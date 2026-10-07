@@ -1,0 +1,32 @@
+node_modules/
+dist/
+build/
+coverage/
+.next/
+*.log
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Genomic / patient data — never commit real data (data/ and ml/ are synthetic only)
+*.vcf
+*.vcf.gz
+*.fastq
+*.fastq.gz
+*.bam
+*.cram
+!data/sample-reports/vcf/synthetic-*.vcf
+ml/datasets/*
+!ml/datasets/README.md
+!ml/datasets/.gitkeep
+ml/**/*.ckpt
+ml/**/*.safetensors
+ml/**/*.pt
