@@ -1,0 +1,68 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+/* Remove Tailwind's default palette/radii so utilities can only resolve to our tokens. */
+@theme inline {
+  --color-*: initial;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-divider: var(--divider);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-surface: var(--destructive-surface);
+  --color-success: var(--success);
+  --color-success-surface: var(--success-surface);
+  --color-warning: var(--warning);
+  --color-warning-surface: var(--warning-surface);
+  --color-ring: var(--ring);
+  --color-transparent: transparent;
+
+  --font-sans: var(--font-family-sans);
+  --font-mono: var(--font-family-mono);
+
+  --spacing: var(--space-unit);
+  --spacing-button-sm: var(--size-button-sm);
+  --spacing-button-md: var(--size-button-md);
+  --spacing-button-lg: var(--size-button-lg);
+  --spacing-control: var(--size-control);
+
+  --radius-sm: var(--radius-1);
+  --radius-md: var(--radius-2);
+  --radius-lg: var(--radius-3);
+
+  --container-page: var(--size-page);
+  --container-prose: var(--size-prose);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-family-sans);
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    line-height: 1.6;
+  }
+  /* One visible focus style for every interactive element (keyboard users). */
+  :focus-visible {
+    outline: 3px solid var(--ring);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
