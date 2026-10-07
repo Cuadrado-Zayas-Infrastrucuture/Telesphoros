@@ -1,0 +1,63 @@
+import { randomUUID } from 'node:crypto';
+import { Injectable } from '@nestjs/common';
+import type { PaginationQuery, PatientInput } from '@telesphoros/shared-types';
+import { AppException } from '../common/app-exception';
+import type { Principal } from '../auth/principal';
+import { PatientsRepository } from '../storage/patients.repository';
+import type { PatientRecord } from '../storage/records';
+import { ReportsRepository } from '../storage/reports.repository';
+
+@Injectable()
+export class PatientsService {
+  constructor(
+    private readonly patients: PatientsRepository,
+    private readonly reports: ReportsRepository,
+  ) {}
+
+  list(principal: Principal, { page, pageSize }: PaginationQuery) {
+    return this.patients.list(principal.sub, { offset: (page - 1) * pageSize, limit: pageSize });
+  }
+
+  /** Someone else's patient is reported as NOT_FOUND, so ids cannot be probed for existence. */
+  async get(principal: Principal, id: string): Promise<PatientRecord> {
+    const record = await this.patients.findById(principal.sub, id);
+    if (!record) throw AppException.notFound('Patient not found.');
+    return record;
+  }
+
+  async create(principal: Principal, input: PatientInput): Promise<PatientRecord> {
+    await this.assertLabelFree(principal.sub, input.label);
+    const now = new Date().toISOString();
+    const record: PatientRecord = {
+      id: randomUUID(),
+      ownerId: principal.sub,
+      label: input.label,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await this.patients.insert(record);
+    return record;
+  }
+
+  async replace(principal: Principal, id: string, input: PatientInput): Promise<PatientRecord> {
+    const existing = await this.get(principal, id);
+    await this.assertLabelFree(principal.sub, input.label, existing.id);
+    const updated = { ...existing, label: input.label, updatedAt: new Date().toISOString() };
+    await this.patients.update(updated);
+    return updated;
+  }
+
+  /** Mirrors the Phase 3 foreign key: a patient with reports cannot be deleted (ON DELETE RESTRICT). */
+  async remove(principal: Principal, id: string): Promise<void> {
+    await this.get(principal, id);
+    if ((await this.reports.countByPatient(principal.sub, id)) > 0) {
+      throw AppException.conflict('This patient still has reports. Delete them first.');
+    }
+    await this.patients.delete(principal.sub, id);
+  }
+
+  private async assertLabelFree(ownerId: string, label: string, ignoreId?: string) {
+    const clash = await this.patients.findByLabel(ownerId, label);
+    if (clash && clash.id !== ignoreId) throw AppException.conflict('A patient with that label already exists.');
+  }
+}

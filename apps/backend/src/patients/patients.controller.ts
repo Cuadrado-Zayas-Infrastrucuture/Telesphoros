@@ -1,0 +1,72 @@
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
+import {
+  buildMeta,
+  type IdParam,
+  idParamSchema,
+  type Paginated,
+  type PaginationQuery,
+  paginationQuerySchema,
+  type PatientDto,
+  type PatientInput,
+  patientInputSchema,
+} from '@telesphoros/shared-types';
+import { CurrentPrincipal, Roles } from '../auth/decorators';
+import type { Principal } from '../auth/principal';
+import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import { toPatientDto } from './patients.mapper';
+import { PatientsService } from './patients.service';
+
+// Reading needs only a valid token; changing data needs the clinician (or admin) role.
+const CAN_WRITE = ['clinician', 'admin'] as const;
+
+@Controller('patients')
+export class PatientsController {
+  constructor(private readonly service: PatientsService) {}
+
+  @Get()
+  async list(
+    @CurrentPrincipal() principal: Principal,
+    @Query(new ZodValidationPipe(paginationQuerySchema)) query: PaginationQuery,
+  ): Promise<Paginated<PatientDto>> {
+    const { items, total } = await this.service.list(principal, query);
+    return { data: items.map(toPatientDto), meta: buildMeta(query.page, query.pageSize, total) };
+  }
+
+  @Get(':id')
+  async get(
+    @CurrentPrincipal() principal: Principal,
+    @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam,
+  ): Promise<PatientDto> {
+    return toPatientDto(await this.service.get(principal, id));
+  }
+
+  @Post()
+  @Roles(...CAN_WRITE)
+  @HttpCode(201)
+  async create(
+    @CurrentPrincipal() principal: Principal,
+    @Body(new ZodValidationPipe(patientInputSchema)) body: PatientInput,
+  ): Promise<PatientDto> {
+    return toPatientDto(await this.service.create(principal, body));
+  }
+
+  @Put(':id')
+  @Roles(...CAN_WRITE)
+  async replace(
+    @CurrentPrincipal() principal: Principal,
+    @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam,
+    @Body(new ZodValidationPipe(patientInputSchema)) body: PatientInput,
+  ): Promise<PatientDto> {
+    return toPatientDto(await this.service.replace(principal, id, body));
+  }
+
+  @Delete(':id')
+  @Roles(...CAN_WRITE)
+  @HttpCode(204)
+  async remove(
+    @CurrentPrincipal() principal: Principal,
+    @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam,
+  ): Promise<void> {
+    await this.service.remove(principal, id);
+  }
+}
