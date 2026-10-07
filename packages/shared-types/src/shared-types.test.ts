@@ -7,8 +7,12 @@ import {
   paginationQuerySchema,
   patientDtoSchema,
   patientInputSchema,
+  REPORT_CONTENT_TYPES,
   reportCreateSchema,
+  reportDtoSchema,
   reportPatchSchema,
+  reportUploadUrlRequestSchema,
+  reportUploadUrlResponseSchema,
 } from './index';
 
 const uuid = '3f2b8c1e-5a47-4d0e-9c3a-1b2c3d4e5f60';
@@ -62,5 +66,33 @@ describe('error envelope', () => {
     expect(errorResponseSchema.safeParse(ok).success).toBe(true);
     expect(errorResponseSchema.safeParse({ error: { ...ok.error, code: 'WHATEVER' } }).success).toBe(false);
     expect(errorResponseSchema.safeParse({ error: { ...ok.error, stack: 'trace' } }).success).toBe(false);
+  });
+});
+
+describe('upload contract', () => {
+  const sha = 'a'.repeat(64);
+  it('requires a lowercase hex SHA-256 and a content type, and refuses extra fields (no client-chosen storage key)', () => {
+    expect(reportUploadUrlRequestSchema.safeParse({ contentType: 'text/x-vcf', sha256: sha }).success).toBe(true);
+    expect(reportUploadUrlRequestSchema.safeParse({ contentType: 'text/x-vcf', sha256: sha.toUpperCase() }).success).toBe(false);
+    expect(reportUploadUrlRequestSchema.safeParse({ contentType: 'text/x-vcf', sha256: 'abc' }).success).toBe(false);
+    expect(reportUploadUrlRequestSchema.safeParse({ contentType: 'text/x-vcf' }).success).toBe(false);
+    expect(reportUploadUrlRequestSchema.safeParse({ contentType: 'text/x-vcf', sha256: sha, storageKey: 'reports/x' }).success).toBe(false);
+  });
+  it('describes the upload target the browser needs, and nothing else', () => {
+    const ok = { uploadUrl: 'https://example.test/x', method: 'PUT', headers: { 'Content-Type': 'text/plain' }, expiresAt: new Date().toISOString() };
+    expect(reportUploadUrlResponseSchema.safeParse(ok).success).toBe(true);
+    expect(reportUploadUrlResponseSchema.safeParse({ ...ok, method: 'POST' }).success).toBe(false);
+    expect(reportUploadUrlResponseSchema.safeParse({ ...ok, storageKey: 'k' }).success).toBe(false);
+  });
+  it('accepts a content type per report type, and the DTO never carries a storage key', () => {
+    expect(REPORT_CONTENT_TYPES.vcf).toContain('text/x-vcf');
+    expect(REPORT_CONTENT_TYPES.structured).toEqual(['application/json']);
+    const dto = {
+      id: uuid, patientId: uuid, type: 'vcf', filename: 'a.vcf', sizeBytes: 5, status: 'received',
+      fileUploaded: false, contentType: null, sha256: null,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    };
+    expect(reportDtoSchema.safeParse(dto).success).toBe(true);
+    expect(reportDtoSchema.safeParse({ ...dto, storageKey: 'reports/x' }).success).toBe(false);
   });
 });

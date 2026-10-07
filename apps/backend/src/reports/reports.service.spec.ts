@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { expectAppException } from '../../test/helpers/expect-app-exception';
 import type { Principal } from '../auth/principal';
+import { InMemoryObjectStorage } from '../object-storage/in-memory-object-storage';
 import { InMemoryPatientsRepository } from '../storage/patients.repository';
 import { InMemoryReportsRepository } from '../storage/reports.repository';
 import { ReportsService } from './reports.service';
@@ -11,7 +12,7 @@ const input = (patientId: string) => ({ patientId, type: 'vcf' as const, filenam
 
 async function setup() {
   const patients = new InMemoryPatientsRepository();
-  const service = new ReportsService(new InMemoryReportsRepository(), patients);
+  const service = new ReportsService(new InMemoryReportsRepository(), patients, new InMemoryObjectStorage(300));
   const now = new Date().toISOString();
   const mkPatient = async (ownerId: string) => {
     const id = randomUUID();

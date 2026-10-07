@@ -17,6 +17,11 @@ export interface ReportRecord {
   filename: string;
   sizeBytes: number;
   status: ReportStatus;
+  /** Set by the upload flow. The bytes live in object storage, never in the database. */
+  storageKey?: string | null;
+  contentType?: string | null;
+  sha256?: string | null;
+  uploadedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

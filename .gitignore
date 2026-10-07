@@ -35,3 +35,11 @@ ml/**/*.pt
 playwright-report/
 test-results/
 *.tsbuildinfo
+
+# Terraform: state can contain identifiers and secrets; the provider cache is machine-specific
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log

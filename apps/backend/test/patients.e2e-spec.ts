@@ -1,7 +1,7 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { patientDtoSchema } from '@telesphoros/shared-types';
 import request from 'supertest';
-import { createTestApp } from './helpers/app';
+import { createTestApp, usingPostgres } from './helpers/app';
 import { bearer, clinicianA, clinicianB, noRolesA, readerA, signToken } from './helpers/tokens';
 
 let app: NestExpressApplication;
@@ -135,6 +135,18 @@ describe('patients: update, delete, conflicts', () => {
 
     await api().delete(`/api/v1/reports/${report.body.id}`).set(bearer(a)).expect(204);
     await api().delete(`${BASE}/${p.id}`).set(bearer(a)).expect(204);
+  });
+});
+
+describe('patients: concurrency (only a real database can settle this)', () => {
+  (usingPostgres() ? it : it.skip)('two simultaneous requests for the same label: one 201, one 409 CONFLICT (never a 500)', async () => {
+    const token = await signToken({ sub: 'user-race', roles: ['clinician'] });
+    const post = () => api().post(BASE).set(bearer(token)).send({ label: 'SYN-RACE-E2E' });
+    const results = await Promise.all([post(), post(), post(), post()]);
+    expect(results.map((r) => r.status).sort()).toEqual([201, 409, 409, 409]);
+    for (const loser of results.filter((r) => r.status === 409)) expect(loser.body.error.code).toBe('CONFLICT');
+    const list = await api().get(BASE).set(bearer(token)).expect(200);
+    expect(list.body.data.filter((p: { label: string }) => p.label === 'SYN-RACE-E2E')).toHaveLength(1);
   });
 });
 

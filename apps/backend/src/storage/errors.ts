@@ -1,0 +1,20 @@
+/**
+ * A write violated a database integrity rule (duplicate key, or a foreign-key RESTRICT).
+ * Raised by the storage layer so the HTTP layer can answer 409 CONFLICT instead of 500, including
+ * when two requests race past the service-level checks and the database is the one to say no.
+ */
+export class IntegrityError extends Error {
+  constructor(readonly constraint?: string) {
+    super('Integrity constraint violated');
+  }
+}
+
+const UNIQUE_VIOLATION = '23505';
+const FOREIGN_KEY_VIOLATION = '23503';
+
+/** Translates a PostgreSQL error into a storage error; anything unrecognised is returned untouched. */
+export function toStorageError(error: unknown): unknown {
+  const { code, constraint } = (error ?? {}) as { code?: string; constraint?: string };
+  if (code === UNIQUE_VIOLATION || code === FOREIGN_KEY_VIOLATION) return new IntegrityError(constraint);
+  return error;
+}
