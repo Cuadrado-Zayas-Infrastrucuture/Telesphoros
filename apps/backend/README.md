@@ -1,7 +1,7 @@
 # @telesphoros/backend
 
-NestJS API foundation (Phase 2). **Synthetic data only**: storage is in memory until Phase 3 and
-there is no real identity provider until Phase 4.
+NestJS API (Phases 2-3). **Synthetic data only.** Storage is PostgreSQL (or in memory for quick tests) plus S3 for
+report files; there is no real identity provider until Phase 4. See [docs/database.md](../../docs/database.md).
 
 ```bash
 pnpm --filter @telesphoros/backend test        # unit + e2e (Jest)
@@ -19,7 +19,9 @@ pnpm --filter @telesphoros/backend build && JWT_SECRET=<32+ chars> pnpm --filter
 | GET, POST | `/patients` | any token / `clinician`,`admin` | Paginated list; create |
 | GET, PUT, DELETE | `/patients/:id` | any token / `clinician`,`admin` | PUT replaces; delete is refused (409) while reports exist |
 | GET, POST | `/reports` | any token / `clinician`,`admin` | Metadata only; the file goes to object storage in Phase 3. Status is always set by the system. |
-| GET, PATCH, DELETE | `/reports/:id` | any token / `clinician`,`admin` | PATCH corrects `type` / `filename` |
+| GET, PATCH, DELETE | `/reports/:id` | any token / `clinician`,`admin` | PATCH corrects `type` / `filename`; DELETE is a soft delete |
+| POST | `/reports/:id/upload-url` | `clinician`,`admin` | Step 1 of an upload: short-lived URL for ONE object (body: `contentType`, `sha256`) |
+| POST | `/reports/:id/complete` | `clinician`,`admin` | Step 2: the server verifies size, type and SHA-256 of the stored file, then marks it uploaded |
 | GET | `/recommendations`, `/recommendations/:id` | any token | **Read-only.** Only the rules engine (Phase 5) creates recommendations; a client cannot. |
 
 Health vs ready: use **health** for "restart this process if it fails", and **ready** for "stop
@@ -61,10 +63,26 @@ See `.env.example` at the repo root. Real secrets belong in AWS Secrets Manager,
 
 - **NestJS 11 (CommonJS), not 12.** Nest 12 and `jose` 6 are ESM-only, which Jest cannot run without
   experimental flags. Moving to Nest 12 means an ESM migration of the backend and its test runner.
-- **Storage sits behind repository interfaces** (`src/storage`). Phase 3 supplies database-backed
-  implementations; controllers and services do not change. Each repository call is a single query
-  (no per-row follow-ups). Phase 3 also needs a sequence column so list ordering stays creation order
-  when timestamps tie.
+- **Storage sits behind repository interfaces** (`src/storage`). Phase 3 added the PostgreSQL
+  implementations behind the same abstract classes; controllers did not change. Each repository call is a single query
+  (no per-row follow-ups). The database orders by an identity `seq` column, so creation order holds even when timestamps tie.
 - **Logs** are structured JSON (pino): request id, method, path (no query string), status, user id.
   Authorization/cookie headers are redacted; bodies are never logged.
-- Not yet (by phase): rate limiting and CORS/security headers (Phases 8-9), database (3), real auth (4).
+- Not yet (by phase): rate limiting and CORS/security headers (Phases 8-9), real auth (4), a scheduler for the daily backup (6-7).
+
+## Configuration (Phase 3 additions)
+
+| Variable | Meaning |
+| --- | --- |
+| `STORAGE_DRIVER` | `memory` (default) or `postgres` |
+| `DATABASE_URL` | the **application** login role (required for `postgres`); `DATABASE_SSL=require` in AWS |
+| `OBJECT_STORAGE_DRIVER` | `memory` (default) or `s3` (AWS S3 or S3-compatible such as MinIO) |
+| `REPORTS_BUCKET`, `AWS_REGION`, `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE` | S3 settings; credentials come from the standard AWS provider chain, never from our config |
+| `UPLOAD_URL_TTL_SECONDS` | presigned URL lifetime, 60 to 900 (default 300) |
+| `DATABASE_MIGRATOR_URL`, `DATABASE_ADMIN_URL` | read only by the `db:*` CLI (migrations; backup/restore), never by the API |
+
+## Tests
+
+A plain `pnpm test` needs no services and runs against the in-memory store. The database tier (schema, row-level
+security, repositories, backup/restore, readiness) and the S3 tier are enabled by `TEST_DATABASE_URL` /
+`TEST_S3_ENDPOINT`, and a plain run prints which tiers it skipped. Details and commands: [docs/database.md](../../docs/database.md).

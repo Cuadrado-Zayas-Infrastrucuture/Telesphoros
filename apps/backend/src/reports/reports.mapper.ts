@@ -9,6 +9,9 @@ export function toReportDto(record: ReportRecord): ReportDto {
     filename: record.filename,
     sizeBytes: record.sizeBytes,
     status: record.status,
+    fileUploaded: Boolean(record.uploadedAt),
+    contentType: record.contentType ?? null,
+    sha256: record.sha256 ?? null,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   });

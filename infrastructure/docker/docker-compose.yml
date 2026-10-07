@@ -1,0 +1,62 @@
+# Local development stack: PostgreSQL 16 + an S3-compatible store (MinIO).
+# SYNTHETIC DATA ONLY. Every credential below is a throwaway dev value; nothing here is for real use.
+#
+#   docker compose -f infrastructure/docker/docker-compose.yml up -d
+#   export DATABASE_MIGRATOR_URL=postgres://postgres:dev-only-password@127.0.0.1:5432/telesphoros
+#   pnpm --filter @telesphoros/backend build && pnpm --filter @telesphoros/backend db:migrate
+#
+# No Docker? scripts/dev-postgres.sh in apps/backend starts a plain local PostgreSQL instead.
+name: telesphoros-dev
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: dev-only-password
+      POSTGRES_DB: telesphoros
+    ports:
+      - "127.0.0.1:5432:5432" # loopback only: never expose the database on the network
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/10-roles.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d telesphoros"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio-dev
+      MINIO_ROOT_PASSWORD: minio-dev-password
+      # Lets the browser upload straight to storage from the local frontend (Vite's default port).
+      MINIO_API_CORS_ALLOW_ORIGIN: http://localhost:5173
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # One-shot: creates the two buckets, then exits.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minio-dev minio-dev-password &&
+      mc mb --ignore-existing local/telesphoros-reports &&
+      mc mb --ignore-existing local/telesphoros-db-backups &&
+      echo buckets ready"
+
+volumes:
+  pgdata:
+  miniodata:

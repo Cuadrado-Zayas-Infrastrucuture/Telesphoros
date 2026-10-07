@@ -48,6 +48,10 @@ export const reportDtoSchema = z.strictObject({
   filename: z.string(),
   sizeBytes: z.number().int(),
   status: reportStatusSchema,
+  /** True once the file is in object storage and the server has verified its size and checksum. */
+  fileUploaded: z.boolean(),
+  contentType: z.string().nullable(),
+  sha256: z.string().nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -59,3 +63,27 @@ export const reportListQuerySchema = z.strictObject({
   patientId: z.uuid().optional(),
 });
 export type ReportListQuery = z.infer<typeof reportListQuerySchema>;
+
+/** Content types accepted per report type. The client declares one; the server checks it matches. */
+export const REPORT_CONTENT_TYPES: Record<ReportType, readonly string[]> = {
+  vcf: ['text/x-vcf', 'text/plain'],
+  structured: ['application/json'],
+};
+
+export const sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/, 'Provide the lowercase hex SHA-256 of the file.');
+
+/** Step 1 of an upload: say what you are about to send, and its checksum. */
+export const reportUploadUrlRequestSchema = z.strictObject({
+  contentType: z.string().min(1).max(100),
+  sha256: sha256HexSchema,
+});
+export type ReportUploadUrlRequest = z.infer<typeof reportUploadUrlRequestSchema>;
+
+/** A short-lived, single-object URL. The browser PUTs the file straight to storage with these headers. */
+export const reportUploadUrlResponseSchema = z.strictObject({
+  uploadUrl: z.string().min(1),
+  method: z.literal('PUT'),
+  headers: z.record(z.string(), z.string()),
+  expiresAt: z.iso.datetime(),
+});
+export type ReportUploadUrlResponse = z.infer<typeof reportUploadUrlResponseSchema>;

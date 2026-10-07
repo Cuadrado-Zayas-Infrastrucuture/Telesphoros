@@ -1,15 +1,15 @@
 import { errorResponseSchema } from '@telesphoros/shared-types';
 import request from 'supertest';
-import { createTestApp } from './helpers/app';
+import { createTestApp, usingPostgres } from './helpers/app';
 
 describe('health (liveness) and ready (readiness)', () => {
-  it('health is public and always "ok"; ready reports "ready" with no dependencies yet', async () => {
+  it('health is public and always "ok"; ready lists each dependency that is up (none with the in-memory store)', async () => {
     const app = await createTestApp();
     try {
       expect((await request(app.getHttpServer()).get('/api/v1/health').expect(200)).body).toEqual({ status: 'ok' });
       expect((await request(app.getHttpServer()).get('/api/v1/ready').expect(200)).body).toEqual({
         status: 'ready',
-        checks: {},
+        checks: usingPostgres() ? { database: 'up', migrations: 'up' } : {},
       });
     } finally {
       await app.close();

@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from './config/config.module';
 import { ENV, type Env } from './config/env';
 import { HealthModule } from './health/health.module';
+import { ObjectStorageModule } from './object-storage/object-storage.module';
 import { PatientsModule } from './patients/patients.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
 import { ReportsModule } from './reports/reports.module';
@@ -43,7 +44,8 @@ export class AppModule {
           }),
         }),
         AuthModule,
-        StorageModule,
+        StorageModule.register(env),
+        ObjectStorageModule.register(env),
         PatientsModule,
         ReportsModule,
         RecommendationsModule,

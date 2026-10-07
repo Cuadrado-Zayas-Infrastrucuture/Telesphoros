@@ -1,5 +1,6 @@
 import { HttpException } from '@nestjs/common';
 import { ErrorCode, type ErrorDetail } from '@telesphoros/shared-types';
+import { IntegrityError } from '../storage/errors';
 import { AppException } from './app-exception';
 
 export interface MappedError {
@@ -46,6 +47,10 @@ export function mapException(exception: unknown): MappedError {
       message: exception.message,
       details: exception.details,
     };
+  }
+  // A database integrity rule said no (duplicate, or a RESTRICT foreign key): a conflict, not a crash.
+  if (exception instanceof IntegrityError) {
+    return { status: 409, ...GENERIC[409]! };
   }
   if (exception instanceof HttpException) {
     return fromStatus(exception.getStatus());

@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { IntegrityError } from '../storage/errors';
 import { AppException } from './app-exception';
 import { mapException } from './error-mapping';
 
@@ -17,6 +18,14 @@ describe('mapException', () => {
     });
     expect(mapException(new ForbiddenException('rule x failed'))).toMatchObject({ status: 403, code: 'FORBIDDEN' });
     expect(JSON.stringify(mapException(new BadRequestException('table users')))).not.toContain('users');
+  });
+
+  it('maps a database integrity violation (duplicate key, RESTRICT foreign key) to 409 CONFLICT, not 500', () => {
+    expect(mapException(new IntegrityError('patients_owner_label_uq'))).toEqual({
+      status: 409,
+      code: 'CONFLICT',
+      message: 'The request conflicts with the current state.',
+    });
   });
 
   it.each([

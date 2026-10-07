@@ -1,8 +1,16 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import type { ReportCreate, ReportListQuery, ReportPatch } from '@telesphoros/shared-types';
+import {
+  REPORT_CONTENT_TYPES,
+  type ReportCreate,
+  type ReportListQuery,
+  type ReportPatch,
+  type ReportUploadUrlRequest,
+  type ReportUploadUrlResponse,
+} from '@telesphoros/shared-types';
 import { AppException } from '../common/app-exception';
 import type { Principal } from '../auth/principal';
+import { ObjectStorage } from '../object-storage/object-storage';
 import { PatientsRepository } from '../storage/patients.repository';
 import type { ReportRecord } from '../storage/records';
 import { ReportsRepository } from '../storage/reports.repository';
@@ -12,6 +20,7 @@ export class ReportsService {
   constructor(
     private readonly reports: ReportsRepository,
     private readonly patients: PatientsRepository,
+    private readonly storage: ObjectStorage,
   ) {}
 
   list(principal: Principal, { page, pageSize, patientId }: ReportListQuery) {
@@ -62,4 +71,61 @@ export class ReportsService {
     await this.get(principal, id);
     await this.reports.delete(principal.sub, id);
   }
+
+  /**
+   * Upload step 1. Records what the client says it will send (type and SHA-256) and returns a
+   * short-lived URL for ONE object. The object key is generated here, never taken from the client:
+   * reports/<owner hash>/<report id>/<random>. Safe to call again before the upload completes.
+   */
+  async createUploadUrl(principal: Principal, id: string, input: ReportUploadUrlRequest): Promise<ReportUploadUrlResponse> {
+    const report = await this.get(principal, id);
+    if (report.uploadedAt) throw AppException.conflict('The file for this report was already uploaded.');
+    if (!REPORT_CONTENT_TYPES[report.type].includes(input.contentType)) {
+      throw AppException.validation([
+        { field: 'contentType', message: `A ${report.type} report must be one of: ${REPORT_CONTENT_TYPES[report.type].join(', ')}.` },
+      ]);
+    }
+    const storageKey = report.storageKey ?? objectKey(principal.sub, report.id);
+    await this.reports.update({
+      ...report,
+      storageKey,
+      contentType: input.contentType,
+      sha256: input.sha256,
+      updatedAt: new Date().toISOString(),
+    });
+    const target = await this.storage.createUploadTarget({ key: storageKey, contentType: input.contentType, sizeBytes: report.sizeBytes });
+    return { uploadUrl: target.url, method: target.method, headers: target.headers, expiresAt: target.expiresAt };
+  }
+
+  /**
+   * Upload step 2. The server reads the stored object back and checks size, content type and
+   * SHA-256 against what was declared. Only then is the report marked uploaded. Idempotent.
+   */
+  async completeUpload(principal: Principal, id: string): Promise<ReportRecord> {
+    const report = await this.get(principal, id);
+    if (report.uploadedAt) return report;
+    if (!report.storageKey || !report.sha256 || !report.contentType) {
+      throw AppException.conflict('Request an upload URL for this report first.');
+    }
+    const stored = await this.storage.inspect(report.storageKey);
+    if (!stored) throw AppException.conflict('The file has not been uploaded yet.');
+    if (stored.sizeBytes !== report.sizeBytes) {
+      throw AppException.conflict('The uploaded file size does not match the declared size.');
+    }
+    if (stored.contentType && stored.contentType !== report.contentType) {
+      throw AppException.conflict('The uploaded file content type does not match the declared type.');
+    }
+    if (stored.sha256 !== report.sha256) {
+      throw AppException.conflict('The uploaded file does not match its checksum.');
+    }
+    const completed = { ...report, uploadedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    await this.reports.update(completed);
+    return completed;
+  }
+}
+
+/** The owner appears only as a hash: a stable per-owner prefix (for storage policies) with no raw identifier or unsafe characters. */
+function objectKey(ownerId: string, reportId: string): string {
+  const ownerPrefix = createHash('sha256').update(ownerId).digest('hex').slice(0, 32);
+  return `reports/${ownerPrefix}/${reportId}/${randomUUID()}`;
 }
