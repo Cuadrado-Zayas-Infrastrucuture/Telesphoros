@@ -30,3 +30,8 @@ ml/datasets/*
 ml/**/*.ckpt
 ml/**/*.safetensors
 ml/**/*.pt
+
+# Playwright
+playwright-report/
+test-results/
+*.tsbuildinfo

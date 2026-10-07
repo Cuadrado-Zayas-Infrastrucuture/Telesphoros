@@ -1,0 +1,49 @@
+/*
+ * Design tokens — the ONE place colors, fonts, spacing and control sizes are defined.
+ * index.css maps these into the Tailwind theme; ESLint bans arbitrary values so nothing
+ * else can introduce a one-off style.
+ * All foreground/background pairs meet WCAG AA (4.5:1) for body text.
+ */
+:root {
+  /* Color */
+  --background: #ffffff;
+  --foreground: #0f172a;
+  --surface: #f8fafc;
+  --muted: #f1f5f9;
+  --muted-foreground: #475569;
+  --border: #64748b; /* 4.8:1 on white — meets 3:1 for UI controls */
+  --divider: #cbd5e1; /* decorative separators only */
+  --primary: #0b5cad;
+  --primary-hover: #084a8c;
+  --primary-foreground: #ffffff;
+  --destructive: #b91c1c;
+  --destructive-foreground: #ffffff;
+  --destructive-surface: #fef2f2;
+  --success: #166534;
+  --success-surface: #f0fdf4;
+  --warning: #92400e;
+  --warning-surface: #fffbeb;
+  --ring: #0b5cad;
+
+  /* Type */
+  --font-family-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Spacing (Tailwind multiplies this base: p-4 = 4 * --space-unit) */
+  --space-unit: 0.25rem;
+
+  /* Radii */
+  --radius-1: 0.25rem;
+  --radius-2: 0.5rem;
+  --radius-3: 0.75rem;
+
+  /* Control sizes — md meets the 44px minimum touch target */
+  --size-button-sm: 2.25rem;
+  --size-button-md: 2.75rem;
+  --size-button-lg: 3.25rem;
+  --size-control: 2.75rem;
+
+  /* Layout */
+  --size-page: 72rem;
+  --size-prose: 40rem;
+}
