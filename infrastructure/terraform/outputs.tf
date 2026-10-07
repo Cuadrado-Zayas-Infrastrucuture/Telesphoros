@@ -30,3 +30,24 @@ output "app_runtime_policy_arn" {
 output "backup_job_policy_arn" {
   value = aws_iam_policy.backup_job.arn
 }
+
+# ---- Authentication: settings for the API and the frontend ----
+output "cognito_user_pool_id" {
+  description = "COGNITO_USER_POOL_ID for the API."
+  value       = aws_cognito_user_pool.main.id
+}
+
+output "cognito_app_client_id" {
+  description = "COGNITO_APP_CLIENT_ID for the API and VITE_OIDC_CLIENT_ID for the frontend."
+  value       = aws_cognito_user_pool_client.spa.id
+}
+
+output "cognito_issuer" {
+  description = "VITE_OIDC_AUTHORITY for the frontend (the API derives the same value from region + pool id)."
+  value       = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.main.id}"
+}
+
+output "cognito_sign_in_domain" {
+  description = "VITE_COGNITO_DOMAIN for the frontend (used for sign-out)."
+  value       = "https://${aws_cognito_user_pool_domain.main.domain}.auth.${var.region}.amazoncognito.com"
+}

@@ -47,3 +47,26 @@ objectives for the managed database as **unproven** until a restore drill has be
 | `AWS_REGION` | `region` |
 | `DATABASE_URL` | the **application** login role (never the admin user), host from output `db_endpoint`, `DATABASE_SSL=require` |
 | `DATABASE_MIGRATOR_URL` / `DATABASE_ADMIN_URL` | admin credentials from the secret in `db_master_secret_arn` (migrations and backups only) |
+
+## Authentication (Cognito) and the password-change notifier
+
+`cognito.tf` and `lambda.tf` add: an **invite-only** user pool (MFA required, authenticator app only, 14-character
+passwords, email-only recovery), the `reader`/`clinician`/`admin` groups, a **public** browser client (authorization
+code + PKCE, 15-minute tokens, revocation on, no user-enumeration hints), the sign-in domain, an SES sender, and the
+Lambda that emails the owner when a password is reset. Build the Lambda first:
+
+```bash
+pnpm --filter @telesphoros/password-change-notifier build   # produces infrastructure/lambda/password-change-notifier/dist
+```
+
+Extra inputs: `app_callback_urls`, `app_logout_urls`, `cognito_domain_prefix`, `ses_from_email` (see
+`example.tfvars.example`). SES starts in its **sandbox**; request production access before inviting real people.
+
+| Setting | From (output) |
+| --- | --- |
+| API `COGNITO_REGION`, `COGNITO_USER_POOL_ID`, `COGNITO_APP_CLIENT_ID` | the region, `cognito_user_pool_id`, `cognito_app_client_id` |
+| Frontend `VITE_OIDC_AUTHORITY`, `VITE_OIDC_CLIENT_ID`, `VITE_COGNITO_DOMAIN` | `cognito_issuer`, `cognito_app_client_id`, `cognito_sign_in_domain` |
+
+A guard test (`node --test infrastructure/terraform/guard.test.mjs`, or `pnpm test:infra`) fails if someone weakens
+MFA, invite-only, password rules, token lifetimes or the client's flows. Details, runbook and the first-apply checklist:
+[docs/auth.md](../../docs/auth.md).

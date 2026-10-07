@@ -1,5 +1,5 @@
 // Tests compile with swc (fast, supports decorators + metadata). Type safety is `pnpm typecheck`.
-// The shared package resolves to its SOURCE here so tests need no prior build.
+// The shared packages resolve to their SOURCE here so tests need no prior build.
 //
 // Three tiers, so a plain `pnpm test` needs no services:
 //   default                       unit + e2e against the in-memory store
@@ -22,6 +22,7 @@ module.exports = {
   ],
   moduleNameMapper: {
     '^@telesphoros/shared-types$': '<rootDir>/../../packages/shared-types/src/index.ts',
+    '^@telesphoros/fake-idp$': '<rootDir>/../../packages/fake-idp/src/index.ts',
   },
   transform: {
     '^.+\\.ts$': [

@@ -120,3 +120,44 @@ variable "backup_retention_days" {
   type        = number
   default     = 365
 }
+
+# ------------------------------------------------------------------------------------------------
+# Authentication (Cognito)
+# ------------------------------------------------------------------------------------------------
+variable "app_callback_urls" {
+  description = "Where Cognito may send the browser after sign-in, e.g. [\"https://app.telesphoros.app/auth/callback\"]. Exact match is required."
+  type        = list(string)
+  validation {
+    condition     = length(var.app_callback_urls) >= 1 && alltrue([for u in var.app_callback_urls : startswith(u, "https://") || startswith(u, "http://localhost")])
+    error_message = "Callback URLs must be https:// (http://localhost is allowed for development only)."
+  }
+}
+
+variable "app_logout_urls" {
+  description = "Where Cognito may send the browser after sign-out, e.g. [\"https://app.telesphoros.app/signed-out\"]."
+  type        = list(string)
+  validation {
+    condition     = length(var.app_logout_urls) >= 1 && alltrue([for u in var.app_logout_urls : startswith(u, "https://") || startswith(u, "http://localhost")])
+    error_message = "Logout URLs must be https:// (http://localhost is allowed for development only)."
+  }
+}
+
+variable "cognito_domain_prefix" {
+  description = "Globally unique prefix for the sign-in page: https://<prefix>.auth.<region>.amazoncognito.com"
+  type        = string
+}
+
+variable "ses_from_email" {
+  description = "Verified sender for invitations, reset codes and password-change notices, e.g. no-reply@telesphoros.app. SES sends a verification email when this is first applied."
+  type        = string
+}
+
+variable "cognito_deletion_protection" {
+  description = "ACTIVE blocks deleting the user pool (and every account in it) by accident."
+  type        = string
+  default     = "ACTIVE"
+  validation {
+    condition     = contains(["ACTIVE", "INACTIVE"], var.cognito_deletion_protection)
+    error_message = "cognito_deletion_protection must be ACTIVE or INACTIVE."
+  }
+}

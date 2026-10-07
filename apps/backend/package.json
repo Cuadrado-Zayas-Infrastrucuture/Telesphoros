@@ -38,6 +38,7 @@
     "@nestjs/testing": "^11.2.7",
     "@swc/core": "^1.16.13",
     "@swc/jest": "^0.2.39",
+    "@telesphoros/fake-idp": "workspace:*",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
     "@types/node": "^26.6.4",

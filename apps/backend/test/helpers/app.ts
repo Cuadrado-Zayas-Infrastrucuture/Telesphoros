@@ -6,6 +6,7 @@ import { Test } from '@nestjs/testing';
 import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.factory';
 import { Public } from '../../src/auth/decorators';
+import { TokenVerifier } from '../../src/auth/token-verifier';
 import { loadEnv } from '../../src/config/env';
 import { READINESS_CHECKS, type ReadinessCheck } from '../../src/health/readiness.service';
 import { createEphemeralDatabase } from './database';
@@ -16,6 +17,10 @@ export interface TestAppOptions {
   readinessChecks?: ReadinessCheck[];
   /** Force the PostgreSQL store against this application-role URL (managed by the caller). */
   postgresUrl?: string;
+  /** Replace the token verifier (e.g. with a CognitoTokenVerifier pointed at the fake identity provider). */
+  tokenVerifier?: TokenVerifier;
+  /** Browser origins allowed to call the API (CORS). */
+  corsOrigins?: string[];
 }
 
 /** True when the e2e suite is running against a real PostgreSQL (TEST_STORAGE=postgres). */
@@ -59,9 +64,10 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
     controllers: options.controllers ?? [],
   });
   if (options.readinessChecks) builder = builder.overrideProvider(READINESS_CHECKS).useValue(options.readinessChecks);
+  if (options.tokenVerifier) builder = builder.overrideProvider(TokenVerifier).useValue(options.tokenVerifier);
   const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication<NestExpressApplication>();
-  configureApp(app);
+  configureApp(app, { corsOrigins: options.corsOrigins });
   // Listen once on a free port. Otherwise supertest starts/stops the server per request, and two
   // requests built in the same expression race for it.
   await app.listen(0);

@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from './config/config.module';
 import { ENV, type Env } from './config/env';
 import { HealthModule } from './health/health.module';
+import { MeModule } from './me/me.module';
 import { ObjectStorageModule } from './object-storage/object-storage.module';
 import { PatientsModule } from './patients/patients.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
@@ -50,6 +51,7 @@ export class AppModule {
         ReportsModule,
         RecommendationsModule,
         HealthModule,
+        MeModule,
       ],
       providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
     };

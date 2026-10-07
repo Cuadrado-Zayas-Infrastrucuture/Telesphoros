@@ -1,7 +1,7 @@
 # @telesphoros/backend
 
-NestJS API (Phases 2-3). **Synthetic data only.** Storage is PostgreSQL (or in memory for quick tests) plus S3 for
-report files; there is no real identity provider until Phase 4. See [docs/database.md](../../docs/database.md).
+NestJS API (Phases 2-4). **Synthetic data only.** Storage is PostgreSQL (or in memory for quick tests) plus S3 for
+report files; sign-in is Amazon Cognito (not yet applied; see [docs/auth.md](../../docs/auth.md)). See [docs/database.md](../../docs/database.md).
 
 ```bash
 pnpm --filter @telesphoros/backend test        # unit + e2e (Jest)
@@ -15,6 +15,7 @@ pnpm --filter @telesphoros/backend build && JWT_SECRET=<32+ chars> pnpm --filter
 | Method | Path | Auth | Notes |
 | --- | --- | --- | --- |
 | GET | `/health` | public | **Liveness**: the process is up. Never touches dependencies. |
+| GET | `/me` | any token | The caller's roles and nothing else (the UI uses it to decide what to show) |
 | GET | `/ready` | public | **Readiness**: safe to receive traffic. Runs dependency checks (the database joins in Phase 3); `503 SERVICE_UNAVAILABLE` while any is down. |
 | GET, POST | `/patients` | any token / `clinician`,`admin` | Paginated list; create |
 | GET, PUT, DELETE | `/patients/:id` | any token / `clinician`,`admin` | PUT replaces; delete is refused (409) while reports exist |
@@ -49,10 +50,13 @@ orchestrator would restart healthy processes in a loop.
   `@Roles(...)` on a route requires at least one of them; otherwise `403 FORBIDDEN`.
 - **Ownership**: every record belongs to the token's `sub`, and every repository method takes the
   owner id. Another user's record is reported as `404 NOT_FOUND` (not 403), so ids cannot be probed.
-- Tokens are verified for signature, issuer, audience, expiry, and an issued-at no older than 1 hour.
-  All rejections return the same generic 401.
-- **Phase 2 verifier is development/test only** (HS256 shared secret). The app **refuses to start with
-  `NODE_ENV=production`** until Phase 4 adds the real identity provider.
+- Tokens are verified for signature, issuer, expiry and an issued-at no older than 1 hour. All rejections return the same
+  generic 401. Two verifiers: **`cognito`** (production): RS256 Cognito *access* tokens against the pool's published keys
+  (`client_id` and `token_use=access` checked; ID tokens, HS256 and `alg: none` refused; an unreachable key set answers 401,
+  never 500); **`hmac`** (development and tests only): a shared secret.
+- **Production fails closed:** `NODE_ENV=production` starts only with the Cognito verifier, no development overrides, PostgreSQL
+  with SSL, S3, and https CORS origins. Details: [docs/auth.md](../../docs/auth.md).
+- **CORS** is an exact-match allowlist (`CORS_ALLOWED_ORIGINS`); empty means no cross-origin access. No cookies are used.
 
 ## Configuration
 
@@ -74,6 +78,10 @@ See `.env.example` at the repo root. Real secrets belong in AWS Secrets Manager,
 
 | Variable | Meaning |
 | --- | --- |
+| `AUTH_VERIFIER` | `hmac` (default; dev/test) or `cognito` (the only one allowed in production) |
+| `COGNITO_REGION`, `COGNITO_USER_POOL_ID`, `COGNITO_APP_CLIENT_ID` | required for `cognito` (from the Terraform outputs) |
+| `COGNITO_ISSUER`, `COGNITO_JWKS_URI` | development-only overrides, for the fake identity provider; **refused in production** |
+| `CORS_ALLOWED_ORIGINS` | comma-separated browser origins allowed to call the API (default none) |
 | `STORAGE_DRIVER` | `memory` (default) or `postgres` |
 | `DATABASE_URL` | the **application** login role (required for `postgres`); `DATABASE_SSL=require` in AWS |
 | `OBJECT_STORAGE_DRIVER` | `memory` (default) or `s3` (AWS S3 or S3-compatible such as MinIO) |

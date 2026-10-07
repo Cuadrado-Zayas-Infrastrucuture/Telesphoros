@@ -1,12 +1,17 @@
 import { NavLink } from 'react-router-dom';
+import { useAuth } from '@/auth/AuthProvider';
+import { WRITER_ROLES } from '@/auth/roles';
+import { AccountMenu } from '@/components/layout/AccountMenu';
 import { cn } from '@/lib/utils';
 
-const links = [
-  { to: '/', label: 'Overview', end: true },
-  { to: '/reports/upload', label: 'Upload report', end: false },
-];
-
 export function SiteHeader() {
+  const { roles } = useAuth();
+  // Links to pages the user cannot use are simply not shown. The pages are guarded as well.
+  const links = [
+    { to: '/', label: 'Overview', end: true, show: true },
+    { to: '/reports/upload', label: 'Upload report', end: false, show: roles.some((r) => WRITER_ROLES.includes(r)) },
+  ].filter((link) => link.show);
+
   return (
     <header className="border-b border-divider bg-background">
       <div className="mx-auto flex max-w-page flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
@@ -34,6 +39,7 @@ export function SiteHeader() {
             ))}
           </ul>
         </nav>
+        <AccountMenu />
       </div>
     </header>
   );
