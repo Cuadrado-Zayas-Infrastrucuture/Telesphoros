@@ -13,6 +13,8 @@ __pycache__/
 .env
 .env.*
 !.env.example
+# Browser-test build settings: localhost URLs only, no secrets (see the file header).
+!apps/frontend/.env.e2e
 *.pem
 *.key
 
@@ -43,3 +45,6 @@ test-results/
 *.tfvars
 !*.tfvars.example
 crash.log
+
+# Browser-test build output
+dist-e2e/

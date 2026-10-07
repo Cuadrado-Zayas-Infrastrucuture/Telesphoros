@@ -1,0 +1,19 @@
+{
+  "name": "@telesphoros/password-change-notifier",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Cognito PostConfirmation trigger: tells the account owner when their password was reset.",
+  "type": "module",
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-sesv2": "^3.1147.0",
+    "@types/node": "^26.6.4",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.3"
+  }
+}

@@ -2,12 +2,30 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { routes } from '@/app/routes';
+import { AuthProvider } from '@/auth/AuthProvider';
+import { AuthConfigError, loadAuthConfig } from '@/auth/authConfig';
+import { createAuthClient } from '@/auth/authClient';
 import '@/styles/index.css';
 
-const router = createBrowserRouter(routes);
+const root = createRoot(document.getElementById('root')!);
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <RouterProvider router={router} />
-  </StrictMode>,
-);
+try {
+  const config = loadAuthConfig(import.meta.env, window.location.origin, import.meta.env.MODE === 'production');
+  const router = createBrowserRouter(routes);
+  root.render(
+    <StrictMode>
+      <AuthProvider client={createAuthClient(config)} apiBaseUrl={config.apiBaseUrl}>
+        <RouterProvider router={router} />
+      </AuthProvider>
+    </StrictMode>,
+  );
+} catch (error) {
+  // A bad build configuration: say so plainly instead of showing a blank page. No stack trace.
+  const message = error instanceof AuthConfigError ? error.message : 'The application could not start.';
+  root.render(
+    <main style={{ fontFamily: 'system-ui, sans-serif', padding: '2rem', maxWidth: '40rem' }}>
+      <h1>Telesphoros cannot start</h1>
+      <p role="alert">{message}</p>
+    </main>,
+  );
+}

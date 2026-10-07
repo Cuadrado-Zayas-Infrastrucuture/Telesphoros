@@ -11,7 +11,7 @@ const message =
   'Arbitrary Tailwind values bypass the design tokens. Add a token in src/styles/tokens.css and use its utility instead.';
 
 export default tseslint.config(
-  { ignores: ['dist', 'coverage', 'test-results', 'playwright-report'] },
+  { ignores: ['dist', 'dist-e2e', 'coverage', 'test-results', 'playwright-report'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   jsxA11y.flatConfigs.recommended,

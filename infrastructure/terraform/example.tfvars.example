@@ -8,3 +8,9 @@ reports_cors_origins = ["https://app.telesphoros.app"]
 
 # Production must also set:
 # db_multi_az = true
+
+# Authentication
+app_callback_urls     = ["https://app.telesphoros.app/auth/callback"]
+app_logout_urls       = ["https://app.telesphoros.app/signed-out"]
+cognito_domain_prefix = "telesphoros-staging"
+ses_from_email        = "no-reply@telesphoros.app"

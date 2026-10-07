@@ -1,11 +1,14 @@
 import { createRequire } from 'node:module';
 import { expect, test, type Page } from '@playwright/test';
+import { signInAs } from './helpers';
 
 const require = createRequire(import.meta.url);
+// The upload page needs a signed-in clinician, so those tests sign in first (through the real flow).
 const PAGES = [
-  { path: '/', name: 'overview' },
-  { path: '/reports/upload', name: 'upload' },
+  { path: '/', name: 'overview', auth: false },
+  { path: '/reports/upload', name: 'upload', auth: true },
 ];
+const open = (page: Page, path: string, auth: boolean) => (auth ? signInAs(page, 'alice', path) : page.goto(path).then(() => undefined));
 
 async function axeViolations(page: Page) {
   await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
@@ -16,10 +19,10 @@ async function axeViolations(page: Page) {
   });
 }
 
-for (const { path, name } of PAGES) {
+for (const { path, name, auth } of PAGES) {
   test.describe(`${name} page`, () => {
     test('fits the viewport with no horizontal scroll', async ({ page }, info) => {
-      await page.goto(path);
+      await open(page, path, auth);
       await page.waitForLoadState('networkidle');
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -29,13 +32,13 @@ for (const { path, name } of PAGES) {
     });
 
     test('has no WCAG 2.0/2.1 A/AA violations in a real browser (incl. colour contrast)', async ({ page }) => {
-      await page.goto(path);
+      await open(page, path, auth);
       await page.waitForLoadState('networkidle');
       expect(await axeViolations(page)).toEqual([]);
     });
 
     test('interactive controls meet the 44px minimum touch target', async ({ page }) => {
-      await page.goto(path);
+      await open(page, path, auth);
       await page.waitForLoadState('networkidle');
       const small = await page.evaluate(() =>
         [...document.querySelectorAll<HTMLElement>('main a, main button, header a, input:not([type=checkbox]), select')]
@@ -61,7 +64,7 @@ test('keyboard: skip link is the first tab stop and jumps to main content', asyn
 });
 
 test('keyboard: the whole upload form can be completed without a mouse', async ({ page }) => {
-  await page.goto('/reports/upload');
+  await signInAs(page, 'alice');
   await page.getByLabel(/synthetic patient label/i).focus();
   await page.keyboard.type('SYN-0042');
   await page.keyboard.press('Tab');
@@ -77,7 +80,7 @@ test('keyboard: the whole upload form can be completed without a mouse', async (
 });
 
 test('form: field-level errors, input preserved after a failed submit, loading state', async ({ page }) => {
-  await page.goto('/reports/upload');
+  await signInAs(page, 'alice');
   await page.getByRole('button', { name: 'Upload report' }).click();
   await expect(page.getByText('Enter a synthetic patient label.')).toBeVisible();
   await expect(page.getByText('Choose a report type.')).toBeVisible();

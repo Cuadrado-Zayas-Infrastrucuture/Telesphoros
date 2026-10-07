@@ -12,3 +12,7 @@ export const readinessDtoSchema = z.strictObject({
   checks: z.record(z.string(), z.enum(['up'])),
 });
 export type ReadinessDto = z.infer<typeof readinessDtoSchema>;
+
+/** `GET /me`: what the signed-in caller may do. Roles only: no identifiers, no email. */
+export const meDtoSchema = z.strictObject({ roles: z.array(z.enum(['reader', 'clinician', 'admin'])) });
+export type MeDto = z.infer<typeof meDtoSchema>;
