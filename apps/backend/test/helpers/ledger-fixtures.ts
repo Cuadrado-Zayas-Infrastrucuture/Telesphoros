@@ -12,22 +12,37 @@ export interface SeededReport {
   patientId: string;
   reportId: string;
   pdfSha256: string;
+  objectVersion: string;
+}
+
+export interface SeedOptions {
+  /** Who created the report record (default `syn-uploader`). */
+  uploader?: string;
+  /** Who asked for the first upload link, and who completed the upload; each defaults to the creator. */
+  requestedBy?: string;
+  completedBy?: string;
+  label?: string;
 }
 
 /** An uploaded lab PDF for a fresh patient, inserted as the owner (this is the state the upload slice will produce). */
-export async function seedLabReport(adminUrl: string, tenantId: string, uploader = 'syn-uploader', label = `SYN-${randomUUID().slice(0, 8)}`): Promise<SeededReport> {
+export async function seedLabReport(adminUrl: string, tenantId: string, uploaderOrOptions: string | SeedOptions = {}, labelArg?: string): Promise<SeededReport> {
+  const options: SeedOptions = typeof uploaderOrOptions === 'string' ? { uploader: uploaderOrOptions, label: labelArg } : uploaderOrOptions;
+  const uploader = options.uploader ?? 'syn-uploader';
+  const label = options.label ?? `SYN-${randomUUID().slice(0, 8)}`;
   const patientId = randomUUID();
   const reportId = randomUUID();
   const pdfSha256 = sha(`pdf:${reportId}`);
+  const objectVersion = `syn-version-${reportId.slice(0, 8)}`;
   await withAdmin(adminUrl, async (c) => {
     await c.query(`INSERT INTO patients (id, tenant_id, created_by, label) VALUES ($1, $2, $3, $4)`, [patientId, tenantId, uploader, label]);
     await c.query(
-      `INSERT INTO reports (id, tenant_id, created_by, patient_id, type, original_filename, size_bytes, status, content_type, sha256, storage_key, uploaded_at)
-       VALUES ($1, $2, $3, $4, 'lab-pdf', 'syn.pdf', 1000, 'received', 'application/pdf', $5, $6, now())`,
-      [reportId, tenantId, uploader, patientId, pdfSha256, `k/${reportId}`],
+      `INSERT INTO reports (id, tenant_id, created_by, patient_id, type, original_filename, size_bytes, status, content_type, sha256, storage_key, uploaded_at,
+                            object_version, upload_requested_by, uploaded_by)
+       VALUES ($1, $2, $3, $4, 'lab-pdf', 'syn.pdf', 1000, 'received', 'application/pdf', $5, $6, now(), $7, $8, $9)`,
+      [reportId, tenantId, uploader, patientId, pdfSha256, `k/${reportId}`, objectVersion, options.requestedBy ?? uploader, options.completedBy ?? uploader],
     );
   });
-  return { tenantId, uploader, patientId, reportId, pdfSha256 };
+  return { tenantId, uploader, patientId, reportId, pdfSha256, objectVersion };
 }
 
 export const captureFor = (r: SeededReport, text = 'synthetic text', over: Partial<CaptureInput> = {}): CaptureInput => ({

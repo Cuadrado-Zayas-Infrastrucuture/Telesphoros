@@ -37,9 +37,10 @@ const run = <T>(db: EphemeralDatabase, work: (c: Client) => Promise<T>) => withA
  * migration. (Every other test derives from it rather than repeating it, and a separate test proves the loader finds exactly these,
  * so a discovery bug cannot hide itself by supplying both the actual and the expected value.)
  */
-const SHIPPED = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009'];
+const SHIPPED = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010'];
 /** The first migration that creates append-only audit tables: reverting it (and everything after it) needs the explicit setting. */
 const FIRST_AUDIT_MIGRATION = '0005';
+const LAST = SHIPPED[SHIPPED.length - 1]!;
 const nextVersion = String(SHIPPED.length + 1).padStart(4, '0');
 
 /** Reverts `steps` migrations in one session that has the audit-drop setting on, as an operator would on purpose. */
@@ -84,6 +85,10 @@ describe('migration runner', () => {
   it('refuses to revert the audit tables unless the session says so on purpose (and only the exact word counts)', async () => {
     const db = await emptyDb();
     await run(db, (c) => migrateUp(c));
+    // 0010 only guards a database that holds evidence identities (tested in report-evidence), so on an empty one it reverts freely;
+    // the audit migrations start below it.
+    expect(await run(db, (c) => migrateDown(c, 1))).toEqual([LAST]);
+    const SHIPPED_NOW = SHIPPED.slice(0, -1);
     const attempt = (setting: string | null) =>
       run(db, async (c) => {
         if (setting !== null) await c.query(`SET telesphoros.allow_audit_drop = '${setting}'`);
@@ -93,7 +98,7 @@ describe('migration runner', () => {
     for (const setting of [null, '', 'YES', 'Yes', 'true', 'on', '1', 'yes ', ' yes']) {
       await expect(attempt(setting)).rejects.toThrow(/Refusing to drop|audit/i);
     }
-    expect((await run(db, (c) => migrationStatus(c))).applied.map((m) => m.version)).toEqual(SHIPPED);
+    expect((await run(db, (c) => migrationStatus(c))).applied.map((m) => m.version)).toEqual(SHIPPED_NOW);
     // A setting that was used and then ended in the same session reads '' afterwards, not NULL, and still refuses.
     await run(db, async (c) => {
       await c.query('BEGIN');
@@ -104,7 +109,7 @@ describe('migration runner', () => {
     // The migrations BEFORE the first audit one revert without it (they hold no audit data).
     const early = await run(db, async (c) => {
       await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
-      return migrateDown(c, SHIPPED.length - SHIPPED.indexOf(FIRST_AUDIT_MIGRATION));
+      return migrateDown(c, SHIPPED_NOW.length - SHIPPED_NOW.indexOf(FIRST_AUDIT_MIGRATION));
     });
     expect(early[early.length - 1]).toBe(FIRST_AUDIT_MIGRATION);
     expect(await run(db, (c) => migrateDown(c, 1))).toEqual(['0004']); // no setting needed
