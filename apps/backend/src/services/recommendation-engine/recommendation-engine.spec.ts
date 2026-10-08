@@ -44,7 +44,7 @@ describe('evaluate: contract', () => {
     ['a lower-case gene', [{ gene: 'genea', state: 'canonical', phenotype: 'x' }], {}],
     ['an unknown state', [{ gene: 'GENEA', state: 'absent' }], {}],
     ['an unknown key', [{ gene: 'GENEA', state: 'null', extra: 1 }], {}],
-    ['a reason only the engine may give', [{ gene: 'GENEA', state: 'unresolved', reasonCode: 'duplicate-gene-conflict' }], {}],
+    ['a reason only the engine may give', [{ gene: 'GENEA', state: 'unresolved', reasonCode: 'gene-absent' }], {}],
     ['a badly written drug name', [], { drugs: ['Not A Drug!'] }],
     ['too many inputs', Array.from({ length: 201 }, () => canonical('GENEA', 'x')), {}],
   ])('refuses %s with an error that repeats none of the input', (_name, inputs, options) => {

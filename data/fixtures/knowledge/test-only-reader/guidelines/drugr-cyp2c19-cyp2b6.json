@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "1.1",
+  "synthetic": true,
+  "provenance": {
+    "source": "SYNTHETIC TEST FIXTURE - TEST ONLY - not CPIC content, not clinical advice",
+    "sourceUrl": "https://example.invalid/synthetic",
+    "retrievedAt": "2026-01-01",
+    "sourceVersion": "synthetic-1"
+  },
+  "review": {
+    "status": "unreviewed"
+  },
+  "id": "drugr-cyp2c19-cyp2b6",
+  "kind": "guideline",
+  "guidelineVersion": "synthetic-1",
+  "title": "Synthetic test-only guideline for drugr",
+  "drug": "drugr",
+  "genes": [
+    "CYP2C19",
+    "CYP2B6"
+  ],
+  "supersedes": [],
+  "recommendations": [
+    {
+      "when": {
+        "CYP2C19": "Normal Metabolizer",
+        "CYP2B6": "Normal Metabolizer"
+      },
+      "locator": {
+        "table": "Synthetic Table R",
+        "row": "Normal Metabolizer",
+        "column": "Normal Metabolizer"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
+      "strength": "Moderate",
+      "recommendationText": "R normal-normal."
+    },
+    {
+      "when": {
+        "CYP2C19": "Intermediate Metabolizer",
+        "CYP2B6": "Normal Metabolizer"
+      },
+      "locator": {
+        "table": "Synthetic Table R",
+        "row": "Intermediate Metabolizer",
+        "column": "Normal Metabolizer"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
+      "strength": "Strong",
+      "recommendationText": "R intermediate-normal."
+    },
+    {
+      "when": {
+        "CYP2C19": "Poor Metabolizer",
+        "CYP2B6": "Normal Metabolizer"
+      },
+      "locator": {
+        "table": "Synthetic Table R",
+        "row": "Poor Metabolizer",
+        "column": "Normal Metabolizer"
+      },
+      "verification": {
+        "state": "disputed",
+        "note": "Synthetic dispute."
+      },
+      "strength": "Strong",
+      "recommendationText": "R poor-normal (disputed)."
+    }
+  ]
+}

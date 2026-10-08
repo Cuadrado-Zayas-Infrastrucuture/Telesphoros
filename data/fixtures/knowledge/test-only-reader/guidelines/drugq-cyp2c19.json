@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "1.1",
+  "synthetic": true,
+  "provenance": {
+    "source": "SYNTHETIC TEST FIXTURE - TEST ONLY - not CPIC content, not clinical advice",
+    "sourceUrl": "https://example.invalid/synthetic",
+    "retrievedAt": "2026-01-01",
+    "sourceVersion": "synthetic-1"
+  },
+  "review": {
+    "status": "unreviewed"
+  },
+  "id": "drugq-cyp2c19",
+  "kind": "guideline",
+  "guidelineVersion": "synthetic-1",
+  "title": "Synthetic test-only guideline for drugq",
+  "drug": "drugq",
+  "genes": [
+    "CYP2C19"
+  ],
+  "supersedes": [],
+  "recommendations": [
+    {
+      "when": {
+        "CYP2C19": "Normal Metabolizer"
+      },
+      "locator": {
+        "table": "Synthetic Table Q",
+        "row": "Normal Metabolizer"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
+      "strength": "Strong",
+      "recommendationText": "Q normal."
+    },
+    {
+      "when": {
+        "CYP2C19": "Intermediate Metabolizer"
+      },
+      "locator": {
+        "table": "Synthetic Table Q",
+        "row": "Intermediate Metabolizer"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
+      "strength": "Moderate",
+      "recommendationText": "Q intermediate."
+    },
+    {
+      "when": {
+        "CYP2C19": "Poor Metabolizer"
+      },
+      "locator": {
+        "table": "Synthetic Table Q",
+        "row": "Poor Metabolizer"
+      },
+      "verification": {
+        "state": "unverified"
+      },
+      "strength": "Strong",
+      "recommendationText": "Q poor (unverified)."
+    }
+  ]
+}
