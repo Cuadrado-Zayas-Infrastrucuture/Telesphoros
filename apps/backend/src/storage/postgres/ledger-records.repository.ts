@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { Database } from '../../db/database';
 import { appendEvent, newId } from '../../ledger/ledger-writer';
-import { DisputeActiveError, SourceChangedError, toLedgerError, type RecordTable } from '../../ledger/ledger-types';
+import { DisputeActiveError, StaleAcceptanceError, SourceChangedError, toLedgerError, type RecordTable } from '../../ledger/ledger-types';
 import { loadProjections } from '../../ledger/projections';
 import { canonicalHash } from '../../services/report-adapter/canonical-json';
 import { LedgerRecordsRepository } from '../ledger-records.repository';
@@ -134,6 +134,8 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
         );
       }
       const stored = await this.finish(client, tenantId, 'evaluations', id);
+      // Capture decisions append under this same lock. A fresh statement sees any decision committed before we acquired it.
+      if (input.captureAcceptanceId !== null) await this.assertCurrentAcceptance(client, tenantId, input.captureId, input.captureAcceptanceId);
       // The append above took the tenant's ledger head lock and keeps it until COMMIT. Raising or deciding a dispute also appends, so it
       // needs the same lock: every dispute change is either committed before we got the lock (and this separate statement, a new
       // snapshot under READ COMMITTED, sees it) or queued behind us (and is ordered after this evaluation).
@@ -144,6 +146,15 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 
   activeDisputeExists(tenantId: string): Promise<boolean> {
     return this.read(tenantId, (client) => this.hasActiveDispute(client, tenantId));
+  }
+
+  private async assertCurrentAcceptance(client: PoolClient, tenantId: string, captureId: string, acceptanceId: string): Promise<void> {
+    const { rows } = await client.query<{ id: string; decision: string }>(
+      `SELECT id::text AS id, decision FROM capture_acceptances
+        WHERE tenant_id = $1 AND capture_id = $2 ORDER BY seq DESC LIMIT 1`,
+      [tenantId, captureId],
+    );
+    if (!rows[0] || rows[0].id !== acceptanceId || rows[0].decision !== 'accepted') throw new StaleAcceptanceError();
   }
 
   private async hasActiveDispute(client: PoolClient, tenantId: string): Promise<boolean> {

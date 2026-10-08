@@ -59,6 +59,14 @@ export class DisputeActiveError extends Error {
   }
 }
 
+/** The acceptance was superseded before the evaluation acquired the ledger lock. Nothing was saved. */
+export class StaleAcceptanceError extends Error {
+  constructor() {
+    super('The capture acceptance is no longer current.');
+    this.name = 'StaleAcceptanceError';
+  }
+}
+
 /** The tenant's head-row lock was not obtained within `lock_timeout`. Nothing was written; retrying is safe. */
 export class LedgerBusyError extends Error {
   /** The SQLSTATE it came from (lock_not_available), kept so callers that look at `code` still see it. */
