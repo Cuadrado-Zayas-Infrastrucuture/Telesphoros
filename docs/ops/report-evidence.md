@@ -25,7 +25,8 @@ nothing the records cite changes. The new version is simply never used.
 - Overwritten (noncurrent) versions are kept at least **six years** (`reports_noncurrent_retention_days`, default 2190, enforced by a
   variable validation and an infrastructure test). Do not lower it: the pinned version of an overwritten file is noncurrent.
 - **No principal in this Terraform module may delete object versions** (`s3:DeleteObjectVersion`). A documented break-glass role outside
-  it may, and using it must be recorded as an audit event with a reason. Versioning does not stop someone with that permission.
+  it may ([break-glass.md](break-glass.md): who holds it, how it is used, and why it must not be created until an audit trail exists), and using it must be
+  recorded as an audit event with a reason. Versioning does not stop someone with that permission.
 
 ## Download links
 
