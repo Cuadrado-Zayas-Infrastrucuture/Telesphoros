@@ -148,7 +148,10 @@ describe('ledger verifier: tampering by someone who can bypass every trigger', (
   it('a tail check that starts at a checkpoint still sees tampering AFTER it, and a rewritten checkpoint target', async () => {
     const t = await chain();
     await verifier.verify(t.tenantId, { recordCheckpoint: true });
-    const e = await repo.insertEvaluation(t.tenantId, 'syn-system', evaluationFor(t.report, t.ids.capture, t.ids.acceptance, { engineVersion: 'syn-2' }));
+    // The chain above holds an open dispute, which blocks a NEW evaluation that shows results (5B-3.2b); a held one shows none and is not blocked.
+    const e = await repo.insertEvaluation(t.tenantId, 'syn-system', evaluationFor(t.report, t.ids.capture, t.ids.acceptance, {
+      engineVersion: 'syn-2', disposition: 'held', holdCode: 'unsupported-layout', geneInputs: [], occurrences: [], results: [], geneStates: [],
+    }));
     expect((await verifier.verify(t.tenantId, { mode: 'tail' })).status).toBe('ok');
     await tamper((c) => c.query(`UPDATE evaluations SET engine_version = 'forged' WHERE id = $1`, [e.record.id]).then(() => undefined));
     expect(kinds(await verifier.verify(t.tenantId, { mode: 'tail' }))).toContain('payload-mismatch');

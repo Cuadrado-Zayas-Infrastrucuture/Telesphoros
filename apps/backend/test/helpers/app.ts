@@ -10,7 +10,7 @@ import { TokenVerifier } from '../../src/auth/token-verifier';
 import { loadEnv } from '../../src/config/env';
 import { READINESS_CHECKS, type ReadinessCheck } from '../../src/health/readiness.service';
 import { createEphemeralDatabase } from './database';
-import { FIXTURES } from './lab-pipeline';
+import { FIXTURES, TEST_KNOWLEDGE } from './lab-pipeline';
 import { TEST_AUDIENCE, TEST_ISSUER, TEST_SECRET } from './env';
 
 export interface TestAppOptions {
@@ -26,6 +26,12 @@ export interface TestAppOptions {
   labReportPipeline?: boolean;
   /** Where the test-only text runner finds its recorded PDFs (default: the imported hand-off captures). */
   fixturesDir?: string;
+  /** The knowledge the pipeline evaluates against (default: the test-only knowledge for the twelve development reports). */
+  knowledgeDir?: string;
+  buildVersion?: string;
+  maxConcurrentReads?: number;
+  /** Replace providers by token (e.g. the report reader, to make it slow or fail on purpose). */
+  overrides?: Array<{ provide: unknown; useValue: unknown }>;
 }
 
 /** True when the e2e suite is running against a real PostgreSQL (TEST_STORAGE=postgres). */
@@ -64,7 +70,9 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
     STORAGE_DRIVER: database || options.postgresUrl ? 'postgres' : 'memory',
     ...(database || options.postgresUrl ? { DATABASE_URL: options.postgresUrl ?? database!.appUrl } : {}),
     ...(options.labReportPipeline ? { LAB_REPORT_PIPELINE: 'enabled' } : {}),
-    ...(options.labReportPipeline ? { LAB_REPORT_FIXTURES_DIR: options.fixturesDir ?? FIXTURES } : {}),
+    ...(options.labReportPipeline
+      ? { LAB_REPORT_FIXTURES_DIR: options.fixturesDir ?? FIXTURES, KNOWLEDGE_DIR: options.knowledgeDir ?? TEST_KNOWLEDGE, BUILD_VERSION: options.buildVersion ?? 'test-build-1', ...(options.maxConcurrentReads ? { LAB_REPORT_MAX_CONCURRENT_READS: String(options.maxConcurrentReads) } : {}) }
+      : {}),
     OBJECT_STORAGE_DRIVER: s3 ? 's3' : 'memory',
     ...(s3 ? { REPORTS_BUCKET: s3.bucket, S3_ENDPOINT: s3.endpoint, S3_FORCE_PATH_STYLE: 'true', AWS_REGION: 'us-east-1' } : {}),
   });
@@ -75,6 +83,7 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
   });
   if (options.readinessChecks) builder = builder.overrideProvider(READINESS_CHECKS).useValue(options.readinessChecks);
   if (options.tokenVerifier) builder = builder.overrideProvider(TokenVerifier).useValue(options.tokenVerifier);
+  for (const override of options.overrides ?? []) builder = builder.overrideProvider(override.provide).useValue(override.useValue);
   const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication<NestExpressApplication>();
   configureApp(app, { corsOrigins: options.corsOrigins });

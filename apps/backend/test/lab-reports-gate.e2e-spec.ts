@@ -5,6 +5,7 @@ import request from 'supertest';
 import { ROLES_KEY } from '../src/auth/decorators';
 import { CapturesController, ReportCaptureController } from '../src/lab-reports/captures.controller';
 import { LabReportsModule } from '../src/lab-reports/lab-reports.module';
+import { LAB_KNOWLEDGE, LAB_READER } from '../src/lab-reports/evaluations.service';
 import { REQUIRES_PIPELINE } from '../src/lab-reports/pipeline-switch';
 import { TextCaptureRunner } from '../src/lab-reports/runner/text-capture-runner';
 import { ObjectStorage } from '../src/object-storage/object-storage';
@@ -34,7 +35,7 @@ function routesOf(controller: ControllerClass): Route[] {
       controller,
       handler: name,
       method: RequestMethod[Reflect.getMetadata(METHOD_METADATA, controller.prototype[name] as object) as number]!,
-      path: `/api/v1/${base}/${Reflect.getMetadata(PATH_METADATA, controller.prototype[name] as object) as string}`.replace(':id', ID),
+      path: `/api/v1/${base}/${Reflect.getMetadata(PATH_METADATA, controller.prototype[name] as object) as string}`.replace(':id', ID).replace(/\/+/g, '/').replace(/\/$/, ''),
       roles: Reflect.getMetadata(ROLES_KEY, controller.prototype[name] as object) as string[] | undefined,
     }));
 }
@@ -47,9 +48,12 @@ describe('the lab-report pipeline routes', () => {
     expect(routes.map((r) => `${r.method} ${r.path.replace(ID, ':id')}`).sort()).toEqual([
       'GET /api/v1/captures/:id',
       'GET /api/v1/captures/:id/text-url',
+      'GET /api/v1/evaluations',
+      'GET /api/v1/evaluations/:id',
       'GET /api/v1/reports/:id/download-url',
       'POST /api/v1/captures/:id/decision',
       'POST /api/v1/reports/:id/capture',
+      'POST /api/v1/reports/:id/evaluations',
     ]);
     expect(moduleControllers).toEqual(expect.arrayContaining([ReportCaptureController, CapturesController]));
   });
@@ -57,7 +61,7 @@ describe('the lab-report pipeline routes', () => {
   it('every controller of the module carries the gate, and every route that is not open to all names its roles', () => {
     for (const controller of moduleControllers) expect(Reflect.getMetadata(REQUIRES_PIPELINE, controller)).toBe(true);
     const open = routes.filter((r) => r.roles === undefined).map((r) => `${r.method} ${r.path.replace(ID, ':id')}`);
-    expect(open).toEqual(['GET /api/v1/captures/:id']); // the one read open to every signed-in role
+    expect(open.sort()).toEqual(['GET /api/v1/captures/:id', 'GET /api/v1/evaluations', 'GET /api/v1/evaluations/:id']); // reads open to every signed-in role
   });
 });
 
@@ -93,7 +97,7 @@ describe('with the pipeline switched off', () => {
   const send = (route: Route, token?: string) => {
     const call = request(app.getHttpServer())[route.method.toLowerCase() as 'get' | 'post'](route.path);
     const withAuth = token ? call.set(bearer(token)) : call;
-    return route.method === 'POST' ? withAuth.send(route.path.endsWith('/decision') ? { decision: 'accepted' } : {}) : withAuth;
+    return route.method === 'POST' ? withAuth.send(route.path.endsWith('/decision') ? { decision: 'accepted' } : route.path.endsWith('/evaluations') ? { captureId: ID, acceptanceId: ID } : {}) : withAuth;
   };
   const tokenWith = (roles: string[]) => signToken({ sub: 'someone', roles, tenant: 'tenant-gate' });
 
@@ -124,7 +128,9 @@ describe('with the pipeline switched off', () => {
     expect(calls).toEqual([]);
   });
 
-  it('builds neither the text runner nor any ledger access while off', () => {
+  it('builds nothing while off: no text runner, no knowledge loaded, no reader started', () => {
     expect(app.get(TextCaptureRunner, { strict: false })).toBeUndefined();
+    expect(app.get(LAB_KNOWLEDGE, { strict: false })).toBeUndefined();
+    expect(app.get(LAB_READER, { strict: false })).toBeUndefined();
   });
 });

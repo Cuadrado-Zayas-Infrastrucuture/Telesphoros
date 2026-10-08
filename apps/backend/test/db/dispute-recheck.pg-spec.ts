@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { PoolClient } from 'pg';
 import { Database } from '../../src/db/database';
 import { DisputeActiveError } from '../../src/ledger/ledger-types';
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
@@ -14,6 +15,32 @@ import { acceptanceFor, captureFor, evaluationFor, seedLabReport } from '../help
 let pg: EphemeralDatabase;
 let database: Database;
 let repo: PostgresLedgerRecordsRepository;
+let gated: PostgresLedgerRecordsRepository;
+
+/** A Database that can hold a transaction open after its work is done and before it COMMITs, so a test can decide the ledger lock's order. */
+class PausableDatabase extends Database {
+  pause?: { reached: () => void; release: Promise<void> };
+  override async withTenant<T>(tenantId: string, work: (client: PoolClient) => Promise<T>, options?: { actor?: string }): Promise<T> {
+    return super.withTenant(tenantId, async (client) => {
+      const result = await work(client);
+      const pause = this.pause;
+      if (pause) {
+        this.pause = undefined; // only the first transaction after the test asks for it
+        pause.reached();
+        await pause.release;
+      }
+      return result;
+    }, options);
+  }
+}
+let pausable: PausableDatabase;
+function pausedBeforeCommit(db: PausableDatabase) {
+  let release!: () => void;
+  let reached!: () => void;
+  const reachedPromise = new Promise<void>((resolve) => (reached = resolve));
+  db.pause = { reached, release: new Promise<void>((resolve) => (release = resolve)) };
+  return { reached: reachedPromise, release: () => release() };
+}
 const WRITER = 'eval-writer';
 const tenant = () => `tenant-${randomUUID()}`;
 
@@ -21,8 +48,11 @@ beforeAll(async () => {
   pg = await createEphemeralDatabase();
   database = new Database({ url: pg.appUrl, ssl: 'disable', applicationName: WRITER });
   repo = new PostgresLedgerRecordsRepository(database);
+  pausable = new PausableDatabase({ url: pg.appUrl, ssl: 'disable', applicationName: 'eval-paused' });
+  gated = new PostgresLedgerRecordsRepository(pausable);
 });
 afterAll(async () => {
+  await pausable.onModuleDestroy();
   await database.onModuleDestroy();
   await pg.drop();
 });
@@ -69,23 +99,24 @@ describe('a dispute and an evaluation racing for the same tenant (decided by the
     expect(await repo.activeDisputeExists(t)).toBe(true);
   });
 
-  it('evaluation first: it is stored, the later dispute commits after it, and the dispute is then active', async () => {
+  it('evaluation first: it is stored, the later dispute waits behind it and commits after it, and the dispute is then active', async () => {
     const { t, evaluation } = await ready();
-    const elsewhere = await seedLabReport(pg.adminUrl, t, { label: 'SYN-HOLD' });
-    const holder = await open('holder', t, 'syn-holder');
-    await holder.insertCapture(elsewhere); // uncommitted: holds the lock so the two below queue up in a known order
-
-    const evaluating = settle(repo.insertEvaluation(t, 'syn-system', evaluation()));
-    await untilBlocked(pg.adminUrl, WRITER); // the evaluation is queued first ...
     const disputer = await open('dispute', t, 'syn-disputer');
-    const raising = settle(disputer.raiseDispute(t));
-    await untilBlocked(pg.adminUrl, disputer.name); // ... and the dispute second
+    const prepared = await disputer.prepareDispute(t); // everything that does not need the lock is done first
 
-    await holder.commit();
+    // The REAL evaluation code runs, and is paused just before COMMIT, after its append and its dispute re-check: it holds the ledger lock.
+    // (Two waiters on one lock are not served in a guaranteed order, so the evaluation is made the holder instead of racing for the queue.)
+    const gate = pausedBeforeCommit(pausable);
+    const evaluating = settle(gated.insertEvaluation(t, 'syn-system', evaluation()));
+    await gate.reached;
+    const raising = settle(disputer.appendPrepared(prepared));
+    await untilBlocked(pg.adminUrl, disputer.name); // the dispute is queued behind the evaluation
+    gate.release();
+
     const stored = await evaluating;
     expect(stored.error).toBeUndefined();
     expect(stored.value!.created).toBe(true);
-    await raising;
+    expect((await raising).error).toBeUndefined();
     await disputer.commit();
 
     expect(await evaluations(t)).toBe(1);

@@ -1,7 +1,6 @@
 import { Client } from 'pg';
 import { appendEvent, newId } from '../../src/ledger/ledger-writer';
 import { captureFor, type SeededReport } from './ledger-fixtures';
-import { withAdmin } from './database';
 import type { PgError } from './ledger-sql';
 
 /**
@@ -44,6 +43,16 @@ export class Session {
 
   /** Raises a dispute and its ledger event, uncommitted (it needs the same ledger lock as any other record). */
   async raiseDispute(tenantId: string): Promise<string> {
+    const prepared = await this.prepareDispute(tenantId);
+    await this.appendPrepared(prepared);
+    return prepared.id;
+  }
+
+  /**
+   * Inserts a dispute WITHOUT its ledger event. Nothing here needs the ledger lock, so a test can do this first and keep the window in which
+   * it holds the lock (which the ledger bounds at 3 s) as short as possible: only `appendPrepared` waits behind it.
+   */
+  async prepareDispute(tenantId: string): Promise<{ id: string; eventId: string }> {
     const id = newId();
     const eventId = newId();
     const noteId = newId();
@@ -56,8 +65,11 @@ export class Session {
        VALUES ($1, $2, $6, $3, 'syn-guideline', '1', $4, 'recommendations', 'poor', NULL, $5)`,
       [id, tenantId, eventId, 'c'.repeat(64), noteId, this.actor],
     );
-    await appendEvent(this.client, 'cell_disputes', id, eventId);
-    return id;
+    return { id, eventId };
+  }
+
+  appendPrepared(prepared: { id: string; eventId: string }): Promise<unknown> {
+    return appendEvent(this.client, 'cell_disputes', prepared.id, prepared.eventId);
   }
 
   commit() {
@@ -70,14 +82,23 @@ export class Session {
   }
 }
 
-/** Waits (bounded) until a connection with this application name is queued behind another session's lock. This is the barrier. */
+/**
+ * Waits (bounded) until a connection with this application name is queued behind another session's lock. This is the barrier.
+ * One connection is used for all the polling: connecting afresh on every poll is slow under load and would stretch the time the
+ * other session holds the ledger lock, which the ledger itself bounds at 3 s.
+ */
 export async function untilBlocked(adminUrl: string, applicationName: string): Promise<void> {
-  const deadline = Date.now() + BLOCKED_MS;
-  while (Date.now() < deadline) {
-    const blocked = await withAdmin(adminUrl, async (c) =>
-      (await c.query(`SELECT 1 FROM pg_stat_activity WHERE application_name = $1 AND wait_event_type = 'Lock'`, [applicationName])).rowCount);
-    if (blocked) return;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+  const watcher = new Client({ connectionString: adminUrl });
+  await watcher.connect();
+  try {
+    const deadline = Date.now() + BLOCKED_MS;
+    while (Date.now() < deadline) {
+      const blocked = await watcher.query(`SELECT 1 FROM pg_stat_activity WHERE application_name = $1 AND wait_event_type = 'Lock'`, [applicationName]);
+      if (blocked.rowCount) return;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  } finally {
+    await watcher.end();
   }
   throw new Error(`${applicationName} never blocked: the two sessions did not interleave as the test requires`);
 }

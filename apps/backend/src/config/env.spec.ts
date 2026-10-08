@@ -84,7 +84,7 @@ describe('loadEnv', () => {
       ['in-memory file storage', { OBJECT_STORAGE_DRIVER: 'memory' }, /OBJECT_STORAGE_DRIVER/],
       ['an unencrypted database connection', { DATABASE_SSL: 'disable' }, /DATABASE_SSL/],
       ['a plain-http CORS origin', { CORS_ALLOWED_ORIGINS: 'http://app.example.com' }, /CORS_ALLOWED_ORIGINS/],
-      ['the synthetic lab-report pipeline', { LAB_REPORT_PIPELINE: 'enabled', LAB_REPORT_FIXTURES_DIR: '/some/recorded/pdfs' }, /LAB_REPORT_PIPELINE.*production/],
+      ['the synthetic lab-report pipeline', { LAB_REPORT_PIPELINE: 'enabled', LAB_REPORT_FIXTURES_DIR: '/some/recorded/pdfs', KNOWLEDGE_DIR: '/k', BUILD_VERSION: 'b1' }, /LAB_REPORT_PIPELINE.*production/],
     ])('refuses %s', (_name, change, message) => {
       expect(() => loadEnv({ ...production, ...change })).toThrow(message);
     });
@@ -92,7 +92,7 @@ describe('loadEnv', () => {
 
   describe('the lab-report pipeline switch', () => {
     const database = { STORAGE_DRIVER: 'postgres', DATABASE_URL: 'postgres://app@db/app' };
-    const fixtures = { LAB_REPORT_FIXTURES_DIR: '/some/recorded/pdfs' };
+    const fixtures = { LAB_REPORT_FIXTURES_DIR: '/some/recorded/pdfs', KNOWLEDGE_DIR: '/some/knowledge', BUILD_VERSION: 'build-1' };
 
     it('is off by default, and "disabled" is the only way it stays off', () => {
       expect(loadEnv({ ...base }).LAB_REPORT_PIPELINE).toBe('disabled');
@@ -103,10 +103,18 @@ describe('loadEnv', () => {
       expect(loadEnv({ ...base, ...database, ...fixtures, LAB_REPORT_PIPELINE: 'enabled' }).LAB_REPORT_PIPELINE).toBe('enabled');
     });
 
-    it('needs the directory of recorded PDFs when enabled (there is no default), and does not need it while off', () => {
-      expect(() => loadEnv({ ...base, ...database, LAB_REPORT_PIPELINE: 'enabled' })).toThrow(/LAB_REPORT_FIXTURES_DIR/);
-      expect(() => loadEnv({ ...base, ...database, LAB_REPORT_FIXTURES_DIR: '', LAB_REPORT_PIPELINE: 'enabled' })).toThrow(/LAB_REPORT_FIXTURES_DIR/);
-      expect(loadEnv({ ...base }).LAB_REPORT_FIXTURES_DIR).toBeUndefined();
+    it.each(['LAB_REPORT_FIXTURES_DIR', 'KNOWLEDGE_DIR', 'BUILD_VERSION'])('needs %s when enabled (there is no default), and does not need it while off', (name) => {
+      const without = Object.fromEntries(Object.entries(fixtures).filter(([key]) => key !== name));
+      expect(() => loadEnv({ ...base, ...database, ...without, LAB_REPORT_PIPELINE: 'enabled' })).toThrow(new RegExp(name));
+      expect(() => loadEnv({ ...base, ...database, ...without, [name]: '', LAB_REPORT_PIPELINE: 'enabled' })).toThrow(new RegExp(name));
+      expect(loadEnv({ ...base })[name as 'BUILD_VERSION']).toBeUndefined();
+    });
+
+    it('validates the build version and bounds the reader concurrency (default 2, 1 to 16)', () => {
+      for (const bad of ['', 'has space', 'x'.repeat(65), 'semi;colon']) expect(() => loadEnv({ ...base, ...database, ...fixtures, BUILD_VERSION: bad, LAB_REPORT_PIPELINE: 'enabled' })).toThrow(/BUILD_VERSION/);
+      expect(loadEnv({ ...base }).LAB_REPORT_MAX_CONCURRENT_READS).toBe(2);
+      for (const bad of ['0', '17', 'many', '1.5']) expect(() => loadEnv({ ...base, LAB_REPORT_MAX_CONCURRENT_READS: bad })).toThrow(/LAB_REPORT_MAX_CONCURRENT_READS/);
+      expect(loadEnv({ ...base, LAB_REPORT_MAX_CONCURRENT_READS: '16' }).LAB_REPORT_MAX_CONCURRENT_READS).toBe(16);
     });
 
     it('is refused with the in-memory store (the ledger has no in-memory version)', () => {

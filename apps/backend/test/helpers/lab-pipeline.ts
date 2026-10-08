@@ -9,6 +9,8 @@ import { ObjectStorage } from '../../src/object-storage/object-storage';
 import { withAdmin } from './database';
 import { bearer, signToken } from './tokens';
 
+export const TEST_KNOWLEDGE = resolve(__dirname, '../../../../data/fixtures/knowledge/test-only-reader');
+export const REPO_ROOT = resolve(__dirname, '../../../..');
 export const FIXTURES = resolve(__dirname, '../../../../knowledge/lab-report-reader/v2-handoff/fixtures/captures');
 export const fixturePdf = (id: string) => readFileSync(join(FIXTURES, id, 'source.pdf'));
 export const fixtureText = (id: string) => readFileSync(join(FIXTURES, id, 'report.txt'), 'utf8');
@@ -81,6 +83,23 @@ export class LabPipeline {
 
   decide(who: Person, captureId: string, body: object) {
     return this.api().post(`/api/v1/captures/${captureId}/decision`).set(bearer(who.token)).send(body);
+  }
+
+  evaluate(who: Person, reportId: string, body: object) {
+    return this.api().post(`/api/v1/reports/${reportId}/evaluations`).set(bearer(who.token)).send(body);
+  }
+
+  /**
+   * The whole run up to an evaluation, by different people: a clinician uploads and captures, an independent reviewer accepts.
+   * Returns the ids an evaluation request names.
+   */
+  async reviewedCapture(bytes: Buffer, who: { clinician?: Person; reviewer?: Person } = {}) {
+    const clinician = who.clinician ?? (await this.person('clin', ['clinician']));
+    const reviewer = who.reviewer ?? (await this.person('rev', ['reviewer']));
+    const up = await this.uploadedLabPdf(clinician, bytes);
+    const capture = (await this.capture(clinician, up.reportId).expect(201)).body;
+    const acceptance = (await this.decide(reviewer, capture.id, { decision: 'accepted' }).expect(201)).body;
+    return { clinician, reviewer, reportId: up.reportId, patientId: up.patientId, captureId: capture.id as string, acceptanceId: acceptance.id as string, upload: up };
   }
 
   row<T = Record<string, unknown>>(sql: string, values: unknown[] = []): Promise<T[]> {

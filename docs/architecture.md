@@ -54,8 +54,10 @@ different person where the rules say so:
 2. **Capture** (`POST /reports/:id/capture`): fetch the pinned version, re-hash, extract text, store it, record a capture, all inside a
    protocol that refuses if the report changed in between. The text runner is currently a **recorded-text substitute** for twelve development PDFs.
 3. **Decision** (`POST /captures/:id/decision`, reviewer): someone who did not create, upload or capture the report accepts or rejects.
-4. **Evaluation** (3.2b-2, in progress): the reader finds spans of text, the **adapter** turns them into engine input or holds the whole
-   report ([design/report-adapter-spec.md](design/report-adapter-spec.md)), and the engine produces results stored with the ledger.
+4. **Evaluation** (`POST /reports/:id/evaluations`): refused unless the decision named is an acceptance and still the latest, the text is
+   unchanged and no dispute is active; then the reader finds spans of text, the **adapter** turns them into engine input or holds the whole
+   report ([design/report-adapter-spec.md](design/report-adapter-spec.md)), and the engine produces results stored with the ledger. The reader and
+   engine run outside any transaction, at most a configured number at once per process; the dispute check repeats inside the storing transaction.
 5. **Corrections and disputes** (5B-3.3, not built): retraction, supersession, disputed guideline cells and their overlay.
 
 Details of the reader and adapter: [lab-report-reader.md](lab-report-reader.md).
