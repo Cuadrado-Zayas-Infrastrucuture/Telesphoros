@@ -94,15 +94,18 @@ export const snapshotSchema = z.strictObject({
     text: z.string().max(200000), textSha256: hash, popplerVersion: id,
     acceptance: reviewSchema.extend({ ...relation, pdfSha256: hash, objectVersion: id, textSha256: hash, popplerVersion: id }) }),
   reader: z.unknown(),
-  records: z.array(z.strictObject({ payload: recordSchema, recordSha256: hash })).max(200),
+  // Resolve and validate a referenced payload at its admission gate, so a missing policy/context cannot preempt empty fields.
+  records: z.array(z.strictObject({ payload: z.unknown(), recordSha256: hash.nullable() })).max(200),
   latestReviews: z.array(z.strictObject({ recordId: id, reviewId: id, sequence: index })).max(200),
   sources: z.array(z.strictObject({ sha256: hash, text: z.string().max(200000) })).max(10),
-  policyBytes: z.string().max(1048576),
-  matcherPolicyBytes: z.string().max(4096),
+  policyBytes: z.string().max(1048576).nullable(),
+  matcherPolicyBytes: z.string().max(4096).nullable(),
   /** Current tenant dispute overlay. Knowledge identity keeps its existing loader computation. */
   knowledgeSetId: hash, disputedRows: z.array(selectorSchema).max(500),
 });
-export type LookupSnapshot = z.infer<typeof snapshotSchema>;
+export type LookupSnapshot = Omit<z.infer<typeof snapshotSchema>, 'records'> & {
+  records: Array<{ payload: z.infer<typeof recordSchema>; recordSha256: string | null }>;
+};
 export type ValidatedRecord = z.infer<typeof recordSchema>;
 export interface LookupPorts {
   /** Authorized store, not request data. One consistent read; JSON retains duplicate-key validation. */
