@@ -14,7 +14,7 @@ import type { TextCaptureRunner } from './runner/text-capture-runner';
 // Cases that need a storage or ledger that misbehaves on purpose, which a real store will not do.
 const pipeline = new PipelineSwitch({ LAB_REPORT_PIPELINE: 'enabled', DOWNLOAD_URL_TTL_SECONDS: 120 } as Env);
 const principal = (roles: Principal['roles']): Principal => ({ sub: 'syn-person', tenantId: 'tenant-unit', roles });
-const runnerFor = (text = 'synthetic text'): TextCaptureRunner => ({ name: 'fake', capture: async () => ({ text, popplerVersion: '26.03.0' }) });
+const runnerFor = (text = 'synthetic text'): TextCaptureRunner => ({ name: 'fake', manifestSha256: 'f'.repeat(64), capture: async () => ({ text, popplerVersion: '26.03.0' }) });
 
 async function setup(storage: ObjectStorage = new InMemoryObjectStorage()) {
   const reports = new InMemoryReportsRepository();

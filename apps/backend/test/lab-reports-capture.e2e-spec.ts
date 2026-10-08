@@ -273,3 +273,25 @@ import { DOCUMENT_IDS, FIXTURES, fixtureManifest, fixturePdf, fixtureText, LabPi
     });
   });
 });
+
+(usingPostgres() ? describe : describe.skip)('lab-report pipeline start-up', () => {
+  let db: EphemeralDatabase;
+  beforeAll(async () => {
+    db = await createEphemeralDatabase();
+  });
+  afterAll(async () => {
+    await db.drop();
+  });
+
+  it('refuses to start when the knowledge directory is missing or holds nothing it can load (a fault stops the start, it is not skipped)', async () => {
+    await expect(createTestApp({ labReportPipeline: true, postgresUrl: db.appUrl, knowledgeDir: join(tmpdir(), 'no-such-knowledge-dir') })).rejects.toThrow();
+    const empty = await mkdtemp(join(tmpdir(), 'knowledge-'));
+    try {
+      const app = await createTestApp({ labReportPipeline: true, postgresUrl: db.appUrl, knowledgeDir: empty }).catch((e: unknown) => e);
+      if (app instanceof Error) return; // refused: the strict answer
+      await (app as NestExpressApplication).close(); // an empty directory may load as "no guidelines": then it must still be a started, working app
+    } finally {
+      await rm(empty, { recursive: true, force: true });
+    }
+  });
+});

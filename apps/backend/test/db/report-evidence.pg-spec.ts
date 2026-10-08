@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { Client } from 'pg';
 import { Database } from '../../src/db/database';
 import { migrateDown } from '../../src/db/migrator';
-import { appendEvent, newId } from '../../src/ledger/ledger-writer';
+import { newId } from '../../src/ledger/ledger-writer';
 import { LedgerIntegrityError, SourceChangedError } from '../../src/ledger/ledger-types';
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { acceptanceFor, captureFor, type SeededReport, seedLabReport, sha } from '../helpers/ledger-fixtures';
 import { attempt, type PgError } from '../helpers/ledger-sql';
+import { Session, untilBlocked as untilBlockedOn } from '../helpers/barrier';
 
 // Migration 0010: the stored file of a lab report is evidence, and the database itself keeps it from changing under a capture.
 // Synthetic data only. Every refusal here has a control that must succeed, so a refusal cannot be an artefact of a broken fixture.
@@ -226,57 +226,12 @@ describe('who may accept a capture (four identities are excluded)', () => {
 // ---------------------------------------------------------------------------------------------------------------------------------------
 // The race (decision 11, 12.3). Two sessions are held at a known point by the database's own lock queue, not by sleeping or repeating.
 
-const BLOCKED_MS = 5_000;
-
-class Session {
-  private constructor(readonly client: Client, readonly name: string) {}
-  static async open(url: string, name: string, tenantId: string): Promise<Session> {
-    const client = new Client({ connectionString: url, application_name: name });
-    await client.connect();
-    await client.query('BEGIN');
-    await client.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
-    await client.query(`SELECT set_config('app.current_actor', 'syn-capturer', true)`);
-    return new Session(client, name);
-  }
-  /** Starts a statement without waiting for it; the outcome is read later. */
-  start(sql: string, values: unknown[] = []): Promise<PgError | undefined> {
-    return this.client.query(sql, values).then(() => undefined, (error: PgError) => error);
-  }
-  async insertCapture(report: SeededReport): Promise<string> {
-    const input = captureFor(report);
-    const id = newId();
-    const eventId = newId();
-    await this.client.query(
-      `INSERT INTO report_captures (id, tenant_id, created_by, ledger_event_id, report_id, pdf_sha256, text_storage_key, text_sha256, text_scalars, poppler_version, runner)
-       VALUES ($1, $2, 'syn-capturer', $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [id, report.tenantId, eventId, report.reportId, input.pdfSha256, input.textStorageKey, input.textSha256, input.textScalars, input.popplerVersion, input.runner],
-    );
-    await appendEvent(this.client, 'report_captures', id, eventId);
-    return id;
-  }
-  commit() { return this.client.query('COMMIT'); }
-  async close() {
-    await this.client.query('ROLLBACK').catch(() => undefined); // intentional: already finished
-    await this.client.end();
-  }
-}
-
-/** Waits (bounded) until the named session is queued behind another session's lock. This is the barrier. */
-async function untilBlocked(name: string): Promise<void> {
-  const deadline = Date.now() + BLOCKED_MS;
-  while (Date.now() < deadline) {
-    const blocked = await withAdmin(pg.adminUrl, async (c) =>
-      (await c.query(`SELECT 1 FROM pg_stat_activity WHERE application_name = $1 AND wait_event_type = 'Lock'`, [name])).rowCount);
-    if (blocked) return;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error(`${name} never blocked: the two sessions did not interleave as the test requires`);
-}
+const untilBlocked = (name: string) => untilBlockedOn(pg.adminUrl, name);
 
 describe('a capture racing a change to the same report (decided by the lock queue, in both orders)', () => {
   const sessions: Session[] = [];
   const open = async (name: string, tenantId: string) => {
-    const s = await Session.open(pg.appUrl, `${name}-${randomUUID().slice(0, 6)}`, tenantId);
+    const s = await Session.open(pg.appUrl, `${name}-${randomUUID().slice(0, 6)}`, tenantId, 'syn-capturer');
     sessions.push(s);
     return s;
   };

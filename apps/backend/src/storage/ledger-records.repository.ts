@@ -22,9 +22,16 @@ export abstract class LedgerRecordsRepository {
   /** The latest decision about a capture (by sequence), or undefined. */
   abstract latestAcceptance(tenantId: string, captureId: string): Promise<Projected | undefined>;
 
-  /** Idempotent per identity key: the same inputs, knowledge and code return the existing evaluation. */
+  /**
+   * Idempotent per identity key: the same inputs, knowledge and code return the existing evaluation.
+   * A NEW evaluation that shows drug results (`disposition: 'evaluated'`) throws DisputeActiveError if a dispute is open or upheld,
+   * checked in a separate statement AFTER the tenant's ledger lock is held (see the implementation). A held evaluation shows nothing
+   * and is not blocked.
+   */
   abstract insertEvaluation(tenantId: string, actor: string, input: EvaluationInput): Promise<InsertResult>;
   abstract findEvaluation(tenantId: string, id: string): Promise<Projected | undefined>;
+  /** True when a dispute is open or upheld in the tenant. An early exit for callers; `insertEvaluation` repeats it after the ledger lock. */
+  abstract activeDisputeExists(tenantId: string): Promise<boolean>;
   abstract listEvaluations(tenantId: string, filter: { reportId?: string; patientId?: string }): Promise<Projected[]>;
 
   abstract insertCorrection(tenantId: string, actor: string, input: CorrectionInput): Promise<InsertResult>;

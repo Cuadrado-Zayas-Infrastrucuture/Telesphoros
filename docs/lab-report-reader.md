@@ -76,9 +76,9 @@ Nothing calls it yet either; it is wired to an endpoint in the records slice.
 
 A held report produces no drug results. Nothing in a hold or in the audit trail contains text from the report.
 
-## The pipeline routes (slice 5B-3.2b-1; synthetic, non-production)
+## The pipeline routes (slice 5B-3.2b; synthetic, non-production)
 
-With `LAB_REPORT_PIPELINE=enabled` (never in production, PostgreSQL only) a report that was uploaded as `lab-pdf` can be captured and reviewed:
+With `LAB_REPORT_PIPELINE=enabled` (never in production, PostgreSQL only) a report that was uploaded as `lab-pdf` can be captured, reviewed and evaluated:
 
 | Route | Who | What |
 | --- | --- | --- |
@@ -86,13 +86,36 @@ With `LAB_REPORT_PIPELINE=enabled` (never in production, PostgreSQL only) a repo
 | `GET /captures/:id` | everyone signed in | The capture and its latest decision. Never the text, a storage key or who made it |
 | `POST /captures/:id/decision` | reviewer | Accept or reject, with an optional note (kept in `event_notes`, shown only as a digest). The hash and Poppler version are copied from the capture |
 | `GET /reports/:id/download-url`, `GET /captures/:id/text-url` | clinician, reviewer, admin | A short-lived link to one version of one file (the PDF's pinned version; the text after its hash was re-checked) |
+| `POST /reports/:id/evaluations` `{captureId, acceptanceId}` | clinician, reviewer, admin | Runs the reader, the adapter and the engine on an accepted capture and stores the result with its ledger event. 201 new, 200 the same evaluation again |
+| `GET /evaluations`, `GET /evaluations/:id` | everyone signed in | Stored evaluations (list: no engine inputs). Always `clinicalUse: "not-approved"` and `actionable: false` |
 
-Whoever **accepts** is not the report's creator, the person who asked for the first upload link, the person who completed the upload, or the
-person who captured it (409 `self-review`; a rejection is open to any reviewer). The text runner is a **recorded-text substitute**: it
-recognises only the twelve development PDFs by the SHA-256 of their retrieved bytes and returns their stored text. It says nothing about real
-PDF extraction, which needs the pinned Poppler binary and is a separate slice. `LAB_REPORT_FIXTURES_DIR` (required when the pipeline is on, no default) names the directory of
-recordings. A missing or damaged directory stops the start; an entry damaged later answers 500 `PIPELINE_MISCONFIGURED`.
-Switched off, every one of these routes answers 503 `PIPELINE_DISABLED` and touches nothing.
+**Whoever accepts** is not the report's creator, the person who asked for the first upload link, the person who completed the upload, or the
+person who captured it (409 `self-review`; a rejection is open to any reviewer).
+
+**An evaluation is refused before the reader runs, and nothing is stored, when:** the decision named is not an acceptance
+(`capture-not-accepted`), a later decision about that capture exists (`stale-acceptance`: always 409, even if the result exists; read history
+with GET), the stored text is no longer the captured text (`text-hash-mismatch`), a dispute is open or upheld in the tenant
+(`dispute-active`, tenant-wide until the overlay exists), or the ids do not belong together (`mismatch`; unknown or foreign ids are 404). The
+dispute check is repeated inside the storing transaction **after** the ledger lock is held, as its own statement; see spec section 18.
+
+**When the reader does not give a usable answer:** `source-limit` and `candidate-or-frame-limit` are facts about the text and are stored as a
+`held` evaluation. `source-time-budget` and `worker-error` are operational: 503 `READER_UNAVAILABLE` with `Retry-After: 30`, **nothing is stored
+and no key is consumed**, and the same request works once the reader does. A repeating failure shows in the log as a reason code, never as a record.
+
+**Capacity:** at most `LAB_REPORT_MAX_CONCURRENT_READS` (default 2) reads at once **in this process**; more are turned away at once with 503
+`PIPELINE_BUSY` and `Retry-After: 5`, nothing queued. This is not a deployment-wide or per-tenant limit. No database transaction is held while the
+reader works. A caller who gives up does not cancel the read; it finishes and is stored once.
+
+**What an evaluation records:** the knowledge set id, the build (`BUILD_VERSION`), the capture and decision it relied on, the adapter's source
+binding, `scope: "synthetic-test-only/1"` and the SHA-256 of the recorded set the text runner answers for, all inside the stored binding and
+therefore inside the ledger event. The engine takes no population or drug-context input; none is invented.
+
+**Configuration when enabled** (the application refuses to start without each): `LAB_REPORT_FIXTURES_DIR`, `KNOWLEDGE_DIR`, `BUILD_VERSION`; the
+reader must be the pinned build (`verifyPinned()` at start), the knowledge must load, and the bucket must keep versions. Nothing is loaded or
+started while the pipeline is off, and every route then answers 503 `PIPELINE_DISABLED` without touching anything.
+
+The text runner is a **recorded-text substitute**: it recognises only the twelve development PDFs by the SHA-256 of their retrieved bytes and
+returns their stored text. It says nothing about real PDF extraction, which needs the pinned Poppler binary and is a separate slice.
 
 ## Known limits
 

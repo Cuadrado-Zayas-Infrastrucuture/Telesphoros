@@ -10,6 +10,8 @@ export interface TextCapture {
  */
 export abstract class TextCaptureRunner {
   abstract readonly name: 'fake' | 'poppler';
+  /** Identifies what this runner can answer for (the recorded set, or the extractor build). Recorded inside every evaluation. */
+  abstract readonly manifestSha256: string;
   abstract capture(pdf: Buffer): Promise<TextCapture>;
 }
 

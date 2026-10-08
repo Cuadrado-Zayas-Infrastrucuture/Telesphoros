@@ -20,13 +20,12 @@ Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and
 | 5B-3.0, 5B-3.1 | The specification, then the database layer: records, correction tables, the per-tenant hash-chained audit ledger, verifier, redaction, roles, backup and restore that preserve ownership and privileges | [design/records-and-corrections.md](design/records-and-corrections.md), [ops/ledger-roles.md](ops/ledger-roles.md) |
 | 5B-3.2a (#20, #21) | Migration 0010 (the stored lab PDF is pinned to an object version and protected by the database), the `reviewer` role, `lab-pdf` type, version-aware object storage, the error contract, the `LAB_REPORT_PIPELINE` switch, six-year retention of overwritten report files in Terraform | [ops/report-evidence.md](ops/report-evidence.md), spec section 16 |
 | 5B-3.2b-1 (#22, #24) | Capture, decision and file-link endpoints, the recorded-text runner, the checkpoint proving the pinned reader runs in CI | [lab-report-reader.md](lab-report-reader.md), spec section 17 |
+| 5B-3.2b-2 | Evaluation endpoints (reader, adapter, engine, stored with the ledger), knowledge loading, the per-process reader limit, the dispute re-check after the ledger lock, D01 to D12 end to end against the hand-written expectations | [lab-report-reader.md](lab-report-reader.md), spec section 18 |
 
 ## In progress and next
 
-- **5B-3.2b-2, results out** (next): knowledge loading at startup, the reader limiter (per process), a database-backed acceptance store, the
-  evaluation endpoints (`POST /reports/:id/evaluations`, `GET /evaluations`, `GET /evaluations/:id`), the dispute re-check after the ledger
-  lock, and D01 to D12 end to end against the hand-written expected results (`tests/report_adapter/golden.json`). Plan:
-  [design/plans/5b-3-2b-endpoints.md](design/plans/5b-3-2b-endpoints.md) sections 6 to 11.
+Slice 5B-3.2 (the pipeline endpoints) is complete once 3.2b-2 merges; its plan and decisions are in [design/plans/](design/plans/).
+
 - **5B-3.3**: corrections, disputes and the overlay, `current=true`, startup and background ledger verification, the readiness `ledger` check,
   `GET /ledger/verify`, restore-time ledger check. Needs its own plan.
 - **Adapter-side R05 readiness proposal**: written, awaiting approval and five owner choices; nothing started.

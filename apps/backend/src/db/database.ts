@@ -3,6 +3,8 @@ import { Pool, type PoolClient } from 'pg';
 import { pendingMigrations } from './migrator';
 
 export interface DatabaseOptions {
+  /** Shown in pg_stat_activity. Tests give each pool its own, to tell which connection is waiting. */
+  applicationName?: string;
   /** Connection string for the APPLICATION role (never the migrator/owner). */
   url: string;
   ssl: 'disable' | 'require';
@@ -41,7 +43,7 @@ export class Database {
       connectionTimeoutMillis: 2_000, // fail fast instead of queueing forever when the database is down
       statement_timeout: 5_000, // no query may run unbounded
       idle_in_transaction_session_timeout: 10_000,
-      application_name: 'telesphoros-backend',
+      application_name: options.applicationName ?? 'telesphoros-backend',
       ssl: options.ssl === 'require' ? { rejectUnauthorized: true } : undefined,
     });
     // An idle client can die (failover, restart). Without a listener that becomes a process crash.

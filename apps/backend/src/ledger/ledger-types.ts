@@ -48,6 +48,17 @@ export class SourceChangedError extends Error {
   }
 }
 
+/**
+ * A dispute about a guideline cell is open or upheld in the tenant, so a result built on guidelines cannot be stored yet (until the
+ * overlay exists, 5B-3.3). Raised AFTER the ledger lock is held, which is what makes the check conclusive. Nothing was written.
+ */
+export class DisputeActiveError extends Error {
+  constructor() {
+    super('A dispute is active in this tenant.');
+    this.name = 'DisputeActiveError';
+  }
+}
+
 /** The tenant's head-row lock was not obtained within `lock_timeout`. Nothing was written; retrying is safe. */
 export class LedgerBusyError extends Error {
   /** The SQLSTATE it came from (lock_not_available), kept so callers that look at `code` still see it. */

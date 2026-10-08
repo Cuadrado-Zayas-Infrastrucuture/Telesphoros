@@ -537,3 +537,19 @@ Each was found by building or by an attack test, and each is covered by a test.
 3. **File links are for clinician, reviewer and admin, not reader** (decision 19). A PDF is the most sensitive artifact in the system.
 4. **The text runner hashes the bytes it is given** and takes no hash from the caller, so a replaced file cannot borrow another file's text.
 
+## 18. Amendments made while building 5B-3.2b-2 (these govern where they differ from the text above)
+
+1. **The dispute re-check** (5.3, plan 12.2). `insertEvaluation` re-checks for an open or upheld dispute **after** the ledger append, as its own
+   statement under READ COMMITTED. It is sound only because every dispute change also appends (so it needs the same tenant lock), the
+   evaluation keeps the lock to COMMIT, and the check takes a fresh snapshot. A dispute that committed before the lock was granted is seen and
+   the evaluation is refused with nothing stored; one that queued behind is ordered after the evaluation. Held evaluations (no drug results) and
+   replays of a stored evaluation are not blocked. Tested with two real sessions in both orders, and the isolation level and the separate
+   statement are asserted.
+2. **Reader outcomes** (6). `source-limit` and `candidate-or-frame-limit` are stored as `held`; `source-time-budget` and `worker-error` answer
+   503 and store nothing.
+3. **What an evaluation stores beyond the adapter's binding:** `scope` and the recorded-set hash (inside `binding`), the knowledge set id and
+   the build version. Source-bound clinical context (indication, population, specimen) remains deferred (section 14).
+4. **Reading** (4.5, 8). A stored evaluation is always readable by id. Its response says whether the decision it relied on is still the latest
+   (`acceptance.current`), how many disputes are active in the tenant, and `actionable: false` (always, while not approved for clinical use).
+5. **The reader limit is per process** and is a configuration value (`LAB_REPORT_MAX_CONCURRENT_READS`).
+

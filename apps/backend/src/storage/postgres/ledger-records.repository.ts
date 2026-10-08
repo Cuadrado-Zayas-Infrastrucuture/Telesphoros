@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { Database } from '../../db/database';
 import { appendEvent, newId } from '../../ledger/ledger-writer';
-import { SourceChangedError, toLedgerError, type RecordTable } from '../../ledger/ledger-types';
+import { DisputeActiveError, SourceChangedError, toLedgerError, type RecordTable } from '../../ledger/ledger-types';
 import { loadProjections } from '../../ledger/projections';
 import { canonicalHash } from '../../services/report-adapter/canonical-json';
 import { LedgerRecordsRepository } from '../ledger-records.repository';
@@ -133,8 +133,34 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
           [tenantId, id, state.gene, state.state, state.phenotype, state.diplotype, state.activityScore, state.reasonCode],
         );
       }
-      return this.finish(client, tenantId, 'evaluations', id);
+      const stored = await this.finish(client, tenantId, 'evaluations', id);
+      // The append above took the tenant's ledger head lock and keeps it until COMMIT. Raising or deciding a dispute also appends, so it
+      // needs the same lock: every dispute change is either committed before we got the lock (and this separate statement, a new
+      // snapshot under READ COMMITTED, sees it) or queued behind us (and is ordered after this evaluation).
+      if (input.disposition === 'evaluated') await this.assertNoActiveDispute(client, tenantId);
+      return stored;
     });
+  }
+
+  activeDisputeExists(tenantId: string): Promise<boolean> {
+    return this.read(tenantId, (client) => this.hasActiveDispute(client, tenantId));
+  }
+
+  private async hasActiveDispute(client: PoolClient, tenantId: string): Promise<boolean> {
+    const { rows } = await client.query<{ active: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM cell_disputes d
+           LEFT JOIN cell_dispute_decisions x ON x.dispute_id = d.id AND x.tenant_id = d.tenant_id
+          WHERE d.tenant_id = $1 AND (x.id IS NULL OR x.decision = 'upheld')
+       ) AS active`,
+      [tenantId],
+    );
+    return rows[0]!.active;
+  }
+
+  /** Its own statement, never part of the append: that is what gives it a fresh snapshot after the lock is held. */
+  private async assertNoActiveDispute(client: PoolClient, tenantId: string): Promise<void> {
+    if (await this.hasActiveDispute(client, tenantId)) throw new DisputeActiveError();
   }
 
   findEvaluation(tenantId: string, id: string): Promise<Projected | undefined> {
