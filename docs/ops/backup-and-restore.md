@@ -33,8 +33,9 @@ pnpm --filter @telesphoros/backend db:restore -- --from /var/backups/telesphoros
 made without `--key-file` is **not encrypted** (development and tests only; the command says so).
 
 A real recovery: `restore ... --target-db telesphoros_restored` keeps the database; then point the application at it.
-The target server must already have the `telesphoros_app` role (migration 0002 creates it, or run
-`infrastructure/docker/postgres-init.sql`'s first block). To restore from the off-site copy, give `--from s3://<bucket>/nightly --latest`
+The target server must already have every role the backup names (`telesphoros_app` and, from migration 0005, the ledger roles, plus
+the role that owns the tables): roles belong to the server, not the database, so a dump cannot carry them. `restore` checks this
+first and stops, restoring nothing, with the list of missing roles. How to create them: `docs/ops/ledger-roles.md`. To restore from the off-site copy, give `--from s3://<bucket>/nightly --latest`
 (or `…/backup-<timestamp>`); it downloads with the read-only key and verifies as below.
 
 ## What `restore` proves (exit code 1 if any step fails)
@@ -48,7 +49,12 @@ The target server must already have the `telesphoros_app` role (migration 0002 c
 2. `pg_restore` completes with no errors, into a brand-new database.
 3. Tables present; **row counts equal the baseline**, including soft-deleted rows.
 4. Applied migrations equal; constraint, index and trigger counts equal.
-5. Row-level security is still enabled, forced and has the same policies, **and still isolates owners when acting as
+5. **Ownership and privileges** equal the record in the manifest (from the backup that first recorded them): who owns each table and
+   function, and who may `SELECT`, `INSERT` or `EXECUTE` what. The restore keeps owners (no `--no-owner` on `pg_restore`) because the ledger's
+   `SECURITY DEFINER` functions run with their **owner's** rights. A restore that gave them to a superuser would silently turn
+   "the application can append to the ledger" into "the application runs code as a superuser". Backups made before this check
+   existed are restored as before (without owners) and say so.
+6. Row-level security is still enabled, forced and has the same policies, **and still isolates owners when acting as
    the application role** (no owner set: sees nothing; one owner set: sees exactly that owner's rows).
 
 The baseline is read **inside the same exported snapshot `pg_dump` uses**, so a busy database cannot cause false

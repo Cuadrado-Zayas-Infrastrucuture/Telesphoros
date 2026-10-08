@@ -1,6 +1,8 @@
 import { type DynamicModule, Global, Module, type Provider } from '@nestjs/common';
 import { Database } from '../db/database';
 import type { Env } from '../config/env';
+import { LedgerRecordsRepository } from './ledger-records.repository';
+import { PostgresLedgerRecordsRepository } from './postgres/ledger-records.repository';
 import { InMemoryPatientsRepository, PatientsRepository } from './patients.repository';
 import { PostgresPatientsRepository } from './postgres/patients.repository';
 import { PostgresRecommendationsRepository } from './postgres/recommendations.repository';
@@ -25,8 +27,10 @@ export class StorageModule {
         { provide: PatientsRepository, useClass: PostgresPatientsRepository },
         { provide: ReportsRepository, useClass: PostgresReportsRepository },
         { provide: RecommendationsRepository, useClass: PostgresRecommendationsRepository },
+        // The ledger's guarantees are database guarantees: there is deliberately no in-memory version.
+        { provide: LedgerRecordsRepository, useClass: PostgresLedgerRecordsRepository },
       ];
-      return { module: StorageModule, providers, exports: [Database, ...repositories] };
+      return { module: StorageModule, providers, exports: [Database, ...repositories, LedgerRecordsRepository] };
     }
 
     return {

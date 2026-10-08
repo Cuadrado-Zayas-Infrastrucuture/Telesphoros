@@ -27,21 +27,23 @@ const urlFor = (database: string, user?: { name: string; password: string }) => 
 };
 
 let name: string;
-let dir: string;
+let dir: string; // the migrations as they were BEFORE 0003
+let upToTenancy: string; // ...and up to and including 0003 (later migrations are not this test's subject)
 let admin: Client; // superuser, bypasses RLS: seeds and inspects
 let migrator: Client; // owns the tables, bound by FORCE RLS
 
-/** The migrations as they were BEFORE 0003. */
-const beforeTenancy = () => {
-  const copy = mkdtempSync(join(tmpdir(), 'migrations-pre-tenancy-'));
+/** A copy of the shipped migrations containing only versions up to and including `last`. */
+const migrationsUpTo = (last: string) => {
+  const copy = mkdtempSync(join(tmpdir(), `migrations-up-to-${last}-`));
   cpSync(MIGRATIONS_DIR, copy, { recursive: true });
-  for (const file of readdirSync(copy).filter((f) => f.startsWith('0003'))) rmSync(join(copy, file));
+  for (const file of readdirSync(copy).filter((f) => /^\d{4}_/.test(f) && f.slice(0, 4) > last)) rmSync(join(copy, file));
   return copy;
 };
 
 beforeAll(async () => {
   name = `test_${randomBytes(6).toString('hex')}`;
-  dir = beforeTenancy();
+  dir = migrationsUpTo('0002');
+  upToTenancy = migrationsUpTo('0003');
   const root = new Client({ connectionString: adminUrl() });
   await root.connect();
   try {
@@ -116,7 +118,7 @@ describe('migration 0003 on a database that already holds owner-era data', () =>
   it('applies as a non-superuser table owner, and no row changes who can see it or when it was last updated', async () => {
     before = await snapshot();
     expect(before).toHaveLength(6);
-    expect(await migrateUp(migrator)).toEqual(['0003']);
+    expect(await migrateUp(migrator, upToTenancy)).toEqual(['0003']);
 
     // Every former owner is now a tenant of one, and the creator is backfilled with the same value.
     const rows = (await admin.query(`SELECT tenant_id, created_by FROM patients ORDER BY tenant_id`)).rows;
@@ -171,14 +173,14 @@ describe('migration 0003 on a database that already holds owner-era data', () =>
 
   it('reverts cleanly: the column is owner_id again with the same values, the policies bind on the owner setting, and it re-applies', async () => {
     const beforeRevert = await snapshot(); // taken now: an earlier test legitimately edited a label
-    expect(await migrateDown(migrator, 1)).toEqual(['0003']);
+    expect(await migrateDown(migrator, 1, upToTenancy)).toEqual(['0003']);
     expect((await admin.query(`SELECT owner_id FROM patients ORDER BY owner_id`)).rows).toEqual([{ owner_id: 'alice' }, { owner_id: 'bob' }]);
     const columns = (await admin.query(`SELECT column_name FROM information_schema.columns WHERE table_name = 'patients' AND column_name IN ('tenant_id','created_by')`)).rows;
     expect(columns).toEqual([]);
     expect(await asApp({ 'app.current_owner_id': 'alice' }, async (c) => (await c.query(`SELECT count(*)::int AS n FROM patients`)).rows[0].n)).toBe(1);
     expect(await asApp({ 'app.current_tenant_id': 'alice' }, async (c) => (await c.query(`SELECT count(*)::int AS n FROM patients`)).rows[0].n)).toBe(0);
 
-    expect(await migrateUp(migrator)).toEqual(['0003']);
+    expect(await migrateUp(migrator, upToTenancy)).toEqual(['0003']);
     expect((await admin.query(`SELECT count(*)::int AS n FROM patients WHERE created_by = tenant_id`)).rows[0].n).toBe(2);
     expect(await snapshot()).toEqual(beforeRevert); // the round trip rewrote no history either
   });

@@ -10,6 +10,9 @@ AWS BAA is executed and the compliance prerequisites are complete.
 | `patients` | synthetic label only | No name, date of birth or real identifier exists in the model, by design |
 | `reports` | report **metadata**: type, filename, size, status, content type, SHA-256, storage key | The bytes are in S3, never here |
 | `recommendations` | engine output (read-only through the API) | Written only by the rules engine (Phase 5) |
+| `report_captures`, `capture_acceptances`, `evaluations` (+ `evaluation_results`, `evaluation_gene_states`), `corrections`, `cell_disputes`, `cell_dispute_decisions` | the records of the lab-report pipeline (migrations 0007 to 0009) | **Append-only** (nobody updates or deletes, the owner included); each row has its own event in the tenant's hash chain, committed in the same transaction. Not connected to any endpoint yet (5B-3.2). Design: `docs/design/records-and-corrections.md` |
+| `event_notes` | every free-text note, kept out of the chain (0006) | Insert-only except one audited redaction |
+| `ledger_events`, `ledger_heads`, `ledger_checkpoints` | the per-tenant audit chain (0005) | Written only by the ledger functions; verified by `src/ledger/verifier.ts` |
 
 Rules enforced **by the database itself** (each is asserted by a test that tries to break it):
 
@@ -42,6 +45,10 @@ row. Tests prove each layer separately and together (`test/db/rls.pg-spec.ts`, `
 | --- | --- | --- |
 | table owner / admin | migrations, backup, restore (`DATABASE_MIGRATOR_URL`, `DATABASE_ADMIN_URL`) | everything; bypasses RLS (needed so a backup sees every row) |
 | `telesphoros_app` (group) + a login user | the API (`DATABASE_URL`) | `SELECT/INSERT/UPDATE` on `patients`, `reports`; `SELECT/INSERT` on `recommendations`; read `schema_migrations`; **bound by RLS** |
+
+The ledger adds four more `NOLOGIN` roles (`telesphoros_ledger`, `telesphoros_redactor`, `telesphoros_ledger_verifier`,
+`telesphoros_ledger_operator`) with narrow rights; what each may do, how the migrator and the verifier and operator logins are
+provisioned, and what a restore needs: [docs/ops/ledger-roles.md](ops/ledger-roles.md). Tests for them live in `apps/backend/test/db/ledger-*.pg-spec.ts`.
 
 The login user and its password are provisioned **outside the repository** (locally by
 `infrastructure/docker/postgres-init.sql`; in AWS by an operator step, with the password in Secrets Manager).

@@ -6,7 +6,10 @@ import { Client } from 'pg';
 import { createBackup } from '../../src/db/backup';
 import { generateKeyFile, manifestMac, readKeyFile } from '../../src/db/backup-crypto';
 import { restoreAndVerify } from '../../src/db/restore';
-import { adminUrl, createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
+import { adminUrl, createEphemeralDatabase, type EphemeralDatabase, serializeRestoreSuites, withAdmin } from '../helpers/database';
+
+// Counts shared state (throwaway databases, temp dirs): must not overlap another restoring suite.
+serializeRestoreSuites();
 
 const dbs: EphemeralDatabase[] = [];
 const scratch: string[] = [];
@@ -60,7 +63,9 @@ describe('backup', () => {
     const { dir, manifest } = await createBackup({ adminUrl: db.adminUrl, destDir: tempDir() });
 
     expect(manifest.serverVersion).toMatch(/^16\./); // which PostgreSQL made this backup
-    expect(manifest.migrations).toEqual(['0001', '0002', '0003']);
+    // Every migration the repository ships, in order: a rule, so adding a migration never breaks this test (an independent
+    // hand-kept list lives in migrations.pg-spec.ts, which is where a forgotten migration is caught).
+    expect(manifest.migrations).toEqual(readdirSync(join(__dirname, '..', '..', 'migrations')).filter((f) => f.endsWith('.up.sql')).map((f) => f.slice(0, 4)).sort());
     expect(manifest.tables.patients).toMatchObject({ rows: 6, rlsEnabled: true, rlsForced: true, policies: 1 });
     expect(manifest.tables.reports!.rows).toBe(3);
     expect(manifest.tables.recommendations!.rows).toBe(3);
@@ -132,17 +137,20 @@ describe('restore (the one-command procedure, actually executed)', () => {
     expect(report.checks.map((c) => `${c.ok ? 'PASS' : 'FAIL'} ${c.name}`)).toEqual([
       'PASS manifest valid',
       'PASS backup file checksum',
+      'PASS required roles',
       'PASS pg_restore',
       'PASS tables present',
       'PASS row counts',
       'PASS migrations',
       'PASS schema shape (constraints, indexes, triggers)',
       'PASS row-level security settings',
+      'PASS ownership and privileges',
       'PASS row-level security isolation',
     ]);
     expect(report.ok).toBe(true);
-    // 6 patients (3 live + 3 soft-deleted) + 3 reports + 3 recommendations + 2 migration rows
-    expect(byName(report.checks, 'row counts')!).toMatchObject({ detail: 'all 4 tables match (15 rows)' });
+    // 6 patients (3 live + 3 soft-deleted) + 3 reports + 3 recommendations + one row per applied migration
+    const manifestRows = 12 + readdirSync(join(__dirname, '..', '..', 'migrations')).filter((f) => f.endsWith('.up.sql')).length;
+    expect(byName(report.checks, 'row counts')!.detail).toMatch(new RegExp(`^all \\d+ tables match \\(${manifestRows} rows\\)$`));
     expect(await throwawayDatabases()).toBe(before); // the throwaway was dropped
   });
 

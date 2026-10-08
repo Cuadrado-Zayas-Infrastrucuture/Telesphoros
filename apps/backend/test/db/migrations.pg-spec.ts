@@ -32,25 +32,82 @@ const tempMigrations = () => {
 };
 const run = <T>(db: EphemeralDatabase, work: (c: Client) => Promise<T>) => withAdmin(db.adminUrl, work);
 
+/**
+ * The migrations that ship, asserted INDEPENDENTLY of the loader: this list is edited by hand, deliberately, with every new
+ * migration. (Every other test derives from it rather than repeating it, and a separate test proves the loader finds exactly these,
+ * so a discovery bug cannot hide itself by supplying both the actual and the expected value.)
+ */
+const SHIPPED = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009'];
+/** The first migration that creates append-only audit tables: reverting it (and everything after it) needs the explicit setting. */
+const FIRST_AUDIT_MIGRATION = '0005';
+const nextVersion = String(SHIPPED.length + 1).padStart(4, '0');
+
+/** Reverts `steps` migrations in one session that has the audit-drop setting on, as an operator would on purpose. */
+const down = (db: EphemeralDatabase, steps: number) =>
+  withAdmin(db.adminUrl, async (c) => {
+    await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
+    return migrateDown(c, steps);
+  });
+
 describe('migration runner', () => {
+  it('ships exactly the migrations this test expects (discovery is checked on its own, against a list written by hand)', () => {
+    expect(loadMigrations().map((m) => m.version)).toEqual(SHIPPED);
+    for (const migration of loadMigrations()) {
+      expect(migration.upSql.length).toBeGreaterThan(0);
+      expect(migration.downSql.length).toBeGreaterThan(0);
+    }
+  });
+
   it('applies every migration in order, and a second run does nothing', async () => {
     const db = await emptyDb();
-    expect(await run(db, (c) => migrateUp(c))).toEqual(['0001', '0002', '0003']);
+    expect(await run(db, (c) => migrateUp(c))).toEqual(SHIPPED);
     expect(await run(db, (c) => migrateUp(c))).toEqual([]);
     const status = await run(db, (c) => migrationStatus(c));
-    expect(status.applied.map((m) => m.version)).toEqual(['0001', '0002', '0003']);
+    expect(status.applied.map((m) => m.version)).toEqual(SHIPPED);
     expect(status.pending).toEqual([]);
   });
 
   it('reverts step by step, and can re-apply after a full revert', async () => {
     const db = await emptyDb();
     await run(db, (c) => migrateUp(c));
-    expect(await run(db, (c) => migrateDown(c, 1))).toEqual(['0003']);
-    expect((await run(db, (c) => migrationStatus(c))).pending.map((m) => m.version)).toEqual(['0003']);
-    expect(await run(db, (c) => migrateDown(c, 5))).toEqual(['0002', '0001']);
+    expect(await down(db, 1)).toEqual([SHIPPED[SHIPPED.length - 1]]);
+    expect((await run(db, (c) => migrationStatus(c))).pending.map((m) => m.version)).toEqual([SHIPPED[SHIPPED.length - 1]]);
+    expect(await down(db, 50)).toEqual(SHIPPED.slice(0, -1).reverse());
     const tables = await run(db, (c) => c.query(`SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> 'schema_migrations'`));
     expect(tables.rows).toEqual([]);
-    expect(await run(db, (c) => migrateUp(c))).toEqual(['0001', '0002', '0003']);
+    // Functions go too (roles are cluster-wide and stay, like telesphoros_app).
+    const functions = await run(db, (c) => c.query(`SELECT proname FROM pg_proc WHERE pronamespace = 'public'::regnamespace`));
+    expect(functions.rows).toEqual([]);
+    expect(await run(db, (c) => migrateUp(c))).toEqual(SHIPPED);
+  });
+
+  it('refuses to revert the audit tables unless the session says so on purpose (and only the exact word counts)', async () => {
+    const db = await emptyDb();
+    await run(db, (c) => migrateUp(c));
+    const attempt = (setting: string | null) =>
+      run(db, async (c) => {
+        if (setting !== null) await c.query(`SET telesphoros.allow_audit_drop = '${setting}'`);
+        return migrateDown(c, 1);
+      });
+    // Never set (SQL NULL), empty, wrong case, wrong words: all refused, and nothing was reverted.
+    for (const setting of [null, '', 'YES', 'Yes', 'true', 'on', '1', 'yes ', ' yes']) {
+      await expect(attempt(setting)).rejects.toThrow(/Refusing to drop|audit/i);
+    }
+    expect((await run(db, (c) => migrationStatus(c))).applied.map((m) => m.version)).toEqual(SHIPPED);
+    // A setting that was used and then ended in the same session reads '' afterwards, not NULL, and still refuses.
+    await run(db, async (c) => {
+      await c.query('BEGIN');
+      await c.query(`SET LOCAL telesphoros.allow_audit_drop = 'yes'`);
+      await c.query('COMMIT');
+      await expect(migrateDown(c, 1)).rejects.toThrow(/Refusing to drop/);
+    });
+    // The migrations BEFORE the first audit one revert without it (they hold no audit data).
+    const early = await run(db, async (c) => {
+      await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
+      return migrateDown(c, SHIPPED.length - SHIPPED.indexOf(FIRST_AUDIT_MIGRATION));
+    });
+    expect(early[early.length - 1]).toBe(FIRST_AUDIT_MIGRATION);
+    expect(await run(db, (c) => migrateDown(c, 1))).toEqual(['0004']); // no setting needed
   });
 
   it('refuses to run if an applied migration was edited afterwards', async () => {
@@ -64,23 +121,23 @@ describe('migration runner', () => {
   it('rolls back a failing migration completely and reports which one failed', async () => {
     const db = await emptyDb();
     const dir = tempMigrations();
-    writeFileSync(join(dir, '0004_broken.up.sql'), 'CREATE TABLE half_done (id int); SELECT 1/0;');
-    writeFileSync(join(dir, '0004_broken.down.sql'), 'DROP TABLE IF EXISTS half_done;');
-    await expect(run(db, (c) => migrateUp(c, dir))).rejects.toThrow(/Migration 0004 failed and was rolled back/);
+    writeFileSync(join(dir, `${nextVersion}_broken.up.sql`), 'CREATE TABLE half_done (id int); SELECT 1/0;');
+    writeFileSync(join(dir, `${nextVersion}_broken.down.sql`), 'DROP TABLE IF EXISTS half_done;');
+    await expect(run(db, (c) => migrateUp(c, dir))).rejects.toThrow(new RegExp(`Migration ${nextVersion} failed and was rolled back`));
     const left = await run(db, (c) => c.query(`SELECT to_regclass('public.half_done') AS t`));
     expect(left.rows[0].t).toBeNull();
-    expect((await run(db, (c) => migrationStatus(c))).applied.map((m) => m.version)).toEqual(['0001', '0002', '0003']);
+    expect((await run(db, (c) => migrationStatus(c))).applied.map((m) => m.version)).toEqual(SHIPPED);
   });
 
   it('is safe when two deploys start at the same moment (advisory lock)', async () => {
     const db = await emptyDb();
     const results = await Promise.all([run(db, (c) => migrateUp(c)), run(db, (c) => migrateUp(c))]);
-    expect(results.flat().sort()).toEqual(['0001', '0002', '0003']); // each migration applied exactly once, no error
+    expect(results.flat().sort()).toEqual(SHIPPED); // each migration applied exactly once, no error
   });
 
   it('reports pending migrations read-only (what /ready relies on)', async () => {
     const db = await emptyDb();
-    expect(await run(db, (c) => pendingMigrations(c))).toEqual(['0001', '0002', '0003']);
+    expect(await run(db, (c) => pendingMigrations(c))).toEqual(SHIPPED);
     await run(db, (c) => migrateUp(c));
     expect(await run(db, (c) => pendingMigrations(c))).toEqual([]);
   });
@@ -91,9 +148,11 @@ describe('migration runner', () => {
     expect(() => loadMigrations(dir)).toThrow(MigrationError);
     const gap = tempMigrations();
     for (const file of readdirSync(gap).filter((f) => f.startsWith('0002'))) rmSync(join(gap, file));
-    writeFileSync(join(gap, '0004_x.up.sql'), 'SELECT 1;');
-    writeFileSync(join(gap, '0004_x.down.sql'), 'SELECT 1;');
     expect(() => loadMigrations(gap)).toThrow(/gap/);
+    const extra = tempMigrations();
+    writeFileSync(join(extra, '9999_x.up.sql'), 'SELECT 1;');
+    writeFileSync(join(extra, '9999_x.down.sql'), 'SELECT 1;');
+    expect(() => loadMigrations(extra)).toThrow(/gap/);
   });
 });
 
@@ -120,10 +179,12 @@ describe('schema (asserted by trying to break it on a real PostgreSQL)', () => {
       [tenant, patientId],
     )).rows[0].id as string;
 
-  it('every foreign key states ON DELETE RESTRICT explicitly', async () => {
+  it('every foreign key states ON DELETE RESTRICT explicitly (the rule, not a list of names: a new table is held to it too)', async () => {
     const { rows } = await q(`SELECT conname, confdeltype FROM pg_constraint WHERE contype = 'f' ORDER BY conname`);
-    expect(rows.map((r) => r.conname)).toEqual(['recommendations_patient_fk', 'recommendations_report_fk', 'reports_patient_fk']);
-    expect(rows.every((r) => r.confdeltype === 'r')).toBe(true);
+    expect(rows.length).toBeGreaterThan(3);
+    expect(rows.filter((r) => r.confdeltype !== 'r').map((r) => r.conname)).toEqual([]);
+    // The three originals are still there.
+    for (const name of ['recommendations_patient_fk', 'recommendations_report_fk', 'reports_patient_fk']) expect(rows.map((r) => r.conname)).toContain(name);
   });
 
   it('ids are UUIDs generated by the database, and every table has NOT NULL created_at / updated_at', async () => {

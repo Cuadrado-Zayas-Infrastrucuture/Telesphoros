@@ -1,10 +1,10 @@
 # Records, corrections and the audit chain (slice 5B-3 specification)
 
-> **Specification only. No migration, table, endpoint or code exists for anything in this document.** It is written and
-> approved before any of that, as `docs/design/outcomes-and-reason-codes.md` requires ("the correction and supersession
-> model for stored results ... written and approved before their code"). The code follows in three later pull requests
-> (5B-3.1, 5B-3.2, 5B-3.3), each of which stops for review. Synthetic data only. `clinical_approval` and
-> `training_eligible` stay `false` on everything in this slice.
+> **Status.** Written and approved before any code, as `docs/design/outcomes-and-reason-codes.md` requires. The database layer
+> (migrations 0004 to 0009, the ledger library, the verifier and the PostgreSQL repository) is built in **5B-3.1**; the endpoints,
+> the `reviewer` role and the pipeline switch follow in 5B-3.2 and 5B-3.3, each of which stops for review. Where building taught
+> something that changes the text below, **section 15 (Amendments) governs**, and the affected passage carries a pointer.
+> Synthetic data only. `clinical_approval` and `training_eligible` stay `false` on everything in this slice.
 
 ## 0. What this slice connects
 
@@ -261,9 +261,11 @@ The ledger has **no free-text column**: only ids, codes, a hash and the actor's 
 ### 6.2 Hashes (exact)
 
 - **`record_hash`** is computed **by the database**, not by the application:
-  `encode(sha256(convert_to(concat_ws(chr(31), tenant_id, seq, event_type, subject_table, subject_id, actor_sub, payload_sha256, prev_hash, created_at_utc), 'UTF8')), 'hex')`,
+  `encode(sha256(convert_to(concat_ws(chr(31), tenant_id, seq, event_type, subject_table, subject_id, actor_sub, payload_sha256, projection_version, hash_version, prev_hash, created_at_utc), 'UTF8')), 'hex')`,
   where `created_at_utc` is `to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')` and the first event of a tenant has
-  `prev_hash = 64 zeros`. Every joined value is constrained not to contain `chr(31)`.
+  `prev_hash = 64 zeros`. Every joined value is constrained not to contain `chr(31)`. `hash_version` (1) names this formula and
+  `projection_version` (1) names the projection of section 6.2's next bullet; both are stored on the event, so a later change is detectable
+  instead of silently reinterpreted. Known-answer vectors from an independent implementation: `apps/backend/test/fixtures/ledger-golden-vectors.json`.
 - **`payload_sha256`** is `sha256` of the **canonical JSON** (sorted keys at every level, no whitespace; the same routine as the
   reader's `canonical-json.ts`) of the subject's projection: every column of the row as stored, timestamps as ISO-8601 UTC strings,
   uuids lower-case, jsonb canonicalized, with `ledger_event_id` included and **free text replaced by its `body_sha256`**. For an
@@ -442,3 +444,55 @@ disabled or ledger latched 503. Responses never contain note text in a list view
 Labeled-data records for the future model (decision 7; the rule stays: training eligibility false until lawful basis, independent
 review and sealed splits); the `operator`, `governance` and `compliance` roles; cross-tenant dispute propagation; anchoring the
 ledger head outside the database; the real Poppler runner; the frontend (5D); the AI layer (5C).
+
+## 15. Amendments made while building 5B-3.1 (these govern where they differ from the text above)
+
+Each was found by building or by an attack test, and each is covered by a test.
+
+1. **Hashes and versions** (6.2). The event hash also covers `projection_version` and `hash_version`. The payload of a **checkpoint** is
+   `sha256(id, tenant, up_to_seq, head_hash, mode)` joined with `chr(31)`; the payload of a **redaction** is
+   `sha256("<note id>:<original body sha256>:<basis code>")`. Both are recomputed by the verifier.
+2. **Encoding of the projection** (6.2): uuid lower-case text; `timestamptz` as `YYYY-MM-DD"T"HH24:MI:SS.US"Z"` in UTC (microseconds, which
+   JavaScript dates would lose); `bigint` as a decimal string; `numeric` as the stored text (`"1.50"`); `integer` as a JSON number;
+   `text[]` as an array in stored order; `jsonb` canonicalized; free text replaced by `{ "id", "bodySha256" }`. Children of an evaluation are
+   ordered in code (results by `ordinal`, gene states by gene symbol in UTF-16 order), never by a collation. The writer and the verifier load
+   rows through the same function, so they cannot drift.
+3. **Two append functions** (6.3). `ledger_append` is the only function the application may call, and it refuses the event types
+   `redaction` and `checkpoint`. `ledger_append_internal` does the work and can be executed only by the redaction function and by
+   functions of the same owner. Only `src/ledger/ledger-writer.ts` calls `ledger_append`; a static test pins that.
+4. **The actor is the author** (6.3). The event's actor must equal the record's `created_by`, checked at COMMIT in **both** directions: a
+   deferred constraint trigger on `ledger_events` (event to row) and a deferred constraint trigger on every record table (row to its own
+   event: the event exists, names this row, this tenant and this author). The deferred foreign key alone only proves that *some* event with
+   that id exists; without the second trigger a second row could point at the first row's event and commit (found by an attack test).
+5. **An evaluation always names its capture** (3.4). `capture_id` is NOT NULL. `capture_acceptance_id` is nullable only for a held
+   evaluation that was held before any acceptance (hold code `capture-not-accepted`). An evaluated one relies on the **latest** decision
+   about its capture, and it must be an acceptance. `hold_message_id` is not stored: a hold is its code.
+6. **Results** (3.4). `guideline_id` / `guideline_version` are nullable together with `citation` (a `no-guideline` or an uncited
+   `no-published-recommendation` result has none). Each result also stores `gene_evidence` (the engine's per-result gene list), so the stored
+   result equals the engine's output field for field.
+7. **Redaction** (3.7, 6.8). A redaction carries a basis **code** (`phi-in-note`, `legal-order`, `other-approved`), not free text. The one
+   allowed update of a note (tombstone, time, basis) is permitted only when a `redaction` event for that note was appended by the **same
+   transaction** (checked through the event row's `xmin`), so an old event cannot be reused. The procedure `redact_event_note(note, event, basis)`
+   is executed by the `telesphoros_ledger_operator` group, with the tenant and actor settings of the operator's session.
+8. **Roles** (7; new text). Four `NOLOGIN` roles are created by the migrations: `telesphoros_ledger` (owns the ledger tables and functions),
+   `telesphoros_redactor` (owns the redaction function; `UPDATE` only on three columns of `event_notes`), `telesphoros_ledger_verifier`
+   (reads; executes only `ledger_record_checkpoint`) and `telesphoros_ledger_operator` (may execute the redaction function). Logins that
+   are members of the last two are provisioned **outside the repository**; the verifier is deliberately **not** a member of the application
+   role. Forced row-level security blinds even an owner, so the ledger role and the verifier each have an **explicit read policy on every
+   record table**; the catalog guard (`ledger-catalog.pg-spec.ts`) fails when one is missing.
+9. **Verification** (6.6). One verification runs in a single `REPEATABLE READ READ ONLY` transaction (one snapshot for the head, the events
+   and the rows). Modes: `full` from genesis; `tail` from the newest checkpoint that still matches the chain (otherwise `full`). It checks both
+   directions and the notes, reports a failure **kind and sequence number only**, and returns `incomplete` (never `ok`, and no checkpoint)
+   when the time or event budget is exhausted. The verifier reads tenants directly from `ledger_heads`; there is no `ledger_tenants()`
+   function. A checkpoint is written only by `ledger_record_checkpoint`, in a separate short transaction.
+10. **The migrator** (D6). Migrations create ledger objects under `SET LOCAL ROLE telesphoros_ledger` / `telesphoros_redactor`, so the
+    migrator needs a one-time `SET` membership in those roles (granted automatically to a superuser or an administrator-enabled migrator;
+    `docs/ops/ledger-roles.md`). Every audit `down` migration refuses to run unless the session sets `telesphoros.allow_audit_drop = 'yes'`.
+11. **Backup and restore** (10). The restore no longer passes `--no-owner` to `pg_restore` (pg_dump's own flag is ignored for the custom archive format, so the restore decides): a restore that gave the definer functions to a superuser would turn
+    "the application can append" into "the application runs code as a superuser". The manifest records ownership and privilege facts
+    (additive field `privileges`, covered by the signature); a restore first requires that every role they name exists on the server,
+    restores with owners, and compares ownership and privileges with the record. Backups made before this field existed are restored as
+    before. See `docs/ops/backup-and-restore.md`.
+12. **PostgreSQL only.** The record repositories have no in-memory implementation: the guarantees are the database's.
+13. **Not done in this slice.** Startup verification, the readiness `ledger` check, the restore-time ledger check and every endpoint belong to
+    5B-3.2 and 5B-3.3. The pipeline stays off.
