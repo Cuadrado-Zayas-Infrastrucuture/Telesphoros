@@ -1,0 +1,46 @@
+{
+  "name": "identical-duplicate-calls-collapse",
+  "description": "The same call twice is one call.",
+  "calls": [
+    {
+      "gene": "GENEA",
+      "outcome": "called",
+      "diplotype": "*1/*1"
+    },
+    {
+      "gene": "GENEA",
+      "outcome": "called",
+      "diplotype": "*1/*1"
+    }
+  ],
+  "drugs": [
+    "drugw"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "phenotypes": [
+      {
+        "status": "determined",
+        "gene": "GENEA",
+        "diplotype": "*1/*1",
+        "phenotype": "Synthetic Normal",
+        "activityScore": null
+      }
+    ],
+    "recommendations": [
+      {
+        "status": "recommendation",
+        "gene": "GENEA",
+        "drug": "drugw",
+        "diplotype": "*1/*1",
+        "phenotype": "Synthetic Normal",
+        "strength": "Strong",
+        "guidelineId": "drugw-genea",
+        "guidelineVersion": "synthetic-1",
+        "sourceUrl": "https://example.invalid/synthetic",
+        "recommendationText": "Synthetic wording.  Two spaces, a non-breaking space, and a é are kept exactly.",
+        "implication": null
+      }
+    ]
+  }
+}

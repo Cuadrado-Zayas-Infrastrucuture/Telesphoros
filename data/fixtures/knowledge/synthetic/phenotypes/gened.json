@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.0",
+  "synthetic": true,
+  "provenance": {
+    "source": "SYNTHETIC TEST FIXTURE - not CPIC content",
+    "sourceUrl": "https://example.invalid/synthetic",
+    "retrievedAt": "2026-01-01",
+    "sourceVersion": "synthetic-1"
+  },
+  "review": {
+    "status": "unreviewed"
+  },
+  "id": "gened",
+  "kind": "gene-phenotype-map",
+  "gene": "GENED",
+  "alleles": [
+    {
+      "name": "*1",
+      "function": "Normal function"
+    }
+  ],
+  "phenotypes": [
+    "Synthetic Only"
+  ],
+  "method": {
+    "type": "function-pair",
+    "rows": [
+      {
+        "functions": [
+          "Normal function",
+          "Normal function"
+        ],
+        "phenotype": "Synthetic Only"
+      }
+    ]
+  }
+}

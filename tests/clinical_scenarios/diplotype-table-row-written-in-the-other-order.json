@@ -1,0 +1,47 @@
+{
+  "name": "diplotype-table-row-written-in-the-other-order",
+  "description": "The table lists \"*2/*1\"; a report saying \"*1/*2\" still matches.",
+  "calls": [
+    {
+      "gene": "GENEC",
+      "outcome": "called",
+      "diplotype": "*1/*2"
+    }
+  ],
+  "drugs": [
+    "drugx"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "phenotypes": [
+      {
+        "status": "determined",
+        "gene": "GENEC",
+        "diplotype": "*1/*2",
+        "phenotype": "Synthetic Alpha",
+        "activityScore": null
+      }
+    ],
+    "recommendations": [
+      {
+        "status": "indeterminate",
+        "drug": "drugx",
+        "gene": "GENEA",
+        "reasonCode": "GENE_NOT_IN_REPORT"
+      },
+      {
+        "status": "recommendation",
+        "gene": "GENEC",
+        "drug": "drugx",
+        "diplotype": "*1/*2",
+        "phenotype": "Synthetic Alpha",
+        "strength": "Optional",
+        "guidelineId": "drugx-genec",
+        "guidelineVersion": "synthetic-1",
+        "sourceUrl": "https://example.invalid/synthetic",
+        "recommendationText": "X alpha.",
+        "implication": null
+      }
+    ]
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "name": "phenotype-the-guideline-does-not-cover",
+  "description": "Phenotype is determined but the guideline has no row for it.",
+  "calls": [
+    {
+      "gene": "GENEB",
+      "outcome": "called",
+      "diplotype": "*1/*1"
+    }
+  ],
+  "drugs": [
+    "drugy"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "phenotypes": [
+      {
+        "status": "determined",
+        "gene": "GENEB",
+        "diplotype": "*1/*1",
+        "phenotype": "Synthetic High",
+        "activityScore": 2
+      }
+    ],
+    "recommendations": [
+      {
+        "status": "indeterminate",
+        "drug": "drugy",
+        "gene": "GENEB",
+        "reasonCode": "PHENOTYPE_NOT_IN_GUIDELINE"
+      }
+    ]
+  }
+}

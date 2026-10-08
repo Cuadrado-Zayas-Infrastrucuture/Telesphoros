@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "1.0",
+  "synthetic": true,
+  "provenance": {
+    "source": "SYNTHETIC TEST FIXTURE - not CPIC content",
+    "sourceUrl": "https://example.invalid/synthetic",
+    "retrievedAt": "2026-01-01",
+    "sourceVersion": "synthetic-1"
+  },
+  "review": {
+    "status": "unreviewed"
+  },
+  "id": "genea",
+  "kind": "gene-phenotype-map",
+  "gene": "GENEA",
+  "alleles": [
+    {
+      "name": "*1",
+      "function": "Normal function"
+    },
+    {
+      "name": "*2",
+      "function": "No function"
+    },
+    {
+      "name": "*3",
+      "function": "Decreased function"
+    }
+  ],
+  "phenotypes": [
+    "Synthetic Normal",
+    "Synthetic Intermediate",
+    "Synthetic Poor"
+  ],
+  "method": {
+    "type": "function-pair",
+    "rows": [
+      {
+        "functions": [
+          "Normal function",
+          "Normal function"
+        ],
+        "phenotype": "Synthetic Normal"
+      },
+      {
+        "functions": [
+          "Normal function",
+          "Decreased function"
+        ],
+        "phenotype": "Synthetic Intermediate"
+      },
+      {
+        "functions": [
+          "Normal function",
+          "No function"
+        ],
+        "phenotype": "Synthetic Intermediate"
+      },
+      {
+        "functions": [
+          "Decreased function",
+          "Decreased function"
+        ],
+        "phenotype": "Synthetic Intermediate"
+      },
+      {
+        "functions": [
+          "Decreased function",
+          "No function"
+        ],
+        "phenotype": "Synthetic Poor"
+      },
+      {
+        "functions": [
+          "No function",
+          "No function"
+        ],
+        "phenotype": "Synthetic Poor"
+      }
+    ]
+  }
+}

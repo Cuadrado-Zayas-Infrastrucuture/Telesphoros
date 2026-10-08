@@ -1,0 +1,32 @@
+{
+  "name": "activity-score-in-a-gap",
+  "description": "Score 1.75 falls between the Medium and High ranges: no phenotype, and the reason says so.",
+  "calls": [
+    {
+      "gene": "GENEB",
+      "outcome": "called",
+      "diplotype": "*1/*5"
+    }
+  ],
+  "drugs": [
+    "drugy"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "phenotypes": [
+      {
+        "status": "indeterminate",
+        "gene": "GENEB",
+        "reasonCode": "NO_PHENOTYPE_MAPPING"
+      }
+    ],
+    "recommendations": [
+      {
+        "status": "indeterminate",
+        "drug": "drugy",
+        "gene": "GENEB",
+        "reasonCode": "NO_PHENOTYPE_MAPPING"
+      }
+    ]
+  }
+}

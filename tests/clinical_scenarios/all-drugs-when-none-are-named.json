@@ -1,0 +1,63 @@
+{
+  "name": "all-drugs-when-none-are-named",
+  "description": "With no drug list, every drug the guidelines cover is evaluated, in alphabetical order.",
+  "calls": [
+    {
+      "gene": "GENEA",
+      "outcome": "called",
+      "diplotype": "*1/*1"
+    }
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "phenotypes": [
+      {
+        "status": "determined",
+        "gene": "GENEA",
+        "diplotype": "*1/*1",
+        "phenotype": "Synthetic Normal",
+        "activityScore": null
+      }
+    ],
+    "recommendations": [
+      {
+        "status": "recommendation",
+        "gene": "GENEA",
+        "drug": "drugw",
+        "diplotype": "*1/*1",
+        "phenotype": "Synthetic Normal",
+        "strength": "Strong",
+        "guidelineId": "drugw-genea",
+        "guidelineVersion": "synthetic-1",
+        "sourceUrl": "https://example.invalid/synthetic",
+        "recommendationText": "Synthetic wording.  Two spaces, a non-breaking space, and a é are kept exactly.",
+        "implication": null
+      },
+      {
+        "status": "recommendation",
+        "gene": "GENEA",
+        "drug": "drugx",
+        "diplotype": "*1/*1",
+        "phenotype": "Synthetic Normal",
+        "strength": "Strong",
+        "guidelineId": "drugx-genea",
+        "guidelineVersion": "synthetic-1",
+        "sourceUrl": "https://example.invalid/synthetic",
+        "recommendationText": "X normal.",
+        "implication": null
+      },
+      {
+        "status": "indeterminate",
+        "drug": "drugx",
+        "gene": "GENEC",
+        "reasonCode": "GENE_NOT_IN_REPORT"
+      },
+      {
+        "status": "indeterminate",
+        "drug": "drugy",
+        "gene": "GENEB",
+        "reasonCode": "GENE_NOT_IN_REPORT"
+      }
+    ]
+  }
+}
