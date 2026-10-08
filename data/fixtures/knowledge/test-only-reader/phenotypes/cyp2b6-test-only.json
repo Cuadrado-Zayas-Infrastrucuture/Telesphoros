@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "1.1",
+  "synthetic": true,
+  "provenance": {
+    "source": "SYNTHETIC TEST FIXTURE - TEST ONLY - not CPIC content, not clinical advice",
+    "sourceUrl": "https://example.invalid/synthetic",
+    "retrievedAt": "2026-01-01",
+    "sourceVersion": "synthetic-1"
+  },
+  "review": {
+    "status": "unreviewed"
+  },
+  "id": "cyp2b6-test-only",
+  "kind": "gene-phenotype-map",
+  "gene": "CYP2B6",
+  "alleles": [
+    {
+      "name": "*1",
+      "function": "Normal function"
+    },
+    {
+      "name": "*2",
+      "function": "No function"
+    }
+  ],
+  "phenotypes": [
+    "Normal Metabolizer",
+    "Intermediate Metabolizer",
+    "Poor Metabolizer"
+  ],
+  "method": {
+    "type": "function-pair",
+    "rows": [
+      {
+        "functions": [
+          "Normal function",
+          "Normal function"
+        ],
+        "phenotype": "Normal Metabolizer"
+      },
+      {
+        "functions": [
+          "Normal function",
+          "No function"
+        ],
+        "phenotype": "Intermediate Metabolizer"
+      },
+      {
+        "functions": [
+          "No function",
+          "No function"
+        ],
+        "phenotype": "Poor Metabolizer"
+      }
+    ]
+  }
+}

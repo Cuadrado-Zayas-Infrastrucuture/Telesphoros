@@ -217,14 +217,14 @@ in a list that is separate from the engine's and frozen by a test like the engin
 
 Messages never contain text taken from a report.
 
-## 7. Result shape (the index)
+## 7. Result shape (the index) **[amended]**
 
 ```ts
 type AdapterResult =
-  | { disposition: 'held'; code: ReportHoldCode; binding: SourceBinding }
+  | { disposition: 'held'; code: ReportHoldCode; message: string; reviewerAction: string; binding: SourceBinding }
   | {
       disposition: 'evaluated';
-      geneInputs: GeneInput[];            // exactly what is passed to evaluate()
+      geneInputs: GeneInput[];            // exactly what is passed to evaluate(); the only place values from the report appear
       occurrences: AdapterOccurrence[];   // the audit trail below
       binding: SourceBinding;
     };
@@ -233,15 +233,19 @@ interface AdapterOccurrence {
   gene: string;
   occurrenceIndex: number;                // 0-based per gene, source order, valid for this text hash only
   roles: { diplotype: SpanRef | null; reportedResult: SpanRef | null; emptyRoles: Array<'diplotype' | 'reportedResult'> };
-  emitted: GeneInput[];                   // one, or two for a diplotype/result conflict
-  note: 'corroborated' | 'result-ignored-missing' | 'conflict' | 'result-untrusted' | 'sentinel' | 'empty-field' | 'nothing-stated' | 'abstained' | null;
+  emitted: Array<{ state: 'canonical' | 'diplotype' | 'null' | 'unresolved'; reasonCode: CallerReasonCode | null }>;  // states and codes only, no values; empty for a repeated gene (its one input is gene-level)
+  note: 'corroborated' | 'conflict' | 'result-untrusted' | 'unavailable' | 'empty-field' | 'no-reported-result' | 'nothing-stated'
+      | 'abstained' | 'duplicate-identical' | 'duplicate-gene-conflict' | null;
 }
 interface SpanRef { start: number; end: number; textSha256: string }    // offsets and a hash, never the text
-interface SourceBinding { textSha256: string; popplerVersion: string; packetHash: string; generatorCodeHash: string; captureAcceptanceId: string }
+interface SourceBinding { textSha256: string; popplerVersion: string | null; packetHash: string | null; generatorCodeHash: string | null; captureAcceptanceId: string | null }
 ```
 
-Logs and audit records carry offsets, hashes and codes, **never span text**, so a future real report cannot reach a log.
-`clinical_approval` and `training_eligible` stay `false` on everything derived from the hand-off.
+The binding's fields are `null` when a report was held before that fact was known (for example, before the acceptance record
+was found). The audit trail's `emitted` carries states and codes but **no diplotype or phenotype text**, so it can be logged and
+stored without carrying anything from the report; the values are in `geneInputs`, which is what the engine receives.
+Logs and audit records carry offsets, hashes and codes, **never span text**. `clinical_approval` and `training_eligible` stay
+`false` on everything derived from the hand-off.
 
 ## 8. Expected adapter output for the twelve development cases
 

@@ -56,11 +56,34 @@ PYTHONDONTWRITEBYTECODE=1 python3 -I -B sidecars/report-reader/reader_cli.py "$E
 
 Do not run the helper scripts inside the imported engine directory (see `ORIGIN.md`).
 
+## The adapter (next step after the reader)
+
+`apps/backend/src/services/report-adapter/` turns the reader's output into the engine's input, exactly as
+[design/report-adapter-spec.md](design/report-adapter-spec.md) (as amended 2026-10-08) says, or holds the whole report.
+Nothing calls it yet either; it is wired to an endpoint in the records slice.
+
+| Piece | File |
+| --- | --- |
+| The orchestrator: checks in the order of the specification, then the mapping | `adapt-report.ts` |
+| One occurrence to engine input (spec section 5.2), and repeated genes (section 5.4) | `adapt-occurrence.ts` |
+| Packet integrity and disjoint evidence, recomputed and re-derived, never trusted | `packet-checks.ts` |
+| The seven-token unavailable matcher (R06), pinned to Unicode 16.0 | `unavailable-matcher.ts` |
+| The reader's canonical JSON, to recompute packet hashes | `canonical-json.ts` |
+| Report-level hold codes, fixed messages and reviewer actions | `hold-codes.ts` |
+| Append-only, asynchronous capture acceptance (in-memory until the records slice) | `capture-acceptance.ts` |
+| Test-only knowledge using the real gene symbols (refused in production) | `data/fixtures/knowledge/test-only-reader/` |
+| Hand-written expected output for D01 to D12 | `tests/report_adapter/golden.json` |
+
+A held report produces no drug results. Nothing in a hold or in the audit trail contains text from the report.
+
 ## Known limits
 
 - The reader's registry names two genes, CYP2C19 and CYP2B6. A report that mentions anything else is held (`unaccounted-text`).
 - D08 (monospaced two-column overflow) is held by design: Poppler's `-layout` capture turns 2, 3 and 4 character gaps into
   three spaces, so the evidence is gone from the stored text. Recovering it needs coordinates, which is the separate,
   unapproved experiment (5B-2b).
+- The adapter's unavailable-value matcher needs a runtime with **Unicode 16.0** data (`process.versions.unicode`), which
+  Node 22.22.0 has; it refuses to load otherwise. CI pins that exact Node release (docs/ops/ci-cd.md). Developers on another
+  Node release will see the adapter's tests fail to load, by design.
 - Poppler 26.03.0 is a version pin (a constant the adapter checks against the capture record). The production image and the
   PDF-to-text runner arrive with hosting and the records slice.

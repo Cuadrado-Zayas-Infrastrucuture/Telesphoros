@@ -1,0 +1,284 @@
+{
+  "_comment": "TEST ONLY: not clinical content. Hand-written from docs/design/report-adapter-spec.md (as amended 2026-10-08) and the test-only knowledge in data/fixtures/knowledge/test-only-reader. geneInputs and notes are what the adapter must produce (one note per occurrence, in source order); engine is what evaluate() must then say for drugq (CYP2C19) and drugr (CYP2C19 + CYP2B6).",
+  "cases": [
+    {
+      "id": "D01",
+      "disposition": "evaluated",
+      "geneInputs": [
+        {
+          "gene": "CYP2C19",
+          "state": "diplotype",
+          "diplotype": "*1/*2"
+        },
+        {
+          "gene": "CYP2B6",
+          "state": "diplotype",
+          "diplotype": "*1/*1"
+        }
+      ],
+      "notes": [
+        "corroborated",
+        "corroborated"
+      ],
+      "engine": {
+        "drugq": {
+          "outcome": "shown",
+          "strength": "Moderate",
+          "recommendationText": "Q intermediate."
+        },
+        "drugr": {
+          "outcome": "shown",
+          "strength": "Strong",
+          "recommendationText": "R intermediate-normal."
+        }
+      }
+    },
+    {
+      "id": "D02",
+      "disposition": "evaluated",
+      "geneInputs": [
+        {
+          "gene": "CYP2C19",
+          "state": "diplotype",
+          "diplotype": "*1/*Z"
+        }
+      ],
+      "notes": [
+        null
+      ],
+      "engine": {
+        "drugq": {
+          "outcome": "held",
+          "reasonCode": "allele-not-in-definitions"
+        },
+        "drugr": {
+          "outcome": "held",
+          "reasonCode": "allele-not-in-definitions"
+        }
+      }
+    },
+    {
+      "id": "D03",
+      "disposition": "evaluated",
+      "geneInputs": [
+        {
+          "gene": "CYP2C19",
+          "state": "unresolved",
+          "reasonCode": "other-gene-unresolved"
+        }
+      ],
+      "notes": [
+        "result-untrusted"
+      ],
+      "engine": {
+        "drugq": {
+          "outcome": "held",
+          "reasonCode": "other-gene-unresolved"
+        },
+        "drugr": {
+          "outcome": "held",
+          "reasonCode": "other-gene-unresolved"
+        }
+      }
+    },
+    {
+      "id": "D04",
+      "disposition": "evaluated",
+      "geneInputs": [
+        {
+          "gene": "CYP2C19",
+          "state": "unresolved",
+          "reasonCode": "other-gene-unresolved"
+        }
+      ],
+      "notes": [
+        "no-reported-result"
+      ],
+      "engine": {
+        "drugq": {
+          "outcome": "held",
+          "reasonCode": "other-gene-unresolved"
+        },
+        "drugr": {
+          "outcome": "held",
+          "reasonCode": "other-gene-unresolved"
+        }
+      }
+    },
+    {
+      "id": "D05",
+      "disposition": "evaluated",
+      "geneInputs": [
+        {
+          "gene": "CYP2C19",
+          "state": "null"
+        }
+      ],
+      "notes": [
+        "empty-field"
+      ],
+      "engine": {
+        "drugq": {
+          "outcome": "held",
+          "reasonCode": "sentinel-literal-in-source"
+        },
+        "drugr": {
+          "outcome": "held",
+          "reasonCode": "sentinel-literal-in-source"
+        }
+      }
+    },
+    {
+      "id": "D06",
+      "disposition": "evaluated",
+      "geneInputs": [
+        {
+          "gene": "CYP2C19",
+          "state": "unresolved",
+          "reasonCode": "duplicate-identical"
+        }
+      ],
+      "notes": [
+        "duplicate-identical",
+        "duplicate-identical"
+      ],
+      "engine": {
+        "drugq": {
+          "outcome": "held",
+          "reasonCode": "duplicate-identical"
+        },
+        "drugr": {
+          "outcome": "held",
+          "reasonCode": "duplicate-identical"
+        }
+      }
+    },
+    {
+      "id": "D07",
+      "disposition": "evaluated",
+      "geneInputs": [
+        {
+          "gene": "CYP2C19",
+          "state": "unresolved",
+          "reasonCode": "duplicate-gene-conflict"
+        }
+      ],
+      "notes": [
+        "duplicate-gene-conflict",
+        "duplicate-gene-conflict"
+      ],
+      "engine": {
+        "drugq": {
+          "outcome": "held",
+          "reasonCode": "duplicate-gene-conflict"
+        },
+        "drugr": {
+          "outcome": "held",
+          "reasonCode": "duplicate-gene-conflict"
+        }
+      }
+    },
+    {
+      "id": "D08",
+      "disposition": "held",
+      "holdCode": "alignment-unsupported"
+    },
+    {
+      "id": "D09",
+      "disposition": "evaluated",
+      "geneInputs": [
+        {
+          "gene": "CYP2C19",
+          "state": "diplotype",
+          "diplotype": "*1/*2"
+        },
+        {
+          "gene": "CYP2B6",
+          "state": "diplotype",
+          "diplotype": "*1/*1"
+        }
+      ],
+      "notes": [
+        "corroborated",
+        "corroborated"
+      ],
+      "engine": {
+        "drugq": {
+          "outcome": "shown",
+          "strength": "Moderate",
+          "recommendationText": "Q intermediate."
+        },
+        "drugr": {
+          "outcome": "shown",
+          "strength": "Strong",
+          "recommendationText": "R intermediate-normal."
+        }
+      }
+    },
+    {
+      "id": "D10",
+      "disposition": "evaluated",
+      "geneInputs": [
+        {
+          "gene": "CYP2C19",
+          "state": "unresolved",
+          "reasonCode": "association-abstained"
+        },
+        {
+          "gene": "CYP2B6",
+          "state": "unresolved",
+          "reasonCode": "association-abstained"
+        }
+      ],
+      "notes": [
+        "abstained",
+        "abstained"
+      ],
+      "engine": {
+        "drugq": {
+          "outcome": "abstained",
+          "reasonCode": "association-abstained"
+        },
+        "drugr": {
+          "outcome": "abstained",
+          "reasonCode": "association-abstained"
+        }
+      }
+    },
+    {
+      "id": "D11",
+      "disposition": "evaluated",
+      "geneInputs": [
+        {
+          "gene": "CYP2C19",
+          "state": "unresolved",
+          "reasonCode": "association-abstained"
+        },
+        {
+          "gene": "CYP2B6",
+          "state": "unresolved",
+          "reasonCode": "association-abstained"
+        }
+      ],
+      "notes": [
+        "abstained",
+        "abstained"
+      ],
+      "engine": {
+        "drugq": {
+          "outcome": "abstained",
+          "reasonCode": "association-abstained"
+        },
+        "drugr": {
+          "outcome": "abstained",
+          "reasonCode": "association-abstained"
+        }
+      }
+    },
+    {
+      "id": "D12",
+      "disposition": "held",
+      "holdCode": "unaccounted-text"
+    }
+  ]
+}

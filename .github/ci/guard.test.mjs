@@ -57,6 +57,12 @@ test('the database job fails when a test tier was skipped instead of passing qui
   for (const v of ['TEST_DATABASE_URL', 'TEST_S3_ENDPOINT', 'TEST_STORAGE=postgres', 'TEST_OBJECT_STORAGE=s3']) assert.ok(workflow.includes(v), `${v} must be set somewhere`);
 });
 
+test('Node is pinned to an exact release, because the unavailable-value matcher is pinned to a Unicode version', () => {
+  const version = workflow.match(/^ {2}NODE_VERSION:\s*"([^"]+)"/m)?.[1];
+  assert.ok(version, 'the workflow must define NODE_VERSION');
+  assert.match(version, /^\d+\.\d+\.\d+$/, 'NODE_VERSION must be an exact release such as 22.22.0, not a floating major');
+});
+
 test('each job is named like its key, so the check name is predictable', () => {
   for (const job of jobsOf(workflow)) assert.equal(job.name, job.key, `job ${job.key} must have "name: ${job.key}"`);
 });

@@ -130,8 +130,12 @@ export const RETIRED_REASON_CODES: Readonly<Record<string, ReasonCode | null>> =
   PHENOTYPE_NOT_IN_GUIDELINE: 'no-published-recommendation',
 };
 
-/** The only reasons a caller (the adapter) may attach to a gene it could not resolve. */
-export const CALLER_REASON_CODES = ['other-gene-unresolved', 'association-abstained'] as const satisfies readonly ReasonCode[];
+/**
+ * The only reasons a caller (the report adapter) may attach to a gene it could not resolve. The two duplicate codes are
+ * there because only the adapter still has the literal facts (diplotype text, result text, field presence) that decide
+ * which one applies (docs/design/report-adapter-spec.md, section 5.4). The engine's own duplicate rule remains the backstop.
+ */
+export const CALLER_REASON_CODES = ['other-gene-unresolved', 'association-abstained', 'duplicate-identical', 'duplicate-gene-conflict'] as const satisfies readonly ReasonCode[];
 export const callerReasonCodeSchema = z.enum(CALLER_REASON_CODES);
 export type CallerReasonCode = z.infer<typeof callerReasonCodeSchema>;
 

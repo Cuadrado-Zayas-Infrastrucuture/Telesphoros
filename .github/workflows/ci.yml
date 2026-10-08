@@ -22,8 +22,11 @@ concurrency:
 
 env:
   CI: "true"
-  # Pinned to the same major the packages declare (engines.node >= 22).
-  NODE_VERSION: "22"
+  # An EXACT release, never a floating major. The report adapter's unavailable-value matcher is pinned to Unicode 16.0
+  # and refuses to load on a runtime with other Unicode data, and a newer Node 22 already reports Unicode 17.0.
+  # Moving this is a deliberate change: re-run the matcher's conformance tests, then change the pin in
+  # apps/backend/src/services/report-adapter/unavailable-matcher.ts and docs/design/report-adapter-spec.md together.
+  NODE_VERSION: "22.22.0"
 
 jobs:
   # Fast gate: types, lint, the unit/API suites on the in-memory store, the production builds,

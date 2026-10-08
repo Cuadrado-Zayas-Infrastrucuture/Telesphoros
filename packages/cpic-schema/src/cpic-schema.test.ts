@@ -180,8 +180,8 @@ describe('vocabulary (frozen: see docs/design/outcomes-and-reason-codes.md)', ()
     expect(REVIEWER_ACTIONS['gene-absent']).toBeTruthy();
   });
 
-  it('the caller may attach only the two reasons the adapter can know', () => {
-    expect([...CALLER_REASON_CODES].sort()).toEqual(['association-abstained', 'other-gene-unresolved']);
+  it('the caller may attach only the four reasons the adapter can know (the amendment of 2026-10-08 added the two duplicate codes)', () => {
+    expect([...CALLER_REASON_CODES].sort()).toEqual(['association-abstained', 'duplicate-gene-conflict', 'duplicate-identical', 'other-gene-unresolved']);
   });
 });
 
@@ -197,7 +197,8 @@ describe('gene input', () => {
 
   it('refuses a reason only the engine may decide, extra keys, missing values and lower-case genes', () => {
     for (const input of [
-      { gene: 'GENEA', state: 'unresolved', reasonCode: 'duplicate-gene-conflict' },
+      { gene: 'GENEA', state: 'unresolved', reasonCode: 'gene-absent' },
+      { gene: 'GENEA', state: 'unresolved', reasonCode: 'cell-disputed' },
       { gene: 'GENEA', state: 'unresolved' },
       { gene: 'GENEA', state: 'canonical' },
       { gene: 'GENEA', state: 'null', phenotype: 'Normal' },
