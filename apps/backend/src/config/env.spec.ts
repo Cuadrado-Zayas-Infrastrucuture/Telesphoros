@@ -84,7 +84,7 @@ describe('loadEnv', () => {
       ['in-memory file storage', { OBJECT_STORAGE_DRIVER: 'memory' }, /OBJECT_STORAGE_DRIVER/],
       ['an unencrypted database connection', { DATABASE_SSL: 'disable' }, /DATABASE_SSL/],
       ['a plain-http CORS origin', { CORS_ALLOWED_ORIGINS: 'http://app.example.com' }, /CORS_ALLOWED_ORIGINS/],
-      ['the synthetic lab-report pipeline', { LAB_REPORT_PIPELINE: 'enabled' }, /LAB_REPORT_PIPELINE.*production/],
+      ['the synthetic lab-report pipeline', { LAB_REPORT_PIPELINE: 'enabled', LAB_REPORT_FIXTURES_DIR: '/some/recorded/pdfs' }, /LAB_REPORT_PIPELINE.*production/],
     ])('refuses %s', (_name, change, message) => {
       expect(() => loadEnv({ ...production, ...change })).toThrow(message);
     });
@@ -92,6 +92,7 @@ describe('loadEnv', () => {
 
   describe('the lab-report pipeline switch', () => {
     const database = { STORAGE_DRIVER: 'postgres', DATABASE_URL: 'postgres://app@db/app' };
+    const fixtures = { LAB_REPORT_FIXTURES_DIR: '/some/recorded/pdfs' };
 
     it('is off by default, and "disabled" is the only way it stays off', () => {
       expect(loadEnv({ ...base }).LAB_REPORT_PIPELINE).toBe('disabled');
@@ -99,7 +100,13 @@ describe('loadEnv', () => {
     });
 
     it('can be enabled with the real database outside production', () => {
-      expect(loadEnv({ ...base, ...database, LAB_REPORT_PIPELINE: 'enabled' }).LAB_REPORT_PIPELINE).toBe('enabled');
+      expect(loadEnv({ ...base, ...database, ...fixtures, LAB_REPORT_PIPELINE: 'enabled' }).LAB_REPORT_PIPELINE).toBe('enabled');
+    });
+
+    it('needs the directory of recorded PDFs when enabled (there is no default), and does not need it while off', () => {
+      expect(() => loadEnv({ ...base, ...database, LAB_REPORT_PIPELINE: 'enabled' })).toThrow(/LAB_REPORT_FIXTURES_DIR/);
+      expect(() => loadEnv({ ...base, ...database, LAB_REPORT_FIXTURES_DIR: '', LAB_REPORT_PIPELINE: 'enabled' })).toThrow(/LAB_REPORT_FIXTURES_DIR/);
+      expect(loadEnv({ ...base }).LAB_REPORT_FIXTURES_DIR).toBeUndefined();
     });
 
     it('is refused with the in-memory store (the ledger has no in-memory version)', () => {
@@ -107,7 +114,7 @@ describe('loadEnv', () => {
     });
 
     it.each(['yes', 'true', 'ENABLED', '1', ''])('rejects the value %j instead of guessing', (value) => {
-      expect(() => loadEnv({ ...base, ...database, LAB_REPORT_PIPELINE: value })).toThrow(/LAB_REPORT_PIPELINE/);
+      expect(() => loadEnv({ ...base, ...database, ...fixtures, LAB_REPORT_PIPELINE: value })).toThrow(/LAB_REPORT_PIPELINE/);
     });
 
     it('bounds the download link lifetime to 60 to 600 seconds, default 120', () => {

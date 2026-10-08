@@ -13,6 +13,7 @@ export interface SeededReport {
   reportId: string;
   pdfSha256: string;
   objectVersion: string;
+  storageKey: string;
 }
 
 export interface SeedOptions {
@@ -42,11 +43,12 @@ export async function seedLabReport(adminUrl: string, tenantId: string, uploader
       [reportId, tenantId, uploader, patientId, pdfSha256, `k/${reportId}`, objectVersion, options.requestedBy ?? uploader, options.completedBy ?? uploader],
     );
   });
-  return { tenantId, uploader, patientId, reportId, pdfSha256, objectVersion };
+  return { tenantId, uploader, patientId, reportId, pdfSha256, objectVersion, storageKey: `k/${reportId}` };
 }
 
 export const captureFor = (r: SeededReport, text = 'synthetic text', over: Partial<CaptureInput> = {}): CaptureInput => ({
   reportId: r.reportId,
+  expectedReport: { patientId: r.patientId, sha256: r.pdfSha256, objectVersion: r.objectVersion, storageKey: r.storageKey },
   pdfSha256: r.pdfSha256,
   textStorageKey: `text/${randomUUID()}`,
   textSha256: sha(text),

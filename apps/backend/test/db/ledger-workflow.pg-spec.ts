@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Database } from '../../src/db/database';
-import { LedgerIntegrityError } from '../../src/ledger/ledger-types';
+import { LedgerIntegrityError, SourceChangedError } from '../../src/ledger/ledger-types';
 import { LedgerVerifier } from '../../src/ledger/verifier';
 import type { Projected } from '../../src/storage/ledger-records';
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
@@ -139,11 +139,12 @@ describe('captures and acceptances', () => {
   it('a capture must belong to an uploaded lab PDF and carry its hash', async () => {
     const t = `tenant-${randomUUID()}`;
     const r = await seedLabReport(pg.adminUrl, t);
-    await refused(repo.insertCapture(t, r.uploader, captureFor(r, 'x', { pdfSha256: sha('some other file') })));
+    // The repository compares what the caller relied on with the locked report row, so each of these is "the report is not what you saw".
+    await expect(repo.insertCapture(t, r.uploader, captureFor(r, 'x', { pdfSha256: sha('some other file') }))).rejects.toBeInstanceOf(SourceChangedError);
     await withAdmin(pg.adminUrl, (c) => c.query(`UPDATE reports SET type = 'vcf' WHERE id = $1`, [r.reportId]));
-    await refused(repo.insertCapture(t, r.uploader, captureFor(r)));
+    await expect(repo.insertCapture(t, r.uploader, captureFor(r))).rejects.toBeInstanceOf(SourceChangedError);
     const [other] = [`tenant-${randomUUID()}`];
-    await refused(repo.insertCapture(other, r.uploader, captureFor(r))); // another tenant's report
+    await expect(repo.insertCapture(other, r.uploader, captureFor(r))).rejects.toBeInstanceOf(SourceChangedError); // another tenant's report
   });
 
   it('an acceptance repeats its capture\'s hash and version exactly; a rejection by the uploader is allowed, an acceptance is not', async () => {

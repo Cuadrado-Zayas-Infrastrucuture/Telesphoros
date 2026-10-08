@@ -3,7 +3,7 @@ import { Client } from 'pg';
 import { Database } from '../../src/db/database';
 import { migrateDown } from '../../src/db/migrator';
 import { appendEvent, newId } from '../../src/ledger/ledger-writer';
-import { LedgerIntegrityError } from '../../src/ledger/ledger-types';
+import { LedgerIntegrityError, SourceChangedError } from '../../src/ledger/ledger-types';
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { acceptanceFor, captureFor, type SeededReport, seedLabReport, sha } from '../helpers/ledger-fixtures';
@@ -154,21 +154,48 @@ describe('once a capture exists, the report is frozen further', () => {
 });
 
 describe('a capture needs a live, pinned lab PDF with the same hash', () => {
-  it('is refused for a soft-deleted report, and for a hash that is not the report\'s; a matching one works', async () => {
+  /** A capture INSERT straight at the database (no repository comparison), so the rule that must hold even for a careless caller is what is tested. */
+  const rawCapture = (report: SeededReport, pdfSha256 = report.pdfSha256) =>
+    attempt(pg.appUrl, report.tenantId, 'syn-capturer', async (c) => {
+      await c.query(
+        `INSERT INTO report_captures (tenant_id, created_by, ledger_event_id, report_id, pdf_sha256, text_storage_key, text_sha256, text_scalars, poppler_version, runner)
+         VALUES ($1, 'syn-capturer', $2, $3, $4, $5, $6, 10, '26.03.0', 'fake')`,
+        [report.tenantId, randomUUID(), report.reportId, pdfSha256, `text/${randomUUID()}`, sha('text')],
+      );
+    });
+
+  it('the database refuses a soft-deleted report, a hash that is not the report\'s, and another type; the repository refuses the same as "source changed"', async () => {
     const t = tenant();
     const gone = await seedLabReport(pg.adminUrl, t);
     await update(gone, `deleted_at = now()`);
-    await expect(repo.insertCapture(t, 'syn-capturer', captureFor(gone))).rejects.toBeInstanceOf(LedgerIntegrityError);
+    expect((await rawCapture(gone))?.code).toBe(INTEGRITY);
+    await expect(repo.insertCapture(t, 'syn-capturer', captureFor(gone))).rejects.toBeInstanceOf(SourceChangedError);
+
     const other = await seedLabReport(pg.adminUrl, t);
-    await expect(repo.insertCapture(t, 'syn-capturer', captureFor(other, 'text', { pdfSha256: sha('some other file') }))).rejects.toBeInstanceOf(LedgerIntegrityError);
-    expect((await repo.insertCapture(t, 'syn-capturer', captureFor(other))).created).toBe(true); // control
+    expect((await rawCapture(other, sha('some other file')))?.code).toBe(INTEGRITY);
+    await expect(repo.insertCapture(t, 'syn-capturer', captureFor(other, 'text', { pdfSha256: sha('some other file') }))).rejects.toBeInstanceOf(SourceChangedError);
+    expect((await repo.insertCapture(t, 'syn-capturer', captureFor(other))).created).toBe(true); // control: the matching one works
   });
 
-  it('is refused for a report of another type', async () => {
+  it('the database refuses a report of another type; the repository refuses it as "source changed"', async () => {
     const t = tenant();
     const report = await seedLabReport(pg.adminUrl, t);
     await update(report, `type = 'vcf'`); // allowed: no capture yet
-    await expect(repo.insertCapture(t, 'syn-capturer', captureFor(report))).rejects.toBeInstanceOf(LedgerIntegrityError);
+    expect((await rawCapture(report))?.code).toBe(INTEGRITY);
+    await expect(repo.insertCapture(t, 'syn-capturer', captureFor(report))).rejects.toBeInstanceOf(SourceChangedError);
+  });
+
+  it.each([
+    ['patient', (r: SeededReport) => ({ expectedReport: { patientId: randomUUID(), sha256: r.pdfSha256, objectVersion: r.objectVersion, storageKey: r.storageKey } })],
+    ['file hash', (r: SeededReport) => ({ expectedReport: { patientId: r.patientId, sha256: sha('other'), objectVersion: r.objectVersion, storageKey: r.storageKey } })],
+    ['object version', (r: SeededReport) => ({ expectedReport: { patientId: r.patientId, sha256: r.pdfSha256, objectVersion: 'another-version', storageKey: r.storageKey } })],
+    ['storage key', (r: SeededReport) => ({ expectedReport: { patientId: r.patientId, sha256: r.pdfSha256, objectVersion: r.objectVersion, storageKey: 'k/other' } })],
+  ])('the repository refuses when the report\'s %s is not what the caller relied on, and writes nothing', async (_name, over) => {
+    const t = tenant();
+    const report = await seedLabReport(pg.adminUrl, t);
+    await expect(repo.insertCapture(t, 'syn-capturer', captureFor(report, 'text', over(report)))).rejects.toBeInstanceOf(SourceChangedError);
+    expect(await withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT count(*)::int AS n FROM report_captures WHERE report_id = $1`, [report.reportId])).rows[0].n)).toBe(0);
+    expect((await repo.insertCapture(t, 'syn-capturer', captureFor(report))).created).toBe(true); // control: what is really there is accepted
   });
 });
 

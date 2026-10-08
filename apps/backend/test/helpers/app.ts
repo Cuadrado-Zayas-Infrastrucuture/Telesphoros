@@ -10,6 +10,7 @@ import { TokenVerifier } from '../../src/auth/token-verifier';
 import { loadEnv } from '../../src/config/env';
 import { READINESS_CHECKS, type ReadinessCheck } from '../../src/health/readiness.service';
 import { createEphemeralDatabase } from './database';
+import { FIXTURES } from './lab-pipeline';
 import { TEST_AUDIENCE, TEST_ISSUER, TEST_SECRET } from './env';
 
 export interface TestAppOptions {
@@ -23,6 +24,8 @@ export interface TestAppOptions {
   corsOrigins?: string[];
   /** Turn the lab-report pipeline switch on. Needs the PostgreSQL store (the ledger has no in-memory version). */
   labReportPipeline?: boolean;
+  /** Where the test-only text runner finds its recorded PDFs (default: the imported hand-off captures). */
+  fixturesDir?: string;
 }
 
 /** True when the e2e suite is running against a real PostgreSQL (TEST_STORAGE=postgres). */
@@ -61,6 +64,7 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
     STORAGE_DRIVER: database || options.postgresUrl ? 'postgres' : 'memory',
     ...(database || options.postgresUrl ? { DATABASE_URL: options.postgresUrl ?? database!.appUrl } : {}),
     ...(options.labReportPipeline ? { LAB_REPORT_PIPELINE: 'enabled' } : {}),
+    ...(options.labReportPipeline ? { LAB_REPORT_FIXTURES_DIR: options.fixturesDir ?? FIXTURES } : {}),
     OBJECT_STORAGE_DRIVER: s3 ? 's3' : 'memory',
     ...(s3 ? { REPORTS_BUCKET: s3.bucket, S3_ENDPOINT: s3.endpoint, S3_FORCE_PATH_STYLE: 'true', AWS_REGION: 'us-east-1' } : {}),
   });

@@ -61,6 +61,8 @@ export const envSchema = z
      * and refused in production (see below). While `disabled` the routes answer 503 PIPELINE_DISABLED and nothing is read or written.
      */
     LAB_REPORT_PIPELINE: z.enum(['disabled', 'enabled']).default('disabled'),
+    /** Directory of recorded PDFs and their text for the TEST-ONLY text runner. Required when the pipeline is enabled; there is no default. */
+    LAB_REPORT_FIXTURES_DIR: z.string().min(1).optional(),
   })
   .superRefine((env, ctx) => {
     const problem = (path: string, message: string) => ctx.addIssue({ code: 'custom', path: [path], message });
@@ -79,6 +81,7 @@ export const envSchema = z
     if (env.LAB_REPORT_PIPELINE === 'enabled') {
       // The pipeline's records are a database guarantee (no in-memory ledger exists), and its evidence is pinned to object versions.
       if (env.STORAGE_DRIVER !== 'postgres') problem('LAB_REPORT_PIPELINE', 'can only be enabled with STORAGE_DRIVER=postgres (the ledger has no in-memory version)');
+      if (!env.LAB_REPORT_FIXTURES_DIR) problem('LAB_REPORT_FIXTURES_DIR', 'is required when LAB_REPORT_PIPELINE=enabled (the directory of recorded PDFs for the test-only text runner)');
       if (env.NODE_ENV === 'production') problem('LAB_REPORT_PIPELINE', 'is refused in production: it is a synthetic, non-production integration until the ledger is verified at startup (slice 5B-3.3)');
     }
 
