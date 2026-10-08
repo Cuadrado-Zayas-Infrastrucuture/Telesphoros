@@ -1,9 +1,24 @@
-import { S3Client } from '@aws-sdk/client-s3';
+import { readFileSync } from 'node:fs';
 import { Client } from 'pg';
 import { createBackup } from './backup';
-import { generateKeyFile } from './backup-crypto';
+import { generateKeyFile, readKeyFile } from './backup-crypto';
+import { parseManifest } from './backup-manifest';
 import { MIGRATIONS_DIR, migrateDown, migrateUp, migrationStatus } from './migrator';
+import {
+  createOffsiteClient,
+  hasCredentials,
+  loadCredentials,
+  loadOffsiteSettings,
+  type LockMode,
+  OffsiteError,
+  parseRemote,
+  type Role,
+  type UploadTarget,
+  uploadBackup,
+} from './offsite';
+import { type Finding, runBackupCheck } from './offsite-check';
 import { restoreAndVerify } from './restore';
+import { restoreFromRemote } from './restore-remote';
 
 const USAGE = `Usage: node dist/db/cli.js <command>
 
@@ -14,13 +29,27 @@ const USAGE = `Usage: node dist/db/cli.js <command>
   keygen  --out FILE            create a new random backup key (64 hex characters, owner-only; never overwrites).
                                 KEEP COPIES OFFLINE: without this key no backup made with it can ever be restored.
 
-  backup  --dest DIR --key-file FILE [--upload s3://bucket/prefix] [--kms-key-id ID]
-                                consistent, encrypted and signed backup (DATABASE_ADMIN_URL: superuser or BYPASSRLS)
-          --dest DIR            without --key-file the backup is NOT encrypted: development only
-  restore --from DIR [--key-file FILE | --passphrase-file FILE] [--keep] [--target-db NAME]
+  backup  --dest DIR --key-file FILE [--upload s3://bucket/prefix] [--retain-days N] [--lock-mode GOVERNANCE|COMPLIANCE]
+          [--remove-local] [--kms-key-id ID]
+                                consistent, encrypted and signed backup (DATABASE_ADMIN_URL: superuser or BYPASSRLS).
+                                --upload copies it to a second provider (BACKUP_S3_UPLOAD_* credentials, Object Lock
+                                on every object). Without --key-file the backup is NOT encrypted: development only.
+  upload  --from DIR --to s3://bucket/prefix --key-file FILE [--retain-days N] [--lock-mode M] [--remove-local]
+                                retry the off-site copy of a backup that is already on disk
+  backup-check --remote s3://bucket/prefix --key-file FILE [--max-age-hours N] [--skip-canary] [--canary-retain-days N]
+                                prove the off-site set-up is right (key, bucket, Object Lock, separate upload and read
+                                keys, a canary round trip, newest backup authentic and recent); exit 1 on any FAIL
+                                (BACKUP_S3_UPLOAD_*, BACKUP_S3_READ_*, optional BACKUP_S3_ADMIN_*)
+  restore --from DIR|s3://bucket/prefix[/backup-TIME] [--latest] [--key-file FILE | --passphrase-file FILE]
+          [--keep] [--target-db NAME]
                                 restore into a THROWAWAY database and verify it; exit 1 if anything is off
                                 (--key-file: format 2 backups, signature and every chunk checked;
-                                 --passphrase-file: old format 1 backups only)  (DATABASE_ADMIN_URL on the target server)
+                                 --passphrase-file: old format 1 backups only; s3:// uses BACKUP_S3_READ_*)
+                                                                  (DATABASE_ADMIN_URL on the target server)
+
+Off-site settings (all BACKUP_S3_*): ENDPOINT, REGION, FORCE_PATH_STYLE, SSE (default none), KMS_KEY_ID;
+credentials per role: BACKUP_S3_<UPLOAD|READ|ADMIN>_ACCESS_KEY_ID / _SECRET_ACCESS_KEY (or the same names + _FILE).
+The AWS credentials are never used for the off-site copy.
 `;
 
 const out = (text: string) => process.stdout.write(`${text}\n`);
@@ -49,6 +78,43 @@ function flags(args: string[]) {
     return typeof v === 'string' ? v : undefined;
   };
   return { text, bool: (name: string) => values.get(name) === true };
+}
+
+function offsiteOverrides(f: ReturnType<typeof flags>) {
+  const days = f.text('retain-days');
+  const kms = f.text('kms-key-id');
+  return {
+    lockMode: f.text('lock-mode') as LockMode | undefined,
+    retainDays: days === undefined ? undefined : Number(days),
+    ...(kms ? { sse: 'aws:kms' as const, kmsKeyId: kms } : {}),
+  };
+}
+
+function uploadTarget(remote: string, f: ReturnType<typeof flags>): UploadTarget {
+  const settings = loadOffsiteSettings(process.env, offsiteOverrides(f));
+  const location = parseRemote(remote);
+  return {
+    client: createOffsiteClient(settings, loadCredentials('upload')),
+    bucket: location.bucket,
+    prefix: location.prefix,
+    sse: settings.sse,
+    kmsKeyId: settings.kmsKeyId,
+    lockMode: settings.lockMode,
+    retainDays: settings.retainDays,
+  };
+}
+
+function printUpload(upload: { keys: string[]; warnings: string[]; etagVerified: boolean }, remote: string) {
+  out(`  uploaded ${upload.keys.length} objects to ${remote} (Object Lock on each${upload.etagVerified ? '' : '; the provider\u2019s ETag is not an MD5, so only Content-MD5 was checked'})`);
+  for (const warning of upload.warnings) out(`  WARNING: ${warning}`);
+}
+
+function printFindings(findings: Finding[]) {
+  for (const finding of findings) out(`${finding.status.padEnd(4)}  ${finding.name}: ${finding.detail}`);
+  const failed = findings.filter((f) => f.status === 'FAIL').length;
+  const warned = findings.filter((f) => f.status === 'WARN').length;
+  out(failed ? `BACKUP CHECK FAILED (${failed} failing${warned ? `, ${warned} warning` : ''})` : `BACKUP CHECK PASSED${warned ? ` (${warned} warning)` : ''}`);
+  return failed === 0;
 }
 
 async function main(argv: string[]) {
@@ -98,32 +164,56 @@ async function main(argv: string[]) {
     const dest = f.text('dest');
     if (!dest) throw new Error('--dest is required');
     const uri = f.text('upload');
-    let upload;
-    if (uri) {
-      const match = /^s3:\/\/([^/]+)\/?(.*)$/.exec(uri);
-      if (!match) throw new Error('--upload must look like s3://bucket/prefix');
-      upload = {
-        client: new S3Client({
-          region: process.env.AWS_REGION ?? 'us-east-2',
-          endpoint: process.env.S3_ENDPOINT,
-          forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
-        }),
-        bucket: match[1]!,
-        prefix: match[2]!,
-        kmsKeyId: f.text('kms-key-id'),
-      };
-    }
-    const { dir, manifest } = await createBackup({
+    const { dir, manifest, upload, localRemoved } = await createBackup({
       adminUrl: required('DATABASE_ADMIN_URL'),
       destDir: dest,
       keyFile: f.text('key-file'),
-      upload,
+      upload: uri ? uploadTarget(uri, f) : undefined,
+      removeLocalAfterUpload: f.bool('remove-local'),
     });
     const rows = Object.values(manifest.tables).reduce((sum, t) => sum + t.rows, 0);
-    out(`backup written: ${dir}`);
+    out(`backup written: ${dir}${localRemoved ? '  (local copy removed after the verified upload)' : ''}`);
     out(`  ${Object.keys(manifest.tables).length} tables, ${rows} rows, migrations ${manifest.migrations.join(', ') || '(none)'}`);
     out(`  ${manifest.dump.file}  ${manifest.dump.bytes} bytes  sha256 ${manifest.dump.sha256}${manifest.dump.encrypted ? '  (encrypted, signed manifest)' : '  (NOT encrypted)'}`);
-    if (uri) out(`  uploaded to ${uri}`);
+    if (upload && uri) printUpload(upload, uri);
+    return;
+  }
+
+  if (command === 'upload') {
+    const f = flags([sub, ...rest].filter((a): a is string => a !== undefined));
+    const from = f.text('from');
+    const to = f.text('to');
+    const keyFile = f.text('key-file');
+    if (!from || !to || !keyFile) throw new Error('--from, --to and --key-file are required');
+    const manifest = parseManifest(readFileSync(`${from}/manifest.json`, 'utf8'));
+    const upload = await uploadBackup(from.replace(/\/$/, ''), manifest, uploadTarget(to, f), await readKeyFile(keyFile));
+    out(`uploaded ${from}`);
+    printUpload(upload, to);
+    return;
+  }
+
+  if (command === 'backup-check') {
+    const f = flags([sub, ...rest].filter((a): a is string => a !== undefined));
+    const remote = f.text('remote');
+    const keyFile = f.text('key-file');
+    if (!remote || !keyFile) throw new Error('--remote and --key-file are required');
+    const settings = loadOffsiteSettings(process.env, offsiteOverrides(f));
+    const location = parseRemote(remote);
+    const days = f.text('canary-retain-days');
+    const maxAge = f.text('max-age-hours');
+    const skipCanary = f.bool('skip-canary');
+    const client = (role: Role) => createOffsiteClient(settings, loadCredentials(role));
+    const findings = await runBackupCheck({
+      keyFile,
+      bucket: location.bucket,
+      prefix: location.prefix,
+      settings,
+      clients: { upload: skipCanary && !hasCredentials('upload') ? client('read') : client('upload'), read: client('read'), ...(hasCredentials('admin') ? { admin: client('admin') } : {}) },
+      maxAgeHours: maxAge === undefined ? undefined : Number(maxAge),
+      skipCanary,
+      canaryRetainDays: days === undefined ? undefined : Number(days),
+    });
+    process.exitCode = printFindings(findings) ? 0 : 1;
     return;
   }
 
@@ -131,14 +221,16 @@ async function main(argv: string[]) {
     const f = flags([sub, ...rest].filter((a): a is string => a !== undefined));
     const from = f.text('from');
     if (!from) throw new Error('--from is required');
-    const report = await restoreAndVerify({
+    const common = {
       adminUrl: required('DATABASE_ADMIN_URL'),
-      backupDir: from,
       keyFile: f.text('key-file'),
       passphraseFile: f.text('passphrase-file'),
       keep: f.bool('keep'),
       targetDatabase: f.text('target-db'),
-    });
+    };
+    const report = from.startsWith('s3://')
+      ? await restoreFromRemote({ ...common, client: createOffsiteClient(loadOffsiteSettings(), loadCredentials('read')), location: parseRemote(from), latest: f.bool('latest') })
+      : await restoreAndVerify({ ...common, backupDir: from });
     for (const check of report.checks) out(`${check.ok ? 'PASS' : 'FAIL'}  ${check.name}: ${check.detail}`);
     out(report.ok ? `RESTORE VERIFIED (${report.kept ? `kept as ${report.database}` : 'throwaway database dropped'})` : 'RESTORE FAILED');
     process.exitCode = report.ok ? 0 : 1;
@@ -149,6 +241,8 @@ async function main(argv: string[]) {
 }
 
 main(process.argv.slice(2)).catch((error: unknown) => {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  // Configuration and protocol errors carry fixed, key-free messages; anything else is reported by name only.
+  const message = error instanceof Error && (error instanceof OffsiteError || !('$metadata' in error)) ? error.message : `${(error as { name?: string }).name ?? 'Error'} (the provider refused or failed the request)`;
+  process.stderr.write(`${message}\n`);
   process.exit(1);
 });

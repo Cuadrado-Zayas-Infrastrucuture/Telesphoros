@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import { chmodSync, createReadStream, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { PutObjectCommand, type S3Client } from '@aws-sdk/client-s3';
 import { Client } from 'pg';
 import { encryptFile, manifestMac, readKeyFile } from './backup-crypto';
 import type { BackupManifest, BackupManifestV1, BackupManifestV2, TableFacts } from './backup-manifest';
+import { type UploadResult, type UploadTarget, uploadBackup } from './offsite';
 import { pgEnv, quoteIdent, run } from './pg-process';
 
 export type { BackupManifest, TableFacts };
@@ -18,7 +18,10 @@ export interface BackupOptions {
    * and the manifest is signed (format 2). Without it the backup is NOT encrypted (format 1): development and tests only.
    */
   keyFile?: string;
-  upload?: { client: S3Client; bucket: string; prefix: string; kmsKeyId?: string };
+  /** Off-site copy (needs `keyFile`: only encrypted, signed backups leave the machine). */
+  upload?: UploadTarget;
+  /** After a verified upload, delete the local copy so the backup host keeps nothing. */
+  removeLocalAfterUpload?: boolean;
   /** Test seam: runs after the snapshot is taken and before the dump starts (to prove snapshot consistency). */
   afterSnapshot?: () => Promise<void>;
 }
@@ -45,9 +48,10 @@ export async function opensslEncrypt(input: string, output: string, passphraseFi
  * earlier, measures a different moment than the copy; restore verification would then raise false
  * alarms on a busy database, or worse, learn to be ignored.
  */
-export async function createBackup(options: BackupOptions): Promise<{ dir: string; manifest: BackupManifest }> {
+export async function createBackup(options: BackupOptions): Promise<{ dir: string; manifest: BackupManifest; upload?: UploadResult; localRemoved?: boolean }> {
   // A bad key file is reported before anything is dumped.
   const masterKey = options.keyFile ? await readKeyFile(options.keyFile) : undefined;
+  if (options.upload && !masterKey) throw new Error('An off-site upload needs --key-file: only encrypted, signed backups leave this machine. Nothing was backed up.');
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const dir = join(options.destDir, `backup-${stamp}`);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -119,7 +123,14 @@ export async function createBackup(options: BackupOptions): Promise<{ dir: strin
   }
 
   // The local backup is complete and valid here; if the off-site copy fails, it stays (and the error is reported).
-  if (options.upload) await uploadBackup(dir, manifest, options.upload);
+  if (options.upload) {
+    const upload = await uploadBackup(dir, manifest, options.upload, masterKey!);
+    if (options.removeLocalAfterUpload) {
+      rmSync(dir, { recursive: true, force: true }); // the provider verified the content (Content-MD5), so the local copy is no longer the only one
+      return { dir, manifest, upload, localRemoved: true };
+    }
+    return { dir, manifest, upload };
+  }
   return { dir, manifest };
 }
 
@@ -161,27 +172,4 @@ async function readFacts(client: Client) {
     ),
   };
   return { serverVersion: version, database, migrations, tables, schema };
-}
-
-/** Off-site copy. The manifest goes up LAST, so a backup is only "there" once it is complete. */
-export async function uploadBackup(
-  dir: string,
-  manifest: BackupManifest,
-  target: NonNullable<BackupOptions['upload']>,
-) {
-  const put = async (file: string) => {
-    const path = join(dir, file);
-    await target.client.send(
-      new PutObjectCommand({
-        Bucket: target.bucket,
-        Key: `${target.prefix.replace(/\/$/, '')}/${dir.split('/').pop()}/${file}`,
-        Body: createReadStream(path),
-        ContentLength: statSync(path).size,
-        ServerSideEncryption: 'aws:kms',
-        ...(target.kmsKeyId ? { SSEKMSKeyId: target.kmsKeyId } : {}),
-      }),
-    );
-  };
-  await put(manifest.dump.file);
-  await put('manifest.json');
 }
