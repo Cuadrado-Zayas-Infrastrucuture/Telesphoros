@@ -18,12 +18,12 @@
     "machine": "arm64"
   },
   "checks": {
-    "newBoundaryPassed": 82,
+    "newBoundaryPassed": 84,
     "newBoundaryFailed": 0,
     "routingMatrixCells": 36,
     "legacyTargetedBaselinePassed": 263,
     "legacyTargetedBaselineFailed": 0,
-    "backendPassed": 853,
+    "backendPassed": 855,
     "backendFailed": 0,
     "backendPending": 43,
     "backendPassedSuites": 47,
@@ -119,7 +119,8 @@
         }
       ],
       "allExpected": true
-    }
+    },
+    "gateStageRegressionChecks": "malformed context and missing policy resolved after stronger source gates"
   },
   "limits": [
     "All fixtures are visible synthetic development evidence; no independent accuracy claim.",
