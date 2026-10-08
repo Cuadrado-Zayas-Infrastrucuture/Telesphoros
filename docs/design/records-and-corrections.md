@@ -593,3 +593,31 @@ Each was found by building or by an attack test, and each is covered by a test.
    it). A dispute shows `inForce`: open or upheld **and** the loaded file is still the one that was disputed. Notes are digests only.
 5. **Two open disputes about one cell are allowed**; each is independent and the overlay is a set. No cross-table uniqueness is added.
 
+
+## 21. Amendments made while building 5B-3.3c (these govern where they differ from the text above)
+
+1. **Configuration** (6.6). `LEDGER_VERIFIER_DATABASE_URL` is the verifier's own login (never the application's; refused if equal to `DATABASE_URL`). It is
+   required in production and whenever `LAB_REPORT_PIPELINE=enabled`, and the watch is off when it is not set elsewhere. `LEDGER_STARTUP_BUDGET_MS`
+   (default 20 000) is **one total budget across tenants**; `LEDGER_FULL_VERIFY_INTERVAL_HOURS` (default 24; 0 turns the timer off).
+2. **The check at start** (6.6). A tenant is checked from its latest checkpoint within the remaining budget, except that a chain whose head is at or below
+   50 000 events (measured, `docs/ops/ledger-watch.md`) is walked in full, because a checkpoint is a shortcut and not a control. A tenant reached after the
+   budget is spent is **incomplete**, never `ok`. Production refuses to start on `failed` or `incomplete`, and also when the check cannot run at all
+   (login, network, missing tables): nothing is known, which is not "fine". **Refinement of the plan:** a *failed* check at start latches in development
+   too (the plan left it unlatched until the background walk found the same thing); readiness is down and writes stop at once.
+3. **The latch** (6.6). In-process, first finding kept, cleared only by a restart. The append gate is a **required first argument of `appendEvent`**, asked
+   before the record is read or anything is appended; the Postgres repository passes the shared status. A closed gate rolls back the whole transaction (503
+   `LEDGER_COMPROMISED`, no `Retry-After`). The evaluation route also asks before it runs the reader. Writes that are not ledger records are unaffected.
+4. **Background and timer** (6.6). One tenant at a time, `full`, a checkpoint on success and **none once latched**. A walk that is too large for its
+   budget (15 minutes per tenant), or cannot run (database problem), leaves readiness at `verifying` and latches nothing; the next scheduled walk tries
+   again. One verification at a time per process: background callers queue, the admin endpoint is told it is busy. A shutdown aborts the walk at its
+   next batch (`VerifyOptions.signal`).
+5. **Readiness** (6.7). `ledger` is `up`, `verifying` (usable; a full walk is running or has not finished) or not ready. `ReadinessDto.checks` values are
+   `up | verifying`. A setup without a verifier login reports exactly what it did before.
+6. **`GET /ledger/verify?full=`** (8). Admin only, behind the pipeline gate (it lives with the other pipeline routes), the caller's own tenant only (no
+   tenant parameter exists; the query is strict). Default walks from the checkpoint, `full=true` the whole chain, within 30 s; success records a
+   checkpoint; a `failed` answer latches. 503 `PIPELINE_BUSY` + `Retry-After` while another check runs. The answer is
+   `{status, mode, headSeq, headHash, eventsChecked, failures: [{kind, seq}], checkpointId}`.
+7. **Restore** (10). `restoreAndVerify` gains `ledger chain`: a full walk of every tenant as `telesphoros_ledger_verifier` (the restore's server credentials
+   with `role` set on the connection), writing nothing; "not applicable" for a backup that predates the ledger.
+8. **Not done, and said so.** No alarm is connected to the `ledger-compromised` log line (Terraform is written, never applied); the head is still not
+   anchored outside the database (6.9).

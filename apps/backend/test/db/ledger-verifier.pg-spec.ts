@@ -87,6 +87,24 @@ describe('ledger verifier: an intact chain', () => {
     expect(count).toBe(0);
   });
 
+  it('walks a chain at or below fullWalkAtOrBelow in FULL even when a checkpoint exists, and from the checkpoint above it', async () => {
+    const { tenantId } = await chain(); // 5 events
+    await verifier.verify(tenantId, { recordCheckpoint: true }); // its own event is the 6th
+    expect(await verifier.verify(tenantId, { mode: 'tail', fullWalkAtOrBelow: 6 })).toMatchObject({ status: 'ok', mode: 'full', eventsChecked: 6 });
+    expect(await verifier.verify(tenantId, { mode: 'tail', fullWalkAtOrBelow: 5 })).toMatchObject({ status: 'ok', mode: 'tail', eventsChecked: 1 });
+    expect(await verifier.verify(tenantId, { mode: 'tail' })).toMatchObject({ mode: 'tail' }); // control: unset, the checkpoint is used
+  });
+
+  it('stops at once when aborted: incomplete, never ok, nothing walked, no checkpoint (control: the same call without the signal is ok)', async () => {
+    const { tenantId } = await chain();
+    const controller = new AbortController();
+    controller.abort();
+    expect(await verifier.verify(tenantId, { signal: controller.signal, recordCheckpoint: true })).toMatchObject({ status: 'incomplete', eventsChecked: 0, checkpointId: null });
+    const count = await withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT count(*)::int AS n FROM ledger_checkpoints WHERE tenant_id = $1`, [tenantId])).rows[0].n);
+    expect(count).toBe(0);
+    expect(await verifier.verify(tenantId, { signal: new AbortController().signal })).toMatchObject({ status: 'ok' });
+  });
+
   it('reports an empty ledger as ok at genesis', async () => {
     expect(await verifier.verify(`tenant-${randomUUID()}`)).toMatchObject({ status: 'ok', headSeq: '0', eventsChecked: 0 });
   });

@@ -1,10 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Client } from 'pg';
+import { Client, Pool } from 'pg';
 import { opensslEncrypt, sha256File } from './backup';
 import { BackupCryptoError, decryptFile, keyIdHex, readEncryptionHeader, readKeyFile, verifyManifestMac } from './backup-crypto';
 import { type BackupManifest, ManifestError, parseManifest } from './backup-manifest';
+import { LedgerVerifier } from '../ledger/verifier';
 import { makeTempDir, sweepStaleTempDirs } from './cleanup';
 import { pgEnv, quoteIdent, run } from './pg-process';
 import { diffPrivilegeFacts, legacyRequiredRoles, missingRoles, readPrivilegeFacts } from './privilege-facts';
@@ -250,6 +251,7 @@ async function verify(url: string, manifest: BackupManifest, record: (n: string,
     }
 
     await verifyIsolation(db, expectedNames.filter((name) => manifest.tables[name]!.rlsEnabled), record);
+    await verifyLedgerChain(url, db, names, record);
   } finally {
     await db.end();
   }
@@ -281,4 +283,56 @@ async function verifyIsolation(db: Client, tables: string[], record: (n: string,
     }
   }
   record('row-level security isolation', problems.length === 0, problems.length === 0 ? `tenants isolated on ${tables.length} tables` : problems.join('; '));
+}
+
+/** One tenant's whole chain may take this long to walk in a restore check (an operator is waiting on a real recovery, not a request). */
+const RESTORE_CHAIN_BUDGET_MS = 15 * 60_000;
+const RESTORE_CHAIN_MAX_EVENTS = 50_000_000;
+
+/**
+ * The restored record log is walked in full, tenant by tenant, acting as `telesphoros_ledger_verifier`: the restore's own (superuser)
+ * connection details are used with `role` set, so no extra credential is needed and the verifier's real policies and grants are exercised.
+ * Writes nothing (no checkpoint): a throwaway restore stays a throwaway. A backup from before the ledger has nothing to walk and says so;
+ * a restored ledger that fails, or cannot finish, makes the restore "not ok".
+ */
+async function verifyLedgerChain(url: string, db: Client, tables: string[], record: (n: string, ok: boolean, d: string) => void) {
+  const name = 'ledger chain';
+  if (!tables.includes('ledger_events')) {
+    record(name, true, 'not applicable: this backup predates the ledger');
+    return;
+  }
+  const role = await db.query(`SELECT 1 FROM pg_roles WHERE rolname = 'telesphoros_ledger_verifier'`);
+  if (role.rowCount === 0) {
+    record(name, false, 'role telesphoros_ledger_verifier does not exist on this server; create it (docs/ops/ledger-roles.md) before relying on this restore');
+    return;
+  }
+  const pool = new Pool({ connectionString: url, max: 1, connectionTimeoutMillis: 10_000, options: '-c role=telesphoros_ledger_verifier' });
+  pool.on('error', () => undefined); // intentional: an idle connection can die; the check reports what it could not do
+  try {
+    // The point of using this role is to exercise ITS policies and grants: prove the connection really has it, not just that it was asked for.
+    const who = await pool.query<{ u: string }>(`SELECT current_user AS u`);
+    if (who.rows[0]!.u !== 'telesphoros_ledger_verifier') {
+      record(name, false, 'the check did not run as telesphoros_ledger_verifier, so it proves nothing about what the verifier may read');
+      return;
+    }
+    const verifier = new LedgerVerifier(pool);
+    const tenants = await verifier.tenants();
+    let events = 0;
+    const problems: string[] = [];
+    for (const [index, tenantId] of tenants.entries()) {
+      const result = await verifier.verify(tenantId, { mode: 'full', budgetMs: RESTORE_CHAIN_BUDGET_MS, maxEvents: RESTORE_CHAIN_MAX_EVENTS, recordCheckpoint: false });
+      events += result.eventsChecked;
+      // Kinds and sequence numbers only: no tenant id and no value from a record reaches the report.
+      if (result.status === 'failed') problems.push(`ledger ${index + 1} of ${tenants.length} FAILED: ${[...new Set(result.failures.slice(0, 5).map((f) => `${f.kind}${f.seq === null ? '' : ` at ${f.seq}`}`))].join(', ')}`);
+      else if (result.status === 'incomplete') problems.push(`ledger ${index + 1} of ${tenants.length} could not be walked to the end (${result.eventsChecked} events checked)`);
+    }
+    record(name, problems.length === 0,
+      problems.length === 0
+        ? tenants.length === 0 ? 'no ledger events in this backup' : `${tenants.length} tenant ledger(s), ${events} events: chain, records and notes verified in full`
+        : problems.join('; '));
+  } catch (error) {
+    record(name, false, `the ledger could not be checked: ${error instanceof Error ? error.name : 'error'}${typeof (error as { code?: unknown }).code === 'string' ? ` ${(error as { code: string }).code}` : ''}`);
+  } finally {
+    await pool.end();
+  }
 }

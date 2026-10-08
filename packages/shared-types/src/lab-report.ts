@@ -236,3 +236,28 @@ export const disputeDtoSchema = z.strictObject({
   createdAt: timestamp,
 });
 export type DisputeDto = z.infer<typeof disputeDtoSchema>;
+
+/** `GET /ledger/verify`. `full=true` walks the whole chain; the default (or `false`) walks from the latest checkpoint. */
+export const ledgerVerifyQuerySchema = z.strictObject({ full: z.enum(['true', 'false']).optional() });
+export type LedgerVerifyQuery = z.infer<typeof ledgerVerifyQuerySchema>;
+
+export const LEDGER_FAILURE_KINDS = [
+  'seq-gap', 'prev-hash-mismatch', 'record-hash-mismatch', 'unsupported-hash-version', 'unsupported-projection-version',
+  'payload-mismatch', 'record-missing', 'record-event-mismatch', 'row-without-event', 'note-digest-mismatch', 'note-redaction-invalid',
+  'head-mismatch', 'checkpoint-mismatch', 'checkpoint-payload-mismatch',
+] as const;
+
+/**
+ * The answer to a ledger check of the caller's own tenant. It names KINDS of failure and sequence numbers, never a value from a record.
+ * A `failed` status also stops this instance from writing records until it is restarted after an investigation.
+ */
+export const ledgerVerifyResultSchema = z.strictObject({
+  status: z.enum(['ok', 'failed', 'incomplete']),
+  mode: z.enum(['full', 'tail']),
+  headSeq: z.string().regex(/^\d+$/),
+  headHash: sha256,
+  eventsChecked: z.number().int().min(0),
+  failures: z.array(z.strictObject({ kind: z.enum(LEDGER_FAILURE_KINDS), seq: z.string().regex(/^\d+$/).nullable() })),
+  checkpointId: z.uuid().nullable(),
+});
+export type LedgerVerifyResult = z.infer<typeof ledgerVerifyResultSchema>;

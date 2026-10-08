@@ -3,6 +3,9 @@ import { appendEvent, newId } from '../../src/ledger/ledger-writer';
 import { captureFor, type SeededReport } from './ledger-fixtures';
 import type { PgError } from './ledger-sql';
 
+/** The barrier tooling exercises the ledger itself, not the watch: its gate never closes. */
+const OPEN_GATE = { assertOpen: (): void => undefined };
+
 /**
  * Two-session tests hold one connection at a known point and let the database's own lock queue decide the order. Nothing here sleeps
  * to "wait for the other side": `untilBlocked` polls pg_stat_activity until the named connection is queued behind a lock (bounded).
@@ -37,7 +40,7 @@ export class Session {
        VALUES ($1, $2, $11, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [id, report.tenantId, eventId, report.reportId, input.pdfSha256, input.textStorageKey, input.textSha256, input.textScalars, input.popplerVersion, input.runner, this.actor],
     );
-    await appendEvent(this.client, 'report_captures', id, eventId);
+    await appendEvent(OPEN_GATE, this.client, 'report_captures', id, eventId);
     return id;
   }
 
@@ -69,7 +72,7 @@ export class Session {
   }
 
   appendPrepared(prepared: { id: string; eventId: string }): Promise<unknown> {
-    return appendEvent(this.client, 'cell_disputes', prepared.id, prepared.eventId);
+    return appendEvent(OPEN_GATE, this.client, 'cell_disputes', prepared.id, prepared.eventId);
   }
 
   commit() {

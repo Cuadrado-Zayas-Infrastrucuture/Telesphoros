@@ -10,6 +10,7 @@ import { ConfigModule } from './config/config.module';
 import { ENV, type Env } from './config/env';
 import { HealthModule } from './health/health.module';
 import { LabReportsModule } from './lab-reports/lab-reports.module';
+import { LedgerModule } from './ledger/ledger.module';
 import { MeModule } from './me/me.module';
 import { ObjectStorageModule } from './object-storage/object-storage.module';
 import { PatientsModule } from './patients/patients.module';
@@ -46,6 +47,7 @@ export class AppModule {
           }),
         }),
         AuthModule,
+        LedgerModule,
         StorageModule.register(env),
         ObjectStorageModule.register(env),
         LabReportsModule,

@@ -1,0 +1,224 @@
+import { randomUUID } from 'node:crypto';
+import { Logger } from '@nestjs/common';
+import type { Client } from 'pg';
+import { Database } from '../../src/db/database';
+import { LedgerMonitor, type LedgerWatchConfig, type VerifierPort } from '../../src/ledger/ledger-monitor';
+import { LedgerStatus } from '../../src/ledger/ledger-status';
+import { LedgerCompromisedError } from '../../src/ledger/ledger-types';
+import { LedgerVerifier, type VerifyOptions, type VerifyResult } from '../../src/ledger/verifier';
+import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
+import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
+import { acceptanceFor, captureFor, evaluationFor, type SeededReport, seedLabReport } from '../helpers/ledger-fixtures';
+
+// The ledger watch against a REAL database and a REAL verifier, with tampering done the way someone who can bypass every trigger would do
+// it. The decisions themselves (budgets, queueing, timers) are in src/ledger/ledger-monitor.spec.ts with a fake verifier. Synthetic data only.
+
+const config = (over: Partial<LedgerWatchConfig> = {}): LedgerWatchConfig => ({
+  production: false, startupBudgetMs: 20_000, fullIntervalMs: 0, fullBudgetMs: 60_000, onDemandBudgetMs: 30_000, fullWalkAtOrBelowEvents: 50_000, ...over,
+});
+
+/** The real verifier, recording what it was asked and what it found. */
+class RecordingVerifier implements VerifierPort {
+  readonly results: Array<{ options: VerifyOptions; result: VerifyResult }> = [];
+  constructor(private readonly inner: LedgerVerifier) {}
+  tenants() { return this.inner.tenants(); }
+  async verify(tenantId: string, options: VerifyOptions = {}) {
+    const result = await this.inner.verify(tenantId, options);
+    this.results.push({ options, result });
+    return result;
+  }
+  close() { return this.inner.close(); }
+}
+
+// Failures are asserted on through spies below; the console copy of each would only bury the test output.
+beforeAll(() => Logger.overrideLogger(false));
+
+let pg: EphemeralDatabase;
+let database: Database;
+let repo: PostgresLedgerRecordsRepository;
+
+async function fresh() {
+  pg = await createEphemeralDatabase();
+  database = new Database({ url: pg.appUrl, ssl: 'disable' });
+  repo = new PostgresLedgerRecordsRepository(database);
+}
+async function dispose() {
+  await database.onModuleDestroy();
+  await pg.drop();
+}
+
+/** A tenant with a capture, an accepted capture, an evaluation (with children), a correction, and a dispute with a note. */
+async function chain(): Promise<{ tenantId: string; report: SeededReport; ids: Record<string, string> }> {
+  const tenantId = `tenant-${randomUUID()}`;
+  const report = await seedLabReport(pg.adminUrl, tenantId);
+  const capture = captureFor(report);
+  const c = await repo.insertCapture(tenantId, report.uploader, capture);
+  const a = await repo.insertAcceptance(tenantId, 'syn-reviewer', acceptanceFor(c.record.id, capture, { note: 'checked against the page' }));
+  const e = await repo.insertEvaluation(tenantId, 'syn-system', evaluationFor(report, c.record.id, a.record.id));
+  const k = await repo.insertCorrection(tenantId, 'syn-reviewer', { evaluationId: e.record.id, kind: 'retraction', reasonCode: 'input-misread', note: 'misread' });
+  const d = await repo.raiseDispute(tenantId, 'syn-reviewer', {
+    guidelineId: 'syn-guideline', guidelineVersion: '1', guidelineContentSha256: 'a'.repeat(64), locator: { table: 'recommendations', row: 'poor' }, note: 'cell looks wrong',
+  });
+  return { tenantId, report, ids: { capture: c.record.id, acceptance: a.record.id, evaluation: e.record.id, correction: k.record.id, dispute: d.record.id } };
+}
+
+const tamper = (work: (c: Client) => Promise<unknown>) => withAdmin(pg.adminUrl, async (c) => {
+  await c.query(`SET session_replication_role = replica`);
+  await work(c);
+});
+
+function watch(over: Partial<LedgerWatchConfig> = {}, status = new LedgerStatus()) {
+  const verifier = new RecordingVerifier(LedgerVerifier.connect(pg.verifierUrl));
+  const monitor = new LedgerMonitor(config(over), verifier, status);
+  return { monitor, status, verifier };
+}
+
+const count = (table: string, tenantId: string) => withAdmin(pg.adminUrl, async (c) => Number((await c.query(`SELECT count(*) AS n FROM ${table} WHERE tenant_id = $1`, [tenantId])).rows[0].n));
+
+describe('ledger watch: an intact log', () => {
+  beforeAll(fresh, 60_000);
+  afterAll(dispose);
+
+  it('passes the check at start in production, then walks everything in full and records a checkpoint for each tenant', async () => {
+    const a = await chain();
+    const b = await chain();
+    const { monitor, status, verifier } = watch({ production: true });
+    await monitor.onApplicationBootstrap();
+    expect(status.tailState).toBe('ok');
+    await monitor.idle();
+    expect(status.readiness()).toBe('up');
+    expect(verifier.results.filter((r) => r.options.mode === 'full').map((r) => r.result.status)).toEqual(expect.arrayContaining(['ok', 'ok']));
+    expect(await count('ledger_checkpoints', a.tenantId)).toBeGreaterThanOrEqual(1);
+    expect(await count('ledger_checkpoints', b.tenantId)).toBeGreaterThanOrEqual(1);
+    await monitor.onModuleDestroy();
+  });
+
+  it('starts again after those checkpoints: a small chain is walked in FULL anyway, and a large one from the checkpoint', async () => {
+    const small = watch({ production: true });
+    await small.monitor.onApplicationBootstrap();
+    await small.monitor.idle();
+    const smallTails = small.verifier.results.filter((r) => r.options.mode === 'tail');
+    expect(smallTails.length).toBeGreaterThan(0);
+    for (const { result } of smallTails) expect(result).toMatchObject({ status: 'ok', mode: 'full' });
+    await small.monitor.onModuleDestroy();
+
+    const large = watch({ production: true, fullWalkAtOrBelowEvents: 0 });
+    await large.monitor.onApplicationBootstrap();
+    await large.monitor.idle();
+    const largeTails = large.verifier.results.filter((r) => r.options.mode === 'tail');
+    for (const { result } of largeTails) expect(result).toMatchObject({ status: 'ok', mode: 'tail' });
+    expect(Math.max(...largeTails.map((t) => t.result.eventsChecked))).toBeLessThanOrEqual(2); // only what came after the checkpoint
+    await large.monitor.onModuleDestroy();
+  });
+
+  it('refuses to start in production when the budget is already spent, without walking anything (control: the same log starts with a budget)', async () => {
+    const spent = watch({ production: true, startupBudgetMs: 0 });
+    await expect(spent.monitor.onApplicationBootstrap()).rejects.toThrow(/incomplete/);
+    expect(spent.verifier.results).toEqual([]);
+    expect(spent.status.readiness()).toBe('down');
+    await spent.monitor.onModuleDestroy();
+
+    const enough = watch({ production: true });
+    await expect(enough.monitor.onApplicationBootstrap()).resolves.toBeUndefined();
+    await enough.monitor.onModuleDestroy();
+  });
+});
+
+describe('ledger watch: a tampered log', () => {
+  type Attack = (c: Client, t: { tenantId: string; ids: Record<string, string> }) => Promise<unknown>;
+  const attacks: Array<[string, Attack]> = [
+    ['an edited record', (c, t) => c.query(`UPDATE report_captures SET text_scalars = text_scalars + 1 WHERE id = $1`, [t.ids.capture])],
+    ['a deleted event', (c, t) => c.query(`DELETE FROM ledger_events WHERE tenant_id = $1 AND seq = 3`, [t.tenantId])],
+    ['two events swapped', async (c, t) => {
+      await c.query(`UPDATE ledger_events SET seq = 1000 WHERE tenant_id = $1 AND seq = 2`, [t.tenantId]);
+      await c.query(`UPDATE ledger_events SET seq = 2 WHERE tenant_id = $1 AND seq = 3`, [t.tenantId]);
+      await c.query(`UPDATE ledger_events SET seq = 3 WHERE tenant_id = $1 AND seq = 1000`, [t.tenantId]);
+    }],
+    ['a child row added to an evaluation after the fact', (c, t) => c.query(
+      `INSERT INTO evaluation_results (tenant_id, evaluation_id, ordinal, drug, genes, outcome, reason_code, gene_evidence)
+       VALUES ($1, $2, 9, 'x', '{}', 'no-guideline', 'no-guideline-for-drug', '[]')`, [t.tenantId, t.ids.evaluation])],
+    ['an edited note', (c, t) => c.query(`UPDATE event_notes SET body = 'rewritten' WHERE tenant_id = $1 AND body = 'cell looks wrong'`, [t.tenantId])],
+  ];
+
+  describe.each(attacks)('after %s', (_name, attack) => {
+    let t: Awaited<ReturnType<typeof chain>>;
+    beforeAll(async () => {
+      await fresh();
+      t = await chain();
+      await tamper((c) => attack(c, t));
+    }, 60_000);
+    afterAll(dispose);
+
+    it('production refuses to start, and says which kind of break and where, never a value', async () => {
+      const { monitor, status } = watch({ production: true });
+      const error = await monitor.onApplicationBootstrap().catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toMatch(/did not pass its check at start: failed \([a-z-]+( at sequence \d+)?\)/);
+      expect((error as Error).message).not.toMatch(/rewritten|cell looks wrong|tenant-/);
+      expect(status.compromised).not.toBeNull();
+      await monitor.onModuleDestroy();
+    });
+
+    it('development carries on with the log latched: not ready, new records refused and not stored, reads still work', async () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const err = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      const status = new LedgerStatus();
+      const { monitor } = watch({}, status);
+      await monitor.onApplicationBootstrap();
+      await monitor.idle();
+      expect(status.compromised).toMatchObject({ source: 'startup' });
+      expect(status.readiness()).toBe('down');
+      expect(err.mock.calls.flat().some((c) => c?.event === 'ledger-compromised')).toBe(true);
+      expect(JSON.stringify([...warn.mock.calls, ...err.mock.calls])).not.toMatch(/rewritten|cell looks wrong/);
+
+      const guarded = new PostgresLedgerRecordsRepository(database, status);
+      const before = [await count('report_captures', t.tenantId), await count('ledger_events', t.tenantId)];
+      const other = await seedLabReport(pg.adminUrl, t.tenantId);
+      await expect(guarded.insertCapture(t.tenantId, other.uploader, captureFor(other))).rejects.toBeInstanceOf(LedgerCompromisedError);
+      expect([await count('report_captures', t.tenantId), await count('ledger_events', t.tenantId)]).toEqual(before); // nothing was stored
+      await expect(guarded.findCapture(t.tenantId, t.ids.capture)).resolves.toMatchObject({ id: t.ids.capture }); // reads work
+      jest.restoreAllMocks();
+      await monitor.onModuleDestroy();
+    });
+  });
+});
+
+describe('ledger watch: damage that appears while it is running', () => {
+  beforeAll(fresh, 60_000);
+  afterAll(dispose);
+
+  it('is found by the timer, latches, and stops new records; the latch survives the damage being undone and is cleared only by a new process', async () => {
+    const err = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const t = await chain();
+    const status = new LedgerStatus();
+    const { monitor } = watch({ production: true, fullIntervalMs: 200 }, status);
+    await monitor.onApplicationBootstrap();
+    await monitor.idle();
+    expect(status.readiness()).toBe('up');
+
+    await tamper((c) => c.query(`UPDATE report_captures SET text_scalars = text_scalars + 1 WHERE id = $1`, [t.ids.capture]));
+    const deadline = Date.now() + 10_000;
+    while (!status.compromised && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50)); // bounded wait for the timer's walk
+    expect(status.compromised).toMatchObject({ tenantId: t.tenantId, kind: 'payload-mismatch', source: 'scheduled' });
+    expect(status.readiness()).toBe('down');
+    expect(err.mock.calls.flat().some((c) => c?.event === 'ledger-compromised' && c.tenantId === t.tenantId)).toBe(true);
+
+    const guarded = new PostgresLedgerRecordsRepository(database, status);
+    const report = await seedLabReport(pg.adminUrl, t.tenantId);
+    await expect(guarded.insertCapture(t.tenantId, report.uploader, captureFor(report))).rejects.toBeInstanceOf(LedgerCompromisedError);
+
+    // Repairing the data does not reopen the writes: a person decides that, by restarting after an investigation.
+    await tamper((c) => c.query(`UPDATE report_captures SET text_scalars = text_scalars - 1 WHERE id = $1`, [t.ids.capture]));
+    await expect(monitor.verifyNow(t.tenantId, true)).resolves.toMatchObject({ status: 'ok' });
+    expect(status.compromised).not.toBeNull();
+    await expect(guarded.insertCapture(t.tenantId, report.uploader, captureFor(report))).rejects.toBeInstanceOf(LedgerCompromisedError);
+    await monitor.onModuleDestroy();
+
+    const restarted = watch({ production: true });
+    await restarted.monitor.onApplicationBootstrap();
+    expect(restarted.status.compromised).toBeNull();
+    await expect(new PostgresLedgerRecordsRepository(database, restarted.status).insertCapture(t.tenantId, report.uploader, captureFor(report))).resolves.toBeDefined();
+    await restarted.monitor.onModuleDestroy();
+    jest.restoreAllMocks();
+  });
+});

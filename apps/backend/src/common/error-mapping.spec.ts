@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { LedgerBusyError, LedgerIntegrityError } from '../ledger/ledger-types';
+import { LedgerBusyError, LedgerCompromisedError, LedgerIntegrityError } from '../ledger/ledger-types';
 import { IntegrityError } from '../storage/errors';
 import { AppException } from './app-exception';
 import { mapException } from './error-mapping';
@@ -81,5 +81,16 @@ describe('mapException: the pipeline error contract', () => {
     expect(mapException(new LedgerIntegrityError('x', '23000'))).toMatchObject({ status: 409, code: 'LEDGER_CONFLICT' });
     expect(mapException(new LedgerBusyError())).toMatchObject({ status: 503, code: 'LEDGER_BUSY', retryAfterSeconds: 2 });
     expect(JSON.stringify(mapException(new LedgerIntegrityError('table report_captures violated', '23000')))).not.toContain('report_captures');
+  });
+
+  it('maps a latched record log to 503 LEDGER_COMPROMISED with no Retry-After (waiting cannot clear it) and no detail about what was found', () => {
+    const mapped = mapException(new LedgerCompromisedError());
+    expect(mapped).toMatchObject({ status: 503, code: 'LEDGER_COMPROMISED' });
+    expect(mapped).not.toHaveProperty('retryAfterSeconds');
+    expect(mapped.details).toBeUndefined();
+  });
+
+  it('keeps a busy ledger CHECK apart from a compromised log: 503 PIPELINE_BUSY, with Retry-After', () => {
+    expect(mapException(AppException.ledgerCheckBusy())).toMatchObject({ status: 503, code: 'PIPELINE_BUSY', retryAfterSeconds: 5 });
   });
 });

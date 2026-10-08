@@ -41,6 +41,13 @@ export interface VerifyOptions {
   maxEvents?: number;
   /** Write a checkpoint when (and only when) the verification is `ok`. */
   recordCheckpoint?: boolean;
+  /**
+   * With `mode: 'tail'`: a chain whose head is at or below this sequence number is walked in FULL even if a checkpoint exists. A checkpoint
+   * makes a start fast; it is not an independent control (specification 6.6), so while the whole walk is cheap it is done.
+   */
+  fullWalkAtOrBelow?: number;
+  /** Aborting stops the walk at the next batch and yields `incomplete` (never `ok`): used so a shutdown does not wait for a long walk. */
+  signal?: AbortSignal;
 }
 
 export interface VerifyResult {
@@ -134,7 +141,8 @@ export class LedgerVerifier {
       // Where to start: genesis, or the newest checkpoint if it still matches the chain.
       let mode: VerifyMode = 'full';
       let position = { seq: 0n, hash: GENESIS_HASH };
-      if (options.mode === 'tail') {
+      const small = options.fullWalkAtOrBelow !== undefined && BigInt(head.seq) <= BigInt(options.fullWalkAtOrBelow);
+      if (options.mode === 'tail' && !small) {
         const cp = await client.query<{ id: string; up_to_seq: string; head_hash: string; mode: string }>(
           `SELECT id::text AS id, up_to_seq::text AS up_to_seq, head_hash, mode FROM ledger_checkpoints c WHERE c.tenant_id = $1 ORDER BY c.up_to_seq DESC LIMIT 1`, [tenantId]);
         const latest = cp.rows[0];
@@ -155,7 +163,7 @@ export class LedgerVerifier {
       let running = position.hash;
       let cursor = position.seq.toString();
       for (;;) {
-        if (Date.now() - started > budgetMs) {
+        if (Date.now() - started > budgetMs || options.signal?.aborted) {
           incomplete = true;
           break;
         }

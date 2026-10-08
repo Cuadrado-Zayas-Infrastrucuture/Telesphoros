@@ -56,6 +56,9 @@ first and stops, restoring nothing, with the list of missing roles. How to creat
    existed are restored as before (without owners) and say so.
 6. Row-level security is still enabled, forced and has the same policies, **and still isolates owners when acting as
    the application role** (no owner set: sees nothing; one owner set: sees exactly that owner's rows).
+7. **`ledger chain`**: every tenant's whole ledger chain is walked in the restored copy, as `telesphoros_ledger_verifier` (chain, records and notes,
+   both directions). It writes nothing. A restored ledger that fails, or cannot be walked to the end (15 minutes per tenant), makes the restore
+   "not ok". A backup from before the ledger existed reports "not applicable" and passes. See `docs/ops/ledger-watch.md`.
 
 The baseline is read **inside the same exported snapshot `pg_dump` uses**, so a busy database cannot cause false
 alarms (a test commits rows between baseline and dump and the restore still verifies).

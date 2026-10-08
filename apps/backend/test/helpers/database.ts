@@ -29,6 +29,14 @@ function withDatabase(url: string, database: string, credentials?: { user: strin
   return parsed.toString();
 }
 
+/** The verifier login's URL for the database an application URL points at (tests that are handed only `appUrl`). */
+export function verifierUrlFor(appUrl: string): string {
+  const parsed = new URL(appUrl);
+  parsed.username = VERIFIER_LOGIN;
+  parsed.password = APP_LOGIN_PASSWORD;
+  return parsed.toString();
+}
+
 export interface EphemeralDatabase {
   name: string;
   /** Superuser/owner connection (what a migrator or backup job would use). */

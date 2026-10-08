@@ -35,4 +35,10 @@ describe('ReadinessService', () => {
       jest.useRealTimers();
     }
   });
+
+  it('reports a dependency that answers "verifying" as verifying, and the instance is still ready', async () => {
+    await expect(
+      new ReadinessService([{ name: 'db', check: async () => undefined }, { name: 'ledger', check: async () => 'verifying' as const }]).run(),
+    ).resolves.toEqual({ status: 'ready', checks: { db: 'up', ledger: 'verifying' } });
+  });
 });

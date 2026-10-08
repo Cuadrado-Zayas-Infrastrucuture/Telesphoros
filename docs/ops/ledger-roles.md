@@ -24,6 +24,11 @@ CREATE ROLE ledger_verifier_login LOGIN PASSWORD '<from your secret manager>' NO
 CREATE ROLE ledger_operator_login  LOGIN PASSWORD '<from your secret manager>' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS IN ROLE telesphoros_ledger_operator;
 ```
 
+The verifier login's connection string is the application's `LEDGER_VERIFIER_DATABASE_URL` (docs/ops/ledger-watch.md). It is **required in
+production and whenever the pipeline is enabled**, and the application refuses to start if it is missing or if it equals `DATABASE_URL`. This is
+the first place the verifier login is used by a running process, so it must exist before the first production start (a hosting-phase task:
+nothing is provisioned in AWS yet). The restore check does not need it: it uses the restore's own server credentials with `role` set.
+
 ## The migrator
 
 The migrations create the ledger's objects under `SET LOCAL ROLE telesphoros_ledger` (and `telesphoros_redactor`), so each owns what it

@@ -16,6 +16,7 @@ import type { DisputeStatus, EvaluationInput, Projected } from '../storage/ledge
 import { ReportsRepository } from '../storage/reports.repository';
 import { DatabaseCaptureAcceptanceStore } from './acceptance-store';
 import { type EvaluationContext, toEvaluationDto, toEvaluationSummaryDto } from './lab-report.mapper';
+import { LedgerStatus } from '../ledger/ledger-status';
 import { ReaderLimiter } from './reader-limiter';
 import { TextCaptureRunner } from './runner/text-capture-runner';
 
@@ -46,6 +47,7 @@ export class EvaluationsService {
     @Optional() private readonly runner?: TextCaptureRunner,
     @Optional() @Inject(LAB_KNOWLEDGE) private readonly knowledge?: KnowledgeSet,
     @Optional() @Inject(LAB_READER) private readonly reader?: ReportReader,
+    @Optional() private readonly status?: LedgerStatus,
   ) {}
 
   private need<T>(dependency: T | undefined | null): T {
@@ -62,6 +64,8 @@ export class EvaluationsService {
     const runner = this.need(this.runner);
     const knowledge = this.need(this.knowledge);
     const reader = this.need(this.reader);
+    // A request that cannot be stored (the record log failed verification) is refused before the reader spends any effort on it.
+    this.status?.assertOpen();
 
     const report = await this.reports.findById(principal.tenantId, reportId);
     if (!report) throw AppException.notFound('Report not found.');

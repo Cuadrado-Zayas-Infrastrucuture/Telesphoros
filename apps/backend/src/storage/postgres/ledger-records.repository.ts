@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { Database } from '../../db/database';
+import { LedgerStatus } from '../../ledger/ledger-status';
 import { appendEvent, newId } from '../../ledger/ledger-writer';
 import { DisputeChangedError, StaleAcceptanceError, SourceChangedError, toLedgerError, type RecordTable } from '../../ledger/ledger-types';
 import { loadProjections } from '../../ledger/projections';
@@ -22,7 +23,8 @@ import type {
  */
 @Injectable()
 export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
-  constructor(private readonly db: Database) {
+  /** `ledger` is the watch's shared state; a repository built without one (a test) never has a latch to obey. */
+  constructor(private readonly db: Database, private readonly ledger: LedgerStatus = new LedgerStatus()) {
     super();
   }
 
@@ -316,7 +318,7 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 
   /** Appends the record's event as the last statement and returns the projection that was hashed. */
   private async finish(client: PoolClient, tenantId: string, table: RecordTable, id: string): Promise<InsertResult> {
-    await appendEvent(client, table, id, await this.eventIdOf(client, table, id));
+    await appendEvent(this.ledger, client, table, id, await this.eventIdOf(client, table, id));
     return { record: await this.mustOne(client, tenantId, table, id), created: true };
   }
 
