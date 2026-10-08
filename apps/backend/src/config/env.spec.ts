@@ -70,6 +70,7 @@ describe('loadEnv', () => {
       NODE_ENV: 'production', AUTH_VERIFIER: 'cognito', COGNITO_REGION: 'us-east-2', COGNITO_USER_POOL_ID: 'us-east-2_AbCdEf123',
       COGNITO_APP_CLIENT_ID: 'client123', STORAGE_DRIVER: 'postgres', DATABASE_URL: 'postgres://app@db/app', DATABASE_SSL: 'require',
       OBJECT_STORAGE_DRIVER: 's3', REPORTS_BUCKET: 'a-bucket', CORS_ALLOWED_ORIGINS: 'https://app.example.com',
+      LEDGER_VERIFIER_DATABASE_URL: 'postgres://verifier@db/app',
     };
 
     it('starts with the real setup', () => {
@@ -84,6 +85,7 @@ describe('loadEnv', () => {
       ['in-memory file storage', { OBJECT_STORAGE_DRIVER: 'memory' }, /OBJECT_STORAGE_DRIVER/],
       ['an unencrypted database connection', { DATABASE_SSL: 'disable' }, /DATABASE_SSL/],
       ['a plain-http CORS origin', { CORS_ALLOWED_ORIGINS: 'http://app.example.com' }, /CORS_ALLOWED_ORIGINS/],
+      ['a missing ledger verifier login', { LEDGER_VERIFIER_DATABASE_URL: undefined }, /LEDGER_VERIFIER_DATABASE_URL.*production/],
       ['the synthetic lab-report pipeline', { LAB_REPORT_PIPELINE: 'enabled', LAB_REPORT_FIXTURES_DIR: '/some/recorded/pdfs', KNOWLEDGE_DIR: '/k', BUILD_VERSION: 'b1' }, /LAB_REPORT_PIPELINE.*production/],
     ])('refuses %s', (_name, change, message) => {
       expect(() => loadEnv({ ...production, ...change })).toThrow(message);
@@ -91,7 +93,7 @@ describe('loadEnv', () => {
   });
 
   describe('the lab-report pipeline switch', () => {
-    const database = { STORAGE_DRIVER: 'postgres', DATABASE_URL: 'postgres://app@db/app' };
+    const database = { STORAGE_DRIVER: 'postgres', DATABASE_URL: 'postgres://app@db/app', LEDGER_VERIFIER_DATABASE_URL: 'postgres://verifier@db/app' };
     const fixtures = { LAB_REPORT_FIXTURES_DIR: '/some/recorded/pdfs', KNOWLEDGE_DIR: '/some/knowledge', BUILD_VERSION: 'build-1' };
 
     it('is off by default, and "disabled" is the only way it stays off', () => {
@@ -129,6 +131,45 @@ describe('loadEnv', () => {
       expect(loadEnv({ ...base }).DOWNLOAD_URL_TTL_SECONDS).toBe(120);
       for (const bad of ['59', '601', 'abc']) expect(() => loadEnv({ ...base, DOWNLOAD_URL_TTL_SECONDS: bad })).toThrow(/DOWNLOAD_URL_TTL_SECONDS/);
       expect(loadEnv({ ...base, DOWNLOAD_URL_TTL_SECONDS: '600' }).DOWNLOAD_URL_TTL_SECONDS).toBe(600);
+    });
+  });
+  describe('the ledger watch settings', () => {
+    const database = { STORAGE_DRIVER: 'postgres', DATABASE_URL: 'postgres://app@db/app' };
+    const verifier = { LEDGER_VERIFIER_DATABASE_URL: 'postgres://verifier@db/app' };
+
+    it('is optional outside production and the pipeline, with a 20 s startup budget and a daily full check by default', () => {
+      const env = loadEnv({ ...base });
+      expect(env.LEDGER_VERIFIER_DATABASE_URL).toBeUndefined();
+      expect(env.LEDGER_STARTUP_BUDGET_MS).toBe(20_000);
+      expect(env.LEDGER_FULL_VERIFY_INTERVAL_HOURS).toBe(24);
+    });
+
+    it('is required when the pipeline is enabled (the log must be watched while it is written)', () => {
+      const pipeline = { ...base, ...database, LAB_REPORT_PIPELINE: 'enabled', LAB_REPORT_FIXTURES_DIR: '/f', KNOWLEDGE_DIR: '/k', BUILD_VERSION: 'b1' };
+      expect(() => loadEnv(pipeline)).toThrow(/LEDGER_VERIFIER_DATABASE_URL.*LAB_REPORT_PIPELINE=enabled/);
+      expect(loadEnv({ ...pipeline, ...verifier }).LEDGER_VERIFIER_DATABASE_URL).toBe(verifier.LEDGER_VERIFIER_DATABASE_URL);
+    });
+
+    it('must be a different login from the application\'s, and needs the real database', () => {
+      expect(() => loadEnv({ ...base, ...database, LEDGER_VERIFIER_DATABASE_URL: database.DATABASE_URL })).toThrow(/LEDGER_VERIFIER_DATABASE_URL.*not the application login/);
+      expect(() => loadEnv({ ...base, ...verifier })).toThrow(/LEDGER_VERIFIER_DATABASE_URL.*STORAGE_DRIVER=postgres/);
+    });
+
+    it('never puts a connection string in the error text', () => {
+      let text = '';
+      try {
+        loadEnv({ ...base, ...database, LEDGER_VERIFIER_DATABASE_URL: database.DATABASE_URL });
+      } catch (error) {
+        text = (error as Error).message;
+      }
+      expect(text).toMatch(/LEDGER_VERIFIER_DATABASE_URL/);
+      expect(text).not.toContain('postgres://');
+    });
+
+    it('bounds the startup budget (1 s to 5 min) and the interval (0 to 168 hours; 0 turns the timer off)', () => {
+      for (const bad of ['999', '300001', 'soon', '1.5']) expect(() => loadEnv({ ...base, LEDGER_STARTUP_BUDGET_MS: bad })).toThrow(/LEDGER_STARTUP_BUDGET_MS/);
+      for (const bad of ['-1', '169', 'daily', '1.5']) expect(() => loadEnv({ ...base, LEDGER_FULL_VERIFY_INTERVAL_HOURS: bad })).toThrow(/LEDGER_FULL_VERIFY_INTERVAL_HOURS/);
+      expect(loadEnv({ ...base, LEDGER_STARTUP_BUDGET_MS: '1000', LEDGER_FULL_VERIFY_INTERVAL_HOURS: '0' })).toMatchObject({ LEDGER_STARTUP_BUDGET_MS: 1000, LEDGER_FULL_VERIFY_INTERVAL_HOURS: 0 });
     });
   });
 });

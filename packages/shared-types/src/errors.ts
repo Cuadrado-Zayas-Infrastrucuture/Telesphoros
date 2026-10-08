@@ -27,6 +27,11 @@ export const ErrorCode = {
   LEDGER_CONFLICT: 'LEDGER_CONFLICT',
   /** The file is not one this build can read (422). */
   UNSUPPORTED_SOURCE: 'UNSUPPORTED_SOURCE',
+  /**
+   * The ledger watch found the record log damaged (503, no Retry-After: only an operator can clear it, by investigating and restarting).
+   * Nothing was written; reads still work.
+   */
+  LEDGER_COMPROMISED: 'LEDGER_COMPROMISED',
   /** An installation fault, not the caller's doing (500): operator action. */
   PIPELINE_MISCONFIGURED: 'PIPELINE_MISCONFIGURED',
   INTERNAL_ERROR: 'INTERNAL_ERROR',

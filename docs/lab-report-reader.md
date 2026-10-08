@@ -93,6 +93,7 @@ With `LAB_REPORT_PIPELINE=enabled` (never in production, PostgreSQL only) a repo
 | `POST /cell-disputes` `{guidelineId, locator, note}` | reviewer | Dispute one cell of a loaded guideline. The version and the file's content hash are read from the loaded knowledge, never supplied |
 | `POST /cell-disputes/:id/decision` `{decision, evidenceNote}` | reviewer | `upheld` or `dismissed`, final, by someone other than the person who raised it; the evidence is required |
 | `GET /cell-disputes`, `GET /cell-disputes/:id` | everyone signed in | Disputes with `status` (`open`, `upheld`, `dismissed`) and `inForce`. Notes appear only as digests |
+| `GET /ledger/verify?full=` | admin | Checks the record log of the caller's own tenant now (from the latest checkpoint, or the whole chain with `full=true`) and records a checkpoint on success. The answer names kinds of failure and sequence numbers only. A `failed` answer stops this process writing records until a restart. 503 `PIPELINE_BUSY` + `Retry-After` while another check runs. See [ops/ledger-watch.md](ops/ledger-watch.md) |
 
 **Corrections** (`POST /evaluations/:id/corrections` `{kind, reasonCode, previousCorrectionId?, replacementEvaluationId?, note?}`): `retraction`
 ("do not rely on this"), `supersession` (replaced by a newer, active evaluation of the same report), `reinstatement` (an earlier retraction was mistaken;
@@ -138,7 +139,11 @@ reader works. A caller who gives up does not cancel the read; it finishes and is
 binding, `scope: "synthetic-test-only/1"` and the SHA-256 of the recorded set the text runner answers for, all inside the stored binding and
 therefore inside the ledger event. The engine takes no population or drug-context input; none is invented.
 
-**Configuration when enabled** (the application refuses to start without each): `LAB_REPORT_FIXTURES_DIR`, `KNOWLEDGE_DIR`, `BUILD_VERSION`; the
+**When the record log fails verification** every route above that writes a record answers **503 `LEDGER_COMPROMISED`** (no `Retry-After`; nothing stored; an
+evaluation is refused before the reader runs) and `/ready` fails on `ledger`; reads still work. Only a restart after an investigation clears it
+([ops/ledger-watch.md](ops/ledger-watch.md)).
+
+**Configuration when enabled** (the application refuses to start without each): `LAB_REPORT_FIXTURES_DIR`, `KNOWLEDGE_DIR`, `BUILD_VERSION`, `LEDGER_VERIFIER_DATABASE_URL`; the
 reader must be the pinned build (`verifyPinned()` at start), the knowledge must load, and the bucket must keep versions. Nothing is loaded or
 started while the pipeline is off, and every route then answers 503 `PIPELINE_DISABLED` without touching anything.
 

@@ -50,11 +50,18 @@ export class AppException extends HttpException {
   static pipelineBusy() {
     return new AppException(503, ErrorCode.PIPELINE_BUSY, 'The reader is busy. Try again shortly.', undefined, 5);
   }
+  static ledgerCheckBusy() {
+    return new AppException(503, ErrorCode.PIPELINE_BUSY, 'A record log check is already running. Try again shortly.', undefined, 5);
+  }
   static readerUnavailable() {
     return new AppException(503, ErrorCode.READER_UNAVAILABLE, 'The report could not be read just now. Nothing was saved; try again later.', undefined, 30);
   }
   static ledgerBusy() {
     return new AppException(503, ErrorCode.LEDGER_BUSY, 'The record log is busy. Nothing was saved; try again.', undefined, 2);
+  }
+  /** No Retry-After on purpose: retrying cannot help, only an operator can clear this. */
+  static ledgerCompromised() {
+    return new AppException(503, ErrorCode.LEDGER_COMPROMISED, 'The record log failed a verification check, so no records can be saved right now. An operator must investigate.');
   }
   static ledgerConflict() {
     return new AppException(409, ErrorCode.LEDGER_CONFLICT, 'A record rule refused this change. Re-read the current state before deciding.');

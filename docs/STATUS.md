@@ -23,14 +23,14 @@ Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and
 | 5B-3.2b-2 (#29) | Evaluation endpoints (reader, adapter, engine, stored with the ledger), knowledge loading, the per-process reader limit, the dispute re-check after the ledger lock, D01 to D12 end to end against the hand-written expectations | [lab-report-reader.md](lab-report-reader.md), spec section 18 |
 | 5B-3.3a | Corrections: retract, reinstate, supersede; correction history and derived state in every evaluation; `current` and `?current=true`; `GET /notes/:id` | [lab-report-reader.md](lab-report-reader.md), spec section 19 |
 | 5B-3.3b | Disputes about guideline cells and the overlay that holds a disputed cell; the exact post-lock dispute re-check replaces the tenant-wide `dispute-active` refusal | [lab-report-reader.md](lab-report-reader.md), spec section 20 |
+| 5B-3.3c | Ledger watch: the check at start (production refuses to start), the background and scheduled full walks, the `ledger-compromised` latch and the append gate, readiness `ledger`, `GET /ledger/verify`, and the restore-time `ledger chain` check | [ops/ledger-watch.md](ops/ledger-watch.md), spec section 21 |
 
 ## In progress and next
 
-Slice 5B-3.2 (the pipeline endpoints) is complete. Slice 5B-3.3 is planned and approved ([design/plans/5b-3-3-corrections-disputes-ledger-watch.md](design/plans/5b-3-3-corrections-disputes-ledger-watch.md), decisions 24 to 30) and is built as three PRs:
+Slice 5B-3.2 (the pipeline endpoints) is complete. Slice 5B-3.3 (corrections, disputes, ledger watch) is built; 3.3a and 3.3b are merged and 3.3c is in review. It was planned and approved ([design/plans/5b-3-3-corrections-disputes-ledger-watch.md](design/plans/5b-3-3-corrections-disputes-ledger-watch.md), decisions 24 to 30) and is built as three PRs:
 
-- **5B-3.3a corrections** (done, above). **3.3b** disputes and the overlay: `POST/GET /cell-disputes`, `applyDisputeOverlay`, and the exact post-lock dispute
-  re-check that replaces today's tenant-wide `dispute-active` refusal. **3.3c** ledger watch: startup and background ledger verification, the
-  `ledger-compromised` latch, the readiness `ledger` check, `GET /ledger/verify`, and the restore-time ledger check.
+- **5B-3.3a corrections, 3.3b disputes and the overlay, 3.3c ledger watch** (all built, above). The pipeline stays synthetic, off by default and refused in
+  production. **No alarm is connected to the `ledger-compromised` log line yet** (Terraform is written, never applied); see [ops/ledger-watch.md](ops/ledger-watch.md).
 - **Open point for a clinical decision (from 3.3a):** `current` follows the specification literally, so retracting the newest evaluation makes an older
   still-active one current again.
 - **Adapter-side R05 readiness proposal**: written, awaiting approval and five owner choices; nothing started.

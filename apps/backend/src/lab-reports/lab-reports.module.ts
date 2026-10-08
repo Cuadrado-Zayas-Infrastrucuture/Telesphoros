@@ -12,6 +12,7 @@ import { DisputesController } from './disputes.controller';
 import { DisputesService } from './disputes.service';
 import { EvaluationsController, ReportEvaluationController } from './evaluations.controller';
 import { EvaluationsService, LAB_KNOWLEDGE, LAB_READER } from './evaluations.service';
+import { LedgerController } from '../ledger/ledger.controller';
 import { PipelineGateGuard, PipelineStartupCheck, PipelineSwitch } from './pipeline-switch';
 import { ReaderLimiter } from './reader-limiter';
 import { FakeTextCaptureRunner } from './runner/fake-text-capture-runner';
@@ -27,7 +28,7 @@ const enabled = (env: Env) => env.LAB_REPORT_PIPELINE === 'enabled';
 @Global()
 @Module({
   controllers: [
-    ReportCaptureController, CapturesController, ReportEvaluationController, EvaluationsController, EvaluationCorrectionsController, NotesController, DisputesController,
+    ReportCaptureController, CapturesController, ReportEvaluationController, EvaluationsController, EvaluationCorrectionsController, NotesController, DisputesController, LedgerController,
   ],
   providers: [
     PipelineSwitch,

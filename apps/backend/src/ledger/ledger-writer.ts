@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { LedgerGate } from './ledger-status';
 import { EVENT_TYPE_FOR_TABLE, PROJECTION_VERSION, type RecordTable, toLedgerError } from './ledger-types';
 import { loadProjections, projectionHash, type Queryable } from './projections';
 
@@ -9,8 +10,13 @@ import { loadProjections, projectionHash, type Queryable } from './projections';
  * (migration 0005: deferred foreign key from the record, deferred constraint trigger on the event).
  *
  * The transaction must have set the tenant and actor settings (Database.withTenant does, given an actor).
+ *
+ * `gate` is the ledger watch's answer to "may anything be written?". It is a required first argument, and it is asked before the
+ * projection is read or anything is appended, so a caller cannot reach the ledger without passing it, and a record log that failed
+ * verification takes no further record: the transaction rolls back and the caller gets a 503, while reads continue.
  */
-export async function appendEvent(client: Queryable, table: RecordTable, recordId: string, eventId: string): Promise<{ seq: string; payloadSha256: string }> {
+export async function appendEvent(gate: LedgerGate, client: Queryable, table: RecordTable, recordId: string, eventId: string): Promise<{ seq: string; payloadSha256: string }> {
+  gate.assertOpen();
   const projections = await loadProjections(client, table, [recordId]);
   const projection = projections.get(recordId);
   if (!projection) throw new Error('The record to append an event for was not found in this transaction.');

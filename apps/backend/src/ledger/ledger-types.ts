@@ -68,6 +68,17 @@ export class StaleAcceptanceError extends Error {
   }
 }
 
+/**
+ * The ledger watch found the record log damaged, so this instance writes no record until it is restarted after an investigation.
+ * Raised BEFORE anything is appended; the transaction that was about to write rolls back. Reads are not affected.
+ */
+export class LedgerCompromisedError extends Error {
+  constructor() {
+    super('The record log failed verification; writes are stopped.');
+    this.name = 'LedgerCompromisedError';
+  }
+}
+
 /** The tenant's head-row lock was not obtained within `lock_timeout`. Nothing was written; retrying is safe. */
 export class LedgerBusyError extends Error {
   /** The SQLSTATE it came from (lock_not_available), kept so callers that look at `code` still see it. */

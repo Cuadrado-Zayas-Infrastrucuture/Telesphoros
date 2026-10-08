@@ -9,7 +9,7 @@ import { Public } from '../../src/auth/decorators';
 import { TokenVerifier } from '../../src/auth/token-verifier';
 import { loadEnv } from '../../src/config/env';
 import { READINESS_CHECKS, type ReadinessCheck } from '../../src/health/readiness.service';
-import { createEphemeralDatabase } from './database';
+import { createEphemeralDatabase, verifierUrlFor } from './database';
 import { FIXTURES, TEST_KNOWLEDGE } from './lab-pipeline';
 import { TEST_AUDIENCE, TEST_ISSUER, TEST_SECRET } from './env';
 
@@ -30,6 +30,14 @@ export interface TestAppOptions {
   knowledgeDir?: string;
   buildVersion?: string;
   maxConcurrentReads?: number;
+  /**
+   * Turn the ledger watch on without the pipeline (it is always on WITH the pipeline: configuration requires it). The verifier login is the
+   * test cluster's, for the same database the application URL points at, unless `verifierUrl` says otherwise.
+   */
+  ledgerWatch?: boolean;
+  verifierUrl?: string;
+  /** Overrides for LEDGER_STARTUP_BUDGET_MS and LEDGER_FULL_VERIFY_INTERVAL_HOURS (strings, as in a real environment). */
+  ledgerSettings?: { LEDGER_STARTUP_BUDGET_MS?: string; LEDGER_FULL_VERIFY_INTERVAL_HOURS?: string };
   /** Replace providers by token (e.g. the report reader, to make it slow or fail on purpose). */
   overrides?: Array<{ provide: unknown; useValue: unknown }>;
 }
@@ -72,6 +80,9 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
     ...(options.labReportPipeline ? { LAB_REPORT_PIPELINE: 'enabled' } : {}),
     ...(options.labReportPipeline
       ? { LAB_REPORT_FIXTURES_DIR: options.fixturesDir ?? FIXTURES, KNOWLEDGE_DIR: options.knowledgeDir ?? TEST_KNOWLEDGE, BUILD_VERSION: options.buildVersion ?? 'test-build-1', ...(options.maxConcurrentReads ? { LAB_REPORT_MAX_CONCURRENT_READS: String(options.maxConcurrentReads) } : {}) }
+      : {}),
+    ...(options.labReportPipeline || options.ledgerWatch
+      ? { LEDGER_VERIFIER_DATABASE_URL: options.verifierUrl ?? (database ? database.verifierUrl : verifierUrlFor(options.postgresUrl!)), ...options.ledgerSettings }
       : {}),
     OBJECT_STORAGE_DRIVER: s3 ? 's3' : 'memory',
     ...(s3 ? { REPORTS_BUCKET: s3.bucket, S3_ENDPOINT: s3.endpoint, S3_FORCE_PATH_STYLE: 'true', AWS_REGION: 'us-east-1' } : {}),
