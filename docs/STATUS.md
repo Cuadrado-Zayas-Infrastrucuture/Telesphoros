@@ -41,8 +41,8 @@ Slice 5B-3.2 (the pipeline endpoints) is complete. Slice 5B-3.3 (corrections, di
 ## Waiting on a person (the founder)
 
 BAA texts from the off-site backup provider candidates (Backblaze B2, Wasabi); two key custodians; provider choice; the first real off-site
-restore drill; hosting and DNS; sertraline and CPIC clinical data and sign-off; an owner for the break-glass role that may delete object
-versions (described in [ops/report-evidence.md](ops/report-evidence.md), not created); applying the `reviewer` Cognito group (Terraform is
+restore drill; hosting and DNS; sertraline and CPIC clinical data and sign-off; the break-glass role that may delete object versions is **assigned to the founder** and described in
+[ops/break-glass.md](ops/break-glass.md), but must **not be created** until CloudTrail with S3 data events exists (step H2); applying the `reviewer` Cognito group (Terraform is
 written, never applied).
 
 ## Decisions on record
