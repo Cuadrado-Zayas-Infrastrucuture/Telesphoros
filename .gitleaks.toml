@@ -1,0 +1,10 @@
+# gitleaks configuration (run by the secret-scan job in .github/workflows/ci.yml).
+# Start from the maintained default rules; allow only what is named below, never a whole directory.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Deliberately unsigned alg=none JWT used as a test vector: the API must reject it (auth.e2e-spec.ts). Header {alg:none,typ:JWT}, payload {sub:user-a}, no signature."
+condition = "AND"
+paths = ['''apps/backend/test/auth\.e2e-spec\.ts''']
+regexes = ['''eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0\.eyJzdWIiOiJ1c2VyLWEifQ\.''']

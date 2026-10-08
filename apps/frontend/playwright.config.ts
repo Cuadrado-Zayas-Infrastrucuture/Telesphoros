@@ -14,6 +14,9 @@ export default defineConfig({
   use: {
     baseURL: APP,
     launchOptions: { executablePath },
+    // On CI, keep evidence of a failure (the workflow uploads test-results for 7 days). Nothing is kept when tests pass.
+    trace: process.env.CI ? 'retain-on-failure' : 'off',
+    screenshot: process.env.CI ? 'only-on-failure' : 'off',
   },
   projects: [
     // Mobile first: 375px is the design baseline, desktop is the check that it still scales up.
