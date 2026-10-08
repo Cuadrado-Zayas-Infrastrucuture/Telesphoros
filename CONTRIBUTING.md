@@ -10,6 +10,7 @@
 - **A green run without the database and S3 tiers proves nothing about the schema.** Those tiers are skipped (with a printed notice) unless TEST_DATABASE_URL / TEST_S3_ENDPOINT are set. CI sets them and fails the job if a tier prints that notice. See docs/database.md.
 - The fake identity provider (packages/fake-idp) is TEST ONLY. Never deploy it, and never point production at it.
 - Run `pnpm test:infra` after touching infrastructure/terraform: it fails if a security setting is weakened.
+- `CLAUDE.md` only points at the documents above; put rules there, not in it. `pnpm test:ci-config` fails if it names a file that does not exist.
 
 ## Merging to `main`
 
