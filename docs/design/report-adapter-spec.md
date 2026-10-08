@@ -320,3 +320,76 @@ that package authorizes code, clinical use or training; this table records only 
 | Hold vocabulary | A proposed vocabulary (categories and codes such as `reported-field-empty`, `adapter-policy-unapproved`) still awaiting its owner freeze | **Not adopted.** Section 6 stands until that vocabulary is frozen; an empty result alone still reaches the engine as `null` |
 
 What the reader's authorization does not change: `clinical_approval` and `training_eligible` stay `false`.
+
+
+## 13. Proposed compatibility contract: R05, explicit context and empty fields
+
+> **Draft for owner review; not implemented or clinical approval.** This section specifies a separate opt-in report lookup boundary. Sections 1–12 describe the existing implementation and earlier decisions; their runtime behavior remains unchanged until a separately approved implementation PR. The proposed direction reconciles the Codex R05/R04/context decisions without globally replacing the engine's table precedence or null semantics. Merging this documentation alone does not enable the boundary, adopt clinical content, authorize training, or establish independent validation.
+
+### 13.1 Placement and compatibility
+
+Reuse the current reader, packet integrity checks, duplicate comparison and phenotype mapper. Run the new boundary after capture/packet/association validation and before guideline selection. Do not feed its new objects to existing strict `GeneInput[]`/evaluation consumers. Existing direct `evaluate()` callers and guidelines without an explicit reviewed policy retain their current results. No endpoint, migration, knowledge file or production switch changes in this specification PR.
+
+The repository's zero-based per-gene occurrence indices remain valid. Conversion to the external one-based merged contract is a separate explicit reversible export; no new `rawText` field or second adapter is needed here.
+
+### 13.2 Strict versioned input and evidence
+
+The proposed strict object is `ReportLookupInputV1`: `schema: "report-lookup-input/1"`, `textSha256`, `packetHash`, `captureAcceptanceId`, `policyId`, `policySha256`, `context`, and `geneStates`. Unknown keys fail validation. Hashes are 64 lowercase hex characters; identifiers are nonempty strings of at most 128 characters. The policy's genes are exactly CYP2C19 and CYP2B6 in this first version; one state per gene is required. Drug/population context validation precedes any table routing. Existing structural holds and duplicate/association dispositions remain stronger gates and are not converted into absence.
+
+Evidence references contain `sourceArtifactSha256`, `start`, `end`, and `literalSha256`. Intervals are nonempty half-open Unicode scalar ranges and must reproduce the bound literal hash. Preserve BOM and source bytes. For a context record or value from another artifact, verify that artifact and its review binding; do not compare its offsets against report text. Protected source artifacts may contain literal text; logs and audit envelopes contain hashes/IDs/codes only.
+
+The gene-state tagged union has these exact alternatives:
+
+| State | Required fields besides `gene` and `state` | Admission rule |
+| --- | --- | --- |
+| `canonical` | `phenotype`, `derivationRecordId` | Phenotype exactly matches the pinned gene list; record binds source evidence, mapping/knowledge version and existing reconciliation gates. Reported Indeterminate is canonical only when permitted by that list; missing/unmappable data cannot manufacture it. |
+| `absent` | `coverageRecordId` | Accepted, accounted-for report region and packet prove the gene has no occurrence. Missing value or failed parsing is not gene absence. |
+| `approved-unavailable` | `basis: "unavailable-token"`, `valueEvidence`, `matcherPolicySha256`, `reviewRecordId` | Exactly the approved R06 token/procedure; source review and frozen policy authorize its missing-result meaning. Record must bind text, packet, occurrence, evidence and policy hashes. Generic old `null` never qualifies. |
+| `unresolved` | `reasonCode`, `evidenceRecordId` | Any unmappable, conflicting, malformed, quoted noncanonical or diplotype-only missing-result input remains held under its bound reason. |
+| `sentinel` | `valueEvidence`, `evidenceRecordId` | Literal `no result` / `sin resultado`; source quotes remain literal. This is not approved-unavailable. |
+| `empty` | `emptyFieldRecordId` | Packet proves a present-empty role. It is neither absent nor approved-unavailable. |
+
+State fields are strict per alternative. Existing gene-symbol and phenotype/value bounds apply; source records must pass the same packet/capture checks and refer to the declared gene. A diplotype with no reported-result field may preserve `no_reported_result` in its evidence record but is `unresolved` here. Repeated genes are held before building this two-state input; do not collapse them into a canonical or missing state. An abstained packet remains association-abstained and never enters this routing boundary.
+
+**Proposed empty-field reason mapping:** any present-empty gene role raises a report-level `reported-field-empty` hold at this new boundary, with no drug results and no selected row. This includes an empty diplotype beside a reported result. The literal empty-field diagnostics remain in the protected evidence record. The frozen repository report-hold vocabulary, fixed privacy-safe message/action and golden expectations must be updated together in the later implementation PR. Existing `null`/sentinel behavior is historical compatibility, not an acceptable conversion for this opt-in path.
+
+### 13.3 Source-bound context
+
+`ContextV1` is a strict object: `schema: "report-lookup-context/1"`, `drug: "sertraline"`, `population: "general"`, `sourceKind: "report" | "reviewed-external"`, `sourceArtifactSha256`, `drugEvidence`, `populationEvidence`, `reviewRecordId`. Both evidence references use section 13.2. A review must attest the drug/population interpretation against that exact artifact and bind the context record; labels inferred solely from fixture scope, caller defaults or omission are invalid. "general" is the reviewed lookup scope, not an asserted patient age or absence of patient-specific contraindications.
+
+A valid context is required even when routing selects no row. Missing, invalid/unreviewed, or changed-source context returns a report-level hold, respectively `lookup-context-required`, `lookup-context-invalid`, or `lookup-context-source-mismatch`. These are proposed new-boundary codes; they do not extend or reinterpret existing frozen codes until a reviewed implementation adopts them. Matching explicit context cannot clear a capture/knowledge/clinical gate.
+
+### 13.4 Guideline-specific routing policy
+
+`SertralineRoutingPolicyV1` is a strict separate artifact: `schema: "sertraline-routing-policy/1"`, `id`, `drug: "sertraline"`, `population: "general"`, `genes: ["CYP2C19", "CYP2B6"]`, `combinedGuidelineId`, `singleGeneGuidelineIds: { CYP2C19: string, CYP2B6: string }`, `reviewedRows`, `knowledgeSetId`, and `reviewRecordId`. Hash and ID bounds follow 13.2. `reviewedRows` is a nonempty array of unique strict selectors `{ guidelineId, table, row, column: string | null }` using each stored recommendation's locator. Every selector must resolve to exactly one verified, non-disputed row in the bound knowledge set; guideline gene sets and drug must match their declared route. No ambiguous locator, absent source row, circular routing or cross-drug policy is permitted.
+
+The review record binds policy bytes, knowledge set and exact primary-source locators. Synthetic policies are test-only and cannot become production knowledge. This document supplies no real recommendation wording or clinical row approvals.
+
+| Gene states, after stronger gates | Routing decision |
+| --- | --- |
+| Either unresolved, sentinel or empty | Hold; no other-gene fallback. Empty uses 13.2; sentinel uses `sentinel-literal-in-source`; unresolved retains its bound validated reason. |
+| One canonical; other absent or approved-unavailable | Only the named single-gene guideline for the canonical gene; require one exact matching in-scope reviewed row. |
+| Both canonical | Only the named combined guideline; require one exact matching in-scope reviewed cell. |
+| Both absent/approved-unavailable | No row; do not fabricate a phenotype or clinical wording. |
+
+Proposed result envelope `ReportLookupDecisionV1` has `schema: "report-lookup-decision/1"`, `inputRecordSha256`, `policySha256`, `contextRecordSha256`, and `decision`. Decision is strict tagged `{ state: "held", reasonCode, selectedRow: null }`, `{ state: "no-row", reasonCode: "both-results-missing", selectedRow: null }`, or `{ state: "row-selected", selectedRow: { guidelineId, table, row, column } }`. A routing decision does not expose recommendation text or mean clinical release.
+
+A missing required source cell or row excluded from the policy returns `out-of-review-scope`, with no narrower route. Existing unverified/disputed cells retain the applicable hold and expose no wording. Missing/invalid/stale routing policy holds as `lookup-policy-invalid`; it must not silently invoke generic fallback. Legacy direct-engine requests without the new boundary keep their old behavior. A verified published "No recommendation" is an actual selected source row and remains distinguishable from `no-row` or an unavailable cell.
+
+New codes in 13.2–13.4 are proposals for the separate boundary. Implementation must review how their categories and fixed messages integrate with report holds and persisted outcomes; do not reuse `sentinel-literal-in-source` for ordinary approved-unavailable tokens or empty values.
+
+### 13.5 Acceptance cases and verification for implementation
+
+1. Both gene orientations of canonical + absent and canonical + approved-unavailable select only the approved single-gene route; both canonical select only the approved combined cell; both missing select no row. Generic old null never passes the approved-unavailable gate.
+2. Unknown/malformed, diplotype-only missing-result, quotes, sentinel and empty hold. Empty evidence survives, including empty diplotype and empty result combinations. Duplicate-identical/conflict remains before normalization; association abstention remains separate.
+3. Missing, unreviewed, forged or source-changed context/policy/evidence holds. Never default drugs from omitted options or manufacture general population.
+4. Out-of-scope/missing cell never falls back; unverified/disputed wording stays hidden. Explicit Indeterminate can match a reviewed source row; no input absence produces Indeterminate.
+5. Legacy evaluation callers and guidelines retain their exact expected outputs; source and audit bytes remain unchanged. Development fixture visibility is disclosed; tests do not establish independent clinical accuracy.
+6. Before/after gold matrix and exhaustive state sweep with an independent expected oracle. Mutants erase result basis, allow empty as unavailable, enable global fallback, bypass scope/context and expose disputed wording; each must fail. Include harmless controls. If a future persisted schema changes, run real database/storage tiers; mocked pools do not validate migrations.
+7. No production, training, model, coordinate or new-gene enablement. Row selection remains behind existing knowledge review and clinical release gates.
+
+These are future acceptance tests, not execution claims. Exact review/coverage/derivation record storage and endpoint wiring remain separate from this routing contract. The input/context/policy validators must reject missing evidence rather than treating a placeholder record ID as validation.
+
+### 13.6 Review and supersession
+
+Owner review of this draft must resolve the proposed empty-field report-level code, exact new boundary contracts and integration with stored records before implementation. Approval records for the proposed section must explicitly supersede the section 11 empty-to-null choice and section 12 R05/context deferrals **for the opt-in boundary only**; existing callers remain unchanged. This avoids silently treating two sets of prior founder decisions as interchangeable. Independent prospective PDF validation still requires its human roles, sampling manifests and freezes. Those requirements do not block preparing the bounded synthetic prototype contract.
