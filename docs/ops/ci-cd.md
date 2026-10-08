@@ -49,6 +49,9 @@ The file is a GitHub **ruleset** for the default branch. It is not active until 
 **When a second maintainer joins:** change `required_approving_review_count` to `1`, set `require_code_owner_review` to
 `true`, and add the second person to `CODEOWNERS` for the sensitive paths. Update this table in the same PR.
 
+**Status:** applied to `main` on 2026-10-07 by the repository owner, created by hand in the Rulesets form with the settings in
+the table above (the file was used as the specification, not imported).
+
 ### Turning it on
 
 1. Merge the PR that adds these files, and let CI run on `main` once. A check name can only be required after it has reported.
