@@ -1,9 +1,10 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from 'pg';
 import { createBackup } from '../../src/db/backup';
+import { generateKeyFile, manifestMac, readKeyFile } from '../../src/db/backup-crypto';
 import { restoreAndVerify } from '../../src/db/restore';
 import { adminUrl, createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 
@@ -19,9 +20,9 @@ const tempDir = () => {
   return dir;
 };
 const clusterAdmin = () => adminUrl();
-const passphraseFile = () => {
-  const file = join(tempDir(), 'passphrase');
-  writeFileSync(file, randomBytes(32).toString('hex'), { mode: 0o600 });
+const keyFile = async () => {
+  const file = join(tempDir(), 'backup.key');
+  await generateKeyFile(file);
   return file;
 };
 
@@ -51,7 +52,7 @@ async function seededDatabase(): Promise<EphemeralDatabase> {
 
 const throwawayDatabases = async () =>
   (await withAdmin(clusterAdmin(), (c) => c.query(`SELECT datname FROM pg_database WHERE datname LIKE 'restore_check_%'`))).rows.length;
-const byName = (checks: { name: string; ok: boolean }[], name: string) => checks.find((c) => c.name === name);
+const byName = <T extends { name: string }>(checks: T[], name: string) => checks.find((c) => c.name === name);
 
 describe('backup', () => {
   it('writes a private, checksummed backup whose manifest describes the data (soft-deleted rows included)', async () => {
@@ -76,39 +77,46 @@ describe('backup', () => {
     await expect(createBackup({ adminUrl: db.appUrl, destDir: tempDir() })).rejects.toThrow(/BYPASSRLS/);
   });
 
-  it('encrypts at rest and leaves no plaintext dump behind', async () => {
+  it('encrypts at rest with authenticated encryption, signs the manifest, and leaves no plaintext dump behind', async () => {
     const db = await seededDatabase();
-    const { dir, manifest } = await createBackup({ adminUrl: db.adminUrl, destDir: tempDir(), passphraseFile: passphraseFile() });
-    expect(manifest.dump).toMatchObject({ file: 'db.dump.enc', encrypted: true });
+    const { dir, manifest } = await createBackup({ adminUrl: db.adminUrl, destDir: tempDir(), keyFile: await keyFile() });
+    expect(manifest.formatVersion).toBe(2);
+    expect(manifest.dump).toMatchObject({ file: 'db.dump.enc', encrypted: true, encryption: { scheme: 'aes-256-gcm-stream/1' } });
+    expect(manifest).toHaveProperty('mac');
     expect(readdirSync(dir).sort()).toEqual(['db.dump.enc', 'manifest.json']);
     expect(statSync(join(dir, 'db.dump.enc')).mode & 0o077).toBe(0);
-    expect(readFileSync(join(dir, 'db.dump.enc')).subarray(0, 8).toString()).toBe('Salted__'); // OpenSSL header: really encrypted
+    const bytes = readFileSync(join(dir, 'db.dump.enc'));
+    expect(bytes.subarray(0, 5).toString('latin1')).toBe('TPBK\u0002'); // our header, not a plaintext pg_dump ("PGDMP")
+    expect(bytes.includes(Buffer.from('PGDMP'))).toBe(false);
+    expect(bytes.includes(Buffer.from('SYN-alice-1'))).toBe(false); // a known value from the data is not readable in the file
   });
 });
 
 describe('a failed backup leaves nothing behind', () => {
-  it('rejects an empty passphrase file BEFORE dumping anything', async () => {
+  it('rejects a bad key file BEFORE dumping anything', async () => {
     const db = await seededDatabase();
     const dest = tempDir();
-    const empty = join(tempDir(), 'empty');
-    writeFileSync(empty, '');
-    await expect(createBackup({ adminUrl: db.adminUrl, destDir: dest, passphraseFile: empty })).rejects.toThrow(/passphrase/i);
+    for (const content of ['', 'not a key', 'ab'.repeat(31), '00'.repeat(32), 'a'.repeat(64)]) {
+      const bad = join(tempDir(), 'bad.key');
+      writeFileSync(bad, content);
+      await expect(createBackup({ adminUrl: db.adminUrl, destDir: dest, keyFile: bad })).rejects.toThrow(/key file/i);
+    }
+    await expect(createBackup({ adminUrl: db.adminUrl, destDir: dest, keyFile: join(tempDir(), 'missing.key') })).rejects.toThrow();
     expect(readdirSync(dest)).toEqual([]);
   });
 
-  it('removes the partial backup (including any unencrypted dump) if a later step fails', async () => {
+  it('removes the partial backup (including the unencrypted dump) if encryption fails after the dump exists', async () => {
     const db = await seededDatabase();
     const dest = tempDir();
-    const file = join(tempDir(), 'pass');
-    writeFileSync(file, 'x'.repeat(40)); // passes the up-front check...
     await expect(
       createBackup({
         adminUrl: db.adminUrl,
         destDir: dest,
-        passphraseFile: file,
-        afterSnapshot: async () => rmSync(file), // ...then vanishes before encryption, AFTER the plaintext dump exists
+        keyFile: await keyFile(),
+        // The encrypted file's name is taken, so encryption fails AFTER pg_dump has written the plaintext dump.
+        afterSnapshot: async () => writeFileSync(join(dest, readdirSync(dest)[0]!, 'db.dump.enc'), 'in the way'),
       }),
-    ).rejects.toThrow(/openssl/);
+    ).rejects.toThrow();
     expect(readdirSync(dest)).toEqual([]); // no backup-* directory, so no plaintext dump either
   });
 });
@@ -122,6 +130,7 @@ describe('restore (the one-command procedure, actually executed)', () => {
     const report = await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir });
 
     expect(report.checks.map((c) => `${c.ok ? 'PASS' : 'FAIL'} ${c.name}`)).toEqual([
+      'PASS manifest valid',
       'PASS backup file checksum',
       'PASS pg_restore',
       'PASS tables present',
@@ -173,18 +182,21 @@ describe('restore (the one-command procedure, actually executed)', () => {
     expect(byName(report.checks, 'row counts')!.ok).toBe(true);
   });
 
-  it('round-trips an encrypted backup with the right passphrase, and refuses the wrong one', async () => {
+  it('round-trips an encrypted backup with the right key, and refuses the wrong key or none', async () => {
     const db = await seededDatabase();
-    const pass = passphraseFile();
-    const { dir } = await createBackup({ adminUrl: db.adminUrl, destDir: tempDir(), passphraseFile: pass });
-    expect((await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir, passphraseFile: pass })).ok).toBe(true);
+    const key = await keyFile();
+    const { dir } = await createBackup({ adminUrl: db.adminUrl, destDir: tempDir(), keyFile: key });
+    const ok = await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir, keyFile: key });
+    expect(ok.ok).toBe(true);
+    expect(ok.checks.map((c) => c.name).slice(0, 5)).toEqual(['manifest valid', 'manifest signature', 'backup file checksum', 'decrypt', 'decrypted checksum']);
 
-    const wrong = await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir, passphraseFile: passphraseFile() });
+    const wrong = await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir, keyFile: await keyFile() });
     expect(wrong.ok).toBe(false);
-    expect(wrong.checks.some((c) => !c.ok && /decrypt/.test(c.name))).toBe(true);
+    expect(wrong.checks.find((c) => c.name === 'manifest signature')).toMatchObject({ ok: false, detail: expect.stringMatching(/different key/) });
 
     const missing = await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir });
     expect(missing.ok).toBe(false);
+    expect(missing.checks.find((c) => c.name === 'manifest signature')!.ok).toBe(false);
   });
 });
 
@@ -202,7 +214,9 @@ describe('restore verification is not a rubber stamp (negative controls)', () =>
     bytes[Math.floor(bytes.length / 2)] ^= 0xff;
     writeFileSync(file, bytes);
     const before = await throwawayDatabases();
-    failing(await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir }), 'backup file checksum');
+    const report = await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir });
+    failing(report, 'backup file checksum');
+    expect(report.checks.at(-1)!.name).toBe('backup file checksum'); // it stopped there
     expect(await throwawayDatabases()).toBe(before); // nothing was created
   });
 
@@ -252,9 +266,159 @@ describe('restore verification is not a rubber stamp (negative controls)', () =>
     const before = await throwawayDatabases();
     const leftovers = () => readdirSync(tmpdir()).filter((n) => n.startsWith('restore-')).length;
     const files = leftovers();
-    await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir, passphraseFile: passphraseFile() }); // dump is not encrypted: harmless, passes
+    await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir, passphraseFile: join(tempDir(), 'unused') }); // dump is not encrypted: the passphrase is never read, harmless, passes
     expect(await throwawayDatabases()).toBe(before);
     expect(leftovers()).toBe(files);
     expect(existsSync(dir)).toBe(true);
+  });
+});
+
+describe('a stored backup cannot be altered without restore noticing (format 2)', () => {
+  const read = (dir: string) => JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'));
+  const write = (dir: string, manifest: unknown) => writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest));
+  const restore = (dir: string, key: string) => restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir, keyFile: key });
+  const failedAt = (report: { ok: boolean; checks: { name: string; ok: boolean }[] }, name: string) => {
+    expect(report.ok).toBe(false);
+    expect(report.checks.find((c) => !c.ok)?.name).toBe(name); // the first failure is the one named...
+    expect(report.checks.at(-1)!.name).toBe(name); // ...and it was the last check: nothing after it ran
+  };
+  async function signedBackup() {
+    const db = await seededDatabase();
+    const key = await keyFile();
+    const { dir } = await createBackup({ adminUrl: db.adminUrl, destDir: tempDir(), keyFile: key });
+    return { dir, key };
+  }
+
+  it('refuses a manifest edited by whoever stores the backup (row counts, migrations, anything)', async () => {
+    const before = await throwawayDatabases();
+    const { dir, key } = await signedBackup();
+    const manifest = read(dir);
+    manifest.tables.patients.rows += 1;
+    write(dir, manifest);
+    failedAt(await restore(dir, key), 'manifest signature');
+
+    const second = read(dir);
+    second.tables.patients.rows -= 1; // put it back: the original verifies again
+    write(dir, second);
+    expect((await restore(dir, key)).ok).toBe(true);
+
+    const extra = read(dir);
+    extra.note = 'added';
+    write(dir, extra);
+    failedAt(await restore(dir, key), 'manifest valid');
+    expect(await throwawayDatabases()).toBe(before);
+  });
+
+  it('refuses a changed dump even when the manifest is left alone, and a dump from another backup', async () => {
+    const one = await signedBackup();
+    const bytes = readFileSync(join(one.dir, 'db.dump.enc'));
+    bytes[Math.floor(bytes.length / 2)] ^= 1;
+    writeFileSync(join(one.dir, 'db.dump.enc'), bytes);
+    failedAt(await restore(one.dir, one.key), 'backup file checksum');
+
+    const two = await signedBackup();
+    const other = await createBackup({ adminUrl: (await seededDatabase()).adminUrl, destDir: tempDir(), keyFile: two.key });
+    writeFileSync(join(two.dir, 'db.dump.enc'), readFileSync(join(other.dir, 'db.dump.enc'))); // same key, different backup
+    failedAt(await restore(two.dir, two.key), 'backup file checksum');
+  });
+
+  it('refuses a truncated dump, a dump with data appended, and an emptied one', async () => {
+    for (const change of [(b: Buffer) => b.subarray(0, b.length - 20), (b: Buffer) => Buffer.concat([b, Buffer.from('x')]), () => Buffer.alloc(0)]) {
+      const { dir, key } = await signedBackup();
+      writeFileSync(join(dir, 'db.dump.enc'), change(readFileSync(join(dir, 'db.dump.enc'))));
+      failedAt(await restore(dir, key), 'backup file checksum');
+    }
+  });
+
+  it('even a correctly re-signed manifest cannot make a damaged dump pass: the chunks are authenticated too', async () => {
+    const { dir, key } = await signedBackup();
+    const file = join(dir, 'db.dump.enc');
+    const bytes = readFileSync(file);
+    bytes[bytes.length - 1] ^= 1; // flips a bit in the last chunk's tag
+    writeFileSync(file, bytes);
+    const manifest = read(dir);
+    manifest.dump.sha256 = createHash('sha256').update(bytes).digest('hex'); // what a holder of the key could do
+    manifest.mac = manifestMac(manifest, await readKeyFile(key), manifest.dump.encryption.salt);
+    write(dir, manifest);
+    const report = await restore(dir, key);
+    failedAt(report, 'decrypt');
+    expect(report.checks.at(-1)!.detail).toMatch(/altered/);
+  });
+
+  it('a correctly re-signed manifest that points at ANOTHER backup\'s dump is refused: the file header must agree with the manifest', async () => {
+    const one = await signedBackup();
+    // A second backup under the SAME key, so only the salt separates the two.
+    const sameKeyDb = await seededDatabase();
+    const other = await createBackup({ adminUrl: sameKeyDb.adminUrl, destDir: tempDir(), keyFile: one.key });
+    const donor = read(other.dir);
+    writeFileSync(join(one.dir, 'db.dump.enc'), readFileSync(join(other.dir, 'db.dump.enc')));
+    const manifest = read(one.dir);
+    manifest.dump.sha256 = donor.dump.sha256; // consistent with the swapped file...
+    manifest.dump.plaintextSha256 = donor.dump.plaintextSha256;
+    manifest.mac = manifestMac(manifest, await readKeyFile(one.key), manifest.dump.encryption.salt); // ...and signed (the key holder could do this)
+    write(one.dir, manifest);
+    const report = await restore(one.dir, one.key);
+    failedAt(report, 'decrypt'); // its header carries the other backup's salt
+  });
+
+  it('refuses a downgrade: a key was given, so only an authenticated backup is accepted', async () => {
+    const { dir, key } = await signedBackup();
+    const plainDb = await seededDatabase();
+    const plain = await createBackup({ adminUrl: plainDb.adminUrl, destDir: tempDir() }); // an unencrypted backup (what an attacker could substitute)
+    failedAt(await restore(plain.dir, key), 'manifest signature');
+    expect((await restore(dir, key)).ok).toBe(true);
+  });
+
+  it('refuses a manifest whose dump file name points outside the backup directory', async () => {
+    const { dir, key } = await signedBackup();
+    const manifest = read(dir);
+    for (const file of ['../manifest.json', '/etc/passwd', 'a/b', '..', '.hidden', 'x\u0000y']) {
+      manifest.dump.file = file;
+      write(dir, manifest);
+      failedAt(await restore(dir, key), 'manifest valid');
+    }
+  });
+
+  it('refuses a manifest that is not JSON or is missing', async () => {
+    const { dir, key } = await signedBackup();
+    writeFileSync(join(dir, 'manifest.json'), '{ not json');
+    failedAt(await restore(dir, key), 'manifest valid');
+    rmSync(join(dir, 'manifest.json'));
+    failedAt(await restore(dir, key), 'manifest valid');
+  });
+
+  it('error messages never contain the key, a path or any manifest text', async () => {
+    const { dir, key } = await signedBackup();
+    const secret = readFileSync(key, 'utf8').trim();
+    const manifest = read(dir);
+    manifest.tables.patients.rows += 1;
+    write(dir, manifest);
+    const report = await restore(dir, join(tempDir(), 'does-not-exist'));
+    const text = JSON.stringify(report);
+    expect(text).not.toContain(secret);
+    expect(text).not.toContain(dir);
+    expect(text).not.toContain('does-not-exist');
+  });
+});
+
+describe('backups written before format 2 still restore', () => {
+  const fixture = join(__dirname, '..', '..', '..', '..', 'tests', 'backup_fixtures', 'v1-encrypted');
+
+  it('restores the real format 1 fixture (AES-256-CBC + passphrase) and verifies it completely', async () => {
+    const report = await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: fixture, passphraseFile: join(fixture, 'passphrase.txt') });
+    expect(report.checks.filter((c) => !c.ok)).toEqual([]);
+    expect(report.ok).toBe(true);
+    expect(byName(report.checks, 'manifest valid')!.detail).toBe('format 1');
+    expect(byName(report.checks, 'row counts')!.detail).toBe('all 4 tables match (15 rows)');
+  });
+
+  it('a key file cannot be used to open a format 1 backup, and a wrong passphrase still fails', async () => {
+    const refused = await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: fixture, keyFile: await keyFile() });
+    expect(refused.ok).toBe(false);
+    expect(refused.checks.at(-1)!.name).toBe('manifest signature');
+    const wrong = join(tempDir(), 'wrong');
+    writeFileSync(wrong, 'a different passphrase entirely');
+    const bad = await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: fixture, passphraseFile: wrong });
+    expect(bad.ok).toBe(false);
   });
 });

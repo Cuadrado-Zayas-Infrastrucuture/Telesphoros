@@ -4,7 +4,7 @@
 
 | Data | Mechanism | Status |
 | --- | --- | --- |
-| Database, logical | `db:backup`: consistent snapshot, encrypted, optional off-site upload (separate region, Object Lock) | **Built and drilled** (below) |
+| Database, logical | `db:backup`: consistent snapshot, authenticated encryption (format 2), signed manifest, optional off-site upload (separate region, Object Lock) | **Built and drilled** (below); a second provider is the next change |
 | Database, point-in-time | RDS automated backups + cross-region replication (Terraform) | **Written, never applied, unproven** |
 | Report files | S3 versioning (Terraform) | **Not backed up by this tool; not replicated to a second region.** A known gap |
 
@@ -13,17 +13,24 @@
 ```bash
 pnpm --filter @telesphoros/backend build
 
+# Once: create the backup key (64 random hex characters, owner-only; refuses to overwrite an existing file).
+pnpm --filter @telesphoros/backend db:keygen -- --out /run/secrets/backup.key
+# Then copy it OFFLINE to two different people (see "The key" below). It is not in any backup and cannot be recovered.
+
 # Back up (needs a role that can read every row: a superuser, or BYPASSRLS. Never the application role.)
 export DATABASE_ADMIN_URL=postgres://<admin>@<host>/<db>
 pnpm --filter @telesphoros/backend db:backup -- --dest /var/backups/telesphoros \
-    --passphrase-file /run/secrets/backup-passphrase \
+    --key-file /run/secrets/backup.key \
     --upload s3://<backups-bucket>/nightly --kms-key-id <backup-kms-key-arn>
 
 # Restore + verify into a THROWAWAY database (safe to run any time; this is the drill)
 export DATABASE_ADMIN_URL=postgres://<admin>@<target-host>/postgres
 pnpm --filter @telesphoros/backend db:restore -- --from /var/backups/telesphoros/backup-<timestamp> \
-    --passphrase-file /run/secrets/backup-passphrase
+    --key-file /run/secrets/backup.key
 ```
+
+`--passphrase-file` on `restore` exists only for old (format 1) backups. `backup` no longer accepts it, and a backup
+made without `--key-file` is **not encrypted** (development and tests only; the command says so).
 
 A real recovery: `restore ... --target-db telesphoros_restored` keeps the database; then point the application at it.
 The target server must already have the `telesphoros_app` role (migration 0002 creates it, or run
@@ -32,7 +39,12 @@ The target server must already have the `telesphoros_app` role (migration 0002 c
 
 ## What `restore` proves (exit code 1 if any step fails)
 
-1. The backup file's SHA-256 matches the manifest (and, if encrypted, so does the decrypted file).
+0. The manifest is well formed (every field has the expected type and shape; the dump's file name cannot point
+   outside the backup directory) and, for a format 2 backup, **its signature verifies under your key**. A manifest
+   edited by whoever stores the backup is refused before anything else runs.
+1. The backup file's SHA-256 matches the manifest. For format 2, the file's own header agrees with the signed
+   manifest, **every chunk authenticates** (a flipped byte, a missing, repeated or reordered chunk, a truncated file
+   or extra data all fail), and the decrypted file matches the signed checksum.
 2. `pg_restore` completes with no errors, into a brand-new database.
 3. Tables present; **row counts equal the baseline**, including soft-deleted rows.
 4. Applied migrations equal; constraint, index and trigger counts equal.
@@ -55,6 +67,9 @@ Environment: PostgreSQL 16.15 on the build host, `moto` S3 emulator, the built `
 4. `restore`: 9 of 9 checks passed (`RESTORE VERIFIED`), exit 0, throwaway database dropped, no leftovers.
 5. Negative controls: a corrupted backup file was refused (exit 1); a missing passphrase was refused (exit 1).
 
+That drill was run with format 1 (passphrase). Format 2 (below) is covered by automated tests, including a real format 1
+backup kept in `tests/backup_fixtures/v1-encrypted/` that must keep restoring. **A format 2 drill with the real CLI
+against the real second provider has not been run**; it is part of the next change.
 Defects this drill and its tests found and fixed: backup files were created world-readable; a failed encrypted backup
 left an **unencrypted dump** on disk; the manifest dropped the PostgreSQL version.
 
@@ -66,8 +81,33 @@ left an **unencrypted dump** on disk; the manifest dropped the PostgreSQL versio
 - **Recovery time:** unmeasured. The drill used six rows; it proves the procedure, not the duration at scale.
 - **Scheduling:** the daily run is not wired to a scheduler yet (it belongs with the compute, Phase 6/7). Until it
   is, nothing runs this automatically.
-- **Encryption:** AES-256-CBC with a PBKDF2-derived key from a passphrase file: confidential, but **not
-  authenticated**; tampering is caught by the SHA-256 in the manifest, which is itself not signed. The off-site bucket
-  adds SSE-KMS and Object Lock. Moving to an authenticated scheme (KMS envelope or `age`) is a follow-up.
-- **The passphrase** must live in a secrets manager, never next to the backups. **Losing it loses every encrypted backup.**
+- **Replay:** the signature proves a backup is genuine and unaltered; it does not prove it is the *latest*. Someone who
+  can write to the bucket could put back an older, genuine backup (or hide a newer one). Object Lock and versioning
+  on the target and a check that last night's backup exists are what answer that; they belong to the next change.
+- **What the provider can see:** the manifest is readable, so a provider sees table names, row counts, the migration
+  list, the database name, the PostgreSQL version and the backup time; it does not see any row, value or tenant id.
 - Restoring needs a PostgreSQL client at least as new as the server (`pg_dump`/`pg_restore` 16 here).
+
+## The backup format (version 2)
+
+Written by `backup --key-file`. Read by `restore --key-file`. Version 1 backups (passphrase) still restore.
+
+- **Encryption:** AES-256-GCM in 1 MiB chunks (`aes-256-gcm-stream/1`), so memory stays bounded however big the dump
+  is. Each chunk is authenticated; the 37-byte file header (magic, version, chunk size, random salt, nonce prefix, key
+  id) is authenticated as part of every chunk. The nonce carries the chunk number and a "final" flag, so a chunk cannot be
+  moved, repeated or dropped, and cutting the file short (even exactly between chunks) fails.
+- **Keys:** one 32-byte master key (the key file). Per backup, HKDF-SHA-256 with a fresh random salt derives the
+  encryption key and, separately, the manifest signing key. The key id in the header and manifest lets you tell which
+  key file a backup needs; it reveals nothing about the key.
+- **Signed manifest:** the manifest carries an HMAC-SHA-256 over every other field. Restore checks it first.
+- **Downgrade:** if you pass `--key-file`, a backup that is not format 2 is refused, so replacing a signed backup with an
+  unencrypted one does not work. Always pass the key file when restoring real backups.
+
+### The key
+
+- Losing the key loses every backup made with it. There is no recovery path and no backdoor. That is the point.
+- Keep **two offline copies held by two different people**, outside AWS and outside the backup provider. Do not store
+  the key in the same bucket, account or password manager entry as the backups it protects.
+- `keygen` never overwrites an existing file. To rotate, create a new key and use it for new backups; keep the old key
+  for as long as any backup made with it must stay restorable (the key id tells you which).
+- Test the custody: at the restore drill, the person holding the offline copy restores from it, not from the server copy.
