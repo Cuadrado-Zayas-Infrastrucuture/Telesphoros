@@ -73,6 +73,14 @@ applies in this order, and holds come before abstention (if a person is needed, 
 `association-abstained`. (`out-of-review-scope` and `cell-disputed` belong to a cell, not a gene, and arise only
 when every gene is clean.) All the genes' individual states are listed in the result either way.
 
+**Codes a caller may attach (amended 2026-10-08).** The engine accepts a gene the caller could not resolve together with
+one reason code, and only from a short list: `other-gene-unresolved` and `association-abstained`. The report adapter
+(`docs/design/report-adapter-spec.md`, section 5.4) also needs `duplicate-identical` and `duplicate-gene-conflict`:
+only the adapter still has the literal facts (diplotype text, result text, field presence) that decide which one applies.
+No code is added and no meaning changes; the list of codes an adapter may attach grows from two to four, and the change in
+`packages/cpic-schema/src/vocabulary.ts` is made, with its pinning test, together with the adapter code. The engine's own
+duplicate rule stays as the backstop for input that does not come from the adapter.
+
 ## Cells: citation and verification
 
 Every guideline cell carries a **locator** (the table, row and, for a combined table, column as the guideline prints

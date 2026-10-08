@@ -1,8 +1,9 @@
 # Report adapter specification
 
-> **Status: proposed for founder review. No adapter, reader or import code exists yet, and none will be written until this
-> document is approved.** It is the first deliverable of slice 5B-2a. Open choices are collected in section 11, each with a
-> recommendation; approving this PR as written accepts the recommendations.
+> **Status: approved (PR 12) and amended on 2026-10-08 (this revision).** The amendment reconciles the specification with
+> the second Codex hand-off (`pgx-claude-handoff-v1`), whose design rules R02 to R07 the founder confirmed as current. Where
+> they differ from the first version of this document, the hand-off's rule now governs; every change is listed in section 12
+> and marked **[amended]** in the text. The reader (PR 13) is merged; the adapter code follows this revision.
 
 ## 1. What the adapter is, and what it is not
 
@@ -86,8 +87,9 @@ An **occurrence** is one gene frame: `(gene, occurrenceIndex)`, where `occurrenc
 - A role is **empty** when the reader recorded that its label is present with no value (`present-empty-field`, taken from the
   packet's diagnostics: the projection alone does not carry it).
 - A reported result is **canonical** when its text, exactly, is one of that gene's canonical phenotype terms (no case
-  folding, no synonyms: the same rule the engine applies). It is a **sentinel** when it is exactly one of the
-  closed set in section 5.5. Otherwise it is **non-canonical**.
+  folding, no synonyms: the same rule the engine applies). It is an **unavailable value** when it matches one of the seven
+  tokens by the exact procedure in section 5.5 **[amended]**. Otherwise it is **non-canonical**; a value wrapped in quotation
+  marks is non-canonical, because the quotation marks are part of the value.
 
 ### 5.2 One occurrence to engine input
 
@@ -96,14 +98,14 @@ An **occurrence** is one gene frame: `(gene, occurrenceIndex)`, where `occurrenc
 | Diplotype | Reported result | Emitted input(s) for the occurrence | Why |
 | --- | --- | --- | --- |
 | present, **cannot** be mapped (malformed, unknown allele, no mapping, no gene definition) | anything | `diplotype` | The engine then reports its own precise reason (`malformed-diplotype`, `allele-not-in-definitions`, `no-phenotype-mapping`, `no-gene-definition`) |
-| present, maps to phenotype P | missing | `diplotype` | A diplotype is enough |
+| present, maps to phenotype P | missing | `unresolved` with `other-gene-unresolved` | **[amended]** A diplotype with no reported result is unresolved (rule R04); the engine's own message for this code already reads "or a genotype only". The diplotype stays in the audit trail and is not used to assign a phenotype |
 | present, maps to P | canonical and equal to P | `diplotype` | The stated result corroborates it |
 | present, maps to P | canonical and **different** from P | **two** inputs: `diplotype` and `canonical` | They differ, so the engine's duplicate rule holds the gene as `duplicate-gene-conflict` |
-| present, maps to P | non-canonical, sentinel, or empty | `unresolved` with `other-gene-unresolved` | The report says something about the result that cannot be checked against the diplotype, so it is not trusted |
+| present, maps to P | non-canonical, unavailable, or empty | `unresolved` with `other-gene-unresolved` | The report says something about the result that cannot be checked against the diplotype, so it is not trusted |
 | missing | canonical | `canonical` | |
-| missing | sentinel | `null` | Report says "no result": engine reports `sentinel-literal-in-source` |
+| missing | unavailable (section 5.5) | `null` | Report says "no result": engine reports `sentinel-literal-in-source`. **[amended]** the match is by the seven-token procedure; a quoted value never matches |
 | missing | **empty** | `null` | A declared field with nothing in it is a "no result" |
-| missing | non-canonical | `unresolved` with `other-gene-unresolved` | Unfamiliar wording: ask the lab |
+| missing | non-canonical (including a quoted value, and the literals "no result" and "sin resultado") | `unresolved` with `other-gene-unresolved` | Unfamiliar wording: ask the lab |
 | missing | missing | `unresolved` with `other-gene-unresolved` | The gene is named but nothing is stated about it. Not `absent`: the report does mention it |
 
 Empty roles follow one rule in both directions. A role that is **empty** while the other role has a value is not trusted:
@@ -120,18 +122,59 @@ an empty diplotype beside a result). An empty role with nothing else stated, or 
 
 The engine keeps its own precedence: a gene problem that needs a person (`held`) beats an abstention on another gene.
 
-### 5.4 Duplicates: when two occurrences are "equal"
+### 5.4 Duplicates: when two occurrences are "equal" **[amended]**
 
-Equality is decided by the engine on the **emitted inputs** (state plus value), never on spans, offsets, pages or the
-literal text of a corroborating result. Identical emitted inputs give `duplicate-identical`, anything else gives
-`duplicate-gene-conflict`; both are held (approved default, section 5.1 of the 5B-1 vocabulary). The adapter therefore
-only has to emit one input per occurrence in the same form for the same content, and the engine does the rest.
+Every gene that occurs more than once is held; nothing is collapsed to a chosen value (rule R03, option A). The adapter,
+not the engine, decides which duplicate code applies, because only the adapter still has the literal facts. Structural
+and evidence checks (section 3) run first; duplicates are compared **before** any unavailable-value matching.
 
-### 5.5 Sentinel literals
+An occurrence is summarized as: the gene symbol; the literal diplotype text or "none"; the literal reported-result text or
+"none"; and a **result basis**: `reported-value` (a result span exists), `empty-field` (the result label is present with
+nothing after it), `no-reported-result` (a diplotype and no result field), or `nothing-stated`. Two occurrences are
+**identical** only if every part is byte-equal as UTF-8: no case, spacing, quotation or phenotype normalization. Differently
+worded unavailable tokens are different; missing and empty are different.
 
-A closed set, frozen in code and in this document. Initial member, from the hand-off fixtures: `"not available"`
-(including its quotation marks, as in D03). Adding a member is a reviewed change that names the report type it comes
-from. Anything else that is not canonical is `non-canonical`, not a sentinel.
+- All occurrences of the gene identical: **one** input for the gene, `unresolved` with `duplicate-identical`.
+- Otherwise: **one** input, `unresolved` with `duplicate-gene-conflict`.
+
+All occurrences stay in `occurrences` (the audit trail). This needs one change to the frozen vocabulary, also **[amended]**:
+the adapter may attach the two duplicate codes (`duplicate-identical`, `duplicate-gene-conflict`) in addition to
+`other-gene-unresolved` and `association-abstained`. The engine's own duplicate rule remains as a backstop for input that
+does not come from this adapter. The change is recorded in `docs/design/outcomes-and-reason-codes.md` and made in code with
+the adapter.
+
+### 5.5 Unavailable values (rule R06) **[amended]**
+
+Exactly seven tokens, already normalized, and no others: `not available`, `not reported`, `pending`, `no disponible`,
+`resultado no disponible`, `no reportado`, `pendiente`. A new token needs a source example, a version change, conformance
+cases and review.
+
+A reported result is compared with them after **only** this fixed sequence, in order: Unicode NFC; replace every run of
+Unicode White_Space code points (U+0009 to U+000D, U+0020, U+0085, U+00A0, U+1680, U+2000 to U+200A, U+2028, U+2029, U+202F,
+U+205F, U+3000) with one U+0020; trim U+0020 from both ends; Unicode default full case folding; remove exactly one terminal
+ASCII period; **no trim afterwards**. The reported text itself is never changed. No accent folding, quote stripping, fuzzy or
+substring matching, or translation.
+
+| Source value | Outcome |
+| --- | --- |
+| `not available` | match |
+| `NOT AVAILABLE.` | match |
+| `not available .` | no match (a space remains after the period is removed) |
+| `not available..` | no match (one period remains) |
+| `"not available"` (with its quotation marks) | **no match**: quotation marks are part of the value (this is D03) |
+| `no result`, `sin resultado` | no match; non-canonical, so held |
+| `Indeterminate` | no match; a phenotype term (canonical when the gene's own list includes it) |
+
+Implementation requirements: the matcher is its own pure module with a frozen conformance table. Node must report Unicode
+16.0 (`process.versions.unicode`), and the module refuses to load otherwise, so a runtime that does not conform cannot
+silently change results. JavaScript has no full case fold, and all seven tokens are ASCII, so the fold may be restricted to
+the characters whose full fold is ASCII-only: A to Z, and eleven others (U+00DF, U+017F, U+1E9E, U+212A, U+FB00 to U+FB06
+with U+FB05 and U+FB06 both folding to `st`). That table is derived independently from a second implementation across every
+code point, and a test fails if it does not agree. A non-ASCII token added later needs the full fold and a new review.
+
+A match makes the result `null` (row "unavailable" in 5.2). **Under the frozen engine, `null` still holds the drug**
+(`sentinel-literal-in-source`). The hand-off's idea that an unavailable result behaves like an absent gene is not adopted
+(section 12, R05).
 
 ### 5.6 Absence
 
@@ -146,7 +189,9 @@ The adapter carries none. Drugs are chosen by the caller (the engine's `options.
 engine evaluates a guideline table purely by gene phenotypes. A published recommendation that depends on something else
 (for example, age or ancestry) cannot be represented today. **Until the knowledge schema gains an explicit context field in
 its own approved change, no such guideline may be loaded as reviewed content**; this is a curation rule, noted again in
-section 11.
+section 11. **[amended]** The hand-off requires explicit, source-bound context (for the saved sertraline integration,
+"sertraline" or "general") and holds when it is missing. That requirement is accepted for the slice that adds the context
+field; it is not built in this slice, and nothing here manufactures context.
 
 ## 6. Report-level holds
 
@@ -202,17 +247,17 @@ Logs and audit records carry offsets, hashes and codes, **never span text**, so 
 
 Expected inputs below are what a hand-written oracle will assert (before any engine call). They do not depend on any
 guideline. `P` is what the engine's mapping says for the diplotype; the corroboration column assumes the case's stated
-result matches (D01, D06, D07, D09), which a test also checks with a deliberately wrong result.
+result matches (D01, D09), which a test also checks with a deliberately wrong result.
 
 | Case | Reader status | Expected adapter output |
 | --- | --- | --- |
 | D01 two named genes | projected | CYP2C19 `diplotype *1/*2`; CYP2B6 `diplotype *1/*1` (results corroborate) |
 | D02 unknown allele | projected | CYP2C19 `diplotype *1/*Z` (engine: `allele-not-in-definitions`; "Indeterminate" is not used) |
-| D03 quoted unavailable | projected | CYP2C19 `null` (engine: `sentinel-literal-in-source`) |
-| D04 result absent | projected | CYP2C19 `diplotype *1/*2` |
+| D03 quoted unavailable | projected | CYP2C19 `unresolved / other-gene-unresolved` **[amended]**: the quoted value is not an unavailable token, so it is a non-canonical value |
+| D04 result absent | projected | CYP2C19 `unresolved / other-gene-unresolved` **[amended]** (diplotype with no reported result, rule R04) |
 | D05 result present, empty | projected | CYP2C19 `null` (empty field) |
-| D06 identical repeats | projected | two identical `diplotype *1/*2` inputs (engine: `duplicate-identical`) |
-| D07 conflicting repeats | projected | `diplotype *1/*2` and `diplotype *2/*2` (engine: `duplicate-gene-conflict`) |
+| D06 identical repeats | projected | **one** input, CYP2C19 `unresolved / duplicate-identical` **[amended]**; both occurrences stay in the audit trail |
+| D07 conflicting repeats | projected | **one** input, CYP2C19 `unresolved / duplicate-gene-conflict` **[amended]** |
 | D08 monospaced overflow | held `alignment-unsupported` | report-level hold, no inputs. **Stays held**: the pinned capture loses a column gap, which is the evidence |
 | D09 proportional columns | projected | CYP2C19 `diplotype *1/*2`; CYP2B6 `diplotype *1/*1` |
 | D10 inline lists | source-abstained | CYP2C19 and CYP2B6 each `unresolved / association-abstained` |
@@ -238,13 +283,36 @@ never placed in `knowledge/cpic`, and the fixtures are never loaded in productio
 | --- | --- |
 | This document; later, a new adapter module, the reader sidecar and its interface, the imported hand-off files, a capture-acceptance interface | The engine, `GeneInput`, the five outcomes, the 14 reason codes, the knowledge schema, the database, the API |
 
-## 11. Choices for the founder (recommendations are what this document assumes)
+## 11. Choices for the founder
 
-1. **A held report yields no drug results** (instead of calling the engine with no genes, which would read as `gene-absent`). *Recommended: as written.*
-2. **Strict result handling:** when a diplotype is present, a result that is non-canonical, a sentinel, or empty is not trusted and the gene is held (`other-gene-unresolved`); a canonical result that disagrees is held as a conflict. *Alternative:* ignore a non-canonical result next to a usable diplotype. *Recommended: strict;* a lab wording we do not recognize beside a genotype is exactly where silent errors hide.
-3. **Diplotype is the engine input when it agrees with the stated result,** so CPIC's tables, not the lab's wording, decide the phenotype. *Recommended: as written.*
-4. **An empty field is treated as "no result"** (`null`), not as missing. *Recommended: as written.*
-5. **Sentinel set starts as `"not available"` only** and grows by reviewed change. *Recommended: as written.*
-6. **Context-dependent guidelines are not loaded** until the knowledge schema gets an explicit context field, in its own approved PR. *Recommended: as written; it needs a later slice.*
-7. **Absence is asserted only when the reader accounted for every character** of the report. *Recommended: as written.*
-8. **The reader's registry stays at CYP2C19 and CYP2B6** until a reviewed change extends it; a report mentioning other genes is held, not partly read. *Recommended: as written.*
+**Decided 2026-10-08 (the founder approved all recommendations).** The eight choices of the first version stand, except
+where section 12 amends them:
+
+1. A held report yields no drug results. *Decided as written.*
+2. Strict result handling next to a diplotype. *Decided as written.*
+3. The diplotype is the engine input when it agrees with the stated result. *Decided as written; but a diplotype with no result is now unresolved (R04).*
+4. An empty field is treated as "no result" (`null`). *Decided as written.*
+5. The sentinel set. *Replaced by the seven-token procedure (R06, section 5.5).*
+6. Context-dependent guidelines are not loaded until the schema has a context field. *Decided as written; the hand-off's explicit-context rule is accepted for that slice.*
+7. Absence is asserted only when the reader accounted for every character. *Decided as written.*
+8. The reader's registry stays at CYP2C19 and CYP2B6. *Decided as written.*
+
+## 12. Reconciliation with the second Codex hand-off (2026-10-08)
+
+The hand-off `pgx-claude-handoff-v1` carries design rules the founder approved in the Codex workspace (R02 to R07, and an
+amendment to R05). The founder confirmed them as current and as overriding this document where they differ. Nothing in
+that package authorizes code, clinical use or training; this table records only how each rule maps here.
+
+| Rule | In the hand-off | Disposition here |
+| --- | --- | --- |
+| R02 provenance | Disjoint exact gene and value spans with frame and association references; shared headings and empty-field diagnostics preserved | **Already consistent** (section 4) |
+| R03=A duplicates | Hold every repeated gene; equality over literal diplotype, literal result, field presence and result basis; compare before absence matching | **Adopted** (section 5.4), with the two duplicate codes added to what an adapter may attach |
+| R04 null basis | `null` with `no_reported_result` only for a diplotype and no result field; unresolved downstream; empty or malformed fields hold | **Adopted** (section 5.2). The diplotype-only occurrence is unresolved |
+| R06 unavailable matcher | Seven tokens, pinned Unicode 16.0.0 procedure, quotes kept | **Adopted** (section 5.5) |
+| R05 lookup precedence (amended) | One canonical gene plus one absent or approved-null gene uses the reviewed single-gene branch; two canonical genes need an in-scope combined-table cell | **Not adopted in this slice.** The frozen engine holds the drug when any gene is absent, unresolved or null, with no fallback to a narrower table. Falling back loosens a hold on clinical output, and the correct behavior depends on the real table structure. It will be decided together with the real sertraline guideline content, with primary-source verification, and would need an explicit guideline-level construct, not a global fallback |
+| R07 checker | `Integration.resolve()` only for its saved mappings | **Not applicable.** This adapter feeds the repository's own engine and phenotype mapper; `Integration.resolve()` is not used |
+| Occurrence base, `rawText` | Source index is zero-based; a revised schema uses one-based indices and a derived `rawText` | **Not applicable.** These serve the hand-off's own strict consumer. The adapter keeps zero-based per-gene indices |
+| Context | Source-bound drug and population context required; missing context holds | **Deferred** (section 5.7) |
+| Hold vocabulary | A proposed vocabulary (categories and codes such as `reported-field-empty`, `adapter-policy-unapproved`) still awaiting its owner freeze | **Not adopted.** Section 6 stands until that vocabulary is frozen; an empty result alone still reaches the engine as `null` |
+
+What the reader's authorization does not change: `clinical_approval` and `training_eligible` stay `false`.
