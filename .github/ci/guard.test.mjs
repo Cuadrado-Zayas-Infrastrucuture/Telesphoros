@@ -6,7 +6,7 @@
 //   - the ruleset and the workflow drifting apart,
 //   - the workflow gaining write permissions or running untrusted code with secrets.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
@@ -92,4 +92,29 @@ test('required checks come from GitHub Actions only (so another app cannot repor
 
 test('dependabot watches every ecosystem the repository uses', () => {
   for (const eco of ['npm', 'github-actions', 'terraform', 'pip', 'docker-compose']) assert.match(dependabot, new RegExp(`package-ecosystem: ${eco}\\b`));
+});
+
+// ---- CLAUDE.md is a pointer: it must stay short and may only name files that exist ----
+
+const REPO = new URL('../../', import.meta.url);
+const PATH_PATTERN = /(?:\b(?:docs|apps|packages|infrastructure|\.github)\/[\w./-]*[\w-]|\bCONTRIBUTING\.md|\bREADME\.md|\bSECURITY\.md)/g;
+
+/** Every repository path a piece of text names, with the ones that do not exist on disk. */
+export function pathsIn(text) {
+  const named = [...new Set(text.match(PATH_PATTERN) ?? [])];
+  return { named, missing: named.filter((p) => !existsSync(new URL(p, REPO))) };
+}
+
+test('CLAUDE.md is a short pointer that names only files that exist', () => {
+  const text = read('../../CLAUDE.md');
+  const { named, missing } = pathsIn(text);
+  assert.ok(named.length >= 5, `expected CLAUDE.md to name at least 5 files, found ${named.length}: a scan that finds nothing proves nothing`);
+  assert.deepEqual(missing, [], `CLAUDE.md names files that do not exist: ${missing.join(', ')}`);
+  assert.ok(text.split('\n').length <= 30, 'CLAUDE.md is a pointer; the rules belong in docs/STATUS.md and CONTRIBUTING.md');
+});
+
+test('the CLAUDE.md path check detects a missing file and passes a real one (controls)', () => {
+  assert.deepEqual(pathsIn('See `docs/no-such-page.md` and docs/STATUS.md').missing, ['docs/no-such-page.md']);
+  assert.deepEqual(pathsIn('See docs/STATUS.md and CONTRIBUTING.md').missing, []);
+  assert.deepEqual(pathsIn('no paths at all').named, []);
 });
