@@ -14,6 +14,7 @@
     "db:migrate": "node dist/db/cli.js migrate up",
     "db:migrate:down": "node dist/db/cli.js migrate down",
     "db:status": "node dist/db/cli.js migrate status",
+    "db:keygen": "node dist/db/cli.js keygen",
     "db:backup": "node dist/db/cli.js backup",
     "db:restore": "node dist/db/cli.js restore",
     "knowledge:verify": "node dist/services/knowledge/cli.js verify",

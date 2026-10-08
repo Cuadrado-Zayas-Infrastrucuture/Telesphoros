@@ -1,0 +1,49 @@
+{
+  "formatVersion": 1,
+  "createdAt": "2026-10-08T12:24:03.676Z",
+  "serverVersion": "16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)",
+  "database": "v1fixture",
+  "migrations": [
+    "0001",
+    "0002",
+    "0003"
+  ],
+  "tables": {
+    "patients": {
+      "rows": 6,
+      "rlsEnabled": true,
+      "rlsForced": true,
+      "policies": 1
+    },
+    "recommendations": {
+      "rows": 3,
+      "rlsEnabled": true,
+      "rlsForced": true,
+      "policies": 1
+    },
+    "reports": {
+      "rows": 3,
+      "rlsEnabled": true,
+      "rlsForced": true,
+      "policies": 1
+    },
+    "schema_migrations": {
+      "rows": 3,
+      "rlsEnabled": false,
+      "rlsForced": false,
+      "policies": 0
+    }
+  },
+  "schema": {
+    "constraints": 23,
+    "indexes": 17,
+    "triggers": 8
+  },
+  "dump": {
+    "file": "db.dump.enc",
+    "bytes": 24688,
+    "sha256": "342f4270a589527a2600ee5dd81521fcb95a7175bca94804be0e7f0981506d76",
+    "plaintextSha256": "647c1c1c896e816a2ac4a3ab8c5f957262567124e1f26e6520692bff037a22dd",
+    "encrypted": true
+  }
+}

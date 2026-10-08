@@ -3,13 +3,18 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from 'pg';
-import { type BackupManifest, opensslEncrypt, sha256File } from './backup';
+import { opensslEncrypt, sha256File } from './backup';
+import { BackupCryptoError, decryptFile, keyIdHex, readEncryptionHeader, readKeyFile, verifyManifestMac } from './backup-crypto';
+import { type BackupManifest, ManifestError, parseManifest } from './backup-manifest';
 import { pgEnv, quoteIdent, run } from './pg-process';
 
 export interface RestoreOptions {
   /** A superuser on the TARGET server. The database named in the URL is not touched. */
   adminUrl: string;
   backupDir: string;
+  /** Format 2 (authenticated) backups: the 32-byte key file. When given, ONLY a format 2 backup is accepted (no downgrade). */
+  keyFile?: string;
+  /** Format 1 backups only (the old passphrase scheme). */
   passphraseFile?: string;
   /** Keep the restored database afterwards (a real recovery). Default: a throwaway that is dropped. */
   keep?: boolean;
@@ -48,13 +53,51 @@ export async function restoreAndVerify(options: RestoreOptions): Promise<Restore
   const checks: Check[] = [];
   const record = (name: string, ok: boolean, detail: string) => checks.push({ name, ok, detail });
 
-  const manifest = JSON.parse(readFileSync(join(options.backupDir, 'manifest.json'), 'utf8')) as BackupManifest;
-  const dumpPath = join(options.backupDir, manifest.dump.file);
   const database = options.targetDatabase ?? `restore_check_${randomBytes(5).toString('hex')}`;
   const keep = Boolean(options.keep || options.targetDatabase);
   const failed = (): RestoreReport => ({ ok: false, database, kept: false, checks });
 
   if (!SAFE_DB_NAME.test(database)) throw new Error('Target database name must be lowercase letters, digits and underscores');
+
+  // 0. The manifest is read as untrusted input: validated, and for format 2 authenticated before anything in it is used.
+  let manifest: BackupManifest;
+  try {
+    manifest = parseManifest(readFileSync(join(options.backupDir, 'manifest.json'), 'utf8'));
+    record('manifest valid', true, `format ${manifest.formatVersion}`);
+  } catch (error) {
+    record('manifest valid', false, error instanceof ManifestError ? error.message : 'manifest.json could not be read');
+    return failed();
+  }
+
+  let masterKey: Buffer | undefined;
+  if (options.keyFile) {
+    if (manifest.formatVersion !== 2) {
+      record('manifest signature', false, 'a key file was given but this backup is not format 2 (authenticated); refusing a downgrade');
+      return failed();
+    }
+    try {
+      masterKey = await readKeyFile(options.keyFile);
+    } catch (error) {
+      record('manifest signature', false, error instanceof BackupCryptoError ? error.message : 'the key file could not be read');
+      return failed();
+    }
+  }
+  if (manifest.formatVersion === 2) {
+    if (!masterKey) {
+      record('manifest signature', false, 'this backup is encrypted and signed (format 2) but no key file was given');
+      return failed();
+    }
+    const { encryption } = manifest.dump;
+    if (keyIdHex(masterKey) !== encryption.keyId) {
+      record('manifest signature', false, 'this backup was made with a different key');
+      return failed();
+    }
+    const authentic = verifyManifestMac(manifest, masterKey, encryption.salt);
+    record('manifest signature', authentic, authentic ? 'authentic (signed with this key)' : 'DOES NOT verify: the manifest was altered or the backup is not from this key');
+    if (!authentic) return failed();
+  }
+
+  const dumpPath = join(options.backupDir, manifest.dump.file);
 
   // 1. The backup file is exactly what was written.
   if (!existsSync(dumpPath)) {
@@ -69,9 +112,27 @@ export async function restoreAndVerify(options: RestoreOptions): Promise<Restore
   const workDir = mkdtempSync(join(tmpdir(), 'restore-'));
   try {
     let restoreFrom = dumpPath;
-    if (manifest.dump.encrypted) {
+    if (manifest.formatVersion === 2) {
+      restoreFrom = join(workDir, 'db.dump');
+      try {
+        // The file's own header must agree with the signed manifest, then every chunk is authenticated as it is read.
+        const header = await readEncryptionHeader(dumpPath);
+        const { encryption } = manifest.dump;
+        if (header.salt !== encryption.salt || header.keyId !== encryption.keyId || header.chunkSize !== encryption.chunkSize) {
+          throw new BackupCryptoError('tampered');
+        }
+        await decryptFile(dumpPath, restoreFrom, masterKey!);
+      } catch (error) {
+        record('decrypt', false, error instanceof BackupCryptoError ? error.message : 'could not decrypt the backup');
+        return failed();
+      }
+      record('decrypt', true, 'every chunk authenticated');
+      const plain = await sha256File(restoreFrom);
+      record('decrypted checksum', plain === manifest.dump.plaintextSha256, plain === manifest.dump.plaintextSha256 ? 'matches manifest' : 'DOES NOT match manifest');
+      if (plain !== manifest.dump.plaintextSha256) return failed();
+    } else if (manifest.dump.encrypted) {
       if (!options.passphraseFile) {
-        record('decrypt', false, 'backup is encrypted but no passphrase file was given');
+        record('decrypt', false, 'backup is encrypted (format 1) but no passphrase file was given');
         return failed();
       }
       restoreFrom = join(workDir, 'db.dump');

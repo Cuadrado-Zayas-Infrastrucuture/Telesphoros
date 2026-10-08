@@ -1,6 +1,7 @@
 import { S3Client } from '@aws-sdk/client-s3';
 import { Client } from 'pg';
 import { createBackup } from './backup';
+import { generateKeyFile } from './backup-crypto';
 import { MIGRATIONS_DIR, migrateDown, migrateUp, migrationStatus } from './migrator';
 import { restoreAndVerify } from './restore';
 
@@ -10,11 +11,16 @@ const USAGE = `Usage: node dist/db/cli.js <command>
   migrate down [steps]          revert the last N (default 1)     (DATABASE_MIGRATOR_URL)
   migrate status                show applied and pending          (DATABASE_MIGRATOR_URL)
 
-  backup  --dest DIR [--passphrase-file FILE] [--upload s3://bucket/prefix] [--kms-key-id ID]
-                                consistent backup + manifest      (DATABASE_ADMIN_URL: superuser or BYPASSRLS)
-  restore --from DIR [--passphrase-file FILE] [--keep] [--target-db NAME]
+  keygen  --out FILE            create a new random backup key (64 hex characters, owner-only; never overwrites).
+                                KEEP COPIES OFFLINE: without this key no backup made with it can ever be restored.
+
+  backup  --dest DIR --key-file FILE [--upload s3://bucket/prefix] [--kms-key-id ID]
+                                consistent, encrypted and signed backup (DATABASE_ADMIN_URL: superuser or BYPASSRLS)
+          --dest DIR            without --key-file the backup is NOT encrypted: development only
+  restore --from DIR [--key-file FILE | --passphrase-file FILE] [--keep] [--target-db NAME]
                                 restore into a THROWAWAY database and verify it; exit 1 if anything is off
-                                                                  (DATABASE_ADMIN_URL on the target server)
+                                (--key-file: format 2 backups, signature and every chunk checked;
+                                 --passphrase-file: old format 1 backups only)  (DATABASE_ADMIN_URL on the target server)
 `;
 
 const out = (text: string) => process.stdout.write(`${text}\n`);
@@ -74,8 +80,21 @@ async function main(argv: string[]) {
     return;
   }
 
+  if (command === 'keygen') {
+    const f = flags([sub, ...rest].filter((a): a is string => a !== undefined));
+    const file = f.text('out');
+    if (!file) throw new Error('--out is required');
+    const { keyId } = await generateKeyFile(file);
+    out(`key written: ${file}  (key id ${keyId})`);
+    out('Store copies of this file OFFLINE with two different people. It is never printed again, and it is not in any backup.');
+    return;
+  }
+
   if (command === 'backup') {
     const f = flags([sub, ...rest].filter((a): a is string => a !== undefined));
+    if (f.text('passphrase-file') !== undefined) {
+      throw new Error('--passphrase-file is no longer used for new backups. Create a key with `keygen --out FILE` and pass --key-file.');
+    }
     const dest = f.text('dest');
     if (!dest) throw new Error('--dest is required');
     const uri = f.text('upload');
@@ -97,13 +116,13 @@ async function main(argv: string[]) {
     const { dir, manifest } = await createBackup({
       adminUrl: required('DATABASE_ADMIN_URL'),
       destDir: dest,
-      passphraseFile: f.text('passphrase-file'),
+      keyFile: f.text('key-file'),
       upload,
     });
     const rows = Object.values(manifest.tables).reduce((sum, t) => sum + t.rows, 0);
     out(`backup written: ${dir}`);
     out(`  ${Object.keys(manifest.tables).length} tables, ${rows} rows, migrations ${manifest.migrations.join(', ') || '(none)'}`);
-    out(`  ${manifest.dump.file}  ${manifest.dump.bytes} bytes  sha256 ${manifest.dump.sha256}${manifest.dump.encrypted ? '  (encrypted)' : '  (NOT encrypted)'}`);
+    out(`  ${manifest.dump.file}  ${manifest.dump.bytes} bytes  sha256 ${manifest.dump.sha256}${manifest.dump.encrypted ? '  (encrypted, signed manifest)' : '  (NOT encrypted)'}`);
     if (uri) out(`  uploaded to ${uri}`);
     return;
   }
@@ -115,6 +134,7 @@ async function main(argv: string[]) {
     const report = await restoreAndVerify({
       adminUrl: required('DATABASE_ADMIN_URL'),
       backupDir: from,
+      keyFile: f.text('key-file'),
       passphraseFile: f.text('passphrase-file'),
       keep: f.bool('keep'),
       targetDatabase: f.text('target-db'),

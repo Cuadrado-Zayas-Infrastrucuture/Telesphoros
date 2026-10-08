@@ -87,7 +87,9 @@ and the same account**, and nothing yet says where the backup job runs. To meet 
 
 - Send backups to a second provider through the S3 protocol (the upload code is provider-neutral except that it
   hard-codes AWS KMS encryption, which other providers do not accept). Encryption must then be **client-side and
-  authenticated** (today's optional passphrase encryption is not authenticated), with keys held outside both providers.
+  authenticated**, with keys held outside both providers. *Done in the backup format change: format 2 is chunked
+  AES-256-GCM with a signed manifest and a key file (`docs/ops/backup-and-restore.md`). Still open: the provider-neutral
+  upload itself.*
 - Run the backup job on a host that is not the database host, with write-only credentials in a separate provider
   account, object lock or versioning on the target, and no copy left on the job's disk after the upload.
 - Make the restore drill read from the second provider, so the copy that matters is the one that is proven.

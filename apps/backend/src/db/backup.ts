@@ -1,35 +1,23 @@
 import { createHash } from 'node:crypto';
-import { chmodSync, createReadStream, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, createReadStream, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PutObjectCommand, type S3Client } from '@aws-sdk/client-s3';
 import { Client } from 'pg';
+import { encryptFile, manifestMac, readKeyFile } from './backup-crypto';
+import type { BackupManifest, BackupManifestV1, BackupManifestV2, TableFacts } from './backup-manifest';
 import { pgEnv, quoteIdent, run } from './pg-process';
 
-export interface TableFacts {
-  rows: number;
-  rlsEnabled: boolean;
-  rlsForced: boolean;
-  policies: number;
-}
-
-export interface BackupManifest {
-  formatVersion: 1;
-  createdAt: string;
-  serverVersion: string;
-  database: string;
-  migrations: string[];
-  /** Counts include soft-deleted rows: they are part of the audit trail and must survive a restore. */
-  tables: Record<string, TableFacts>;
-  schema: { constraints: number; indexes: number; triggers: number };
-  dump: { file: string; bytes: number; sha256: string; plaintextSha256: string; encrypted: boolean };
-}
+export type { BackupManifest, TableFacts };
 
 export interface BackupOptions {
   /** A role that can read every row: a superuser or one with BYPASSRLS. NEVER the application role. */
   adminUrl: string;
   destDir: string;
-  /** If set, the dump is encrypted at rest (AES-256-CBC, PBKDF2) with the passphrase in this file. */
-  passphraseFile?: string;
+  /**
+   * If set, the dump is encrypted with authenticated encryption (AES-256-GCM, chunked) under the 32-byte key in this file,
+   * and the manifest is signed (format 2). Without it the backup is NOT encrypted (format 1): development and tests only.
+   */
+  keyFile?: string;
   upload?: { client: S3Client; bucket: string; prefix: string; kmsKeyId?: string };
   /** Test seam: runs after the snapshot is taken and before the dump starts (to prove snapshot consistency). */
   afterSnapshot?: () => Promise<void>;
@@ -41,6 +29,7 @@ export async function sha256File(path: string): Promise<string> {
   return hash.digest('hex');
 }
 
+/** Format 1 only: kept so old backups can still be read. New backups never use it. */
 export async function opensslEncrypt(input: string, output: string, passphraseFile: string, decrypt = false) {
   await run('openssl', [
     'enc', decrypt ? '-d' : '-e', '-aes-256-cbc', '-pbkdf2', '-iter', '600000', '-salt',
@@ -57,9 +46,8 @@ export async function opensslEncrypt(input: string, output: string, passphraseFi
  * alarms on a busy database, or worse, learn to be ignored.
  */
 export async function createBackup(options: BackupOptions): Promise<{ dir: string; manifest: BackupManifest }> {
-  if (options.passphraseFile && readFileSync(options.passphraseFile, 'utf8').trim().length < 16) {
-    throw new Error('The passphrase file is empty or too short (need at least 16 characters). Nothing was backed up.');
-  }
+  // A bad key file is reported before anything is dumped.
+  const masterKey = options.keyFile ? await readKeyFile(options.keyFile) : undefined;
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const dir = join(options.destDir, `backup-${stamp}`);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -93,26 +81,34 @@ export async function createBackup(options: BackupOptions): Promise<{ dir: strin
     chmodSync(plainFile, 0o600);
 
     const plaintextSha256 = await sha256File(plainFile);
-    let dumpFile = plainFile;
-    if (options.passphraseFile) {
-      dumpFile = `${plainFile}.enc`;
-      await opensslEncrypt(plainFile, dumpFile, options.passphraseFile);
-      chmodSync(dumpFile, 0o600);
+    const createdAt = new Date().toISOString();
+    if (masterKey) {
+      const dumpFile = `${plainFile}.enc`;
+      const encryption = await encryptFile(plainFile, dumpFile, masterKey);
       rmSync(plainFile); // plaintext PHI must not linger next to its encrypted copy
+      const unsigned: Omit<BackupManifestV2, 'mac'> = {
+        formatVersion: 2,
+        createdAt,
+        ...facts,
+        dump: {
+          file: dumpFile.slice(dir.length + 1),
+          bytes: statSync(dumpFile).size,
+          sha256: await sha256File(dumpFile),
+          plaintextSha256,
+          encrypted: true,
+          encryption,
+        },
+      };
+      manifest = { ...unsigned, mac: manifestMac(unsigned, masterKey, encryption.salt) };
+    } else {
+      const unencrypted: BackupManifestV1 = {
+        formatVersion: 1,
+        createdAt,
+        ...facts,
+        dump: { file: 'db.dump', bytes: statSync(plainFile).size, sha256: plaintextSha256, plaintextSha256, encrypted: false },
+      };
+      manifest = unencrypted;
     }
-
-    manifest = {
-      formatVersion: 1,
-      createdAt: new Date().toISOString(),
-      ...facts,
-      dump: {
-        file: dumpFile.slice(dir.length + 1),
-        bytes: statSync(dumpFile).size,
-        sha256: await sha256File(dumpFile),
-        plaintextSha256,
-        encrypted: Boolean(options.passphraseFile),
-      },
-    };
     writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2), { mode: 0o600 });
   } catch (error) {
     // A half-written backup is worse than none: it may hold an UNENCRYPTED dump and no manifest to say so.
