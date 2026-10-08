@@ -8,7 +8,7 @@ AWS BAA is executed and the compliance prerequisites are complete.
 | Table | Holds | Notes |
 | --- | --- | --- |
 | `patients` | synthetic label only | No name, date of birth or real identifier exists in the model, by design |
-| `reports` | report **metadata**: type, filename, size, status, content type, SHA-256, storage key | The bytes are in S3, never here |
+| `reports` | report **metadata**: type, filename, size, status, content type, SHA-256, storage key, and (0010) the verified object version and who requested and completed the upload | The bytes are in S3, never here. Once uploaded, the file's identity cannot change; once captured, neither can the type, name, patient or deletion mark (enforced by trigger `reports_evidence_guard`). That last rule reads captures as the calling role, so it covers every application path; a table owner that is not a superuser and sets no tenant sees no captures and is not covered |
 | `recommendations` | engine output (read-only through the API) | Written only by the rules engine (Phase 5) |
 | `report_captures`, `capture_acceptances`, `evaluations` (+ `evaluation_results`, `evaluation_gene_states`), `corrections`, `cell_disputes`, `cell_dispute_decisions` | the records of the lab-report pipeline (migrations 0007 to 0009) | **Append-only** (nobody updates or deletes, the owner included); each row has its own event in the tenant's hash chain, committed in the same transaction. Not connected to any endpoint yet (5B-3.2). Design: `docs/design/records-and-corrections.md` |
 | `event_notes` | every free-text note, kept out of the chain (0006) | Insert-only except one audited redaction |

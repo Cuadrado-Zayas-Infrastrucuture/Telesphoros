@@ -84,6 +84,7 @@ describe('migrations run for a migrator that is not a superuser', () => {
     const db = await databaseOwnedBy(WITH_MEMBERSHIP);
     await asMigrator(WITH_MEMBERSHIP, db, async (c) => {
       await migrateUp(c);
+      await migrateDown(c, 1); // 0010 holds no evidence in an empty database, so it reverts freely (its own guard is tested in report-evidence)
       await expect(migrateDown(c, 1)).rejects.toThrow(/allow_audit_drop|Refusing/);
       await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
       for (let i = 0; i < 6; i++) await migrateDown(c, 1); // 0009 .. 0004
