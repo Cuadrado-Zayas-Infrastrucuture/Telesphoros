@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildMeta,
+  CORRECTION_KINDS,
+  CORRECTION_REASON_CODES,
+  correctionCreateSchema,
+  evaluationListQuerySchema,
+  REASONS_FOR_KIND,
   ErrorCode,
   errorResponseSchema,
   MAX_PAGE_SIZE,
@@ -126,5 +131,52 @@ describe('tenant ids and tenant groups', () => {
 
   it('uses the documented prefix', () => {
     expect(TENANT_GROUP_PREFIX).toBe('tenant:');
+  });
+});
+
+describe('correction requests', () => {
+  const ok = (body: object) => correctionCreateSchema.safeParse(body).success;
+  const uuid = '3f0c8a52-6d0e-4f64-9a53-0c5a3b7f9a11';
+
+  it('accepts each kind with a reason that belongs to it, and refuses every reason that does not', () => {
+    for (const kind of CORRECTION_KINDS) {
+      for (const reasonCode of CORRECTION_REASON_CODES) {
+        const body = {
+          kind, reasonCode, note: 'a note',
+          ...(kind === 'supersession' ? { replacementEvaluationId: uuid } : {}),
+          ...(kind === 'reinstatement' ? { previousCorrectionId: uuid } : {}),
+        };
+        expect(ok(body), `${kind} / ${reasonCode}`).toBe(REASONS_FOR_KIND[kind].includes(reasonCode));
+      }
+    }
+  });
+
+  it('every reason code is allowed for at least one kind, and the table names no unknown code', () => {
+    const allowed = new Set(Object.values(REASONS_FOR_KIND).flat());
+    expect([...allowed].sort()).toEqual([...CORRECTION_REASON_CODES].sort());
+  });
+
+  it('needs a replacement exactly for a supersession, a named retraction for a reinstatement, and a note for clinical-review-disagrees', () => {
+    expect(ok({ kind: 'supersession', reasonCode: 'software-defect' })).toBe(false);
+    expect(ok({ kind: 'supersession', reasonCode: 'software-defect', replacementEvaluationId: uuid })).toBe(true);
+    expect(ok({ kind: 'retraction', reasonCode: 'software-defect', replacementEvaluationId: uuid })).toBe(false);
+    expect(ok({ kind: 'reinstatement', reasonCode: 'retraction-mistaken' })).toBe(false);
+    expect(ok({ kind: 'reinstatement', reasonCode: 'retraction-mistaken', previousCorrectionId: uuid })).toBe(true);
+    expect(ok({ kind: 'retraction', reasonCode: 'clinical-review-disagrees' })).toBe(false);
+    expect(ok({ kind: 'retraction', reasonCode: 'clinical-review-disagrees', note: 'why' })).toBe(true);
+  });
+
+  it('takes nothing but the documented fields, and trims or bounds the note', () => {
+    expect(ok({ kind: 'retraction', reasonCode: 'software-defect', createdBy: 'x' })).toBe(false);
+    expect(ok({ kind: 'retraction', reasonCode: 'software-defect', note: '   ' })).toBe(false);
+    expect(ok({ kind: 'retraction', reasonCode: 'software-defect', note: 'x'.repeat(1001) })).toBe(false);
+    expect(ok({ kind: 'retraction', reasonCode: 'software-defect', note: 'x'.repeat(1000) })).toBe(true);
+  });
+});
+
+describe('the evaluation list query', () => {
+  it('accepts only current=true, never false or a number', () => {
+    expect(evaluationListQuerySchema.safeParse({ current: 'true' }).success).toBe(true);
+    for (const current of ['false', '1', 'yes', true, 1]) expect(evaluationListQuerySchema.safeParse({ current }).success, String(current)).toBe(false);
   });
 });

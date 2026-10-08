@@ -101,3 +101,12 @@ export interface DisputeStatus {
   status: 'open' | 'upheld' | 'dismissed';
   decision: Projected | null;
 }
+
+/** A stored note, for the one route that reads free text. `body` is the fixed tombstone once redacted. */
+export interface NoteRecord {
+  id: string;
+  body: string;
+  bodySha256: string;
+  redacted: boolean;
+  createdAt: string;
+}

@@ -6,6 +6,8 @@ import type { ReportReader } from '../services/report-reader/report-reader';
 import { SubprocessReportReader } from '../services/report-reader/subprocess-report-reader';
 import { CapturesController, ReportCaptureController } from './captures.controller';
 import { CapturesService } from './captures.service';
+import { EvaluationCorrectionsController, NotesController } from './corrections.controller';
+import { CorrectionsService } from './corrections.service';
 import { EvaluationsController, ReportEvaluationController } from './evaluations.controller';
 import { EvaluationsService, LAB_KNOWLEDGE, LAB_READER } from './evaluations.service';
 import { PipelineGateGuard, PipelineStartupCheck, PipelineSwitch } from './pipeline-switch';
@@ -22,13 +24,14 @@ const enabled = (env: Env) => env.LAB_REPORT_PIPELINE === 'enabled';
  */
 @Global()
 @Module({
-  controllers: [ReportCaptureController, CapturesController, ReportEvaluationController, EvaluationsController],
+  controllers: [ReportCaptureController, CapturesController, ReportEvaluationController, EvaluationsController, EvaluationCorrectionsController, NotesController],
   providers: [
     PipelineSwitch,
     PipelineGateGuard,
     PipelineStartupCheck,
     CapturesService,
     EvaluationsService,
+    CorrectionsService,
     { provide: ReaderLimiter, inject: [ENV], useFactory: (env: Env) => new ReaderLimiter(env.LAB_REPORT_MAX_CONCURRENT_READS) },
     {
       provide: TextCaptureRunner,

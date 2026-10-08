@@ -553,3 +553,23 @@ Each was found by building or by an attack test, and each is covered by a test.
    (`acceptance.current`), how many disputes are active in the tenant, and `actionable: false` (always, while not approved for clinical use).
 5. **The reader limit is per process** and is a configuration value (`LAB_REPORT_MAX_CONCURRENT_READS`).
 
+## 19. Amendments made while building 5B-3.3a (these govern where they differ from the text above)
+
+1. **A correction names the correction it saw last** (4.3, 8). `previousCorrectionId` must equal the evaluation's latest correction, or be omitted
+   when there is none; anything else is 409 `stale-chain` and the service never fills it in. The one-child unique indexes still decide a race (the
+   loser is told to reload). Nothing about the evaluation, its report or the author is taken from the request body.
+2. **Reasons the API gives** (4.4). `invalid-transition` (superseded is terminal; a retracted evaluation can only be reinstated; only a retracted
+   one can be reinstated), `self-reinstatement` (the reinstater is not the retractor; the database trigger repeats it), `bad-replacement`.
+   The reason table of 4.2 is checked against migration 0009's CHECK constraint by a test that reads the migration text.
+3. **A replacement** (4.1, 4.3) must also be **newer** than the evaluation it replaces and itself **active** (service rules; no migration). A held
+   replacement is allowed ("replaced by no result"). If the replacement is retracted a moment after the check, the history reads correctly and no
+   record is wrong; this is recorded, not prevented. Unknown replacement: 404.
+4. **`current`** (4.5) is on every evaluation (`current: boolean`) and `GET /evaluations?current=true` returns the latest active evaluation of each report
+   (only the value `true` is accepted). It follows the specification as written: if the newest evaluation is retracted, an **older still-active evaluation
+   becomes current again**. This is flagged for a clinical decision; it is not silently changed.
+5. **Correction history in the evaluation** (4.4, 8). `corrections` lists every correction oldest first; the evaluation's `state` and `supersededBy` are
+   derived from that same list, so the two cannot disagree. A correction shows its note as `{id, bodySha256}` only; whether a note was redacted is shown
+   when it is read.
+6. **Reading a note** (3.7, 6.8). `GET /notes/:id` (clinician, reviewer, admin; not reader) returns the text, or the fixed tombstone once redacted, with
+   its original digest. It is the only route that returns a note body; it is never logged, and another tenant's note is 404.
+
