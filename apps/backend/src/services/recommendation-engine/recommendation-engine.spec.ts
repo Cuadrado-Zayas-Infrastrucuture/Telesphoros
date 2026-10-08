@@ -1,11 +1,12 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
-  CALLER_REASON_CODES,
   CPIC_STRENGTHS,
+  type DrugResult,
   type EvaluationResult,
   evaluationResultSchema,
-  type GeneCall,
+  type GeneInput,
+  REASON_OUTCOME,
 } from '@telesphoros/cpic-schema';
 import { RECOMMENDATION_STRENGTHS } from '@telesphoros/shared-types';
 import { loadKnowledge } from '../knowledge/knowledge-loader';
@@ -19,7 +20,7 @@ beforeAll(async () => {
 });
 afterAll(cleanupTempDirs);
 
-const called = (gene: string, diplotype: string): GeneCall => ({ gene, outcome: 'called', diplotype });
+const canonical = (gene: string, phenotype: string): GeneInput => ({ gene, state: 'canonical', phenotype });
 const deepFreeze = <T>(value: T): T => {
   if (value && typeof value === 'object') {
     Object.values(value).forEach(deepFreeze);
@@ -30,7 +31,7 @@ const deepFreeze = <T>(value: T): T => {
 
 describe('evaluate: contract', () => {
   it('always returns a result that matches the published result schema, and names the knowledge it used', () => {
-    const result = evaluate(knowledge, [called('GENEA', '*1/*3'), called('GENEB', '*1/*5')]);
+    const result = evaluate(knowledge, [canonical('GENEA', 'Synthetic Normal'), canonical('GENEE', 'Synthetic Fast')]);
     expect(evaluationResultSchema.safeParse(result).success).toBe(true);
     expect(result.knowledgeSetId).toBe(knowledge.id);
   });
@@ -39,22 +40,17 @@ describe('evaluate: contract', () => {
     expect([...CPIC_STRENGTHS]).toEqual([...RECOMMENDATION_STRENGTHS]);
   });
 
-  it.each(CALLER_REASON_CODES)('passes the parser reason %s through unchanged', (reasonCode) => {
-    const result = evaluate(knowledge, [{ gene: 'GENEA', outcome: 'indeterminate', reasonCode }], { drugs: ['drugw'] });
-    expect(result.phenotypes).toEqual([{ status: 'indeterminate', gene: 'GENEA', reasonCode }]);
-    expect(result.recommendations).toEqual([{ status: 'indeterminate', drug: 'drugw', gene: 'GENEA', reasonCode }]);
-  });
-
   it.each([
-    ['a lower-case gene', [{ gene: 'genea', outcome: 'called', diplotype: '*1/*1' }], {}],
-    ['an unknown key', [{ gene: 'GENEA', outcome: 'called', diplotype: '*1/*1', extra: 1 }], {}],
-    ['a reason only the engine may give', [{ gene: 'GENEA', outcome: 'indeterminate', reasonCode: 'NO_MATCHING_GUIDELINE' }], {}],
+    ['a lower-case gene', [{ gene: 'genea', state: 'canonical', phenotype: 'x' }], {}],
+    ['an unknown state', [{ gene: 'GENEA', state: 'absent' }], {}],
+    ['an unknown key', [{ gene: 'GENEA', state: 'null', extra: 1 }], {}],
+    ['a reason only the engine may give', [{ gene: 'GENEA', state: 'unresolved', reasonCode: 'duplicate-gene-conflict' }], {}],
     ['a badly written drug name', [], { drugs: ['Not A Drug!'] }],
-    ['too many calls', Array.from({ length: 201 }, () => called('GENEA', '*1/*1')), {}],
-  ])('refuses %s with an error that repeats none of the input', (_name, calls, options) => {
+    ['too many inputs', Array.from({ length: 201 }, () => canonical('GENEA', 'x')), {}],
+  ])('refuses %s with an error that repeats none of the input', (_name, inputs, options) => {
     let thrown: unknown;
     try {
-      evaluate(knowledge, calls as never, options as never);
+      evaluate(knowledge, inputs as never, options as never);
     } catch (error) {
       thrown = error;
     }
@@ -63,81 +59,137 @@ describe('evaluate: contract', () => {
   });
 });
 
-describe('evaluate: it only ever repeats the guideline, and only for a determined phenotype', () => {
-  // Exhaustive over the fixtures: every diplotype of every gene, written both ways round, plus junk.
-  const genes = ['GENEA', 'GENEB', 'GENEC', 'GENED'];
-  const diplotypes: string[] = [];
-  for (let a = 1; a <= 5; a += 1) for (let b = 1; b <= 5; b += 1) diplotypes.push(`*${a}/*${b}`);
-  diplotypes.push('*1', '*1|*2', '', '*9/*9', ' *1/*1');
-
-  it('every recommendation matches an independent lookup in the guideline file, and nothing else is recommended', () => {
-    let recommendations = 0;
-    for (const gene of genes) {
-      for (const diplotype of diplotypes) {
-        const result = evaluate(knowledge, [called(gene, diplotype)]);
-        const phenotype = result.phenotypes.find((p) => p.gene === gene)!;
-        for (const rec of result.recommendations) {
-          if (rec.status !== 'recommendation') continue;
-          recommendations += 1;
-          // Independent oracle: read the guideline straight from the loaded file.
-          const guideline = knowledge.guidelinesForDrug(rec.drug).find((g) => g.gene === rec.gene)!;
-          const row = guideline.recommendations.find((r) => r.phenotype === rec.phenotype)!;
-          expect(row).toBeDefined();
-          expect(rec.recommendationText).toBe(row.recommendationText);
-          expect(rec.strength).toBe(row.strength);
-          expect(rec.guidelineVersion).toBe(guideline.guidelineVersion);
-          expect(rec.guidelineId).toBe(guideline.id);
-          expect(rec.implication).toBe(row.implication ?? null);
-          // ...and only for the gene that was called, with a determined phenotype.
-          expect(rec.gene).toBe(gene);
-          expect(phenotype.status).toBe('determined');
-          expect(phenotype.status === 'determined' && phenotype.phenotype).toBe(rec.phenotype);
-        }
-      }
+describe('evaluate: what may be shown, checked over EVERY combination of states for the combined table’s genes', () => {
+  // Every way GENEA and GENEE can arrive, including the ways that must never produce a recommendation.
+  const forGene = (gene: string, phenotypes: string[], diplotype?: string): GeneInput[][] => [
+    [], // absent
+    ...phenotypes.map((phenotype) => [canonical(gene, phenotype)]),
+    [canonical(gene, 'Not A Canonical Term')],
+    [{ gene, state: 'null' }],
+    [{ gene, state: 'unresolved', reasonCode: 'other-gene-unresolved' }],
+    [{ gene, state: 'unresolved', reasonCode: 'association-abstained' }],
+    [canonical(gene, phenotypes[0]!), canonical(gene, phenotypes[0]!)], // duplicate, identical
+    [canonical(gene, phenotypes[0]!), canonical(gene, phenotypes[1]!)], // duplicate, different
+    ...(diplotype ? [[{ gene, state: 'diplotype', diplotype } as GeneInput], [{ gene, state: 'diplotype', diplotype: '*9/*9' } as GeneInput]] : []),
+  ];
+  const geneA = forGene('GENEA', ['Synthetic Normal', 'Synthetic Intermediate', 'Synthetic Poor'], '*1/*3');
+  const geneE = forGene('GENEE', ['Synthetic Fast', 'Synthetic Slow']);
+  let allWording: string[];
+  let all: { inputs: GeneInput[]; result: EvaluationResult }[];
+  let results: DrugResult[];
+  beforeAll(() => {
+    allWording = knowledge.drugs().flatMap((drug) =>
+      knowledge.guidelinesForDrug(drug).flatMap((guideline) => guideline.recommendations.flatMap((row) => [row.recommendationText, ...(row.implication ? [row.implication] : [])])),
+    );
+    all = [];
+    for (const a of geneA) for (const e of geneE) {
+      const inputs = [...a, ...e];
+      all.push({ inputs, result: evaluate(knowledge, inputs) });
     }
-    expect(recommendations).toBeGreaterThan(40); // the loop really exercised the happy path
+    results = all.flatMap(({ result }) => result.results);
   });
 
-  it('never recommends anything for a gene that was not called or could not be called', () => {
-    const none = evaluate(knowledge, []);
-    expect(none.recommendations.every((r) => r.status === 'indeterminate')).toBe(true);
-    const unphased = evaluate(knowledge, [{ gene: 'GENEA', outcome: 'indeterminate', reasonCode: 'UNPHASED_VCF' }]);
-    expect(unphased.recommendations.filter((r) => r.status === 'recommendation' && r.gene === 'GENEA')).toEqual([]);
+  it('the sweep is large enough to mean something, and reaches every outcome', () => {
+    expect(all.length).toBeGreaterThan(100);
+    const floors = { shown: 20, held: 100, abstained: 5, 'no-published-recommendation': 2 } as const;
+    for (const [outcome, floor] of Object.entries(floors)) {
+      expect(results.filter((r) => r.outcome === outcome).length).toBeGreaterThanOrEqual(floor);
+    }
+    expect(all.every(({ result }) => evaluationResultSchema.safeParse(result).success)).toBe(true);
+  });
+
+  it('a result is shown only for a verified cell found by an independent lookup, with every gene canonical', () => {
+    const shown = results.filter((r): r is Extract<DrugResult, { outcome: 'shown' }> => r.outcome === 'shown');
+    expect(shown.length).toBeGreaterThan(20);
+    for (const result of shown) {
+      const guideline = knowledge.guidelinesForDrug(result.drug).find((g) => g.id === result.citation.guidelineId)!;
+      const row = guideline.recommendations.find((candidate) => result.geneStates.every((gene) => candidate.when[gene.gene] === gene.phenotype))!;
+      expect(row).toBeDefined();
+      expect(row.verification.state).toBe('verified');
+      expect(result.citation.verification).toBe('verified');
+      expect(result.recommendationText).toBe(row.recommendationText);
+      expect(result.strength).toBe(row.strength);
+      expect(row.strength).not.toBe('No recommendation');
+      expect(result.citation.locator).toEqual({ table: row.locator.table, row: row.locator.row, column: row.locator.column ?? null });
+      expect(result.geneStates.every((gene) => gene.state === 'canonical')).toBe(true);
+    }
+  });
+
+  it('whenever any gene behind a result is not a clean canonical phenotype, the result is never shown or "no published recommendation"', () => {
+    for (const result of results) {
+      if (result.outcome === 'no-guideline') continue;
+      if (result.geneStates.some((gene) => gene.state !== 'canonical')) {
+        expect(['held', 'abstained']).toContain(result.outcome);
+      }
+    }
+  });
+
+  it('the wording of a held, abstained or unverified-cell result never appears anywhere in it', () => {
+    for (const result of results) {
+      if (result.outcome !== 'held' && result.outcome !== 'abstained') continue;
+      const text = JSON.stringify(result);
+      for (const wording of allWording) expect(text.includes(wording)).toBe(false);
+    }
+    // ...including the cells that exist but are not verified.
+    const heldWithCell = results.filter((r): r is Extract<DrugResult, { outcome: 'held' }> => r.outcome === 'held' && r.citation !== null);
+    expect(heldWithCell.some((r) => r.reasonCode === 'out-of-review-scope')).toBe(true);
+    expect(heldWithCell.some((r) => r.reasonCode === 'cell-disputed')).toBe(true);
+  });
+
+  it('every non-shown result carries a reason whose outcome is the one it reports', () => {
+    for (const result of results) {
+      if (result.outcome === 'shown') continue;
+      expect(REASON_OUTCOME[result.reasonCode]).toBe(result.outcome);
+    }
+  });
+
+  it('a table replaced by a combined one is never shown on its own, whatever the genes do', () => {
+    const drugv = results.filter((r) => r.drug === 'drugv');
+    expect(drugv.length).toBe(all.length); // exactly one result per evaluation
+    for (const result of drugv) {
+      expect(result.genes).toEqual(['GENEA', 'GENEE']);
+      if (result.outcome === 'shown' || result.outcome === 'held' || result.outcome === 'no-published-recommendation') {
+        expect(result.citation?.guidelineId ?? 'drugv-genea-genee').toBe('drugv-genea-genee');
+      }
+    }
   });
 });
 
 describe('evaluate: determinism and purity', () => {
-  const calls = [called('GENEC', '*2/*1'), called('GENEA', '*1/*3'), called('GENEB', '*2/*4')];
+  const inputs: GeneInput[] = [canonical('GENEC', 'Synthetic Alpha'), canonical('GENEA', 'Synthetic Intermediate'), { gene: 'GENEB', state: 'diplotype', diplotype: '*2/*4' }];
 
   it('gives identical output for identical input, in a fixed order', () => {
-    const first = evaluate(knowledge, calls);
-    for (let i = 0; i < 5; i += 1) expect(evaluate(knowledge, calls)).toEqual(first);
-    expect(first.phenotypes.map((p) => p.gene)).toEqual(['GENEA', 'GENEB', 'GENEC']);
-    expect(first.recommendations.map((r) => r.drug)).toEqual([...first.recommendations.map((r) => r.drug)].sort());
+    const first = evaluate(knowledge, inputs);
+    for (let i = 0; i < 5; i += 1) expect(evaluate(knowledge, inputs)).toEqual(first);
+    expect(first.geneStates.map((g) => g.gene)).toEqual([...first.geneStates.map((g) => g.gene)].sort());
+    expect(first.results.map((r) => r.drug)).toEqual([...first.results.map((r) => r.drug)].sort());
   });
 
-  it('does not depend on the order of calls or of drugs, and a repeated drug is evaluated once', () => {
-    const forward = evaluate(knowledge, calls, { drugs: ['drugx', 'drugy'] });
-    expect(evaluate(knowledge, [...calls].reverse(), { drugs: ['drugy', 'drugx', 'drugx'] })).toEqual(forward);
+  it('does not depend on the order of inputs or of drugs, and a repeated drug is evaluated once', () => {
+    const forward = evaluate(knowledge, inputs, { drugs: ['drugx', 'drugy'] });
+    expect(evaluate(knowledge, [...inputs].reverse(), { drugs: ['drugy', 'drugx', 'drugx'] })).toEqual(forward);
   });
 
-  it('does not change its inputs', () => {
-    const frozenCalls = deepFreeze(structuredClone(calls));
-    const frozenOptions = deepFreeze({ drugs: ['drugx'] });
-    const before = JSON.stringify(knowledge.guidelinesForDrug('drugx'));
-    expect(() => evaluate(knowledge, frozenCalls, frozenOptions)).not.toThrow();
-    expect(JSON.stringify(knowledge.guidelinesForDrug('drugx'))).toBe(before);
+  it('does not change its inputs or the knowledge', () => {
+    const frozen = deepFreeze(structuredClone(inputs));
+    const before = JSON.stringify(knowledge.guidelinesForDrug('drugv'));
+    expect(() => evaluate(knowledge, frozen, deepFreeze({ drugs: ['drugx', 'drugv'] }))).not.toThrow();
+    expect(JSON.stringify(knowledge.guidelinesForDrug('drugv'))).toBe(before);
   });
 
   it('an empty drug list means "no drugs", not "all drugs"', () => {
-    expect(evaluate(knowledge, calls, { drugs: [] }).recommendations).toEqual([]);
-    expect(evaluate(knowledge, calls).recommendations.length).toBeGreaterThan(0);
+    expect(evaluate(knowledge, inputs, { drugs: [] }).results).toEqual([]);
+    expect(evaluate(knowledge, inputs).results.length).toBeGreaterThan(0);
   });
 });
 
 describe('evaluate: privacy', () => {
-  it('never copies a value from the report into an indeterminate result', () => {
-    const result = evaluate(knowledge, [called('GENEA', '*SECRET-ONE/*1'), called('GENEC', '*SECRET-TWO|*1')]);
+  it('never copies a value from the report into a result', () => {
+    const result = evaluate(knowledge, [
+      canonical('GENEA', 'SECRET-PHENOTYPE'),
+      { gene: 'GENEC', state: 'diplotype', diplotype: '*SECRET-ONE|*1' },
+      { gene: 'GENEB', state: 'diplotype', diplotype: '*SECRET-TWO/*1' },
+    ]);
     expect(JSON.stringify(result)).not.toContain('SECRET');
   });
 });
@@ -151,12 +203,13 @@ describe('evaluate: when no guidelines are loaded', () => {
     empty = await loadKnowledge({ directory: dir, mode: 'production' });
   });
 
-  it('says so for a requested drug, and invents nothing', () => {
-    const result: EvaluationResult = evaluate(empty, [called('GENEA', '*1/*1')], { drugs: ['drugx'] });
-    expect(result.phenotypes).toEqual([{ status: 'indeterminate', gene: 'GENEA', reasonCode: 'NO_GENE_DEFINITION' }]);
-    expect(result.recommendations).toEqual([{ status: 'indeterminate', drug: 'drugx', gene: null, reasonCode: 'NO_MATCHING_GUIDELINE' }]);
+  it('says so for a requested drug, and cannot interpret any gene', () => {
+    const result = evaluate(empty, [canonical('GENEA', 'Synthetic Normal')], { drugs: ['drugx'] });
+    expect(result.geneStates).toEqual([{ gene: 'GENEA', state: 'unresolved', phenotype: null, diplotype: null, activityScore: null, reasonCode: 'no-gene-definition' }]);
+    expect(result.results).toEqual([{ outcome: 'no-guideline', drug: 'drugx', genes: [], geneStates: [], reasonCode: 'no-guideline-for-drug' }]);
   });
+
   it('has nothing to evaluate when no drug is named', () => {
-    expect(evaluate(empty, [called('GENEA', '*1/*1')]).recommendations).toEqual([]);
+    expect(evaluate(empty, [canonical('GENEA', 'Synthetic Normal')]).results).toEqual([]);
   });
 });

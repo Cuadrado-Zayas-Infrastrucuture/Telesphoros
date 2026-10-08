@@ -1,11 +1,11 @@
 {
   "name": "wording-is-copied-verbatim",
   "description": "Guideline wording (non-breaking space, double space, accent) reaches the result unchanged.",
-  "calls": [
+  "inputs": [
     {
       "gene": "GENEA",
-      "outcome": "called",
-      "diplotype": "*1/*1"
+      "state": "canonical",
+      "phenotype": "Synthetic Normal"
     }
   ],
   "drugs": [
@@ -13,26 +13,43 @@
   ],
   "expected": {
     "knowledgeSetId": "$KNOWLEDGE_SET_ID",
-    "phenotypes": [
+    "geneStates": [
       {
-        "status": "determined",
         "gene": "GENEA",
-        "diplotype": "*1/*1",
+        "state": "canonical",
         "phenotype": "Synthetic Normal",
-        "activityScore": null
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": null
       }
     ],
-    "recommendations": [
+    "results": [
       {
-        "status": "recommendation",
-        "gene": "GENEA",
+        "outcome": "shown",
         "drug": "drugw",
-        "diplotype": "*1/*1",
-        "phenotype": "Synthetic Normal",
+        "genes": [
+          "GENEA"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "canonical",
+            "phenotype": "Synthetic Normal",
+            "reasonCode": null
+          }
+        ],
         "strength": "Strong",
-        "guidelineId": "drugw-genea",
-        "guidelineVersion": "synthetic-1",
-        "sourceUrl": "https://example.invalid/synthetic",
+        "citation": {
+          "guidelineId": "drugw-genea",
+          "guidelineVersion": "synthetic-1",
+          "sourceUrl": "https://example.invalid/synthetic",
+          "locator": {
+            "table": "Synthetic Table 1",
+            "row": "Synthetic Normal",
+            "column": null
+          },
+          "verification": "verified"
+        },
         "recommendationText": "Synthetic wording.  Two spaces, a non-breaking space, and a é are kept exactly.",
         "implication": null
       }

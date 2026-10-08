@@ -1,0 +1,56 @@
+{
+  "name": "unverified-cell-is-held-and-shows-no-wording",
+  "description": "The cell exists but has not been verified: held as out-of-review-scope, with its location and no wording.",
+  "inputs": [
+    {
+      "gene": "GENEB",
+      "state": "canonical",
+      "phenotype": "Synthetic Medium"
+    }
+  ],
+  "drugs": [
+    "drugy"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [
+      {
+        "gene": "GENEB",
+        "state": "canonical",
+        "phenotype": "Synthetic Medium",
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": null
+      }
+    ],
+    "results": [
+      {
+        "outcome": "held",
+        "drug": "drugy",
+        "genes": [
+          "GENEB"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEB",
+            "state": "canonical",
+            "phenotype": "Synthetic Medium",
+            "reasonCode": null
+          }
+        ],
+        "reasonCode": "out-of-review-scope",
+        "citation": {
+          "guidelineId": "drugy-geneb",
+          "guidelineVersion": "synthetic-1",
+          "sourceUrl": "https://example.invalid/synthetic",
+          "locator": {
+            "table": "Synthetic Table 1",
+            "row": "Synthetic Medium",
+            "column": null
+          },
+          "verification": "unverified"
+        }
+      }
+    ]
+  }
+}

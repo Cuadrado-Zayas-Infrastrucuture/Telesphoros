@@ -1,0 +1,76 @@
+{
+  "name": "combined-table-cell-disputed",
+  "description": "A disputed combined cell: held, and the single-gene row it replaces is NOT used instead.",
+  "inputs": [
+    {
+      "gene": "GENEA",
+      "state": "canonical",
+      "phenotype": "Synthetic Intermediate"
+    },
+    {
+      "gene": "GENEE",
+      "state": "canonical",
+      "phenotype": "Synthetic Slow"
+    }
+  ],
+  "drugs": [
+    "drugv"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [
+      {
+        "gene": "GENEA",
+        "state": "canonical",
+        "phenotype": "Synthetic Intermediate",
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": null
+      },
+      {
+        "gene": "GENEE",
+        "state": "canonical",
+        "phenotype": "Synthetic Slow",
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": null
+      }
+    ],
+    "results": [
+      {
+        "outcome": "held",
+        "drug": "drugv",
+        "genes": [
+          "GENEA",
+          "GENEE"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "canonical",
+            "phenotype": "Synthetic Intermediate",
+            "reasonCode": null
+          },
+          {
+            "gene": "GENEE",
+            "state": "canonical",
+            "phenotype": "Synthetic Slow",
+            "reasonCode": null
+          }
+        ],
+        "reasonCode": "cell-disputed",
+        "citation": {
+          "guidelineId": "drugv-genea-genee",
+          "guidelineVersion": "synthetic-1",
+          "sourceUrl": "https://example.invalid/synthetic",
+          "locator": {
+            "table": "Synthetic Table 2",
+            "row": "Synthetic Intermediate",
+            "column": "Synthetic Slow"
+          },
+          "verification": "disputed"
+        }
+      }
+    ]
+  }
+}

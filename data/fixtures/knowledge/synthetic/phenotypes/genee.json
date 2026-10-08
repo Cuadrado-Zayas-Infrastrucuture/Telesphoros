@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "1.1",
+  "synthetic": true,
+  "provenance": {
+    "source": "SYNTHETIC TEST FIXTURE - not CPIC content",
+    "sourceUrl": "https://example.invalid/synthetic",
+    "retrievedAt": "2026-01-01",
+    "sourceVersion": "synthetic-1"
+  },
+  "review": {
+    "status": "unreviewed"
+  },
+  "id": "genee",
+  "kind": "gene-phenotype-map",
+  "gene": "GENEE",
+  "phenotypes": [
+    "Synthetic Fast",
+    "Synthetic Slow"
+  ]
+}

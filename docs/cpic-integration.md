@@ -1,6 +1,6 @@
 # CPIC knowledge: format, sign-off and rules
 
-> **Status (PR 5A):** the schemas, loader and engine are built and tested on **synthetic fixtures only**.
+> **Status (PR 5B-1):** the schemas, loader and engine are built and tested on **synthetic fixtures only**.
 > `knowledge/cpic/` is empty on purpose: no real CPIC content has been fetched or reviewed yet. Until it
 > has been, the system reports "no guideline loaded" instead of recommending anything.
 
@@ -23,21 +23,23 @@ error, never skipped**, because skipped knowledge looks exactly like "no guideli
 Test content lives elsewhere (`data/fixtures/knowledge/synthetic/`, invented genes `GENEA`–`GENED`). Every file
 there is `synthetic: true`.
 
-## File format (schema version `1.0`)
+## File format (schema version `1.1`)
 
 Every file starts with the same envelope:
 
 | Field | Meaning |
 | --- | --- |
-| `schemaVersion` | `"1.0"` |
+| `schemaVersion` | `"1.1"` |
 | `id` | lower-case letters, digits, dashes; equals the file name |
 | `kind` | `gene-phenotype-map` or `guideline` |
 | `synthetic` | `true` for invented test content. Refused in production; can never be signed off |
 | `provenance` | `source`, `sourceUrl` (https), `retrievedAt` (date), `sourceVersion` |
 | `review` | `{status: "unreviewed"}` or `{status: "reviewed", reviewedBy, reviewedAt, contentSha256}` |
 
-**Gene map** (`kind: gene-phenotype-map`): `gene`, `alleles` (name, function, optional `activityValue`),
-`phenotypes` (every term the tables may produce) and one `method`:
+**Gene map** (`kind: gene-phenotype-map`): `gene` and `phenotypes` (every canonical term the gene can have;
+reported phenotypes and guideline cells may only use these). To accept a **diplotype** as input, also give
+`alleles` (name, function, optional `activityValue`) and one `method`; a gene a lab reports as a phenotype needs
+neither (give both or neither):
 
 - `diplotype-table`: explicit rows `{diplotype, phenotype}`. Row order of the two alleles does not matter.
 - `function-pair`: rows `{functions: [a, b], phenotype}` over the alleles' functional status. Order does not matter.
@@ -45,12 +47,21 @@ Every file starts with the same envelope:
   (`min`/`max`, each with an explicit `…Inclusive`). Scores are compared in whole hundredths, so there is no
   floating-point error. Ranges must not overlap; gaps are allowed and mean "no phenotype".
 
-**Guideline** (`kind: guideline`): `drug` (lower case), `gene`, `guidelineVersion`, `title`, and
-`recommendations`: one row per phenotype with `strength` (`Strong`, `Moderate`, `Optional`,
-`No recommendation`), `recommendationText` (copied verbatim, never rewritten) and optional `implication`.
+**Guideline** (`kind: guideline`): `drug` (lower case), `guidelineVersion`, `title`, `genes` (one for a single-gene
+table, several for a combined table), `supersedes` (ids of narrower guidelines for the same drug that a combined
+table replaces; `[]` if none) and `recommendations`: one **cell** per combination of phenotypes:
 
-Schema 1.0 limits (stated so nobody assumes more): **one gene per guideline; diploid genes written
-`allele/allele`; no copy-number or structural variants; no multi-gene guidelines.**
+- `when`: a phenotype for each of the guideline's genes (exactly those genes)
+- `locator`: `table`, `row`, and `column` for a combined table, as the guideline prints them
+- `verification`: `{state: "unverified"}`, `{state: "verified", verifiedBy, verifiedAt}` or `{state: "disputed", note}`
+- `strength` (`Strong`, `Moderate`, `Optional`, `No recommendation`), `recommendationText` (copied verbatim, never
+  rewritten) and optional `implication`
+
+Only `verified` cells can ever be shown. The five outcomes, the reason codes and the rules above are in
+[design/outcomes-and-reason-codes.md](design/outcomes-and-reason-codes.md).
+
+Schema 1.1 limits (stated so nobody assumes more): **at most four genes per guideline; diploid genes written
+`allele/allele`; no copy-number or structural variants.**
 
 ## Review and sign-off
 
@@ -65,8 +76,10 @@ loader rejects it, in every environment**, until someone reviews it again.
 
 ## What the loader enforces (`services/knowledge/knowledge-loader.ts`)
 
-- Everything above, plus: unique ids; one gene map per gene; one guideline per drug and gene; every
-  guideline's gene has a map; every guideline phenotype is one the map defines.
+- Everything above, plus: unique ids; one gene map per gene; one guideline per drug and set of genes (however the
+  genes are ordered); every gene a guideline uses has a map; every phenotype in a cell is one that gene's map defines.
+- `supersedes` is checked: the replaced guidelines must exist, be for the same drug, cover a smaller subset of the
+  genes, not themselves supersede others (no chains), and be replaced by only one table.
 - **Production** (`mode: "production"`, and also any mode that is not exactly `"non-production"`):
   refuses `synthetic` files and anything not `reviewed`. All problems are listed together.
 - A test (`knowledge-loader.spec.ts`) loads the real `knowledge/cpic/` under the production rules, so
@@ -78,27 +91,15 @@ fails) arrives with the processing pipeline in PR 5B.
 
 ## What the engine returns
 
-`evaluate(knowledge, calls, {drugs?})` returns, for each gene, a phenotype and, for each drug, one result per
-guideline. Either a **recommendation** (wording, `strength`, `guidelineId`, `guidelineVersion` and `sourceUrl`
-as separate fields), or **indeterminate with a reason code**, never a guess:
-
-| Code | Meaning |
-| --- | --- |
-| `UNPHASED_VCF`, `STRUCTURAL_VARIANT`, `MULTIALLELIC_SITE` | the parser could not make a call (reported by the parser) |
-| `ALLELE_NOT_IN_DEFINITIONS`, `MALFORMED_DIPLOTYPE` | the diplotype text is unusable |
-| `NO_GENE_DEFINITION` | no tables for this gene |
-| `NO_PHENOTYPE_MAPPING` | the tables define no phenotype for this combination |
-| `CONFLICTING_CALLS` | the report gives different results for one gene; none is picked |
-| `GENE_NOT_IN_REPORT` | the guideline needs a gene the report lacks |
-| `NO_MATCHING_GUIDELINE` | no loaded guideline covers the drug |
-| `PHENOTYPE_NOT_IN_GUIDELINE` | the guideline has no row for this phenotype |
-
-Messages for these codes are fixed text (`REASON_MESSAGES`). No genotype, diplotype or allele from a report is
-ever copied into a reason, a message or an error.
+`evaluate(knowledge, geneInputs, {drugs?})` takes one input per occurrence of a gene in the report (a canonical
+phenotype, a diplotype, a "no result" marker, or "unresolved") and returns the resolved state of each gene plus one
+result per drug and guideline, each one of the five outcomes with its reason code, version stamps (`knowledgeSetId`,
+guideline id and version, source URL) and, where a cell applies, its citation. Details, precedence and the choices
+awaiting confirmation: [design/outcomes-and-reason-codes.md](design/outcomes-and-reason-codes.md).
 
 ## Not done yet
 
 - Real CPIC content: needs `api.cpicpgx.org` reachable, then a pharmacist's review. Do not write guideline
   text by hand.
 - A cross-check of every diplotype against CPIC's own published lookup (separate, gated step).
-- Report parsers, the processing pipeline, database tables, the API and the UI (PR 5B–5D).
+- The report adapter, the processing pipeline, database tables, the API and the UI (PR 5B-2 onward).

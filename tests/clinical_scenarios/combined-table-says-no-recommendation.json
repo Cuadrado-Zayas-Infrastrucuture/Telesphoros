@@ -1,0 +1,79 @@
+{
+  "name": "combined-table-says-no-recommendation",
+  "description": "A verified combined cell that says \"No recommendation\".",
+  "inputs": [
+    {
+      "gene": "GENEA",
+      "state": "canonical",
+      "phenotype": "Synthetic Intermediate"
+    },
+    {
+      "gene": "GENEE",
+      "state": "canonical",
+      "phenotype": "Synthetic Fast"
+    }
+  ],
+  "drugs": [
+    "drugv"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [
+      {
+        "gene": "GENEA",
+        "state": "canonical",
+        "phenotype": "Synthetic Intermediate",
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": null
+      },
+      {
+        "gene": "GENEE",
+        "state": "canonical",
+        "phenotype": "Synthetic Fast",
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": null
+      }
+    ],
+    "results": [
+      {
+        "outcome": "no-published-recommendation",
+        "drug": "drugv",
+        "genes": [
+          "GENEA",
+          "GENEE"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "canonical",
+            "phenotype": "Synthetic Intermediate",
+            "reasonCode": null
+          },
+          {
+            "gene": "GENEE",
+            "state": "canonical",
+            "phenotype": "Synthetic Fast",
+            "reasonCode": null
+          }
+        ],
+        "reasonCode": "no-published-recommendation",
+        "citation": {
+          "guidelineId": "drugv-genea-genee",
+          "guidelineVersion": "synthetic-1",
+          "sourceUrl": "https://example.invalid/synthetic",
+          "locator": {
+            "table": "Synthetic Table 2",
+            "row": "Synthetic Intermediate",
+            "column": "Synthetic Fast"
+          },
+          "verification": "verified"
+        },
+        "strength": "No recommendation",
+        "recommendationText": "V intermediate-fast: no recommendation.",
+        "implication": null
+      }
+    ]
+  }
+}

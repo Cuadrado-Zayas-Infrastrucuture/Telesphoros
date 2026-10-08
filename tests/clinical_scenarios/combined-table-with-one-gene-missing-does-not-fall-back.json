@@ -1,0 +1,61 @@
+{
+  "name": "combined-table-with-one-gene-missing-does-not-fall-back",
+  "description": "GENEE is missing: the drug is held. The single-gene GENEA row is NOT shown instead.",
+  "inputs": [
+    {
+      "gene": "GENEA",
+      "state": "canonical",
+      "phenotype": "Synthetic Normal"
+    }
+  ],
+  "drugs": [
+    "drugv"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [
+      {
+        "gene": "GENEA",
+        "state": "canonical",
+        "phenotype": "Synthetic Normal",
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": null
+      },
+      {
+        "gene": "GENEE",
+        "state": "absent",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "gene-absent"
+      }
+    ],
+    "results": [
+      {
+        "outcome": "held",
+        "drug": "drugv",
+        "genes": [
+          "GENEA",
+          "GENEE"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "canonical",
+            "phenotype": "Synthetic Normal",
+            "reasonCode": null
+          },
+          {
+            "gene": "GENEE",
+            "state": "absent",
+            "phenotype": null,
+            "reasonCode": "gene-absent"
+          }
+        ],
+        "reasonCode": "gene-absent",
+        "citation": null
+      }
+    ]
+  }
+}

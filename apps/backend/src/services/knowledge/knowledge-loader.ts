@@ -2,7 +2,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type GeneMapFile, type GuidelineFile, knowledgeFileSchema, type KnowledgeFile } from '@telesphoros/cpic-schema';
 import { contentSha256, fullSha256, knowledgeSetId } from './content-hash';
-import { type KnowledgeFileInfo, KnowledgeSet } from './knowledge-set';
+import { genesKey, type KnowledgeFileInfo, KnowledgeSet } from './knowledge-set';
 
 export type KnowledgeMode = 'production' | 'non-production';
 
@@ -78,8 +78,8 @@ export async function loadKnowledge(options: LoadKnowledgeOptions): Promise<Know
       if (geneMaps.has(file.gene)) problems.push(`${path}: gene ${file.gene} already has a phenotype map.`);
       geneMaps.set(file.gene, file);
     } else {
-      const key = `${file.drug}\0${file.gene}`;
-      if (guidelineKeys.has(key)) problems.push(`${path}: there is already a guideline for ${file.drug} and ${file.gene}.`);
+      const key = `${file.drug}\0${genesKey(file)}`;
+      if (guidelineKeys.has(key)) problems.push(`${path}: there is already a guideline for ${file.drug} and ${file.genes.join(' + ')}.`);
       guidelineKeys.add(key);
       guidelines.push(file);
     }
@@ -94,24 +94,57 @@ export async function loadKnowledge(options: LoadKnowledgeOptions): Promise<Know
     });
   }
 
+  const guidelineById = new Map(guidelines.map((guideline) => [guideline.id, guideline]));
+  const supersededBy = new Map<string, string>();
   for (const { path, file } of candidates) {
     if (file.kind !== 'guideline') continue;
-    const map = geneMaps.get(file.gene);
-    if (!map) {
-      problems.push(`${path}: no phenotype map exists for gene ${file.gene}.`);
-      continue;
-    }
-    for (const row of file.recommendations) {
-      if (!map.phenotypes.includes(row.phenotype)) {
-        problems.push(`${path}: phenotype "${row.phenotype}" is not one of the phenotypes defined for ${file.gene}.`);
+    for (const gene of file.genes) {
+      const map = geneMaps.get(gene);
+      if (!map) {
+        problems.push(`${path}: no phenotype map exists for gene ${gene}.`);
+        continue;
+      }
+      for (const row of file.recommendations) {
+        const phenotype = row.when[gene];
+        if (phenotype !== undefined && !map.phenotypes.includes(phenotype)) {
+          problems.push(`${path}: phenotype "${phenotype}" is not one of the phenotypes defined for ${gene}.`);
+        }
       }
     }
+    checkSupersession(path, file, guidelineById, supersededBy, problems);
   }
 
   if (problems.length > 0) throw new KnowledgeLoadError(problems);
 
   const id = knowledgeSetId(candidates.map(({ path, file }) => ({ path, fullSha256: fullSha256(file) })));
   return new KnowledgeSet(id, strict ? 'production' : 'non-production', [...geneMaps.values()], guidelines, infos);
+}
+
+/**
+ * A combined table may replace narrower single-gene tables for the same drug. The replaced tables
+ * are then never shown on their own, so a mistake here would hide a guideline or allow a fallback.
+ */
+function checkSupersession(
+  path: string,
+  file: GuidelineFile,
+  byId: ReadonlyMap<string, GuidelineFile>,
+  supersededBy: Map<string, string>,
+  problems: string[],
+): void {
+  for (const id of file.supersedes) {
+    const target = byId.get(id);
+    if (!target) {
+      problems.push(`${path}: supersedes "${id}", which is not a loaded guideline.`);
+      continue;
+    }
+    if (target.drug !== file.drug) problems.push(`${path}: supersedes "${id}", which is for a different drug.`);
+    const covered = target.genes.every((gene) => file.genes.includes(gene)) && target.genes.length < file.genes.length;
+    if (!covered) problems.push(`${path}: supersedes "${id}", whose genes are not a smaller subset of this guideline's genes.`);
+    if (target.supersedes.length > 0) problems.push(`${path}: supersedes "${id}", which itself supersedes others (chains are not allowed).`);
+    const other = supersededBy.get(id);
+    if (other !== undefined && other !== file.id) problems.push(`${path}: "${id}" is already superseded by "${other}".`);
+    supersededBy.set(id, file.id);
+  }
 }
 
 async function readCandidates(directory: string, problems: string[]): Promise<Candidate[]> {

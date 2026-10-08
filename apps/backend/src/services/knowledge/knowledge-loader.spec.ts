@@ -20,12 +20,13 @@ async function problemsOf(directory: string, mode: 'production' | 'non-productio
 describe('loadKnowledge: the fixtures', () => {
   it('loads the synthetic fixtures outside production', async () => {
     const set = await loadKnowledge({ directory: SYNTHETIC_DIR, mode: 'non-production' });
-    expect(set.files).toHaveLength(8);
-    expect(set.guidelineCount).toBe(4);
-    expect(set.drugs()).toEqual(['drugw', 'drugx', 'drugy']);
+    expect(set.files).toHaveLength(11);
+    expect(set.guidelineCount).toBe(6);
+    expect(set.drugs()).toEqual(['drugv', 'drugw', 'drugx', 'drugy']);
     expect(set.gene('GENEA')?.gene).toBe('GENEA');
     expect(set.gene('NOPE')).toBeUndefined();
-    expect(set.guidelinesForDrug('drugx').map((g) => g.gene)).toEqual(['GENEA', 'GENEC']);
+    expect(set.guidelinesForDrug('drugx').map((g) => g.genes.join('+'))).toEqual(['GENEA', 'GENEC']);
+    expect(set.guidelinesForDrug('drugv').map((g) => g.genes.join('+'))).toEqual(['GENEA', 'GENEA+GENEE']);
     expect(set.guidelinesForDrug('nope')).toEqual([]);
     expect(set.containsSynthetic).toBe(true);
     expect(set.allReviewed).toBe(false);
@@ -50,8 +51,8 @@ describe('loadKnowledge: the fixtures', () => {
 describe('loadKnowledge: production rules', () => {
   it('refuses every synthetic and unreviewed file, naming each one', async () => {
     const problems = await problemsOf(SYNTHETIC_DIR, 'production');
-    expect(problems.filter((p) => p.includes('synthetic test content is not allowed in production'))).toHaveLength(8);
-    expect(problems.filter((p) => p.includes('unreviewed content is not allowed in production'))).toHaveLength(8);
+    expect(problems.filter((p) => p.includes('synthetic test content is not allowed in production'))).toHaveLength(11);
+    expect(problems.filter((p) => p.includes('unreviewed content is not allowed in production'))).toHaveLength(11);
   });
 
   it('fails closed when the mode is missing or misspelled', async () => {
@@ -184,13 +185,23 @@ describe('loadKnowledge: cross-file consistency', () => {
   it('rejects a guideline for a gene with no map, and a phenotype the map does not define', async () => {
     const dir = await copyOf(SYNTHETIC_DIR);
     const guideline = (await readJson(join(dir, 'guidelines/drugy-geneb.json'))) as GuidelineFile;
-    await writeJson(join(dir, 'guidelines/drugq-genez.json'), { ...guideline, id: 'drugq-genez', drug: 'drugq', gene: 'GENEZ' });
+    const rowsFor = (gene: string) => guideline.recommendations.map((row) => ({ ...row, when: { [gene]: Object.values(row.when)[0]! } }));
+    await writeJson(join(dir, 'guidelines/drugq-genez.json'), { ...guideline, id: 'drugq-genez', drug: 'drugq', genes: ['GENEZ'], recommendations: rowsFor('GENEZ') });
     const other = (await readJson(join(dir, 'guidelines/drugx-genea.json'))) as GuidelineFile;
-    other.recommendations[0]!.phenotype = 'Synthetic Ultra';
+    other.recommendations[0]!.when = { GENEA: 'Synthetic Ultra' };
     await writeJson(join(dir, 'guidelines/drugx-genea.json'), other);
     const text = (await problemsOf(dir)).join('\n');
     expect(text).toContain('no phenotype map exists for gene GENEZ');
     expect(text).toContain('phenotype "Synthetic Ultra" is not one of the phenotypes defined for GENEA');
+  });
+
+  it('a combined table must be read against a phenotype defined for EACH of its genes', async () => {
+    const dir = await copyOf(SYNTHETIC_DIR);
+    const path = join(dir, 'guidelines/drugv-genea-genee.json');
+    const combined = (await readJson(path)) as GuidelineFile;
+    combined.recommendations[0]!.when = { GENEA: 'Synthetic Normal', GENEE: 'Synthetic Ultra' };
+    await writeJson(path, combined);
+    expect((await problemsOf(dir)).join('\n')).toContain('phenotype "Synthetic Ultra" is not one of the phenotypes defined for GENEE');
   });
 
   it('reports every problem together, not only the first', async () => {
@@ -209,5 +220,64 @@ describe('loadKnowledge: an empty knowledge directory', () => {
     const set = await loadKnowledge({ directory: dir, mode: 'production' });
     expect(set.isEmpty).toBe(true);
     expect(set.drugs()).toEqual([]);
+  });
+});
+
+describe('loadKnowledge: a combined table replacing narrower ones (supersedes)', () => {
+  const variant = async (change: (dir: string, combined: GuidelineFile) => Promise<void> | void) => {
+    const dir = await copyOf(SYNTHETIC_DIR);
+    const path = join(dir, 'guidelines/drugv-genea-genee.json');
+    const combined = (await readJson(path)) as GuidelineFile;
+    await change(dir, combined);
+    await writeJson(path, combined);
+    return (await problemsOf(dir)).join('\n');
+  };
+  const extra = async (dir: string, id: string, fields: Partial<GuidelineFile>) => {
+    const template = (await readJson(join(dir, 'guidelines/drugv-genea.json'))) as GuidelineFile;
+    await writeJson(join(dir, `guidelines/${id}.json`), { ...template, id, ...fields });
+  };
+
+  it('is accepted as shipped in the fixtures', async () => {
+    expect(await problemsOf(SYNTHETIC_DIR)).toEqual([]);
+  });
+
+  it('refuses to supersede something that is not loaded', async () => {
+    expect(await variant((_dir, c) => void (c.supersedes = ['drugv-nothing']))).toContain('supersedes "drugv-nothing", which is not a loaded guideline');
+  });
+
+  it('refuses to supersede a guideline for a different drug', async () => {
+    expect(await variant((_dir, c) => void (c.supersedes = ['drugw-genea']))).toContain('which is for a different drug');
+  });
+
+  it('refuses to supersede a guideline whose genes are not a smaller subset', async () => {
+    const text = await variant(async (dir, c) => {
+      await extra(dir, 'drugv-geneb', { genes: ['GENEB'], recommendations: [{ ...(await readJson(join(dir, 'guidelines/drugy-geneb.json')) as GuidelineFile).recommendations[0]!, when: { GENEB: 'Synthetic Low' } }] });
+      c.supersedes = ['drugv-geneb'];
+    });
+    expect(text).toContain('whose genes are not a smaller subset');
+  });
+
+  it('refuses a chain: a superseded guideline may not itself supersede others', async () => {
+    const text = await variant(async (dir) => {
+      const row = { ...(await readJson(join(dir, 'guidelines/drugv-genea-genee.json')) as GuidelineFile).recommendations[0]!, when: { GENEA: 'Synthetic Normal', GENEC: 'Synthetic Alpha', GENEE: 'Synthetic Fast' } };
+      await extra(dir, 'drugv-three-genes', { genes: ['GENEA', 'GENEC', 'GENEE'], supersedes: ['drugv-genea-genee'], recommendations: [row] });
+    });
+    expect(text).toContain('which itself supersedes others (chains are not allowed)');
+  });
+
+  it('refuses a guideline that two different tables both claim to replace', async () => {
+    const text = await variant(async (dir) => {
+      const row = { ...(await readJson(join(dir, 'guidelines/drugv-genea-genee.json')) as GuidelineFile).recommendations[0]!, when: { GENEA: 'Synthetic Normal', GENEC: 'Synthetic Alpha' } };
+      await extra(dir, 'drugv-genea-genec', { genes: ['GENEA', 'GENEC'], supersedes: ['drugv-genea'], recommendations: [row] });
+    });
+    expect(text).toContain('is already superseded by');
+  });
+
+  it('two tables for the same drug and the same genes are refused whatever order the genes are listed in', async () => {
+    const text = await variant(async (dir) => {
+      const combined = (await readJson(join(dir, 'guidelines/drugv-genea-genee.json'))) as GuidelineFile;
+      await writeJson(join(dir, 'guidelines/drugv-reordered.json'), { ...combined, id: 'drugv-reordered', genes: ['GENEE', 'GENEA'], supersedes: [] });
+    });
+    expect(text).toContain('there is already a guideline for drugv and GENEE + GENEA');
   });
 });

@@ -1,0 +1,58 @@
+{
+  "name": "shown-single-gene",
+  "description": "A canonical phenotype, a verified cell: the guideline wording is shown with its citation.",
+  "inputs": [
+    {
+      "gene": "GENEA",
+      "state": "canonical",
+      "phenotype": "Synthetic Intermediate"
+    }
+  ],
+  "drugs": [
+    "drugw"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [
+      {
+        "gene": "GENEA",
+        "state": "canonical",
+        "phenotype": "Synthetic Intermediate",
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": null
+      }
+    ],
+    "results": [
+      {
+        "outcome": "shown",
+        "drug": "drugw",
+        "genes": [
+          "GENEA"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "canonical",
+            "phenotype": "Synthetic Intermediate",
+            "reasonCode": null
+          }
+        ],
+        "strength": "Moderate",
+        "citation": {
+          "guidelineId": "drugw-genea",
+          "guidelineVersion": "synthetic-1",
+          "sourceUrl": "https://example.invalid/synthetic",
+          "locator": {
+            "table": "Synthetic Table 1",
+            "row": "Synthetic Intermediate",
+            "column": null
+          },
+          "verification": "verified"
+        },
+        "recommendationText": "W intermediate.",
+        "implication": null
+      }
+    ]
+  }
+}

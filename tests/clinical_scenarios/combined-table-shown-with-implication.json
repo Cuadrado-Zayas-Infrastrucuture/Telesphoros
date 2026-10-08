@@ -1,0 +1,78 @@
+{
+  "name": "combined-table-shown-with-implication",
+  "description": "A second verified combined cell, with its implication.",
+  "inputs": [
+    {
+      "gene": "GENEA",
+      "state": "canonical",
+      "phenotype": "Synthetic Normal"
+    },
+    {
+      "gene": "GENEE",
+      "state": "canonical",
+      "phenotype": "Synthetic Slow"
+    }
+  ],
+  "drugs": [
+    "drugv"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [
+      {
+        "gene": "GENEA",
+        "state": "canonical",
+        "phenotype": "Synthetic Normal",
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": null
+      },
+      {
+        "gene": "GENEE",
+        "state": "canonical",
+        "phenotype": "Synthetic Slow",
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": null
+      }
+    ],
+    "results": [
+      {
+        "outcome": "shown",
+        "drug": "drugv",
+        "genes": [
+          "GENEA",
+          "GENEE"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "canonical",
+            "phenotype": "Synthetic Normal",
+            "reasonCode": null
+          },
+          {
+            "gene": "GENEE",
+            "state": "canonical",
+            "phenotype": "Synthetic Slow",
+            "reasonCode": null
+          }
+        ],
+        "strength": "Moderate",
+        "citation": {
+          "guidelineId": "drugv-genea-genee",
+          "guidelineVersion": "synthetic-1",
+          "sourceUrl": "https://example.invalid/synthetic",
+          "locator": {
+            "table": "Synthetic Table 2",
+            "row": "Synthetic Normal",
+            "column": "Synthetic Slow"
+          },
+          "verification": "verified"
+        },
+        "recommendationText": "V normal-slow.",
+        "implication": "V normal-slow implication."
+      }
+    ]
+  }
+}

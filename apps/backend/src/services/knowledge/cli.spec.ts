@@ -16,7 +16,7 @@ describe('knowledge CLI', () => {
   it('verify passes for the fixtures outside production, and fails for them in production', async () => {
     const ok = await run(['verify', '--dir', SYNTHETIC_DIR]);
     expect(ok.code).toBe(0);
-    expect(ok.text).toMatch(/^OK \(non-production\): 8 files, 4 guidelines, knowledge set [0-9a-f]{64}/);
+    expect(ok.text).toMatch(/^OK \(non-production\): 11 files, 6 guidelines, knowledge set [0-9a-f]{64}/);
     const refused = await run(['verify', '--dir', SYNTHETIC_DIR, '--production']);
     expect(refused.code).toBe(1);
     expect(refused.text).toContain('not allowed in production');

@@ -1,0 +1,65 @@
+{
+  "name": "holds-win-over-abstention",
+  "description": "One gene abstained and another is a no-result sentinel: a person is needed, so the result is held (not abstained).",
+  "inputs": [
+    {
+      "gene": "GENEA",
+      "state": "unresolved",
+      "reasonCode": "association-abstained"
+    },
+    {
+      "gene": "GENEE",
+      "state": "null"
+    }
+  ],
+  "drugs": [
+    "drugv"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [
+      {
+        "gene": "GENEA",
+        "state": "unresolved",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "association-abstained"
+      },
+      {
+        "gene": "GENEE",
+        "state": "null",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "sentinel-literal-in-source"
+      }
+    ],
+    "results": [
+      {
+        "outcome": "held",
+        "drug": "drugv",
+        "genes": [
+          "GENEA",
+          "GENEE"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "unresolved",
+            "phenotype": null,
+            "reasonCode": "association-abstained"
+          },
+          {
+            "gene": "GENEE",
+            "state": "null",
+            "phenotype": null,
+            "reasonCode": "sentinel-literal-in-source"
+          }
+        ],
+        "reasonCode": "sentinel-literal-in-source",
+        "citation": null
+      }
+    ]
+  }
+}

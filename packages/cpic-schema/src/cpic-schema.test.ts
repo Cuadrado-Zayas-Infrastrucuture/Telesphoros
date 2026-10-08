@@ -1,20 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import {
-  canonicalDiplotype,
   CALLER_REASON_CODES,
-  geneCallSchema,
+  canonicalDiplotype,
+  drugResultSchema,
+  geneInputSchema,
   geneMapFileSchema,
+  geneStateResultSchema,
   guidelineFileSchema,
   hasAtMostTwoDecimals,
-  INDETERMINATE_REASON_CODES,
   knowledgeFileSchema,
+  OUTCOMES,
+  REASON_CODES,
   REASON_MESSAGES,
+  REASON_OUTCOME,
+  REASON_PRECEDENCE,
+  RETIRED_REASON_CODES,
+  REVIEWER_ACTIONS,
   splitDiplotype,
   toHundredths,
 } from './index';
 
 const base = {
-  schemaVersion: '1.0',
+  schemaVersion: '1.1',
   synthetic: true,
   provenance: { source: 'SYNTHETIC TEST FIXTURE', sourceUrl: 'https://example.invalid/synthetic', retrievedAt: '2026-01-01', sourceVersion: 'test' },
   review: { status: 'unreviewed' },
@@ -51,6 +58,15 @@ const activityMap = (ranges: unknown[]) => ({
   method: { type: 'activity-score', ranges },
 });
 
+const cell = (when: Record<string, string>, over: Record<string, unknown> = {}) => ({
+  when,
+  locator: { table: 'Table 1', row: 'Row', column: 'Column' },
+  verification: { state: 'verified', verifiedBy: 'SYNTHETIC TEST', verifiedAt: '2026-01-02' },
+  strength: 'Strong',
+  recommendationText: 'Synthetic text.',
+  ...over,
+});
+
 const guideline = () => ({
   ...base,
   id: 'drugx-genea',
@@ -58,8 +74,17 @@ const guideline = () => ({
   guidelineVersion: '2024.1',
   title: 'Synthetic drugx guideline',
   drug: 'drugx',
-  gene: 'GENEA',
-  recommendations: [{ phenotype: 'Normal', strength: 'Strong', recommendationText: 'Synthetic text.' }],
+  genes: ['GENEA'],
+  supersedes: [] as string[],
+  recommendations: [cell({ GENEA: 'Normal' })],
+});
+
+const combined = () => ({
+  ...guideline(),
+  id: 'drugx-genea-geneb',
+  genes: ['GENEA', 'GENEB'],
+  supersedes: ['drugx-genea'],
+  recommendations: [cell({ GENEA: 'Normal', GENEB: 'Fast' }), cell({ GENEA: 'Normal', GENEB: 'Slow' })],
 });
 
 const issuesOf = (schema: { safeParse: (value: unknown) => { success: boolean; error?: { issues: { message: string; path: PropertyKey[] }[] } } }, value: unknown) =>
@@ -85,28 +110,150 @@ describe('diplotype helpers', () => {
   });
 });
 
-describe('reason codes', () => {
-  it('has a fixed message for every code, and none contains a placeholder or value', () => {
-    for (const code of INDETERMINATE_REASON_CODES) {
-      expect(REASON_MESSAGES[code], code).toBeTruthy();
+describe('vocabulary (frozen: see docs/design/outcomes-and-reason-codes.md)', () => {
+  it('every reason code has an outcome, a plain meaning and a reviewer action entry, with no placeholder or value in any text', () => {
+    for (const code of REASON_CODES) {
+      expect(OUTCOMES).toContain(REASON_OUTCOME[code]);
+      expect(REASON_MESSAGES[code]).toBeTruthy();
       expect(REASON_MESSAGES[code]).not.toMatch(/[{}$%]|\*\d/);
+      expect(code in REVIEWER_ACTIONS, code).toBe(true);
+      const action = REVIEWER_ACTIONS[code];
+      if (action !== null) expect(action).not.toMatch(/[{}$%]/);
     }
   });
-  it('caller codes are a subset of all codes', () => {
-    for (const code of CALLER_REASON_CODES) expect(INDETERMINATE_REASON_CODES).toContain(code);
+
+  it('the held and abstained codes are all in the precedence list, and nothing else is', () => {
+    const needsPrecedence = REASON_CODES.filter((code) => REASON_OUTCOME[code] === 'held' || REASON_OUTCOME[code] === 'abstained');
+    // out-of-review-scope and cell-disputed belong to a CELL, not to a gene, so they never compete with gene problems.
+    const cellLevel = ['out-of-review-scope', 'cell-disputed'];
+    expect([...REASON_PRECEDENCE].sort()).toEqual(needsPrecedence.filter((c) => !cellLevel.includes(c)).sort());
+    expect(REASON_PRECEDENCE[REASON_PRECEDENCE.length - 1]).toBe('association-abstained'); // holds win over abstention
+  });
+
+  it('every retired 5A code maps to a current code, or to nothing if its feature was dropped', () => {
+    for (const [oldCode, target] of Object.entries(RETIRED_REASON_CODES)) {
+      expect(oldCode).toMatch(/^[A-Z_]+$/);
+      if (target !== null) expect(REASON_CODES).toContain(target);
+    }
+    expect(Object.keys(RETIRED_REASON_CODES)).toHaveLength(11); // the whole 5A vocabulary, none forgotten
+  });
+
+  it('maps each retired 5A code to exactly the code the spec names (docs/design/outcomes-and-reason-codes.md)', () => {
+    expect(RETIRED_REASON_CODES).toEqual({
+      CONFLICTING_CALLS: 'duplicate-gene-conflict',
+      GENE_NOT_IN_REPORT: 'gene-absent',
+      NO_MATCHING_GUIDELINE: 'no-guideline-for-drug',
+      PHENOTYPE_NOT_IN_GUIDELINE: 'no-published-recommendation',
+      MALFORMED_DIPLOTYPE: 'malformed-diplotype',
+      ALLELE_NOT_IN_DEFINITIONS: 'allele-not-in-definitions',
+      NO_PHENOTYPE_MAPPING: 'no-phenotype-mapping',
+      NO_GENE_DEFINITION: 'no-gene-definition',
+      UNPHASED_VCF: null,
+      STRUCTURAL_VARIANT: null,
+      MULTIALLELIC_SITE: null,
+    });
+  });
+
+  it('each reason code belongs to the outcome the spec gives it', () => {
+    expect(REASON_OUTCOME).toEqual({
+      'duplicate-gene-conflict': 'held',
+      'duplicate-identical': 'held',
+      'sentinel-literal-in-source': 'held',
+      'other-gene-unresolved': 'held',
+      'out-of-review-scope': 'held',
+      'cell-disputed': 'held',
+      'gene-absent': 'held',
+      'malformed-diplotype': 'held',
+      'allele-not-in-definitions': 'held',
+      'no-phenotype-mapping': 'held',
+      'no-gene-definition': 'held',
+      'association-abstained': 'abstained',
+      'no-published-recommendation': 'no-published-recommendation',
+      'no-guideline-for-drug': 'no-guideline',
+    });
+  });
+
+  it('a reviewer can only be pointed at "nothing to do" where nothing can be done', () => {
+    expect(REVIEWER_ACTIONS['out-of-review-scope']).toBeNull();
+    expect(REVIEWER_ACTIONS['no-guideline-for-drug']).toBeNull();
+    expect(REVIEWER_ACTIONS['no-published-recommendation']).toBeNull();
+    expect(REVIEWER_ACTIONS['gene-absent']).toBeTruthy();
+  });
+
+  it('the caller may attach only the two reasons the adapter can know', () => {
+    expect([...CALLER_REASON_CODES].sort()).toEqual(['association-abstained', 'other-gene-unresolved']);
   });
 });
 
-describe('gene call', () => {
-  it('accepts a called diplotype and a caller-supplied reason', () => {
-    expect(geneCallSchema.safeParse({ gene: 'GENEA', outcome: 'called', diplotype: '*1/*2' }).success).toBe(true);
-    expect(geneCallSchema.safeParse({ gene: 'GENEA', outcome: 'indeterminate', reasonCode: 'UNPHASED_VCF' }).success).toBe(true);
+describe('gene input', () => {
+  it('accepts the four states', () => {
+    for (const input of [
+      { gene: 'GENEA', state: 'canonical', phenotype: 'Normal' },
+      { gene: 'GENEA', state: 'diplotype', diplotype: '*1/*2' },
+      { gene: 'GENEA', state: 'null' },
+      { gene: 'GENEA', state: 'unresolved', reasonCode: 'other-gene-unresolved' },
+    ]) expect(geneInputSchema.safeParse(input).success, JSON.stringify(input)).toBe(true);
   });
-  it('refuses a reason only the engine may decide, extra keys, and a called gene with no diplotype', () => {
-    expect(geneCallSchema.safeParse({ gene: 'GENEA', outcome: 'indeterminate', reasonCode: 'NO_MATCHING_GUIDELINE' }).success).toBe(false);
-    expect(geneCallSchema.safeParse({ gene: 'GENEA', outcome: 'called', diplotype: '*1/*2', extra: 1 }).success).toBe(false);
-    expect(geneCallSchema.safeParse({ gene: 'GENEA', outcome: 'called' }).success).toBe(false);
-    expect(geneCallSchema.safeParse({ gene: 'genea', outcome: 'called', diplotype: '*1/*2' }).success).toBe(false);
+
+  it('refuses a reason only the engine may decide, extra keys, missing values and lower-case genes', () => {
+    for (const input of [
+      { gene: 'GENEA', state: 'unresolved', reasonCode: 'duplicate-gene-conflict' },
+      { gene: 'GENEA', state: 'unresolved' },
+      { gene: 'GENEA', state: 'canonical' },
+      { gene: 'GENEA', state: 'null', phenotype: 'Normal' },
+      { gene: 'GENEA', state: 'canonical', phenotype: 'Normal', extra: 1 },
+      { gene: 'genea', state: 'canonical', phenotype: 'Normal' },
+      { gene: 'GENEA', state: 'absent' },
+    ]) expect(geneInputSchema.safeParse(input).success, JSON.stringify(input)).toBe(false);
+  });
+
+  it('accepts any diplotype text up to 100 characters (including empty) so one bad value is reported per gene instead of aborting the whole report', () => {
+    expect(geneInputSchema.safeParse({ gene: 'GENEA', state: 'diplotype', diplotype: '' }).success).toBe(true);
+    expect(geneInputSchema.safeParse({ gene: 'GENEA', state: 'diplotype', diplotype: 'x'.repeat(100) }).success).toBe(true);
+    expect(geneInputSchema.safeParse({ gene: 'GENEA', state: 'diplotype', diplotype: 'x'.repeat(101) }).success).toBe(false);
+  });
+});
+
+describe('results', () => {
+  const citation = { guidelineId: 'g', guidelineVersion: 'v', sourceUrl: 'https://example.invalid/x', locator: { table: 'T', row: 'R', column: null }, verification: 'verified' };
+  const evidence = [{ gene: 'GENEA', state: 'canonical', phenotype: 'Normal', reasonCode: null }];
+  const shown = { outcome: 'shown', drug: 'drugx', genes: ['GENEA'], geneStates: evidence, strength: 'Strong', citation, recommendationText: 'Text.', implication: null };
+
+  it('a shown result carries its wording, strength and a full citation', () => {
+    expect(drugResultSchema.safeParse(shown).success).toBe(true);
+    for (const missing of ['citation', 'strength', 'recommendationText']) {
+      const copy: Record<string, unknown> = { ...shown };
+      delete copy[missing];
+      expect(drugResultSchema.safeParse(copy).success, missing).toBe(false);
+    }
+  });
+
+  it('a held or abstained result can NEVER carry guideline wording or strength', () => {
+    const held = { outcome: 'held', drug: 'drugx', genes: ['GENEA'], geneStates: evidence, reasonCode: 'cell-disputed', citation };
+    expect(drugResultSchema.safeParse(held).success).toBe(true);
+    for (const extra of [{ recommendationText: 'Text.' }, { strength: 'Strong' }, { implication: 'x' }]) {
+      expect(drugResultSchema.safeParse({ ...held, ...extra }).success, JSON.stringify(extra)).toBe(false);
+    }
+    const abstained = { outcome: 'abstained', drug: 'drugx', genes: ['GENEA'], geneStates: evidence, reasonCode: 'association-abstained' };
+    expect(drugResultSchema.safeParse(abstained).success).toBe(true);
+    expect(drugResultSchema.safeParse({ ...abstained, citation }).success).toBe(false);
+    expect(drugResultSchema.safeParse({ ...abstained, reasonCode: 'gene-absent' }).success).toBe(false);
+  });
+
+  it('the five outcomes accept only their own reason codes', () => {
+    const noRec = { outcome: 'no-published-recommendation', drug: 'drugx', genes: ['GENEA'], geneStates: evidence, reasonCode: 'no-published-recommendation', citation: null, strength: null, recommendationText: null, implication: null };
+    expect(drugResultSchema.safeParse(noRec).success).toBe(true);
+    expect(drugResultSchema.safeParse({ ...noRec, reasonCode: 'gene-absent' }).success).toBe(false);
+    const none = { outcome: 'no-guideline', drug: 'drugz', genes: [], geneStates: [], reasonCode: 'no-guideline-for-drug' };
+    expect(drugResultSchema.safeParse(none).success).toBe(true);
+    expect(drugResultSchema.safeParse({ ...none, genes: ['GENEA'] }).success).toBe(false);
+  });
+
+  it('a gene state is either canonical with a phenotype, or one of three problems with a reason', () => {
+    expect(geneStateResultSchema.safeParse({ gene: 'GENEA', state: 'canonical', phenotype: 'Normal', diplotype: null, activityScore: null, reasonCode: null }).success).toBe(true);
+    expect(geneStateResultSchema.safeParse({ gene: 'GENEA', state: 'absent', phenotype: null, diplotype: null, activityScore: null, reasonCode: 'gene-absent' }).success).toBe(true);
+    expect(geneStateResultSchema.safeParse({ gene: 'GENEA', state: 'absent', phenotype: null, diplotype: null, activityScore: null, reasonCode: null }).success).toBe(false);
+    expect(geneStateResultSchema.safeParse({ gene: 'GENEA', state: 'canonical', phenotype: 'Normal', diplotype: null, activityScore: null, reasonCode: 'gene-absent' }).success).toBe(false);
   });
 });
 
@@ -178,25 +325,96 @@ describe('gene map file', () => {
   });
 });
 
+describe('gene map file: phenotype-only genes', () => {
+  const phenotypeOnly = () => ({ ...base, id: 'genee', kind: 'gene-phenotype-map', gene: 'GENEE', phenotypes: ['Fast', 'Slow'] });
+
+  it('a gene a lab reports as a phenotype needs no alleles or method', () => {
+    expect(geneMapFileSchema.safeParse(phenotypeOnly()).success).toBe(true);
+  });
+
+  it('but alleles and method come together or not at all, and phenotypes must still be unique', () => {
+    const onlyAlleles = { ...phenotypeOnly(), alleles: makeAlleles() };
+    expect(issuesOf(geneMapFileSchema, onlyAlleles).join('|')).toContain('both alleles and method');
+    const { alleles: _a, ...noAlleles } = functionPairMap();
+    void _a;
+    expect(issuesOf(geneMapFileSchema, noAlleles).join('|')).toContain('both alleles and method');
+    expect(issuesOf(geneMapFileSchema, { ...phenotypeOnly(), phenotypes: ['Fast', 'Fast'] }).join('|')).toContain('unique');
+  });
+});
+
 describe('guideline file', () => {
-  it('accepts a valid guideline and refuses duplicates, bad strengths and bad drug names', () => {
+  it('accepts a single-gene guideline and a combined (multi-gene) one', () => {
     expect(guidelineFileSchema.safeParse(guideline()).success).toBe(true);
-    const twice = guideline();
-    twice.recommendations.push({ ...twice.recommendations[0]! });
-    expect(issuesOf(guidelineFileSchema, twice).join('|')).toContain('more than once');
+    expect(guidelineFileSchema.safeParse(combined()).success).toBe(true);
+  });
+
+  it('a cell must name a phenotype for exactly the guideline’s genes', () => {
+    for (const when of [{}, { GENEA: 'Normal', GENEB: 'Fast' }, { GENEB: 'Fast' }] as Record<string, string>[]) {
+      const file = guideline();
+      file.recommendations = [cell(when)];
+      expect(issuesOf(guidelineFileSchema, file).join('|'), JSON.stringify(when)).toContain('exactly this guideline');
+    }
+    const two = combined();
+    two.recommendations = [cell({ GENEA: 'Normal' })];
+    expect(issuesOf(guidelineFileSchema, two).join('|')).toContain('exactly this guideline');
+  });
+
+  it('refuses the same combination of phenotypes twice, however the keys are ordered', () => {
+    const file = combined();
+    file.recommendations = [cell({ GENEA: 'Normal', GENEB: 'Fast' }), cell({ GENEB: 'Fast', GENEA: 'Normal' })];
+    expect(issuesOf(guidelineFileSchema, file).join('|')).toContain('more than once');
+  });
+
+  it('refuses duplicate genes, a guideline that supersedes itself, and duplicate superseded ids', () => {
+    expect(issuesOf(guidelineFileSchema, { ...combined(), genes: ['GENEA', 'GENEA'] }).join('|')).toContain('Genes must be unique');
+    expect(issuesOf(guidelineFileSchema, { ...combined(), supersedes: ['drugx-genea-geneb'] }).join('|')).toContain('supersede itself');
+    expect(issuesOf(guidelineFileSchema, { ...combined(), supersedes: ['a', 'a'] }).join('|')).toContain('Ids must be unique');
+  });
+
+  it('every cell needs a locator and a verification state, and each state needs what it implies', () => {
+    for (const missing of ['locator', 'verification', 'strength', 'recommendationText']) {
+      const file = guideline();
+      delete (file.recommendations[0] as Record<string, unknown>)[missing];
+      expect(guidelineFileSchema.safeParse(file).success, missing).toBe(false);
+    }
+    const withState = (verification: unknown) => {
+      const file = guideline();
+      file.recommendations = [cell({ GENEA: 'Normal' }, { verification })];
+      return guidelineFileSchema.safeParse(file).success;
+    };
+    expect(withState({ state: 'unverified' })).toBe(true);
+    expect(withState({ state: 'verified', verifiedBy: 'A. Reviewer', verifiedAt: '2026-02-01' })).toBe(true);
+    expect(withState({ state: 'disputed', note: 'Position differs between sources.' })).toBe(true);
+    expect(withState({ state: 'verified' })).toBe(false); // who and when are required
+    expect(withState({ state: 'disputed' })).toBe(false); // a dispute must say what is disputed
+    expect(withState({ state: 'unverified', verifiedBy: 'A. Reviewer' })).toBe(false);
+    expect(withState({ state: 'green' })).toBe(false);
+    expect(withState(undefined)).toBe(false);
+  });
+
+  it('a locator may omit the column (single-gene table) but not the table or row', () => {
+    const withLocator = (locator: unknown) => {
+      const file = guideline();
+      file.recommendations = [cell({ GENEA: 'Normal' }, { locator })];
+      return guidelineFileSchema.safeParse(file).success;
+    };
+    expect(withLocator({ table: 'T', row: 'R' })).toBe(true);
+    expect(withLocator({ table: 'T' })).toBe(false);
+    expect(withLocator({ row: 'R' })).toBe(false);
+  });
+
+  it('refuses bad strengths and drug names, and keeps line breaks and tabs in wording but refuses other control characters', () => {
     const strength = guideline();
     (strength.recommendations[0] as { strength: string }).strength = 'Very strong';
     expect(guidelineFileSchema.safeParse(strength).success).toBe(false);
     for (const drug of ['Drugx', ' drugx', 'drugx ', 'drug_x', '']) {
       expect(guidelineFileSchema.safeParse({ ...guideline(), drug }).success, JSON.stringify(drug)).toBe(false);
     }
-  });
-  it('refuses control characters in guideline text but keeps line breaks and tabs', () => {
     const withBreaks = guideline();
-    withBreaks.recommendations[0]!.recommendationText = 'Line one.\n\tLine two.';
+    withBreaks.recommendations = [cell({ GENEA: 'Normal' }, { recommendationText: 'Line one.\n\tLine two.' })];
     expect(guidelineFileSchema.safeParse(withBreaks).success).toBe(true);
     const withEscape = guideline();
-    withEscape.recommendations[0]!.recommendationText = 'Bad \u001b[31m text';
+    withEscape.recommendations = [cell({ GENEA: 'Normal' }, { recommendationText: 'Bad \u001b[31m text' })];
     expect(guidelineFileSchema.safeParse(withEscape).success).toBe(false);
   });
 });
@@ -227,13 +445,5 @@ describe('envelope', () => {
     expect(knowledgeFileSchema.safeParse(guideline()).success).toBe(true);
     expect(knowledgeFileSchema.safeParse(functionPairMap()).success).toBe(true);
     expect(knowledgeFileSchema.safeParse({ ...guideline(), kind: 'other' }).success).toBe(false);
-  });
-});
-
-describe('gene call: diplotype text', () => {
-  it('accepts any text up to 100 characters (including empty) so one bad value is reported per gene instead of aborting the whole report', () => {
-    expect(geneCallSchema.safeParse({ gene: 'GENEA', outcome: 'called', diplotype: '' }).success).toBe(true);
-    expect(geneCallSchema.safeParse({ gene: 'GENEA', outcome: 'called', diplotype: 'x'.repeat(100) }).success).toBe(true);
-    expect(geneCallSchema.safeParse({ gene: 'GENEA', outcome: 'called', diplotype: 'x'.repeat(101) }).success).toBe(false);
   });
 });

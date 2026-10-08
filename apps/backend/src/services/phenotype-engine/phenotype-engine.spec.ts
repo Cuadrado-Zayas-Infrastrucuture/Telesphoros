@@ -43,7 +43,7 @@ describe('mapPhenotype: activity score', () => {
   });
 
   it('a score in the gap between ranges has no phenotype', () => {
-    expect(mapPhenotype(map('GENEB'), '*1/*5')).toEqual({ status: 'indeterminate', gene: 'GENEB', reasonCode: 'NO_PHENOTYPE_MAPPING' });
+    expect(mapPhenotype(map('GENEB'), '*1/*5')).toEqual({ status: 'unresolved', gene: 'GENEB', reasonCode: 'no-phenotype-mapping' });
   });
 
   it('is exact where floating point would not be: 0.1 + 0.2 is 0.3', () => {
@@ -81,12 +81,12 @@ describe('mapPhenotype: activity-score edges do not depend on the order of the r
       expect(mapPhenotype(custom(ranges), '*1/*1')).toMatchObject({ phenotype: 'Lower', activityScore: 1 });
     }
     // Only the exclusive range exists: the edge itself is in no range.
-    expect(mapPhenotype(custom([upper]), '*1/*1')).toMatchObject({ status: 'indeterminate', reasonCode: 'NO_PHENOTYPE_MAPPING' });
+    expect(mapPhenotype(custom([upper]), '*1/*1')).toMatchObject({ status: 'unresolved', reasonCode: 'no-phenotype-mapping' });
   });
 
   it('an exclusive upper bound excludes the edge score', () => {
     const below = { min: 0, minInclusive: true, max: 1, maxInclusive: false, phenotype: 'Lower' };
-    expect(mapPhenotype(custom([below]), '*1/*1')).toMatchObject({ status: 'indeterminate', reasonCode: 'NO_PHENOTYPE_MAPPING' });
+    expect(mapPhenotype(custom([below]), '*1/*1')).toMatchObject({ status: 'unresolved', reasonCode: 'no-phenotype-mapping' });
     expect(mapPhenotype(custom([below]), '*2/*2')).toMatchObject({ phenotype: 'Lower', activityScore: 0.5 });
   });
 
@@ -103,22 +103,28 @@ describe('mapPhenotype: diplotype table', () => {
   });
   it('a combination with no row has no phenotype', () => {
     for (const diplotype of ['*1/*3', '*2/*2', '*2/*3']) {
-      expect(mapPhenotype(map('GENEC'), diplotype)).toMatchObject({ status: 'indeterminate', reasonCode: 'NO_PHENOTYPE_MAPPING' });
+      expect(mapPhenotype(map('GENEC'), diplotype)).toMatchObject({ status: 'unresolved', reasonCode: 'no-phenotype-mapping' });
     }
   });
 });
 
 describe('mapPhenotype: input it will not guess about', () => {
   it.each(['', '*1', '*1/', '/*1', '*1/*1/*1', '*1|*1', ' *1/*1', '*1/*1 ', '*1 /*1', '*1/ *1'])('malformed %j', (diplotype) => {
-    expect(mapPhenotype(map('GENEA'), diplotype)).toEqual({ status: 'indeterminate', gene: 'GENEA', reasonCode: 'MALFORMED_DIPLOTYPE' });
+    expect(mapPhenotype(map('GENEA'), diplotype)).toEqual({ status: 'unresolved', gene: 'GENEA', reasonCode: 'malformed-diplotype' });
   });
   it.each(['*1/*9', '*9/*9', '*1/*10', '*1/1', '*1/*1.0'])('unknown allele %j', (diplotype) => {
-    expect(mapPhenotype(map('GENEA'), diplotype)).toEqual({ status: 'indeterminate', gene: 'GENEA', reasonCode: 'ALLELE_NOT_IN_DEFINITIONS' });
+    expect(mapPhenotype(map('GENEA'), diplotype)).toEqual({ status: 'unresolved', gene: 'GENEA', reasonCode: 'allele-not-in-definitions' });
   });
   it('allele names are case sensitive', () => {
     expect(mapPhenotype(map('GENEA'), '*1/*1')).toMatchObject({ status: 'determined' });
-    const lower = { ...map('GENEA'), alleles: map('GENEA').alleles.map((a) => ({ ...a, name: a.name.replace('*', 'x') })) };
-    expect(mapPhenotype(lower, '*1/*1')).toMatchObject({ reasonCode: 'ALLELE_NOT_IN_DEFINITIONS' });
+    const lower = { ...map('GENEA'), alleles: map('GENEA').alleles!.map((a) => ({ ...a, name: a.name.replace('*', 'x') })) };
+    expect(mapPhenotype(lower, '*1/*1')).toMatchObject({ reasonCode: 'allele-not-in-definitions' });
+  });
+});
+
+describe('mapPhenotype: a gene reported as a phenotype has no allele tables', () => {
+  it('cannot interpret a diplotype for it, and says so by reason (never guesses)', () => {
+    expect(mapPhenotype(knowledge.gene('GENEE')!, '*1/*1')).toEqual({ status: 'unresolved', gene: 'GENEE', reasonCode: 'no-gene-definition' });
   });
 });
 
