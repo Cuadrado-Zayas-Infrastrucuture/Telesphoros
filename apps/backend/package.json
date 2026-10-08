@@ -6,7 +6,7 @@
     "prebuild": "pnpm --filter @telesphoros/shared-types --filter @telesphoros/cpic-schema build",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
-    "pretypecheck": "pnpm --filter @telesphoros/shared-types --filter @telesphoros/cpic-schema build",
+    "pretypecheck": "pnpm --filter @telesphoros/shared-types --filter @telesphoros/cpic-schema --filter @telesphoros/fake-idp build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "jest",

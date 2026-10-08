@@ -23,5 +23,7 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
     css: false,
+    // Must exceed the longest asyncUtilTimeout (src/test/setup.ts), or the test is killed before its own wait can report.
+    testTimeout: 30_000,
   },
 });

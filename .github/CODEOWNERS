@@ -1,0 +1,29 @@
+# Code owners are requested for review automatically on any pull request that touches these paths.
+# They are NOT yet a merge requirement (see docs/ops/ci-cd.md): with one maintainer, a required code-owner
+# approval could never be given by the author. Turn that on when a second maintainer joins.
+# The last matching pattern wins.
+
+*                                   @jzayas03
+
+# Database shape and tenant isolation
+/apps/backend/migrations/           @jzayas03
+/apps/backend/src/db/               @jzayas03
+
+# Authentication, tenancy, and the identity provider
+/apps/backend/src/auth/             @jzayas03
+/packages/shared-types/             @jzayas03
+/packages/fake-idp/                 @jzayas03
+/docs/auth.md                       @jzayas03
+
+# Clinical content and logic: reviewed knowledge, schemas, the engines, and their validation
+/knowledge/                         @jzayas03
+/packages/cpic-schema/              @jzayas03
+/apps/backend/src/services/         @jzayas03
+/tests/clinical_scenarios/          @jzayas03
+/docs/clinical-validation/          @jzayas03
+
+# Infrastructure, CI, and the rules about merging
+/infrastructure/                    @jzayas03
+/.github/                           @jzayas03
+/.gitleaks.toml                     @jzayas03
+/SECURITY.md                        @jzayas03

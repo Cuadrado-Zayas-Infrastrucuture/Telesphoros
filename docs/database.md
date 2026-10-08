@@ -112,5 +112,6 @@ Decision needed from the founder: which provider. Tracked as a dedicated change 
 | + the whole API suite running **on PostgreSQL** | same | `... test:db` |
 | + the whole API suite uploading over the S3 protocol | `TEST_S3_ENDPOINT` + `TEST_OBJECT_STORAGE=s3` | `TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 ... test` |
 
-A plain `test` prints which tiers it skipped. **CI must run the database and S3 tiers** (Phase 11): a green run
-without them says nothing about the schema.
+A plain `test` prints which tiers it skipped. **CI runs all three tiers** (the `database-and-storage` job in
+`.github/workflows/ci.yml`) and fails the job if any tier reports `NOT RUNNING`: a green run without them says nothing
+about the schema.

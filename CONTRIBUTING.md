@@ -7,6 +7,15 @@
 - Commits by agents carry a `Co-Authored-By` trailer.
 - Database changes are **new numbered migrations** with a matching down file (never edit an applied one). Run the database tier before opening a PR: see docs/database.md.
 - Never put real patient data anywhere: not in the repository, not in tests, not in the dev database.
-- **A green run without the database and S3 tiers proves nothing about the schema.** Those tiers are skipped (with a printed notice) unless TEST_DATABASE_URL / TEST_S3_ENDPOINT are set, and CI must set them. See docs/database.md.
+- **A green run without the database and S3 tiers proves nothing about the schema.** Those tiers are skipped (with a printed notice) unless TEST_DATABASE_URL / TEST_S3_ENDPOINT are set. CI sets them and fails the job if a tier prints that notice. See docs/database.md.
 - The fake identity provider (packages/fake-idp) is TEST ONLY. Never deploy it, and never point production at it.
 - Run `pnpm test:infra` after touching infrastructure/terraform: it fails if a security setting is weakened.
+
+## Merging to `main`
+
+- `main` is protected by a ruleset (`.github/rulesets/main.json`, steps in [docs/ops/ci-cd.md](docs/ops/ci-cd.md)): a pull request is required, and
+  `verify`, `database-and-storage`, `browser`, `terraform` and `secret-scan` must be green. Force pushes and deletion are blocked.
+- **Required approvals are 0 while there is one maintainer** (the author cannot approve their own PR). When a second
+  maintainer is added, the policy becomes **1 approval + the checks**, with code-owner review required for the paths in `.github/CODEOWNERS`.
+- Every GitHub Action is pinned to a commit SHA; Dependabot updates them. Run `pnpm test:ci-config` after touching `.github/`.
+- Secrets never go in the repository. `secret-scan` checks the whole history; the only allowlist entry is named in `.gitleaks.toml`.

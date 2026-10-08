@@ -1,0 +1,39 @@
+# Dependency updates. Grouping: minor and patch updates arrive together; major updates always get their own PR.
+# GitHub Actions updates change the pinned commit SHA and the "# vX.Y.Z" comment beside it in one PR.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: terraform
+    directory: /infrastructure/terraform
+    schedule:
+      interval: weekly
+    groups:
+      terraform-minor-patch:
+        update-types: [minor, patch]
+
+  # The S3 emulator the CI storage tier uses (.github/ci/requirements.txt).
+  - package-ecosystem: pip
+    directory: /.github/ci
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker-compose
+    directory: /infrastructure/docker
+    schedule:
+      interval: weekly
