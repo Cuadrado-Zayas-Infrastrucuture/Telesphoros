@@ -49,6 +49,7 @@ row. Tests prove each layer separately and together (`test/db/rls.pg-spec.ts`, `
 The ledger adds four more `NOLOGIN` roles (`telesphoros_ledger`, `telesphoros_redactor`, `telesphoros_ledger_verifier`,
 `telesphoros_ledger_operator`) with narrow rights; what each may do, how the migrator and the verifier and operator logins are
 provisioned, and what a restore needs: [docs/ops/ledger-roles.md](ops/ledger-roles.md). Tests for them live in `apps/backend/test/db/ledger-*.pg-spec.ts`.
+The stored lab PDF is pinned to an object version and protected by the database; see [docs/ops/report-evidence.md](ops/report-evidence.md).
 
 The login user and its password are provisioned **outside the repository** (locally by
 `infrastructure/docker/postgres-init.sql`; in AWS by an operator step, with the password in Secrets Manager).

@@ -84,8 +84,36 @@ describe('loadEnv', () => {
       ['in-memory file storage', { OBJECT_STORAGE_DRIVER: 'memory' }, /OBJECT_STORAGE_DRIVER/],
       ['an unencrypted database connection', { DATABASE_SSL: 'disable' }, /DATABASE_SSL/],
       ['a plain-http CORS origin', { CORS_ALLOWED_ORIGINS: 'http://app.example.com' }, /CORS_ALLOWED_ORIGINS/],
+      ['the synthetic lab-report pipeline', { LAB_REPORT_PIPELINE: 'enabled' }, /LAB_REPORT_PIPELINE.*production/],
     ])('refuses %s', (_name, change, message) => {
       expect(() => loadEnv({ ...production, ...change })).toThrow(message);
+    });
+  });
+
+  describe('the lab-report pipeline switch', () => {
+    const database = { STORAGE_DRIVER: 'postgres', DATABASE_URL: 'postgres://app@db/app' };
+
+    it('is off by default, and "disabled" is the only way it stays off', () => {
+      expect(loadEnv({ ...base }).LAB_REPORT_PIPELINE).toBe('disabled');
+      expect(loadEnv({ ...base, LAB_REPORT_PIPELINE: 'disabled' }).LAB_REPORT_PIPELINE).toBe('disabled');
+    });
+
+    it('can be enabled with the real database outside production', () => {
+      expect(loadEnv({ ...base, ...database, LAB_REPORT_PIPELINE: 'enabled' }).LAB_REPORT_PIPELINE).toBe('enabled');
+    });
+
+    it('is refused with the in-memory store (the ledger has no in-memory version)', () => {
+      expect(() => loadEnv({ ...base, LAB_REPORT_PIPELINE: 'enabled' })).toThrow(/LAB_REPORT_PIPELINE.*postgres/);
+    });
+
+    it.each(['yes', 'true', 'ENABLED', '1', ''])('rejects the value %j instead of guessing', (value) => {
+      expect(() => loadEnv({ ...base, ...database, LAB_REPORT_PIPELINE: value })).toThrow(/LAB_REPORT_PIPELINE/);
+    });
+
+    it('bounds the download link lifetime to 60 to 600 seconds, default 120', () => {
+      expect(loadEnv({ ...base }).DOWNLOAD_URL_TTL_SECONDS).toBe(120);
+      for (const bad of ['59', '601', 'abc']) expect(() => loadEnv({ ...base, DOWNLOAD_URL_TTL_SECONDS: bad })).toThrow(/DOWNLOAD_URL_TTL_SECONDS/);
+      expect(loadEnv({ ...base, DOWNLOAD_URL_TTL_SECONDS: '600' }).DOWNLOAD_URL_TTL_SECONDS).toBe(600);
     });
   });
 });

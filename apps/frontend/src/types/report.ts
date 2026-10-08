@@ -1,7 +1,12 @@
+/** Report types the upload form OFFERS. `lab-pdf` is deliberately absent: it has no upload screen in this phase. */
 export const REPORT_TYPES = ['vcf', 'structured'] as const;
 export type ReportType = (typeof REPORT_TYPES)[number];
 
-export const REPORT_TYPE_LABELS: Record<ReportType, string> = {
+/** Every type the API can return, so a row of any type can be labelled. */
+export type KnownReportType = ReportType | 'lab-pdf';
+
+export const REPORT_TYPE_LABELS: Record<KnownReportType, string> = {
   vcf: 'VCF (variant call file)',
   structured: 'Structured PGx report (JSON)',
+  'lab-pdf': 'Lab report (PDF)',
 };

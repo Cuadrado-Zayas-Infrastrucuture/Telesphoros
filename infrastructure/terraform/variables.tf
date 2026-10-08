@@ -99,6 +99,16 @@ variable "db_deletion_protection" {
   default = true
 }
 
+variable "reports_noncurrent_retention_days" {
+  description = "How long an OVERWRITTEN version of a report file is kept. A captured lab PDF is pinned to an exact object version; if the file is later overwritten, the pinned version becomes noncurrent and must not expire while a capture, review or evaluation still rests on it. Never below the six-year record-retention floor (2190 days)."
+  type        = number
+  default     = 2190
+  validation {
+    condition     = var.reports_noncurrent_retention_days >= 2190
+    error_message = "reports_noncurrent_retention_days must be at least 2190 (six years): evidence must outlive the records that cite it."
+  }
+}
+
 variable "backup_lock_days" {
   description = "Object Lock retention on logical backups: nobody can delete or overwrite them for this long."
   type        = number

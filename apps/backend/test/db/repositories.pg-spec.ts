@@ -23,6 +23,7 @@ const patient = (tenantId: string, label: string, createdAt = stamp()): PatientR
 });
 const report = (tenantId: string, patientId: string, over: Partial<ReportRecord> = {}): ReportRecord => ({
   id: randomUUID(), tenantId, createdBy: 'syn-actor', patientId, type: 'vcf', filename: 'a.vcf', sizeBytes: 100, status: 'received',
+  storageKey: null, contentType: null, sha256: null, uploadedAt: null, objectVersion: null, uploadRequestedBy: null, uploadedBy: null,
   createdAt: stamp(), updatedAt: stamp(), ...over,
 });
 const recommendation = (tenantId: string, patientId: string, reportId: string, over: Partial<RecommendationRecord> = {}): RecommendationRecord => ({
@@ -149,12 +150,47 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
       await patients.insert(p);
       const r = report(o, p.id);
       await reports.insert(r);
-      const done = {
-        ...r, filename: 'b.json', type: 'structured' as const, storageKey: `reports/${randomUUID()}`,
-        contentType: 'application/json', sha256: 'b'.repeat(64), uploadedAt: stamp(), updatedAt: stamp(10),
-      };
-      await reports.update(done);
-      expect(await reports.findById(o, r.id)).toEqual(done);
+      const edited = { ...r, filename: 'b.json', type: 'structured' as const, status: 'processing' as const, updatedAt: stamp(10) };
+      await reports.update(edited);
+      expect(await reports.findById(o, r.id)).toEqual(edited);
+    });
+
+    it('update() never touches the stored file: only type, file name and status change', async () => {
+      const { patients, reports } = await make();
+      const o = tenant();
+      const p = patient(o, 'SYN-A');
+      await patients.insert(p);
+      const r = report(o, p.id);
+      await reports.insert(r);
+      const hash = 'c'.repeat(64);
+      expect(await reports.recordUploadRequest({ ...r, storageKey: 'k/1', contentType: 'application/json', sha256: hash, uploadRequestedBy: 'syn-first', updatedAt: stamp(5) })).toBe(true);
+      // A stale copy of the record, written back by update(), must not erase or replace the declared file.
+      await reports.update({ ...r, filename: 'c.vcf', storageKey: 'other', sha256: 'd'.repeat(64), uploadRequestedBy: 'syn-other', updatedAt: stamp(10) });
+      expect(await reports.findById(o, r.id)).toMatchObject({ filename: 'c.vcf', storageKey: 'k/1', sha256: hash, uploadRequestedBy: 'syn-first' });
+    });
+
+    it('records the declared file and the FIRST requester, then marks the upload done exactly once', async () => {
+      const { patients, reports } = await make();
+      const o = tenant();
+      const p = patient(o, 'SYN-A');
+      await patients.insert(p);
+      const r = report(o, p.id);
+      await reports.insert(r);
+      const hash = 'b'.repeat(64);
+      const declared = { ...r, storageKey: `reports/${randomUUID()}`, contentType: 'application/json', sha256: hash, updatedAt: stamp(5) };
+      expect(await reports.recordUploadRequest({ ...declared, uploadRequestedBy: 'syn-first' })).toBe(true);
+      // Asking again before the upload completes is allowed and changes nobody's identity.
+      expect(await reports.recordUploadRequest({ ...declared, uploadRequestedBy: 'syn-second', updatedAt: stamp(6) })).toBe(true);
+      expect(await reports.findById(o, r.id)).toMatchObject({ uploadRequestedBy: 'syn-first', sha256: hash, uploadedAt: null });
+
+      const done = { ...declared, uploadedAt: stamp(7), objectVersion: 'ver-1', uploadedBy: 'syn-completer', updatedAt: stamp(7) };
+      expect(await reports.markUploaded(done)).toBe(true);
+      expect(await reports.findById(o, r.id)).toMatchObject({ uploadedAt: done.uploadedAt, objectVersion: 'ver-1', uploadedBy: 'syn-completer', uploadRequestedBy: 'syn-first' });
+
+      // The loser of a race to complete, and a late upload-url request, both find the upload already done and change nothing.
+      expect(await reports.markUploaded({ ...done, objectVersion: 'ver-2', uploadedBy: 'syn-late', uploadedAt: stamp(20) })).toBe(false);
+      expect(await reports.recordUploadRequest({ ...declared, sha256: 'e'.repeat(64), uploadRequestedBy: 'syn-late', updatedAt: stamp(21) })).toBe(false);
+      expect(await reports.findById(o, r.id)).toMatchObject({ objectVersion: 'ver-1', uploadedBy: 'syn-completer', sha256: hash, uploadRequestedBy: 'syn-first' });
     });
 
     it('is tenant-scoped', async () => {

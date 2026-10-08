@@ -4,7 +4,7 @@
 # ------------------------------------------------------------------------------------------------
 
 locals {
-  roles = ["reader", "clinician", "admin"]
+  roles = ["reader", "clinician", "admin", "reviewer"]
 }
 
 # Invitations, reset codes and the password-change notice are sent through SES (HIPAA-eligible,

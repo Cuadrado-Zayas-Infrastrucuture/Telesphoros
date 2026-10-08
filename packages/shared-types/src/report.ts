@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const REPORT_TYPES = ['vcf', 'structured'] as const;
+export const REPORT_TYPES = ['vcf', 'structured', 'lab-pdf'] as const;
 export const reportTypeSchema = z.enum(REPORT_TYPES);
 export type ReportType = z.infer<typeof reportTypeSchema>;
 
@@ -16,7 +16,14 @@ export const reportFilenameSchema = z
   .min(1)
   .max(100)
   .regex(/^[A-Za-z0-9._-]+$/, 'Use letters, numbers, dots, dashes and underscores only.')
-  .regex(/\.(vcf|json)$/i, 'Only .vcf and .json files are accepted.');
+  .regex(/\.(vcf|json|pdf)$/i, 'Only .vcf, .json and .pdf files are accepted.');
+
+/** The one extension each report type takes. A name must match its type: a .pdf is never a "vcf". */
+export const REPORT_EXTENSIONS: Record<ReportType, '.vcf' | '.json' | '.pdf'> = { vcf: '.vcf', structured: '.json', 'lab-pdf': '.pdf' };
+
+export const filenameMatchesType = (type: ReportType, filename: string): boolean => filename.toLowerCase().endsWith(REPORT_EXTENSIONS[type]);
+
+const FILENAME_TYPE_MISMATCH = { path: ['filename'] as PropertyKey[], message: 'The file name must end in the extension of the report type.' };
 
 /**
  * POST body. This registers report METADATA only: the file itself goes to object storage in
@@ -27,7 +34,7 @@ export const reportCreateSchema = z.strictObject({
   type: reportTypeSchema,
   filename: reportFilenameSchema,
   sizeBytes: z.number().int().min(1).max(MAX_REPORT_BYTES),
-});
+}).refine((body) => filenameMatchesType(body.type, body.filename), FILENAME_TYPE_MISMATCH);
 export type ReportCreate = z.infer<typeof reportCreateSchema>;
 
 /** PATCH body: correct metadata. At least one field is required. */
@@ -38,7 +45,9 @@ export const reportPatchSchema = z
   })
   .refine((body) => body.type !== undefined || body.filename !== undefined, {
     message: 'Provide at least one field to change.',
-  });
+  })
+  // When both are given they must agree. When only one is, the service checks it against the stored other half.
+  .refine((body) => body.type === undefined || body.filename === undefined || filenameMatchesType(body.type, body.filename), FILENAME_TYPE_MISMATCH);
 export type ReportPatch = z.infer<typeof reportPatchSchema>;
 
 export const reportDtoSchema = z.strictObject({
@@ -68,6 +77,7 @@ export type ReportListQuery = z.infer<typeof reportListQuerySchema>;
 export const REPORT_CONTENT_TYPES: Record<ReportType, readonly string[]> = {
   vcf: ['text/x-vcf', 'text/plain'],
   structured: ['application/json'],
+  'lab-pdf': ['application/pdf'],
 };
 
 export const sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/, 'Provide the lowercase hex SHA-256 of the file.');

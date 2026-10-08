@@ -13,6 +13,12 @@ describe('HmacTokenVerifier', () => {
     });
   });
 
+  it('keeps every role the token carries, reviewer included, in any combination', async () => {
+    for (const roles of [['reviewer'], ['clinician', 'reviewer'], ['admin', 'reviewer'], ['reader', 'clinician', 'admin', 'reviewer']] as const) {
+      await expect(verifier.verify(await signToken({ sub: 'u1', tenant: 'acme', roles: [...roles] }))).resolves.toEqual({ sub: 'u1', tenantId: 'acme', roles: [...roles] });
+    }
+  });
+
   it('treats a missing roles claim as NO roles (least privilege)', async () => {
     await expect(verifier.verify(await signToken({ sub: 'u1', tenant: 'acme' }))).resolves.toEqual({ sub: 'u1', tenantId: 'acme', roles: [] });
   });

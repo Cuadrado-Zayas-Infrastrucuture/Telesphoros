@@ -39,8 +39,8 @@ test('the browser client is public, uses the code flow only, and has short-lived
   has(cognito, 'write_attributes = []');
 });
 
-test('the three roles exist as Cognito groups', () => {
-  has(cognito, 'roles = ["reader", "clinician", "admin"]');
+test('the four roles exist as Cognito groups', () => {
+  has(cognito, 'roles = ["reader", "clinician", "admin", "reviewer"]');
 });
 
 test('the notifier is invokable only by this user pool and may send only as the verified sender', () => {
@@ -49,4 +49,59 @@ test('the notifier is invokable only by this user pool and may send only as the 
   has(lambda, 'actions = ["ses:SendEmail"]');
   has(lambda, 'resources = [aws_sesv2_email_identity.from.arn]');
   lacks(lambda, /resources\s*=\s*\["\*"\]/, 'no wildcard resources');
+});
+
+// ---- Report evidence (slice 5B-3.2a) --------------------------------------------------------------------------------------------
+const storage = readFileSync(new URL('./storage.tf', import.meta.url), 'utf8');
+const iam = readFileSync(new URL('./iam.tf', import.meta.url), 'utf8');
+const variables = readFileSync(new URL('./variables.tf', import.meta.url), 'utf8');
+/** Terraform text without comment lines, so a rule is checked against what is configured and not against what is said about it. */
+const code = (text) => text.split('\n').filter((line) => !/^\s*#/.test(line)).join('\n');
+
+/** The text of every `block { ... }` whose header matches, found by brace matching (not regex nesting). */
+function blocks(text, header) {
+  const found = [];
+  const re = new RegExp(header, 'g');
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    let depth = 0;
+    let i = text.indexOf('{', m.index);
+    const start = i;
+    for (; i < text.length; i++) {
+      if (text[i] === '{') depth++;
+      else if (text[i] === '}' && --depth === 0) break;
+    }
+    found.push(text.slice(start, i + 1));
+  }
+  return found;
+}
+
+test('a pinned report file cannot expire as a noncurrent version before the six-year floor', () => {
+  const [rule] = blocks(storage, 'resource "aws_s3_bucket_lifecycle_configuration" "reports"');
+  assert.ok(rule, 'the reports lifecycle configuration must exist');
+  const [expiry] = blocks(rule, 'noncurrent_version_expiration');
+  assert.ok(expiry, 'the reports bucket must set a noncurrent expiration explicitly');
+  assert.ok(/noncurrent_days\s*=\s*var\.reports_noncurrent_retention_days/.test(expiry), 'use the variable, not a literal that can drift below the floor');
+  const [variable] = blocks(variables, 'variable "reports_noncurrent_retention_days"');
+  assert.ok(variable, 'the retention variable must exist');
+  const def = Number(/default\s*=\s*(\d+)/.exec(variable)?.[1]);
+  assert.ok(def >= 2190, `default ${def} is below the six-year floor (2190 days)`);
+  has(variable, 'condition     = var.reports_noncurrent_retention_days >= 2190');
+});
+
+test('the reports bucket keeps versions, and the application may read an exact version but never delete one', () => {
+  const [versioning] = blocks(storage, 'resource "aws_s3_bucket_versioning" "reports"');
+  has(versioning, 'status = "Enabled"');
+  has(iam, '"s3:GetObjectVersion"');
+  has(iam, '"s3:GetBucketVersioning"');
+  lacks(code(iam), /s3:Delete|s3:\*/, 'the application policy must not be able to delete or administer objects');
+});
+
+test('no policy in this module grants deletion of object versions (a break-glass role outside this module is the only holder)', () => {
+  for (const [name, text] of [['storage.tf', storage], ['iam.tf', iam], ['lambda.tf', lambda]]) {
+    for (const statement of blocks(code(text), 'statement')) {
+      const allows = !/effect\s*=\s*"Deny"/.test(statement);
+      if (!allows) continue;
+      assert.ok(!/s3:DeleteObjectVersion|s3:Delete\*|"s3:\*"/.test(statement), `${name}: an Allow statement must not grant version deletion or s3:*:\n${statement}`);
+    }
+  }
 });

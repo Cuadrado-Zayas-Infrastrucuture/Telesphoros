@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { CreateBucketCommand, S3Client } from '@aws-sdk/client-s3';
+import { CreateBucketCommand, PutBucketVersioningCommand, S3Client } from '@aws-sdk/client-s3';
 import { Controller, Get, type Type } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
@@ -21,6 +21,8 @@ export interface TestAppOptions {
   tokenVerifier?: TokenVerifier;
   /** Browser origins allowed to call the API (CORS). */
   corsOrigins?: string[];
+  /** Turn the lab-report pipeline switch on. Needs the PostgreSQL store (the ledger has no in-memory version). */
+  labReportPipeline?: boolean;
 }
 
 /** True when the e2e suite is running against a real PostgreSQL (TEST_STORAGE=postgres). */
@@ -35,7 +37,10 @@ async function createBucket() {
   process.env.AWS_ACCESS_KEY_ID ??= 'test';
   process.env.AWS_SECRET_ACCESS_KEY ??= 'test';
   const bucket = `test-reports-${randomBytes(5).toString('hex')}`;
-  await new S3Client({ region: 'us-east-1', endpoint, forcePathStyle: true }).send(new CreateBucketCommand({ Bucket: bucket }));
+  const client = new S3Client({ region: 'us-east-1', endpoint, forcePathStyle: true });
+  await client.send(new CreateBucketCommand({ Bucket: bucket }));
+  // Like the Terraform reports bucket: versioning on, so an uploaded file can be pinned to the exact version that was verified.
+  await client.send(new PutBucketVersioningCommand({ Bucket: bucket, VersioningConfiguration: { Status: 'Enabled' } }));
   return { bucket, endpoint };
 }
 
@@ -55,6 +60,7 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
     JWT_AUDIENCE: TEST_AUDIENCE,
     STORAGE_DRIVER: database || options.postgresUrl ? 'postgres' : 'memory',
     ...(database || options.postgresUrl ? { DATABASE_URL: options.postgresUrl ?? database!.appUrl } : {}),
+    ...(options.labReportPipeline ? { LAB_REPORT_PIPELINE: 'enabled' } : {}),
     OBJECT_STORAGE_DRIVER: s3 ? 's3' : 'memory',
     ...(s3 ? { REPORTS_BUCKET: s3.bucket, S3_ENDPOINT: s3.endpoint, S3_FORCE_PATH_STYLE: 'true', AWS_REGION: 'us-east-1' } : {}),
   });

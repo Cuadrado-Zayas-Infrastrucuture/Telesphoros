@@ -11,6 +11,8 @@ export class AppException extends HttpException {
     readonly code: ErrorCode,
     message: string,
     readonly details?: ErrorDetail[],
+    /** Sent as the Retry-After header. Present only where waiting can help. */
+    readonly retryAfterSeconds?: number,
   ) {
     super(message, status);
   }
@@ -32,5 +34,31 @@ export class AppException extends HttpException {
   }
   static unavailable(message: string, details?: ErrorDetail[]) {
     return new AppException(503, ErrorCode.SERVICE_UNAVAILABLE, message, details);
+  }
+
+  /** A business conflict with a stable `reason` the caller can act on (it must change something; retrying as-is will not help). */
+  static conflictBecause(reason: string, message: string) {
+    return new AppException(409, ErrorCode.CONFLICT, message, [{ field: 'request', message, reason }]);
+  }
+  static pipelineDisabled() {
+    return new AppException(503, ErrorCode.PIPELINE_DISABLED, 'Lab report processing is switched off.');
+  }
+  static pipelineBusy() {
+    return new AppException(503, ErrorCode.PIPELINE_BUSY, 'The reader is busy. Try again shortly.', undefined, 5);
+  }
+  static readerUnavailable() {
+    return new AppException(503, ErrorCode.READER_UNAVAILABLE, 'The report could not be read just now. Nothing was saved; try again later.', undefined, 30);
+  }
+  static ledgerBusy() {
+    return new AppException(503, ErrorCode.LEDGER_BUSY, 'The record log is busy. Nothing was saved; try again.', undefined, 2);
+  }
+  static ledgerConflict() {
+    return new AppException(409, ErrorCode.LEDGER_CONFLICT, 'A record rule refused this change. Re-read the current state before deciding.');
+  }
+  static unsupportedSource() {
+    return new AppException(422, ErrorCode.UNSUPPORTED_SOURCE, 'This file is not one this build can read.');
+  }
+  static pipelineMisconfigured() {
+    return new AppException(500, ErrorCode.PIPELINE_MISCONFIGURED, 'Lab report processing is not installed correctly. An operator must fix this.');
   }
 }
