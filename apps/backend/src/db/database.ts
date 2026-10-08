@@ -9,12 +9,12 @@ export interface DatabaseOptions {
   max?: number;
 }
 
-const MAX_OWNER_ID_LENGTH = 128;
+const MAX_TENANT_ID_LENGTH = 128;
 
 /**
  * The application's only door to PostgreSQL.
  *
- * `withOwner` runs a unit of work inside ONE transaction that first sets `app.current_owner_id`
+ * `withTenant` runs a unit of work inside ONE transaction that first sets `app.current_tenant_id`
  * (transaction-local, so it cannot leak to the next request on a pooled connection). The row-level
  * security policies read that setting: if it is missing, the application role sees no rows.
  */
@@ -37,13 +37,13 @@ export class Database {
     this.pool.on('error', (error) => this.logger.error(`Idle database client error: ${error.message}`));
   }
 
-  async withOwner<T>(ownerId: string, work: (client: PoolClient) => Promise<T>): Promise<T> {
-    if (!ownerId || ownerId.length > MAX_OWNER_ID_LENGTH) throw new Error('Invalid owner id');
+  async withTenant<T>(tenantId: string, work: (client: PoolClient) => Promise<T>): Promise<T> {
+    if (!tenantId || tenantId.length > MAX_TENANT_ID_LENGTH) throw new Error('Invalid tenant id');
     const client = await this.pool.connect();
     let discard = false;
     try {
       await client.query('BEGIN');
-      await client.query(`SELECT set_config('app.current_owner_id', $1, true)`, [ownerId]);
+      await client.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
       const result = await work(client);
       await client.query('COMMIT');
       return result;

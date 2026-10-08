@@ -35,22 +35,22 @@ const run = <T>(db: EphemeralDatabase, work: (c: Client) => Promise<T>) => withA
 describe('migration runner', () => {
   it('applies every migration in order, and a second run does nothing', async () => {
     const db = await emptyDb();
-    expect(await run(db, (c) => migrateUp(c))).toEqual(['0001', '0002']);
+    expect(await run(db, (c) => migrateUp(c))).toEqual(['0001', '0002', '0003']);
     expect(await run(db, (c) => migrateUp(c))).toEqual([]);
     const status = await run(db, (c) => migrationStatus(c));
-    expect(status.applied.map((m) => m.version)).toEqual(['0001', '0002']);
+    expect(status.applied.map((m) => m.version)).toEqual(['0001', '0002', '0003']);
     expect(status.pending).toEqual([]);
   });
 
   it('reverts step by step, and can re-apply after a full revert', async () => {
     const db = await emptyDb();
     await run(db, (c) => migrateUp(c));
-    expect(await run(db, (c) => migrateDown(c, 1))).toEqual(['0002']);
-    expect((await run(db, (c) => migrationStatus(c))).pending.map((m) => m.version)).toEqual(['0002']);
-    expect(await run(db, (c) => migrateDown(c, 5))).toEqual(['0001']);
+    expect(await run(db, (c) => migrateDown(c, 1))).toEqual(['0003']);
+    expect((await run(db, (c) => migrationStatus(c))).pending.map((m) => m.version)).toEqual(['0003']);
+    expect(await run(db, (c) => migrateDown(c, 5))).toEqual(['0002', '0001']);
     const tables = await run(db, (c) => c.query(`SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> 'schema_migrations'`));
     expect(tables.rows).toEqual([]);
-    expect(await run(db, (c) => migrateUp(c))).toEqual(['0001', '0002']);
+    expect(await run(db, (c) => migrateUp(c))).toEqual(['0001', '0002', '0003']);
   });
 
   it('refuses to run if an applied migration was edited afterwards', async () => {
@@ -64,23 +64,23 @@ describe('migration runner', () => {
   it('rolls back a failing migration completely and reports which one failed', async () => {
     const db = await emptyDb();
     const dir = tempMigrations();
-    writeFileSync(join(dir, '0003_broken.up.sql'), 'CREATE TABLE half_done (id int); SELECT 1/0;');
-    writeFileSync(join(dir, '0003_broken.down.sql'), 'DROP TABLE IF EXISTS half_done;');
-    await expect(run(db, (c) => migrateUp(c, dir))).rejects.toThrow(/Migration 0003 failed and was rolled back/);
+    writeFileSync(join(dir, '0004_broken.up.sql'), 'CREATE TABLE half_done (id int); SELECT 1/0;');
+    writeFileSync(join(dir, '0004_broken.down.sql'), 'DROP TABLE IF EXISTS half_done;');
+    await expect(run(db, (c) => migrateUp(c, dir))).rejects.toThrow(/Migration 0004 failed and was rolled back/);
     const left = await run(db, (c) => c.query(`SELECT to_regclass('public.half_done') AS t`));
     expect(left.rows[0].t).toBeNull();
-    expect((await run(db, (c) => migrationStatus(c))).applied.map((m) => m.version)).toEqual(['0001', '0002']);
+    expect((await run(db, (c) => migrationStatus(c))).applied.map((m) => m.version)).toEqual(['0001', '0002', '0003']);
   });
 
   it('is safe when two deploys start at the same moment (advisory lock)', async () => {
     const db = await emptyDb();
     const results = await Promise.all([run(db, (c) => migrateUp(c)), run(db, (c) => migrateUp(c))]);
-    expect(results.flat().sort()).toEqual(['0001', '0002']); // each migration applied exactly once, no error
+    expect(results.flat().sort()).toEqual(['0001', '0002', '0003']); // each migration applied exactly once, no error
   });
 
   it('reports pending migrations read-only (what /ready relies on)', async () => {
     const db = await emptyDb();
-    expect(await run(db, (c) => pendingMigrations(c))).toEqual(['0001', '0002']);
+    expect(await run(db, (c) => pendingMigrations(c))).toEqual(['0001', '0002', '0003']);
     await run(db, (c) => migrateUp(c));
     expect(await run(db, (c) => pendingMigrations(c))).toEqual([]);
   });
@@ -111,13 +111,13 @@ describe('schema (asserted by trying to break it on a real PostgreSQL)', () => {
     );
     expect(error?.code).toBe(code);
   };
-  const patient = async (owner: string, label: string) =>
-    (await q('INSERT INTO patients (owner_id, label) VALUES ($1, $2) RETURNING id', [owner, label])).rows[0].id as string;
-  const report = async (owner: string, patientId: string, extra = '') =>
+  const patient = async (tenant: string, label: string) =>
+    (await q('INSERT INTO patients (tenant_id, created_by, label) VALUES ($1, $1, $2) RETURNING id', [tenant, label])).rows[0].id as string;
+  const report = async (tenant: string, patientId: string, extra = '') =>
     (await q(
-      `INSERT INTO reports (owner_id, patient_id, type, original_filename, size_bytes${extra ? ', ' + extra.split('=')[0] : ''})
-       VALUES ($1, $2, 'vcf', 'a.vcf', 100${extra ? ', ' + extra.split('=')[1] : ''}) RETURNING id`,
-      [owner, patientId],
+      `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes${extra ? ', ' + extra.split('=')[0] : ''})
+       VALUES ($1, $1, $2, 'vcf', 'a.vcf', 100${extra ? ', ' + extra.split('=')[1] : ''}) RETURNING id`,
+      [tenant, patientId],
     )).rows[0].id as string;
 
   it('every foreign key states ON DELETE RESTRICT explicitly', async () => {
@@ -144,28 +144,28 @@ describe('schema (asserted by trying to break it on a real PostgreSQL)', () => {
     const { rows } = await q(`SELECT indexname FROM pg_indexes WHERE schemaname = 'public'`);
     const names = rows.map((r) => r.indexname);
     for (const expected of [
-      'patients_owner_label_uq', 'patients_owner_seq_idx', 'reports_storage_key_uq', 'reports_owner_seq_idx',
-      'reports_owner_patient_idx', 'reports_patient_idx', 'recommendations_owner_seq_idx',
-      'recommendations_owner_patient_idx', 'recommendations_owner_report_idx',
+      'patients_tenant_label_uq', 'patients_tenant_seq_idx', 'reports_storage_key_uq', 'reports_tenant_seq_idx',
+      'reports_tenant_patient_idx', 'reports_patient_idx', 'recommendations_tenant_seq_idx',
+      'recommendations_tenant_patient_idx', 'recommendations_tenant_report_idx',
     ]) {
       expect(names).toContain(expected);
     }
   });
 
-  it('enforces the label rules and uniqueness (case-insensitive, per owner, live rows only)', async () => {
-    await expectCode(`INSERT INTO patients (owner_id, label) VALUES ('o1', 'Jane Doe')`, '23514');
-    await expectCode(`INSERT INTO patients (owner_id, label) VALUES ('o1', '')`, '23514');
-    await expectCode(`INSERT INTO patients (owner_id, label) VALUES ('', 'SYN-1')`, '23514');
+  it('enforces the label rules and uniqueness (case-insensitive, per tenant, live rows only)', async () => {
+    await expectCode(`INSERT INTO patients (tenant_id, created_by, label) VALUES ('o1', 'o1', 'Jane Doe')`, '23514');
+    await expectCode(`INSERT INTO patients (tenant_id, created_by, label) VALUES ('o1', 'o1', '')`, '23514');
+    await expectCode(`INSERT INTO patients (tenant_id, created_by, label) VALUES ('', '', 'SYN-1')`, '23514');
     const id = await patient('o-uq', 'SYN-UQ');
-    await expectCode(`INSERT INTO patients (owner_id, label) VALUES ('o-uq', 'syn-uq')`, '23505');
-    await patient('o-other', 'SYN-UQ'); // another owner may reuse it
+    await expectCode(`INSERT INTO patients (tenant_id, created_by, label) VALUES ('o-uq', 'o-uq', 'syn-uq')`, '23505');
+    await patient('o-other', 'SYN-UQ'); // another tenant may reuse it
     await q('UPDATE patients SET deleted_at = now() WHERE id = $1', [id]);
     await patient('o-uq', 'SYN-UQ'); // a soft-deleted row frees its label
   });
 
   it('validates report fields', async () => {
     const p = await patient('o-rf', 'SYN-RF');
-    const bad = (cols: string, vals: string) => expectCode(`INSERT INTO reports (owner_id, patient_id, ${cols}) VALUES ('o-rf', '${p}', ${vals})`, '23514');
+    const bad = (cols: string, vals: string) => expectCode(`INSERT INTO reports (tenant_id, created_by, patient_id, ${cols}) VALUES ('o-rf', 'o-rf', '${p}', ${vals})`, '23514');
     await bad('type, original_filename, size_bytes', `'pdf', 'a.vcf', 10`);
     await bad('type, original_filename, size_bytes', `'vcf', '../a.vcf', 10`);
     await bad('type, original_filename, size_bytes', `'vcf', 'a.vcf', 0`);
@@ -180,28 +180,28 @@ describe('schema (asserted by trying to break it on a real PostgreSQL)', () => {
     const sha = 'a'.repeat(64);
     await report('o-key', p, `storage_key='reports/x/1'`);
     await expectCode(
-      `INSERT INTO reports (owner_id, patient_id, type, original_filename, size_bytes, storage_key, sha256, content_type)
-       VALUES ('o-key', '${p}', 'vcf', 'b.vcf', 5, 'reports/x/1', '${sha}', 'text/plain')`,
+      `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes, storage_key, sha256, content_type)
+       VALUES ('o-key', 'o-key', '${p}', 'vcf', 'b.vcf', 5, 'reports/x/1', '${sha}', 'text/plain')`,
       '23505',
     );
   });
 
-  it('composite foreign keys stop a child pointing at another owner’s parent', async () => {
+  it('composite foreign keys stop a child pointing at another tenant’s parent', async () => {
     const mine = await patient('o-fk1', 'SYN-FK1');
     await expectCode(
-      `INSERT INTO reports (owner_id, patient_id, type, original_filename, size_bytes) VALUES ('o-fk2', '${mine}', 'vcf', 'a.vcf', 1)`,
+      `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ('o-fk2', 'o-fk2', '${mine}', 'vcf', 'a.vcf', 1)`,
       '23503',
     );
     const rep = await report('o-fk1', mine);
     const theirs = await patient('o-fk2', 'SYN-FK2');
     await expectCode(
-      `INSERT INTO recommendations (owner_id, patient_id, report_id, gene, drug, phenotype, summary, strength, guideline_version)
-       VALUES ('o-fk2', '${theirs}', '${rep}', 'G', 'd', 'p', 's', 'Strong', 'v')`,
+      `INSERT INTO recommendations (tenant_id, created_by, patient_id, report_id, gene, drug, phenotype, summary, strength, guideline_version)
+       VALUES ('o-fk2', 'o-fk2', '${theirs}', '${rep}', 'G', 'd', 'p', 's', 'Strong', 'v')`,
       '23503',
     );
     await expectCode(
-      `INSERT INTO recommendations (owner_id, patient_id, report_id, gene, drug, phenotype, summary, strength, guideline_version)
-       VALUES ('o-fk1', '${mine}', '${rep}', 'G', 'd', 'p', 's', 'Mandatory', 'v')`,
+      `INSERT INTO recommendations (tenant_id, created_by, patient_id, report_id, gene, drug, phenotype, summary, strength, guideline_version)
+       VALUES ('o-fk1', 'o-fk1', '${mine}', '${rep}', 'G', 'd', 'p', 's', 'Mandatory', 'v')`,
       '23514',
     );
   });
@@ -212,8 +212,8 @@ describe('schema (asserted by trying to break it on a real PostgreSQL)', () => {
     await expectCode('DELETE FROM patients WHERE id = $1', '23503', [p]);
     await expectCode('UPDATE patients SET deleted_at = now() WHERE id = $1', '23503', [p]);
     await q(
-      `INSERT INTO recommendations (owner_id, patient_id, report_id, gene, drug, phenotype, summary, strength, guideline_version)
-       VALUES ('o-rs', $1, $2, 'G', 'd', 'p', 's', 'Strong', 'v')`,
+      `INSERT INTO recommendations (tenant_id, created_by, patient_id, report_id, gene, drug, phenotype, summary, strength, guideline_version)
+       VALUES ('o-rs', 'o-rs', $1, $2, 'G', 'd', 'p', 's', 'Strong', 'v')`,
       [p, r],
     );
     await expectCode('UPDATE reports SET deleted_at = now() WHERE id = $1', '23503', [r]);

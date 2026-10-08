@@ -5,8 +5,8 @@ import { InMemoryPatientsRepository } from '../storage/patients.repository';
 import { InMemoryReportsRepository } from '../storage/reports.repository';
 import { PatientsService } from './patients.service';
 
-const alice: Principal = { sub: 'alice', roles: ['clinician'] };
-const bob: Principal = { sub: 'bob', roles: ['clinician'] };
+const alice: Principal = { sub: 'alice', tenantId: 'alice', roles: ['clinician'] };
+const bob: Principal = { sub: 'bob', tenantId: 'bob', roles: ['clinician'] };
 
 function setup() {
   const patients = new InMemoryPatientsRepository();
@@ -19,19 +19,19 @@ describe('PatientsService', () => {
     it('stores an owned record with a uuid and matching timestamps', async () => {
       const { service, patients } = setup();
       const record = await service.create(alice, { label: 'SYN-1' });
-      expect(record.ownerId).toBe('alice');
+      expect(record.tenantId).toBe('alice');
       expect(record.id).toMatch(/^[0-9a-f-]{36}$/);
       expect(record.createdAt).toBe(record.updatedAt);
       expect(await patients.findById('alice', record.id)).toEqual(record);
     });
 
-    it('rejects a duplicate label for the same owner, ignoring case', async () => {
+    it('rejects a duplicate label for the same tenant, ignoring case', async () => {
       const { service } = setup();
       await service.create(alice, { label: 'SYN-1' });
       await expectAppException(service.create(alice, { label: 'syn-1' }), 409, 'CONFLICT');
     });
 
-    it('allows the same label for a different owner', async () => {
+    it('allows the same label for a different tenant', async () => {
       const { service } = setup();
       await service.create(alice, { label: 'SYN-1' });
       await expect(service.create(bob, { label: 'SYN-1' })).resolves.toBeDefined();
@@ -45,7 +45,7 @@ describe('PatientsService', () => {
       await expect(service.get(alice, created.id)).resolves.toEqual(created);
     });
 
-    it('reports another owner’s record and a missing record identically (NOT_FOUND)', async () => {
+    it('reports another tenant’s record and a missing record identically (NOT_FOUND)', async () => {
       const { service } = setup();
       const created = await service.create(alice, { label: 'SYN-1' });
       await expectAppException(service.get(bob, created.id), 404, 'NOT_FOUND');
@@ -54,7 +54,7 @@ describe('PatientsService', () => {
   });
 
   describe('list', () => {
-    it('pages with offset/limit, reports the owner’s total, and excludes other owners', async () => {
+    it('pages with offset/limit, reports the tenant’s total, and excludes other tenants', async () => {
       const { service } = setup();
       for (let i = 1; i <= 5; i++) await service.create(alice, { label: `SYN-${i}` });
       await service.create(bob, { label: 'SYN-BOB' });
@@ -67,12 +67,12 @@ describe('PatientsService', () => {
   });
 
   describe('replace', () => {
-    it('changes the label and refreshes updatedAt, keeping id and owner', async () => {
+    it('changes the label and refreshes updatedAt, keeping id and tenant', async () => {
       const { service } = setup();
       const created = await service.create(alice, { label: 'SYN-1' });
       await new Promise((resolve) => setTimeout(resolve, 5));
       const updated = await service.replace(alice, created.id, { label: 'SYN-2' });
-      expect(updated).toMatchObject({ id: created.id, ownerId: 'alice', label: 'SYN-2' });
+      expect(updated).toMatchObject({ id: created.id, tenantId: 'alice', label: 'SYN-2' });
       expect(updated.updatedAt > created.updatedAt).toBe(true);
     });
 
@@ -84,7 +84,7 @@ describe('PatientsService', () => {
       await expectAppException(service.replace(alice, one.id, { label: 'SYN-2' }), 409, 'CONFLICT');
     });
 
-    it('cannot touch another owner’s record', async () => {
+    it('cannot touch another tenant’s record', async () => {
       const { service } = setup();
       const created = await service.create(alice, { label: 'SYN-1' });
       await expectAppException(service.replace(bob, created.id, { label: 'X' }), 404, 'NOT_FOUND');
@@ -104,13 +104,13 @@ describe('PatientsService', () => {
       const { service, reports } = setup();
       const created = await service.create(alice, { label: 'SYN-1' });
       await reports.insert({
-        id: randomUUID(), ownerId: 'alice', patientId: created.id, type: 'vcf', filename: 'a.vcf',
+        id: randomUUID(), tenantId: 'alice', createdBy: 'alice', patientId: created.id, type: 'vcf', filename: 'a.vcf',
         sizeBytes: 1, status: 'received', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       });
       await expectAppException(service.remove(alice, created.id), 409, 'CONFLICT');
     });
 
-    it('cannot delete another owner’s record', async () => {
+    it('cannot delete another tenant’s record', async () => {
       const { service } = setup();
       const created = await service.create(alice, { label: 'SYN-1' });
       await expectAppException(service.remove(bob, created.id), 404, 'NOT_FOUND');

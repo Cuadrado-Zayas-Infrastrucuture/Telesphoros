@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { API, fakeClient, fakeFetch, TOKEN } from '@/test/authTestUtils';
-import { AuthProvider, NotSignedInError, SessionEndedError, useAuth } from './AuthProvider';
+import { AccountNotReadyError, AuthProvider, NotSignedInError, SessionEndedError, useAuth } from './AuthProvider';
 
 function setup(options: { client?: ReturnType<typeof fakeClient>; fetchImpl?: ReturnType<typeof fakeFetch> } = {}) {
   const client = options.client ?? fakeClient({ returnTo: '/reports/upload' });
@@ -51,6 +51,16 @@ describe('AuthProvider', () => {
     const { result, client } = setup({ fetchImpl: fakeFetch({ status: 401 }) });
     await act(async () => {
       await expect(result.current.completeSignIn()).rejects.toThrow();
+    });
+    expect(result.current.status).toBe('failed');
+    expect(result.current.roles).toEqual([]);
+    expect(client.signIn).not.toHaveBeenCalled();
+  });
+
+  it('tells "your account has no organization" (403) apart from other failures, and still never loops', async () => {
+    const { result, client } = setup({ fetchImpl: fakeFetch({ status: 403 }) });
+    await act(async () => {
+      await expect(result.current.completeSignIn()).rejects.toBeInstanceOf(AccountNotReadyError);
     });
     expect(result.current.status).toBe('failed');
     expect(result.current.roles).toEqual([]);

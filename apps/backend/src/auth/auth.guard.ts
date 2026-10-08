@@ -3,7 +3,7 @@ import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import { AppException } from '../common/app-exception';
 import { IS_PUBLIC_KEY } from './decorators';
-import { TokenVerifier } from './token-verifier';
+import { NoTenantError, TokenVerifier } from './token-verifier';
 
 /** Global guard: every route requires a valid bearer token unless it is marked @Public(). */
 @Injectable()
@@ -26,7 +26,9 @@ export class AuthGuard implements CanActivate {
 
     try {
       req.principal = await this.verifier.verify(token);
-    } catch {
+    } catch (error) {
+      // A genuine token for a user without exactly one tenant: known, but not allowed in.
+      if (error instanceof NoTenantError) throw AppException.forbidden();
       // intentional: never reveal why verification failed
       throw AppException.unauthorized();
     }

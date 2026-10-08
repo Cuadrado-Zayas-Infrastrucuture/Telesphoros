@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '@/auth/AuthProvider';
+import { AccountNotReadyError, useAuth } from '@/auth/AuthProvider';
 import { Alert } from '@/components/ui/Alert';
 import { AlertDescription } from '@/components/ui/AlertDescription';
 import { AlertTitle } from '@/components/ui/AlertTitle';
@@ -13,21 +13,38 @@ export default function AuthCallbackPage() {
   usePageTitle('Signing you in');
   const { completeSignIn } = useAuth();
   const navigate = useNavigate();
-  const [failed, setFailed] = useState(false);
+  const [failure, setFailure] = useState<'none' | 'generic' | 'account'>('none');
 
   useEffect(() => {
     let cancelled = false;
     completeSignIn().then(
       // `replace`: the one-time code in this URL must not stay in the browser history.
       (returnTo) => !cancelled && navigate(returnTo, { replace: true }),
-      () => !cancelled && setFailed(true),
+      (error: unknown) => {
+        // The one-time code and state must not stay in the address bar or history after a failure either.
+        window.history.replaceState(window.history.state, '', window.location.pathname);
+        if (!cancelled) setFailure(error instanceof AccountNotReadyError ? 'account' : 'generic');
+      },
     );
     return () => {
       cancelled = true;
     };
   }, [completeSignIn, navigate]);
 
-  if (failed) {
+  if (failure === 'account') {
+    return (
+      <div className="flex max-w-prose flex-col gap-4">
+        <h1 className="text-3xl leading-tight font-bold">Your account is not set up yet</h1>
+        <Alert variant="destructive">
+          <AlertTitle>No organization is assigned to your account</AlertTitle>
+          <AlertDescription>
+            You signed in successfully, but your account does not belong to an organization yet. Ask your administrator to add you to one. Trying again will not help until they do.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+  if (failure === 'generic') {
     return (
       <div className="flex max-w-prose flex-col gap-4">
         <h1 className="text-3xl leading-tight font-bold">Sign-in did not complete</h1>

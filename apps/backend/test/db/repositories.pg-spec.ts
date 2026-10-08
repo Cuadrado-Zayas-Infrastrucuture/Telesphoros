@@ -18,15 +18,15 @@ interface Stores {
 }
 
 const stamp = (offsetMs = 0) => new Date(Date.now() + offsetMs).toISOString();
-const patient = (ownerId: string, label: string, createdAt = stamp()): PatientRecord => ({
-  id: randomUUID(), ownerId, label, createdAt, updatedAt: createdAt,
+const patient = (tenantId: string, label: string, createdAt = stamp()): PatientRecord => ({
+  id: randomUUID(), tenantId, createdBy: 'syn-actor', label, createdAt, updatedAt: createdAt,
 });
-const report = (ownerId: string, patientId: string, over: Partial<ReportRecord> = {}): ReportRecord => ({
-  id: randomUUID(), ownerId, patientId, type: 'vcf', filename: 'a.vcf', sizeBytes: 100, status: 'received',
+const report = (tenantId: string, patientId: string, over: Partial<ReportRecord> = {}): ReportRecord => ({
+  id: randomUUID(), tenantId, createdBy: 'syn-actor', patientId, type: 'vcf', filename: 'a.vcf', sizeBytes: 100, status: 'received',
   createdAt: stamp(), updatedAt: stamp(), ...over,
 });
-const recommendation = (ownerId: string, patientId: string, reportId: string, over: Partial<RecommendationRecord> = {}): RecommendationRecord => ({
-  id: randomUUID(), ownerId, patientId, reportId, gene: 'G', drug: 'd', phenotype: 'p', summary: 's',
+const recommendation = (tenantId: string, patientId: string, reportId: string, over: Partial<RecommendationRecord> = {}): RecommendationRecord => ({
+  id: randomUUID(), tenantId, createdBy: 'syn-actor', patientId, reportId, gene: 'G', drug: 'd', phenotype: 'p', summary: 's',
   strength: 'Strong', guidelineVersion: 'v0', createdAt: stamp(), ...over,
 });
 
@@ -47,7 +47,7 @@ const memory = async (): Promise<Stores> => ({
   recommendations: new InMemoryRecommendationsRepository(),
   close: async () => undefined,
 });
-// The Postgres stores share one database, so each test uses its own owner ids to stay independent.
+// The Postgres stores share one database, so each test uses its own tenant ids to stay independent.
 const postgres = async (): Promise<Stores> => ({
   patients: new PostgresPatientsRepository(database),
   reports: new PostgresReportsRepository(database),
@@ -59,12 +59,12 @@ const postgres = async (): Promise<Stores> => ({
 // One contract, run against BOTH implementations: they must be interchangeable.
 // ---------------------------------------------------------------------------------------------
 describe.each([['in-memory', memory], ['postgres', postgres]] as const)('repository contract: %s', (_name, make) => {
-  const owner = () => `owner-${randomUUID()}`;
+  const tenant = () => `tenant-${randomUUID()}`;
 
   describe('patients', () => {
     it('round-trips a record exactly (including timestamps) and finds it by label, ignoring case', async () => {
       const { patients } = await make();
-      const o = owner();
+      const o = tenant();
       const p = patient(o, 'SYN-1');
       await patients.insert(p);
       expect(await patients.findById(o, p.id)).toEqual(p);
@@ -72,9 +72,9 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
       expect(await patients.findByLabel(o, 'SYN-2')).toBeUndefined();
     });
 
-    it('is owner-scoped on every read and write', async () => {
+    it('is tenant-scoped on every read and write', async () => {
       const { patients } = await make();
-      const [a, b] = [owner(), owner()];
+      const [a, b] = [tenant(), tenant()];
       const p = patient(a, 'SYN-1');
       await patients.insert(p);
       expect(await patients.findById(b, p.id)).toBeUndefined();
@@ -86,7 +86,7 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
 
     it('lists in CREATION order even when timestamps tie, with correct totals and pages', async () => {
       const { patients } = await make();
-      const o = owner();
+      const o = tenant();
       const sameInstant = stamp();
       for (let i = 1; i <= 5; i++) await patients.insert(patient(o, `SYN-${i}`, sameInstant));
       const page = await patients.list(o, { offset: 2, limit: 2 });
@@ -98,7 +98,7 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
 
     it('updates the label and timestamp', async () => {
       const { patients } = await make();
-      const o = owner();
+      const o = tenant();
       const p = patient(o, 'SYN-1');
       await patients.insert(p);
       const changed = { ...p, label: 'SYN-9', updatedAt: stamp(5000) };
@@ -108,7 +108,7 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
 
     it('soft delete: hidden from reads and lists, reported once, and the label becomes reusable', async () => {
       const { patients } = await make();
-      const o = owner();
+      const o = tenant();
       const p = patient(o, 'SYN-1');
       await patients.insert(p);
       expect(await patients.delete(o, p.id)).toBe(true);
@@ -123,7 +123,7 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
   describe('reports', () => {
     it('round-trips upload fields, filters by patient, and counts only live reports', async () => {
       const { patients, reports } = await make();
-      const o = owner();
+      const o = tenant();
       const [p1, p2] = [patient(o, 'SYN-A'), patient(o, 'SYN-B')];
       await patients.insert(p1);
       await patients.insert(p2);
@@ -144,7 +144,7 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
 
     it('persists updates, including completing an upload', async () => {
       const { patients, reports } = await make();
-      const o = owner();
+      const o = tenant();
       const p = patient(o, 'SYN-A');
       await patients.insert(p);
       const r = report(o, p.id);
@@ -157,9 +157,9 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
       expect(await reports.findById(o, r.id)).toEqual(done);
     });
 
-    it('is owner-scoped', async () => {
+    it('is tenant-scoped', async () => {
       const { patients, reports } = await make();
-      const [a, b] = [owner(), owner()];
+      const [a, b] = [tenant(), tenant()];
       const p = patient(a, 'SYN-A');
       await patients.insert(p);
       const r = report(a, p.id);
@@ -171,9 +171,9 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
   });
 
   describe('recommendations', () => {
-    it('lists, filters and fetches, scoped to the owner', async () => {
+    it('lists, filters and fetches, scoped to the tenant', async () => {
       const { patients, reports, recommendations } = await make();
-      const [a, b] = [owner(), owner()];
+      const [a, b] = [tenant(), tenant()];
       const pa = patient(a, 'SYN-A');
       const pb = patient(b, 'SYN-B');
       await patients.insert(pa);
@@ -200,7 +200,7 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
 // PostgreSQL-only guarantees: the database itself says no, whatever the application does.
 // ---------------------------------------------------------------------------------------------
 describe('postgres: what only the database can guarantee', () => {
-  const owner = () => `owner-${randomUUID()}`;
+  const tenant = () => `tenant-${randomUUID()}`;
   const stores = () => ({
     patients: new PostgresPatientsRepository(database),
     reports: new PostgresReportsRepository(database),
@@ -208,7 +208,7 @@ describe('postgres: what only the database can guarantee', () => {
 
   it('two racing inserts of the same label: exactly one wins, the loser gets an IntegrityError (not a 500)', async () => {
     const { patients } = stores();
-    const o = owner();
+    const o = tenant();
     const results = await Promise.allSettled([patients.insert(patient(o, 'SYN-RACE')), patients.insert(patient(o, 'SYN-RACE'))]);
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     const rejected = results.find((r) => r.status === 'rejected') as PromiseRejectedResult;
@@ -217,7 +217,7 @@ describe('postgres: what only the database can guarantee', () => {
 
   it('soft delete keeps the row (audit trail) and stamps deleted_at', async () => {
     const { patients } = stores();
-    const o = owner();
+    const o = tenant();
     const p = patient(o, 'SYN-KEEP');
     await patients.insert(p);
     await patients.delete(o, p.id);
@@ -228,7 +228,7 @@ describe('postgres: what only the database can guarantee', () => {
 
   it('refuses to soft-delete a patient that still has live reports, and allows it once they are gone', async () => {
     const { patients, reports } = stores();
-    const o = owner();
+    const o = tenant();
     const p = patient(o, 'SYN-GUARD');
     await patients.insert(p);
     const r = report(o, p.id);
@@ -238,9 +238,9 @@ describe('postgres: what only the database can guarantee', () => {
     await expect(patients.delete(o, p.id)).resolves.toBe(true);
   });
 
-  it('refuses a report that points at another owner’s patient', async () => {
+  it('refuses a report that points at another tenant’s patient', async () => {
     const { patients, reports } = stores();
-    const [a, b] = [owner(), owner()];
+    const [a, b] = [tenant(), tenant()];
     const p = patient(a, 'SYN-X');
     await patients.insert(p);
     await expect(reports.insert(report(b, p.id))).rejects.toBeInstanceOf(IntegrityError);
@@ -248,7 +248,7 @@ describe('postgres: what only the database can guarantee', () => {
 
   it('refuses to register the same storage key for two reports', async () => {
     const { patients, reports } = stores();
-    const o = owner();
+    const o = tenant();
     const p = patient(o, 'SYN-KEY');
     await patients.insert(p);
     const key = `reports/${randomUUID()}`;

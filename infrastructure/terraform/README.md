@@ -51,7 +51,7 @@ objectives for the managed database as **unproven** until a restore drill has be
 ## Authentication (Cognito) and the password-change notifier
 
 `cognito.tf` and `lambda.tf` add: an **invite-only** user pool (MFA required, authenticator app only, 14-character
-passwords, email-only recovery), the `reader`/`clinician`/`admin` groups, a **public** browser client (authorization
+passwords, email-only recovery), the `reader`/`clinician`/`admin` groups (tenant groups, `tenant:<id>`, are created per organization by the runbook in `docs/auth.md`, not here), a **public** browser client (authorization
 code + PKCE, 15-minute tokens, revocation on, no user-enumeration hints), the sign-in domain, an SES sender, and the
 Lambda that emails the owner when a password is reset. Build the Lambda first:
 

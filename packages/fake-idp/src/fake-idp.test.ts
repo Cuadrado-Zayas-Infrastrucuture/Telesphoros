@@ -40,7 +40,7 @@ describe('fake IdP behaves like a strict OIDC provider', () => {
     expect(meta.issuer).toBe(idp.issuer);
     const keys = createLocalJWKSet((await (await fetch(idp.jwksUri)).json()) as { keys: JWK[] });
     const { payload } = await jwtVerify(await idp.mintAccessToken(), keys, { issuer: idp.issuer });
-    expect(payload).toMatchObject({ token_use: 'access', client_id: 'test-client', 'cognito:groups': ['clinician'] });
+    expect(payload).toMatchObject({ token_use: 'access', client_id: 'test-client', 'cognito:groups': ['clinician', 'tenant:alpha'] });
   });
 
   it('rejects an unregistered redirect_uri, missing PKCE and missing state', async () => {

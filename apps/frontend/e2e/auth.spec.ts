@@ -47,10 +47,26 @@ test.describe('signing in', () => {
     });
   }
 
+  // erin is in no organization and frank is in two: the API refuses both (403), and the page says why.
+  for (const persona of ['erin', 'frank'] as const) {
+    test(`${persona} signs in but is told the account is not set up, with no pointless retry`, async ({ page }) => {
+      await page.goto('/reports/upload');
+      await page.getByRole('button', { name: 'Sign in' }).click();
+      await page.getByRole('button', { name: new RegExp(`Sign in as ${persona}\\b`) }).click();
+      await expect(page.getByRole('heading', { level: 1, name: 'Your account is not set up yet' })).toBeVisible();
+      await expect(page.getByText('No organization is assigned to your account')).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Try again' })).toHaveCount(0);
+      await expect(page.getByLabel(/report file/i)).toHaveCount(0);
+      expect(page.url()).not.toMatch(/[?&](code|state)=/);
+      expect(await axeViolations(page)).toEqual([]);
+    });
+  }
+
   test('a failed sign-in callback shows a clear message and a way to retry', async ({ page }) => {
     await page.goto('/auth/callback?code=bogus&state=bogus');
     await expect(page.getByRole('heading', { level: 1, name: 'Sign-in did not complete' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Try again' })).toHaveAttribute('href', '/signin');
+    expect(page.url()).not.toMatch(/[?&](code|state)=/); // a failed attempt does not leave its one-time values behind
     expect(await axeViolations(page)).toEqual([]);
   });
 });

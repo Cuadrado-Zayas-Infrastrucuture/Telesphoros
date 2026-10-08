@@ -64,7 +64,7 @@ describe('report upload: the happy path', () => {
     expect(Object.keys(done.body).sort()).toEqual(
       ['contentType', 'createdAt', 'fileUploaded', 'filename', 'id', 'patientId', 'sha256', 'sizeBytes', 'status', 'type', 'updatedAt'],
     );
-    expect(JSON.stringify(done.body)).not.toMatch(/owner|user-a|reports\//);
+    expect(JSON.stringify(done.body)).not.toMatch(/owner|tenant|created_?by|user-a|reports\//);
   });
 
   it('is idempotent: completing twice is fine, but a second upload URL is refused', async () => {
@@ -85,7 +85,7 @@ describe('report upload: the happy path', () => {
     await complete(a, id).expect(200);
   });
 
-  (usingS3() ? it : it.skip)('stores exactly one object under reports/<owner hash>/<report id>/ with no raw owner id in the key', async () => {
+  (usingS3() ? it : it.skip)('stores exactly one object under reports/<tenant hash>/<report id>/ with no raw tenant id in the key', async () => {
     const a = await clinicianA();
     const id = await newReport(a);
     await putFile((await uploadUrl(a, id).expect(200)).body, VCF);

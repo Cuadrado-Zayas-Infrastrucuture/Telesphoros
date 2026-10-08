@@ -6,17 +6,17 @@ import { InMemoryPatientsRepository } from '../storage/patients.repository';
 import { InMemoryReportsRepository } from '../storage/reports.repository';
 import { ReportsService } from './reports.service';
 
-const alice: Principal = { sub: 'alice', roles: ['clinician'] };
-const bob: Principal = { sub: 'bob', roles: ['clinician'] };
+const alice: Principal = { sub: 'alice', tenantId: 'alice', roles: ['clinician'] };
+const bob: Principal = { sub: 'bob', tenantId: 'bob', roles: ['clinician'] };
 const input = (patientId: string) => ({ patientId, type: 'vcf' as const, filename: 'a.vcf', sizeBytes: 100 });
 
 async function setup() {
   const patients = new InMemoryPatientsRepository();
   const service = new ReportsService(new InMemoryReportsRepository(), patients, new InMemoryObjectStorage(300));
   const now = new Date().toISOString();
-  const mkPatient = async (ownerId: string) => {
+  const mkPatient = async (tenantId: string) => {
     const id = randomUUID();
-    await patients.insert({ id, ownerId, label: `SYN-${id.slice(0, 6)}`, createdAt: now, updatedAt: now });
+    await patients.insert({ id, tenantId, createdBy: tenantId, label: `SYN-${id.slice(0, 6)}`, createdAt: now, updatedAt: now });
     return id;
   };
   return { service, mkPatient };
@@ -27,10 +27,10 @@ describe('ReportsService', () => {
     it('registers metadata owned by the caller, always with status "received"', async () => {
       const { service, mkPatient } = await setup();
       const record = await service.create(alice, input(await mkPatient('alice')));
-      expect(record).toMatchObject({ ownerId: 'alice', status: 'received', type: 'vcf', filename: 'a.vcf', sizeBytes: 100 });
+      expect(record).toMatchObject({ tenantId: 'alice', status: 'received', type: 'vcf', filename: 'a.vcf', sizeBytes: 100 });
     });
 
-    it('treats a missing patient and another owner’s patient identically (NOT_FOUND)', async () => {
+    it('treats a missing patient and another tenant’s patient identically (NOT_FOUND)', async () => {
       const { service, mkPatient } = await setup();
       const bobsPatient = await mkPatient('bob');
       await expectAppException(service.create(alice, input(bobsPatient)), 404, 'NOT_FOUND');
@@ -46,7 +46,7 @@ describe('ReportsService', () => {
       await expectAppException(service.get(bob, created.id), 404, 'NOT_FOUND');
     });
 
-    it('list filters by patient, pages, and is owner-scoped', async () => {
+    it('list filters by patient, pages, and is tenant-scoped', async () => {
       const { service, mkPatient } = await setup();
       const p1 = await mkPatient('alice');
       const p2 = await mkPatient('alice');
@@ -71,7 +71,7 @@ describe('ReportsService', () => {
       expect(updated.updatedAt > created.updatedAt).toBe(true);
     });
 
-    it('cannot patch another owner’s report', async () => {
+    it('cannot patch another tenant’s report', async () => {
       const { service, mkPatient } = await setup();
       const created = await service.create(alice, input(await mkPatient('alice')));
       await expectAppException(service.patch(bob, created.id, { type: 'structured' }), 404, 'NOT_FOUND');
@@ -79,7 +79,7 @@ describe('ReportsService', () => {
   });
 
   describe('remove', () => {
-    it('deletes own report; cannot delete another owner’s', async () => {
+    it('deletes own report; cannot delete another tenant’s', async () => {
       const { service, mkPatient } = await setup();
       const created = await service.create(alice, input(await mkPatient('alice')));
       await expectAppException(service.remove(bob, created.id), 404, 'NOT_FOUND');

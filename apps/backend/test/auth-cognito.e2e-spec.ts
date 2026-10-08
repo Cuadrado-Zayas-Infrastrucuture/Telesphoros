@@ -22,8 +22,9 @@ afterAll(async () => {
   await idp.stop();
 });
 
-const user = (name: 'alice' | 'bob' | 'carol' | 'dave') => idp.users.find((u) => u.email.startsWith(name))!;
-const token = (name: 'alice' | 'bob' | 'carol' | 'dave') => idp.mintAccessToken({ user: user(name) });
+type Name = 'alice' | 'bob' | 'carol' | 'dave' | 'erin' | 'frank';
+const user = (name: Name) => idp.users.find((u) => u.email.startsWith(name))!;
+const token = (name: Name) => idp.mintAccessToken({ user: user(name) });
 const api = () => request(app.getHttpServer());
 
 describe('the API, authenticating real RS256 Cognito-shaped tokens', () => {
@@ -38,12 +39,28 @@ describe('the API, authenticating real RS256 Cognito-shaped tokens', () => {
     }
   });
 
-  it('one user can never see or touch another user’s records (the subject becomes the owner, RLS binds on PostgreSQL)', async () => {
+  it('one tenant can never see or touch another tenant’s records (the tenant group becomes the scope, RLS binds on PostgreSQL)', async () => {
     const created = (await api().post('/api/v1/patients').set(bearer(await token('alice'))).send({ label: `SYN-${randomUUID().slice(0, 8)}` }).expect(201)).body;
     const bobsList = await api().get('/api/v1/patients').set(bearer(await token('bob'))).expect(200);
     expect(bobsList.body.data.map((p: { id: string }) => p.id)).not.toContain(created.id);
     await api().get(`/api/v1/patients/${created.id}`).set(bearer(await token('bob'))).expect(404);
     await api().get(`/api/v1/patients/${created.id}`).set(bearer(await token('alice'))).expect(200);
+  });
+
+  it('members of one tenant share records: alice and carol (tenant alpha) see each other’s, bob (beta) sees neither', async () => {
+    const created = (await api().post('/api/v1/patients').set(bearer(await token('alice'))).send({ label: `SYN-${randomUUID().slice(0, 8)}` }).expect(201)).body;
+    await api().get(`/api/v1/patients/${created.id}`).set(bearer(await token('carol'))).expect(200);
+    await api().get(`/api/v1/patients/${created.id}`).set(bearer(await token('bob'))).expect(404);
+  });
+
+  it('a signed-in user without exactly one tenant group is refused with 403: erin has none, frank has two', async () => {
+    for (const who of ['erin', 'frank'] as const) {
+      for (const path of ['/api/v1/me', '/api/v1/patients']) {
+        const res = await api().get(path).set(bearer(await token(who))).expect(403);
+        expect(errorResponseSchema.safeParse(res.body).success).toBe(true);
+        expect(res.body.error.code).toBe('FORBIDDEN');
+      }
+    }
   });
 
   it('GET /me returns the caller’s roles and nothing else', async () => {

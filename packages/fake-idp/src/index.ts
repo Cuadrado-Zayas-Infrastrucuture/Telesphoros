@@ -17,11 +17,18 @@ export interface FakeUser {
   groups: string[];
 }
 
+/**
+ * Groups work like Cognito's: role groups plus exactly one "tenant:<id>" group per user.
+ * alice and carol share a tenant (so tests can prove members see each other's records); bob and
+ * dave are in another. erin has a role but no tenant, and frank is in two tenants: both must be refused.
+ */
 export const DEFAULT_USERS: FakeUser[] = [
-  { sub: '11111111-1111-4111-8111-111111111111', email: 'alice@example.test', groups: ['clinician'] },
-  { sub: '22222222-2222-4222-8222-222222222222', email: 'bob@example.test', groups: ['reader'] },
-  { sub: '33333333-3333-4333-8333-333333333333', email: 'carol@example.test', groups: ['admin'] },
-  { sub: '44444444-4444-4444-8444-444444444444', email: 'dave@example.test', groups: [] },
+  { sub: '11111111-1111-4111-8111-111111111111', email: 'alice@example.test', groups: ['clinician', 'tenant:alpha'] },
+  { sub: '22222222-2222-4222-8222-222222222222', email: 'bob@example.test', groups: ['reader', 'tenant:beta'] },
+  { sub: '33333333-3333-4333-8333-333333333333', email: 'carol@example.test', groups: ['admin', 'tenant:alpha'] },
+  { sub: '44444444-4444-4444-8444-444444444444', email: 'dave@example.test', groups: ['tenant:beta'] },
+  { sub: '55555555-5555-4555-8555-555555555555', email: 'erin@example.test', groups: ['clinician'] },
+  { sub: '66666666-6666-4666-8666-666666666666', email: 'frank@example.test', groups: ['clinician', 'tenant:alpha', 'tenant:beta'] },
 ];
 
 export interface FakeIdpOptions {

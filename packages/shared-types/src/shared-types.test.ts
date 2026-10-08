@@ -13,6 +13,9 @@ import {
   reportPatchSchema,
   reportUploadUrlRequestSchema,
   reportUploadUrlResponseSchema,
+  TENANT_GROUP_PREFIX,
+  tenantFromGroups,
+  tenantIdSchema,
 } from './index';
 
 const uuid = '3f2b8c1e-5a47-4d0e-9c3a-1b2c3d4e5f60';
@@ -94,5 +97,27 @@ describe('upload contract', () => {
     };
     expect(reportDtoSchema.safeParse(dto).success).toBe(true);
     expect(reportDtoSchema.safeParse({ ...dto, storageKey: 'reports/x' }).success).toBe(false);
+  });
+});
+
+describe('tenant ids and tenant groups', () => {
+  it('accepts lower-case letters, digits and dashes, 1 to 63 characters, not starting with a dash', () => {
+    for (const ok of ['a', 'acme', 'acme-pharmacy-2', '9lives', 'a'.repeat(63)]) expect(tenantIdSchema.safeParse(ok).success, ok).toBe(true);
+    for (const bad of ['', '-a', 'A', 'a b', 'a_b', 'a/b', 'a:b', 'a'.repeat(64), 'ñ', 'a\n']) expect(tenantIdSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+  });
+
+  it('finds the tenant in exactly one "tenant:<id>" group, ignoring roles and look-alikes', () => {
+    expect(tenantFromGroups(['clinician', 'tenant:acme'])).toEqual({ ok: true, tenantId: 'acme' });
+    expect(tenantFromGroups(['tenant:acme', 'tenants', 'tenant', 'Tenant:other'])).toEqual({ ok: true, tenantId: 'acme' });
+  });
+
+  it('refuses none, several (even identical), and malformed ones', () => {
+    for (const groups of [[], ['clinician'], ['tenant:a', 'tenant:b'], ['tenant:a', 'tenant:a'], ['tenant:'], ['tenant:A'], ['tenant:a b'], [`tenant:${'a'.repeat(64)}`]]) {
+      expect(tenantFromGroups(groups), JSON.stringify(groups)).toEqual({ ok: false });
+    }
+  });
+
+  it('uses the documented prefix', () => {
+    expect(TENANT_GROUP_PREFIX).toBe('tenant:');
   });
 });

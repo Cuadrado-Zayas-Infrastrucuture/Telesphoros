@@ -7,7 +7,8 @@ import { type ReportFilter, ReportsRepository } from '../reports.repository';
 
 interface ReportRow {
   id: string;
-  owner_id: string;
+  tenant_id: string;
+  created_by: string;
   patient_id: string;
   type: ReportType;
   original_filename: string;
@@ -22,11 +23,12 @@ interface ReportRow {
 }
 
 const COLUMNS =
-  'id, owner_id, patient_id, type, original_filename, size_bytes, status, content_type, sha256, storage_key, uploaded_at, created_at, updated_at';
+  'id, tenant_id, created_by, patient_id, type, original_filename, size_bytes, status, content_type, sha256, storage_key, uploaded_at, created_at, updated_at';
 
 const toRecord = (row: ReportRow): ReportRecord => ({
   id: row.id,
-  ownerId: row.owner_id,
+  tenantId: row.tenant_id,
+  createdBy: row.created_by,
   patientId: row.patient_id,
   type: row.type,
   filename: row.original_filename,
@@ -46,37 +48,37 @@ export class PostgresReportsRepository extends ReportsRepository {
     super();
   }
 
-  list(ownerId: string, { offset, limit }: PageRequest, filter: ReportFilter): Promise<Page<ReportRecord>> {
-    return this.db.withOwner(ownerId, async (client) => {
+  list(tenantId: string, { offset, limit }: PageRequest, filter: ReportFilter): Promise<Page<ReportRecord>> {
+    return this.db.withTenant(tenantId, async (client) => {
       // `$2::uuid IS NULL OR patient_id = $2` keeps ONE static query text for both filtered and unfiltered lists.
-      const where = 'owner_id = $1 AND deleted_at IS NULL AND ($2::uuid IS NULL OR patient_id = $2::uuid)';
+      const where = 'tenant_id = $1 AND deleted_at IS NULL AND ($2::uuid IS NULL OR patient_id = $2::uuid)';
       const rows = await client.query<ReportRow>(
         `SELECT ${COLUMNS} FROM reports WHERE ${where} ORDER BY seq LIMIT $3 OFFSET $4`,
-        [ownerId, filter.patientId ?? null, limit, offset],
+        [tenantId, filter.patientId ?? null, limit, offset],
       );
       const total = await client.query<{ n: number }>(`SELECT count(*)::int AS n FROM reports WHERE ${where}`, [
-        ownerId,
+        tenantId,
         filter.patientId ?? null,
       ]);
       return { items: rows.rows.map(toRecord), total: total.rows[0]!.n };
     });
   }
 
-  findById(ownerId: string, id: string): Promise<ReportRecord | undefined> {
-    return this.db.withOwner(ownerId, async (client) => {
+  findById(tenantId: string, id: string): Promise<ReportRecord | undefined> {
+    return this.db.withTenant(tenantId, async (client) => {
       const { rows } = await client.query<ReportRow>(
-        `SELECT ${COLUMNS} FROM reports WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL`,
-        [id, ownerId],
+        `SELECT ${COLUMNS} FROM reports WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+        [id, tenantId],
       );
       return rows[0] ? toRecord(rows[0]) : undefined;
     });
   }
 
-  countByPatient(ownerId: string, patientId: string): Promise<number> {
-    return this.db.withOwner(ownerId, async (client) => {
+  countByPatient(tenantId: string, patientId: string): Promise<number> {
+    return this.db.withTenant(tenantId, async (client) => {
       const { rows } = await client.query<{ n: number }>(
-        'SELECT count(*)::int AS n FROM reports WHERE owner_id = $1 AND patient_id = $2 AND deleted_at IS NULL',
-        [ownerId, patientId],
+        'SELECT count(*)::int AS n FROM reports WHERE tenant_id = $1 AND patient_id = $2 AND deleted_at IS NULL',
+        [tenantId, patientId],
       );
       return rows[0]!.n;
     });
@@ -84,13 +86,13 @@ export class PostgresReportsRepository extends ReportsRepository {
 
   async insert(record: ReportRecord): Promise<void> {
     try {
-      await this.db.withOwner(record.ownerId, (client) =>
+      await this.db.withTenant(record.tenantId, (client) =>
         client.query(
-          `INSERT INTO reports (id, owner_id, patient_id, type, original_filename, size_bytes, status,
+          `INSERT INTO reports (id, tenant_id, created_by, patient_id, type, original_filename, size_bytes, status,
                                 content_type, sha256, storage_key, uploaded_at, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
           [
-            record.id, record.ownerId, record.patientId, record.type, record.filename, record.sizeBytes,
+            record.id, record.tenantId, record.createdBy, record.patientId, record.type, record.filename, record.sizeBytes,
             record.status, record.contentType ?? null, record.sha256 ?? null, record.storageKey ?? null,
             record.uploadedAt ?? null, record.createdAt, record.updatedAt,
           ],
@@ -103,14 +105,14 @@ export class PostgresReportsRepository extends ReportsRepository {
 
   async update(record: ReportRecord): Promise<void> {
     try {
-      await this.db.withOwner(record.ownerId, (client) =>
+      await this.db.withTenant(record.tenantId, (client) =>
         client.query(
           `UPDATE reports
               SET type = $3, original_filename = $4, status = $5, content_type = $6, sha256 = $7,
                   storage_key = $8, uploaded_at = $9, updated_at = $10
-            WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL`,
+            WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
           [
-            record.id, record.ownerId, record.type, record.filename, record.status,
+            record.id, record.tenantId, record.type, record.filename, record.status,
             record.contentType ?? null, record.sha256 ?? null, record.storageKey ?? null,
             record.uploadedAt ?? null, record.updatedAt,
           ],
@@ -121,12 +123,12 @@ export class PostgresReportsRepository extends ReportsRepository {
     }
   }
 
-  async delete(ownerId: string, id: string): Promise<boolean> {
+  async delete(tenantId: string, id: string): Promise<boolean> {
     try {
-      return await this.db.withOwner(ownerId, async (client) => {
+      return await this.db.withTenant(tenantId, async (client) => {
         const result = await client.query(
-          'UPDATE reports SET deleted_at = now(), updated_at = now() WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL',
-          [id, ownerId],
+          'UPDATE reports SET deleted_at = now(), updated_at = now() WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL',
+          [id, tenantId],
         );
         return (result.rowCount ?? 0) > 0;
       });

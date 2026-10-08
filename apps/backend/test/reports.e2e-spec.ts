@@ -25,7 +25,7 @@ describe('reports', () => {
     const res = await api().post(BASE).set(bearer(a)).send(validBody(patientId)).expect(201);
     expect(res.body.status).toBe('received');
     expect(reportDtoSchema.safeParse(res.body).success).toBe(true);
-    expect(JSON.stringify(res.body)).not.toMatch(/owner|user-a/i);
+    expect(JSON.stringify(res.body)).not.toMatch(/owner|tenant|created_?by|user-a/i);
   });
 
   it('forbids a reader from creating reports', async () => {

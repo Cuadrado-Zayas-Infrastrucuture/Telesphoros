@@ -41,7 +41,7 @@ function withDatabase(url: string, database: string): string {
 /**
  * Restores a backup into a fresh database and PROVES it is a faithful, working copy:
  * file integrity, row counts against the baseline taken inside the backup's own snapshot,
- * migrations, schema shape, and that row-level security still isolates owners.
+ * migrations, schema shape, and that row-level security still isolates tenants.
  * Never touches an existing database. Exits "not ok" rather than guessing.
  */
 export async function restoreAndVerify(options: RestoreOptions): Promise<RestoreReport> {
@@ -153,7 +153,7 @@ async function verify(url: string, manifest: BackupManifest, record: (n: string,
     };
     record('schema shape (constraints, indexes, triggers)', JSON.stringify(schema) === JSON.stringify(manifest.schema), JSON.stringify(schema));
 
-    // Row-level security survived, and still isolates owners.
+    // Row-level security survived, and still isolates tenants.
     const flags = await db.query<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>(
       `SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relkind = 'r'`,
     );
@@ -171,7 +171,7 @@ async function verify(url: string, manifest: BackupManifest, record: (n: string,
   }
 }
 
-/** Acts as the application role: with no owner it must see nothing; with one owner, exactly that owner's rows. */
+/** Acts as the application role: with no tenant it must see nothing; with one tenant, exactly that tenant's rows. */
 async function verifyIsolation(db: Client, tables: string[], record: (n: string, ok: boolean, d: string) => void) {
   const role = await db.query(`SELECT 1 FROM pg_roles WHERE rolname = 'telesphoros_app'`);
   if (role.rowCount === 0) {
@@ -180,21 +180,21 @@ async function verifyIsolation(db: Client, tables: string[], record: (n: string,
   }
   const problems: string[] = [];
   for (const table of tables) {
-    const owner = (await db.query<{ owner_id: string }>(`SELECT owner_id FROM ${quoteIdent(table)} LIMIT 1`)).rows[0]?.owner_id;
-    if (owner === undefined) continue; // an empty table proves nothing and breaks nothing
-    const expected = Number((await db.query<{ n: string }>(`SELECT count(*) AS n FROM ${quoteIdent(table)} WHERE owner_id = $1`, [owner])).rows[0]!.n);
-    for (const scenario of ['with owner', 'without owner'] as const) {
+    const tenant = (await db.query<{ tenant_id: string }>(`SELECT tenant_id FROM ${quoteIdent(table)} LIMIT 1`)).rows[0]?.tenant_id;
+    if (tenant === undefined) continue; // an empty table proves nothing and breaks nothing
+    const expected = Number((await db.query<{ n: string }>(`SELECT count(*) AS n FROM ${quoteIdent(table)} WHERE tenant_id = $1`, [tenant])).rows[0]!.n);
+    for (const scenario of ['with tenant', 'without tenant'] as const) {
       await db.query('BEGIN');
       try {
         await db.query('SET LOCAL ROLE telesphoros_app');
-        if (scenario === 'with owner') await db.query(`SELECT set_config('app.current_owner_id', $1, true)`, [owner]);
+        if (scenario === 'with tenant') await db.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenant]);
         const seen = Number((await db.query<{ n: string }>(`SELECT count(*) AS n FROM ${quoteIdent(table)}`)).rows[0]!.n);
-        const want = scenario === 'with owner' ? expected : 0;
+        const want = scenario === 'with tenant' ? expected : 0;
         if (seen !== want) problems.push(`${table} ${scenario}: saw ${seen}, expected ${want}`);
       } finally {
         await db.query('ROLLBACK');
       }
     }
   }
-  record('row-level security isolation', problems.length === 0, problems.length === 0 ? `owners isolated on ${tables.length} tables` : problems.join('; '));
+  record('row-level security isolation', problems.length === 0, problems.length === 0 ? `tenants isolated on ${tables.length} tables` : problems.join('; '));
 }
