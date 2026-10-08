@@ -20,6 +20,10 @@ export class AppException extends HttpException {
   static notFound(message = 'Resource not found.') {
     return new AppException(404, ErrorCode.NOT_FOUND, message);
   }
+  /** A 404 with a stable `reason` for the one thing that was not found (e.g. a guideline the loaded knowledge does not have). */
+  static notFoundBecause(reason: string, message: string) {
+    return new AppException(404, ErrorCode.NOT_FOUND, message, [{ field: 'request', message, reason }]);
+  }
   static conflict(message: string) {
     return new AppException(409, ErrorCode.CONFLICT, message);
   }

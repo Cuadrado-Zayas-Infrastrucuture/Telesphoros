@@ -6,11 +6,13 @@ import { ENV, type Env } from '../config/env';
 import { ObjectStorage } from '../object-storage/object-storage';
 import { evaluate } from '../services/recommendation-engine/recommendation-engine';
 import { adaptReport, adapterKnowledgeFrom, type AdapterResult } from '../services/report-adapter';
+import { applyDisputeOverlay, type DisputedCell, OVERLAY_VERSION, type OverlayResult } from '../services/knowledge/dispute-overlay';
 import type { KnowledgeSet } from '../services/knowledge/knowledge-set';
+import { DisputeChangedError } from '../ledger/ledger-types';
 import { type ReaderResult } from '../services/report-reader/reader-result';
 import type { ReportReader } from '../services/report-reader/report-reader';
 import { LedgerRecordsRepository } from '../storage/ledger-records.repository';
-import type { EvaluationInput, Projected } from '../storage/ledger-records';
+import type { DisputeStatus, EvaluationInput, Projected } from '../storage/ledger-records';
 import { ReportsRepository } from '../storage/reports.repository';
 import { DatabaseCaptureAcceptanceStore } from './acceptance-store';
 import { type EvaluationContext, toEvaluationDto, toEvaluationSummaryDto } from './lab-report.mapper';
@@ -85,9 +87,6 @@ export class EvaluationsService {
     if (stored.sha256 !== capture.textSha256) throw AppException.conflictBecause('text-hash-mismatch', 'The stored text is not the text that was captured.');
     const text = stored.bytes.toString('utf8');
 
-    // Early exit only; the guarantee is the check inside the storing transaction, after the ledger lock (plan 12.2).
-    if (await ledger.activeDisputeExists(principal.tenantId)) throw AppException.conflictBecause('dispute-active', 'A dispute about a guideline is open, so this cannot be evaluated yet.');
-
     const read = await this.limiter.run(() => reader.read(text));
     this.failIfOperational(read);
 
@@ -96,9 +95,20 @@ export class EvaluationsService {
       { captures: new DatabaseCaptureAcceptanceStore(ledger), knowledge: adapterKnowledgeFrom(knowledge) },
     );
 
-    const input = this.build(report.patientId, report.id, capture.id, adapted, knowledge, runner);
-    const result = await ledger.insertEvaluation(principal.tenantId, principal.sub, input);
-    return { evaluation: await this.present(principal.tenantId, result.record), created: result.created };
+    // Disputes about guideline cells tighten what is shown (the overlay, spec 5.3): a disputed cell is held with no wording and everything
+    // else is evaluated as usual. The disputes read here are the BASIS the storing transaction re-checks after the ledger lock; if one
+    // appeared in between, the repository refuses and we evaluate once more with the new set (the reader is not run again).
+    for (let attempt = 1; ; attempt++) {
+      const active = (await ledger.listDisputes(principal.tenantId)).filter((d) => d.status !== 'dismissed');
+      const input = this.build(report.patientId, report.id, capture.id, adapted, knowledge, runner, active);
+      try {
+        const result = await ledger.insertEvaluation(principal.tenantId, principal.sub, input);
+        return { evaluation: await this.present(principal.tenantId, result.record), created: result.created };
+      } catch (error) {
+        if (!(error instanceof DisputeChangedError) || attempt >= 2) throw error;
+        this.logger.warn({ event: 'dispute-changed-retry' }, 'A dispute changed while evaluating; evaluating once more');
+      }
+    }
   }
 
   async list(principal: Principal, query: EvaluationListQuery): Promise<EvaluationSummaryDto[]> {
@@ -128,20 +138,30 @@ export class EvaluationsService {
     }
   }
 
-  private build(patientId: string, reportId: string, captureId: string, adapted: AdapterResult, knowledge: KnowledgeSet, runner: TextCaptureRunner): EvaluationInput {
+  private build(
+    patientId: string, reportId: string, captureId: string, adapted: AdapterResult, knowledge: KnowledgeSet, runner: TextCaptureRunner, active: DisputeStatus[],
+  ): EvaluationInput {
     // The scope and what the substitute runner can answer for are part of the stored binding, hence of the ledger event.
-    const binding = { ...adapted.binding, scope: PIPELINE_SCOPE, recordingsSha256: runner.manifestSha256 };
+    const binding: Record<string, unknown> = { ...adapted.binding, scope: PIPELINE_SCOPE, recordingsSha256: runner.manifestSha256 };
     if (adapted.disposition === 'held') {
+      // A held evaluation shows no result, so no cell and no dispute matters to it.
       return {
         patientId, reportId, captureId, captureAcceptanceId: adapted.binding.captureAcceptanceId, disposition: 'held', holdCode: adapted.code, binding,
         knowledgeSetId: knowledge.id, engineVersion: this.env.BUILD_VERSION!, geneInputs: [], occurrences: [], results: [], geneStates: [],
       };
     }
-    const engine = evaluate(knowledge, adapted.geneInputs);
+    const disputed: DisputedCell[] = active.map(({ dispute: d }) => ({
+      guidelineId: d.guidelineId as string, guidelineVersion: d.guidelineVersion as string, guidelineContentSha256: d.guidelineContentSha256 as string,
+      locator: { table: d.locatorTable as string, row: d.locatorRow as string, column: (d.locatorColumn as string | null) ?? null },
+    }));
+    const overlay: OverlayResult = applyDisputeOverlay(knowledge, disputed);
+    // When the overlay changed a cell, the stored binding says how to rebuild the effective set from the base set (inside the hashed record).
+    if (overlay.cellKeys.length > 0) binding.overlay = { version: OVERLAY_VERSION, baseKnowledgeSetId: knowledge.id, cellKeys: overlay.cellKeys };
+    const engine = evaluate(overlay.knowledge, adapted.geneInputs);
     return {
       patientId, reportId, captureId, captureAcceptanceId: adapted.binding.captureAcceptanceId, disposition: 'evaluated', holdCode: null, binding,
       knowledgeSetId: engine.knowledgeSetId, engineVersion: this.env.BUILD_VERSION!, geneInputs: adapted.geneInputs, occurrences: adapted.occurrences,
-      results: engine.results, geneStates: engine.geneStates,
+      results: engine.results, geneStates: engine.geneStates, disputeBasis: active.map(({ dispute }) => dispute.id),
     };
   }
 

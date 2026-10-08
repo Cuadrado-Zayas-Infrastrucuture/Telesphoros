@@ -48,11 +48,15 @@ describe('the lab-report pipeline routes', () => {
     expect(routes.map((r) => `${r.method} ${r.path.replace(ID, ':id')}`).sort()).toEqual([
       'GET /api/v1/captures/:id',
       'GET /api/v1/captures/:id/text-url',
+      'GET /api/v1/cell-disputes',
+      'GET /api/v1/cell-disputes/:id',
       'GET /api/v1/evaluations',
       'GET /api/v1/evaluations/:id',
       'GET /api/v1/notes/:id',
       'GET /api/v1/reports/:id/download-url',
       'POST /api/v1/captures/:id/decision',
+      'POST /api/v1/cell-disputes',
+      'POST /api/v1/cell-disputes/:id/decision',
       'POST /api/v1/evaluations/:id/corrections',
       'POST /api/v1/reports/:id/capture',
       'POST /api/v1/reports/:id/evaluations',
@@ -63,7 +67,7 @@ describe('the lab-report pipeline routes', () => {
   it('every controller of the module carries the gate, and every route that is not open to all names its roles', () => {
     for (const controller of moduleControllers) expect(Reflect.getMetadata(REQUIRES_PIPELINE, controller)).toBe(true);
     const open = routes.filter((r) => r.roles === undefined).map((r) => `${r.method} ${r.path.replace(ID, ':id')}`);
-    expect(open.sort()).toEqual(['GET /api/v1/captures/:id', 'GET /api/v1/evaluations', 'GET /api/v1/evaluations/:id']); // reads open to every signed-in role
+    expect(open.sort()).toEqual(['GET /api/v1/captures/:id', 'GET /api/v1/cell-disputes', 'GET /api/v1/cell-disputes/:id', 'GET /api/v1/evaluations', 'GET /api/v1/evaluations/:id']); // reads open to every signed-in role
   });
 });
 

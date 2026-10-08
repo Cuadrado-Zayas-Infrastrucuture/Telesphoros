@@ -55,10 +55,10 @@ different person where the rules say so:
    protocol that refuses if the report changed in between. The text runner is currently a **recorded-text substitute** for twelve development PDFs.
 3. **Decision** (`POST /captures/:id/decision`, reviewer): someone who did not create, upload or capture the report accepts or rejects.
 4. **Evaluation** (`POST /reports/:id/evaluations`): refused unless the decision named is an acceptance and still the latest, the text is
-   unchanged and no dispute is active; then the reader finds spans of text, the **adapter** turns them into engine input or holds the whole
+   unchanged; then the reader finds spans of text, the **adapter** turns them into engine input or holds the whole
    report ([design/report-adapter-spec.md](design/report-adapter-spec.md)), and the engine produces results stored with the ledger. The reader and
-   engine run outside any transaction, at most a configured number at once per process; the dispute check repeats inside the storing transaction.
-5. **Corrections** (`POST /evaluations/:id/corrections`, reviewer): retraction, supersession and reinstatement, each a new ledgered record; the evaluation is never edited, its state is derived from its corrections, and `current` marks the latest active evaluation of a report. **Disputed guideline cells and their overlay** (5B-3.3b) and **ledger verification** (5B-3.3c) are not built yet.
+   engine run outside any transaction, at most a configured number at once per process. Disputed guideline cells are held by an **overlay** (the engine already holds a disputed cell with no wording); the disputes it read are re-checked inside the storing transaction after the ledger lock.
+5. **Corrections** (`POST /evaluations/:id/corrections`, reviewer): retraction, supersession and reinstatement, each a new ledgered record; the evaluation is never edited, its state is derived from its corrections, and `current` marks the latest active evaluation of a report. **Disputes** (`POST /cell-disputes`, reviewer): a disputed guideline cell is held by an overlay at the next evaluation. **Ledger verification** (5B-3.3c) is not built yet.
 
 Details of the reader and adapter: [lab-report-reader.md](lab-report-reader.md).
 

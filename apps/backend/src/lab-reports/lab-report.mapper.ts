@@ -1,9 +1,10 @@
 import {
-  type AcceptanceDto, acceptanceDtoSchema, type CaptureDto, captureDtoSchema, CLINICAL_USE, type CorrectionDto, correctionDtoSchema, type EvaluationDto, evaluationDtoSchema,
-  type EvaluationSummaryDto, evaluationSummaryDtoSchema, type NoteDto, noteDtoSchema,
+  type AcceptanceDto, acceptanceDtoSchema, type CaptureDto, captureDtoSchema, CLINICAL_USE, type CorrectionDto, correctionDtoSchema, type DisputeDto, disputeDtoSchema,
+  type EvaluationDto, evaluationDtoSchema, type EvaluationSummaryDto, evaluationSummaryDtoSchema, type NoteDto, noteDtoSchema,
 } from '@telesphoros/shared-types';
 import { REPORT_HOLD_ACTIONS, REPORT_HOLD_MESSAGES, type ReportHoldCode } from '../services/report-adapter';
-import type { NoteRecord, Projected } from '../storage/ledger-records';
+import type { KnowledgeSet } from '../services/knowledge/knowledge-set';
+import type { DisputeStatus, NoteRecord, Projected } from '../storage/ledger-records';
 
 /**
  * Stored record -> public shape. These are allow-lists: a field that is not named here (the storage key, the identity of the person who
@@ -122,4 +123,28 @@ export function toEvaluationSummaryDto(record: Projected, context: EvaluationCon
   const detail: Record<string, unknown> = { ...toEvaluationDto(record, context) };
   delete detail.geneInputs; // the engine's inputs are for the detail only
   return evaluationSummaryDtoSchema.parse(detail);
+}
+
+/**
+ * A dispute as the API shows it. `inForce` says whether it holds a cell NOW: open or upheld, and the loaded knowledge file is still the one
+ * whose content hash was disputed (a corrected, re-signed file has another hash, so the hold lifts by itself).
+ */
+export function toDisputeDto(status: DisputeStatus, knowledge: KnowledgeSet): DisputeDto {
+  const d = status.dispute;
+  const file = knowledge.files.find((f) => f.kind === 'guideline' && f.id === d.guidelineId);
+  const loadedVersion = knowledge.allGuidelines().find((g) => g.id === d.guidelineId)?.guidelineVersion;
+  const sameFile = file !== undefined && file.contentSha256 === d.guidelineContentSha256 && loadedVersion === d.guidelineVersion;
+  const decision = status.decision;
+  return disputeDtoSchema.parse({
+    id: d.id,
+    guidelineId: d.guidelineId,
+    guidelineVersion: d.guidelineVersion,
+    guidelineContentSha256: d.guidelineContentSha256,
+    locator: { table: d.locatorTable, row: d.locatorRow, column: d.locatorColumn ?? null },
+    status: status.status,
+    inForce: status.status !== 'dismissed' && sameFile,
+    note: d.note ?? null,
+    decision: decision ? { id: decision.id, decision: decision.decision, evidence: decision.evidence ?? null, createdAt: decision.createdAt } : null,
+    createdAt: d.createdAt,
+  });
 }

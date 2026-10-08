@@ -189,3 +189,50 @@ export const evaluationListQuerySchema = z.strictObject({
   current: z.literal('true').optional(),
 });
 export type EvaluationListQuery = z.infer<typeof evaluationListQuerySchema>;
+
+// -------------------------------------------------------------------------------------------------------------------- disputes
+
+export const DISPUTE_STATUSES = ['open', 'upheld', 'dismissed'] as const;
+export type DisputeStatusValue = (typeof DISPUTE_STATUSES)[number];
+
+const cellLabel = z.string().trim().min(1).max(100);
+
+/**
+ * `POST /cell-disputes`. The guideline's version and the content hash of its file are read from the knowledge the service has loaded, never
+ * taken from the request: a dispute is always about the file that is actually in force.
+ */
+export const disputeCreateSchema = z.strictObject({
+  guidelineId: cellLabel,
+  locator: z.strictObject({ table: cellLabel, row: cellLabel, column: cellLabel.optional() }),
+  note: z.string().trim().min(1).max(MAX_NOTE_LENGTH),
+});
+export type DisputeCreate = z.infer<typeof disputeCreateSchema>;
+
+/** `POST /cell-disputes/:id/decision`. The evidence is required: a dispute is decided on something. */
+export const disputeDecisionCreateSchema = z.strictObject({
+  decision: z.enum(['upheld', 'dismissed']),
+  evidenceNote: z.string().trim().min(1).max(MAX_NOTE_LENGTH),
+});
+export type DisputeDecisionCreate = z.infer<typeof disputeDecisionCreateSchema>;
+
+export const disputeListQuerySchema = z.strictObject({ status: z.enum(DISPUTE_STATUSES).optional() });
+export type DisputeListQuery = z.infer<typeof disputeListQuerySchema>;
+
+const noteRef = z.strictObject({ id: z.uuid(), bodySha256: sha256 });
+
+/** A dispute about one guideline cell, with its single final decision if there is one. Notes are digests; read the text with `GET /notes/:id`. */
+export const disputeDtoSchema = z.strictObject({
+  id: z.uuid(),
+  guidelineId: z.string(),
+  guidelineVersion: z.string(),
+  /** The content hash of the knowledge file that was disputed. A corrected, re-signed file has another hash, which lifts the hold. */
+  guidelineContentSha256: sha256,
+  locator: z.strictObject({ table: z.string(), row: z.string(), column: z.string().nullable() }),
+  status: z.enum(DISPUTE_STATUSES),
+  /** True while this dispute holds the cell: it is open or upheld AND the loaded knowledge file is the one that was disputed. */
+  inForce: z.boolean(),
+  note: noteRef.nullable(),
+  decision: z.strictObject({ id: z.uuid(), decision: z.enum(['upheld', 'dismissed']), evidence: noteRef.nullable(), createdAt: timestamp }).nullable(),
+  createdAt: timestamp,
+});
+export type DisputeDto = z.infer<typeof disputeDtoSchema>;

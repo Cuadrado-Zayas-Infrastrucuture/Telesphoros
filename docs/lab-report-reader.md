@@ -90,6 +90,9 @@ With `LAB_REPORT_PIPELINE=enabled` (never in production, PostgreSQL only) a repo
 | `GET /evaluations`, `GET /evaluations/:id` | everyone signed in | Stored evaluations (list: no engine inputs), with their correction history, derived `state` and `current`. `?current=true` keeps the latest active evaluation of each report. Always `clinicalUse: "not-approved"` and `actionable: false` |
 | `POST /evaluations/:id/corrections` | reviewer | Retract, reinstate or supersede an evaluation. The evaluation itself is never changed. See below |
 | `GET /notes/:id` | clinician, reviewer, admin | The text of a note (a decision, correction or dispute note), or the tombstone once redacted. The only route that returns a note body |
+| `POST /cell-disputes` `{guidelineId, locator, note}` | reviewer | Dispute one cell of a loaded guideline. The version and the file's content hash are read from the loaded knowledge, never supplied |
+| `POST /cell-disputes/:id/decision` `{decision, evidenceNote}` | reviewer | `upheld` or `dismissed`, final, by someone other than the person who raised it; the evidence is required |
+| `GET /cell-disputes`, `GET /cell-disputes/:id` | everyone signed in | Disputes with `status` (`open`, `upheld`, `dismissed`) and `inForce`. Notes appear only as digests |
 
 **Corrections** (`POST /evaluations/:id/corrections` `{kind, reasonCode, previousCorrectionId?, replacementEvaluationId?, note?}`): `retraction`
 ("do not rely on this"), `supersession` (replaced by a newer, active evaluation of the same report), `reinstatement` (an earlier retraction was mistaken;
@@ -99,14 +102,29 @@ once cannot both succeed (the loser is told to reload). `clinical-review-disagre
 cannot. After a correction the evaluation reads back unchanged except for `state`, `supersededBy`, `corrections` and `current`. **`current` follows
 the specification literally: if the newest evaluation is retracted, an older still-active one is current again.**
 
+**Disputes and the overlay.** A dispute names a cell of a guideline file by id, version, the file's **content hash** and a locator (table, row, optional
+column). While it is open or upheld, the **next** evaluation of any report in that tenant holds that cell (`cell-disputed`, its citation and **no
+wording**) and evaluates everything else normally. The overlay can only tighten: a cell that is not `verified` in the file is left as it is, so a
+dismissal never makes anything shown. A dispute about an older file (different hash) or version has no effect, which is how a corrected, re-signed
+file lifts the hold. The evaluation's `knowledgeSetId` is then an effective id derived from the base set and the cells held (it equals the base id when
+none were), and the stored binding records `overlay` (`overlay/1`, the base id and the cell keys) so the set can be rebuilt. Because the effective
+knowledge differs, repeating a request after a dispute is a **new** evaluation (201), and after a dismissal it is the original one again (200).
+Raising or deciding a dispute never changes a stored evaluation; correct an earlier result, if it needs it, with a correction.
+
+**A dispute that appears while an evaluation is being made is never missed.** The evaluation is built from the disputes it read (their ids are its
+*basis*). Inside the storing transaction, **after** the ledger lock is held and as its own statement under READ COMMITTED, the repository checks that
+no active dispute is outside the basis; if one is, nothing is stored and the service evaluates once more with the new set (the reader is not run
+again). If it changes again, 409 `dispute-changed` ("try again"). A held evaluation needs no basis, and a replay of a stored evaluation is returned
+before this check. See spec section 20.
+
 **Whoever accepts** is not the report's creator, the person who asked for the first upload link, the person who completed the upload, or the
 person who captured it (409 `self-review`; a rejection is open to any reviewer).
 
 **An evaluation is refused before the reader runs, and nothing is stored, when:** the decision named is not an acceptance
 (`capture-not-accepted`), a later decision about that capture exists (`stale-acceptance`: always 409, even if the result exists; read history
-with GET), the stored text is no longer the captured text (`text-hash-mismatch`), a dispute is open or upheld in the tenant
-(`dispute-active`, tenant-wide until the overlay exists), or the ids do not belong together (`mismatch`; unknown or foreign ids are 404). The
-dispute check is repeated inside the storing transaction **after** the ledger lock is held, as its own statement; see spec section 18.
+with GET), the stored text is no longer the captured text (`text-hash-mismatch`), or the ids do not belong together (`mismatch`; unknown or foreign
+ids are 404). **A dispute no longer refuses an evaluation** (until slice 5B-3.3b any dispute in the tenant did, `dispute-active`): the disputed
+cell is held and everything else is evaluated; see "Disputes" below.
 
 **When the reader does not give a usable answer:** `source-limit` and `candidate-or-frame-limit` are facts about the text and are stored as a
 `held` evaluation. `source-time-budget` and `worker-error` are operational: 503 `READER_UNAVAILABLE` with `Retry-After: 30`, **nothing is stored

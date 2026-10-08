@@ -49,13 +49,14 @@ export class SourceChangedError extends Error {
 }
 
 /**
- * A dispute about a guideline cell is open or upheld in the tenant, so a result built on guidelines cannot be stored yet (until the
- * overlay exists, 5B-3.3). Raised AFTER the ledger lock is held, which is what makes the check conclusive. Nothing was written.
+ * A dispute became active (open or upheld) after the evaluation read the disputes it built its overlay from, so the result it was about
+ * to store may show a cell that should now be held. Raised AFTER the ledger lock is held, which is what makes the check conclusive.
+ * Nothing was written; the caller re-reads the disputes and evaluates again.
  */
-export class DisputeActiveError extends Error {
+export class DisputeChangedError extends Error {
   constructor() {
-    super('A dispute is active in this tenant.');
-    this.name = 'DisputeActiveError';
+    super('A dispute changed while the evaluation was being made.');
+    this.name = 'DisputeChangedError';
   }
 }
 

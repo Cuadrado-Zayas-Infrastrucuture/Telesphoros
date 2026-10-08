@@ -102,7 +102,9 @@ const real = new SubprocessReportReader({ mode: 'non-production' });
       expect(await lab.count('evaluations', 'report_id = $1', [s.reportId])).toBe(0);
     });
 
-    it('an open dispute blocks it (409 dispute-active); once dismissed it does not; reads then show the dispute', async () => {
+    it('an active dispute does not refuse an evaluation any more (the overlay holds only its cell); reads show how many are active', async () => {
+      // Before slice 5B-3.3b any dispute in the tenant refused every new evaluation (409 dispute-active). Now a dispute that names no cell of the
+      // loaded knowledge changes nothing, and one that does hold only its own cell (lab-reports-disputes.e2e-spec.ts).
       const t = `tenant-d-${Math.random().toString(36).slice(2, 8)}`;
       const local = new LabPipeline(app, db.adminUrl, t);
       const clin = await local.person('clin', ['clinician']);
@@ -112,19 +114,12 @@ const real = new SubprocessReportReader({ mode: 'non-production' });
       const before = await local.evaluate(clin, s1.reportId, body(s1)).expect(201);
       const ledger = app.get(LedgerRecordsRepository);
       const raised = await ledger.raiseDispute(t, 'syn-disputer', { guidelineId: 'g', guidelineVersion: '1', guidelineContentSha256: 'c'.repeat(64), locator: { table: 'r', row: 'x' }, note: 'wrong cell' });
-      // Refused BEFORE the reader runs: a spy on the reader sees no call.
-      const calls: string[] = [];
-      const counting: ReportReader = { read: async (text) => { calls.push('read'); return real.read(text); } };
-      const watched = await other({ overrides: [{ provide: LAB_READER, useValue: counting }] });
-      const blocked = await watched.evaluate(clin, s2.reportId, body(s2)).expect(409);
-      expect(blocked.body.error.details[0].reason).toBe('dispute-active');
-      expect(calls).toEqual([]);
-      expect(await local.count('evaluations', 'report_id = $1', [s2.reportId])).toBe(0);
-      // The evaluation made BEFORE the dispute is still readable, but no longer looks current.
+      const during = await local.evaluate(clin, s2.reportId, body(s2)).expect(201);
+      expect(during.body.knowledgeSetId).toBe(before.body.knowledgeSetId); // no cell of the loaded knowledge was disputed: the same effective set
       const read = await local.api().get(`/api/v1/evaluations/${before.body.id}`).set(bearer(clin.token)).expect(200);
       expect(read.body).toMatchObject({ advisory: { activeDisputes: 1 }, actionable: false, clinicalUse: 'not-approved' });
       await ledger.decideDispute(t, 'syn-decider', { disputeId: raised.record.id, decision: 'dismissed', evidenceNote: 'the cell is right' });
-      await local.evaluate(clin, s2.reportId, body(s2)).expect(201);
+      expect((await local.api().get(`/api/v1/evaluations/${before.body.id}`).set(bearer(clin.token))).body.advisory.activeDisputes).toBe(0);
     });
 
     it('needs a role that may evaluate (reader and no role are 403), and takes only the two ids', async () => {

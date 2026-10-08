@@ -24,15 +24,13 @@ export abstract class LedgerRecordsRepository {
 
   /**
    * Idempotent per identity key: the same inputs, knowledge and code return the existing evaluation.
-   * A NEW evaluation that shows drug results (`disposition: 'evaluated'`) throws DisputeActiveError if a dispute is open or upheld,
-   * checked in a separate statement AFTER the tenant's ledger lock is held (see the implementation). A held evaluation shows nothing
-   * and is not blocked.
+   * A NEW evaluation that shows drug results (`disposition: 'evaluated'`) throws DisputeChangedError if, once the tenant's ledger lock is
+   * held, a dispute is active (open or upheld) that is not in `input.disputeBasis`: checked in a separate statement AFTER the lock (see the
+   * implementation). A held evaluation shows nothing and is not blocked.
    * A new evaluation naming an acceptance also rechecks that decision after the lock; supersession throws StaleAcceptanceError.
    */
   abstract insertEvaluation(tenantId: string, actor: string, input: EvaluationInput): Promise<InsertResult>;
   abstract findEvaluation(tenantId: string, id: string): Promise<Projected | undefined>;
-  /** True when a dispute is open or upheld in the tenant. An early exit for callers; `insertEvaluation` repeats it after the ledger lock. */
-  abstract activeDisputeExists(tenantId: string): Promise<boolean>;
   /** `current` keeps only the latest ACTIVE evaluation of each report (specification 4.5); the other filters narrow the result further. */
   abstract listEvaluations(tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }): Promise<Projected[]>;
   /** For each report, the id of its current evaluation (the latest active one), or null when it has none. Every asked report has an entry. */
@@ -45,6 +43,7 @@ export abstract class LedgerRecordsRepository {
   abstract raiseDispute(tenantId: string, actor: string, input: DisputeInput): Promise<InsertResult>;
   abstract decideDispute(tenantId: string, actor: string, input: DisputeDecisionInput): Promise<InsertResult>;
   abstract listDisputes(tenantId: string): Promise<DisputeStatus[]>;
+  abstract findDispute(tenantId: string, id: string): Promise<DisputeStatus | undefined>;
 
   /** A note's text (or its tombstone). Notes are free text kept out of the ledger; this is the only read of their body. */
   abstract findNote(tenantId: string, id: string): Promise<NoteRecord | undefined>;

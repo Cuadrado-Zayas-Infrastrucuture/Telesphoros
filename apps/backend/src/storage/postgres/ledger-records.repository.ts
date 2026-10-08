@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { Database } from '../../db/database';
 import { appendEvent, newId } from '../../ledger/ledger-writer';
-import { DisputeActiveError, StaleAcceptanceError, SourceChangedError, toLedgerError, type RecordTable } from '../../ledger/ledger-types';
+import { DisputeChangedError, StaleAcceptanceError, SourceChangedError, toLedgerError, type RecordTable } from '../../ledger/ledger-types';
 import { loadProjections } from '../../ledger/projections';
 import { canonicalHash } from '../../services/report-adapter/canonical-json';
 import { LedgerRecordsRepository } from '../ledger-records.repository';
@@ -139,13 +139,20 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
       // The append above took the tenant's ledger head lock and keeps it until COMMIT. Raising or deciding a dispute also appends, so it
       // needs the same lock: every dispute change is either committed before we got the lock (and this separate statement, a new
       // snapshot under READ COMMITTED, sees it) or queued behind us (and is ordered after this evaluation).
-      if (input.disposition === 'evaluated') await this.assertNoActiveDispute(client, tenantId);
+      if (input.disposition === 'evaluated') await this.assertDisputeBasis(client, tenantId, input.disputeBasis ?? []);
       return stored;
     });
   }
 
-  activeDisputeExists(tenantId: string): Promise<boolean> {
-    return this.read(tenantId, (client) => this.hasActiveDispute(client, tenantId));
+  /** The ids of the disputes in force (open, or decided `upheld`) in the tenant. */
+  private async activeDisputeIds(client: PoolClient, tenantId: string): Promise<string[]> {
+    const { rows } = await client.query<{ id: string }>(
+      `SELECT d.id::text AS id FROM cell_disputes d
+         LEFT JOIN cell_dispute_decisions x ON x.dispute_id = d.id AND x.tenant_id = d.tenant_id
+        WHERE d.tenant_id = $1 AND (x.id IS NULL OR x.decision = 'upheld')`,
+      [tenantId],
+    );
+    return rows.map((r) => r.id);
   }
 
   private async assertCurrentAcceptance(client: PoolClient, tenantId: string, captureId: string, acceptanceId: string): Promise<void> {
@@ -157,21 +164,13 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
     if (!rows[0] || rows[0].id !== acceptanceId || rows[0].decision !== 'accepted') throw new StaleAcceptanceError();
   }
 
-  private async hasActiveDispute(client: PoolClient, tenantId: string): Promise<boolean> {
-    const { rows } = await client.query<{ active: boolean }>(
-      `SELECT EXISTS (
-         SELECT 1 FROM cell_disputes d
-           LEFT JOIN cell_dispute_decisions x ON x.dispute_id = d.id AND x.tenant_id = d.tenant_id
-          WHERE d.tenant_id = $1 AND (x.id IS NULL OR x.decision = 'upheld')
-       ) AS active`,
-      [tenantId],
-    );
-    return rows[0]!.active;
-  }
-
-  /** Its own statement, never part of the append: that is what gives it a fresh snapshot after the lock is held. */
-  private async assertNoActiveDispute(client: PoolClient, tenantId: string): Promise<void> {
-    if (await this.hasActiveDispute(client, tenantId)) throw new DisputeActiveError();
+  /**
+   * Its own statement, never part of the append: that is what gives it a fresh snapshot after the lock is held. A dispute that LEFT the
+   * set since the caller looked (it was dismissed) is harmless: the overlay was only more cautious than needed.
+   */
+  private async assertDisputeBasis(client: PoolClient, tenantId: string, basis: readonly string[]): Promise<void> {
+    const known = new Set(basis);
+    if ((await this.activeDisputeIds(client, tenantId)).some((id) => !known.has(id))) throw new DisputeChangedError();
   }
 
   findEvaluation(tenantId: string, id: string): Promise<Projected | undefined> {
@@ -264,20 +263,26 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
   }
 
   listDisputes(tenantId: string): Promise<DisputeStatus[]> {
-    return this.read(tenantId, async (client) => {
-      const disputes = await client.query<{ id: string; decision_id: string | null }>(
-        `SELECT d.id::text AS id, x.id::text AS decision_id FROM cell_disputes d
-           LEFT JOIN cell_dispute_decisions x ON x.dispute_id = d.id AND x.tenant_id = d.tenant_id
-          WHERE d.tenant_id = $1 ORDER BY d.seq`,
-        [tenantId],
-      );
-      const disputeRows = await this.many(client, tenantId, 'cell_disputes', disputes.rows.map((r) => r.id));
-      const decisionIds = disputes.rows.flatMap((r) => (r.decision_id ? [r.decision_id] : []));
-      const decisions = new Map((await this.many(client, tenantId, 'cell_dispute_decisions', decisionIds)).map((d) => [d.id, d]));
-      return disputes.rows.map((row, index) => {
-        const decision = row.decision_id ? decisions.get(row.decision_id)! : null;
-        return { dispute: disputeRows[index]!, status: decision ? (decision.decision as 'upheld' | 'dismissed') : 'open', decision };
-      });
+    return this.read(tenantId, (client) => this.disputeStatuses(client, tenantId));
+  }
+
+  findDispute(tenantId: string, id: string): Promise<DisputeStatus | undefined> {
+    return this.read(tenantId, async (client) => (await this.disputeStatuses(client, tenantId, id))[0]);
+  }
+
+  private async disputeStatuses(client: PoolClient, tenantId: string, only?: string): Promise<DisputeStatus[]> {
+    const disputes = await client.query<{ id: string; decision_id: string | null }>(
+      `SELECT d.id::text AS id, x.id::text AS decision_id FROM cell_disputes d
+         LEFT JOIN cell_dispute_decisions x ON x.dispute_id = d.id AND x.tenant_id = d.tenant_id
+        WHERE d.tenant_id = $1 AND ($2::uuid IS NULL OR d.id = $2::uuid) ORDER BY d.seq`,
+      [tenantId, only ?? null],
+    );
+    const disputeRows = await this.many(client, tenantId, 'cell_disputes', disputes.rows.map((r) => r.id));
+    const decisionIds = disputes.rows.flatMap((r) => (r.decision_id ? [r.decision_id] : []));
+    const decisions = new Map((await this.many(client, tenantId, 'cell_dispute_decisions', decisionIds)).map((d) => [d.id, d]));
+    return disputes.rows.map((row, index) => {
+      const decision = row.decision_id ? decisions.get(row.decision_id)! : null;
+      return { dispute: disputeRows[index]!, status: decision ? (decision.decision as 'upheld' | 'dismissed') : 'open', decision };
     });
   }
 

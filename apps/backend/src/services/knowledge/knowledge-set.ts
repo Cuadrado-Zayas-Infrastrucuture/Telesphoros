@@ -37,6 +37,15 @@ export class KnowledgeSet {
     this.byDrug = grouped;
   }
 
+  /** Every gene map and every guideline, for building a derived set (the dispute overlay). The files themselves are shared, not copied. */
+  allGeneMaps(): GeneMapFile[] {
+    return [...this.geneMaps.values()];
+  }
+
+  allGuidelines(): GuidelineFile[] {
+    return [...this.byDrug.values()].flat();
+  }
+
   gene(symbol: string): GeneMapFile | undefined {
     return this.geneMaps.get(symbol);
   }

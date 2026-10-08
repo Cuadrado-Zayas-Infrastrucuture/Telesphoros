@@ -573,3 +573,23 @@ Each was found by building or by an attack test, and each is covered by a test.
 6. **Reading a note** (3.7, 6.8). `GET /notes/:id` (clinician, reviewer, admin; not reader) returns the text, or the fixed tombstone once redacted, with
    its original digest. It is the only route that returns a note body; it is never logged, and another tenant's note is 404.
 
+## 20. Amendments made while building 5B-3.3b (these govern where they differ from the text above)
+
+1. **The overlay replaces the tenant-wide refusal** (5.3, plan 12.2). `dispute-active` is gone. An evaluation is built from the disputes it read; the
+   storing transaction refuses (`DisputeChangedError`, 409 `dispute-changed`) only if, after the ledger lock is held, an active dispute is not among
+   the **ids it read** (its basis). A dispute that has since left the set is harmless. The service retries once with the new set, without running the
+   reader again. Omitting the basis means "none were considered": it fails closed. A held evaluation needs no basis. Proved again with two real
+   sessions in both orders, and the check is asserted to be its own statement after the append under READ COMMITTED.
+2. **What the overlay changes** (5.3). Only cells that were `verified` and are named by an open or upheld dispute **whose file version and content hash
+   match the loaded file**. Cells already `unverified` or `disputed` are untouched and are not part of the effective id. The effective id is
+   `sha256("overlay/1\n" + baseId + "\n" + canonicalJson(sorted cell keys))`, a cell key being `[guideline id, version, file hash, table, row, column or null]`,
+   and equals the base id when nothing changed. The stored binding also records `overlay: {version, baseKnowledgeSetId, cellKeys}` so a reader can rebuild
+   the set. Disputes are read per tenant; one tenant's dispute never changes another tenant's evaluation.
+3. **Idempotency across a dispute** (3.4). The evaluation identity includes the effective knowledge set id, so repeating a request after a dispute is a
+   new evaluation, and after a dismissal it is the original evaluation again (a replay). A dispute that holds an unrelated cell also changes the id.
+4. **Endpoints** (8). `POST /cell-disputes` and `POST /cell-disputes/:id/decision` (reviewer only); `GET /cell-disputes` (filter `status`) and
+   `GET /cell-disputes/:id` for every signed-in role. The guideline version and content hash are taken from the loaded knowledge. Reasons: 404
+   `unknown-guideline`, 409 `unknown-cell`, 409 `self-decision` (the database trigger repeats it), 409 `already-decided` (the unique constraint repeats
+   it). A dispute shows `inForce`: open or upheld **and** the loaded file is still the one that was disputed. Notes are digests only.
+5. **Two open disputes about one cell are allowed**; each is independent and the overlay is a set. No cross-table uniqueness is added.
+

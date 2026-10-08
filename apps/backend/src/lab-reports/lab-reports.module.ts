@@ -8,6 +8,8 @@ import { CapturesController, ReportCaptureController } from './captures.controll
 import { CapturesService } from './captures.service';
 import { EvaluationCorrectionsController, NotesController } from './corrections.controller';
 import { CorrectionsService } from './corrections.service';
+import { DisputesController } from './disputes.controller';
+import { DisputesService } from './disputes.service';
 import { EvaluationsController, ReportEvaluationController } from './evaluations.controller';
 import { EvaluationsService, LAB_KNOWLEDGE, LAB_READER } from './evaluations.service';
 import { PipelineGateGuard, PipelineStartupCheck, PipelineSwitch } from './pipeline-switch';
@@ -24,7 +26,9 @@ const enabled = (env: Env) => env.LAB_REPORT_PIPELINE === 'enabled';
  */
 @Global()
 @Module({
-  controllers: [ReportCaptureController, CapturesController, ReportEvaluationController, EvaluationsController, EvaluationCorrectionsController, NotesController],
+  controllers: [
+    ReportCaptureController, CapturesController, ReportEvaluationController, EvaluationsController, EvaluationCorrectionsController, NotesController, DisputesController,
+  ],
   providers: [
     PipelineSwitch,
     PipelineGateGuard,
@@ -32,6 +36,7 @@ const enabled = (env: Env) => env.LAB_REPORT_PIPELINE === 'enabled';
     CapturesService,
     EvaluationsService,
     CorrectionsService,
+    DisputesService,
     { provide: ReaderLimiter, inject: [ENV], useFactory: (env: Env) => new ReaderLimiter(env.LAB_REPORT_MAX_CONCURRENT_READS) },
     {
       provide: TextCaptureRunner,

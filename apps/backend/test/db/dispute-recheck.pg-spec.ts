@@ -4,15 +4,16 @@ import { join } from 'node:path';
 import type { PoolClient } from 'pg';
 import { Database } from '../../src/db/database';
 import { mapException } from '../../src/common/error-mapping';
-import { DisputeActiveError, StaleAcceptanceError } from '../../src/ledger/ledger-types';
+import { DisputeChangedError, StaleAcceptanceError } from '../../src/ledger/ledger-types';
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
 import { Session, untilBlocked } from '../helpers/barrier';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { acceptanceFor, captureFor, evaluationFor, seedLabReport } from '../helpers/ledger-fixtures';
 
-// The dispute re-check (plan 12.2). An evaluation that shows drug results must not be stored while a dispute is open or upheld.
-// The check is only conclusive because it runs AFTER the tenant's ledger lock is held, as its own statement. The orders below are
-// decided by the database's lock queue, not by sleeping.
+// The dispute re-check (plan 12.2, amended by slice 5B-3.3b). An evaluation that shows drug results is built from the disputes its caller
+// SAW (the basis: their ids), with those cells held by the overlay. It must not be stored if, once the tenant's ledger lock is held, a dispute
+// is active that the caller did not see. The check is only conclusive because it runs AFTER the lock, as its own statement. The orders
+// below are decided by the database's lock queue, not by sleeping.
 let pg: EphemeralDatabase;
 let database: Database;
 let repo: PostgresLedgerRecordsRepository;
@@ -68,6 +69,7 @@ async function ready(t = tenant()) {
 }
 const count = (sql: string, values: unknown[]) => withAdmin(pg.adminUrl, async (c) => (await c.query(sql, values)).rows[0].n as number);
 const evaluations = (t: string) => count(`SELECT count(*)::int AS n FROM evaluations WHERE tenant_id = $1`, [t]);
+const activeIds = async (t: string) => (await repo.listDisputes(t)).filter((d) => d.status !== 'dismissed').map((d) => d.dispute.id);
 const evaluationEvents = (t: string) => count(`SELECT count(*)::int AS n FROM ledger_events WHERE tenant_id = $1 AND event_type = 'evaluation'`, [t]);
 const sessions: Session[] = [];
 const open = async (name: string, t: string, actor: string) => {
@@ -121,22 +123,31 @@ describe('acceptance freshness at the ledger boundary', () => {
 });
 
 describe('a dispute and an evaluation racing for the same tenant (decided by the ledger lock queue)', () => {
-  it('dispute commits first: the evaluation is refused, and nothing of it remains (no row, no event)', async () => {
+  it('dispute commits first and the evaluation did not see it: refused, and nothing of it remains (no row, no event)', async () => {
     const { t, evaluation } = await ready();
     const other = await ready(); // control: another tenant has its own lock and is not held up
     const disputer = await open('dispute', t, 'syn-disputer');
     await disputer.raiseDispute(t); // uncommitted: holds this tenant's ledger lock
 
-    const pending = settle(repo.insertEvaluation(t, 'syn-system', evaluation()));
+    const pending = settle(repo.insertEvaluation(t, 'syn-system', evaluation({ disputeBasis: [] })));
     await untilBlocked(pg.adminUrl, WRITER);
-    expect((await repo.insertEvaluation(other.t, 'syn-system', other.evaluation())).created).toBe(true); // control
+    expect((await repo.insertEvaluation(other.t, 'syn-system', other.evaluation({ disputeBasis: [] }))).created).toBe(true); // control
 
     await disputer.commit();
     const { error } = await pending;
-    expect(error).toBeInstanceOf(DisputeActiveError);
+    expect(error).toBeInstanceOf(DisputeChangedError);
+    expect(mapException(error)).toMatchObject({ status: 409, details: [{ reason: 'dispute-changed' }] });
     expect(await evaluations(t)).toBe(0);
     expect(await evaluationEvents(t)).toBe(0);
-    expect(await repo.activeDisputeExists(t)).toBe(true);
+    expect(await activeIds(t)).toHaveLength(1);
+  });
+
+  it('control: the same dispute is harmless when the evaluation SAW it (it is in the basis): the evaluation is stored', async () => {
+    const { t, evaluation } = await ready();
+    const raised = await repo.raiseDispute(t, 'syn-disputer', dispute);
+    const stored = await repo.insertEvaluation(t, 'syn-system', evaluation({ disputeBasis: [raised.record.id] }));
+    expect(stored.created).toBe(true);
+    expect(await evaluations(t)).toBe(1);
   });
 
   it('evaluation first: it is stored, the later dispute waits behind it and commits after it, and the dispute is then active', async () => {
@@ -147,7 +158,7 @@ describe('a dispute and an evaluation racing for the same tenant (decided by the
     // The REAL evaluation code runs, and is paused just before COMMIT, after its append and its dispute re-check: it holds the ledger lock.
     // (Two waiters on one lock are not served in a guaranteed order, so the evaluation is made the holder instead of racing for the queue.)
     const gate = pausedBeforeCommit(pausable);
-    const evaluating = settle(gated.insertEvaluation(t, 'syn-system', evaluation()));
+    const evaluating = settle(gated.insertEvaluation(t, 'syn-system', evaluation({ disputeBasis: [] })));
     await gate.reached;
     const raising = settle(disputer.appendPrepared(prepared));
     await untilBlocked(pg.adminUrl, disputer.name); // the dispute is queued behind the evaluation
@@ -160,45 +171,88 @@ describe('a dispute and an evaluation racing for the same tenant (decided by the
     await disputer.commit();
 
     expect(await evaluations(t)).toBe(1);
-    expect(await repo.activeDisputeExists(t)).toBe(true);
+    expect(await activeIds(t)).toHaveLength(1);
     const events = await withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT event_type FROM ledger_events WHERE tenant_id = $1 ORDER BY seq`, [t])).rows.map((r) => r.event_type));
     expect(events.slice(-2)).toEqual(['evaluation', 'dispute']); // the dispute is ordered AFTER the evaluation it could not have been known to
   });
 
   it('the same replay of a stored evaluation still returns it while a dispute is active (the check is for new results only)', async () => {
     const { t, evaluation } = await ready();
-    const first = await repo.insertEvaluation(t, 'syn-system', evaluation());
+    const first = await repo.insertEvaluation(t, 'syn-system', evaluation({ disputeBasis: [] }));
     await repo.raiseDispute(t, 'syn-disputer', dispute);
-    const again = await repo.insertEvaluation(t, 'syn-system', evaluation());
+    const again = await repo.insertEvaluation(t, 'syn-system', evaluation({ disputeBasis: [] }));
     expect(again.created).toBe(false);
     expect(again.record.id).toBe(first.record.id);
   });
 });
 
-describe('which disputes block', () => {
-  it('open and upheld ones do; a dismissed one does not (and the control: no dispute at all)', async () => {
+describe('which disputes the basis must cover', () => {
+  it('an open or an upheld dispute that is not in the basis refuses; a dismissed one does not; with no dispute at all it is stored (control)', async () => {
     const control = await ready();
-    expect((await repo.insertEvaluation(control.t, 'syn-system', control.evaluation())).created).toBe(true);
+    expect((await repo.insertEvaluation(control.t, 'syn-system', control.evaluation({ disputeBasis: [] }))).created).toBe(true);
 
     const open = await ready();
     await repo.raiseDispute(open.t, 'syn-disputer', dispute);
-    expect(await repo.activeDisputeExists(open.t)).toBe(true);
-    await expect(repo.insertEvaluation(open.t, 'syn-system', open.evaluation())).rejects.toBeInstanceOf(DisputeActiveError);
+    await expect(repo.insertEvaluation(open.t, 'syn-system', open.evaluation({ disputeBasis: [] }))).rejects.toBeInstanceOf(DisputeChangedError);
 
     const upheld = await ready();
     const u = await repo.raiseDispute(upheld.t, 'syn-disputer', dispute);
     await repo.decideDispute(upheld.t, 'syn-decider', { disputeId: u.record.id, decision: 'upheld', evidenceNote: 'the cell is wrong' });
-    expect(await repo.activeDisputeExists(upheld.t)).toBe(true);
-    await expect(repo.insertEvaluation(upheld.t, 'syn-system', upheld.evaluation())).rejects.toBeInstanceOf(DisputeActiveError);
+    expect(await activeIds(upheld.t)).toEqual([u.record.id]);
+    await expect(repo.insertEvaluation(upheld.t, 'syn-system', upheld.evaluation({ disputeBasis: [] }))).rejects.toBeInstanceOf(DisputeChangedError);
 
     const dismissed = await ready();
     const d = await repo.raiseDispute(dismissed.t, 'syn-disputer', dispute);
     await repo.decideDispute(dismissed.t, 'syn-decider', { disputeId: d.record.id, decision: 'dismissed', evidenceNote: 'the cell is right' });
-    expect(await repo.activeDisputeExists(dismissed.t)).toBe(false);
-    expect((await repo.insertEvaluation(dismissed.t, 'syn-system', dismissed.evaluation())).created).toBe(true);
+    expect(await activeIds(dismissed.t)).toEqual([]);
+    expect((await repo.insertEvaluation(dismissed.t, 'syn-system', dismissed.evaluation({ disputeBasis: [] }))).created).toBe(true);
   });
 
-  it('a held evaluation shows no drug result and is not blocked by a dispute', async () => {
+  it('a basis may name a dispute that has since been dismissed (the overlay was only more cautious than needed)', async () => {
+    const { t, evaluation } = await ready();
+    const raised = await repo.raiseDispute(t, 'syn-disputer', dispute);
+    await repo.decideDispute(t, 'syn-decider', { disputeId: raised.record.id, decision: 'dismissed', evidenceNote: 'the cell is right' });
+    expect((await repo.insertEvaluation(t, 'syn-system', evaluation({ disputeBasis: [raised.record.id] }))).created).toBe(true);
+  });
+
+  it('the basis must cover EVERY active dispute: knowing one is not enough', async () => {
+    const { t, evaluation } = await ready();
+    const first = await repo.raiseDispute(t, 'syn-disputer', dispute);
+    await repo.raiseDispute(t, 'syn-disputer', { ...dispute, locator: { table: 'recommendations', row: 'normal' } });
+    await expect(repo.insertEvaluation(t, 'syn-system', evaluation({ disputeBasis: [first.record.id] }))).rejects.toBeInstanceOf(DisputeChangedError);
+  });
+
+  it("another tenant's disputes are not in this tenant's basis and never refuse it", async () => {
+    const mine = await ready();
+    const theirs = await ready();
+    await repo.raiseDispute(theirs.t, 'syn-disputer', dispute);
+    expect((await repo.insertEvaluation(mine.t, 'syn-system', mine.evaluation({ disputeBasis: [] }))).created).toBe(true);
+  });
+
+  it("the query's own tenant condition holds even where row-level security does not (checked as a superuser, which bypasses it)", async () => {
+    const superuser = new Database({ url: pg.adminUrl, ssl: 'disable' });
+    try {
+      const bypassing = new PostgresLedgerRecordsRepository(superuser);
+      const mine = await ready();
+      const theirs = await ready();
+      await repo.raiseDispute(theirs.t, 'syn-disputer', dispute);
+      // Control: the superuser connection really does see the other tenant's dispute (so a missing condition WOULD refuse below).
+      expect(await withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT count(*)::int AS n FROM cell_disputes`)).rows[0].n)).toBeGreaterThan(0);
+      expect((await bypassing.insertEvaluation(mine.t, 'syn-system', mine.evaluation({ disputeBasis: [] }))).created).toBe(true);
+    } finally {
+      await superuser.onModuleDestroy();
+    }
+  });
+
+  it('omitting the basis means "none were considered": it fails closed when a dispute is active, and passes when none is', async () => {
+    const quiet = await ready();
+    expect((await repo.insertEvaluation(quiet.t, 'syn-system', quiet.evaluation())).created).toBe(true);
+    const disputed = await ready();
+    await repo.raiseDispute(disputed.t, 'syn-disputer', dispute);
+    await expect(repo.insertEvaluation(disputed.t, 'syn-system', disputed.evaluation())).rejects.toBeInstanceOf(DisputeChangedError);
+  });
+
+  it('a held evaluation shows no drug result and needs no basis: a dispute does not block it', async () => {
     const { t, evaluation } = await ready();
     await repo.raiseDispute(t, 'syn-disputer', dispute);
     const held = await repo.insertEvaluation(t, 'syn-system', evaluation({ disposition: 'held', holdCode: 'unsupported-layout', geneInputs: [], occurrences: [], results: [], geneStates: [] }));
@@ -234,12 +288,12 @@ describe('why the check is sound, asserted rather than assumed', () => {
 
   it('is a separate statement after the append: the source keeps the check out of the statement that appends, and after it', () => {
     const source = readFileSync(join(__dirname, '../../src/storage/postgres/ledger-records.repository.ts'), 'utf8');
-    const insertEvaluation = source.slice(source.indexOf('insertEvaluation(tenantId'), source.indexOf('activeDisputeExists(tenantId'));
+    const insertEvaluation = source.slice(source.indexOf('insertEvaluation(tenantId'), source.indexOf('/** The ids of the disputes in force'));
     const finishAt = insertEvaluation.indexOf('await this.finish(client, tenantId, \'evaluations\'');
-    const checkAt = insertEvaluation.indexOf('await this.assertNoActiveDispute(');
+    const checkAt = insertEvaluation.indexOf('await this.assertDisputeBasis(');
     expect(finishAt).toBeGreaterThan(0);
     expect(checkAt).toBeGreaterThan(finishAt); // the check comes after the append, never before it
-    const checkSql = source.slice(source.indexOf('private async hasActiveDispute'), source.indexOf('/** Its own statement'));
+    const checkSql = source.slice(source.indexOf('private async activeDisputeIds'), source.indexOf('private async assertCurrentAcceptance'));
     expect(checkSql).toContain('cell_disputes');
     expect(checkSql).not.toContain('ledger_append'); // not folded into the append
     expect(source.slice(source.indexOf('private async finish'), source.indexOf('private async eventIdOf'))).not.toContain('Dispute');

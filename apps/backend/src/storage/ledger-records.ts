@@ -51,6 +51,12 @@ export interface EvaluationInput {
   engineVersion: string;
   /** Exactly what was passed to evaluate(); empty when held. */
   geneInputs: unknown[];
+  /**
+   * The ids of the disputes (open or upheld) that were in force when the overlay for these results was built. A NEW evaluated evaluation
+   * is refused (DisputeChangedError) if, after the ledger lock is held, any active dispute is not in this list. Omitted means "none were
+   * considered", so any active dispute refuses (fail closed). Not stored; the effective knowledge set id records what was applied.
+   */
+  disputeBasis?: readonly string[];
   /** The adapter's audit trail (offsets, hashes, states, codes); empty when held. */
   occurrences: unknown[];
   /** The engine's output, stored as it was shown. Empty when held. */
