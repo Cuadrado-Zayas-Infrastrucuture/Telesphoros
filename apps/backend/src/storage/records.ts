@@ -27,6 +27,12 @@ export interface ReportRecord {
   contentType?: string | null;
   sha256?: string | null;
   uploadedAt?: string | null;
+  /** The storage VERSION of the verified file (migration 0010). Present for a lab-pdf once uploaded; evidence rests on exactly this. */
+  objectVersion?: string | null;
+  /** Who asked for the FIRST upload link (set once, never replaced). */
+  uploadRequestedBy?: string | null;
+  /** Who completed the upload (set once). With `createdBy` and the capturer, one of the identities that cannot accept the capture. */
+  uploadedBy?: string | null;
   createdAt: string;
   updatedAt: string;
 }

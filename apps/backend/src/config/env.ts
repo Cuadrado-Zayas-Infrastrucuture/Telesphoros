@@ -53,6 +53,14 @@ export const envSchema = z
     S3_ENDPOINT: z.url().optional(),
     S3_FORCE_PATH_STYLE: booleanString.default(false),
     UPLOAD_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(900).default(300),
+    /** How long a download link for a stored report lives. Short on purpose: a link is a bearer credential and is never revoked early. */
+    DOWNLOAD_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(600).default(120),
+
+    /**
+     * The lab-report pipeline (capture, review, evaluation) is a synthetic, non-production integration. Off unless switched on here,
+     * and refused in production (see below). While `disabled` the routes answer 503 PIPELINE_DISABLED and nothing is read or written.
+     */
+    LAB_REPORT_PIPELINE: z.enum(['disabled', 'enabled']).default('disabled'),
   })
   .superRefine((env, ctx) => {
     const problem = (path: string, message: string) => ctx.addIssue({ code: 'custom', path: [path], message });
@@ -67,6 +75,12 @@ export const envSchema = z
     }
     if (env.STORAGE_DRIVER === 'postgres' && !env.DATABASE_URL) problem('DATABASE_URL', 'is required when STORAGE_DRIVER=postgres');
     if (env.OBJECT_STORAGE_DRIVER === 's3' && !env.REPORTS_BUCKET) problem('REPORTS_BUCKET', 'is required when OBJECT_STORAGE_DRIVER=s3');
+
+    if (env.LAB_REPORT_PIPELINE === 'enabled') {
+      // The pipeline's records are a database guarantee (no in-memory ledger exists), and its evidence is pinned to object versions.
+      if (env.STORAGE_DRIVER !== 'postgres') problem('LAB_REPORT_PIPELINE', 'can only be enabled with STORAGE_DRIVER=postgres (the ledger has no in-memory version)');
+      if (env.NODE_ENV === 'production') problem('LAB_REPORT_PIPELINE', 'is refused in production: it is a synthetic, non-production integration until the ledger is verified at startup (slice 5B-3.3)');
+    }
 
     // Production fails closed: anything that is only fit for development is refused outright.
     if (env.NODE_ENV === 'production') {

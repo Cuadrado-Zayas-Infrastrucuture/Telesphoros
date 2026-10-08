@@ -50,8 +50,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "reports" {
     abort_incomplete_multipart_upload {
       days_after_initiation = 7
     }
+    # NOT short: a lab PDF that a capture is pinned to becomes "noncurrent" if the key is overwritten, and it is evidence for as long
+    # as the records that cite it (variables.tf enforces the six-year floor).
     noncurrent_version_expiration {
-      noncurrent_days = 90
+      noncurrent_days = var.reports_noncurrent_retention_days
     }
   }
   depends_on = [aws_s3_bucket_versioning.reports]

@@ -51,6 +51,13 @@ describe('inputs are strict (no mass assignment)', () => {
   });
   it('requires at least one field to PATCH a report', () => {
     expect(reportPatchSchema.safeParse({}).success).toBe(false);
+    // A file name must end in the extension of its type, in both directions, on create and on patch.
+    const create = (type: string, filename: string) => reportCreateSchema.safeParse({ patientId: uuid, type, filename, sizeBytes: 5 }).success;
+    expect([create('lab-pdf', 'a.pdf'), create('lab-pdf', 'A.PDF'), create('vcf', 'a.vcf'), create('structured', 'a.json')]).toEqual([true, true, true, true]);
+    expect([create('vcf', 'a.pdf'), create('lab-pdf', 'a.vcf'), create('lab-pdf', 'a.json'), create('structured', 'a.pdf'), create('vcf', 'a.json')]).toEqual([false, false, false, false, false]);
+    expect(reportPatchSchema.safeParse({ type: 'lab-pdf', filename: 'a.pdf' }).success).toBe(true);
+    expect(reportPatchSchema.safeParse({ type: 'vcf', filename: 'a.pdf' }).success).toBe(false);
+    expect(reportPatchSchema.safeParse({ filename: 'a.pdf' }).success).toBe(true); // alone: the service checks it against the stored type
     expect(reportPatchSchema.safeParse({ type: 'structured' }).success).toBe(true);
   });
 });

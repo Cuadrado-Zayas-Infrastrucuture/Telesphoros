@@ -496,3 +496,30 @@ Each was found by building or by an attack test, and each is covered by a test.
 12. **PostgreSQL only.** The record repositories have no in-memory implementation: the guarantees are the database's.
 13. **Not done in this slice.** Startup verification, the readiness `ledger` check, the restore-time ledger check and every endpoint belong to
     5B-3.2 and 5B-3.3. The pipeline stays off.
+
+## 16. Amendments made while building 5B-3.2a (these govern where they differ from the text above)
+
+1. **The roles table** (7). The role of a person is the whole set of groups they hold, never a "highest" one. `reviewer` adds to what a
+   person holds; no other role implies it, so an `admin` alone cannot accept a capture, and `admin` + `reviewer` can (never their own work).
+   The frontend's "most capable role" is for display only.
+2. **Four identities cannot accept a capture** (7, decision 12), replacing "the user who uploaded the report": the report's creator, the
+   first person who asked for an upload link (set once, never replaced), the person who completed the upload (set once), and the capture's
+   creator. A retry that returns an existing record changes nobody's identity. A rejection is open to any reviewer. Enforced by the
+   database (migration 0010), tested for each identity. An office therefore needs at least two people able to review.
+3. **The stored file is pinned to a storage VERSION** (3.2, migration 0010). `reports.object_version` is read from the same response as the
+   bytes that were hashed. A lab PDF without a real version (including S3's literal `null`) cannot be completed (409, reason
+   `source-unpinned`). Once uploaded, the file's identity cannot change; once any capture exists, the report's type, name, patient and
+   deletion mark cannot change either. Reads and links for evidence name the version; a missing version is "missing", never the latest.
+4. **A capture locks the report row** (`FOR SHARE`) in the same transaction that inserts it, so a concurrent change to the report waits
+   and is then refused (capture first), or is seen and the capture is refused (change first). Tested with two real sessions held at a
+   barrier in both orders, with controls.
+5. **Retention of overwritten files.** The reports bucket keeps noncurrent versions for at least six years (it was 90 days, which would
+   have deleted a captured file's pinned version after an overwrite). Terraform enforces the floor with a variable validation and an infra
+   guard. No principal in the module may delete object versions; a break-glass role outside it may, and its use is an audit event.
+6. **The pipeline switch** (9) is `LAB_REPORT_PIPELINE` (default `disabled`). While off, creating, changing, uploading or completing a
+   `lab-pdf` report answers 503 `PIPELINE_DISABLED` and does nothing; reading and deleting such a report still work. Enabled, it is refused
+   in production and with the in-memory store, and with the S3 driver the application refuses to start unless the bucket keeps versions.
+7. **Error codes** (8): `PIPELINE_DISABLED`, `PIPELINE_BUSY`, `READER_UNAVAILABLE`, `LEDGER_BUSY`, `LEDGER_CONFLICT`, `UNSUPPORTED_SOURCE`,
+   `PIPELINE_MISCONFIGURED`; a business conflict keeps `CONFLICT` with a stable `details[].reason`. Only the three "try again" errors carry
+   `Retry-After`.
+8. **A file name must end in the extension of its type** on create and on change (`lab-pdf` takes only `.pdf`).

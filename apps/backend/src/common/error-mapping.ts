@@ -1,5 +1,6 @@
 import { HttpException } from '@nestjs/common';
 import { ErrorCode, type ErrorDetail } from '@telesphoros/shared-types';
+import { LedgerBusyError, LedgerIntegrityError } from '../ledger/ledger-types';
 import { IntegrityError } from '../storage/errors';
 import { AppException } from './app-exception';
 
@@ -8,6 +9,7 @@ export interface MappedError {
   code: ErrorCode;
   message: string;
   details?: ErrorDetail[];
+  retryAfterSeconds?: number;
 }
 
 const GENERIC: Record<number, { code: ErrorCode; message: string }> = {
@@ -46,8 +48,12 @@ export function mapException(exception: unknown): MappedError {
       code: exception.code,
       message: exception.message,
       details: exception.details,
+      ...(exception.retryAfterSeconds === undefined ? {} : { retryAfterSeconds: exception.retryAfterSeconds }),
     };
   }
+  // The ledger said no. These two never reach a client as a 500: a refused write is a conflict, a lock timeout is "busy".
+  if (exception instanceof LedgerBusyError) return mapException(AppException.ledgerBusy());
+  if (exception instanceof LedgerIntegrityError) return mapException(AppException.ledgerConflict());
   // A database integrity rule said no (duplicate, or a RESTRICT foreign key): a conflict, not a crash.
   if (exception instanceof IntegrityError) {
     return { status: 409, ...GENERIC[409]! };

@@ -26,6 +26,13 @@ describe('CognitoTokenVerifier: accepts', () => {
     await expect(verifier().verify(await idp.mintAccessToken({ user: carol }))).resolves.toEqual({ sub: carol!.sub, tenantId: 'alpha', roles: ['admin'] });
   });
 
+  it('keeps every role group a person holds, so a reviewer who is also a clinician or admin is both', async () => {
+    const [gina, hal, ivy] = ['gina', 'hal', 'ivy'].map((n) => DEFAULT_USERS.find((u) => u.email.startsWith(n))!);
+    await expect(verifier().verify(await idp.mintAccessToken({ user: gina! }))).resolves.toEqual({ sub: gina!.sub, tenantId: 'alpha', roles: ['reviewer'] });
+    await expect(verifier().verify(await idp.mintAccessToken({ user: hal! }))).resolves.toEqual({ sub: hal!.sub, tenantId: 'alpha', roles: ['clinician', 'reviewer'] });
+    await expect(verifier().verify(await idp.mintAccessToken({ user: ivy! }))).resolves.toEqual({ sub: ivy!.sub, tenantId: 'alpha', roles: ['admin', 'reviewer'] });
+  });
+
   it('a user in a tenant but with no role group: authenticated with NO roles (least privilege)', async () => {
     await expect(verifier().verify(await idp.mintAccessToken({ user: dave }))).resolves.toEqual({ sub: dave!.sub, tenantId: 'beta', roles: [] });
   });

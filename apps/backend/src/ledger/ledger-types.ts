@@ -40,10 +40,25 @@ export class LedgerIntegrityError extends Error {
   }
 }
 
+/** The tenant's head-row lock was not obtained within `lock_timeout`. Nothing was written; retrying is safe. */
+export class LedgerBusyError extends Error {
+  /** The SQLSTATE it came from (lock_not_available), kept so callers that look at `code` still see it. */
+  readonly code = '55P03';
+  constructor() {
+    super('The ledger lock was not obtained in time.');
+    this.name = 'LedgerBusyError';
+  }
+}
+
 const INTEGRITY_CLASS = '23';
-/** SQLSTATE class 23 (integrity constraint violation) becomes a LedgerIntegrityError; anything else is returned untouched. */
+const LOCK_NOT_AVAILABLE = '55P03';
+/**
+ * SQLSTATE class 23 (integrity constraint violation) becomes a LedgerIntegrityError; a lock timeout (55P03) becomes a LedgerBusyError;
+ * anything else is returned untouched.
+ */
 export function toLedgerError(error: unknown): unknown {
   const { code, constraint } = (error ?? {}) as { code?: string; constraint?: string };
   if (typeof code === 'string' && code.startsWith(INTEGRITY_CLASS)) return new LedgerIntegrityError('A ledger or record integrity rule refused this write.', code, constraint);
+  if (code === LOCK_NOT_AVAILABLE) return new LedgerBusyError();
   return error;
 }

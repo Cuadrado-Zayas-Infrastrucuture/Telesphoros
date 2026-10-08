@@ -18,12 +18,15 @@ interface ReportRow {
   sha256: string | null;
   storage_key: string | null;
   uploaded_at: Date | null;
+  object_version: string | null;
+  upload_requested_by: string | null;
+  uploaded_by: string | null;
   created_at: Date;
   updated_at: Date;
 }
 
 const COLUMNS =
-  'id, tenant_id, created_by, patient_id, type, original_filename, size_bytes, status, content_type, sha256, storage_key, uploaded_at, created_at, updated_at';
+  'id, tenant_id, created_by, patient_id, type, original_filename, size_bytes, status, content_type, sha256, storage_key, uploaded_at, object_version, upload_requested_by, uploaded_by, created_at, updated_at';
 
 const toRecord = (row: ReportRow): ReportRecord => ({
   id: row.id,
@@ -38,6 +41,9 @@ const toRecord = (row: ReportRow): ReportRecord => ({
   sha256: row.sha256,
   storageKey: row.storage_key,
   uploadedAt: row.uploaded_at ? row.uploaded_at.toISOString() : null,
+  objectVersion: row.object_version,
+  uploadRequestedBy: row.upload_requested_by,
+  uploadedBy: row.uploaded_by,
   createdAt: row.created_at.toISOString(),
   updatedAt: row.updated_at.toISOString(),
 });
@@ -89,12 +95,13 @@ export class PostgresReportsRepository extends ReportsRepository {
       await this.db.withTenant(record.tenantId, (client) =>
         client.query(
           `INSERT INTO reports (id, tenant_id, created_by, patient_id, type, original_filename, size_bytes, status,
-                                content_type, sha256, storage_key, uploaded_at, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+                                content_type, sha256, storage_key, uploaded_at, object_version, upload_requested_by, uploaded_by, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
           [
             record.id, record.tenantId, record.createdBy, record.patientId, record.type, record.filename, record.sizeBytes,
             record.status, record.contentType ?? null, record.sha256 ?? null, record.storageKey ?? null,
-            record.uploadedAt ?? null, record.createdAt, record.updatedAt,
+            record.uploadedAt ?? null, record.objectVersion ?? null, record.uploadRequestedBy ?? null, record.uploadedBy ?? null,
+            record.createdAt, record.updatedAt,
           ],
         ),
       );
@@ -107,17 +114,43 @@ export class PostgresReportsRepository extends ReportsRepository {
     try {
       await this.db.withTenant(record.tenantId, (client) =>
         client.query(
-          `UPDATE reports
-              SET type = $3, original_filename = $4, status = $5, content_type = $6, sha256 = $7,
-                  storage_key = $8, uploaded_at = $9, updated_at = $10
+          `UPDATE reports SET type = $3, original_filename = $4, status = $5, updated_at = $6
             WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
-          [
-            record.id, record.tenantId, record.type, record.filename, record.status,
-            record.contentType ?? null, record.sha256 ?? null, record.storageKey ?? null,
-            record.uploadedAt ?? null, record.updatedAt,
-          ],
+          [record.id, record.tenantId, record.type, record.filename, record.status, record.updatedAt],
         ),
       );
+    } catch (error) {
+      throw toStorageError(error);
+    }
+  }
+
+  async recordUploadRequest(record: ReportRecord): Promise<boolean> {
+    try {
+      return await this.db.withTenant(record.tenantId, async (client) => {
+        // COALESCE keeps the FIRST requester; `uploaded_at IS NULL` means a request that lost a race to completion changes nothing.
+        const result = await client.query(
+          `UPDATE reports
+              SET storage_key = $3, content_type = $4, sha256 = $5, upload_requested_by = COALESCE(upload_requested_by, $6), updated_at = $7
+            WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL AND uploaded_at IS NULL`,
+          [record.id, record.tenantId, record.storageKey ?? null, record.contentType ?? null, record.sha256 ?? null, record.uploadRequestedBy ?? null, record.updatedAt],
+        );
+        return (result.rowCount ?? 0) > 0;
+      });
+    } catch (error) {
+      throw toStorageError(error);
+    }
+  }
+
+  async markUploaded(record: ReportRecord): Promise<boolean> {
+    try {
+      return await this.db.withTenant(record.tenantId, async (client) => {
+        const result = await client.query(
+          `UPDATE reports SET uploaded_at = $3, object_version = $4, uploaded_by = $5, updated_at = $6
+            WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL AND uploaded_at IS NULL`,
+          [record.id, record.tenantId, record.uploadedAt ?? null, record.objectVersion ?? null, record.uploadedBy ?? null, record.updatedAt],
+        );
+        return (result.rowCount ?? 0) > 0;
+      });
     } catch (error) {
       throw toStorageError(error);
     }

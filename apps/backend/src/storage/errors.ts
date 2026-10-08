@@ -11,10 +11,12 @@ export class IntegrityError extends Error {
 
 const UNIQUE_VIOLATION = '23505';
 const FOREIGN_KEY_VIOLATION = '23503';
+/** Raised explicitly by our own triggers (migration 0010: the stored file and a captured report cannot change). */
+const INTEGRITY_RULE = '23000';
 
 /** Translates a PostgreSQL error into a storage error; anything unrecognised is returned untouched. */
 export function toStorageError(error: unknown): unknown {
   const { code, constraint } = (error ?? {}) as { code?: string; constraint?: string };
-  if (code === UNIQUE_VIOLATION || code === FOREIGN_KEY_VIOLATION) return new IntegrityError(constraint);
+  if (code === UNIQUE_VIOLATION || code === FOREIGN_KEY_VIOLATION || code === INTEGRITY_RULE) return new IntegrityError(constraint);
   return error;
 }

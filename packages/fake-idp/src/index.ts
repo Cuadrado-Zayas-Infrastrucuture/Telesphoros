@@ -29,6 +29,10 @@ export const DEFAULT_USERS: FakeUser[] = [
   { sub: '44444444-4444-4444-8444-444444444444', email: 'dave@example.test', groups: ['tenant:beta'] },
   { sub: '55555555-5555-4555-8555-555555555555', email: 'erin@example.test', groups: ['clinician'] },
   { sub: '66666666-6666-4666-8666-666666666666', email: 'frank@example.test', groups: ['clinician', 'tenant:alpha', 'tenant:beta'] },
+  // Reviewers, alone and in combination: the backend must read the whole set of groups, never a "highest" role.
+  { sub: '77777777-7777-4777-8777-777777777777', email: 'gina@example.test', groups: ['reviewer', 'tenant:alpha'] },
+  { sub: '88888888-8888-4888-8888-888888888888', email: 'hal@example.test', groups: ['clinician', 'reviewer', 'tenant:alpha'] },
+  { sub: '99999999-9999-4999-8999-999999999999', email: 'ivy@example.test', groups: ['admin', 'reviewer', 'tenant:alpha'] },
 ];
 
 export interface FakeIdpOptions {

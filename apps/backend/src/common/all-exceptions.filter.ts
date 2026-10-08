@@ -30,6 +30,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     if (res.headersSent) return;
     if (mapped.code === ErrorCode.UNAUTHORIZED) res.setHeader('WWW-Authenticate', 'Bearer');
+    if (mapped.retryAfterSeconds !== undefined) res.setHeader('Retry-After', String(mapped.retryAfterSeconds));
 
     const body: ErrorResponse = {
       error: {

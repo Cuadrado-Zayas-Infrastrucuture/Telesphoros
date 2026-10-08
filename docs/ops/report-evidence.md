@@ -1,0 +1,39 @@
+# Report files as evidence
+
+A lab PDF that has been captured, reviewed and evaluated is evidence: the records cite its exact bytes. This page says what protects those
+bytes and what an operator must and must not do. (Slice 5B-3.2a. Nothing here is applied in AWS yet.)
+
+## What pins a file
+
+- The reports bucket **keeps object versions** (Terraform enables it; the application refuses to start with the pipeline on if the bucket
+  does not).
+- On `complete`, the server streams the stored object once and records, from that one response, its SHA-256 **and its storage version**
+  (`reports.object_version`), plus who asked for the first upload link and who completed the upload.
+- The database then refuses any change to that file's identity. Once a capture exists it also refuses to change the report's type, name,
+  patient or deletion mark.
+- Every read and every download link for a captured file names the version. If that version is gone, the read fails; it never serves the
+  latest object instead.
+
+## What an overwrite does
+
+An upload link stays valid for up to its lifetime (5 minutes by default) and can be used more than once. Someone holding it can write a
+new object to the same key after the upload was verified. That creates a **new version**: the report stays pinned to the verified one, and
+nothing the records cite changes. The new version is simply never used.
+
+## Retention and deletion
+
+- Overwritten (noncurrent) versions are kept at least **six years** (`reports_noncurrent_retention_days`, default 2190, enforced by a
+  variable validation and an infrastructure test). Do not lower it: the pinned version of an overwritten file is noncurrent.
+- **No principal in this Terraform module may delete object versions** (`s3:DeleteObjectVersion`). A documented break-glass role outside
+  it may, and using it must be recorded as an audit event with a reason. Versioning does not stop someone with that permission.
+
+## Download links
+
+A link is a bearer credential: whoever holds it can download that version until it expires (default 120 seconds, 60 to 600). Links are
+issued only after the tenant-scoped lookup, are never logged, and **turning the pipeline off does not revoke a link already issued**; the
+lifetime is the bound.
+
+## Switching the pipeline
+
+`LAB_REPORT_PIPELINE=enabled` is for synthetic, non-production use and is refused in production. Disabling it stops new uploads and
+completions of lab PDFs immediately; links already issued keep working until they expire.

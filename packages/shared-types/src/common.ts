@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { roleSchema } from './roles';
 
 /** `:id` route parameter. */
 export const idParamSchema = z.strictObject({ id: z.uuid() });
@@ -14,5 +15,5 @@ export const readinessDtoSchema = z.strictObject({
 export type ReadinessDto = z.infer<typeof readinessDtoSchema>;
 
 /** `GET /me`: what the signed-in caller may do. Roles only: no identifiers, no email. */
-export const meDtoSchema = z.strictObject({ roles: z.array(z.enum(['reader', 'clinician', 'admin'])) });
+export const meDtoSchema = z.strictObject({ roles: z.array(roleSchema) });
 export type MeDto = z.infer<typeof meDtoSchema>;

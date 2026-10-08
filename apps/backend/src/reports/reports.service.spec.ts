@@ -4,6 +4,8 @@ import type { Principal } from '../auth/principal';
 import { InMemoryObjectStorage } from '../object-storage/in-memory-object-storage';
 import { InMemoryPatientsRepository } from '../storage/patients.repository';
 import { InMemoryReportsRepository } from '../storage/reports.repository';
+import type { Env } from '../config/env';
+import { PipelineSwitch } from '../lab-reports/pipeline-switch';
 import { ReportsService } from './reports.service';
 
 const alice: Principal = { sub: 'alice', tenantId: 'alice', roles: ['clinician'] };
@@ -12,7 +14,7 @@ const input = (patientId: string) => ({ patientId, type: 'vcf' as const, filenam
 
 async function setup() {
   const patients = new InMemoryPatientsRepository();
-  const service = new ReportsService(new InMemoryReportsRepository(), patients, new InMemoryObjectStorage(300));
+  const service = new ReportsService(new InMemoryReportsRepository(), patients, new InMemoryObjectStorage(300), new PipelineSwitch({ LAB_REPORT_PIPELINE: 'enabled', DOWNLOAD_URL_TTL_SECONDS: 120 } as Env));
   const now = new Date().toISOString();
   const mkPatient = async (tenantId: string) => {
     const id = randomUUID();
@@ -66,9 +68,18 @@ describe('ReportsService', () => {
       const { service, mkPatient } = await setup();
       const created = await service.create(alice, input(await mkPatient('alice')));
       await new Promise((resolve) => setTimeout(resolve, 5));
-      const updated = await service.patch(alice, created.id, { filename: 'b.json' });
-      expect(updated).toMatchObject({ filename: 'b.json', type: 'vcf', status: 'received' });
+      const updated = await service.patch(alice, created.id, { filename: 'b.vcf' });
+      expect(updated).toMatchObject({ filename: 'b.vcf', type: 'vcf', status: 'received' });
       expect(updated.updatedAt > created.updatedAt).toBe(true);
+    });
+
+    it('refuses a change that leaves the file name and the type disagreeing, whichever half is changed', async () => {
+      const { service, mkPatient } = await setup();
+      const created = await service.create(alice, input(await mkPatient('alice')));
+      await expectAppException(service.patch(alice, created.id, { filename: 'b.json' }), 400, 'VALIDATION_ERROR');
+      await expectAppException(service.patch(alice, created.id, { type: 'structured' }), 400, 'VALIDATION_ERROR');
+      await expectAppException(service.patch(alice, created.id, { filename: 'b.pdf' }), 400, 'VALIDATION_ERROR');
+      expect(await service.patch(alice, created.id, { type: 'structured', filename: 'b.json' })).toMatchObject({ type: 'structured', filename: 'b.json' });
     });
 
     it('cannot patch another tenant’s report', async () => {

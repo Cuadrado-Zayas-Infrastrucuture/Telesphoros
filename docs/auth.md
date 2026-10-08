@@ -26,6 +26,7 @@ applied: the Terraform is written and validated, and the BAA is still pending.
 | `reader` | reader | read their own data |
 | `clinician` | clinician | read, create, change, upload |
 | `admin` | admin | what a clinician may; reserved for administration |
+| `reviewer` | reviewer | accept or reject a text capture of a lab report (slice 5B-3.2). It **adds** to whatever else the person holds and is never implied by another role: an `admin` alone cannot accept. The person who created, uploaded or captured a report can never accept its capture, whatever roles they hold |
 | (no role group) | none | sign in, and see their tenant's data without changing anything |
 
 A group name the API does not know is **ignored**, so nothing can grant a role by accident.
