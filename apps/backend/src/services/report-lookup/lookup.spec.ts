@@ -196,6 +196,21 @@ describe('context, policy, strict records and partial bindings', () => {
     const result = await run(f, SCOPE, JSON.stringify(raw)); expectFailure(result, 'lookup-context-required');
     if ('bindings' in result.outcome) expect(result.outcome.bindings).toMatchObject({ inputRecordSha256: null, contextRecordSha256: null, policySha256: null });
   });
+  test('missing policy artifact fails at policy with no fabricated policy digest', async () => {
+    const f = fixture(); f.snapshot.policyBytes = null;
+    const result = await run(f); expectFailure(result, 'lookup-policy-invalid');
+    if ('bindings' in result.outcome) expect(result.outcome).toMatchObject({ stage: 'policy', bindings: { policySha256: null, inputRecordSha256: null } });
+  });
+  test('malformed context review is resolved at context, after stronger empty gates', async () => {
+    const f = fixture();
+    const record = f.snapshot.records.find((r) => r.payload.type === 'context-review')!;
+    (record.payload as unknown as Record<string, unknown>).extra = true;
+    expect((await run(f)).outcome).toMatchObject({ stage: 'context', reasonCode: 'lookup-context-invalid' });
+    const g = fixture(['empty', 'canonical']);
+    const emptyContext = g.snapshot.records.find((r) => r.payload.type === 'context-review')!;
+    (emptyContext.payload as unknown as Record<string, unknown>).extra = true;
+    expectFailure(await run(g), 'reported-field-empty');
+  });
   test('early capture failure has null bindings', async () => {
     const f = fixture(); f.snapshot.capture.acceptance.decision = 'rejected';
     const result = await run(f); expectFailure(result, 'capture-not-accepted');
