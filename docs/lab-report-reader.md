@@ -2,7 +2,7 @@
 
 > **Not approved for production.** The imported engine is authorized for offline construction only
 > (`clinical_approval: false`, `training_eligible: false`), and `SubprocessReportReader` refuses to be created with
-> `mode: 'production'`. Nothing calls it yet: the adapter (next PR) and the records/API slice (5B-3) come later.
+> `mode: 'production'`. Nothing calls it yet: the adapter (next PR) and the records/API slice (5B-3) come later. The records/API slice is specified in [design/records-and-corrections.md](design/records-and-corrections.md).
 > Everything under `knowledge/lab-report-reader/v2-handoff/` is **TEST ONLY: not clinical content, not human-adjudicated**.
 
 ## What it does
