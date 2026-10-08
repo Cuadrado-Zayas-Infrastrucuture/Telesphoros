@@ -1,0 +1,68 @@
+{
+  "_comment": "TEST ONLY: not clinical content. Hand-written from the characters of the twelve captured texts (offsets are Unicode scalars, half-open), NOT produced by the engine and NOT copied from the hand-off's own reference. Spans are listed in source order; the test compares them as sets.",
+  "cases": [
+    { "id": "D01", "status": "projected", "reason": null, "spans": [
+      { "gene": "CYP2C19", "occurrenceIndex": 0, "role": "gene", "start": 0, "end": 7, "text": "CYP2C19" },
+      { "gene": "CYP2C19", "occurrenceIndex": 0, "role": "diplotype", "start": 19, "end": 24, "text": "*1/*2" },
+      { "gene": "CYP2C19", "occurrenceIndex": 0, "role": "reportedResult", "start": 33, "end": 57, "text": "Intermediate Metabolizer" },
+      { "gene": "CYP2B6", "occurrenceIndex": 0, "role": "gene", "start": 58, "end": 64, "text": "CYP2B6" },
+      { "gene": "CYP2B6", "occurrenceIndex": 0, "role": "diplotype", "start": 76, "end": 81, "text": "*1/*1" },
+      { "gene": "CYP2B6", "occurrenceIndex": 0, "role": "reportedResult", "start": 90, "end": 108, "text": "Normal Metabolizer" }
+    ], "emptyFieldRoles": [] },
+    { "id": "D02", "status": "projected", "reason": null, "spans": [
+      { "gene": "CYP2C19", "occurrenceIndex": 0, "role": "gene", "start": 0, "end": 7, "text": "CYP2C19" },
+      { "gene": "CYP2C19", "occurrenceIndex": 0, "role": "diplotype", "start": 19, "end": 24, "text": "*1/*Z" },
+      { "gene": "CYP2C19", "occurrenceIndex": 0, "role": "reportedResult", "start": 33, "end": 46, "text": "Indeterminate" }
+    ], "emptyFieldRoles": [] },
+    { "id": "D03", "status": "projected", "reason": null, "spans": [
+      { "gene": "CYP2C19", "occurrenceIndex": 0, "role": "gene", "start": 0, "end": 7, "text": "CYP2C19" },
+      { "gene": "CYP2C19", "occurrenceIndex": 0, "role": "reportedResult", "start": 16, "end": 31, "text": "\"not available\"" }
+    ], "emptyFieldRoles": [] },
+    { "id": "D04", "status": "projected", "reason": null, "spans": [
+      { "gene": "CYP2C19", "occurrenceIndex": 0, "role": "gene", "start": 0, "end": 7, "text": "CYP2C19" },
+      { "gene": "CYP2C19", "occurrenceIndex": 0, "role": "diplotype", "start": 19, "end": 24, "text": "*1/*2" }
+    ], "emptyFieldRoles": [] },
+    { "id": "D05", "status": "projected", "reason": null, "spans": [
+      { "gene": "CYP2C19", "occurrenceIndex": 0, "role": "gene", "start": 0, "end": 7, "text": "CYP2C19" }
+    ], "emptyFieldRoles": ["reportedResult"] },
+    { "id": "D06", "status": "projected", "reason": null, "spans": [
+      { "gene": "CYP2C19", "occurrenceIndex": 0, "role": "gene", "start": 0, "end": 7, "text": "CYP2C19" },
+      { "gene": "CYP2C19", "occurrenceIndex": 0, "role": "diplotype", "start": 19, "end": 24, "text": "*1/*2" },
+      { "gene": "CYP2C19", "occurrenceIndex": 0, "role": "reportedResult", "start": 33, "end": 57, "text": "Intermediate Metabolizer" },
+      { "gene": "CYP2C19", "occurrenceIndex": 1, "role": "gene", "start": 58, "end": 65, "text": "CYP2C19" },
+      { "gene": "CYP2C19", "occurrenceIndex": 1, "role": "diplotype", "start": 77, "end": 82, "text": "*1/*2" },
+      { "gene": "CYP2C19", "occurrenceIndex": 1, "role": "reportedResult", "start": 91, "end": 115, "text": "Intermediate Metabolizer" }
+    ], "emptyFieldRoles": [] },
+    { "id": "D07", "status": "projected", "reason": null, "spans": [
+      { "gene": "CYP2C19", "occurrenceIndex": 0, "role": "gene", "start": 0, "end": 7, "text": "CYP2C19" },
+      { "gene": "CYP2C19", "occurrenceIndex": 0, "role": "diplotype", "start": 19, "end": 24, "text": "*1/*2" },
+      { "gene": "CYP2C19", "occurrenceIndex": 0, "role": "reportedResult", "start": 33, "end": 57, "text": "Intermediate Metabolizer" },
+      { "gene": "CYP2C19", "occurrenceIndex": 1, "role": "gene", "start": 59, "end": 66, "text": "CYP2C19" },
+      { "gene": "CYP2C19", "occurrenceIndex": 1, "role": "diplotype", "start": 78, "end": 83, "text": "*2/*2" },
+      { "gene": "CYP2C19", "occurrenceIndex": 1, "role": "reportedResult", "start": 92, "end": 108, "text": "Poor Metabolizer" }
+    ], "emptyFieldRoles": [] },
+    { "id": "D08", "status": "held", "reason": "alignment-unsupported", "spans": [], "emptyFieldRoles": [] },
+    { "id": "D09", "status": "projected", "reason": null, "spans": [
+      { "gene": "CYP2C19", "occurrenceIndex": 0, "role": "gene", "start": 0, "end": 7, "text": "CYP2C19" },
+      { "gene": "CYP2C19", "occurrenceIndex": 0, "role": "diplotype", "start": 44, "end": 49, "text": "*1/*2" },
+      { "gene": "CYP2C19", "occurrenceIndex": 0, "role": "reportedResult", "start": 84, "end": 108, "text": "Intermediate Metabolizer" },
+      { "gene": "CYP2B6", "occurrenceIndex": 0, "role": "gene", "start": 27, "end": 33, "text": "CYP2B6" },
+      { "gene": "CYP2B6", "occurrenceIndex": 0, "role": "diplotype", "start": 71, "end": 76, "text": "*1/*1" },
+      { "gene": "CYP2B6", "occurrenceIndex": 0, "role": "reportedResult", "start": 111, "end": 129, "text": "Normal Metabolizer" }
+    ], "emptyFieldRoles": [] },
+    { "id": "D10", "status": "source-abstained", "reason": "registered-source-ambiguity", "spans": [], "emptyFieldRoles": [],
+      "unassociated": [
+        { "kind": "gene", "start": 7, "end": 14, "text": "CYP2C19" },
+        { "kind": "gene", "start": 15, "end": 21, "text": "CYP2B6" },
+        { "kind": "reportedResult", "start": 31, "end": 47, "text": "Poor Metabolizer" },
+        { "kind": "reportedResult", "start": 48, "end": 66, "text": "Normal Metabolizer" }
+      ] },
+    { "id": "D11", "status": "source-abstained", "reason": "registered-source-ambiguity", "spans": [], "emptyFieldRoles": [],
+      "unassociated": [
+        { "kind": "gene", "start": 0, "end": 7, "text": "CYP2C19" },
+        { "kind": "gene", "start": 8, "end": 14, "text": "CYP2B6" },
+        { "kind": "reportedResult", "start": 16, "end": 32, "text": "Poor Metabolizer" }
+      ] },
+    { "id": "D12", "status": "held", "reason": "unaccounted-text", "spans": [], "emptyFieldRoles": [] }
+  ]
+}
