@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { Database } from '../../db/database';
 import { appendEvent, newId } from '../../ledger/ledger-writer';
-import { toLedgerError, type RecordTable } from '../../ledger/ledger-types';
+import { SourceChangedError, toLedgerError, type RecordTable } from '../../ledger/ledger-types';
 import { loadProjections } from '../../ledger/projections';
 import { canonicalHash } from '../../services/report-adapter/canonical-json';
 import { LedgerRecordsRepository } from '../ledger-records.repository';
@@ -28,6 +28,19 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 
   insertCapture(tenantId: string, actor: string, input: CaptureInput): Promise<InsertResult> {
     return this.write(tenantId, actor, async (client) => {
+      // The report row is locked FOR SHARE for the rest of this transaction: a concurrent change to it waits for us, and one that
+      // committed before is seen here. Then what the caller relied on is compared with what is there NOW.
+      const locked = await client.query<{ type: string; patient_id: string; sha256: string | null; object_version: string | null; storage_key: string | null; uploaded: boolean; deleted: boolean }>(
+        `SELECT type, patient_id::text AS patient_id, sha256, object_version, storage_key, uploaded_at IS NOT NULL AS uploaded, deleted_at IS NOT NULL AS deleted
+           FROM reports WHERE id = $1 AND tenant_id = $2 FOR SHARE`,
+        [input.reportId, tenantId],
+      );
+      const report = locked.rows[0];
+      const expected = input.expectedReport;
+      if (!report || report.deleted || !report.uploaded || report.type !== 'lab-pdf' || report.patient_id !== expected.patientId || report.sha256 !== expected.sha256
+        || report.object_version !== expected.objectVersion || report.storage_key !== expected.storageKey || report.sha256 !== input.pdfSha256) {
+        throw new SourceChangedError();
+      }
       const existing = await client.query<{ id: string }>(
         `SELECT id::text AS id FROM report_captures WHERE tenant_id = $1 AND report_id = $2 AND text_sha256 = $3 AND poppler_version = $4`,
         [tenantId, input.reportId, input.textSha256, input.popplerVersion],
@@ -47,6 +60,20 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 
   findCapture(tenantId: string, id: string): Promise<Projected | undefined> {
     return this.read(tenantId, (client) => this.one(client, tenantId, 'report_captures', id));
+  }
+
+  findCaptureByIdentity(tenantId: string, identity: { reportId: string; textSha256: string; popplerVersion: string }): Promise<Projected | undefined> {
+    return this.read(tenantId, async (client) => {
+      const { rows } = await client.query<{ id: string }>(
+        `SELECT id::text AS id FROM report_captures WHERE tenant_id = $1 AND report_id = $2 AND text_sha256 = $3 AND poppler_version = $4`,
+        [tenantId, identity.reportId, identity.textSha256, identity.popplerVersion],
+      );
+      return rows[0] ? this.one(client, tenantId, 'report_captures', rows[0].id) : undefined;
+    });
+  }
+
+  findAcceptance(tenantId: string, id: string): Promise<Projected | undefined> {
+    return this.read(tenantId, (client) => this.one(client, tenantId, 'capture_acceptances', id));
   }
 
   insertAcceptance(tenantId: string, actor: string, input: AcceptanceInput): Promise<InsertResult> {

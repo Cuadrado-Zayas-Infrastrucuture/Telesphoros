@@ -523,3 +523,17 @@ Each was found by building or by an attack test, and each is covered by a test.
    `PIPELINE_MISCONFIGURED`; a business conflict keeps `CONFLICT` with a stable `details[].reason`. Only the three "try again" errors carry
    `Retry-After`.
 8. **A file name must end in the extension of its type** on create and on change (`lab-pdf` takes only `.pdf`).
+
+## 17. Amendments made while building 5B-3.2b-1 (these govern where they differ from the text above)
+
+1. **The capture protocol is enforced by the repository** (3.2, plan 12.3). `insertCapture` requires the bindings the caller relied on
+   (patient, file hash, object version, storage key) and, inside the capture's own transaction, locks the report row `FOR SHARE`, re-reads
+   them, and refuses with "source changed" if any differs. The database trigger of migration 0010 repeats the checks, so a caller that
+   bypasses the repository is stopped too.
+2. **The captured text is not version-pinned** (decision 18). The capture table has no column for the text object's version, and adding one
+   would change the hashed projection. Instead the text key is content-addressed and deterministic, the text is re-hashed before a link is
+   issued (`GET /captures/:id/text-url`, a separate route so a damaged text object cannot make the capture unreadable) and again at
+   evaluation. A link therefore names a version whose bytes were just checked.
+3. **File links are for clinician, reviewer and admin, not reader** (decision 19). A PDF is the most sensitive artifact in the system.
+4. **The text runner hashes the bytes it is given** and takes no hash from the caller, so a replaced file cannot borrow another file's text.
+

@@ -76,6 +76,24 @@ Nothing calls it yet either; it is wired to an endpoint in the records slice.
 
 A held report produces no drug results. Nothing in a hold or in the audit trail contains text from the report.
 
+## The pipeline routes (slice 5B-3.2b-1; synthetic, non-production)
+
+With `LAB_REPORT_PIPELINE=enabled` (never in production, PostgreSQL only) a report that was uploaded as `lab-pdf` can be captured and reviewed:
+
+| Route | Who | What |
+| --- | --- | --- |
+| `POST /reports/:id/capture` | clinician, reviewer, admin | Fetches the **pinned version** of the PDF, re-hashes it, runs the text runner, stores the text, and records a capture. 201 new, 200 the same text again |
+| `GET /captures/:id` | everyone signed in | The capture and its latest decision. Never the text, a storage key or who made it |
+| `POST /captures/:id/decision` | reviewer | Accept or reject, with an optional note (kept in `event_notes`, shown only as a digest). The hash and Poppler version are copied from the capture |
+| `GET /reports/:id/download-url`, `GET /captures/:id/text-url` | clinician, reviewer, admin | A short-lived link to one version of one file (the PDF's pinned version; the text after its hash was re-checked) |
+
+Whoever **accepts** is not the report's creator, the person who asked for the first upload link, the person who completed the upload, or the
+person who captured it (409 `self-review`; a rejection is open to any reviewer). The text runner is a **recorded-text substitute**: it
+recognises only the twelve development PDFs by the SHA-256 of their retrieved bytes and returns their stored text. It says nothing about real
+PDF extraction, which needs the pinned Poppler binary and is a separate slice. `LAB_REPORT_FIXTURES_DIR` (required when the pipeline is on, no default) names the directory of
+recordings. A missing or damaged directory stops the start; an entry damaged later answers 500 `PIPELINE_MISCONFIGURED`.
+Switched off, every one of these routes answers 503 `PIPELINE_DISABLED` and touches nothing.
+
 ## Known limits
 
 - The reader's registry names two genes, CYP2C19 and CYP2B6. A report that mentions anything else is held (`unaccounted-text`).

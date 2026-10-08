@@ -40,6 +40,14 @@ export class LedgerIntegrityError extends Error {
   }
 }
 
+/** The report changed (or vanished) between the moment the caller read it and the moment its capture was written. Nothing was written. */
+export class SourceChangedError extends Error {
+  constructor() {
+    super('The report changed while it was being captured.');
+    this.name = 'SourceChangedError';
+  }
+}
+
 /** The tenant's head-row lock was not obtained within `lock_timeout`. Nothing was written; retrying is safe. */
 export class LedgerBusyError extends Error {
   /** The SQLSTATE it came from (lock_not_available), kept so callers that look at `code` still see it. */

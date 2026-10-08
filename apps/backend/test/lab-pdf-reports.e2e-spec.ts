@@ -221,7 +221,7 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
     await put((await uploadUrl(alice, id).expect(200)).body, PDF);
     await complete(alice, id).expect(200);
     const stored = await row(id);
-    const seeded: SeededReport = { tenantId: 'tenant-cap', uploader: 'alice', patientId, reportId: id, pdfSha256: stored.sha256, objectVersion: stored.object_version };
+    const seeded: SeededReport = { tenantId: 'tenant-cap', uploader: 'alice', patientId, reportId: id, pdfSha256: stored.sha256, objectVersion: stored.object_version, storageKey: stored.storage_key };
     await app.get(LedgerRecordsRepository).insertCapture('tenant-cap', 'cap-person', captureFor(seeded));
 
     const patch = await api(app).patch(`/api/v1/reports/${id}`).set(bearer(alice)).send({ type: 'vcf', filename: 'a.vcf' }).expect(409);

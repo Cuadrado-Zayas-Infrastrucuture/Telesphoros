@@ -8,10 +8,17 @@ import type {
  * Every method is tenant-scoped; `actor` is the authenticated individual.
  */
 export abstract class LedgerRecordsRepository {
+  /**
+   * Locks the report row, re-reads the bindings the caller relied on (`input.expectedReport`) and throws SourceChangedError if any
+   * differs; only then inserts. Idempotent per content identity: the same text again returns the existing capture and writes nothing.
+   */
   abstract insertCapture(tenantId: string, actor: string, input: CaptureInput): Promise<InsertResult>;
   abstract findCapture(tenantId: string, id: string): Promise<Projected | undefined>;
+  /** The capture already stored for this content identity, if any. */
+  abstract findCaptureByIdentity(tenantId: string, identity: { reportId: string; textSha256: string; popplerVersion: string }): Promise<Projected | undefined>;
 
   abstract insertAcceptance(tenantId: string, actor: string, input: AcceptanceInput): Promise<InsertResult>;
+  abstract findAcceptance(tenantId: string, id: string): Promise<Projected | undefined>;
   /** The latest decision about a capture (by sequence), or undefined. */
   abstract latestAcceptance(tenantId: string, captureId: string): Promise<Projected | undefined>;
 

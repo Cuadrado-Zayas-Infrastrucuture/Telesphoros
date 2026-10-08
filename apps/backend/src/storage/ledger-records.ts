@@ -6,8 +6,21 @@ import type { DrugResult, GeneStateResult } from '@telesphoros/cpic-schema';
  * `seq` as a decimal string, timestamps as UTC text with microseconds, free text replaced by `{ id, bodySha256 }`.
  */
 
+/**
+ * What the caller saw of the report before it read the stored file. The capture's transaction locks the report row, re-reads these
+ * and refuses (SourceChangedError) if any differs: a capture can only ever describe the report that was actually processed.
+ */
+export interface ExpectedReportBindings {
+  patientId: string;
+  sha256: string;
+  objectVersion: string;
+  storageKey: string;
+}
+
 export interface CaptureInput {
   reportId: string;
+  /** Required, so no caller can write a capture without saying what it relied on. */
+  expectedReport: ExpectedReportBindings;
   pdfSha256: string;
   textStorageKey: string;
   textSha256: string;

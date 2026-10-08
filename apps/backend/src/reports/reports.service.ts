@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import {
   filenameMatchesType,
@@ -12,6 +12,7 @@ import {
 } from '@telesphoros/shared-types';
 import { AppException } from '../common/app-exception';
 import type { Principal } from '../auth/principal';
+import { reportObjectKey } from '../lab-reports/object-keys';
 import { PipelineSwitch } from '../lab-reports/pipeline-switch';
 import { ObjectStorage } from '../object-storage/object-storage';
 import { PatientsRepository } from '../storage/patients.repository';
@@ -104,7 +105,7 @@ export class ReportsService {
         { field: 'contentType', message: `A ${report.type} report must be one of: ${REPORT_CONTENT_TYPES[report.type].join(', ')}.` },
       ]);
     }
-    const storageKey = report.storageKey ?? objectKey(principal.tenantId, report.id);
+    const storageKey = report.storageKey ?? reportObjectKey(principal.tenantId, report.id);
     const recorded = await this.reports.recordUploadRequest({
       ...report,
       storageKey,
@@ -152,10 +153,4 @@ export class ReportsService {
     if (!(await this.reports.markUploaded(completed))) return this.get(principal, id);
     return completed;
   }
-}
-
-/** The tenant appears only as a hash: a stable per-tenant prefix (for storage policies) with no raw identifier or unsafe characters. */
-function objectKey(tenantId: string, reportId: string): string {
-  const tenantPrefix = createHash('sha256').update(tenantId).digest('hex').slice(0, 32);
-  return `reports/${tenantPrefix}/${reportId}/${randomUUID()}`;
 }

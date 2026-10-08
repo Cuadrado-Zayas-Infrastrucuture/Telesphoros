@@ -1,5 +1,6 @@
 export * from './common';
 export * from './errors';
+export * from './lab-report';
 export * from './pagination';
 export * from './patient';
 export * from './recommendation';
