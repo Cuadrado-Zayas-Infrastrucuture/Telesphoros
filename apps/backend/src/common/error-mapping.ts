@@ -1,6 +1,6 @@
 import { HttpException } from '@nestjs/common';
 import { ErrorCode, type ErrorDetail } from '@telesphoros/shared-types';
-import { DisputeActiveError, LedgerBusyError, LedgerIntegrityError, SourceChangedError } from '../ledger/ledger-types';
+import { DisputeActiveError, LedgerBusyError, LedgerIntegrityError, SourceChangedError, StaleAcceptanceError } from '../ledger/ledger-types';
 import { IntegrityError } from '../storage/errors';
 import { AppException } from './app-exception';
 
@@ -52,6 +52,7 @@ export function mapException(exception: unknown): MappedError {
     };
   }
   // The ledger said no. These two never reach a client as a 500: a refused write is a conflict, a lock timeout is "busy".
+  if (exception instanceof StaleAcceptanceError) return mapException(AppException.conflictBecause('stale-acceptance', 'A later decision supersedes the acceptance named. Nothing was saved.'));
   if (exception instanceof DisputeActiveError) return mapException(AppException.conflictBecause('dispute-active', 'A dispute about a guideline is open. Nothing was saved; this cannot be evaluated until it is resolved.'));
   if (exception instanceof SourceChangedError) return mapException(AppException.conflictBecause('source-changed', 'The report changed while it was being captured. Nothing was saved; capture it again.'));
   if (exception instanceof LedgerBusyError) return mapException(AppException.ledgerBusy());

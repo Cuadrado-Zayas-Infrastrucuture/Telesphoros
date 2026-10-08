@@ -27,6 +27,7 @@ export abstract class LedgerRecordsRepository {
    * A NEW evaluation that shows drug results (`disposition: 'evaluated'`) throws DisputeActiveError if a dispute is open or upheld,
    * checked in a separate statement AFTER the tenant's ledger lock is held (see the implementation). A held evaluation shows nothing
    * and is not blocked.
+   * A new evaluation naming an acceptance also rechecks that decision after the lock; supersession throws StaleAcceptanceError.
    */
   abstract insertEvaluation(tenantId: string, actor: string, input: EvaluationInput): Promise<InsertResult>;
   abstract findEvaluation(tenantId: string, id: string): Promise<Projected | undefined>;

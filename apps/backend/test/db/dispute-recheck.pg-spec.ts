@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { PoolClient } from 'pg';
 import { Database } from '../../src/db/database';
-import { DisputeActiveError } from '../../src/ledger/ledger-types';
+import { mapException } from '../../src/common/error-mapping';
+import { DisputeActiveError, StaleAcceptanceError } from '../../src/ledger/ledger-types';
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
 import { Session, untilBlocked } from '../helpers/barrier';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
@@ -63,7 +64,7 @@ async function ready(t = tenant()) {
   const capture = captureFor(report);
   const c = await repo.insertCapture(t, report.uploader, capture);
   const a = await repo.insertAcceptance(t, 'syn-reviewer', acceptanceFor(c.record.id, capture));
-  return { t, report, evaluation: (over = {}) => evaluationFor(report, c.record.id, a.record.id, over) };
+  return { t, report, capture, captureId: c.record.id, evaluation: (over = {}) => evaluationFor(report, c.record.id, a.record.id, over) };
 }
 const count = (sql: string, values: unknown[]) => withAdmin(pg.adminUrl, async (c) => (await c.query(sql, values)).rows[0].n as number);
 const evaluations = (t: string) => count(`SELECT count(*)::int AS n FROM evaluations WHERE tenant_id = $1`, [t]);
@@ -79,6 +80,45 @@ afterEach(async () => {
 });
 const settle = <T>(work: Promise<T>) => work.then((value) => ({ value, error: undefined }), (error: unknown) => ({ value: undefined, error }));
 const dispute = { guidelineId: 'syn-guideline', guidelineVersion: '1', guidelineContentSha256: 'c'.repeat(64), locator: { table: 'recommendations', row: 'poor' }, note: 'a disputed cell' };
+
+describe('acceptance freshness at the ledger boundary', () => {
+  it.each(['accepted', 'rejected'] as const)('superseding %s decision commits first: no evaluation or event survives', async (decision) => {
+    const { t, capture, captureId, evaluation } = await ready();
+    const gate = pausedBeforeCommit(pausable);
+    const rejecting = settle(gated.insertAcceptance(t, 'syn-reviewer-2', acceptanceFor(captureId, capture, { decision })));
+    await gate.reached;
+    const pending = settle(repo.insertEvaluation(t, 'syn-system', evaluation()));
+    try {
+      await untilBlocked(pg.adminUrl, WRITER);
+    } finally {
+      gate.release();
+    }
+    expect((await rejecting).error).toBeUndefined();
+    const result = await pending;
+    expect(result.error).toBeInstanceOf(StaleAcceptanceError);
+    expect(mapException(result.error)).toMatchObject({ status: 409 });
+    expect(await evaluations(t)).toBe(0);
+    expect(await evaluationEvents(t)).toBe(0);
+  });
+
+  it('evaluation commits first: a later rejection waits and preserves history', async () => {
+    const { t, capture, captureId, evaluation } = await ready();
+    const gate = pausedBeforeCommit(pausable);
+    const pending = settle(gated.insertEvaluation(t, 'syn-system', evaluation()));
+    await gate.reached;
+    const rejecting = settle(repo.insertAcceptance(t, 'syn-reviewer-2', acceptanceFor(captureId, capture, { decision: 'rejected' })));
+    try {
+      await untilBlocked(pg.adminUrl, WRITER);
+    } finally {
+      gate.release();
+    }
+    expect((await pending).value?.created).toBe(true);
+    expect((await rejecting).error).toBeUndefined();
+    expect(await evaluations(t)).toBe(1);
+    expect(await evaluationEvents(t)).toBe(1);
+    expect((await repo.latestAcceptance(t, captureId))?.decision).toBe('rejected');
+  });
+});
 
 describe('a dispute and an evaluation racing for the same tenant (decided by the ledger lock queue)', () => {
   it('dispute commits first: the evaluation is refused, and nothing of it remains (no row, no event)', async () => {
