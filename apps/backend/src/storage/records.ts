@@ -1,9 +1,13 @@
 import type { RecommendationStrength, ReportStatus, ReportType } from '@telesphoros/shared-types';
 
-/** Internal records. `ownerId` lives here and is NEVER copied into a DTO. */
+/**
+ * Internal records. `tenantId` (who may see the row) and `createdBy` (the individual who made it)
+ * live here and are NEVER copied into a DTO. Neither can change after the row is created.
+ */
 export interface PatientRecord {
   id: string;
-  ownerId: string;
+  tenantId: string;
+  createdBy: string;
   label: string;
   createdAt: string;
   updatedAt: string;
@@ -11,7 +15,8 @@ export interface PatientRecord {
 
 export interface ReportRecord {
   id: string;
-  ownerId: string;
+  tenantId: string;
+  createdBy: string;
   patientId: string;
   type: ReportType;
   filename: string;
@@ -28,7 +33,8 @@ export interface ReportRecord {
 
 export interface RecommendationRecord {
   id: string;
-  ownerId: string;
+  tenantId: string;
+  createdBy: string;
   patientId: string;
   reportId: string;
   gene: string;

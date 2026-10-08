@@ -11,8 +11,8 @@ export interface RecommendationFilter {
  * client, so the API exposes read methods only. `insert` exists for that engine and for tests.
  */
 export abstract class RecommendationsRepository {
-  abstract list(ownerId: string, page: PageRequest, filter: RecommendationFilter): Promise<Page<RecommendationRecord>>;
-  abstract findById(ownerId: string, id: string): Promise<RecommendationRecord | undefined>;
+  abstract list(tenantId: string, page: PageRequest, filter: RecommendationFilter): Promise<Page<RecommendationRecord>>;
+  abstract findById(tenantId: string, id: string): Promise<RecommendationRecord | undefined>;
   abstract insert(record: RecommendationRecord): Promise<void>;
 }
 
@@ -20,18 +20,18 @@ export abstract class RecommendationsRepository {
 export class InMemoryRecommendationsRepository extends RecommendationsRepository {
   private readonly rows = new Map<string, RecommendationRecord>();
 
-  async list(ownerId: string, page: PageRequest, filter: RecommendationFilter) {
+  async list(tenantId: string, page: PageRequest, filter: RecommendationFilter) {
     const rows = [...this.rows.values()].filter(
       (row) =>
-        row.ownerId === ownerId &&
+        row.tenantId === tenantId &&
         (!filter.patientId || row.patientId === filter.patientId) &&
         (!filter.reportId || row.reportId === filter.reportId),
     );
     return slicePage(rows.sort(byCreatedAt), page);
   }
-  async findById(ownerId: string, id: string) {
+  async findById(tenantId: string, id: string) {
     const row = this.rows.get(id);
-    return row && row.ownerId === ownerId ? { ...row } : undefined;
+    return row && row.tenantId === tenantId ? { ...row } : undefined;
   }
   async insert(record: RecommendationRecord) {
     this.rows.set(record.id, { ...record });

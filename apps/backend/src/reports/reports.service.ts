@@ -24,11 +24,11 @@ export class ReportsService {
   ) {}
 
   list(principal: Principal, { page, pageSize, patientId }: ReportListQuery) {
-    return this.reports.list(principal.sub, { offset: (page - 1) * pageSize, limit: pageSize }, { patientId });
+    return this.reports.list(principal.tenantId, { offset: (page - 1) * pageSize, limit: pageSize }, { patientId });
   }
 
   async get(principal: Principal, id: string): Promise<ReportRecord> {
-    const record = await this.reports.findById(principal.sub, id);
+    const record = await this.reports.findById(principal.tenantId, id);
     if (!record) throw AppException.notFound('Report not found.');
     return record;
   }
@@ -36,13 +36,14 @@ export class ReportsService {
   /** Registers report metadata for one of the caller's own patients. The new status is always "received". */
   async create(principal: Principal, input: ReportCreate): Promise<ReportRecord> {
     // Same NOT_FOUND whether the patient is missing or belongs to someone else.
-    if (!(await this.patients.findById(principal.sub, input.patientId))) {
+    if (!(await this.patients.findById(principal.tenantId, input.patientId))) {
       throw AppException.notFound('Patient not found.');
     }
     const now = new Date().toISOString();
     const record: ReportRecord = {
       id: randomUUID(),
-      ownerId: principal.sub,
+      tenantId: principal.tenantId,
+      createdBy: principal.sub,
       patientId: input.patientId,
       type: input.type,
       filename: input.filename,
@@ -69,13 +70,13 @@ export class ReportsService {
 
   async remove(principal: Principal, id: string): Promise<void> {
     await this.get(principal, id);
-    await this.reports.delete(principal.sub, id);
+    await this.reports.delete(principal.tenantId, id);
   }
 
   /**
    * Upload step 1. Records what the client says it will send (type and SHA-256) and returns a
    * short-lived URL for ONE object. The object key is generated here, never taken from the client:
-   * reports/<owner hash>/<report id>/<random>. Safe to call again before the upload completes.
+   * reports/<tenant hash>/<report id>/<random>. Safe to call again before the upload completes.
    */
   async createUploadUrl(principal: Principal, id: string, input: ReportUploadUrlRequest): Promise<ReportUploadUrlResponse> {
     const report = await this.get(principal, id);
@@ -85,7 +86,7 @@ export class ReportsService {
         { field: 'contentType', message: `A ${report.type} report must be one of: ${REPORT_CONTENT_TYPES[report.type].join(', ')}.` },
       ]);
     }
-    const storageKey = report.storageKey ?? objectKey(principal.sub, report.id);
+    const storageKey = report.storageKey ?? objectKey(principal.tenantId, report.id);
     await this.reports.update({
       ...report,
       storageKey,
@@ -124,8 +125,8 @@ export class ReportsService {
   }
 }
 
-/** The owner appears only as a hash: a stable per-owner prefix (for storage policies) with no raw identifier or unsafe characters. */
-function objectKey(ownerId: string, reportId: string): string {
-  const ownerPrefix = createHash('sha256').update(ownerId).digest('hex').slice(0, 32);
-  return `reports/${ownerPrefix}/${reportId}/${randomUUID()}`;
+/** The tenant appears only as a hash: a stable per-tenant prefix (for storage policies) with no raw identifier or unsafe characters. */
+function objectKey(tenantId: string, reportId: string): string {
+  const tenantPrefix = createHash('sha256').update(tenantId).digest('hex').slice(0, 32);
+  return `reports/${tenantPrefix}/${reportId}/${randomUUID()}`;
 }

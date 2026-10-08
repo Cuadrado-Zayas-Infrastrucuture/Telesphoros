@@ -21,7 +21,7 @@ describe('mapException', () => {
   });
 
   it('maps a database integrity violation (duplicate key, RESTRICT foreign key) to 409 CONFLICT, not 500', () => {
-    expect(mapException(new IntegrityError('patients_owner_label_uq'))).toEqual({
+    expect(mapException(new IntegrityError('patients_tenant_label_uq'))).toEqual({
       status: 409,
       code: 'CONFLICT',
       message: 'The request conflicts with the current state.',

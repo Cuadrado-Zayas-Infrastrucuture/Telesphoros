@@ -1,9 +1,9 @@
 import { Logger } from '@nestjs/common';
-import { type Role, roleSchema } from '@telesphoros/shared-types';
+import { type Role, roleSchema, tenantFromGroups } from '@telesphoros/shared-types';
 import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from 'jose';
 import { z } from 'zod';
 import type { Principal } from './principal';
-import { InvalidTokenError, TokenVerifier } from './token-verifier';
+import { InvalidTokenError, NoTenantError, TokenVerifier } from './token-verifier';
 
 export interface CognitoVerifierOptions {
   /** `https://cognito-idp.<region>.amazonaws.com/<user pool id>` */
@@ -56,9 +56,14 @@ export class CognitoTokenVerifier extends TokenVerifier {
       if (payload.client_id !== this.options.clientId) throw new InvalidTokenError('wrong client');
       const sub = subjectClaim.parse(payload.sub);
       const groups: unknown = payload['cognito:groups'];
-      const roles = Array.isArray(groups) ? [...new Set(groups.filter((g): g is Role => roleSchema.safeParse(g).success))] : [];
-      return { sub, roles };
+      const groupNames = Array.isArray(groups) ? groups.filter((g): g is string => typeof g === 'string') : [];
+      const roles = [...new Set(groupNames.filter((g): g is Role => roleSchema.safeParse(g).success))];
+      // Exactly one "tenant:<id>" group, or the user is refused (403). Unknown groups are ignored.
+      const tenant = tenantFromGroups(groupNames);
+      if (!tenant.ok) throw new NoTenantError();
+      return { sub, tenantId: tenant.tenantId, roles };
     } catch (error) {
+      if (error instanceof NoTenantError) throw error;
       // Operators need to know when the key set is the problem; callers never learn why they were refused.
       if (!(error instanceof InvalidTokenError) && !this.isTokenProblem(error)) {
         this.logger.warn(`Could not verify a token because the key set was unavailable: ${(error as Error).message}`);

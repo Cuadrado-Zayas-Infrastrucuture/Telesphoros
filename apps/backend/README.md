@@ -41,15 +41,17 @@ orchestrator would restart healthy processes in a loop.
 - **Request id**: every response carries `X-Request-Id` (also in the error body). A caller may send
   its own (8-64 chars of `A-Z a-z 0-9 . _ -`); anything else is replaced.
 - **Inputs are strict**: unknown fields are rejected (no mass assignment). Response DTOs are checked
-  against the same schemas, and internal fields (owner, storage keys) never appear.
+  against the same schemas, and internal fields (tenant, author, storage keys) never appear.
 
 ## Authentication and authorization
 
 - Every route requires `Authorization: Bearer <JWT>` unless marked `@Public()` (only health and ready).
 - Roles: `reader` (read only), `clinician` (read + change), `admin` (reserved). A token with no roles is least privilege.
   `@Roles(...)` on a route requires at least one of them; otherwise `403 FORBIDDEN`.
-- **Ownership**: every record belongs to the token's `sub`, and every repository method takes the
-  owner id. Another user's record is reported as `404 NOT_FOUND` (not 403), so ids cannot be probed.
+- **Tenancy**: every record belongs to the caller's tenant (an organization; the token's single `tenant:<id>` group) and
+  every repository method takes the tenant id, so colleagues share records. The token's `sub` is only recorded as the
+  author (`created_by`). Another tenant's record is reported as `404 NOT_FOUND` (not 403), so ids cannot be probed. A
+  genuine token whose user has no tenant group, or two, is refused with `403 FORBIDDEN`. See [docs/auth.md](../../docs/auth.md).
 - Tokens are verified for signature, issuer, expiry and an issued-at no older than 1 hour. All rejections return the same
   generic 401. Two verifiers: **`cognito`** (production): RS256 Cognito *access* tokens against the pool's published keys
   (`client_id` and `token_use=access` checked; ID tokens, HS256 and `alg: none` refused; an unreachable key set answers 401,

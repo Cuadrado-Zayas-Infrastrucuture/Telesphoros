@@ -12,14 +12,14 @@ export class RecommendationsService {
 
   list(principal: Principal, { page, pageSize, patientId, reportId }: RecommendationListQuery) {
     return this.recommendations.list(
-      principal.sub,
+      principal.tenantId,
       { offset: (page - 1) * pageSize, limit: pageSize },
       { patientId, reportId },
     );
   }
 
   async get(principal: Principal, id: string): Promise<RecommendationRecord> {
-    const record = await this.recommendations.findById(principal.sub, id);
+    const record = await this.recommendations.findById(principal.tenantId, id);
     if (!record) throw AppException.notFound('Recommendation not found.');
     return record;
   }

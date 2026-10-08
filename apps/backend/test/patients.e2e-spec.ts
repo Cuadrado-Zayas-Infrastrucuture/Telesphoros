@@ -22,7 +22,7 @@ describe('patients: roles and shape', () => {
     const res = await api().post(BASE).set(bearer(await clinicianA())).send({ label: 'SYN-0001' }).expect(201);
     expect(Object.keys(res.body).sort()).toEqual(['createdAt', 'id', 'label', 'updatedAt']);
     expect(patientDtoSchema.safeParse(res.body).success).toBe(true);
-    expect(JSON.stringify(res.body)).not.toMatch(/owner|user-a/i);
+    expect(JSON.stringify(res.body)).not.toMatch(/owner|tenant|created_?by|user-a/i);
   });
 
   it('forbids a reader and a role-less caller from changing data, but not from reading', async () => {
@@ -56,7 +56,7 @@ describe('patients: ownership (one user can never see or touch another user’s 
     expect(still.body.label).toBe('SYN-OWN-1');
   });
 
-  it('allows the same label for different owners', async () => {
+  it('allows the same label for different tenants', async () => {
     await makePatient(await clinicianA(), 'SYN-SHARED');
     await makePatient(await clinicianB(), 'SYN-SHARED');
   });
@@ -67,7 +67,9 @@ describe('patients: validation (rejected before any business logic)', () => {
     ['empty body', {}],
     ['name-like label', { label: 'Jane Doe' }],
     ['over-long label', { label: 'A'.repeat(41) }],
-    ['unknown field (mass assignment)', { label: 'SYN-2', ownerId: 'user-b' }],
+    ['unknown field (mass assignment)', { label: 'SYN-2', tenantId: 'user-b' }],
+    ['client-supplied author', { label: 'SYN-2', createdBy: 'someone-else' }],
+    ['client-supplied tenant column', { label: 'SYN-2', tenant_id: 'user-b' }],
     ['wrong type', { label: 12345 }],
     ['array instead of object', []],
   ])('returns 400 VALIDATION_ERROR for %s', async (_name, body) => {

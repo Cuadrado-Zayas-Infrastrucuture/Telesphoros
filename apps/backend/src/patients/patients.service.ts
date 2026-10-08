@@ -15,22 +15,23 @@ export class PatientsService {
   ) {}
 
   list(principal: Principal, { page, pageSize }: PaginationQuery) {
-    return this.patients.list(principal.sub, { offset: (page - 1) * pageSize, limit: pageSize });
+    return this.patients.list(principal.tenantId, { offset: (page - 1) * pageSize, limit: pageSize });
   }
 
   /** Someone else's patient is reported as NOT_FOUND, so ids cannot be probed for existence. */
   async get(principal: Principal, id: string): Promise<PatientRecord> {
-    const record = await this.patients.findById(principal.sub, id);
+    const record = await this.patients.findById(principal.tenantId, id);
     if (!record) throw AppException.notFound('Patient not found.');
     return record;
   }
 
   async create(principal: Principal, input: PatientInput): Promise<PatientRecord> {
-    await this.assertLabelFree(principal.sub, input.label);
+    await this.assertLabelFree(principal.tenantId, input.label);
     const now = new Date().toISOString();
     const record: PatientRecord = {
       id: randomUUID(),
-      ownerId: principal.sub,
+      tenantId: principal.tenantId,
+      createdBy: principal.sub,
       label: input.label,
       createdAt: now,
       updatedAt: now,
@@ -41,7 +42,7 @@ export class PatientsService {
 
   async replace(principal: Principal, id: string, input: PatientInput): Promise<PatientRecord> {
     const existing = await this.get(principal, id);
-    await this.assertLabelFree(principal.sub, input.label, existing.id);
+    await this.assertLabelFree(principal.tenantId, input.label, existing.id);
     const updated = { ...existing, label: input.label, updatedAt: new Date().toISOString() };
     await this.patients.update(updated);
     return updated;
@@ -50,14 +51,14 @@ export class PatientsService {
   /** Mirrors the Phase 3 foreign key: a patient with reports cannot be deleted (ON DELETE RESTRICT). */
   async remove(principal: Principal, id: string): Promise<void> {
     await this.get(principal, id);
-    if ((await this.reports.countByPatient(principal.sub, id)) > 0) {
+    if ((await this.reports.countByPatient(principal.tenantId, id)) > 0) {
       throw AppException.conflict('This patient still has reports. Delete them first.');
     }
-    await this.patients.delete(principal.sub, id);
+    await this.patients.delete(principal.tenantId, id);
   }
 
-  private async assertLabelFree(ownerId: string, label: string, ignoreId?: string) {
-    const clash = await this.patients.findByLabel(ownerId, label);
+  private async assertLabelFree(tenantId: string, label: string, ignoreId?: string) {
+    const clash = await this.patients.findByLabel(tenantId, label);
     if (clash && clash.id !== ignoreId) throw AppException.conflict('A patient with that label already exists.');
   }
 }

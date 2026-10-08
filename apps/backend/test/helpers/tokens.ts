@@ -4,6 +4,8 @@ import { TEST_AUDIENCE, TEST_ISSUER, TEST_SECRET } from './env';
 export interface TokenOptions {
   sub?: string | null;
   roles?: unknown;
+  /** The tenant claim. Omitted: derived from the subject, so each test user is a tenant of one. `null` omits the claim. */
+  tenant?: string | null;
   secret?: string;
   issuer?: string;
   audience?: string;
@@ -15,13 +17,15 @@ export interface TokenOptions {
 /** Signs a JWT exactly as the HmacTokenVerifier expects, with knobs to break each rule. */
 export async function signToken(options: TokenOptions = {}): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
+  const sub = options.sub === undefined ? 'user-a' : options.sub;
+  const tenant = options.tenant === undefined ? `tenant-${(sub ?? 'anonymous').toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : options.tenant;
   const claims: Record<string, unknown> = {};
   if (options.roles !== undefined) claims.roles = options.roles;
+  if (tenant !== null) claims.tenant = tenant;
   const jwt = new SignJWT(claims)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuer(options.issuer ?? TEST_ISSUER)
     .setAudience(options.audience ?? TEST_AUDIENCE);
-  const sub = options.sub === undefined ? 'user-a' : options.sub;
   if (sub !== null) jwt.setSubject(sub);
   const iat = options.iat === undefined ? 0 : options.iat;
   if (iat !== null) jwt.setIssuedAt(now + iat);
@@ -30,7 +34,7 @@ export async function signToken(options: TokenOptions = {}): Promise<string> {
   return jwt.sign(new TextEncoder().encode(options.secret ?? TEST_SECRET));
 }
 
-/** Ready-made callers. user-a and user-b are different owners. */
+/** Ready-made callers. user-a and user-b are different tenants. */
 export const clinicianA = () => signToken({ sub: 'user-a', roles: ['clinician'] });
 export const clinicianB = () => signToken({ sub: 'user-b', roles: ['clinician'] });
 export const readerA = () => signToken({ sub: 'user-a', roles: ['reader'] });

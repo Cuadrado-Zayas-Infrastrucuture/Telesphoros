@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:net';
 import { DEFAULT_USERS, type FakeIdp, startFakeIdp } from '@telesphoros/fake-idp';
 import { SignJWT } from 'jose';
 import { CognitoTokenVerifier } from './cognito-token-verifier';
-import { InvalidTokenError } from './token-verifier';
+import { InvalidTokenError, NoTenantError } from './token-verifier';
 
 let idp: FakeIdp;
 beforeAll(async () => {
@@ -12,7 +12,7 @@ afterAll(() => idp.stop());
 
 const verifier = (over: { cooldownMs?: number; timeoutMs?: number; jwksUri?: string } = {}) =>
   new CognitoTokenVerifier({ issuer: idp.issuer, clientId: 'app-client', cooldownMs: 0, ...over });
-const [alice, bob, carol, dave] = DEFAULT_USERS;
+const [alice, bob, carol, dave, erin, frank] = DEFAULT_USERS;
 const rejects = async (token: string, v = verifier()) => {
   const error = await v.verify(token).catch((e: unknown) => e);
   expect(error).toBeInstanceOf(InvalidTokenError);
@@ -21,23 +21,60 @@ const rejects = async (token: string, v = verifier()) => {
 
 describe('CognitoTokenVerifier: accepts', () => {
   it('a valid access token, mapping cognito:groups to roles', async () => {
-    await expect(verifier().verify(await idp.mintAccessToken({ user: alice }))).resolves.toEqual({ sub: alice!.sub, roles: ['clinician'] });
-    await expect(verifier().verify(await idp.mintAccessToken({ user: bob }))).resolves.toEqual({ sub: bob!.sub, roles: ['reader'] });
-    await expect(verifier().verify(await idp.mintAccessToken({ user: carol }))).resolves.toEqual({ sub: carol!.sub, roles: ['admin'] });
+    await expect(verifier().verify(await idp.mintAccessToken({ user: alice }))).resolves.toEqual({ sub: alice!.sub, tenantId: 'alpha', roles: ['clinician'] });
+    await expect(verifier().verify(await idp.mintAccessToken({ user: bob }))).resolves.toEqual({ sub: bob!.sub, tenantId: 'beta', roles: ['reader'] });
+    await expect(verifier().verify(await idp.mintAccessToken({ user: carol }))).resolves.toEqual({ sub: carol!.sub, tenantId: 'alpha', roles: ['admin'] });
   });
 
-  it('a user with no group: authenticated but with NO roles (least privilege)', async () => {
-    await expect(verifier().verify(await idp.mintAccessToken({ user: dave }))).resolves.toEqual({ sub: dave!.sub, roles: [] });
+  it('a user in a tenant but with no role group: authenticated with NO roles (least privilege)', async () => {
+    await expect(verifier().verify(await idp.mintAccessToken({ user: dave }))).resolves.toEqual({ sub: dave!.sub, tenantId: 'beta', roles: [] });
   });
 
   it('ignores groups it does not know, so an unrecognised group can never grant anything', async () => {
-    const token = await idp.mintAccessToken({ user: alice, claims: { 'cognito:groups': ['superuser', 'clinician', 'clinician', 'root'] } });
-    await expect(verifier().verify(token)).resolves.toEqual({ sub: alice!.sub, roles: ['clinician'] });
+    const token = await idp.mintAccessToken({ user: alice, claims: { 'cognito:groups': ['superuser', 'clinician', 'clinician', 'root', 'tenant:alpha'] } });
+    await expect(verifier().verify(token)).resolves.toEqual({ sub: alice!.sub, tenantId: 'alpha', roles: ['clinician'] });
   });
 
-  it('treats a groups claim of the wrong shape as no roles', async () => {
+  it('treats a groups claim of the wrong shape as no groups at all: no roles and no tenant, so the user is refused', async () => {
     const token = await idp.mintAccessToken({ user: alice, claims: { 'cognito:groups': 'admin' } });
-    await expect(verifier().verify(token)).resolves.toEqual({ sub: alice!.sub, roles: [] });
+    await expect(verifier().verify(token)).rejects.toBeInstanceOf(NoTenantError);
+  });
+});
+
+describe('CognitoTokenVerifier: the tenant (exactly one "tenant:<id>" group)', () => {
+  const refused = async (token: string) => {
+    await expect(verifier().verify(token)).rejects.toBeInstanceOf(NoTenantError);
+  };
+
+  it('refuses a genuine token whose user has a role but no tenant group', async () => {
+    await refused(await idp.mintAccessToken({ user: erin }));
+  });
+
+  it('refuses a user in two tenants rather than picking one, and a repeated group', async () => {
+    await refused(await idp.mintAccessToken({ user: frank }));
+    await refused(await idp.mintAccessToken({ user: alice, claims: { 'cognito:groups': ['clinician', 'tenant:alpha', 'tenant:alpha'] } }));
+  });
+
+  it.each([
+    ['empty id', 'tenant:'],
+    ['upper case', 'tenant:Alpha'],
+    ['a space', 'tenant:al pha'],
+    ['a slash', 'tenant:a/b'],
+    ['a leading dash', 'tenant:-alpha'],
+    ['64 characters', `tenant:${'a'.repeat(64)}`],
+  ])('refuses a malformed tenant id (%s)', async (_name, group) => {
+    await refused(await idp.mintAccessToken({ user: alice, claims: { 'cognito:groups': ['clinician', group] } }));
+  });
+
+  it('accepts the longest valid id (63 characters) and ignores a group that merely resembles the prefix', async () => {
+    const longest = 'a'.repeat(63);
+    const token = await idp.mintAccessToken({ user: alice, claims: { 'cognito:groups': ['clinician', `tenant:${longest}`, 'tenants', 'tenant'] } });
+    await expect(verifier().verify(token)).resolves.toEqual({ sub: alice!.sub, tenantId: longest, roles: ['clinician'] });
+  });
+
+  it('only a verified token can learn it lacks a tenant: a forged one with no tenant is just "Invalid token"', async () => {
+    await rejects(await idp.mintAccessToken({ user: erin, signWith: 'foreign' }));
+    await rejects(await idp.mintAccessToken({ user: erin, claims: { client_id: 'someone-else' } }));
   });
 });
 

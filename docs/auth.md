@@ -14,8 +14,10 @@ applied: the Terraform is written and validated, and the BAA is still pending.
 4. The app calls `GET /api/v1/me`; the **server** answers with the user's roles. The UI uses them to decide
    what to *show*. The API enforces every permission itself, whatever the UI shows.
 5. Each API call carries `Authorization: Bearer <access token>`. The API verifies the signature against the
-   user pool's published keys, then maps `cognito:groups` to roles; the token's `sub` is the owner id that
-   row-level security binds every query to (see [database.md](database.md)).
+   user pool's published keys, then reads `cognito:groups`: role groups give roles, and **exactly one**
+   `tenant:<id>` group names the user's organization. The tenant is what row-level security binds every query
+   to (see [database.md](database.md)); the token's `sub` (the individual) is only recorded as the author of what
+   they create.
 
 ## Roles
 
@@ -24,9 +26,28 @@ applied: the Terraform is written and validated, and the BAA is still pending.
 | `reader` | reader | read their own data |
 | `clinician` | clinician | read, create, change, upload |
 | `admin` | admin | what a clinician may; reserved for administration |
-| (no group) | none | sign in, and see nothing they can change |
+| (no role group) | none | sign in, and see their tenant's data without changing anything |
 
 A group name the API does not know is **ignored**, so nothing can grant a role by accident.
+
+## Tenants
+
+A **tenant** is an organization whose members share its records. Membership is a Cognito group named
+`tenant:<id>`, where `<id>` is lower-case letters, digits and dashes (1 to 63 characters, not starting with a dash),
+for example `tenant:acme-pharmacy`.
+
+- Every user must be in **exactly one** tenant group. None, two or more, or a malformed one is refused with
+  **403** after sign-in: the account is known but not set up. The browser shows "Your account is not set up yet"
+  with no retry button. (A forged or invalid token is still a plain 401, so an attacker learns nothing about tenants.)
+- Colleagues in a tenant see and edit each other's patients and reports, and each record remembers its author
+  (`created_by`, taken from the token, never from the request). Neither the tenant nor the author can change
+  afterwards: a database trigger refuses it, even for the table owner.
+- Another tenant's records are indistinguishable from records that do not exist (404).
+- Tenant groups are **data created by the runbook below, not Terraform**, so onboarding an organization needs no
+  infrastructure change. Access tokens carry group names but not custom attributes, which is why the tenant is a group.
+- There is no tenant registry yet: a typo such as `tenant:acmee` simply makes a separate, empty tenant. It fails safe
+  (that user sees nothing) but is easy to miss, so check the list of groups when onboarding.
+- A tenant id is permanent once records exist; renaming one is a data migration, not an edit.
 
 ## Where tokens live
 
@@ -70,6 +91,14 @@ aws cognito-idp admin-create-user --user-pool-id $POOL --username person@example
   --desired-delivery-mediums EMAIL
 aws cognito-idp admin-add-user-to-group --user-pool-id $POOL --username person@example.org --group-name clinician
 
+# Onboard an organization once, then add each person to it (every user needs exactly one tenant group)
+aws cognito-idp create-group --user-pool-id $POOL --group-name tenant:acme-pharmacy --description "Acme Pharmacy"
+aws cognito-idp admin-add-user-to-group --user-pool-id $POOL --username person@example.org --group-name tenant:acme-pharmacy
+
+# Move a person to another organization (they are refused between the two steps, by design: fail closed)
+aws cognito-idp admin-remove-user-from-group --user-pool-id $POOL --username person@example.org --group-name tenant:acme-pharmacy
+aws cognito-idp admin-add-user-to-group      --user-pool-id $POOL --username person@example.org --group-name tenant:other-org
+
 # Change a role
 aws cognito-idp admin-remove-user-from-group --user-pool-id $POOL --username person@example.org --group-name reader
 aws cognito-idp admin-add-user-to-group      --user-pool-id $POOL --username person@example.org --group-name clinician
@@ -80,7 +109,7 @@ aws cognito-idp admin-user-global-sign-out  --user-pool-id $POOL --username pers
 ```
 
 The **first administrator** is created the same way, from the console or CLI, by whoever applies the Terraform.
-Role changes take effect when the person's next access token is issued (within 15 minutes).
+Role and tenant changes take effect when the person's next access token is issued (within 15 minutes), so a person removed from a tenant keeps access for up to that long unless you also run `admin-user-global-sign-out`.
 
 ## Passwords and email
 
@@ -108,7 +137,7 @@ real email delivery, `terraform plan`/`apply`, and Cognito's own session and cod
 
 1. Sign in once as a real invited user. Decode the access token (do not paste it into a website) and confirm
    `iss`, `token_use=access`, `client_id` and `cognito:groups`; confirm the API accepts it (`GET /api/v1/me`).
-2. Confirm an ID token is refused by the API, and a user in no group can sign in but change nothing.
+2. Confirm an ID token is refused by the API, a user with a tenant but no role group can sign in but change nothing, and a user with no tenant group (or two) gets 403 from `/api/v1/me`.
 3. Confirm MFA enrolment is forced at first sign-in, and that SMS is not offered.
 4. Confirm the invitation, a password-reset code, and the password-change notice actually arrive (SES out of the sandbox).
 5. Confirm sign-out ends the session (the next sign-in asks for credentials) and note Cognito's real session lifetime.

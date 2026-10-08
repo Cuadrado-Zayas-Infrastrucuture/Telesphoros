@@ -2,17 +2,17 @@ import { Injectable } from '@nestjs/common';
 import { byCreatedAt, type Page, type PageRequest, type PatientRecord, slicePage } from './records';
 
 /**
- * Persistence contract. EVERY method takes `ownerId`, so a caller cannot even ask for another
- * owner's data. Each call is one lookup (no per-row follow-up queries).
+ * Persistence contract. EVERY method takes `tenantId`, so a caller cannot even ask for another
+ * tenant's data. Each call is one lookup (no per-row follow-up queries).
  * Phase 3 provides a database-backed implementation of this same class.
  */
 export abstract class PatientsRepository {
-  abstract list(ownerId: string, page: PageRequest): Promise<Page<PatientRecord>>;
-  abstract findById(ownerId: string, id: string): Promise<PatientRecord | undefined>;
-  abstract findByLabel(ownerId: string, label: string): Promise<PatientRecord | undefined>;
+  abstract list(tenantId: string, page: PageRequest): Promise<Page<PatientRecord>>;
+  abstract findById(tenantId: string, id: string): Promise<PatientRecord | undefined>;
+  abstract findByLabel(tenantId: string, label: string): Promise<PatientRecord | undefined>;
   abstract insert(record: PatientRecord): Promise<void>;
   abstract update(record: PatientRecord): Promise<void>;
-  abstract delete(ownerId: string, id: string): Promise<boolean>;
+  abstract delete(tenantId: string, id: string): Promise<boolean>;
 }
 
 /** Development/test store. Data lives in process memory and is lost on restart. */
@@ -20,20 +20,20 @@ export abstract class PatientsRepository {
 export class InMemoryPatientsRepository extends PatientsRepository {
   private readonly rows = new Map<string, PatientRecord>();
 
-  private owned(ownerId: string) {
-    return [...this.rows.values()].filter((row) => row.ownerId === ownerId);
+  private owned(tenantId: string) {
+    return [...this.rows.values()].filter((row) => row.tenantId === tenantId);
   }
 
-  async list(ownerId: string, page: PageRequest) {
-    return slicePage(this.owned(ownerId).sort(byCreatedAt), page);
+  async list(tenantId: string, page: PageRequest) {
+    return slicePage(this.owned(tenantId).sort(byCreatedAt), page);
   }
-  async findById(ownerId: string, id: string) {
+  async findById(tenantId: string, id: string) {
     const row = this.rows.get(id);
-    return row && row.ownerId === ownerId ? { ...row } : undefined;
+    return row && row.tenantId === tenantId ? { ...row } : undefined;
   }
-  async findByLabel(ownerId: string, label: string) {
+  async findByLabel(tenantId: string, label: string) {
     const wanted = label.toLowerCase();
-    return this.owned(ownerId).find((row) => row.label.toLowerCase() === wanted);
+    return this.owned(tenantId).find((row) => row.label.toLowerCase() === wanted);
   }
   async insert(record: PatientRecord) {
     this.rows.set(record.id, { ...record });
@@ -41,9 +41,9 @@ export class InMemoryPatientsRepository extends PatientsRepository {
   async update(record: PatientRecord) {
     this.rows.set(record.id, { ...record });
   }
-  async delete(ownerId: string, id: string) {
+  async delete(tenantId: string, id: string) {
     const row = this.rows.get(id);
-    if (!row || row.ownerId !== ownerId) return false;
+    if (!row || row.tenantId !== tenantId) return false;
     return this.rows.delete(id);
   }
 }

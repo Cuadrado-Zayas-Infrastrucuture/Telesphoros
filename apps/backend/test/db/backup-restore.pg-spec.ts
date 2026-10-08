@@ -25,24 +25,24 @@ const passphraseFile = () => {
   return file;
 };
 
-/** A realistic synthetic dataset: several owners, a soft-deleted patient, an uploaded report, recommendations. */
+/** A realistic synthetic dataset: several tenants, a soft-deleted patient, an uploaded report, recommendations. */
 async function seededDatabase(): Promise<EphemeralDatabase> {
   const db = await createEphemeralDatabase();
   dbs.push(db);
   await withAdmin(db.adminUrl, async (c) => {
-    for (const owner of ['alice', 'bob', 'carol']) {
-      const live = (await c.query(`INSERT INTO patients (owner_id, label) VALUES ($1, $2) RETURNING id`, [owner, `SYN-${owner}-1`])).rows[0].id;
-      const dead = (await c.query(`INSERT INTO patients (owner_id, label, deleted_at) VALUES ($1, $2, now()) RETURNING id`, [owner, `SYN-${owner}-gone`])).rows[0].id;
+    for (const tenant of ['alice', 'bob', 'carol']) {
+      const live = (await c.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ($1, $1, $2) RETURNING id`, [tenant, `SYN-${tenant}-1`])).rows[0].id;
+      const dead = (await c.query(`INSERT INTO patients (tenant_id, created_by, label, deleted_at) VALUES ($1, $1, $2, now()) RETURNING id`, [tenant, `SYN-${tenant}-gone`])).rows[0].id;
       expect(dead).toBeDefined();
       const report = (await c.query(
-        `INSERT INTO reports (owner_id, patient_id, type, original_filename, size_bytes, content_type, sha256, storage_key, uploaded_at)
-         VALUES ($1, $2, 'vcf', 'a.vcf', 100, 'text/plain', $3, $4, now()) RETURNING id`,
-        [owner, live, 'a'.repeat(64), `reports/${owner}/1`],
+        `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes, content_type, sha256, storage_key, uploaded_at)
+         VALUES ($1, $1, $2, 'vcf', 'a.vcf', 100, 'text/plain', $3, $4, now()) RETURNING id`,
+        [tenant, live, 'a'.repeat(64), `reports/${tenant}/1`],
       )).rows[0].id;
       await c.query(
-        `INSERT INTO recommendations (owner_id, patient_id, report_id, gene, drug, phenotype, summary, strength, guideline_version)
-         VALUES ($1, $2, $3, 'G', 'd', 'p', 's', 'Strong', 'v0')`,
-        [owner, live, report],
+        `INSERT INTO recommendations (tenant_id, created_by, patient_id, report_id, gene, drug, phenotype, summary, strength, guideline_version)
+         VALUES ($1, $1, $2, $3, 'G', 'd', 'p', 's', 'Strong', 'v0')`,
+        [tenant, live, report],
       );
     }
   });
@@ -59,7 +59,7 @@ describe('backup', () => {
     const { dir, manifest } = await createBackup({ adminUrl: db.adminUrl, destDir: tempDir() });
 
     expect(manifest.serverVersion).toMatch(/^16\./); // which PostgreSQL made this backup
-    expect(manifest.migrations).toEqual(['0001', '0002']);
+    expect(manifest.migrations).toEqual(['0001', '0002', '0003']);
     expect(manifest.tables.patients).toMatchObject({ rows: 6, rlsEnabled: true, rlsForced: true, policies: 1 });
     expect(manifest.tables.reports!.rows).toBe(3);
     expect(manifest.tables.recommendations!.rows).toBe(3);
@@ -133,7 +133,7 @@ describe('restore (the one-command procedure, actually executed)', () => {
     ]);
     expect(report.ok).toBe(true);
     // 6 patients (3 live + 3 soft-deleted) + 3 reports + 3 recommendations + 2 migration rows
-    expect(byName(report.checks, 'row counts')!).toMatchObject({ detail: 'all 4 tables match (14 rows)' });
+    expect(byName(report.checks, 'row counts')!).toMatchObject({ detail: 'all 4 tables match (15 rows)' });
     expect(await throwawayDatabases()).toBe(before); // the throwaway was dropped
   });
 
@@ -146,8 +146,8 @@ describe('restore (the one-command procedure, actually executed)', () => {
     try {
       const url = new URL(clusterAdmin());
       url.pathname = `/${target}`;
-      const restored = await withAdmin(url.toString(), (c) => c.query(`SELECT owner_id, label, deleted_at IS NOT NULL AS deleted FROM patients ORDER BY owner_id, label`));
-      const original = await withAdmin(db.adminUrl, (c) => c.query(`SELECT owner_id, label, deleted_at IS NOT NULL AS deleted FROM patients ORDER BY owner_id, label`));
+      const restored = await withAdmin(url.toString(), (c) => c.query(`SELECT tenant_id, label, deleted_at IS NOT NULL AS deleted FROM patients ORDER BY tenant_id, label`));
+      const original = await withAdmin(db.adminUrl, (c) => c.query(`SELECT tenant_id, label, deleted_at IS NOT NULL AS deleted FROM patients ORDER BY tenant_id, label`));
       expect(restored.rows).toEqual(original.rows);
     } finally {
       await withAdmin(clusterAdmin(), (c) => c.query(`DROP DATABASE IF EXISTS ${target} WITH (FORCE)`));
@@ -161,7 +161,7 @@ describe('restore (the one-command procedure, actually executed)', () => {
       destDir: tempDir(),
       afterSnapshot: async () => {
         // A busy database: another connection commits new rows between the baseline and the dump.
-        await withAdmin(db.adminUrl, (c) => c.query(`INSERT INTO patients (owner_id, label) VALUES ('dave', 'SYN-late-1'), ('dave', 'SYN-late-2')`));
+        await withAdmin(db.adminUrl, (c) => c.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ('dave', 'dave', 'SYN-late-1'), ('dave', 'dave', 'SYN-late-2')`));
       },
     });
     expect(manifest.tables.patients!.rows).toBe(6); // the baseline is the snapshot, not "now"

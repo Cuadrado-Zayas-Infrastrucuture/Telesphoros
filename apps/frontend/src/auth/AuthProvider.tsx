@@ -7,6 +7,11 @@ export type AuthStatus = 'signedOut' | 'signedIn' | 'failed';
 export class NotSignedInError extends Error {}
 /** Thrown after the app has started a fresh sign-in because the session ended. The caller should just stop. */
 export class SessionEndedError extends Error {}
+/**
+ * Signing in worked but the API refused the account (403): it is not set up for an organization.
+ * Trying again cannot help, so the UI says so instead of offering a retry.
+ */
+export class AccountNotReadyError extends Error {}
 
 export interface AuthContextValue {
   status: AuthStatus;
@@ -92,6 +97,7 @@ export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthPr
       // Deliberately NOT apiFetch: if the API refuses a brand-new token, signing in again would loop
       // forever (the identity provider's session bounces straight back). Report failure instead.
       const response = await send('/api/v1/me');
+      if (response.status === 403) throw new AccountNotReadyError('The account is not set up for an organization');
       if (!response.ok) throw new Error('The API did not accept the sign-in');
       setRoles(meDtoSchema.parse(await response.json()).roles);
       setStatus('signedIn');
