@@ -7,6 +7,7 @@ import { BackupCryptoError, decryptFile, keyIdHex, readEncryptionHeader, readKey
 import { type BackupManifest, ManifestError, parseManifest } from './backup-manifest';
 import { makeTempDir, sweepStaleTempDirs } from './cleanup';
 import { pgEnv, quoteIdent, run } from './pg-process';
+import { diffPrivilegeFacts, legacyRequiredRoles, missingRoles, readPrivilegeFacts } from './privilege-facts';
 
 export interface RestoreOptions {
   /** A superuser on the TARGET server. The database named in the URL is not touched. */
@@ -149,10 +150,18 @@ export async function restoreAndVerify(options: RestoreOptions): Promise<Restore
       if (plain !== manifest.dump.plaintextSha256) return failed();
     }
 
-    // 3. Restore into a brand-new database.
+    // 3. Restore into a brand-new database. First the roles the backup names must exist on this server (roles are per server, not per
+    // database, so a dump cannot carry them): ownership is part of the backup, and a missing owner would fail half way through.
+    const required = manifest.privileges ? manifest.privileges.roles : legacyRequiredRoles(manifest.migrations);
     const admin = new Client({ connectionString: options.adminUrl });
     await admin.connect();
     try {
+      const absent = await missingRoles(admin, required);
+      if (absent.length > 0) {
+        record('required roles', false, `these roles do not exist on this server: ${absent.join(', ')}. Create them first (docs/ops/ledger-roles.md); nothing was restored.`);
+        return failed();
+      }
+      record('required roles', true, required.length === 0 ? 'none required' : `${required.length} present`);
       await admin.query(`CREATE DATABASE ${quoteIdent(database)}`);
     } finally {
       await admin.end();
@@ -160,7 +169,10 @@ export async function restoreAndVerify(options: RestoreOptions): Promise<Restore
     const restoredUrl = withDatabase(options.adminUrl, database);
 
     try {
-      await run('pg_restore', ['--exit-on-error', '--no-owner', `--dbname=${database}`, restoreFrom], pgEnv(options.adminUrl, database));
+      // A backup that recorded its privilege facts is restored WITH its owners (the ledger's definer functions depend on them).
+      // An older backup, which did not, keeps the previous behaviour: it has no definer functions to protect.
+      const ownerFlags = manifest.privileges ? [] : ['--no-owner'];
+      await run('pg_restore', ['--exit-on-error', ...ownerFlags, `--dbname=${database}`, restoreFrom], pgEnv(options.adminUrl, database));
       record('pg_restore', true, 'completed without errors');
       await verify(restoredUrl, manifest, record);
     } catch (error) {
@@ -227,6 +239,15 @@ async function verify(url: string, manifest: BackupManifest, record: (n: string,
       return flag?.relrowsecurity !== want.rlsEnabled || flag?.relforcerowsecurity !== want.rlsForced || (policies.rows.find((p) => p.tablename === name)?.n ?? 0) !== want.policies;
     });
     record('row-level security settings', rlsProblems.length === 0, rlsProblems.length === 0 ? 'enabled, forced and policies intact' : `changed: ${rlsProblems.join(', ')}`);
+
+    if (manifest.privileges) {
+      const problems = diffPrivilegeFacts(manifest.privileges, await readPrivilegeFacts(db));
+      record('ownership and privileges', problems.length === 0,
+        problems.length === 0 ? `${manifest.privileges.ownership.length} owners and ${manifest.privileges.grants.length} privileges identical to the backup`
+          : `${problems.length} differences, e.g. ${problems.slice(0, 3).join('; ')}`);
+    } else {
+      record('ownership and privileges', true, 'not recorded in this (older) backup; restored without owners, as before');
+    }
 
     await verifyIsolation(db, expectedNames.filter((name) => manifest.tables[name]!.rlsEnabled), record);
   } finally {

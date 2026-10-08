@@ -22,6 +22,15 @@ const tableFacts = z.object({ rows: count, rlsEnabled: z.boolean(), rlsForced: z
 // A plain file name: no separators, no "..", nothing that escapes the backup directory.
 const fileName = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/).refine((name) => !name.includes('..'));
 
+/** Who owns and who may do what (privilege-facts.ts). Optional: backups made before they were recorded do not have it. */
+const privileges = z
+  .object({
+    roles: z.array(z.string().max(128)).max(200),
+    ownership: z.array(z.string().max(512)).max(20_000),
+    grants: z.array(z.string().max(512)).max(50_000),
+  })
+  .strict();
+
 const facts = {
   createdAt: z.string().min(1).max(64),
   serverVersion: z.string().min(1).max(64),
@@ -30,6 +39,7 @@ const facts = {
   /** Counts include soft-deleted rows: they are part of the audit trail and must survive a restore. */
   tables: z.record(z.string().max(128), tableFacts),
   schema: z.object({ constraints: count, indexes: count, triggers: count }).strict(),
+  privileges: privileges.optional(),
 };
 
 const manifestV1 = z

@@ -1,0 +1,138 @@
+{
+  "description": "Computed by an independent implementation (see README.md). Do not regenerate from the TypeScript code under test.",
+  "tenantId": "tenant-golden",
+  "events": [
+    {
+      "seq": "1",
+      "eventType": "capture",
+      "subjectTable": "report_captures",
+      "subjectId": "0f1e2d3c-0000-4000-8000-000000000001",
+      "actorSub": "syn-uploader",
+      "projection": {
+        "kind": "capture",
+        "id": "0f1e2d3c-0000-4000-8000-000000000001",
+        "version": 1
+      },
+      "payloadSha256": "aaed3357e7150db0ee9a6c35f009b8242485e963196078e967b32daf1a13e06c",
+      "projectionVersion": 1,
+      "hashVersion": 1,
+      "prevHash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "createdAtUtc": "2026-01-02T03:04:05.123456Z",
+      "recordHash": "2076f9685fdea54e887df739fd0ee0574eb205747a0710b6b1418660cba17340"
+    },
+    {
+      "seq": "2",
+      "eventType": "capture-decision",
+      "subjectTable": "capture_acceptances",
+      "subjectId": "0f1e2d3c-0000-4000-8000-000000000002",
+      "actorSub": "syn-réviewer 😀",
+      "projection": {
+        "kind": "capture-decision",
+        "note": {
+          "id": "n1",
+          "bodySha256": "f86fd89de87a848a45bfe77708d91a5d2ff48b8e4a4b98af5165af82692f8928"
+        },
+        "version": 1
+      },
+      "payloadSha256": "cedc0735a358c4362b66654f43ca5dfdcb13ad752742db48c510b9a0ca0c6d95",
+      "projectionVersion": 1,
+      "hashVersion": 1,
+      "prevHash": "2076f9685fdea54e887df739fd0ee0574eb205747a0710b6b1418660cba17340",
+      "createdAtUtc": "2026-01-02T03:04:06.000001Z",
+      "recordHash": "574369a64ef0b86c99bd99434933ebbd3262c59781c85360c8d6a9f03f6d3f68"
+    },
+    {
+      "seq": "3",
+      "eventType": "evaluation",
+      "subjectTable": "evaluations",
+      "subjectId": "0f1e2d3c-0000-4000-8000-000000000003",
+      "actorSub": "syn-system",
+      "projection": {
+        "z": [
+          1,
+          2,
+          {
+            "b": null,
+            "a": true
+          }
+        ],
+        "😀": "astral",
+        "￿": "bmp-high",
+        "a": "é",
+        "version": 1
+      },
+      "payloadSha256": "8cfcd94ea99afcc18414af3967be8ef76d7a86d30fd64d30337c115e3663dc6a",
+      "projectionVersion": 1,
+      "hashVersion": 1,
+      "prevHash": "574369a64ef0b86c99bd99434933ebbd3262c59781c85360c8d6a9f03f6d3f68",
+      "createdAtUtc": "2026-12-31T23:59:59.999999Z",
+      "recordHash": "f00e0773f33c0caa572d1ab2b88061aab17ec4fa65751622e900ec68c980c6ad"
+    }
+  ],
+  "checkpoint": {
+    "id": "0f1e2d3c-0000-4000-8000-0000000000aa",
+    "tenantId": "tenant-golden",
+    "upToSeq": "3",
+    "headHash": "f00e0773f33c0caa572d1ab2b88061aab17ec4fa65751622e900ec68c980c6ad",
+    "mode": "full",
+    "payload": "a6630e0b18e4ab472653f4aca0c8e23777996ca3472ab9717fea5a4ddf771b6e"
+  },
+  "redaction": {
+    "noteId": "0f1e2d3c-0000-4000-8000-0000000000bb",
+    "bodySha256": "f758b6a181ef6d0c4726480c77617a7a9f6cf0bd15b355d741fdf1606c827bce",
+    "basisCode": "phi-in-note",
+    "payload": "7354a7c0c9f755bf4318ca09b2d9b0fdf1edb9ab8eaa162da1671b21364d0228"
+  },
+  "canonicalJson": [
+    {
+      "value": {
+        "b": 1,
+        "a": 2
+      },
+      "canonical": "{\"a\":2,\"b\":1}",
+      "sha256": "d3626ac30a87e6f7a6428233b3c68299976865fa5508e4267c5415c76af7a772"
+    },
+    {
+      "value": {
+        "😀": 1,
+        "￿": 2,
+        "a": 3
+      },
+      "canonical": "{\"a\":3,\"😀\":1,\"￿\":2}",
+      "sha256": "92a98ee3f7f8f30bd80c9d464a68ad47d46e0da2bc7da9c2b5a391e15fd1b4ff"
+    },
+    {
+      "value": [
+        "x",
+        null,
+        true,
+        false,
+        0,
+        -7,
+        9007199254740991
+      ],
+      "canonical": "[\"x\",null,true,false,0,-7,9007199254740991]",
+      "sha256": "56a6fb8829cf4a23f4a11e3906a4f33d319ab4e0cb5906e2e5c650debbea3c82"
+    },
+    {
+      "value": "line\nbreak \"quoted\" back\\slash \u001f   ",
+      "canonical": "\"line\\nbreak \\\"quoted\\\" back\\\\slash \\u001f   \"",
+      "sha256": "2d3b7a5a4583f2cf33f52fbad4c8d80a4e842e736d4d8ca1c6bf0fd5def19214"
+    },
+    {
+      "value": {
+        "nested": {
+          "y": [
+            {
+              "d": 1,
+              "c": 2
+            }
+          ],
+          "x": ""
+        }
+      },
+      "canonical": "{\"nested\":{\"x\":\"\",\"y\":[{\"c\":2,\"d\":1}]}}",
+      "sha256": "16f6986f2141307a99d628f1a0faaa43004f2f0ce954263a4efcb39f3d590871"
+    }
+  ]
+}

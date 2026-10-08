@@ -5,6 +5,7 @@ import { Client } from 'pg';
 import { encryptFile, manifestMac, readKeyFile } from './backup-crypto';
 import type { BackupManifest, BackupManifestV1, BackupManifestV2, TableFacts } from './backup-manifest';
 import { type UploadResult, type UploadTarget, uploadBackup } from './offsite';
+import { readPrivilegeFacts } from './privilege-facts';
 import { pgEnv, quoteIdent, run } from './pg-process';
 
 export type { BackupManifest, TableFacts };
@@ -76,7 +77,9 @@ export async function createBackup(options: BackupOptions): Promise<{ dir: strin
     const plainFile = join(dir, 'db.dump');
     await run(
       'pg_dump',
-      ['--format=custom', `--snapshot=${snapshot}`, '--no-owner', `--file=${plainFile}`],
+      // Owners are part of the backup: the ledger's SECURITY DEFINER functions run with their owner's rights. (pg_dump's own `--no-owner`
+      // is ignored for archive formats; whether owners are applied is decided by `pg_restore`, see restore.ts.)
+      ['--format=custom', `--snapshot=${snapshot}`, `--file=${plainFile}`],
       pgEnv(options.adminUrl),
     );
     await client.query('COMMIT'); // the snapshot only needs to live until pg_dump has finished
@@ -171,5 +174,6 @@ async function readFacts(client: Client) {
       `SELECT count(*) AS n FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid WHERE c.relnamespace = 'public'::regnamespace AND NOT t.tgisinternal`,
     ),
   };
-  return { serverVersion: version, database, migrations, tables, schema };
+  const privileges = await readPrivilegeFacts(client);
+  return { serverVersion: version, database, migrations, tables, schema, privileges };
 }

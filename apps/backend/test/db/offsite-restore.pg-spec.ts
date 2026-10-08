@@ -6,9 +6,12 @@ import { createBackup } from '../../src/db/backup';
 import { generateKeyFile, readKeyFile } from '../../src/db/backup-crypto';
 import { type UploadTarget } from '../../src/db/offsite';
 import { restoreFromRemote } from '../../src/db/restore-remote';
-import { adminUrl, createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
+import { adminUrl, createEphemeralDatabase, type EphemeralDatabase, serializeRestoreSuites, withAdmin } from '../helpers/database';
 import { cleanupScratch, clientFor, emulator, newBucket, S3_ENDPOINT, tempDir } from '../helpers/offsite-fixtures';
 import { type Gateway, type Op, startGateway } from '../helpers/provider-gateway';
+
+// Counts shared state (throwaway databases, temp dirs): must not overlap another restoring suite.
+serializeRestoreSuites();
 
 /**
  * The whole chain: a real database backed up with the real code, copied to a "second provider", then restored FROM that

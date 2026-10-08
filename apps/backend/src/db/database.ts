@@ -10,6 +10,17 @@ export interface DatabaseOptions {
 }
 
 const MAX_TENANT_ID_LENGTH = 128;
+const MAX_ACTOR_LENGTH = 128;
+// eslint-disable-next-line no-control-regex -- the point is to refuse control characters
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
+
+export interface TenantWorkOptions {
+  /**
+   * The authenticated individual (the token's `sub`). Recorded as the author of audited writes. Like the tenant, it is an identity
+   * CLAIM supplied by authenticated application code, never taken from a request body, and transaction-local.
+   */
+  actor?: string;
+}
 
 /**
  * The application's only door to PostgreSQL.
@@ -37,13 +48,16 @@ export class Database {
     this.pool.on('error', (error) => this.logger.error(`Idle database client error: ${error.message}`));
   }
 
-  async withTenant<T>(tenantId: string, work: (client: PoolClient) => Promise<T>): Promise<T> {
+  async withTenant<T>(tenantId: string, work: (client: PoolClient) => Promise<T>, options: TenantWorkOptions = {}): Promise<T> {
     if (!tenantId || tenantId.length > MAX_TENANT_ID_LENGTH) throw new Error('Invalid tenant id');
+    const { actor } = options;
+    if (actor !== undefined && (!actor || actor.length > MAX_ACTOR_LENGTH || CONTROL_CHARACTERS.test(actor))) throw new Error('Invalid actor');
     const client = await this.pool.connect();
     let discard = false;
     try {
       await client.query('BEGIN');
       await client.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
+      if (actor !== undefined) await client.query(`SELECT set_config('app.current_actor', $1, true)`, [actor]);
       const result = await work(client);
       await client.query('COMMIT');
       return result;
