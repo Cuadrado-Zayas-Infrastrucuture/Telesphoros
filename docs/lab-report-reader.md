@@ -87,7 +87,17 @@ With `LAB_REPORT_PIPELINE=enabled` (never in production, PostgreSQL only) a repo
 | `POST /captures/:id/decision` | reviewer | Accept or reject, with an optional note (kept in `event_notes`, shown only as a digest). The hash and Poppler version are copied from the capture |
 | `GET /reports/:id/download-url`, `GET /captures/:id/text-url` | clinician, reviewer, admin | A short-lived link to one version of one file (the PDF's pinned version; the text after its hash was re-checked) |
 | `POST /reports/:id/evaluations` `{captureId, acceptanceId}` | clinician, reviewer, admin | Runs the reader, the adapter and the engine on an accepted capture and stores the result with its ledger event. 201 new, 200 the same evaluation again |
-| `GET /evaluations`, `GET /evaluations/:id` | everyone signed in | Stored evaluations (list: no engine inputs). Always `clinicalUse: "not-approved"` and `actionable: false` |
+| `GET /evaluations`, `GET /evaluations/:id` | everyone signed in | Stored evaluations (list: no engine inputs), with their correction history, derived `state` and `current`. `?current=true` keeps the latest active evaluation of each report. Always `clinicalUse: "not-approved"` and `actionable: false` |
+| `POST /evaluations/:id/corrections` | reviewer | Retract, reinstate or supersede an evaluation. The evaluation itself is never changed. See below |
+| `GET /notes/:id` | clinician, reviewer, admin | The text of a note (a decision, correction or dispute note), or the tombstone once redacted. The only route that returns a note body |
+
+**Corrections** (`POST /evaluations/:id/corrections` `{kind, reasonCode, previousCorrectionId?, replacementEvaluationId?, note?}`): `retraction`
+("do not rely on this"), `supersession` (replaced by a newer, active evaluation of the same report), `reinstatement` (an earlier retraction was mistaken;
+by someone other than the retractor). The reviewer names the correction they saw last (`previousCorrectionId`); a stale or missing one is 409
+`stale-chain`. Other refusals are 409 with a `details[].reason`: `invalid-transition`, `self-reinstatement`, `bad-replacement`; two reviewers acting at
+once cannot both succeed (the loser is told to reload). `clinical-review-disagrees` needs a note. Only a reviewer corrects; an administrator alone
+cannot. After a correction the evaluation reads back unchanged except for `state`, `supersededBy`, `corrections` and `current`. **`current` follows
+the specification literally: if the newest evaluation is retracted, an older still-active one is current again.**
 
 **Whoever accepts** is not the report's creator, the person who asked for the first upload link, the person who completed the upload, or the
 person who captured it (409 `self-review`; a rejection is open to any reviewer).

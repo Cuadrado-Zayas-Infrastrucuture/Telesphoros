@@ -61,6 +61,67 @@ export type DecisionCreate = z.infer<typeof decisionCreateSchema>;
 export const evaluationCreateSchema = z.strictObject({ captureId: z.uuid(), acceptanceId: z.uuid() });
 export type EvaluationCreate = z.infer<typeof evaluationCreateSchema>;
 
+// ---------------------------------------------------------------------------------------------------------------- corrections
+
+export const CORRECTION_KINDS = ['retraction', 'supersession', 'reinstatement'] as const;
+export const CORRECTION_REASON_CODES = [
+  'capture-wrong', 'wrong-patient', 'input-misread', 'knowledge-error-found', 'software-defect', 'clinical-review-disagrees', 'retraction-mistaken',
+] as const;
+export type CorrectionKind = (typeof CORRECTION_KINDS)[number];
+export type CorrectionReasonCode = (typeof CORRECTION_REASON_CODES)[number];
+
+/** Which reason codes each kind may carry (specification 4.2). The database repeats this as a check constraint. */
+export const REASONS_FOR_KIND: Record<CorrectionKind, readonly CorrectionReasonCode[]> = {
+  retraction: ['capture-wrong', 'wrong-patient', 'input-misread', 'knowledge-error-found', 'software-defect', 'clinical-review-disagrees'],
+  supersession: ['capture-wrong', 'input-misread', 'knowledge-error-found', 'software-defect'],
+  reinstatement: ['retraction-mistaken'],
+};
+
+/**
+ * `POST /evaluations/:id/corrections`. `previousCorrectionId` is the last correction the caller SAW (omitted when there is none): a reviewer
+ * acts on what they were looking at, and a stale view is refused. Nothing about the evaluation or its report is taken from the body.
+ */
+export const correctionCreateSchema = z
+  .strictObject({
+    kind: z.enum(CORRECTION_KINDS),
+    reasonCode: z.enum(CORRECTION_REASON_CODES),
+    previousCorrectionId: z.uuid().optional(),
+    replacementEvaluationId: z.uuid().optional(),
+    note: z.string().trim().min(1).max(MAX_NOTE_LENGTH).optional(),
+  })
+  .superRefine((body, ctx) => {
+    const problem = (path: string, message: string) => ctx.addIssue({ code: 'custom', path: [path], message });
+    if (!REASONS_FOR_KIND[body.kind].includes(body.reasonCode)) problem('reasonCode', 'This reason is not allowed for this kind of correction.');
+    if (body.kind === 'supersession' && !body.replacementEvaluationId) problem('replacementEvaluationId', 'A supersession names the evaluation that replaces this one.');
+    if (body.kind !== 'supersession' && body.replacementEvaluationId) problem('replacementEvaluationId', 'Only a supersession names a replacement.');
+    if (body.kind === 'reinstatement' && !body.previousCorrectionId) problem('previousCorrectionId', 'A reinstatement names the retraction it undoes.');
+    if (body.reasonCode === 'clinical-review-disagrees' && !body.note) problem('note', 'This reason needs a note.');
+  });
+export type CorrectionCreate = z.infer<typeof correctionCreateSchema>;
+
+/** A correction as the API shows it. The note is a digest of a stored note, never its text (read it with `GET /notes/:id`). */
+export const correctionDtoSchema = z.strictObject({
+  id: z.uuid(),
+  evaluationId: z.uuid(),
+  kind: z.enum(CORRECTION_KINDS),
+  reasonCode: z.enum(CORRECTION_REASON_CODES),
+  previousCorrectionId: z.uuid().nullable(),
+  replacementEvaluationId: z.uuid().nullable(),
+  note: z.strictObject({ id: z.uuid(), bodySha256: sha256 }).nullable(),
+  createdAt: timestamp,
+});
+export type CorrectionDto = z.infer<typeof correctionDtoSchema>;
+
+/** `GET /notes/:id`. A redacted note reads as the fixed tombstone with `redacted: true`; its digest still matches what the ledger committed to. */
+export const noteDtoSchema = z.strictObject({
+  id: z.uuid(),
+  body: z.string(),
+  bodySha256: sha256,
+  redacted: z.boolean(),
+  createdAt: timestamp,
+});
+export type NoteDto = z.infer<typeof noteDtoSchema>;
+
 const evaluationResultDtoSchema = z.strictObject({
   drug: z.string(),
   genes: z.array(z.string()),
@@ -108,8 +169,10 @@ export const evaluationDtoSchema = z.strictObject({
   geneStates: z.array(evaluationGeneStateDtoSchema),
   /** What the engine received (gene states from the report), in the detail only. */
   geneInputs: z.array(z.looseObject({ gene: z.string(), state: z.string() })),
-  /** Always empty until corrections exist (slice 5B-3.3). */
-  corrections: z.array(z.looseObject({})),
+  /** Every correction about this evaluation, oldest first. The evaluation itself is never changed; `state` is derived from the last one. */
+  corrections: z.array(correctionDtoSchema),
+  /** True for the latest active evaluation of its report (specification 4.5). An older active evaluation becomes current again if a newer one is retracted. */
+  current: z.boolean(),
   advisory: z.strictObject({ activeDisputes: z.number().int().min(0) }),
   actionable: z.literal(false),
   createdAt: timestamp,
@@ -119,5 +182,10 @@ export type EvaluationDto = z.infer<typeof evaluationDtoSchema>;
 export const evaluationSummaryDtoSchema = evaluationDtoSchema.omit({ geneInputs: true });
 export type EvaluationSummaryDto = z.infer<typeof evaluationSummaryDtoSchema>;
 
-export const evaluationListQuerySchema = z.strictObject({ reportId: z.uuid().optional(), patientId: z.uuid().optional() });
+export const evaluationListQuerySchema = z.strictObject({
+  reportId: z.uuid().optional(),
+  patientId: z.uuid().optional(),
+  /** `current=true` keeps only the current evaluation of each report. Only the value `true` is accepted. */
+  current: z.literal('true').optional(),
+});
 export type EvaluationListQuery = z.infer<typeof evaluationListQuerySchema>;

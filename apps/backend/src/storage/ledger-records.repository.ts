@@ -1,5 +1,5 @@
 import type {
-  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationState, InsertResult, Projected,
+  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationState, InsertResult, NoteRecord, Projected,
 } from './ledger-records';
 
 /**
@@ -33,7 +33,10 @@ export abstract class LedgerRecordsRepository {
   abstract findEvaluation(tenantId: string, id: string): Promise<Projected | undefined>;
   /** True when a dispute is open or upheld in the tenant. An early exit for callers; `insertEvaluation` repeats it after the ledger lock. */
   abstract activeDisputeExists(tenantId: string): Promise<boolean>;
-  abstract listEvaluations(tenantId: string, filter: { reportId?: string; patientId?: string }): Promise<Projected[]>;
+  /** `current` keeps only the latest ACTIVE evaluation of each report (specification 4.5); the other filters narrow the result further. */
+  abstract listEvaluations(tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }): Promise<Projected[]>;
+  /** For each report, the id of its current evaluation (the latest active one), or null when it has none. Every asked report has an entry. */
+  abstract currentEvaluationIds(tenantId: string, reportIds: string[]): Promise<Map<string, string | null>>;
 
   abstract insertCorrection(tenantId: string, actor: string, input: CorrectionInput): Promise<InsertResult>;
   abstract listCorrections(tenantId: string, evaluationId: string): Promise<Projected[]>;
@@ -42,4 +45,7 @@ export abstract class LedgerRecordsRepository {
   abstract raiseDispute(tenantId: string, actor: string, input: DisputeInput): Promise<InsertResult>;
   abstract decideDispute(tenantId: string, actor: string, input: DisputeDecisionInput): Promise<InsertResult>;
   abstract listDisputes(tenantId: string): Promise<DisputeStatus[]>;
+
+  /** A note's text (or its tombstone). Notes are free text kept out of the ledger; this is the only read of their body. */
+  abstract findNote(tenantId: string, id: string): Promise<NoteRecord | undefined>;
 }

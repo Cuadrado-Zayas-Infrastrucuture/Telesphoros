@@ -20,14 +20,18 @@ Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and
 | 5B-3.0, 5B-3.1 | The specification, then the database layer: records, correction tables, the per-tenant hash-chained audit ledger, verifier, redaction, roles, backup and restore that preserve ownership and privileges | [design/records-and-corrections.md](design/records-and-corrections.md), [ops/ledger-roles.md](ops/ledger-roles.md) |
 | 5B-3.2a (#20, #21) | Migration 0010 (the stored lab PDF is pinned to an object version and protected by the database), the `reviewer` role, `lab-pdf` type, version-aware object storage, the error contract, the `LAB_REPORT_PIPELINE` switch, six-year retention of overwritten report files in Terraform | [ops/report-evidence.md](ops/report-evidence.md), spec section 16 |
 | 5B-3.2b-1 (#22, #24) | Capture, decision and file-link endpoints, the recorded-text runner, the checkpoint proving the pinned reader runs in CI | [lab-report-reader.md](lab-report-reader.md), spec section 17 |
-| 5B-3.2b-2 | Evaluation endpoints (reader, adapter, engine, stored with the ledger), knowledge loading, the per-process reader limit, the dispute re-check after the ledger lock, D01 to D12 end to end against the hand-written expectations | [lab-report-reader.md](lab-report-reader.md), spec section 18 |
+| 5B-3.2b-2 (#29) | Evaluation endpoints (reader, adapter, engine, stored with the ledger), knowledge loading, the per-process reader limit, the dispute re-check after the ledger lock, D01 to D12 end to end against the hand-written expectations | [lab-report-reader.md](lab-report-reader.md), spec section 18 |
+| 5B-3.3a | Corrections: retract, reinstate, supersede; correction history and derived state in every evaluation; `current` and `?current=true`; `GET /notes/:id` | [lab-report-reader.md](lab-report-reader.md), spec section 19 |
 
 ## In progress and next
 
-Slice 5B-3.2 (the pipeline endpoints) is complete once 3.2b-2 merges; its plan and decisions are in [design/plans/](design/plans/).
+Slice 5B-3.2 (the pipeline endpoints) is complete. Slice 5B-3.3 is planned and approved ([design/plans/5b-3-3-corrections-disputes-ledger-watch.md](design/plans/5b-3-3-corrections-disputes-ledger-watch.md), decisions 24 to 30) and is built as three PRs:
 
-- **5B-3.3**: corrections, disputes and the overlay, `current=true`, startup and background ledger verification, the readiness `ledger` check,
-  `GET /ledger/verify`, restore-time ledger check. Needs its own plan.
+- **5B-3.3a corrections** (done, above). **3.3b** disputes and the overlay: `POST/GET /cell-disputes`, `applyDisputeOverlay`, and the exact post-lock dispute
+  re-check that replaces today's tenant-wide `dispute-active` refusal. **3.3c** ledger watch: startup and background ledger verification, the
+  `ledger-compromised` latch, the readiness `ledger` check, `GET /ledger/verify`, and the restore-time ledger check.
+- **Open point for a clinical decision (from 3.3a):** `current` follows the specification literally, so retracting the newest evaluation makes an older
+  still-active one current again.
 - **Adapter-side R05 readiness proposal**: written, awaiting approval and five owner choices; nothing started.
 - **Real Poppler text runner**: needs the pinned Poppler 26.03.0 binary and a magic-byte check on uploaded files; separate slice.
 - **Tableau (analytics)**: feasible as its own slice; synthetic data only until a BAA; a separate read-only role over de-identified aggregate

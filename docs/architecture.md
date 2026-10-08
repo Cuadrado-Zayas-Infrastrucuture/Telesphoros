@@ -58,7 +58,7 @@ different person where the rules say so:
    unchanged and no dispute is active; then the reader finds spans of text, the **adapter** turns them into engine input or holds the whole
    report ([design/report-adapter-spec.md](design/report-adapter-spec.md)), and the engine produces results stored with the ledger. The reader and
    engine run outside any transaction, at most a configured number at once per process; the dispute check repeats inside the storing transaction.
-5. **Corrections and disputes** (5B-3.3, not built): retraction, supersession, disputed guideline cells and their overlay.
+5. **Corrections** (`POST /evaluations/:id/corrections`, reviewer): retraction, supersession and reinstatement, each a new ledgered record; the evaluation is never edited, its state is derived from its corrections, and `current` marks the latest active evaluation of a report. **Disputed guideline cells and their overlay** (5B-3.3b) and **ledger verification** (5B-3.3c) are not built yet.
 
 Details of the reader and adapter: [lab-report-reader.md](lab-report-reader.md).
 

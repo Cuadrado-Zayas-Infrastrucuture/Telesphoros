@@ -103,10 +103,12 @@ export class EvaluationsService {
 
   async list(principal: Principal, query: EvaluationListQuery): Promise<EvaluationSummaryDto[]> {
     const ledger = this.need(this.ledger);
-    const records = await ledger.listEvaluations(principal.tenantId, query);
+    const { current, ...filter } = query;
+    const records = await ledger.listEvaluations(principal.tenantId, { ...filter, current: current === 'true' });
     const disputes = await this.activeDisputes(principal.tenantId);
+    const currentIds = await ledger.currentEvaluationIds(principal.tenantId, [...new Set(records.map((r) => r.reportId as string))]);
     const out: EvaluationSummaryDto[] = [];
-    for (const record of records) out.push(toEvaluationSummaryDto(record, await this.context(principal.tenantId, record, disputes)));
+    for (const record of records) out.push(toEvaluationSummaryDto(record, await this.context(principal.tenantId, record, disputes, currentIds)));
     return out;
   }
 
@@ -147,7 +149,7 @@ export class EvaluationsService {
     return (await this.need(this.ledger).listDisputes(tenantId)).filter((d) => d.status !== 'dismissed').length;
   }
 
-  private async context(tenantId: string, record: Projected, disputes: number): Promise<EvaluationContext> {
+  private async context(tenantId: string, record: Projected, disputes: number, currentIds?: Map<string, string | null>): Promise<EvaluationContext> {
     const ledger = this.need(this.ledger);
     const acceptanceId = record.captureAcceptanceId as string | null;
     let acceptance: EvaluationContext['acceptance'] = null;
@@ -156,12 +158,14 @@ export class EvaluationsService {
       const latest = await ledger.latestAcceptance(tenantId, record.captureId as string);
       if (decided) acceptance = { id: decided.id, decision: decided.decision as 'accepted' | 'rejected', current: latest?.id === decided.id };
     }
-    const state = await ledger.evaluationState(tenantId, record.id);
-    return { acceptance, state: { state: state.state, by: state.state === 'superseded' ? state.by : null }, activeDisputes: disputes };
+    // The state is derived from these same corrections (mapper), so what is shown can never disagree with the history shown beside it.
+    const corrections = await ledger.listCorrections(tenantId, record.id);
+    const reportId = record.reportId as string;
+    const currentId = (currentIds ?? (await ledger.currentEvaluationIds(tenantId, [reportId]))).get(reportId) ?? null;
+    return { acceptance, corrections, current: currentId === record.id, activeDisputes: disputes };
   }
 
   private async present(tenantId: string, record: Projected): Promise<EvaluationDto> {
     return toEvaluationDto(record, await this.context(tenantId, record, await this.activeDisputes(tenantId)));
   }
 }
-

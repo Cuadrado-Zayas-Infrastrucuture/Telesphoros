@@ -7,7 +7,7 @@ import { loadProjections } from '../../ledger/projections';
 import { canonicalHash } from '../../services/report-adapter/canonical-json';
 import { LedgerRecordsRepository } from '../ledger-records.repository';
 import type {
-  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationState, InsertResult, Projected,
+  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationState, InsertResult, NoteRecord, Projected,
 } from '../ledger-records';
 
 /**
@@ -178,14 +178,27 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
     return this.read(tenantId, (client) => this.one(client, tenantId, 'evaluations', id));
   }
 
-  listEvaluations(tenantId: string, filter: { reportId?: string; patientId?: string }): Promise<Projected[]> {
+  listEvaluations(tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }): Promise<Projected[]> {
     return this.read(tenantId, async (client) => {
       const { rows } = await client.query<{ id: string }>(
-        `SELECT id::text AS id FROM evaluations
-          WHERE tenant_id = $1 AND ($2::uuid IS NULL OR report_id = $2::uuid) AND ($3::uuid IS NULL OR patient_id = $3::uuid) ORDER BY seq`,
-        [tenantId, filter.reportId ?? null, filter.patientId ?? null],
+        `SELECT e.id::text AS id FROM evaluations e
+          WHERE e.tenant_id = $1 AND ($2::uuid IS NULL OR e.report_id = $2::uuid) AND ($3::uuid IS NULL OR e.patient_id = $3::uuid)
+            AND (NOT $4::boolean OR e.id IN (${CURRENT_EVALUATIONS_SQL}))
+          ORDER BY e.seq`,
+        [tenantId, filter.reportId ?? null, filter.patientId ?? null, filter.current === true],
       );
       return this.many(client, tenantId, 'evaluations', rows.map((r) => r.id));
+    });
+  }
+
+  currentEvaluationIds(tenantId: string, reportIds: string[]): Promise<Map<string, string | null>> {
+    return this.read(tenantId, async (client) => {
+      const { rows } = await client.query<{ report_id: string; id: string }>(
+        `SELECT e.report_id::text AS report_id, e.id::text AS id FROM evaluations e WHERE e.id IN (${CURRENT_EVALUATIONS_SQL}) AND e.report_id = ANY($2::uuid[])`,
+        [tenantId, reportIds],
+      );
+      const found = new Map(rows.map((r) => [r.report_id, r.id]));
+      return new Map(reportIds.map((reportId) => [reportId, found.get(reportId) ?? null]));
     });
   }
 
@@ -268,6 +281,19 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
     });
   }
 
+  findNote(tenantId: string, id: string): Promise<NoteRecord | undefined> {
+    return this.read(tenantId, async (client) => {
+      const { rows } = await client.query<{ id: string; body: string; body_sha256: string; redacted: boolean; created_at: string }>(
+        `SELECT id::text AS id, body, body_sha256, redacted_at IS NOT NULL AS redacted,
+                to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at
+           FROM event_notes WHERE id = $1 AND tenant_id = $2`,
+        [id, tenantId],
+      );
+      const row = rows[0];
+      return row ? { id: row.id, body: row.body, bodySha256: row.body_sha256, redacted: row.redacted, createdAt: row.created_at } : undefined;
+    });
+  }
+
   // ---- plumbing -------------------------------------------------------------------------------------------------------------
 
   /** One tenant- and actor-scoped transaction; any integrity refusal (also at COMMIT) becomes a LedgerIntegrityError. */
@@ -339,6 +365,21 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
     });
   }
 }
+
+/**
+ * The current evaluation of each report (specification 4.5): the latest (`seq`) one that is ACTIVE. An evaluation is not active when its
+ * last correction (the one with no child) is a retraction or a supersession; no corrections, or a last reinstatement, means active.
+ * Uses `$1` for the tenant. Computed in one statement, so a list built from it is consistent.
+ */
+const CURRENT_EVALUATIONS_SQL = `
+  SELECT DISTINCT ON (a.report_id) a.id
+    FROM evaluations a
+   WHERE a.tenant_id = $1
+     AND NOT EXISTS (
+       SELECT 1 FROM corrections c
+        WHERE c.tenant_id = a.tenant_id AND c.evaluation_id = a.id AND c.kind IN ('retraction', 'supersession')
+          AND NOT EXISTS (SELECT 1 FROM corrections n WHERE n.tenant_id = c.tenant_id AND n.previous_correction_id = c.id))
+   ORDER BY a.report_id, a.seq DESC`;
 
 /**
  * The key under which "the same evaluation" is recognised: what was evaluated (capture and acceptance), with which knowledge and
