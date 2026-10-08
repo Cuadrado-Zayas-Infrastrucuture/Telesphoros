@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "synthetic": true,
   "provenance": {
     "source": "SYNTHETIC TEST FIXTURE - not CPIC content",
@@ -15,20 +15,56 @@
   "guidelineVersion": "synthetic-1",
   "title": "Synthetic guideline for drugw",
   "drug": "drugw",
-  "gene": "GENEA",
+  "genes": [
+    "GENEA"
+  ],
+  "supersedes": [],
   "recommendations": [
     {
-      "phenotype": "Synthetic Normal",
+      "when": {
+        "GENEA": "Synthetic Normal"
+      },
+      "locator": {
+        "table": "Synthetic Table 1",
+        "row": "Synthetic Normal"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
       "strength": "Strong",
       "recommendationText": "Synthetic wording.  Two spaces, a non-breaking space, and a é are kept exactly."
     },
     {
-      "phenotype": "Synthetic Intermediate",
+      "when": {
+        "GENEA": "Synthetic Intermediate"
+      },
+      "locator": {
+        "table": "Synthetic Table 1",
+        "row": "Synthetic Intermediate"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
       "strength": "Moderate",
       "recommendationText": "W intermediate."
     },
     {
-      "phenotype": "Synthetic Poor",
+      "when": {
+        "GENEA": "Synthetic Poor"
+      },
+      "locator": {
+        "table": "Synthetic Table 1",
+        "row": "Synthetic Poor"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
       "strength": "Strong",
       "recommendationText": "W poor."
     }

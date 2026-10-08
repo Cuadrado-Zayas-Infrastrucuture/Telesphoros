@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "synthetic": true,
   "provenance": {
     "source": "SYNTHETIC TEST FIXTURE - not CPIC content",
@@ -15,15 +15,40 @@
   "guidelineVersion": "synthetic-1",
   "title": "Synthetic guideline for drugx",
   "drug": "drugx",
-  "gene": "GENEC",
+  "genes": [
+    "GENEC"
+  ],
+  "supersedes": [],
   "recommendations": [
     {
-      "phenotype": "Synthetic Alpha",
+      "when": {
+        "GENEC": "Synthetic Alpha"
+      },
+      "locator": {
+        "table": "Synthetic Table 1",
+        "row": "Synthetic Alpha"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
       "strength": "Optional",
       "recommendationText": "X alpha."
     },
     {
-      "phenotype": "Synthetic Beta",
+      "when": {
+        "GENEC": "Synthetic Beta"
+      },
+      "locator": {
+        "table": "Synthetic Table 1",
+        "row": "Synthetic Beta"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
       "strength": "No recommendation",
       "recommendationText": "X beta."
     }

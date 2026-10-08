@@ -1,0 +1,76 @@
+{
+  "name": "combined-table-cell-unverified",
+  "description": "An unverified combined cell: held, with no fallback to the narrower row.",
+  "inputs": [
+    {
+      "gene": "GENEA",
+      "state": "canonical",
+      "phenotype": "Synthetic Poor"
+    },
+    {
+      "gene": "GENEE",
+      "state": "canonical",
+      "phenotype": "Synthetic Fast"
+    }
+  ],
+  "drugs": [
+    "drugv"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [
+      {
+        "gene": "GENEA",
+        "state": "canonical",
+        "phenotype": "Synthetic Poor",
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": null
+      },
+      {
+        "gene": "GENEE",
+        "state": "canonical",
+        "phenotype": "Synthetic Fast",
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": null
+      }
+    ],
+    "results": [
+      {
+        "outcome": "held",
+        "drug": "drugv",
+        "genes": [
+          "GENEA",
+          "GENEE"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "canonical",
+            "phenotype": "Synthetic Poor",
+            "reasonCode": null
+          },
+          {
+            "gene": "GENEE",
+            "state": "canonical",
+            "phenotype": "Synthetic Fast",
+            "reasonCode": null
+          }
+        ],
+        "reasonCode": "out-of-review-scope",
+        "citation": {
+          "guidelineId": "drugv-genea-genee",
+          "guidelineVersion": "synthetic-1",
+          "sourceUrl": "https://example.invalid/synthetic",
+          "locator": {
+            "table": "Synthetic Table 2",
+            "row": "Synthetic Poor",
+            "column": "Synthetic Fast"
+          },
+          "verification": "unverified"
+        }
+      }
+    ]
+  }
+}

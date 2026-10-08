@@ -1,0 +1,83 @@
+{
+  "name": "diplotype-from-a-structured-feed",
+  "description": "A diplotype is mapped with the gene tables; the canonical spelling is reported, and another gene the drug needs is absent.",
+  "inputs": [
+    {
+      "gene": "GENEA",
+      "state": "diplotype",
+      "diplotype": "*3/*1"
+    }
+  ],
+  "drugs": [
+    "drugx"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [
+      {
+        "gene": "GENEA",
+        "state": "canonical",
+        "phenotype": "Synthetic Intermediate",
+        "diplotype": "*1/*3",
+        "activityScore": null,
+        "reasonCode": null
+      },
+      {
+        "gene": "GENEC",
+        "state": "absent",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "gene-absent"
+      }
+    ],
+    "results": [
+      {
+        "outcome": "shown",
+        "drug": "drugx",
+        "genes": [
+          "GENEA"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "canonical",
+            "phenotype": "Synthetic Intermediate",
+            "reasonCode": null
+          }
+        ],
+        "strength": "Moderate",
+        "citation": {
+          "guidelineId": "drugx-genea",
+          "guidelineVersion": "synthetic-1",
+          "sourceUrl": "https://example.invalid/synthetic",
+          "locator": {
+            "table": "Synthetic Table 1",
+            "row": "Synthetic Intermediate",
+            "column": null
+          },
+          "verification": "verified"
+        },
+        "recommendationText": "X intermediate.",
+        "implication": "X intermediate implication."
+      },
+      {
+        "outcome": "held",
+        "drug": "drugx",
+        "genes": [
+          "GENEC"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEC",
+            "state": "absent",
+            "phenotype": null,
+            "reasonCode": "gene-absent"
+          }
+        ],
+        "reasonCode": "gene-absent",
+        "citation": null
+      }
+    ]
+  }
+}

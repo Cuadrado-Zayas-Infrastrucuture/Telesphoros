@@ -1,0 +1,49 @@
+{
+  "name": "no-cell-for-this-phenotype",
+  "description": "The guideline has no cell for the phenotype: no published recommendation, and no citation to invent.",
+  "inputs": [
+    {
+      "gene": "GENEB",
+      "state": "canonical",
+      "phenotype": "Synthetic High"
+    }
+  ],
+  "drugs": [
+    "drugy"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [
+      {
+        "gene": "GENEB",
+        "state": "canonical",
+        "phenotype": "Synthetic High",
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": null
+      }
+    ],
+    "results": [
+      {
+        "outcome": "no-published-recommendation",
+        "drug": "drugy",
+        "genes": [
+          "GENEB"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEB",
+            "state": "canonical",
+            "phenotype": "Synthetic High",
+            "reasonCode": null
+          }
+        ],
+        "reasonCode": "no-published-recommendation",
+        "citation": null,
+        "strength": null,
+        "recommendationText": null,
+        "implication": null
+      }
+    ]
+  }
+}

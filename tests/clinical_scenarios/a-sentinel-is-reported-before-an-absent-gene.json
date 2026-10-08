@@ -1,0 +1,60 @@
+{
+  "name": "a-sentinel-is-reported-before-an-absent-gene",
+  "description": "A no-result sentinel and a missing gene together: the more specific reason leads.",
+  "inputs": [
+    {
+      "gene": "GENEA",
+      "state": "null"
+    }
+  ],
+  "drugs": [
+    "drugv"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [
+      {
+        "gene": "GENEA",
+        "state": "null",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "sentinel-literal-in-source"
+      },
+      {
+        "gene": "GENEE",
+        "state": "absent",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "gene-absent"
+      }
+    ],
+    "results": [
+      {
+        "outcome": "held",
+        "drug": "drugv",
+        "genes": [
+          "GENEA",
+          "GENEE"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "null",
+            "phenotype": null,
+            "reasonCode": "sentinel-literal-in-source"
+          },
+          {
+            "gene": "GENEE",
+            "state": "absent",
+            "phenotype": null,
+            "reasonCode": "gene-absent"
+          }
+        ],
+        "reasonCode": "sentinel-literal-in-source",
+        "citation": null
+      }
+    ]
+  }
+}

@@ -1,62 +1,165 @@
 {
   "name": "all-drugs-when-none-are-named",
   "description": "With no drug list, every drug the guidelines cover is evaluated, in alphabetical order.",
-  "calls": [
+  "inputs": [
     {
       "gene": "GENEA",
-      "outcome": "called",
-      "diplotype": "*1/*1"
+      "state": "canonical",
+      "phenotype": "Synthetic Normal"
     }
   ],
   "expected": {
     "knowledgeSetId": "$KNOWLEDGE_SET_ID",
-    "phenotypes": [
+    "geneStates": [
       {
-        "status": "determined",
         "gene": "GENEA",
-        "diplotype": "*1/*1",
+        "state": "canonical",
         "phenotype": "Synthetic Normal",
-        "activityScore": null
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": null
+      },
+      {
+        "gene": "GENEB",
+        "state": "absent",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "gene-absent"
+      },
+      {
+        "gene": "GENEC",
+        "state": "absent",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "gene-absent"
+      },
+      {
+        "gene": "GENEE",
+        "state": "absent",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "gene-absent"
       }
     ],
-    "recommendations": [
+    "results": [
       {
-        "status": "recommendation",
-        "gene": "GENEA",
+        "outcome": "held",
+        "drug": "drugv",
+        "genes": [
+          "GENEA",
+          "GENEE"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "canonical",
+            "phenotype": "Synthetic Normal",
+            "reasonCode": null
+          },
+          {
+            "gene": "GENEE",
+            "state": "absent",
+            "phenotype": null,
+            "reasonCode": "gene-absent"
+          }
+        ],
+        "reasonCode": "gene-absent",
+        "citation": null
+      },
+      {
+        "outcome": "shown",
         "drug": "drugw",
-        "diplotype": "*1/*1",
-        "phenotype": "Synthetic Normal",
+        "genes": [
+          "GENEA"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "canonical",
+            "phenotype": "Synthetic Normal",
+            "reasonCode": null
+          }
+        ],
         "strength": "Strong",
-        "guidelineId": "drugw-genea",
-        "guidelineVersion": "synthetic-1",
-        "sourceUrl": "https://example.invalid/synthetic",
+        "citation": {
+          "guidelineId": "drugw-genea",
+          "guidelineVersion": "synthetic-1",
+          "sourceUrl": "https://example.invalid/synthetic",
+          "locator": {
+            "table": "Synthetic Table 1",
+            "row": "Synthetic Normal",
+            "column": null
+          },
+          "verification": "verified"
+        },
         "recommendationText": "Synthetic wording.  Two spaces, a non-breaking space, and a é are kept exactly.",
         "implication": null
       },
       {
-        "status": "recommendation",
-        "gene": "GENEA",
+        "outcome": "shown",
         "drug": "drugx",
-        "diplotype": "*1/*1",
-        "phenotype": "Synthetic Normal",
+        "genes": [
+          "GENEA"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "canonical",
+            "phenotype": "Synthetic Normal",
+            "reasonCode": null
+          }
+        ],
         "strength": "Strong",
-        "guidelineId": "drugx-genea",
-        "guidelineVersion": "synthetic-1",
-        "sourceUrl": "https://example.invalid/synthetic",
+        "citation": {
+          "guidelineId": "drugx-genea",
+          "guidelineVersion": "synthetic-1",
+          "sourceUrl": "https://example.invalid/synthetic",
+          "locator": {
+            "table": "Synthetic Table 1",
+            "row": "Synthetic Normal",
+            "column": null
+          },
+          "verification": "verified"
+        },
         "recommendationText": "X normal.",
         "implication": null
       },
       {
-        "status": "indeterminate",
+        "outcome": "held",
         "drug": "drugx",
-        "gene": "GENEC",
-        "reasonCode": "GENE_NOT_IN_REPORT"
+        "genes": [
+          "GENEC"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEC",
+            "state": "absent",
+            "phenotype": null,
+            "reasonCode": "gene-absent"
+          }
+        ],
+        "reasonCode": "gene-absent",
+        "citation": null
       },
       {
-        "status": "indeterminate",
+        "outcome": "held",
         "drug": "drugy",
-        "gene": "GENEB",
-        "reasonCode": "GENE_NOT_IN_REPORT"
+        "genes": [
+          "GENEB"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEB",
+            "state": "absent",
+            "phenotype": null,
+            "reasonCode": "gene-absent"
+          }
+        ],
+        "reasonCode": "gene-absent",
+        "citation": null
       }
     ]
   }

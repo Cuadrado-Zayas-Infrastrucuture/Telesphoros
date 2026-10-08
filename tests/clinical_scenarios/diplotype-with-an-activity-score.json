@@ -1,0 +1,58 @@
+{
+  "name": "diplotype-with-an-activity-score",
+  "description": "An activity-score gene: the score is reported with the phenotype.",
+  "inputs": [
+    {
+      "gene": "GENEB",
+      "state": "diplotype",
+      "diplotype": "*2/*3"
+    }
+  ],
+  "drugs": [
+    "drugy"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [
+      {
+        "gene": "GENEB",
+        "state": "canonical",
+        "phenotype": "Synthetic Low",
+        "diplotype": "*2/*3",
+        "activityScore": 0.5,
+        "reasonCode": null
+      }
+    ],
+    "results": [
+      {
+        "outcome": "shown",
+        "drug": "drugy",
+        "genes": [
+          "GENEB"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEB",
+            "state": "canonical",
+            "phenotype": "Synthetic Low",
+            "reasonCode": null
+          }
+        ],
+        "strength": "Strong",
+        "citation": {
+          "guidelineId": "drugy-geneb",
+          "guidelineVersion": "synthetic-1",
+          "sourceUrl": "https://example.invalid/synthetic",
+          "locator": {
+            "table": "Synthetic Table 1",
+            "row": "Synthetic Low",
+            "column": null
+          },
+          "verification": "verified"
+        },
+        "recommendationText": "Y low.",
+        "implication": null
+      }
+    ]
+  }
+}

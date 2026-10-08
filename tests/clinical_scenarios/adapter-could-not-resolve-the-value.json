@@ -1,0 +1,46 @@
+{
+  "name": "adapter-could-not-resolve-the-value",
+  "description": "A value the adapter could not turn into a phenotype is held.",
+  "inputs": [
+    {
+      "gene": "GENEA",
+      "state": "unresolved",
+      "reasonCode": "other-gene-unresolved"
+    }
+  ],
+  "drugs": [
+    "drugw"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [
+      {
+        "gene": "GENEA",
+        "state": "unresolved",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "other-gene-unresolved"
+      }
+    ],
+    "results": [
+      {
+        "outcome": "held",
+        "drug": "drugw",
+        "genes": [
+          "GENEA"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "unresolved",
+            "phenotype": null,
+            "reasonCode": "other-gene-unresolved"
+          }
+        ],
+        "reasonCode": "other-gene-unresolved",
+        "citation": null
+      }
+    ]
+  }
+}

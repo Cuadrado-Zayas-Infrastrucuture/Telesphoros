@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "1.1",
+  "synthetic": true,
+  "provenance": {
+    "source": "SYNTHETIC TEST FIXTURE - not CPIC content",
+    "sourceUrl": "https://example.invalid/synthetic",
+    "retrievedAt": "2026-01-01",
+    "sourceVersion": "synthetic-1"
+  },
+  "review": {
+    "status": "unreviewed"
+  },
+  "id": "drugv-genea-genee",
+  "kind": "guideline",
+  "guidelineVersion": "synthetic-1",
+  "title": "Synthetic guideline for drugv",
+  "drug": "drugv",
+  "genes": [
+    "GENEA",
+    "GENEE"
+  ],
+  "supersedes": [
+    "drugv-genea"
+  ],
+  "recommendations": [
+    {
+      "when": {
+        "GENEA": "Synthetic Normal",
+        "GENEE": "Synthetic Fast"
+      },
+      "locator": {
+        "table": "Synthetic Table 2",
+        "row": "Synthetic Normal",
+        "column": "Synthetic Fast"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
+      "strength": "Strong",
+      "recommendationText": "V normal-fast."
+    },
+    {
+      "when": {
+        "GENEA": "Synthetic Normal",
+        "GENEE": "Synthetic Slow"
+      },
+      "locator": {
+        "table": "Synthetic Table 2",
+        "row": "Synthetic Normal",
+        "column": "Synthetic Slow"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
+      "strength": "Moderate",
+      "recommendationText": "V normal-slow.",
+      "implication": "V normal-slow implication."
+    },
+    {
+      "when": {
+        "GENEA": "Synthetic Intermediate",
+        "GENEE": "Synthetic Fast"
+      },
+      "locator": {
+        "table": "Synthetic Table 2",
+        "row": "Synthetic Intermediate",
+        "column": "Synthetic Fast"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
+      "strength": "No recommendation",
+      "recommendationText": "V intermediate-fast: no recommendation."
+    },
+    {
+      "when": {
+        "GENEA": "Synthetic Intermediate",
+        "GENEE": "Synthetic Slow"
+      },
+      "locator": {
+        "table": "Synthetic Table 2",
+        "row": "Synthetic Intermediate",
+        "column": "Synthetic Slow"
+      },
+      "verification": {
+        "state": "disputed",
+        "note": "Synthetic: the cell position differs between two synthetic sources."
+      },
+      "strength": "Moderate",
+      "recommendationText": "V intermediate-slow."
+    },
+    {
+      "when": {
+        "GENEA": "Synthetic Poor",
+        "GENEE": "Synthetic Fast"
+      },
+      "locator": {
+        "table": "Synthetic Table 2",
+        "row": "Synthetic Poor",
+        "column": "Synthetic Fast"
+      },
+      "verification": {
+        "state": "unverified"
+      },
+      "strength": "Strong",
+      "recommendationText": "V poor-fast."
+    }
+  ]
+}

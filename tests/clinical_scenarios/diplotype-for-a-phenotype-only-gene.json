@@ -1,0 +1,61 @@
+{
+  "name": "diplotype-for-a-phenotype-only-gene",
+  "description": "A diplotype for a gene that has no allele tables cannot be interpreted.",
+  "inputs": [
+    {
+      "gene": "GENEE",
+      "state": "diplotype",
+      "diplotype": "*1/*1"
+    }
+  ],
+  "drugs": [
+    "drugv"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [
+      {
+        "gene": "GENEA",
+        "state": "absent",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "gene-absent"
+      },
+      {
+        "gene": "GENEE",
+        "state": "unresolved",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "no-gene-definition"
+      }
+    ],
+    "results": [
+      {
+        "outcome": "held",
+        "drug": "drugv",
+        "genes": [
+          "GENEA",
+          "GENEE"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "absent",
+            "phenotype": null,
+            "reasonCode": "gene-absent"
+          },
+          {
+            "gene": "GENEE",
+            "state": "unresolved",
+            "phenotype": null,
+            "reasonCode": "no-gene-definition"
+          }
+        ],
+        "reasonCode": "no-gene-definition",
+        "citation": null
+      }
+    ]
+  }
+}

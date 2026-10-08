@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "1.1",
+  "synthetic": true,
+  "provenance": {
+    "source": "SYNTHETIC TEST FIXTURE - not CPIC content",
+    "sourceUrl": "https://example.invalid/synthetic",
+    "retrievedAt": "2026-01-01",
+    "sourceVersion": "synthetic-1"
+  },
+  "review": {
+    "status": "unreviewed"
+  },
+  "id": "drugv-genea",
+  "kind": "guideline",
+  "guidelineVersion": "synthetic-1",
+  "title": "Synthetic guideline for drugv",
+  "drug": "drugv",
+  "genes": [
+    "GENEA"
+  ],
+  "supersedes": [],
+  "recommendations": [
+    {
+      "when": {
+        "GENEA": "Synthetic Normal"
+      },
+      "locator": {
+        "table": "Synthetic Table 1",
+        "row": "Synthetic Normal"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
+      "strength": "Strong",
+      "recommendationText": "V single normal."
+    },
+    {
+      "when": {
+        "GENEA": "Synthetic Intermediate"
+      },
+      "locator": {
+        "table": "Synthetic Table 1",
+        "row": "Synthetic Intermediate"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
+      "strength": "Moderate",
+      "recommendationText": "V single intermediate."
+    },
+    {
+      "when": {
+        "GENEA": "Synthetic Poor"
+      },
+      "locator": {
+        "table": "Synthetic Table 1",
+        "row": "Synthetic Poor"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
+      "strength": "Strong",
+      "recommendationText": "V single poor."
+    }
+  ]
+}

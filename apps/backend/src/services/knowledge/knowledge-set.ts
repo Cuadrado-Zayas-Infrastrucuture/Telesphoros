@@ -14,6 +14,9 @@ export interface KnowledgeFileInfo {
  * Everything the engine knows, validated and immutable. Built only by `loadKnowledge`, which has
  * already enforced the production rules (reviewed content only, no test content).
  */
+/** The genes a guideline is read by, sorted and joined: the same for the same set of genes, whatever order the file lists them in. */
+export const genesKey = (guideline: Pick<GuidelineFile, 'genes'>): string => [...guideline.genes].sort().join('+');
+
 export class KnowledgeSet {
   private readonly geneMaps: ReadonlyMap<string, GeneMapFile>;
   private readonly byDrug: ReadonlyMap<string, readonly GuidelineFile[]>;
@@ -30,7 +33,7 @@ export class KnowledgeSet {
     for (const guideline of guidelines) {
       grouped.set(guideline.drug, [...(grouped.get(guideline.drug) ?? []), guideline]);
     }
-    for (const list of grouped.values()) list.sort((a, b) => (a.gene < b.gene ? -1 : a.gene > b.gene ? 1 : 0));
+    for (const list of grouped.values()) list.sort((a, b) => (genesKey(a) < genesKey(b) ? -1 : genesKey(a) > genesKey(b) ? 1 : 0));
     this.byDrug = grouped;
   }
 
@@ -38,7 +41,7 @@ export class KnowledgeSet {
     return this.geneMaps.get(symbol);
   }
 
-  /** Guidelines for a drug, ordered by gene. Drug names are lower case. */
+  /** Guidelines for a drug, ordered by their genes. Drug names are lower case. */
   guidelinesForDrug(drug: string): readonly GuidelineFile[] {
     return this.byDrug.get(drug) ?? [];
   }

@@ -1,0 +1,45 @@
+{
+  "name": "no-result-sentinel-in-the-report",
+  "description": "The report says \"no result\" where a value should be: held, never treated as a missing gene.",
+  "inputs": [
+    {
+      "gene": "GENEA",
+      "state": "null"
+    }
+  ],
+  "drugs": [
+    "drugw"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [
+      {
+        "gene": "GENEA",
+        "state": "null",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "sentinel-literal-in-source"
+      }
+    ],
+    "results": [
+      {
+        "outcome": "held",
+        "drug": "drugw",
+        "genes": [
+          "GENEA"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "null",
+            "phenotype": null,
+            "reasonCode": "sentinel-literal-in-source"
+          }
+        ],
+        "reasonCode": "sentinel-literal-in-source",
+        "citation": null
+      }
+    ]
+  }
+}

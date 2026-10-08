@@ -1,0 +1,51 @@
+{
+  "name": "duplicate-gene-with-identical-values",
+  "description": "Two identical values for one gene are still held, for a person to confirm it is a repeated line.",
+  "inputs": [
+    {
+      "gene": "GENEA",
+      "state": "canonical",
+      "phenotype": "Synthetic Normal"
+    },
+    {
+      "gene": "GENEA",
+      "state": "canonical",
+      "phenotype": "Synthetic Normal"
+    }
+  ],
+  "drugs": [
+    "drugw"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [
+      {
+        "gene": "GENEA",
+        "state": "unresolved",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "duplicate-identical"
+      }
+    ],
+    "results": [
+      {
+        "outcome": "held",
+        "drug": "drugw",
+        "genes": [
+          "GENEA"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "unresolved",
+            "phenotype": null,
+            "reasonCode": "duplicate-identical"
+          }
+        ],
+        "reasonCode": "duplicate-identical",
+        "citation": null
+      }
+    ]
+  }
+}

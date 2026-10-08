@@ -1,0 +1,21 @@
+{
+  "name": "drug-with-no-guideline",
+  "description": "No guideline covers the drug.",
+  "inputs": [],
+  "drugs": [
+    "drugz"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [],
+    "results": [
+      {
+        "outcome": "no-guideline",
+        "drug": "drugz",
+        "genes": [],
+        "geneStates": [],
+        "reasonCode": "no-guideline-for-drug"
+      }
+    ]
+  }
+}

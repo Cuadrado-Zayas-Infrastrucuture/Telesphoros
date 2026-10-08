@@ -1,0 +1,46 @@
+{
+  "name": "phenotype-terms-are-case-sensitive",
+  "description": "Only the gene's own canonical terms are recognized: no case folding.",
+  "inputs": [
+    {
+      "gene": "GENEA",
+      "state": "canonical",
+      "phenotype": "synthetic normal"
+    }
+  ],
+  "drugs": [
+    "drugw"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [
+      {
+        "gene": "GENEA",
+        "state": "unresolved",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "other-gene-unresolved"
+      }
+    ],
+    "results": [
+      {
+        "outcome": "held",
+        "drug": "drugw",
+        "genes": [
+          "GENEA"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "unresolved",
+            "phenotype": null,
+            "reasonCode": "other-gene-unresolved"
+          }
+        ],
+        "reasonCode": "other-gene-unresolved",
+        "citation": null
+      }
+    ]
+  }
+}

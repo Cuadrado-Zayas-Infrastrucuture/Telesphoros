@@ -1,0 +1,69 @@
+{
+  "name": "combined-table-has-no-cell-for-the-combination",
+  "description": "No cell exists for this pair of phenotypes: no published recommendation, and no fallback.",
+  "inputs": [
+    {
+      "gene": "GENEA",
+      "state": "canonical",
+      "phenotype": "Synthetic Poor"
+    },
+    {
+      "gene": "GENEE",
+      "state": "canonical",
+      "phenotype": "Synthetic Slow"
+    }
+  ],
+  "drugs": [
+    "drugv"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [
+      {
+        "gene": "GENEA",
+        "state": "canonical",
+        "phenotype": "Synthetic Poor",
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": null
+      },
+      {
+        "gene": "GENEE",
+        "state": "canonical",
+        "phenotype": "Synthetic Slow",
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": null
+      }
+    ],
+    "results": [
+      {
+        "outcome": "no-published-recommendation",
+        "drug": "drugv",
+        "genes": [
+          "GENEA",
+          "GENEE"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "canonical",
+            "phenotype": "Synthetic Poor",
+            "reasonCode": null
+          },
+          {
+            "gene": "GENEE",
+            "state": "canonical",
+            "phenotype": "Synthetic Slow",
+            "reasonCode": null
+          }
+        ],
+        "reasonCode": "no-published-recommendation",
+        "citation": null,
+        "strength": null,
+        "recommendationText": null,
+        "implication": null
+      }
+    ]
+  }
+}

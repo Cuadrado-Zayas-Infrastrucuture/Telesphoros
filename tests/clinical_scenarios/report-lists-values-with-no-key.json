@@ -1,0 +1,45 @@
+{
+  "name": "report-lists-values-with-no-key",
+  "description": "The adapter abstained from associating values with genes: abstained, nothing assigned.",
+  "inputs": [
+    {
+      "gene": "GENEA",
+      "state": "unresolved",
+      "reasonCode": "association-abstained"
+    }
+  ],
+  "drugs": [
+    "drugw"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [
+      {
+        "gene": "GENEA",
+        "state": "unresolved",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "association-abstained"
+      }
+    ],
+    "results": [
+      {
+        "outcome": "abstained",
+        "drug": "drugw",
+        "genes": [
+          "GENEA"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "unresolved",
+            "phenotype": null,
+            "reasonCode": "association-abstained"
+          }
+        ],
+        "reasonCode": "association-abstained"
+      }
+    ]
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "name": "diplotype-failures-are-held-by-reason",
+  "description": "Four different ways a diplotype cannot be used, each reported by its own reason.",
+  "inputs": [
+    {
+      "gene": "GENEA",
+      "state": "diplotype",
+      "diplotype": "*1/*9"
+    },
+    {
+      "gene": "GENEC",
+      "state": "diplotype",
+      "diplotype": "*1|*2"
+    },
+    {
+      "gene": "GENEB",
+      "state": "diplotype",
+      "diplotype": "*1/*5"
+    },
+    {
+      "gene": "GENEZ",
+      "state": "diplotype",
+      "diplotype": "*1/*2"
+    }
+  ],
+  "drugs": [
+    "drugx",
+    "drugy"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "geneStates": [
+      {
+        "gene": "GENEA",
+        "state": "unresolved",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "allele-not-in-definitions"
+      },
+      {
+        "gene": "GENEB",
+        "state": "unresolved",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "no-phenotype-mapping"
+      },
+      {
+        "gene": "GENEC",
+        "state": "unresolved",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "malformed-diplotype"
+      },
+      {
+        "gene": "GENEZ",
+        "state": "unresolved",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "no-gene-definition"
+      }
+    ],
+    "results": [
+      {
+        "outcome": "held",
+        "drug": "drugx",
+        "genes": [
+          "GENEA"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "unresolved",
+            "phenotype": null,
+            "reasonCode": "allele-not-in-definitions"
+          }
+        ],
+        "reasonCode": "allele-not-in-definitions",
+        "citation": null
+      },
+      {
+        "outcome": "held",
+        "drug": "drugx",
+        "genes": [
+          "GENEC"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEC",
+            "state": "unresolved",
+            "phenotype": null,
+            "reasonCode": "malformed-diplotype"
+          }
+        ],
+        "reasonCode": "malformed-diplotype",
+        "citation": null
+      },
+      {
+        "outcome": "held",
+        "drug": "drugy",
+        "genes": [
+          "GENEB"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEB",
+            "state": "unresolved",
+            "phenotype": null,
+            "reasonCode": "no-phenotype-mapping"
+          }
+        ],
+        "reasonCode": "no-phenotype-mapping",
+        "citation": null
+      }
+    ]
+  }
+}

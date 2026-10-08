@@ -3,7 +3,7 @@ import { canonicalDiplotype, hasAtMostTwoDecimals, toHundredths } from './diplot
 import { cpicStrengthSchema } from './vocabulary';
 
 /** Bump when a file's shape changes. Files declare the version they were written for. */
-export const KNOWLEDGE_SCHEMA_VERSION = '1.0';
+export const KNOWLEDGE_SCHEMA_VERSION = '1.1';
 
 const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f]/; // everything except tab and newline
 const SINGLE_LINE_CONTROL = /[\u0000-\u001f\u007f]/;
@@ -118,13 +118,24 @@ export const geneMapFileSchema = z
     ...envelope,
     kind: z.literal('gene-phenotype-map'),
     gene: geneSymbolSchema,
-    alleles: z.array(alleleSchema).min(1).max(2000),
-    /** Every phenotype the tables may produce. Guidelines may only refer to these. */
+    /** Needed only to turn a diplotype into a phenotype. A gene a lab reports as a phenotype needs neither. */
+    alleles: z.array(alleleSchema).min(1).max(2000).optional(),
+    /** Every phenotype term this gene can have. Reported phenotypes and guideline cells may only use these. */
     phenotypes: z.array(label(100)).min(1).max(50),
-    method: methodSchema,
+    method: methodSchema.optional(),
   })
   .superRefine((file, ctx) => {
-    const alleleNames = file.alleles.map((allele) => allele.name);
+    if ((file.alleles === undefined) !== (file.method === undefined)) {
+      addIssue(ctx, ['method'], 'Give both alleles and method (to map diplotypes) or neither (phenotype-only gene).');
+      return;
+    }
+    if (file.alleles === undefined || file.method === undefined) {
+      const phenotypes = new Set(file.phenotypes);
+      if (phenotypes.size !== file.phenotypes.length) addIssue(ctx, ['phenotypes'], 'Phenotypes must be unique.');
+      return;
+    }
+    const { alleles, method } = file;
+    const alleleNames = alleles.map((allele) => allele.name);
     const phenotypes = new Set(file.phenotypes);
     if (phenotypes.size !== file.phenotypes.length) addIssue(ctx, ['phenotypes'], 'Phenotypes must be unique.');
     if (new Set(alleleNames).size !== alleleNames.length) addIssue(ctx, ['alleles'], 'Allele names must be unique.');
@@ -132,9 +143,9 @@ export const geneMapFileSchema = z
       if (!phenotypes.has(value)) addIssue(ctx, path, 'This phenotype is not in the phenotypes list.');
     };
 
-    if (file.method.type === 'diplotype-table') {
+    if (method.type === 'diplotype-table') {
       const seen = new Set<string>();
-      file.method.rows.forEach((row, index) => {
+      method.rows.forEach((row, index) => {
         const canonical = canonicalDiplotype(alleleNames, row.diplotype);
         if (!canonical) {
           addIssue(ctx, ['method', 'rows', index, 'diplotype'], 'Must be two known alleles written "allele/allele".');
@@ -143,10 +154,10 @@ export const geneMapFileSchema = z
         } else seen.add(canonical);
         requirePhenotype(row.phenotype, ['method', 'rows', index, 'phenotype']);
       });
-    } else if (file.method.type === 'function-pair') {
-      const functions = new Set(file.alleles.map((allele) => allele.function));
+    } else if (method.type === 'function-pair') {
+      const functions = new Set(alleles.map((allele) => allele.function));
       const seen = new Set<string>();
-      file.method.rows.forEach((row, index) => {
+      method.rows.forEach((row, index) => {
         for (const [position, name] of row.functions.entries()) {
           if (!functions.has(name)) addIssue(ctx, ['method', 'rows', index, 'functions', position], 'No allele has this function.');
         }
@@ -156,10 +167,10 @@ export const geneMapFileSchema = z
         requirePhenotype(row.phenotype, ['method', 'rows', index, 'phenotype']);
       });
     } else {
-      file.alleles.forEach((allele, index) => {
+      alleles.forEach((allele, index) => {
         if (allele.activityValue === undefined) addIssue(ctx, ['alleles', index, 'activityValue'], 'Every allele needs an activityValue for this method.');
       });
-      const bounds = file.method.ranges.map((range, index) => {
+      const bounds = method.ranges.map((range, index) => {
         requirePhenotype(range.phenotype, ['method', 'ranges', index, 'phenotype']);
         const low = toHundredths(range.min);
         const high = toHundredths(range.max);
@@ -182,31 +193,73 @@ export const geneMapFileSchema = z
   });
 export type GeneMapFile = z.infer<typeof geneMapFileSchema>;
 
+/** Where the cell sits in the published guideline, so a person can find it and check it. */
+const locatorSchema = z.strictObject({
+  /** The table as the guideline names it, e.g. "Table 2". */
+  table: label(100),
+  /** The row label as printed. */
+  row: label(100),
+  /** The column label as printed; absent for a single-gene table. */
+  column: label(100).optional(),
+});
+export type CellLocator = z.infer<typeof locatorSchema>;
+
+/**
+ * Whether this cell's position has been rechecked against the published source. Only `verified`
+ * cells can ever be shown; `unverified` and `disputed` cells hold the result.
+ */
+const cellVerificationSchema = z.discriminatedUnion('state', [
+  z.strictObject({ state: z.literal('unverified') }),
+  z.strictObject({ state: z.literal('verified'), verifiedBy: label(100), verifiedAt: z.iso.date() }),
+  z.strictObject({ state: z.literal('disputed'), note: prose(1000) }),
+]);
+export type CellVerification = z.infer<typeof cellVerificationSchema>;
+
 const recommendationRowSchema = z.strictObject({
-  phenotype: label(100),
+  /** The phenotype of each gene this cell applies to. Exactly the guideline's genes. */
+  when: z.record(geneSymbolSchema, label(100)),
+  locator: locatorSchema,
+  verification: cellVerificationSchema,
   strength: cpicStrengthSchema,
   /** The guideline's wording, kept exactly. The engine never rewrites it. */
   recommendationText: prose(4000),
   implication: prose(2000).optional(),
 });
+export type RecommendationRow = z.infer<typeof recommendationRowSchema>;
 
 export const guidelineFileSchema = z
   .strictObject({
     ...envelope,
     kind: z.literal('guideline'),
-    /** Version of the guideline as its publisher states it, recorded on every recommendation. */
+    /** Version of the guideline as its publisher states it, recorded on every result. */
     guidelineVersion: label(50),
     title: label(200),
     drug: drugNameSchema,
-    /** Version 1 supports guidelines that depend on one gene. */
-    gene: geneSymbolSchema,
-    recommendations: z.array(recommendationRowSchema).min(1).max(100),
+    /** The genes this guideline's table is read by: one for a single-gene table, several for a combined table. */
+    genes: z.array(geneSymbolSchema).min(1).max(4),
+    /**
+     * Ids of single-gene guidelines (same drug, a subset of these genes) that this combined table
+     * replaces. They are never shown on their own: if this table cannot be applied, the drug's result
+     * is held, with no fallback to a narrower row.
+     */
+    supersedes: z.array(fileIdSchema).max(10),
+    recommendations: z.array(recommendationRowSchema).min(1).max(500),
   })
   .superRefine((file, ctx) => {
+    if (new Set(file.genes).size !== file.genes.length) addIssue(ctx, ['genes'], 'Genes must be unique.');
+    if (new Set(file.supersedes).size !== file.supersedes.length) addIssue(ctx, ['supersedes'], 'Ids must be unique.');
+    if (file.supersedes.includes(file.id)) addIssue(ctx, ['supersedes'], 'A guideline cannot supersede itself.');
+    const wanted = [...file.genes].sort();
     const seen = new Set<string>();
     file.recommendations.forEach((row, index) => {
-      if (seen.has(row.phenotype)) addIssue(ctx, ['recommendations', index, 'phenotype'], 'This phenotype appears more than once.');
-      seen.add(row.phenotype);
+      const given = Object.keys(row.when).sort();
+      if (given.length !== wanted.length || given.some((gene, position) => gene !== wanted[position])) {
+        addIssue(ctx, ['recommendations', index, 'when'], 'A cell must give a phenotype for exactly this guideline\'s genes.');
+        return;
+      }
+      const key = JSON.stringify(wanted.map((gene) => row.when[gene]));
+      if (seen.has(key)) addIssue(ctx, ['recommendations', index, 'when'], 'This combination of phenotypes appears more than once.');
+      seen.add(key);
     });
   });
 export type GuidelineFile = z.infer<typeof guidelineFileSchema>;

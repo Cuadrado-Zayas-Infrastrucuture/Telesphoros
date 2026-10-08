@@ -1,25 +1,97 @@
 {
   "name": "empty-report",
-  "description": "No calls: every needed gene is reported as missing.",
-  "calls": [],
+  "description": "No genes at all: every gene a guideline needs is absent, and nothing is recommended.",
+  "inputs": [],
   "drugs": [
+    "drugv",
     "drugx"
   ],
   "expected": {
     "knowledgeSetId": "$KNOWLEDGE_SET_ID",
-    "phenotypes": [],
-    "recommendations": [
+    "geneStates": [
       {
-        "status": "indeterminate",
-        "drug": "drugx",
         "gene": "GENEA",
-        "reasonCode": "GENE_NOT_IN_REPORT"
+        "state": "absent",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "gene-absent"
       },
       {
-        "status": "indeterminate",
-        "drug": "drugx",
         "gene": "GENEC",
-        "reasonCode": "GENE_NOT_IN_REPORT"
+        "state": "absent",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "gene-absent"
+      },
+      {
+        "gene": "GENEE",
+        "state": "absent",
+        "phenotype": null,
+        "diplotype": null,
+        "activityScore": null,
+        "reasonCode": "gene-absent"
+      }
+    ],
+    "results": [
+      {
+        "outcome": "held",
+        "drug": "drugv",
+        "genes": [
+          "GENEA",
+          "GENEE"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "absent",
+            "phenotype": null,
+            "reasonCode": "gene-absent"
+          },
+          {
+            "gene": "GENEE",
+            "state": "absent",
+            "phenotype": null,
+            "reasonCode": "gene-absent"
+          }
+        ],
+        "reasonCode": "gene-absent",
+        "citation": null
+      },
+      {
+        "outcome": "held",
+        "drug": "drugx",
+        "genes": [
+          "GENEA"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEA",
+            "state": "absent",
+            "phenotype": null,
+            "reasonCode": "gene-absent"
+          }
+        ],
+        "reasonCode": "gene-absent",
+        "citation": null
+      },
+      {
+        "outcome": "held",
+        "drug": "drugx",
+        "genes": [
+          "GENEC"
+        ],
+        "geneStates": [
+          {
+            "gene": "GENEC",
+            "state": "absent",
+            "phenotype": null,
+            "reasonCode": "gene-absent"
+          }
+        ],
+        "reasonCode": "gene-absent",
+        "citation": null
       }
     ]
   }
