@@ -75,7 +75,32 @@ the ledger existed reports "not applicable: this backup predates the ledger" and
 
 ## How long it takes (measured)
 
-MEASUREMENTS_PLACEHOLDER
+Full walks of one tenant's chain, measured in slice 5B-3.3c on the CI-sized development machine (4 vCPU Xeon 2.1 GHz, 16 GB, PostgreSQL on the same
+machine, nothing else running). The events are real records written through the application: a capture, an acceptance and an evaluation (with its
+result and gene-state rows) per report, so each event is checked against its stored rows in both directions.
+
+| Events in the chain | Full walk | Walk from a checkpoint (1 new event) |
+| --- | --- | --- |
+| 10 002 | 0.95 s | 6 ms |
+| 50 001 | 5.4 s (4.8 s on a second run) | 58 ms |
+| 150 000 | 14.7 s (14.2 s on a second run) | 122 ms |
+
+The cost is linear, about 0.1 ms per event (10 000 events a second). The lightest possible events (checkpoints only) were 0.25 s at 10 001 and
+1.3 s at 50 001, so real records are the right thing to plan with.
+
+What the defaults rest on:
+
+- **Walk in full at start up to 50 000 events** (about 5 s): cheap enough to do on every start, and stronger than trusting a checkpoint.
+- **Start budget 20 s**: covers a cold start (no checkpoint yet) of roughly 190 000 events on this machine. A database across a network adds a round
+  trip per 200-event batch, so allow a safety factor of three, about 60 000 events; far above a pilot's size. If production refuses to start with
+  `incomplete`, raise `LEDGER_STARTUP_BUDGET_MS` once (the limit is 300 000, about 1.5 million events here); the first background walk then records a
+  checkpoint and later starts take milliseconds.
+- **Background and timer walks: 15 minutes per tenant.** **Admin check: 30 s** (about 300 000 events; a larger chain answers `incomplete`).
+- **Restore check: 15 minutes per tenant.**
+
+Not measured: a database on another host, a chain beyond 150 000 events, and walk speed or writer latency while writes are happening. A walk reads
+one read-only snapshot, which by design takes no lock a writer waits on, but that is a property of the design and was **not** tested under load in
+this slice.
 
 ## What this does not do
 

@@ -22,6 +22,8 @@ export interface RestoreOptions {
   keep?: boolean;
   /** Restore into this named database instead of a random throwaway one. Implies keep. */
   targetDatabase?: string;
+  /** Lowers how many events of one tenant's ledger the `ledger chain` check will walk (default 50 million); a larger chain is "not ok". Tests use it. */
+  ledgerChainMaxEvents?: number;
 }
 
 export interface Check {
@@ -175,7 +177,7 @@ export async function restoreAndVerify(options: RestoreOptions): Promise<Restore
       const ownerFlags = manifest.privileges ? [] : ['--no-owner'];
       await run('pg_restore', ['--exit-on-error', ...ownerFlags, `--dbname=${database}`, restoreFrom], pgEnv(options.adminUrl, database));
       record('pg_restore', true, 'completed without errors');
-      await verify(restoredUrl, manifest, record);
+      await verify(restoredUrl, manifest, record, options.ledgerChainMaxEvents ?? RESTORE_CHAIN_MAX_EVENTS);
     } catch (error) {
       record('pg_restore', false, (error as Error).message.slice(0, 300));
     } finally {
@@ -198,7 +200,7 @@ async function dropDatabase(adminUrl: string, database: string) {
   }
 }
 
-async function verify(url: string, manifest: BackupManifest, record: (n: string, ok: boolean, d: string) => void) {
+async function verify(url: string, manifest: BackupManifest, record: (n: string, ok: boolean, d: string) => void, chainMaxEvents: number) {
   const db = new Client({ connectionString: url });
   await db.connect();
   try {
@@ -251,7 +253,7 @@ async function verify(url: string, manifest: BackupManifest, record: (n: string,
     }
 
     await verifyIsolation(db, expectedNames.filter((name) => manifest.tables[name]!.rlsEnabled), record);
-    await verifyLedgerChain(url, db, names, record);
+    await verifyLedgerChain(url, db, names, record, chainMaxEvents);
   } finally {
     await db.end();
   }
@@ -295,7 +297,7 @@ const RESTORE_CHAIN_MAX_EVENTS = 50_000_000;
  * Writes nothing (no checkpoint): a throwaway restore stays a throwaway. A backup from before the ledger has nothing to walk and says so;
  * a restored ledger that fails, or cannot finish, makes the restore "not ok".
  */
-async function verifyLedgerChain(url: string, db: Client, tables: string[], record: (n: string, ok: boolean, d: string) => void) {
+async function verifyLedgerChain(url: string, db: Client, tables: string[], record: (n: string, ok: boolean, d: string) => void, maxEvents: number) {
   const name = 'ledger chain';
   if (!tables.includes('ledger_events')) {
     record(name, true, 'not applicable: this backup predates the ledger');
@@ -320,7 +322,7 @@ async function verifyLedgerChain(url: string, db: Client, tables: string[], reco
     let events = 0;
     const problems: string[] = [];
     for (const [index, tenantId] of tenants.entries()) {
-      const result = await verifier.verify(tenantId, { mode: 'full', budgetMs: RESTORE_CHAIN_BUDGET_MS, maxEvents: RESTORE_CHAIN_MAX_EVENTS, recordCheckpoint: false });
+      const result = await verifier.verify(tenantId, { mode: 'full', budgetMs: RESTORE_CHAIN_BUDGET_MS, maxEvents, recordCheckpoint: false });
       events += result.eventsChecked;
       // Kinds and sequence numbers only: no tenant id and no value from a record reaches the report.
       if (result.status === 'failed') problems.push(`ledger ${index + 1} of ${tenants.length} FAILED: ${[...new Set(result.failures.slice(0, 5).map((f) => `${f.kind}${f.seq === null ? '' : ` at ${f.seq}`}`))].join(', ')}`);

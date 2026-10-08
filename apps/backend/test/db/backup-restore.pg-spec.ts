@@ -146,6 +146,7 @@ describe('restore (the one-command procedure, actually executed)', () => {
       'PASS row-level security settings',
       'PASS ownership and privileges',
       'PASS row-level security isolation',
+      'PASS ledger chain',
     ]);
     expect(report.ok).toBe(true);
     // 6 patients (3 live + 3 soft-deleted) + 3 reports + 3 recommendations + one row per applied migration

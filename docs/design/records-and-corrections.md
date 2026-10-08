@@ -600,7 +600,7 @@ Each was found by building or by an attack test, and each is covered by a test.
    required in production and whenever `LAB_REPORT_PIPELINE=enabled`, and the watch is off when it is not set elsewhere. `LEDGER_STARTUP_BUDGET_MS`
    (default 20 000) is **one total budget across tenants**; `LEDGER_FULL_VERIFY_INTERVAL_HOURS` (default 24; 0 turns the timer off).
 2. **The check at start** (6.6). A tenant is checked from its latest checkpoint within the remaining budget, except that a chain whose head is at or below
-   50 000 events (measured, `docs/ops/ledger-watch.md`) is walked in full, because a checkpoint is a shortcut and not a control. A tenant reached after the
+   50 000 events (measured: about 5 s for a full walk; 14.7 s for 150 000; `docs/ops/ledger-watch.md`) is walked in full, because a checkpoint is a shortcut and not a control. A tenant reached after the
    budget is spent is **incomplete**, never `ok`. Production refuses to start on `failed` or `incomplete`, and also when the check cannot run at all
    (login, network, missing tables): nothing is known, which is not "fine". **Refinement of the plan:** a *failed* check at start latches in development
    too (the plan left it unlatched until the background walk found the same thing); readiness is down and writes stop at once.

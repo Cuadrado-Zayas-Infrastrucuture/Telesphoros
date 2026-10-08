@@ -347,6 +347,26 @@ describe('LedgerMonitor: one verification at a time, and an admin check', () => 
     await monitor.onModuleDestroy();
   });
 
+  it('makes a background walk WAIT for an admin check that is running, instead of running beside it', async () => {
+    const verifier = new FakeVerifier(['a']);
+    const { monitor } = await started(verifier);
+    const hold = gate<VerifyResult>();
+    verifier.answer = () => hold.promise;
+    const admin = monitor.verifyNow('a', true);
+    const before = verifier.calls.length;
+    const pass = (monitor as unknown as { runFullPass(source: 'scheduled'): Promise<void> }).runFullPass('scheduled');
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    expect(verifier.calls.length).toBe(before); // the walk has not started its first tenant: it is queued behind the admin check
+    expect(verifier.maxActive).toBe(1);
+    verifier.answer = (tenantId, options) => outcome(tenantId, { mode: options.mode ?? 'tail' });
+    hold.release(outcome('a', { mode: 'full' }));
+    await admin;
+    await pass;
+    expect(verifier.calls.length).toBe(before + 1); // it ran once the slot was free
+    expect(verifier.maxActive).toBe(1);
+    await monitor.onModuleDestroy();
+  });
+
   it('answers an admin check with 503 PIPELINE_BUSY and a Retry-After while another is running, and works again afterwards', async () => {
     const hold = gate<VerifyResult>();
     const verifier = new FakeVerifier(['a']);

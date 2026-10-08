@@ -85,6 +85,17 @@ describe('the restore check "ledger chain"', () => {
     expect(await events(withDb(adminUrl(), name))).toEqual(await events(pg.adminUrl));
   });
 
+  it('is NOT ok when the chain cannot be walked to the end (too large for the limit): incomplete is never a pass', async () => {
+    const { backupDir } = await populated();
+    const report = await restoreAndVerify({ adminUrl: adminUrl(), backupDir, ledgerChainMaxEvents: 2 });
+    expect(report.ok).toBe(false);
+    expect(chainCheck(report)).toMatchObject({ ok: false });
+    expect(chainCheck(report)!.detail).toBe('ledger 1 of 1 could not be walked to the end (2 events checked)');
+    expect(report.checks.filter((c) => !c.ok).map((c) => c.name)).toEqual(['ledger chain']);
+    // Control: the same backup with room to walk everything passes.
+    expect(chainCheck(await restoreAndVerify({ adminUrl: adminUrl(), backupDir, ledgerChainMaxEvents: 5 }))).toMatchObject({ ok: true });
+  });
+
   it('is NOT ok for a restored ledger with an edited record, names the kind and sequence number, and shows no value or tenant', async () => {
     const { backupDir, tenantId } = await populated((c, ids) => c.query(`UPDATE report_captures SET text_scalars = text_scalars + 1 WHERE id = $1`, [ids.capture]));
     const report = await restoreAndVerify({ adminUrl: adminUrl(), backupDir });
