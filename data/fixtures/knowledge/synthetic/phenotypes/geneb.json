@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "1.0",
+  "synthetic": true,
+  "provenance": {
+    "source": "SYNTHETIC TEST FIXTURE - not CPIC content",
+    "sourceUrl": "https://example.invalid/synthetic",
+    "retrievedAt": "2026-01-01",
+    "sourceVersion": "synthetic-1"
+  },
+  "review": {
+    "status": "unreviewed"
+  },
+  "id": "geneb",
+  "kind": "gene-phenotype-map",
+  "gene": "GENEB",
+  "alleles": [
+    {
+      "name": "*1",
+      "function": "Normal function",
+      "activityValue": 1
+    },
+    {
+      "name": "*2",
+      "function": "Decreased function",
+      "activityValue": 0.5
+    },
+    {
+      "name": "*3",
+      "function": "No function",
+      "activityValue": 0
+    },
+    {
+      "name": "*4",
+      "function": "Decreased function",
+      "activityValue": 0.25
+    },
+    {
+      "name": "*5",
+      "function": "Decreased function",
+      "activityValue": 0.75
+    }
+  ],
+  "phenotypes": [
+    "Synthetic Low",
+    "Synthetic Medium",
+    "Synthetic High"
+  ],
+  "method": {
+    "type": "activity-score",
+    "ranges": [
+      {
+        "min": 0,
+        "minInclusive": true,
+        "max": 0.5,
+        "maxInclusive": true,
+        "phenotype": "Synthetic Low"
+      },
+      {
+        "min": 0.5,
+        "minInclusive": false,
+        "max": 1.5,
+        "maxInclusive": true,
+        "phenotype": "Synthetic Medium"
+      },
+      {
+        "min": 2,
+        "minInclusive": true,
+        "max": 2,
+        "maxInclusive": true,
+        "phenotype": "Synthetic High"
+      }
+    ]
+  }
+}

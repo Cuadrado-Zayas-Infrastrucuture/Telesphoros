@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "1.0",
+  "synthetic": true,
+  "provenance": {
+    "source": "SYNTHETIC TEST FIXTURE - not CPIC content",
+    "sourceUrl": "https://example.invalid/synthetic",
+    "retrievedAt": "2026-01-01",
+    "sourceVersion": "synthetic-1"
+  },
+  "review": {
+    "status": "unreviewed"
+  },
+  "id": "drugy-geneb",
+  "kind": "guideline",
+  "guidelineVersion": "synthetic-1",
+  "title": "Synthetic guideline for drugy",
+  "drug": "drugy",
+  "gene": "GENEB",
+  "recommendations": [
+    {
+      "phenotype": "Synthetic Low",
+      "strength": "Strong",
+      "recommendationText": "Y low."
+    },
+    {
+      "phenotype": "Synthetic Medium",
+      "strength": "Moderate",
+      "recommendationText": "Y medium."
+    }
+  ]
+}

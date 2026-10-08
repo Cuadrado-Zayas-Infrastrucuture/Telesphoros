@@ -21,6 +21,7 @@ module.exports = {
     ...(process.env.TEST_S3_ENDPOINT ? [] : ['/test/object-storage/']),
   ],
   moduleNameMapper: {
+    '^@telesphoros/cpic-schema$': '<rootDir>/../../packages/cpic-schema/src/index.ts',
     '^@telesphoros/shared-types$': '<rootDir>/../../packages/shared-types/src/index.ts',
     '^@telesphoros/fake-idp$': '<rootDir>/../../packages/fake-idp/src/index.ts',
   },

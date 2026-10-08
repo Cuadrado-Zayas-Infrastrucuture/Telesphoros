@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.0",
+  "synthetic": true,
+  "provenance": {
+    "source": "SYNTHETIC TEST FIXTURE - not CPIC content",
+    "sourceUrl": "https://example.invalid/synthetic",
+    "retrievedAt": "2026-01-01",
+    "sourceVersion": "synthetic-1"
+  },
+  "review": {
+    "status": "unreviewed"
+  },
+  "id": "drugx-genea",
+  "kind": "guideline",
+  "guidelineVersion": "synthetic-1",
+  "title": "Synthetic guideline for drugx",
+  "drug": "drugx",
+  "gene": "GENEA",
+  "recommendations": [
+    {
+      "phenotype": "Synthetic Normal",
+      "strength": "Strong",
+      "recommendationText": "X normal."
+    },
+    {
+      "phenotype": "Synthetic Intermediate",
+      "strength": "Moderate",
+      "recommendationText": "X intermediate.",
+      "implication": "X intermediate implication."
+    },
+    {
+      "phenotype": "Synthetic Poor",
+      "strength": "Strong",
+      "recommendationText": "X poor."
+    }
+  ]
+}

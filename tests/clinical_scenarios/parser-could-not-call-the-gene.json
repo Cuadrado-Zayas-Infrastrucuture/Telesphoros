@@ -1,0 +1,32 @@
+{
+  "name": "parser-could-not-call-the-gene",
+  "description": "A reason supplied by the parser is passed through to every drug that needs the gene.",
+  "calls": [
+    {
+      "gene": "GENEA",
+      "outcome": "indeterminate",
+      "reasonCode": "UNPHASED_VCF"
+    }
+  ],
+  "drugs": [
+    "drugw"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "phenotypes": [
+      {
+        "status": "indeterminate",
+        "gene": "GENEA",
+        "reasonCode": "UNPHASED_VCF"
+      }
+    ],
+    "recommendations": [
+      {
+        "status": "indeterminate",
+        "drug": "drugw",
+        "gene": "GENEA",
+        "reasonCode": "UNPHASED_VCF"
+      }
+    ]
+  }
+}

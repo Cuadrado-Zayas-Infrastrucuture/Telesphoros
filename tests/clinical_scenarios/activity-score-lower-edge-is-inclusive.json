@@ -1,0 +1,41 @@
+{
+  "name": "activity-score-lower-edge-is-inclusive",
+  "description": "Score 0.5 is the inclusive top of Low, and Medium excludes 0.5.",
+  "calls": [
+    {
+      "gene": "GENEB",
+      "outcome": "called",
+      "diplotype": "*2/*3"
+    }
+  ],
+  "drugs": [
+    "drugy"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "phenotypes": [
+      {
+        "status": "determined",
+        "gene": "GENEB",
+        "diplotype": "*2/*3",
+        "phenotype": "Synthetic Low",
+        "activityScore": 0.5
+      }
+    ],
+    "recommendations": [
+      {
+        "status": "recommendation",
+        "gene": "GENEB",
+        "drug": "drugy",
+        "diplotype": "*2/*3",
+        "phenotype": "Synthetic Low",
+        "strength": "Strong",
+        "guidelineId": "drugy-geneb",
+        "guidelineVersion": "synthetic-1",
+        "sourceUrl": "https://example.invalid/synthetic",
+        "recommendationText": "Y low.",
+        "implication": null
+      }
+    ]
+  }
+}

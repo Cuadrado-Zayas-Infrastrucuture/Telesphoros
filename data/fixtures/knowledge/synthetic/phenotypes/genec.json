@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0",
+  "synthetic": true,
+  "provenance": {
+    "source": "SYNTHETIC TEST FIXTURE - not CPIC content",
+    "sourceUrl": "https://example.invalid/synthetic",
+    "retrievedAt": "2026-01-01",
+    "sourceVersion": "synthetic-1"
+  },
+  "review": {
+    "status": "unreviewed"
+  },
+  "id": "genec",
+  "kind": "gene-phenotype-map",
+  "gene": "GENEC",
+  "alleles": [
+    {
+      "name": "*1",
+      "function": "Normal function"
+    },
+    {
+      "name": "*2",
+      "function": "Unknown function"
+    },
+    {
+      "name": "*3",
+      "function": "Unknown function"
+    }
+  ],
+  "phenotypes": [
+    "Synthetic Alpha",
+    "Synthetic Beta"
+  ],
+  "method": {
+    "type": "diplotype-table",
+    "rows": [
+      {
+        "diplotype": "*2/*1",
+        "phenotype": "Synthetic Alpha"
+      },
+      {
+        "diplotype": "*1/*1",
+        "phenotype": "Synthetic Beta"
+      },
+      {
+        "diplotype": "*3/*3",
+        "phenotype": "Synthetic Alpha"
+      }
+    ]
+  }
+}

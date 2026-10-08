@@ -1,0 +1,48 @@
+{
+  "name": "unknown-allele-and-malformed-diplotype",
+  "description": "An allele outside the definitions, and a diplotype not written \"a/b\", are both reported by reason and never guessed.",
+  "calls": [
+    {
+      "gene": "GENEA",
+      "outcome": "called",
+      "diplotype": "*1/*9"
+    },
+    {
+      "gene": "GENEC",
+      "outcome": "called",
+      "diplotype": "*1|*2"
+    }
+  ],
+  "drugs": [
+    "drugx"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "phenotypes": [
+      {
+        "status": "indeterminate",
+        "gene": "GENEA",
+        "reasonCode": "ALLELE_NOT_IN_DEFINITIONS"
+      },
+      {
+        "status": "indeterminate",
+        "gene": "GENEC",
+        "reasonCode": "MALFORMED_DIPLOTYPE"
+      }
+    ],
+    "recommendations": [
+      {
+        "status": "indeterminate",
+        "drug": "drugx",
+        "gene": "GENEA",
+        "reasonCode": "ALLELE_NOT_IN_DEFINITIONS"
+      },
+      {
+        "status": "indeterminate",
+        "drug": "drugx",
+        "gene": "GENEC",
+        "reasonCode": "MALFORMED_DIPLOTYPE"
+      }
+    ]
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "1.0",
+  "synthetic": true,
+  "provenance": {
+    "source": "SYNTHETIC TEST FIXTURE - not CPIC content",
+    "sourceUrl": "https://example.invalid/synthetic",
+    "retrievedAt": "2026-01-01",
+    "sourceVersion": "synthetic-1"
+  },
+  "review": {
+    "status": "unreviewed"
+  },
+  "id": "drugx-genec",
+  "kind": "guideline",
+  "guidelineVersion": "synthetic-1",
+  "title": "Synthetic guideline for drugx",
+  "drug": "drugx",
+  "gene": "GENEC",
+  "recommendations": [
+    {
+      "phenotype": "Synthetic Alpha",
+      "strength": "Optional",
+      "recommendationText": "X alpha."
+    },
+    {
+      "phenotype": "Synthetic Beta",
+      "strength": "No recommendation",
+      "recommendationText": "X beta."
+    }
+  ]
+}

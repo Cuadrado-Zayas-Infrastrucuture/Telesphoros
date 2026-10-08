@@ -1,0 +1,25 @@
+{
+  "name": "gene-with-tables-but-no-guideline",
+  "description": "A phenotype is determined even where no guideline uses it; no recommendation is invented.",
+  "calls": [
+    {
+      "gene": "GENED",
+      "outcome": "called",
+      "diplotype": "*1/*1"
+    }
+  ],
+  "drugs": [],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "phenotypes": [
+      {
+        "status": "determined",
+        "gene": "GENED",
+        "diplotype": "*1/*1",
+        "phenotype": "Synthetic Only",
+        "activityScore": null
+      }
+    ],
+    "recommendations": []
+  }
+}

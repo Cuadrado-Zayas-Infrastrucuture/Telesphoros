@@ -1,0 +1,26 @@
+{
+  "name": "empty-report",
+  "description": "No calls: every needed gene is reported as missing.",
+  "calls": [],
+  "drugs": [
+    "drugx"
+  ],
+  "expected": {
+    "knowledgeSetId": "$KNOWLEDGE_SET_ID",
+    "phenotypes": [],
+    "recommendations": [
+      {
+        "status": "indeterminate",
+        "drug": "drugx",
+        "gene": "GENEA",
+        "reasonCode": "GENE_NOT_IN_REPORT"
+      },
+      {
+        "status": "indeterminate",
+        "drug": "drugx",
+        "gene": "GENEC",
+        "reasonCode": "GENE_NOT_IN_REPORT"
+      }
+    ]
+  }
+}
