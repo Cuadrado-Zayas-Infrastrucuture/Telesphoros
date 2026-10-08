@@ -8,9 +8,9 @@ import { comparisonCopy, isUnavailableValue, UNAVAILABLE_TOKENS } from '../repor
 import { bindingMismatches, PINNED_POPPLER_VERSION } from '../report-reader/pinned-reader';
 import { readerResultSchema } from '../report-reader/reader-result';
 import {
-  contextSchema, lookupInputSchema, policySchema, scopeSchema, snapshotSchema, GENES,
+  contextSchema, lookupInputSchema, policySchema, recordSchema, scopeSchema, snapshotSchema, GENES,
   type AdmissionStage, type EvidenceRef, type GeneState, type LookupPorts, type LookupReason,
-  type LookupSnapshot, type OfflineLookupResult, type SourceRecord, type TrustedProcessingScope,
+  type OfflineLookupResult, type SourceRecord, type TrustedProcessingScope,
   type ValidatedBindings, type ValidatedRecord,
 } from './contracts';
 import { artifactHash, boundedScalars, parseRecordJson, recordHash } from './strict-json';
@@ -35,11 +35,14 @@ async function operation<T>(action: (signal: AbortSignal) => Promise<T>): Promis
   } finally { if (timer !== undefined) clearTimeout(timer); controller.abort(); }
 }
 
-function currentRecord(snapshot: LookupSnapshot, id: string): ValidatedRecord | null {
-  const wrappers = snapshot.records.filter((r) => r.payload.id === id);
+function currentRecord(snapshot: z.infer<typeof snapshotSchema>, id: string): ValidatedRecord | null {
+  const wrappers = snapshot.records.filter((r) => typeof r.payload === 'object' && r.payload !== null && 'id' in r.payload && r.payload.id === id);
   const latest = snapshot.latestReviews.filter((r) => r.recordId === id);
   if (wrappers.length !== 1 || latest.length !== 1) return null;
-  const { payload, recordSha256 } = wrappers[0]!;
+  const parsed = recordSchema.safeParse(wrappers[0]!.payload);
+  if (!parsed.success) return null;
+  const payload = parsed.data;
+  const recordSha256 = wrappers[0]!.recordSha256;
   if (recordHash(payload) !== recordSha256 || payload.review.decision !== 'accepted'
       || latest[0]!.reviewId !== payload.review.id || latest[0]!.sequence !== payload.review.sequence) return null;
   return payload;
@@ -185,7 +188,7 @@ export async function lookupOffline(
             || map.review.status !== 'reviewed' || map.review.contentSha256 !== contentSha256(map) || file.contentSha256 !== contentSha256(map)
             || record.mappingFileId !== map.id || record.mappingContentSha256 !== file.contentSha256) return hold(stage, 'lookup-input-invalid');
       } else if (state.state === 'approved-unavailable') {
-        if (record.type !== 'unavailable' || diplotype.state !== 'missing' || result.state !== 'present'
+        if (snapshot.matcherPolicyBytes === null || record.type !== 'unavailable' || diplotype.state !== 'missing' || result.state !== 'present'
             || !isUnavailableValue(result.text) || !occurrence.resultSpan || !same(state.valueEvidence, refFor(capture.textSha256, occurrence.resultSpan))
             || !same(record.valueEvidence, state.valueEvidence) || record.matcherPolicySha256 !== state.matcherPolicySha256
             || record.routingPolicySha256 !== (raw as Record<string, unknown>).policySha256
@@ -221,6 +224,7 @@ export async function lookupOffline(
     bindings.contextRecordSha256 = contextHash;
     dependencyRecords.push({ id: contextReview.id, recordSha256: recordHash(contextReview) });
     stage = 'policy';
+    if (snapshot.policyBytes === null) return hold(stage, 'lookup-policy-invalid');
     const policyParsed = policySchema.safeParse(parseRecordJson(snapshot.policyBytes));
     if (!policyParsed.success) return hold(stage, 'lookup-policy-invalid');
     const policy = policyParsed.data;
