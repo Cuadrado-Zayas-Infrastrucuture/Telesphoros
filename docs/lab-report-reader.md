@@ -82,5 +82,8 @@ A held report produces no drug results. Nothing in a hold or in the audit trail 
 - D08 (monospaced two-column overflow) is held by design: Poppler's `-layout` capture turns 2, 3 and 4 character gaps into
   three spaces, so the evidence is gone from the stored text. Recovering it needs coordinates, which is the separate,
   unapproved experiment (5B-2b).
+- The adapter's unavailable-value matcher needs a runtime with **Unicode 16.0** data (`process.versions.unicode`), which
+  Node 22.22.0 has; it refuses to load otherwise. CI pins that exact Node release (docs/ops/ci-cd.md). Developers on another
+  Node release will see the adapter's tests fail to load, by design.
 - Poppler 26.03.0 is a version pin (a constant the adapter checks against the capture record). The production image and the
   PDF-to-text runner arrive with hosting and the records slice.

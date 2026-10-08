@@ -23,6 +23,11 @@ A green run is evidence about the code at that commit. It is not evidence about 
 
 - **Every GitHub Action is pinned to a full commit SHA**, with the version in a trailing comment. Tags can be moved; SHAs cannot.
   Dependabot opens the update PRs and changes both. `pnpm test:ci-config` fails on an unpinned action.
+- **Node is pinned to an exact release** (`NODE_VERSION` in `ci.yml`, currently 22.22.0), not a floating major. The report
+  adapter's unavailable-value matcher is pinned to Unicode 16.0 and refuses to load on a runtime with other Unicode data;
+  a newer Node 22 already reports 17.0. To move Node: run the matcher's conformance tests on the new release, then change
+  the pin in `unavailable-matcher.ts` and `docs/design/report-adapter-spec.md` in the same PR. `pnpm test:ci-config` fails
+  if `NODE_VERSION` becomes a floating major.
 - **Permissions are `contents: read` and nothing else.** Checks are reported by the runner itself and need no write scope.
 - **gitleaks is built from source** (`go install`, verified by the Go checksum database) rather than using the maintainers'
   GitHub Action, which requires a paid licence for organization repositories.
