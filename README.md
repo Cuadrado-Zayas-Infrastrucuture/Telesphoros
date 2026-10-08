@@ -1,4 +1,4 @@
-# Telesphoros Remastered
+# Telesphoros 
 
 CPIC-guided pharmacogenomic (PGx) decision support at the point of care.
 Cuadrado Zayas Infrastructure LLC, San Juan, PR.
