@@ -81,22 +81,19 @@ current Terraform.
 
 ## Requirement: backups live away from the database, ideally with another provider
 
-Founder requirement (2026-10-08). **Not met yet.** Today the nightly logical backup uploads to an S3 bucket in a
-separate AWS region, under its own KMS key and a write-only role. That is a different region, but the **same provider
-and the same account**, and nothing yet says where the backup job runs. To meet the requirement:
+Founder requirement (2026-10-08). **Built and tested against an emulator; not yet met in fact.** It is met when the
+first real drill in `docs/ops/offsite-backups.md` has been run against the chosen provider. What exists:
 
-- Send backups to a second provider through the S3 protocol (the upload code is provider-neutral except that it
-  hard-codes AWS KMS encryption, which other providers do not accept). Encryption must then be **client-side and
-  authenticated**, with keys held outside both providers. *Done in the backup format change: format 2 is chunked
-  AES-256-GCM with a signed manifest and a key file (`docs/ops/backup-and-restore.md`). Still open: the provider-neutral
-  upload itself.*
-- Run the backup job on a host that is not the database host, with write-only credentials in a separate provider
-  account, object lock or versioning on the target, and no copy left on the job's disk after the upload.
-- Make the restore drill read from the second provider, so the copy that matters is the one that is proven.
-- Any provider that holds backups of real patient data needs a signed business associate agreement first. Until then
-  backups contain synthetic data only.
+- Backups are encrypted and signed on the backup host (chunked AES-256-GCM, signed manifest, key file held offline by
+  two people; `docs/ops/backup-and-restore.md`), so the provider holds only ciphertext.
+- Upload goes to any S3-compatible provider with its own `BACKUP_S3_*` credentials (the AWS credentials are never
+  used), a separate upload-only key and read-only key, Object Lock on every object, and optionally no copy left on the
+  job's disk. `backup-check` proves the set-up, including that the keys really are upload-only and read-only.
+- Restore can read directly from the second provider and verifies exactly like a local restore.
 
-Decision needed from the founder: which provider. Tracked as a dedicated change after the tenancy work.
+Still open: which provider (founder, after reading its BAA); where the scheduled job runs (hosting phase); the first
+drill with a real provider; multipart upload above 5 GiB. Any provider that holds backups of real patient data needs a
+signed business associate agreement first. Until then backups contain synthetic data only.
 
 ## Running it locally
 

@@ -1,11 +1,11 @@
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Client } from 'pg';
 import { opensslEncrypt, sha256File } from './backup';
 import { BackupCryptoError, decryptFile, keyIdHex, readEncryptionHeader, readKeyFile, verifyManifestMac } from './backup-crypto';
 import { type BackupManifest, ManifestError, parseManifest } from './backup-manifest';
+import { makeTempDir, sweepStaleTempDirs } from './cleanup';
 import { pgEnv, quoteIdent, run } from './pg-process';
 
 export interface RestoreOptions {
@@ -109,7 +109,9 @@ export async function restoreAndVerify(options: RestoreOptions): Promise<Restore
   if (actualSha !== manifest.dump.sha256) return failed();
 
   // 2. Decrypt into a private temp dir (removed no matter what).
-  const workDir = mkdtempSync(join(tmpdir(), 'restore-'));
+  sweepStaleTempDirs(); // leftovers from an earlier run that was killed outright
+  const work = makeTempDir('restore-'); // removed on return, error, uncaught exception, SIGINT/SIGTERM/SIGHUP
+  const workDir = work.path;
   try {
     let restoreFrom = dumpPath;
     if (manifest.formatVersion === 2) {
@@ -167,7 +169,7 @@ export async function restoreAndVerify(options: RestoreOptions): Promise<Restore
       if (!keep) await dropDatabase(options.adminUrl, database);
     }
   } finally {
-    rmSync(workDir, { recursive: true, force: true });
+    work.dispose();
   }
 
   return { ok: checks.every((c) => c.ok), database, kept: keep && checks.every((c) => c.ok), checks };

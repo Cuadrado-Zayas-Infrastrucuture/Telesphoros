@@ -4,7 +4,7 @@
 
 | Data | Mechanism | Status |
 | --- | --- | --- |
-| Database, logical | `db:backup`: consistent snapshot, authenticated encryption (format 2), signed manifest, optional off-site upload (separate region, Object Lock) | **Built and drilled** (below); a second provider is the next change |
+| Database, logical | `db:backup`: consistent snapshot, authenticated encryption (format 2), signed manifest, off-site upload to a second provider with Object Lock | **Built and tested against an emulator; not yet drilled with a real provider** (`docs/ops/offsite-backups.md`) |
 | Database, point-in-time | RDS automated backups + cross-region replication (Terraform) | **Written, never applied, unproven** |
 | Report files | S3 versioning (Terraform) | **Not backed up by this tool; not replicated to a second region.** A known gap |
 
@@ -21,7 +21,7 @@ pnpm --filter @telesphoros/backend db:keygen -- --out /run/secrets/backup.key
 export DATABASE_ADMIN_URL=postgres://<admin>@<host>/<db>
 pnpm --filter @telesphoros/backend db:backup -- --dest /var/backups/telesphoros \
     --key-file /run/secrets/backup.key \
-    --upload s3://<backups-bucket>/nightly --kms-key-id <backup-kms-key-arn>
+    --upload s3://<backups-bucket>/nightly --remove-local   # second provider: see docs/ops/offsite-backups.md
 
 # Restore + verify into a THROWAWAY database (safe to run any time; this is the drill)
 export DATABASE_ADMIN_URL=postgres://<admin>@<target-host>/postgres
@@ -34,8 +34,8 @@ made without `--key-file` is **not encrypted** (development and tests only; the 
 
 A real recovery: `restore ... --target-db telesphoros_restored` keeps the database; then point the application at it.
 The target server must already have the `telesphoros_app` role (migration 0002 creates it, or run
-`infrastructure/docker/postgres-init.sql`'s first block). Fetch an off-site backup first with
-`aws s3 sync s3://<backups-bucket>/nightly/backup-<timestamp> <dir>`.
+`infrastructure/docker/postgres-init.sql`'s first block). To restore from the off-site copy, give `--from s3://<bucket>/nightly --latest`
+(or `…/backup-<timestamp>`); it downloads with the read-only key and verifies as below.
 
 ## What `restore` proves (exit code 1 if any step fails)
 
@@ -82,8 +82,8 @@ left an **unencrypted dump** on disk; the manifest dropped the PostgreSQL versio
 - **Scheduling:** the daily run is not wired to a scheduler yet (it belongs with the compute, Phase 6/7). Until it
   is, nothing runs this automatically.
 - **Replay:** the signature proves a backup is genuine and unaltered; it does not prove it is the *latest*. Someone who
-  can write to the bucket could put back an older, genuine backup (or hide a newer one). Object Lock and versioning
-  on the target and a check that last night's backup exists are what answer that; they belong to the next change.
+  can write to the bucket could put back an older, genuine backup (or hide a newer one). Object Lock on every upload and
+  `backup-check --max-age-hours` (does last night's backup exist, is it authentic) answer that; see `docs/ops/offsite-backups.md`.
 - **What the provider can see:** the manifest is readable, so a provider sees table names, row counts, the migration
   list, the database name, the PostgreSQL version and the backup time; it does not see any row, value or tenant id.
 - Restoring needs a PostgreSQL client at least as new as the server (`pg_dump`/`pg_restore` 16 here).
