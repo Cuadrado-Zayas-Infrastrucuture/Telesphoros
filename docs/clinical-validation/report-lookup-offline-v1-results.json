@@ -1,0 +1,131 @@
+{
+  "schema": "report-lookup-offline-verification/1",
+  "date": "2026-10-08",
+  "baseCommit": "ea0529a74dffed0f312c776b197c608efcc21a08",
+  "scope": "offline synthetic implementation only",
+  "clinicalApproval": false,
+  "trainingEligible": false,
+  "apiIntegrated": false,
+  "databaseIntegrated": false,
+  "modelInvolved": false,
+  "environment": {
+    "node": "22.22.0",
+    "unicode": "16.0",
+    "pnpm": "10.28.0",
+    "python": "3.14.6",
+    "os": "Darwin",
+    "osRelease": "27.0.0",
+    "machine": "arm64"
+  },
+  "checks": {
+    "newBoundaryPassed": 82,
+    "newBoundaryFailed": 0,
+    "routingMatrixCells": 36,
+    "legacyTargetedBaselinePassed": 263,
+    "legacyTargetedBaselineFailed": 0,
+    "backendPassed": 853,
+    "backendFailed": 0,
+    "backendPending": 43,
+    "backendPassedSuites": 47,
+    "databaseStorageTiers": "not enabled locally; CI required",
+    "typecheck": "passed",
+    "lint": "passed",
+    "build": "passed",
+    "importedHandoffOriginalsVerified": 119,
+    "mutation": {
+      "schema": "report-lookup-mutation-results/1",
+      "syntheticDevelopmentOnly": true,
+      "workingSourcesUnchanged": true,
+      "results": [
+        {
+          "id": "harmless-control",
+          "oracle": "canonical / canonical",
+          "passedAssertions": 1,
+          "failedAssertions": 0,
+          "runtimeErrorSuites": 0,
+          "controlOrMutantExpectedResult": true
+        },
+        {
+          "id": "erase-unavailable-basis",
+          "oracle": "erasing the unavailable basis",
+          "passedAssertions": 0,
+          "failedAssertions": 1,
+          "runtimeErrorSuites": 0,
+          "controlOrMutantExpectedResult": true
+        },
+        {
+          "id": "admit-empty-diplotype",
+          "oracle": "empty diplotype beside a canonical",
+          "passedAssertions": 0,
+          "failedAssertions": 1,
+          "runtimeErrorSuites": 0,
+          "controlOrMutantExpectedResult": true
+        },
+        {
+          "id": "ignore-diplotype-for-unavailable",
+          "oracle": "unavailable beside",
+          "passedAssertions": 0,
+          "failedAssertions": 2,
+          "runtimeErrorSuites": 0,
+          "controlOrMutantExpectedResult": true
+        },
+        {
+          "id": "capture-scope-bypass",
+          "oracle": "capture is bound to",
+          "passedAssertions": 0,
+          "failedAssertions": 3,
+          "runtimeErrorSuites": 0,
+          "controlOrMutantExpectedResult": true
+        },
+        {
+          "id": "stale-capture-acceptance",
+          "oracle": "latest rejection cannot be bypassed",
+          "passedAssertions": 0,
+          "failedAssertions": 1,
+          "runtimeErrorSuites": 0,
+          "controlOrMutantExpectedResult": true
+        },
+        {
+          "id": "context-scope-bypass",
+          "oracle": "external context targets",
+          "passedAssertions": 0,
+          "failedAssertions": 3,
+          "runtimeErrorSuites": 0,
+          "controlOrMutantExpectedResult": true
+        },
+        {
+          "id": "superseded-evidence-review",
+          "oracle": "record hash tampering and superseded",
+          "passedAssertions": 0,
+          "failedAssertions": 1,
+          "runtimeErrorSuites": 0,
+          "controlOrMutantExpectedResult": true
+        },
+        {
+          "id": "combined-falls-back",
+          "oracle": "excluded combined cell never falls back",
+          "passedAssertions": 0,
+          "failedAssertions": 1,
+          "runtimeErrorSuites": 0,
+          "controlOrMutantExpectedResult": true
+        },
+        {
+          "id": "expose-clinical-wording",
+          "oracle": "canonical / canonical",
+          "passedAssertions": 0,
+          "failedAssertions": 1,
+          "runtimeErrorSuites": 0,
+          "controlOrMutantExpectedResult": true
+        }
+      ],
+      "allExpected": true
+    }
+  },
+  "limits": [
+    "All fixtures are visible synthetic development evidence; no independent accuracy claim.",
+    "Both-absent source is held by the current reader, though its routing contract is verified.",
+    "Trusted record-store authorization and atomic persistence are not implemented in this offline slice.",
+    "Cooperative operation cancellation cannot kill an uncooperative port.",
+    "CI required checks must pass before merge."
+  ]
+}
