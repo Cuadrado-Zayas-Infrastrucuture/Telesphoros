@@ -44,7 +44,7 @@ const reinstate = (t: string, evaluationId: string, previous: string) =>
 const current = async (t: string, reportId: string) => (await repo.currentEvaluationIds(t, [reportId])).get(reportId);
 
 describe('the current evaluation of a report', () => {
-  it('is the latest ACTIVE one, through retraction, reinstatement and supersession', async () => {
+  it('is the NEWEST evaluation if it is active and otherwise none (an older active one is never promoted), through retraction, reinstatement and supersession', async () => {
     const t = tenant();
     const r = await report(t);
     expect(await current(t, r.reportId)).toBeNull(); // no evaluation yet: an entry, and it is null
@@ -54,19 +54,37 @@ describe('the current evaluation of a report', () => {
     expect(await current(t, r.reportId)).toBe(e2);
 
     const retraction = await retract(t, e2);
-    expect(await current(t, r.reportId)).toBe(e1); // the newest is retracted: the older active one is current again
+    expect(await current(t, r.reportId)).toBeNull(); // the newest is retracted: e1 is still active, but it is NOT current (specification 22)
     const second = await retract(t, e1);
     expect(await current(t, r.reportId)).toBeNull();
     const reinstated = await reinstate(t, e2, retraction);
-    expect(await current(t, r.reportId)).toBe(e2); // a reinstatement makes it active again
+    expect(await current(t, r.reportId)).toBe(e2); // a reinstatement makes the newest current again
     await reinstate(t, e1, second);
-    expect(await current(t, r.reportId)).toBe(e2); // e1 is active too, but e2 is the later one
+    expect(await current(t, r.reportId)).toBe(e2); // e1 is active too, but e2 is the newer one
 
     const e3 = await r.evaluate();
     await repo.insertCorrection(t, 'syn-reviewer', { evaluationId: e2, kind: 'supersession', reasonCode: 'software-defect', previousCorrectionId: reinstated, replacementEvaluationId: e3 });
     expect(await current(t, r.reportId)).toBe(e3);
-    await retract(t, e3);
-    expect(await current(t, r.reportId)).toBe(e1); // e2 is superseded (terminal, not active); e1 is the latest active
+    const third = await retract(t, e3);
+    expect(await current(t, r.reportId)).toBeNull(); // e2 is superseded (terminal) and e1 is active, yet neither is the newest: nothing is current
+    await reinstate(t, e3, third);
+    expect(await current(t, r.reportId)).toBe(e3); // control: the newest, active again, is current again
+
+    const e4 = await r.evaluate();
+    await retract(t, e4);
+    expect(await current(t, r.reportId)).toBeNull();
+    const e5 = await r.evaluate();
+    expect(await current(t, r.reportId)).toBe(e5); // a fresh evaluation is what restores a current one after a retraction
+  });
+
+  it('never makes a superseded evaluation current, even if the database was handed a replacement that is OLDER (the service refuses that; the query must not depend on it)', async () => {
+    const t = tenant();
+    const r = await report(t);
+    const e1 = await r.evaluate();
+    const e2 = await r.evaluate();
+    expect(await current(t, r.reportId)).toBe(e2); // control: before the supersession, e2 is current
+    await repo.insertCorrection(t, 'syn-reviewer', { evaluationId: e2, kind: 'supersession', reasonCode: 'software-defect', replacementEvaluationId: e1 });
+    expect(await current(t, r.reportId)).toBeNull(); // e2 is superseded and still the newest; e1 is not promoted either
   });
 
   it('is decided per report, and the list filter agrees with it', async () => {
@@ -77,7 +95,7 @@ describe('the current evaluation of a report', () => {
     expect([...(await repo.currentEvaluationIds(t, [a.reportId, b.reportId])).entries()].sort()).toEqual([[a.reportId, a2], [b.reportId, b1]].sort());
     await retract(t, a2);
     const listed = (await repo.listEvaluations(t, { current: true })).map((e) => e.id).sort();
-    expect(listed).toEqual([a1, b1].sort());
+    expect(listed).toEqual([b1]); // a's newest is retracted, so a has no current evaluation (a1 is active but not promoted)
     expect((await repo.listEvaluations(t, {})).map((e) => e.id).sort()).toEqual([a1, a2, b1].sort());
     expect((await repo.listEvaluations(t, { current: true, reportId: b.reportId })).map((e) => e.id)).toEqual([b1]);
     expect(await repo.listEvaluations(t, { current: true, reportId: randomUUID() })).toEqual([]);

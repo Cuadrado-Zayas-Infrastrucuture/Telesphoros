@@ -374,19 +374,22 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 }
 
 /**
- * The current evaluation of each report (specification 4.5): the latest (`seq`) one that is ACTIVE. An evaluation is not active when its
- * last correction (the one with no child) is a retraction or a supersession; no corrections, or a last reinstatement, means active.
+ * The current evaluation of each report (specification 4.5, amended in section 22): the NEWEST (`seq`) evaluation of the report, if it is
+ * ACTIVE, and otherwise none. An older active evaluation is never promoted when the newest is retracted: a retraction says "do not rely on
+ * this", and nobody has said the older one is what to rely on instead. An evaluation is not active when its last correction (the one with
+ * no child) is a retraction or a supersession; no corrections, or a last reinstatement, means active.
  * Uses `$1` for the tenant. Computed in one statement, so a list built from it is consistent.
  */
 const CURRENT_EVALUATIONS_SQL = `
-  SELECT DISTINCT ON (a.report_id) a.id
-    FROM evaluations a
-   WHERE a.tenant_id = $1
-     AND NOT EXISTS (
-       SELECT 1 FROM corrections c
-        WHERE c.tenant_id = a.tenant_id AND c.evaluation_id = a.id AND c.kind IN ('retraction', 'supersession')
-          AND NOT EXISTS (SELECT 1 FROM corrections n WHERE n.tenant_id = c.tenant_id AND n.previous_correction_id = c.id))
-   ORDER BY a.report_id, a.seq DESC`;
+  SELECT newest.id
+    FROM (SELECT DISTINCT ON (a.report_id) a.id, a.tenant_id
+            FROM evaluations a
+           WHERE a.tenant_id = $1
+           ORDER BY a.report_id, a.seq DESC) newest
+   WHERE NOT EXISTS (
+     SELECT 1 FROM corrections c
+      WHERE c.tenant_id = newest.tenant_id AND c.evaluation_id = newest.id AND c.kind IN ('retraction', 'supersession')
+        AND NOT EXISTS (SELECT 1 FROM corrections n WHERE n.tenant_id = c.tenant_id AND n.previous_correction_id = c.id))`;
 
 /**
  * The key under which "the same evaluation" is recognised: what was evaluated (capture and acceptance), with which knowledge and

@@ -31,8 +31,6 @@ Slice 5B-3.2 (the pipeline endpoints) is complete. Slice 5B-3.3 (corrections, di
 
 - **5B-3.3a corrections, 3.3b disputes and the overlay, 3.3c ledger watch** (all built, above). The pipeline stays synthetic, off by default and refused in
   production. **No alarm is connected to the `ledger-compromised` log line yet** (Terraform is written, never applied); see [ops/ledger-watch.md](ops/ledger-watch.md).
-- **Open point for a clinical decision (from 3.3a):** `current` follows the specification literally, so retracting the newest evaluation makes an older
-  still-active one current again.
 - **Adapter-side R05 readiness proposal**: written, awaiting approval and five owner choices; nothing started.
 - **Real Poppler text runner**: needs the pinned Poppler 26.03.0 binary and a magic-byte check on uploaded files; separate slice.
 - **Tableau (analytics)**: feasible as its own slice; synthetic data only until a BAA; a separate read-only role over de-identified aggregate

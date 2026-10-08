@@ -171,7 +171,7 @@ export const evaluationDtoSchema = z.strictObject({
   geneInputs: z.array(z.looseObject({ gene: z.string(), state: z.string() })),
   /** Every correction about this evaluation, oldest first. The evaluation itself is never changed; `state` is derived from the last one. */
   corrections: z.array(correctionDtoSchema),
-  /** True for the latest active evaluation of its report (specification 4.5). An older active evaluation becomes current again if a newer one is retracted. */
+  /** True for the NEWEST evaluation of its report if it is active; a report whose newest is retracted has none (specification 4.5, amended in section 22). */
   current: z.boolean(),
   advisory: z.strictObject({ activeDisputes: z.number().int().min(0) }),
   actionable: z.literal(false),

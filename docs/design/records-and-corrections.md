@@ -206,8 +206,8 @@ returned by id, clearly marked, and its original content is unchanged.
 
 ### 4.5 "Current"
 
-The current evaluation of a report is the latest (`seq`) evaluation of that report that is `active`. Older evaluations, and
-retracted or superseded ones, are history. A newer evaluation of the same report made with newer knowledge is **not** a
+The current evaluation of a report is its latest (`seq`) evaluation, **if that one is `active`; otherwise the report has none**
+(amended in section 22: an older active evaluation is never promoted). Older evaluations, and retracted or superseded ones, are history. A newer evaluation of the same report made with newer knowledge is **not** a
 correction: it is a new row, and the older one stays `active` (decision 10).
 
 ## 5. Disputed cells
@@ -564,9 +564,10 @@ Each was found by building or by an attack test, and each is covered by a test.
 3. **A replacement** (4.1, 4.3) must also be **newer** than the evaluation it replaces and itself **active** (service rules; no migration). A held
    replacement is allowed ("replaced by no result"). If the replacement is retracted a moment after the check, the history reads correctly and no
    record is wrong; this is recorded, not prevented. Unknown replacement: 404.
-4. **`current`** (4.5) is on every evaluation (`current: boolean`) and `GET /evaluations?current=true` returns the latest active evaluation of each report
+4. **`current`** (4.5) is on every evaluation (`current: boolean`) and `GET /evaluations?current=true` returns the current evaluation of each report
    (only the value `true` is accepted). It follows the specification as written: if the newest evaluation is retracted, an **older still-active evaluation
-   becomes current again**. This is flagged for a clinical decision; it is not silently changed.
+   becomes current again**. This is flagged for a clinical decision; it is not silently changed. **Superseded by section 22: the founder decided
+   that nothing is current in that case.**
 5. **Correction history in the evaluation** (4.4, 8). `corrections` lists every correction oldest first; the evaluation's `state` and `supersededBy` are
    derived from that same list, so the two cannot disagree. A correction shows its note as `{id, bodySha256}` only; whether a note was redacted is shown
    when it is read.
@@ -621,3 +622,19 @@ Each was found by building or by an attack test, and each is covered by a test.
    with `role` set on the connection), writing nothing; "not applicable" for a backup that predates the ledger.
 8. **Not done, and said so.** No alarm is connected to the `ledger-compromised` log line (Terraform is written, never applied); the head is still not
    anchored outside the database (6.9).
+
+## 22. Amendment made after the clinical decision on `current` (this governs where it differs from 4.5 and section 19)
+
+The founder (a pharmacist) decided on 2026-10-08 that when the newest evaluation of a report is retracted, **nothing is current**. The rule is now:
+
+> The current evaluation of a report is its newest evaluation (by `seq`) if that evaluation is `active`. Otherwise the report has no current evaluation.
+
+- **Why.** A retraction says "do not rely on this". Quietly promoting an older evaluation would present a result that predates the corrected one as the
+  one to rely on, when nobody has said so. Failing closed is the safer default for decision support.
+- **What follows.** An older evaluation that was never corrected stays `active` (its `state` is unchanged) but `current` is `false`. A reinstatement of the
+  newest makes it current again. A fresh evaluation (a new capture and acceptance, or newer knowledge) is the newest and is current if active. A
+  supersession is unchanged: the replacement is newer, so it is current.
+- **Known consequence.** If the newest is retracted and the older one was in fact right, a reviewer cannot say so; they need a fresh capture and
+  evaluation. A later "affirm" action could close that gap if it proves needed; it is not built.
+- **What did not change.** `state`, `supersededBy`, the correction rules, stored records (no migration), and every other field of an evaluation.
+  `GET /evaluations?current=true` and `current` on each evaluation follow the new rule from the same single query.
