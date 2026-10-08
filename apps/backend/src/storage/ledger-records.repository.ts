@@ -31,9 +31,9 @@ export abstract class LedgerRecordsRepository {
    */
   abstract insertEvaluation(tenantId: string, actor: string, input: EvaluationInput): Promise<InsertResult>;
   abstract findEvaluation(tenantId: string, id: string): Promise<Projected | undefined>;
-  /** `current` keeps only the latest ACTIVE evaluation of each report (specification 4.5); the other filters narrow the result further. */
+  /** `current` keeps only the current evaluation of each report: its newest, if active (specification 4.5, amended in section 22); the other filters narrow the result further. */
   abstract listEvaluations(tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }): Promise<Projected[]>;
-  /** For each report, the id of its current evaluation (the latest active one), or null when it has none. Every asked report has an entry. */
+  /** For each report, the id of its current evaluation (its newest, if that is active), or null when it has none. Every asked report has an entry. */
   abstract currentEvaluationIds(tenantId: string, reportIds: string[]): Promise<Map<string, string | null>>;
 
   abstract insertCorrection(tenantId: string, actor: string, input: CorrectionInput): Promise<InsertResult>;

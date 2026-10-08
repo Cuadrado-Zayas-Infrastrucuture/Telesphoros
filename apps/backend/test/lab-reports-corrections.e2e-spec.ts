@@ -281,23 +281,25 @@ import { bearer } from './helpers/tokens';
     });
   });
 
-  describe('"current" (specification 4.5): the latest ACTIVE evaluation of a report', () => {
+  describe('"current" (specification 4.5, amended in section 22): the newest evaluation of a report, if it is active', () => {
     const list = (who: Person, query = '') => lab.api().get(`/api/v1/evaluations${query}`).set(bearer(who.token));
     const ids = (res: { body: Array<{ id: string }> }) => res.body.map((e) => e.id).sort();
 
-    it('follows the corrections: newest active; an older active one again if the newest is retracted; none if all are', async () => {
+    it('follows the corrections: the newest if active; NONE if the newest is retracted (an older active one is not promoted); the newest again once reinstated', async () => {
       const s = await withSecond(await scenario());
       const mine = (query: string) => list(s.clinician, `?reportId=${s.reportId}${query}`);
       expect(ids(await mine('&current=true').expect(200))).toEqual([s.e2.id]);
       expect(ids(await mine('').expect(200))).toEqual([s.e1.id, s.e2.id].sort()); // without the filter, both
       expect((await mine('').expect(200)).body.map((e: Evaluation) => [e.id, e.current]).sort()).toEqual([[s.e1.id, false], [s.e2.id, true]].sort());
 
-      // Retract the NEWEST: the older, still-active evaluation becomes current again (the specification as written).
+      // Retract the NEWEST: the report has no current evaluation. The older one is still ACTIVE (it was never corrected) but is not promoted:
+      // a reviewer who retracted the newest said "do not rely on this", and nobody has said the older one is what to rely on instead.
       const retraction = (await correct(s.reviewer, s.e2.id, { kind: 'retraction', reasonCode: 'software-defect' }).expect(201)).body;
-      expect(ids(await mine('&current=true').expect(200))).toEqual([s.e1.id]);
-      expect((await read(s.clinician, s.e1.id)).body.current).toBe(true);
+      expect((await mine('&current=true').expect(200)).body).toEqual([]);
+      expect((await read(s.clinician, s.e1.id)).body).toMatchObject({ state: 'active', current: false });
+      expect((await read(s.clinician, s.e2.id)).body).toMatchObject({ state: 'retracted', current: false });
 
-      // Retract that too: the report has no current evaluation, but both remain readable by id.
+      // Retract that too: still none, and both remain readable by id.
       await correct(s.reviewer, s.e1.id, { kind: 'retraction', reasonCode: 'software-defect' }).expect(201);
       expect((await mine('&current=true').expect(200)).body).toEqual([]);
       expect((await read(s.clinician, s.e1.id)).body).toMatchObject({ state: 'retracted', current: false });
