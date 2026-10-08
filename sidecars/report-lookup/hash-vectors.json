@@ -1,0 +1,42 @@
+{
+  "schema": "report-lookup-hash-vectors/1",
+  "construction": "Independent Python oracle; synthetic development only",
+  "records": [
+    {
+      "raw": "{\"\\ue000\":1,\"\\ud83e\\uddec\":2}",
+      "accepted": true,
+      "canonical": "{\"\ud83e\uddec\":2,\"\ue000\":1}",
+      "sha256": "37afb841b1d2086c5635f287bc5920e8e76d9256314b4db301bacb7a8432cc8c"
+    },
+    {
+      "raw": "{\"b\":[null,true,false,0,-1,9007199254740991],\"a\":\"test\"}",
+      "accepted": true,
+      "canonical": "{\"a\":\"test\",\"b\":[null,true,false,0,-1,9007199254740991]}",
+      "sha256": "e505b84c2c96f1012a088a843f232945b45db7b9b2cbaed448540bb3ca8e93d4"
+    },
+    {
+      "raw": "{\"text\":\"\\ufeff\\ud83e\\uddec\\n\"}",
+      "accepted": true,
+      "canonical": "{\"text\":\"\ufeff\ud83e\uddec\\n\"}",
+      "sha256": "73d8d092c3485d26226ea073fcd6138c755601a077dd00d7d4d018ddf5e1a777"
+    }
+  ],
+  "artifacts": [
+    {
+      "text": "\ufeff\ud83e\uddecA\n",
+      "sha256": "0566fef22711f9440f97357391dc58d1f4d2ed4e27a0a8fc807874d4b59f22c4"
+    },
+    {
+      "text": "\ufeff\ud83e\uddec",
+      "sha256": "ed638e97d17cbc018b73879cf248618f441628d1346b97558a9325081aabedf3"
+    },
+    {
+      "text": "{\"policy\":1}",
+      "sha256": "337c4a597a0e2ea1526c19744f2b1bc2608c6b9761f13e471c8da2e0122ea483"
+    },
+    {
+      "text": "{\"policy\":1}\n",
+      "sha256": "6a3bf7423d7aaafd0893104af714cff8c1c36860796dbc981072fa299db0d78b"
+    }
+  ]
+}
