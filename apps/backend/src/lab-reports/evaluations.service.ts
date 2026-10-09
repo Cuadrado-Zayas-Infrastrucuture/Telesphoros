@@ -147,6 +147,15 @@ export class EvaluationsService {
   ): EvaluationInput {
     // The scope and what the substitute runner can answer for are part of the stored binding, hence of the ledger event.
     const binding: Record<string, unknown> = { ...adapted.binding, scope: PIPELINE_SCOPE, recordingsSha256: runner.manifestSha256 };
+    // Bind the actual base files into the immutable, ledger-hashed record; an overlay changes verification, never file identity.
+    binding.cellProvenance = {
+      version: 'cell-provenance/1',
+      files: knowledge.allGuidelines().map((g) => {
+        const file = knowledge.files.find((f) => f.kind === 'guideline' && f.id === g.id);
+        if (!file) throw AppException.pipelineMisconfigured();
+        return { guidelineId: g.id, guidelineVersion: g.guidelineVersion, contentSha256: file.contentSha256 };
+      }).sort((a, b) => a.guidelineId < b.guidelineId ? -1 : a.guidelineId > b.guidelineId ? 1 : 0),
+    };
     if (adapted.disposition === 'held') {
       // A held evaluation shows no result, so no cell and no dispute matters to it.
       return {

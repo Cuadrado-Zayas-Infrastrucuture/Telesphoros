@@ -162,3 +162,7 @@ returns their stored text. It says nothing about real PDF extraction, which need
   Node release will see the adapter's tests fail to load, by design.
 - Poppler 26.03.0 is a version pin (a constant the adapter checks against the capture record). The production image and the
   PDF-to-text runner arrive with hosting and the records slice.
+
+## Finding evaluations that cited a disputed cell
+
+`GET /api/v1/cell-disputes/:id/evaluations` (clinician, reviewer, admin) accepts `limit` (1–100, default 50) and `afterSeq` (decimal sequence, default 0). The stored dispute supplies the cell identity. It lists historical evaluations, including corrected ones, with exact-file versus historical-identity-unverified matches and whether wording was exposed. Known different file hashes are excluded. A page may have no entries and still have a continuation cursor; follow it until null. It never changes an evaluation. See [the contract and limits](clinical-validation/cell-usage-listing.md).

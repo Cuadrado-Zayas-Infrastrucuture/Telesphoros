@@ -190,6 +190,27 @@ export const evaluationListQuerySchema = z.strictObject({
 });
 export type EvaluationListQuery = z.infer<typeof evaluationListQuerySchema>;
 
+/** Read-only dispute impact listing. The cursor advances over historical candidates, including excluded file versions. */
+export const cellUsageQuerySchema = z.strictObject({
+  afterSeq: z.string().regex(/^(0|[1-9][0-9]{0,18})$/).refine((s) => /^(0|[1-9][0-9]{0,18})$/.test(s) && BigInt(s) <= 9223372036854775807n).default('0'),
+  limit: z.string().regex(/^[1-9][0-9]{0,2}$/).transform(Number).pipe(z.number().int().max(100)).default(50),
+});
+export type CellUsageQuery = z.infer<typeof cellUsageQuerySchema>;
+export const cellUsageDtoSchema = z.strictObject({
+  disputeId: z.uuid(),
+  entries: z.array(z.strictObject({
+    evaluationId: z.uuid(), reportId: z.uuid(), createdAt: timestamp,
+    state: z.enum(['active', 'retracted', 'superseded']),
+    matches: z.array(z.strictObject({
+      resultIndex: z.number().int().min(0), drug: z.string(), outcome: z.string(),
+      identity: z.enum(['exact-file', 'historical-identity-unverified']), wordingExposed: z.boolean(),
+    })),
+  })),
+  nextAfterSeq: z.string().nullable(),
+  clinicalUse: z.literal(CLINICAL_USE), actionable: z.literal(false),
+});
+export type CellUsageDto = z.infer<typeof cellUsageDtoSchema>;
+
 // -------------------------------------------------------------------------------------------------------------------- disputes
 
 export const DISPUTE_STATUSES = ['open', 'upheld', 'dismissed'] as const;

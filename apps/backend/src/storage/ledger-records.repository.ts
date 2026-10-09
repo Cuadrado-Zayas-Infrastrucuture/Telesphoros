@@ -44,6 +44,8 @@ export abstract class LedgerRecordsRepository {
   abstract decideDispute(tenantId: string, actor: string, input: DisputeDecisionInput): Promise<InsertResult>;
   abstract listDisputes(tenantId: string): Promise<DisputeStatus[]>;
   abstract findDispute(tenantId: string, id: string): Promise<DisputeStatus | undefined>;
+  /** Bounded historical candidates, by citation identity WITHOUT the file hash; the service must classify file provenance. */
+  abstract cellEvaluationCandidates(tenantId: string, cell: DisputeInput, afterSeq: string, limit: number): Promise<Projected[]>;
 
   /** A note's text (or its tombstone). Notes are free text kept out of the ledger; this is the only read of their body. */
   abstract findNote(tenantId: string, id: string): Promise<NoteRecord | undefined>;

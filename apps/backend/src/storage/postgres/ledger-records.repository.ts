@@ -272,6 +272,23 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
     return this.read(tenantId, async (client) => (await this.disputeStatuses(client, tenantId, id))[0]);
   }
 
+  cellEvaluationCandidates(tenantId: string, cell: DisputeInput, afterSeq: string, limit: number): Promise<Projected[]> {
+    return this.read(tenantId, async (client) => {
+      const { rows } = await client.query<{ id: string }>(
+        `SELECT e.id::text AS id FROM evaluations e
+          WHERE e.tenant_id = $1 AND e.seq > $2::bigint AND EXISTS (
+            SELECT 1 FROM evaluation_results r
+             WHERE r.tenant_id = $1 AND r.evaluation_id = e.id
+               AND r.guideline_id = $3 AND r.guideline_version = $4
+               AND r.citation->'locator'->>'table' = $5 AND r.citation->'locator'->>'row' = $6
+               AND (r.citation->'locator'->>'column') IS NOT DISTINCT FROM $7::text)
+          ORDER BY e.seq LIMIT $8`,
+        [tenantId, afterSeq, cell.guidelineId, cell.guidelineVersion, cell.locator.table, cell.locator.row, cell.locator.column ?? null, limit],
+      );
+      return this.many(client, tenantId, 'evaluations', rows.map((r) => r.id));
+    });
+  }
+
   private async disputeStatuses(client: PoolClient, tenantId: string, only?: string): Promise<DisputeStatus[]> {
     const disputes = await client.query<{ id: string; decision_id: string | null }>(
       `SELECT d.id::text AS id, x.id::text AS decision_id FROM cell_disputes d

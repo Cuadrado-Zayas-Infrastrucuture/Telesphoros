@@ -1,0 +1,125 @@
+{
+  "schema": "cell-usage-verification/1",
+  "baseCommit": "375dcddf8d373dc516545a721409e116c35ff33e",
+  "scope": "synthetic-engineering-only",
+  "backendTiers": [
+    {
+      "tier": "tier1",
+      "returncode": 0,
+      "summary": [
+        "Test Suites: 7 skipped, 83 passed, 83 of 90 total",
+        "Tests:       180 skipped, 1300 passed, 1480 total",
+        "Time:        52.161 s, estimated 62 s"
+      ],
+      "skippedServiceNotice": false
+    },
+    {
+      "tier": "tier2",
+      "returncode": 0,
+      "summary": [
+        "Test Suites: 90 passed, 90 total",
+        "Tests:       1 skipped, 1479 passed, 1480 total",
+        "Time:        92.364 s"
+      ],
+      "skippedServiceNotice": false
+    },
+    {
+      "tier": "tier3",
+      "returncode": 0,
+      "summary": [
+        "Test Suites: 90 passed, 90 total",
+        "Tests:       1480 passed, 1480 total",
+        "Time:        122.054 s"
+      ],
+      "skippedServiceNotice": false
+    }
+  ],
+  "mutations": [
+    {
+      "label": "file-hash",
+      "caught": true,
+      "returncode": 1
+    },
+    {
+      "label": "guideline-id",
+      "caught": true,
+      "returncode": 1
+    },
+    {
+      "label": "guideline-version",
+      "caught": true,
+      "returncode": 1
+    },
+    {
+      "label": "locator-table",
+      "caught": true,
+      "returncode": 1
+    },
+    {
+      "label": "locator-row",
+      "caught": true,
+      "returncode": 1
+    },
+    {
+      "label": "locator-column",
+      "caught": true,
+      "returncode": 1
+    },
+    {
+      "label": "historical-uncertainty",
+      "caught": true,
+      "returncode": 1
+    },
+    {
+      "label": "withheld-wording",
+      "caught": true,
+      "returncode": 1
+    },
+    {
+      "label": "pagination-cursor",
+      "caught": true,
+      "returncode": 1
+    },
+    {
+      "label": "tenant-conditions",
+      "caught": true,
+      "returncode": 1
+    },
+    {
+      "label": "query-cursor",
+      "caught": true,
+      "returncode": 1
+    },
+    {
+      "label": "recorded-provenance",
+      "caught": true,
+      "returncode": 1
+    },
+    {
+      "label": "reader-role",
+      "caught": true,
+      "returncode": 1
+    }
+  ],
+  "typecheck": "passed",
+  "lint": "passed",
+  "build": "passed",
+  "sharedTypesTests": 20,
+  "environment": {
+    "node": "22.22.0",
+    "postgresServerAndClient": "16.14",
+    "python": "3.14.6",
+    "macOS": "27.0.1",
+    "moto": "5.2.3"
+  },
+  "initialFailure": {
+    "testsFailed": 22,
+    "cause": "Unpinned newer pg_dump emitted transaction_timeout, unsupported by PostgreSQL 16",
+    "repair": "Pinned PostgreSQL 16 client tools in PATH; repeated all tiers on a fresh disposable cluster"
+  },
+  "limits": [
+    "Local synthetic checks do not grant clinical approval or training eligibility",
+    "Historical missing or unusable file provenance stays explicitly unverified",
+    "Required PR CI remains the merge gate"
+  ]
+}

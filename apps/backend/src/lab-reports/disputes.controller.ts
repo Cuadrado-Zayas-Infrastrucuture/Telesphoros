@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import {
-  type DisputeCreate, disputeCreateSchema, type DisputeDecisionCreate, disputeDecisionCreateSchema, type DisputeDto, type DisputeListQuery, disputeListQuerySchema, type IdParam, idParamSchema,
+  type CellUsageDto, type CellUsageQuery, cellUsageQuerySchema, type DisputeCreate, disputeCreateSchema, type DisputeDecisionCreate, disputeDecisionCreateSchema, type DisputeDto, type DisputeListQuery, disputeListQuerySchema, type IdParam, idParamSchema,
 } from '@telesphoros/shared-types';
 import { CurrentPrincipal, Roles } from '../auth/decorators';
 import type { Principal } from '../auth/principal';
@@ -35,6 +35,16 @@ export class DisputesController {
   @Get()
   list(@CurrentPrincipal() principal: Principal, @Query(new ZodValidationPipe(disputeListQuerySchema)) query: DisputeListQuery): Promise<DisputeDto[]> {
     return this.disputes.list(principal, query);
+  }
+
+  @Get(':id/evaluations')
+  @Roles('clinician', 'reviewer', 'admin')
+  evaluations(
+    @CurrentPrincipal() principal: Principal,
+    @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam,
+    @Query(new ZodValidationPipe(cellUsageQuerySchema)) query: CellUsageQuery,
+  ): Promise<CellUsageDto> {
+    return this.disputes.evaluations(principal, id, query);
   }
 
   @Get(':id')
