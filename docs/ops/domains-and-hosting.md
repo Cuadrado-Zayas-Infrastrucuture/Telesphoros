@@ -13,7 +13,7 @@ been inspected or changed by this implementation. Company source/project is stil
 | `www.cuadradozayasinfrastructure.com` | Redirect to company apex in Vercel | Prepare in the company project, not this repository |
 | `app.telesphoros.app` | Private frontend S3 origin through CloudFront | H1 Terraform, disabled by default |
 | `telesphoros.app`, `www.telesphoros.app` | 301 to `app.telesphoros.app`, retaining path/query | Same CloudFront distribution and certificate |
-| `api.telesphoros.app` | AWS API host | H2; no DNS target or compute created here |
+| `api.telesphoros.app` | AWS API host | F3a (edge: certificate, load balancer, firewall) written, disabled by default; compute is F3b; see [api-hosting.md](api-hosting.md). No DNS record until a healthy service exists |
 
 Cloudflare remains authoritative. Use DNS-only for CloudFront records to avoid chaining
 CDN proxies. Use the Vercel project's **actual displayed** A/CNAME/TXT values; do not copy

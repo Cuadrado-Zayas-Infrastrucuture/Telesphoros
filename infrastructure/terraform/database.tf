@@ -83,6 +83,10 @@ resource "aws_db_instance" "main" {
 
   lifecycle {
     precondition {
+      condition     = length(var.app_security_group_ids) >= 1 || var.enable_api_hosting
+      error_message = "Name at least one application security group (app_security_group_ids), or enable_api_hosting so the API tasks' group is the one allowed."
+    }
+    precondition {
       condition     = var.environment != "production" || var.db_multi_az
       error_message = "Production requires db_multi_az = true."
     }

@@ -21,6 +21,9 @@
 It does **not** create: the VPC and subnets, the application compute, DNS records, the database roles
 (`telesphoros_app` and its login user are created by migrations plus an operator step), dashboards, or the application's own alarms (the audit-trail alarms are the only ones; Phase 7/10).
 
+**F3a optional API edge:** `api-edge.tf` adds an ACM certificate, an HTTPS-only load balancer, a firewall (WAF) and exact security
+groups when `enable_api_hosting = true` (default false). The compute behind it is F3b. See [api-hosting.md](../../docs/ops/api-hosting.md).
+
 **H1 optional frontend:** `web.tf` now adds a private public-code S3 bucket, CloudFront/OAC and an ACM certificate
 when `enable_web_hosting = true`. Its default is false: no new hosting resources are selected by default.
 It still does not create DNS records, API compute, deployment roles/workflows or observability resources.
