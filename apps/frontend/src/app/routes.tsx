@@ -24,6 +24,11 @@ export const routes: RouteObject[] = [
       {
         element: <ProtectedRoute />,
         children: [
+          ...(import.meta.env.DEV ? [
+            { path: 'local-upload', lazy: async () => ({ Component: (await import('@/pages/LocalUploadReportPage')).default }) },
+            { path: 'local-review', lazy: async () => ({ Component: (await import('@/pages/LocalReviewPage')).default }) },
+            { path: 'local-operations', lazy: async () => ({ Component: (await import('@/pages/LocalOperationsPage')).default }) },
+          ] : []),
           {
             element: <RequireRole anyOf={WRITER_ROLES} />,
             children: [

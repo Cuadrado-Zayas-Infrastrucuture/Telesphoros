@@ -13,6 +13,9 @@
     "test": "pnpm -r --if-present test",
     "build": "pnpm -r --if-present build",
     "test:infra": "node --test infrastructure/terraform/guard.test.mjs",
-    "test:ci-config": "node --test .github/ci/guard.test.mjs"
+    "test:ci-config": "node --test .github/ci/guard.test.mjs",
+    "demo:review:setup": "node scripts/local-review/database.cjs setup",
+    "demo:review": "node scripts/local-review/start.cjs",
+    "demo:review:test": "node --test scripts/local-review/local-poppler-runner.test.cjs"
   }
 }
