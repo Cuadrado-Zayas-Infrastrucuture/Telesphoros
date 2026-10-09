@@ -1,8 +1,5 @@
-import { randomUUID } from 'node:crypto';
-import type { IncomingMessage } from 'node:http';
 import { type DynamicModule, Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
-import type { Request } from 'express';
 import { LoggerModule } from 'nestjs-pino';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 import { AuthModule } from './auth/auth.module';
@@ -11,6 +8,7 @@ import { ENV, type Env } from './config/env';
 import { HealthModule } from './health/health.module';
 import { LabReportsModule } from './lab-reports/lab-reports.module';
 import { LedgerModule } from './ledger/ledger.module';
+import { pinoHttpOptions } from './logger-options';
 import { MeModule } from './me/me.module';
 import { ObjectStorageModule } from './object-storage/object-storage.module';
 import { PatientsModule } from './patients/patients.module';
@@ -28,22 +26,7 @@ export class AppModule {
         LoggerModule.forRootAsync({
           inject: [ENV],
           useFactory: (config: Env) => ({
-            pinoHttp: {
-              level: config.LOG_LEVEL,
-              genReqId: (req: IncomingMessage) => (req as Request).id ?? randomUUID(),
-              // Defence in depth: secrets are redacted even if the serializers below are ever loosened.
-              redact: { paths: ['req.headers.authorization', 'req.headers.cookie'], censor: '[redacted]' },
-              serializers: {
-                // Log the path only: query strings can carry identifiers.
-                req: (req: IncomingMessage & { id: string }) => ({
-                  id: req.id,
-                  method: req.method,
-                  url: String(req.url).split('?')[0],
-                }),
-                res: (res: { statusCode: number }) => ({ statusCode: res.statusCode }),
-              },
-              customProps: (req: IncomingMessage) => ({ userId: (req as Request).principal?.sub }),
-            },
+            pinoHttp: pinoHttpOptions(config),
           }),
         }),
         AuthModule,

@@ -34,7 +34,7 @@ costs signature checks. **It is not a defence against a determined distributed a
 
 - **0** (nothing in front): the connection's own address is used and `X-Forwarded-For` is **ignored**, so a client cannot invent its way out of the address limit with a header it controls.
 - **1** (one load balancer, as planned for step F3): the address the load balancer appended is used. Anything a client puts earlier in the header is ignored.
-- **Too low behind a load balancer** puts every client in one bucket (a self-inflicted outage). **Too high** lets a client spoof its address. When the compute host arrives (F3b), the value is 1 behind the F3a load balancer ([api-hosting.md](api-hosting.md)), and the Terraform and this setting must agree.
+- **Too low behind a load balancer** puts every client in one bucket (a self-inflicted outage). **Too high** lets a client spoof its address. F3b sets the value to 1 behind the F3a load balancer (a test fails the build otherwise) ([api-hosting.md](api-hosting.md)), and the Terraform and this setting must agree.
 
 ## Known limits (read before relying on it)
 

@@ -1,6 +1,6 @@
 # Plan F3: API hosting on ECS Fargate behind a load balancer
 
-Status: **approved by the founder on 2026-10-09** (decisions at the end). F3a (the edge) is built in this PR; F3b (the compute) is the next PR. Terraform text only; nothing is applied in AWS, ever, by this plan.
+Status: **approved by the founder on 2026-10-09** (decisions at the end). F3a (the edge) and F3b (the compute) are built (separate PRs). Terraform text only; nothing is applied in AWS, ever, by this plan.
 F1 (#41) and F2 (#42) are merged; F3 reads F1's alarm topic.
 This supersedes the earlier H1 plan: #39 already landed the frontend hosting (`web.tf`); this is the API half ("H2" in the docs).
 

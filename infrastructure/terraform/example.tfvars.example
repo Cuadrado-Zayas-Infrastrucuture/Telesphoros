@@ -20,6 +20,11 @@ ses_from_email        = "no-reply@telesphoros.app"
 # enable_api_hosting = true
 # public_subnet_ids  = ["subnet-0cccccccccccccccc", "subnet-0dddddddddddddddd"]
 
+# API compute (F3b; needs enable_api_hosting). The image is pinned by digest and comes from F4; leave it empty to create only the foundations.
+# api_image         = "123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-api@sha256:<64 hex digits>"
+# api_cors_origins  = ["https://app.telesphoros.app"]   # staging: the Vercel staging address
+# api_desired_count = 2                                 # production needs at least 2
+
 # Audit trail (docs/ops/audit-trail.md). The alarm address has no default: SNS emails it a confirmation link.
 alarm_email = "security@example.com"
 # audit_lock_mode = "GOVERNANCE"   # COMPLIANCE is irreversible; decide separately
