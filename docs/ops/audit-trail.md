@@ -42,7 +42,7 @@ CloudTrail records who did what in the AWS account. This trail keeps the record 
 - **It does not record who signs in to the application.** CloudTrail covers administrative calls to Cognito, not users signing in; sign-in logging is separate work. The application's own record log (the ledger) is separate too: see [ledger-watch.md](ledger-watch.md).
 - **It does not record object-level events on buckets other than the reports bucket** (backups and the audit bucket log changes to their *settings*, which is what the alarms watch).
 - **GOVERNANCE lock can be overridden** by an identity with the bypass right, and by anyone who controls the account. `COMPLIANCE` (nobody can, not even root) is irreversible and a separate decision.
-- **The `ledger-compromised` alarm is not here.** It needs the application's log group, which arrives with the compute host (step F3); that alarm should publish to this topic (`audit_alarm_topic_arn` output).
+- **The `ledger-compromised` alarm is not here.** It lives with the application's log group in `api-compute.tf` (step F3b) and publishes to this topic, so one confirmed address hears everything ([api-hosting.md](api-hosting.md)).
 - **Cost.** Management events for the first copy are free; S3 data events are billed per event, and a second management-event copy or a busy bucket changes that. With synthetic data and a small bucket the cost is negligible, but it grows with real use: check the current AWS CloudTrail pricing before applying.
 
 ## Verification status

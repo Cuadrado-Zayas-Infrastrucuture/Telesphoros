@@ -62,8 +62,9 @@ It reads memory, so it cannot time out on the database.
 ## The alarm
 
 The watch writes one structured **error** line per finding (`event: "ledger-compromised"`). Turning that line into a page or an email is a
-deployment task: the Terraform is written but never applied, and **no alarm on this log line exists yet**. Until the hosting phase connects one,
-someone has to be reading the logs, or must treat `/ready` failing on `ledger` as the signal. This document will say so until it changes.
+deployment task. The alarm is written ([ops/api-hosting.md](api-hosting.md), `api-compute.tf`: a metric filter on the line and an alarm into the audit topic), but the
+Terraform is **never applied**, so **no alarm exists in AWS yet**. Until it is applied and tested, someone has to be reading the logs, or must treat `/ready` failing on
+`ledger` as the signal. A test pins that the application writes `event` at the top level of its JSON log line (the field the alarm matches).
 
 ## Restore
 
