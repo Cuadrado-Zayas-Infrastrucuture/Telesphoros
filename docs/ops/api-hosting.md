@@ -1,7 +1,7 @@
 # API hosting (F3): ECS Fargate behind a load balancer
 
 **Status: F3a (the edge) and F3b (the compute) are written as Terraform and guard-tested. Neither is applied, and both are off by default (`enable_api_hosting = false`).**
-What is still missing before anything runs: the image and the deployment pipeline (F4), the database logins (below), and a VPC with a NAT route. Plan and the founder's decisions:
+What is still missing before anything runs: the image and the deployment pipeline (F4; the command that creates the database logins now exists, below), and a VPC with a NAT route (or the synthetic profile's created network). Plan and the founder's decisions:
 [design/plans/f3-api-hosting.md](../design/plans/f3-api-hosting.md). Nothing here is approval to apply the rest of the root: the three first-apply
 gates in `infrastructure/terraform/README.md` still apply.
 
@@ -47,17 +47,30 @@ The foundations exist as soon as the switch is on. **The task definitions and th
 
 **How the `ledger-compromised` alarm is kept honest.** The alarm is a CloudWatch Logs metric filter on a top-level `event` field in each JSON log line. That only works if the application really writes the field at the top level, so: a test (`log-shape.spec.ts`) drives the application's real logger options (now in `logger-options.ts`) and requires the field at the top level; the Terraform guard requires the application to still log that event name and that spec to exist; and each was proved by breaking it (nesting the logged object turns the spec red). **Not verified:** the real alarm firing in AWS (use `set-alarm-state` and a deliberate test event in staging; checklist below).
 
-## The database logins (a gap this PR does not close)
+## The database logins (`db provision-logins`)
 
-The migrations create the roles but not their logins, and RDS creates only the admin user ([ledger-roles.md](ledger-roles.md)). Before the first start, an administrator must, from inside the VPC, create three logins and put their connection strings in the three secrets. **The connection strings carry no TLS parameters** (no `sslmode`, `sslrootcert` or any `ssl...` name): the application refuses them at start-up, because in node-postgres they can override the explicit TLS setting. TLS comes only from `DATABASE_SSL=require`, which the service and the migration task both set ([database.md](../database.md#database-tls)):
+The migrations create the privilege roles but not their logins, and RDS creates only the administrator. The command `provision-logins` (FD-4; `apps/backend/src/db/provision-logins.ts`) creates the three logins from a one-off task, so **no password is ever typed, shown, logged or kept in Terraform state**. **The connection strings it writes carry no TLS parameters** (no `sslmode`, `sslrootcert` or any `ssl...` name): the application refuses them at start-up, because in node-postgres they can override the explicit TLS setting. TLS comes only from `DATABASE_SSL=require`, which the service and the one-off tasks all set ([database.md](../database.md#database-tls)).
 
-| Secret | Login | Member of |
-| --- | --- | --- |
-| `.../api/database-url` | an application login | `telesphoros_app` only |
-| `.../api/ledger-verifier-database-url` | a verifier login | `telesphoros_ledger_verifier` only, **never** `telesphoros_app` |
-| `.../api/migrator-database-url` | the table owner | (owns the tables; needs `SET` on `telesphoros_ledger` and `telesphoros_redactor`, see ledger-roles.md) |
+| Secret | Login (default name) | Member of | Notes |
+| --- | --- | --- | --- |
+| `.../api/database-url` | `telesphoros_api` | `telesphoros_app` only | the service's `DATABASE_URL` |
+| `.../api/ledger-verifier-database-url` | `telesphoros_ledger_watch` | `telesphoros_ledger_verifier` only, **never** `telesphoros_app` | the service's `LEDGER_VERIFIER_DATABASE_URL` |
+| `.../api/migrator-database-url` | `telesphoros_migrator` | `telesphoros_ledger` and `telesphoros_redactor`, `SET` only, no inherit | owns the database and every object the migrations create; not a superuser and **not** `CREATEROLE`; used only by the migration task |
 
-The SQL is in ledger-roles.md. **There is no tool in the repository to run it, and no bastion**: the image will not carry `psql`, tasks have no shell, and the database has no public address. Proposed for F4 (needs its own approval): a small `db provision-logins` command in the same image, run as a one-off task with the admin secret, that creates the logins with generated passwords and writes the connection strings into the three secrets, so no password is ever typed or displayed. Until that exists, the first deployment cannot start.
+What the command does, in order: takes a lock; creates the five privilege groups if they do not exist, with exactly the attributes the migrations give them (a test keeps the two in agreement); for each login, **writes the new connection string to the secret first, then sets the password** (sent to the database only as a SCRAM-SHA-256 verifier, because the RDS parameter group logs DDL statements and a plaintext password would be written to that log); makes the migrator the database owner; grants the memberships; then **reads the result back from the catalog** and fails if a login has an extra attribute or membership, if the verifier could execute `ledger_append` (or the application the incident, checkpoint or hold functions), or if either could write a ledger table.
+
+**It is safe to run twice.** A login whose stored string still signs in is left alone (`unchanged`); a missing role, an empty secret or a changed password is `repaired`; `--rotate` replaces every password (`rotated`; restart the service afterwards so tasks pick up the new secrets). If the database step fails after the secret was written, the secret holds a password nothing accepts and the next run repairs it.
+
+**First deployment, in this order** (after the image exists, FD-4b/FD-6):
+
+1. Run the **provisioning task** (`api_provision_task_family`) once. Expect `LOGINS READY`; the group-privilege check says `SKIP` because nothing is migrated yet.
+2. Run the **migration task** once (it uses the migrator login).
+3. Run the provisioning task again with the command `provision-logins --require-migrated` (an ECS run-task override). Now the group privileges are read back and must pass.
+4. Start the service.
+
+The task's execution role injects the administrator's `username` and `password` from the RDS-managed secret; the **task role** can read and write only the three connection-string secrets and cannot read the administrator secret (a guard test pins both). The task role *can* read the three connection strings it wrote; that is how it recognises an unchanged login, and the task runs only when a person starts it.
+
+**Not verified until a real account exists:** RDS itself. The command is proved against PostgreSQL 16 (the automated tests use the cluster's superuser; a non-superuser administrator on a pristine cluster, with the migrator then applying all 11 migrations, was run once by hand for FD-4a and becomes an automated check in the FD-4b container rehearsal), but `rds_superuser` is not a stock administrator and Postgres 16 restricts who may grant a role; the first run on RDS (FD-7) is the real test. IAM, the execution-role injection of the administrator secret, and Fargate's read-only filesystem are likewise unproven. The human **operator** login (break-glass, [ledger-roles.md](ledger-roles.md)) is deliberately not created by this command.
 
 ## Releasing (after F4 exists)
 

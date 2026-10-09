@@ -17,15 +17,24 @@ import {
   uploadBackup,
 } from './offsite';
 import { type Finding, runBackupCheck } from './offsite-check';
+import { provisionLogins } from './provision-logins';
+import { secretsManagerStore } from './provision-secrets';
 import { restoreAndVerify } from './restore';
 import { restoreFromRemote } from './restore-remote';
-import { pgClientConfig } from './tls';
+import { pgClientConfig, tlsFromEnv } from './tls';
 
 const USAGE = `Usage: node dist/db/cli.js <command>
 
   migrate up                    apply pending migrations          (DATABASE_MIGRATOR_URL: the table owner)
   migrate down [steps]          revert the last N (default 1)     (DATABASE_MIGRATOR_URL)
   migrate status                show applied and pending          (DATABASE_MIGRATOR_URL)
+
+  provision-logins [--rotate] [--require-migrated]
+                                create the application, ledger-verifier and migrator logins with generated passwords and store their
+                                connection strings in Secrets Manager (a one-off task; no password is ever printed or logged).
+                                Run it before "migrate up", and again after it with --require-migrated to check the group privileges.
+                                Env: PROVISION_ADMIN_USER, PROVISION_ADMIN_PASSWORD (the RDS-managed administrator), DATABASE_HOST,
+                                [DATABASE_PORT=5432] [DATABASE_NAME=telesphoros], PROVISION_SECRET_APP / _VERIFIER / _MIGRATOR (secret ids).
 
   keygen  --out FILE            create a new random backup key (64 hex characters, owner-only; never overwrites).
                                 KEEP COPIES OFFLINE: without this key no backup made with it can ever be restored.
@@ -144,6 +153,34 @@ async function main(argv: string[]) {
     } finally {
       await client.end();
     }
+    return;
+  }
+
+  if (command === 'provision-logins') {
+    const f = flags([sub, ...rest].filter((a): a is string => a !== undefined));
+    const host = required('DATABASE_HOST');
+    const port = Number(process.env.DATABASE_PORT || 5432);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('DATABASE_PORT must be a port number');
+    const database = process.env.DATABASE_NAME || 'telesphoros';
+    const admin = new URL('postgres://placeholder');
+    admin.username = required('PROVISION_ADMIN_USER');
+    admin.password = required('PROVISION_ADMIN_PASSWORD');
+    admin.hostname = host;
+    admin.port = String(port);
+    admin.pathname = `/${database}`;
+    const report = await provisionLogins({
+      adminUrl: admin.toString(),
+      tls: tlsFromEnv(),
+      target: { host, port },
+      secrets: { app: required('PROVISION_SECRET_APP'), verifier: required('PROVISION_SECRET_VERIFIER'), migrator: required('PROVISION_SECRET_MIGRATOR') },
+      store: secretsManagerStore(),
+      rotate: f.bool('rotate'),
+      requireMigrated: f.bool('require-migrated'),
+    });
+    for (const login of report.logins) out(`${login.action.padEnd(9)} ${login.kind} login (${login.name})`);
+    for (const check of report.checks) out(`${check.skipped ? 'SKIP' : check.ok ? 'PASS' : 'FAIL'}  ${check.name}: ${check.detail}`);
+    out(report.ok ? 'LOGINS READY' : 'LOGINS NOT READY');
+    process.exitCode = report.ok ? 0 : 1;
     return;
   }
 

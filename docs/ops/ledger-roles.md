@@ -8,13 +8,13 @@ administrator must provide.
 
 | Role | Login? | Created by | What it can do |
 | --- | --- | --- | --- |
-| `telesphoros_app` | no (its login is provisioned outside) | migration 0002 | The application. `SELECT` and `INSERT` on the record tables and notes, `SELECT` on the ledger, `EXECUTE` on `ledger_append` (the gate) only: **not** `ledger_append_internal`, and nothing that records, holds or clears an incident (a catalog test pins it). No `UPDATE`, `DELETE`, `TRUNCATE`; cannot write the ledger; cannot read the incident tables. |
+| `telesphoros_app` | no (its login is created by `db provision-logins`) | migration 0002 | The application. `SELECT` and `INSERT` on the record tables and notes, `SELECT` on the ledger, `EXECUTE` on `ledger_append` (the gate) only: **not** `ledger_append_internal`, and nothing that records, holds or clears an incident (a catalog test pins it). No `UPDATE`, `DELETE`, `TRUNCATE`; cannot write the ledger; cannot read the incident tables. |
 | `telesphoros_ledger` | no | migration 0005 | Owns the ledger tables and the ledger functions. Reads the record tables only through explicit, tenant-scoped read policies. |
 | `telesphoros_redactor` | no | migration 0006 | Owns the redaction function. `UPDATE` on three columns of `event_notes` (body, redacted_at, redaction_basis_code), and nothing else. |
 | `telesphoros_ledger_verifier` | no (group) | migration 0005 | Reads every tenant's ledger and records, and the incident tables. May execute exactly two functions: `ledger_record_checkpoint` and `ledger_record_incident` (0011). Writes no record. |
 | `telesphoros_ledger_operator` | no (group) | migration 0006 | May execute `redact_event_note`, and (0011) `ledger_set_global_hold` and `ledger_clear_incident`; reads the incident tables. Runbook use only, never an API: no application code calls these (a static test pins it). See [ledger-watch.md](ledger-watch.md). |
 
-Logins for the **verifier** and the **operator** are provisioned outside the repository, like the application's login. Each login is a
+The **application**, **verifier** and **migrator** logins are created by `db provision-logins` (FD-4, [api-hosting.md](api-hosting.md#the-database-logins-db-provision-logins)); the **operator** login is provisioned outside the repository, by a person. Each login is a
 member of exactly its one group and of nothing else. The verifier login must **not** be a member of `telesphoros_app`: it would then
 inherit the right to append.
 

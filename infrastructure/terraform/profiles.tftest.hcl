@@ -58,8 +58,8 @@ run "default_variables_plan" {
     error_message = "the default profile must be production, so a forgotten variable can never select the relaxed one"
   }
   assert {
-    condition     = length(aws_ecs_service.api) == 0 && length(aws_lb.api) == 0
-    error_message = "API hosting is off by default"
+    condition     = length(aws_ecs_service.api) == 0 && length(aws_lb.api) == 0 && length(aws_ecs_task_definition.api_provision) == 0 && length(data.aws_iam_policy_document.api_provision_task) == 0
+    error_message = "API hosting, and with it the provisioning task, is off by default"
   }
 }
 
@@ -147,8 +147,8 @@ run "production_hosting_on" {
   }
 
   assert {
-    condition     = length(aws_ecs_service.api) == 1 && length(aws_ecs_task_definition.api_migrate) == 1
-    error_message = "hosting on creates the service and the migration task"
+    condition     = length(aws_ecs_service.api) == 1 && length(aws_ecs_task_definition.api_migrate) == 1 && length(aws_ecs_task_definition.api_provision) == 1
+    error_message = "hosting on creates the service, the migration task and the provisioning task"
   }
   assert {
     condition     = length(data.aws_iam_policy_document.api_execution_service) == 1 && length(data.aws_iam_policy_document.api_execution_migrate) == 1
@@ -251,6 +251,10 @@ run "synthetic_hosting_on" {
     api_cors_origins   = ["https://staging.example.test"]
   }
 
+  assert {
+    condition     = length(aws_ecs_task_definition.api_provision) == 1 && length(aws_iam_role.api_provision_task) == 1 && length(aws_iam_role.api_execution_provision) == 1
+    error_message = "the provisioning task and its two roles exist under the synthetic profile too"
+  }
   assert {
     condition     = one(aws_ecs_service.api[0].network_configuration).assign_public_ip == true
     error_message = "synthetic tasks get a public address (there is no NAT)"

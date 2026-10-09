@@ -1,0 +1,348 @@
+import { randomBytes } from 'node:crypto';
+import { Client } from 'pg';
+import { migrateUp } from '../../src/db/migrator';
+import { checkGroups, type LoginNames, type ProvisionOptions, type ProvisionReport, provisionLogins, type SecretStore, scramVerifier } from '../../src/db/provision-logins';
+import { pgClientConfig } from '../../src/db/tls';
+import { adminUrl, withAdmin } from '../helpers/database';
+
+/**
+ * `db provision-logins` against a REAL PostgreSQL (FD-4). Roles are cluster-wide and other Jest workers share them, so every test uses its own login names
+ * and its own database; the five privilege groups are created once under the same lock the other suites use. The admin here is the cluster superuser; the
+ * run as a NON-superuser administrator (what RDS gives) happens on a fresh cluster in the CI rehearsal, where no group exists yet.
+ */
+jest.setTimeout(120_000);
+
+const ROLE_LOCK = 4242;
+const GROUPS = ['telesphoros_app', 'telesphoros_ledger', 'telesphoros_redactor', 'telesphoros_ledger_verifier', 'telesphoros_ledger_operator'];
+
+class MemoryStore implements SecretStore {
+  values = new Map<string, string>();
+  puts: string[] = [];
+  async get(id: string) {
+    return this.values.get(id);
+  }
+  async put(id: string, value: string) {
+    this.puts.push(id);
+    this.values.set(id, value);
+  }
+}
+
+interface Fixture {
+  database: string;
+  names: LoginNames;
+  store: MemoryStore;
+  options: ProvisionOptions;
+  url: (user: string, password: string) => string;
+}
+
+const databases: string[] = [];
+const logins: string[] = [];
+const base = new URL(adminUrl());
+
+/**
+ * Does this cluster check passwords over TCP? The local development cluster (scripts/dev-postgres.sh) uses `trust`, where any password signs in, so a test that
+ * expects a wrong or replaced password to be REFUSED cannot mean anything there. CI's PostgreSQL service checks passwords, and CI must never skip these tests.
+ */
+let passwordsChecked = false;
+const whenPasswordsAreChecked = (name: string, work: () => Promise<void>) => it(name, async () => {
+  if (!passwordsChecked) {
+    process.stderr.write(`[jest] SKIPPED on a trust-authentication cluster (passwords are not checked): ${name}\n`);
+    return;
+  }
+  await work();
+});
+
+beforeAll(async () => {
+  const probe = `prov_probe_${randomBytes(3).toString('hex')}`;
+  logins.push(probe);
+  await withAdmin(adminUrl(), async (c) => {
+    await c.query(`CREATE ROLE ${probe} LOGIN PASSWORD 'right-password'`);
+  });
+  const wrong = new URL(base);
+  wrong.username = probe;
+  wrong.password = 'wrong-password';
+  const outcome = await asLogin(wrong.toString(), (c) => c.query('SELECT 1')).then(() => 'connected', (e: { code?: string }) => e.code);
+  passwordsChecked = outcome === '28P01';
+  if (process.env.CI && !passwordsChecked) throw new Error('CI must run this suite on a cluster that checks passwords (got: ' + String(outcome) + ')');
+  await withAdmin(adminUrl(), async (c) => {
+    await c.query('SELECT pg_advisory_lock($1)', [ROLE_LOCK]);
+    for (const role of GROUPS) {
+      await c.query(`DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${role}') THEN CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS; END IF; END $$`);
+    }
+    await c.query('SELECT pg_advisory_unlock($1)', [ROLE_LOCK]);
+  });
+});
+
+afterAll(async () => {
+  await withAdmin(adminUrl(), async (c) => {
+    for (const name of databases) await c.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+    for (const name of logins) await c.query(`DROP ROLE IF EXISTS ${name}`);
+  });
+});
+
+async function fixture(): Promise<Fixture> {
+  const tag = randomBytes(4).toString('hex');
+  const database = `test_prov_${tag}`;
+  const names: LoginNames = { app: `prov_app_${tag}`, verifier: `prov_ver_${tag}`, migrator: `prov_mig_${tag}` };
+  databases.push(database);
+  logins.push(...Object.values(names));
+  await withAdmin(adminUrl(), (c) => c.query(`CREATE DATABASE ${database}`));
+  const url = (user: string, password: string) => {
+    const u = new URL(base);
+    u.pathname = `/${database}`;
+    u.username = user;
+    u.password = password;
+    return u.toString();
+  };
+  const admin = new URL(base);
+  admin.pathname = `/${database}`;
+  const store = new MemoryStore();
+  const options: ProvisionOptions = {
+    adminUrl: admin.toString(),
+    tls: 'disable',
+    target: { host: base.hostname, port: Number(base.port) },
+    secrets: { app: 'secret-app', verifier: 'secret-verifier', migrator: 'secret-migrator' },
+    store,
+    names,
+  };
+  return { database, names, store, options, url };
+}
+
+const passwordIn = (value: string) => decodeURIComponent(new URL(value).password);
+
+async function asLogin<T>(value: string, work: (c: Client) => Promise<T>): Promise<T> {
+  const client = new Client(pgClientConfig(value, 'disable'));
+  await client.connect();
+  try {
+    return await work(client);
+  } finally {
+    await client.end();
+  }
+}
+
+const failing = (report: ProvisionReport) => report.checks.filter((c) => !c.ok).map((c) => `${c.name}: ${c.detail}`);
+
+describe('provisioning on a database nothing has been applied to', () => {
+  it('creates the three logins, stores working connection strings, and makes the migrator the owner so the migrations run as it', async () => {
+    const f = await fixture();
+    const report = await provisionLogins(f.options);
+    expect(failing(report)).toEqual([]);
+    expect(report.ok).toBe(true);
+    expect(report.logins.map((l) => [l.kind, l.action])).toEqual([['migrator', 'created'], ['app', 'created'], ['verifier', 'created']]);
+    expect(report.checks.find((c) => c.name === 'group privileges')).toMatchObject({ skipped: true, ok: true }); // nothing to read back before the migrations
+
+    // Every stored string signs in as the login it names (a real connection, not a string check).
+    for (const [kind, user] of [['app', f.names.app], ['verifier', f.names.verifier], ['migrator', f.names.migrator]] as const) {
+      const value = f.store.values.get(f.options.secrets[kind])!;
+      expect(await asLogin(value, async (c) => (await c.query('SELECT current_user AS u')).rows[0].u)).toBe(user);
+    }
+
+    // The real flow: the migrator, a login that is not a superuser and not CREATEROLE, applies every migration.
+    const owner = await withAdmin(f.options.adminUrl, async (c) => (await c.query('SELECT pg_get_userbyid(datdba) AS o FROM pg_database WHERE datname = current_database()')).rows[0].o);
+    expect(owner).toBe(f.names.migrator);
+    await asLogin(f.store.values.get('secret-migrator')!, async (c) => {
+      expect((await c.query('SELECT rolsuper, rolcreaterole FROM pg_roles WHERE rolname = current_user')).rows[0]).toEqual({ rolsuper: false, rolcreaterole: false });
+      expect((await migrateUp(c)).length).toBeGreaterThan(0);
+    });
+
+    // After the migrations the group privileges can be read back, and they hold.
+    const after = await provisionLogins({ ...f.options, requireMigrated: true });
+    expect(failing(after)).toEqual([]);
+    const privileges = after.checks.filter((c) => /login privileges$/.test(c.name));
+    expect(privileges.map((c) => [c.name, c.ok, c.skipped ?? false])).toEqual([['app login privileges', true, false], ['verifier login privileges', true, false]]);
+    expect(after.logins.every((l) => l.action === 'unchanged')).toBe(true);
+  });
+
+  it('the logins cannot do what the ledger forbids them (live attempts, not catalog reads)', async () => {
+    const f = await fixture();
+    await provisionLogins(f.options);
+    await asLogin(f.store.values.get('secret-migrator')!, (c) => migrateUp(c));
+    for (const kind of ['app', 'verifier'] as const) {
+      await asLogin(f.store.values.get(f.options.secrets[kind])!, async (c) => {
+        await expect(c.query("INSERT INTO ledger_events (id) VALUES ('00000000-0000-0000-0000-000000000000')")).rejects.toMatchObject({ code: '42501' });
+      });
+    }
+    await asLogin(f.store.values.get('secret-app')!, async (c) => {
+      await expect(c.query("SELECT ledger_set_global_hold('no')")).rejects.toMatchObject({ code: '42501' });
+    });
+    await asLogin(f.store.values.get('secret-verifier')!, async (c) => {
+      await expect(c.query('SELECT * FROM ledger_incident_clearances')).resolves.toBeDefined(); // the verifier may read the incident tables (0011)
+    });
+    await asLogin(f.store.values.get('secret-app')!, async (c) => {
+      await expect(c.query('SELECT * FROM ledger_incident_clearances')).rejects.toMatchObject({ code: '42501' }); // the application may not
+    });
+  });
+});
+
+describe('running it again', () => {
+  it('changes nothing: no secret is written, no password changes, every login still works', async () => {
+    const f = await fixture();
+    await provisionLogins(f.options);
+    const before = new Map(f.store.values);
+    const putsBefore = f.store.puts.length;
+    const again = await provisionLogins(f.options);
+    expect(again.ok).toBe(true);
+    expect(again.logins.map((l) => l.action)).toEqual(['unchanged', 'unchanged', 'unchanged']);
+    expect(f.store.puts.length).toBe(putsBefore);
+    expect(f.store.values).toEqual(before);
+    for (const value of before.values()) await asLogin(value, (c) => c.query('SELECT 1'));
+  });
+
+  whenPasswordsAreChecked('--rotate replaces every password: the new strings work and the old ones no longer do', async () => {
+    const f = await fixture();
+    await provisionLogins(f.options);
+    const old = new Map(f.store.values);
+    const rotated = await provisionLogins({ ...f.options, rotate: true });
+    expect(rotated.ok).toBe(true);
+    expect(rotated.logins.map((l) => l.action)).toEqual(['rotated', 'rotated', 'rotated']);
+    for (const [id, value] of f.store.values) {
+      expect(value).not.toBe(old.get(id));
+      await asLogin(value, (c) => c.query('SELECT 1')); // control: the new string works
+      await expect(asLogin(old.get(id)!, (c) => c.query('SELECT 1'))).rejects.toMatchObject({ code: '28P01' });
+    }
+  });
+
+  whenPasswordsAreChecked('repairs a secret that is empty, and a password changed behind its back, and says so', async () => {
+    const f = await fixture();
+    await provisionLogins(f.options);
+    f.store.values.delete('secret-verifier'); // a container with no value
+    await withAdmin(f.options.adminUrl, (c) => c.query(`ALTER ROLE ${f.names.app} PASSWORD 'changed-by-someone'`));
+    const report = await provisionLogins(f.options);
+    expect(report.ok).toBe(true);
+    expect(Object.fromEntries(report.logins.map((l) => [l.kind, l.action]))).toEqual({ migrator: 'unchanged', app: 'repaired', verifier: 'repaired' });
+    for (const value of f.store.values.values()) await asLogin(value, (c) => c.query('SELECT 1'));
+  });
+
+  it('two runs at the same moment do not corrupt each other', async () => {
+    const f = await fixture();
+    const [a, b] = await Promise.all([provisionLogins(f.options), provisionLogins(f.options)]);
+    expect(a.ok && b.ok).toBe(true);
+    for (const value of f.store.values.values()) await asLogin(value, (c) => c.query('SELECT 1')); // the stored strings are the ones the database accepts
+  });
+});
+
+describe('what it refuses to call ready', () => {
+  it('a verifier that has been made a member of the application role fails the check (it would inherit the right to append), and passes again once removed', async () => {
+    const f = await fixture();
+    await provisionLogins(f.options);
+    await withAdmin(f.options.adminUrl, (c) => c.query(`GRANT telesphoros_app TO ${f.names.verifier}`));
+    const bad = await provisionLogins(f.options);
+    expect(bad.ok).toBe(false);
+    expect(failing(bad).join('\n')).toMatch(/verifier login memberships/);
+    await withAdmin(f.options.adminUrl, (c) => c.query(`REVOKE telesphoros_app FROM ${f.names.verifier}`));
+    expect((await provisionLogins(f.options)).ok).toBe(true); // control: the same run is ready once the extra membership is gone
+  });
+
+  it.each([['CREATEDB', 'NOCREATEDB'], ['CREATEROLE', 'NOCREATEROLE'], ['BYPASSRLS', 'NOBYPASSRLS'], ['REPLICATION', 'NOREPLICATION']])('a login given %s fails the check, and passes again once it is taken away', async (grant, revoke) => {
+    const f = await fixture();
+    await provisionLogins(f.options);
+    await withAdmin(f.options.adminUrl, (c) => c.query(`ALTER ROLE ${f.names.app} ${grant}`));
+    const report = await provisionLogins(f.options);
+    expect(report.ok).toBe(false);
+    expect(failing(report).join('\n')).toMatch(/app login attributes/);
+    await withAdmin(f.options.adminUrl, (c) => c.query(`ALTER ROLE ${f.names.app} ${revoke}`));
+    expect((await provisionLogins(f.options)).ok).toBe(true); // control
+  });
+
+  it('after the migrations, a verifier that can append fails, and --require-migrated turns "not migrated yet" into a failure', async () => {
+    const f = await fixture();
+    expect((await provisionLogins({ ...f.options, requireMigrated: true })).ok).toBe(false); // nothing migrated yet
+    await asLogin(f.store.values.get('secret-migrator')!, (c) => migrateUp(c));
+    expect((await provisionLogins({ ...f.options, requireMigrated: true })).ok).toBe(true); // control
+    // The administrator (or a mistake) gives the verifier the right to append: the gate function itself.
+    await withAdmin(f.options.adminUrl, async (c) => {
+      const gate = (await c.query("SELECT oid::regprocedure AS sig FROM pg_proc WHERE proname = 'ledger_append' AND pronamespace = 'public'::regnamespace")).rows[0].sig;
+      await c.query(`GRANT EXECUTE ON FUNCTION ${gate} TO ${f.names.verifier}`);
+    });
+    const bad = await provisionLogins({ ...f.options, requireMigrated: true });
+    expect(bad.ok).toBe(false);
+    expect(failing(bad).join('\n')).toMatch(/verifier login privileges: .*ledger_append \(CAN execute\)/);
+  });
+
+  it('a verifier that is also a writer of the ledger tables fails the check', async () => {
+    const f = await fixture();
+    await provisionLogins(f.options);
+    await asLogin(f.store.values.get('secret-migrator')!, (c) => migrateUp(c));
+    expect((await provisionLogins({ ...f.options, requireMigrated: true })).ok).toBe(true); // control
+    await withAdmin(f.options.adminUrl, (c) => c.query(`GRANT INSERT ON ledger_events TO ${f.names.app}`));
+    const bad = await provisionLogins({ ...f.options, requireMigrated: true });
+    expect(bad.ok).toBe(false);
+    expect(failing(bad).join('\n')).toMatch(/app login privileges: .*ledger_events \(CAN write\)/);
+  });
+
+  it('a secret that cannot be written stops the run before any role is created', async () => {
+    const f = await fixture();
+    const broken: SecretStore = { get: async () => undefined, put: async () => { throw new Error('the secret store is down'); } };
+    await expect(provisionLogins({ ...f.options, store: broken })).rejects.toThrow(/secret store is down/);
+    const roles = await withAdmin(f.options.adminUrl, async (c) => (await c.query('SELECT rolname FROM pg_roles WHERE rolname = ANY($1)', [Object.values(f.names)])).rows);
+    expect(roles).toEqual([]); // nothing was created whose password nobody holds
+  });
+
+  it('refuses names that are not plain identifiers, or that repeat', async () => {
+    const f = await fixture();
+    await expect(provisionLogins({ ...f.options, names: { ...f.names, app: 'Bad Name; DROP' } })).rejects.toThrow(/login name/);
+    await expect(provisionLogins({ ...f.options, names: { ...f.names, verifier: f.names.app } })).rejects.toThrow(/differ/);
+  });
+});
+
+describe('the password never leaves the process except as a hash', () => {
+  it('no statement sent to the database contains a plaintext password, and nothing in the report does (creating, and replacing, a password)', async () => {
+    const f = await fixture();
+    const sent: string[] = [];
+    const original = Client.prototype.query;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (Client.prototype as any).query = function (...args: unknown[]) {
+      const first = args[0];
+      sent.push(typeof first === 'string' ? first : String((first as { text?: string })?.text ?? ''));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (original as any).apply(this, args);
+    };
+    const reports: ProvisionReport[] = [];
+    const passwords: string[] = [];
+    try {
+      reports.push(await provisionLogins(f.options)); // CREATE ROLE
+      passwords.push(...[...f.store.values.values()].map(passwordIn));
+      reports.push(await provisionLogins({ ...f.options, rotate: true })); // ALTER ROLE
+      passwords.push(...[...f.store.values.values()].map(passwordIn));
+    } finally {
+      Client.prototype.query = original;
+    }
+    expect(new Set(passwords).size).toBe(6); // three created, three replaced: all different
+    const everything = sent.join('\n');
+    expect(everything).toContain('SCRAM-SHA-256$'); // control: the statements that set passwords were captured, and they carry the verifier
+    expect(sent.filter((s) => /^CREATE ROLE .*PASSWORD/.test(s)).length).toBeGreaterThanOrEqual(3);
+    expect(sent.filter((s) => /^ALTER ROLE .*PASSWORD/.test(s)).length).toBeGreaterThanOrEqual(3);
+    for (const password of passwords) {
+      expect(everything).not.toContain(password);
+      expect(JSON.stringify(reports)).not.toContain(password);
+    }
+  });
+
+  it('a group that can log in, or carries any other attribute the migrations did not give it, fails the group check', async () => {
+    const f = await fixture();
+    const good = `prov_grp_ok_${randomBytes(3).toString('hex')}`;
+    const bad = `prov_grp_bad_${randomBytes(3).toString('hex')}`;
+    logins.push(good, bad);
+    await withAdmin(f.options.adminUrl, async (c) => {
+      await c.query(`CREATE ROLE ${good} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS`);
+      await c.query(`CREATE ROLE ${bad} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS`);
+      expect(await checkGroups(c, [good])).toMatchObject({ ok: true }); // control
+      expect(await checkGroups(c, [bad])).toMatchObject({ ok: false });
+      expect(await checkGroups(c, [good, `prov_grp_missing_${randomBytes(3).toString('hex')}`])).toMatchObject({ ok: false }); // a missing group
+    });
+  });
+
+  it('the verifier we send is the one PostgreSQL itself would store for the same password and salt', async () => {
+    const f = await fixture();
+    const name = `prov_scram_${randomBytes(3).toString('hex')}`;
+    logins.push(name);
+    await withAdmin(f.options.adminUrl, async (c) => {
+      await c.query("SET password_encryption = 'scram-sha-256'");
+      await c.query(`CREATE ROLE ${name} LOGIN PASSWORD 'plain-text-for-comparison'`);
+      const stored: string = (await c.query('SELECT rolpassword FROM pg_authid WHERE rolname = $1', [name])).rows[0].rolpassword;
+      const [, iterations, salt] = /^SCRAM-SHA-256\$(\d+):([^$]+)\$/.exec(stored)!;
+      expect(scramVerifier('plain-text-for-comparison', Buffer.from(salt!, 'base64'), Number(iterations))).toBe(stored);
+      expect(scramVerifier('a different password', Buffer.from(salt!, 'base64'), Number(iterations))).not.toBe(stored); // control
+    });
+  });
+});
