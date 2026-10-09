@@ -82,8 +82,8 @@ export function apiEdgeProblems(tf, vars = variables, db = database) {
   need(has(lb, 'drop_invalid_header_fields = true'), 'invalid header fields must be dropped');
   need(has(lb, 'desync_mitigation_mode = "strictest"'), 'desync mitigation must be strictest');
   need(has(lb, 'enable_deletion_protection = var.environment == "production"'), 'deletion protection must be on in production');
-  need(has(lb, 'subnets = var.public_subnet_ids'), 'the load balancer must sit in the public subnets');
-  need(has(lb, 'condition = length(var.public_subnet_ids) >= 2'), 'at least two public subnets must be required');
+  need(has(lb, 'subnets = local.alb_subnet_ids'), 'the load balancer must sit in the public subnets (profile.tf: the supplied ones, or the synthetic ones)');
+  need(has(lb, 'condition = length(local.alb_subnet_ids) >= 2'), 'at least two public subnets must be required');
   need(!has(text, 'access_logs'), 'access logging must stay off: request lines carry record identifiers (docs/ops/api-hosting.md)');
 
   // Listener: HTTPS only, TLS 1.2 or newer, everything else a 404.
@@ -185,7 +185,7 @@ test('the API edge guard reports each way the text could be weakened (controls)'
     ['invalid headers kept', 'drop_invalid_header_fields = true', 'drop_invalid_header_fields = false'],
     ['desync mitigation weakened', 'desync_mitigation_mode     = "strictest"', 'desync_mitigation_mode     = "defensive"'],
     ['deletion protection off', 'enable_deletion_protection = var.environment == "production"', 'enable_deletion_protection = false'],
-    ['one public subnet allowed', 'condition     = length(var.public_subnet_ids) >= 2', 'condition     = length(var.public_subnet_ids) >= 1'],
+    ['one public subnet allowed', 'condition     = length(local.alb_subnet_ids) >= 2', 'condition     = length(local.alb_subnet_ids) >= 1'],
     ['access logs on', '  idle_timeout               = 60\n', '  idle_timeout               = 60\n  access_logs {\n    bucket  = "x"\n    enabled = true\n  }\n'],
     ['plain listener added', 'resource "aws_lb_listener_rule" "api_forward" {', 'resource "aws_lb_listener" "plain" {\n  count             = local.api_count\n  load_balancer_arn = aws_lb.api[0].arn\n  port              = 80\n  protocol          = "HTTP"\n  default_action {\n    type = "forward"\n  }\n}\n\nresource "aws_lb_listener_rule" "api_forward" {'],
     ['old TLS policy', 'ELBSecurityPolicy-TLS13-1-2-2021-06', 'ELBSecurityPolicy-2016-08'],
@@ -194,7 +194,7 @@ test('the API edge guard reports each way the text could be weakened (controls)'
     ['wrong task port', 'api_port       = 3000', 'api_port       = 8080'],
     ['liveness health check', 'api_ready_path = "/api/v1/ready"', 'api_ready_path = "/api/v1/health"'],
     ['health check accepts anything', 'matcher             = "200"', 'matcher             = "200-499"'],
-    ['inline security group rule', 'description = "Load balancer for ${local.name}: HTTPS from the internet, traffic only to the application"\n  vpc_id      = var.vpc_id', 'description = "x"\n  vpc_id      = var.vpc_id\n  ingress {\n    from_port = 0\n    to_port   = 0\n    protocol  = "-1"\n  }'],
+    ['inline security group rule', 'description = "Load balancer for ${local.name}: HTTPS from the internet, traffic only to the application"\n  vpc_id      = local.vpc_id', 'description = "x"\n  vpc_id      = local.vpc_id\n  ingress {\n    from_port = 0\n    to_port   = 0\n    protocol  = "-1"\n  }'],
     ['load balancer open on another port', 'from_port         = 443\n  to_port           = 443\n  description       = "HTTPS from the internet (the firewall filters it)"', 'from_port         = 0\n  to_port           = 65535\n  description       = "HTTPS from the internet (the firewall filters it)"'],
     ['tasks open to the internet', 'referenced_security_group_id = aws_security_group.api_alb[0].id\n  ip_protocol                  = "tcp"\n  from_port                    = local.api_port\n  to_port                      = local.api_port\n  description                  = "From the load balancer only"', 'cidr_ipv4                    = "0.0.0.0/0"\n  ip_protocol                  = "tcp"\n  from_port                    = local.api_port\n  to_port                      = local.api_port\n  description                  = "From the load balancer only"'],
     ['tasks may reach any port out', 'from_port         = 443\n  to_port           = 443\n  description       = "HTTPS to AWS services and the Cognito key endpoint"', 'from_port         = 0\n  to_port           = 65535\n  description       = "HTTPS to AWS services and the Cognito key endpoint"'],

@@ -1,5 +1,10 @@
 environment = "staging"
 
+# Deployment profile (README.md, "Deployment profiles"). The default, production, is what is written for; do not change it for anything that will hold real records.
+# For the FD-7 rehearsal only (staging, synthetic data, one Region, small, destroyable, creates its own network), set the following and delete the vpc_id and subnet lines below:
+# deployment_profile = "synthetic"
+
+# Production profile: required. Synthetic profile: leave both out and the rehearsal creates its own network.
 vpc_id                 = "vpc-0123456789abcdef0"
 private_subnet_ids     = ["subnet-0aaaaaaaaaaaaaaaa", "subnet-0bbbbbbbbbbbbbbbb"]
 app_security_group_ids = ["sg-0123456789abcdef0"]

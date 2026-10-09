@@ -23,7 +23,7 @@ resource "aws_cognito_user_pool" "main" {
     case_sensitive = false
   }
 
-  deletion_protection = var.cognito_deletion_protection
+  deletion_protection = local.cognito_protection
 
   # No public sign-up. Accounts exist only because an administrator invited them.
   admin_create_user_config {

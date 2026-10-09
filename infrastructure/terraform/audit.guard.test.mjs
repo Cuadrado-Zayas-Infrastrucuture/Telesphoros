@@ -51,13 +51,14 @@ export function auditProblems(tf, appIam = iam) {
   // The log bucket: private, versioned, locked, encrypted with the audit key.
   const bucket = one('resource "aws_s3_bucket" "audit"');
   need(has(bucket, 'object_lock_enabled = true'), 'the audit bucket must have Object Lock enabled');
-  need(has(bucket, 'force_destroy = false'), 'the audit bucket must not be force-destroyable');
+  need(has(bucket, 'force_destroy = local.synthetic'), 'the audit bucket may be force-destroyable only through the synthetic profile (profile.tf), never by a literal');
+  need(!/force_destroy\s*=\s*true/.test(bucket), 'the audit bucket must not be force-destroyable by a literal');
   const access = one('resource "aws_s3_bucket_public_access_block" "audit"');
   for (const flag of ['block_public_acls', 'block_public_policy', 'ignore_public_acls', 'restrict_public_buckets']) need(has(access, `${flag} = true`), `public access must stay blocked (${flag})`);
   need(has(one('resource "aws_s3_bucket_versioning" "audit"'), 'status = "Enabled"'), 'the audit bucket must be versioned');
   need(has(one('resource "aws_s3_bucket_ownership_controls" "audit"'), 'object_ownership = "BucketOwnerEnforced"'), 'ACLs must be disabled on the audit bucket');
   const lock = one('resource "aws_s3_bucket_object_lock_configuration" "audit"');
-  need(has(lock, 'mode = var.audit_lock_mode') && has(lock, 'days = var.audit_lock_days'), 'the lock must use the mode and days variables, not literals that can drift');
+  need(has(lock, 'mode = var.audit_lock_mode') && has(lock, 'days = local.audit_lock_days'), 'the lock must use the mode variable and the profile days (the variable in production), not literals that can drift');
   const sse = one('resource "aws_s3_bucket_server_side_encryption_configuration" "audit"');
   need(has(sse, 'sse_algorithm = "aws:kms"') && has(sse, 'kms_master_key_id = aws_kms_key.audit.arn'), 'logs must be encrypted with the dedicated audit key');
   const lifecycle = one('resource "aws_s3_bucket_lifecycle_configuration" "audit"');
@@ -95,7 +96,7 @@ export function auditProblems(tf, appIam = iam) {
 
   // The trail itself.
   const trail = one('resource "aws_cloudtrail" "audit"');
-  need(has(trail, 'is_multi_region_trail = true'), 'the trail must cover every region');
+  need(has(trail, 'is_multi_region_trail = !local.synthetic'), 'the trail must cover every region (single-Region only through the synthetic profile)');
   need(has(trail, 'include_global_service_events = true'), 'the trail must include global service events');
   need(has(trail, 'enable_log_file_validation = true'), 'log file validation (signed digests) must be on');
   need(has(trail, 'kms_key_id = aws_kms_key.audit.arn'), 'the trail must encrypt with the audit key');
@@ -113,7 +114,7 @@ export function auditProblems(tf, appIam = iam) {
   need(has(alarm, 'threshold = 1') && has(alarm, 'comparison_operator = "GreaterThanOrEqualToThreshold"'), 'a single occurrence must alarm');
   need(has(alarm, 'treat_missing_data = "notBreaching"'), 'no data must not alarm');
   need(has(one('resource "aws_cloudwatch_log_metric_filter" "audit"'), 'for_each = local.audit_alarms'), 'every alarm needs its metric filter');
-  need(has(text, 'audit_buckets = [aws_s3_bucket.reports.bucket, aws_s3_bucket.audit.bucket, aws_s3_bucket.backups.bucket]'), 'the bucket-protection alarm must watch the reports, audit and backup buckets');
+  need(has(text, 'audit_buckets = concat([aws_s3_bucket.reports.bucket, aws_s3_bucket.audit.bucket], aws_s3_bucket.backups[*].bucket)'), 'the bucket-protection alarm must watch the reports, audit and (when it exists) backup buckets');
   const alarms = one('audit_alarms = ');
   for (const [name, fragments] of Object.entries(ALARMS)) {
     const entry = blocks(alarms, `${name} = `)[0] ?? '';
@@ -137,7 +138,7 @@ test('the audit guard reports each way the text could be weakened (controls)', (
     ['Object Lock removed', 'object_lock_enabled = true', 'object_lock_enabled = false'],
     ['public access allowed', 'block_public_policy     = true', 'block_public_policy     = false'],
     ['versioning suspended', 'status = "Enabled"', 'status = "Suspended"'],
-    ['lock days a literal', 'days = var.audit_lock_days', 'days = 1'],
+    ['lock days a literal', 'days = local.audit_lock_days', 'days = 1'],
     ['logs not encrypted with the audit key', 'kms_master_key_id = aws_kms_key.audit.arn\n    }\n    bucket_key_enabled', 'kms_master_key_id = aws_kms_key.data.arn\n    }\n    bucket_key_enabled'],
     ['retention floor lowered', 'default     = 2190', 'default     = 365'],
     ['retention validation removed', 'condition     = var.audit_log_retention_days >= 2190', 'condition     = true'],
@@ -146,8 +147,8 @@ test('the audit guard reports each way the text could be weakened (controls)', (
     ['insecure transport allowed', 'variable = "aws:SecureTransport"', 'variable = "aws:Other"'],
     ['anyone may write logs', 'identifiers = ["cloudtrail.amazonaws.com"]\n    }\n    condition {\n      test     = "StringEquals"\n      variable = "aws:SourceArn"\n      values   = [local.audit_trail_arn]\n    }\n    condition {\n      test     = "StringEquals"\n      variable = "s3:x-amz-acl"', 'identifiers = ["*"]\n    }\n    condition {\n      test     = "StringEquals"\n      variable = "aws:SourceArn"\n      values   = [local.audit_trail_arn]\n    }\n    condition {\n      test     = "StringEquals"\n      variable = "s3:x-amz-acl"'],
     ['writes allowed for any prefix', '/AWSLogs/${local.audit_account_id}/*', '/*'],
-    ['key rotation off', 'enable_key_rotation     = true\n  deletion_window_in_days = 30\n  policy', 'enable_key_rotation     = false\n  deletion_window_in_days = 30\n  policy'],
-    ['not multi-region', 'is_multi_region_trail         = true', 'is_multi_region_trail         = false'],
+    ['key rotation off', 'enable_key_rotation     = true\n  deletion_window_in_days = local.kms_deletion_days\n  policy', 'enable_key_rotation     = false\n  deletion_window_in_days = local.kms_deletion_days\n  policy'],
+    ['not multi-region', 'is_multi_region_trail         = !local.synthetic', 'is_multi_region_trail         = false'],
     ['log validation off', 'enable_log_file_validation    = true', 'enable_log_file_validation    = false'],
     ['reads not recorded', 'read_write_type           = "All"', 'read_write_type           = "WriteOnly"'],
     ['data events dropped', 'values = ["${aws_s3_bucket.reports.arn}/"]', 'values = ["arn:aws:s3"]'],
@@ -158,7 +159,8 @@ test('the audit guard reports each way the text could be weakened (controls)', (
     ['break-glass assumption not watched', '${var.break_glass_role_name}', 'some-other-role'],
     ['trail tampering not watched', '$.eventName = \\"StopLogging\\"', '$.eventName = \\"Nothing\\"'],
     ['key changes not watched', '$.eventName = \\"ScheduleKeyDeletion\\"', '$.eventName = \\"Nothing\\"'],
-    ['backup bucket not watched', 'aws_s3_bucket.audit.bucket, aws_s3_bucket.backups.bucket]', 'aws_s3_bucket.audit.bucket]'],
+    ['backup bucket not watched', 'aws_s3_bucket.audit.bucket], aws_s3_bucket.backups[*].bucket)', 'aws_s3_bucket.audit.bucket], [])'],
+    ['audit bucket force-destroyable by a literal', 'force_destroy       = local.synthetic', 'force_destroy       = true'],
     ['bucket-protection alarm ignores the list', 'for b in local.audit_buckets', 'for b in []'],
   ];
   for (const [name, from, to] of weakened) {

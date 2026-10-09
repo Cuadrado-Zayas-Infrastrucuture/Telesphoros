@@ -133,6 +133,8 @@ export function apiComputeProblems(tf, sources = {}) {
   need(common.some((s) => s.resources.includes('local.api_repository') && s.actions.includes('ecr:BatchGetImage')), 'image pulls must be limited to the one repository');
   need(common.some((s) => s.resources.includes(':log-group:${local.api_log_group}:*') && s.actions.includes('logs:PutLogEvents')), 'log writes must be limited to the API log group');
   for (const doc of ['api_execution_service', 'api_execution_migrate']) need(has(one(`data "aws_iam_policy_document" "${doc}"`), 'source_policy_documents = [data.aws_iam_policy_document.api_execution_common.json]'), `${doc} must build on the common statements`);
+  // They index secrets that exist only when hosting is on, so they must be counted too: uncounted, the default variables cannot even be planned (FD-3).
+  for (const doc of ['api_execution_service', 'api_execution_migrate']) need(has(one(`data "aws_iam_policy_document" "${doc}"`), 'count = local.api_count'), `${doc} must be counted by local.api_count`);
 
   // The service task definition.
   const task = one('resource "aws_ecs_task_definition" "api"');
@@ -173,7 +175,8 @@ export function apiComputeProblems(tf, sources = {}) {
   const service = one('resource "aws_ecs_service" "api"');
   need(has(service, 'launch_type = "FARGATE"') && has(service, 'desired_count = var.api_desired_count'), 'the service must be Fargate with the desired count variable');
   need(has(service, 'enable_execute_command = false'), 'no shell may be opened into a task');
-  need(has(service, 'assign_public_ip = false') && has(service, 'subnets = var.private_subnet_ids') && has(service, 'security_groups = [aws_security_group.api_tasks[0].id]'), 'tasks must run in the private subnets, with no public address, in the tasks security group');
+  need(has(service, 'assign_public_ip = local.tasks_public_ip') && has(service, 'subnets = local.data_subnet_ids') && has(service, 'security_groups = [aws_security_group.api_tasks[0].id]'), 'tasks must run in the data subnets (private in production), with a public address only through the synthetic profile, in the tasks security group');
+  need(!/assign_public_ip\s*=\s*true/.test(code(service)), 'no literal public address for the tasks');
   need(has(service, 'enable = true') && has(service, 'rollback = true'), 'a failed deployment must roll back (circuit breaker)');
   need(has(service, 'deployment_minimum_healthy_percent = 100') && has(service, 'deployment_maximum_percent = 200'), 'a deployment must never reduce healthy capacity');
   need(has(service, 'target_group_arn = aws_lb_target_group.api[0].arn') && has(service, 'container_name = local.api_container') && has(service, 'container_port = local.api_port'), 'the service must register with the API target group on the task port');
@@ -275,8 +278,10 @@ test('the API compute guard reports each way the text could be weakened (control
     ['an expression the guard cannot evaluate', envLine('BUILD_VERSION', 'local.api_build'), envLine('BUILD_VERSION', 'var.something_new')],
     ['wrong port', envLine('PORT', 'tostring(local.api_port)'), envLine('PORT', '"8080"')],
     ['shell into tasks', 'enable_execute_command             = false', 'enable_execute_command             = true'],
-    ['tasks get a public address', 'assign_public_ip = false', 'assign_public_ip = true'],
-    ['tasks in the public subnets', 'subnets          = var.private_subnet_ids', 'subnets          = var.public_subnet_ids'],
+    ['tasks get a public address', 'assign_public_ip = local.tasks_public_ip', 'assign_public_ip = true'],
+    ['tasks in the public subnets', 'subnets          = local.data_subnet_ids', 'subnets          = var.public_subnet_ids'],
+    ['an execution policy not counted', 'data "aws_iam_policy_document" "api_execution_service" {\n  count                   = local.api_count\n', 'data "aws_iam_policy_document" "api_execution_service" {\n'],
+    ['a migrator policy not counted', 'data "aws_iam_policy_document" "api_execution_migrate" {\n  count                   = local.api_count\n', 'data "aws_iam_policy_document" "api_execution_migrate" {\n'],
     ['no rollback', 'rollback = true', 'rollback = false'],
     ['deployment may drop capacity', 'deployment_minimum_healthy_percent = 100', 'deployment_minimum_healthy_percent = 0'],
     ['service registers on another port', 'container_port   = local.api_port\n  }\n\n  depends_on', 'container_port   = 8080\n  }\n\n  depends_on'],

@@ -1,0 +1,370 @@
+# Run with: terraform test   (from infrastructure/terraform, after `terraform init -backend=false`)
+#
+# An offline PLAN of this root under each deployment profile (profile.tf), with every provider mocked: no AWS account, no credentials,
+# nothing is created. It proves the SHAPE of each profile: what exists, what is switched off, and what is refused. It does NOT prove that AWS
+# accepts the plan (limits, quotas, a service the account's plan refuses): that is the first real apply (the FD-7 rehearsal).
+#
+# The text guards (guard.test.mjs and its siblings) pin the security settings themselves; these runs pin the resource-level consequences.
+
+mock_provider "aws" {
+  mock_data "aws_iam_policy_document" {
+    defaults = {
+      json = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"s3:GetObject\",\"Resource\":\"*\"}]}"
+    }
+  }
+  mock_data "aws_availability_zones" {
+    defaults = {
+      names = ["us-east-2a", "us-east-2b", "us-east-2c"]
+    }
+  }
+}
+
+mock_provider "aws" {
+  alias = "backup"
+  mock_data "aws_iam_policy_document" {
+    defaults = {
+      json = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"s3:GetObject\",\"Resource\":\"*\"}]}"
+    }
+  }
+}
+
+mock_provider "aws" {
+  alias = "web_certificate"
+}
+
+mock_provider "archive" {}
+
+variables {
+  environment            = "staging"
+  vpc_id                 = "vpc-0123456789abcdef0"
+  private_subnet_ids     = ["subnet-aaaa1111", "subnet-bbbb2222"]
+  app_security_group_ids = ["sg-0123456789abcdef0"]
+  reports_cors_origins   = ["https://staging.example.test"]
+  app_callback_urls      = ["https://staging.example.test/cb"]
+  app_logout_urls        = ["https://staging.example.test/out"]
+  cognito_domain_prefix  = "profile-test"
+  ses_from_email         = "no-reply@example.test"
+  alarm_email            = "ops@example.test"
+}
+
+# ------------------------------------------------------------------------------------------------
+# The default variables must plan. (Before FD-3 they could not: two IAM policy documents indexed secrets that exist only when API hosting is on.)
+# ------------------------------------------------------------------------------------------------
+run "default_variables_plan" {
+  command = plan
+
+  assert {
+    condition     = var.deployment_profile == "production"
+    error_message = "the default profile must be production, so a forgotten variable can never select the relaxed one"
+  }
+  assert {
+    condition     = length(aws_ecs_service.api) == 0 && length(aws_lb.api) == 0
+    error_message = "API hosting is off by default"
+  }
+}
+
+# ------------------------------------------------------------------------------------------------
+# Production: two Regions, protected, and a network the operator supplies.
+# ------------------------------------------------------------------------------------------------
+run "production_shape" {
+  command = plan
+
+  variables {
+    environment = "production"
+    db_multi_az = true
+  }
+
+  assert {
+    condition     = length(aws_kms_key.backup) == 1 && length(aws_kms_alias.backup) == 1
+    error_message = "production keeps the off-site backup key"
+  }
+  assert {
+    condition     = length(aws_s3_bucket.backups) == 1 && length(aws_s3_bucket_object_lock_configuration.backups) == 1 && length(aws_s3_bucket_policy.backups) == 1
+    error_message = "production keeps the locked off-site backups bucket and its policy"
+  }
+  assert {
+    condition     = length(aws_db_instance_automated_backups_replication.offsite) == 1 && length(aws_iam_policy.backup_job) == 1
+    error_message = "production replicates automated backups off-site and defines the backup job policy"
+  }
+  assert {
+    condition     = one(aws_s3_bucket_object_lock_configuration.backups[0].rule).default_retention[0].days == 14 && one(aws_s3_bucket_object_lock_configuration.audit.rule).default_retention[0].days == 365
+    error_message = "production lock periods come from the variables (14 days for backups, 365 for the audit logs)"
+  }
+  assert {
+    condition     = aws_cloudtrail.audit.is_multi_region_trail == true
+    error_message = "production's audit trail covers every Region"
+  }
+  assert {
+    condition     = aws_db_instance.main.multi_az == true && aws_db_instance.main.deletion_protection == true && aws_db_instance.main.skip_final_snapshot == false
+    error_message = "production's database is Multi-AZ, deletion-protected, and takes a final snapshot"
+  }
+  assert {
+    condition     = aws_db_instance.main.final_snapshot_identifier == "telesphoros-production-final" && aws_db_instance.main.backup_retention_period == 14 && aws_db_instance.main.instance_class == "db.t4g.small"
+    error_message = "production keeps its snapshot name, 14-day recovery window and instance class"
+  }
+  assert {
+    condition     = aws_db_instance.main.performance_insights_enabled == true && aws_db_instance.main.publicly_accessible == false
+    error_message = "production keeps Performance Insights and no public address"
+  }
+  assert {
+    condition     = aws_s3_bucket.reports.force_destroy == false && aws_s3_bucket.audit.force_destroy == false && aws_s3_bucket.access_logs.force_destroy == false && aws_s3_bucket.backups[0].force_destroy == false
+    error_message = "no production bucket can be force-destroyed"
+  }
+  assert {
+    condition     = aws_kms_key.data.deletion_window_in_days == 30 && aws_kms_key.audit.deletion_window_in_days == 30 && aws_kms_key.backup[0].deletion_window_in_days == 30
+    error_message = "production keys keep the 30-day deletion window"
+  }
+  assert {
+    condition     = aws_cognito_user_pool.main.deletion_protection == "ACTIVE"
+    error_message = "production's user pool is deletion-protected"
+  }
+  assert {
+    condition     = length(aws_vpc.synthetic) == 0 && length(aws_subnet.synthetic) == 0 && length(aws_internet_gateway.synthetic) == 0 && length(aws_vpc_endpoint.synthetic_s3) == 0
+    error_message = "the synthetic network must not exist in production"
+  }
+  assert {
+    condition     = aws_db_subnet_group.main.subnet_ids == toset(["subnet-aaaa1111", "subnet-bbbb2222"])
+    error_message = "production's database uses the operator's private subnets"
+  }
+  assert {
+    condition     = output.deployment_profile == "production"
+    error_message = "the profile is reported as an output"
+  }
+}
+
+run "production_hosting_on" {
+  command = plan
+
+  variables {
+    environment        = "production"
+    db_multi_az        = true
+    enable_api_hosting = true
+    api_domain         = "api.example.test"
+    public_subnet_ids  = ["subnet-pub1111", "subnet-pub2222"]
+    api_image          = "123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    api_cors_origins   = ["https://staging.example.test"]
+    api_desired_count  = 2
+  }
+
+  assert {
+    condition     = length(aws_ecs_service.api) == 1 && length(aws_ecs_task_definition.api_migrate) == 1
+    error_message = "hosting on creates the service and the migration task"
+  }
+  assert {
+    condition     = length(data.aws_iam_policy_document.api_execution_service) == 1 && length(data.aws_iam_policy_document.api_execution_migrate) == 1
+    error_message = "the execution policies exist exactly when hosting is on"
+  }
+  assert {
+    condition     = one(aws_ecs_service.api[0].network_configuration).assign_public_ip == false
+    error_message = "production tasks never get a public address"
+  }
+  assert {
+    condition     = one(aws_ecs_service.api[0].network_configuration).subnets == toset(["subnet-aaaa1111", "subnet-bbbb2222"])
+    error_message = "production tasks run in the operator's private subnets"
+  }
+  assert {
+    condition     = aws_lb.api[0].subnets == toset(["subnet-pub1111", "subnet-pub2222"]) && aws_lb.api[0].enable_deletion_protection == true
+    error_message = "the load balancer uses the supplied public subnets and is deletion-protected in production"
+  }
+  assert {
+    condition     = aws_secretsmanager_secret.api_database_url[0].recovery_window_in_days == 30 && aws_kms_key.api_logs[0].deletion_window_in_days == 30
+    error_message = "production keeps the 30-day recovery windows"
+  }
+}
+
+# ------------------------------------------------------------------------------------------------
+# Synthetic: one Region, small, destroyable, self-contained network.
+# ------------------------------------------------------------------------------------------------
+run "synthetic_shape" {
+  command = plan
+
+  variables {
+    deployment_profile = "synthetic"
+    vpc_id             = ""
+    private_subnet_ids = []
+  }
+
+  assert {
+    condition     = length(aws_kms_key.backup) == 0 && length(aws_kms_alias.backup) == 0 && length(aws_s3_bucket.backups) == 0 && length(aws_s3_bucket_object_lock_configuration.backups) == 0 && length(aws_s3_bucket_policy.backups) == 0
+    error_message = "synthetic has no second-Region key or backups bucket"
+  }
+  assert {
+    condition     = length(aws_db_instance_automated_backups_replication.offsite) == 0 && length(aws_iam_policy.backup_job) == 0 && length(data.aws_iam_policy_document.backup_job) == 0
+    error_message = "synthetic has no automated-backup replication and no backup job policy"
+  }
+  assert {
+    condition     = output.backups_bucket == null && output.backup_kms_key_arn == null && output.backup_job_policy_arn == null && output.deployment_profile == "synthetic"
+    error_message = "the off-site outputs are null under synthetic"
+  }
+  assert {
+    condition     = aws_cloudtrail.audit.is_multi_region_trail == false
+    error_message = "synthetic's audit trail is single-Region"
+  }
+  assert {
+    condition     = aws_db_instance.main.instance_class == "db.t4g.micro" && aws_db_instance.main.multi_az == false && aws_db_instance.main.backup_retention_period == 1
+    error_message = "synthetic's database is small, single-AZ, with one day of recovery"
+  }
+  assert {
+    condition     = aws_db_instance.main.deletion_protection == false && aws_db_instance.main.skip_final_snapshot == true && aws_db_instance.main.final_snapshot_identifier == null
+    error_message = "synthetic's database can be destroyed without a final snapshot"
+  }
+  assert {
+    condition     = aws_db_instance.main.publicly_accessible == false && aws_db_instance.main.performance_insights_enabled == false
+    error_message = "synthetic's database still has no public address"
+  }
+  assert {
+    condition     = aws_s3_bucket.reports.force_destroy == true && aws_s3_bucket.audit.force_destroy == true && aws_s3_bucket.access_logs.force_destroy == true
+    error_message = "synthetic's buckets can be emptied on destroy"
+  }
+  assert {
+    condition     = one(aws_s3_bucket_object_lock_configuration.audit.rule).default_retention[0].days == 1 && one(aws_s3_bucket_object_lock_configuration.audit.rule).default_retention[0].mode == "GOVERNANCE"
+    error_message = "synthetic's audit lock is one day, GOVERNANCE"
+  }
+  assert {
+    condition     = aws_kms_key.data.deletion_window_in_days == 7 && aws_kms_key.audit.deletion_window_in_days == 7
+    error_message = "synthetic keys use the shortest deletion window"
+  }
+  assert {
+    condition     = aws_cognito_user_pool.main.deletion_protection == "INACTIVE"
+    error_message = "synthetic's user pool can be destroyed"
+  }
+  assert {
+    condition     = length(aws_vpc.synthetic) == 1 && length(aws_subnet.synthetic) == 2 && length(aws_internet_gateway.synthetic) == 1 && length(aws_vpc_endpoint.synthetic_s3) == 1
+    error_message = "synthetic creates its own VPC, two subnets, an internet gateway and the S3 gateway endpoint"
+  }
+  assert {
+    condition     = aws_subnet.synthetic[0].availability_zone != aws_subnet.synthetic[1].availability_zone
+    error_message = "the two subnets must be in different zones: RDS refuses a subnet group inside one"
+  }
+}
+
+run "synthetic_hosting_on" {
+  command = plan
+
+  variables {
+    deployment_profile = "synthetic"
+    vpc_id             = ""
+    private_subnet_ids = []
+    enable_api_hosting = true
+    api_domain         = "api.example.test"
+    api_image          = "123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    api_cors_origins   = ["https://staging.example.test"]
+  }
+
+  assert {
+    condition     = one(aws_ecs_service.api[0].network_configuration).assign_public_ip == true
+    error_message = "synthetic tasks get a public address (there is no NAT)"
+  }
+  assert {
+    condition     = length(aws_subnet.synthetic) == 2 && length(aws_route_table_association.synthetic) == 2 && length(aws_route.synthetic_internet) == 1
+    error_message = "the created subnets are routed to the internet gateway (their ids are only known after apply, so the service's subnet set cannot be compared here)"
+  }
+  assert {
+    condition     = aws_secretsmanager_secret.api_database_url[0].recovery_window_in_days == 0 && aws_secretsmanager_secret.api_migrator_url[0].recovery_window_in_days == 0 && aws_secretsmanager_secret.api_ledger_verifier_url[0].recovery_window_in_days == 0
+    error_message = "synthetic secrets are deleted at once, so a re-apply does not collide with a pending deletion"
+  }
+  assert {
+    condition     = aws_kms_key.api_logs[0].deletion_window_in_days == 7
+    error_message = "synthetic's log key uses the shortest deletion window"
+  }
+}
+
+# A supplied network under synthetic is used as given: no VPC is created and the tasks get no public address.
+run "synthetic_with_own_network" {
+  command = plan
+
+  variables {
+    deployment_profile = "synthetic"
+    enable_api_hosting = true
+    api_domain         = "api.example.test"
+    public_subnet_ids  = ["subnet-pub1111", "subnet-pub2222"]
+    api_image          = "123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    api_cors_origins   = ["https://staging.example.test"]
+  }
+
+  assert {
+    condition     = length(aws_vpc.synthetic) == 0 && one(aws_ecs_service.api[0].network_configuration).assign_public_ip == false
+    error_message = "a supplied network is used as given and the tasks stay private"
+  }
+}
+
+# ------------------------------------------------------------------------------------------------
+# Refusals.
+# ------------------------------------------------------------------------------------------------
+run "refuses_synthetic_for_production" {
+  command = plan
+
+  variables {
+    deployment_profile = "synthetic"
+    environment        = "production"
+    db_multi_az        = true
+  }
+
+  expect_failures = [terraform_data.profile]
+}
+
+run "refuses_a_compliance_lock_under_synthetic" {
+  command = plan
+
+  variables {
+    deployment_profile = "synthetic"
+    audit_lock_mode    = "COMPLIANCE"
+  }
+
+  expect_failures = [terraform_data.profile]
+}
+
+run "refuses_production_without_a_network" {
+  command = plan
+
+  variables {
+    vpc_id             = ""
+    private_subnet_ids = []
+  }
+
+  expect_failures = [terraform_data.profile]
+}
+
+run "refuses_a_supplied_vpc_without_subnets" {
+  command = plan
+
+  variables {
+    deployment_profile = "synthetic"
+    private_subnet_ids = []
+  }
+
+  expect_failures = [terraform_data.profile]
+}
+
+run "refuses_an_unknown_profile" {
+  command = plan
+
+  variables {
+    deployment_profile = "rehearsal"
+  }
+
+  expect_failures = [var.deployment_profile]
+}
+
+run "refuses_production_without_multi_az" {
+  command = plan
+
+  variables {
+    environment = "production"
+    db_multi_az = false
+  }
+
+  expect_failures = [aws_db_instance.main]
+}
+
+run "refuses_production_without_deletion_protection" {
+  command = plan
+
+  variables {
+    environment            = "production"
+    db_multi_az            = true
+    db_deletion_protection = false
+  }
+
+  expect_failures = [aws_db_instance.main]
+}

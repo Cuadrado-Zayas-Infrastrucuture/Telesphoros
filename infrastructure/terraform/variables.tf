@@ -30,16 +30,22 @@ variable "backup_region" {
 }
 
 variable "vpc_id" {
-  description = "VPC the database lives in. Created elsewhere."
+  description = "VPC the database lives in. Created elsewhere. Required in the production profile; the synthetic profile creates its own when this is empty (network-synthetic.tf)."
   type        = string
+  default     = ""
+  validation {
+    condition     = var.vpc_id == "" || startswith(var.vpc_id, "vpc-")
+    error_message = "vpc_id must be empty or a VPC id (vpc-...)."
+  }
 }
 
 variable "private_subnet_ids" {
-  description = "At least two private subnets in different availability zones."
+  description = "At least two private subnets in different availability zones. Required in the production profile (profile.tf refuses fewer); the synthetic profile creates its own when vpc_id is empty."
   type        = list(string)
+  default     = []
   validation {
-    condition     = length(var.private_subnet_ids) >= 2
-    error_message = "Provide at least two private subnets."
+    condition     = length(var.private_subnet_ids) == 0 || length(var.private_subnet_ids) >= 2
+    error_message = "Provide at least two private subnets, or none."
   }
 }
 

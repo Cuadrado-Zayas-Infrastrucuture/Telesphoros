@@ -4,7 +4,7 @@
 # ------------------------------------------------------------------------------------------------
 resource "aws_s3_bucket" "reports" {
   bucket        = "${local.name}-reports-${data.aws_caller_identity.current.account_id}"
-  force_destroy = false
+  force_destroy = local.synthetic
 }
 
 resource "aws_s3_bucket_ownership_controls" "reports" {
@@ -121,7 +121,7 @@ resource "aws_s3_bucket_policy" "reports" {
 # ------------------------------------------------------------------------------------------------
 resource "aws_s3_bucket" "access_logs" {
   bucket        = "${local.name}-access-logs-${data.aws_caller_identity.current.account_id}"
-  force_destroy = false
+  force_destroy = local.synthetic
 }
 
 resource "aws_s3_bucket_ownership_controls" "access_logs" {
@@ -209,6 +209,7 @@ resource "aws_s3_bucket_policy" "access_logs" {
 # application or operator account cannot quietly delete the only copy.
 # ------------------------------------------------------------------------------------------------
 resource "aws_s3_bucket" "backups" {
+  count               = local.offsite_count
   provider            = aws.backup
   bucket              = "${local.name}-db-backups-${data.aws_caller_identity.current.account_id}"
   force_destroy       = false
@@ -216,16 +217,18 @@ resource "aws_s3_bucket" "backups" {
 }
 
 resource "aws_s3_bucket_ownership_controls" "backups" {
+  count    = local.offsite_count
   provider = aws.backup
-  bucket   = aws_s3_bucket.backups.id
+  bucket   = aws_s3_bucket.backups[0].id
   rule {
     object_ownership = "BucketOwnerEnforced"
   }
 }
 
 resource "aws_s3_bucket_public_access_block" "backups" {
+  count                   = local.offsite_count
   provider                = aws.backup
-  bucket                  = aws_s3_bucket.backups.id
+  bucket                  = aws_s3_bucket.backups[0].id
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
@@ -233,16 +236,18 @@ resource "aws_s3_bucket_public_access_block" "backups" {
 }
 
 resource "aws_s3_bucket_versioning" "backups" {
+  count    = local.offsite_count
   provider = aws.backup
-  bucket   = aws_s3_bucket.backups.id
+  bucket   = aws_s3_bucket.backups[0].id
   versioning_configuration {
     status = "Enabled"
   }
 }
 
 resource "aws_s3_bucket_object_lock_configuration" "backups" {
+  count    = local.offsite_count
   provider = aws.backup
-  bucket   = aws_s3_bucket.backups.id
+  bucket   = aws_s3_bucket.backups[0].id
   rule {
     default_retention {
       mode = var.backup_lock_mode
@@ -253,20 +258,22 @@ resource "aws_s3_bucket_object_lock_configuration" "backups" {
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "backups" {
+  count    = local.offsite_count
   provider = aws.backup
-  bucket   = aws_s3_bucket.backups.id
+  bucket   = aws_s3_bucket.backups[0].id
   rule {
     apply_server_side_encryption_by_default {
       sse_algorithm     = "aws:kms"
-      kms_master_key_id = aws_kms_key.backup.arn
+      kms_master_key_id = aws_kms_key.backup[0].arn
     }
     bucket_key_enabled = true
   }
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "backups" {
+  count    = local.offsite_count
   provider = aws.backup
-  bucket   = aws_s3_bucket.backups.id
+  bucket   = aws_s3_bucket.backups[0].id
   rule {
     id     = "age-out"
     status = "Enabled"
@@ -289,11 +296,12 @@ resource "aws_s3_bucket_lifecycle_configuration" "backups" {
 }
 
 data "aws_iam_policy_document" "backups_bucket" {
+  count = local.offsite_count
   statement {
     sid       = "DenyInsecureTransport"
     effect    = "Deny"
     actions   = ["s3:*"]
-    resources = [aws_s3_bucket.backups.arn, "${aws_s3_bucket.backups.arn}/*"]
+    resources = [aws_s3_bucket.backups[0].arn, "${aws_s3_bucket.backups[0].arn}/*"]
     principals {
       type        = "*"
       identifiers = ["*"]
@@ -309,7 +317,7 @@ data "aws_iam_policy_document" "backups_bucket" {
     sid       = "DenyUnencryptedUploads"
     effect    = "Deny"
     actions   = ["s3:PutObject"]
-    resources = ["${aws_s3_bucket.backups.arn}/*"]
+    resources = ["${aws_s3_bucket.backups[0].arn}/*"]
     principals {
       type        = "*"
       identifiers = ["*"]
@@ -323,8 +331,9 @@ data "aws_iam_policy_document" "backups_bucket" {
 }
 
 resource "aws_s3_bucket_policy" "backups" {
+  count      = local.offsite_count
   provider   = aws.backup
-  bucket     = aws_s3_bucket.backups.id
-  policy     = data.aws_iam_policy_document.backups_bucket.json
+  bucket     = aws_s3_bucket.backups[0].id
+  policy     = data.aws_iam_policy_document.backups_bucket[0].json
   depends_on = [aws_s3_bucket_public_access_block.backups]
 }
