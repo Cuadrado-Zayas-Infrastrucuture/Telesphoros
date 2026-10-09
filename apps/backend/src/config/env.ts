@@ -12,6 +12,18 @@ const isOrigin = (value: string) => {
   }
 };
 
+/**
+ * TLS parameters in a database URL, by name. db/tls.ts refuses the same names when a connection is built (a test pins the two together). This file
+ * cannot import it: it is also loaded on its own, by the infrastructure guard that checks the deployed task environment against it.
+ */
+const urlTlsParameterNames = (url: string): string[] => {
+  try {
+    return [...new Set([...new URL(url).searchParams.keys()].filter((name) => /^(ssl|uselibpqcompat)/i.test(name)))];
+  } catch {
+    return []; // an unreadable URL is refused where the connection is built, without quoting it
+  }
+};
+
 export const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -108,6 +120,10 @@ export const envSchema = z
       }
     }
     if (env.STORAGE_DRIVER === 'postgres' && !env.DATABASE_URL) problem('DATABASE_URL', 'is required when STORAGE_DRIVER=postgres');
+    for (const key of ['DATABASE_URL', 'LEDGER_VERIFIER_DATABASE_URL'] as const) {
+      const names = env[key] ? urlTlsParameterNames(env[key]) : [];
+      if (names.length > 0) problem(key, `must not carry TLS parameters (${names.join(', ')}): they can override DATABASE_SSL, which is the only TLS setting`);
+    }
     if (env.OBJECT_STORAGE_DRIVER === 's3' && !env.REPORTS_BUCKET) problem('REPORTS_BUCKET', 'is required when OBJECT_STORAGE_DRIVER=s3');
 
     // The watch needs the database and its own login; the production and pipeline requirements are checked next to each of those.

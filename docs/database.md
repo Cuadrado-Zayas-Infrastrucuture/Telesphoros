@@ -72,6 +72,16 @@ pnpm --filter @telesphoros/backend db:migrate:down          # revert the last on
 - Versions must be contiguous and every migration needs a `down`.
 - `/api/v1/ready` returns **503 while migrations are pending** or the database is unreachable; `/health` stays 200.
 
+## Database TLS
+
+One setting decides how every database connection is encrypted: `DATABASE_SSL` (`disable`, the default, for local development and tests; `require` in AWS, and production refuses anything else).
+
+- **The connection URLs carry no TLS parameters.** Any `ssl...` or `uselibpqcompat` parameter in `DATABASE_URL`, `LEDGER_VERIFIER_DATABASE_URL`, the migrator or admin URL is refused, by name only (the message never quotes the URL). The reason: node-postgres lets URL parameters *replace* an explicit `ssl` object, so `?sslmode=disable` connected without TLS and `?sslmode=no-verify` switched verification off even when the code asked for verification. In libpq (`pg_dump`, `pg_restore`), `sslmode=require` encrypts but does not verify the certificate.
+- `require` means TLS 1.2 or newer with the certificate chain and host name verified against the system authorities plus `NODE_EXTRA_CA_CERTS` (the RDS authority bundle goes there in the image).
+- The command-line tools get the same guarantee through `PGSSLMODE=verify-full`, `PGSSLROOTCERT` (from `DATABASE_SSL_CA`, else `NODE_EXTRA_CA_CERTS`) and `PGSSLMINPROTOCOLVERSION=TLSv1.2`; with no authority file they refuse rather than connect unverified.
+- Every `Pool` and `Client` is built from `pgClientConfig(url)` in `src/db/tls.ts`; `connection-guard.spec.ts` fails the build for any file that builds one another way.
+- Proved against real TLS (`test/db/tls.pg-spec.ts`: a throwaway authority, a matching and a mismatched certificate, an untrusted authority, and URLs carrying `sslmode`), and by breaking the code in eleven ways with a green control. **Not verified:** a connection to a real RDS instance (nothing is applied in AWS).
+
 ## Report files
 
 Upload is two steps and the browser talks to storage directly:

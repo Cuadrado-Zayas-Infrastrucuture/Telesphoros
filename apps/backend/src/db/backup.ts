@@ -7,6 +7,7 @@ import type { BackupManifest, BackupManifestV1, BackupManifestV2, TableFacts } f
 import { type UploadResult, type UploadTarget, uploadBackup } from './offsite';
 import { readPrivilegeFacts } from './privilege-facts';
 import { pgEnv, quoteIdent, run } from './pg-process';
+import { pgClientConfig } from './tls';
 
 export type { BackupManifest, TableFacts };
 
@@ -57,7 +58,7 @@ export async function createBackup(options: BackupOptions): Promise<{ dir: strin
   const dir = join(options.destDir, `backup-${stamp}`);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
 
-  const client = new Client({ connectionString: options.adminUrl });
+  const client = new Client(pgClientConfig(options.adminUrl));
   await client.connect();
   let manifest: BackupManifest;
   try {
