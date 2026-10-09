@@ -36,11 +36,21 @@ describe('the ledger readiness check', () => {
     }
   });
 
-  it('is down once latched, whatever else is true, and names nothing about what was found', async () => {
+  it('is "contained" (still ready, the other tenants keep working) while a tenant is latched, and names no tenant', async () => {
     const status = new LedgerStatus();
     status.setTail('ok');
     status.markFullCompleted();
     status.latch(finding);
+    const answer = await body(status);
+    expect(answer).toEqual({ status: 'ready', checks: { ledger: 'contained' } });
+    expect(JSON.stringify(answer)).not.toMatch(/payload|"t"/);
+  });
+
+  it('is down for a global hold, whatever else is true, and names nothing about what was found', async () => {
+    const status = new LedgerStatus();
+    status.setTail('ok');
+    status.markFullCompleted();
+    status.syncOpen([{ id: 'h', scope: 'global', tenantId: null, kind: 'manual-hold', seq: null, source: 'manual', detectedAt: new Date(0) }]);
     const error = await body(status).catch((e: unknown) => e);
     expect(error).toMatchObject({ status: 503, details: [{ field: 'ledger', message: 'unavailable' }] });
     expect(JSON.stringify((error as { details: unknown }).details)).not.toMatch(/payload|7/);

@@ -84,6 +84,11 @@ describe('migrations run for a migrator that is not a superuser', () => {
     const db = await databaseOwnedBy(WITH_MEMBERSHIP);
     await asMigrator(WITH_MEMBERSHIP, db, async (c) => {
       await migrateUp(c);
+      await expect(migrateDown(c, 1)).rejects.toThrow(/Refusing to drop ledger incidents/); // 0011 removes audit data, so it is guarded too
+      await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
+      await migrateDown(c, 1); // 0011, as a migrator that is not a superuser (it replaces ledger_append, which needs CREATE on the schema for a moment)
+      expect((await c.query(`SELECT has_schema_privilege('telesphoros_ledger', 'public', 'CREATE') AS ledger`)).rows[0].ledger).toBe(false);
+      await c.query(`RESET telesphoros.allow_audit_drop`);
       await migrateDown(c, 1); // 0010 holds no evidence in an empty database, so it reverts freely (its own guard is tested in report-evidence)
       await expect(migrateDown(c, 1)).rejects.toThrow(/allow_audit_drop|Refusing/);
       await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);

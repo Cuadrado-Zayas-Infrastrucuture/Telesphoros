@@ -28,9 +28,13 @@ describe('ledger append guard', () => {
     expect(callers(CALL)).toEqual(['ledger/ledger-writer.ts']);
   });
 
-  it('only ledger/verifier.ts calls ledger_record_checkpoint, and nothing in src calls the redaction function', () => {
+  it('only ledger/verifier.ts calls ledger_record_checkpoint and ledger_record_incident, and nothing in src calls the redaction function, the global hold or the clearance', () => {
     expect(callers(/\bledger_record_checkpoint\b/)).toEqual(['ledger/verifier.ts']);
+    expect(callers(/\bledger_record_incident\b/)).toEqual(['ledger/verifier.ts']);
     expect(callers(/\bredact_event_note\b/)).toEqual([]);
+    // A person's act (the operator role, in a runbook), never an API: no application code may open or close a hold.
+    expect(callers(/\bledger_set_global_hold\b/)).toEqual([]);
+    expect(callers(/\bledger_clear_incident\b/)).toEqual([]);
   });
 
   it('appendEvent is called from one place only (the Postgres ledger repository), and every call passes the ledger watch\'s gate first', () => {
@@ -38,7 +42,7 @@ describe('ledger append guard', () => {
     const source = readFileSync(join(SRC, 'storage/postgres/ledger-records.repository.ts'), 'utf8');
     const calls = source.match(/appendEvent\(/g) ?? [];
     expect(calls.length).toBeGreaterThan(0);
-    expect(source.match(/appendEvent\(this\.ledger, /g) ?? []).toHaveLength(calls.length);
+    expect(source.match(/appendEvent\(this\.ledger, tenantId, /g) ?? []).toHaveLength(calls.length);
   });
 
   it('detects a violation (control: the pattern matches a synthetic caller)', () => {

@@ -335,7 +335,7 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 
   /** Appends the record's event as the last statement and returns the projection that was hashed. */
   private async finish(client: PoolClient, tenantId: string, table: RecordTable, id: string): Promise<InsertResult> {
-    await appendEvent(this.ledger, client, table, id, await this.eventIdOf(client, table, id));
+    await appendEvent(this.ledger, tenantId, client, table, id, await this.eventIdOf(client, table, id));
     return { record: await this.mustOne(client, tenantId, table, id), created: true };
   }
 

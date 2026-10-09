@@ -10,8 +10,8 @@ export type HealthDto = z.infer<typeof healthDtoSchema>;
 
 export const readinessDtoSchema = z.strictObject({
   status: z.literal('ready'),
-  /** `verifying`: the dependency is usable and a longer check of it is still running (the instance IS ready). */
-  checks: z.record(z.string(), z.enum(['up', 'verifying'])),
+  /** `verifying`: the dependency is usable and a longer check of it is still running (the instance IS ready). `contained`: usable, but at least one tenant's record log is stopped (the others are not; the instance IS ready). */
+  checks: z.record(z.string(), z.enum(['up', 'verifying', 'contained'])),
 });
 export type ReadinessDto = z.infer<typeof readinessDtoSchema>;
 

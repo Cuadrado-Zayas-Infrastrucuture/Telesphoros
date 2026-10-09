@@ -638,3 +638,27 @@ The founder (a pharmacist) decided on 2026-10-08 that when the newest evaluation
   evaluation. A later "affirm" action could close that gap if it proves needed; it is not built.
 - **What did not change.** `state`, `supersededBy`, the correction rules, stored records (no migration), and every other field of an evaluation.
   `GET /evaluations?current=true` and `current` on each evaluation follow the new rule from the same single query.
+
+## 23. Amendment made while building FD-2: containment shared through the database (this governs where it differs from 6.6, 6.7 and section 21)
+
+The peer review of 2026-10-09 found that the latch of 6.6 lived in one process's memory, so a second API task kept appending to a chain the first had
+found damaged (and a load balancer does not help: it sends traffic to every target when all are unhealthy). Migration 0011 moves the fact into the
+database, where `ledger_append` already takes the tenant's head-row lock. The plan is [design/plans/fd2-ledger-containment.md](plans/fd2-ledger-containment.md).
+
+- **Tables.** `ledger_incidents` (a tenant incident or a global hold; open until a clearance names it) and `ledger_incident_clearances`; both append-only
+  (the `refuse_mutation` triggers), neither readable by the application role. `ledger_checkpoints` gains `walk_started_at` (the database's clock at the
+  start of the walk's snapshot; `NULL` for checkpoints from the older four-argument function, which therefore never clear anything).
+- **Who.** `ledger_record_incident` (verifier login, tenant incidents only, idempotent while one is open), `ledger_set_global_hold` and
+  `ledger_clear_incident` (operator role only). The application role holds `ledger_append` and nothing behind it (`ledger_append_internal` stays
+  unreachable for it; a catalog test pins this).
+- **The gate.** `ledger_append` takes the tenant's head-row lock and then refuses (SQLSTATE `LC001`, 503 `LEDGER_COMPROMISED`) while the tenant has an
+  open incident or any global hold is open. `ledger_record_incident` takes the same lock, so no write commits for the tenant after the incident exists.
+  Checkpoints and redactions use `ledger_append_internal` and are deliberately not gated.
+- **Clearing a tenant incident** needs a `full` checkpoint of that tenant whose walk **started after** the incident was recorded and reaches at least the
+  failed sequence number. A chain that is still damaged writes no checkpoint, so it cannot be cleared by anyone. A global hold needs only a basis.
+- **Per tenant, not per instance.** The in-memory `LedgerStatus` is a mirror and a fast path, per tenant; the monitor records its findings in the
+  database, reads the open incidents at start, before each full walk and every 60 seconds, and keeps refusing on its own for a finding the database has
+  not yet heard. Production still refuses to start on a NEW failure (recorded first, so the replacement start finds it contained and goes on); an
+  already-contained tenant is listed in the log and not re-judged at start. Readiness is `contained` (still ready) for tenant incidents and not ready
+  for a global hold or an unverified start. The first finding logs `ledger-compromised` (the alarm); later failures of a contained tenant log a warning.
+- **Not built.** Two-person approval of a clearance or hold (FD-8). Anchoring the head outside the database (6.9). Anything proved in AWS.

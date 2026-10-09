@@ -15,13 +15,21 @@ describe('appendEvent and the ledger gate', () => {
     const status = new LedgerStatus();
     status.latch({ tenantId: 't', kind: 'seq-gap', seq: '2', source: 'background', at: new Date(0) });
     const { client, query } = silentClient();
-    await expect(appendEvent(status, client, 'report_captures', 'r', 'e')).rejects.toBeInstanceOf(LedgerCompromisedError);
+    await expect(appendEvent(status, 't', client, 'report_captures', 'r', 'e')).rejects.toBeInstanceOf(LedgerCompromisedError);
     expect(query).not.toHaveBeenCalled();
+  });
+
+  it('asks the gate about THIS tenant: another tenant\'s contained record log does not stop the write', async () => {
+    const status = new LedgerStatus();
+    status.latch({ tenantId: 'other', kind: 'seq-gap', seq: '2', source: 'background', at: new Date(0) });
+    const { client, query } = silentClient();
+    await expect(appendEvent(status, 't', client, 'report_captures', 'r', 'e')).rejects.toThrow('the database must not be touched');
+    expect(query).toHaveBeenCalled();
   });
 
   it('control: an open gate goes on to read the record (so the refusal above is the gate, not a broken client)', async () => {
     const { client, query } = silentClient();
-    await expect(appendEvent(new LedgerStatus(), client, 'report_captures', 'r', 'e')).rejects.toThrow('the database must not be touched');
+    await expect(appendEvent(new LedgerStatus(), 't', client, 'report_captures', 'r', 'e')).rejects.toThrow('the database must not be touched');
     expect(query).toHaveBeenCalled();
   });
 });

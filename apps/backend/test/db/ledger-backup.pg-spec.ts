@@ -135,3 +135,29 @@ describe('a backup of a populated ledger', () => {
     expect(report.checks.filter((c) => !c.ok)).toEqual([]);
   });
 });
+
+describe('a backup taken while a tenant is contained (migration 0011)', () => {
+  it('restores the incident still OPEN: a restore cannot quietly reopen the writes of a tenant under investigation', async () => {
+    // Runs last in this file: it leaves an open incident behind in the source database.
+    const incident = await withAdmin(pg.verifierUrl, async (c: Client) => (await c.query(`SELECT ledger_record_incident($1, 'payload-mismatch', 1::bigint, 'background')::text AS id`, [tenantId])).rows[0].id as string);
+    const during = (await createBackup({ adminUrl: pg.adminUrl, destDir: tempDir() })).dir;
+
+    const name = target();
+    const report = await restoreAndVerify({ adminUrl: adminUrl(), backupDir: during, targetDatabase: name });
+    expect(report.checks.filter((c) => !c.ok)).toEqual([]);
+
+    const open = await withAdmin(withDb(adminUrl(), name), async (c: Client) => (await c.query(
+      `SELECT id::text AS id FROM ledger_incidents i WHERE NOT EXISTS (SELECT 1 FROM ledger_incident_clearances c WHERE c.incident_id = i.id)`)).rows.map((r) => r.id));
+    expect(open).toEqual([incident]);
+
+    // And the restored database enforces it: the application cannot append for that tenant (a copy of the data, the same refusal).
+    const database = new Database({ url: withDb(pg.appUrl, name), ssl: 'disable' });
+    try {
+      const repo = new PostgresLedgerRecordsRepository(database);
+      const extra = await seedLabReport(withDb(pg.adminUrl, name), tenantId, 'syn-uploader', 'SYN-10');
+      await expect(repo.insertCapture(tenantId, extra.uploader, captureFor(extra))).rejects.toMatchObject({ name: 'LedgerCompromisedError' });
+    } finally {
+      await database.onModuleDestroy();
+    }
+  });
+});

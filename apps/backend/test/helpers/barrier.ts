@@ -13,7 +13,7 @@ const OPEN_GATE = { assertOpen: (): void => undefined };
 const BLOCKED_MS = 5_000;
 
 export class Session {
-  private constructor(readonly client: Client, readonly name: string, readonly actor: string) {}
+  private constructor(readonly client: Client, readonly name: string, readonly actor: string, readonly tenantId: string) {}
 
   /** A transaction as the application role, in a tenant, with an actor. */
   static async open(url: string, name: string, tenantId: string, actor = 'syn-session'): Promise<Session> {
@@ -22,7 +22,7 @@ export class Session {
     await client.query('BEGIN');
     await client.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
     await client.query(`SELECT set_config('app.current_actor', $1, true)`, [actor]);
-    return new Session(client, name, actor);
+    return new Session(client, name, actor, tenantId);
   }
 
   /** Starts a statement without waiting for it; the outcome is read later. */
@@ -40,7 +40,7 @@ export class Session {
        VALUES ($1, $2, $11, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [id, report.tenantId, eventId, report.reportId, input.pdfSha256, input.textStorageKey, input.textSha256, input.textScalars, input.popplerVersion, input.runner, this.actor],
     );
-    await appendEvent(OPEN_GATE, this.client, 'report_captures', id, eventId);
+    await appendEvent(OPEN_GATE, report.tenantId, this.client, 'report_captures', id, eventId);
     return id;
   }
 
@@ -72,7 +72,7 @@ export class Session {
   }
 
   appendPrepared(prepared: { id: string; eventId: string }): Promise<unknown> {
-    return appendEvent(OPEN_GATE, this.client, 'cell_disputes', prepared.id, prepared.eventId);
+    return appendEvent(OPEN_GATE, this.tenantId, this.client, 'cell_disputes', prepared.id, prepared.eventId);
   }
 
   commit() {

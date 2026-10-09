@@ -64,8 +64,8 @@ export class EvaluationsService {
     const runner = this.need(this.runner);
     const knowledge = this.need(this.knowledge);
     const reader = this.need(this.reader);
-    // A request that cannot be stored (the record log failed verification) is refused before the reader spends any effort on it.
-    this.status?.assertOpen();
+    // A request that cannot be stored (the tenant's record log is contained) is refused before the reader spends any effort on it.
+    this.status?.assertOpen(principal.tenantId);
 
     const report = await this.reports.findById(principal.tenantId, reportId);
     if (!report) throw AppException.notFound('Report not found.');

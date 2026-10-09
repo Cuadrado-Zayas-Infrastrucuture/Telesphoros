@@ -8,11 +8,11 @@ administrator must provide.
 
 | Role | Login? | Created by | What it can do |
 | --- | --- | --- | --- |
-| `telesphoros_app` | no (its login is provisioned outside) | migration 0002 | The application. `SELECT` and `INSERT` on the record tables and notes, `SELECT` on the ledger, `EXECUTE` on `ledger_append` only. No `UPDATE`, `DELETE`, `TRUNCATE`; cannot write the ledger. |
+| `telesphoros_app` | no (its login is provisioned outside) | migration 0002 | The application. `SELECT` and `INSERT` on the record tables and notes, `SELECT` on the ledger, `EXECUTE` on `ledger_append` (the gate) only: **not** `ledger_append_internal`, and nothing that records, holds or clears an incident (a catalog test pins it). No `UPDATE`, `DELETE`, `TRUNCATE`; cannot write the ledger; cannot read the incident tables. |
 | `telesphoros_ledger` | no | migration 0005 | Owns the ledger tables and the ledger functions. Reads the record tables only through explicit, tenant-scoped read policies. |
 | `telesphoros_redactor` | no | migration 0006 | Owns the redaction function. `UPDATE` on three columns of `event_notes` (body, redacted_at, redaction_basis_code), and nothing else. |
-| `telesphoros_ledger_verifier` | no (group) | migration 0005 | Reads every tenant's ledger and records. May execute exactly one function, `ledger_record_checkpoint`. Writes no record. |
-| `telesphoros_ledger_operator` | no (group) | migration 0006 | May execute `redact_event_note`. |
+| `telesphoros_ledger_verifier` | no (group) | migration 0005 | Reads every tenant's ledger and records, and the incident tables. May execute exactly two functions: `ledger_record_checkpoint` and `ledger_record_incident` (0011). Writes no record. |
+| `telesphoros_ledger_operator` | no (group) | migration 0006 | May execute `redact_event_note`, and (0011) `ledger_set_global_hold` and `ledger_clear_incident`; reads the incident tables. Runbook use only, never an API: no application code calls these (a static test pins it). See [ledger-watch.md](ledger-watch.md). |
 
 Logins for the **verifier** and the **operator** are provisioned outside the repository, like the application's login. Each login is a
 member of exactly its one group and of nothing else. The verifier login must **not** be a member of `telesphoros_app`: it would then
@@ -48,8 +48,20 @@ deployment should run `migrate` once on an empty server and read the result.
 ## Restoring on a new server
 
 Roles are per server, so a backup cannot carry them. Before `db:restore`, create on the target server every role the backup names:
-`telesphoros_app`, the five above, and the role that owns the tables (the migrator). `db:restore` checks and stops, restoring nothing,
+`telesphoros_app`, the roles above, and the role that owns the tables (the migrator). `db:restore` checks and stops, restoring nothing,
 if any is missing. The manifest lists them (`privileges.roles`).
+
+## Containing and reopening a tenant (runbook; never an API)
+
+Migration 0011 (FD-2) puts the record log's "damaged" state in the database, where every API task sees it. The verifier login records a tenant
+incident when a walk fails; `ledger_append` then refuses that tenant's writes in every task. An operator can stop every tenant, and can reopen a
+tenant once a full verification that began after the incident has passed. The commands and the rules are in [ledger-watch.md](ledger-watch.md).
+
+```sql
+-- as the operator login
+SELECT ledger_set_global_hold('why, up to 500 characters');          -- every tenant refused until cleared
+SELECT ledger_clear_incident('<incident id>'::uuid, 'what was done'); -- a tenant incident needs a later passing full walk
+```
 
 ## Redacting a note (runbook; never an API)
 

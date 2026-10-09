@@ -11,12 +11,13 @@ import { loadProjections, projectionHash, type Queryable } from './projections';
  *
  * The transaction must have set the tenant and actor settings (Database.withTenant does, given an actor).
  *
- * `gate` is the ledger watch's answer to "may anything be written?". It is a required first argument, and it is asked before the
- * projection is read or anything is appended, so a caller cannot reach the ledger without passing it, and a record log that failed
- * verification takes no further record: the transaction rolls back and the caller gets a 503, while reads continue.
+ * `gate` is the ledger watch's answer to "may anything be written for this tenant?". It is a required first argument, and it is asked before
+ * the projection is read or anything is appended, so a caller cannot reach the ledger without passing it, and a contained tenant takes no
+ * further record: the transaction rolls back and the caller gets a 503, while reads continue. The gate is a fast path: `ledger_append`
+ * itself refuses a contained tenant inside the database (migration 0011), so a task that has not heard of an incident yet is stopped too.
  */
-export async function appendEvent(gate: LedgerGate, client: Queryable, table: RecordTable, recordId: string, eventId: string): Promise<{ seq: string; payloadSha256: string }> {
-  gate.assertOpen();
+export async function appendEvent(gate: LedgerGate, tenantId: string, client: Queryable, table: RecordTable, recordId: string, eventId: string): Promise<{ seq: string; payloadSha256: string }> {
+  gate.assertOpen(tenantId);
   const projections = await loadProjections(client, table, [recordId]);
   const projection = projections.get(recordId);
   if (!projection) throw new Error('The record to append an event for was not found in this transaction.');
