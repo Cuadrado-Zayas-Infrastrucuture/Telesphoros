@@ -15,10 +15,11 @@
 | Database | RDS PostgreSQL 16: encrypted (customer-managed KMS key), private only, SSL forced, Multi-AZ (required in production), deletion protection, admin password generated and rotated in Secrets Manager (never in code or state), 14-day point-in-time recovery, automated backups **replicated to a second region** |
 | Report files | S3 bucket: KMS-encrypted, versioned, all public access blocked, TLS 1.2+ only, access logging, CORS for direct browser uploads from your origins only, abandoned uploads cleaned up |
 | Logical backups | S3 bucket in the **backup region** with its **own key**: Object Lock (nobody can delete or overwrite for 14 days), encryption with our key enforced, aged to cheaper storage, expires after a year |
+| Audit trail | CloudTrail (multi-region, signed digests, S3 data events on the reports bucket), a locked log bucket with its own KMS key, and six email alarms ([audit-trail.md](../../docs/ops/audit-trail.md)) |
 | Access | Two **unattached** IAM policies: `app_runtime` (read/write report files) and `backup_job` (write-only to the backup bucket) |
 
 It does **not** create: the VPC and subnets, the application compute, DNS records, the database roles
-(`telesphoros_app` and its login user are created by migrations plus an operator step), alarms or dashboards (Phase 7/10).
+(`telesphoros_app` and its login user are created by migrations plus an operator step), dashboards, or the application's own alarms (the audit-trail alarms are the only ones; Phase 7/10).
 
 **H1 optional frontend:** `web.tf` now adds a private public-code S3 bucket, CloudFront/OAC and an ACM certificate
 when `enable_web_hosting = true`. Its default is false: no new hosting resources are selected by default.

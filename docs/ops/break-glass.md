@@ -5,7 +5,7 @@ different version in its place. **No principal in the Terraform module may delet
 This page is the one exception: a role that exists only for the rare case where a version must be removed, who holds it, how it is used, and the
 honest limits of the control.
 
-**Status: described, not created. It must not be created for real use until the audit trail in "The audit gap" exists.** Nothing here has been
+**Status: described, not created. It must not be created for real use until the audit trail (described in `audit-trail.md`) has been applied and tested.** Nothing here has been
 applied in AWS.
 
 ## When it may be used, and when it may not
@@ -87,17 +87,16 @@ cannot read the file's contents: removing a file does not require seeing it.
 4. Delete **only** the version(s) named in the record.
 5. List again and confirm they are gone and the other versions are untouched.
 6. Close the decision record with the time, the version ids removed, and what you checked.
-7. Check that the audit event exists (see below). If it does not, say so in the record.
+7. Check that the audit event exists in the trail and that the alarm emailed. If it did not, say so in the record.
 
-## The audit gap (read this before creating the role)
+## The audit trail this depends on (read this before creating the role)
 
-The design says each use "is an audit event with a reason". **Today that is not true.** The Terraform has no CloudTrail. `AssumeRole` is a
-management event that AWS keeps for 90 days in its event history, but `DeleteObjectVersion` is an S3 **data event**, which is recorded only if a
-trail with data events for the reports bucket exists. Without one, a use of this role leaves no durable record except the decision record you
-write yourself.
+The design says each use "is an audit event with a reason". `DeleteObjectVersion` is an S3 **data event**, recorded only by a trail that asks for
+data events on the reports bucket. The Terraform now describes exactly that trail and its alarms ([audit-trail.md](audit-trail.md), `infrastructure/terraform/audit.tf`),
+including an alarm on any attempt to assume this role and one on any deletion in the reports bucket. **It is written but not applied, so today a use of this role would still leave no durable record
+except the decision record you write yourself.**
 
-Before the role is created for real use, the hosting work (step H2) must add: a CloudTrail trail delivering to a protected bucket, S3 data events
-for the reports bucket, and an alarm on `DeleteObjectVersion` and on any `AssumeRole` of this role. Until then, do not create it.
+Do not create the role until the audit trail has been applied, is logging, and both alarms have been tested (the checklist in [audit-trail.md](audit-trail.md)).
 
 ## Honest limits
 
