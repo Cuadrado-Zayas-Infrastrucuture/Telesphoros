@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import './api-compute.guard.test.mjs';
 import './api.guard.test.mjs';
 import './audit.guard.test.mjs';
+import './profile.guard.test.mjs';
 import './web.guard.test.mjs';
 
 const cognito = readFileSync(new URL('./cognito.tf', import.meta.url), 'utf8');

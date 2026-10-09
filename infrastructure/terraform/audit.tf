@@ -25,7 +25,7 @@ variable "audit_lock_mode" {
 }
 
 variable "audit_lock_days" {
-  description = "Nobody (in GOVERNANCE mode, nobody without the bypass right) can delete or overwrite an audit log for this many days."
+  description = "Nobody (in GOVERNANCE mode, nobody without the bypass right) can delete or overwrite an audit log for this many days. The synthetic profile always uses 1."
   type        = number
   default     = 365
   validation {
@@ -61,7 +61,8 @@ locals {
   audit_trail_arn = "arn:aws:cloudtrail:${var.region}:${local.audit_account_id}:trail/${local.audit_trail_name}"
   audit_log_group = "/aws/cloudtrail/${local.audit_trail_name}"
   audit_metrics   = "${local.name}/Audit"
-  audit_buckets   = [aws_s3_bucket.reports.bucket, aws_s3_bucket.audit.bucket, aws_s3_bucket.backups.bucket]
+  # The off-site backups bucket exists only in the production profile (profile.tf), so it is listed only then.
+  audit_buckets = concat([aws_s3_bucket.reports.bucket, aws_s3_bucket.audit.bucket], aws_s3_bucket.backups[*].bucket)
 
   # One alarm per entry: a CloudWatch Logs metric filter over the trail, and an alarm on its metric.
   audit_alarms = {
@@ -164,7 +165,7 @@ data "aws_iam_policy_document" "audit_key" {
 resource "aws_kms_key" "audit" {
   description             = "${local.name} audit trail logs and alarm topic"
   enable_key_rotation     = true
-  deletion_window_in_days = 30
+  deletion_window_in_days = local.kms_deletion_days
   policy                  = data.aws_iam_policy_document.audit_key.json
 }
 
@@ -176,7 +177,7 @@ resource "aws_kms_alias" "audit" {
 # ---- The log bucket: private, versioned, locked, encrypted with the audit key, TLS-only ----
 resource "aws_s3_bucket" "audit" {
   bucket              = "${local.name}-audit-${local.audit_account_id}"
-  force_destroy       = false
+  force_destroy       = local.synthetic
   object_lock_enabled = true
 }
 
@@ -207,7 +208,7 @@ resource "aws_s3_bucket_object_lock_configuration" "audit" {
   rule {
     default_retention {
       mode = var.audit_lock_mode
-      days = var.audit_lock_days
+      days = local.audit_lock_days
     }
   }
   depends_on = [aws_s3_bucket_versioning.audit]
@@ -360,7 +361,7 @@ resource "aws_cloudtrail" "audit" {
   name                          = local.audit_trail_name
   s3_bucket_name                = aws_s3_bucket.audit.id
   kms_key_id                    = aws_kms_key.audit.arn
-  is_multi_region_trail         = true
+  is_multi_region_trail         = !local.synthetic
   include_global_service_events = true
   enable_log_file_validation    = true
   cloud_watch_logs_group_arn    = "${aws_cloudwatch_log_group.audit.arn}:*"

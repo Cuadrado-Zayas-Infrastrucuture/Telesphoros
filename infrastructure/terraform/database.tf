@@ -1,13 +1,13 @@
 resource "aws_db_subnet_group" "main" {
   name       = local.name
-  subnet_ids = var.private_subnet_ids
+  subnet_ids = local.data_subnet_ids
 }
 
 # Only the named application security groups can reach the database. No other ingress, no public address.
 resource "aws_security_group" "db" {
   name        = "${local.name}-db"
   description = "PostgreSQL for ${local.name}: reachable only from the application"
-  vpc_id      = var.vpc_id
+  vpc_id      = local.vpc_id
 }
 
 resource "aws_vpc_security_group_ingress_rule" "db_from_app" {
@@ -47,7 +47,7 @@ resource "aws_db_instance" "main" {
   identifier     = local.name
   engine         = "postgres"
   engine_version = "16"
-  instance_class = var.db_instance_class
+  instance_class = local.db_instance_class
 
   db_name  = "telesphoros"
   username = "telesphoros_admin"
@@ -61,25 +61,25 @@ resource "aws_db_instance" "main" {
   storage_encrypted     = true
   kms_key_id            = aws_kms_key.data.arn
 
-  multi_az               = var.db_multi_az
+  multi_az               = local.db_multi_az
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [aws_security_group.db.id]
   parameter_group_name   = aws_db_parameter_group.main.name
   publicly_accessible    = false
 
-  backup_retention_period   = var.db_backup_retention_days
+  backup_retention_period   = local.db_backup_retention
   backup_window             = "07:00-08:00" # UTC, early morning in Puerto Rico
   maintenance_window        = "sun:08:30-sun:09:30"
   copy_tags_to_snapshot     = true
-  deletion_protection       = var.db_deletion_protection
-  skip_final_snapshot       = false
-  final_snapshot_identifier = "${local.name}-final"
+  deletion_protection       = local.db_deletion_protection
+  skip_final_snapshot       = local.synthetic
+  final_snapshot_identifier = local.synthetic ? null : "${local.name}-final"
 
   auto_minor_version_upgrade            = true
   enabled_cloudwatch_logs_exports       = ["postgresql", "upgrade"]
-  performance_insights_enabled          = true
-  performance_insights_kms_key_id       = aws_kms_key.data.arn
-  performance_insights_retention_period = 7
+  performance_insights_enabled          = local.db_performance_insights
+  performance_insights_kms_key_id       = local.db_performance_insights ? aws_kms_key.data.arn : null
+  performance_insights_retention_period = local.db_performance_insights ? 7 : null
 
   lifecycle {
     precondition {
@@ -98,10 +98,11 @@ resource "aws_db_instance" "main" {
 }
 
 # Automated backups (point-in-time recovery) are copied to the separate region as well, so losing
-# the primary region does not lose the recovery points.
+# the primary region does not lose the recovery points. (Absent under the synthetic profile: single-Region.)
 resource "aws_db_instance_automated_backups_replication" "offsite" {
+  count                  = local.offsite_count
   provider               = aws.backup
   source_db_instance_arn = aws_db_instance.main.arn
-  kms_key_id             = aws_kms_key.backup.arn
+  kms_key_id             = aws_kms_key.backup[0].arn
   retention_period       = var.db_backup_retention_days
 }

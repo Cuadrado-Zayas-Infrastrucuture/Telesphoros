@@ -3,14 +3,19 @@ output "reports_bucket" {
   value       = aws_s3_bucket.reports.bucket
 }
 
+output "deployment_profile" {
+  description = "production or synthetic (profile.tf)."
+  value       = var.deployment_profile
+}
+
 output "backups_bucket" {
-  description = "Destination for `db:backup --upload s3://<this>/<prefix>` (in the backup region)."
-  value       = aws_s3_bucket.backups.bucket
+  description = "Destination for `db:backup --upload s3://<this>/<prefix>` (in the backup region). Null under the synthetic profile: there is no second Region."
+  value       = local.synthetic ? null : aws_s3_bucket.backups[0].bucket
 }
 
 output "backup_kms_key_arn" {
-  description = "Pass as --kms-key-id to `db:backup`."
-  value       = aws_kms_key.backup.arn
+  description = "Pass as --kms-key-id to `db:backup`. Null under the synthetic profile."
+  value       = local.synthetic ? null : aws_kms_key.backup[0].arn
 }
 
 output "db_endpoint" {
@@ -28,7 +33,8 @@ output "app_runtime_policy_arn" {
 }
 
 output "backup_job_policy_arn" {
-  value = aws_iam_policy.backup_job.arn
+  description = "Null under the synthetic profile."
+  value       = local.synthetic ? null : aws_iam_policy.backup_job[0].arn
 }
 
 # ---- Authentication: settings for the API and the frontend ----
@@ -59,7 +65,7 @@ output "audit_bucket" {
 }
 
 output "audit_trail_name" {
-  description = "The multi-region trail. Check it with `aws cloudtrail get-trail-status --name <this>`."
+  description = "The audit trail (multi-Region in the production profile). Check it with `aws cloudtrail get-trail-status --name <this>`."
   value       = aws_cloudtrail.audit.name
 }
 

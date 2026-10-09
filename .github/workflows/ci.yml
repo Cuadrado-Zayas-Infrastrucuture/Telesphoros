@@ -174,7 +174,7 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # No cloud credentials and nothing is applied: formatting, then validation of the configuration itself.
+  # No cloud credentials and nothing is applied: formatting, validation of the configuration itself, then an offline mocked plan per profile.
   terraform:
     name: terraform
     runs-on: ubuntu-24.04
@@ -194,6 +194,9 @@ jobs:
       # -backend=false: there is no remote state yet, and CI must never touch any.
       - run: terraform init -backend=false -input=false
       - run: terraform validate
+      # A plan of the whole root under each deployment profile (profiles.tftest.hcl) with every provider mocked: nothing is created and there
+      # are no credentials. It proves what each profile builds and refuses, and that the default variables plan; it does not prove AWS accepts it.
+      - run: terraform test
 
   # Advisory for now (not a required check): tflint's rules have not yet run on this code.
   # Promote it to a required check once it has been clean on main (docs/ops/ci-cd.md).

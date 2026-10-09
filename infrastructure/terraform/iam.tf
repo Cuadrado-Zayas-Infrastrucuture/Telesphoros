@@ -34,21 +34,24 @@ resource "aws_iam_policy" "app_runtime" {
   policy      = data.aws_iam_policy_document.app_runtime.json
 }
 
+# Off-site backups only (absent under the synthetic profile, which has no second Region).
 data "aws_iam_policy_document" "backup_job" {
+  count = local.offsite_count
   statement {
     sid       = "UploadBackups"
     actions   = ["s3:PutObject"]
-    resources = ["${aws_s3_bucket.backups.arn}/*"]
+    resources = ["${aws_s3_bucket.backups[0].arn}/*"]
   }
   statement {
     sid       = "EncryptBackups"
     actions   = ["kms:GenerateDataKey", "kms:Encrypt"]
-    resources = [aws_kms_key.backup.arn]
+    resources = [aws_kms_key.backup[0].arn]
   }
 }
 
 resource "aws_iam_policy" "backup_job" {
+  count       = local.offsite_count
   name        = "${local.name}-backup-job"
   description = "Write-only access for the backup job. It cannot read, list or delete backups."
-  policy      = data.aws_iam_policy_document.backup_job.json
+  policy      = data.aws_iam_policy_document.backup_job[0].json
 }

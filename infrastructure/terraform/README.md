@@ -14,7 +14,7 @@
 | --- | --- |
 | Database | RDS PostgreSQL 16: encrypted (customer-managed KMS key), private only, SSL forced, Multi-AZ (required in production), deletion protection, admin password generated and rotated in Secrets Manager (never in code or state), 14-day point-in-time recovery, automated backups **replicated to a second region** |
 | Report files | S3 bucket: KMS-encrypted, versioned, all public access blocked, TLS 1.2+ only, access logging, CORS for direct browser uploads from your origins only, abandoned uploads cleaned up |
-| Logical backups | S3 bucket in the **backup region** with its **own key**: Object Lock (nobody can delete or overwrite for 14 days), encryption with our key enforced, aged to cheaper storage, expires after a year |
+| Logical backups | (production profile only) S3 bucket in the **backup region** with its **own key**: Object Lock (nobody can delete or overwrite for 14 days), encryption with our key enforced, aged to cheaper storage, expires after a year |
 | Audit trail | CloudTrail (multi-region, signed digests, S3 data events on the reports bucket), a locked log bucket with its own KMS key, and six email alarms ([audit-trail.md](../../docs/ops/audit-trail.md)) |
 | Access | Two **unattached** IAM policies: `app_runtime` (read/write report files) and `backup_job` (write-only to the backup bucket) |
 
@@ -44,9 +44,50 @@ terraform apply -var-file=production.tfvars                        # only after 
 
 Commit the generated `.terraform.lock.hcl` (run `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64`).
 
+## Deployment profiles (FD-3)
+
+`deployment_profile` chooses the shape of the same root. **`production` is the default**, so a forgotten variable can never select the other one.
+
+| | `production` (default) | `synthetic` (rehearsal only) |
+| --- | --- | --- |
+| Allowed with | `staging` or `production` | **`staging` only** (refused for `production`) |
+| Regions | two: primary, plus the off-site backup key, locked backups bucket and replicated automated backups | **one**: none of those exist; the audit trail is single-Region |
+| Database | `db_instance_class`, Multi-AZ (required in production), deletion protection, final snapshot, 14-day recovery window (variables) | `db.t4g.micro`, single-AZ, no deletion protection, no final snapshot, **1-day** recovery window, no Performance Insights |
+| Network | you supply `vpc_id`, `private_subnet_ids` (and `public_subnet_ids` for hosting); refused if missing | **created** (`network-synthetic.tf`): a VPC, two public subnets in two zones, an internet gateway, the free S3 gateway endpoint. **No NAT gateway.** Tasks get a public address; the security groups are unchanged (port 3000 from the load balancer only; out only to the database and over HTTPS) and the database has no public address. Supply `vpc_id` and subnets to use your own instead (tasks then stay private) |
+| Destroying | protected: `force_destroy = false`, 30-day key and secret recovery windows, Cognito deletion protection on | `force_destroy = true` on the buckets, 7-day key window, secrets deleted at once, Cognito deletion protection off, audit lock 1 day |
+| Refused | | `COMPLIANCE` locks (nobody could ever remove them, so the rehearsal could not be destroyed) |
+
+Every relaxation is written once, in `profile.tf`, and a guard test (`profile.guard.test.mjs`) lists each place the rest of the root consults it, so a new
+one cannot slip in. The synthetic profile holds **synthetic data only** and is not a staging environment for real records.
+
+### Running a synthetic rehearsal and destroying it
+
+```bash
+cd infrastructure/terraform
+cp example.tfvars.example synthetic.tfvars   # *.tfvars is gitignored; set deployment_profile = "synthetic", environment = "staging", and leave vpc_id out
+terraform init
+terraform plan -var-file=synthetic.tfvars    # review it line by line, as for any plan
+# apply and destroy are the FD-7 rehearsal; they need the gates in the status page (a founder-run session, a budget alert, a plan for the free window)
+terraform destroy -var-file=synthetic.tfvars
+```
+
+**Before a destroy:** the identity that runs it needs `s3:BypassGovernanceRetention` (and `s3:DeleteObjectVersion`) on the three buckets, because a locked object less
+than a day old can only be removed with the bypass header, and `force_destroy` uses it. Whether the provider really removes locked versions on destroy is **not yet
+verified**; FD-7 tests it with a real destroy, and if it does not, the runbook gains a short emptying step. Things a destroy can leave behind: the RDS log
+groups that AWS creates by itself (`/aws/rds/instance/...`) (check the console after the first real destroy).
+
+**Resource addresses changed.** The off-site resources are now counted (`aws_kms_key.backup[0]`, `aws_s3_bucket.backups[0]`, and so on), as are the two API execution
+policy documents. Nothing has ever been applied, so there is no state to move and no `moved` blocks are needed; if you hold a local test state or an old saved plan from before FD-3, discard it.
+
+### What `terraform test` proves, and what it does not
+
+`terraform test` (CI runs it in the `terraform` job; no credentials) plans the whole root offline under each profile with every provider mocked: that the default variables plan,
+what each profile creates and switches off, and that the refusals refuse (`profiles.tftest.hcl`). It proves the **shape**. It does **not** prove that AWS accepts it (quotas, the
+free plan's limits, a service it refuses, whether the provider can destroy locked objects): that is the first real apply. A new `mock_data` default is needed for any new data source.
+
 ## What was verified (and what was not)
 
-Original verification used AWS provider 5.100.0; the requirement has since advanced. H1 formatting/schema
+Original verification used AWS provider 5.100.0; the requirement has since advanced. Since FD-3 CI also runs `terraform test` (an offline, mocked plan per deployment profile; see above). H1 formatting/schema
 validation and exact current provider versions are recorded in [H1 verification](../../docs/verification/hosting-h1.md).
 **Not verified:** `terraform plan` or `apply` (no AWS credentials were
 used), real RDS point-in-time recovery, cross-region replication, and Object Lock behaviour. Treat the recovery

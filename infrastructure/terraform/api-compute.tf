@@ -129,7 +129,7 @@ resource "aws_kms_key" "api_logs" {
   count                   = local.api_count
   description             = "${local.name} API logs"
   enable_key_rotation     = true
-  deletion_window_in_days = 30
+  deletion_window_in_days = local.kms_deletion_days
   policy                  = data.aws_iam_policy_document.api_logs_key.json
 }
 
@@ -155,6 +155,8 @@ resource "aws_secretsmanager_secret" "api_database_url" {
   name        = "${local.name}/api/database-url"
   description = "DATABASE_URL: the application login (member of telesphoros_app only). Value set by hand."
   kms_key_id  = aws_kms_key.data.arn
+
+  recovery_window_in_days = local.secret_recovery_days
 }
 
 resource "aws_secretsmanager_secret" "api_ledger_verifier_url" {
@@ -162,6 +164,8 @@ resource "aws_secretsmanager_secret" "api_ledger_verifier_url" {
   name        = "${local.name}/api/ledger-verifier-database-url"
   description = "LEDGER_VERIFIER_DATABASE_URL: the verifier login (member of telesphoros_ledger_verifier only, never telesphoros_app). Value set by hand."
   kms_key_id  = aws_kms_key.data.arn
+
+  recovery_window_in_days = local.secret_recovery_days
 }
 
 resource "aws_secretsmanager_secret" "api_migrator_url" {
@@ -169,6 +173,8 @@ resource "aws_secretsmanager_secret" "api_migrator_url" {
   name        = "${local.name}/api/migrator-database-url"
   description = "DATABASE_MIGRATOR_URL: the table owner, used only by the one-off migration task. Value set by hand."
   kms_key_id  = aws_kms_key.data.arn
+
+  recovery_window_in_days = local.secret_recovery_days
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -226,6 +232,7 @@ data "aws_iam_policy_document" "api_execution_common" {
 }
 
 data "aws_iam_policy_document" "api_execution_service" {
+  count                   = local.api_count
   source_policy_documents = [data.aws_iam_policy_document.api_execution_common.json]
   statement {
     sid       = "ReadTheRuntimeSecrets"
@@ -245,6 +252,7 @@ data "aws_iam_policy_document" "api_execution_service" {
 }
 
 data "aws_iam_policy_document" "api_execution_migrate" {
+  count                   = local.api_count
   source_policy_documents = [data.aws_iam_policy_document.api_execution_common.json]
   statement {
     sid       = "ReadTheMigratorSecret"
@@ -273,7 +281,7 @@ resource "aws_iam_role_policy" "api_execution_service" {
   count  = local.api_count
   name   = "start-the-service"
   role   = aws_iam_role.api_execution_service[0].id
-  policy = data.aws_iam_policy_document.api_execution_service.json
+  policy = data.aws_iam_policy_document.api_execution_service[0].json
 }
 
 resource "aws_iam_role" "api_execution_migrate" {
@@ -286,7 +294,7 @@ resource "aws_iam_role_policy" "api_execution_migrate" {
   count  = local.api_count
   name   = "start-the-migration"
   role   = aws_iam_role.api_execution_migrate[0].id
-  policy = data.aws_iam_policy_document.api_execution_migrate.json
+  policy = data.aws_iam_policy_document.api_execution_migrate[0].json
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -407,9 +415,9 @@ resource "aws_ecs_service" "api" {
   }
 
   network_configuration {
-    subnets          = var.private_subnet_ids
+    subnets          = local.data_subnet_ids
     security_groups  = [aws_security_group.api_tasks[0].id]
-    assign_public_ip = false
+    assign_public_ip = local.tasks_public_ip
   }
 
   load_balancer {

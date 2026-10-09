@@ -24,6 +24,7 @@ locals {
     # The data classification of what these resources WILL hold once live. Synthetic data only until then.
     DataClassification = "phi"
     Environment        = var.environment
+    DeploymentProfile  = var.deployment_profile # lets a rehearsal's leftovers be found by tag
     ManagedBy          = "terraform"
   }
 }

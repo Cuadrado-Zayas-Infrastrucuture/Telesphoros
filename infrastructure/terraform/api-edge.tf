@@ -66,14 +66,14 @@ resource "aws_security_group" "api_alb" {
   count       = local.api_count
   name        = "${local.name}-api-alb"
   description = "Load balancer for ${local.name}: HTTPS from the internet, traffic only to the application"
-  vpc_id      = var.vpc_id
+  vpc_id      = local.vpc_id
 }
 
 resource "aws_security_group" "api_tasks" {
   count       = local.api_count
   name        = "${local.name}-api-tasks"
   description = "API tasks for ${local.name}: traffic only from the load balancer, out only to the database and to AWS over HTTPS"
-  vpc_id      = var.vpc_id
+  vpc_id      = local.vpc_id
 }
 
 resource "aws_vpc_security_group_ingress_rule" "api_alb_https" {
@@ -148,7 +148,7 @@ resource "aws_lb" "api" {
   load_balancer_type         = "application"
   internal                   = false
   ip_address_type            = "ipv4"
-  subnets                    = var.public_subnet_ids
+  subnets                    = local.alb_subnet_ids
   security_groups            = [aws_security_group.api_alb[0].id]
   drop_invalid_header_fields = true
   desync_mitigation_mode     = "strictest"
@@ -157,7 +157,7 @@ resource "aws_lb" "api" {
 
   lifecycle {
     precondition {
-      condition     = length(var.public_subnet_ids) >= 2
+      condition     = length(local.alb_subnet_ids) >= 2
       error_message = "The load balancer needs at least two public subnets in different availability zones (public_subnet_ids)."
     }
   }
@@ -166,7 +166,7 @@ resource "aws_lb" "api" {
 resource "aws_lb_target_group" "api" {
   count                = local.api_count
   name                 = "${local.name}-api"
-  vpc_id               = var.vpc_id
+  vpc_id               = local.vpc_id
   protocol             = "HTTP"
   port                 = local.api_port
   target_type          = "ip"

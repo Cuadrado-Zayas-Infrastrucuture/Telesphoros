@@ -78,6 +78,36 @@ test('the ruleset requires exactly the non-advisory jobs of the workflow', () =>
   for (const j of jobsOf(workflow)) if (!ADVISORY.has(j.key)) assert.ok(!j.continueOnError, `${j.key} is a gate, so it must not be continue-on-error`);
 });
 
+/** The steps (`run:` lines, in order) of one job of ci.yml. */
+function runSteps(text, key) {
+  const body = text.split(/^jobs:\s*$/m)[1] ?? '';
+  const block = body.split(/^  (?=[a-z][a-z0-9-]*:\s*$)/m).find((b) => b.startsWith(`${key}:`)) ?? '';
+  return [...block.matchAll(/^ {6}- run:\s*(.+)$/gm)].map((m) => m[1].trim());
+}
+
+/** What is wrong with how the terraform job proves the deployment profiles (empty when nothing is). */
+export function terraformJobProblems(text) {
+  const steps = runSteps(text, 'terraform');
+  const problems = [];
+  const at = (command) => steps.indexOf(command);
+  if (at('terraform test') < 0) problems.push('the terraform job must run `terraform test` (the offline per-profile plans in profiles.tftest.hcl)');
+  if (at('terraform init -backend=false -input=false') < 0 || at('terraform init -backend=false -input=false') > at('terraform test')) problems.push('terraform test must run after `terraform init -backend=false`');
+  const job = text.split(/^jobs:\s*$/m)[1]?.split(/^ {2}(?=[a-z][a-z0-9-]*:\s*$)/m).find((b) => b.startsWith('terraform:')) ?? '';
+  if (/AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|PROFILE|ROLE_ARN)|role-to-assume|configure-aws-credentials/.test(job)) problems.push('the terraform job must hold no cloud credentials');
+  return problems;
+}
+
+test('the terraform job runs the offline profile tests, after init, and holds no credentials', () => {
+  assert.deepEqual(terraformJobProblems(workflow), []);
+});
+
+test('the terraform job check reports a missing test step, a wrong order and a credential (controls)', () => {
+  assert.ok(terraformJobProblems(workflow.replace(/^ {6}- run: terraform test\n/m, '')).length > 0, 'a job without terraform test must be reported');
+  const reordered = workflow.replace('      - run: terraform init -backend=false -input=false\n', '').replace('      - run: terraform test\n', '      - run: terraform test\n      - run: terraform init -backend=false -input=false\n');
+  assert.ok(terraformJobProblems(reordered).length > 0, 'a test before init must be reported');
+  assert.ok(terraformJobProblems(workflow.replace('      - run: terraform test\n', '      - run: terraform test\n        env:\n          AWS_ACCESS_KEY_ID: x\n')).length > 0, 'a credential must be reported');
+});
+
 test('the ruleset protects the default branch and blocks force-push and deletion', () => {
   assert.deepEqual(ruleset.conditions.ref_name.include, ['~DEFAULT_BRANCH']);
   assert.equal(ruleset.enforcement, 'active');
