@@ -19,6 +19,7 @@ import {
 import { type Finding, runBackupCheck } from './offsite-check';
 import { restoreAndVerify } from './restore';
 import { restoreFromRemote } from './restore-remote';
+import { pgClientConfig } from './tls';
 
 const USAGE = `Usage: node dist/db/cli.js <command>
 
@@ -121,7 +122,7 @@ async function main(argv: string[]) {
   const [command, sub, ...rest] = argv;
 
   if (command === 'migrate') {
-    const client = new Client({ connectionString: required('DATABASE_MIGRATOR_URL') });
+    const client = new Client(pgClientConfig(required('DATABASE_MIGRATOR_URL')));
     await client.connect();
     try {
       if (sub === 'up') {

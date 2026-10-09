@@ -9,6 +9,7 @@ import { LedgerVerifier } from '../ledger/verifier';
 import { makeTempDir, sweepStaleTempDirs } from './cleanup';
 import { pgEnv, quoteIdent, run } from './pg-process';
 import { diffPrivilegeFacts, legacyRequiredRoles, missingRoles, readPrivilegeFacts } from './privilege-facts';
+import { pgClientConfig } from './tls';
 
 export interface RestoreOptions {
   /** A superuser on the TARGET server. The database named in the URL is not touched. */
@@ -156,7 +157,7 @@ export async function restoreAndVerify(options: RestoreOptions): Promise<Restore
     // 3. Restore into a brand-new database. First the roles the backup names must exist on this server (roles are per server, not per
     // database, so a dump cannot carry them): ownership is part of the backup, and a missing owner would fail half way through.
     const required = manifest.privileges ? manifest.privileges.roles : legacyRequiredRoles(manifest.migrations);
-    const admin = new Client({ connectionString: options.adminUrl });
+    const admin = new Client(pgClientConfig(options.adminUrl));
     await admin.connect();
     try {
       const absent = await missingRoles(admin, required);
@@ -191,7 +192,7 @@ export async function restoreAndVerify(options: RestoreOptions): Promise<Restore
 }
 
 async function dropDatabase(adminUrl: string, database: string) {
-  const admin = new Client({ connectionString: adminUrl });
+  const admin = new Client(pgClientConfig(adminUrl));
   await admin.connect();
   try {
     await admin.query(`DROP DATABASE IF EXISTS ${quoteIdent(database)} WITH (FORCE)`);
@@ -201,7 +202,7 @@ async function dropDatabase(adminUrl: string, database: string) {
 }
 
 async function verify(url: string, manifest: BackupManifest, record: (n: string, ok: boolean, d: string) => void, chainMaxEvents: number) {
-  const db = new Client({ connectionString: url });
+  const db = new Client(pgClientConfig(url));
   await db.connect();
   try {
     // Row counts: the restored database against the baseline taken in the backup's OWN snapshot.
@@ -312,7 +313,7 @@ async function verifyLedgerChain(url: string, db: Client, tables: string[], reco
     record(name, false, 'role telesphoros_ledger_verifier does not exist on this server; create it (docs/ops/ledger-roles.md) before relying on this restore');
     return;
   }
-  const pool = new Pool({ connectionString: url, max: 1, connectionTimeoutMillis: 10_000, options: '-c role=telesphoros_ledger_verifier' });
+  const pool = new Pool({ ...pgClientConfig(url), max: 1, connectionTimeoutMillis: 10_000, options: '-c role=telesphoros_ledger_verifier' });
   pool.on('error', () => undefined); // intentional: an idle connection can die; the check reports what it could not do
   try {
     // The point of using this role is to exercise ITS policies and grants: prove the connection really has it, not just that it was asked for.

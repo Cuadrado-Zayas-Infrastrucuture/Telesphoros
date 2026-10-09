@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { Pool, type PoolClient } from 'pg';
 import { pendingMigrations } from './migrator';
+import { pgClientConfig } from './tls';
 
 export interface DatabaseOptions {
   /** Shown in pg_stat_activity. Tests give each pool its own, to tell which connection is waiting. */
@@ -37,14 +38,13 @@ export class Database {
 
   constructor(options: DatabaseOptions) {
     this.pool = new Pool({
-      connectionString: options.url,
+      ...pgClientConfig(options.url, options.ssl), // TLS comes from the explicit setting only; a URL that carries TLS parameters is refused
       max: options.max ?? 10,
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 2_000, // fail fast instead of queueing forever when the database is down
       statement_timeout: 5_000, // no query may run unbounded
       idle_in_transaction_session_timeout: 10_000,
       application_name: options.applicationName ?? 'telesphoros-backend',
-      ssl: options.ssl === 'require' ? { rejectUnauthorized: true } : undefined,
     });
     // An idle client can die (failover, restart). Without a listener that becomes a process crash.
     this.pool.on('error', (error) => this.logger.error(`Idle database client error: ${error.message}`));

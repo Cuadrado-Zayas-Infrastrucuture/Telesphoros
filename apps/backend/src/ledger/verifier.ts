@@ -4,6 +4,7 @@ import { checkpointPayload, GENESIS_HASH, recordHash, redactionPayload } from '.
 import { HASH_VERSION, PROJECTION_VERSION, RECORD_TABLES, TOMBSTONE } from './ledger-types';
 import { loadProjections, projectionHash } from './projections';
 import type { Compromise, OpenIncident } from './ledger-status';
+import { pgClientConfig } from '../db/tls';
 
 /**
  * The ledger verifier (specification section 6.4). It connects with its OWN credentials, a login that belongs to
@@ -93,8 +94,7 @@ export class LedgerVerifier {
   /** A verifier on its own pool. `url` must be the verifier login, never the application's. */
   static connect(url: string, ssl: 'disable' | 'require' = 'disable'): LedgerVerifier {
     const pool = new Pool({
-      connectionString: url, max: 2, connectionTimeoutMillis: 5_000, application_name: 'telesphoros-ledger-verifier',
-      ssl: ssl === 'require' ? { rejectUnauthorized: true } : undefined,
+      ...pgClientConfig(url, ssl), max: 2, connectionTimeoutMillis: 5_000, application_name: 'telesphoros-ledger-verifier',
     });
     pool.on('error', () => undefined); // intentional: an idle verifier connection can die; the next verification opens another
     return new LedgerVerifier(pool);

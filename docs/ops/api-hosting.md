@@ -49,7 +49,7 @@ The foundations exist as soon as the switch is on. **The task definitions and th
 
 ## The database logins (a gap this PR does not close)
 
-The migrations create the roles but not their logins, and RDS creates only the admin user ([ledger-roles.md](ledger-roles.md)). Before the first start, an administrator must, from inside the VPC, create three logins and put their connection strings in the three secrets (each ending `?sslmode=require`):
+The migrations create the roles but not their logins, and RDS creates only the admin user ([ledger-roles.md](ledger-roles.md)). Before the first start, an administrator must, from inside the VPC, create three logins and put their connection strings in the three secrets. **The connection strings carry no TLS parameters** (no `sslmode`, `sslrootcert` or any `ssl...` name): the application refuses them at start-up, because in node-postgres they can override the explicit TLS setting. TLS comes only from `DATABASE_SSL=require`, which the service and the migration task both set ([database.md](../database.md#database-tls)):
 
 | Secret | Login | Member of |
 | --- | --- | --- |
