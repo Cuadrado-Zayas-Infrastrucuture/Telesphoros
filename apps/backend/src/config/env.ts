@@ -79,6 +79,22 @@ export const envSchema = z
     LEDGER_STARTUP_BUDGET_MS: z.coerce.number().int().min(1000).max(300_000).default(20_000),
     /** How often the whole chain is walked again, in hours (jittered by 10%). 0 turns the timer off; the walk after start still runs. */
     LEDGER_FULL_VERIFY_INTERVAL_HOURS: z.coerce.number().int().min(0).max(168).default(24),
+
+    /**
+     * Rate limiting (docs/ops/rate-limiting.md). Per PROCESS: two instances each allow the full rate. Production refuses to start with it off.
+     * Limits are requests per minute. The per-person limits apply after sign-in, by route class; the address limit applies before.
+     */
+    RATE_LIMIT_ENABLED: booleanString.default(true),
+    RATE_LIMIT_IP_PER_MINUTE: z.coerce.number().int().min(1).max(100_000).default(300),
+    RATE_LIMIT_READ_PER_MINUTE: z.coerce.number().int().min(1).max(100_000).default(120),
+    RATE_LIMIT_WRITE_PER_MINUTE: z.coerce.number().int().min(1).max(100_000).default(30),
+    RATE_LIMIT_EXPENSIVE_PER_MINUTE: z.coerce.number().int().min(1).max(100_000).default(10),
+    /**
+     * How many reverse proxies (load balancers) sit in front of this process. 0 uses the connection's own address and IGNORES X-Forwarded-For,
+     * so a client cannot invent its way out of the address limit. Too low behind a load balancer puts every client in one bucket; too high lets
+     * a client spoof its address. Must be set explicitly in production.
+     */
+    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).optional(),
   })
   .superRefine((env, ctx) => {
     const problem = (path: string, message: string) => ctx.addIssue({ code: 'custom', path: [path], message });
@@ -118,6 +134,8 @@ export const envSchema = z
       if (env.OBJECT_STORAGE_DRIVER !== 's3') problem('OBJECT_STORAGE_DRIVER', 'must be s3 in production');
       if (env.DATABASE_SSL !== 'require') problem('DATABASE_SSL', 'must be require in production');
       if (!env.LEDGER_VERIFIER_DATABASE_URL) problem('LEDGER_VERIFIER_DATABASE_URL', 'is required in production (the record log is verified at start and re-verified while running)');
+      if (!env.RATE_LIMIT_ENABLED) problem('RATE_LIMIT_ENABLED', 'must be true in production');
+      if (env.TRUST_PROXY_HOPS === undefined) problem('TRUST_PROXY_HOPS', 'must be set explicitly in production (0 if nothing sits in front, 1 behind one load balancer): a wrong value defeats or poisons the address limit');
       if (env.CORS_ALLOWED_ORIGINS.some((origin) => !origin.startsWith('https://'))) problem('CORS_ALLOWED_ORIGINS', 'must all be https:// origins in production');
     }
   });

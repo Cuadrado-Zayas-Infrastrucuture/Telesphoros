@@ -14,6 +14,7 @@ import type { Principal } from '../auth/principal';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { CapturesService } from './captures.service';
 import { RequiresPipeline } from './pipeline-switch';
+import { RateLimitClass } from '../rate-limit/rate-limit.decorators';
 
 const CAN_CAPTURE = ['clinician', 'reviewer', 'admin'] as const;
 const CAN_REVIEW = ['reviewer'] as const;
@@ -26,6 +27,7 @@ export class ReportCaptureController {
 
   /** 201 for a new capture, 200 when the same text had already been captured (the same record comes back). */
   @Post(':id/capture')
+  @RateLimitClass('expensive')
   @Roles(...CAN_CAPTURE)
   async capture(
     @CurrentPrincipal() principal: Principal,
@@ -38,6 +40,7 @@ export class ReportCaptureController {
   }
 
   @Get(':id/download-url')
+  @RateLimitClass('expensive')
   @Roles(...CAN_CAPTURE)
   downloadUrl(@CurrentPrincipal() principal: Principal, @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam): Promise<FileLinkDto> {
     return this.captures.pdfLink(principal, id);
@@ -55,6 +58,7 @@ export class CapturesController {
   }
 
   @Get(':id/text-url')
+  @RateLimitClass('expensive')
   @Roles(...CAN_CAPTURE)
   textUrl(@CurrentPrincipal() principal: Principal, @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam): Promise<FileLinkDto> {
     return this.captures.textLink(principal, id);

@@ -15,6 +15,7 @@ import type { Principal } from '../auth/principal';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { EvaluationsService } from './evaluations.service';
 import { RequiresPipeline } from './pipeline-switch';
+import { RateLimitClass } from '../rate-limit/rate-limit.decorators';
 
 const CAN_EVALUATE = ['clinician', 'reviewer', 'admin'] as const;
 
@@ -26,6 +27,7 @@ export class ReportEvaluationController {
 
   /** 201 for a new evaluation, 200 when the same evaluation (same capture, decision, knowledge and build) already exists. */
   @Post(':id/evaluations')
+  @RateLimitClass('expensive')
   @Roles(...CAN_EVALUATE)
   async create(
     @CurrentPrincipal() principal: Principal,

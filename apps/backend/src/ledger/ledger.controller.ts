@@ -5,6 +5,7 @@ import type { Principal } from '../auth/principal';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { RequiresPipeline } from '../lab-reports/pipeline-switch';
 import { LedgerMonitor } from './ledger-monitor';
+import { RateLimitClass } from '../rate-limit/rate-limit.decorators';
 
 /**
  * An admin's check of the record log of THEIR OWN tenant, now. The default walks from the latest checkpoint; `full=true` walks the whole
@@ -17,6 +18,7 @@ export class LedgerController {
   constructor(private readonly monitor: LedgerMonitor) {}
 
   @Get('verify')
+  @RateLimitClass('expensive')
   @Roles('admin')
   async verify(@CurrentPrincipal() principal: Principal, @Query(new ZodValidationPipe(ledgerVerifyQuerySchema)) query: LedgerVerifyQuery): Promise<LedgerVerifyResult> {
     const result = await this.monitor.verifyNow(principal.tenantId, query.full === 'true');

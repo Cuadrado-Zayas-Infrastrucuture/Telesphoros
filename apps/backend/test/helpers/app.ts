@@ -38,6 +38,12 @@ export interface TestAppOptions {
   verifierUrl?: string;
   /** Overrides for LEDGER_STARTUP_BUDGET_MS and LEDGER_FULL_VERIFY_INTERVAL_HOURS (strings, as in a real environment). */
   ledgerSettings?: { LEDGER_STARTUP_BUDGET_MS?: string; LEDGER_FULL_VERIFY_INTERVAL_HOURS?: string };
+  /**
+   * Rate limiting is OFF in tests unless asked for (one test person makes far more requests than a real one). Pass the limits to turn it on;
+   * any left out use the real defaults. `trustProxyHops` is the TRUST_PROXY_HOPS setting.
+   */
+  rateLimit?: { ip?: number; read?: number; write?: number; expensive?: number };
+  trustProxyHops?: number;
   /** Replace providers by token (e.g. the report reader, to make it slow or fail on purpose). */
   overrides?: Array<{ provide: unknown; useValue: unknown }>;
 }
@@ -84,6 +90,12 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
     ...(options.labReportPipeline || options.ledgerWatch
       ? { LEDGER_VERIFIER_DATABASE_URL: options.verifierUrl ?? (database ? database.verifierUrl : verifierUrlFor(options.postgresUrl!)), ...options.ledgerSettings }
       : {}),
+    RATE_LIMIT_ENABLED: options.rateLimit ? 'true' : 'false',
+    ...(options.rateLimit?.ip === undefined ? {} : { RATE_LIMIT_IP_PER_MINUTE: String(options.rateLimit.ip) }),
+    ...(options.rateLimit?.read === undefined ? {} : { RATE_LIMIT_READ_PER_MINUTE: String(options.rateLimit.read) }),
+    ...(options.rateLimit?.write === undefined ? {} : { RATE_LIMIT_WRITE_PER_MINUTE: String(options.rateLimit.write) }),
+    ...(options.rateLimit?.expensive === undefined ? {} : { RATE_LIMIT_EXPENSIVE_PER_MINUTE: String(options.rateLimit.expensive) }),
+    ...(options.trustProxyHops === undefined ? {} : { TRUST_PROXY_HOPS: String(options.trustProxyHops) }),
     OBJECT_STORAGE_DRIVER: s3 ? 's3' : 'memory',
     ...(s3 ? { REPORTS_BUCKET: s3.bucket, S3_ENDPOINT: s3.endpoint, S3_FORCE_PATH_STYLE: 'true', AWS_REGION: 'us-east-1' } : {}),
   });
@@ -97,7 +109,7 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
   for (const override of options.overrides ?? []) builder = builder.overrideProvider(override.provide).useValue(override.useValue);
   const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication<NestExpressApplication>();
-  configureApp(app, { corsOrigins: options.corsOrigins });
+  configureApp(app, { corsOrigins: options.corsOrigins, trustProxyHops: options.trustProxyHops });
   // Listen once on a free port. Otherwise supertest starts/stops the server per request, and two
   // requests built in the same expression race for it.
   await app.listen(0);

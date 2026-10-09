@@ -44,6 +44,10 @@ export class AppException extends HttpException {
   static conflictBecause(reason: string, message: string) {
     return new AppException(409, ErrorCode.CONFLICT, message, [{ field: 'request', message, reason }]);
   }
+  /** 429 with Retry-After. The message never says which limit or key was hit. */
+  static rateLimited(retryAfterSeconds: number) {
+    return new AppException(429, ErrorCode.RATE_LIMITED, 'Too many requests. Try again shortly.', undefined, retryAfterSeconds);
+  }
   static pipelineDisabled() {
     return new AppException(503, ErrorCode.PIPELINE_DISABLED, 'Lab report processing is switched off.');
   }
