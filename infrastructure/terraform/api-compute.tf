@@ -373,7 +373,9 @@ resource "aws_ecs_task_definition" "api_migrate" {
       user                   = local.api_user
       readonlyRootFilesystem = true
       command                = ["node", "dist/db/cli.js", "migrate", "up"]
-      secrets                = [{ name = "DATABASE_MIGRATOR_URL", valueFrom = aws_secretsmanager_secret.api_migrator_url[0].arn }]
+      # TLS is chosen only by this setting; the connection string carries no TLS parameters (apps/backend/src/db/tls.ts).
+      environment = [{ name = "DATABASE_SSL", value = "require" }]
+      secrets     = [{ name = "DATABASE_MIGRATOR_URL", valueFrom = aws_secretsmanager_secret.api_migrator_url[0].arn }]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
