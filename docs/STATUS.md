@@ -27,11 +27,11 @@ Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and
 
 ## In progress and next
 
-Slice 5B-3.2 (the pipeline endpoints) is complete. Slice 5B-3.3 (corrections, disputes, ledger watch) is built; 3.3a and 3.3b are merged and 3.3c is in review. It was planned and approved ([design/plans/5b-3-3-corrections-disputes-ledger-watch.md](design/plans/5b-3-3-corrections-disputes-ledger-watch.md), decisions 24 to 30) and is built as three PRs:
+Slice 5B-3.2 (the pipeline endpoints) is complete. Slice 5B-3.3 (corrections, disputes, ledger watch) is complete; 3.3a, 3.3b and 3.3c are all merged. It was planned and approved ([design/plans/5b-3-3-corrections-disputes-ledger-watch.md](design/plans/5b-3-3-corrections-disputes-ledger-watch.md), decisions 24 to 30) and is built as three PRs:
 
 - **5B-3.3a corrections, 3.3b disputes and the overlay, 3.3c ledger watch** (all built, above). The pipeline stays synthetic, off by default and refused in
   production. **No alarm is connected to the `ledger-compromised` log line yet** (Terraform is written, never applied); see [ops/ledger-watch.md](ops/ledger-watch.md).
-- **Adapter-side R05 readiness proposal**: written, awaiting approval and five owner choices; nothing started.
+- **Adapter-side R05 offline prototype (#28)**: implemented and verified with synthetic development tests; see [offline verification](clinical-validation/report-lookup-offline-v1.md). Production record-store/API integration requires its own approved plan; the evaluation API still uses the existing report adapter. Real clinical content, independent validation and clinical/training release remain pending.
 - **Real Poppler text runner**: needs the pinned Poppler 26.03.0 binary and a magic-byte check on uploaded files; separate slice.
 - **Tableau (analytics)**: feasible as its own slice; synthetic data only until a BAA; a separate read-only role over de-identified aggregate
   views with small-cell suppression, ideally pointed at a restored copy. Not planned in detail.
