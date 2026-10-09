@@ -1,0 +1,34 @@
+// CloudFront viewer-request function. No network, logs, patient data or dynamic host destination.
+var appHost = ${app_host_json};
+var redirectHosts = ${redirect_hosts_json};
+
+function handler(event) {
+  var request = event.request;
+  var host = request.headers.host.value.toLowerCase();
+  if (redirectHosts.indexOf(host) !== -1) {
+    var parts = [];
+    var query = request.querystring;
+    // CloudFront exposes URL-encoded components; preserve them without decoding/re-encoding.
+    Object.keys(query).forEach(function (key) {
+      var values = query[key].multiValue || [query[key]];
+      values.forEach(function (item) { parts.push(key + '=' + item.value); });
+    });
+    return {
+      statusCode: 301,
+      headers: {
+        location: { value: 'https://' + appHost + request.uri + (parts.length ? '?' + parts.join('&') : '') },
+        'cache-control': { value: 'no-store' },
+        'referrer-policy': { value: 'no-referrer' }
+      }
+    };
+  }
+  // BrowserRouter navigation only. Assets/API paths and any file extension retain origin errors.
+  var leaf = request.uri.split('/').pop();
+  if ((request.method === 'GET' || request.method === 'HEAD') &&
+      host === appHost && leaf.indexOf('.') === -1 &&
+      request.uri !== '/api' && request.uri.indexOf('/api/') !== 0 &&
+      request.uri !== '/assets' && request.uri.indexOf('/assets/') !== 0) {
+    request.uri = '/index.html';
+  }
+  return request;
+}

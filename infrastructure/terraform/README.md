@@ -17,8 +17,14 @@
 | Logical backups | S3 bucket in the **backup region** with its **own key**: Object Lock (nobody can delete or overwrite for 14 days), encryption with our key enforced, aged to cheaper storage, expires after a year |
 | Access | Two **unattached** IAM policies: `app_runtime` (read/write report files) and `backup_job` (write-only to the backup bucket) |
 
-It does **not** create: the VPC and subnets, the application compute, DNS and certificates, the database roles
+It does **not** create: the VPC and subnets, the application compute, DNS records, the database roles
 (`telesphoros_app` and its login user are created by migrations plus an operator step), alarms or dashboards (Phase 7/10).
+
+**H1 optional frontend:** `web.tf` now adds a private public-code S3 bucket, CloudFront/OAC and an ACM certificate
+when `enable_web_hosting = true`. Its default is false: no new hosting resources are selected by default.
+It still does not create DNS records, API compute, deployment roles/workflows or observability resources.
+The entire root remains subject to the three first-apply gates above; enabling one option does not approve
+creating the existing database/auth resources. Read the [hosting/DNS checklist](../../docs/ops/domains-and-hosting.md).
 
 ## How to use it later
 
@@ -34,8 +40,9 @@ Commit the generated `.terraform.lock.hcl` (run `terraform providers lock -platf
 
 ## What was verified (and what was not)
 
-Verified: `terraform fmt -check`, `terraform validate` against the real AWS provider schema (5.100.0), and that
-`validate` fails on a deliberately broken file. **Not verified:** `terraform plan` or `apply` (no AWS credentials were
+Original verification used AWS provider 5.100.0; the requirement has since advanced. H1 formatting/schema
+validation and exact current provider versions are recorded in [H1 verification](../../docs/verification/hosting-h1.md).
+**Not verified:** `terraform plan` or `apply` (no AWS credentials were
 used), real RDS point-in-time recovery, cross-region replication, and Object Lock behaviour. Treat the recovery
 objectives for the managed database as **unproven** until a restore drill has been run in AWS.
 

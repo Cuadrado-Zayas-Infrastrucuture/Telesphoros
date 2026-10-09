@@ -32,6 +32,7 @@ Slice 5B-3.2 (the pipeline endpoints) is complete. Slice 5B-3.3 (corrections, di
 - **5B-3.3a corrections, 3.3b disputes and the overlay, 3.3c ledger watch** (all built, above). The pipeline stays synthetic, off by default and refused in
   production. **No alarm is connected to the `ledger-compromised` log line yet** (Terraform is written, never applied); see [ops/ledger-watch.md](ops/ledger-watch.md).
 - **Disputed-cell evaluation listing**: implemented in this slice; exact file matches and historical candidates without provable file identity are shown separately. Read-only, paginated, and synthetic-only; see [verification and limits](clinical-validation/cell-usage-listing.md).
+- **Hosting H1**: company site on Vercel, product on AWS, both domains in Jan's Cloudflare account. Optional private S3/CloudFront frontend configuration is written, disabled by default and never applied; see [hosting and DNS checklist](ops/domains-and-hosting.md). API host, WAF/CloudTrail, deployment roles/state and live validation remain separate prerequisites.
 - **Adapter-side R05 offline prototype (#28)**: implemented and verified with synthetic development tests; see [offline verification](clinical-validation/report-lookup-offline-v1.md). Production record-store/API integration requires its own approved plan; the evaluation API still uses the existing report adapter. Real clinical content, independent validation and clinical/training release remain pending.
 - **Real Poppler text runner**: needs the pinned Poppler 26.03.0 binary and a magic-byte check on uploaded files; separate slice.
 - **Tableau (analytics)**: feasible as its own slice; synthetic data only until a BAA; a separate read-only role over de-identified aggregate
@@ -40,7 +41,7 @@ Slice 5B-3.2 (the pipeline endpoints) is complete. Slice 5B-3.3 (corrections, di
 ## Waiting on a person (the founder)
 
 BAA texts from the off-site backup provider candidates (Backblaze B2, Wasabi); two key custodians; provider choice; the first real off-site
-restore drill; hosting and DNS; sertraline and CPIC clinical data and sign-off; the break-glass role that may delete object versions is **assigned to the founder** and described in
+restore drill; deployment approval and the company Vercel source/project; sertraline and CPIC clinical data and sign-off; the break-glass role that may delete object versions is **assigned to the founder** and described in
 [ops/break-glass.md](ops/break-glass.md), but must **not be created** until CloudTrail with S3 data events exists (step H2); applying the `reviewer` Cognito group (Terraform is
 written, never applied).
 

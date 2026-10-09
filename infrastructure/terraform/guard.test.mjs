@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import './web.guard.test.mjs';
 
 const cognito = readFileSync(new URL('./cognito.tf', import.meta.url), 'utf8');
 const lambda = readFileSync(new URL('./lambda.tf', import.meta.url), 'utf8');
