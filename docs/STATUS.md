@@ -31,6 +31,7 @@ Slice 5B-3.2 (the pipeline endpoints) is complete. Slice 5B-3.3 (corrections, di
 
 - **5B-3.3a corrections, 3.3b disputes and the overlay, 3.3c ledger watch** (all built, above). The pipeline stays synthetic, off by default and refused in
   production. **No alarm is connected to the `ledger-compromised` log line yet** (Terraform is written, never applied); see [ops/ledger-watch.md](ops/ledger-watch.md).
+- **Disputed-cell evaluation listing**: implemented in this slice; exact file matches and historical candidates without provable file identity are shown separately. Read-only, paginated, and synthetic-only; see [verification and limits](clinical-validation/cell-usage-listing.md).
 - **Adapter-side R05 offline prototype (#28)**: implemented and verified with synthetic development tests; see [offline verification](clinical-validation/report-lookup-offline-v1.md). Production record-store/API integration requires its own approved plan; the evaluation API still uses the existing report adapter. Real clinical content, independent validation and clinical/training release remain pending.
 - **Real Poppler text runner**: needs the pinned Poppler 26.03.0 binary and a magic-byte check on uploaded files; separate slice.
 - **Tableau (analytics)**: feasible as its own slice; synthetic data only until a BAA; a separate read-only role over de-identified aggregate

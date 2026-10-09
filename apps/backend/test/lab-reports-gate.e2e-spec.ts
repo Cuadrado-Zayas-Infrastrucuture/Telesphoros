@@ -50,6 +50,7 @@ describe('the lab-report pipeline routes', () => {
       'GET /api/v1/captures/:id/text-url',
       'GET /api/v1/cell-disputes',
       'GET /api/v1/cell-disputes/:id',
+      'GET /api/v1/cell-disputes/:id/evaluations',
       'GET /api/v1/evaluations',
       'GET /api/v1/evaluations/:id',
       'GET /api/v1/ledger/verify',

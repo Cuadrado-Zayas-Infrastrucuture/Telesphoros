@@ -1,5 +1,5 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import type { DisputeCreate, DisputeDecisionCreate, DisputeDto, DisputeListQuery } from '@telesphoros/shared-types';
+import { CLINICAL_USE, cellUsageDtoSchema, type CellUsageDto, type CellUsageQuery, type DisputeCreate, type DisputeDecisionCreate, type DisputeDto, type DisputeListQuery } from '@telesphoros/shared-types';
 import type { Principal } from '../auth/principal';
 import { AppException } from '../common/app-exception';
 import type { KnowledgeSet } from '../services/knowledge/knowledge-set';
@@ -7,6 +7,7 @@ import type { DisputeStatus } from '../storage/ledger-records';
 import { LedgerRecordsRepository } from '../storage/ledger-records.repository';
 import { LAB_KNOWLEDGE } from './evaluations.service';
 import { toDisputeDto } from './lab-report.mapper';
+import { cellMatches } from './cell-usage';
 
 /**
  * Disputes about guideline cells (specification 5). A reviewer raises one against a cell of the knowledge that is loaded NOW; a second
@@ -65,6 +66,33 @@ export class DisputesService {
   async list(principal: Principal, query: DisputeListQuery): Promise<DisputeDto[]> {
     const { ledger, knowledge } = this.need();
     return (await ledger.listDisputes(principal.tenantId)).filter((d) => !query.status || d.status === query.status).map((d) => this.present(knowledge, d));
+  }
+
+  async evaluations(principal: Principal, id: string, query: CellUsageQuery): Promise<CellUsageDto> {
+    const ledger = this.ledger;
+    if (!ledger) throw AppException.pipelineMisconfigured();
+    const found = await ledger.findDispute(principal.tenantId, id);
+    if (!found) throw AppException.notFound('Dispute not found.');
+    const d = found.dispute;
+    const cell = {
+      guidelineId: d.guidelineId as string, guidelineVersion: d.guidelineVersion as string,
+      guidelineContentSha256: d.guidelineContentSha256 as string,
+      locator: { table: d.locatorTable as string, row: d.locatorRow as string, ...(d.locatorColumn === null ? {} : { column: d.locatorColumn as string }) },
+      note: '',
+    };
+    const candidates = await ledger.cellEvaluationCandidates(principal.tenantId, cell, query.afterSeq, query.limit + 1);
+    const page = candidates.slice(0, query.limit);
+    const entries: CellUsageDto['entries'] = [];
+    for (const record of page) {
+      const matches = cellMatches(record, cell);
+      if (matches.length === 0) continue;
+      const state = await ledger.evaluationState(principal.tenantId, record.id);
+      entries.push({ evaluationId: record.id, reportId: record.reportId as string, createdAt: record.createdAt, state: state.state, matches });
+    }
+    return cellUsageDtoSchema.parse({
+      disputeId: id, entries, nextAfterSeq: candidates.length > query.limit ? page[page.length - 1]!.seq : null,
+      clinicalUse: CLINICAL_USE, actionable: false,
+    });
   }
 
   private present(knowledge: KnowledgeSet, status: DisputeStatus): DisputeDto {
