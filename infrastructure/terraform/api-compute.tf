@@ -271,6 +271,74 @@ data "aws_iam_policy_document" "api_execution_migrate" {
   }
 }
 
+# The one-off provisioning task (db provision-logins). Two identities, as for every task here, and neither is the application's:
+#  - the EXECUTION role starts the task and injects the database administrator's credentials from the RDS-managed secret (username and password only);
+#  - the TASK role is what the command runs as: it can read and write exactly the three connection-string secrets, and it can NOT read the administrator secret.
+data "aws_iam_policy_document" "api_execution_provision" {
+  count                   = local.api_count
+  source_policy_documents = [data.aws_iam_policy_document.api_execution_common.json]
+  statement {
+    sid       = "ReadTheAdministratorSecret"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [aws_db_instance.main.master_user_secret[0].secret_arn]
+  }
+  statement {
+    sid       = "DecryptSecretsThroughSecretsManager"
+    actions   = ["kms:Decrypt"]
+    resources = [aws_kms_key.data.arn]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["secretsmanager.${var.region}.amazonaws.com"]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "api_provision_task" {
+  count = local.api_count
+  statement {
+    sid       = "ReadAndWriteTheThreeConnectionStrings"
+    actions   = ["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue"]
+    resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn]
+  }
+  statement {
+    sid       = "UseTheDataKeyThroughSecretsManager"
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
+    resources = [aws_kms_key.data.arn]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["secretsmanager.${var.region}.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "api_execution_provision" {
+  count              = local.api_count
+  name               = "${local.name}-api-provision-exec"
+  assume_role_policy = data.aws_iam_policy_document.api_ecs_assume.json
+}
+
+resource "aws_iam_role_policy" "api_execution_provision" {
+  count  = local.api_count
+  name   = "start-the-provisioning"
+  role   = aws_iam_role.api_execution_provision[0].id
+  policy = data.aws_iam_policy_document.api_execution_provision[0].json
+}
+
+resource "aws_iam_role" "api_provision_task" {
+  count              = local.api_count
+  name               = "${local.name}-api-provision-task"
+  assume_role_policy = data.aws_iam_policy_document.api_ecs_assume.json
+}
+
+resource "aws_iam_role_policy" "api_provision_task" {
+  count  = local.api_count
+  name   = "write-the-connection-strings"
+  role   = aws_iam_role.api_provision_task[0].id
+  policy = data.aws_iam_policy_document.api_provision_task[0].json
+}
+
 resource "aws_iam_role" "api_execution_service" {
   count              = local.api_count
   name               = "${local.name}-api-exec"
@@ -390,6 +458,58 @@ resource "aws_ecs_task_definition" "api_migrate" {
           "awslogs-group"         = aws_cloudwatch_log_group.api[0].name
           "awslogs-region"        = var.region
           "awslogs-stream-prefix" = "migrate"
+        }
+      }
+    }
+  ])
+}
+
+# One-off, run by a person before the first migration and again after it (docs/ops/api-hosting.md): creates the three database logins with generated passwords and
+# writes their connection strings into the three secrets. The administrator's credentials come from the RDS-managed secret through the execution role; no password
+# is typed, shown or kept in Terraform state. The connection strings it writes carry no TLS parameters (apps/backend/src/db/tls.ts).
+resource "aws_ecs_task_definition" "api_provision" {
+  count                    = local.api_service_count
+  family                   = "${local.name}-api-provision"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = aws_iam_role.api_execution_provision[0].arn
+  task_role_arn            = aws_iam_role.api_provision_task[0].arn
+
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture        = "X86_64"
+  }
+
+  container_definitions = jsonencode([
+    {
+      name                   = "provision"
+      image                  = var.api_image
+      essential              = true
+      user                   = local.api_user
+      readonlyRootFilesystem = true
+      command                = ["node", "dist/db/cli.js", "provision-logins"]
+      environment = [
+        { name = "DATABASE_SSL", value = "require" },
+        { name = "DATABASE_HOST", value = aws_db_instance.main.address },
+        { name = "DATABASE_PORT", value = tostring(aws_db_instance.main.port) },
+        { name = "DATABASE_NAME", value = aws_db_instance.main.db_name },
+        { name = "AWS_REGION", value = var.region },
+        { name = "PROVISION_SECRET_APP", value = aws_secretsmanager_secret.api_database_url[0].arn },
+        { name = "PROVISION_SECRET_VERIFIER", value = aws_secretsmanager_secret.api_ledger_verifier_url[0].arn },
+        { name = "PROVISION_SECRET_MIGRATOR", value = aws_secretsmanager_secret.api_migrator_url[0].arn },
+      ]
+      secrets = [
+        { name = "PROVISION_ADMIN_USER", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:username::" },
+        { name = "PROVISION_ADMIN_PASSWORD", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::" },
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.api[0].name
+          "awslogs-region"        = var.region
+          "awslogs-stream-prefix" = "provision"
         }
       }
     }
@@ -548,4 +668,9 @@ output "api_cluster_name" {
 output "api_migrate_task_family" {
   description = "Run this task definition once before a release (docs/ops/api-hosting.md)."
   value       = local.api_service_count == 1 ? aws_ecs_task_definition.api_migrate[0].family : null
+}
+
+output "api_provision_task_family" {
+  description = "Run this task definition once before the first migration, and again after it (docs/ops/api-hosting.md, \"The database logins\")."
+  value       = local.api_service_count == 1 ? aws_ecs_task_definition.api_provision[0].family : null
 }

@@ -96,7 +96,7 @@ export function apiComputeProblems(tf, sources = {}) {
   need(has(text, 'api_service_count = var.enable_api_hosting && var.api_image != "" ? 1 : 0'), 'api_service_count must need the switch and an image');
   const resources = [...text.matchAll(/^resource "([^"]+)" "([^"]+)"/gm)];
   need(resources.length >= 21, 'the scan must find the resources (a floor, so an empty read cannot pass)');
-  const SERVICE_ONLY = new Set(['aws_ecs_task_definition.api', 'aws_ecs_task_definition.api_migrate', 'aws_ecs_service.api', 'aws_cloudwatch_metric_alarm.api_unhealthy_targets', 'aws_cloudwatch_metric_alarm.api_target_5xx', 'aws_cloudwatch_metric_alarm.api_running_tasks']);
+  const SERVICE_ONLY = new Set(['aws_ecs_task_definition.api', 'aws_ecs_task_definition.api_migrate', 'aws_ecs_task_definition.api_provision', 'aws_ecs_service.api', 'aws_cloudwatch_metric_alarm.api_unhealthy_targets', 'aws_cloudwatch_metric_alarm.api_target_5xx', 'aws_cloudwatch_metric_alarm.api_running_tasks']);
   for (const [header, type, name] of resources) {
     const b = blocks(text, header.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))[0] ?? '';
     const want = SERVICE_ONLY.has(`${type}.${name}`) ? 'local.api_service_count' : 'local.api_count';
@@ -113,7 +113,7 @@ export function apiComputeProblems(tf, sources = {}) {
   need(has(one('resource "aws_iam_role_policy_attachment" "api_task_runtime"'), 'policy_arn = aws_iam_policy.app_runtime.arn') && has(one('resource "aws_iam_role_policy_attachment" "api_task_runtime"'), 'role = aws_iam_role.api_task[0].name'), 'the task role must have the app_runtime policy attached');
   const assume = one('data "aws_iam_policy_document" "api_ecs_assume"');
   need(has(assume, 'identifiers = ["ecs-tasks.amazonaws.com"]') && has(assume, 'variable = "aws:SourceAccount"'), 'the roles must be assumable by ECS tasks of this account only');
-  for (const role of ['api_task', 'api_execution_service', 'api_execution_migrate']) need(has(one(`resource "aws_iam_role" "${role}"`), 'assume_role_policy = data.aws_iam_policy_document.api_ecs_assume.json'), `the ${role} role must use the ECS-only trust`);
+  for (const role of ['api_task', 'api_execution_service', 'api_execution_migrate', 'api_execution_provision', 'api_provision_task']) need(has(one(`resource "aws_iam_role" "${role}"`), 'assume_role_policy = data.aws_iam_policy_document.api_ecs_assume.json'), `the ${role} role must use the ECS-only trust`);
   for (const [doc, secrets, other] of [
     ['api_execution_service', ['api_database_url[0].arn', 'api_ledger_verifier_url[0].arn'], 'api_migrator_url'],
     ['api_execution_migrate', ['api_migrator_url[0].arn'], 'api_database_url'],
@@ -159,6 +159,30 @@ export function apiComputeProblems(tf, sources = {}) {
   need(has(migrate, 'readonlyRootFilesystem = true') && has(migrate, 'user = local.api_user'), 'the migration task must be read-only and non-root too');
   need(has(migrate, 'environment = [{ name = "DATABASE_SSL", value = "require" }]'), 'the migration task must set DATABASE_SSL=require: TLS comes only from that setting, never from the connection string');
   need(has(text, 'family = "${local.name}-api-migrate"') && !/aws_ecs_service" "api_migrate/.test(text), 'the migration task must be a task definition only, never a service');
+
+  // The one-off provisioning task: creates the three logins. Its execution role injects the administrator's credentials; its task role can touch ONLY the three
+  // connection-string secrets and can NOT read the administrator secret.
+  const provision = one('resource "aws_ecs_task_definition" "api_provision"');
+  need(has(provision, 'task_role_arn = aws_iam_role.api_provision_task[0].arn') && has(provision, 'execution_role_arn = aws_iam_role.api_execution_provision[0].arn'), 'the provisioning task must use its own two roles');
+  need(has(provision, 'command = ["node", "dist/db/cli.js", "provision-logins"]'), 'the provisioning task must run the provision-logins command');
+  need(has(provision, 'readonlyRootFilesystem = true') && has(provision, 'user = local.api_user') && has(provision, 'image = var.api_image'), 'the provisioning task must be read-only, non-root and run the pinned image');
+  need(has(provision, '{ name = "DATABASE_SSL", value = "require" }'), 'the provisioning task must set DATABASE_SSL=require');
+  need(has(provision, 'valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:username::"') && has(provision, 'valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::"'), "the administrator's credentials must be injected as the username and password keys of the RDS-managed secret, and nothing else of it");
+  need(!/DATABASE_URL|DATABASE_MIGRATOR_URL|DATABASE_ADMIN_URL|LEDGER_VERIFIER/.test(code(provision)), 'the provisioning task must not be given any connection string');
+  need(has(text, 'family = "${local.name}-api-provision"') && !/aws_ecs_service" "api_provision/.test(text), 'the provisioning task must be a task definition only, never a service');
+  const provisionTask = one('data "aws_iam_policy_document" "api_provision_task"');
+  const readWrite = statements(provisionTask).find((s) => s.actions.includes('secretsmanager:PutSecretValue'));
+  need(readWrite !== undefined && readWrite.actions.replace(/\s/g, '') === '["secretsmanager:GetSecretValue","secretsmanager:PutSecretValue"]', 'the provisioning task role may only read and write secret values');
+  for (const ref of ['api_database_url[0].arn', 'api_ledger_verifier_url[0].arn', 'api_migrator_url[0].arn']) need(readWrite?.resources.includes(`aws_secretsmanager_secret.${ref}`), `the provisioning task role must reach ${ref}`);
+  need(readWrite ? (readWrite.resources.match(/aws_secretsmanager_secret\./g) ?? []).length === 3 && !readWrite.resources.includes('"*"') : false, 'the provisioning task role must reach exactly the three connection-string secrets');
+  need(!has(provisionTask, 'master_user_secret') && !/"secretsmanager:\*"|"iam:|"kms:\*"|resources\s*=\s*\["\*"\]/.test(code(provisionTask)), 'the provisioning task role must not read the administrator secret, hold iam or wildcard rights');
+  const provisionDecrypt = statements(provisionTask).find((s) => s.actions.includes('kms:Decrypt'));
+  need(provisionDecrypt !== undefined && has(provisionDecrypt.body, 'variable = "kms:ViaService"') && provisionDecrypt.resources.includes('aws_kms_key.data.arn'), 'the provisioning task role must use the data key only through Secrets Manager');
+  const provisionExec = one('data "aws_iam_policy_document" "api_execution_provision"');
+  const adminRead = statements(provisionExec).find((s) => s.actions.includes('secretsmanager:GetSecretValue'));
+  need(adminRead !== undefined && adminRead.resources.trim() === '[aws_db_instance.main.master_user_secret[0].secret_arn]', 'the provisioning execution role must read the administrator secret and nothing else');
+  need(has(provisionExec, 'source_policy_documents = [data.aws_iam_policy_document.api_execution_common.json]'), 'the provisioning execution role must build on the common statements');
+  for (const doc of ['api_execution_provision', 'api_provision_task']) need(has(one(`data "aws_iam_policy_document" "${doc}"`), 'count = local.api_count'), `${doc} must be counted by local.api_count`);
 
   // The environment, judged by the application's own start-up rules.
   const env = environmentOf(text, problems);
@@ -303,6 +327,17 @@ test('the API compute guard reports each way the text could be weakened (control
     ['running-tasks threshold fixed', 'threshold           = var.api_desired_count', 'threshold           = 0'],
     ['Container Insights off', 'value = "enabled"', 'value = "disabled"'],
     ['output removed', 'output "api_cluster_name"', 'output "api_other"'],
+    ['provisioning task role can read the administrator secret', 'resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn]', 'resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn, aws_db_instance.main.master_user_secret[0].secret_arn]'],
+    ['provisioning task role reaches only two secrets', 'resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn]', 'resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn]'],
+    ['provisioning task role may do anything with secrets', 'actions   = ["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue"]', 'actions   = ["secretsmanager:*"]'],
+    ['provisioning task role gains iam', 'sid       = "ReadAndWriteTheThreeConnectionStrings"', 'sid       = "ReadAndWriteTheThreeConnectionStrings"\n    # x\n    actions2  = ["iam:PassRole"]'],
+    ['provisioning execution role reads more than the administrator secret', 'resources = [aws_db_instance.main.master_user_secret[0].secret_arn]', 'resources = [aws_db_instance.main.master_user_secret[0].secret_arn, aws_secretsmanager_secret.api_database_url[0].arn]'],
+    ['provisioning runs the wrong command', 'command                = ["node", "dist/db/cli.js", "provision-logins"]', 'command                = ["node", "dist/db/cli.js", "migrate", "up"]'],
+    ['provisioning gets the whole administrator secret', ':password::"', '"'],
+    ['provisioning without TLS', '{ name = "DATABASE_SSL", value = "require" },\n        { name = "DATABASE_HOST"', '{ name = "DATABASE_SSL", value = "disable" },\n        { name = "DATABASE_HOST"'],
+    ['provisioning task given a connection string', '{ name = "AWS_REGION", value = var.region },\n        { name = "PROVISION_SECRET_APP"', '{ name = "DATABASE_URL", value = "postgres://x" },\n        { name = "PROVISION_SECRET_APP"'],
+    ['provisioning task writable filesystem', 'readonlyRootFilesystem = true\n      command                = ["node", "dist/db/cli.js", "provision-logins"]', 'readonlyRootFilesystem = false\n      command                = ["node", "dist/db/cli.js", "provision-logins"]'],
+    ['provisioning task not counted by the image', 'resource "aws_ecs_task_definition" "api_provision" {\n  count                    = local.api_service_count', 'resource "aws_ecs_task_definition" "api_provision" {\n  count                    = local.api_count'],
   ];
   for (const [name, from, to] of weakened) {
     assert.ok(compute.includes(from), `the control for "${name}" must match the real text (it does not: fix the control)`);
