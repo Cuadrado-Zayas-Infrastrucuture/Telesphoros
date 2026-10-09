@@ -14,3 +14,8 @@ app_callback_urls     = ["https://app.telesphoros.app/auth/callback"]
 app_logout_urls       = ["https://app.telesphoros.app/signed-out"]
 cognito_domain_prefix = "telesphoros-staging"
 ses_from_email        = "no-reply@telesphoros.app"
+
+# Audit trail (docs/ops/audit-trail.md). The alarm address has no default: SNS emails it a confirmation link.
+alarm_email = "security@example.com"
+# audit_lock_mode = "GOVERNANCE"   # COMPLIANCE is irreversible; decide separately
+# audit_lock_days = 365

@@ -56,7 +56,7 @@ Any H2 WAF/CloudTrail/observability plan needs its own redaction and retention r
    Preserve all Google/email verification records. Nameservers do not change.
 2. Review the AWS BAA, encrypted/locked remote state, OIDC deployment roles, the full-root
    Terraform plan and costs before any apply. These existing first-apply requirements remain.
-   H2 API hosting, WAF, CloudTrail data events and operational alarms remain separate work.
+   H2 API hosting, WAF and the application's own alarms remain separate work (the CloudTrail audit trail is written separately: [audit-trail.md](audit-trail.md)).
    Do not create the break-glass role ahead of its audit prerequisites.
 3. Choose the environment and confirm `web_domain`. To enable H1, supply the exact
    `https://app.telesphoros.app/auth/callback` callback, `/signed-out` logout and
