@@ -15,6 +15,11 @@ app_logout_urls       = ["https://app.telesphoros.app/signed-out"]
 cognito_domain_prefix = "telesphoros-staging"
 ses_from_email        = "no-reply@telesphoros.app"
 
+# API hosting (docs/ops/api-hosting.md). Off by default. With it on, app_security_group_ids may be empty (the API tasks'
+# own group is then the one the database accepts).
+# enable_api_hosting = true
+# public_subnet_ids  = ["subnet-0cccccccccccccccc", "subnet-0dddddddddddddddd"]
+
 # Audit trail (docs/ops/audit-trail.md). The alarm address has no default: SNS emails it a confirmation link.
 alarm_email = "security@example.com"
 # audit_lock_mode = "GOVERNANCE"   # COMPLIANCE is irreversible; decide separately

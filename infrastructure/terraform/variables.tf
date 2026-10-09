@@ -44,12 +44,9 @@ variable "private_subnet_ids" {
 }
 
 variable "app_security_group_ids" {
-  description = "Security groups of the application that may connect to the database (port 5432). Nothing else can."
+  description = "Security groups of the application that may connect to the database (port 5432). Nothing else can. May be empty only when enable_api_hosting is true: the API tasks' own group (api-edge.tf) is then the one allowed."
   type        = list(string)
-  validation {
-    condition     = length(var.app_security_group_ids) >= 1
-    error_message = "Name at least one application security group."
-  }
+  default     = []
 }
 
 variable "reports_cors_origins" {
