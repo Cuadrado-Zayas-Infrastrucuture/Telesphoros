@@ -2,7 +2,7 @@
 
 **Nothing is deployed from this repository, and no workflow can deploy.** There is deliberately no deploy workflow:
 Terraform has never been applied, no AWS account is wired to GitHub, the AWS BAA is not executed, and the hosting
-choice below is open. This page records the intended flow so the workflow can be written once those are settled.
+choice below is settled but not deployed. This page records the intended flow so the workflow can be written once the remaining prerequisites are settled.
 
 ## Intended flow (to be built after the decisions below)
 
@@ -21,10 +21,14 @@ choice below is open. This page records the intended flow so the workflow can be
 
 | Decision | State |
 | --- | --- |
-| Frontend hosting: Vercel, or S3 + CloudFront | open (founder) |
+| Frontend hosting | Founder chose company site on Vercel, product on S3 + CloudFront; H1 configuration is disabled by default, not applied |
 | AWS BAA executed | deferred; **no real patient data until it is** |
 | Remote Terraform state backend and the OIDC roles | not created |
-| DNS location for the domain | open |
+| DNS location for both domains | Jan's single Cloudflare account, administered by Jan; Google email records preserved |
 | Backups on a different provider than the database | not met: see the backup requirement in [../database.md](../database.md) |
 
 Until then, CI ([ci-cd.md](ci-cd.md)) validates the Terraform text and nothing more.
+
+The [H1 hosting and DNS checklist](domains-and-hosting.md) describes the optional frontend resources,
+manual certificate validation, staged checks and rollback. API hosting remains H2. No Vercel project
+has been inspected; the company site's source/project is still needed.
