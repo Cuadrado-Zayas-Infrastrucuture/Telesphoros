@@ -3,11 +3,12 @@ import { Pool, type PoolClient } from 'pg';
 import { checkpointPayload, GENESIS_HASH, recordHash, redactionPayload } from './record-hash';
 import { HASH_VERSION, PROJECTION_VERSION, RECORD_TABLES, TOMBSTONE } from './ledger-types';
 import { loadProjections, projectionHash } from './projections';
+import type { Compromise, OpenIncident } from './ledger-status';
 
 /**
  * The ledger verifier (specification section 6.4). It connects with its OWN credentials, a login that belongs to
  * `telesphoros_ledger_verifier` and to nothing else: it reads every tenant's ledger and records (explicit read policies), and can
- * execute exactly one function, `ledger_record_checkpoint`. It can write no record.
+ * execute exactly two functions, `ledger_record_checkpoint` and `ledger_record_incident` (migration 0011). It can write no record.
  *
  * One verification runs inside ONE `REPEATABLE READ READ ONLY` transaction, so it sees a single snapshot: the head it captures,
  * the events it walks and the rows it compares all belong to the same instant. Writers are never blocked.
@@ -110,25 +111,49 @@ export class LedgerVerifier {
   }
 
   async verify(tenantId: string, options: VerifyOptions = {}): Promise<VerifyResult> {
-    const result = await this.walk(tenantId, options);
+    const { result, startedAt } = await this.walk(tenantId, options);
     if (options.recordCheckpoint && result.status === 'ok' && result.headSeq !== '0') {
       // A separate, short, read-write transaction: the snapshot above is read-only by design. The function re-checks that the
       // head it is asked to record exists in the chain, so a head that has since moved on is still a true statement.
-      const { rows } = await this.pool.query<{ id: string }>(`SELECT ledger_record_checkpoint($1, $2::bigint, $3, $4) AS id`, [
-        tenantId, result.headSeq, result.headHash, result.mode,
+      // `startedAt` is the DATABASE's clock at the start of the walk's snapshot: a clearance of an incident accepts only a checkpoint whose
+      // walk began after the incident was recorded, so a walk that was already running when the damage was found cannot clear it.
+      const { rows } = await this.pool.query<{ id: string }>(`SELECT ledger_record_checkpoint($1, $2::bigint, $3, $4, $5::timestamptz) AS id`, [
+        tenantId, result.headSeq, result.headHash, result.mode, startedAt,
       ]);
       result.checkpointId = rows[0]!.id;
     }
     return result;
   }
 
-  private async walk(tenantId: string, options: VerifyOptions): Promise<VerifyResult> {
+  /**
+   * Tells the database that a verification found this tenant's record log damaged. From this call's return, `ledger_append` refuses every
+   * write for the tenant in every task. Idempotent (the first finding of an open incident is kept). Returns the incident's id.
+   */
+  async recordIncident(finding: Pick<Compromise, 'tenantId' | 'kind' | 'seq' | 'source'>): Promise<string> {
+    const { rows } = await this.pool.query<{ id: string }>(`SELECT ledger_record_incident($1, $2, $3::bigint, $4)::text AS id`, [
+      finding.tenantId, finding.kind, finding.seq, finding.source,
+    ]);
+    return rows[0]!.id;
+  }
+
+  /** Every incident that no clearance names: tenant incidents and global holds. */
+  async openIncidents(): Promise<OpenIncident[]> {
+    const { rows } = await this.pool.query<{ id: string; scope: 'tenant' | 'global'; tenant_id: string | null; kind: OpenIncident['kind']; failed_seq: string | null; source: OpenIncident['source']; detected_at: Date }>(
+      `SELECT i.id::text AS id, i.scope, i.tenant_id, i.kind, i.failed_seq::text AS failed_seq, i.source, i.detected_at
+         FROM ledger_incidents i WHERE NOT EXISTS (SELECT 1 FROM ledger_incident_clearances c WHERE c.incident_id = i.id) ORDER BY i.seq`);
+    return rows.map((r) => ({ id: r.id, scope: r.scope, tenantId: r.tenant_id, kind: r.kind, seq: r.failed_seq, source: r.source, detectedAt: r.detected_at }));
+  }
+
+  private async walk(tenantId: string, options: VerifyOptions): Promise<{ result: VerifyResult; startedAt: string }> {
     const started = Date.now();
     const budgetMs = options.budgetMs ?? DEFAULT_BUDGET_MS;
     const maxEvents = options.maxEvents ?? DEFAULT_MAX_EVENTS;
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      // The transaction's start time on the database's clock (never later than the snapshot it takes next): the conservative "walk began" instant.
+      const begun = await client.query<{ at: string }>(`SELECT now()::text AS at`);
+      const startedAt = begun.rows[0]!.at;
       await client.query(`SELECT set_config('statement_timeout', '30000', true)`);
       const failures: Failure[] = [];
       const fail = (kind: FailureKind, seq: string | null) => {
@@ -210,7 +235,7 @@ export class LedgerVerifier {
 
       await client.query('COMMIT');
       const status: VerifyStatus = failures.length > 0 ? 'failed' : incomplete ? 'incomplete' : 'ok';
-      return { tenantId, status, mode, headSeq: head.seq, headHash: head.record_hash, eventsChecked: checked, failures, checkpointId: null };
+      return { result: { tenantId, status, mode, headSeq: head.seq, headHash: head.record_hash, eventsChecked: checked, failures, checkpointId: null }, startedAt };
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined); // intentional: a broken connection is released below either way
       throw error;

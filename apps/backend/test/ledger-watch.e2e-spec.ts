@@ -39,6 +39,8 @@ class ControlledVerifier implements VerifierPort {
     }
     return this.inner.verify(tenantId, options);
   }
+  recordIncident(finding: Parameters<LedgerVerifier['recordIncident']>[0]) { return this.inner.recordIncident(finding); }
+  openIncidents() { return this.inner.openIncidents(); }
   close() { return this.inner.close(); }
 }
 
@@ -180,7 +182,7 @@ class ControlledVerifier implements VerifierPort {
 
     const ready = () => lab.api().get('/api/v1/ready');
 
-    it('stops every record write (503 LEDGER_COMPROMISED, nothing stored, reader not run), fails readiness, and leaves reads and other writes alone', async () => {
+    it('stops every record write of that tenant (503 LEDGER_COMPROMISED, nothing stored, reader not run), reports "contained" (still ready), and leaves reads, other writes and other tenants alone', async () => {
       await app.get(LedgerMonitor).idle();
       const clin = await lab.person('clin', ['clinician']);
       const rev = await lab.person('rev', ['reviewer']);
@@ -228,10 +230,20 @@ class ControlledVerifier implements VerifierPort {
       expect(read).toHaveBeenCalledTimes(1); // the evaluation was refused before the reader ran
       expect(await rows()).toEqual(before); // nothing was stored by any of them
 
-      // Readiness fails and names only the dependency.
-      const notReady = await lab.api().get('/api/v1/ready').expect(503);
-      expect(notReady.body.error.details).toEqual([{ field: 'ledger', message: 'unavailable' }]);
+      // The instance stays ready for everyone else; the public body says "contained" and names no tenant.
+      const stillReady = await lab.api().get('/api/v1/ready').expect(200);
+      expect(readinessDtoSchema.safeParse(stillReady.body).success).toBe(true);
+      expect(stillReady.body.checks.ledger).toBe('contained');
+      expect(JSON.stringify(stillReady.body)).not.toContain(lab.tenant);
       await lab.api().get('/api/v1/health').expect(200);
+
+      // The finding is in the DATABASE, so a task that never walked this tenant is stopped too.
+      expect(await withAdmin(db.adminUrl, async (c) => (await c.query(`SELECT tenant_id, scope FROM ledger_incidents`)).rows)).toEqual([{ tenant_id: lab.tenant, scope: 'tenant' }]);
+
+      // Another tenant is not affected.
+      const neighbour = new LabPipeline(app, db.adminUrl);
+      const neighbourClinician = await neighbour.person('clin', ['clinician']);
+      await neighbour.reviewedCapture(fixturePdf('D01'), { clinician: neighbourClinician });
 
       // Reads work, writes that are not ledger records work, and the admin can still look.
       await lab.api().get(`/api/v1/captures/${evaluated.captureId}`).set(bearer(rev.token)).expect(200);

@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common';
 import { AppException } from '../common/app-exception';
-import { LedgerStatus, type TailState, type VerifySource } from './ledger-status';
+import { type Compromise, LedgerStatus, type OpenIncident, type TailState, type VerifySource } from './ledger-status';
 import type { VerifyOptions, VerifyResult } from './verifier';
 
 export const LEDGER_VERIFIER = Symbol('LEDGER_VERIFIER');
@@ -10,6 +10,10 @@ export const LEDGER_WATCH_CONFIG = Symbol('LEDGER_WATCH_CONFIG');
 export interface VerifierPort {
   tenants(): Promise<string[]>;
   verify(tenantId: string, options?: VerifyOptions): Promise<VerifyResult>;
+  /** Tells the database a verification found a tenant's record log damaged; returns the incident id. Idempotent. */
+  recordIncident(finding: Pick<Compromise, 'tenantId' | 'kind' | 'seq' | 'source'>): Promise<string>;
+  /** Every incident no clearance names. */
+  openIncidents(): Promise<OpenIncident[]>;
   close(): Promise<void>;
 }
 
@@ -26,23 +30,31 @@ export interface LedgerWatchConfig {
   onDemandBudgetMs: number;
   /** A chain of at most this many events gets a FULL walk at start even when a checkpoint exists (a checkpoint is a shortcut, not a control). */
   fullWalkAtOrBelowEvents: number;
+  /** How often the open incidents are read again, so a sibling task's finding (or a person's clearance) reaches this process's view. 0 turns it off. */
+  incidentPollMs: number;
 }
 
 /** Measured in slice 5B-3.3c (docs/ops/ledger-watch.md): these are the defaults the environment settings are layered over. */
 export const FULL_WALK_AT_OR_BELOW_EVENTS = 50_000;
 export const FULL_BUDGET_MS = 15 * 60_000;
 export const ON_DEMAND_BUDGET_MS = 30_000;
+export const INCIDENT_POLL_MS = 60_000;
 
 const BUSY = Symbol('busy');
 
 /**
  * The ledger watch (specification 6.6 and 6.7). It owns the verifier connection and the in-process `LedgerStatus`:
  *
- *   1. At start, each tenant's chain is checked from its latest checkpoint within one total budget. Production refuses to start unless
- *      every tenant is `ok`; other environments log and carry on.
+ *   1. At start, each tenant that is not already contained has its chain checked from its latest checkpoint within one total budget.
+ *      Production refuses to start when a tenant fails that check and is not yet contained (the finding is recorded first, so the next
+ *      start sees it as contained); other environments log and carry on. A tenant already contained is listed in the log, not re-judged.
  *   2. Right after start, and then on a timer, every tenant's whole chain is walked and a checkpoint is recorded on success.
- *   3. A `failed` walk, from any of these or from the admin endpoint, LATCHES the instance: readiness fails and no record is written until
- *      the process is restarted after an investigation. Reads continue.
+ *   3. A `failed` walk, from any of these or from the admin endpoint, CONTAINS that tenant: the finding is recorded in the database
+ *      (the verifier's `recordIncident`), where `ledger_append` refuses every write for the tenant in every task, and is mirrored in this process's
+ *      `LedgerStatus`. Other tenants keep working; reads continue. A person clears the incident (a runbook step, never an API) after an
+ *      investigation, and only a full walk that began after the incident has passed.
+ *   4. The open incidents are read at start, before each full walk and on a short timer, so a sibling task's finding or a person's
+ *      clearance reaches this process even if it never walked that tenant itself.
  *
  * Only one verification runs at a time in this process. What is logged and returned names kinds of failure and sequence numbers, never a
  * value from a record.
@@ -55,6 +67,7 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
   private pass: Promise<void> | null = null;
   private passInProgress = false;
   private timer: NodeJS.Timeout | undefined;
+  private pollTimer: NodeJS.Timeout | undefined;
   private stopped = false;
 
   constructor(
@@ -73,11 +86,13 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
     await this.checkAtStart(this.verifier);
     this.pass = this.runFullPass('background');
     this.armTimer();
+    this.armPoll();
   }
 
   async onModuleDestroy(): Promise<void> {
     this.stopped = true;
     clearTimeout(this.timer);
+    clearTimeout(this.pollTimer);
     this.abort.abort(); // a walk in progress stops at its next batch instead of holding shutdown
     await this.pass?.catch(() => undefined); // intentional: the pass logs its own failure
     await this.running?.catch(() => undefined); // intentional: the holder reports its own failure
@@ -91,16 +106,16 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
 
   /**
    * An admin's check of one tenant, now. Refused (503, try again) while another verification is running in this process.
-   * A `failed` answer latches the instance just as the background walk would: an admin who found damage found the same damage.
+   * A `failed` answer contains the tenant just as the background walk would: an admin who found damage found the same damage.
    */
   async verifyNow(tenantId: string, full: boolean): Promise<VerifyResult> {
     if (!this.verifier) throw AppException.pipelineMisconfigured();
     const verifier = this.verifier;
     const outcome = await this.tryHold(async () => {
       const result = await verifier.verify(tenantId, {
-        mode: full ? 'full' : 'tail', budgetMs: this.config.onDemandBudgetMs, recordCheckpoint: this.status.compromised === null, signal: this.abort.signal,
+        mode: full ? 'full' : 'tail', budgetMs: this.config.onDemandBudgetMs, recordCheckpoint: true, signal: this.abort.signal,
       });
-      this.note(result, 'on-demand');
+      await this.note(result, 'on-demand');
       return result;
     });
     if (outcome === BUSY) throw AppException.ledgerCheckBusy();
@@ -113,9 +128,15 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
     const deadline = Date.now() + this.config.startupBudgetMs;
     let outcome: TailState = 'ok';
     let checked = 0;
+    await this.syncIncidents(); // what the database already holds (a sibling's findings, a person's global hold)
+    const knownBefore = this.status.containedTenants().length;
+    if (knownBefore > 0 || this.status.hold) {
+      this.logger.warn({ event: 'ledger-contained-at-start', containedTenants: knownBefore, globalHold: this.status.hold !== null, message: 'Record logs are already contained; this instance starts, and does not write for them.' });
+    }
     try {
       const tenants = await verifier.tenants();
       for (const tenantId of tenants) {
+        if (this.status.hasIncident(tenantId)) continue; // already known and recorded: not judged again here, its full walk goes on in the background
         const remaining = deadline - Date.now();
         if (remaining <= 0) {
           outcome = outcome === 'failed' ? 'failed' : 'incomplete';
@@ -124,7 +145,7 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
         const result = await this.queued(() => verifier.verify(tenantId, {
           mode: 'tail', budgetMs: remaining, fullWalkAtOrBelow: this.config.fullWalkAtOrBelowEvents, signal: this.abort.signal,
         }));
-        this.note(result, 'startup');
+        await this.note(result, 'startup');
         checked += 1;
         if (result.status === 'failed') outcome = 'failed';
         else if (result.status === 'incomplete' && outcome !== 'failed') outcome = 'incomplete';
@@ -137,7 +158,7 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
     this.status.setTail(outcome);
     if (outcome === 'ok') return;
 
-    const finding = this.status.compromised;
+    const finding = [...this.status.containedTenants()].map((t) => this.status.finding(t)).find((f) => f?.source === 'startup') ?? this.status.compromised;
     const summary = finding ? ` (${finding.kind}${finding.seq === null ? '' : ` at sequence ${finding.seq}`})` : '';
     if (this.config.production) {
       throw new Error(`The record log did not pass its check at start: ${outcome}${summary}. Production does not start until it does (docs/ops/ledger-watch.md).`);
@@ -159,16 +180,20 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
     const done = (async () => {
       let allOk = true;
       try {
+        await this.syncIncidents();
         for (const tenantId of await verifier.tenants()) {
           if (this.stopped) {
             allOk = false;
             break;
           }
           const result = await this.queued(() => verifier.verify(tenantId, {
-            mode: 'full', budgetMs: this.config.fullBudgetMs, recordCheckpoint: this.status.compromised === null, signal: this.abort.signal,
+            // A checkpoint is a true statement about the tenant that was walked, so it is recorded for every tenant that passes, a contained
+            // one included: it is the evidence a person needs to clear the incident.
+            mode: 'full', budgetMs: this.config.fullBudgetMs, recordCheckpoint: true, signal: this.abort.signal,
           }));
-          this.note(result, source);
-          if (result.status !== 'ok') allOk = false;
+          await this.note(result, source);
+          // A contained tenant that still fails is expected and already reported; it must not keep the instance "verifying" forever.
+          if (result.status !== 'ok' && !(result.status === 'failed' && this.status.hasIncident(tenantId))) allOk = false;
         }
       } catch (error) {
         allOk = false;
@@ -192,7 +217,43 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
     this.timer.unref(); // the timer alone must never keep the process alive
   }
 
+  private armPoll(): void {
+    if (this.config.incidentPollMs <= 0 || this.stopped) return;
+    this.pollTimer = setTimeout(() => {
+      void this.syncIncidents().finally(() => this.armPoll());
+    }, this.config.incidentPollMs);
+    this.pollTimer.unref(); // the timer alone must never keep the process alive
+  }
+
   // ---- shared ----
+
+  /**
+   * Brings this process's view in line with the database: first tells it about any finding made here that it has not heard (a database that
+   * was unreachable when the damage was found), then mirrors the open incidents. It never throws: when the database cannot be read the
+   * process keeps what it knows, and the database still refuses writes on its own.
+   */
+  private async syncIncidents(): Promise<void> {
+    const verifier = this.verifier;
+    if (!verifier) return;
+    try {
+      for (const finding of this.status.unrecorded()) await this.record(finding);
+      this.status.syncOpen(await verifier.openIncidents());
+    } catch (error) {
+      this.logger.warn({ event: 'ledger-incident-sync-failed', error: describe(error), message: 'The open incidents could not be read; this instance keeps what it knows, and the database still refuses writes for contained tenants.' });
+    }
+  }
+
+  /** Writes a finding of this process into the database. A failure is logged and retried by the next sync; it never hides the finding. */
+  private async record(finding: Compromise): Promise<void> {
+    const verifier = this.verifier;
+    if (!verifier || finding.tenantId === null) return;
+    try {
+      await verifier.recordIncident({ tenantId: finding.tenantId, kind: finding.kind, seq: finding.seq, source: finding.source });
+      this.status.markRecorded(finding.tenantId);
+    } catch (error) {
+      this.logger.error({ event: 'ledger-incident-record-failed', tenantId: finding.tenantId, error: describe(error), message: 'A finding could not be recorded in the database; this instance refuses writes for the tenant meanwhile and retries.' });
+    }
+  }
 
   /** One verification at a time in this process. A background caller queues behind the current one... */
   private async queued<T>(work: () => Promise<T>): Promise<T> {
@@ -217,15 +278,26 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
     }
   }
 
-  /** Logs what a verification found and latches the instance on damage. */
-  private note(result: VerifyResult, source: VerifySource): void {
+  /** Logs what a verification found and, on damage, contains the tenant: latched here at once, recorded in the database for every task. */
+  private async note(result: VerifyResult, source: VerifySource): Promise<void> {
     if (result.status === 'failed') {
       const first = result.failures[0]!;
-      this.status.latch({ tenantId: result.tenantId, kind: first.kind, seq: first.seq, source, at: new Date() });
-      this.logger.error({
-        event: 'ledger-compromised', source, tenantId: result.tenantId, mode: result.mode, eventsChecked: result.eventsChecked,
-        failures: result.failures.slice(0, 10).map(({ kind, seq }) => ({ kind, seq })), message: 'The record log failed verification. Records are no longer written by this instance.',
-      });
+      const alreadyContained = this.status.hasIncident(result.tenantId);
+      const finding: Compromise = { tenantId: result.tenantId, kind: first.kind, seq: first.seq, source, at: new Date() };
+      if (!alreadyContained) {
+        this.status.latch(finding); // before the first await: this process refuses at once, whatever the database call does
+        this.logger.error({
+          event: 'ledger-compromised', source, tenantId: result.tenantId, mode: result.mode, eventsChecked: result.eventsChecked,
+          failures: result.failures.slice(0, 10).map(({ kind, seq }) => ({ kind, seq })), message: 'The record log of this tenant failed verification. Records are no longer written for it.',
+        });
+        await this.record(finding);
+      } else {
+        // The tenant is already contained and reported (the alarm fired on the first finding): a repeat is a warning, not a second page.
+        this.logger.warn({
+          event: 'ledger-incident-still-open', source, tenantId: result.tenantId, mode: result.mode, eventsChecked: result.eventsChecked,
+          failures: result.failures.slice(0, 10).map(({ kind, seq }) => ({ kind, seq })), message: 'A contained tenant still fails verification.',
+        });
+      }
     } else if (result.status === 'incomplete' && !this.abort.signal.aborted) {
       // (A walk stopped because the application is shutting down is not worth a line: the next start walks again.)
       this.logger.warn({

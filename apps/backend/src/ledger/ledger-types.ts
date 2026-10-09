@@ -69,12 +69,13 @@ export class StaleAcceptanceError extends Error {
 }
 
 /**
- * The ledger watch found the record log damaged, so this instance writes no record until it is restarted after an investigation.
- * Raised BEFORE anything is appended; the transaction that was about to write rolls back. Reads are not affected.
+ * The record log of this tenant is contained (an open incident, or a global hold), so no record is written for it until a person clears the
+ * incident after an investigation. Raised by this process's own gate before anything is appended, or by the database (SQLSTATE LC001, from
+ * `ledger_append`, which every task shares). The transaction that was about to write rolls back. Reads are not affected.
  */
 export class LedgerCompromisedError extends Error {
   constructor() {
-    super('The record log failed verification; writes are stopped.');
+    super('The record log is contained; writes are stopped.');
     this.name = 'LedgerCompromisedError';
   }
 }
@@ -91,13 +92,16 @@ export class LedgerBusyError extends Error {
 
 const INTEGRITY_CLASS = '23';
 const LOCK_NOT_AVAILABLE = '55P03';
+/** Raised by `ledger_append` (migration 0011) while the tenant has an open incident or a global hold is open. */
+export const LEDGER_CONTAINED = 'LC001';
 /**
  * SQLSTATE class 23 (integrity constraint violation) becomes a LedgerIntegrityError; a lock timeout (55P03) becomes a LedgerBusyError;
- * anything else is returned untouched.
+ * the database's containment refusal (LC001) becomes a LedgerCompromisedError; anything else is returned untouched.
  */
 export function toLedgerError(error: unknown): unknown {
   const { code, constraint } = (error ?? {}) as { code?: string; constraint?: string };
   if (typeof code === 'string' && code.startsWith(INTEGRITY_CLASS)) return new LedgerIntegrityError('A ledger or record integrity rule refused this write.', code, constraint);
   if (code === LOCK_NOT_AVAILABLE) return new LedgerBusyError();
+  if (code === LEDGER_CONTAINED) return new LedgerCompromisedError();
   return error;
 }

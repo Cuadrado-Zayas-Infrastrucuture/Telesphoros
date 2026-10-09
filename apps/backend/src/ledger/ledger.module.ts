@@ -1,6 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { ENV, type Env } from '../config/env';
-import { FULL_BUDGET_MS, FULL_WALK_AT_OR_BELOW_EVENTS, LEDGER_VERIFIER, LEDGER_WATCH_CONFIG, LedgerMonitor, type LedgerWatchConfig, ON_DEMAND_BUDGET_MS } from './ledger-monitor';
+import { FULL_BUDGET_MS, FULL_WALK_AT_OR_BELOW_EVENTS, INCIDENT_POLL_MS, LEDGER_VERIFIER, LEDGER_WATCH_CONFIG, LedgerMonitor, type LedgerWatchConfig, ON_DEMAND_BUDGET_MS } from './ledger-monitor';
 import { LedgerStatus } from './ledger-status';
 import { LedgerVerifier } from './verifier';
 
@@ -23,6 +23,7 @@ import { LedgerVerifier } from './verifier';
         fullBudgetMs: FULL_BUDGET_MS,
         onDemandBudgetMs: ON_DEMAND_BUDGET_MS,
         fullWalkAtOrBelowEvents: FULL_WALK_AT_OR_BELOW_EVENTS,
+        incidentPollMs: INCIDENT_POLL_MS,
       }),
     },
     // The verifier has its own pool and its own login; the monitor closes it when the application shuts down.

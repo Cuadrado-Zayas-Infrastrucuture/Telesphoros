@@ -9,7 +9,8 @@ import { RateLimitClass } from '../rate-limit/rate-limit.decorators';
 
 /**
  * An admin's check of the record log of THEIR OWN tenant, now. The default walks from the latest checkpoint; `full=true` walks the whole
- * chain. Success records a checkpoint. A failure stops this instance from writing records until it is restarted after an investigation.
+ * chain. Success records a checkpoint. A failure contains the tenant: the finding is recorded in the database and no task writes a record
+ * for it until a person clears the incident after an investigation (docs/ops/ledger-watch.md).
  * The answer names kinds of failure and sequence numbers, never a value from a record.
  */
 @Controller('ledger')

@@ -1,23 +1,42 @@
 # The ledger watch
 
-Slice 5B-3.3c. The record log (the per-tenant hash-chained ledger of `docs/design/records-and-corrections.md` section 6) makes tampering
-**evident**. This is the part that actually looks. Nothing here has been applied in AWS, and nothing here is connected to a real alarm yet
-(see "The alarm" below).
+Slice 5B-3.3c, with containment shared through the database since FD-2 (migration 0011). The record log (the per-tenant hash-chained ledger of
+`docs/design/records-and-corrections.md` section 6) makes tampering **evident**. This is the part that actually looks. Nothing here has been
+applied in AWS, and nothing here is connected to a real alarm yet (see "The alarm" below).
 
 ## What it does
 
 | When | What | If it finds damage |
 | --- | --- | --- |
-| **At start** | For every tenant, checks the chain from the latest checkpoint (a chain of at most 50 000 events is walked in full instead), within one total budget | **Production refuses to start.** Other environments log it and latch (below) |
-| **Right after start** | One tenant at a time, walks the whole chain and records a `full` checkpoint when it is `ok` | Latches |
-| **On a timer** (default every 24 h, jittered 10%) | The same full walk | Latches |
-| **On request** (`GET /ledger/verify`, admin) | Checks the caller's own tenant, now | Latches, and says what it found |
+| **At start** | Reads the open incidents, then checks every tenant that is not already contained from its latest checkpoint (a chain of at most 50 000 events is walked in full instead), within one total budget | A **new** failure is contained and recorded, and **production refuses to start** (the replacement start finds it recorded and goes on). Other environments log it and carry on |
+| **Right after start** | One tenant at a time, walks the whole chain and records a `full` checkpoint when it is `ok` (a contained tenant too: that checkpoint is the evidence for clearing) | Contains the tenant |
+| **On a timer** (default every 24 h, jittered 10%) | The same full walk | Contains the tenant |
+| **On a shorter timer** (every 60 s) | Reads the open incidents again | Mirrors them (a sibling task's finding, a person's clearance) |
+| **On request** (`GET /ledger/verify`, admin) | Checks the caller's own tenant, now | Contains the tenant, and says what it found |
 | **After a restore** (`db:restore`) | Walks every tenant's whole chain as `telesphoros_ledger_verifier` | The restore is "not ok" |
 
-**Latched** means: this process stops writing records until it is restarted. Readiness (`/ready`) fails on `ledger`; every request that would
-append to the ledger gets **503 `LEDGER_COMPROMISED`** (no `Retry-After`: waiting cannot clear it), is rolled back and stores nothing; the
-evaluation route refuses before it runs the reader. Reads, and writes that are not ledger records (for example creating a patient), carry on.
-The latch is memory only and cannot be cleared by repairing the data: a person decides, by restarting after an investigation.
+## Containment (FD-2): what "contained" means
+
+A walk that finds damage records an **incident** in the database (`ledger_incidents`, written only by `ledger_record_incident`, which only the
+verifier login may call). From the moment that call returns, `ledger_append` (the one function the application may call to write a record)
+**refuses every write for that tenant, in every task**, inside its own transaction and right after it takes the tenant's head-row lock
+(SQLSTATE `LC001`, answered as **503 `LEDGER_COMPROMISED`**, no `Retry-After`: waiting cannot clear it). The row written by the refused request
+is rolled back with it, and the evaluation route refuses before it runs the reader. Reads, redactions, checkpoints, and writes that are not
+ledger records (for example creating a patient) carry on. **Other tenants carry on too.**
+
+- **The database is the authority; each process's memory is a fast path.** A task that never walked the tenant is stopped by the database at its
+  first write; a restart changes nothing, because the incident is still open. (An older image, during a rolling deployment, gets a plain 500
+  instead of the 503 for the same refusal.)
+- **No write commits for the tenant after the incident exists.** `ledger_record_incident` takes the same head-row lock first, so a write that is
+  already in flight finishes (and commits) before the incident is recorded, and every write queued behind it sees the incident.
+- **Only a person reopens writes**, with `ledger_clear_incident` as the operator login (below). It is refused unless a **full** verification of
+  that tenant that **began after the incident was recorded** (the database's clock) has passed and reaches the failed sequence number. A walk that
+  was already running when the damage was found cannot clear it by finishing later; a chain that is still damaged cannot be cleared by anyone,
+  because a checkpoint is written only after a walk that found nothing wrong.
+- **A global hold** (`ledger_set_global_hold`, operator only) stops writes for every tenant until it is cleared; clearing it is a decision, not a
+  walk. Writes already in flight for other tenants may still commit; every write that starts after the hold is recorded is refused.
+- If the database cannot be told (unreachable when the damage is found), the process keeps refusing on its own and retries at its next sync; the
+  log line `ledger-incident-record-failed` (class and code only) says so.
 
 Only one verification runs at a time in a process. The walk reads one consistent snapshot (`REPEATABLE READ`, read-only), so it never blocks a
 writer. Answers and log lines name **kinds of failure and sequence numbers, never a value from a record**, and no tenant is named in an error
@@ -39,25 +58,47 @@ Validation errors name variables, never values.
 
 - `up`: the check at start passed, a full walk has finished, none is running.
 - `verifying`: the check at start passed and a full walk is running (or has not yet finished). **The instance is ready.**
-- not ready (503, `details: [{field: "ledger", message: "unavailable"}]`): the check at start has not passed, or the log is latched.
+- `contained`: at least one tenant's record log is stopped; the others are not. **The instance is ready**, because the other tenants keep working.
+  The public body names no tenant and no count; the log line `ledger-compromised` (and the alarm) is how a person finds out.
+- not ready (503, `details: [{field: "ledger", message: "unavailable"}]`): the check at start has not passed, or a **global hold** is open.
 
-It reads memory, so it cannot time out on the database.
+It reads memory (mirrored from the database every 60 s), so it cannot time out on the database. Do not read "ready" as "no incident": a load
+balancer keeps sending traffic to a task that is ready, and the database refuses the contained tenant's writes whichever task they reach.
 
-## When it latches or refuses to start (runbook)
+## When a tenant is contained, or production refuses to start (runbook)
 
-1. **Do not restart to "clear" it.** A restart clears the latch, and if the damage is real it will be found again (and production will refuse to
-   start): that is the design, but the first job is to find out what happened.
+1. **Do not look for a way to "clear" it by restarting.** A restart changes nothing: the incident is in the database, and if the damage is real a
+   walk finds it again. The first job is to find out what happened.
 2. Read the log line with `event: "ledger-compromised"`. It has `tenantId`, `source` (`startup`, `background`, `scheduled`, `on-demand`), `mode`,
    and `failures: [{kind, seq}]` (at most ten). The kinds are listed in `apps/backend/src/ledger/verifier.ts`: `seq-gap`, `prev-hash-mismatch`,
    `record-hash-mismatch`, `payload-mismatch` (a stored row no longer matches what its event recorded), `record-missing`, `row-without-event`,
-   `head-mismatch`, `checkpoint-mismatch`, `note-digest-mismatch` and the rest.
-3. Ask for the same answer from the other side: an admin of that tenant calls `GET /ledger/verify?full=true`.
-4. Compare against the most recent good backup: `db:restore` of that backup now ends with the same walk (`ledger chain`), so a backup that passes
-   is a known-good copy to compare with or recover from.
-5. When the cause is understood and handled (data recovered, or the finding explained and accepted by whoever owns that decision), restart.
-6. An incomplete check at start in production (`... : incomplete`) is not damage: the chain is larger than the budget allows on a cold start (no
+   `head-mismatch`, `checkpoint-mismatch`, `note-digest-mismatch` and the rest. A tenant that is already contained and still fails logs
+   `ledger-incident-still-open` (a warning) at each walk; it does not page again.
+3. See what the database holds, as the operator login (`telesphoros_ledger_operator`; the login is provisioned outside the repository, like the
+   verifier's, see [ledger-roles.md](ledger-roles.md)):
+   ```sql
+   SELECT i.id, i.scope, i.tenant_id, i.kind, i.failed_seq, i.source, i.detected_at, i.recorded_by
+     FROM ledger_incidents i
+    WHERE NOT EXISTS (SELECT 1 FROM ledger_incident_clearances c WHERE c.incident_id = i.id)
+    ORDER BY i.seq;
+   ```
+4. Ask for the same answer from the other side: an admin of that tenant calls `GET /ledger/verify?full=true`.
+5. Compare against the most recent good backup: `db:restore` of that backup ends with the same walk (`ledger chain`), so a backup that passes is a
+   known-good copy to compare with or recover from. A backup taken during an incident restores with the incident **still open**.
+6. **To stop every tenant at once** (for example while you investigate something wider): as the operator login,
+   `SELECT ledger_set_global_hold('why, in your own words, up to 500 characters');`. Readiness goes down on every task within a minute.
+7. **To reopen a tenant**, when the cause is understood and handled (data recovered, or the finding explained and accepted by whoever owns that
+   decision): wait for (or ask for, with `GET /ledger/verify?full=true`) a full walk that passes, so a `full` checkpoint exists that began after the
+   incident, and then, as the operator login,
+   `SELECT ledger_clear_incident('<incident id>', 'what was done, up to 500 characters');`.
+   The database refuses with "No full verification that started after the incident has passed" until the evidence exists. For a global hold the same
+   call needs only the basis. Every task notices within a minute; none needs a restart. The clearance is a row of its own (who, when, why, and the
+   checkpoint that proved it), and nothing is ever deleted.
+8. An incomplete check at start in production (`... : incomplete`) is not damage: the chain is larger than the budget allows on a cold start (no
    checkpoint yet), or the verifier login or the database could not be reached. Look for `ledger-verification-error` (the class and database code
    only). For size, raise `LEDGER_STARTUP_BUDGET_MS` once (up to 300 000); after the first background walk there is a checkpoint and starts are fast.
+9. A damage that cannot be repaired in place (the ledger and its record tables are append-only, even for the owner) means recovering that tenant's
+   data from a verified backup; clearing needs the full walk to pass on whatever is then in the database.
 
 ## The alarm
 
@@ -109,4 +150,11 @@ this slice.
   (specification 6.9). Anchoring each tenant's head outside the database is the follow-up that closes both.
 - A checkpoint is a shortcut, not a control: it makes a start fast, and someone who can rewrite the chain can rewrite a checkpoint stored beside it.
   The control is the full walk.
-- The latch is per process. Two instances each run their own walks and latch themselves, so they can briefly disagree.
+- **Two-person authorisation** of a clearance or a hold is not built: the operator role alone may do either (the evidence rule for a tenant incident
+  is technical; a global hold is a decision). It waits for the second reviewer (FD-8).
+- **Not tested in AWS.** The behaviour is proved against a real PostgreSQL (two sessions, a restart, a restore), not against RDS or a real
+  load balancer; the clock used by the clearance rule is one database's clock (a failover to another host with a different clock could skew it by
+  the clock difference).
+- The checkpoint's walk start time is stored beside the checkpoint but is **not part of its hashed payload** (changing that is a hash-version
+  change). The table is append-only and only the verifier's function writes it, but a verifier login that lies could write a false start time; that
+  login is already trusted to say "this chain is sound".

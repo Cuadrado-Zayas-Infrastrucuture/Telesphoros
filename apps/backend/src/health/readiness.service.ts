@@ -7,11 +7,11 @@ export const CHECK_TIMEOUT_MS = 2000;
 
 /**
  * One dependency probe. `check()` resolves if the dependency is usable and rejects/throws if not. It may resolve to `'verifying'` to say
- * "usable, and a longer check is still running": the instance is still ready, and the public body says so.
+ * "usable, and a longer check is still running", or `'contained'` to say "usable, with part of it stopped on purpose": the instance is still ready, and the public body says so.
  */
 export interface ReadinessCheck {
   name: string;
-  check(): Promise<void | 'verifying'>;
+  check(): Promise<void | 'verifying' | 'contained'>;
 }
 
 @Injectable()
@@ -30,7 +30,7 @@ export class ReadinessService {
               timer = setTimeout(() => reject(new Error('timeout')), CHECK_TIMEOUT_MS);
             }),
           ]);
-          return { name, up: true, state: answer === 'verifying' ? ('verifying' as const) : ('up' as const) };
+          return { name, up: true, state: answer === 'verifying' || answer === 'contained' ? answer : ('up' as const) };
         } catch {
           // intentional: the reason is logged by the probe itself; the public body only names what is down
           return { name, up: false, state: 'up' as const };

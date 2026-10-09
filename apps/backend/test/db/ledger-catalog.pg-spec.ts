@@ -11,7 +11,7 @@ afterAll(async () => {
 });
 const q = <T = Record<string, unknown>>(sql: string, values: unknown[] = []) => withAdmin(pg.adminUrl, async (c: Client) => (await c.query(sql, values)).rows as T[]);
 
-const GUARDED = [...APPEND_ONLY_CLASSES.record, ...APPEND_ONLY_CLASSES.child, ...APPEND_ONLY_CLASSES.ledger];
+const GUARDED = [...APPEND_ONLY_CLASSES.record, ...APPEND_ONLY_CLASSES.child, ...APPEND_ONLY_CLASSES.ledger, ...APPEND_ONLY_CLASSES.incident];
 const TENANT_POLICIED = [...APPEND_ONLY_CLASSES.record, ...APPEND_ONLY_CLASSES.child, ...APPEND_ONLY_CLASSES.notes];
 const FORCED = [...APPEND_ONLY_CLASSES.record, ...APPEND_ONLY_CLASSES.child, ...APPEND_ONLY_CLASSES.notes];
 
@@ -102,10 +102,28 @@ describe('catalog guard: the audit tables are classified and protected as their 
     expect([owner('ledger_append'), await callers('ledger_append')]).toEqual(['telesphoros_ledger', ['telesphoros_app', 'telesphoros_ledger']]);
     expect([owner('ledger_append_internal'), await callers('ledger_append_internal')]).toEqual(['telesphoros_ledger', ['telesphoros_ledger', 'telesphoros_redactor']]);
     expect([owner('ledger_record_checkpoint'), await callers('ledger_record_checkpoint')]).toEqual(['telesphoros_ledger', ['telesphoros_ledger', 'telesphoros_ledger_verifier']]);
+    expect([owner('ledger_record_incident'), await callers('ledger_record_incident')]).toEqual(['telesphoros_ledger', ['telesphoros_ledger', 'telesphoros_ledger_verifier']]);
+    expect([owner('ledger_set_global_hold'), await callers('ledger_set_global_hold')]).toEqual(['telesphoros_ledger', ['telesphoros_ledger', 'telesphoros_ledger_operator']]);
+    expect([owner('ledger_clear_incident'), await callers('ledger_clear_incident')]).toEqual(['telesphoros_ledger', ['telesphoros_ledger', 'telesphoros_ledger_operator']]);
     expect([owner('redact_event_note'), await callers('redact_event_note')]).toEqual(['telesphoros_redactor', ['telesphoros_ledger_operator', 'telesphoros_redactor']]);
     for (const name of ['ledger_row_has_event', 'ledger_event_row_exists', 'ledger_heads_guard', 'event_notes_guard', 'evaluation_child_guard']) {
       expect([name, (await callers(name)).includes('PUBLIC')]).toEqual([name, false]);
     }
+  });
+
+  it('the application role can execute exactly ONE ledger function, the gate: not the internal appender, and nothing that records, holds or clears an incident', async () => {
+    const reachable = await q<{ proname: string }>(`SELECT p.proname FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND has_function_privilege('telesphoros_app', p.oid, 'EXECUTE') AND p.proname LIKE 'ledger\\_%'`);
+    expect(reachable.map((r) => r.proname).sort()).toEqual(['ledger_append']);
+    expect((await q<{ ok: boolean }>(`SELECT has_function_privilege('telesphoros_app', 'ledger_append_internal(uuid, text, text, uuid, text, smallint)', 'EXECUTE') AS ok`))[0]!.ok).toBe(false);
+  });
+
+  it('the incident tables are insert-protected for every login (only the functions write them) and invisible to the application role', async () => {
+    const grants = await q<{ table_name: string; grantee: string; privilege_type: string }>(`SELECT table_name, grantee, privilege_type FROM information_schema.role_table_grants WHERE table_schema = 'public' AND table_name = ANY($1)`,
+      [APPEND_ONLY_CLASSES.incident]);
+    const byRole = (role: string) => grants.filter((g) => g.grantee === role).map((g) => g.privilege_type);
+    expect(byRole('telesphoros_app')).toEqual([]);
+    expect(byRole('PUBLIC')).toEqual([]);
+    for (const role of ['telesphoros_ledger_verifier', 'telesphoros_ledger_operator']) expect(new Set(byRole(role))).toEqual(new Set(['SELECT']));
   });
 
   it('every foreign key in the audit design is ON DELETE RESTRICT, and the verifier is not in the application role', async () => {

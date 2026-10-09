@@ -14,6 +14,8 @@ export const APPEND_ONLY_CLASSES = {
   head: ['ledger_heads'],
   /** Free text. Insert-only except the single redaction update. */
   notes: ['event_notes'],
+  /** Containment of a damaged ledger (migration 0011): written only by its functions, never updated; open until a clearance names the incident. */
+  incident: ['ledger_incidents', 'ledger_incident_clearances'],
 } as const;
 
 /** Tables from before the ledger: protected by tenant isolation, not by append-only rules. */

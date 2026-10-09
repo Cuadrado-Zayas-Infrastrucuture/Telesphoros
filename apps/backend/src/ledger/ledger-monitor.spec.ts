@@ -1,14 +1,14 @@
 import { Logger } from '@nestjs/common';
 import { AppException } from '../common/app-exception';
 import { LedgerMonitor, type LedgerWatchConfig, type VerifierPort } from './ledger-monitor';
-import { LedgerStatus } from './ledger-status';
+import { type Compromise, LedgerStatus, type OpenIncident } from './ledger-status';
 import type { VerifyOptions, VerifyResult } from './verifier';
 
 // The ledger watch's decisions, with a fake verifier so every outcome (damage, running out of time, a failing login, two callers at once)
 // can be produced on demand. The real verifier against real tampering is test/db/ledger-watch.pg-spec.ts. Synthetic data only.
 
 const config = (over: Partial<LedgerWatchConfig> = {}): LedgerWatchConfig => ({
-  production: false, startupBudgetMs: 20_000, fullIntervalMs: 0, fullBudgetMs: 900_000, onDemandBudgetMs: 30_000, fullWalkAtOrBelowEvents: 50_000, ...over,
+  production: false, startupBudgetMs: 20_000, fullIntervalMs: 0, fullBudgetMs: 900_000, onDemandBudgetMs: 30_000, fullWalkAtOrBelowEvents: 50_000, incidentPollMs: 0, ...over,
 });
 
 const outcome = (tenantId: string, over: Partial<VerifyResult> = {}): VerifyResult => ({
@@ -24,6 +24,11 @@ class FakeVerifier implements VerifierPort {
   active = 0;
   maxActive = 0;
   failTenants: Error | null = null;
+  /** The database's open incidents, as the fake keeps them (the real ones are in test/db/ledger-incidents.pg-spec.ts). */
+  incidents: OpenIncident[] = [];
+  recorded: Array<Pick<Compromise, 'tenantId' | 'kind' | 'seq' | 'source'>> = [];
+  failRecord: Error | null = null;
+  failOpen: Error | null = null;
   constructor(public tenantIds: string[], public answer: Answer = (tenantId, options) => outcome(tenantId, { mode: options.mode ?? 'tail' })) {}
   async tenants(): Promise<string[]> {
     if (this.failTenants) throw this.failTenants;
@@ -39,11 +44,30 @@ class FakeVerifier implements VerifierPort {
       this.active -= 1;
     }
   }
+  async recordIncident(finding: Pick<Compromise, 'tenantId' | 'kind' | 'seq' | 'source'>): Promise<string> {
+    if (this.failRecord) throw this.failRecord;
+    this.recorded.push(finding);
+    const open = this.incidents.find((i) => i.scope === 'tenant' && i.tenantId === finding.tenantId);
+    if (open) return open.id;
+    const id = `incident-${this.incidents.length + 1}`;
+    this.incidents.push({ id, scope: 'tenant', tenantId: finding.tenantId, kind: finding.kind, seq: finding.seq, source: finding.source, detectedAt: new Date(0) });
+    return id;
+  }
+  async openIncidents(): Promise<OpenIncident[]> {
+    if (this.failOpen) throw this.failOpen;
+    return [...this.incidents];
+  }
   async close(): Promise<void> {
     this.closed = true;
   }
   get tail() { return this.calls.filter((c) => c.options.mode === 'tail'); }
   get full() { return this.calls.filter((c) => c.options.mode === 'full'); }
+}
+
+/** Resolves once the background walk has called the verifier (bounded: it fails instead of waiting for ever). */
+async function untilWalking(verifier: FakeVerifier): Promise<void> {
+  for (let turn = 0; turn < 200 && verifier.full.length === 0; turn++) await Promise.resolve();
+  if (verifier.full.length === 0) throw new Error('the background walk never started');
 }
 
 /** A promise a test settles by hand. */
@@ -83,7 +107,7 @@ describe('LedgerMonitor: with no verifier login', () => {
     await monitor.onApplicationBootstrap();
     await monitor.idle();
     expect(status.tailState).toBe('not-run');
-    expect(() => status.assertOpen()).not.toThrow();
+    expect(() => status.assertOpen('t')).not.toThrow();
     await monitor.onModuleDestroy();
   });
 
@@ -169,7 +193,7 @@ describe('LedgerMonitor: the check at start', () => {
   });
 
   describe('outside production', () => {
-    it('warns and carries on after a failure, but latches it (writes stop, readiness fails), and still runs the background walk', async () => {
+    it('warns and carries on after a failure, but contains the tenant (its writes stop, readiness fails for the unverified start), records it, and still runs the background walk', async () => {
       const verifier = new FakeVerifier(['a'], (tenantId, options) => (options.mode === 'tail' ? failed(tenantId) : outcome(tenantId, { mode: 'full' })));
       const { monitor, status } = build(verifier);
       await expect(monitor.onApplicationBootstrap()).resolves.toBeUndefined();
@@ -177,7 +201,8 @@ describe('LedgerMonitor: the check at start', () => {
       expect(status.tailState).toBe('failed');
       expect(status.compromised).toMatchObject({ kind: 'payload-mismatch', seq: '9' });
       expect(status.readiness()).toBe('down');
-      expect(() => status.assertOpen()).toThrow();
+      expect(() => status.assertOpen('a')).toThrow();
+      expect(verifier.recorded).toEqual([{ tenantId: 'a', kind: 'payload-mismatch', seq: '9', source: 'startup' }]);
       expect(warnings.mock.calls.flat().some((c) => c?.event === 'ledger-startup-check' && c.outcome === 'failed')).toBe(true);
       expect(verifier.full).toHaveLength(1);
       await monitor.onModuleDestroy();
@@ -219,14 +244,17 @@ describe('LedgerMonitor: the background full walk', () => {
     await monitor.onModuleDestroy();
   });
 
-  it('LATCHES on a failed walk: logs the kind and sequence only, stops checkpoints for the tenants after it, and readiness fails', async () => {
+  it('CONTAINS the failed tenant: logs the kind and sequence only, records the incident, keeps the other tenant working, and readiness says "contained"', async () => {
     const verifier = new FakeVerifier(['a', 'b'], (tenantId, options) => (options.mode === 'full' && tenantId === 'a'
       ? { ...failed(tenantId), failures: [{ kind: 'payload-mismatch', seq: '9', value: 'SECRET-NOTE-TEXT' } as never] }
       : outcome(tenantId, { mode: options.mode ?? 'tail' })));
     const { monitor, status } = await started(verifier);
     expect(status.compromised).toMatchObject({ tenantId: 'a', kind: 'payload-mismatch', seq: '9', source: 'background' });
-    expect(status.readiness()).toBe('down');
-    expect(verifier.full.map((c) => [c.tenantId, c.options.recordCheckpoint])).toEqual([['a', true], ['b', false]]);
+    expect(status.readiness()).toBe('contained');
+    expect(() => status.assertOpen('a')).toThrow();
+    expect(() => status.assertOpen('b')).not.toThrow();
+    expect(verifier.recorded).toEqual([{ tenantId: 'a', kind: 'payload-mismatch', seq: '9', source: 'background' }]);
+    expect(verifier.full.map((c) => [c.tenantId, c.options.recordCheckpoint])).toEqual([['a', true], ['b', true]]); // a checkpoint only ever follows an ok walk
     const logged = errors.mock.calls.flat().find((c) => c?.event === 'ledger-compromised');
     expect(logged).toMatchObject({ event: 'ledger-compromised', tenantId: 'a', source: 'background', failures: [{ kind: 'payload-mismatch', seq: '9' }] });
     expect(JSON.stringify(errors.mock.calls)).not.toContain('SECRET-NOTE-TEXT');
@@ -254,12 +282,13 @@ describe('LedgerMonitor: the background full walk', () => {
     await monitor.onModuleDestroy();
   });
 
-  it('writes no checkpoint once latched, for any later walk', async () => {
+  it('still asks for a checkpoint for a contained tenant: it is the evidence a person needs to clear the incident (the verifier writes one only after an ok walk)', async () => {
     const verifier = new FakeVerifier(['a'], (tenantId, options) => (options.mode === 'full' ? failed(tenantId) : outcome(tenantId)));
-    const { monitor } = await started(verifier);
+    const { monitor, status } = await started(verifier);
+    expect(status.hasIncident('a')).toBe(true);
     verifier.answer = (tenantId, options) => outcome(tenantId, { mode: options.mode ?? 'tail' });
     await monitor.verifyNow('a', true);
-    expect(verifier.calls.at(-1)!.options.recordCheckpoint).toBe(false);
+    expect(verifier.calls.at(-1)!.options).toMatchObject({ mode: 'full', recordCheckpoint: true });
     await monitor.onModuleDestroy();
   });
 });
@@ -388,7 +417,7 @@ describe('LedgerMonitor: one verification at a time, and an admin check', () => 
     const verifier = new FakeVerifier(['a'], (tenantId, options) => (options.mode === 'full' ? hold.promise : outcome(tenantId)));
     const { monitor } = build(verifier);
     await monitor.onApplicationBootstrap();
-    await Promise.resolve();
+    await untilWalking(verifier);
     await expect(monitor.verifyNow('a', false)).rejects.toMatchObject({ code: 'PIPELINE_BUSY' });
     hold.release(outcome('a', { mode: 'full' }));
     await monitor.idle();
@@ -406,16 +435,14 @@ describe('LedgerMonitor: one verification at a time, and an admin check', () => 
     await monitor.onModuleDestroy();
   });
 
-  it('LATCHES on a failed admin check, still returns the failed result, and stops checkpoints', async () => {
+  it('CONTAINS the tenant on a failed admin check, records it, and still returns the failed result', async () => {
     const verifier = new FakeVerifier(['a']);
     const { monitor, status } = await started(verifier);
     verifier.answer = (tenantId) => failed(tenantId);
     await expect(monitor.verifyNow('a', true)).resolves.toMatchObject({ status: 'failed' });
     expect(status.compromised).toMatchObject({ tenantId: 'a', source: 'on-demand', kind: 'payload-mismatch' });
-    expect(status.readiness()).toBe('down');
-    verifier.answer = (tenantId) => outcome(tenantId);
-    await monitor.verifyNow('a', false);
-    expect(verifier.calls.at(-1)!.options.recordCheckpoint).toBe(false);
+    expect(status.readiness()).toBe('contained');
+    expect(verifier.recorded).toEqual([{ tenantId: 'a', kind: 'payload-mismatch', seq: '9', source: 'on-demand' }]);
     await monitor.onModuleDestroy();
   });
 
@@ -436,9 +463,135 @@ describe('LedgerMonitor: shutdown', () => {
       : outcome(tenantId)));
     const { monitor, status } = build(verifier);
     await monitor.onApplicationBootstrap();
+    await untilWalking(verifier);
     await monitor.onModuleDestroy();
     expect(verifier.closed).toBe(true);
     expect(verifier.full[0]!.options.signal!.aborted).toBe(true);
     expect(status.readiness()).toBe('verifying');
+  });
+});
+
+describe('LedgerMonitor: containment shared through the database', () => {
+  const open = (tenantId: string | null, over: Partial<OpenIncident> = {}): OpenIncident => ({
+    id: `i-${tenantId ?? 'hold'}`, scope: tenantId === null ? 'global' : 'tenant', tenantId, kind: tenantId === null ? 'manual-hold' : 'payload-mismatch', seq: tenantId === null ? null : '9',
+    source: tenantId === null ? 'manual' : 'background', detectedAt: new Date(0), ...over,
+  });
+
+  it('a sibling task\'s finding is mirrored at start: production STARTS with the tenant listed as contained, and does not re-judge it', async () => {
+    const verifier = new FakeVerifier(['a', 'b'], (tenantId) => (tenantId === 'a' ? failed(tenantId) : outcome(tenantId)));
+    verifier.incidents = [open('a')];
+    const { monitor, status } = build(verifier, { production: true });
+    await expect(monitor.onApplicationBootstrap()).resolves.toBeUndefined();
+    expect(verifier.tail.map((c) => c.tenantId)).toEqual(['b']); // 'a' is already known and recorded: no second verdict, no restart loop
+    expect(status.tailState).toBe('ok');
+    expect(status.readiness()).toBe('contained');
+    expect(() => status.assertOpen('a')).toThrow();
+    expect(() => status.assertOpen('b')).not.toThrow();
+    const line = warnings.mock.calls.flat().find((c) => c?.event === 'ledger-contained-at-start');
+    expect(line).toMatchObject({ containedTenants: 1, globalHold: false });
+    expect(JSON.stringify(warnings.mock.calls)).not.toContain('"a"'); // the count, not the tenant
+    await monitor.idle();
+    await monitor.onModuleDestroy();
+  });
+
+  it('control: a NEW failure at start is still refused in production, and is recorded first so the next start sees it as contained', async () => {
+    const verifier = new FakeVerifier(['a'], (tenantId) => failed(tenantId));
+    await expect(build(verifier, { production: true }).monitor.onApplicationBootstrap()).rejects.toThrow(/failed.*payload-mismatch at sequence 9/);
+    expect(verifier.incidents.map((i) => i.tenantId)).toEqual(['a']);
+    const second = build(verifier, { production: true });
+    await expect(second.monitor.onApplicationBootstrap()).resolves.toBeUndefined();
+    await second.monitor.idle();
+    await second.monitor.onModuleDestroy();
+  });
+
+  it('a global hold lets the instance start, but readiness is down and every tenant is refused', async () => {
+    const verifier = new FakeVerifier(['a', 'b']);
+    verifier.incidents = [open(null)];
+    const { monitor, status } = build(verifier, { production: true });
+    await expect(monitor.onApplicationBootstrap()).resolves.toBeUndefined();
+    expect(verifier.tail.map((c) => c.tenantId)).toEqual(['a', 'b']); // still judged: a hold says nothing about the chains
+    expect(status.readiness()).toBe('down');
+    expect(() => status.assertOpen('a')).toThrow();
+    expect(() => status.assertOpen('b')).toThrow();
+    await monitor.idle();
+    await monitor.onModuleDestroy();
+  });
+
+  it('a contained tenant that still fails does not keep the instance "verifying" for ever, and does not page twice', async () => {
+    const verifier = new FakeVerifier(['a', 'b'], (tenantId, options) => (tenantId === 'a' && options.mode === 'full' ? failed(tenantId) : outcome(tenantId, { mode: options.mode ?? 'tail' })));
+    const { monitor, status } = await started(verifier);
+    expect(errors.mock.calls.flat().filter((c) => c?.event === 'ledger-compromised')).toHaveLength(1);
+    await monitor.verifyNow('a', true); // fails again while contained
+    expect(errors.mock.calls.flat().filter((c) => c?.event === 'ledger-compromised')).toHaveLength(1);
+    expect(warnings.mock.calls.flat().some((c) => c?.event === 'ledger-incident-still-open' && c.tenantId === 'a')).toBe(true);
+    expect(verifier.recorded).toHaveLength(1);
+    expect(status.readiness()).toBe('contained');
+    await monitor.onModuleDestroy();
+  });
+
+  it('refuses at once even when the database cannot be told (the process never writes to a damaged chain while waiting), and logs the class of the failure only', async () => {
+    const verifier = new FakeVerifier(['a'], (tenantId, options) => (options.mode === 'full' ? failed(tenantId) : outcome(tenantId)));
+    verifier.failRecord = Object.assign(new Error('connection refused to db.internal'), { code: 'ECONNREFUSED' });
+    const { monitor, status } = await started(verifier);
+    expect(() => status.assertOpen('a')).toThrow();
+    expect(status.unrecorded().map((f) => f.tenantId)).toEqual(['a']);
+    expect(errors.mock.calls.flat().some((c) => c?.event === 'ledger-incident-record-failed' && c.tenantId === 'a')).toBe(true);
+    expect(JSON.stringify(errors.mock.calls)).not.toContain('db.internal'); // the class and code only
+    await monitor.onModuleDestroy();
+  });
+
+  it('retries recording at the start of the next full pass, then holds the tenant because the database says so', async () => {
+    jest.useFakeTimers();
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    const verifier = new FakeVerifier(['a'], (tenantId, options) => (options.mode === 'full' ? failed(tenantId) : outcome(tenantId)));
+    verifier.failRecord = new Error('db down');
+    const { monitor, status } = await started(verifier, { fullIntervalMs: 1000 });
+    expect(status.unrecorded()).toHaveLength(1);
+    verifier.failRecord = null;
+    await jest.advanceTimersByTimeAsync(900); // the scheduled pass starts by syncing
+    expect(status.unrecorded()).toEqual([]);
+    expect(verifier.incidents.map((i) => i.tenantId)).toEqual(['a']);
+    await monitor.onModuleDestroy();
+  });
+
+  it('the poll picks up a sibling\'s finding and a person\'s clearance without a walk of its own', async () => {
+    jest.useFakeTimers();
+    const verifier = new FakeVerifier(['a', 'b']);
+    const { monitor, status } = await started(verifier, { incidentPollMs: 5_000 });
+    expect(status.readiness()).toBe('up');
+    verifier.incidents = [open('b')]; // another task found damage
+    await jest.advanceTimersByTimeAsync(5_000);
+    expect(() => status.assertOpen('b')).toThrow();
+    expect(status.readiness()).toBe('contained');
+    verifier.incidents = []; // a person cleared it
+    await jest.advanceTimersByTimeAsync(5_000);
+    expect(() => status.assertOpen('b')).not.toThrow();
+    expect(status.readiness()).toBe('up');
+    await monitor.onModuleDestroy();
+  });
+
+  it('after a person clears a tenant that failed its full walk, the instance is "up" at once: the expected failure never left it "verifying"', async () => {
+    jest.useFakeTimers();
+    const verifier = new FakeVerifier(['a'], (tenantId, options) => (options.mode === 'full' ? failed(tenantId) : outcome(tenantId)));
+    const { monitor, status } = await started(verifier, { incidentPollMs: 5_000 });
+    expect(status.readiness()).toBe('contained');
+    verifier.incidents = []; // cleared by a person (and, in this test, the next full walk is far away)
+    await jest.advanceTimersByTimeAsync(5_000);
+    expect(status.readiness()).toBe('up');
+    await monitor.onModuleDestroy();
+  });
+
+  it('keeps what it knows, and says so in the log, when the open incidents cannot be read', async () => {
+    jest.useFakeTimers();
+    const verifier = new FakeVerifier(['a']);
+    verifier.incidents = [open('a')];
+    const { monitor, status } = await started(verifier, { incidentPollMs: 5_000 });
+    verifier.failOpen = Object.assign(new Error('timeout talking to db.internal'), { code: '57014' });
+    await jest.advanceTimersByTimeAsync(5_000);
+    expect(() => status.assertOpen('a')).toThrow(); // unchanged
+    const line = warnings.mock.calls.flat().find((c) => c?.event === 'ledger-incident-sync-failed');
+    expect(line).toMatchObject({ error: 'Error 57014' });
+    expect(JSON.stringify(warnings.mock.calls)).not.toContain('db.internal');
+    await monitor.onModuleDestroy();
   });
 });

@@ -252,7 +252,11 @@ async function verify(url: string, manifest: BackupManifest, record: (n: string,
       record('ownership and privileges', true, 'not recorded in this (older) backup; restored without owners, as before');
     }
 
-    await verifyIsolation(db, expectedNames.filter((name) => manifest.tables[name]!.rlsEnabled), record);
+    // Isolation is checked as the application role, so only tables the application role has a policy on can be judged this way. The incident
+    // tables (migration 0011) have row-level security but give the application role nothing: it must not read them at all.
+    const appPolicies = await db.query<{ tablename: string }>(`SELECT DISTINCT tablename FROM pg_policies WHERE schemaname = 'public' AND 'telesphoros_app' = ANY (roles::text[])`);
+    const appTables = new Set(appPolicies.rows.map((r) => r.tablename));
+    await verifyIsolation(db, expectedNames.filter((name) => manifest.tables[name]!.rlsEnabled && appTables.has(name)), record);
     await verifyLedgerChain(url, db, names, record, chainMaxEvents);
   } finally {
     await db.end();
