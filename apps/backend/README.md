@@ -85,7 +85,9 @@ See `.env.example` at the repo root. Real secrets belong in AWS Secrets Manager,
 | `COGNITO_ISSUER`, `COGNITO_JWKS_URI` | development-only overrides, for the fake identity provider; **refused in production** |
 | `CORS_ALLOWED_ORIGINS` | comma-separated browser origins allowed to call the API (default none) |
 | `STORAGE_DRIVER` | `memory` (default) or `postgres` |
-| `DATABASE_URL` | the **application** login role (required for `postgres`); `DATABASE_SSL=require` in AWS |
+| `DATABASE_URL` | the **application** login role (required for `postgres`); **no TLS parameters in the URL** (refused) |
+| `DATABASE_SSL` | `disable` (default, development only) or `require` (TLS 1.2+, certificate and host name verified; required in AWS); the only TLS setting, see [database.md](../../docs/database.md#database-tls) |
+| `DATABASE_SSL_CA` | path to the authority file the `pg_dump`/`pg_restore` tools verify against when `DATABASE_SSL=require` (falls back to `NODE_EXTRA_CA_CERTS`) |
 | `OBJECT_STORAGE_DRIVER` | `memory` (default) or `s3` (AWS S3 or S3-compatible such as MinIO) |
 | `REPORTS_BUCKET`, `AWS_REGION`, `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE` | S3 settings; credentials come from the standard AWS provider chain, never from our config |
 | `UPLOAD_URL_TTL_SECONDS` | presigned URL lifetime, 60 to 900 (default 300) |

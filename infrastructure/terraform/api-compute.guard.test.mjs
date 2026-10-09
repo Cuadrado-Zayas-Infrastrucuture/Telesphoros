@@ -49,8 +49,8 @@ const PLACEHOLDERS = {
   'local.api_build': 'sha256-abababababab',
 };
 const SECRET_PLACEHOLDERS = {
-  DATABASE_URL: 'postgres://app_login@db.example:5432/telesphoros?sslmode=require',
-  LEDGER_VERIFIER_DATABASE_URL: 'postgres://verifier_login@db.example:5432/telesphoros?sslmode=require',
+  DATABASE_URL: 'postgres://app_login@db.example:5432/telesphoros',
+  LEDGER_VERIFIER_DATABASE_URL: 'postgres://verifier_login@db.example:5432/telesphoros',
 };
 /** Values that must never be plain environment: secrets, and anything the production start-up refuses. */
 const FORBIDDEN_ENVIRONMENT = ['DATABASE_URL', 'LEDGER_VERIFIER_DATABASE_URL', 'DATABASE_MIGRATOR_URL', 'DATABASE_ADMIN_URL', 'JWT_SECRET', 'LAB_REPORT_PIPELINE', 'COGNITO_ISSUER', 'COGNITO_JWKS_URI', 'S3_ENDPOINT', 'KNOWLEDGE_DIR', 'LAB_REPORT_FIXTURES_DIR', 'LAB_REPORT_PIPELINE'];
@@ -155,6 +155,7 @@ export function apiComputeProblems(tf, sources = {}) {
   need(has(migrate, 'command = ["node", "dist/db/cli.js", "migrate", "up"]'), 'the migration task must run the migrate command');
   need(has(migrate, 'name = "DATABASE_MIGRATOR_URL", valueFrom = aws_secretsmanager_secret.api_migrator_url[0].arn'), 'the migration task must get the migrator login from its secret');
   need(has(migrate, 'readonlyRootFilesystem = true') && has(migrate, 'user = local.api_user'), 'the migration task must be read-only and non-root too');
+  need(has(migrate, 'environment = [{ name = "DATABASE_SSL", value = "require" }]'), 'the migration task must set DATABASE_SSL=require: TLS comes only from that setting, never from the connection string');
   need(has(text, 'family = "${local.name}-api-migrate"') && !/aws_ecs_service" "api_migrate/.test(text), 'the migration task must be a task definition only, never a service');
 
   // The environment, judged by the application's own start-up rules.
@@ -261,6 +262,7 @@ test('the API compute guard reports each way the text could be weakened (control
     ['no CORS origin required', 'condition     = length(var.api_cors_origins) >= 1', 'condition     = true'],
     ['migration gets a task role', '# No task role: the migration reaches the database only, not S3 or anything else in the account.', 'task_role_arn = aws_iam_role.api_task[0].arn'],
     ['migration uses the service execution role', 'execution_role_arn       = aws_iam_role.api_execution_migrate[0].arn', 'execution_role_arn       = aws_iam_role.api_execution_service[0].arn'],
+    ['migration task without TLS', 'environment = [{ name = "DATABASE_SSL", value = "require" }]', 'environment = [{ name = "DATABASE_SSL", value = "disable" }]'],
     ['migration command changed', 'command                = ["node", "dist/db/cli.js", "migrate", "up"]', 'command                = ["node", "dist/main.js"]'],
     ['proxy hops wrong', envLine('TRUST_PROXY_HOPS', '"1"'), envLine('TRUST_PROXY_HOPS', '"2"')],
     ['proxy hops missing', `${envLine('TRUST_PROXY_HOPS', '"1"')}\n`, ''],
