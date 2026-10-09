@@ -51,3 +51,19 @@ output "cognito_sign_in_domain" {
   description = "VITE_COGNITO_DOMAIN for the frontend (used for sign-out)."
   value       = "https://${aws_cognito_user_pool_domain.main.domain}.auth.${var.region}.amazoncognito.com"
 }
+
+# ---- Audit trail (F1) ----
+output "audit_bucket" {
+  description = "Where the CloudTrail logs and their signed digest files are kept (Object Lock)."
+  value       = aws_s3_bucket.audit.bucket
+}
+
+output "audit_trail_name" {
+  description = "The multi-region trail. Check it with `aws cloudtrail get-trail-status --name <this>`."
+  value       = aws_cloudtrail.audit.name
+}
+
+output "audit_alarm_topic_arn" {
+  description = "The SNS topic audit alarms publish to. Later alarms (for example ledger-compromised) should publish here too."
+  value       = aws_sns_topic.audit_alarms.arn
+}
