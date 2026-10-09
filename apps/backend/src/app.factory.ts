@@ -8,6 +8,11 @@ export const JSON_BODY_LIMIT = '100kb';
 export interface ConfigureOptions {
   /** Browser origins allowed to call the API. Empty or omitted: no cross-origin access at all. */
   corsOrigins?: string[];
+  /**
+   * How many reverse proxies sit in front of the app (TRUST_PROXY_HOPS). 0 or omitted: use the connection's own address and ignore
+   * X-Forwarded-For, so the per-address rate limit cannot be dodged by a header the client controls.
+   */
+  trustProxyHops?: number;
 }
 
 /**
@@ -16,6 +21,7 @@ export interface ConfigureOptions {
  */
 export function configureApp(app: NestExpressApplication, options: ConfigureOptions = {}) {
   app.disable('x-powered-by');
+  app.set('trust proxy', options.trustProxyHops && options.trustProxyHops > 0 ? options.trustProxyHops : false);
   // Before everything else, so even 404s and parse errors carry a request id.
   app.use(requestIdMiddleware);
 

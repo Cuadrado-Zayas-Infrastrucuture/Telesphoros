@@ -140,6 +140,9 @@ reader works. A caller who gives up does not cancel the read; it finishes and is
 binding, `scope: "synthetic-test-only/1"` and the SHA-256 of the recorded set the text runner answers for, all inside the stored binding and
 therefore inside the ledger event. The engine takes no population or drug-context input; none is invented.
 
+**Rate limits.** Every route is rate limited (per address before sign-in, per person and route class after): a request over the limit is refused with **429 `RATE_LIMITED`** and a `Retry-After`, and
+nothing is read or stored. Evaluation, capture, the file links and `GET /ledger/verify` are the expensive class (10 a minute per person by default). See [ops/rate-limiting.md](ops/rate-limiting.md).
+
 **When the record log fails verification** every route above that writes a record answers **503 `LEDGER_COMPROMISED`** (no `Retry-After`; nothing stored; an
 evaluation is refused before the reader runs) and `/ready` fails on `ledger`; reads still work. Only a restart after an investigation clears it
 ([ops/ledger-watch.md](ops/ledger-watch.md)).

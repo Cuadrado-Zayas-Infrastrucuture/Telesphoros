@@ -1,6 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import type { HealthDto, ReadinessDto } from '@telesphoros/shared-types';
 import { Public } from '../auth/decorators';
+import { SkipRateLimit } from '../rate-limit/rate-limit.decorators';
 import { ReadinessService } from './readiness.service';
 
 /**
@@ -11,6 +12,7 @@ import { ReadinessService } from './readiness.service';
  * Both are public and return no internal detail.
  */
 @Controller()
+@SkipRateLimit() // probes are called on a schedule by the load balancer
 export class HealthController {
   constructor(private readonly readiness: ReadinessService) {}
 

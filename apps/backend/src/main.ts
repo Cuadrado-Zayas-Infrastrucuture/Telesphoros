@@ -10,7 +10,7 @@ async function bootstrap() {
   const env = loadEnv(); // throws on a bad or unsafe configuration: fail fast, before listening
   const app = await NestFactory.create<NestExpressApplication>(AppModule.register(env), { bufferLogs: true });
   app.useLogger(app.get(Logger));
-  configureApp(app, { corsOrigins: env.CORS_ALLOWED_ORIGINS });
+  configureApp(app, { corsOrigins: env.CORS_ALLOWED_ORIGINS, trustProxyHops: env.TRUST_PROXY_HOPS });
   app.enableShutdownHooks();
   await app.listen(env.PORT);
 }

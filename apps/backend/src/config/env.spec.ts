@@ -70,7 +70,7 @@ describe('loadEnv', () => {
       NODE_ENV: 'production', AUTH_VERIFIER: 'cognito', COGNITO_REGION: 'us-east-2', COGNITO_USER_POOL_ID: 'us-east-2_AbCdEf123',
       COGNITO_APP_CLIENT_ID: 'client123', STORAGE_DRIVER: 'postgres', DATABASE_URL: 'postgres://app@db/app', DATABASE_SSL: 'require',
       OBJECT_STORAGE_DRIVER: 's3', REPORTS_BUCKET: 'a-bucket', CORS_ALLOWED_ORIGINS: 'https://app.example.com',
-      LEDGER_VERIFIER_DATABASE_URL: 'postgres://verifier@db/app',
+      LEDGER_VERIFIER_DATABASE_URL: 'postgres://verifier@db/app', TRUST_PROXY_HOPS: '1',
     };
 
     it('starts with the real setup', () => {
@@ -85,6 +85,8 @@ describe('loadEnv', () => {
       ['in-memory file storage', { OBJECT_STORAGE_DRIVER: 'memory' }, /OBJECT_STORAGE_DRIVER/],
       ['an unencrypted database connection', { DATABASE_SSL: 'disable' }, /DATABASE_SSL/],
       ['a plain-http CORS origin', { CORS_ALLOWED_ORIGINS: 'http://app.example.com' }, /CORS_ALLOWED_ORIGINS/],
+      ['rate limiting switched off', { RATE_LIMIT_ENABLED: 'false' }, /RATE_LIMIT_ENABLED.*production/],
+      ['an unset proxy setting (it would defeat or poison the address limit)', { TRUST_PROXY_HOPS: undefined }, /TRUST_PROXY_HOPS.*production/],
       ['a missing ledger verifier login', { LEDGER_VERIFIER_DATABASE_URL: undefined }, /LEDGER_VERIFIER_DATABASE_URL.*production/],
       ['the synthetic lab-report pipeline', { LAB_REPORT_PIPELINE: 'enabled', LAB_REPORT_FIXTURES_DIR: '/some/recorded/pdfs', KNOWLEDGE_DIR: '/k', BUILD_VERSION: 'b1' }, /LAB_REPORT_PIPELINE.*production/],
     ])('refuses %s', (_name, change, message) => {
@@ -170,6 +172,32 @@ describe('loadEnv', () => {
       for (const bad of ['999', '300001', 'soon', '1.5']) expect(() => loadEnv({ ...base, LEDGER_STARTUP_BUDGET_MS: bad })).toThrow(/LEDGER_STARTUP_BUDGET_MS/);
       for (const bad of ['-1', '169', 'daily', '1.5']) expect(() => loadEnv({ ...base, LEDGER_FULL_VERIFY_INTERVAL_HOURS: bad })).toThrow(/LEDGER_FULL_VERIFY_INTERVAL_HOURS/);
       expect(loadEnv({ ...base, LEDGER_STARTUP_BUDGET_MS: '1000', LEDGER_FULL_VERIFY_INTERVAL_HOURS: '0' })).toMatchObject({ LEDGER_STARTUP_BUDGET_MS: 1000, LEDGER_FULL_VERIFY_INTERVAL_HOURS: 0 });
+    });
+  });
+
+  describe('rate limiting settings', () => {
+    it('is on by default, with 300 per address and 120 / 30 / 10 per person per minute, and no proxy trusted', () => {
+      const env = loadEnv({ ...base });
+      expect(env).toMatchObject({
+        RATE_LIMIT_ENABLED: true, RATE_LIMIT_IP_PER_MINUTE: 300, RATE_LIMIT_READ_PER_MINUTE: 120, RATE_LIMIT_WRITE_PER_MINUTE: 30, RATE_LIMIT_EXPENSIVE_PER_MINUTE: 10,
+      });
+      expect(env.TRUST_PROXY_HOPS).toBeUndefined();
+    });
+
+    it('accepts explicit values, including 0 proxies (nothing in front)', () => {
+      expect(loadEnv({ ...base, RATE_LIMIT_ENABLED: 'false', RATE_LIMIT_READ_PER_MINUTE: '5', TRUST_PROXY_HOPS: '0' })).toMatchObject({
+        RATE_LIMIT_ENABLED: false, RATE_LIMIT_READ_PER_MINUTE: 5, TRUST_PROXY_HOPS: 0,
+      });
+    });
+
+    it.each(['RATE_LIMIT_IP_PER_MINUTE', 'RATE_LIMIT_READ_PER_MINUTE', 'RATE_LIMIT_WRITE_PER_MINUTE', 'RATE_LIMIT_EXPENSIVE_PER_MINUTE'])('bounds %s to 1 through 100000', (name) => {
+      for (const bad of ['0', '-1', '100001', 'lots', '1.5']) expect(() => loadEnv({ ...base, [name]: bad })).toThrow(new RegExp(name));
+      expect(loadEnv({ ...base, [name]: '1' })[name as 'RATE_LIMIT_IP_PER_MINUTE']).toBe(1);
+    });
+
+    it('bounds TRUST_PROXY_HOPS to 0 through 5 and rejects a boolean-looking value for the switch', () => {
+      for (const bad of ['-1', '6', 'one', '1.5']) expect(() => loadEnv({ ...base, TRUST_PROXY_HOPS: bad })).toThrow(/TRUST_PROXY_HOPS/);
+      for (const bad of ['yes', '1', '', 'ON']) expect(() => loadEnv({ ...base, RATE_LIMIT_ENABLED: bad })).toThrow(/RATE_LIMIT_ENABLED/);
     });
   });
 });

@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ENV, type Env } from '../config/env';
+import { IpRateLimitGuard, PersonRateLimitGuard } from '../rate-limit/rate-limit.guard';
+import { RateLimitModule } from '../rate-limit/rate-limit.module';
 import { AuthGuard } from './auth.guard';
 import { CognitoTokenVerifier } from './cognito-token-verifier';
 import { RolesGuard } from './roles.guard';
@@ -19,11 +21,15 @@ function createVerifier(env: Env): TokenVerifier {
 }
 
 @Module({
+  imports: [RateLimitModule],
   providers: [
     { provide: TokenVerifier, useFactory: createVerifier, inject: [ENV] },
-    // Order matters: authenticate first, then check roles.
+    // Order matters. The address limit comes FIRST (a flood of bad tokens must be stopped before token verification), then authenticate,
+    // then check roles, then the per-person limit (so a request that is refused or not signed in never spends a person's tokens).
+    { provide: APP_GUARD, useClass: IpRateLimitGuard },
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: PersonRateLimitGuard },
   ],
   exports: [TokenVerifier],
 })
