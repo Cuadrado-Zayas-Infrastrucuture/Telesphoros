@@ -203,6 +203,23 @@ describe('finding and downloading backups', () => {
     await emulator().send(new PutObjectCommand({ Bucket: bucket, Key: 'nightly/_canary/canary-x/manifest.json', Body: '{}' }));
     await emulator().send(new PutObjectCommand({ Bucket: bucket, Key: 'nightly/readme.txt', Body: 'hi' }));
 
+    // Force real provider pagination: one common prefix/object per page, opaque tokens supplied by the emulator.
+    const paginated = reader(g, bucket);
+    const send = paginated.client.send.bind(paginated.client);
+    const lists: ListObjectsV2Command[] = [];
+    jest.spyOn(paginated.client, 'send').mockImplementation((command) => {
+      if (command instanceof ListObjectsV2Command) {
+        command.input.MaxKeys = 1;
+        lists.push(command);
+      }
+      return send(command);
+    });
+    expect(await listBackups(paginated)).toEqual([a.name, b.name, c.name]);
+    expect(lists.length).toBeGreaterThan(1);
+    expect(lists[0]!.input.ContinuationToken).toBeUndefined();
+    expect(lists.slice(1).every((command) => Boolean(command.input.ContinuationToken))).toBe(true);
+    expect(await latestComplete(paginated)).toMatchObject({ name: b.name, incompleteNewer: 1 });
+
     expect(await listBackups(reader(g, bucket))).toEqual([a.name, b.name, c.name]);
     const newest = await latestComplete(reader(g, bucket));
     expect(newest).toMatchObject({ name: b.name, incompleteNewer: 1 });

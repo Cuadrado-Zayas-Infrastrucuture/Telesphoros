@@ -57,6 +57,13 @@ db:restore -- --from s3://<bucket>/nightly/backup-2026-10-08T03-00-00-000Z --key
 process ends normally, on an error, on an uncaught exception, and on SIGINT, SIGTERM and SIGHUP. SIGKILL cannot be
 trapped; the next restore removes our own leftover folders older than six hours.
 
+`--latest` exhausts the backup-prefix listing before selecting a complete backup. If `IsTruncated` is true but the
+next continuation token is null/missing/empty, or page 1,000 is still truncated, discovery throws
+`IncompleteBackupListingError`. Recovery exits 1 before downloading objects or touching the target database; it never
+falls back to a complete backup found in that partial window. A terminal page 1,000 is accepted. `backup-check` also
+reports FAIL for incomplete discovery. Investigate the listing/provider or name an independently verified backup
+explicitly; a manual backup choice does not establish newest status. See [Phase 3B verification](../verification/phase3b-backup-discovery.md).
+
 ## What `backup-check` proves
 
 Each line is PASS, WARN, FAIL or SKIP. Exit code 1 on any FAIL.

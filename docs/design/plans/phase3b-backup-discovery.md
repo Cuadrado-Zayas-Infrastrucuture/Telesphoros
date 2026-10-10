@@ -1,0 +1,9 @@
+# Phase 3B: complete backup discovery
+
+Founder authorized this scoped continuation with “go” on 2026-10-10 after merging #54 and #55. Baseline main `629805a`. One independent draft PR; stop for review before Phase 3C.
+
+`listBackups` must exhaust pagination before returning names. A truncated page with a null/missing/empty continuation token, or a still-truncated 1,000th page, throws `IncompleteBackupListingError`. A terminal 1,000th page succeeds. `latestComplete` cannot inspect manifests from a partial window. Remote recovery must preserve the typed error rather than suppress it; the CLI exits 1 before downloads, temporary folders or restore execution. The freshness monitor must report FAIL without claiming a newest authentic/recent backup.
+
+Reproduce the old failure with incomplete-listing controls; verify complete/empty listings, opaque tokens, empty truncated pages, sorting, the exact cap boundary and normal provider refusal. Test actual SDK pagination through the S3 emulator and successful current-schema remote restores on disposable SCRAM PostgreSQL. Exercise the built CLI against local malformed S3 responses with a database-connection tripwire. Run lint/types/build and the backend regression tier; inspect the three database tiers and required CI checks on the final PR head.
+
+Exclusions: restore engine/schema/cryptography, backup retention or scheduling, file recovery, clinical logic, UI/auth/providers, Terraform, AWS operations, operational credentials, production data, deployment and spend. Explicit-backup restores remain independent of discovery. Phase 3C still needs its own approval and exact synthetic dataset bytes/GB alongside restore durations. Report-file recovery must separately evaluate Object Lock Compliance Mode and CRR, including the documented Region-policy exception; no infrastructure is applied here.

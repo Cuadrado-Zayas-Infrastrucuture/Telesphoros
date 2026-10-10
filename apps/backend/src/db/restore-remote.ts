@@ -1,5 +1,5 @@
 import { makeTempDir } from './cleanup';
-import { downloadBackup, latestComplete, OffsiteError, type ReadTarget, type RemoteLocation } from './offsite';
+import { downloadBackup, IncompleteBackupListingError, latestComplete, OffsiteError, type ReadTarget, type RemoteLocation } from './offsite';
 import { type RestoreOptions, type RestoreReport, restoreAndVerify } from './restore';
 
 export interface RemoteRestoreOptions extends Omit<RestoreOptions, 'backupDir'> {
@@ -24,7 +24,10 @@ export async function restoreFromRemote(options: RemoteRestoreOptions): Promise<
   let name = location.backup;
   if (!name) {
     if (!latest) return failure('The remote names no single backup; give …/backup-<timestamp> or --latest.');
-    const found = await latestComplete(target).catch(() => undefined);
+    const found = await latestComplete(target).catch((error: unknown) => {
+      if (error instanceof IncompleteBackupListingError) throw error;
+      return undefined;
+    });
     if (!found) return failure('No complete backup was found under that prefix (or it could not be listed).');
     name = found.name;
   }
