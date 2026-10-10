@@ -6,7 +6,9 @@
 | --- | --- | --- |
 | Database, logical | `db:backup`: consistent snapshot, authenticated encryption (format 2), signed manifest, off-site upload to a second provider with Object Lock | **Built and tested against an emulator; not yet drilled with a real provider** (`docs/ops/offsite-backups.md`) |
 | Database, point-in-time | RDS automated backups + cross-region replication (Terraform) | **Written, never applied, unproven** |
-| Report files | S3 versioning (Terraform) | **Not backed up by this tool; not replicated to a second region.** A known gap |
+| Report files and captured text | S3 versioning (Terraform); exact PDF versions and text hashes in the DB | **Independent copies/recovery unimplemented.** See the [planning-only recovery design](../design/plans/report-file-recovery.md). |
+
+The written two-Region production profile is not authorized under the documented project single-Region constraint. CRR evaluation in the recovery design is conditional on founder approval and verified platform/policy eligibility; same-Region copies cannot establish Region-loss recovery. No AWS policy/account eligibility was checked or changed by this plan.
 
 ## Commands
 
