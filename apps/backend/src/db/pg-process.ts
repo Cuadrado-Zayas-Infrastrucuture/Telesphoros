@@ -33,9 +33,9 @@ export function pgEnv(url: string, database?: string, tls: DatabaseTls = tlsFrom
 export const quoteIdent = (name: string) => `"${name.replace(/"/g, '""')}"`;
 
 /** Runs a command to completion. Rejects with the command's own stderr (bounded) on a non-zero exit. */
-export function run(command: string, args: string[], env: NodeJS.ProcessEnv = { PATH: process.env.PATH }): Promise<void> {
+export function run(command: string, args: string[], env: NodeJS.ProcessEnv = { PATH: process.env.PATH }, timeoutMs?: number): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { env, stdio: ['ignore', 'ignore', 'pipe'] });
+    const child = spawn(command, args, { env, stdio: ['ignore', 'ignore', 'pipe'], timeout: timeoutMs });
     let stderr = '';
     child.stderr.on('data', (chunk: Buffer) => {
       if (stderr.length < 4000) stderr += chunk.toString();

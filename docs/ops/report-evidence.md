@@ -30,7 +30,7 @@ nothing the records cite changes. The new version is simply never used.
 
 ## Independent recovery
 
-Independent file-copy recovery remains unimplemented. Database restoration alone cannot recover a missing pinned PDF or captured text. The [report-file recovery design](../design/plans/report-file-recovery.md) defines exact-version/copy-mapping acceptance, Compliance Object Lock and conditional CRR evaluation. It also covers completed VCF/JSON and hash-bound text; text's VersionId is not persisted in the current schema. This is a planning document, not an applied retention or recovery control.
+The [local F1 catalogue library](evidence-catalogue.md) binds verified DB membership to exact translated copies and observes destination policy metadata on Moto. Independent primary-denied recovery and application recovery remain unimplemented. Database restoration alone cannot recover a missing pinned PDF or captured text. The [report-file recovery design](../design/plans/report-file-recovery.md) defines exact-version/copy-mapping acceptance, Compliance Object Lock and conditional CRR evaluation. It also covers completed VCF/JSON and hash-bound text; text's VersionId is not persisted in the current schema. The design is reviewed; F1 is a local library. Neither is an applied production retention or recovery control.
 
 ## Download links
 

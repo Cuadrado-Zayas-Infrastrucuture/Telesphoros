@@ -25,6 +25,11 @@ export interface RestoreOptions {
   targetDatabase?: string;
   /** Lowers how many events of one tenant's ledger the `ledger chain` check will walk (default 50 million); a larger chain is "not ok". Tests use it. */
   ledgerChainMaxEvents?: number;
+  /** Operational inventory seam: runs only after ALL checks pass, while the owned restore still exists. Not exposed by the CLI. */
+  afterVerified?: (restoredUrl: string, manifest: BackupManifest) => Promise<void>;
+  /** Ops library bounds only; existing CLI defaults remain unchanged. */
+  operationTimeoutMs?: number;
+  assertBudget?: () => void;
 }
 
 export interface Check {
@@ -56,7 +61,8 @@ function withDatabase(url: string, database: string): string {
  */
 export async function restoreAndVerify(options: RestoreOptions): Promise<RestoreReport> {
   const checks: Check[] = [];
-  const record = (name: string, ok: boolean, detail: string) => checks.push({ name, ok, detail });
+  const record = (name: string, ok: boolean, detail: string) => { options.assertBudget?.(); checks.push({ name, ok, detail }); };
+  if (options.operationTimeoutMs !== undefined && (!Number.isSafeInteger(options.operationTimeoutMs) || options.operationTimeoutMs < 1)) throw new Error('Invalid restore operation timeout.');
 
   const database = options.targetDatabase ?? `restore_check_${randomBytes(5).toString('hex')}`;
   const keep = Boolean(options.keep || options.targetDatabase);
@@ -157,9 +163,9 @@ export async function restoreAndVerify(options: RestoreOptions): Promise<Restore
     // 3. Restore into a brand-new database. First the roles the backup names must exist on this server (roles are per server, not per
     // database, so a dump cannot carry them): ownership is part of the backup, and a missing owner would fail half way through.
     const required = manifest.privileges ? manifest.privileges.roles : legacyRequiredRoles(manifest.migrations);
-    const admin = new Client(pgClientConfig(options.adminUrl));
-    await admin.connect();
+    const admin = new Client({ ...pgClientConfig(options.adminUrl), connectionTimeoutMillis: options.operationTimeoutMs, query_timeout: options.operationTimeoutMs });
     try {
+      await admin.connect();
       const absent = await missingRoles(admin, required);
       if (absent.length > 0) {
         record('required roles', false, `these roles do not exist on this server: ${absent.join(', ')}. Create them first (docs/ops/ledger-roles.md); nothing was restored.`);
@@ -176,13 +182,14 @@ export async function restoreAndVerify(options: RestoreOptions): Promise<Restore
       // A backup that recorded its privilege facts is restored WITH its owners (the ledger's definer functions depend on them).
       // An older backup, which did not, keeps the previous behaviour: it has no definer functions to protect.
       const ownerFlags = manifest.privileges ? [] : ['--no-owner'];
-      await run('pg_restore', ['--exit-on-error', ...ownerFlags, `--dbname=${database}`, restoreFrom], pgEnv(options.adminUrl, database));
+      await run('pg_restore', ['--exit-on-error', ...ownerFlags, `--dbname=${database}`, restoreFrom], pgEnv(options.adminUrl, database), options.operationTimeoutMs);
       record('pg_restore', true, 'completed without errors');
-      await verify(restoredUrl, manifest, record, options.ledgerChainMaxEvents ?? RESTORE_CHAIN_MAX_EVENTS);
+      await verify(restoredUrl, manifest, record, options.ledgerChainMaxEvents ?? RESTORE_CHAIN_MAX_EVENTS, options.operationTimeoutMs, options.assertBudget);
+      if (checks.every(check => check.ok)) await options.afterVerified?.(restoredUrl, manifest);
     } catch (error) {
       record('pg_restore', false, (error as Error).message.slice(0, 300));
     } finally {
-      if (!keep) await dropDatabase(options.adminUrl, database);
+      if (!keep) await dropDatabase(options.adminUrl, database, options.operationTimeoutMs);
     }
   } finally {
     work.dispose();
@@ -191,20 +198,20 @@ export async function restoreAndVerify(options: RestoreOptions): Promise<Restore
   return { ok: checks.every((c) => c.ok), database, kept: keep && checks.every((c) => c.ok), checks };
 }
 
-async function dropDatabase(adminUrl: string, database: string) {
-  const admin = new Client(pgClientConfig(adminUrl));
-  await admin.connect();
+async function dropDatabase(adminUrl: string, database: string, timeoutMs?: number) {
+  const admin = new Client({ ...pgClientConfig(adminUrl), connectionTimeoutMillis: timeoutMs, query_timeout: timeoutMs });
   try {
+    await admin.connect();
     await admin.query(`DROP DATABASE IF EXISTS ${quoteIdent(database)} WITH (FORCE)`);
   } finally {
     await admin.end();
   }
 }
 
-async function verify(url: string, manifest: BackupManifest, record: (n: string, ok: boolean, d: string) => void, chainMaxEvents: number) {
-  const db = new Client(pgClientConfig(url));
-  await db.connect();
+async function verify(url: string, manifest: BackupManifest, record: (n: string, ok: boolean, d: string) => void, chainMaxEvents: number, timeoutMs?: number, assertBudget?: () => void) {
+  const db = new Client({ ...pgClientConfig(url), connectionTimeoutMillis: timeoutMs, query_timeout: timeoutMs });
   try {
+    await db.connect();
     // Row counts: the restored database against the baseline taken in the backup's OWN snapshot.
     const names = (await db.query<{ tablename: string }>(`SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1`)).rows.map((r) => r.tablename);
     const expectedNames = Object.keys(manifest.tables).sort();
@@ -258,7 +265,7 @@ async function verify(url: string, manifest: BackupManifest, record: (n: string,
     const appPolicies = await db.query<{ tablename: string }>(`SELECT DISTINCT tablename FROM pg_policies WHERE schemaname = 'public' AND 'telesphoros_app' = ANY (roles::text[])`);
     const appTables = new Set(appPolicies.rows.map((r) => r.tablename));
     await verifyIsolation(db, expectedNames.filter((name) => manifest.tables[name]!.rlsEnabled && appTables.has(name)), record);
-    await verifyLedgerChain(url, db, names, record, chainMaxEvents);
+    await verifyLedgerChain(url, db, names, record, chainMaxEvents, timeoutMs, assertBudget);
   } finally {
     await db.end();
   }
@@ -302,7 +309,7 @@ const RESTORE_CHAIN_MAX_EVENTS = 50_000_000;
  * Writes nothing (no checkpoint): a throwaway restore stays a throwaway. A backup from before the ledger has nothing to walk and says so;
  * a restored ledger that fails, or cannot finish, makes the restore "not ok".
  */
-async function verifyLedgerChain(url: string, db: Client, tables: string[], record: (n: string, ok: boolean, d: string) => void, maxEvents: number) {
+async function verifyLedgerChain(url: string, db: Client, tables: string[], record: (n: string, ok: boolean, d: string) => void, maxEvents: number, timeoutMs?: number, assertBudget?: () => void) {
   const name = 'ledger chain';
   if (!tables.includes('ledger_events')) {
     record(name, true, 'not applicable: this backup predates the ledger');
@@ -313,7 +320,7 @@ async function verifyLedgerChain(url: string, db: Client, tables: string[], reco
     record(name, false, 'role telesphoros_ledger_verifier does not exist on this server; create it (docs/ops/ledger-roles.md) before relying on this restore');
     return;
   }
-  const pool = new Pool({ ...pgClientConfig(url), max: 1, connectionTimeoutMillis: 10_000, options: '-c role=telesphoros_ledger_verifier' });
+  const pool = new Pool({ ...pgClientConfig(url), max: 1, connectionTimeoutMillis: timeoutMs ?? 10_000, query_timeout: timeoutMs, options: '-c role=telesphoros_ledger_verifier' });
   pool.on('error', () => undefined); // intentional: an idle connection can die; the check reports what it could not do
   try {
     // The point of using this role is to exercise ITS policies and grants: prove the connection really has it, not just that it was asked for.
@@ -327,7 +334,9 @@ async function verifyLedgerChain(url: string, db: Client, tables: string[], reco
     let events = 0;
     const problems: string[] = [];
     for (const [index, tenantId] of tenants.entries()) {
-      const result = await verifier.verify(tenantId, { mode: 'full', budgetMs: RESTORE_CHAIN_BUDGET_MS, maxEvents, recordCheckpoint: false });
+      assertBudget?.();
+      const result = await verifier.verify(tenantId, { mode: 'full', budgetMs: Math.min(timeoutMs ?? RESTORE_CHAIN_BUDGET_MS, RESTORE_CHAIN_BUDGET_MS), maxEvents, recordCheckpoint: false });
+      assertBudget?.();
       events += result.eventsChecked;
       // Kinds and sequence numbers only: no tenant id and no value from a record reaches the report.
       if (result.status === 'failed') problems.push(`ledger ${index + 1} of ${tenants.length} FAILED: ${[...new Set(result.failures.slice(0, 5).map((f) => `${f.kind}${f.seq === null ? '' : ` at ${f.seq}`}`))].join(', ')}`);
