@@ -92,3 +92,10 @@ pnpm install --frozen-lockfile && pnpm typecheck && pnpm lint && pnpm test && pn
 pnpm test:infra && pnpm test:ci-config
 # The database and S3 tiers: docs/database.md. The browser tests: pnpm --filter @telesphoros/frontend e2e
 ```
+
+
+## API image and rehearsal (FD-4b)
+
+The `image` job is a new required check in the versioned ruleset. The founder must import that file; this PR does not change live protection. It builds linux/amd64 without publishing, exports an OCI archive with SBOM and provenance, blocks fixed HIGH/CRITICAL vulnerabilities with an empty reviewed exception list, and runs the synthetic TLS/provisioning/migration/two-task containment rehearsal. See [the image runbook](../../infrastructure/docker/README.md). The Docker load exporter is used for execution; the private, one-day OCI artifact retains attestations. No keyless signing, deploy identity or cloud access is introduced.
+
+The pristine-database check expects production startup refusal before HTTP listen, reflecting the existing ledger bootstrap guard. It does not weaken that guard to force a pre-migration HTTP 503. After migrations, both tasks must pass health/readiness and reject unauthenticated access; the independent compiled writer process must refuse contained-tenant writes while a healthy-tenant control succeeds. This does not verify live Cognito, S3, IAM, RDS or Fargate.
