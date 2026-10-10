@@ -243,3 +243,55 @@ jobs:
       - name: Scan the full history
         run: |
           "$(go env GOPATH)/bin/gitleaks" git --redact --no-banner --verbose --config .gitleaks.toml
+
+  image:
+    name: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: node --test infrastructure/docker/guard.test.mjs
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: infrastructure/docker/api.Dockerfile
+          platforms: linux/amd64
+          push: false
+          sbom: true
+          provenance: mode=max
+          outputs: type=oci,dest=${{ runner.temp }}/api.oci.tar
+      # Classic Docker stores cannot load attested manifest lists. Reuse the same
+      # builder/cache for the runtime export; retain evidence in the OCI archive.
+      - uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: infrastructure/docker/api.Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: telesphoros-fd4b:rehearsal
+          sbom: false
+          provenance: false
+      - uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        with:
+          image-ref: telesphoros-fd4b:rehearsal
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+          trivyignores: infrastructure/docker/trivy.ignore
+      - run: node infrastructure/docker/rehearsal.cjs telesphoros-fd4b:rehearsal
+      # OCI retains SBOM/provenance that the Docker load exporter can discard.
+      # Private repository artifact only; no registry push or transparency log.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: api-image-with-attestations
+          path: ${{ runner.temp }}/api.oci.tar
+          retention-days: 1
+          if-no-files-found: error

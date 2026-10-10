@@ -38,7 +38,8 @@
           { "context": "database-and-storage", "integration_id": 15368 },
           { "context": "browser", "integration_id": 15368 },
           { "context": "terraform", "integration_id": 15368 },
-          { "context": "secret-scan", "integration_id": 15368 }
+          { "context": "secret-scan", "integration_id": 15368 },
+          { "context": "image", "integration_id": 15368 }
         ]
       }
     }

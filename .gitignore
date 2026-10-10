@@ -51,3 +51,6 @@ dist-e2e/
 
 # Dedicated synthetic local review state
 .local-review/
+
+# Public AWS trust roots, independently confirmed by founder for FD-4b.
+!infrastructure/docker/global-bundle.pem

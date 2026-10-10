@@ -66,3 +66,12 @@ PR 1, then PR 2 (several CI iterations expected, because I cannot build the imag
 - **The task role can read the three secrets it writes** (to recognise an unchanged login), not only write them; it still cannot read the administrator secret.
 - **A wrong secret id surfaces on the write**, not the read (Secrets Manager answers "not found" for both a missing secret and an empty container), so the command stops before changing any role.
 - The development cluster (`scripts/dev-postgres.sh`) uses `trust` authentication, so two tests that expect a wrong password to be refused announce a skip there and **fail in CI if the cluster does not check passwords**.
+
+
+## PR 2 implementation clarifications (FD-4b)
+
+- On 2026-10-09 the founder supplied their independent download's exact SHA-256 and 111-certificate count. The local file matched both and measured 169,984 bytes; that confirmed public bundle is vendored and build-checked.
+- Production's ledger bootstrap guard stops before listen on a pristine database. The rehearsal asserts this existing refusal, then checks HTTP readiness after migration; no application guard is relaxed to obtain a pre-migration 503.
+- Legacy pnpm deployment re-resolves. A build-only comparison of actual production dependency edges and versions prevents differences from the frozen source installation.
+- The first vulnerability scan found inherited npm tooling and Debian security-package findings. Installer tooling is removed and four available fixed Debian versions are pinned. The empty exception list remains unchanged.
+- Docker load can drop attestations; CI also exports and privately retains an OCI archive with SBOM/provenance. No registry push or public signing log.

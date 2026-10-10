@@ -1,0 +1,17 @@
+.git
+**/node_modules
+**/dist
+**/coverage
+**/.env
+**/.env.*
+**/*.log
+**/*.key
+**/*.pem
+!infrastructure/docker/global-bundle.pem
+**/.terraform
+**/*.tfstate*
+**/*.tfvars
+.local-review
+sidecars
+ml
+data

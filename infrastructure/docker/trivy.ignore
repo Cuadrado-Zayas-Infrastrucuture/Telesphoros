@@ -1,0 +1,2 @@
+# Reviewed vulnerability exceptions only: identifier, rationale, owner, expiry.
+# Empty: no vulnerabilities are exempted. Do not add entries merely to make CI green.
