@@ -1,0 +1,3 @@
+# Exact historical false positive: dummy Moto secret-container NAME synthetic/migrator.
+# No credential value; scoped to one commit, file, rule and line, not future findings.
+e7d3914308258e77a417ca17981773ddb5228e17:infrastructure/docker/rehearsal.cjs:generic-api-key:31
