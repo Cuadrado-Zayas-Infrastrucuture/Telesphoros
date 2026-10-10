@@ -1,6 +1,6 @@
 # Phase 1 frontend foundation closure
 
-Baseline main c88903d, 2026-10-09. Scope: existing frontend foundation; synthetic data only. Plan: ../design/plans/phase1-closure.md. Status: local verification passed; draft PR/CI and founder phase acceptance pending.
+Baseline main c88903d, 2026-10-09. Scope: existing frontend foundation; synthetic data only. Plan: ../design/plans/phase1-closure.md. Status: local verification passed; founder review/merge and phase acceptance pending. PR checks provide the separate CI evidence.
 
 ## Finite inventory
 
@@ -28,7 +28,7 @@ Asset inventory: helix.png is converted by existing vite-imagetools to responsiv
 - Removed nested main landmarks; containing AppLayout supplies the one main/skip target.
 - Local fields have explicit label IDs, aria-invalid, linked error text and first-invalid focus; existing schemas validate operations before requests. Inputs retained after refusal.
 - Busy states disable submissions; a synchronous ref guard rejects same-turn overlapping actions. Reviewer confirmation, hash preview association and role refusals remain.
-- Source text stays byte-identical in DOM; visual wrapping never modifies it. Long output/history stays in named keyboard-focusable scroll regions.
+- Displayed decoded text is not rewritten; visual wrapping does not modify the string. Browser tests prove literal equality for the synthetic fixture, not byte-level decoding fidelity for every capture. Long output/history stays in named keyboard-focusable scroll regions.
 - Form components split into files without changing their context/error behavior.
 - New structure guard checks image attributes, names/file ownership, all seven production page chunks and absence of all three Local pages from production manifest. Existing entry budget remains 150 kB gzip.
 - Dev-screen browser suite uses Vite development mode and real fake-IdP login/API me authentication. Record responses intercepted with synthetic data: UI evidence only, not storage/clinical integration. Existing production-build suite remains separate. Both run under the existing CI browser command.
@@ -46,6 +46,6 @@ Standard upload intentionally still simulates submission in the browser. Phase 1
 - Runtime: macOS arm64, browser test Node 22.22.0 / Unicode 16.0, installed Chromium build 1234. Host Node 24.14.0 correctly refused backend startup due to Unicode 17.0; no backend guard weakened. Local loopback services required sandbox escalation.
 - Native desktop macOS select popup ArrowDown behavior differed from Linux/mobile; the test now uses keyboard typeahead with a value assertion. No mouse selection or test skip.
 - Baseline evidence: the original before run had three failing tests (invalid capture, invalid upload, dispute fields), restored/fixed runs passed. Twelve negative controls cover the new mechanisms; no clinical-quality inference is made.
-- No AWS calls, Terraform apply, DNS, real-provider mail, live clinical data or production deployment occurred. Required PR CI remains to be read before final delivery.
+- No AWS calls, Terraform apply, DNS, real-provider mail, live clinical data or production deployment occurred. Read the required PR checks for the delivered commit before phase acceptance.
 
 AGENTS.md rule: yes
