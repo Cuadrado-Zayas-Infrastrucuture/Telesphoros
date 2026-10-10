@@ -45,10 +45,19 @@ suite('F2 fresh-process independent byte recovery (synthetic translated copies)'
       const timer = setTimeout(() => { worker.kill(); reject(new Error('Fresh recovery worker timed out.')); }, 120_000);
       let message: { status: string; code?: string; errorType?: string; metrics?: Record<string, unknown> } | undefined;
       let unexpectedOutput = false;
-      worker.stdout?.on('data', () => { unexpectedOutput = true; }); worker.stderr?.on('data', () => { unexpectedOutput = true; });
+      const outputCategories = new Set<string>();
+      worker.stdout?.on('data', () => { unexpectedOutput = true; outputCategories.add('stdout'); });
+      worker.stderr?.on('data', (chunk: Buffer) => {
+        unexpectedOutput = true;
+        // Fixed categories expose startup evidence without printing arbitrary worker data or credentials.
+        const text = chunk.toString();
+        outputCategories.add(text.includes('Failed to load native binding') ? 'native-binding'
+          : text.includes('Cannot find module') ? 'module-not-found'
+          : text.includes('Warning:') ? 'runtime-warning' : 'other-stderr');
+      });
       worker.on('message', value => { message = value as typeof message; });
       worker.once('error', error => { clearTimeout(timer); reject(error); });
-      worker.once('exit', code => { clearTimeout(timer); if (code !== 0 || unexpectedOutput || !message) reject(new Error('Fresh recovery worker failed or emitted unexpected output.')); else resolve(message); });
+      worker.once('exit', code => { clearTimeout(timer); if (code !== 0 || unexpectedOutput || !message) reject(new Error(`Fresh recovery worker failed: exit=${code}, reply=${Boolean(message)}, output=${[...outputCategories].sort().join(',') || 'none'}.`)); else resolve(message); });
       worker.send({ ...base, fault, ...overrides });
     });
     expect(await databases()).toEqual(before); expect(readdirSync(tmp)).toEqual([]);
