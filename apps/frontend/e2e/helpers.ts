@@ -1,7 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 
-export type Persona = 'alice' | 'bob' | 'carol' | 'dave';
-export const ROLE: Record<Persona, string> = { alice: 'clinician', bob: 'reader', carol: 'admin', dave: 'no role' };
+export type Persona = 'alice' | 'bob' | 'carol' | 'dave' | 'gina';
+export const ROLE: Record<Persona, string> = { alice: 'clinician', bob: 'reader', carol: 'admin', dave: 'no role', gina: 'reviewer' };
 
 /**
  * Signs in exactly as a person would: open a protected page, get sent to sign in, click through to the

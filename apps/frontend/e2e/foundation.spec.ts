@@ -68,7 +68,10 @@ test('keyboard: the whole upload form can be completed without a mouse', async (
   await page.getByLabel(/synthetic patient label/i).focus();
   await page.keyboard.type('SYN-0042');
   await page.keyboard.press('Tab');
-  await page.keyboard.press('ArrowDown'); // native <select>: choose the first real option
+  await expect(page.getByLabel(/report type/i)).toBeFocused();
+  // Native-select typeahead chooses the named option without depending on platform popup behavior.
+  await page.keyboard.press('v');
+  await expect(page.getByLabel(/report type/i)).toHaveValue('vcf');
   await page.keyboard.press('Tab');
   await page.getByLabel(/report file/i).setInputFiles({ name: 'ok.vcf', mimeType: 'text/plain', buffer: Buffer.from('x') });
   await page.keyboard.press('Tab');
@@ -125,4 +128,5 @@ test('images: lazy attribute, meaningful alt, and only AVIF/WebP are served to a
 test('unknown routes show the not-found page, not a blank screen', async ({ page }) => {
   await page.goto('/definitely/not/here');
   await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
+  expect(await axeViolations(page)).toEqual([]);
 });

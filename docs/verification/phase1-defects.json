@@ -1,0 +1,50 @@
+[
+  {
+    "defect": "two components in one file",
+    "rejected": true
+  },
+  {
+    "defect": "component/file name drift",
+    "rejected": true
+  },
+  {
+    "defect": "image missing alt",
+    "rejected": true
+  },
+  {
+    "defect": "image missing dimensions",
+    "rejected": true
+  },
+  {
+    "defect": "eager production page",
+    "rejected": true
+  },
+  {
+    "defect": "local page in production",
+    "rejected": true
+  },
+  {
+    "defect": "capture error association removed",
+    "rejected": true
+  },
+  {
+    "defect": "comparison bypass",
+    "rejected": true
+  },
+  {
+    "defect": "dispute busy control removed",
+    "rejected": true
+  },
+  {
+    "defect": "local browser suite silently skipped",
+    "rejected": true
+  },
+  {
+    "defect": "LocalReviewPage.tsx overlapping request guard removed",
+    "rejected": true
+  },
+  {
+    "defect": "LocalOperationsPage.tsx overlapping request guard removed",
+    "rejected": true
+  }
+]
