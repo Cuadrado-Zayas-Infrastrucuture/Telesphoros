@@ -29,12 +29,13 @@ export function fakeClient(session: Partial<Session> = {}): FakeClient {
 
 /** A `fetch` that answers GET /api/v1/me with the given roles (or a status). */
 export function fakeFetch(answer: { roles?: unknown; status?: number } = { roles: ['clinician'] }) {
-  return vi.fn<typeof fetch>(async () =>
-    new Response(JSON.stringify({ roles: answer.roles ?? [] }), {
+  return vi.fn<typeof fetch>(async (input) => {
+    if (String(input).includes('/api/v1/patients')) return new Response(JSON.stringify({ data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } }));
+    return new Response(JSON.stringify({ roles: answer.roles ?? [] }), {
       status: answer.status ?? 200,
       headers: { 'Content-Type': 'application/json' },
-    }),
-  );
+    });
+  });
 }
 
 export const API = 'http://api.test';

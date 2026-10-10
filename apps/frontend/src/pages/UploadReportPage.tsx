@@ -1,5 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { Paginated, PatientDto } from '@telesphoros/shared-types';
+import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
 import { useForm } from 'react-hook-form';
 import { Alert } from '@/components/ui/Alert';
 import { AlertDescription } from '@/components/ui/AlertDescription';
@@ -24,44 +26,70 @@ import { Input } from '@/components/ui/Input';
 import { NativeSelect } from '@/components/ui/NativeSelect';
 import { Spinner } from '@/components/ui/Spinner';
 import { usePageTitle } from '@/hooks/usePageTitle';
-import { submitReport } from '@/lib/api';
-import { uploadReportSchema, type UploadReportValues } from '@/lib/uploadReportSchema';
+import { listPatients, SubmitError, submitReport, type UploadProgress } from '@/lib/api';
+import { productUploadSchema, type ProductUploadValues } from '@/lib/productUploadSchema';
 import { REPORT_TYPE_LABELS, REPORT_TYPES } from '@/types/report';
 
 // The file starts unset; the schema reports "Choose a report file." until one is picked.
 const emptyValues = {
-  patientLabel: '',
+  patientId: '',
   reportType: '',
   file: undefined,
   syntheticConfirmed: false,
-} as unknown as UploadReportValues;
+} as unknown as ProductUploadValues;
 
 export default function UploadReportPage() {
   usePageTitle('Upload report');
+  const { apiFetch } = useAuth();
+  const progress = useRef<UploadProgress>({});
+  const [patients, setPatients] = useState<Paginated<PatientDto> | null>(null);
+  const [selectedPatient, setSelectedPatient] = useState<PatientDto | null>(null);
+  const [patientRequest, setPatientRequest] = useState({ page: 1, attempt: 0 });
+  const [patientsLoading, setPatientsLoading] = useState(true);
+  const [patientError, setPatientError] = useState<string | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    void listPatients(apiFetch, patientRequest.page, controller.signal).then(result => {
+      if (!controller.signal.aborted) { setPatients(result); setPatientsLoading(false); }
+    }).catch(error => {
+      if (!controller.signal.aborted && !(error instanceof SessionEndedError)) {
+        setPatientError('Patients could not be loaded. Please retry.'); setPatientsLoading(false);
+      }
+    });
+    return () => controller.abort();
+  }, [apiFetch, patientRequest]);
+  function loadPatients(page: number) {
+    setPatientError(null); setPatientsLoading(true);
+    setPatientRequest(current => ({ page, attempt: current.attempt + 1 }));
+  }
+
   const [serverError, setServerError] = useState<string | null>(null);
   const [reference, setReference] = useState<string | null>(null);
   // Changing the key remounts the file input, the only way to clear a native file control.
   const [formKey, setFormKey] = useState(0);
 
-  const form = useForm<UploadReportValues>({
-    resolver: zodResolver(uploadReportSchema),
+  const form = useForm<ProductUploadValues>({
+    resolver: zodResolver(productUploadSchema),
     defaultValues: emptyValues,
     mode: 'onTouched',
   });
   const { isSubmitting } = form.formState;
 
-  async function onSubmit(values: UploadReportValues) {
+  async function onSubmit(values: ProductUploadValues) {
     setServerError(null);
     try {
-      const result = await submitReport(values);
+      const result = await submitReport(values, apiFetch, progress.current);
       setReference(result.reference);
     } catch (error) {
       // Values stay in the form so the user can retry without retyping.
-      setServerError(error instanceof Error ? error.message : 'Something went wrong. Please try again.');
+      if (error instanceof SessionEndedError) return;
+      setServerError(error instanceof SubmitError ? error.message : 'The upload was interrupted. Your entries are kept; please retry.');
     }
   }
 
   function startOver() {
+    progress.current = {};
+    setSelectedPatient(null);
     form.reset(emptyValues);
     setReference(null);
     setServerError(null);
@@ -73,9 +101,9 @@ export default function UploadReportPage() {
       <div className="flex max-w-prose flex-col gap-4">
         <h1 className="text-3xl leading-tight font-bold">Report received</h1>
         <Alert variant="success">
-          <AlertTitle>Upload complete (simulated)</AlertTitle>
+          <AlertTitle>Upload complete</AlertTitle>
           <AlertDescription>
-            Reference <strong>{reference}</strong>. Nothing was sent anywhere; this is the Phase 1 stub.
+            Reference <strong>{reference}</strong>. The server verified the stored file. This does not indicate clinical review or processing.
           </AlertDescription>
         </Alert>
         <div>
@@ -106,24 +134,45 @@ export default function UploadReportPage() {
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form key={formKey} onSubmit={form.handleSubmit(onSubmit)} noValidate className="flex flex-col gap-6">
+            <form key={formKey} onSubmit={event => void form.handleSubmit(onSubmit)(event)} noValidate className="flex flex-col gap-6">
               <fieldset disabled={isSubmitting} className="flex min-w-0 flex-col gap-6">
                 <legend className="sr-only">Report details</legend>
 
                 <FormField
                   control={form.control}
-                  name="patientLabel"
+                  name="patientId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Synthetic patient label (required)</FormLabel>
+                      <FormLabel>Synthetic patient (required)</FormLabel>
                       <FormControl>
-                        <Input autoComplete="off" {...field} />
+                        <NativeSelect {...field} disabled={patientsLoading || isSubmitting} onChange={event => {
+                          field.onChange(event);
+                          setSelectedPatient(patients?.data.find(patient => patient.id === event.target.value) ?? null);
+                        }}>
+                          <option value="">Choose an existing patient…</option>
+                          {selectedPatient && !patients?.data.some(patient => patient.id === selectedPatient.id) && (
+                            <option value={selectedPatient.id}>{selectedPatient.label}</option>
+                          )}
+                          {patients?.data.map(patient => <option key={patient.id} value={patient.id}>{patient.label}</option>)}
+                        </NativeSelect>
                       </FormControl>
-                      <FormDescription>Example: SYN-0001. Never a real name or identifier.</FormDescription>
+                      <FormDescription>Select an existing synthetic patient. This upload does not create a patient.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
+                <div className="flex flex-col gap-2">
+                  <p role="status">{patientsLoading ? 'Loading patients…' : patients?.meta.total === 0 ? 'No patients available. Ask an administrator to add a synthetic patient.' : patients ? `Patient page ${patients.meta.page} of ${patients.meta.totalPages}` : 'Patients unavailable.'}</p>
+                  {patientError && <p role="alert" className="text-destructive">{patientError}</p>}
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" disabled={patientsLoading || isSubmitting} onClick={() => loadPatients(patientError ? patientRequest.page : patients?.meta.page ?? 1)}>Refresh patients</Button>
+                    {patients && patients.meta.totalPages > 1 && <>
+                      <Button type="button" variant="outline" disabled={patientsLoading || isSubmitting || patients.meta.page <= 1} onClick={() => loadPatients(patients.meta.page - 1)}>Previous patients</Button>
+                      <Button type="button" variant="outline" disabled={patientsLoading || isSubmitting || patients.meta.page >= patients.meta.totalPages} onClick={() => loadPatients(patients.meta.page + 1)}>Next patients</Button>
+                    </>}
+                  </div>
+                </div>
 
                 <FormField
                   control={form.control}
@@ -202,6 +251,7 @@ export default function UploadReportPage() {
                       'Upload report'
                     )}
                   </Button>
+                  {serverError && <Button type="button" variant="outline" disabled={isSubmitting} onClick={startOver} className="mt-2 w-full sm:ml-2 sm:mt-0 sm:w-auto">Start a new upload</Button>}
                 </div>
               </fieldset>
             </form>

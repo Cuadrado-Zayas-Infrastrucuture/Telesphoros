@@ -17,3 +17,25 @@ export async function signInAs(page: Page, persona: Persona, path = '/reports/up
 
 /** A JWT-shaped string: three base64url parts, the first starting like a JSON header. */
 export const JWT_PATTERN = /eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*/;
+
+
+/** Create synthetic fixture data through the authenticated API; the product itself never creates patients. */
+export async function signInWithPatient(page: Page) {
+  const me = page.waitForResponse(response => response.url().endsWith('/api/v1/me'));
+  await signInAs(page, 'alice');
+  const authenticated = await me;
+  const api = new URL(authenticated.url()).origin;
+  const headers = { Authorization: authenticated.request().headers().authorization! };
+  const created = await page.request.post(`${api}/api/v1/patients`, { headers, data: { label: `SYN-${crypto.randomUUID()}` } });
+  expect(created.status()).toBe(201);
+  const patient = await created.json() as { id: string; label: string };
+  await page.getByRole('button', { name: 'Refresh patients' }).click();
+  for (let attempts = 0; attempts < 100; attempts++) {
+    await expect(page.getByRole('button', { name: 'Refresh patients' })).toBeEnabled();
+    if (await page.getByRole('option', { name: patient.label, exact: true }).count()) return { ...patient, api, headers };
+    const next = page.getByRole('button', { name: 'Next patients' });
+    if (!(await next.count()) || !(await next.isEnabled())) break;
+    await next.click();
+  }
+  throw new Error('Synthetic patient fixture was not listed within the bounded test pages.');
+}

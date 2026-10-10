@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { expect, test, type Page } from '@playwright/test';
-import { signInAs } from './helpers';
+import { signInAs, signInWithPatient } from './helpers';
 
 const require = createRequire(import.meta.url);
 // The upload page needs a signed-in clinician, so those tests sign in first (through the real flow).
@@ -64,10 +64,11 @@ test('keyboard: skip link is the first tab stop and jumps to main content', asyn
 });
 
 test('keyboard: the whole upload form can be completed without a mouse', async ({ page }) => {
-  await signInAs(page, 'alice');
-  await page.getByLabel(/synthetic patient label/i).focus();
-  await page.keyboard.type('SYN-0042');
-  await page.keyboard.press('Tab');
+  await signInWithPatient(page);
+  await page.getByLabel(/synthetic patient \(required\)/i).focus();
+  await page.keyboard.press('s');
+  await expect(page.getByLabel(/synthetic patient \(required\)/i)).not.toHaveValue('');
+  for (let attempts = 0; attempts < 5 && !(await page.getByLabel(/report type/i).evaluate(element => element === document.activeElement)); attempts++) await page.keyboard.press('Tab');
   await expect(page.getByLabel(/report type/i)).toBeFocused();
   // Native-select typeahead chooses the named option without depending on platform popup behavior.
   await page.keyboard.press('v');
@@ -83,26 +84,30 @@ test('keyboard: the whole upload form can be completed without a mouse', async (
 });
 
 test('form: field-level errors, input preserved after a failed submit, loading state', async ({ page }) => {
-  await signInAs(page, 'alice');
+  const patient = await signInWithPatient(page);
   await page.getByRole('button', { name: 'Upload report' }).click();
-  await expect(page.getByText('Enter a synthetic patient label.')).toBeVisible();
+  await expect(page.getByText('Choose an existing patient.')).toBeVisible();
   await expect(page.getByText('Choose a report type.')).toBeVisible();
   await expect(page.getByText('Choose a report file.')).toBeVisible();
   await expect(page.getByText('Confirm that this file contains synthetic data only.')).toBeVisible();
 
-  await page.getByLabel(/synthetic patient label/i).fill('SYN-0099');
+  await page.getByLabel(/synthetic patient \(required\)/i).selectOption(patient.id);
   await page.getByLabel(/report type/i).selectOption('vcf');
   await page.getByLabel(/report file/i).setInputFiles({ name: 'fail.vcf', mimeType: 'text/plain', buffer: Buffer.from('x') });
   await page.getByLabel(/synthetic data only/i).check();
 
+  await page.route('**/api/v1/reports', async route => {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    await route.fulfill({ status: 429, json: { message: 'synthetic refusal' } });
+  });
   const submit = page.getByRole('button', { name: 'Upload report' });
   await submit.click();
   const busy = page.getByRole('button', { name: /uploading/i });
   await expect(busy).toBeVisible();
   await expect(busy).toBeDisabled();
 
-  await expect(page.getByRole('alert')).toContainText('The server could not accept this report');
-  await expect(page.getByLabel(/synthetic patient label/i)).toHaveValue('SYN-0099');
+  await expect(page.getByRole('alert')).toContainText('Too many requests. Wait a moment');
+  await expect(page.getByLabel(/synthetic patient \(required\)/i)).toHaveValue(patient.id);
   await expect(page.getByLabel(/report type/i)).toHaveValue('vcf');
   await expect(page.getByLabel(/synthetic data only/i)).toBeChecked();
   await expect(submit).toBeEnabled();

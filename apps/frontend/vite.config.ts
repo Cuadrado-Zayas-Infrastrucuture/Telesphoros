@@ -17,6 +17,10 @@ export default defineConfig({
     // The manifest lets scripts/check-chunks.mjs prove every page is its own lazy chunk.
     manifest: true,
     sourcemap: true,
+    // Keep shared, framework-free styling utilities separate when new route imports change automatic chunk grouping.
+    rolldownOptions: {
+      output: { codeSplitting: { groups: [{ name: 'ui-utilities', test: /\/node_modules\/(tailwind-merge|class-variance-authority|clsx)\// }] } },
+    },
   },
   test: {
     environment: 'jsdom',
