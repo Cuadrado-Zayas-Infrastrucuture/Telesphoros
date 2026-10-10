@@ -15,6 +15,8 @@ Only the new design/verification pages and links/status text in `docs/STATUS.md`
 
 Local review checked 81 relative file links across the five changed pages, existing backend build/typecheck/lint/test scripts, the referenced recovery spec/helper paths, the three actual CI profiles and `git diff --check`; all passed. No new tests mirror this documentation. Existing full CI remains a delivery gate; its final-head result and inspected logs are recorded in the PR after completion. Until then this file is the pre-CI snapshot. Future F1–F4 checks are labelled proposed, pending separate approval; no invented CLI/test is presented as available.
 
+Readability checks passed: eight ordered contract headings, six deployment checklist items and a three-column task table with acceptance controls below it. Verification/publication and cryptographic/logging constraints are separate rules; pagination failures are separate bullets. The bridge keeps the catalogue necessary for both architectures and the local mapping probe distinct from a production resolver. F4 retrieval/transfer costs and existing-baseline-only command warnings are explicit. All 81 links resolve; no zero-width/BOM artifact is present.
+
 ## Known limits and next action
 
 The design is concrete for review but the copy catalogue, recovery resolver, scheduling/limits, independent recovery and live permission/Compliance tests do not exist. Primary/current-version hash checks do not make text version-pinned. Native replication and ordinary copy have different VersionId semantics. Region/provider/custody, retention, budget, RPO/RTO and deployment eligibility remain founder gates. Approve a separate local F1 implementation after this planning PR; wider Phase 3/clinical acceptance remains open.
