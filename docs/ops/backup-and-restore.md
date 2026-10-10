@@ -82,12 +82,16 @@ against the real second provider has not been run**; it is part of the next chan
 Defects this drill and its tests found and fixed: backup files were created world-readable; a failed encrypted backup
 left an **unencrypted dump** on disk; the manifest dropped the PostgreSQL version.
 
+## Current-schema local format 2 rehearsal (2026-10-10)
+
+The [Phase 3C rehearsal](../verification/phase3c-recovery-rehearsal.md) executes the built CLI against a 13-migration synthetic database and a separate fresh PostgreSQL target, with exact volume/timing evidence and refusal controls. It verifies pinned primary PDF bytes separately. It does not recover independent report-file copies or validate a live provider. Use its bounded procedure to repeat the local rehearsal; retain the live-provider/custody drill as a separate task.
+
 ## Honest limits
 
 - **Recovery point:** a logical backup recovers to the moment it was taken (up to a day old if run daily). A
   point-in-time claim (minutes) belongs to RDS point-in-time recovery, which has **not been applied or drilled**. Do
   not quote it externally until a restore has been run in AWS.
-- **Recovery time:** unmeasured. The drill used six rows; it proves the procedure, not the duration at scale.
+- **Recovery time:** production RTO remains unmeasured. Phase 3C records exact byte counts and durations for a small local current-schema fixture; neither that baseline nor the historical six-row drill establishes recovery time at scale.
 - **Scheduling:** the daily run is not wired to a scheduler yet (it belongs with the compute, Phase 6/7). Until it
   is, nothing runs this automatically.
 - **Replay:** the signature proves a backup is genuine and unaltered; it does not prove it is the *latest*. Someone who

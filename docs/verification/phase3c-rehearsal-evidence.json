@@ -1,0 +1,556 @@
+{
+  "generator": {
+    "tenants": 3,
+    "coreRowsPerTenant": 100,
+    "uploadedPdfsPerTenant": 2,
+    "evaluationsPerCapture": 4,
+    "pdfBytes": 262144
+  },
+  "procedureOnly": true,
+  "productionRto": null,
+  "databaseRecoveryVerified": true,
+  "primaryEvidenceAvailable": true,
+  "independentReportCopiesRecovered": false,
+  "applicationRecoveryComplete": false,
+  "primaryBucket": "offsite-mv2pwwpt-0-e5813d",
+  "sourceDatabase": {
+    "bytes": 11025431,
+    "GB": 0.011025431,
+    "GiB": 0.01026823278516531
+  },
+  "environment": {
+    "postgres": "PostgreSQL 16.14 (Homebrew) on aarch64-apple-darwin25.4.0, compiled by Apple clang version 21.0.0 (clang-2100.0.123.102), 64-bit",
+    "fsync": "on",
+    "synchronous_commit": "on",
+    "node": "v22.22.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M5",
+    "memoryBytes": 17179869184,
+    "storage": "local PostgreSQL data directories; loopback Moto S3 emulator; no live provider",
+    "sourceSsl": "disable/loopback",
+    "targetAuthentication": "SCRAM",
+    "gitHeadAtRun": "88489986cbfba86942f527cb86ae9c6cd99c73a5"
+  },
+  "rehearsalSourceSha256": {
+    "test/db/recovery-cli.pg-spec.ts": "1c79b05a78759fa8e0074f52582976aa354014ae68d3388e303e9bea88ce22ee",
+    "test/helpers/recovery-cli-observe.cjs": "8f6368fc797d5a44ecbe0b2cb6d66e16f1a6bf1026d6d8f8d707b20982f9f215",
+    "test/helpers/recovery-seed.ts": "356c553b09084310e2420dd6c504bec68005e472ec12c754d866f728094ae20f",
+    "test/helpers/recovery-target.ts": "8299b6ddb9fcdfcafbe7c21bc35457d617695586847008c1f0b978e1ac0da26e",
+    "test/helpers/recovery-evidence.ts": "bb5585fab89f5eacbb8a3ef01357a116a1201f65154fdfcf4449a5eb5a14b645"
+  },
+  "builtCliSha256": "1279ff34de1fc6027fbcefe02a46a6510d438f8d666a33915cd8baabf0594c09",
+  "targetConfiguration": {
+    "postgres": "PostgreSQL 16.14 (Homebrew) on aarch64-apple-darwin25.4.0, compiled by Apple clang version 21.0.0 (clang-2100.0.123.102), 64-bit",
+    "fsync": "on",
+    "synchronous_commit": "on",
+    "encoding": "UTF8"
+  },
+  "plaintextCustomDump": {
+    "bytes": 246953,
+    "GB": 0.000246953,
+    "GiB": 0.00022999290376901627
+  },
+  "encryptedArchive": {
+    "bytes": 247006,
+    "GB": 0.000247006,
+    "GiB": 0.00023004226386547089
+  },
+  "manifest": {
+    "bytes": 18640,
+    "backupName": "backup-2026-10-10T18-18-42-691Z",
+    "createdAt": "2026-10-10T18:18:42.826Z",
+    "formatVersion": 2,
+    "migrations": [
+      "0001",
+      "0002",
+      "0003",
+      "0004",
+      "0005",
+      "0006",
+      "0007",
+      "0008",
+      "0009",
+      "0010",
+      "0011",
+      "0012",
+      "0013"
+    ],
+    "tables": {
+      "capture_acceptances": {
+        "rows": 6,
+        "rlsEnabled": true,
+        "rlsForced": true,
+        "policies": 3
+      },
+      "cell_dispute_decisions": {
+        "rows": 3,
+        "rlsEnabled": true,
+        "rlsForced": true,
+        "policies": 3
+      },
+      "cell_disputes": {
+        "rows": 6,
+        "rlsEnabled": true,
+        "rlsForced": true,
+        "policies": 3
+      },
+      "corrections": {
+        "rows": 12,
+        "rlsEnabled": true,
+        "rlsForced": true,
+        "policies": 3
+      },
+      "evaluation_gene_states": {
+        "rows": 48,
+        "rlsEnabled": true,
+        "rlsForced": true,
+        "policies": 3
+      },
+      "evaluation_results": {
+        "rows": 72,
+        "rlsEnabled": true,
+        "rlsForced": true,
+        "policies": 3
+      },
+      "evaluations": {
+        "rows": 24,
+        "rlsEnabled": true,
+        "rlsForced": true,
+        "policies": 3
+      },
+      "event_notes": {
+        "rows": 9,
+        "rlsEnabled": true,
+        "rlsForced": true,
+        "policies": 5
+      },
+      "ledger_checkpoints": {
+        "rows": 3,
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policies": 2
+      },
+      "ledger_events": {
+        "rows": 60,
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policies": 2
+      },
+      "ledger_heads": {
+        "rows": 3,
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policies": 2
+      },
+      "ledger_incident_clearances": {
+        "rows": 0,
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policies": 2
+      },
+      "ledger_incidents": {
+        "rows": 0,
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policies": 2
+      },
+      "patients": {
+        "rows": 306,
+        "rlsEnabled": true,
+        "rlsForced": true,
+        "policies": 1
+      },
+      "recommendations": {
+        "rows": 300,
+        "rlsEnabled": true,
+        "rlsForced": true,
+        "policies": 1
+      },
+      "report_captures": {
+        "rows": 6,
+        "rlsEnabled": true,
+        "rlsForced": true,
+        "policies": 3
+      },
+      "reports": {
+        "rows": 306,
+        "rlsEnabled": true,
+        "rlsForced": true,
+        "policies": 1
+      },
+      "schema_migrations": {
+        "rows": 13,
+        "rlsEnabled": false,
+        "rlsForced": false,
+        "policies": 0
+      }
+    },
+    "schema": {
+      "constraints": 175,
+      "indexes": 78,
+      "triggers": 53
+    },
+    "encryptedSha256": "18d03f1572f7dc170d7a0393bf2baf264f8a57e03ea638eb018b645f4a8ca2e5",
+    "plaintextSha256": "5bba252b0b921ea87d08f7c6d7ffd7e553bf4cfdfab779aa742b59a3d0476296"
+  },
+  "backupSeconds": 0.2990466669999996,
+  "uploadSeconds": 0.20773933300000044,
+  "producerPhases": [
+    {
+      "phase": "pg_dump",
+      "seconds": 0.094609542,
+      "ok": true,
+      "plaintextDumpBytes": 246953
+    },
+    {
+      "phase": "encrypt",
+      "seconds": 0.0020020419999999604,
+      "ok": true,
+      "plaintextDumpBytes": 246953
+    },
+    {
+      "phase": "upload",
+      "seconds": 0.03590012499999998,
+      "ok": true,
+      "encryptedArchiveBytes": 247006,
+      "manifestBytes": 18640
+    }
+  ],
+  "catalogAcceptanceSeconds": 0.029795291000000362,
+  "primaryEvidenceCheckSeconds": 0.04350283300000046,
+  "requiredPdfVersions": {
+    "count": 6,
+    "bytes": 1572864,
+    "GB": 0.001572864,
+    "GiB": 0.00146484375,
+    "inventory": [
+      {
+        "bucket": "offsite-mv2pwwpt-0-e5813d",
+        "key": "rehearsal/pdf-0.pdf",
+        "version": "cdfa51b7-7b81-4a33-8f33-e81d9221c5d2",
+        "sha256": "4162d75f9120760493288fc81d7d65ff195048642b4ab63852a7f8c0cab820d0",
+        "bytes": 262144
+      },
+      {
+        "bucket": "offsite-mv2pwwpt-0-e5813d",
+        "key": "rehearsal/pdf-1.pdf",
+        "version": "5dc8b667-e55f-4425-bf2d-bffede8f46d1",
+        "sha256": "a3592e9d434b9a4ae165632d5aa0f51a79944b14f4881f5030517ce031507f77",
+        "bytes": 262144
+      },
+      {
+        "bucket": "offsite-mv2pwwpt-0-e5813d",
+        "key": "rehearsal/pdf-2.pdf",
+        "version": "f67d26b0-80d3-47d9-9c93-59b638c1e032",
+        "sha256": "431afb30fdcf8d02f7ca0050ed25adb19b33f90ef13e158124882e789e7c6fbe",
+        "bytes": 262144
+      },
+      {
+        "bucket": "offsite-mv2pwwpt-0-e5813d",
+        "key": "rehearsal/pdf-3.pdf",
+        "version": "f114736c-f1e2-4766-92d7-3bfeb165452e",
+        "sha256": "8a45db976d1ba54f67b6650fc06293a4410f3abc5e3cb32cd2011cb8d78cadc7",
+        "bytes": 262144
+      },
+      {
+        "bucket": "offsite-mv2pwwpt-0-e5813d",
+        "key": "rehearsal/pdf-4.pdf",
+        "version": "a2633576-d1f9-4bb1-87ff-3bb4bbbed5ca",
+        "sha256": "77458be189fd8fed394e50ea00b89ccf7144c22537d55274dc2f736990484654",
+        "bytes": 262144
+      },
+      {
+        "bucket": "offsite-mv2pwwpt-0-e5813d",
+        "key": "rehearsal/pdf-5.pdf",
+        "version": "ae30905c-eefc-466b-b1e0-b1f77580fc1f",
+        "sha256": "63664bf914343f2935dc26028f1b192c7efe48587c416372ee1bacbfae2f2fcc",
+        "bytes": 262144
+      }
+    ]
+  },
+  "requiredCapturedText": {
+    "count": 6,
+    "bytes": 84,
+    "GB": 8.4e-8,
+    "GiB": 7.82310962677002e-8,
+    "inventory": [
+      {
+        "bucket": "offsite-mv2pwwpt-0-e5813d",
+        "key": "rehearsal/text-0.txt",
+        "sha256": "ee45c640f343b243a36f0c59c54c1b6c8fb84157383348fc864facc9e855dab9",
+        "bytes": 14,
+        "observedVersion": "7df601b4-2a21-406e-8cc5-ccaa695ef130"
+      },
+      {
+        "bucket": "offsite-mv2pwwpt-0-e5813d",
+        "key": "rehearsal/text-1.txt",
+        "sha256": "ee45c640f343b243a36f0c59c54c1b6c8fb84157383348fc864facc9e855dab9",
+        "bytes": 14,
+        "observedVersion": "dbcfc1b6-82a1-4ca1-b58d-f6d1e8e23592"
+      },
+      {
+        "bucket": "offsite-mv2pwwpt-0-e5813d",
+        "key": "rehearsal/text-2.txt",
+        "sha256": "ee45c640f343b243a36f0c59c54c1b6c8fb84157383348fc864facc9e855dab9",
+        "bytes": 14,
+        "observedVersion": "ab284c06-431c-4b43-be6b-9842f0e5a2d2"
+      },
+      {
+        "bucket": "offsite-mv2pwwpt-0-e5813d",
+        "key": "rehearsal/text-3.txt",
+        "sha256": "ee45c640f343b243a36f0c59c54c1b6c8fb84157383348fc864facc9e855dab9",
+        "bytes": 14,
+        "observedVersion": "472da9f1-e03d-4d78-a1cd-d793bd1539dd"
+      },
+      {
+        "bucket": "offsite-mv2pwwpt-0-e5813d",
+        "key": "rehearsal/text-4.txt",
+        "sha256": "ee45c640f343b243a36f0c59c54c1b6c8fb84157383348fc864facc9e855dab9",
+        "bytes": 14,
+        "observedVersion": "997ac82e-923a-4b94-a758-949455e362f9"
+      },
+      {
+        "bucket": "offsite-mv2pwwpt-0-e5813d",
+        "key": "rehearsal/text-5.txt",
+        "sha256": "ee45c640f343b243a36f0c59c54c1b6c8fb84157383348fc864facc9e855dab9",
+        "bytes": 14,
+        "observedVersion": "19ecaae4-05c8-4d04-8310-f6de4ce19267"
+      }
+    ],
+    "pinning": "hash; current schema does not pin a text VersionId"
+  },
+  "targetDatabase": {
+    "bytes": 10869783,
+    "GB": 0.010869783,
+    "GiB": 0.01012327428907156
+  },
+  "restoreCliSeconds": 0.5321594590000004,
+  "restorePhases": [
+    {
+      "phase": "download",
+      "seconds": 0.01309375,
+      "ok": true
+    },
+    {
+      "phase": "decrypt",
+      "seconds": 0.0016352919999999926,
+      "ok": true,
+      "encryptedArchiveBytes": 247006
+    },
+    {
+      "phase": "pg_restore",
+      "seconds": 0.160677459,
+      "ok": true,
+      "plaintextDumpBytes": 246953
+    },
+    {
+      "phase": "restore-verification-and-temp-cleanup",
+      "seconds": 0.08424925000000001,
+      "ok": true
+    }
+  ],
+  "databaseVerifiedSeconds": 0.5619547500000007,
+  "measurements": [
+    {
+      "phase": "backup-process-total",
+      "seconds": 0.2990466669999996,
+      "denominator": "source pg_database_size (physical tables/indexes/catalogs)",
+      "bytes": 11025431,
+      "volume": {
+        "bytes": 11025431,
+        "GB": 0.011025431,
+        "GiB": 0.01026823278516531
+      },
+      "bytesPerSecond": 36868596.833416685
+    },
+    {
+      "phase": "upload-process-total",
+      "seconds": 0.20773933300000044,
+      "denominator": "encrypted archive plus signed manifest transferred to local emulator",
+      "bytes": 265646,
+      "volume": {
+        "bytes": 265646,
+        "GB": 0.000265646,
+        "GiB": 0.0002474021166563034
+      },
+      "bytesPerSecond": 1278746.764821852
+    },
+    {
+      "phase": "remote-restore-process-total",
+      "seconds": 0.5321594590000004,
+      "denominator": "encrypted archive plus signed manifest downloaded; includes all verification and process overhead",
+      "bytes": 265646,
+      "volume": {
+        "bytes": 265646,
+        "GB": 0.000265646,
+        "GiB": 0.0002474021166563034
+      },
+      "bytesPerSecond": 499184.96327996266
+    },
+    {
+      "phase": "database-verified-including-independent-catalog-acceptance",
+      "seconds": 0.5619547500000007,
+      "denominator": "source physical database size; no report bytes restored",
+      "bytes": 11025431,
+      "volume": {
+        "bytes": 11025431,
+        "GB": 0.011025431,
+        "GiB": 0.01026823278516531
+      },
+      "bytesPerSecond": 19619784.333169147
+    },
+    {
+      "phase": "primary-evidence-availability",
+      "seconds": 0.04350283300000046,
+      "denominator": "required pinned PDFs plus hash-checked capture text read from primary; no independent copy recovery",
+      "bytes": 1572948,
+      "volume": {
+        "bytes": 1572948,
+        "GB": 0.001572948,
+        "GiB": 0.0014649219810962677
+      },
+      "bytesPerSecond": 36157369.33730231
+    },
+    {
+      "phase": "pg_dump",
+      "seconds": 0.094609542,
+      "denominator": "plaintext custom archive bytes",
+      "bytes": 246953,
+      "volume": {
+        "bytes": 246953,
+        "GB": 0.000246953,
+        "GiB": 0.00022999290376901627
+      },
+      "bytesPerSecond": 2610233.5428280584
+    },
+    {
+      "phase": "encrypt",
+      "seconds": 0.0020020419999999604,
+      "denominator": "plaintext custom archive bytes",
+      "bytes": 246953,
+      "volume": {
+        "bytes": 246953,
+        "GB": 0.000246953,
+        "GiB": 0.00022999290376901627
+      },
+      "bytesPerSecond": 123350559.0791826
+    },
+    {
+      "phase": "upload",
+      "seconds": 0.03590012499999998,
+      "denominator": "encrypted archive bytes (upload also transfers the manifest)",
+      "bytes": 247006,
+      "volume": {
+        "bytes": 247006,
+        "GB": 0.000247006,
+        "GiB": 0.00023004226386547089
+      },
+      "bytesPerSecond": 6880366.015438669
+    },
+    {
+      "phase": "download",
+      "seconds": 0.01309375,
+      "denominator": "source physical database size (verification/cleanup) or archive plus manifest (download)",
+      "bytes": 265646,
+      "volume": {
+        "bytes": 265646,
+        "GB": 0.000265646,
+        "GiB": 0.0002474021166563034
+      },
+      "bytesPerSecond": 20288000
+    },
+    {
+      "phase": "decrypt",
+      "seconds": 0.0016352919999999926,
+      "denominator": "encrypted archive bytes (upload also transfers the manifest)",
+      "bytes": 247006,
+      "volume": {
+        "bytes": 247006,
+        "GB": 0.000247006,
+        "GiB": 0.00023004226386547089
+      },
+      "bytesPerSecond": 151047030.13284546
+    },
+    {
+      "phase": "pg_restore",
+      "seconds": 0.160677459,
+      "denominator": "plaintext custom archive bytes",
+      "bytes": 246953,
+      "volume": {
+        "bytes": 246953,
+        "GB": 0.000246953,
+        "GiB": 0.00022999290376901627
+      },
+      "bytesPerSecond": 1536948.62700063
+    },
+    {
+      "phase": "restore-verification-and-temp-cleanup",
+      "seconds": 0.08424925000000001,
+      "denominator": "source physical database size (verification/cleanup) or archive plus manifest (download)",
+      "bytes": 11025431,
+      "volume": {
+        "bytes": 11025431,
+        "GB": 0.011025431,
+        "GiB": 0.01026823278516531
+      },
+      "bytesPerSecond": 130866814.83811426
+    }
+  ],
+  "targetClusterRemoved": true,
+  "sourceDatabaseRemoved": true,
+  "providerRequests": {
+    "uploadOnlyKeyUsed": true,
+    "readOnlyKeyUsed": true,
+    "readOnlyKeyNeverWrote": true
+  },
+  "controls": [
+    {
+      "name": "missing-target-roles",
+      "passed": true,
+      "seconds": 0.23051099999999952
+    },
+    {
+      "name": "healthy-remote-database-and-primary-evidence",
+      "passed": true,
+      "seconds": 0.5321594590000004
+    },
+    {
+      "name": "wrong-key",
+      "passed": true,
+      "seconds": 0.21833441700000003
+    },
+    {
+      "name": "tampered-manifest",
+      "passed": true,
+      "seconds": 0.21748720800000046
+    },
+    {
+      "name": "tampered-encrypted-archive",
+      "passed": true,
+      "seconds": 0.21071737500000018
+    },
+    {
+      "name": "restored-rls-drift",
+      "passed": true,
+      "seconds": 0.5598447090000008
+    },
+    {
+      "name": "restored-acl-drift",
+      "passed": true,
+      "seconds": 0.5262017089999991
+    },
+    {
+      "name": "broken-ledger-history",
+      "passed": true,
+      "seconds": 0.5170210000000006
+    },
+    {
+      "name": "missing-exact-report-version-and-altered-byte-refusal-with-positive-control",
+      "passed": true,
+      "seconds": 0.022849750000001223
+    }
+  ],
+  "allNineRehearsalControlsRecorded": true,
+  "recordedAt": "2026-10-10T18:18:49.735Z"
+}
