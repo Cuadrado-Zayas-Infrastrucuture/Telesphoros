@@ -20,6 +20,7 @@ Approved base main `3c1e191`; branch `feat/f2-independent-recovery`. No applicat
 | Attempt to recreate built-in `pg_database_owner` | Reassess setup against the CLI rehearsal; extract/reuse its existence-checked role provisioning |
 | Bucket listing's trailing slash misclassified as object GET | Classify nonempty path components; exact object GETs still require versions |
 | Artificial cap cursors passed into Moto and lost the final object | Cache the actual first terminal page inside the test-only pagination injection; preserve the 1,000-page software boundary |
+| Linux CI fresh workers exit before IPC or backup reads: fixed diagnostic category `native-binding`; minimal-environment startup reproduces missing native user cache | Give SWC an explicit private cache inside the owned fixture directory; canonicalize its path (macOS temporary paths may contain `/var` symlinks). Keep HOME/XDG and provider credentials absent, unexpected output fatal, and per-worker temporary cleanup assertions unchanged |
 
 No production guard, meaningful assertion or test was removed to obtain green results.
 
@@ -32,6 +33,8 @@ No production guard, meaningful assertion or test was removed to obtain green re
 - Infrastructure guards **31 passed**; CI guards **31 passed**, including negative artifact/missing-profile controls. Final focused checks passed **22 tests in each of the three profiles**; the CLI validator accepted all three generated profiles against the current checkout HEAD. Staged gitleaks scan passed with zero leaks and no new allowlist entries.
 
 Local JSON records the checkout HEAD, which was base main while the implementation was uncommitted; local checks cover the edited working tree. Required CI must generate and validate measurements at the actual reviewed PR checkout before delivery acceptance.
+
+The three focused profiles were subsequently regenerated and validated at committed head `509bce6`. Draft PR #63's initial and diagnostic CI runs passed the other six checks but failed the F2 worker startup in Tier 1; later tiers correctly did not run. Those runs do not provide F2 acceptance evidence. The private native-cache repair is being verified through a fresh complete CI run.
 
 ## Remaining limits
 

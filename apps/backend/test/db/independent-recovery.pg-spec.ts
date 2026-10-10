@@ -1,6 +1,6 @@
 import { fork, execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CreateBucketCommand, DeleteObjectCommand, GetObjectCommand, PutBucketVersioningCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { createBackup } from '../../src/db/backup';
@@ -28,7 +28,7 @@ suite('F2 fresh-process independent byte recovery (synthetic translated copies)'
   let source: S3EvidenceStorage; let copy: S3EvidenceStorage; let backupStore: S3EvidenceStorage;
   let gateway: Awaited<ReturnType<typeof recoveryGateway>>;
   let base: Omit<RecoveryProbeOptions, 'copy' | 'backup' | 'recovery'> & { endpoint: string; copyBucket: string; backupBucket: string; recoveryBucket: string };
-  let sourceStorage: S3ObjectStorage; let scratch: string; let sourceBytes = 0;
+  let sourceStorage: S3ObjectStorage; let scratch: string; let nativeCache: string; let sourceBytes = 0;
   let pdf: SeededReport; let copiedPdfKey: string; let copiedPdfVersion: string;
   const measurements: unknown[] = []; const controls: { name: string; passed: boolean }[] = [];
   const pass = (name: string) => controls.push({ name, passed: true });
@@ -40,7 +40,7 @@ suite('F2 fresh-process independent byte recovery (synthetic translated copies)'
     const result = await new Promise<{ status: string; code?: string; errorType?: string; metrics?: Record<string, unknown> }>((resolve, reject) => {
       const worker = fork(join(__dirname, '../helpers/independent-recovery-worker.cjs'), [], {
         // No ambient AWS credentials, source endpoint, local backup path or parent heap.
-        env: { PATH: process.env.PATH, TMPDIR: tmp, DATABASE_SSL: 'disable', SWC_NATIVE_BINDING_CACHE: process.env.SWC_NATIVE_BINDING_CACHE }, silent: true,
+        env: { PATH: process.env.PATH, TMPDIR: tmp, DATABASE_SSL: 'disable', SWC_NATIVE_BINDING_CACHE: nativeCache }, silent: true,
       });
       const timer = setTimeout(() => { worker.kill(); reject(new Error('Fresh recovery worker timed out.')); }, 120_000);
       let message: { status: string; code?: string; errorType?: string; metrics?: Record<string, unknown> } | undefined;
@@ -92,6 +92,10 @@ suite('F2 fresh-process independent byte recovery (synthetic translated copies)'
     execFileSync('pnpm', ['--filter', '@telesphoros/backend', 'build'], { cwd: join(__dirname, '../../../..'), timeout: 120_000, stdio: 'pipe' });
     pg = await createEphemeralDatabase(); target = await recoveryTarget();
     scratch = tempDir('f2-recovery-');
+    // SWC's native carrier needs an explicit cache when HOME/XDG are deliberately absent.
+    // This contains executable dependencies only; evidence and each worker's TMPDIR stay separate.
+    nativeCache = join(scratch, 'swc-native'); mkdirSync(nativeCache, { mode: 0o700 });
+    nativeCache = realpathSync(nativeCache); // macOS /var is a symlink; the native cache requires a canonical path.
     const primaryBucket = 'f2-primary-' + randomUUID();
     await emulator().send(new CreateBucketCommand({ Bucket: primaryBucket }));
     await emulator().send(new PutBucketVersioningCommand({ Bucket: primaryBucket, VersioningConfiguration: { Status: 'Enabled' } }));
