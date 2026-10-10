@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { ReportStatus, ReportType } from '@telesphoros/shared-types';
 import { Database } from '../../db/database';
-import { toStorageError } from '../errors';
+import { IntegrityError, toStorageError } from '../errors';
 import type { Page, PageRequest, ReportRecord } from '../records';
 import { type ReportFilter, ReportsRepository } from '../reports.repository';
 
@@ -14,6 +14,9 @@ interface ReportRow {
   original_filename: string;
   size_bytes: string; // bigint arrives as a string
   status: ReportStatus;
+  creation_request_id: string | null;
+  creation_request_hash: string | null;
+  deleted_at: Date | null;
   content_type: string | null;
   sha256: string | null;
   storage_key: string | null;
@@ -26,7 +29,18 @@ interface ReportRow {
 }
 
 const COLUMNS =
-  'id, tenant_id, created_by, patient_id, type, original_filename, size_bytes, status, content_type, sha256, storage_key, uploaded_at, object_version, upload_requested_by, uploaded_by, created_at, updated_at';
+  'id, tenant_id, created_by, patient_id, type, original_filename, size_bytes, status, content_type, sha256, storage_key, uploaded_at, object_version, upload_requested_by, uploaded_by, created_at, updated_at, creation_request_id, creation_request_hash, deleted_at';
+
+const INSERT = `INSERT INTO reports (id, tenant_id, created_by, patient_id, type, original_filename, size_bytes, status,
+  content_type, sha256, storage_key, uploaded_at, object_version, upload_requested_by, uploaded_by, created_at, updated_at,
+  creation_request_id, creation_request_hash)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`;
+const insertValues = (record: ReportRecord) => [
+  record.id, record.tenantId, record.createdBy, record.patientId, record.type, record.filename, record.sizeBytes,
+  record.status, record.contentType ?? null, record.sha256 ?? null, record.storageKey ?? null,
+  record.uploadedAt ?? null, record.objectVersion ?? null, record.uploadRequestedBy ?? null, record.uploadedBy ?? null,
+  record.createdAt, record.updatedAt, record.creationRequestId ?? null, record.creationRequestHash ?? null,
+];
 
 const toRecord = (row: ReportRow): ReportRecord => ({
   id: row.id,
@@ -37,6 +51,10 @@ const toRecord = (row: ReportRow): ReportRecord => ({
   filename: row.original_filename,
   sizeBytes: Number(row.size_bytes),
   status: row.status,
+  ...(row.creation_request_id ? {
+    creationRequestId: row.creation_request_id,
+    creationRequestHash: row.creation_request_hash,
+  } : {}),
   contentType: row.content_type,
   sha256: row.sha256,
   storageKey: row.storage_key,
@@ -93,18 +111,31 @@ export class PostgresReportsRepository extends ReportsRepository {
   async insert(record: ReportRecord): Promise<void> {
     try {
       await this.db.withTenant(record.tenantId, (client) =>
-        client.query(
-          `INSERT INTO reports (id, tenant_id, created_by, patient_id, type, original_filename, size_bytes, status,
-                                content_type, sha256, storage_key, uploaded_at, object_version, upload_requested_by, uploaded_by, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
-          [
-            record.id, record.tenantId, record.createdBy, record.patientId, record.type, record.filename, record.sizeBytes,
-            record.status, record.contentType ?? null, record.sha256 ?? null, record.storageKey ?? null,
-            record.uploadedAt ?? null, record.objectVersion ?? null, record.uploadRequestedBy ?? null, record.uploadedBy ?? null,
-            record.createdAt, record.updatedAt,
-          ],
-        ),
+        client.query(INSERT, insertValues(record)),
       );
+    } catch (error) {
+      throw toStorageError(error);
+    }
+  }
+
+  async insertOrReplay(record: ReportRecord): Promise<ReportRecord> {
+    if (!record.creationRequestId || !record.creationRequestHash) throw new Error('Missing report creation identity');
+    try {
+      return await this.db.withTenant(record.tenantId, async client => {
+        const inserted = await client.query<ReportRow>(`${INSERT}
+          ON CONFLICT ON CONSTRAINT reports_creation_request_uq DO NOTHING RETURNING ${COLUMNS}`, insertValues(record));
+        if (inserted.rows[0]) return toRecord(inserted.rows[0]);
+        // Separate READ COMMITTED statement sees the winner after a concurrent INSERT finishes.
+        // Do not use a no-op UPDATE: it would fire evidence guards and alter an existing row on replay.
+        const existing = await client.query<ReportRow>(`SELECT ${COLUMNS} FROM reports
+          WHERE tenant_id = $1 AND created_by = $2 AND creation_request_id = $3`,
+        [record.tenantId, record.createdBy, record.creationRequestId]);
+        const prior = existing.rows[0];
+        if (!prior || prior.deleted_at || prior.creation_request_hash !== record.creationRequestHash) {
+          throw new IntegrityError('reports_creation_request_uq');
+        }
+        return toRecord(prior);
+      });
     } catch (error) {
       throw toStorageError(error);
     }

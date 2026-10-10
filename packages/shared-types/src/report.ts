@@ -34,6 +34,8 @@ export const reportCreateSchema = z.strictObject({
   type: reportTypeSchema,
   filename: reportFilenameSchema,
   sizeBytes: z.number().int().min(1).max(MAX_REPORT_BYTES),
+  /** Retry identity for this creator in this tenant; omitted callers retain ordinary creation. */
+  requestId: z.uuid().transform(value => value.toLowerCase()).optional(),
 }).refine((body) => filenameMatchesType(body.type, body.filename), FILENAME_TYPE_MISMATCH);
 export type ReportCreate = z.infer<typeof reportCreateSchema>;
 

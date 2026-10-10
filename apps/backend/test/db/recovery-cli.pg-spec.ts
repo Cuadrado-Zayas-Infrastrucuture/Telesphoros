@@ -102,7 +102,7 @@ suite('built format 2 CLI current-schema recovery rehearsal', () => {
     expect(backup.code).toBe(0);
     const produced = /^backup written: (.+)$/m.exec(backup.output); expect(produced).not.toBeNull(); backupDir = produced![1]!;
     manifest = parseManifest(readFileSync(join(backupDir, 'manifest.json'), 'utf8')) as BackupManifestV2;
-    expect(manifest.formatVersion).toBe(2); expect(manifest.migrations).toHaveLength(13);
+    expect(manifest.formatVersion).toBe(2); expect(manifest.migrations).toHaveLength(14);
     for (const [table, rows] of Object.entries(EXPECTED_ROWS)) expect(manifest.tables[table]?.rows).toBe(rows);
     const dump = backup.events.find(e => e.phase === 'pg_dump')!; expect(dump.plaintextDumpBytes).toBeGreaterThan(0);
     evidence.plaintextCustomDump = volume(dump.plaintextDumpBytes!); evidence.encryptedArchive = volume(manifest.dump.bytes);
@@ -152,9 +152,14 @@ suite('built format 2 CLI current-schema recovery rehearsal', () => {
     const restored = await call([...restoreArgs(), '--target-db', name]);
     expect(restored.code).toBe(0); expect(restored.output).toContain('RESTORE VERIFIED');
     expect(restored.output).toMatch(/PASS\s+ledger chain/);
+    const retryInventorySql = `SELECT id,tenant_id,created_by,creation_request_id,creation_request_hash FROM reports
+      WHERE creation_request_id IS NOT NULL ORDER BY tenant_id,id`;
+    const originalRetries = await withAdmin(source!.adminUrl, c => c.query(retryInventorySql));
+    expect(originalRetries.rows).toHaveLength(3);
     const catalogStart = performance.now();
     const facts = await withAdmin(withDb(target!.url, name), async c => {
       await assertSchemaAcceptance(c);
+      expect((await c.query(retryInventorySql)).rows).toEqual(originalRetries.rows);
       for (const [table, rows] of Object.entries(EXPECTED_ROWS)) expect(Number((await c.query(`SELECT count(*) AS n FROM ${quoteIdent(table)}`)).rows[0].n)).toBe(rows);
       const pdfs = (await c.query('SELECT storage_key,object_version,sha256,size_bytes FROM reports WHERE uploaded_at IS NOT NULL ORDER BY storage_key')).rows;
       const texts = (await c.query('SELECT text_storage_key,text_sha256,text_scalars FROM report_captures ORDER BY text_storage_key')).rows;

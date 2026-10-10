@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import {
   filenameMatchesType,
@@ -60,9 +60,17 @@ export class ReportsService {
       filename: input.filename,
       sizeBytes: input.sizeBytes,
       status: 'received',
+      ...(input.requestId ? {
+        creationRequestId: input.requestId,
+        // Fixed tuple: request property order and later metadata corrections cannot change the original identity.
+        creationRequestHash: createHash('sha256').update(JSON.stringify([
+          input.patientId.toLowerCase(), input.type, input.filename, input.sizeBytes,
+        ])).digest('hex'),
+      } : {}),
       createdAt: now,
       updatedAt: now,
     };
+    if (input.requestId) return this.reports.insertOrReplay(record);
     await this.reports.insert(record);
     return record;
   }
