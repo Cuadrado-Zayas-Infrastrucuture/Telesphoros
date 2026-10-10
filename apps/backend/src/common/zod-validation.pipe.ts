@@ -17,7 +17,8 @@ export class ZodValidationPipe<T> implements PipeTransform<unknown, T> {
     throw AppException.validation(
       result.error.issues.map((issue) => ({
         field: issue.path.length > 0 ? issue.path.join('.') : '(request)',
-        message: issue.message,
+        // Zod includes caller-supplied key names in strict-object errors. Never echo those names.
+        message: issue.code === 'unrecognized_keys' ? 'Unknown fields are not allowed.' : issue.message,
       })),
     );
   }

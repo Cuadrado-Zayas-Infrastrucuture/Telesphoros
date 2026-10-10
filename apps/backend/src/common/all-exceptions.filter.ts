@@ -6,7 +6,7 @@ import { mapException } from './error-mapping';
 
 /**
  * Last line of defence: every error, expected or not, leaves the API in the same envelope and
- * never with a stack trace. The full error is logged internally (with the request id) instead.
+ * never with a stack trace. Logs contain fixed diagnostic fields and the request id, never the thrown value.
  */
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -23,7 +23,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const requestId = String(req.id);
 
     if (mapped.status >= 500) {
-      this.logger.error({ err: exception, requestId }, 'Unhandled error');
+      this.logger.error(
+        {
+          event: 'api-error',
+          requestId,
+          status: mapped.status,
+          code: mapped.code,
+        },
+        'Request failed',
+      );
     } else {
       this.logger.warn({ requestId, status: mapped.status, code: mapped.code }, 'Request rejected');
     }

@@ -33,14 +33,14 @@ orchestrator would restart healthy processes in a loop.
 
 - **Errors**: always `{ "error": { "code", "message", "details?", "requestId" } }`. Switch on `code`
   (`VALIDATION_ERROR`, `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`,
-  `PAYLOAD_TOO_LARGE`, `RATE_LIMITED` (reserved, Phase 9), `SERVICE_UNAVAILABLE`, `INTERNAL_ERROR`).
+  `PAYLOAD_TOO_LARGE`, `RATE_LIMITED`, `SERVICE_UNAVAILABLE`, `INTERNAL_ERROR`).
   Codes are stable: add, never rename. `details` are `{ field, message }` and never contain the submitted value.
-  No stack traces, ever; the full error is logged internally against the `requestId`.
+  No stack traces or raw exceptions in API error logs; fixed event/status/code fields are logged against the `requestId`.
 - **Lists**: `{ "data": [...], "meta": { "page", "pageSize", "total", "totalPages" } }`.
   `pageSize` defaults to 20 and is capped at 100; unknown query parameters are rejected.
 - **Request id**: every response carries `X-Request-Id` (also in the error body). A caller may send
   its own (8-64 chars of `A-Z a-z 0-9 . _ -`); anything else is replaced.
-- **Inputs are strict**: unknown fields are rejected (no mass assignment). Response DTOs are checked
+- **Inputs are strict**: unknown fields are rejected (no mass assignment). Caller-supplied unknown field names are not echoed in errors. Endpoints without a body/query declaration reject nonempty undeclared input before business logic; absent bodies and empty JSON objects remain valid for bodyless actions. Authentication/authorization runs first. Response DTOs are checked
   against the same schemas, and internal fields (tenant, author, storage keys) never appear.
 
 ## Authentication and authorization
@@ -72,9 +72,9 @@ See `.env.example` at the repo root. Real secrets belong in AWS Secrets Manager,
 - **Storage sits behind repository interfaces** (`src/storage`). Phase 3 added the PostgreSQL
   implementations behind the same abstract classes; controllers did not change. Each repository call is a single query
   (no per-row follow-ups). The database orders by an identity `seq` column, so creation order holds even when timestamps tie.
-- **Logs** are structured JSON (pino): request id, method, path (no query string), status, user id.
+- **Logs** are structured JSON (pino): request id, method, matched route template (no path parameters or query string), status, user id. Unmatched or guard-rejected requests use `[unmatched]`.
   Authorization/cookie headers are redacted; bodies are never logged.
-- Not yet (by phase): rate limiting and CORS/security headers (Phases 8-9), real auth (4), a scheduler for the daily backup (6-7).
+- Rate limiting and CORS are implemented; see `docs/ops/rate-limiting.md` and `docs/auth.md`. Live provider provisioning, security-header closure and scheduled operational verification remain separate phases.
 
 ## Configuration (Phase 3 additions)
 
