@@ -10,8 +10,11 @@ import { adminUrl, withAdmin } from '../helpers/database';
  * roles are created up front, as a database administrator would; see docs/ops/ledger-roles.md.)
  */
 const PASSWORD = 'test-only-password';
-const WITH_MEMBERSHIP = 'telesphoros_test_migrator';
-const WITHOUT_MEMBERSHIP = 'telesphoros_test_migrator_bare';
+// Logins are cluster-wide. A different suite used the old fixed name with a different password;
+// trust authentication hid that collision. Each run owns and removes only its randomly named logins.
+const loginTag = randomBytes(5).toString('hex');
+const WITH_MEMBERSHIP = `test_ledger_migrator_${loginTag}`;
+const WITHOUT_MEMBERSHIP = `test_ledger_migrator_bare_${loginTag}`;
 const ROLE_LOCK = 4242;
 const DEFINER_ROLES = ['telesphoros_ledger', 'telesphoros_redactor'];
 
@@ -41,6 +44,7 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   for (const name of databases) await withAdmin(adminUrl(), (c) => c.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`));
+  for (const login of [WITH_MEMBERSHIP, WITHOUT_MEMBERSHIP]) await withAdmin(adminUrl(), (c) => c.query(`DROP ROLE IF EXISTS ${login}`));
 });
 
 async function databaseOwnedBy(owner: string): Promise<string> {

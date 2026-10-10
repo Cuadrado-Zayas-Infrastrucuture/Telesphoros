@@ -12,7 +12,8 @@ import { adminUrl } from '../helpers/database';
  * production-like case: FORCE ROW LEVEL SECURITY also binds the migrating role, so a careless
  * backfill would silently update nothing).
  */
-const MIGRATOR = 'telesphoros_test_migrator';
+// Fixture logins are cluster-wide; isolate this suite from other migrator passwords and memberships.
+const MIGRATOR = `test_tenancy_migrator_${randomBytes(5).toString('hex')}`;
 const MIGRATOR_PASSWORD = 'test-only-migrator-password';
 const ROLE_LOCK = 4242;
 
@@ -88,6 +89,7 @@ afterAll(async () => {
   const root = new Client({ connectionString: adminUrl() });
   await root.connect();
   await root.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+  await root.query(`DROP ROLE IF EXISTS ${MIGRATOR}`);
   await root.end();
   rmSync(dir, { recursive: true, force: true });
 });
