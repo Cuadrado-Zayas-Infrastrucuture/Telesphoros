@@ -36,6 +36,16 @@ export class OffsiteError extends Error {
   }
 }
 
+/** Discovery cannot establish the newest backup from an incomplete listing. Never use its partial results. */
+export class IncompleteBackupListingError extends OffsiteError {
+  constructor(reason: 'missing-token' | 'page-limit') {
+    super(reason === 'missing-token'
+      ? 'Backup listing is incomplete: a truncated page has no continuation token. Recovery aborted.'
+      : 'Backup listing is incomplete: the 1,000-page limit was reached with more results remaining. Recovery aborted.');
+    this.name = 'IncompleteBackupListingError';
+  }
+}
+
 export interface OffsiteSettings {
   endpoint?: string;
   region: string;
@@ -279,7 +289,7 @@ export interface ReadTarget {
   prefix: string;
 }
 
-/** Names of the backups under the prefix (newest last). Includes incomplete ones: see `latestComplete`. */
+/** Names from a fully exhausted listing (newest last). Throws rather than returning any partial window. */
 export async function listBackups(target: ReadTarget): Promise<string[]> {
   const names: string[] = [];
   const listPrefix = target.prefix ? `${target.prefix}/` : '';
@@ -294,10 +304,11 @@ export async function listBackups(target: ReadTarget): Promise<string[]> {
       const name = (common.Prefix ?? '').replace(/\/$/, '').split('/').pop() ?? '';
       if (BACKUP_NAME.test(name)) names.push(name);
     }
-    if (!out.IsTruncated) break;
+    if (!out.IsTruncated) return names.sort();
+    if (!out.NextContinuationToken) throw new IncompleteBackupListingError('missing-token');
     token = out.NextContinuationToken;
   }
-  return names.sort();
+  throw new IncompleteBackupListingError('page-limit');
 }
 
 async function readBody(body: unknown, limit: number): Promise<Buffer> {
