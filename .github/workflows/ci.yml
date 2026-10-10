@@ -114,14 +114,17 @@ jobs:
       # so a skip fails the job instead of passing quietly.
       - name: "Tier 1: unit + API suite (in-memory), plus the database and S3 specs"
         run: |
+          set -o pipefail
           pnpm --filter @telesphoros/backend test 2>&1 | tee tier1.log
           ! grep -F "[jest] NOT RUNNING" tier1.log
       - name: "Tier 2: the whole API suite on PostgreSQL"
         run: |
+          set -o pipefail
           TEST_STORAGE=postgres pnpm --filter @telesphoros/backend test 2>&1 | tee tier2.log
           ! grep -F "[jest] NOT RUNNING" tier2.log
       - name: "Tier 3: the whole API suite on PostgreSQL, uploading over the S3 protocol"
         run: |
+          set -o pipefail
           TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 pnpm --filter @telesphoros/backend test 2>&1 | tee tier3.log
           ! grep -F "[jest] NOT RUNNING" tier3.log
       - if: failure()

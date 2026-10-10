@@ -6,7 +6,10 @@
 //   - the ruleset and the workflow drifting apart,
 //   - the workflow gaining write permissions or running untrusted code with secrets.
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
@@ -166,3 +169,22 @@ test('image job builds with retained attestations, blocks vulnerabilities and re
 for(const [token,rule] of [['load: true','runtime load'],['push: false','no push'],['sbom: true','SBOM'],['provenance: mode=max','provenance'],['type=oci,dest=','OCI evidence'],["exit-code: '1'",'scan blocks'],['severity: CRITICAL,HIGH','fixed high critical'],['ignore-unfixed: true','fixed only'],['trivyignores: infrastructure/docker/trivy.ignore','reviewed exceptions'],['node infrastructure/docker/rehearsal.cjs','rehearsal'],['node --test infrastructure/docker/guard.test.mjs','guards']]) {
   test(`image job detects missing ${rule} (control)`,()=>assert.ok(imageJobProblems(workflow.replace(token,'removed')).includes(rule)));
 }
+
+// Execute the three actual tier scripts with a stub test command. A failed producer must
+// survive tee; a skipped service must fail; successful tests must retain their log.
+test('database tier pipelines preserve test failures and missing-service refusal', () => {
+  const scripts = [...workflow.matchAll(/^ {8}run: \|\n((?: {10}.*\n)+)/gm)]
+    .map(m => m[1].replace(/^ {10}/gm, '')).filter(script => /\| tee tier[123]\.log/.test(script));
+  assert.equal(scripts.length, 3, 'all three database tier scripts must be exercised');
+  const dir = mkdtempSync(join(tmpdir(), 'ci-tier-controls-'));
+  try {
+    for (const script of scripts) {
+      const run = (status, message) => spawnSync('bash', ['-e', '-c',
+        'pnpm() { printf "%s\\n" "$fixture_message"; return "$fixture_status"; }\n' + script],
+      { cwd: dir, env: { ...process.env, fixture_status: String(status), fixture_message: message }, encoding: 'utf8' });
+      assert.equal(run(17, 'fixture test failed').status, 17, 'tee must not hide a failed test producer');
+      assert.notEqual(run(0, '[jest] NOT RUNNING fixture service').status, 0, 'missing services must fail');
+      assert.equal(run(0, 'fixture tests passed').status, 0, 'successful tests must pass');
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
