@@ -1,0 +1,74 @@
+[
+  {
+    "defect": "raw-exception-logging",
+    "test": "test/api-log-privacy.e2e-spec.ts",
+    "exitCode": 1,
+    "summary": [
+      "Test Suites: 1 failed, 1 total",
+      "Tests:       1 failed, 1 total"
+    ]
+  },
+  {
+    "defect": "raw-url-logging",
+    "test": "test/api-log-privacy.e2e-spec.ts",
+    "exitCode": 1,
+    "summary": [
+      "Test Suites: 1 failed, 1 total",
+      "Tests:       1 failed, 1 total"
+    ]
+  },
+  {
+    "defect": "unknown-field-name-echo",
+    "test": "src/common/zod-validation.pipe.spec.ts",
+    "exitCode": 1,
+    "summary": [
+      "Test Suites: 1 failed, 1 total",
+      "Tests:       1 failed, 1 passed, 2 total"
+    ]
+  },
+  {
+    "defect": "body-boundary-bypass",
+    "test": "src/common/input-boundary.interceptor.spec.ts",
+    "exitCode": 1,
+    "summary": [
+      "Test Suites: 1 failed, 1 total",
+      "Tests:       23 failed, 11 passed, 34 total"
+    ]
+  },
+  {
+    "defect": "query-boundary-bypass",
+    "test": "src/common/input-boundary.interceptor.spec.ts",
+    "exitCode": 1,
+    "summary": [
+      "Test Suites: 1 failed, 1 total",
+      "Tests:       26 failed, 8 passed, 34 total"
+    ]
+  },
+  {
+    "defect": "global-boundary-unregistered",
+    "test": "test/input-boundaries.e2e-spec.ts",
+    "exitCode": 1,
+    "summary": [
+      "Test Suites: 1 failed, 1 total",
+      "Tests:       1 failed, 1 total"
+    ]
+  },
+  {
+    "defect": "unsupported-body-bypass",
+    "test": "test/input-boundaries.e2e-spec.ts",
+    "exitCode": 1,
+    "summary": [
+      "Test Suites: 1 failed, 1 total",
+      "Tests:       1 failed, 1 total"
+    ]
+  },
+  {
+    "defect": "automatic-http-error-leak",
+    "test": "test/api-log-privacy.e2e-spec.ts",
+    "exitCode": 1,
+    "summary": [
+      "Test Suites: 1 failed, 1 total",
+      "Tests:       1 failed, 1 total"
+    ]
+  }
+]

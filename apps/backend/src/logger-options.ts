@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import type { Request } from 'express';
 import type { Options } from 'pino-http';
+import { LOG_ROUTE } from './common/log-route';
 import type { Env } from './config/env';
 
 /**
@@ -14,16 +15,31 @@ export function pinoHttpOptions(config: Pick<Env, 'LOG_LEVEL'>): Options {
     level: config.LOG_LEVEL,
     genReqId: (req: IncomingMessage) => (req as Request).id ?? randomUUID(),
     // Defence in depth: secrets are redacted even if the serializers below are ever loosened.
-    redact: { paths: ['req.headers.authorization', 'req.headers.cookie'], censor: '[redacted]' },
+    redact: {
+      paths: ['req.headers.authorization', 'req.headers.cookie'],
+      censor: '[redacted]',
+    },
     serializers: {
-      // Log the path only: query strings can carry identifiers.
+      // Route templates only: both path parameters and query strings can carry private values.
       req: (req: IncomingMessage & { id: string }) => ({
         id: req.id,
         method: req.method,
-        url: String(req.url).split('?')[0],
       }),
       res: (res: { statusCode: number }) => ({ statusCode: res.statusCode }),
     },
-    customProps: (req: IncomingMessage) => ({ userId: (req as Request).principal?.sub }),
+    // These run at response time, after the boundary interceptor has captured the route template.
+    customSuccessObject: (req, _res, value) => ({
+      res: value.res,
+      responseTime: value.responseTime,
+      route: (req as Request & { [LOG_ROUTE]?: string })[LOG_ROUTE] ?? '[unmatched]',
+    }),
+    customErrorObject: (req, _res, _error, value) => ({
+      res: value.res,
+      responseTime: value.responseTime,
+      route: (req as Request & { [LOG_ROUTE]?: string })[LOG_ROUTE] ?? '[unmatched]',
+    }),
+    customProps: (req: IncomingMessage) => ({
+      userId: (req as Request).principal?.sub,
+    }),
   };
 }

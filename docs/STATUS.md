@@ -5,7 +5,11 @@ Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and
 
 ## Current frontend foundation closure
 
-Phase 0 skeleton accepted by founder on 2026-10-09. Phase 1 closure is on a separate PR branch, locally verified, awaiting CI/review and founder phase acceptance. It adds local-screen field errors/focus, shared token controls, mobile/keyboard checks, separate form-component files and all-page chunk guards. Standard product upload remains a browser-only sample stub; clinical logic and hosting are untouched. Evidence: [Phase 1 closure](verification/phase1-closure.md). No later phase is marked complete by this change.
+Phase 0 skeleton accepted by founder on 2026-10-09. Phase 1 closure merged as PR #50, with all seven CI checks passing; the founder confirmed the merge. It adds local-screen field errors/focus, shared token controls, mobile/keyboard checks, separate form-component files and all-page chunk guards. Standard product upload remains a browser-only sample stub; clinical logic and hosting are untouched. Evidence: [Phase 1 closure](verification/phase1-closure.md). No later phase is marked complete by this change.
+
+## Current Phase 2 closure
+
+The founder approved three separate slices: API privacy/input boundaries, bounded evaluation/dispute lists, then batched evaluation context reads. The first slice is in review; pagination and batching are still open. Existing API/storage/auth code is not a claim that all later foundation phases are complete. No deployment, clinical approval or spending is authorized by these slices.
 
 ## What exists on `main`
 

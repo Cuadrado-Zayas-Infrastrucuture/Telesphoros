@@ -1,7 +1,8 @@
 import { type DynamicModule, Module } from '@nestjs/common';
-import { APP_FILTER } from '@nestjs/core';
+import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
+import { InputBoundaryInterceptor } from './common/input-boundary.interceptor';
 import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from './config/config.module';
 import { ENV, type Env } from './config/env';
@@ -40,7 +41,10 @@ export class AppModule {
         HealthModule,
         MeModule,
       ],
-      providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
+      providers: [
+        { provide: APP_FILTER, useClass: AllExceptionsFilter },
+        { provide: APP_INTERCEPTOR, useClass: InputBoundaryInterceptor },
+      ],
     };
   }
 }
