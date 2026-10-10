@@ -9,18 +9,19 @@ AWS BAA is executed and the compliance prerequisites are complete.
 | --- | --- | --- |
 | `patients` | synthetic label only | No name, date of birth or real identifier exists in the model, by design |
 | `reports` | report **metadata**: type, filename, size, status, content type, SHA-256, storage key, and (0010) the verified object version and who requested and completed the upload | The bytes are in S3, never here. Once uploaded, the file's identity cannot change; once captured, neither can the type, name, patient or deletion mark (enforced by trigger `reports_evidence_guard`). That last rule reads captures as the calling role, so it covers every application path; a table owner that is not a superuser and sets no tenant sees no captures and is not covered |
-| `recommendations` | engine output (read-only through the API) | Written only by the rules engine (Phase 5) |
+| `recommendations` | engine output (read-only through the API) | Repository insertion exists; general production engine ingestion remains Phase 5 work. Migrations 0012/0013 bind tenant, patient and report through a composite FK |
 | `report_captures`, `capture_acceptances`, `evaluations` (+ `evaluation_results`, `evaluation_gene_states`), `corrections`, `cell_disputes`, `cell_dispute_decisions` | the records of the lab-report pipeline (migrations 0007 to 0009) | **Append-only** (nobody updates or deletes, the owner included); each row has its own event in the tenant's hash chain, committed in the same transaction. Not connected to any endpoint yet (5B-3.2). Design: `docs/design/records-and-corrections.md` |
 | `event_notes` | every free-text note, kept out of the chain (0006) | Insert-only except one audited redaction |
 | `ledger_events`, `ledger_heads`, `ledger_checkpoints` | the per-tenant audit chain (0005) | Written only by the ledger functions; verified by `src/ledger/verifier.ts` |
 
 Rules enforced **by the database itself** (each is asserted by a test that tries to break it):
 
-- **UUID primary keys** (`gen_random_uuid()`), matching the public ids in the API.
-- **Every table has `tenant_id` (the organization that may see the row) and `created_by` (the individual who made it).**
-  Every foreign key is **composite** (`id, tenant_id`), so a child row cannot point at another tenant's parent even if
+- **UUID primary keys** on clinical API records, matching their public ids. Ledger heads and migration history instead use tenant/version keys.
+- **Tenant records have `tenant_id` (the organization that may see the row) and `created_by` (the individual who made it).**
+  Clinical parent foreign keys are **composite** (`id, tenant_id`), so a child row cannot point at another tenant's parent even if
   application code were wrong. Neither column can change after insert (a trigger refuses it, even for the table owner).
   (Migration 0003 renamed `owner_id` to `tenant_id`; each former owner became a tenant of one.)
+- Global containment/clearance and system tables deliberately have different fields and relationship rules; see the [complete table-class acceptance matrix](verification/phase3a-data-integrity.md). Recommendations now reference `reports(tenant_id, patient_id, id)`, so two different patients in one tenant cannot be joined by independent FKs.
 - **Every foreign key states `ON DELETE RESTRICT`.** Clinical history is never silently cascaded away.
 - **Soft delete** (`deleted_at`). The application role has no `DELETE` privilege at all. Soft-deleting a patient
   that still has live reports (or a report with live recommendations) is refused by a trigger, mirroring `RESTRICT`.
@@ -28,9 +29,13 @@ Rules enforced **by the database itself** (each is asserted by a test that tries
   storage key (the same file cannot be registered twice).
 - **Checks:** label and filename formats, size 1 byte to 10 MB, valid status/type/strength, lowercase hex SHA-256,
   and "uploaded implies key + checksum + content type".
-- **`created_at` / `updated_at`** on every table; `updated_at` moves automatically unless the writer sets it.
+- **`created_at` / `updated_at`** on the legacy mutable tables; `updated_at` moves automatically unless the writer sets it. Append-only and system tables use class-specific fields.
 - **`seq`** (identity) gives stable creation order for pagination, because timestamps can tie.
-- **Indexes** on the tenant plus the filtered and ordered columns, and on every foreign key.
+- **Indexes** support tenant/filter/order and parent uniqueness; exact query-facing definitions and real query plans are checked. Some append-only event FKs deliberately lack a dedicated child index; application roles cannot delete those parents.
+
+### Recommendation relationship migration (0012/0013)
+
+0012 adds the tenant/patient/id uniqueness to reports and a `NOT VALID` FK from recommendations; it enforces new references without changing historical rows. 0013 validates in a separate transaction. Both bound lock waits to 2 seconds and statements to 30 seconds. `NOT VALID` avoids the initial historical-row scan, not all locking; referenced uniqueness still requires an index build. If legacy mismatches exist, 0013 fails and rolls back while 0012 remains committed. Pending 0013 keeps readiness at 503; the catalog acceptance gate also rejects `convalidated=false`. Stop: do not reassign patients, delete/soft-delete rows or run a quarantine script automatically. Founder approval of a specific tenant-scoped, evidence-preserving remediation script is required before any operational repair and retry. Clean synthetic databases validate automatically. Rollback of 0013 recreates the enforced unvalidated FK; rollback of 0012 removes it and the added unique constraint. Nothing here was applied to a live/shared database.
 
 ## Row-level security (defence in depth)
 
