@@ -1,6 +1,6 @@
 # Continuous integration. See docs/ops/ci-cd.md for what each job proves and how branch protection uses them.
 #
-# The five job names below ARE the required status checks in .github/rulesets/main.json.
+# The six non-advisory job names below ARE the required status checks in .github/rulesets/main.json.
 # Renaming a job silently un-requires it, so change both together.
 #
 # Synthetic data only: nothing here has cloud credentials, and nothing is deployed.
@@ -127,6 +127,8 @@ jobs:
           set -o pipefail
           TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 pnpm --filter @telesphoros/backend test 2>&1 | tee tier3.log
           ! grep -F "[jest] NOT RUNNING" tier3.log
+      - name: Validate all three independent-recovery measurement profiles
+        run: node .github/ci/verify-recovery-metrics.mjs
       # F1 synthetic aggregates only: no catalogue, report IDs/keys/content, URLs or credentials.
       - name: Retain synthetic evidence-catalogue measurements
         if: always()
@@ -134,6 +136,15 @@ jobs:
         with:
           name: evidence-catalogue-measurements
           path: apps/backend/test-results/evidence-catalogue-*.json
+          retention-days: 7
+          if-no-files-found: error
+      # F2 synthetic aggregates only; independent bytes are not application recovery.
+      - name: Retain synthetic independent-recovery measurements
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: independent-recovery-measurements
+          path: apps/backend/test-results/independent-recovery-*.json
           retention-days: 7
           if-no-files-found: error
       - if: failure()

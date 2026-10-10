@@ -4,8 +4,20 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { quoteIdent } from '../../src/db/pg-process';
+import { withAdmin } from './database';
 
 const exec = promisify(execFile);
+
+/** Restore owns a database, not cluster roles; preserve PostgreSQL's existing built-in roles. */
+export async function prepareRecoveryRoles(url: string, roles: string[]) {
+  await withAdmin(url, async client => {
+    for (const role of roles) {
+      const exists = await client.query('SELECT 1 FROM pg_roles WHERE rolname=$1', [role]);
+      if (!exists.rowCount) await client.query(`CREATE ROLE ${quoteIdent(role)} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS`);
+    }
+  });
+}
 
 /** Owns one fresh loopback cluster. Never accepts a caller's data directory or target URL. */
 export async function recoveryTarget() {

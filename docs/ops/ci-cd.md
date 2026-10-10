@@ -15,6 +15,7 @@ runs on `main` are never cancelled. The workflow has read-only repository permis
 | `browser` | yes | The login flow and pages, driven by Chromium at 375 px and 1280 px against the fake identity provider (test only), the built API and the built frontend. On failure, traces and screenshots are kept 7 days |
 | `terraform` | yes | `terraform fmt -check`, `init -backend=false`, `validate`, then `terraform test`: an offline plan of the whole root under each deployment profile with every provider mocked (what each profile builds, what it refuses, that the default variables plan). No credentials; nothing is created or applied, and it does not prove AWS accepts the plan |
 | `secret-scan` | yes | gitleaks over the **full git history** (rules and the one named allowlist entry in `.gitleaks.toml`) |
+| `image` | yes | Build/scan and synthetic TLS/provisioning/migration/two-task containment rehearsal; no registry push or AWS proof |
 | `terraform-lint` | no (advisory) | tflint with the AWS ruleset. Promote it once it has run clean on `main` (below) |
 
 A green run is evidence about the code at that commit. It is not evidence about AWS: Terraform has never been applied.
@@ -44,7 +45,7 @@ The file is a GitHub **ruleset** for the default branch. It is not active until 
 | Rule | Setting | Why |
 | --- | --- | --- |
 | Require a pull request | on; **0 required approvals**; conversations must be resolved | Every PR is opened under the sole maintainer's account, so a required approval would be a permanent self-approval deadlock |
-| Required status checks | `verify`, `database-and-storage`, `browser`, `terraform`, `secret-scan`, each bound to the GitHub Actions app | Another app cannot report a check by the same name |
+| Required status checks | `verify`, `database-and-storage`, `browser`, `terraform`, `secret-scan`, `image`, each bound to the GitHub Actions app | Another app cannot report a check by the same name |
 | Block force pushes | on | History on `main` is never rewritten |
 | Block deletion | on | |
 | "Require branch to be up to date" | **off** | Safer, but forces a re-run after each merge; revisit when `main` becomes contested |
@@ -57,12 +58,14 @@ The file is a GitHub **ruleset** for the default branch. It is not active until 
 **Status:** applied to `main` on 2026-10-07 by the repository owner, created by hand in the Rulesets form with the settings in
 the table above (the file was used as the specification, not imported).
 
+On 2026-10-10 the founder approved adding the missing live `image` check. Ruleset `24691287` was updated narrowly; a full before/after comparison preserved every other existing rule/condition/bypass field, and effective main protection returned all six check names. This does not claim every setting in the versioned ruleset was imported (the live rules returned no explicit deletion rule).
+
 ### Turning it on
 
 1. Merge the PR that adds these files, and let CI run on `main` once. A check name can only be required after it has reported.
 2. GitHub → repository **Settings → Rules → Rulesets → New ruleset → Import a ruleset**, and choose `.github/rulesets/main.json`.
-3. Review the page it shows (target: default branch; the five checks; bypass: Admin, pull request only) and **Create**.
-4. Check it: open a throwaway PR and confirm it cannot merge until all five checks are green, and that
+3. Review the page it shows (target: default branch; the six checks; bypass: Admin, pull request only) and **Create**.
+4. Check it: open a throwaway PR and confirm it cannot merge until all six checks are green, and that
    `git push --force origin main` is refused.
 5. Settings → Actions → General: confirm Actions is allowed, and that **Workflow permissions** is "Read repository contents".
    (The workflow also states its own permissions, so a permissive default would not widen it.)
@@ -96,6 +99,8 @@ pnpm test:infra && pnpm test:ci-config
 
 ## API image and rehearsal (FD-4b)
 
-The `image` job is a new required check in the versioned ruleset. The founder must import that file; this PR does not change live protection. It builds linux/amd64 without publishing, exports an OCI archive with SBOM and provenance, blocks fixed HIGH/CRITICAL vulnerabilities with an empty reviewed exception list, and runs the synthetic TLS/provisioning/migration/two-task containment rehearsal. See [the image runbook](../../infrastructure/docker/README.md). The Docker load exporter is used for execution; the private, one-day OCI artifact retains attestations. No keyless signing, deploy identity or cloud access is introduced.
+The `image` job is required in the versioned ruleset and, after the approved 2026-10-10 setting update, effective main protection. It builds linux/amd64 without publishing, exports an OCI archive with SBOM and provenance, blocks fixed HIGH/CRITICAL vulnerabilities with an empty reviewed exception list, and runs the synthetic TLS/provisioning/migration/two-task containment rehearsal. See [the image runbook](../../infrastructure/docker/README.md). The Docker load exporter is used for execution; the private, one-day OCI artifact retains attestations. No keyless signing, deploy identity or cloud access is introduced.
+
+The database job also retains seven-day aggregate-only F1 catalogue and F2 independent-byte recovery artifacts. The latter does not establish application recovery or native replication; see [the F2 runbook](independent-recovery.md).
 
 The pristine-database check expects production startup refusal before HTTP listen, reflecting the existing ledger bootstrap guard. It does not weaken that guard to force a pre-migration HTTP 503. After migrations, both tasks must pass health/readiness and reject unauthenticated access; the independent compiled writer process must refuse contained-tenant writes while a healthy-tenant control succeeds. This does not verify live Cognito, S3, IAM, RDS or Fargate.

@@ -6,16 +6,59 @@
 //   - the ruleset and the workflow drifting apart,
 //   - the workflow gaining write permissions or running untrusted code with secrets.
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
+import { verifyAllProfiles, verifyRecoveryMetrics } from './verify-recovery-metrics.mjs';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const workflow = read('../workflows/ci.yml');
 const ruleset = JSON.parse(read('../rulesets/main.json'));
 const dependabot = read('../dependabot.yml');
+
+function recoveryMetricControl() {
+  const volume = bytes => ({ bytes, GB: bytes / 1e9, GiB: bytes / 1024 ** 3 });
+  const metric = { format: 1, databaseRecoveryVerified: true, independentBytesRecovered: true, applicationRecoveryComplete: false, identityMode: 'translated-test-only', references: 5, recoveredObjects: 5, concurrency: 1,
+    requiredByKind: Object.fromEntries(['lab-pdf', 'vcf', 'structured', 'text'].map(kind => [kind, { objects: kind === 'lab-pdf' ? 2 : 1, ...volume(10) }])),
+    volumes: { restoredDatabase: volume(300), archive: volume(100), catalogue: volume(90), recoveredObjects: volume(40), read: volume(100), writeAttempted: volume(10) },
+    seconds: { backupDownload: 1, catalogue: 1, restoreAndEvidence: 3, evidenceVerification: 2, total: 5 } };
+  const measurements = Array.from({ length: 7 }, () => structuredClone(metric)); measurements.at(-1).volumes.writeAttempted = volume(0);
+  return { format: 1, synthetic: true, status: 'passed', controls: Array.from({ length: 30 }, (_, i) => ({ name: 'control-' + i, passed: true })),
+    runtime: { node: 'v22.22.0', platform: 'linux', architecture: 'x64', gitHead: 'a'.repeat(40), storage: 'loopback PostgreSQL/Moto; synthetic gateway, not AWS IAM', freshProcess: true }, sourceDatabase: volume(300), measurements, applicationRecoveryComplete: false, nativeReplicationVerified: false };
+}
+
+test('CI validates all three recovery artifacts after the service tiers', () => {
+  const command = '      - name: Validate all three independent-recovery measurement profiles\n        run: node .github/ci/verify-recovery-metrics.mjs';
+  assert.ok(workflow.includes(command));
+  assert.ok(workflow.indexOf(command) > workflow.indexOf('TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 pnpm'));
+  assert.ok(workflow.includes('path: apps/backend/test-results/independent-recovery-*.json'));
+});
+
+test('recovery evidence validator refuses false acceptance, incomplete controls, unknown fields and wrong denominators', () => {
+  assert.equal(verifyRecoveryMetrics(recoveryMetricControl()), true);
+  for (const mutate of [
+    v => { v.applicationRecoveryComplete = true; }, v => { v.nativeReplicationVerified = true; },
+    v => { v.controls.pop(); }, v => { v.controls[0].passed = false; }, v => { v.measurements.pop(); },
+    v => { v.rawCatalogue = 'synthetic forbidden field'; }, v => { v.measurements[0].tenantId = 'synthetic forbidden field'; },
+    v => { v.measurements[0].volumes.recoveredObjects.GB = 999; }, v => { v.measurements[0].independentBytesRecovered = false; },
+    v => { v.measurements.at(-1).volumes.writeAttempted.bytes = 1; },
+  ]) { const value = recoveryMetricControl(); mutate(value); assert.throws(() => verifyRecoveryMetrics(value)); }
+});
+
+test('recovery evidence requires each profile, not merely one matching artifact file', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'recovery-metric-control-'));
+  try {
+    assert.throws(() => verifyAllProfiles(dir));
+    for (const profile of ['memory', 'postgres']) writeFileSync(join(dir, 'independent-recovery-' + profile + '.json'), JSON.stringify(recoveryMetricControl()));
+    assert.throws(() => verifyAllProfiles(dir));
+    writeFileSync(join(dir, 'independent-recovery-postgres-s3.json'), JSON.stringify(recoveryMetricControl()));
+    assert.doesNotThrow(() => verifyAllProfiles(dir));
+    assert.doesNotThrow(() => verifyAllProfiles(dir, 'a'.repeat(40)));
+    assert.throws(() => verifyAllProfiles(dir, 'b'.repeat(40)));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
 
 /** Jobs that deliberately are NOT required checks. Anything else in ci.yml must be required. */
 const ADVISORY = new Set(['terraform-lint']);
