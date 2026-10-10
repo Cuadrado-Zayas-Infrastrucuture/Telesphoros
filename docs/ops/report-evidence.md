@@ -28,6 +28,10 @@ nothing the records cite changes. The new version is simply never used.
   it may ([break-glass.md](break-glass.md): who holds it, how it is used, and why it must not be created until an audit trail exists), and using it must be
   recorded as an audit event with a reason. Versioning does not stop someone with that permission.
 
+## Independent recovery
+
+Independent file-copy recovery remains unimplemented. Database restoration alone cannot recover a missing pinned PDF or captured text. The [report-file recovery design](../design/plans/report-file-recovery.md) defines exact-version/copy-mapping acceptance, Compliance Object Lock and conditional CRR evaluation. It also covers completed VCF/JSON and hash-bound text; text's VersionId is not persisted in the current schema. This is a planning document, not an applied retention or recovery control.
+
 ## Download links
 
 A link is a bearer credential: whoever holds it can download that version until it expires (default 120 seconds, 60 to 600). Links are

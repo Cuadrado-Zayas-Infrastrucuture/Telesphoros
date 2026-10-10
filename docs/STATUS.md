@@ -17,7 +17,11 @@ Founder approved the revised local/synthetic plan on 2026-10-10. PR #54 merged e
 
 ## Phase 3B backup discovery
 
-Founder authorized this continuation with “go” on 2026-10-10. Incomplete backup listings now throw `IncompleteBackupListingError`; latest recovery aborts before object reads, temporary files or restore execution instead of choosing from a truncated window. Local boundary controls, emulator pagination and PostgreSQL/S3 regressions are recorded in [verification](verification/phase3b-backup-discovery.md); see the [scoped plan](design/plans/phase3b-backup-discovery.md). Final-head CI and founder review remain PR acceptance gates. Phase 3C's dataset-size/timing rehearsal and report-file recovery remain separate; this does not accept all Phase 3.
+Founder authorized this continuation with “go” on 2026-10-10. Incomplete backup listings now throw `IncompleteBackupListingError`; latest recovery aborts before object reads, temporary files or restore execution instead of choosing from a truncated window. PR #56 merged after all seven CI jobs passed; inspected database tiers passed 1,531 / 1,712 / 1,713 with zero failures. Local boundary controls, emulator pagination and PostgreSQL/S3 regressions are recorded in [verification](verification/phase3b-backup-discovery.md); see the [scoped plan](design/plans/phase3b-backup-discovery.md). This does not accept all Phase 3.
+
+## Phase 3C current-schema recovery rehearsal
+
+PR #57 merged after all seven exact-head CI jobs passed. Inspected database tiers passed 1,537 / 1,718 / 1,719 with zero failures or actual missing-service notices. The built format 2 CLI restored a populated synthetic DB into a fresh PostgreSQL cluster, checked catalog/privileges/ledger and recorded exact dataset bytes with timings. See [plan](design/plans/phase3c-recovery-rehearsal.md) and [verification](verification/phase3c-recovery-rehearsal.md). Pinned PDFs and captured text were checked on primary storage; independent report copies and complete application recovery remain false. This is not production-scale RTO or live-provider/custody acceptance.
 
 ## Phase 3D1 report registration retries
 
@@ -25,7 +29,11 @@ Founder approved this prerequisite to standard product upload on 2026-10-10. Opt
 
 ## Phase 3D2 standard synthetic upload
 
-Founder approved the separate transport/UI plan with “go” on 2026-10-10 after PR #58. The standard VCF/JSON screen selects existing patients from bounded pages, registers with retry keys, transfers through an explicit storage-origin allowlist and shows success only after server verification. See [plan](design/plans/phase3d2-product-upload.md), [runbook](ops/report-upload.md) and [verification](verification/phase3d2-product-upload.md). Local verification/final-head CI and founder review remain gates until their recorded results. Retry state is limited to the mounted form; reload recovery, PDF/local experiment changes, independent report-file recovery, clinical processing and live deployment acceptance remain separate. Nothing is deployed or approved clinically.
+Founder approved the separate transport/UI plan with “go” on 2026-10-10 after PR #58. The standard VCF/JSON screen selects existing patients from bounded pages, registers with retry keys, transfers through an explicit storage-origin allowlist and shows success only after server verification. PR #59 merged at `e550100`; all seven exact-head CI jobs passed, with inspected database tiers 1,558 / 1,739 / 1,740, zero failures/missing-service notices and browser 54 + 18 passed. See [plan](design/plans/phase3d2-product-upload.md), [runbook](ops/report-upload.md), [verification](verification/phase3d2-product-upload.md) and [final delivery evidence](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/59). The committed slice documents retain their pre-CI snapshots; the published PR completes scoped verification. Retry state is limited to the mounted form; reload recovery, PDF/local experiment changes, independent report-file recovery, clinical processing and live deployment acceptance remain separate. Nothing is deployed or approved clinically.
+
+## Independent report-file recovery planning
+
+Founder approved a planning-only PR after #59 on 2026-10-10. The [design](design/plans/report-file-recovery.md) traces all completed report types and captured text, defines authenticated catalogue/identity/completeness controls, evaluates S3 Object Lock Compliance Mode and conditional CRR, and specifies proposed synthetic acceptance checks. [Planning verification](verification/report-file-recovery-plan.md) distinguishes repository/source review from tests not yet implemented. No copy mechanism, resolver, scheduler, retention configuration or AWS resource is implemented/applied; the single-Region constraint remains in force. Review this design before separately approving local catalogue implementation. Whole Phase 3 acceptance remains open.
 
 ## What exists on `main`
 
