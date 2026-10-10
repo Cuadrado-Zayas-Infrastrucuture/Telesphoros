@@ -6,7 +6,7 @@ Founder approved this **planning-only** slice with “go” on 2026-10-10. Basel
 
 Define how a database recovery point can recover every referenced report and captured-text object after primary storage becomes unavailable. Design completion means the repository evidence, copy alternatives, identity contract, refusal cases and next implementation slices are reviewable. It does **not** mean files have been backed up or recovered. The [Phase 3C rehearsal](../../verification/phase3c-recovery-rehearsal.md) explicitly leaves independent copies and complete application recovery false.
 
-Threats: loss of the primary bucket or host; compromised application/operator credentials; overwritten keys and delete markers; missing historical versions; unusable encryption keys; incomplete or stale copy discovery. A separate bucket with the same unrestricted administrator is not adequate custody isolation. Immutability is a requirement of this threat model, not a claim that HIPAA universally mandates a particular AWS feature.
+Threats: loss of the primary bucket or host; compromised application/operator credentials; overwritten keys and delete markers; missing historical versions; unusable encryption keys; incomplete or stale copy discovery. A separate bucket with the same unrestricted administrator is not adequate **custody isolation**. Immutability is a requirement of this threat model, not a claim that HIPAA universally mandates a particular AWS feature.
 
 ## Repository evidence
 
@@ -37,43 +37,153 @@ Replication retains creation metadata and version IDs. Live replication covers n
 
 **Evaluate S3 Object Lock Compliance Mode** for every required destination version, catalogue and completion record. It prevents even root from deleting protected versions or shortening their retention during the fixed term; it does not prevent new versions/delete markers, deletion of the associated AWS account or loss of decryption access. Enabling Object Lock is irreversible. Verify exact mode and retain-until on actual versions; bucket defaults alone are not acceptance. With replication, source retention overrides destination defaults; without source retention, destination defaults apply. Reject replicas with inadequate retention. [Object Lock](https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lock.html), [retention/replication behavior](https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication-what-is-isnot-replicated.html), [lock and encryption considerations](https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lock-managing.html).
 
-Recommendation for the next **local** slice: build the catalogue/refusal contract and a copy-mapping rehearsal with primary denied. This proves byte recovery logic without pretending Moto implements native replication or AWS Compliance enforcement. For deployment, prefer native version-preserving replication if the approved platform and custody support it; evaluate SRR first under the current constraint and keep CRR conditional. A copy-mapping production resolver remains an explicit alternative, not an implementation already selected.
+For deployment, prefer native version-preserving replication if the approved platform and custody support it; evaluate SRR first under the current constraint and keep CRR conditional.
+
+**Local-to-production bridge:** F1 defines the catalogue needed to bind complete evidence membership to a DB recovery point for either copy architecture. F2 uses a test-only copy mapping/probe because the local Moto fixture does not exercise native AWS replication; it proves byte-recovery logic without claiming replica VersionId preservation or AWS Compliance enforcement. A production copy-mapping resolver remains a separately approved F3 alternative, not a mechanism selected merely to accommodate the emulator.
 
 ## Required identity and completeness contract
 
-1. **Bind the DB recovery point.** Restore and verify a specific format 2 backup into a disposable target, then derive required membership from that immutable restored DB. Bind the evidence catalogue to the signed DB manifest/archive digest, schema version, producer generation and creation time. Do not correlate two independent live scans by timestamp. All tenant queries use parameterized tenant predicates; the approved backup/inventory role handles complete tenant coverage, including soft-deleted evidence. Do not use the product's live-only pagination as a backup inventory.
-2. **Record exact evidence.** Catalogue each report/capture reference, source bucket/key and DB version when present; SHA-256, exact bytes, content type; text scalar count/runner identity; observed text version from the same verified read; destination bucket/key/version; encryption/key identifier and retention mode/expiry. Distinguish DB-pinned, hash-bound and observed identities. Include completed VCF/JSON, captured PDFs/text and any uploaded report without a capture. Uncompleted registrations and unreferenced orphan text are counted separately, not silently promoted into required evidence or deleted.
-3. **Resolve unpinned records safely.** For text or a completed non-PDF with no DB version, accept only bytes matching the restored DB hash and other recorded constraints. If current bytes fail, exhaust version-aware discovery before selecting a verified historical match. Record that observed version without backfilling immutable DB fields. Missing expected metadata or no match fails recovery; never substitute latest, recapture text or accept an ETag as SHA-256.
-4. **Publish after verification.** A producer stages copies, reads every required destination version back, computes hashes/volumes, verifies retention/encryption and only then signs and publishes a completion record. Encrypt sensitive catalogues and identifiers in storage; aggregate-only logs, no file content, raw tenant/report IDs or signed URLs. Use existing crypto patterns after a scoped review, no new cryptographic scheme by assumption. A digest alone is not authenticity. An authentic old catalogue is not freshness: compare producer generations with independently retained monitoring evidence and report the protected DB time and copy lag.
-5. **Fail closed on discovery.** Bound pages, objects, bytes, time and retry attempts before implementation; proposed listing cap is 1000 pages. `ListObjectsV2` uses continuation tokens; `ListObjectVersions` uses key/version markers. Preserve each API's cursor semantics, including the literal `null` version marker when valid. Missing required cursors, repeated cursor/no progress, timeout or a still-truncated page 1000 throws proposed typed `IncompleteEvidenceListingError`; terminal page 1000 is allowed. Publish nothing and claim neither completeness nor newest status from a partial window. [Version listing API](https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectVersions.html).
-6. **Recover identity without weakening evidence.** Native replicas must serve the original key/version and matching bytes from the designated recovery bucket. Ordinary copies require a signed one-to-one mapping keyed by the original source identity; recovery reads/download links resolve only a verified destination version. No ambiguous mapping, arbitrary endpoint/key, latest fallback or DB rewrite. Text reads must serve the hash-bound bytes even when a newer bad version/delete marker exists; this is a future adapter change, not something existing bucket configuration solves.
-7. **Prove primary independence.** Deny all primary access before the positive recovery acceptance. Start a fresh recovery process with no cached primary bytes; assert zero successful primary reads. Restore DB, catalogue and files using recovery credentials/custodied keys only. Verify every required object and existing ledger/catalog/RLS/ACL checks. Missing one required file keeps `applicationRecoveryComplete=false`. A test-only mapping probe is labelled `independentBytesRecovered`, not full application recovery until actual API/file-link/evaluation paths work under the restricted application role. Existing clinical holds remain in force.
+### 1. Bind the DB recovery point
+
+- Restore and verify a specific format 2 backup into a disposable target; derive required membership from that immutable restored DB.
+- Bind the catalogue to the signed DB manifest/archive digest, schema version, producer generation and creation time. Two independent live scans correlated by timestamp are insufficient.
+- Use parameterized tenant predicates and the approved backup/inventory role for complete tenant coverage, including soft-deleted evidence. Product live-only pagination is not a backup inventory.
+
+### 2. Record exact evidence
+
+Catalogue each reference with:
+
+- Report/capture identity; source bucket/key and DB version when present.
+- SHA-256, exact bytes and content type; text scalar count and runner identity.
+- Observed text version from the same verified read; destination bucket/key/version.
+- Encryption/key identifier and retention mode/expiry.
+
+Distinguish DB-pinned, hash-bound and observed identities. Include all completed VCF/JSON, captured PDFs/text and uploaded reports without captures. Count uncompleted registrations and unreferenced orphan text separately; do not promote them into required evidence or delete them.
+
+### 3. Resolve unpinned records safely
+
+- Accept text or a completed non-PDF without a DB version only when bytes match the restored DB hash and other recorded constraints.
+- If current bytes fail, exhaust version-aware discovery before selecting a verified historical match. Record the observed version without backfilling immutable DB fields.
+- Missing metadata or no match fails recovery. Never substitute latest, recapture text or use an ETag as SHA-256.
+
+### 4. Verify before publishing
+
+Stage copies → read every required destination version → compute hashes/volumes → verify retention/encryption → sign and publish the completion record. A partial set must never be published as complete.
+
+Authenticity does not establish freshness. Compare producer generations with independently retained monitoring evidence; report the protected DB time and copy lag.
+
+### 5. Cryptographic and logging constraints
+
+- Authenticate and encrypt sensitive catalogues and identifiers. A digest alone is not authenticity.
+- Reuse existing crypto patterns after scoped review; do not assume a new cryptographic scheme.
+- Log aggregates only: no file content, raw tenant/report IDs or signed URLs.
+
+### 6. Fail closed on discovery
+
+Define page, object, byte, time and retry bounds before implementation. Proposed listing cap: **1000 pages**.
+
+- `ListObjectsV2`: continuation-token pagination.
+- `ListObjectVersions`: key/version-marker pagination. Preserve API semantics, including the literal `null` version marker when valid. [Version listing API](https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectVersions.html).
+- A terminal page 1000 is allowed.
+
+Throw proposed typed `IncompleteEvidenceListingError` on any of:
+
+- Missing required cursors.
+- Repeated cursor or no progress.
+- Timeout.
+- Page 1000 still truncated.
+
+Publish nothing after incomplete discovery. Claim neither completeness nor newest status from a partial window.
+
+### 7. Recover identity without weakening evidence
+
+- Native replicas must serve the original key/version and matching bytes from the designated recovery bucket.
+- Ordinary copies require a signed one-to-one mapping keyed by original source identity. Reads/download links resolve only a verified destination version.
+- Reject ambiguous mappings, arbitrary endpoints/keys, latest fallback and DB rewrites.
+- Text reads must serve hash-bound bytes despite a newer bad version/delete marker. This needs a future adapter change; bucket configuration alone does not solve it.
+
+### 8. Prove primary independence
+
+- Deny primary access before positive acceptance. Start a fresh recovery process without cached primary bytes; assert zero successful primary reads.
+- Restore DB, catalogue and files using recovery credentials/custodied keys only. Verify every required object and existing ledger/catalog/RLS/ACL checks.
+- One missing required file keeps `applicationRecoveryComplete=false`.
+- Label a test-only mapping probe `independentBytesRecovered`. Claim full application recovery only after actual API/file-link/evaluation paths work under the restricted application role. Existing clinical holds stay in force.
 
 ## Custody, operational and cost gates
 
-Separate application, copy producer, recovery reader and destination administrator identities. Application credentials must not read/write/delete recovery storage, shorten locks, change destination policy or disable/delete its key. Recovery reader cannot write/delete. Protect both destination decryption and catalogue signing keys from primary administrators; keep tested offline custody/recovery procedures. KMS replication needs explicit encrypted-object selection, destination key configuration and scoped source/decrypt plus destination/encrypt permissions; a configured rule is not proof of working replication. [Encrypted replication](https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication-config-for-kms-objects.html).
+**Custody and operational principles:**
 
-Require private storage, encryption in transit/at rest, least privilege and scoped service resource conditions; encrypted audit logging, CloudTrail data events, copy failure/lag metrics and freshness alerts must cover primary and recovery paths. Audit trails must not include report content. Denied delete tests belong to disposable synthetic canaries, never real retained evidence. [S3 security guidance](https://docs.aws.amazon.com/AmazonS3/latest/userguide/security-best-practices.html).
+- **Role separation:** separate application, copy producer, recovery reader and destination administrator identities.
+- **Least privilege:** application credentials must not read/write/delete recovery storage, shorten locks, change destination policy or disable/delete its key. Recovery readers cannot write/delete.
+- **Key isolation:** protect destination decryption and catalogue signing keys from primary administrators; keep tested offline custody/recovery procedures.
+- **KMS replication:** require explicit encrypted-object selection, destination key configuration and scoped source/decrypt plus destination/encrypt permissions. A configured rule is not proof of working replication. [Encrypted replication](https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication-config-for-kms-objects.html).
+- **Security and audit:** require private storage, encryption in transit/at rest and scoped service resource conditions. Encrypted audit logging, CloudTrail data events, copy failure/lag metrics and freshness alerts must cover primary and recovery paths. Audit trails must not include report content.
+- **Canary isolation:** denied-delete tests belong to disposable synthetic canaries, never real retained evidence. [S3 security guidance](https://docs.aws.amazon.com/AmazonS3/latest/userguide/security-best-practices.html).
 
-Founder decisions before deployment: permitted Region/platform path and destination custodian/provider; BAA coverage before real records; retention and deletion/legal-hold policy; RPO/RTO targets and accepted Region-loss limitation; budget and key custodians. The repository's 2190-day noncurrent floor is an existing safeguard, **not a legal retention determination**. Do not inherit DB backup retention (14/30 days) for evidence. Compliance retention cannot be shortened to roll back a bad deployment; approve synthetic canary volume/retention and retained costs first.
+### Founder deployment gates — required before F4
 
-Cost review must count all retained versions and catalogue copies, growth/overwrites, replication PUTs and backfill jobs, inter-Region transfer for CRR, inventory/read/hash verification, KMS and audit/metrics, retrieval and minimum archive durations. SRR still incurs destination storage and requests; a cold archive adds recall time to RTO. No dollar estimate without approved volume/Region/class. [S3 pricing](https://aws.amazon.com/s3/pricing/).
+- [ ] **Infrastructure:** permitted Region/platform path and destination custodian/provider; platform/policy eligibility verified.
+- [ ] **Compliance:** BAA coverage verified before any real records are handled.
+- [ ] **Policy:** approved retention, deletion and legal-hold policies.
+- [ ] **Recovery objectives:** RPO/RTO targets and accepted Region-loss limitations.
+- [ ] **Financial:** approved budget based on verified volume/Region/class estimates, including the drill.
+- [ ] **Custody:** designated key custodians and tested recovery procedures.
+
+The repository's 2190-day noncurrent floor is an existing safeguard, **not a legal retention determination**. Do not inherit DB backup retention (14/30 days) for evidence. Compliance retention cannot be shortened to roll back a bad deployment; approve synthetic canary volume/retention and retained costs first.
+
+Cost review must count all retained versions and catalogue copies, growth/overwrites, replication PUTs and backfill jobs, inter-Region transfer for CRR, inventory/read/hash verification, KMS and audit/metrics, retrieval and minimum archive durations. **Budget retrieval and data-transfer costs during the F4 drill itself**, including repeated controls. SRR still incurs destination storage and requests; a cold archive adds recall time to RTO. No dollar estimate without approved volume/Region/class. [S3 pricing](https://aws.amazon.com/s3/pricing/).
 
 ## Next implementation slices and acceptance
 
 These are prerequisites and verification requirements, **not scheduled work or software-enforced retry limits**. All tasks below are pending until separately approved; acceptance checks below are proposed and have not run.
 
-| Task | Prerequisite | Owner / relevant files / deliverable | Acceptance and verification |
-| --- | --- | --- | --- |
-| F1 catalogue | This design reviewed; approve local contract | One agent; DB backup helpers, evidence helper, object-storage contract; versioned authenticated catalogue and producer completion/refusal logic | Snapshot membership, all report types/soft-deleted rows, text observed versions, bounded discovery, signed completion and idempotent resume tests; strict fixtures under isolated PostgreSQL/Moto. |
-| F2 independent-byte rehearsal | F1 | One agent; existing recovery seed/target helpers and a new focused spec; separate primary/copy/recovery buckets and explicit copy mapping | Primary denied; native-version and translated-identity contracts tested honestly; corruption, missing file/key, stale/partial catalogue and wrong mapping refuse. Re-run healthy control after faults. No claim of native AWS replication. |
-| F3 application recovery | F2; approved identity path | One agent; object-storage resolver/module plus API acceptance tests, new migrations only if independently justified | Restricted app role reads exact restored PDF/text and standard report bytes; authorized file links bind verified versions; tenant isolation/clinical holds unchanged. Do not relax evidence guards. |
-| F4 provider/custody drill | F3; founder deployment gates satisfied | Operator/custodians; separately scoped infrastructure/runbooks | Live synthetic retention/permission/encryption/backfill/lag controls, primary denied, restored API paths and offline key custody; actual provider evidence retained. No production operation until separately authorized. |
+| Task | Prerequisite | Owner / relevant files / deliverable |
+| --- | --- | --- |
+| F1 catalogue | Design reviewed; local contract approved | One agent; DB backup/evidence helpers and object-storage contract; authenticated catalogue and completion/refusal logic. |
+| F2 independent-byte rehearsal | F1 | One agent; recovery seed/target helpers and a new focused spec; separate primary/copy/recovery buckets and test-only mapping/probe. |
+| F3 application recovery | F2; identity path approved | One agent; storage resolver/module and API acceptance tests; migrations only if independently justified. |
+| F4 provider/custody drill | F3; all founder deployment gates satisfied | Operator/custodians; separately scoped infrastructure/runbooks and retained provider evidence. |
 
-F2/F3 controls must include: newer different source/destination versions and delete markers; missing pinned PDF with a latest substitute present; exact text corruption; completed unpinned VCF/JSON; tampered/missing/duplicate/foreign mapping; omitted soft-deleted reference; lost copy reply/resume; pagination truncation/repeated cursor/hard-cap boundaries; wrong/missing decryption or signing key; insufficient retention; interrupted recovery and owned temporary-file cleanup. Environment failures are not permission/retention passes.
+### Acceptance criteria — proposed, not yet run
 
-Record source physical DB bytes, archive/catalogue bytes, unique required PDF/text/VCF/JSON bytes and object counts, copied/verified/transferred totals separately; exact bytes plus decimal GB and binary GiB. Pair monotonic inventory/copy/download/verification/DB/end-to-end durations with their volume denominator, concurrency, runtime, storage and key/custody assumptions. Keep database recovery, independent byte recovery and application acceptance separate. Small synthetic timings do not establish production RTO; async replication does not establish zero RPO.
+- **F1:** snapshot membership covers all report types/soft-deleted rows and observed text versions; discovery is bounded; completion is signed; interrupted copy resumes idempotently. Test under isolated PostgreSQL/Moto fixtures.
+- **F2:** primary is denied; native-version and translated-identity contracts are distinguished honestly; corrupt/missing evidence, stale/partial catalogue and wrong mapping refuse. Re-run healthy controls after faults. No claim of native AWS replication.
+- **F3:** the restricted app role reads exact PDF/text/standard-report bytes and authorized links bind verified versions. Tenant isolation, clinical holds and evidence guards remain intact.
+- **F4:** live synthetic retention, permissions, encryption, backfill and lag checks pass with primary denied; restored API paths and offline custody work; provider evidence is retained. Production operations still require separate authorization.
 
-Reuse actual commands: `pnpm --filter @telesphoros/backend build`, `pnpm --filter @telesphoros/backend typecheck`, `pnpm --filter @telesphoros/backend lint`; focused `pnpm --filter @telesphoros/backend test --runInBand --runTestsByPath test/db/recovery-cli.pg-spec.ts` exercises **existing DB/primary evidence**, not the proposed file recovery. The existing three CI backend tiers require both `TEST_DATABASE_URL` and `TEST_S3_ENDPOINT`; tiers two/three add `TEST_STORAGE=postgres` and then `TEST_OBJECT_STORAGE=s3`. Use only helper-owned loopback targets. Future new-spec names/commands must be documented when implemented; no file-recovery CLI exists today.
+### Required F2/F3 refusal and recovery controls
+
+- **Newer/modified state:** newer different source/destination versions and delete markers; a missing pinned PDF despite a latest substitute being present.
+- **Data integrity:** exact text corruption and completed unpinned VCF/JSON.
+- **Mapping failures:** tampered, missing, duplicate or foreign mapping; omitted soft-deleted reference.
+- **Network/state:** lost copy reply and safe resume.
+- **Pagination boundaries:** truncated listings, repeated cursors and hard-cap boundaries.
+- **Crypto/policy:** wrong/missing decryption or signing key; insufficient retention.
+- **Lifecycle:** interrupted recovery and cleanup of owned temporary files.
+
+Environment failures are not permission/retention passes.
+
+### Measurement evidence
+
+Record source physical DB bytes, archive/catalogue bytes, unique required PDF/text/VCF/JSON bytes and object counts, copied/verified/transferred totals separately; exact bytes plus decimal GB and binary GiB. Pair monotonic inventory/copy/download/verification/DB/end-to-end durations with their volume denominator, concurrency, runtime, storage and key/custody assumptions.
+
+**Proposed evidence sink:** publish synthetic rehearsal measurements as structured JSON CI artifacts (for example, `report-file-recovery-metrics.json`) for historical review; stdout summaries alone are insufficient. Include the tested commit and aggregate measurements only, with sanitized runtime assumptions and check status; exclude report content, raw tenant/report IDs, object keys, signed URLs and resolved credentials. Retain live F4 drill evidence in the separately approved, access-controlled evidence destination. This is a future implementation requirement; no artifact producer or CI configuration is added by this plan.
+
+Keep database recovery, independent byte recovery and application acceptance separate. Small synthetic timings do not establish production RTO; async replication does not establish zero RPO.
+
+### Existing baseline commands — before F1
+
+**Do not run these expecting F1–F4 functionality to exist; they are the baseline to ensure main is unbroken before beginning F1.**
+
+```bash
+pnpm --filter @telesphoros/backend build
+pnpm --filter @telesphoros/backend typecheck
+pnpm --filter @telesphoros/backend lint
+pnpm --filter @telesphoros/backend test --runInBand --runTestsByPath test/db/recovery-cli.pg-spec.ts
+```
+
+The focused spec exercises **existing DB/primary evidence only**. Provision helper-owned loopback targets and set both `TEST_DATABASE_URL` and `TEST_S3_ENDPOINT` before the spec/service tiers; absent services mean skipped work, not acceptance.
+
+The existing three CI backend tiers use those service URLs; tiers two/three add `TEST_STORAGE=postgres` and then `TEST_OBJECT_STORAGE=s3`. Future new-spec names/commands must be documented when implemented; no file-recovery CLI exists today.
 
 Iterate from observed failures with focused checks, then required integration CI and actual service logs. Reassess after three unsuccessful repairs, repeated identical failures without new evidence or no measurable progress; classify implementation/environment/requirements/permissions. Stop for a missing decision/authorization only when it blocks the next approved slice. See [planning verification](../../verification/report-file-recovery-plan.md).
