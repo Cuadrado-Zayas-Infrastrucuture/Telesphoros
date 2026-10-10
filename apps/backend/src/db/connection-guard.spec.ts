@@ -44,7 +44,7 @@ describe('every database connection goes through the TLS contract', () => {
   it('the scan found the application source (a floor, so an empty read cannot pass) including every known connection site', () => {
     expect(files.length).toBeGreaterThan(40);
     const constructing = files.filter((f) => /new\s+(Pool|Client)\s*\(/.test(f.text)).map((f) => f.file).sort();
-    expect(constructing).toEqual(['db/backup.ts', 'db/cli.ts', 'db/database.ts', 'db/provision-logins.ts', 'db/restore.ts', 'ledger/verifier.ts']);
+    expect(constructing).toEqual(['db/backup.ts', 'db/cli.ts', 'db/database.ts', 'db/evidence-inventory.ts', 'db/provision-logins.ts', 'db/restore.ts', 'ledger/verifier.ts']);
   });
 
   it('no file bypasses pgClientConfig', () => {

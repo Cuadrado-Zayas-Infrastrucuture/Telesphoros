@@ -135,7 +135,7 @@ Cost review must count all retained versions and catalogue copies, growth/overwr
 
 ## Next implementation slices and acceptance
 
-These are prerequisites and verification requirements, **not scheduled work or software-enforced retry limits**. All tasks below are pending until separately approved; acceptance checks below are proposed and have not run.
+These are prerequisites and verification requirements, **not scheduled work or software-enforced retry limits**. F1 was separately approved and implemented as the [local catalogue slice](f1-evidence-catalogue.md); its current evidence and limits are in [verification](../../verification/f1-evidence-catalogue.md). F2–F4 remain pending separate approval; their acceptance checks below are proposed and have not run.
 
 | Task | Prerequisite | Owner / relevant files / deliverable |
 | --- | --- | --- |
@@ -144,7 +144,7 @@ These are prerequisites and verification requirements, **not scheduled work or s
 | F3 application recovery | F2; identity path approved | One agent; storage resolver/module and API acceptance tests; migrations only if independently justified. |
 | F4 provider/custody drill | F3; all founder deployment gates satisfied | Operator/custodians; separately scoped infrastructure/runbooks and retained provider evidence. |
 
-### Acceptance criteria — proposed, not yet run
+### Acceptance criteria — F1 local; F2–F4 proposed
 
 - **F1:** snapshot membership covers all report types/soft-deleted rows and observed text versions; discovery is bounded; completion is signed; interrupted copy resumes idempotently. Test under isolated PostgreSQL/Moto fixtures.
 - **F2:** primary is denied; native-version and translated-identity contracts are distinguished honestly; corrupt/missing evidence, stale/partial catalogue and wrong mapping refuse. Re-run healthy controls after faults. No claim of native AWS replication.
@@ -167,13 +167,13 @@ Environment failures are not permission/retention passes.
 
 Record source physical DB bytes, archive/catalogue bytes, unique required PDF/text/VCF/JSON bytes and object counts, copied/verified/transferred totals separately; exact bytes plus decimal GB and binary GiB. Pair monotonic inventory/copy/download/verification/DB/end-to-end durations with their volume denominator, concurrency, runtime, storage and key/custody assumptions.
 
-**Proposed evidence sink:** publish synthetic rehearsal measurements as structured JSON CI artifacts (for example, `report-file-recovery-metrics.json`) for historical review; stdout summaries alone are insufficient. Include the tested commit and aggregate measurements only, with sanitized runtime assumptions and check status; exclude report content, raw tenant/report IDs, object keys, signed URLs and resolved credentials. Retain live F4 drill evidence in the separately approved, access-controlled evidence destination. This is a future implementation requirement; no artifact producer or CI configuration is added by this plan.
+**Evidence sink:** publish synthetic rehearsal measurements as structured JSON CI artifacts (for example, `report-file-recovery-metrics.json`) for historical review; stdout summaries alone are insufficient. Include the tested commit and aggregate measurements only, with sanitized runtime assumptions and check status; exclude report content, raw tenant/report IDs, object keys, signed URLs and resolved credentials. Retain live F4 drill evidence in the separately approved, access-controlled evidence destination. The separate F1 slice now produces whitelisted aggregate JSON and uploads it as a seven-day CI artifact; see [measurement semantics](../../ops/evidence-catalogue.md#aggregate-measurement-artifacts). F2–F4 and live-drill sinks remain future requirements.
 
 Keep database recovery, independent byte recovery and application acceptance separate. Small synthetic timings do not establish production RTO; async replication does not establish zero RPO.
 
-### Existing baseline commands — before F1
+### Existing DB baseline commands
 
-**Do not run these expecting F1–F4 functionality to exist; they are the baseline to ensure main is unbroken before beginning F1.**
+**These existing commands exercise DB/primary evidence only. Do not run them expecting F2–F4 recovery functionality.** The separate [F1 runbook](../../ops/evidence-catalogue.md#available-verification-commands) lists the newly available catalogue specs.
 
 ```bash
 pnpm --filter @telesphoros/backend build
@@ -184,6 +184,6 @@ pnpm --filter @telesphoros/backend test --runInBand --runTestsByPath test/db/rec
 
 The focused spec exercises **existing DB/primary evidence only**. Provision helper-owned loopback targets and set both `TEST_DATABASE_URL` and `TEST_S3_ENDPOINT` before the spec/service tiers; absent services mean skipped work, not acceptance.
 
-The existing three CI backend tiers use those service URLs; tiers two/three add `TEST_STORAGE=postgres` and then `TEST_OBJECT_STORAGE=s3`. Future new-spec names/commands must be documented when implemented; no file-recovery CLI exists today.
+The existing three CI backend tiers use those service URLs; tiers two/three add `TEST_STORAGE=postgres` and then `TEST_OBJECT_STORAGE=s3`. F1 spec commands are documented in its runbook; no file-recovery CLI exists today.
 
 Iterate from observed failures with focused checks, then required integration CI and actual service logs. Reassess after three unsuccessful repairs, repeated identical failures without new evidence or no measurable progress; classify implementation/environment/requirements/permissions. Stop for a missing decision/authorization only when it blocks the next approved slice. See [planning verification](../../verification/report-file-recovery-plan.md).
