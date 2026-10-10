@@ -66,6 +66,37 @@ import { bearer } from './helpers/tokens';
   }
 
   describe('raising a dispute', () => {
+    it('an active dispute beyond the default public page still holds its clinical cell and appears in complete advisories', async () => {
+      const s = await evaluatedD01();
+      const other = await lab.person('independent', ['reviewer']);
+      const ids: string[] = [];
+      for (let i = 0; i < 20; i++) {
+        const d = (await raise(s.rev, { ...cellOf(resultFor(s.e, 'drugr')), note: 'SYN page filler' }).expect(201)).body;
+        ids.push(d.id);
+        await decide(other, d.id, { decision: 'dismissed', evidenceNote: 'SYN dismissed filler' }).expect(201);
+      }
+      const target = (await raise(s.rev, { ...cellOf(resultFor(s.e, 'drugq')), note: 'SYN off-page active cell' }).expect(201)).body;
+      const get = (query = '') => lab.api().get('/api/v1/cell-disputes' + query).set(bearer(s.clin.token));
+      const first = await get().expect(200);
+      expect(first.body.data.map((d: Json) => d.id)).toEqual(ids);
+      expect(first.body.meta).toEqual({ page: 1, pageSize: 20, total: 21, totalPages: 2 });
+      const second = await get('?page=2').expect(200);
+      expect(second.body.data.map((d: Json) => d.id)).toEqual([target.id]);
+      const open = await get('?status=open&pageSize=1').expect(200);
+      expect(open.body.data.map((d: Json) => d.id)).toEqual([target.id]);
+      expect(open.body.meta.total).toBe(1);
+      const empty = await get('?status=open&page=2&pageSize=1').expect(200);
+      expect(empty.body).toEqual({ data: [], meta: { page: 2, pageSize: 1, total: 1, totalPages: 1 } });
+      await get('?pageSize=100').expect(200);
+      for (const bad of ['page=0', 'page=-1', 'page=1.5', 'pageSize=0', 'pageSize=101', 'page=9007199254740991&pageSize=100', 'page=1&page=2', 'unknown=1']) await get('?' + bad).expect(400);
+      const after = (await lab.evaluate(s.clin, s.reportId, body(s)).expect(201)).body;
+      expect(resultFor(after, 'drugq')).toMatchObject({ outcome: 'held', reasonCode: 'cell-disputed', recommendationText: null });
+      expect(resultFor(after, 'drugr')).toEqual(resultFor(s.e, 'drugr'));
+      expect(after.advisory.activeDisputes).toBe(1);
+      const history = await lab.api().get('/api/v1/evaluations?pageSize=1').set(bearer(s.clin.token)).expect(200);
+      expect(history.body.data[0].advisory.activeDisputes).toBe(1);
+    });
+
     it('stores it as open, taking the guideline version and the file hash from the loaded knowledge, with only the note digest in the answer', async () => {
       const s = await evaluatedD01();
       const cell = cellOf(resultFor(s.e, 'drugq'));
@@ -321,18 +352,18 @@ import { bearer } from './helpers/tokens';
       for (const roles of [['reader'], ['clinician'], ['reviewer'], ['admin']]) {
         const who = await lab.person('x', roles);
         const list = await lab.api().get('/api/v1/cell-disputes').set(bearer(who.token)).expect(200);
-        expect(list.body.map((d: Json) => d.id)).toEqual(expect.arrayContaining([raised.id, second.id]));
-        expect(list.body.every((d: Json) => disputeDtoSchema.safeParse(d).success)).toBe(true);
+        expect(list.body.data.map((d: Json) => d.id)).toEqual(expect.arrayContaining([raised.id, second.id]));
+        expect(list.body.data.every((d: Json) => disputeDtoSchema.safeParse(d).success)).toBe(true);
         await lab.api().get(`/api/v1/cell-disputes/${raised.id}`).set(bearer(who.token)).expect(200);
       }
       const open = await lab.api().get('/api/v1/cell-disputes?status=open').set(bearer(s.clin.token)).expect(200);
-      expect(open.body.map((d: Json) => d.id)).toContain(raised.id);
-      expect(open.body.map((d: Json) => d.id)).not.toContain(second.id);
-      expect((await lab.api().get('/api/v1/cell-disputes?status=dismissed').set(bearer(s.clin.token)).expect(200)).body.map((d: Json) => d.id)).toContain(second.id);
+      expect(open.body.data.map((d: Json) => d.id)).toContain(raised.id);
+      expect(open.body.data.map((d: Json) => d.id)).not.toContain(second.id);
+      expect((await lab.api().get('/api/v1/cell-disputes?status=dismissed').set(bearer(s.clin.token)).expect(200)).body.data.map((d: Json) => d.id)).toContain(second.id);
       await lab.api().get('/api/v1/cell-disputes?status=nope').set(bearer(s.clin.token)).expect(400);
 
       const stranger = await lab.person('stranger', ['admin'], 'tenant-elsewhere');
-      expect((await lab.api().get('/api/v1/cell-disputes').set(bearer(stranger.token)).expect(200)).body).toEqual([]);
+      expect((await lab.api().get('/api/v1/cell-disputes').set(bearer(stranger.token)).expect(200)).body.data).toEqual([]);
       await lab.api().get(`/api/v1/cell-disputes/${raised.id}`).set(bearer(stranger.token)).expect(404);
       await lab.api().get(`/api/v1/cell-disputes/${randomUUID()}`).set(bearer(s.clin.token)).expect(404);
     });

@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
-import { type EvaluationCreate, type EvaluationDto, type EvaluationListQuery, type EvaluationSummaryDto, PIPELINE_SCOPE } from '@telesphoros/shared-types';
+import { buildMeta, type Paginated, type EvaluationCreate, type EvaluationDto, type EvaluationListQuery, type EvaluationSummaryDto, PIPELINE_SCOPE } from '@telesphoros/shared-types';
 import type { Principal } from '../auth/principal';
 import { AppException } from '../common/app-exception';
 import { ENV, type Env } from '../config/env';
@@ -115,15 +115,15 @@ export class EvaluationsService {
     }
   }
 
-  async list(principal: Principal, query: EvaluationListQuery): Promise<EvaluationSummaryDto[]> {
+  async list(principal: Principal, query: EvaluationListQuery): Promise<Paginated<EvaluationSummaryDto>> {
     const ledger = this.need(this.ledger);
-    const { current, ...filter } = query;
-    const records = await ledger.listEvaluations(principal.tenantId, { ...filter, current: current === 'true' });
+    const { current, page, pageSize, ...filter } = query;
+    const { items: records, total } = await ledger.listEvaluations(principal.tenantId, { ...filter, current: current === 'true' }, { offset: (page - 1) * pageSize, limit: pageSize });
     const disputes = await this.activeDisputes(principal.tenantId);
     const currentIds = await ledger.currentEvaluationIds(principal.tenantId, [...new Set(records.map((r) => r.reportId as string))]);
     const out: EvaluationSummaryDto[] = [];
     for (const record of records) out.push(toEvaluationSummaryDto(record, await this.context(principal.tenantId, record, disputes, currentIds)));
-    return out;
+    return { data: out, meta: buildMeta(page, pageSize, total) };
   }
 
   async get(principal: Principal, id: string): Promise<EvaluationDto> {

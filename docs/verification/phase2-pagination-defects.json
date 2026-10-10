@@ -1,0 +1,73 @@
+{
+  "runtime": "Node 22.22.0 / Unicode 16.0",
+  "storage": "isolated PostgreSQL 16 application role, synthetic only",
+  "defects": [
+    {
+      "defect": "evaluation-limit",
+      "source": "apps/backend/src/storage/postgres/ledger-records.repository.ts",
+      "exitCode": 1,
+      "assertionRejected": true,
+      "restoredSha256": "a24afd7a7de252fbccf9e2cb0147977f0c26685c15cba32793b688c46c56fb65"
+    },
+    {
+      "defect": "evaluation-offset",
+      "source": "apps/backend/src/storage/postgres/ledger-records.repository.ts",
+      "exitCode": 1,
+      "assertionRejected": true,
+      "restoredSha256": "a24afd7a7de252fbccf9e2cb0147977f0c26685c15cba32793b688c46c56fb65"
+    },
+    {
+      "defect": "evaluation-patient-filter",
+      "source": "apps/backend/src/storage/postgres/ledger-records.repository.ts",
+      "exitCode": 1,
+      "assertionRejected": true,
+      "restoredSha256": "a24afd7a7de252fbccf9e2cb0147977f0c26685c15cba32793b688c46c56fb65"
+    },
+    {
+      "defect": "dispute-status-filter",
+      "source": "apps/backend/src/storage/postgres/ledger-records.repository.ts",
+      "exitCode": 1,
+      "assertionRejected": true,
+      "restoredSha256": "a24afd7a7de252fbccf9e2cb0147977f0c26685c15cba32793b688c46c56fb65"
+    },
+    {
+      "defect": "internal-disputes-truncated",
+      "source": "apps/backend/src/storage/postgres/ledger-records.repository.ts",
+      "exitCode": 1,
+      "assertionRejected": true,
+      "restoredSha256": "a24afd7a7de252fbccf9e2cb0147977f0c26685c15cba32793b688c46c56fb65"
+    },
+    {
+      "defect": "page-size-cap",
+      "source": "packages/shared-types/src/lab-report.ts",
+      "exitCode": 1,
+      "assertionRejected": true,
+      "restoredSha256": "5909e98516036061de70e5a55c7720afcdc23a7404a2dc6aee0fb55ee6131ffc"
+    },
+    {
+      "defect": "frontend-page-position-on-refusal",
+      "source": "apps/frontend/src/pages/LocalOperationsPage.tsx",
+      "exitCode": 1,
+      "assertionRejected": true,
+      "restoredSha256": "69846189df8f029e04d4a26ad73a4798a79da4b8d5455bcfed21186f53041bfc"
+    }
+  ],
+  "restoredControls": [
+    {
+      "control": "repository",
+      "exitCode": 0
+    },
+    {
+      "control": "off-page-overlay",
+      "exitCode": 0
+    },
+    {
+      "control": "shared",
+      "exitCode": 0
+    },
+    {
+      "control": "frontend",
+      "exitCode": 0
+    }
+  ]
+}

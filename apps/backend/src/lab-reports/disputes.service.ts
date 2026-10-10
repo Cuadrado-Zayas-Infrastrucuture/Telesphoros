@@ -1,5 +1,5 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import { CLINICAL_USE, cellUsageDtoSchema, type CellUsageDto, type CellUsageQuery, type DisputeCreate, type DisputeDecisionCreate, type DisputeDto, type DisputeListQuery } from '@telesphoros/shared-types';
+import { buildMeta, type Paginated, CLINICAL_USE, cellUsageDtoSchema, type CellUsageDto, type CellUsageQuery, type DisputeCreate, type DisputeDecisionCreate, type DisputeDto, type DisputeListQuery } from '@telesphoros/shared-types';
 import type { Principal } from '../auth/principal';
 import { AppException } from '../common/app-exception';
 import type { KnowledgeSet } from '../services/knowledge/knowledge-set';
@@ -63,9 +63,11 @@ export class DisputesService {
     return this.present(knowledge, found);
   }
 
-  async list(principal: Principal, query: DisputeListQuery): Promise<DisputeDto[]> {
+  async list(principal: Principal, query: DisputeListQuery): Promise<Paginated<DisputeDto>> {
     const { ledger, knowledge } = this.need();
-    return (await ledger.listDisputes(principal.tenantId)).filter((d) => !query.status || d.status === query.status).map((d) => this.present(knowledge, d));
+    const { page, pageSize, status } = query;
+    const { items, total } = await ledger.pageDisputes(principal.tenantId, { offset: (page - 1) * pageSize, limit: pageSize }, status);
+    return { data: items.map((d) => this.present(knowledge, d)), meta: buildMeta(page, pageSize, total) };
   }
 
   async evaluations(principal: Principal, id: string, query: CellUsageQuery): Promise<CellUsageDto> {

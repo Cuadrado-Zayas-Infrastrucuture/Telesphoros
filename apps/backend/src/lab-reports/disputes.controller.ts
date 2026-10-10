@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import {
+  type Paginated,
   type CellUsageDto, type CellUsageQuery, cellUsageQuerySchema, type DisputeCreate, disputeCreateSchema, type DisputeDecisionCreate, disputeDecisionCreateSchema, type DisputeDto, type DisputeListQuery, disputeListQuerySchema, type IdParam, idParamSchema,
 } from '@telesphoros/shared-types';
 import { CurrentPrincipal, Roles } from '../auth/decorators';
@@ -33,7 +34,7 @@ export class DisputesController {
   }
 
   @Get()
-  list(@CurrentPrincipal() principal: Principal, @Query(new ZodValidationPipe(disputeListQuerySchema)) query: DisputeListQuery): Promise<DisputeDto[]> {
+  list(@CurrentPrincipal() principal: Principal, @Query(new ZodValidationPipe(disputeListQuerySchema)) query: DisputeListQuery): Promise<Paginated<DisputeDto>> {
     return this.disputes.list(principal, query);
   }
 

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { paginationQuerySchema } from './pagination';
 
 /**
  * The lab-report pipeline's public shapes (slice 5B-3.2). The pipeline is a SYNTHETIC, NON-PRODUCTION integration: the reader and the
@@ -182,12 +183,12 @@ export type EvaluationDto = z.infer<typeof evaluationDtoSchema>;
 export const evaluationSummaryDtoSchema = evaluationDtoSchema.omit({ geneInputs: true });
 export type EvaluationSummaryDto = z.infer<typeof evaluationSummaryDtoSchema>;
 
-export const evaluationListQuerySchema = z.strictObject({
+export const evaluationListQuerySchema = paginationQuerySchema.extend({
   reportId: z.uuid().optional(),
   patientId: z.uuid().optional(),
   /** `current=true` keeps only the current evaluation of each report. Only the value `true` is accepted. */
   current: z.literal('true').optional(),
-});
+}).refine((query) => Number.isSafeInteger((query.page - 1) * query.pageSize), { path: ['page'], message: 'Page offset is too large.' });
 export type EvaluationListQuery = z.infer<typeof evaluationListQuerySchema>;
 
 /** Read-only dispute impact listing. The cursor advances over historical candidates, including excluded file versions. */
@@ -236,7 +237,8 @@ export const disputeDecisionCreateSchema = z.strictObject({
 });
 export type DisputeDecisionCreate = z.infer<typeof disputeDecisionCreateSchema>;
 
-export const disputeListQuerySchema = z.strictObject({ status: z.enum(DISPUTE_STATUSES).optional() });
+export const disputeListQuerySchema = paginationQuerySchema.extend({ status: z.enum(DISPUTE_STATUSES).optional() })
+  .refine((query) => Number.isSafeInteger((query.page - 1) * query.pageSize), { path: ['page'], message: 'Page offset is too large.' });
 export type DisputeListQuery = z.infer<typeof disputeListQuerySchema>;
 
 const noteRef = z.strictObject({ id: z.uuid(), bodySha256: sha256 });
