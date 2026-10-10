@@ -33,7 +33,7 @@ export default function HomePage() {
         </h1>
         <p className="text-lg text-muted-foreground">
           Upload a pharmacogenomic report and review CPIC-guided recommendations. This build is the
-          frontend foundation: layout, design system and a sample upload form.
+          synthetic environment: upload verification is available; clinical processing and release remain separate.
         </p>
         <div>
           <Button asChild size="lg">

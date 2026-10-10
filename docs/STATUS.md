@@ -5,7 +5,7 @@ Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and
 
 ## Current frontend foundation closure
 
-Phase 0 skeleton accepted by founder on 2026-10-09. Phase 1 closure merged as PR #50, with all seven CI checks passing; the founder confirmed the merge. It adds local-screen field errors/focus, shared token controls, mobile/keyboard checks, separate form-component files and all-page chunk guards. Standard product upload remains a browser-only sample stub; clinical logic and hosting are untouched. Evidence: [Phase 1 closure](verification/phase1-closure.md). No later phase is marked complete by this change.
+Phase 0 skeleton accepted by founder on 2026-10-09. Phase 1 closure merged as PR #50, with all seven CI checks passing; the founder confirmed the merge. It adds local-screen field errors/focus, shared token controls, mobile/keyboard checks, separate form-component files and all-page chunk guards. That closure left standard product upload as a browser-only sample stub; its later transport slice is tracked below. Clinical logic and hosting were untouched. Evidence: [Phase 1 closure](verification/phase1-closure.md). No later phase is marked complete by this change.
 
 ## Current Phase 2 closure
 
@@ -21,7 +21,11 @@ Founder authorized this continuation with “go” on 2026-10-10. Incomplete bac
 
 ## Phase 3D1 report registration retries
 
-Founder approved this prerequisite to standard product upload on 2026-10-10. Optional request keys make report metadata creation retryable per tenant and creator, with immutable original-input fingerprints, concurrent PostgreSQL uniqueness and soft-delete reservations. See [plan](design/plans/phase3d1-report-registration.md) and [verification](verification/phase3d1-report-registration.md). PR/final-head CI acceptance remains pending. The product upload form is still a stub; authentication/hosting acceptance, report-file recovery and live provider/scheduler/custody remain separate gates. This does not accept all Phase 3 or authorize clinical use/deployment.
+Founder approved this prerequisite to standard product upload on 2026-10-10. Optional request keys make report metadata creation retryable per tenant and creator, with immutable original-input fingerprints, concurrent PostgreSQL uniqueness and soft-delete reservations. See [plan](design/plans/phase3d1-report-registration.md) and [verification](verification/phase3d1-report-registration.md). PR #58 merged after all seven exact-head CI jobs passed; inspected database tiers passed 1,558 / 1,739 / 1,740 with zero failures or missing-service notices. The product form transport is tracked separately below; authentication/hosting acceptance, report-file recovery and live provider/scheduler/custody remain separate gates. This does not accept all Phase 3 or authorize clinical use/deployment.
+
+## Phase 3D2 standard synthetic upload
+
+Founder approved the separate transport/UI plan with “go” on 2026-10-10 after PR #58. The standard VCF/JSON screen selects existing patients from bounded pages, registers with retry keys, transfers through an explicit storage-origin allowlist and shows success only after server verification. See [plan](design/plans/phase3d2-product-upload.md), [runbook](ops/report-upload.md) and [verification](verification/phase3d2-product-upload.md). Local verification/final-head CI and founder review remain gates until their recorded results. Retry state is limited to the mounted form; reload recovery, PDF/local experiment changes, independent report-file recovery, clinical processing and live deployment acceptance remain separate. Nothing is deployed or approved clinically.
 
 ## What exists on `main`
 
