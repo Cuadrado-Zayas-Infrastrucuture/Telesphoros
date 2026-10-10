@@ -14,7 +14,7 @@ import { cleanupScratch, emulator, newBucket, S3_ENDPOINT, tempDir } from '../he
 import { type Gateway, startGateway } from '../helpers/provider-gateway';
 import { type PinnedPdf, verifyPinnedPdf } from '../helpers/recovery-evidence';
 import { EXPECTED_ROWS, GENERATOR, seedRecovery } from '../helpers/recovery-seed';
-import { recoveryTarget } from '../helpers/recovery-target';
+import { prepareRecoveryRoles, recoveryTarget } from '../helpers/recovery-target';
 import { assertSchemaAcceptance } from '../helpers/schema-acceptance';
 
 serializeRestoreSuites();
@@ -111,12 +111,7 @@ suite('built format 2 CLI current-schema recovery rehearsal', () => {
     evidence.backupSeconds = backup.seconds; evidence.uploadSeconds = upload.seconds; evidence.producerPhases = [...backup.events, ...upload.events];
     // Fresh cluster has no application/ledger roles: exercise the actual built CLI refusal before provisioning.
     await refused('missing-target-roles', restoreArgs(), /FAIL\s+required roles/);
-    await withAdmin(target.url, async c => {
-      for (const role of manifest.privileges!.roles) {
-        const exists = await c.query('SELECT 1 FROM pg_roles WHERE rolname=$1', [role]);
-        if (!exists.rowCount) await c.query(`CREATE ROLE ${quoteIdent(role)} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS`);
-      }
-    });
+    await prepareRecoveryRoles(target.url, manifest.privileges!.roles);
   }, 180000);
 
   afterAll(async () => {
