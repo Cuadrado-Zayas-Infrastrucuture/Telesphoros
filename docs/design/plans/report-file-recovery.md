@@ -111,9 +111,14 @@ Publish nothing after incomplete discovery. Claim neither completeness nor newes
 
 ## Custody, operational and cost gates
 
-Separate application, copy producer, recovery reader and destination administrator identities. Application credentials must not read/write/delete recovery storage, shorten locks, change destination policy or disable/delete its key. Recovery reader cannot write/delete. Protect both destination decryption and catalogue signing keys from primary administrators; keep tested offline custody/recovery procedures. KMS replication needs explicit encrypted-object selection, destination key configuration and scoped source/decrypt plus destination/encrypt permissions; a configured rule is not proof of working replication. [Encrypted replication](https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication-config-for-kms-objects.html).
+**Custody and operational principles:**
 
-Require private storage, encryption in transit/at rest, least privilege and scoped service resource conditions; encrypted audit logging, CloudTrail data events, copy failure/lag metrics and freshness alerts must cover primary and recovery paths. Audit trails must not include report content. Denied delete tests belong to disposable synthetic canaries, never real retained evidence. [S3 security guidance](https://docs.aws.amazon.com/AmazonS3/latest/userguide/security-best-practices.html).
+- **Role separation:** separate application, copy producer, recovery reader and destination administrator identities.
+- **Least privilege:** application credentials must not read/write/delete recovery storage, shorten locks, change destination policy or disable/delete its key. Recovery readers cannot write/delete.
+- **Key isolation:** protect destination decryption and catalogue signing keys from primary administrators; keep tested offline custody/recovery procedures.
+- **KMS replication:** require explicit encrypted-object selection, destination key configuration and scoped source/decrypt plus destination/encrypt permissions. A configured rule is not proof of working replication. [Encrypted replication](https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication-config-for-kms-objects.html).
+- **Security and audit:** require private storage, encryption in transit/at rest and scoped service resource conditions. Encrypted audit logging, CloudTrail data events, copy failure/lag metrics and freshness alerts must cover primary and recovery paths. Audit trails must not include report content.
+- **Canary isolation:** denied-delete tests belong to disposable synthetic canaries, never real retained evidence. [S3 security guidance](https://docs.aws.amazon.com/AmazonS3/latest/userguide/security-best-practices.html).
 
 ### Founder deployment gates — required before F4
 
@@ -148,19 +153,23 @@ These are prerequisites and verification requirements, **not scheduled work or s
 
 ### Required F2/F3 refusal and recovery controls
 
-- Newer different source/destination versions and delete markers; a missing pinned PDF despite a latest substitute being present.
-- Exact text corruption and completed unpinned VCF/JSON.
-- Tampered, missing, duplicate or foreign mapping; omitted soft-deleted reference.
-- Lost copy reply and safe resume.
-- Truncated listings, repeated cursors and hard-cap boundaries.
-- Wrong/missing decryption or signing key; insufficient retention.
-- Interrupted recovery and cleanup of owned temporary files.
+- **Newer/modified state:** newer different source/destination versions and delete markers; a missing pinned PDF despite a latest substitute being present.
+- **Data integrity:** exact text corruption and completed unpinned VCF/JSON.
+- **Mapping failures:** tampered, missing, duplicate or foreign mapping; omitted soft-deleted reference.
+- **Network/state:** lost copy reply and safe resume.
+- **Pagination boundaries:** truncated listings, repeated cursors and hard-cap boundaries.
+- **Crypto/policy:** wrong/missing decryption or signing key; insufficient retention.
+- **Lifecycle:** interrupted recovery and cleanup of owned temporary files.
 
 Environment failures are not permission/retention passes.
 
 ### Measurement evidence
 
-Record source physical DB bytes, archive/catalogue bytes, unique required PDF/text/VCF/JSON bytes and object counts, copied/verified/transferred totals separately; exact bytes plus decimal GB and binary GiB. Pair monotonic inventory/copy/download/verification/DB/end-to-end durations with their volume denominator, concurrency, runtime, storage and key/custody assumptions. Keep database recovery, independent byte recovery and application acceptance separate. Small synthetic timings do not establish production RTO; async replication does not establish zero RPO.
+Record source physical DB bytes, archive/catalogue bytes, unique required PDF/text/VCF/JSON bytes and object counts, copied/verified/transferred totals separately; exact bytes plus decimal GB and binary GiB. Pair monotonic inventory/copy/download/verification/DB/end-to-end durations with their volume denominator, concurrency, runtime, storage and key/custody assumptions.
+
+**Proposed evidence sink:** publish synthetic rehearsal measurements as structured JSON CI artifacts (for example, `report-file-recovery-metrics.json`) for historical review; stdout summaries alone are insufficient. Include the tested commit and aggregate measurements only, with sanitized runtime assumptions and check status; exclude report content, raw tenant/report IDs, object keys, signed URLs and resolved credentials. Retain live F4 drill evidence in the separately approved, access-controlled evidence destination. This is a future implementation requirement; no artifact producer or CI configuration is added by this plan.
+
+Keep database recovery, independent byte recovery and application acceptance separate. Small synthetic timings do not establish production RTO; async replication does not establish zero RPO.
 
 ### Existing baseline commands — before F1
 

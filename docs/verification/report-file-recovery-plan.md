@@ -17,6 +17,8 @@ Local review checked 81 relative file links across the five changed pages, exist
 
 Readability checks passed: eight ordered contract headings, six deployment checklist items and a three-column task table with acceptance controls below it. Verification/publication and cryptographic/logging constraints are separate rules; pagination failures are separate bullets. The bridge keeps the catalogue necessary for both architectures and the local mapping probe distinct from a production resolver. F4 retrieval/transfer costs and existing-baseline-only command warnings are explicit. All 81 links resolve; no zero-width/BOM artifact is present.
 
+Final polish exposes six labelled custody/operational principles and seven labelled refusal/recovery controls. Synthetic measurement output is explicitly proposed as aggregate-only JSON CI artifacts, with live drill evidence retained in a separately approved controlled destination. No artifact producer or CI change is implied.
+
 ## Known limits and next action
 
 The design is concrete for review but the copy catalogue, recovery resolver, scheduling/limits, independent recovery and live permission/Compliance tests do not exist. Primary/current-version hash checks do not make text version-pinned. Native replication and ordinary copy have different VersionId semantics. Region/provider/custody, retention, budget, RPO/RTO and deployment eligibility remain founder gates. Approve a separate local F1 implementation after this planning PR; wider Phase 3/clinical acceptance remains open.
