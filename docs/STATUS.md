@@ -1,7 +1,11 @@
 # Status, history and working agreements
 
-Read this first to pick the project up. Snapshot: **2026-10-08**. Update it in the same pull request as any change it describes.
+Read this first to pick the project up. Snapshot: **2026-10-09**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
+
+## Current frontend foundation closure
+
+Phase 0 skeleton accepted by founder on 2026-10-09. Phase 1 closure is on a separate PR branch, locally verified, awaiting CI/review and founder phase acceptance. It adds local-screen field errors/focus, shared token controls, mobile/keyboard checks, separate form-component files and all-page chunk guards. Standard product upload remains a browser-only sample stub; clinical logic and hosting are untouched. Evidence: [Phase 1 closure](verification/phase1-closure.md). No later phase is marked complete by this change.
 
 ## What exists on `main`
 

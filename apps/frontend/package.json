@@ -10,8 +10,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "check:chunks": "node scripts/check-chunks.mjs",
-    "e2e": "pnpm --filter @telesphoros/fake-idp build && pnpm --filter @telesphoros/backend build && vite build --mode e2e --outDir dist-e2e && playwright test",
+    "check:chunks": "node scripts/check-chunks.mjs && node scripts/check-foundation.mjs",
+    "e2e": "pnpm --filter @telesphoros/fake-idp build && pnpm --filter @telesphoros/backend build && vite build --mode e2e --outDir dist-e2e && playwright test && playwright test --config playwright.local.config.ts",
     "build:e2e": "vite build --mode e2e --outDir dist-e2e"
   },
   "dependencies": {

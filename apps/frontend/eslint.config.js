@@ -24,6 +24,8 @@ export default tseslint.config(
     files: ['src/**/*.{ts,tsx}'],
     ignores: ['src/**/*.test.{ts,tsx}'],
     rules: {
+      // Named overflow regions need keyboard focus to scroll their unmodified evidence.
+      'jsx-a11y/no-noninteractive-tabindex': ['error', { roles: ['region'] }],
       'no-restricted-syntax': [
         'error',
         { selector: `Literal[value=/${ARBITRARY}/]`, message },

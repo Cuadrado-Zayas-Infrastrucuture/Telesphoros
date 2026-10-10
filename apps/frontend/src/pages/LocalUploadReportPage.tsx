@@ -37,7 +37,7 @@ const emptyValues = {
   syntheticConfirmed: false,
 } as unknown as UploadReportValues;
 
-export default function UploadReportPage() {
+export default function LocalUploadReportPage() {
   const { apiFetch } = useAuth();
   const progress = useRef<UploadProgress>({});
   usePageTitle('Upload report');
@@ -187,7 +187,7 @@ export default function UploadReportPage() {
                             onChange={(event) => onChange(event.target.checked)}
                           />
                         </FormControl>
-                        <FormLabel className="leading-normal">
+                        <FormLabel className="flex min-h-control items-center leading-normal">
                           I confirm this file contains synthetic data only (required)
                         </FormLabel>
                       </div>
