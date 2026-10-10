@@ -19,7 +19,7 @@ pnpm --filter @telesphoros/backend build && JWT_SECRET=<32+ chars> pnpm --filter
 | GET | `/ready` | public | **Readiness**: safe to receive traffic. Runs dependency checks (the database joins in Phase 3); `503 SERVICE_UNAVAILABLE` while any is down. |
 | GET, POST | `/patients` | any token / `clinician`,`admin` | Paginated list; create |
 | GET, PUT, DELETE | `/patients/:id` | any token / `clinician`,`admin` | PUT replaces; delete is refused (409) while reports exist |
-| GET, POST | `/reports` | any token / `clinician`,`admin` | Metadata only; the file goes to object storage in Phase 3. Status is always set by the system. |
+| GET, POST | `/reports` | any token / `clinician`,`admin` | Metadata only; optional UUID `requestId` makes registration retryable for that tenant/creator. Status is always set by the system. |
 | GET, PATCH, DELETE | `/reports/:id` | any token / `clinician`,`admin` | PATCH corrects `type` / `filename`; DELETE is a soft delete |
 | POST | `/reports/:id/upload-url` | `clinician`,`admin` | Step 1 of an upload: short-lived URL for ONE object (body: `contentType`, `sha256`) |
 | POST | `/reports/:id/complete` | `clinician`,`admin` | Step 2: the server verifies size, type and SHA-256 of the stored file, then marks it uploaded |

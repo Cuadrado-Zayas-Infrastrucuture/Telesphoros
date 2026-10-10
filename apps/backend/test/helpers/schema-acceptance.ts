@@ -35,6 +35,7 @@ const primaryKeys: Record<string, string> = {
 };
 const uniqueKeys: Record<string, string> = {
   patients_id_tenant_uq: 'id, tenant_id', reports_id_tenant_uq: 'id, tenant_id',
+  reports_creation_request_uq: 'tenant_id, created_by, creation_request_id',
   reports_id_patient_tenant_uq: 'id, patient_id, tenant_id', reports_tenant_patient_id_uq: 'tenant_id, patient_id, id',
   ledger_events_id_tenant_uq: 'id, tenant_id', ledger_events_subject_uq: 'subject_table, subject_id',
   ledger_events_tenant_prev_uq: 'tenant_id, prev_hash', ledger_events_tenant_seq_uq: 'tenant_id, seq',
@@ -51,7 +52,7 @@ const uniqueKeys: Record<string, string> = {
 // Complete CHECK inventory; semantic refusal/control tests remain in the existing behavior suites.
 const checkNames: Record<string, string> = {
   patients: 'created_by_len label_format tenant_id_len',
-  reports: 'created_by_len filename_format lab_pdf_pinned object_version_valid pin_after_upload sha256_format size_range status_valid tenant_id_len type_valid upload_consistent upload_requested_by_len uploaded_by_len',
+  reports: 'created_by_len creation_request_pair filename_format lab_pdf_pinned object_version_valid pin_after_upload sha256_format size_range status_valid tenant_id_len type_valid upload_consistent upload_requested_by_len uploaded_by_len',
   recommendations: 'created_by_len strength_valid tenant_id_len',
   report_captures: 'created_by_len hashes key_len poppler runner scalars tenant_id_len',
   capture_acceptances: 'created_by_len decision poppler tenant_id_len text_hash',

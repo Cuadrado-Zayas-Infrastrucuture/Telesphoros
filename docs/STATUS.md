@@ -19,6 +19,10 @@ Founder approved the revised local/synthetic plan on 2026-10-10. PR #54 merged e
 
 Founder authorized this continuation with “go” on 2026-10-10. Incomplete backup listings now throw `IncompleteBackupListingError`; latest recovery aborts before object reads, temporary files or restore execution instead of choosing from a truncated window. Local boundary controls, emulator pagination and PostgreSQL/S3 regressions are recorded in [verification](verification/phase3b-backup-discovery.md); see the [scoped plan](design/plans/phase3b-backup-discovery.md). Final-head CI and founder review remain PR acceptance gates. Phase 3C's dataset-size/timing rehearsal and report-file recovery remain separate; this does not accept all Phase 3.
 
+## Phase 3D1 report registration retries
+
+Founder approved this prerequisite to standard product upload on 2026-10-10. Optional request keys make report metadata creation retryable per tenant and creator, with immutable original-input fingerprints, concurrent PostgreSQL uniqueness and soft-delete reservations. See [plan](design/plans/phase3d1-report-registration.md) and [verification](verification/phase3d1-report-registration.md). PR/final-head CI acceptance remains pending. The product upload form is still a stub; authentication/hosting acceptance, report-file recovery and live provider/scheduler/custody remain separate gates. This does not accept all Phase 3 or authorize clinical use/deployment.
+
 ## What exists on `main`
 
 | Phase | What it added | Where to read more |

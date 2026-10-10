@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { IntegrityError } from './errors';
 import { byCreatedAt, type Page, type PageRequest, type ReportRecord, slicePage } from './records';
 
 export interface ReportFilter {
@@ -11,6 +12,8 @@ export abstract class ReportsRepository {
   abstract findById(tenantId: string, id: string): Promise<ReportRecord | undefined>;
   abstract countByPatient(tenantId: string, patientId: string): Promise<number>;
   abstract insert(record: ReportRecord): Promise<void>;
+  /** Atomic keyed creation: replay the same original metadata; conflicting or deleted identities refuse. */
+  abstract insertOrReplay(record: ReportRecord): Promise<ReportRecord>;
   /** Changes only what a person may edit: type, file name, status. Never the stored file's identity. */
   abstract update(record: ReportRecord): Promise<void>;
   /**
@@ -26,6 +29,8 @@ export abstract class ReportsRepository {
 @Injectable()
 export class InMemoryReportsRepository extends ReportsRepository {
   private readonly rows = new Map<string, ReportRecord>();
+  // Keep a reservation even when the live row is deleted, like PostgreSQL's retained soft-delete row.
+  private readonly creationRequests = new Map<string, { id: string; hash: string }>();
 
   private owned(tenantId: string) {
     return [...this.rows.values()].filter((row) => row.tenantId === tenantId);
@@ -43,7 +48,25 @@ export class InMemoryReportsRepository extends ReportsRepository {
     return this.owned(tenantId).filter((row) => row.patientId === patientId).length;
   }
   async insert(record: ReportRecord) {
+    if (record.creationRequestId && record.creationRequestHash) {
+      const key = JSON.stringify([record.tenantId, record.createdBy, record.creationRequestId]);
+      if (this.creationRequests.has(key)) throw new IntegrityError('reports_creation_request_uq');
+      this.creationRequests.set(key, { id: record.id, hash: record.creationRequestHash });
+    }
     this.rows.set(record.id, { ...record });
+  }
+  async insertOrReplay(record: ReportRecord): Promise<ReportRecord> {
+    if (!record.creationRequestId || !record.creationRequestHash) throw new Error('Missing report creation identity');
+    const key = JSON.stringify([record.tenantId, record.createdBy, record.creationRequestId]);
+    const prior = this.creationRequests.get(key);
+    if (prior) {
+      const current = this.rows.get(prior.id);
+      if (!current || prior.hash !== record.creationRequestHash) throw new IntegrityError('reports_creation_request_uq');
+      return { ...current };
+    }
+    // insert reserves synchronously before returning its promise; concurrent calls cannot both create a row.
+    await this.insert(record);
+    return { ...record };
   }
   async update(record: ReportRecord) {
     const row = this.rows.get(record.id);

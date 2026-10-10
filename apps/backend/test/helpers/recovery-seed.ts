@@ -53,7 +53,10 @@ export async function seedRecovery(pg: EphemeralDatabase, storage: S3ObjectStora
         for (let i = 0; i < GENERATOR.coreRowsPerTenant; i++) {
           const patient = randomUUID(); const report = randomUUID();
           await c.query('INSERT INTO patients (id,tenant_id,created_by,label) VALUES ($1,$2,$3,$4)', [patient, tenant, 'syn-uploader', `SYN-CORE-${i}`]);
-          await c.query(`INSERT INTO reports (id,tenant_id,created_by,patient_id,type,original_filename,size_bytes) VALUES ($1,$2,$3,$4,'vcf','synthetic.vcf',100)`, [report, tenant, 'syn-uploader', patient]);
+          const requestId = i === 0 ? '3d100000-0000-4000-8000-000000000001' : null;
+          const requestHash = requestId ? sha(JSON.stringify([patient, 'vcf', 'synthetic.vcf', 100])) : null;
+          await c.query(`INSERT INTO reports (id,tenant_id,created_by,patient_id,type,original_filename,size_bytes,creation_request_id,creation_request_hash)
+            VALUES ($1,$2,$3,$4,'vcf','synthetic.vcf',100,$5,$6)`, [report, tenant, 'syn-uploader', patient, requestId, requestHash]);
           await c.query(`INSERT INTO recommendations (tenant_id,created_by,patient_id,report_id,gene,drug,phenotype,summary,strength,guideline_version)
             VALUES ($1,$2,$3,$4,'SYN','syn-drug','synthetic','synthetic','Strong','syn-1')`, [tenant, 'syn-uploader', patient, report]);
         }
