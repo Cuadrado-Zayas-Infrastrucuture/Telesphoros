@@ -1,0 +1,63 @@
+{
+  "runtime": "Node 22.22.0 / Unicode 16.0",
+  "storage": "isolated PostgreSQL 16, application role and explicit predicates under superuser bypass, synthetic only",
+  "defects": [
+    {
+      "defect": "oldest-acceptance",
+      "source": "apps/backend/src/storage/postgres/ledger-records.repository.ts",
+      "exitCode": 1,
+      "assertionRejected": true,
+      "restoredSha256": "22375d6b62610b33740a0af13eb5ad718542ae16439689fd7fd06c274f44d981"
+    },
+    {
+      "defect": "global-latest-capture",
+      "source": "apps/backend/src/storage/postgres/ledger-records.repository.ts",
+      "exitCode": 1,
+      "assertionRejected": true,
+      "restoredSha256": "22375d6b62610b33740a0af13eb5ad718542ae16439689fd7fd06c274f44d981"
+    },
+    {
+      "defect": "reversed-corrections",
+      "source": "apps/backend/src/storage/postgres/ledger-records.repository.ts",
+      "exitCode": 1,
+      "assertionRejected": true,
+      "restoredSha256": "22375d6b62610b33740a0af13eb5ad718542ae16439689fd7fd06c274f44d981"
+    },
+    {
+      "defect": "truncated-corrections",
+      "source": "apps/backend/src/storage/postgres/ledger-records.repository.ts",
+      "exitCode": 1,
+      "assertionRejected": true,
+      "restoredSha256": "22375d6b62610b33740a0af13eb5ad718542ae16439689fd7fd06c274f44d981"
+    },
+    {
+      "defect": "foreign-selected-evaluation",
+      "source": "apps/backend/src/storage/postgres/ledger-records.repository.ts",
+      "exitCode": 1,
+      "assertionRejected": true,
+      "restoredSha256": "22375d6b62610b33740a0af13eb5ad718542ae16439689fd7fd06c274f44d981"
+    },
+    {
+      "defect": "fabricated-null-acceptance",
+      "source": "apps/backend/src/storage/postgres/ledger-records.repository.ts",
+      "exitCode": 1,
+      "assertionRejected": true,
+      "restoredSha256": "22375d6b62610b33740a0af13eb5ad718542ae16439689fd7fd06c274f44d981"
+    },
+    {
+      "defect": "missing-context-default",
+      "source": "apps/backend/src/lab-reports/evaluations.service.ts",
+      "exitCode": 1,
+      "assertionRejected": true,
+      "restoredSha256": "d18544e6791adebcb846651e5219361f2ba3de3265c72b9d9231bace996cc013"
+    },
+    {
+      "defect": "per-record-context-regression",
+      "source": "apps/backend/src/lab-reports/evaluations.service.ts",
+      "exitCode": 1,
+      "assertionRejected": true,
+      "restoredSha256": "d18544e6791adebcb846651e5219361f2ba3de3265c72b9d9231bace996cc013"
+    }
+  ],
+  "restoredControlExitCode": 0
+}

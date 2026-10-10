@@ -10,7 +10,7 @@ import { loadProjections } from '../../ledger/projections';
 import { canonicalHash } from '../../services/report-adapter/canonical-json';
 import { LedgerRecordsRepository } from '../ledger-records.repository';
 import type {
-  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationState, InsertResult, NoteRecord, Projected,
+  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationReadContext, EvaluationState, InsertResult, NoteRecord, Projected,
 } from '../ledger-records';
 
 /**
@@ -194,6 +194,34 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
         [tenantId, filter.reportId ?? null, filter.patientId ?? null, filter.current === true, page.limit, page.offset],
       );
       return { items: await this.many(client, tenantId, 'evaluations', rows.flatMap((r) => r.id === null ? [] : [r.id])), total: rows[0]!.total };
+    });
+  }
+
+  evaluationContexts(tenantId: string, evaluationIds: string[]): Promise<Map<string, EvaluationReadContext>> {
+    if (evaluationIds.length === 0) return Promise.resolve(new Map());
+    return this.read(tenantId, async (client) => {
+      const { rows } = await client.query<{ id: string; acceptance_id: string | null; decision: 'accepted' | 'rejected' | null; latest_id: string | null }>(
+        `WITH selected AS MATERIALIZED (SELECT id, capture_id, capture_acceptance_id FROM evaluations WHERE tenant_id = $1 AND id = ANY($2::uuid[])),
+          latest AS (SELECT DISTINCT ON (capture_id) capture_id, id FROM capture_acceptances
+            WHERE tenant_id = $1 AND capture_id IN (SELECT capture_id FROM selected) ORDER BY capture_id, seq DESC)
+          SELECT e.id::text AS id, a.id::text AS acceptance_id, a.decision, l.id::text AS latest_id FROM selected e
+            LEFT JOIN capture_acceptances a ON a.id = e.capture_acceptance_id AND a.tenant_id = $1 AND a.capture_id = e.capture_id
+            LEFT JOIN latest l ON l.capture_id = e.capture_id`,
+        [tenantId, evaluationIds],
+      );
+      const contexts = new Map<string, EvaluationReadContext>(rows.map((r) => [r.id, {
+        acceptance: r.acceptance_id === null ? null : { id: r.acceptance_id, decision: r.decision!, current: r.acceptance_id === r.latest_id },
+        corrections: [],
+      }]));
+      if (contexts.size === 0) return contexts;
+      const corrections = await client.query<{ id: string }>(
+        `SELECT id::text AS id FROM corrections WHERE tenant_id = $1 AND evaluation_id = ANY($2::uuid[]) ORDER BY seq`,
+        [tenantId, [...contexts.keys()]],
+      );
+      for (const correction of await this.many(client, tenantId, 'corrections', corrections.rows.map((r) => r.id))) {
+        contexts.get(correction.evaluationId as string)!.corrections.push(correction);
+      }
+      return contexts;
     });
   }
 

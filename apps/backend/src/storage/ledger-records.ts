@@ -1,5 +1,11 @@
 import type { DrugResult, GeneStateResult } from '@telesphoros/cpic-schema';
 
+/** Mutable read context for an evaluation; corrections retain their complete canonical projections, oldest first. */
+export interface EvaluationReadContext {
+  acceptance: { id: string; decision: 'accepted' | 'rejected'; current: boolean } | null;
+  corrections: Projected[];
+}
+
 /**
  * Records of the lab-report pipeline (docs/design/records-and-corrections.md). Every one is append-only, tenant-scoped, and committed
  * together with its ledger event. Reads return the PROJECTION of the stored row (the exact object that was hashed): camelCase,

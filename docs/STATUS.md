@@ -9,7 +9,7 @@ Phase 0 skeleton accepted by founder on 2026-10-09. Phase 1 closure merged as PR
 
 ## Current Phase 2 closure
 
-The founder approved three separate slices: API privacy/input boundaries, bounded evaluation/dispute lists, then batched evaluation context reads. The first slice merged as PR #51 with all seven checks passing. The second slice adds bounded public lists and local page controls and is in review; batching remains open. Internal complete dispute reads remain separate from public pages. See [pagination plan](design/plans/phase2-review-pagination.md) and [verification](verification/phase2-review-pagination.md). Existing API/storage/auth code is not a claim that all later foundation phases are complete. No deployment, clinical approval or spending is authorized by these slices.
+The founder approved three separate slices: API privacy/input boundaries, bounded evaluation/dispute lists, then batched evaluation context reads. The first two slices merged as PR #51 and PR #52 with all seven checks passing. The final slice batches the selected page's acceptance/correction context and is in review; real PostgreSQL query count stays at 21 statements for pages of 1, 20 and 100 records. Internal complete dispute reads remain separate from public pages. See [pagination verification](verification/phase2-review-pagination.md), [batching plan](design/plans/phase2-evaluation-context.md) and [batching verification](verification/phase2-evaluation-context.md). Whole-Phase-2 founder acceptance remains open. Existing API/storage/auth code is not a claim that all later foundation phases are complete. No deployment, clinical approval or spending is authorized by these slices.
 
 ## What exists on `main`
 

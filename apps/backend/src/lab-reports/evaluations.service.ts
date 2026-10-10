@@ -119,10 +119,15 @@ export class EvaluationsService {
     const ledger = this.need(this.ledger);
     const { current, page, pageSize, ...filter } = query;
     const { items: records, total } = await ledger.listEvaluations(principal.tenantId, { ...filter, current: current === 'true' }, { offset: (page - 1) * pageSize, limit: pageSize });
+    const contexts = await ledger.evaluationContexts(principal.tenantId, records.map((r) => r.id));
     const disputes = await this.activeDisputes(principal.tenantId);
     const currentIds = await ledger.currentEvaluationIds(principal.tenantId, [...new Set(records.map((r) => r.reportId as string))]);
     const out: EvaluationSummaryDto[] = [];
-    for (const record of records) out.push(toEvaluationSummaryDto(record, await this.context(principal.tenantId, record, disputes, currentIds)));
+    for (const record of records) {
+      const context = contexts.get(record.id);
+      if (!context) throw AppException.pipelineMisconfigured();
+      out.push(toEvaluationSummaryDto(record, { ...context, current: currentIds.get(record.reportId as string) === record.id, activeDisputes: disputes }));
+    }
     return { data: out, meta: buildMeta(page, pageSize, total) };
   }
 

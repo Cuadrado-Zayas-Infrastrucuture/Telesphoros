@@ -1,5 +1,5 @@
 import type {
-  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationState, InsertResult, NoteRecord, Projected,
+  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationReadContext, EvaluationState, InsertResult, NoteRecord, Projected,
 } from './ledger-records';
 import type { DisputeStatusValue } from '@telesphoros/shared-types';
 import type { Page, PageRequest } from './records';
@@ -35,6 +35,8 @@ export abstract class LedgerRecordsRepository {
   abstract findEvaluation(tenantId: string, id: string): Promise<Projected | undefined>;
   /** `current` keeps only the current evaluation of each report: its newest, if active (specification 4.5, amended in section 22); the other filters narrow the result further. */
   abstract listEvaluations(tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }, page: PageRequest): Promise<Page<Projected>>;
+  /** Batch the named acceptance/current-decision comparison and complete corrections for selected tenant evaluations. Unknown/foreign IDs are absent. */
+  abstract evaluationContexts(tenantId: string, evaluationIds: string[]): Promise<Map<string, EvaluationReadContext>>;
   /** For each report, the id of its current evaluation (its newest, if that is active), or null when it has none. Every asked report has an entry. */
   abstract currentEvaluationIds(tenantId: string, reportIds: string[]): Promise<Map<string, string | null>>;
 
