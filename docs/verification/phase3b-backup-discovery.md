@@ -25,7 +25,7 @@ The pagination contract is based on [AWS ListObjectsV2](https://docs.aws.amazon.
 
 Initial CLI probing used an `xsi:nil` XML token unsupported by the SDK's S3 string decoder; it produced an ordinary listing failure before the application guard. It is not counted as typed-error evidence. Runtime null is tested at the SDK-result boundary, while CLI probes use missing/empty XML strings.
 
-Final-head CI outcomes are recorded in the PR. Required acceptance includes inspected database job logs with zero failed tests, not only green check statuses. Profile-specific skips must be distinguished from missing-service skips. No RTO or GB-scale restore claim is made by these small regression fixtures; the size/timing rehearsal is Phase 3C.
+PR #56 merged at `8848998`; final head `901a0ce`, CI `38072875490`: all seven required checks passed. Inspected database logs: default 105 suites / 1,531 passed / 182 profile skips; PostgreSQL 112 suites / 1,712 passed / one profile skip; PostgreSQL/S3 112 suites / 1,713 passed / zero skips. No failed tests or actual missing-service/authentication skips. Browser and image checks passed, including health/auth/tenant and rollback controls. Required acceptance includes inspected database job logs with zero failed tests, not only green check statuses. Profile-specific skips must be distinguished from missing-service skips. No RTO or GB-scale restore claim is made by these small regression fixtures; the size/timing rehearsal is Phase 3C.
 
 ## Remaining limits
 
