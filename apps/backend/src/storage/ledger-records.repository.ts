@@ -1,6 +1,8 @@
 import type {
   AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationState, InsertResult, NoteRecord, Projected,
 } from './ledger-records';
+import type { DisputeStatusValue } from '@telesphoros/shared-types';
+import type { Page, PageRequest } from './records';
 
 /**
  * The records of the lab-report pipeline. PostgreSQL only: the ledger's guarantees (database-computed hashes, triggers, deferred
@@ -32,7 +34,7 @@ export abstract class LedgerRecordsRepository {
   abstract insertEvaluation(tenantId: string, actor: string, input: EvaluationInput): Promise<InsertResult>;
   abstract findEvaluation(tenantId: string, id: string): Promise<Projected | undefined>;
   /** `current` keeps only the current evaluation of each report: its newest, if active (specification 4.5, amended in section 22); the other filters narrow the result further. */
-  abstract listEvaluations(tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }): Promise<Projected[]>;
+  abstract listEvaluations(tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }, page: PageRequest): Promise<Page<Projected>>;
   /** For each report, the id of its current evaluation (its newest, if that is active), or null when it has none. Every asked report has an entry. */
   abstract currentEvaluationIds(tenantId: string, reportIds: string[]): Promise<Map<string, string | null>>;
 
@@ -42,7 +44,9 @@ export abstract class LedgerRecordsRepository {
 
   abstract raiseDispute(tenantId: string, actor: string, input: DisputeInput): Promise<InsertResult>;
   abstract decideDispute(tenantId: string, actor: string, input: DisputeDecisionInput): Promise<InsertResult>;
+  /** Complete internal read for clinical overlays and advisories. Never substitute a public page here. */
   abstract listDisputes(tenantId: string): Promise<DisputeStatus[]>;
+  abstract pageDisputes(tenantId: string, page: PageRequest, status?: DisputeStatusValue): Promise<Page<DisputeStatus>>;
   abstract findDispute(tenantId: string, id: string): Promise<DisputeStatus | undefined>;
   /** Bounded historical candidates, by citation identity WITHOUT the file hash; the service must classify file provenance. */
   abstract cellEvaluationCandidates(tenantId: string, cell: DisputeInput, afterSeq: string, limit: number): Promise<Projected[]>;

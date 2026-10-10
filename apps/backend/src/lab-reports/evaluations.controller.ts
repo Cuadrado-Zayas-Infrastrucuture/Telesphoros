@@ -6,6 +6,7 @@ import {
   type EvaluationListQuery,
   evaluationListQuerySchema,
   type EvaluationSummaryDto,
+  type Paginated,
   type IdParam,
   idParamSchema,
 } from '@telesphoros/shared-types';
@@ -47,7 +48,7 @@ export class EvaluationsController {
   constructor(private readonly evaluations: EvaluationsService) {}
 
   @Get()
-  list(@CurrentPrincipal() principal: Principal, @Query(new ZodValidationPipe(evaluationListQuerySchema)) query: EvaluationListQuery): Promise<EvaluationSummaryDto[]> {
+  list(@CurrentPrincipal() principal: Principal, @Query(new ZodValidationPipe(evaluationListQuerySchema)) query: EvaluationListQuery): Promise<Paginated<EvaluationSummaryDto>> {
     return this.evaluations.list(principal, query);
   }
 

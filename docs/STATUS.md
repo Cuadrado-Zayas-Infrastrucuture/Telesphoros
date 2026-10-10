@@ -1,6 +1,6 @@
 # Status, history and working agreements
 
-Read this first to pick the project up. Snapshot: **2026-10-09**. Update it in the same pull request as any change it describes.
+Read this first to pick the project up. Snapshot: **2026-10-10**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
 ## Current frontend foundation closure
@@ -9,7 +9,7 @@ Phase 0 skeleton accepted by founder on 2026-10-09. Phase 1 closure merged as PR
 
 ## Current Phase 2 closure
 
-The founder approved three separate slices: API privacy/input boundaries, bounded evaluation/dispute lists, then batched evaluation context reads. The first slice is in review; pagination and batching are still open. Existing API/storage/auth code is not a claim that all later foundation phases are complete. No deployment, clinical approval or spending is authorized by these slices.
+The founder approved three separate slices: API privacy/input boundaries, bounded evaluation/dispute lists, then batched evaluation context reads. The first slice merged as PR #51 with all seven checks passing. The second slice adds bounded public lists and local page controls and is in review; batching remains open. Internal complete dispute reads remain separate from public pages. See [pagination plan](design/plans/phase2-review-pagination.md) and [verification](verification/phase2-review-pagination.md). Existing API/storage/auth code is not a claim that all later foundation phases are complete. No deployment, clinical approval or spending is authorized by these slices.
 
 ## What exists on `main`
 

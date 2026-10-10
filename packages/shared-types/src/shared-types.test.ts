@@ -5,6 +5,7 @@ import {
   CORRECTION_REASON_CODES,
   correctionCreateSchema,
   evaluationListQuerySchema,
+  disputeListQuerySchema,
   REASONS_FOR_KIND,
   ErrorCode,
   errorResponseSchema,
@@ -22,6 +23,18 @@ import {
   tenantFromGroups,
   tenantIdSchema,
 } from './index';
+
+describe('bounded review list queries', () => {
+  for (const [name, schema] of [['evaluations', evaluationListQuerySchema], ['disputes', disputeListQuerySchema]] as const) {
+    it(`${name} defaults to 20, caps at 100 and rejects invalid/unsafe pages`, () => {
+      expect(schema.parse({})).toEqual({ page: 1, pageSize: 20 });
+      expect(schema.parse({ page: '2', pageSize: '100' })).toEqual({ page: 2, pageSize: 100 });
+      for (const query of [{ page: '0' }, { page: '-1' }, { page: '1.5' }, { pageSize: '0' }, { pageSize: '101' }, { page: '9007199254740991', pageSize: '100' }, { unknown: '1' }]) {
+        expect(schema.safeParse(query).success, JSON.stringify(query)).toBe(false);
+      }
+    });
+  }
+});
 
 const uuid = '3f2b8c1e-5a47-4d0e-9c3a-1b2c3d4e5f60';
 

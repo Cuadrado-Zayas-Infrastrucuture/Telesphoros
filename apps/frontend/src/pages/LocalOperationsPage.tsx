@@ -4,6 +4,7 @@ import { NativeSelect } from '@/components/ui/NativeSelect';
 import { Textarea } from '@/components/ui/Textarea';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { FieldError } from '@/components/ui/FieldError';
+import { PaginationControls } from '@/components/PaginationControls';
 import { useRef } from 'react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -17,12 +18,15 @@ import {
   disputeDecisionCreateSchema,
   cellUsageDtoSchema,
   ledgerVerifyResultSchema,
+  paginatedSchema,
+  DEFAULT_PAGE_SIZE,
   REASONS_FOR_KIND,
   type EvaluationDto,
   type EvaluationSummaryDto,
   type DisputeDto,
   type CorrectionKind,
   type CorrectionReasonCode,
+  type PaginationMeta,
 } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
 import { usePageTitle } from '@/hooks/usePageTitle';
@@ -31,8 +35,10 @@ export default function LocalOperationsPage() {
   usePageTitle('Local review operations');
   const { apiFetch, roles } = useAuth();
   const [evaluations, setEvaluations] = useState<EvaluationSummaryDto[]>([]);
+  const [evaluationMeta, setEvaluationMeta] = useState<PaginationMeta>();
   const [selected, setSelected] = useState<EvaluationDto>();
   const [disputes, setDisputes] = useState<DisputeDto[]>([]);
+  const [disputeMeta, setDisputeMeta] = useState<PaginationMeta>();
   const [chosen, setChosen] = useState<DisputeDto>();
   const [kind, setKind] = useState<CorrectionKind>('retraction');
   const [reason, setReason] = useState<CorrectionReasonCode>('software-defect');
@@ -111,10 +117,14 @@ export default function LocalOperationsPage() {
     if (!reviewer || !confirmed)
       throw new Error('Explicit reviewer confirmation required.');
   }
-  async function history() {
-    const data = await json('/evaluations');
-    if (!Array.isArray(data)) throw new Error('Invalid history response.');
-    setEvaluations(data.map((x) => evaluationSummaryDtoSchema.parse(x)));
+  async function history(page = evaluationMeta?.page ?? 1) {
+    const result = paginatedSchema(evaluationSummaryDtoSchema).parse(await json(`/evaluations?page=${page}&pageSize=${DEFAULT_PAGE_SIZE}`));
+    setEvaluations(result.data);
+    setEvaluationMeta(result.meta);
+    if (page !== (evaluationMeta?.page ?? 1)) {
+      setSelected(undefined);
+      setConfirmed(false);
+    }
   }
   async function open(id: string) {
     setSelected(undefined);
@@ -147,10 +157,16 @@ export default function LocalOperationsPage() {
     await history();
     setNote('');
   }
-  async function listDisputes() {
-    const data = await json('/cell-disputes');
-    if (!Array.isArray(data)) throw new Error('Invalid dispute response.');
-    setDisputes(data.map((x) => disputeDtoSchema.parse(x)));
+  async function listDisputes(page = disputeMeta?.page ?? 1) {
+    const result = paginatedSchema(disputeDtoSchema).parse(await json(`/cell-disputes?page=${page}&pageSize=${DEFAULT_PAGE_SIZE}`));
+    setDisputes(result.data);
+    setDisputeMeta(result.meta);
+    if (page !== (disputeMeta?.page ?? 1)) {
+      setChosen(undefined);
+      setConfirmed(false);
+      setCursor(undefined);
+      setOutput('');
+    }
   }
   async function raise() {
     guard();
@@ -217,9 +233,10 @@ export default function LocalOperationsPage() {
       </Button>
       <section className="space-y-3">
         <h2 className="text-xl">Evaluation history</h2>
-        <Button disabled={busy} onClick={() => void act(history)}>
+        <Button disabled={busy} onClick={() => void act(() => history())}>
           Refresh evaluations
         </Button>
+        {evaluationMeta && <PaginationControls label="Evaluation" meta={evaluationMeta} busy={busy} onPage={(page) => void act(() => history(page))} />}
         <div
           role="region"
           aria-label="Evaluation history table"
@@ -342,9 +359,10 @@ export default function LocalOperationsPage() {
       </section>
       <section className="space-y-3">
         <h2 className="text-xl">Guideline-cell disputes</h2>
-        <Button disabled={busy} onClick={() => void act(listDisputes)}>
+        <Button disabled={busy} onClick={() => void act(() => listDisputes())}>
           Refresh disputes
         </Button>
+        {disputeMeta && <PaginationControls label="Dispute" meta={disputeMeta} busy={busy} onPage={(page) => void act(() => listDisputes(page))} />}
         <ul>
           {disputes.map((d) => (
             <li key={d.id}>

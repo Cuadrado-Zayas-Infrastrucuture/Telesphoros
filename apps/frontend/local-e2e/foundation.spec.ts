@@ -3,6 +3,45 @@ import { expect, test, type Page } from '@playwright/test';
 import { signInAs } from '../e2e/helpers';
 const require = createRequire(import.meta.url);
 const id = '11111111-1111-4111-8111-111111111111';
+
+test('review list pages support keyboard navigation and preserve their position after refusal', async ({ page }) => {
+  let failNext = true;
+  const requests: string[] = [];
+  for (const endpoint of ['evaluations', 'cell-disputes']) {
+    await page.route(`**/api/v1/${endpoint}?*`, (route) => {
+      const url = new URL(route.request().url());
+      const current = Number(url.searchParams.get('page'));
+      requests.push(`${endpoint}:${current}`);
+      if (endpoint === 'evaluations' && current === 2 && failNext) {
+        failNext = false;
+        return route.fulfill({ status: 503, json: {} });
+      }
+      return route.fulfill({ json: { data: [], meta: { page: current, pageSize: 20, total: 21, totalPages: 2 } } });
+    });
+  }
+  await signInAs(page, 'gina', '/local-operations');
+  await page.getByRole('button', { name: 'Refresh evaluations' }).click();
+  const nav = page.getByRole('navigation', { name: 'Evaluation pages' });
+  await expect(nav).toContainText('Page 1 of 2');
+  await nav.getByRole('button', { name: 'Next evaluation page' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('alert')).toContainText('Request refused');
+  await expect(nav).toContainText('Page 1 of 2');
+  await nav.getByRole('button', { name: 'Next evaluation page' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(nav).toContainText('Page 2 of 2');
+  await expect(nav.getByRole('button', { name: 'Next evaluation page' })).toBeDisabled();
+  await nav.getByRole('button', { name: 'Previous evaluation page' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(nav).toContainText('Page 1 of 2');
+  await page.getByRole('button', { name: 'Refresh disputes' }).click();
+  const disputes = page.getByRole('navigation', { name: 'Dispute pages' });
+  await disputes.getByRole('button', { name: 'Next dispute page' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(disputes).toContainText('Page 2 of 2');
+  expect(requests).toEqual(['evaluations:1', 'evaluations:2', 'evaluations:2', 'evaluations:1', 'cell-disputes:1', 'cell-disputes:2']);
+  await accessible(page);
+});
 async function accessible(page: Page) {
   await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
   const violations = await page.evaluate(async () => {
@@ -178,8 +217,8 @@ test('evaluation history scrolls inside its region and correction errors are fie
     actionable: false,
     createdAt: 'now',
   };
-  await page.route('**/api/v1/evaluations', (route) =>
-    route.fulfill({ json: [summary] }),
+  await page.route('**/api/v1/evaluations?*', (route) =>
+    route.fulfill({ json: { data: [summary], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } } }),
   );
   await page.route('**/api/v1/evaluations/' + id, (route) =>
     route.fulfill({ json: { ...summary, geneInputs: [] } }),
@@ -223,8 +262,8 @@ test('dispute decisions require field-linked evidence and clear confirmation onl
     decision: null as unknown,
     createdAt: 'now',
   };
-  await page.route('**/api/v1/cell-disputes', (route) =>
-    route.fulfill({ json: [dispute] }),
+  await page.route('**/api/v1/cell-disputes?*', (route) =>
+    route.fulfill({ json: { data: [dispute], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } } }),
   );
   await page.route('**/api/v1/cell-disputes/' + id + '/decision', (route) => {
     writes++;

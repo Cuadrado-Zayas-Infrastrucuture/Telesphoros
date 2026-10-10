@@ -283,25 +283,25 @@ import { bearer } from './helpers/tokens';
 
   describe('"current" (specification 4.5, amended in section 22): the newest evaluation of a report, if it is active', () => {
     const list = (who: Person, query = '') => lab.api().get(`/api/v1/evaluations${query}`).set(bearer(who.token));
-    const ids = (res: { body: Array<{ id: string }> }) => res.body.map((e) => e.id).sort();
+    const ids = (res: { body: { data: Array<{ id: string }> } }) => res.body.data.map((e) => e.id).sort();
 
     it('follows the corrections: the newest if active; NONE if the newest is retracted (an older active one is not promoted); the newest again once reinstated', async () => {
       const s = await withSecond(await scenario());
       const mine = (query: string) => list(s.clinician, `?reportId=${s.reportId}${query}`);
       expect(ids(await mine('&current=true').expect(200))).toEqual([s.e2.id]);
       expect(ids(await mine('').expect(200))).toEqual([s.e1.id, s.e2.id].sort()); // without the filter, both
-      expect((await mine('').expect(200)).body.map((e: Evaluation) => [e.id, e.current]).sort()).toEqual([[s.e1.id, false], [s.e2.id, true]].sort());
+      expect((await mine('').expect(200)).body.data.map((e: Evaluation) => [e.id, e.current]).sort()).toEqual([[s.e1.id, false], [s.e2.id, true]].sort());
 
       // Retract the NEWEST: the report has no current evaluation. The older one is still ACTIVE (it was never corrected) but is not promoted:
       // a reviewer who retracted the newest said "do not rely on this", and nobody has said the older one is what to rely on instead.
       const retraction = (await correct(s.reviewer, s.e2.id, { kind: 'retraction', reasonCode: 'software-defect' }).expect(201)).body;
-      expect((await mine('&current=true').expect(200)).body).toEqual([]);
+      expect((await mine('&current=true').expect(200)).body.data).toEqual([]);
       expect((await read(s.clinician, s.e1.id)).body).toMatchObject({ state: 'active', current: false });
       expect((await read(s.clinician, s.e2.id)).body).toMatchObject({ state: 'retracted', current: false });
 
       // Retract that too: still none, and both remain readable by id.
       await correct(s.reviewer, s.e1.id, { kind: 'retraction', reasonCode: 'software-defect' }).expect(201);
-      expect((await mine('&current=true').expect(200)).body).toEqual([]);
+      expect((await mine('&current=true').expect(200)).body.data).toEqual([]);
       expect((await read(s.clinician, s.e1.id)).body).toMatchObject({ state: 'retracted', current: false });
 
       // Reinstating the newest brings it back.
@@ -318,12 +318,12 @@ import { bearer } from './helpers/tokens';
       expect(ids(current)).toEqual(expect.arrayContaining([b.e1.id]));
       expect(ids(current)).not.toContain(a.e1.id);
       const byPatient = await list(a.clinician, `?patientId=${a.patientId}&current=true`).expect(200);
-      expect(byPatient.body).toEqual([]); // a's only evaluation is retracted; b's patient is not asked for
+      expect(byPatient.body.data).toEqual([]); // a's only evaluation is retracted; b's patient is not asked for
       const all = await list(a.clinician, `?patientId=${a.patientId}`).expect(200);
-      expect(all.body).toHaveLength(1);
-      expect(evaluationSummaryDtoSchema.safeParse(all.body[0]).success).toBe(true);
-      expect(all.body[0]).not.toHaveProperty('geneInputs');
-      expect(all.body[0]).toMatchObject({ state: 'retracted', current: false, corrections: [expect.objectContaining({ kind: 'retraction' })] });
+      expect(all.body.data).toHaveLength(1);
+      expect(evaluationSummaryDtoSchema.safeParse(all.body.data[0]).success).toBe(true);
+      expect(all.body.data[0]).not.toHaveProperty('geneInputs');
+      expect(all.body.data[0]).toMatchObject({ state: 'retracted', current: false, corrections: [expect.objectContaining({ kind: 'retraction' })] });
     });
 
     it('accepts only current=true', async () => {

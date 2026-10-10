@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
+import type { DisputeStatusValue } from '@telesphoros/shared-types';
+import type { Page, PageRequest } from '../records';
 import { Database } from '../../db/database';
 import { LedgerStatus } from '../../ledger/ledger-status';
 import { appendEvent, newId } from '../../ledger/ledger-writer';
@@ -179,16 +181,19 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
     return this.read(tenantId, (client) => this.one(client, tenantId, 'evaluations', id));
   }
 
-  listEvaluations(tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }): Promise<Projected[]> {
+  listEvaluations(tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }, page: PageRequest): Promise<Page<Projected>> {
     return this.read(tenantId, async (client) => {
-      const { rows } = await client.query<{ id: string }>(
-        `SELECT e.id::text AS id FROM evaluations e
+      // Count and page use ONE statement snapshot, including when the requested page is empty.
+      const { rows } = await client.query<{ id: string | null; total: number }>(
+        `WITH matching AS MATERIALIZED (SELECT e.id, e.seq FROM evaluations e
           WHERE e.tenant_id = $1 AND ($2::uuid IS NULL OR e.report_id = $2::uuid) AND ($3::uuid IS NULL OR e.patient_id = $3::uuid)
-            AND (NOT $4::boolean OR e.id IN (${CURRENT_EVALUATIONS_SQL}))
-          ORDER BY e.seq`,
-        [tenantId, filter.reportId ?? null, filter.patientId ?? null, filter.current === true],
+            AND (NOT $4::boolean OR e.id IN (${CURRENT_EVALUATIONS_SQL}))),
+          page AS (SELECT id, seq FROM matching ORDER BY seq LIMIT $5 OFFSET $6)
+          SELECT page.id::text AS id, totals.total FROM (SELECT count(*)::int AS total FROM matching) totals
+            LEFT JOIN page ON true ORDER BY page.seq`,
+        [tenantId, filter.reportId ?? null, filter.patientId ?? null, filter.current === true, page.limit, page.offset],
       );
-      return this.many(client, tenantId, 'evaluations', rows.map((r) => r.id));
+      return { items: await this.many(client, tenantId, 'evaluations', rows.flatMap((r) => r.id === null ? [] : [r.id])), total: rows[0]!.total };
     });
   }
 
@@ -268,6 +273,22 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
     return this.read(tenantId, (client) => this.disputeStatuses(client, tenantId));
   }
 
+  pageDisputes(tenantId: string, page: PageRequest, status?: DisputeStatusValue): Promise<Page<DisputeStatus>> {
+    return this.read(tenantId, async (client) => {
+      const { rows } = await client.query<{ id: string | null; decision_id: string | null; total: number }>(
+        `WITH matching AS MATERIALIZED (SELECT d.id, d.seq, x.id AS decision_id FROM cell_disputes d
+          LEFT JOIN cell_dispute_decisions x ON x.dispute_id = d.id AND x.tenant_id = d.tenant_id
+          WHERE d.tenant_id = $1 AND ($2::text IS NULL OR COALESCE(x.decision, 'open') = $2)),
+          page AS (SELECT id, seq, decision_id FROM matching ORDER BY seq LIMIT $3 OFFSET $4)
+          SELECT page.id::text AS id, page.decision_id::text AS decision_id, totals.total
+            FROM (SELECT count(*)::int AS total FROM matching) totals LEFT JOIN page ON true ORDER BY page.seq`,
+        [tenantId, status ?? null, page.limit, page.offset],
+      );
+      const selected = rows.flatMap((r) => r.id === null ? [] : [{ id: r.id, decision_id: r.decision_id }]);
+      return { items: await this.loadDisputeStatuses(client, tenantId, selected), total: rows[0]!.total };
+    });
+  }
+
   findDispute(tenantId: string, id: string): Promise<DisputeStatus | undefined> {
     return this.read(tenantId, async (client) => (await this.disputeStatuses(client, tenantId, id))[0]);
   }
@@ -296,10 +317,14 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
         WHERE d.tenant_id = $1 AND ($2::uuid IS NULL OR d.id = $2::uuid) ORDER BY d.seq`,
       [tenantId, only ?? null],
     );
-    const disputeRows = await this.many(client, tenantId, 'cell_disputes', disputes.rows.map((r) => r.id));
-    const decisionIds = disputes.rows.flatMap((r) => (r.decision_id ? [r.decision_id] : []));
+    return this.loadDisputeStatuses(client, tenantId, disputes.rows);
+  }
+
+  private async loadDisputeStatuses(client: PoolClient, tenantId: string, rows: { id: string; decision_id: string | null }[]): Promise<DisputeStatus[]> {
+    const disputeRows = await this.many(client, tenantId, 'cell_disputes', rows.map((r) => r.id));
+    const decisionIds = rows.flatMap((r) => (r.decision_id ? [r.decision_id] : []));
     const decisions = new Map((await this.many(client, tenantId, 'cell_dispute_decisions', decisionIds)).map((d) => [d.id, d]));
-    return disputes.rows.map((row, index) => {
+    return rows.map((row, index) => {
       const decision = row.decision_id ? decisions.get(row.decision_id)! : null;
       return { dispute: disputeRows[index]!, status: decision ? (decision.decision as 'upheld' | 'dismissed') : 'open', decision };
     });

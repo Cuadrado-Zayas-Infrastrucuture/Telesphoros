@@ -128,18 +128,41 @@ const golden = (JSON.parse(readFileSync(join(REPO_ROOT, 'tests/report_adapter/go
     for (const roles of [['reader'], ['clinician'], ['reviewer'], ['admin'], []]) {
       const who = await lab.person('r', roles);
       const list = await lab.api().get('/api/v1/evaluations').set(bearer(who.token)).expect(200);
-      expect(list.body).toHaveLength(12);
-      expect(evaluationSummaryDtoSchema.safeParse(list.body[0]).success).toBe(true);
-      expect(list.body[0]).not.toHaveProperty('geneInputs');
+      expect(list.body.data).toHaveLength(12);
+      expect(list.body.meta).toEqual({ page: 1, pageSize: 20, total: 12, totalPages: 1 });
+      expect(evaluationSummaryDtoSchema.safeParse(list.body.data[0]).success).toBe(true);
+      expect(list.body.data[0]).not.toHaveProperty('geneInputs');
       const one = await lab.api().get(`/api/v1/evaluations/${ids[0]!.id}`).set(bearer(who.token)).expect(200);
       expect(one.body).toHaveProperty('geneInputs');
     }
     const filtered = await lab.api().get(`/api/v1/evaluations?reportId=${ids[3]!.report_id}`).set(bearer((await lab.person('r', ['reader'])).token)).expect(200);
-    expect(filtered.body.map((e: { id: string }) => e.id)).toEqual([ids[3]!.id]);
+    expect(filtered.body.data.map((e: { id: string }) => e.id)).toEqual([ids[3]!.id]);
     const stranger = await lab.person('m', ['clinician'], 'tenant-two');
-    expect((await lab.api().get('/api/v1/evaluations').set(bearer(stranger.token)).expect(200)).body).toEqual([]);
+    expect((await lab.api().get('/api/v1/evaluations').set(bearer(stranger.token)).expect(200)).body.data).toEqual([]);
     await lab.api().get(`/api/v1/evaluations/${ids[0]!.id}`).set(bearer(stranger.token)).expect(404);
     await lab.api().get('/api/v1/evaluations/not-a-uuid').set(bearer(stranger.token)).expect(400);
     await lab.api().get('/api/v1/evaluations?unknown=1').set(bearer(stranger.token)).expect(400);
+  });
+
+  it('pages evaluation summaries in stable order with exact filtered totals and strict bounds', async () => {
+    const who = await lab.person('pagination-reader', ['reader']);
+    const rows = await lab.row<{ id: string; report_id: string; patient_id: string }>('SELECT id, report_id, patient_id FROM evaluations WHERE tenant_id = $1 ORDER BY seq', [lab.tenant]);
+    const get = (query: string) => lab.api().get(`/api/v1/evaluations?${query}`).set(bearer(who.token));
+    const all: string[] = [];
+    for (let page = 1; page <= 3; page++) {
+      const res = await get(`page=${page}&pageSize=5`).expect(200);
+      expect(res.body.meta).toEqual({ page, pageSize: 5, total: 12, totalPages: 3 });
+      expect(res.body.data).toHaveLength(page === 3 ? 2 : 5);
+      all.push(...res.body.data.map((e: { id: string }) => e.id));
+    }
+    expect(all).toEqual(rows.map((r) => r.id));
+    const empty = await get('page=4&pageSize=5').expect(200);
+    expect(empty.body).toEqual({ data: [], meta: { page: 4, pageSize: 5, total: 12, totalPages: 3 } });
+    for (const filter of [`reportId=${rows[0]!.report_id}`, `patientId=${rows[0]!.patient_id}&current=true`]) {
+      const filtered = await get(`${filter}&page=2&pageSize=1`).expect(200);
+      expect(filtered.body).toEqual({ data: [], meta: { page: 2, pageSize: 1, total: 1, totalPages: 1 } });
+    }
+    await get('pageSize=100').expect(200);
+    for (const bad of ['page=0', 'page=-1', 'page=1.5', 'pageSize=0', 'pageSize=101', 'page=9007199254740991&pageSize=100', 'page=1&page=2', 'pageSize=nope']) await get(bad).expect(400);
   });
 });

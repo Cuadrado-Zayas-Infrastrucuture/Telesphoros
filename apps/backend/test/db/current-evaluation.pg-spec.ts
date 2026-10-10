@@ -94,11 +94,11 @@ describe('the current evaluation of a report', () => {
     const [a1, a2, b1] = [await a.evaluate(), await a.evaluate(), await b.evaluate()];
     expect([...(await repo.currentEvaluationIds(t, [a.reportId, b.reportId])).entries()].sort()).toEqual([[a.reportId, a2], [b.reportId, b1]].sort());
     await retract(t, a2);
-    const listed = (await repo.listEvaluations(t, { current: true })).map((e) => e.id).sort();
+    const listed = (await repo.listEvaluations(t, { current: true }, { offset: 0, limit: 100 })).items.map((e) => e.id).sort();
     expect(listed).toEqual([b1]); // a's newest is retracted, so a has no current evaluation (a1 is active but not promoted)
-    expect((await repo.listEvaluations(t, {})).map((e) => e.id).sort()).toEqual([a1, a2, b1].sort());
-    expect((await repo.listEvaluations(t, { current: true, reportId: b.reportId })).map((e) => e.id)).toEqual([b1]);
-    expect(await repo.listEvaluations(t, { current: true, reportId: randomUUID() })).toEqual([]);
+    expect((await repo.listEvaluations(t, {}, { offset: 0, limit: 100 })).items.map((e) => e.id).sort()).toEqual([a1, a2, b1].sort());
+    expect((await repo.listEvaluations(t, { current: true, reportId: b.reportId }, { offset: 0, limit: 100 })).items.map((e) => e.id)).toEqual([b1]);
+    expect((await repo.listEvaluations(t, { current: true, reportId: randomUUID() }, { offset: 0, limit: 100 })).items).toEqual([]);
   });
 
   it("never looks at another tenant's evaluations (checked as a superuser, where only the query's own conditions protect)", async () => {
@@ -108,13 +108,13 @@ describe('the current evaluation of a report', () => {
     const b = await report(tb);
     const [ea, eb] = [await a.evaluate(), await b.evaluate()];
     expect(await bypassing.currentEvaluationIds(ta, [a.reportId, b.reportId])).toEqual(new Map([[a.reportId, ea], [b.reportId, null]]));
-    expect((await bypassing.listEvaluations(ta, {})).map((e) => e.id)).toEqual([ea]); // the unfiltered list, too
-    expect((await bypassing.listEvaluations(ta, { current: true })).map((e) => e.id)).toEqual([ea]);
-    expect((await bypassing.listEvaluations(tb, { current: true })).map((e) => e.id)).toEqual([eb]);
+    expect((await bypassing.listEvaluations(ta, {}, { offset: 0, limit: 100 })).items.map((e) => e.id)).toEqual([ea]); // the unfiltered list, too
+    expect((await bypassing.listEvaluations(ta, { current: true }, { offset: 0, limit: 100 })).items.map((e) => e.id)).toEqual([ea]);
+    expect((await bypassing.listEvaluations(tb, { current: true }, { offset: 0, limit: 100 })).items.map((e) => e.id)).toEqual([eb]);
     // A correction of tenant B's evaluation must not change tenant A's answer either (the subquery over corrections is tenant-scoped too).
     await retract(tb, eb);
-    expect((await bypassing.listEvaluations(ta, { current: true })).map((e) => e.id)).toEqual([ea]);
-    expect(await bypassing.listEvaluations(tb, { current: true })).toEqual([]);
+    expect((await bypassing.listEvaluations(ta, { current: true }, { offset: 0, limit: 100 })).items.map((e) => e.id)).toEqual([ea]);
+    expect((await bypassing.listEvaluations(tb, { current: true }, { offset: 0, limit: 100 })).items).toEqual([]);
   });
 });
 
