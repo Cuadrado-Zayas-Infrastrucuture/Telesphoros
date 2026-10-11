@@ -75,3 +75,11 @@ docker compose --env-file packages/smart-pilot/openemr/.runtime/docker.env -f pa
 ```
 
 This pilot is local HTTP with memory-only sessions. Production requires separately reviewed TLS, durable session/audit/consent integration, user/organization mappings and clinical validation/release approval. Do not mount this harness in the production API. The original repository was deleted; the port targets Telesphoros-Remastered from a fresh main branch and carries no legacy history or gateway dependencies.
+
+## Versioned PGx / source-report preview
+
+After building, rerun `pnpm --filter @telesphoros/smart-pilot ehr:configure` and restart the pilot process to load the explicit versioned fixtures into the ignored local registration. This provisions only the fixed synthetic container. It is not a migration and does not read production reports. Existing registrations without `pgx` continue to work but display “Versioned FHIR preview unavailable.”
+
+Open the consented synthetic patient and expand **Versioned FHIR preview (synthetic only)**. Evaluation 2 references source v2, its SHA-256 and embedded synthetic source bytes; evaluation 1 is not silently substituted. The second patient's consent refusal shows no preview. Closing/changing the launch or expiring the session removes the displayed context. `test:browser` checks both launches and version/source visibility.
+
+See the [FHIR mapping contract and limits](../fhir-cds-hooks.md), [plan](../design/plans/synthetic-pgx-fhir.md) and [verification](../verification/synthetic-pgx-fhir.md). This remains read-only; no resources are sent to OpenEMR and no clinical engine, retention setting or release gate changes.

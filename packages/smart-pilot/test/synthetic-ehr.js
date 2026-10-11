@@ -1,5 +1,7 @@
 // A protocol test double, not OpenEMR. It exercises real HTTP, PKCE and signed OIDC.
 import express from "express";
+import fs from "node:fs";
+const pgxTemplate = JSON.parse(fs.readFileSync(new URL("../src/pgx-fixture.json", import.meta.url), "utf8"));
 import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
 import { SCOPES, SYNTHETIC_TAG } from "../src/client.js";
@@ -190,6 +192,9 @@ export function createSyntheticEhr({ origin, pilotOrigin, faults = {} }) {
       ].map((fhirId, index) => ({
         fhirId,
         patientId: `pat_${String(index + 1).padStart(24, "0")}`,
+        pgx: { ...pgxTemplate, versions: pgxTemplate.versions.map(v => ({
+          ...structuredClone(v), patientId: `pat_${String(index + 1).padStart(24, "0")}`,
+        })) },
         consent: fhirId !== "patient-no-consent",
         interpretable: fhirId !== "patient-invalid",
         profile:

@@ -69,6 +69,7 @@ test("real HTTP OAuth, PKCE, signed identity and two-page FHIR context; no EHR w
   expect(response.body.medications).toHaveLength(2);
   expect(response.body.clinician).toBe("Practitioner/clinician-a");
   expect(response.body.clinicalRecommendationsEnabled).toBe(false);
+  expect(response.body.pgxFhirPreview.resourceType).toBe("Bundle");
   expect(JSON.stringify(response.body)).not.toMatch(
     /access_token|refresh_token|id_token/,
   );
@@ -141,6 +142,7 @@ test.each([
   const response = await evidence(await login(patient));
   expect(response.status).toBe(200);
   expect(response.body.status).toBe(status);
+  expect(response.body.pgxFhirPreview).toBeNull();
   if (["consent_required", "genotype_not_interpretable"].includes(status))
     expect(response.body.profile).toHaveLength(0);
 });
@@ -248,4 +250,24 @@ test.each([{ azp: "another-client" }, { subject: 42 }])(
 test("accepts an explicit authorized party matching this client", async () => {
   await setup({ azp: "synthetic-client" });
   expect((await evidence(await login())).status).toBe(200);
+});
+
+// Same authenticated route and expiration boundary as medication context; no separate export bypass.
+test.each(["retracted", "held", "missing", "wrong-patient", "stale-acceptance"])("HTTP withholds versioned FHIR on %s", async fault => {
+  await setup();
+  const token = await login();
+  expect((await evidence(token)).body.pgxFhirPreview.resourceType).toBe("Bundle");
+  const p = fixture.registration.patients[0];
+  if (fault === "missing") delete p.pgx;
+  else {
+    const v = p.pgx.versions[1];
+    if (fault === "retracted") v.state = "retracted";
+    if (fault === "held") v.disposition = "held";
+    if (fault === "wrong-patient") v.patientId = fixture.registration.patients[1].patientId;
+    if (fault === "stale-acceptance") v.acceptance.current = false;
+  }
+  const response = await evidence(token);
+  expect(response.status).toBe(200);
+  expect(response.body.pgxFhirPreview).toBeNull();
+  expect(response.body.clinicalRecommendationsEnabled).toBe(false);
 });

@@ -153,6 +153,13 @@ function SessionEvidence({ sessionToken }: { sessionToken: string | null }) {
               style={{ marginTop: "calc(6 * var(--space-unit))" }}
             >
               <h2>Synthetic genomic fixture</h2>
+              {data.pgxFhirPreview ? (
+                <details>
+                  <summary>Versioned FHIR preview (synthetic only)</summary>
+                  <p>Core FHIR R4 collection. Source bytes and interpretation identities are pinned. No EHR write or clinical approval.</p>
+                  <pre style={{ overflowX: "auto", maxHeight: "28rem" }}>{JSON.stringify(data.pgxFhirPreview, null, 2)}</pre>
+                </details>
+              ) : <p>Versioned FHIR preview unavailable. No older result is substituted.</p>}
               {data.profile.length ? (
                 <ul>
                   {data.profile.map((row, index) => (

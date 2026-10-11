@@ -1,0 +1,69 @@
+{
+  "selectedEvaluationId": "synthetic-evaluation-2",
+  "versions": [
+    {
+      "tenantId": "synthetic-office",
+      "patientId": "pat_000000000000000000000001",
+      "evaluationId": "synthetic-evaluation-1",
+      "createdAt": "2026-10-01T12:00:00Z",
+      "engineVersion": "synthetic-engine/1",
+      "knowledgeSetId": "synthetic-knowledge/1",
+      "clinicalUse": "not-approved",
+      "actionable": false,
+      "disposition": "evaluated",
+      "state": "superseded",
+      "current": false,
+      "activeDisputes": 0,
+      "acceptance": {
+        "id": "synthetic-acceptance-1",
+        "decision": "accepted",
+        "current": true
+      },
+      "source": {
+        "reportId": "synthetic-source-report",
+        "versionId": "v1",
+        "sha256": "bb9b9b2800ac01aa95c9ae2c19fa980cb9a8b10e12499dc7a0a3a12c0c8bd872",
+        "text": "SYNTHETIC ONLY. PGx source report version 1. CYP2C19 *1/*1. Not approved for clinical use.\n"
+      },
+      "genes": [
+        {
+          "gene": "CYP2C19",
+          "diplotype": "*1/*1",
+          "phenotype": "Synthetic normal metabolizer"
+        }
+      ]
+    },
+    {
+      "tenantId": "synthetic-office",
+      "patientId": "pat_000000000000000000000001",
+      "evaluationId": "synthetic-evaluation-2",
+      "createdAt": "2026-10-02T12:00:00Z",
+      "engineVersion": "synthetic-engine/1",
+      "knowledgeSetId": "synthetic-knowledge/2",
+      "clinicalUse": "not-approved",
+      "actionable": false,
+      "disposition": "evaluated",
+      "state": "active",
+      "current": true,
+      "activeDisputes": 0,
+      "acceptance": {
+        "id": "synthetic-acceptance-2",
+        "decision": "accepted",
+        "current": true
+      },
+      "source": {
+        "reportId": "synthetic-source-report",
+        "versionId": "v2",
+        "sha256": "85420e0957c9501314139a194175b3958658b768c682f22aa32edfd59bfd57b6",
+        "text": "SYNTHETIC ONLY. PGx source report version 2. CYP2C19 *1/*2. Not approved for clinical use.\n"
+      },
+      "genes": [
+        {
+          "gene": "CYP2C19",
+          "diplotype": "*1/*2",
+          "phenotype": "Synthetic intermediate metabolizer"
+        }
+      ]
+    }
+  ]
+}
