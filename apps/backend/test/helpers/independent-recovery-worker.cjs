@@ -12,6 +12,7 @@ const { S3EvidenceStorage } = require('../../src/db/s3-evidence-storage.ts');
 const { EvidenceError, IncompleteEvidenceListingError, byteDigest, catalogueSchema, completionSchema, decryptDocument, encryptDocument } = require('../../src/db/evidence-catalogue.ts');
 const { readKeyFile } = require('../../src/db/backup-crypto.ts');
 process.once('message', async config => {
+  if (config.application) require('@nestjs/common').Logger.overrideLogger(false); // matches the test app's LOG_LEVEL=silent
   const settings = { region: 'us-east-1', endpoint: config.endpoint, credentials: { accessKeyId: 'SYNRECOVERYREADER', secretAccessKey: 'synthetic-only' } };
   const copy = new S3EvidenceStorage({ ...settings, bucket: config.copyBucket, prefix: 'catalogues/' });
   const backup = new S3EvidenceStorage({ ...settings, bucket: config.backupBucket, prefix: 'backups/' });
@@ -53,7 +54,9 @@ process.once('message', async config => {
     if (['omitted-soft-delete', 'duplicate-mapping', 'missing-mapping', 'foreign-mapping', 'stale-binding'].includes(config.fault)) {
       const key = await readKeyFile(config.catalogueKeyFile);
       const catalogueKey = 'catalogues/' + config.generation + '/catalogue.enc';
-      const published = await get(catalogueKey, undefined, 16 * 1024 ** 2 + 65536, args[3]);
+      const pinnedCatalogueVersion = args[0].endsWith('completion.enc')
+        ? (await decryptDocument(value.bytes, key, completionSchema)).catalogueVersion : args[1];
+      const published = await get(catalogueKey, pinnedCatalogueVersion, 16 * 1024 ** 2 + 65536, args[3]);
       const catalogue = await decryptDocument(published.bytes, key, catalogueSchema);
       if (config.fault === 'omitted-soft-delete') {
         const omitted = catalogue.sources.find(s => s.reference.kind === 'lab-pdf' && s.reference.tenantId === 'syn-f2-b');
@@ -80,8 +83,13 @@ process.once('message', async config => {
   };
   try {
     config.readObjects = 0;
-    const metrics = await independentRecoveryProbe({ ...config, copy, backup, recovery });
-    process.send({ status: 'passed', metrics });
+    let application;
+    const afterBytesVerified = config.application ? async (url, catalogue) => {
+      const { applicationAcceptance } = require('./application-recovery.ts');
+      application = await applicationAcceptance(url, catalogue, config);
+    } : undefined;
+    const metrics = await independentRecoveryProbe({ ...config, copy, backup, recovery, afterBytesVerified });
+    process.send({ status: 'passed', metrics, ...(application ? { application } : {}) });
   } catch (error) {
     process.send({ status: 'refused', code: error instanceof EvidenceError ? error.code : 'internal', errorType: error instanceof IncompleteEvidenceListingError ? error.name : 'EvidenceError', independentBytesRecovered: false, applicationRecoveryComplete: false });
   } finally { copy.destroy(); backup.destroy(); recovery.destroy(); process.disconnect(); }

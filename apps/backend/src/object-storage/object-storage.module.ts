@@ -4,11 +4,16 @@ import type { Env } from '../config/env';
 import { InMemoryObjectStorage } from './in-memory-object-storage';
 import { ObjectStorage } from './object-storage';
 import { S3ObjectStorage } from './s3-object-storage';
+import type { RecoveryObjectStorage } from './recovery-object-storage';
 
 @Global()
 @Module({})
 export class ObjectStorageModule {
-  static register(env: Env): DynamicModule {
+  static register(env: Env, recovery?: RecoveryObjectStorage): DynamicModule {
+    if (recovery) return {
+      module: ObjectStorageModule,
+      providers: [{ provide: ObjectStorage, useValue: recovery }], exports: [ObjectStorage],
+    };
     if (env.OBJECT_STORAGE_DRIVER === 's3') {
       return {
         module: ObjectStorageModule,

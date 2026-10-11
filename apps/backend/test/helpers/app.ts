@@ -12,8 +12,10 @@ import { READINESS_CHECKS, type ReadinessCheck } from '../../src/health/readines
 import { createEphemeralDatabase, verifierUrlFor } from './database';
 import { FIXTURES, TEST_KNOWLEDGE } from './lab-pipeline';
 import { TEST_AUDIENCE, TEST_ISSUER, TEST_SECRET } from './env';
+import type { RecoveryObjectStorage } from '../../src/object-storage/recovery-object-storage';
 
 export interface TestAppOptions {
+  recoveryStorage?: RecoveryObjectStorage;
   controllers?: Type<unknown>[];
   readinessChecks?: ReadinessCheck[];
   /** Force the PostgreSQL store against this application-role URL (managed by the caller). */
@@ -101,7 +103,7 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
   });
 
   let builder = Test.createTestingModule({
-    imports: [AppModule.register(env)],
+    imports: [AppModule.register(env, options.recoveryStorage)],
     controllers: options.controllers ?? [],
   });
   if (options.readinessChecks) builder = builder.overrideProvider(READINESS_CHECKS).useValue(options.readinessChecks);

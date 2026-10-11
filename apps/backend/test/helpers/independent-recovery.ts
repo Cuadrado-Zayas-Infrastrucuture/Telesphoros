@@ -17,6 +17,8 @@ export interface RecoveryProbeOptions {
   copy: EvidenceStorage; backup: EvidenceStorage; recovery: EvidenceStorage;
   backupManifest: { key: string; version: string }; backupArchive: { key: string; version: string };
   limits?: Partial<EvidenceLimits>;
+  /** F3 acceptance seam: only called after verified DB inventory and ALL independent bytes. No F2 completeness promotion. */
+  afterBytesVerified?: (restoredUrl: string, installedCatalogue: EvidenceCatalogue) => Promise<void>;
 }
 const volume = (bytes: number) => ({ bytes, GB: bytes / 1e9, GiB: bytes / 1024 ** 3 });
 const seconds = (start: number) => (performance.now() - start) / 1000;
@@ -87,6 +89,7 @@ export async function independentRecoveryProbe(options: RecoveryProbeOptions) {
           const inventory = await readEvidenceInventory(url, budget); restoredBytes = inventory.restoredDatabaseBytes;
           if (digest(inventory.references) !== digest(catalogue.sources.map(s => s.reference)) || inventory.uncompletedRegistrations !== catalogue.uncompletedRegistrations) throw new EvidenceError('binding');
           const verifyStart = performance.now();
+          const installedMappings: EvidenceCatalogue['mappings'] = [];
           for (const [sourceId, item] of unique) {
             const location = mappingLocation(catalogue, item);
             const object = await exact(options.copy, location.key, location.version, item.reference.kind === 'text' ? 400_000 : item.bytes, policy, budget);
@@ -101,7 +104,7 @@ export async function independentRecoveryProbe(options: RecoveryProbeOptions) {
             const token = manifestMac({ domain: 'telesphoros-evidence/stage-token/1', generation, binding, destinationBucket: options.copy.bucket, destinationPrefix: options.copy.prefix, id: sourceId }, catalogueKey, digest({ binding, generation }).slice(0, 32));
             if (object.token !== token) throw new EvidenceError('integrity');
             // Install into an owned recovery bucket, never write the independent copy or primary.
-            const key = options.recovery.prefix + generation + '/' + sourceId;
+            const key = options.recovery.prefix + generation + '/objects/' + sourceId;
             let versions = await listVersions(options.recovery, key, budget);
             if (versions.length === 0) {
               try { await options.recovery.put(key, object.bytes, object.contentType, token, policy, budget); }
@@ -112,9 +115,11 @@ export async function independentRecoveryProbe(options: RecoveryProbeOptions) {
             if (versions.length !== 1 || versions[0].deleted) throw new EvidenceError('ambiguous');
             const recovered = await exact(options.recovery, key, versions[0].version, item.bytes, policy, budget);
             if (recovered.sha256 !== ref.sha256 || recovered.bytes.length !== item.bytes || recovered.contentType !== ref.contentType || recovered.token !== token) throw new EvidenceError('integrity');
+            installedMappings.push({ sourceId, destinationVersion: recovered.version!, mode: 'translated' });
             recoveredBytes += object.bytes.length; recoveredObjects++;
           }
           verificationSeconds = seconds(verifyStart);
+          await options.afterBytesVerified?.(url, { ...catalogue, destinationBucket: options.recovery.bucket, destinationPrefix: options.recovery.prefix, mappings: installedMappings });
         } catch (error) { callbackError = error; throw error; }
       },
     });

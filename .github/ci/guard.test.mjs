@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { verifyAllProfiles, verifyRecoveryMetrics } from './verify-recovery-metrics.mjs';
+import { verifyApplicationRecovery, verifyApplicationProfiles } from './verify-application-recovery.mjs';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const workflow = read('../workflows/ci.yml');
@@ -57,6 +58,43 @@ test('recovery evidence requires each profile, not merely one matching artifact 
     assert.doesNotThrow(() => verifyAllProfiles(dir));
     assert.doesNotThrow(() => verifyAllProfiles(dir, 'a'.repeat(40)));
     assert.throws(() => verifyAllProfiles(dir, 'b'.repeat(40)));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+function applicationMetricControl() {
+  const value = recoveryMetricControl();
+  const r = value.measurements[0]; r.references = 7; r.recoveredObjects = 7;
+  for (const [kind, v] of Object.entries(r.requiredByKind)) v.objects = kind === 'lab-pdf' ? 3 : kind === 'text' ? 2 : 1;
+  const application = { applicationRecoveryComplete: true, clinicalUseApproved: false, apiControls: ['restricted-login-rls', 'module-health-readiness', 'link-authentication-roles-and-tenant', 'verified-version-links',
+    'standard-and-pdf-bytes', 'soft-deletion', 'golden-evaluations-and-clinical-holds', 'evaluation-tenant-isolation', 'database-evidence-guard', 'ledger-validity', 'read-only-and-exact-pin-refusal', 'unchanged-evidence-inventory'], linkedBytes: 20, seconds: 1 };
+  const measurements = [{ recovery: r, application }, structuredClone({ recovery: r, application })];
+  measurements[1].recovery.volumes.writeAttempted = { bytes: 0, GB: 0, GiB: 0 };
+  const names = ['application-primary-copy-reads-and-target-writes-denied', 'actual-app-api-links-evaluations-isolation-and-holds',
+    'tampered-install', 'foreign-destination', 'foreign-db', 'startup-missing', 'runtime-pdf', 'runtime-text', 'missing-object', 'text-corrupt', 'missing-mapping', 'truncated', 'healthy-safe-resume-after-faults'];
+  return { ...value, controls: names.map(name => ({ name, passed: true })), measurements, applicationRecoveryComplete: true, clinicalUseApproved: false };
+}
+test('application recovery gates all profiles after tiers and retains aggregate artifacts', () => {
+  const command = '        run: node .github/ci/verify-application-recovery.mjs';
+  assert.ok(workflow.includes(command)); assert.ok(workflow.indexOf(command) > workflow.indexOf('TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 pnpm'));
+  assert.ok(workflow.includes('path: apps/backend/test-results/application-recovery-*.json'));
+  assert.equal(verifyApplicationRecovery(applicationMetricControl()), true);
+});
+test('application recovery refuses incomplete/false acceptance, privacy drift and incorrect volume or timing', () => {
+  for (const mutate of [v => { v.clinicalUseApproved = true; }, v => { v.applicationRecoveryComplete = false; }, v => { v.controls.pop(); },
+    v => { v.controls[0].passed = false; }, v => { v.rawCatalogue = 'forbidden'; }, v => { v.measurements[0].application.url = 'forbidden'; }, v => { v.measurements[0].application.apiControls.pop(); },
+    v => { v.measurements[0].recovery.volumes.recoveredObjects.GB = 999; }, v => { v.measurements[0].application.seconds = Infinity; },
+    v => { v.measurements[0].application.applicationRecoveryComplete = false; }, v => { v.measurements[1].recovery.volumes.writeAttempted.bytes = 1; }]) {
+    const value = applicationMetricControl(); mutate(value); assert.throws(() => verifyApplicationRecovery(value));
+  }
+});
+test('application recovery requires three artifacts at the expected checkout', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'application-metric-controls-'));
+  try {
+    assert.throws(() => verifyApplicationProfiles(dir));
+    for (const profile of ['memory', 'postgres']) writeFileSync(join(dir, 'application-recovery-' + profile + '.json'), JSON.stringify(applicationMetricControl()));
+    assert.throws(() => verifyApplicationProfiles(dir));
+    writeFileSync(join(dir, 'application-recovery-postgres-s3.json'), JSON.stringify(applicationMetricControl()));
+    assert.doesNotThrow(() => verifyApplicationProfiles(dir, 'a'.repeat(40))); assert.throws(() => verifyApplicationProfiles(dir, 'b'.repeat(40)));
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

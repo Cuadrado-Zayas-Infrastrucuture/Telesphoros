@@ -18,7 +18,7 @@ const realVersion = (id: string | undefined): string | undefined => (id && id !=
 export class S3ObjectStorage extends ObjectStorage {
   constructor(
     private readonly client: S3Client,
-    private readonly bucket: string,
+    readonly bucket: string,
     private readonly ttlSeconds: number,
   ) {
     super();
