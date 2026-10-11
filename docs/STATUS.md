@@ -6,10 +6,13 @@ Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and
 ## Shared dependency build coordination
 
 Workspace typecheck/test now finish one prerequisite-library build phase before running parallel consumers; recursive build uses pnpm’s topological graph without nested dependency rebuilds. Standalone backend/pilot commands retain their prerequisite builds. This fixes overlapping clean builds observed after #70 without serializing checks, disabling cleaning or changing clinical/retention settings. See [plan](design/plans/shared-build-race.md) and [verification](verification/shared-build-race.md).
+## Authorized synthetic source PDF
+
+The local SMART reader can opt into the existing authorized pinned-version download link, verify PDF bytes/version/size/digest against the accepted source, and embed them in the FHIR preview. The viewer offers a local synthetic PDF download. See [plan](design/plans/synthetic-source-pdf.md), [runbook](ops/source-pdf-preview.md) and [verification](verification/synthetic-source-pdf.md). No backend route, retention or clinical gate changes; no EHR writes or deployment.
 
 ## Stored synthetic PGx reads
 
-The OpenEMR pilot can now opt into fresh, explicitly bound reads of stored synthetic evaluations through existing authorized API routes. It checks patient/tenant/principal identity, acceptance/correction/dispute state and source metadata, and never falls back to static fixtures on failure. The source is metadata-only until the separate PDF-retrieval slice. See [plan](design/plans/synthetic-stored-pgx.md), [runbook](ops/stored-pgx-preview.md) and [verification](verification/synthetic-stored-pgx.md). No production route, schema, retention or clinical-gate change; no real data or deployment.
+The OpenEMR pilot can now opt into fresh, explicitly bound reads of stored synthetic evaluations through existing authorized API routes. It checks patient/tenant/principal identity, acceptance/correction/dispute state and source metadata, and never falls back to static fixtures on failure. The source is metadata-only unless the optional PDF retrieval above is configured. See [plan](design/plans/synthetic-stored-pgx.md), [runbook](ops/stored-pgx-preview.md) and [verification](verification/synthetic-stored-pgx.md). No production route, schema, retention or clinical-gate change; no real data or deployment.
 
 ## Synthetic versioned PGx FHIR preview
 

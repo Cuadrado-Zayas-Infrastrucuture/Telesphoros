@@ -175,3 +175,24 @@ it("makes an unavailable version explicit without rendering a source or old resu
   await screen.findByText("Versioned FHIR preview unavailable. No older result is substituted.");
   expect(screen.queryByText("Versioned FHIR preview (synthetic only)")).not.toBeInTheDocument();
 });
+
+
+it("offers only a local PDF download and revokes it when the chart changes", async () => {
+  const create = vi.fn().mockReturnValue("blob:synthetic-pdf");
+  const revoke = vi.fn();
+  vi.stubGlobal("URL", Object.assign(class extends URL {}, { createObjectURL: create, revokeObjectURL: revoke }));
+  const base = await syntheticResponse().json();
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ...base,
+    evidenceSource: "stored-synthetic", pgxFhirPreview: { entry: [{ resource: {
+      resourceType: "DocumentReference", content: [{ attachment: { contentType: "application/pdf", data: btoa("%PDF-1.4 synthetic") } }],
+    } }] },
+  }) }));
+  const view = render(<SmartEvidencePage sessionToken={"a".repeat(43)} />);
+  const link = await screen.findByRole("link", { name: "Download verified synthetic source PDF" });
+  expect(link).toHaveAttribute("href", "blob:synthetic-pdf");
+  expect(link).toHaveAttribute("download", "synthetic-source.pdf");
+  expect(create).toHaveBeenCalledOnce(); expect(fetch).toHaveBeenCalledOnce();
+  view.rerender(<SmartEvidencePage sessionToken={null} />);
+  expect(revoke).toHaveBeenCalledWith("blob:synthetic-pdf");
+  expect(screen.queryByRole("link")).not.toBeInTheDocument();
+});
