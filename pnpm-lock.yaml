@@ -306,6 +306,9 @@ importers:
 
   packages/smart-pilot:
     dependencies:
+      '@telesphoros/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
       axios:
         specifier: ^1.20.0
         version: 1.20.0

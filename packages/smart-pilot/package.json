@@ -5,9 +5,12 @@
   "description": "LOCAL SYNTHETIC ONLY: isolated OpenEMR SMART integration rehearsal",
   "type": "module",
   "scripts": {
+    "pretypecheck": "pnpm --filter @telesphoros/shared-types build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
+    "pretest": "pnpm --filter @telesphoros/shared-types build",
     "test": "vitest run",
+    "prebuild": "pnpm --filter @telesphoros/shared-types build",
     "build": "tsc -p tsconfig.build.json && vite build",
     "start": "node dist/start.js",
     "ehr:start": "node openemr/start.cjs",
@@ -16,6 +19,7 @@
     "test:ehr-guard": "node openemr/verify-seed-guard.cjs"
   },
   "dependencies": {
+    "@telesphoros/shared-types": "workspace:*",
     "axios": "^1.20.0",
     "express": "^5.2.1",
     "jsonwebtoken": "9.0.3",

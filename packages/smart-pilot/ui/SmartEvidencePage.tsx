@@ -153,6 +153,7 @@ function SessionEvidence({ sessionToken }: { sessionToken: string | null }) {
               style={{ marginTop: "calc(6 * var(--space-unit))" }}
             >
               <h2>Synthetic genomic fixture</h2>
+              {data.evidenceSource === "stored-synthetic" && <p>Stored synthetic evaluation. Source PDF retrieval is not connected.</p>}
               {data.pgxFhirPreview ? (
                 <details>
                   <summary>Versioned FHIR preview (synthetic only)</summary>

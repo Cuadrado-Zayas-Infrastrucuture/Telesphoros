@@ -2,6 +2,12 @@
 
 The isolated [OpenEMR SMART pilot](ops/openemr-smart-pilot.md) now has a synthetic **FHIR R4 4.0.1** collection preview. It does not implement a production FHIR server, CDS Hooks service, clinical recommendation, or EHR writeback. The production API never imports this package.
 
+## Stored synthetic evaluations
+
+An [opt-in stored mode](ops/stored-pgx-preview.md) now feeds this same builder through existing authorized API GETs and shared DTOs. It uses explicit EHR issuer/clinician and stored patient/evaluation bindings, supports multiple canonical genes and phenotype-only states without inventing a genotype, and refuses changed/stale/held/disputed records. Its source DocumentReference is metadata-only: report ID and SHA-256, **no asserted storage version or fetched bytes**. `capture-id` links the selected capture identity on DiagnosticReport; `source-retrieval` discloses the unavailable retrieval integration on DocumentReference. Both extensions use the existing pilot namespace and `valueString`. Static embedded fixtures remain available only when stored mode is not selected.
+
+The fixture-specific rules and embedded-source statements below describe static mode; stored mode's authorization, source and consistency limits are in its runbook. Neither mode is production approved.
+
 ## Mapping contract
 
 `GET /auth/fhir/pilot/evidence` adds `pgxFhirPreview`, either a self-contained collection Bundle or `null`. It uses the existing authenticated SMART session, verified synthetic Patient, medication context and post-read expiry check. No new scope, endpoint, storage service or bearer credential is introduced.

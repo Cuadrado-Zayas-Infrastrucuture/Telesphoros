@@ -1,4 +1,5 @@
 import express from "express";
+import type { StoredPgxReader } from "./stored-pgx.js";
 import { mapPgxToFhir } from "./pgx-fhir.js";
 import crypto from "node:crypto";
 import {
@@ -17,11 +18,13 @@ export function createPilotRouter({
   origin,
   registrations,
   now = Date.now,
+  storedReader,
   onDiagnostic = () => {},
 }: {
   origin: string;
   registrations: Record<string, Registration>;
   now?: () => number;
+  storedReader?: StoredPgxReader;
   onDiagnostic?: (event: Diagnostic) => void;
 }) {
   loopbackUrl(origin);
@@ -164,17 +167,31 @@ export function createPilotRouter({
       }
       // Synthetic fixture display only: never invokes or bypasses held clinical generation.
       const fixture = context.mapping;
-      const status = !fixture.consent
+      let status = !fixture.consent
         ? "consent_required"
         : !fixture.interpretable
           ? "genotype_not_interpretable"
-          : !fixture.profile?.length
+          : !fixture.stored && !fixture.profile?.length
             ? "pgx_unavailable"
             : !context.medications.length
               ? "medications_unavailable"
               : context.uncertainCount || context.unmappedCount
                 ? "medications_incomplete"
                 : "synthetic_context_ready";
+      const binding = {
+        tenantId: session.registration.tenantId, patientId: fixture.patientId,
+        fhirPatient: session.patient, issuer: session.registration.issuer,
+      };
+      const stored = fixture.stored && storedReader && status === "synthetic_context_ready"
+        ? await storedReader(fixture.stored, session.user, binding) : null;
+      const expires = Math.min(session.expires, stored?.expires ?? session.expires);
+      if (expires <= now()) return res.status(401).json({ error: "smart_session_expired" });
+      // Selecting stored mode never falls back to registration fixtures, including on missing configuration.
+      const preview = fixture.stored ? stored?.bundle ?? null : mapPgxToFhir(fixture.pgx, {
+        ...binding, consent: fixture.consent, interpretable: fixture.interpretable,
+        contextReady: status === "synthetic_context_ready",
+      });
+      if (fixture.stored && !preview && status === "synthetic_context_ready") status = "pgx_unavailable";
       return res.json({
         synthetic: true,
         clinicalRecommendationsEnabled: false,
@@ -183,18 +200,15 @@ export function createPilotRouter({
         encounter: session.encounter,
         clinician: session.user,
         tenant: session.registration.tenantId,
-        expiresAt: new Date(session.expires).toISOString(),
+        expiresAt: new Date(expires).toISOString(),
         medications: context.medications,
         pagesRead: context.pages,
         uncertainMedicationCount: context.uncertainCount,
         unmappedMedicationCount: context.unmappedCount,
-        profile:
+        profile: fixture.stored ? stored?.profile ?? [] :
           fixture.consent && fixture.interpretable ? fixture.profile || [] : [],
-        pgxFhirPreview: mapPgxToFhir(fixture.pgx, {
-          tenantId: session.registration.tenantId, patientId: fixture.patientId,
-          fhirPatient: session.patient, issuer: session.registration.issuer, consent: fixture.consent,
-          interpretable: fixture.interpretable, contextReady: status === "synthetic_context_ready",
-        }),
+        evidenceSource: fixture.stored ? "stored-synthetic" : "static-synthetic",
+        pgxFhirPreview: preview,
         evidence:
           "Synthetic integration fixture. No clinical recommendation was generated. Clinical release controls remain unchanged.",
       });

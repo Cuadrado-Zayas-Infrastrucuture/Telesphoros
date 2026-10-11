@@ -74,14 +74,30 @@ export function mapPgxToFhir(input: unknown, binding: {
         (sources.has(key) && sources.get(key) !== v.source.sha256)) return null;
     sources.set(key, v.source.sha256);
   }
-  const v = selected;
+  return buildPgxCollection(selected, binding, { kind: "embedded", ...selected.source });
+}
+
+export interface PgxSnapshot {
+  evaluationId: string; createdAt: string; engineVersion: string; knowledgeSetId: string;
+  acceptance: { id: string }; captureId?: string;
+  genes: { gene: string; diplotype: string | null; phenotype: string }[];
+}
+export type PgxSource = { kind: "embedded"; reportId: string; versionId: string; sha256: string; text: string }
+  | { kind: "stored-reference"; reportId: string; sha256: string };
+export interface FhirBinding {
+  tenantId: string; patientId: string; fhirPatient: string; issuer: string;
+}
+type Resource = { resourceType: string; id: string; [field: string]: unknown };
+
+// Called only after the fixture or stored-DTO boundary has checked its own gates.
+export function buildPgxCollection(v: PgxSnapshot, binding: FhirBinding, sourceData: PgxSource) {
   const identity = [binding.tenantId, binding.patientId, binding.issuer, binding.fhirPatient];
   const scopedIdentifier = (kind: string, value: string) => identifier(`${kind}/${digest(JSON.stringify(identity)).slice(0, 32)}`, value);
   const makeId = (kind: string, values: unknown) => `${kind}-${digest(JSON.stringify([identity, values])).slice(0, 48)}`;
-  const sourceId = makeId("source", v.source);
+  const sourceId = makeId("source", sourceData.kind === "embedded" ? {
+    reportId: sourceData.reportId, versionId: sourceData.versionId, sha256: sourceData.sha256, text: sourceData.text,
+  } : sourceData);
   const reportId = makeId("pgx", v);
-  const genotypeId = makeId("genotype", v);
-  const phenotypeId = makeId("phenotype", v);
   const provenanceId = makeId("provenance", v);
   const patientId = makeId("patient", binding.fhirPatient);
   const deviceId = makeId("device", v.engineVersion);
@@ -89,73 +105,79 @@ export function mapPgxToFhir(input: unknown, binding: {
   const ref = (type: string, resourceId: string) => ({ reference: fullUrl(type, resourceId) });
   const subject = ref("Patient", patientId);
   const source = ref("DocumentReference", sourceId);
-  const evaluationIdentifier = scopedIdentifier("evaluation", v.evaluationId);
-  const gene = v.genes[0];
-  const resources = [
-    {
-      resourceType: "Patient", id: patientId,
-      // An identifier records the verified EHR identity without claiming this preview is that server.
-      identifier: [{ system: `${binding.issuer}/Patient`, value: binding.fhirPatient }],
-    },
-    {
-      resourceType: "Device", id: deviceId,
-      deviceName: [{ name: "Synthetic PGx fixture engine", type: "user-friendly-name" }],
-      version: [{ value: v.engineVersion }],
-    },
-    {
-      resourceType: "DocumentReference", id: sourceId, status: "current",
-      masterIdentifier: scopedIdentifier("source-version", `${v.source.reportId}/${v.source.versionId}`),
-      extension: [extension("source-report-id", v.source.reportId), extension("source-version-id", v.source.versionId)],
-      subject,
-      description: "Pinned synthetic source bytes. Document status is not clinical approval.",
-      content: [{ attachment: {
-        extension: [extension("source-sha256", v.source.sha256)],
-        contentType: "text/plain", title: "Synthetic PGx source report",
-        data: Buffer.from(v.source.text, "utf8").toString("base64"),
-        size: Buffer.byteLength(v.source.text, "utf8"),
-      } }],
-    },
-    {
+  const observations: Resource[] = v.genes.flatMap(gene => {
+    const genotypeId = makeId("genotype", v.genes.length === 1 ? v : [v, gene.gene]);
+    const phenotypeId = makeId("phenotype", v.genes.length === 1 ? v : [v, gene.gene]);
+    const genotype: Resource[] = gene.diplotype === null ? [] : [{
       resourceType: "Observation", id: genotypeId, status: "final",
       identifier: [scopedIdentifier("genotype", `${v.evaluationId}/${gene.gene}`)], subject,
       code: { coding: [{ system: "http://loinc.org", code: "84413-4" }], text: "Genotype display name" },
-      valueCodeableConcept: { text: `${gene.gene} ${gene.diplotype}` },
-      derivedFrom: [source],
+      valueCodeableConcept: { text: `${gene.gene} ${gene.diplotype}` }, derivedFrom: [source],
       note: [{ text: "Synthetic supplied diplotype; not computed or clinically approved." }],
-    },
-    {
+    }];
+    return [...genotype, {
       resourceType: "Observation", id: phenotypeId, status: "final",
       identifier: [scopedIdentifier("phenotype", `${v.evaluationId}/${gene.gene}`)], subject,
       code: concept("pgx-phenotype", `${gene.gene} synthetic phenotype`),
       valueCodeableConcept: { text: gene.phenotype },
-      derivedFrom: [ref("Observation", genotypeId), source],
+      derivedFrom: [...(gene.diplotype === null ? [] : [ref("Observation", genotypeId)]), source],
       note: [{ text: "Synthetic supplied phenotype; no genotype-to-phenotype calculation was run." }],
+    }];
+  });
+  const resources: Resource[] = [
+    {
+      resourceType: "Patient", id: patientId,
+      identifier: [{ system: `${binding.issuer}/Patient`, value: binding.fhirPatient }],
     },
     {
+      resourceType: "Device", id: deviceId,
+      deviceName: [{ name: sourceData.kind === "embedded" ? "Synthetic PGx fixture engine" : "Stored synthetic PGx engine", type: "user-friendly-name" }],
+      version: [{ value: v.engineVersion }],
+    },
+    {
+      resourceType: "DocumentReference", id: sourceId, status: "current",
+      masterIdentifier: scopedIdentifier(sourceData.kind === "embedded" ? "source-version" : "source-digest",
+        `${sourceData.reportId}/${sourceData.kind === "embedded" ? sourceData.versionId : sourceData.sha256}`),
+      extension: [extension("source-report-id", sourceData.reportId), ...(sourceData.kind === "embedded"
+        ? [extension("source-version-id", sourceData.versionId)]
+        : [extension("source-retrieval", "not-connected; storage version unavailable in public DTO")])],
+      subject,
+      description: sourceData.kind === "embedded"
+        ? "Pinned synthetic source bytes. Document status is not clinical approval."
+        : "Synthetic stored source metadata only. Bytes and storage version have not been retrieved by this preview.",
+      content: [{ attachment: {
+        extension: [extension("source-sha256", sourceData.sha256)],
+        ...(sourceData.kind === "embedded" ? {
+          contentType: "text/plain", title: "Synthetic PGx source report",
+          data: Buffer.from(sourceData.text, "utf8").toString("base64"),
+          size: Buffer.byteLength(sourceData.text, "utf8"),
+        } : { contentType: "application/pdf", title: "Synthetic source report reference; retrieval not connected" }),
+      } }],
+    },
+    ...observations,
+    {
       resourceType: "DiagnosticReport", id: reportId, status: "final",
-      identifier: [evaluationIdentifier],
-      extension: [extension("knowledge-set-id", v.knowledgeSetId), extension("acceptance-id", v.acceptance.id)],
+      identifier: [scopedIdentifier("evaluation", v.evaluationId)],
+      extension: [extension("knowledge-set-id", v.knowledgeSetId), extension("acceptance-id", v.acceptance.id),
+        ...(v.captureId ? [extension("capture-id", v.captureId)] : [])],
       code: concept("pgx-preview", "Synthetic PGx interpretation snapshot"), subject,
-      issued: v.createdAt,
-      result: [ref("Observation", genotypeId), ref("Observation", phenotypeId)],
+      issued: v.createdAt, result: observations.map(o => ref("Observation", o.id)),
       conclusion: "SYNTHETIC ONLY. Not approved for clinical use. No recommendation or risk assessment generated.",
     },
     {
       resourceType: "Provenance", id: provenanceId,
-      target: [ref("DiagnosticReport", reportId), ref("Observation", genotypeId), ref("Observation", phenotypeId)],
+      target: [ref("DiagnosticReport", reportId), ...observations.map(o => ref("Observation", o.id))],
       recorded: v.createdAt,
       activity: concept("synthetic-mapping", "Mapping supplied synthetic evaluation; no clinical engine invocation"),
-      agent: [{ who: ref("Device", deviceId) }],
-      entity: [{ role: "source", what: source }],
+      agent: [{ who: ref("Device", deviceId) }], entity: [{ role: "source", what: source }],
     },
   ];
   return {
     resourceType: "Bundle" as const, type: "collection" as const,
     meta: { tag: [tag] },
     entry: resources.map(resource => ({
-      fullUrl: fullUrl(resource.resourceType, resource.id),
-      resource: { ...resource, meta: { tag: [tag] } },
+      fullUrl: fullUrl(resource.resourceType, resource.id), resource: { ...resource, meta: { tag: [tag] } },
     })),
   };
 }
-export type PgxFhirBundle = NonNullable<ReturnType<typeof mapPgxToFhir>>;
+export type PgxFhirBundle = ReturnType<typeof buildPgxCollection>;
