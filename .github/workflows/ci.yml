@@ -326,6 +326,7 @@ jobs:
           ignore-unfixed: true
           severity: CRITICAL,HIGH
           trivyignores: infrastructure/docker/trivy.ignore
+      - run: node --test infrastructure/docker/postgres-readiness.test.cjs
       - run: node infrastructure/docker/rehearsal.cjs telesphoros-fd4b:rehearsal
       # OCI retains SBOM/provenance that the Docker load exporter can discard.
       # Private repository artifact only; no registry push or transparency log.

@@ -1,5 +1,6 @@
 // Local/CI only. Creates uniquely named disposable resources; never contacts AWS.
 const assert=require('node:assert/strict');
+const {postgresReady}=require('./postgres-readiness.cjs');
 const {execFileSync}=require('node:child_process');
 const {mkdtempSync,writeFileSync,readFileSync,rmSync}=require('node:fs');
 const {tmpdir}=require('node:os');
@@ -31,7 +32,7 @@ async function main(){
   writeFileSync(join(scratch,'rehearsal.env'),Object.entries({NODE_ENV:'production',NODE_EXTRA_CA_CERTS:'/test/ca.crt',DATABASE_SSL:'require',AUTH_VERIFIER:'cognito',COGNITO_REGION:'us-east-2',COGNITO_USER_POOL_ID:'us-east-2_Synthetic',COGNITO_APP_CLIENT_ID:'synthetic',STORAGE_DRIVER:'postgres',OBJECT_STORAGE_DRIVER:'s3',REPORTS_BUCKET:'synthetic-reports',AWS_REGION:'us-east-2',AWS_ACCESS_KEY_ID:'synthetic',AWS_SECRET_ACCESS_KEY:'synthetic',AWS_ENDPOINT_URL_SECRETS_MANAGER:'http://moto:5000',AWS_EC2_METADATA_DISABLED:'true',RATE_LIMIT_ENABLED:'true',TRUST_PROXY_HOPS:'1',BUILD_VERSION:'synthetic-fd4b',PORT:'3000',CORS_ALLOWED_ORIGINS:'https://synthetic.example.invalid',PROVISION_ADMIN_USER:'synthetic_admin',PROVISION_ADMIN_PASSWORD:password,DATABASE_HOST:'pg',REHEARSAL_WRONG_HOST:pg,DATABASE_PORT:'5432',DATABASE_NAME:'telesphoros',PROVISION_SECRET_APP:'synthetic/app',PROVISION_SECRET_VERIFIER:'synthetic/verifier',PROVISION_SECRET_MIGRATOR:'synthetic/migrator'}).map(([k,v])=>`${k}=${v}`).join('\n')+'\n',{mode:0o600});
   docker('network','create',network);networkCreated=true;
   start(pg,['--network',network,'--network-alias','pg','--env-file',join(scratch,'pg.env'),'postgres:16-bookworm@sha256:0ea6700a3b4f0ae6ce746519073558aed4d88a79d8d07622a9a644946c7319c4']);
-  await until(()=>docker('exec',pg,'pg_isready','-U','postgres').includes('accepting connections'),'Postgres');
+  await until(()=>postgresReady(docker,pg),'Postgres final TCP listener');
   docker('cp',join(scratch,'server.key'),`${pg}:/var/lib/postgresql/server.key`);docker('cp',join(scratch,'server.crt'),`${pg}:/var/lib/postgresql/server.crt`);
   docker('exec','-u','root',pg,'chown','postgres:postgres','/var/lib/postgresql/server.key','/var/lib/postgresql/server.crt');docker('exec','-u','root',pg,'chmod','600','/var/lib/postgresql/server.key');
   run('docker',['exec','-i',pg,'psql','-U','postgres','-v','ON_ERROR_STOP=1'],{input:`ALTER SYSTEM SET ssl='on';
