@@ -343,7 +343,8 @@ instance is ready), or `failed` (not ready). Details never include row content.
   (who, when, the legal or policy basis in the runbook record). The verifier skips the hash check for a note that has a `redaction`
   event and still checks everything else.
 - **Scope of redaction:** free-text notes only. Structured evaluation data (gene inputs, results) is part of the clinical record and
-  follows the retention policy (HIPAA six-year minimum and legal hold), not erasure.
+  follows the applicable record-retention policy and legal holds, not erasure. HIPAA compliance-document retention is a separate
+  category; see [retention authorities](../genomic-storage.md#retention-authorities-and-existing-policy).
 
 ### 6.9 Stated limits
 
@@ -403,8 +404,10 @@ disabled or ledger latched 503. Responses never contain note text in a list view
 
 ## 10. Retention, backup and restore
 
-- Records are retained indefinitely by the application (no delete path). HIPAA's six-year minimum and legal hold are handled by a
-  future reviewed retention job, which this design does not block (the triggers are the one place it would need an explicit, audited exception).
+- Records are retained indefinitely by the application (no delete path). Any future reviewed retention job must follow a record-category
+  schedule that accounts for applicable law, customer obligations and legal holds; it would need an explicit, audited exception at the
+  triggers. No such job or permission is introduced here. HIPAA's six-year compliance-document rule is not a universal clinical-record
+  retention period. Existing retention settings remain unchanged; see [retention authorities and policy](../genomic-storage.md#retention-authorities-and-existing-policy).
 - The new tables are included automatically in backup and restore (facts are read for every public table). **Restore gains a check:
   the ledger verifies in the restored copy**, so a restored database is proven intact, not only complete.
 - Patient and report soft-delete guards (section 3.9) keep evaluated history from being hidden.
