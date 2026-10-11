@@ -1,16 +1,8 @@
-import React, { useEffect, useState } from "react";
-import type { Evidence } from "../src/types.js";
+import React from "react";
+import { useEvidence, labels } from "./useEvidence.js";
+import { CorrectionHistory } from "./CorrectionHistory.js";
 import "./style.css";
 import { SourcePdf } from "./SourcePdf.js";
-
-const labels: Record<string, string> = {
-  synthetic_context_ready: "Synthetic context verified",
-  consent_required: "Genomic consent required",
-  genotype_not_interpretable: "Genomic result unavailable for interpretation",
-  pgx_unavailable: "No genomic profile available",
-  medications_unavailable: "No active medication context available",
-  medications_incomplete: "Medication context needs reconciliation",
-};
 
 export function takeSmartSession(
   location: Pick<Location, "hash" | "pathname"> = window.location,
@@ -24,61 +16,7 @@ export function takeSmartSession(
 }
 
 function SessionEvidence({ sessionToken }: { sessionToken: string | null }) {
-  const [data, setData] = useState<Evidence | null>(null);
-  const [error, setError] = useState(
-    sessionToken
-      ? null
-      : "Launch this view from the synthetic EHR patient chart.",
-  );
-  useEffect(() => {
-    if (!sessionToken) return undefined;
-    const controller = new AbortController();
-    let expiryTimer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = setTimeout(() => controller.abort(), 120000);
-    fetch("/auth/fhir/pilot/evidence", {
-      headers: { Authorization: `Bearer ${sessionToken}` },
-      cache: "no-store",
-      credentials: "omit",
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("unavailable");
-        const result: Evidence = await response.json();
-        const remaining = Date.parse(result.expiresAt) - Date.now();
-        if (
-          !result.synthetic ||
-          result.clinicalRecommendationsEnabled !== false ||
-          !labels[result.status] ||
-          !Number.isFinite(remaining) ||
-          remaining <= 0
-        )
-          throw new Error("invalid");
-        if (controller.signal.aborted) return;
-        setData(result);
-        expiryTimer = setTimeout(() => {
-          setData(null);
-          setError("Session expired. Launch again from the patient chart.");
-        }, remaining);
-      })
-      .catch(() => {
-        if (!controller.signal.aborted)
-          setError(
-            "Context could not be verified. No risk assessment is available. Launch again from the patient chart.",
-          );
-      })
-      .finally(() => clearTimeout(timeout));
-    const abortMessage = () =>
-      setError(
-        "Context retrieval timed out. Launch again from the patient chart.",
-      );
-    controller.signal.addEventListener("abort", abortMessage);
-    return () => {
-      controller.signal.removeEventListener("abort", abortMessage);
-      controller.abort();
-      clearTimeout(timeout);
-      clearTimeout(expiryTimer);
-    };
-  }, [sessionToken]);
+  const { data, error, checking, recheck } = useEvidence(sessionToken);
   return (
     <main
       style={{
@@ -104,6 +42,7 @@ function SessionEvidence({ sessionToken }: { sessionToken: string | null }) {
               ? "Retrieving and verifying patient context…"
               : labels[data.status])}
         </div>
+        {sessionToken && <button className="pilot-recheck" type="button" onClick={recheck} disabled={checking}>Recheck evidence</button>}
         {data && (
           <>
             <section
@@ -171,10 +110,11 @@ function SessionEvidence({ sessionToken }: { sessionToken: string | null }) {
                   ))}
                 </ul>
               ) : (
-                <p>No consented, interpretable fixture is available.</p>
+                <p>{data.correctionHistory ? "Genomic evidence is withheld for this selected evaluation." : "No consented, interpretable fixture is available."}</p>
               )}
               <p>{data.evidence}</p>
             </section>
+            {data.correctionHistory && <CorrectionHistory history={data.correctionHistory} />}
           </>
         )}
         <p style={{ marginTop: "calc(6 * var(--space-unit))" }}>

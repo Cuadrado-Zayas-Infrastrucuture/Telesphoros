@@ -1,3 +1,4 @@
+import type { CorrectionHistory } from "./correction-history.js";
 import { z } from "zod";
 import { pgxVersionsSchema, type PgxFhirBundle } from "./pgx-fhir.js";
 export const storedPatientSchema = z.strictObject({
@@ -65,6 +66,8 @@ export interface Evidence {
   clinician: string;
   tenant: string;
   expiresAt: string;
+  freshUntil: string;
+  correctionHistory: CorrectionHistory | null;
   medications: Medication[];
   pagesRead: number;
   uncertainMedicationCount: number;

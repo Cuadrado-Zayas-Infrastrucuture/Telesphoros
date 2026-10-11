@@ -11,3 +11,15 @@ body {
 dd {
   overflow-wrap: anywhere;
 }
+.pilot-recheck {
+  font: inherit;
+  color: var(--foreground);
+  background: var(--background);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-2);
+  padding: calc(2 * var(--space-unit)) calc(3 * var(--space-unit));
+  margin-top: calc(3 * var(--space-unit));
+}
+.pilot-recheck:disabled {
+  color: var(--muted-foreground);
+}

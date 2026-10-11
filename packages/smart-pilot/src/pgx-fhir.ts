@@ -79,7 +79,7 @@ export function mapPgxToFhir(input: unknown, binding: {
 
 export interface PgxSnapshot {
   evaluationId: string; createdAt: string; engineVersion: string; knowledgeSetId: string;
-  acceptance: { id: string }; captureId?: string;
+  acceptance: { id: string }; captureId?: string; correctionRevision?: string;
   genes: { gene: string; diplotype: string | null; phenotype: string }[];
 }
 export type PgxSource = { kind: "embedded"; reportId: string; versionId: string; sha256: string; text: string }
@@ -162,7 +162,8 @@ export function buildPgxCollection(v: PgxSnapshot, binding: FhirBinding, sourceD
       resourceType: "DiagnosticReport", id: reportId, status: "final",
       identifier: [scopedIdentifier("evaluation", v.evaluationId)],
       extension: [extension("knowledge-set-id", v.knowledgeSetId), extension("acceptance-id", v.acceptance.id),
-        ...(v.captureId ? [extension("capture-id", v.captureId)] : [])],
+        ...(v.captureId ? [extension("capture-id", v.captureId)] : []),
+        ...(v.correctionRevision ? [extension("correction-revision", v.correctionRevision)] : [])],
       code: concept("pgx-preview", "Synthetic PGx interpretation snapshot"), subject,
       issued: v.createdAt, result: observations.map(o => ref("Observation", o.id)),
       conclusion: "SYNTHETIC ONLY. Not approved for clinical use. No recommendation or risk assessment generated.",
