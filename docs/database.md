@@ -139,3 +139,9 @@ signed business associate agreement first. Until then backups contain synthetic 
 A plain `test` prints which tiers it skipped. **CI runs all three tiers** (the `database-and-storage` job in
 `.github/workflows/ci.yml`) and fails the job if any tier reports `NOT RUNNING`: a green run without them says nothing
 about the schema.
+
+## Scheduling the real-service test suites
+
+When `TEST_DATABASE_URL` is set, the backend Jest configuration runs one suite at a time. All suites share one PostgreSQL instance; host CPU-count worker defaults can overload it with concurrent migrations, restores and checkpoints. The restore advisory lock only excludes other participating restore suites, not unrelated database suites.
+
+This controls scheduling, not coverage: existing test deadlines and assertions remain, as do multi-session/writer concurrency tests within a suite. Unit-only runs retain Jest's worker defaults. Do not override the service-run worker count to gain speed without rerunning the resource-contention controls. See [verification](verification/restore-test-scheduling.md).

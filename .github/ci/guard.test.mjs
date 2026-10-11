@@ -269,3 +269,22 @@ test('database tier pipelines preserve test failures and missing-service refusal
     }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('real PostgreSQL suites use one worker without extending test deadlines or changing discovery', () => {
+  const config = new URL('../../apps/backend/jest.config.js', import.meta.url).pathname;
+  const load = database => {
+    const result = spawnSync(process.execPath, ['-e', 'process.stdout.write(JSON.stringify(require(process.argv[1])))', config], {
+      encoding: 'utf8', env: { ...process.env, TEST_DATABASE_URL: database, TEST_S3_ENDPOINT: '' },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    return JSON.parse(result.stdout);
+  };
+  const memory = load('');
+  const postgres = load('postgres://synthetic.invalid/contract-only'); // parsed configuration only; never connects
+  assert.equal(postgres.maxWorkers, 1);
+  assert.equal(memory.maxWorkers, undefined, 'unit-only runs retain Jest worker defaults');
+  assert.equal(postgres.testTimeout, undefined, 'keep the existing Jest five-second deadline');
+  assert.equal(memory.testTimeout, undefined);
+  assert.equal(postgres.testRegex, memory.testRegex);
+  assert.ok(!postgres.testPathIgnorePatterns.includes('/test/db/'), 'database tests must remain enabled');
+});
