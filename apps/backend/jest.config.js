@@ -14,6 +14,10 @@ if (skipped.length > 0) process.stderr.write(`[jest] NOT RUNNING: ${skipped.join
 module.exports = {
   rootDir: '.',
   testEnvironment: 'node',
+  // Service-backed suites share one PostgreSQL instance. Host CPU-count worker defaults
+  // oversubscribe that service during concurrent migrations/restores/checkpoints. Keep
+  // suites sequential; concurrency exercised inside a suite and all deadlines stay intact.
+  ...(process.env.TEST_DATABASE_URL ? { maxWorkers: 1 } : {}),
   testRegex: '(src|test)/.*\\.(spec|e2e-spec|pg-spec|s3-spec)\\.ts$',
   testPathIgnorePatterns: [
     '/node_modules/',

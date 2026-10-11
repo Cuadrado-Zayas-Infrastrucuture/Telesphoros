@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-11**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Restore-test scheduling
+
+The [restore-test scheduling investigation](design/plans/restore-test-scheduling.md) addresses shared PostgreSQL contention in CI: service-backed Jest runs now use one worker, while unit-only runs keep the default parallelism. Test deadlines, assertions and concurrency exercised within each suite are unchanged. See [reproduction and verification](verification/restore-test-scheduling.md) for measured stress results and the limits of attributing the original runner timeout. Retention, clinical gates and production recovery behavior are untouched.
+
 ## Genomic storage documentation corrections
 
 The [genomic storage guidance](genomic-storage.md) applies the [source evaluation](verification/genomic-storage-report-evaluation.md): separate legal retention requirements from product policy, preserve source reports alongside structured PGx results, and correct compression, licensing and HIPAA claims. This is documentation only; retention values, clinical gates, application behavior and infrastructure are unchanged. Unverified statistics and jurisdiction-specific requirements remain explicitly unresolved. The evaluation retains real workstation evidence links and adds repository-relative navigation for GitHub readers.
