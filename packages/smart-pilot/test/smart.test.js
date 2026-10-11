@@ -9,7 +9,7 @@ let ehrServer;
 let fixture;
 let agent;
 let clock;
-async function setup(faults = {}) {
+async function setup(faults = {}, storedReader) {
   let handler;
   ehrServer = http.createServer((req, res) => handler(req, res));
   await new Promise((resolve) => ehrServer.listen(0, "127.0.0.1", resolve));
@@ -26,6 +26,7 @@ async function setup(faults = {}) {
       origin: pilotOrigin,
       registrations: { openemr: fixture.registration },
       now: () => clock,
+      storedReader,
     }),
   );
   agent = request.agent(app);
@@ -270,4 +271,44 @@ test.each(["retracted", "held", "missing", "wrong-patient", "stale-acceptance"])
   expect(response.status).toBe(200);
   expect(response.body.pgxFhirPreview).toBeNull();
   expect(response.body.clinicalRecommendationsEnabled).toBe(false);
+});
+
+const storedSelection = { patientId: "00000000-0000-4000-8000-000000000001", label: "SYN-STORED", evaluationId: "00000000-0000-4000-8000-000000000003" };
+const storedOutput = () => ({ bundle: { resourceType: "Bundle", type: "collection", entry: [] }, expires: clock + 10000, profile: [{ gene: "CYP2C19", result: "Synthetic stored result" }] });
+test("stored mode uses the verified clinician binding and never returns the static profile", async () => {
+  const read = vi.fn(async () => storedOutput()); await setup({}, read);
+  const p = fixture.registration.patients[0]; p.stored = storedSelection; p.profile = [];
+  const response = await evidence(await login());
+  expect(response.status).toBe(200);
+  expect(response.body.evidenceSource).toBe("stored-synthetic");
+  expect(response.body.status).toBe("synthetic_context_ready");
+  expect(response.body.profile).toEqual(storedOutput().profile);
+  expect(Date.parse(response.body.expiresAt)).toBe(clock + 10000);
+  expect(read.mock.calls[0][1]).toBe("Practitioner/clinician-a");
+  expect(read.mock.calls[0][2].fhirPatient).toBe("patient-a");
+});
+test("stored mode without credentials is unavailable, with no fixture fallback", async () => {
+  await setup(); fixture.registration.patients[0].stored = storedSelection;
+  const response = await evidence(await login());
+  expect(response.body.status).toBe("pgx_unavailable");
+  expect(response.body.pgxFhirPreview).toBeNull(); expect(response.body.profile).toEqual([]);
+});
+test.each(["patient-no-consent", "patient-invalid", "patient-empty"])("stored reader is not called behind gate %s", async patient => {
+  const read = vi.fn(async () => storedOutput()); await setup({}, read);
+  fixture.registration.patients.find(p => p.fhirId === patient).stored = storedSelection;
+  const response = await evidence(await login(patient));
+  expect(response.status).toBe(200); expect(response.body.pgxFhirPreview).toBeNull(); expect(read).not.toHaveBeenCalled();
+});
+test("late SMART expiry after stored reads withholds everything", async () => {
+  const read = vi.fn(async () => { clock += 360000; return storedOutput(); }); await setup({}, read);
+  fixture.registration.patients[0].stored = storedSelection;
+  const response = await evidence(await login());
+  expect(response.status).toBe(401); expect(response.body.pgxFhirPreview).toBeUndefined();
+});
+test("stored read errors expose neither credentials nor partial data", async () => {
+  const read = vi.fn(async () => { throw new Error("sensitive-credential-sentinel"); }); await setup({}, read);
+  fixture.registration.patients[0].stored = storedSelection;
+  const response = await evidence(await login());
+  expect(response.status).toBe(422); expect(response.body.pgxFhirPreview).toBeUndefined();
+  expect(JSON.stringify(response.body)).not.toContain("sensitive-credential-sentinel");
 });

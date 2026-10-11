@@ -83,3 +83,7 @@ After building, rerun `pnpm --filter @telesphoros/smart-pilot ehr:configure` and
 Open the consented synthetic patient and expand **Versioned FHIR preview (synthetic only)**. Evaluation 2 references source v2, its SHA-256 and embedded synthetic source bytes; evaluation 1 is not silently substituted. The second patient's consent refusal shows no preview. Closing/changing the launch or expiring the session removes the displayed context. `test:browser` checks both launches and version/source visibility.
 
 See the [FHIR mapping contract and limits](../fhir-cds-hooks.md), [plan](../design/plans/synthetic-pgx-fhir.md) and [verification](../verification/synthetic-pgx-fhir.md). This remains read-only; no resources are sent to OpenEMR and no clinical engine, retention setting or release gate changes.
+
+## Read stored synthetic evaluations
+
+Use the [stored-mode runbook](stored-pgx-preview.md) to bind an existing local synthetic backend principal and patient/evaluation explicitly. A stored selection replaces static fixture output and never falls back on failure. Source PDF retrieval remains unconnected; retention and clinical gates are unchanged.

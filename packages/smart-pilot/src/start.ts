@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPilotRouter } from "./router.js";
+import { createStoredPgxReader } from "./stored-pgx.js";
 import { validateRegistration } from "./client.js";
 
 // Standalone development harness. Never imported or mounted by the production Nest API.
@@ -18,6 +19,11 @@ async function start() {
       ),
     ),
   );
+  const storedPath = path.join(root, "openemr/.runtime/stored-reader.json");
+  if (fs.existsSync(storedPath) && (fs.statSync(storedPath).mode & 0o077) !== 0)
+    throw new Error("Stored reader credentials require private file permissions");
+  const storedReader = fs.existsSync(storedPath)
+    ? createStoredPgxReader(JSON.parse(fs.readFileSync(storedPath, "utf8"))) : undefined;
   const origin = "http://127.0.0.1:8767";
   const dist = path.join(root, "dist-ui");
   if (!fs.existsSync(path.join(dist, "index.html")))
@@ -25,7 +31,7 @@ async function start() {
   const app = express();
   app.disable("x-powered-by");
   app.use(
-    createPilotRouter({ origin, registrations: { openemr: registration } }),
+    createPilotRouter({ origin, storedReader, registrations: { openemr: registration } }),
   );
   app.get("/", (_req, res) =>
     res

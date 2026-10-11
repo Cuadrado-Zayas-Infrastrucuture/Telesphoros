@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { pgxVersionsSchema, type PgxFhirBundle } from "./pgx-fhir.js";
+export const storedPatientSchema = z.strictObject({
+  patientId: z.uuid(), label: z.string().regex(/^SYN-[A-Za-z0-9-]{1,36}$/), evaluationId: z.uuid(),
+});
+export type StoredPatient = z.infer<typeof storedPatientSchema>;
 export const registrationSchema = z.object({
   tenantId: z.literal("synthetic-office"),
   clientId: z.string().min(1),
@@ -15,6 +19,7 @@ export const registrationSchema = z.object({
         patientId: z.string(),
         syntheticIdentifier: z.string().optional(),
         pgx: pgxVersionsSchema.optional(),
+        stored: storedPatientSchema.optional(),
         consent: z.boolean(),
         interpretable: z.boolean(),
         profile: z
@@ -65,6 +70,7 @@ export interface Evidence {
   uncertainMedicationCount: number;
   unmappedMedicationCount: number;
   profile: { gene: string; result: string }[];
+  evidenceSource: "static-synthetic" | "stored-synthetic";
   pgxFhirPreview: PgxFhirBundle | null;
   evidence: string;
 }

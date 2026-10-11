@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import crypto from "node:crypto";
-import zlib from "node:zlib";
-import Ajv from "ajv";
+import { validate, validateSchema } from "./fhir-r4/validate.js";
 import { mapPgxToFhir } from "../src/pgx-fhir.js";
 
 const fixture = () => JSON.parse(fs.readFileSync(new URL("../src/pgx-fixture.json", import.meta.url), "utf8"));
@@ -12,22 +11,6 @@ const binding = {
 };
 const map = (value = fixture(), context = binding) => mapPgxToFhir(value, context);
 const resource = (bundle, type) => bundle.entry.find(e => e.resource.resourceType === type).resource;
-const rawSchema = zlib.gunzipSync(fs.readFileSync(new URL("./fhir-r4/fhir.schema.json.gz", import.meta.url)));
-expect(crypto.createHash("sha256").update(rawSchema).digest("hex")).toBe("2230406893b4cf002a4ee1e5e2bbeca22ac5d2d4931b3e9ef7b9594bbc376a01");
-const schema = JSON.parse(rawSchema);
-// HL7's draft-06 schema uses `id`, discriminator metadata and no format assertions.
-// Explicitly selected draft-06 meta-schema; don't relax field/required/type checks.
-const ajv = new Ajv({ schemaId: "auto", allErrors: false });
-ajv.addMetaSchema(JSON.parse(fs.readFileSync(new URL("../node_modules/ajv/lib/refs/json-schema-draft-06.json", import.meta.url))));
-ajv.addSchema(schema, "fhir-r4");
-const validateSchema = ajv.compile({ $ref: "fhir-r4#/definitions/Bundle" });
-// R4 JSON schema omits required primitive cardinalities (extension-only values are legal).
-// This preview supplies actual values, so check those independently as well.
-const validate = bundle => validateSchema(bundle) && bundle.type === "collection" &&
-  bundle.entry.every(({ resource: r }) => {
-    const required = { DiagnosticReport: "status", Observation: "status", DocumentReference: "status", Provenance: "recorded" }[r.resourceType];
-    return !required || (typeof r[required] === "string" && r[required].length > 0);
-  });
 
 test("core R4 schema accepts the complete collection and rejects malformed resources", () => {
   const bundle = map();

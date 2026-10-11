@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-11**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Stored synthetic PGx reads
+
+The OpenEMR pilot can now opt into fresh, explicitly bound reads of stored synthetic evaluations through existing authorized API routes. It checks patient/tenant/principal identity, acceptance/correction/dispute state and source metadata, and never falls back to static fixtures on failure. The source is metadata-only until the separate PDF-retrieval slice. See [plan](design/plans/synthetic-stored-pgx.md), [runbook](ops/stored-pgx-preview.md) and [verification](verification/synthetic-stored-pgx.md). No production route, schema, retention or clinical-gate change; no real data or deployment.
+
 ## Synthetic versioned PGx FHIR preview
 
 The isolated OpenEMR pilot now maps explicitly selected synthetic evaluation/source versions into a core FHIR R4 collection preview. It preserves source bytes and SHA-256, interpretation/knowledge/engine identities, and patient-bound references; stale, held, retracted, disputed or unconsented results are withheld without fallback. See [mapping contract](fhir-cds-hooks.md), [plan](design/plans/synthetic-pgx-fhir.md) and [verification](verification/synthetic-pgx-fhir.md). This is not a production FHIR/IG adapter or clinical interpretation. No EHR writes, retention changes or clinical gate changes.
