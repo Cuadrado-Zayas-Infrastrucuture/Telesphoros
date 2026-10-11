@@ -54,7 +54,7 @@ A failed API/schema/state check returns the existing sanitized unavailable respo
 
 ## Source identity and consistency limits
 
-The stored DocumentReference contains report ID and SHA-256 metadata from the API, plus the selected capture ID on DiagnosticReport. **No PDF bytes, retrieval URL or object-storage version is invented or fetched.** A digest agreement between DTOs is not an independent byte read-back. The source identifier is report/digest based, and a `source-retrieval` extension explicitly marks retrieval unconnected. Exact version-specific PDF retrieval remains the next slice.
+By default, the stored DocumentReference contains report ID and SHA-256 metadata from the API, plus the selected capture ID on DiagnosticReport. No PDF bytes or object-storage version is invented. The source identifier is report/digest based, and a `source-retrieval` extension marks retrieval unconnected. To enable verified PDF bytes and exact version identity, use the optional [source-PDF configuration](source-pdf-preview.md).
 
 The common FHIR builder preserves the original single-gene static fixture identities and supports multiple stored genes with distinct Observation identities. No recommendation text, drug advice, storage key or presigned URL is exported. The existing synthetic FHIR tags, warnings and disabled clinical actionability remain.
 

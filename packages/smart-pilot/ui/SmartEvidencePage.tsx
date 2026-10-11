@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import type { Evidence } from "../src/types.js";
 import "./style.css";
+import { SourcePdf } from "./SourcePdf.js";
 
 const labels: Record<string, string> = {
   synthetic_context_ready: "Synthetic context verified",
@@ -153,7 +154,7 @@ function SessionEvidence({ sessionToken }: { sessionToken: string | null }) {
               style={{ marginTop: "calc(6 * var(--space-unit))" }}
             >
               <h2>Synthetic genomic fixture</h2>
-              {data.evidenceSource === "stored-synthetic" && <p>Stored synthetic evaluation. Source PDF retrieval is not connected.</p>}
+              {data.evidenceSource === "stored-synthetic" && <><p>Stored synthetic evaluation.</p><SourcePdf bundle={data.pgxFhirPreview} /></>}
               {data.pgxFhirPreview ? (
                 <details>
                   <summary>Versioned FHIR preview (synthetic only)</summary>

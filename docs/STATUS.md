@@ -3,9 +3,13 @@
 Read this first to pick the project up. Snapshot: **2026-10-11**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Authorized synthetic source PDF
+
+The local SMART reader can opt into the existing authorized pinned-version download link, verify PDF bytes/version/size/digest against the accepted source, and embed them in the FHIR preview. The viewer offers a local synthetic PDF download. See [plan](design/plans/synthetic-source-pdf.md), [runbook](ops/source-pdf-preview.md) and [verification](verification/synthetic-source-pdf.md). No backend route, retention or clinical gate changes; no EHR writes or deployment.
+
 ## Stored synthetic PGx reads
 
-The OpenEMR pilot can now opt into fresh, explicitly bound reads of stored synthetic evaluations through existing authorized API routes. It checks patient/tenant/principal identity, acceptance/correction/dispute state and source metadata, and never falls back to static fixtures on failure. The source is metadata-only until the separate PDF-retrieval slice. See [plan](design/plans/synthetic-stored-pgx.md), [runbook](ops/stored-pgx-preview.md) and [verification](verification/synthetic-stored-pgx.md). No production route, schema, retention or clinical-gate change; no real data or deployment.
+The OpenEMR pilot can now opt into fresh, explicitly bound reads of stored synthetic evaluations through existing authorized API routes. It checks patient/tenant/principal identity, acceptance/correction/dispute state and source metadata, and never falls back to static fixtures on failure. The source is metadata-only unless the optional PDF retrieval above is configured. See [plan](design/plans/synthetic-stored-pgx.md), [runbook](ops/stored-pgx-preview.md) and [verification](verification/synthetic-stored-pgx.md). No production route, schema, retention or clinical-gate change; no real data or deployment.
 
 ## Synthetic versioned PGx FHIR preview
 

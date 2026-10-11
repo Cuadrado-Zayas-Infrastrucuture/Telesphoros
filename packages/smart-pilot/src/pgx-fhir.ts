@@ -83,6 +83,7 @@ export interface PgxSnapshot {
   genes: { gene: string; diplotype: string | null; phenotype: string }[];
 }
 export type PgxSource = { kind: "embedded"; reportId: string; versionId: string; sha256: string; text: string }
+  | { kind: "stored-pdf"; reportId: string; versionId: string; sha256: string; data: string; size: number }
   | { kind: "stored-reference"; reportId: string; sha256: string };
 export interface FhirBinding {
   tenantId: string; patientId: string; fhirPatient: string; issuer: string;
@@ -136,13 +137,13 @@ export function buildPgxCollection(v: PgxSnapshot, binding: FhirBinding, sourceD
     },
     {
       resourceType: "DocumentReference", id: sourceId, status: "current",
-      masterIdentifier: scopedIdentifier(sourceData.kind === "embedded" ? "source-version" : "source-digest",
-        `${sourceData.reportId}/${sourceData.kind === "embedded" ? sourceData.versionId : sourceData.sha256}`),
-      extension: [extension("source-report-id", sourceData.reportId), ...(sourceData.kind === "embedded"
+      masterIdentifier: scopedIdentifier(sourceData.kind !== "stored-reference" ? "source-version" : "source-digest",
+        `${sourceData.reportId}/${sourceData.kind !== "stored-reference" ? sourceData.versionId : sourceData.sha256}`),
+      extension: [extension("source-report-id", sourceData.reportId), ...(sourceData.kind !== "stored-reference"
         ? [extension("source-version-id", sourceData.versionId)]
         : [extension("source-retrieval", "not-connected; storage version unavailable in public DTO")])],
       subject,
-      description: sourceData.kind === "embedded"
+      description: sourceData.kind !== "stored-reference"
         ? "Pinned synthetic source bytes. Document status is not clinical approval."
         : "Synthetic stored source metadata only. Bytes and storage version have not been retrieved by this preview.",
       content: [{ attachment: {
@@ -151,6 +152,8 @@ export function buildPgxCollection(v: PgxSnapshot, binding: FhirBinding, sourceD
           contentType: "text/plain", title: "Synthetic PGx source report",
           data: Buffer.from(sourceData.text, "utf8").toString("base64"),
           size: Buffer.byteLength(sourceData.text, "utf8"),
+        } : sourceData.kind === "stored-pdf" ? {
+          contentType: "application/pdf", title: "Verified synthetic source PDF", data: sourceData.data, size: sourceData.size,
         } : { contentType: "application/pdf", title: "Synthetic source report reference; retrieval not connected" }),
       } }],
     },
