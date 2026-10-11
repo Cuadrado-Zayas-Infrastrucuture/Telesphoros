@@ -46,3 +46,20 @@ test('public CA bytes match owner-confirmed pin',()=>{
  assert.equal(createHash('sha256').update(bytes).digest('hex'),'fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c');
  assert.equal(bytes.length,169984);assert.equal((bytes.toString().match(/BEGIN CERTIFICATE/g)||[]).length,111);
 });
+
+// Local pilot credentials must stay out of the root API build context too.
+const rootIgnore = readFileSync(new URL('../../.dockerignore', import.meta.url), 'utf8');
+export function pilotContextProblems(source) {
+  const lines = source.split('\n').map(line => line.trim());
+  return ['packages/smart-pilot/openemr/.runtime', 'packages/smart-pilot/dist-ui']
+    .filter(pattern => !lines.includes(pattern));
+}
+test('root build context excludes synthetic pilot runtime and viewer output', () => {
+  assert.deepEqual(pilotContextProblems(rootIgnore), []);
+});
+for (const pattern of ['packages/smart-pilot/openemr/.runtime', 'packages/smart-pilot/dist-ui']) {
+  test(`detects missing pilot context exclusion: ${pattern}`, () => {
+    const valid = `${rootIgnore}\npackages/smart-pilot/openemr/.runtime\npackages/smart-pilot/dist-ui\n`;
+    assert.ok(pilotContextProblems(valid.split('\n').filter(line => line !== pattern).join('\n')).includes(pattern));
+  });
+}

@@ -21,3 +21,5 @@ Run strict TypeScript, lint, ported HTTP refusal/control tests, viewer tests/bui
 ## PR #66 review follow-up
 
 Founder authorized CI/diff review and fixes while retaining draft status on 2026-10-11. Reproduce query-relative pagination, expiration during upstream reads, and viewer session replacement before fixing them. Review identity claim checks as part of the same isolated connector boundary. Add refusal/control regressions, rerun the real synthetic EHR workflow, and require current-head CI. No production scope, real data or clinical release change.
+
+The review also covers root `.dockerignore` and its existing image guard: exclude this pilot's local runtime state from API build context. Verify with missing-exclusion controls and a disposable Docker context containing only non-secret markers. This changes packaging containment, not production runtime behavior.

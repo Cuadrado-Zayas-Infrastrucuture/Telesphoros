@@ -12,7 +12,7 @@ pnpm demo:smart:setup
 pnpm demo:smart
 ```
 
-The dedicated `telesphoros-remastered-smart-synthetic` Docker project generates credentials under `packages/smart-pilot/openemr/.runtime/` (directory 0700, files 0600). Runtime files are ignored and excluded from the image build context. Provisioning refuses a database with non-pilot patients or conflicting patient identities. MariaDB has no published port; OpenEMR binds `127.0.0.1:8301`, and the viewer binds `127.0.0.1:8767`. No production environment file is loaded. `NODE_ENV=production` refuses startup.
+The dedicated `telesphoros-remastered-smart-synthetic` Docker project generates credentials under `packages/smart-pilot/openemr/.runtime/` (directory 0700, files 0600). Runtime files are ignored and excluded from both the pilot image context and the repository-wide API image context. Provisioning refuses a database with non-pilot patients or conflicting patient identities. MariaDB has no published port; OpenEMR binds `127.0.0.1:8301`, and the viewer binds `127.0.0.1:8767`. No production environment file is loaded. `NODE_ENV=production` refuses startup.
 
 Open [the isolated EHR](http://127.0.0.1:8301/interface/login/login.php). The user is `synthetic-admin`; retrieve its password locally from the generated runtime `docker.env` entry `PILOT_ADMIN_PASSWORD`. Never paste it into chat or reports. The test clinician uses the deliberately invalid NPI `0000000000` to produce a Practitioner identity; it represents no real clinician.
 
