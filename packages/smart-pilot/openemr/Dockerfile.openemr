@@ -1,0 +1,3 @@
+FROM openemr/openemr:8.4.1@sha256:9322d489069bbfc1664515f25729f3ccef8ec1738c62a55f45588b7376f6f52c
+COPY apply-openemr-user-context-fix.php verify-openemr-user-context.php /tmp/
+RUN php /tmp/apply-openemr-user-context-fix.php && php /tmp/verify-openemr-user-context.php

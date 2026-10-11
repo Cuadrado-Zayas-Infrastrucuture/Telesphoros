@@ -15,3 +15,6 @@
 sidecars
 ml
 data
+# Local SMART rehearsal state must never enter the API image build context.
+packages/smart-pilot/openemr/.runtime
+packages/smart-pilot/dist-ui

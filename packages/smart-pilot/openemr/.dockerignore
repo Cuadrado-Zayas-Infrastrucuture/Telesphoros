@@ -1,0 +1,4 @@
+**
+!Dockerfile.openemr
+!apply-openemr-user-context-fix.php
+!verify-openemr-user-context.php

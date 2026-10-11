@@ -1,0 +1,13 @@
+@import "../../../apps/frontend/src/styles/tokens.css";
+body {
+  margin: 0;
+}
+.pilot-card {
+  padding: calc(6 * var(--space-unit));
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-2);
+  background: var(--background);
+}
+dd {
+  overflow-wrap: anywhere;
+}

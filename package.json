@@ -17,6 +17,8 @@
     "demo:review:setup": "node scripts/local-review/database.cjs setup",
     "demo:review": "node scripts/local-review/start.cjs",
     "demo:review:test": "node --test scripts/local-review/local-poppler-runner.test.cjs",
-    "test:image": "node --test infrastructure/docker/guard.test.mjs"
+    "test:image": "node --test infrastructure/docker/guard.test.mjs",
+    "demo:smart:setup": "pnpm --filter @telesphoros/smart-pilot ehr:start && pnpm --filter @telesphoros/smart-pilot ehr:configure",
+    "demo:smart": "pnpm --filter @telesphoros/smart-pilot build && pnpm --filter @telesphoros/smart-pilot start"
   }
 }
