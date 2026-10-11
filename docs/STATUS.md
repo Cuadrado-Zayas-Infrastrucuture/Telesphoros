@@ -1,7 +1,11 @@
 # Status, history and working agreements
 
-Read this first to pick the project up. Snapshot: **2026-10-10**. Update it in the same pull request as any change it describes.
+Read this first to pick the project up. Snapshot: **2026-10-11**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
+
+## Genomic storage documentation corrections
+
+The [genomic storage guidance](genomic-storage.md) applies the [source evaluation](verification/genomic-storage-report-evaluation.md): separate legal retention requirements from product policy, preserve source reports alongside structured PGx results, and correct compression, licensing and HIPAA claims. This is documentation only; retention values, clinical gates, application behavior and infrastructure are unchanged. Unverified statistics and jurisdiction-specific requirements remain explicitly unresolved. The evaluation retains real workstation evidence links and adds repository-relative navigation for GitHub readers.
 
 ## Local synthetic OpenEMR SMART pilot
 

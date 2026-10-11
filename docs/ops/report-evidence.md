@@ -22,6 +22,9 @@ nothing the records cite changes. The new version is simply never used.
 
 ## Retention and deletion
 
+The configured period below is an existing product policy, not a claim that HIPAA sets a universal clinical-record retention period.
+Applicable record-category requirements and legal holds still need confirmation; see [retention authorities and policy](../genomic-storage.md#retention-authorities-and-existing-policy). This clarification does not authorize a reduction or deletion.
+
 - Overwritten (noncurrent) versions are kept at least **six years** (`reports_noncurrent_retention_days`, default 2190, enforced by a
   variable validation and an infrastructure test). Do not lower it: the pinned version of an overwritten file is noncurrent.
 - **No principal in this Terraform module may delete object versions** (`s3:DeleteObjectVersion`). A documented break-glass role outside
