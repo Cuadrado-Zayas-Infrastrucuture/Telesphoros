@@ -4,12 +4,14 @@ import {
   evaluationDtoSchema, patientDtoSchema, reportDtoSchema, captureDtoSchema,
   tenantIdSchema, tenantFromGroups, PIPELINE_SCOPE,
 } from "@telesphoros/shared-types";
+import { readSourcePdf } from "./source-pdf.js";
 import { buildPgxCollection, type FhirBinding } from "./pgx-fhir.js";
 import { fail, loopbackUrl, requestJson } from "./client.js";
 
 import { storedPatientSchema, type StoredPatient } from "./types.js";
 const configSchema = z.strictObject({
   mode: z.literal("stored-synthetic"), apiBaseUrl: z.string(), issuer: z.string(), clientId: z.string().min(1),
+  sourcePdf: z.strictObject({ storageOrigin: z.string() }).optional(),
   readers: z.array(z.strictObject({
     ehrIssuer: z.string(),
     clinician: z.string().regex(/^Practitioner(Role)?\/[A-Za-z0-9.-]{1,64}$/),
@@ -30,6 +32,8 @@ export function createStoredPgxReader(value: unknown, now = Date.now) {
   const issuer = loopbackUrl(config.issuer);
   if (base.pathname !== "/api/v1" || base.search || issuer.search)
     fail("invalid_stored_endpoint");
+  if (config.sourcePdf && loopbackUrl(config.sourcePdf.storageOrigin).origin !== config.sourcePdf.storageOrigin)
+    fail("invalid_storage_origin");
   for (const r of config.readers) {
     const ehr = loopbackUrl(r.ehrIssuer);
     if (ehr.search || ehr.pathname.endsWith("/")) fail("invalid_stored_endpoint");
@@ -70,6 +74,8 @@ export function createStoredPgxReader(value: unknown, now = Date.now) {
         capture.latestDecision?.id !== evaluation.acceptance.id || capture.latestDecision.decision !== "accepted" ||
         capture.latestDecision.captureId !== capture.id || capture.latestDecision.textSha256 !== capture.textSha256 ||
         capture.latestDecision.popplerVersion !== capture.popplerVersion) fail("stored_source_mismatch");
+    const pdf = config.sourcePdf ? await readSourcePdf(await get(`/reports/${report.id}/download-url`),
+      config.sourcePdf.storageOrigin, { sizeBytes: report.sizeBytes, sha256: capture.pdfSha256 }, now) : null;
     // Closing reads catch changes during assembly. This is a bounded read, not an atomic DB snapshot or ongoing correction feed.
     for (const [path, schema, before] of [
       [`/patients/${patient.id}`, patientDtoSchema, patient],
@@ -79,7 +85,8 @@ export function createStoredPgxReader(value: unknown, now = Date.now) {
     ] as const) {
       if (JSON.stringify(schema.parse(await get(path))) !== JSON.stringify(before)) fail("stored_context_changed");
     }
-    if (claims.exp * 1000 <= now()) fail("stored_token_expired");
+    const expires = Math.min(claims.exp * 1000, pdf?.expires ?? Infinity);
+    if (expires <= now()) fail("stored_token_expired");
     const snapshot = {
       evaluationId: evaluation.id, captureId: capture.id, createdAt: evaluation.createdAt,
       engineVersion: evaluation.engineVersion, knowledgeSetId: evaluation.knowledgeSetId,
@@ -88,8 +95,9 @@ export function createStoredPgxReader(value: unknown, now = Date.now) {
     };
     return {
       bundle: buildPgxCollection(snapshot, { ...binding, tenantId: reader.tenantId, patientId: patient.id },
-        { kind: "stored-reference", reportId: report.id, sha256: capture.pdfSha256 }),
-      expires: claims.exp * 1000,
+        pdf ? { kind: "stored-pdf", reportId: report.id, versionId: pdf.versionId, sha256: pdf.sha256, data: pdf.data, size: pdf.size }
+          : { kind: "stored-reference", reportId: report.id, sha256: capture.pdfSha256 }),
+      expires,
       profile: snapshot.genes.map(g => ({ gene: g.gene, result: `Synthetic stored result: ${g.phenotype}` })),
     };
   };

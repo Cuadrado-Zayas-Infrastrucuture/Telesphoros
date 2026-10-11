@@ -7,7 +7,7 @@ import { startFakeIdp, DEFAULT_USERS, type FakeIdp } from '@telesphoros/fake-idp
 import type { EvaluationDto } from '@telesphoros/shared-types';
 import { CognitoTokenVerifier } from '../../src/auth/cognito-token-verifier';
 import { Database } from '../../src/db/database';
-import { createTestApp } from '../helpers/app';
+import { createTestApp, usingS3 } from '../helpers/app';
 import { createEphemeralDatabase, type EphemeralDatabase } from '../helpers/database';
 import { fixturePdf, LabPipeline, type Person } from '../helpers/lab-pipeline';
 import { bearer } from '../helpers/tokens';
@@ -42,7 +42,7 @@ describe('stored synthetic PGx: real API, signed identity and PostgreSQL', () =>
   let lab: LabPipeline;
   let writer: Person;
   let reviewer: Person;
-  let config: { mode: string; apiBaseUrl: string; issuer: string; clientId: string; readers: Array<{ ehrIssuer: string; clinician: string; subject: string; tenantId: string; token: string }> };
+  let config: { mode: string; apiBaseUrl: string; issuer: string; clientId: string; sourcePdf?: { storageOrigin: string }; readers: Array<{ ehrIssuer: string; clinician: string; subject: string; tenantId: string; token: string }> };
   const requests: string[] = [];
   const tenant = `stored-${randomUUID().slice(0, 8)}`;
   beforeAll(async () => {
@@ -61,6 +61,7 @@ describe('stored synthetic PGx: real API, signed identity and PostgreSQL', () =>
     writer = await person(0); reviewer = await person(6);
     const address = app.getHttpServer().address() as { port: number };
     config = { mode: 'stored-synthetic', apiBaseUrl: `http://127.0.0.1:${address.port}/api/v1`, issuer: idp.issuer, clientId: 'fake-client-id',
+      ...(usingS3() ? { sourcePdf: { storageOrigin: new URL(process.env.TEST_S3_ENDPOINT!).origin } } : {}),
       readers: [{ ehrIssuer: binding.issuer, clinician, subject: writer.sub, tenantId: tenant, token: writer.token }] };
   }, 60_000);
   afterAll(async () => { await app?.close(); await idp?.stop(); await db?.drop(); });
@@ -81,7 +82,14 @@ describe('stored synthetic PGx: real API, signed identity and PostgreSQL', () =>
     expect(result.withheld).toBeUndefined(); expect(result.schemaValid).toBe(true);
     expect(result.profile?.map(g => g.gene)).toEqual(['CYP2B6', 'CYP2C19']);
     expect(result.bundle?.entry.filter(e => e.resource.resourceType === 'Observation')).toHaveLength(4);
-    expect(requests).toEqual(Array(9).fill('GET'));
+    expect(requests).toEqual(Array(usingS3() ? 10 : 9).fill('GET'));
+    if (usingS3()) {
+      const document = result.bundle?.entry.find(e => e.resource.resourceType === 'DocumentReference')?.resource;
+      const content = document?.content as { attachment: { data: string; size: number; url?: string } }[];
+      expect(Buffer.from(content[0]!.attachment.data, 'base64')).toEqual(fixturePdf('D01'));
+      expect(content[0]!.attachment.url).toBeUndefined();
+      expect(document?.extension).toContainEqual(expect.objectContaining({ valueString: s.upload.version }));
+    }
     expect(await counts()).toEqual(before);
     expect(JSON.stringify(result)).not.toMatch(/Q intermediate\.|R intermediate-normal\.|access_token|storageKey/);
   }, 30_000);
@@ -122,6 +130,28 @@ describe('stored synthetic PGx: real API, signed identity and PostgreSQL', () =>
       const address = disabled.getHttpServer().address() as { port: number };
       expect(await preview({ ...config, apiBaseUrl: `http://127.0.0.1:${address.port}/api/v1` }, s.selection)).toEqual({ withheld: true });
     } finally { await disabled.close(); }
+  }, 30_000);
+
+  it('retrieves the pinned PDF after overwrite and refuses a deleted pinned version without fallback', async () => {
+    const s = await seed();
+    expect((await preview(config, s.selection)).schemaValid).toBe(true);
+    if (!usingS3()) {
+      // Non-HTTP in-memory links cannot enable PDF retrieval; metadata mode is still covered above.
+      expect(await preview({ ...config, sourcePdf: { storageOrigin: 'http://127.0.0.1:5555' } }, s.selection)).toEqual({ withheld: true });
+      return;
+    }
+    const newerVersion = await lab.put(s.upload.target, fixturePdf('D02'));
+    expect(newerVersion).not.toBe(s.upload.version);
+    const result = await preview(config, s.selection);
+    const document = result.bundle?.entry.find(e => e.resource.resourceType === 'DocumentReference')?.resource;
+    const content = document?.content as { attachment: { data: string } }[];
+    expect(Buffer.from(content[0]!.attachment.data, 'base64')).toEqual(fixturePdf('D01'));
+    expect(document?.extension).toContainEqual(expect.objectContaining({ valueString: s.upload.version }));
+    // Blast radius: only this test's newly created object version in its unique emulator bucket.
+    // The synthetic source fixture can recreate it; no shared or production object is touched.
+    const rows = await lab.row<{ storage_key: string }>('SELECT storage_key FROM reports WHERE tenant_id = $1 AND id = $2', [tenant, s.reportId]);
+    await lab.deleteVersion(rows[0]!.storage_key, s.upload.version!);
+    expect(await preview(config, s.selection)).toEqual({ withheld: true });
   }, 30_000);
 
   it('withholds after an actual active cell dispute appears', async () => {

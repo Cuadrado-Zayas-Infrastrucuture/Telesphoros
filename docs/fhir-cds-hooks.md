@@ -49,3 +49,8 @@ The fixture schema accepts only `clinicalUse: "not-approved"`, `actionable: fals
 ## Next separately scoped work
 
 A production adapter would require authorized tenant-bound repository reads, a reviewed correction/history contract, approved lab/phenotype terminology and IG validation, real version-pinned report retrieval with authorization, and clinical release approval. None is enabled by this preview. Retention policy and clinical gates remain unchanged.
+
+
+### Optional verified synthetic PDF source
+
+With [source-PDF retrieval](ops/source-pdf-preview.md) configured, the stored reader uses the existing authorized pinned download link and independently checks bytes, exact storage response version, SHA-256, size and PDF type/signature before its closing state reads. DocumentReference uses a report/version master identifier, the existing `source-version-id` and `source-sha256` extensions, and `attachment.data`/`size` with `application/pdf`. The signed URL and storage key are never exported. No FHIR `meta.versionId` or standard Attachment.hash is invented. Without this option the metadata-only behavior above remains. Retrieval failures withhold the entire preview; they do not fall back to metadata or older evidence. Clinical and IG conformance limits are unchanged.

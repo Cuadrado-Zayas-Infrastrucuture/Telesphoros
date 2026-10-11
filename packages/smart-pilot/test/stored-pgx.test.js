@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
 import { createStoredPgxReader } from "../src/stored-pgx.js";
+import * as sourcePdf from "../src/source-pdf.js";
 import * as client from "../src/client.js";
 import { validate, validateSchema } from "./fhir-r4/validate.js";
 
@@ -134,4 +135,46 @@ test.each(["https://example.com/api/v1", "http://127.0.0.1:3010/other", "http://
 test("the same clinician identifier from a different EHR cannot use the credential", async () => {
   await expect(build()(selection, clinician, { ...binding, issuer: "http://127.0.0.1:8302/fhir" })).rejects.toThrow("stored_reader_unavailable");
   expect(calls).toHaveLength(0);
+});
+
+
+test("configured PDF retrieval preserves the verified version and bytes through the R4 builder", async () => {
+  const data = Buffer.from("%PDF-1.4\nSYNTHETIC ONLY\n%%EOF\n").toString("base64");
+  config.sourcePdf = { storageOrigin: "http://127.0.0.1:5555" };
+  records[`/reports/${uuid(2)}/download-url`] = { url: "opaque-test-only", expiresAt: time };
+  const pdf = vi.spyOn(sourcePdf, "readSourcePdf").mockResolvedValue({ versionId: "version-1", sha256: report().sha256, data, size: 30, expires: clock() + 30000 });
+  const result = await read();
+  expect(validate(result.bundle), JSON.stringify(validateSchema.errors)).toBe(true);
+  const document = result.bundle.entry.find(e => e.resource.resourceType === "DocumentReference").resource;
+  expect(document.extension.find(e => e.url.endsWith("source-version-id")).valueString).toBe("version-1");
+  expect(document.content[0].attachment.data).toBe(data);
+  expect(document.content[0].attachment.url).toBeUndefined();
+  expect(result.expires).toBe(clock() + 30000);
+  expect(calls).toHaveLength(10);
+  expect(pdf).toHaveBeenCalledWith(records[`/reports/${uuid(2)}/download-url`], config.sourcePdf.storageOrigin, { sizeBytes: report().sizeBytes, sha256: capture().pdfSha256 }, expect.any(Function));
+  pdf.mockRejectedValue(new Error("source_pdf_withheld"));
+  await expect(read()).rejects.toThrow("source_pdf_withheld");
+});
+test("a correction during PDF download withholds the entire preview", async () => {
+  config.sourcePdf = { storageOrigin: "http://127.0.0.1:5555" };
+  records[`/reports/${uuid(2)}/download-url`] = {};
+  const pdf = vi.spyOn(sourcePdf, "readSourcePdf").mockImplementation(async () => {
+    evaluation().state = "retracted";
+    return { versionId: "v1", sha256: report().sha256, data: "JVBERi0=", size: 5, expires: clock() + 30000 };
+  });
+  await expect(read()).rejects.toThrow("stored_context_changed");
+  expect(pdf).toHaveBeenCalledOnce();
+});
+test.each(["http://127.0.0.1:5555/path", "https://example.com", "http://127.0.0.1:5555?query=1"])("rejects invalid configured storage origin %s", origin => {
+  config.sourcePdf = { storageOrigin: origin }; expect(build).toThrow();
+});
+test("link expiry during closing state reads withholds bytes even while the backend credential remains valid", async () => {
+  config.sourcePdf = { storageOrigin: "http://127.0.0.1:5555" };
+  records[`/reports/${uuid(2)}/download-url`] = {};
+  vi.spyOn(sourcePdf, "readSourcePdf").mockResolvedValue({ versionId: "v1", sha256: report().sha256, data: "JVBERi0=", size: 5, expires: clock() + 30000 });
+  let now = clock();
+  const reader = createStoredPgxReader(config, () => now);
+  await reader(selection, clinician, binding); calls.length = 0;
+  onRead = (_path, count) => { if (count === 10) now += 31000; };
+  await expect(reader(selection, clinician, binding)).rejects.toThrow("stored_token_expired");
 });
