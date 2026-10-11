@@ -108,12 +108,20 @@ try {
       ) !== "true"
     )
       throw new Error("Clinical boundary disclosure missing");
+    const hasPreview = run("js", "document.body.textContent.includes('Versioned FHIR preview (synthetic only)')") === "true";
+    if (hasPreview !== (number === 1)) throw new Error("Versioned FHIR consent boundary failed");
+    if (number === 1) {
+      run("click", "text=Versioned FHIR preview (synthetic only)");
+      if (run("js", "document.querySelector('pre').textContent.includes('synthetic-evaluation-2') && document.querySelector('pre').textContent.includes('DocumentReference')") !== "true")
+        throw new Error("Version/source preview missing");
+    }
     run("screenshot", path.join(runtime, `patient-${number}.png`));
     results.push({
       syntheticPatient: number,
       expectedState: expected,
       result: "PASS",
       fragmentCleared: true,
+      versionedPreviewVisible: hasPreview,
     });
   }
   fs.writeFileSync(

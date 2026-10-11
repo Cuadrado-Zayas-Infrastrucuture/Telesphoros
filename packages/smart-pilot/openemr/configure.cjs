@@ -41,6 +41,7 @@ for (const args of [
     process.exit(1);
   }
 }
+const pgxTemplate = JSON.parse(fs.readFileSync(path.join(__dirname, "../src/pgx-fixture.json"), "utf8"));
 const registration = {
   tenantId: "synthetic-office",
   clientId: "synthetic-telesphoros",
@@ -53,6 +54,9 @@ const registration = {
     ...p,
     patientId: "pat_" + String(index + 1).padStart(24, "0"),
     syntheticIdentifier: "TSP-SYNTHETIC-" + (index + 1),
+    pgx: { ...pgxTemplate, versions: pgxTemplate.versions.map(v => ({
+      ...v, patientId: "pat_" + String(index + 1).padStart(24, "0"),
+    })) },
     consent: index === 0,
     interpretable: true,
     profile: [

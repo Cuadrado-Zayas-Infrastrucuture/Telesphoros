@@ -1,4 +1,5 @@
 import express from "express";
+import { mapPgxToFhir } from "./pgx-fhir.js";
 import crypto from "node:crypto";
 import {
   SCOPES,
@@ -189,6 +190,11 @@ export function createPilotRouter({
         unmappedMedicationCount: context.unmappedCount,
         profile:
           fixture.consent && fixture.interpretable ? fixture.profile || [] : [],
+        pgxFhirPreview: mapPgxToFhir(fixture.pgx, {
+          tenantId: session.registration.tenantId, patientId: fixture.patientId,
+          fhirPatient: session.patient, issuer: session.registration.issuer, consent: fixture.consent,
+          interpretable: fixture.interpretable, contextReady: status === "synthetic_context_ready",
+        }),
         evidence:
           "Synthetic integration fixture. No clinical recommendation was generated. Clinical release controls remain unchanged.",
       });

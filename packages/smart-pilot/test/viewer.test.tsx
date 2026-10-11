@@ -150,3 +150,28 @@ it("clears an earlier session error when a fresh session succeeds", async () => 
     "Synthetic context verified",
   );
 });
+
+it("shows a read-only versioned preview and removes it when the launch changes", async () => {
+  const response = syntheticResponse();
+  const data = await response.json();
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ ...data, pgxFhirPreview: {
+      resourceType: "Bundle", type: "collection", entry: [{ resource: {
+        resourceType: "DiagnosticReport", identifier: [{ value: "synthetic-evaluation-2" }],
+      } }],
+    } }),
+  }));
+  const view = render(<SmartEvidencePage sessionToken={"a".repeat(43)} />);
+  await screen.findByText("Versioned FHIR preview (synthetic only)");
+  expect(screen.getByText(/"synthetic-evaluation-2"/)).toBeInTheDocument();
+  expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  view.rerender(<SmartEvidencePage sessionToken={null} />);
+  expect(screen.queryByText(/"synthetic-evaluation-2"/)).not.toBeInTheDocument();
+});
+it("makes an unavailable version explicit without rendering a source or old result", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(syntheticResponse()));
+  render(<SmartEvidencePage sessionToken={"s".repeat(43)} />);
+  await screen.findByText("Versioned FHIR preview unavailable. No older result is substituted.");
+  expect(screen.queryByText("Versioned FHIR preview (synthetic only)")).not.toBeInTheDocument();
+});

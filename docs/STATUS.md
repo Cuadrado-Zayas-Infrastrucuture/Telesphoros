@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-11**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Synthetic versioned PGx FHIR preview
+
+The isolated OpenEMR pilot now maps explicitly selected synthetic evaluation/source versions into a core FHIR R4 collection preview. It preserves source bytes and SHA-256, interpretation/knowledge/engine identities, and patient-bound references; stale, held, retracted, disputed or unconsented results are withheld without fallback. See [mapping contract](fhir-cds-hooks.md), [plan](design/plans/synthetic-pgx-fhir.md) and [verification](verification/synthetic-pgx-fhir.md). This is not a production FHIR/IG adapter or clinical interpretation. No EHR writes, retention changes or clinical gate changes.
+
 ## Restore-test scheduling
 
 The [restore-test scheduling investigation](design/plans/restore-test-scheduling.md) addresses shared PostgreSQL contention in CI: service-backed Jest runs now use one worker, while unit-only runs keep the default parallelism. Test deadlines, assertions and concurrency exercised within each suite are unchanged. See [reproduction and verification](verification/restore-test-scheduling.md) for measured stress results and the limits of attributing the original runner timeout. Retention, clinical gates and production recovery behavior are untouched.

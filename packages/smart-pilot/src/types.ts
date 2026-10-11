@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { pgxVersionsSchema, type PgxFhirBundle } from "./pgx-fhir.js";
 export const registrationSchema = z.object({
   tenantId: z.literal("synthetic-office"),
   clientId: z.string().min(1),
@@ -13,6 +14,7 @@ export const registrationSchema = z.object({
         fhirId: z.string(),
         patientId: z.string(),
         syntheticIdentifier: z.string().optional(),
+        pgx: pgxVersionsSchema.optional(),
         consent: z.boolean(),
         interpretable: z.boolean(),
         profile: z
@@ -63,6 +65,7 @@ export interface Evidence {
   uncertainMedicationCount: number;
   unmappedMedicationCount: number;
   profile: { gene: string; result: string }[];
+  pgxFhirPreview: PgxFhirBundle | null;
   evidence: string;
 }
 export const patientSchema = z.object({
