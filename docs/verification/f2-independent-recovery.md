@@ -34,8 +34,14 @@ No production guard, meaningful assertion or test was removed to obtain green re
 
 Local JSON records the checkout HEAD, which was base main while the implementation was uncommitted; local checks cover the edited working tree. Required CI must generate and validate measurements at the actual reviewed PR checkout before delivery acceptance.
 
-The three focused profiles were subsequently regenerated and validated at committed head `509bce6`. Draft PR #63's initial and diagnostic CI runs passed the other six checks but failed the F2 worker startup in Tier 1; later tiers correctly did not run. Those runs do not provide F2 acceptance evidence. The private native-cache repair is being verified through a fresh complete CI run.
+The three focused profiles were subsequently regenerated and validated at committed head `509bce6`. Draft PR #63's initial and diagnostic CI runs passed the other six checks but failed the F2 worker startup in Tier 1; later tiers correctly did not run. Those runs do not provide F2 acceptance evidence. The private native-cache repair passed the final CI run recorded below.
 
 ## Remaining limits
 
-The fixtures prove synthetic translated-copy bytes only. Native identity is a separate unit contract. No AWS IAM/Compliance/KMS/native replication/custody proof, no application recovery or clinical release, no production RPO/RTO claim. Abrupt termination/power-loss DB cleanup is outside the cooperative interruption controls. Required CI delivery evidence remains pending until a reviewed PR run exists.
+The fixtures prove synthetic translated-copy bytes only. Native identity is a separate unit contract. No AWS IAM/Compliance/KMS/native replication/custody proof, no application recovery or clinical release, no production RPO/RTO claim. Abrupt termination/power-loss DB cleanup is outside the cooperative interruption controls. F3 application and F4 provider/custody acceptance remain separate from this completed F2 delivery.
+
+## Merged delivery evidence
+
+[F2 PR #63](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/63) merged as `2a6022f653a56382f3e2c4299337144066d23856`. [Final CI run 38094880125](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/actions/runs/38094880125) passed all seven checks at head `222955ae35e7ef3e31cdef4d3c2d778a5a338c43`. The tested PR checkout `bda879a3595b397e7bf71461eacb43d69e5db868` and actual main merge have the same tree `96996a9f5abad39de1ec9e79180dae053cb0e4c5`.
+
+Inspected database logs show Tier 1 **1,612 passed / 182 expected profile skips**, Tier 2 **1,793 passed / one expected profile skip**, Tier 3 **1,794 passed / zero skips**, with zero failures/missing-service notices/conditional password skips. All three downloaded F2 artifacts passed the strict validator against the actual tested checkout; each contains 30 passed controls/seven measurements and application recovery false. F1 artifacts from that run each retained 12 passed controls/three measurements. Verify, browser, image, Terraform, advisory terraform-lint and full-history secret-scan logs were also inspected. No production recovery or clinical acceptance is inferred.

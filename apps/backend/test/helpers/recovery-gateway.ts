@@ -9,10 +9,12 @@ export async function recoveryGateway(upstream: string, allowedBuckets: string[]
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://fixture');
     const bucket = url.pathname.split('/')[1];
-    const caller = /Credential=([^/,\s]+)\//.exec(String(req.headers.authorization ?? ''))?.[1];
+    const caller = /Credential=([^/,\s]+)\//.exec(String(req.headers.authorization ?? ''))?.[1]
+      ?? url.searchParams.get('X-Amz-Credential')?.split('/')[0];
     const reader = caller === 'SYNRECOVERYREADER';
     const record = (status: number) => requests.push({ bucket, method: req.method ?? '', reader, object: url.pathname.split('/').filter(Boolean).length > 1, pinned: url.searchParams.has('versionId'), status });
     const allowed = reader ? req.method === 'GET' && allowedBuckets.includes(bucket)
+      : caller === 'SYNRECOVERYAPP' ? req.method === 'GET' && bucket === recoveryBucket
       : caller === 'SYNRECOVERYLOADER' && ['GET', 'PUT'].includes(req.method ?? '') && bucket === recoveryBucket;
     if (!allowed) {
       record(403); req.resume(); res.writeHead(403, { 'content-type': 'application/xml' });
