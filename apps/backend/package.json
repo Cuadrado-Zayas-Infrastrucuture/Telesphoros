@@ -3,10 +3,10 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "prebuild": "pnpm --filter @telesphoros/shared-types --filter @telesphoros/cpic-schema build",
+    "prebuild": "node ../../scripts/workspace-build/workspace.cjs prepare shared-types cpic-schema",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
-    "pretypecheck": "pnpm --filter @telesphoros/shared-types --filter @telesphoros/cpic-schema --filter @telesphoros/fake-idp build",
+    "pretypecheck": "node ../../scripts/workspace-build/workspace.cjs prepare shared-types cpic-schema fake-idp",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "jest",
