@@ -1,0 +1,43 @@
+name: telesphoros-remastered-smart-synthetic
+services:
+  database:
+    image: mariadb:11.4
+    environment:
+      MARIADB_ROOT_PASSWORD: ${PILOT_DB_ROOT}
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - synthetic-db:/var/lib/mysql
+    networks: [synthetic]
+  openemr:
+    image: telesphoros-openemr-synthetic:8.4.1-uuid-context
+    build:
+      context: .
+      dockerfile: Dockerfile.openemr
+    ports:
+      - '127.0.0.1:8301:80'
+    environment:
+      MYSQL_HOST: database
+      MYSQL_ROOT_PASS: ${PILOT_DB_ROOT}
+      MYSQL_USER: openemr
+      MYSQL_PASS: ${PILOT_DB_APP}
+      TELESPHOROS_SYNTHETIC_PILOT: "1"
+      OE_USER: synthetic-admin
+      OE_PASS: ${PILOT_ADMIN_PASSWORD}
+    depends_on:
+      database:
+        condition: service_healthy
+    volumes:
+      - synthetic-sites:/var/www/localhost/htdocs/openemr/sites
+      - ./openemr-module:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/oe-module-telesphoros-pilot:ro
+    networks: [synthetic, browser]
+networks:
+  browser: {}
+  synthetic:
+    internal: true
+volumes:
+  synthetic-db:
+  synthetic-sites:

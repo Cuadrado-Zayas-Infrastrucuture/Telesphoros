@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-10**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Local synthetic OpenEMR SMART pilot
+
+A separate development package, `@telesphoros/smart-pilot`, ports the synthetic read-only OpenEMR rehearsal from the deleted gateway repository onto this codebase. It validates chart launch, signed clinician identity and exact patient-bound FHIR reads; a standalone viewer displays synthetic fixtures and withholds genomic content without fixture consent. It does not call the clinical engine or mount routes in the production API. See [plan](design/plans/openemr-smart-pilot.md), [runbook](ops/openemr-smart-pilot.md) and [verification](verification/openemr-smart-pilot.md). No clinical approval, real data, AWS deployment or broader SMART integration is claimed.
+
 ## Current frontend foundation closure
 
 Phase 0 skeleton accepted by founder on 2026-10-09. Phase 1 closure merged as PR #50, with all seven CI checks passing; the founder confirmed the merge. It adds local-screen field errors/focus, shared token controls, mobile/keyboard checks, separate form-component files and all-page chunk guards. That closure left standard product upload as a browser-only sample stub; its later transport slice is tracked below. Clinical logic and hosting were untouched. Evidence: [Phase 1 closure](verification/phase1-closure.md). No later phase is marked complete by this change.
