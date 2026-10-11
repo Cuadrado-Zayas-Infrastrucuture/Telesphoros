@@ -56,8 +56,11 @@ pnpm --filter @telesphoros/smart-pilot typecheck
 pnpm --filter @telesphoros/smart-pilot lint
 pnpm --filter @telesphoros/smart-pilot test
 pnpm --filter @telesphoros/smart-pilot build
+pnpm --filter @telesphoros/smart-pilot test:ehr-guard
 pnpm --filter @telesphoros/smart-pilot test:browser
 ```
+
+The optional `test:ehr-guard` runs the actual provisioning predicate on a connection-local temporary MariaDB table, including NULL/empty/unregistered refusal and valid fixture controls. It never changes persistent patient records.
 
 The optional browser smoke requires the installed gstack browse binary at `~/.agents/skills/gstack/browse/dist/browse`, the provisioned EHR, and the running viewer. It captures generated credentials only in memory and withholds sensitive browser diagnostics. It opens the observed chart link in a managed tab because the driver does not track native `noopener` popups. It clears the stale local OAuth cookie for this test browser session (cookies are not port-scoped); do not use this test browser concurrently with another localhost OpenEMR instance. Screenshots and an aggregate verification JSON remain in the ignored runtime directory.
 

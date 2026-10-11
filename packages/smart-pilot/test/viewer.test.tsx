@@ -81,3 +81,72 @@ describe("synthetic SMART evidence", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+const syntheticResponse = () => ({
+  ok: true,
+  json: async () => ({
+    synthetic: true,
+    clinicalRecommendationsEnabled: false,
+    status: "synthetic_context_ready",
+    patient: "synthetic-a",
+    encounter: null,
+    clinician: "Practitioner/synthetic",
+    tenant: "synthetic-office",
+    expiresAt: new Date(Date.now() + 60000).toISOString(),
+    pagesRead: 1,
+    medications: [],
+    uncertainMedicationCount: 0,
+    unmappedMedicationCount: 0,
+    profile: [],
+    evidence: "Synthetic fixture only",
+  }),
+});
+it("removes the previous patient when its session is removed", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(syntheticResponse()));
+  const view = render(<SmartEvidencePage sessionToken={"a".repeat(43)} />);
+  await screen.findByText("synthetic-a");
+  view.rerender(<SmartEvidencePage sessionToken={null} />);
+  expect(screen.queryByText("synthetic-a")).not.toBeInTheDocument();
+  expect(screen.getByRole("status")).toHaveTextContent("Launch this view");
+});
+it("withholds the old patient while a different session is pending or fails", async () => {
+  let finish: ((value: { ok: boolean }) => void) | undefined;
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(syntheticResponse())
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      ),
+  );
+  const view = render(<SmartEvidencePage sessionToken={"a".repeat(43)} />);
+  await screen.findByText("synthetic-a");
+  view.rerender(<SmartEvidencePage sessionToken={"b".repeat(43)} />);
+  expect(screen.queryByText("synthetic-a")).not.toBeInTheDocument();
+  finish?.({ ok: false });
+  await waitFor(() =>
+    expect(screen.getByRole("status")).toHaveTextContent("No risk assessment"),
+  );
+});
+it("clears an earlier session error when a fresh session succeeds", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce(syntheticResponse()),
+  );
+  const view = render(<SmartEvidencePage sessionToken={"a".repeat(43)} />);
+  await waitFor(() =>
+    expect(screen.getByRole("status")).toHaveTextContent("No risk assessment"),
+  );
+  view.rerender(<SmartEvidencePage sessionToken={"b".repeat(43)} />);
+  await screen.findByText("synthetic-a");
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "Synthetic context verified",
+  );
+});

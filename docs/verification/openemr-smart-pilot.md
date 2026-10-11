@@ -42,3 +42,19 @@ The isolated image retains the source-hash-checked user-UUID forwarding and bina
 Review the draft and require all repository CI gates before merging. Production adoption requires separate TLS, session/audit/consent and organization-mapping work plus clinical validation and release approval. No merge or deployment is included here.
 
 See the [runbook](../ops/openemr-smart-pilot.md) for setup, chart launch and teardown.
+
+## PR #66 review fixes
+
+A follow-up review on 2026-10-11 reproduced and corrected:
+
+| Finding | Regression evidence and correction |
+|---|---|
+| Query-only relative pagination resolved against the FHIR directory | Returned 422 for a valid second page; resolve against the page supplying the link. Same-origin/path/patient checks remain mandatory. |
+| Session expired during an upstream read still released its result | Returned 200 after the synthetic clock crossed expiry; recheck before releasing evidence, delete the session and return 401. |
+| Wrong explicit authorized party and non-string OIDC subject accepted | Both returned callback 302; now reject mismatched `azp` whenever present and require a nonempty string `sub`. Matching authorized-party control succeeds. |
+| Viewer retained old patient context/error when launch session changed | Three UI regressions failed; key the session view by its token so prior data, errors and pending work are cleared together. |
+| Provisioning guard omitted NULL identifiers | The actual SQL predicate failed against a temporary MariaDB table; explicitly reject NULL as well as empty/unregistered identifiers. Both registered fixtures remain accepted. No persistent records changed by this guard test. |
+
+The pre-fix HTTP/UI run had **7 failing tests**. After repair, **42 tests passed**, with strict TypeScript, lint and build passing. The optional `pnpm --filter @telesphoros/smart-pilot test:ehr-guard` executes the actual provisioning predicate against the dedicated MariaDB instance in a connection-local temporary table. Normal provisioning was rerun successfully. CI on the updated PR head remains authoritative for repository-wide tiers; earlier-head green results do not validate these changes.
+
+Both real OpenEMR chart → OAuth → FHIR → viewer scenarios were rerun against the rebuilt review fixes and passed: correct separate patients, consent withholding, cleared fragments and disabled clinical recommendations.

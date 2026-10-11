@@ -156,6 +156,11 @@ export function createPilotRouter({
     }
     try {
       const context = await readContext(session.registration, session);
+      // Upstream pagination can outlive a session. Never release its data afterward.
+      if (session.expires <= now()) {
+        if (bearer) sessions.delete(hash(bearer));
+        return res.status(401).json({ error: "smart_session_expired" });
+      }
       // Synthetic fixture display only: never invokes or bypasses held clinical generation.
       const fixture = context.mapping;
       const status = !fixture.consent

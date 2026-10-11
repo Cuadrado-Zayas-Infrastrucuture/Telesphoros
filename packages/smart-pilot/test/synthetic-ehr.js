@@ -70,7 +70,8 @@ export function createSyntheticEhr({ origin, pilotOrigin, faults = {} }) {
     tokens.set(access, q.launch);
     const idToken = jwt.sign(
       {
-        sub: `synthetic-${q.launch}`,
+        sub: faults.subject ?? `synthetic-${q.launch}`,
+        ...(faults.azp ? { azp: faults.azp } : {}),
         nonce: faults.nonce ? "wrong" : q.nonce,
         fhirUser: `${issuer}/${faults.person ? "Person" : "Practitioner"}/${q.launch === "patient-b" ? "clinician-b" : "clinician-a"}`,
       },
@@ -123,6 +124,7 @@ export function createSyntheticEhr({ origin, pilotOrigin, faults = {} }) {
   app.get("/fhir/MedicationRequest", (req, res) => {
     if (req.query.patient !== req.syntheticPatient)
       return res.status(403).end();
+    faults.onMedicationRead?.();
     const second = req.query.page === "2";
     const medication = {
       resourceType: "MedicationRequest",

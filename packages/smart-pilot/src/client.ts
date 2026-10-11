@@ -178,7 +178,9 @@ export async function exchange(
   });
   if (
     typeof claims === "string" ||
+    typeof claims.sub !== "string" ||
     !claims.sub ||
+    (claims.azp !== undefined && claims.azp !== registration.clientId) ||
     !Number.isFinite(claims.exp) ||
     claims.nonce !== flow.nonce ||
     (Array.isArray(claims.aud) &&
@@ -240,10 +242,12 @@ export async function readContext(
   if (!tagged && !marked) fail("synthetic_patient_required");
   let next: string | undefined =
     `${base}/MedicationRequest?patient=${encodeURIComponent(session.patient)}&_count=50`;
+  let currentPage = next;
   const visited = new Set();
   const medications: z.infer<typeof medicationSchema>[] = [];
   while (next) {
-    const url = new URL(next, `${base}/`);
+    // Relative references are resolved against the page that supplied them.
+    const url = new URL(next, currentPage);
     if (
       url.origin !== new URL(base).origin ||
       url.pathname !== `${new URL(base).pathname}/MedicationRequest` ||
@@ -256,6 +260,7 @@ export async function readContext(
       visited.size >= 20
     )
       fail("unsafe_fhir_pagination");
+    currentPage = url.href;
     visited.add(url.href);
     const bundle = bundleSchema.parse(
       await requestJson(url.href, { token: session.token }),

@@ -22,11 +22,7 @@ export function takeSmartSession(
   return /^[A-Za-z0-9_-]{43}$/.test(token || "") ? token : null;
 }
 
-export default function SmartEvidencePage({
-  sessionToken,
-}: {
-  sessionToken: string | null;
-}) {
+function SessionEvidence({ sessionToken }: { sessionToken: string | null }) {
   const [data, setData] = useState<Evidence | null>(null);
   const [error, setError] = useState(
     sessionToken
@@ -178,5 +174,19 @@ export default function SmartEvidencePage({
         </p>
       </div>
     </main>
+  );
+}
+
+// Remount on a new launch so no prior patient's data or error survives a token change.
+export default function SmartEvidencePage({
+  sessionToken,
+}: {
+  sessionToken: string | null;
+}) {
+  return (
+    <SessionEvidence
+      key={sessionToken || "no-session"}
+      sessionToken={sessionToken}
+    />
   );
 }

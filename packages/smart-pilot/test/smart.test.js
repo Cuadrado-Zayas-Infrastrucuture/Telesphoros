@@ -220,3 +220,32 @@ test.each(["searchset", "collection", "transaction"])(
     expect(response.status).toBe(bundleType === "transaction" ? 422 : 200);
   },
 );
+
+test("follows query-relative next links against the current medication page", async () => {
+  await setup({ next: "?patient=patient-a&page=2" });
+  const response = await evidence(await login());
+  expect(response.status).toBe(200);
+  expect(response.body.pagesRead).toBe(2);
+  expect(response.body.medications).toHaveLength(2);
+});
+test("withholds evidence if its session expires while upstream data is being read", async () => {
+  await setup({
+    onMedicationRead: () => {
+      clock += 16 * 60 * 1000;
+    },
+  });
+  const response = await evidence(await login());
+  expect(response.status).toBe(401);
+  expect(response.body).toEqual({ error: "smart_session_expired" });
+});
+test.each([{ azp: "another-client" }, { subject: 42 }])(
+  "rejects mismatched authorized party or malformed subject: %j",
+  async (faults) => {
+    await setup(faults);
+    expect((await get(await begin())).status).toBe(400);
+  },
+);
+test("accepts an explicit authorized party matching this client", async () => {
+  await setup({ azp: "synthetic-client" });
+  expect((await evidence(await login())).status).toBe(200);
+});

@@ -11,7 +11,7 @@ function query($sql, $params = []) {
     $statement->execute($params);
     return $statement;
 }
-if ((int) query('SELECT COUNT(*) n FROM patient_data WHERE pubpid NOT IN (?, ?)', ['TSP-SYNTHETIC-1', 'TSP-SYNTHETIC-2'])->get_result()->fetch_assoc()['n'] !== 0) {
+if ((int) query('SELECT COUNT(*) n FROM patient_data WHERE pubpid IS NULL OR pubpid NOT IN (?, ?)', ['TSP-SYNTHETIC-1', 'TSP-SYNTHETIC-2'])->get_result()->fetch_assoc()['n'] !== 0) {
     throw new RuntimeException('Refusing to seed a database containing non-pilot patients');
 }
 $config = json_decode(file_get_contents('/tmp/smart-pilot-seed.json'), true, 512, JSON_THROW_ON_ERROR);

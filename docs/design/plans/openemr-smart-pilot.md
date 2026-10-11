@@ -17,3 +17,7 @@ Production API mounts/auth, database migrations/RLS, clinical engines, real know
 ## Verification
 
 Run strict TypeScript, lint, ported HTTP refusal/control tests, viewer tests/build, and both real synthetic OpenEMR browser launches. Verify ignored runtime files and secret signatures before commit. Inspect workspace CI; database/S3 tiers remain necessary for repository merge but this slice changes neither application schema nor storage. Report all skipped tiers and keep the PR draft for review.
+
+## PR #66 review follow-up
+
+Founder authorized CI/diff review and fixes while retaining draft status on 2026-10-11. Reproduce query-relative pagination, expiration during upstream reads, and viewer session replacement before fixing them. Review identity claim checks as part of the same isolated connector boundary. Add refusal/control regressions, rerun the real synthetic EHR workflow, and require current-head CI. No production scope, real data or clinical release change.
