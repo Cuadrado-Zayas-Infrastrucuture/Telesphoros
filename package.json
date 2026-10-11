@@ -9,9 +9,9 @@
   },
   "scripts": {
     "lint": "pnpm -r --if-present lint",
-    "typecheck": "pnpm -r --if-present typecheck",
-    "test": "pnpm -r --if-present test",
-    "build": "pnpm -r --if-present build",
+    "typecheck": "node scripts/workspace-build/workspace.cjs run typecheck",
+    "test": "node --test scripts/workspace-build/workspace.test.cjs && node scripts/workspace-build/workspace.cjs run test",
+    "build": "node scripts/workspace-build/workspace.cjs run build",
     "test:infra": "node --test infrastructure/terraform/guard.test.mjs",
     "test:ci-config": "node --test .github/ci/guard.test.mjs",
     "demo:review:setup": "node scripts/local-review/database.cjs setup",
@@ -19,6 +19,7 @@
     "demo:review:test": "node --test scripts/local-review/local-poppler-runner.test.cjs",
     "test:image": "node --test infrastructure/docker/guard.test.mjs",
     "demo:smart:setup": "pnpm --filter @telesphoros/smart-pilot ehr:start && pnpm --filter @telesphoros/smart-pilot ehr:configure",
-    "demo:smart": "pnpm --filter @telesphoros/smart-pilot build && pnpm --filter @telesphoros/smart-pilot start"
+    "demo:smart": "pnpm --filter @telesphoros/smart-pilot build && pnpm --filter @telesphoros/smart-pilot start",
+    "test:build-orchestration": "node --test scripts/workspace-build/workspace.test.cjs"
   }
 }

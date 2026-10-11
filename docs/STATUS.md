@@ -3,6 +3,9 @@
 Read this first to pick the project up. Snapshot: **2026-10-11**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Shared dependency build coordination
+
+Workspace typecheck/test now finish one prerequisite-library build phase before running parallel consumers; recursive build uses pnpm’s topological graph without nested dependency rebuilds. Standalone backend/pilot commands retain their prerequisite builds. This fixes overlapping clean builds observed after #70 without serializing checks, disabling cleaning or changing clinical/retention settings. See [plan](design/plans/shared-build-race.md) and [verification](verification/shared-build-race.md).
 ## Authorized synthetic source PDF
 
 The local SMART reader can opt into the existing authorized pinned-version download link, verify PDF bytes/version/size/digest against the accepted source, and embed them in the FHIR preview. The viewer offers a local synthetic PDF download. See [plan](design/plans/synthetic-source-pdf.md), [runbook](ops/source-pdf-preview.md) and [verification](verification/synthetic-source-pdf.md). No backend route, retention or clinical gate changes; no EHR writes or deployment.
