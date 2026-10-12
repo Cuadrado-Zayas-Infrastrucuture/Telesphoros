@@ -1,5 +1,5 @@
 import type { Client } from 'pg';
-import { ALL_CLASSIFIED_TABLES, APPEND_ONLY_CLASSES } from '../../src/db/append-only-tables';
+import { ALL_CLASSIFIED_TABLES, APPEND_ONLY_CLASSES, MUTABLE_OPERATIONAL_TABLES } from '../../src/db/append-only-tables';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 
 let pg: EphemeralDatabase;
@@ -29,6 +29,14 @@ describe('catalog guard: the audit tables are classified and protected as their 
     const by = Object.fromEntries(rows.map((r) => [r.relname, r]));
     for (const t of Object.values(APPEND_ONLY_CLASSES).flat()) expect([t, by[t]?.relrowsecurity]).toEqual([t, true]);
     for (const t of FORCED) expect([t, by[t]?.relforcerowsecurity]).toEqual([t, true]);
+  });
+
+  it('local operational state has forced tenant RLS and no application DELETE/TRUNCATE privilege',async()=>{
+    const tables=await q<{relname:string;relrowsecurity:boolean;relforcerowsecurity:boolean}>("SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class WHERE relnamespace='public'::regnamespace AND relname=ANY($1)",[[...MUTABLE_OPERATIONAL_TABLES]]);
+    expect(tables).toHaveLength(2);for(const t of tables)expect(t).toMatchObject({relrowsecurity:true,relforcerowsecurity:true});
+    const grants=await q<{table_name:string;privilege_type:string}>("SELECT table_name,privilege_type FROM information_schema.role_table_grants WHERE table_schema='public' AND grantee='telesphoros_app' AND table_name=ANY($1)",[[...MUTABLE_OPERATIONAL_TABLES]]);
+    for(const table of MUTABLE_OPERATIONAL_TABLES)expect(grants.filter(g=>g.table_name===table).map(g=>g.privilege_type).sort()).toEqual(['INSERT','SELECT','UPDATE']);
+    const policies=await q<{tablename:string;qual:string;with_check:string}>("SELECT tablename,qual,with_check FROM pg_policies WHERE schemaname='public' AND tablename=ANY($1)",[[...MUTABLE_OPERATIONAL_TABLES]]);expect(policies).toHaveLength(2);for(const p of policies){expect(p.qual).toContain('app.current_tenant_id');expect(p.with_check).toContain('app.current_tenant_id');}
   });
 
   it('every guarded table refuses UPDATE/DELETE per row and TRUNCATE per statement', async () => {

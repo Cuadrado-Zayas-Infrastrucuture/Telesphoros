@@ -73,7 +73,7 @@ export async function seedRecovery(pg: EphemeralDatabase, storage: S3ObjectStora
         expect(await reports.recordUploadRequest(record)).toBe(true);
         const uploaded = await storage.putObject(key, bytes, 'application/pdf');
         expect(uploaded.version).toBeTruthy();
-        Object.assign(record, { objectVersion: uploaded.version, uploadedAt: new Date().toISOString(), uploadedBy: 'syn-uploader' });
+        Object.assign(record, await reports.findById(tenant,reportId), { objectVersion: uploaded.version, uploadedAt: new Date().toISOString(), uploadedBy: 'syn-uploader' });
         expect(await reports.markUploaded(record)).toBe(true);
         // Latest bytes deliberately differ: recovery must read the pinned version, never latest.
         await storage.putObject(key, Buffer.from('Synthetic later version'), 'application/pdf');

@@ -1,3 +1,4 @@
+import type { Readable } from 'node:stream';
 import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { type FetchedObject, type InspectedObject, ObjectStorage, ObjectTooLargeError, type UploadTarget } from './object-storage';
@@ -78,6 +79,19 @@ export class InMemoryObjectStorage extends ObjectStorage {
 
   async createDownloadUrl(key: string, version: string, ttlSeconds: number): Promise<string> {
     return `memory://download/${key}?versionId=${encodeURIComponent(version)}&expires=${ttlSeconds}`;
+  }
+
+  async uploadVersions(key: string, signal: AbortSignal) { if(signal.aborted)throw new Error('Incomplete inventory');return [...this.objects.entries()].filter(([k])=>k.startsWith(key)).flatMap(([k,values])=>values.map(v=>({key:k,version:v.version,deleted:false}))); }
+
+  async uploadMultipart(_key:string,signal:AbortSignal) {void _key;if(signal.aborted)throw new Error('Incomplete inventory');return [];}
+
+  async putStream(key: string, stream: Readable, contentType: string, size: number, signal: AbortSignal) {
+    // Test-only store necessarily retains bytes. Production S3 streaming never takes this path.
+    if (this.objects.has(key) || signal.aborted) throw new Error('Write refused');
+    const chunks: Buffer[] = []; let count = 0;
+    for await (const chunk of stream) { if (signal.aborted) throw new Error('Write cancelled'); count += chunk.length; if (count > size) throw new ObjectTooLargeError(size); chunks.push(chunk); }
+    if (count !== size) throw new Error('Incomplete write');
+    return this.putObject(key, Buffer.concat(chunks), contentType);
   }
 
   async versioningEnabled(): Promise<boolean> {

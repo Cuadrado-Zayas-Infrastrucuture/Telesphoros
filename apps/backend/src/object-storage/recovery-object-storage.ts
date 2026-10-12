@@ -89,11 +89,11 @@ export class RecoveryObjectStorage extends ObjectStorage {
     if (entry.source.bytes > options.maxBytes) throw new ObjectTooLargeError(options.maxBytes);
     return this.read(entry, options.maxBytes);
   }
-  async createDownloadUrl(key: string, version: string, ttlSeconds: number): Promise<string> {
+  async createDownloadUrl(key: string, version: string, ttlSeconds: number, options?: { filename: string }): Promise<string> {
     if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds < 1 || ttlSeconds > 900) throw new EvidenceError('policy');
     const entry = this.resolve(key, version);
     await this.read(entry, entry.source.bytes); // exact bytes verified again before signing; never signs a missing/corrupt substitute
-    return this.target.createDownloadUrl(entry.key, entry.version, ttlSeconds);
+    return this.target.createDownloadUrl(entry.key, entry.version, ttlSeconds, options);
   }
   async versioningEnabled(): Promise<boolean> { return this.target.versioningEnabled(); }
   async createUploadTarget(): Promise<never> { throw AppException.unavailable('Recovery file storage is read only.'); }

@@ -46,13 +46,13 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
     await app.close();
   });
 
-  it('answers 503 PIPELINE_DISABLED to a signed-in clinician creating a lab-pdf, with no Retry-After, and writes nothing', async () => {
+  it('registers PDF metadata while processing is disabled without touching bytes', async () => {
     const token = await tenantToken('clin-1', ['clinician']);
     const patientId = await newPatient(app, token);
-    const res = await createReport(app, token, patientId).expect(503);
-    expect(res.body.error).toMatchObject({ code: 'PIPELINE_DISABLED' });
+    const res = await createReport(app, token, patientId).expect(201);
+    expect(res.body).toMatchObject({ type: 'lab-pdf',fileUploaded:false });
     expect(res.headers['retry-after']).toBeUndefined();
-    expect((await api(app).get('/api/v1/reports').set(bearer(token)).expect(200)).body.data).toEqual([]);
+    expect((await api(app).get('/api/v1/reports').set(bearer(token)).expect(200)).body.data).toHaveLength(1);
     expect(storageCalls).toEqual([]);
   });
 
@@ -100,13 +100,13 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
     }
   });
 
-  it('refuses to turn an existing report into a lab-pdf while off, and nothing touched storage', async () => {
+  it('allows an unuploaded report type correction while processing is off without touching storage', async () => {
     const token = await tenantToken('clin-1', ['clinician']);
     const patientId = await newPatient(app, token);
     const id = (await createReport(app, token, patientId, { type: 'vcf', filename: 'a.vcf' }).expect(201)).body.id;
-    const res = await api(app).patch(`/api/v1/reports/${id}`).set(bearer(token)).send({ type: 'lab-pdf', filename: 'a.pdf' }).expect(503);
-    expect(res.body.error.code).toBe('PIPELINE_DISABLED');
-    expect((await api(app).get(`/api/v1/reports/${id}`).set(bearer(token))).body).toMatchObject({ type: 'vcf', filename: 'a.vcf' });
+    const res = await api(app).patch(`/api/v1/reports/${id}`).set(bearer(token)).send({ type: 'lab-pdf', filename: 'a.pdf' }).expect(200);
+    expect(res.body.type).toBe('lab-pdf');
+    expect((await api(app).get(`/api/v1/reports/${id}`).set(bearer(token))).body).toMatchObject({ type: 'lab-pdf', filename: 'a.pdf' });
     expect(storageCalls).toEqual([]);
   });
 });
@@ -233,14 +233,14 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
     await api(app).delete(`/api/v1/reports/${free}`).set(bearer(alice)).expect(204);
   });
 
-  it('switching the pipeline off later stops uploading and completing a lab-pdf (503), while reading it and deleting it still work', async () => {
+  it('switching the pipeline off later preserves the legacy PDF processing gate outside an owned run (503), while reading it and deleting it still work', async () => {
     const alice = await tenantToken('alice', ['clinician'], 'tenant-off');
     const patientId = await newPatient(app, alice);
     const id = (await createReport(app, alice, patientId).expect(201)).body.id as string;
     const target = (await uploadUrl(alice, id).expect(200)).body;
     await put(target, PDF);
 
-    const off = await createTestApp({ postgresUrl: db.appUrl }); // the same database, the switch back to its default
+    const off = await createTestApp({ postgresUrl: db.appUrl,legacyTransport:true }); // the same database, the switch back to its default
     try {
       const get = (path: string) => request(off.getHttpServer()).get(`/api/v1/${path}`).set(bearer(alice));
       const post = (path: string, body: object = {}) => request(off.getHttpServer()).post(`/api/v1/${path}`).set(bearer(alice)).send(body);

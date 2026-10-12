@@ -135,7 +135,7 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
       await reports.insert(report(o, p1.id));
       await reports.insert(report(o, p2.id));
 
-      expect(await reports.findById(o, uploaded.id)).toEqual(uploaded);
+      expect(await reports.findById(o, uploaded.id)).toEqual({...uploaded, uploadRevision:expect.any(String),deletedAt:null});
       expect((await reports.list(o, { offset: 0, limit: 10 }, { patientId: p1.id })).total).toBe(2);
       expect((await reports.list(o, { offset: 0, limit: 10 }, {})).total).toBe(3);
       expect(await reports.countByPatient(o, p1.id)).toBe(2);
@@ -152,7 +152,7 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
       await reports.insert(r);
       const edited = { ...r, filename: 'b.json', type: 'structured' as const, status: 'processing' as const, updatedAt: stamp(10) };
       await reports.update(edited);
-      expect(await reports.findById(o, r.id)).toEqual(edited);
+      expect(await reports.findById(o, r.id)).toEqual({...edited, uploadRevision:expect.any(String),deletedAt:null});
     });
 
     it('update() never touches the stored file: only type, file name and status change', async () => {
@@ -183,7 +183,9 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
       expect(await reports.recordUploadRequest({ ...declared, uploadRequestedBy: 'syn-second', updatedAt: stamp(6) })).toBe(true);
       expect(await reports.findById(o, r.id)).toMatchObject({ uploadRequestedBy: 'syn-first', sha256: hash, uploadedAt: null });
 
-      const done = { ...declared, uploadedAt: stamp(7), objectVersion: 'ver-1', uploadedBy: 'syn-completer', updatedAt: stamp(7) };
+      const current = (await reports.findById(o, r.id))!;
+      expect(await reports.markUploaded({ ...declared, uploadedAt: stamp(7) })).toBe(false); // stale revision cannot pin
+      const done = { ...current, uploadedAt: stamp(7), objectVersion: 'ver-1', uploadedBy: 'syn-completer', updatedAt: stamp(7) };
       expect(await reports.markUploaded(done)).toBe(true);
       expect(await reports.findById(o, r.id)).toMatchObject({ uploadedAt: done.uploadedAt, objectVersion: 'ver-1', uploadedBy: 'syn-completer', uploadRequestedBy: 'syn-first' });
 

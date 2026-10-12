@@ -9,7 +9,7 @@ import { bearer, signToken } from './helpers/tokens';
 
 let app: NestExpressApplication;
 beforeAll(async () => {
-  app = await createTestApp();
+  app = await createTestApp({legacyTransport:true});
 });
 afterAll(async () => {
   await app.close();

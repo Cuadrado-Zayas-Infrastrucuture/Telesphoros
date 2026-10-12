@@ -14,6 +14,10 @@ The local SMART reader can opt into the existing authorized pinned-version downl
 
 The OpenEMR pilot can now opt into fresh, explicitly bound reads of stored synthetic evaluations through existing authorized API routes. It checks patient/tenant/principal identity, acceptance/correction/dispute state and source metadata, and never falls back to static fixtures on failure. The source is metadata-only unless the optional PDF retrieval above is configured. See [plan](design/plans/synthetic-stored-pgx.md), [runbook](ops/stored-pgx-preview.md) and [verification](verification/synthetic-stored-pgx.md). No production route, schema, retention or clinical-gate change; no real data or deployment.
 
+## L1 owned synthetic storage API
+
+The founder approved L1 plus intake/cancellation refinements and the explicit legacy compatibility boundary. The branch adds bounded validated PDF/VCF/JSON intake, immutable upload attempts/revision CAS, exact-version attachment access and conservative owned compensation libraries. See [API](design/local-storage-intake.md) and [verification](verification/local-storage-intake.md). The full local three-tier regression and final negative controls passed. Delivery still requires committed-head recovery evidence and separate PR authorization. No PR/remote CI or merge is claimed. New owned-mode apps keep clinical processing disabled. L2 browser transport and L3 operational runner/scheduling/teardown remain pending; AWS upgrades, spending, agreements and production use remain deferred.
+
 ## Synthetic versioned PGx FHIR preview
 
 The isolated OpenEMR pilot now maps explicitly selected synthetic evaluation/source versions into a core FHIR R4 collection preview. It preserves source bytes and SHA-256, interpretation/knowledge/engine identities, and patient-bound references; stale, held, retracted, disputed or unconsented results are withheld without fallback. See [mapping contract](fhir-cds-hooks.md), [plan](design/plans/synthetic-pgx-fhir.md) and [verification](verification/synthetic-pgx-fhir.md). This is not a production FHIR/IG adapter or clinical interpretation. No EHR writes, retention changes or clinical gate changes.

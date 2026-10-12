@@ -1,3 +1,5 @@
+import type { UploadVersion, UploadMultipart } from './upload-inventory';
+import type { Readable } from 'node:stream';
 export interface UploadTarget {
   url: string;
   method: 'PUT';
@@ -46,7 +48,7 @@ export abstract class ObjectStorage {
    * object (or version) exists. This is what makes the upload trustworthy: we verify the bytes ourselves instead of taking the
    * client's word for their size or checksum.
    */
-  abstract inspect(key: string, options?: { version?: string }): Promise<InspectedObject | undefined>;
+  abstract inspect(key: string, options?: { version?: string; signal?: AbortSignal }): Promise<InspectedObject | undefined>;
 
   /** Like `inspect` (same single request) but also keeps the bytes. Throws ObjectTooLargeError beyond `maxBytes`. Undefined if missing. */
   abstract getObject(key: string, options: { version?: string; maxBytes: number }): Promise<FetchedObject | undefined>;
@@ -55,7 +57,17 @@ export abstract class ObjectStorage {
   abstract putObject(key: string, bytes: Buffer, contentType: string): Promise<{ version: string | undefined }>;
 
   /** A short-lived link that downloads exactly this VERSION. A bearer credential: never log it. */
-  abstract createDownloadUrl(key: string, version: string, ttlSeconds: number): Promise<string>;
+  abstract createDownloadUrl(key: string, version: string, ttlSeconds: number, options?: { filename: string }): Promise<string>;
+
+  /** Validated owned file stream; unsupported/read-only adapters refuse rather than buffer or grant a write. */
+  async uploadVersions(_key: string, _signal: AbortSignal): Promise<UploadVersion[]> { void _key; void _signal; throw new Error('Upload inventory unavailable.'); }
+
+  async uploadMultipart(_key: string, _signal: AbortSignal): Promise<UploadMultipart[]> {void _key;void _signal;throw new Error('Multipart inventory unavailable.');}
+
+  async putStream(_key: string, _bytes: Readable, _contentType: string, _size: number, _signal: AbortSignal, _metadata?: Record<string,string>): Promise<{ version: string | undefined }> {
+    void _key; void _bytes; void _contentType; void _size; void _signal; void _metadata;
+    throw new Error('Streaming writes unavailable.');
+  }
 
   /** True when the store keeps object versions (the bucket's versioning is enabled). Startup refuses the pipeline otherwise. */
   abstract versioningEnabled(): Promise<boolean>;

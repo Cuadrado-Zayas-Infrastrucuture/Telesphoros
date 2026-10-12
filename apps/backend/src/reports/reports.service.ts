@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { FILE_LINK_ROLES } from '../auth/file-access';
 import { Injectable } from '@nestjs/common';
 import {
   filenameMatchesType,
@@ -6,7 +7,6 @@ import {
   type ReportCreate,
   type ReportListQuery,
   type ReportPatch,
-  type ReportType,
   type ReportUploadUrlRequest,
   type ReportUploadUrlResponse,
 } from '@telesphoros/shared-types';
@@ -28,11 +28,6 @@ export class ReportsService {
     private readonly pipeline: PipelineSwitch,
   ) {}
 
-  /** A `lab-pdf` report belongs to the pipeline: while it is switched off, creating, changing or uploading one answers 503 and does nothing. */
-  private gate(...types: ReportType[]): void {
-    if (types.includes('lab-pdf')) this.pipeline.assertEnabled();
-  }
-
   list(principal: Principal, { page, pageSize, patientId }: ReportListQuery) {
     return this.reports.list(principal.tenantId, { offset: (page - 1) * pageSize, limit: pageSize }, { patientId });
   }
@@ -45,7 +40,6 @@ export class ReportsService {
 
   /** Registers report metadata for one of the caller's own patients. The new status is always "received". */
   async create(principal: Principal, input: ReportCreate): Promise<ReportRecord> {
-    this.gate(input.type);
     // Same NOT_FOUND whether the patient is missing or belongs to someone else.
     if (!(await this.patients.findById(principal.tenantId, input.patientId))) {
       throw AppException.notFound('Patient not found.');
@@ -72,12 +66,12 @@ export class ReportsService {
     };
     if (input.requestId) return this.reports.insertOrReplay(record);
     await this.reports.insert(record);
-    return record;
+    return this.get(principal,record.id);
   }
 
   async patch(principal: Principal, id: string, patch: ReportPatch): Promise<ReportRecord> {
     const existing = await this.get(principal, id);
-    this.gate(existing.type, patch.type ?? existing.type);
+    if (existing.uploadedAt && patch.type !== undefined && patch.type !== existing.type) throw AppException.conflict('An uploaded report cannot change its type.');
     // Create checks that name and type agree; a patch may change only one of them, so check the result.
     const type = patch.type ?? existing.type;
     const filename = patch.filename ?? existing.filename;
@@ -91,7 +85,19 @@ export class ReportsService {
       updatedAt: new Date().toISOString(),
     };
     await this.reports.update(updated);
-    return updated;
+    return this.get(principal, id);
+  }
+
+  async downloadUrl(principal: Principal,id: string) {
+    if(!principal.roles.some(r=>FILE_LINK_ROLES.includes(r as typeof FILE_LINK_ROLES[number])))throw AppException.forbidden();
+    const report=await this.get(principal,id);
+    if(!await this.patients.findById(principal.tenantId,report.patientId))throw AppException.notFound();
+    if(!report.uploadedAt||!report.storageKey||!report.objectVersion||report.objectVersion==='null'||!report.sha256||!report.contentType)throw AppException.conflictBecause('source-unpinned','A verified pinned upload is required.');
+    const stored=await this.storage.inspect(report.storageKey,{version:report.objectVersion});
+    if(!stored||stored.version!==report.objectVersion||stored.sha256!==report.sha256||stored.sizeBytes!==report.sizeBytes||stored.contentType!==report.contentType)throw AppException.conflictBecause('source-changed','The stored version is missing or does not match the verified file.');
+    const current=await this.get(principal,id);if(current.objectVersion!==report.objectVersion||current.storageKey!==report.storageKey)throw AppException.conflict('The report changed during verification.');
+    const ttl=this.pipeline.downloadUrlTtlSeconds;
+    return {url:await this.storage.createDownloadUrl(report.storageKey,report.objectVersion,ttl,{filename:current.filename}),expiresAt:new Date(Date.now()+ttl*1000).toISOString()};
   }
 
   async remove(principal: Principal, id: string): Promise<void> {
@@ -106,7 +112,8 @@ export class ReportsService {
    */
   async createUploadUrl(principal: Principal, id: string, input: ReportUploadUrlRequest): Promise<ReportUploadUrlResponse> {
     const report = await this.get(principal, id);
-    this.gate(report.type);
+    if (this.pipeline.localStorageOnly) throw AppException.conflictBecause('validated-intake-required', 'Use validated server intake before storage.');
+    if(report.type==='lab-pdf')this.pipeline.assertEnabled();
     if (report.uploadedAt) throw AppException.conflict('The file for this report was already uploaded.');
     if (!REPORT_CONTENT_TYPES[report.type].includes(input.contentType)) {
       throw AppException.validation([
@@ -134,7 +141,8 @@ export class ReportsService {
    */
   async completeUpload(principal: Principal, id: string): Promise<ReportRecord> {
     const report = await this.get(principal, id);
-    this.gate(report.type);
+    if (this.pipeline.localStorageOnly) throw AppException.conflictBecause('validated-intake-required', 'Use validated server intake before storage.');
+    if(report.type==='lab-pdf')this.pipeline.assertEnabled();
     if (report.uploadedAt) return report;
     if (!report.storageKey || !report.sha256 || !report.contentType) {
       throw AppException.conflict('Request an upload URL for this report first.');
@@ -152,13 +160,17 @@ export class ReportsService {
     }
     // The version came back in the SAME response as the bytes that were just hashed, so it names exactly the verified object.
     // A lab PDF is evidence and must be pinned to a real version; without versioning there is nothing to pin.
-    if (report.type === 'lab-pdf' && !stored.version) {
+    if (!stored.version || stored.version === 'null') {
       throw AppException.conflictBecause('source-unpinned', 'The stored file has no version, so it cannot be used as evidence. Enable versioning on the reports bucket.');
     }
     const now = new Date().toISOString();
     const completed: ReportRecord = { ...report, uploadedAt: now, objectVersion: stored.version ?? null, uploadedBy: principal.sub, updatedAt: now };
     // If someone completed it first, keep THEIR record: a repeated complete changes nobody's identity.
-    if (!(await this.reports.markUploaded(completed))) return this.get(principal, id);
+    if (!(await this.reports.markUploaded(completed))) {
+      const winner=await this.get(principal,id);
+      if(winner.storageKey!==completed.storageKey || winner.objectVersion!==completed.objectVersion || winner.sha256!==completed.sha256) throw AppException.conflict('The upload declaration changed during verification.');
+      return winner;
+    }
     return completed;
   }
 }

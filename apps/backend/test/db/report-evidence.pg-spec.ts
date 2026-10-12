@@ -180,7 +180,11 @@ describe('a capture needs a live, pinned lab PDF with the same hash', () => {
   it('the database refuses a report of another type; the repository refuses it as "source changed"', async () => {
     const t = tenant();
     const report = await seedLabReport(pg.adminUrl, t);
-    await update(report, `type = 'vcf'`); // allowed: no capture yet
+    expect((await update(report, `type = 'vcf'`))?.code).toBe(INTEGRITY); // uploaded type is now frozen before capture
+    const foreign = await seedLabReport(pg.adminUrl,t);
+    const vcfId=newId(),vcfKey=`vcf/${randomUUID()}`;
+    await withAdmin(pg.adminUrl,c=>c.query(`INSERT INTO reports(id,tenant_id,created_by,patient_id,type,original_filename,size_bytes,storage_key,sha256,content_type,uploaded_at,object_version,uploaded_by) VALUES($1,$2,'syn-up',$3,'vcf','inert.vcf',10,$4,$5,'text/x-vcf',now(),'syn-v','syn-up')`,[vcfId,t,foreign.patientId,vcfKey,report.pdfSha256]));
+    report.reportId=vcfId;report.storageKey=vcfKey;report.objectVersion='syn-v';
     expect((await rawCapture(report))?.code).toBe(INTEGRITY);
     await expect(repo.insertCapture(t, 'syn-capturer', captureFor(report))).rejects.toBeInstanceOf(SourceChangedError);
   });
@@ -263,7 +267,6 @@ describe('a capture racing a change to the same report (decided by the lock queu
 
   it.each([
     ['soft-delete', `deleted_at = now()`],
-    ['change of type', `type = 'vcf'`],
   ])('report change (%s) commits first: the waiting capture is refused and nothing of it remains', async (_name, set) => {
     const t = tenant();
     const report = await seedLabReport(pg.adminUrl, t);
@@ -298,7 +301,7 @@ describe('reverting 0010', () => {
       await withAdmin(db.adminUrl, async (c) => {
         // 0011 (incidents) sits above 0010 and has its own guard: revert it on purpose first, then drop the setting again so 0010's guard is what is tested.
         await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
-        expect(await migrateDown(c, 3)).toEqual(['0014', '0013', '0012']);
+        expect(await migrateDown(c, 4)).toEqual(['0015', '0014', '0013', '0012']);
         expect(await migrateDown(c, 1)).toEqual(['0011']);
         await c.query(`RESET telesphoros.allow_audit_drop`);
         await expect(migrateDown(c, 1)).rejects.toThrow(/Refusing to drop report evidence/);

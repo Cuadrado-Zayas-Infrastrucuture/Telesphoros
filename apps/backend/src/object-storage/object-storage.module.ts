@@ -1,3 +1,4 @@
+import { assertLocalStorage } from '../reports/intake/local-policy';
 import { S3Client } from '@aws-sdk/client-s3';
 import { type DynamicModule, Global, Module } from '@nestjs/common';
 import type { Env } from '../config/env';
@@ -10,6 +11,7 @@ import type { RecoveryObjectStorage } from './recovery-object-storage';
 @Module({})
 export class ObjectStorageModule {
   static register(env: Env, recovery?: RecoveryObjectStorage): DynamicModule {
+    if (env.LOCAL_STORAGE_RUN_ID) assertLocalStorage(env);
     if (recovery) return {
       module: ObjectStorageModule,
       providers: [{ provide: ObjectStorage, useValue: recovery }], exports: [ObjectStorage],
@@ -23,7 +25,7 @@ export class ObjectStorageModule {
             useFactory: () =>
               new S3ObjectStorage(
                 // Credentials come from the default provider chain (an IAM role in AWS), never from our config.
-                new S3Client({ region: env.AWS_REGION, endpoint: env.S3_ENDPOINT, forcePathStyle: env.S3_FORCE_PATH_STYLE }),
+                new S3Client({ region: env.AWS_REGION, endpoint: env.S3_ENDPOINT, forcePathStyle: env.S3_FORCE_PATH_STYLE, ...(env.LOCAL_STORAGE_RUN_ID ? { credentials: { accessKeyId: 'local-synthetic', secretAccessKey: 'local-synthetic' }, maxAttempts: 1 } : {}) }),
                 env.REPORTS_BUCKET!,
                 env.UPLOAD_URL_TTL_SECONDS,
               ),

@@ -10,10 +10,10 @@ import { bearer, clinicianA, clinicianB, readerA } from './helpers/tokens';
 
 let app: NestExpressApplication;
 beforeAll(async () => {
-  app = await createTestApp();
+  app = await createTestApp({legacyTransport:true});
 });
 afterAll(async () => {
-  await app.close();
+  await app?.close();
 });
 
 const api = () => request(app.getHttpServer());
@@ -40,7 +40,7 @@ async function putFile(target: { uploadUrl: string; headers: Record<string, stri
   expect(res.ok).toBe(true);
 }
 
-describe('report upload: the happy path', () => {
+describe('outside-owned-run legacy report upload: the happy path', () => {
   it('registers, gets a URL, uploads directly, and the server verifies and marks it uploaded', async () => {
     const a = await clinicianA();
     const id = await newReport(a);
@@ -100,7 +100,7 @@ describe('report upload: the happy path', () => {
   });
 });
 
-describe('report upload: the server does not take the client’s word', () => {
+describe('outside-owned-run legacy report upload: the server does not take the client’s word', () => {
   it('rejects completion before any URL was requested, and before any bytes arrived', async () => {
     const a = await clinicianA();
     const id = await newReport(a);
@@ -128,7 +128,7 @@ describe('report upload: the server does not take the client’s word', () => {
   });
 });
 
-describe('report upload: validation, roles and ownership', () => {
+describe('outside-owned-run legacy report upload: validation, roles and ownership', () => {
   it('rejects a content type that does not suit the report type, a bad checksum, and unknown fields', async () => {
     const a = await clinicianA();
     const id = await newReport(a);

@@ -1,3 +1,4 @@
+import { ReportsController } from '../src/reports/reports.controller';
 import { Controller, Get, HttpCode, Post } from '@nestjs/common';
 import { METHOD_METADATA } from '@nestjs/common/constants';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -75,7 +76,7 @@ describe('route classes', () => {
     const marked = (controller: { prototype: object }, handler: string) => Reflect.getMetadata(RATE_CLASS_KEY, (controller.prototype as Record<string, object>)[handler]);
     expect([
       marked(ReportCaptureController, 'capture'),
-      marked(ReportCaptureController, 'downloadUrl'),
+      marked(ReportsController, 'downloadUrl'),
       marked(CapturesController, 'textUrl'),
       marked(ReportEvaluationController, 'create'),
       marked(LedgerController, 'verify'),

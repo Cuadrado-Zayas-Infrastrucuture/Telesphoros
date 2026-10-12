@@ -18,7 +18,8 @@ import { RunnerMisconfiguredError, TextCaptureRunner, UnsupportedSourceError } f
 export const MAX_TEXT_SCALARS = 100_000;
 
 /** The roles that may open a stored file (the PDF or its text). A `reader` may not: a PDF is the most sensitive artifact here. */
-export const FILE_LINK_ROLES = ['clinician', 'reviewer', 'admin'] as const;
+export { FILE_LINK_ROLES } from '../auth/file-access';
+import { FILE_LINK_ROLES } from '../auth/file-access';
 
 export interface CaptureOutcome {
   capture: CaptureDto;

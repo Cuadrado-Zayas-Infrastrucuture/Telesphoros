@@ -55,7 +55,6 @@ describe('the lab-report pipeline routes', () => {
       'GET /api/v1/evaluations/:id',
       'GET /api/v1/ledger/verify',
       'GET /api/v1/notes/:id',
-      'GET /api/v1/reports/:id/download-url',
       'POST /api/v1/captures/:id/decision',
       'POST /api/v1/cell-disputes',
       'POST /api/v1/cell-disputes/:id/decision',

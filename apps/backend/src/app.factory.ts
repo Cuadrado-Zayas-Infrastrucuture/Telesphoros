@@ -1,3 +1,6 @@
+import type { Request,Response,NextFunction } from 'express';
+import type { IncomingMessage, Server } from 'node:http';
+import { isIntakePath } from './reports/intake/raw-intake';
 import { VersioningType } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { requestIdMiddleware } from './common/request-id.middleware';
@@ -24,6 +27,15 @@ export function configureApp(app: NestExpressApplication, options: ConfigureOpti
   app.set('trust proxy', options.trustProxyHops && options.trustProxyHops > 0 ? options.trustProxyHops : false);
   // Before everything else, so even 404s and parse errors carry a request id.
   app.use(requestIdMiddleware);
+  app.use((req:Request,res:Response,next:NextFunction)=>{
+    if(isIntakePath((req.url??'').split('?')[0]!,req.method)){
+      const socket=req.socket;const previous=socket.timeout??0;const timeout=()=>req.destroy();
+      req.setTimeout(10000,timeout);
+      const clear=()=>{req.removeListener('timeout',timeout);if(!socket.destroyed)socket.setTimeout(previous);res.removeListener('finish',clear);res.removeListener('close',clear);};
+      res.once('finish',clear);res.once('close',clear);
+    }
+    next();
+  });
 
   const allowed = new Set(options.corsOrigins ?? []);
   if (allowed.size > 0) {
@@ -32,14 +44,16 @@ export function configureApp(app: NestExpressApplication, options: ConfigureOpti
       origin: (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) =>
         callback(null, origin !== undefined && allowed.has(origin)),
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-      allowedHeaders: ['Authorization', 'Content-Type', 'X-Request-Id'],
+      allowedHeaders: ['Authorization', 'Content-Type', 'X-Request-Id', 'X-Upload-Revision'],
       exposedHeaders: ['X-Request-Id'],
       maxAge: 600,
       credentials: false, // we authenticate with a bearer header, never cookies
     });
   }
 
-  app.useBodyParser('json', { limit: JSON_BODY_LIMIT });
+  app.useBodyParser('json', { limit: JSON_BODY_LIMIT, type: (req: IncomingMessage) => !isIntakePath((req.url ?? '').split('?')[0]!, req.method ?? '') && /^application\/json(?:;|$)/i.test(req.headers['content-type'] ?? '') });
+  // Finite pre-authentication header/body lifetime; intake imposes its tighter progress deadlines after admission.
+  const server=app.getHttpServer() as Server; server.headersTimeout=30000;
   app.setGlobalPrefix(API_PREFIX);
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
 }
