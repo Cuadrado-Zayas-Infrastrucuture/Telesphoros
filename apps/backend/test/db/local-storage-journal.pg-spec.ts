@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { Client } from 'pg';
-import { Database } from '../src/db/database';
-import { PostgresReportsRepository } from '../src/storage/postgres/reports.repository';
-import { PostgresPatientsRepository } from '../src/storage/postgres/patients.repository';
-import type { UploadAttempt } from '../src/storage/upload-attempt';
-import { createEphemeralDatabase, type EphemeralDatabase } from './helpers/database';
+import { Database } from '../../src/db/database';
+import { PostgresReportsRepository } from '../../src/storage/postgres/reports.repository';
+import { PostgresPatientsRepository } from '../../src/storage/postgres/patients.repository';
+import type { UploadAttempt } from '../../src/storage/upload-attempt';
+import { createEphemeralDatabase, type EphemeralDatabase } from '../helpers/database';
 let fixture: EphemeralDatabase, db: Database, repo: PostgresReportsRepository, owner: Client;
 const tenant = 'synthetic-local-tenant';
 let runId: string;

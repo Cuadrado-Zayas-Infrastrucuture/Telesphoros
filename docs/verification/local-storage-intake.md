@@ -2,6 +2,8 @@
 
 Scope: the founder approved L1 and refinement proposals 17/18 on 2026-10-11. The feature branch is `feat/local-storage-intake`, based on `aa912254a6d5f4f283a379316b43255e3dd4316d`. L2 browser implementation and L3 product setup/scheduler/teardown remain pending. G01 remains open; clinical use and AWS/provider/spending/agreement actions remain deferred.
 
+Draft PR #77 was subsequently authorized and opened. Its first combined-tree CI run exposed two verification-fixture gaps: the PostgreSQL-only upload journal suite was outside the existing `test/db` service tier, and the image rehearsal had no S3 endpoint/versioned bucket for processing-disabled startup. The journal suite now lives in `test/db` with all assertions preserved. The existing image rehearsal explicitly uses its disposable Moto endpoint and creates/verifies a versioned bucket before API startup; no application startup check was weakened. Current main `9c66493` was integrated, retaining merged #73–#76. These are L1 CI repairs, not L3 product setup or teardown. Final remote results belong to the PR checks and dated delivery receipt; the table below retains its original local-baseline results.
+
 ## Implemented behavior
 
 - Owned local mode accepts opaque PDF/VCF/JSON through bounded private staging, streaming structural/hash/size checks, conditional single-part upload, exact-version read-back and atomic metadata/journal completion.
@@ -66,4 +68,4 @@ Supply the owned loopback `TEST_DATABASE_URL`/`TEST_S3_ENDPOINT`, PostgreSQL 16 
 - Two-intake/RSS observations include the test client, SDK and read-back. They are local regression limits, not production sizing or RTO evidence. A kernel-blocked filesystem write is detected when the write returns; no hardware cancellation guarantee is claimed.
 - L1 supplies cleanup/staging primitives and durable status, without an operational schedule or trusted run manifest/catalogue adapter. L3 owns those integrations, clock checks, multipart assembly and complete Moto/IAM-state teardown.
 - L2 must replace the old browser transport before the UI can target owned validated-intake mode. Existing browser acceptance checks cover compatibility, not a new L2 user flow.
-- No PR or remote seven-job CI run is authorized or claimed here. Production coverage, custody, contract fit, real records and deployment remain separate gates.
+- Draft PR #77 is authorized; remote acceptance requires all seven combined-tree CI checks and recovery artifacts. Production coverage, custody, contract fit, real records and deployment remain separate gates.

@@ -5,6 +5,7 @@ const {randomUUID, createHash} = require('node:crypto');
 const fs = require('node:fs');
 const {Client} = require('/app/node_modules/pg');
 const {SecretsManagerClient,CreateSecretCommand,GetSecretValueCommand} = require('/app/node_modules/@aws-sdk/client-secrets-manager');
+const {S3Client,CreateBucketCommand,PutBucketVersioningCommand,GetBucketVersioningCommand} = require('/app/node_modules/@aws-sdk/client-s3');
 const {pgClientConfig} = require('/app/dist/db/tls');
 const sm = new SecretsManagerClient({});
 const hash = text => createHash('sha256').update(text).digest('hex');
@@ -70,6 +71,13 @@ async function main() {
     let output='';child.stdout.on('data',b=>output+=b);child.stderr.on('data',b=>output+=b);
     const code=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{child.kill();reject(new Error('pristine startup did not refuse'));},30000);child.on('exit',code=>{clearTimeout(timer);resolve(code);});child.on('error',reject);});
     assert.notEqual(code,0);assert.match(output,/record log did not pass its check at start/);
+    // Storage-only startup still requires genuine version pins. This fixture is
+    // confined to the disposable Moto container; never fall back to an AWS endpoint.
+    assert.equal(process.env.S3_ENDPOINT,'http://moto:5000');
+    const s3=new S3Client({endpoint:process.env.S3_ENDPOINT,forcePathStyle:true});
+    await s3.send(new CreateBucketCommand({Bucket:process.env.REPORTS_BUCKET,CreateBucketConfiguration:{LocationConstraint:process.env.AWS_REGION}}));
+    await s3.send(new PutBucketVersioningCommand({Bucket:process.env.REPORTS_BUCKET,VersioningConfiguration:{Status:'Enabled'}}));
+    assert.equal((await s3.send(new GetBucketVersioningCommand({Bucket:process.env.REPORTS_BUCKET}))).Status,'Enabled');
     await cli(['migrate','up']); await cli(['provision-logins','--require-migrated']);
     console.log('PASS provisioning, pristine startup refusal, migrations, privilege verification');
   } else if(mode==='api') await api();
