@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { CreateBucketCommand, PutBucketVersioningCommand, S3Client } from '@aws-sdk/client-s3';
 import { Controller, Get, type Type } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -16,6 +16,8 @@ import type { RecoveryObjectStorage } from '../../src/object-storage/recovery-ob
 
 export interface TestAppOptions {
   recoveryStorage?: RecoveryObjectStorage;
+  /** Explicit legacy compatibility control, never an owned local intake run. */
+  legacyTransport?: boolean;
   controllers?: Type<unknown>[];
   readinessChecks?: ReadinessCheck[];
   /** Force the PostgreSQL store against this application-role URL (managed by the caller). */
@@ -55,17 +57,18 @@ export const usingPostgres = () => process.env.TEST_STORAGE === 'postgres';
 /** True when uploads go to an S3-compatible server (TEST_OBJECT_STORAGE=s3 + TEST_S3_ENDPOINT). */
 export const usingS3 = () => process.env.TEST_OBJECT_STORAGE === 's3';
 
-async function createBucket() {
+async function createBucket(runId?: string) {
   const endpoint = process.env.TEST_S3_ENDPOINT;
   if (!endpoint) throw new Error('TEST_OBJECT_STORAGE=s3 needs TEST_S3_ENDPOINT');
   // Emulators accept any credentials. Real AWS credentials are never used in tests.
   process.env.AWS_ACCESS_KEY_ID ??= 'test';
   process.env.AWS_SECRET_ACCESS_KEY ??= 'test';
-  const bucket = `test-reports-${randomBytes(5).toString('hex')}`;
-  const client = new S3Client({ region: 'us-east-1', endpoint, forcePathStyle: true });
+  const bucket = runId ? `synthetic-storage-${runId}` : `reports-test-${randomBytes(6).toString('hex')}`;
+  const client = new S3Client({ region: 'us-east-1', endpoint, forcePathStyle: true, credentials: {accessKeyId:'local-test',secretAccessKey:'local-test'} });
   await client.send(new CreateBucketCommand({ Bucket: bucket }));
   // Like the Terraform reports bucket: versioning on, so an uploaded file can be pinned to the exact version that was verified.
   await client.send(new PutBucketVersioningCommand({ Bucket: bucket, VersioningConfiguration: { Status: 'Enabled' } }));
+  client.destroy();
   return { bucket, endpoint };
 }
 
@@ -76,10 +79,12 @@ async function createBucket() {
  */
 export async function createTestApp(options: TestAppOptions = {}): Promise<NestExpressApplication> {
   const database = usingPostgres() && !options.postgresUrl ? await createEphemeralDatabase() : undefined;
-  const s3 = usingS3() ? await createBucket() : undefined;
+  const runId = options.labReportPipeline || options.recoveryStorage || options.legacyTransport ? undefined : randomUUID();
+  const s3 = usingS3() ? await createBucket(runId) : undefined;
   const env = loadEnv({
     NODE_ENV: 'test',
     LOG_LEVEL: 'silent',
+    ...(runId ? {LOCAL_STORAGE_RUN_ID:runId} : {}),
     JWT_SECRET: TEST_SECRET,
     JWT_ISSUER: TEST_ISSUER,
     JWT_AUDIENCE: TEST_AUDIENCE,

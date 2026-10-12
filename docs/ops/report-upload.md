@@ -1,5 +1,8 @@
 # Standard synthetic report upload
 
+Owned local synthetic runs use the [L1 validated intake contract](../design/local-storage-intake.md). Their direct-upload routes are refused. The browser flow below describes the existing compatibility transport outside that mode; replacing it is pending L2.
+
+
 The signed-in clinician/admin screen at `/reports/upload` uploads VCF or structured JSON through the existing report endpoints. Select an existing synthetic patient from bounded pages of 20; it never creates patients. If none exist, an administrator must add one through the existing API. PDF capture, clinical processing/review and release remain separate.
 
 The browser validates patient UUID, type/extension, filename, nonempty file and 10 MiB limit, computes SHA-256, registers metadata with a UUID requestId, requests a presigned PUT target, sends bytes directly and requests completion. It shows success only when the returned report identity, size, content type and checksum match and the server marks the file verified. A completed report recovered after a lost response is checked the same way.

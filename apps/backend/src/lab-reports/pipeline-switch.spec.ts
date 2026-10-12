@@ -18,10 +18,10 @@ describe('PipelineSwitch', () => {
 });
 
 describe('PipelineStartupCheck', () => {
-  it('does nothing while the pipeline is off, even on an unversioned store', async () => {
+  it('refuses unversioned report storage while processing is disabled', async () => {
     const storage = new InMemoryObjectStorage();
     storage.versioned = false;
-    await expect(new PipelineStartupCheck(switchFor('disabled'), storage).onApplicationBootstrap()).resolves.toBeUndefined();
+    await expect(new PipelineStartupCheck(switchFor('disabled'), storage).onApplicationBootstrap()).rejects.toThrow(/keeps versions/);
   });
 
   it('refuses to start with the pipeline on and a store that keeps no versions', async () => {

@@ -8,3 +8,11 @@ description = "Deliberately unsigned alg=none JWT used as a test vector: the API
 condition = "AND"
 paths = ['''apps/backend/test/auth\.e2e-spec\.ts''']
 regexes = ['''eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0\.eyJzdWIiOiJ1c2VyLWEifQ\.''']
+
+[[allowlists]]
+description = "The disposable Moto Secrets Manager resource name synthetic/migrator is an identifier, not credential material; generated rehearsal passwords remain scanned."
+condition = "AND"
+ruleIDs = ["generic-api-key"]
+paths = ['''^infrastructure/docker/rehearsal\.cjs$''']
+regexTarget = "secret"
+regexes = ['''^synthetic/migrator$''']

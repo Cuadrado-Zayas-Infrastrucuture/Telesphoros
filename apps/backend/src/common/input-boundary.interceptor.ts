@@ -1,3 +1,4 @@
+import { RAW_INTAKE } from '../reports/intake/raw-intake';
 import { type CallHandler, type ExecutionContext, Injectable, type NestInterceptor } from '@nestjs/common';
 import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { RouteParamtypes } from '@nestjs/common/enums/route-paramtypes.enum';
@@ -20,7 +21,7 @@ export class InputBoundaryInterceptor implements NestInterceptor {
     // Capture while Nest's matched route is active; the HTTP logger binds its request BEFORE routing.
     (req as Request & { [LOG_ROUTE]?: string })[LOG_ROUTE] = typeof req.route?.path === 'string' ? req.route.path : '[unmatched]';
     const framedBody = Number(req.headers?.['content-length'] ?? 0) > 0 || req.headers?.['transfer-encoding'] !== undefined;
-    if (framedBody && req.body === undefined) {
+    if (framedBody && req.body === undefined && !Reflect.getMetadata(RAW_INTAKE,context.getHandler())) {
       throw AppException.validation([
         {
           field: '(body)',

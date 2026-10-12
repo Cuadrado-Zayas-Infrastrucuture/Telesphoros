@@ -19,7 +19,7 @@ import { RateLimitClass } from '../rate-limit/rate-limit.decorators';
 const CAN_CAPTURE = ['clinician', 'reviewer', 'admin'] as const;
 const CAN_REVIEW = ['reviewer'] as const;
 
-/** `POST /reports/:id/capture` and `GET /reports/:id/download-url`: the report-side routes of the pipeline. */
+/** `POST /reports/:id/capture`: the report-side processing route. */
 @Controller('reports')
 @RequiresPipeline()
 export class ReportCaptureController {
@@ -39,12 +39,7 @@ export class ReportCaptureController {
     return capture;
   }
 
-  @Get(':id/download-url')
-  @RateLimitClass('expensive')
-  @Roles(...CAN_CAPTURE)
-  downloadUrl(@CurrentPrincipal() principal: Principal, @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam): Promise<FileLinkDto> {
-    return this.captures.pdfLink(principal, id);
-  }
+
 }
 
 @Controller('captures')

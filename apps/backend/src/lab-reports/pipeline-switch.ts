@@ -10,10 +10,12 @@ import { ObjectStorage } from '../object-storage/object-storage';
 @Injectable()
 export class PipelineSwitch {
   readonly enabled: boolean;
+  readonly localStorageOnly: boolean;
   readonly downloadUrlTtlSeconds: number;
 
   constructor(@Inject(ENV) env: Env) {
     this.enabled = env.LAB_REPORT_PIPELINE === 'enabled';
+    this.localStorageOnly = !!env.LOCAL_STORAGE_RUN_ID;
     this.downloadUrlTtlSeconds = env.DOWNLOAD_URL_TTL_SECONDS;
   }
 
@@ -56,10 +58,10 @@ export class PipelineStartupCheck implements OnApplicationBootstrap {
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
-    if (!this.pipeline.enabled) return;
+
     if (!(await this.storage.versioningEnabled())) {
-      throw new Error('LAB_REPORT_PIPELINE=enabled requires object storage that keeps versions (enable versioning on the reports bucket).');
+      throw new Error('Report storage requires object storage that keeps versions (enable versioning on the reports bucket).');
     }
-    this.logger.warn('The lab-report pipeline is ENABLED: a synthetic, non-production integration. Never use real patient data.');
+    if(this.pipeline.enabled) this.logger.warn('The lab-report pipeline is ENABLED: a synthetic, non-production integration. Never use real patient data.');
   }
 }

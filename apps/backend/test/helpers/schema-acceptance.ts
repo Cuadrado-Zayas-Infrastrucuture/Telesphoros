@@ -3,6 +3,8 @@ import type { Client } from 'pg';
 // Hand-reviewed against the relationship design and original SQL, not generated from the live catalog.
 // Global containment clearances intentionally lack tenant-composite FKs: their functions check scope.
 const relationships: [string, string, string, string][] = [
+  ['upload_attempt_report_fk', 'report_upload_attempts', 'tenant_id,patient_id,report_id', 'reports:tenant_id,patient_id,id'],
+  ['upload_attempt_run_fk', 'report_upload_attempts', 'tenant_id,run_id', 'report_upload_runs:tenant_id,run_id'],
   ['reports_patient_fk', 'reports', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   ['recommendations_patient_fk', 'recommendations', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   ['recommendations_report_fk', 'recommendations', 'report_id,tenant_id', 'reports:id,tenant_id'],
@@ -27,6 +29,7 @@ const relationships: [string, string, string, string][] = [
   ['ledger_clearances_checkpoint_fk', 'ledger_incident_clearances', 'verified_checkpoint_id', 'ledger_checkpoints:id'],
 ];
 const primaryKeys: Record<string, string> = {
+  report_upload_runs: 'run_id', report_upload_attempts: 'id',
   patients: 'id', reports: 'id', recommendations: 'id', schema_migrations: 'version',
   ledger_heads: 'tenant_id', ledger_events: 'id', ledger_checkpoints: 'id', event_notes: 'id',
   report_captures: 'id', capture_acceptances: 'id', evaluations: 'id', evaluation_results: 'id',
@@ -34,6 +37,7 @@ const primaryKeys: Record<string, string> = {
   ledger_incidents: 'id', ledger_incident_clearances: 'id',
 };
 const uniqueKeys: Record<string, string> = {
+  report_upload_runs_tenant_id_run_id_key: 'tenant_id, run_id', upload_attempt_request_uq: 'tenant_id, report_id, principal, request_id', upload_attempt_key_uq: 'storage_key',
   patients_id_tenant_uq: 'id, tenant_id', reports_id_tenant_uq: 'id, tenant_id',
   reports_creation_request_uq: 'tenant_id, created_by, creation_request_id',
   reports_id_patient_tenant_uq: 'id, patient_id, tenant_id', reports_tenant_patient_id_uq: 'tenant_id, patient_id, id',
@@ -51,6 +55,9 @@ const uniqueKeys: Record<string, string> = {
 };
 // Complete CHECK inventory; semantic refusal/control tests remain in the existing behavior suites.
 const checkNames: Record<string, string> = {
+  report_upload_runs: 'reserved_bytes_check',
+  report_upload_attempts: 'principal_check type_check size_bytes_check content_type_check sha256_check storage_key_check state_check object_version_check',
+  upload_attempt: 'committed_pin',
   patients: 'created_by_len label_format tenant_id_len',
   reports: 'created_by_len creation_request_pair filename_format lab_pdf_pinned object_version_valid pin_after_upload sha256_format size_range status_valid tenant_id_len type_valid upload_consistent upload_requested_by_len uploaded_by_len',
   recommendations: 'created_by_len strength_valid tenant_id_len',
@@ -75,6 +82,7 @@ for (const table of ['report_captures', 'capture_acceptances', 'evaluations', 'c
 
 // Query-facing definitions. Constraint-backed indexes and internal append-only guards are also covered by ledger-catalog/behavior suites.
 const queryIndexes: Record<string, string> = {
+  upload_attempt_run_idx: 'INDEX upload_attempt_run_idx ON public.report_upload_attempts USING btree (tenant_id, run_id, state)',
   patients_tenant_label_uq: 'UNIQUE INDEX patients_tenant_label_uq ON public.patients USING btree (tenant_id, lower(label)) WHERE (deleted_at IS NULL)',
   patients_tenant_seq_idx: 'INDEX patients_tenant_seq_idx ON public.patients USING btree (tenant_id, seq) WHERE (deleted_at IS NULL)',
   reports_tenant_seq_idx: 'INDEX reports_tenant_seq_idx ON public.reports USING btree (tenant_id, seq) WHERE (deleted_at IS NULL)',

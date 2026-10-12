@@ -72,6 +72,8 @@ export const envSchema = z
      * The lab-report pipeline (capture, review, evaluation) is a synthetic, non-production integration. Off unless switched on here,
      * and refused in production (see below). While `disabled` the routes answer 503 PIPELINE_DISABLED and nothing is read or written.
      */
+    LOCAL_STORAGE_RUN_ID: z.uuid().optional(),
+    LOCAL_UPLOAD_CLEANUP_GRACE_SECONDS: z.coerce.number().int().min(0).max(604800).default(86400),
     LAB_REPORT_PIPELINE: z.enum(['disabled', 'enabled']).default('disabled'),
     /** Directory of recorded PDFs and their text for the TEST-ONLY text runner. Required when the pipeline is enabled; there is no default. */
     LAB_REPORT_FIXTURES_DIR: z.string().min(1).optional(),
@@ -141,6 +143,8 @@ export const envSchema = z
       if (!env.LAB_REPORT_FIXTURES_DIR) problem('LAB_REPORT_FIXTURES_DIR', 'is required when LAB_REPORT_PIPELINE=enabled (the directory of recorded PDFs for the test-only text runner)');
       if (env.NODE_ENV === 'production') problem('LAB_REPORT_PIPELINE', 'is refused in production: it is a synthetic, non-production integration (test-only text runner and development knowledge)');
     }
+
+    if (env.LOCAL_UPLOAD_CLEANUP_GRACE_SECONDS < 86400 && (!env.LOCAL_STORAGE_RUN_ID || env.NODE_ENV === 'production' || env.LAB_REPORT_PIPELINE !== 'disabled')) problem('LOCAL_UPLOAD_CLEANUP_GRACE_SECONDS', 'shortened grace requires a disposable local run with processing disabled');
 
     // Production fails closed: anything that is only fit for development is refused outright.
     if (env.NODE_ENV === 'production') {

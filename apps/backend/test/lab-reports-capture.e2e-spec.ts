@@ -244,7 +244,7 @@ import { DOCUMENT_IDS, FIXTURES, fixtureManifest, fixturePdf, fixtureText, LabPi
     it('no link for a report whose file is not uploaded (409), and none for a report of another type', async () => {
       const clinician = await lab.person('clin', ['clinician']);
       const pending = await lab.uploadedLabPdf(clinician, fixturePdf('D01'), { complete: false });
-      expect((await lab.api().get(`/api/v1/reports/${pending.reportId}/download-url`).set(bearer(clinician.token)).expect(409)).body.error.details[0].reason).toBe('not-uploaded');
+      expect((await lab.api().get(`/api/v1/reports/${pending.reportId}/download-url`).set(bearer(clinician.token)).expect(409)).body.error.details[0].reason).toBe('source-unpinned');
     });
   });
 

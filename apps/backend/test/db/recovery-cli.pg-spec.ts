@@ -102,7 +102,7 @@ suite('built format 2 CLI current-schema recovery rehearsal', () => {
     expect(backup.code).toBe(0);
     const produced = /^backup written: (.+)$/m.exec(backup.output); expect(produced).not.toBeNull(); backupDir = produced![1]!;
     manifest = parseManifest(readFileSync(join(backupDir, 'manifest.json'), 'utf8')) as BackupManifestV2;
-    expect(manifest.formatVersion).toBe(2); expect(manifest.migrations).toHaveLength(14);
+    expect(manifest.formatVersion).toBe(2); expect(manifest.migrations).toHaveLength(15);
     for (const [table, rows] of Object.entries(EXPECTED_ROWS)) expect(manifest.tables[table]?.rows).toBe(rows);
     const dump = backup.events.find(e => e.phase === 'pg_dump')!; expect(dump.plaintextDumpBytes).toBeGreaterThan(0);
     evidence.plaintextCustomDump = volume(dump.plaintextDumpBytes!); evidence.encryptedArchive = volume(manifest.dump.bytes);

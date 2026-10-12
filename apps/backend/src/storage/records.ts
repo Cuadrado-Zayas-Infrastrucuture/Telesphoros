@@ -14,6 +14,8 @@ export interface PatientRecord {
 }
 
 export interface ReportRecord {
+  uploadRevision?: string;
+  deletedAt?: string | null;
   id: string;
   tenantId: string;
   createdBy: string;
