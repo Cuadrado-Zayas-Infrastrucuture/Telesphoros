@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-11**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Final synthetic OpenEMR workflow acceptance
+
+An explicit local acceptance command now connects real OpenEMR chart launches and SMART OAuth/PKCE to the built reader/viewer, actual API, restricted PostgreSQL role and versioned Moto PDFs. It verifies source download, correction rechecks, offline clearing/revocation, explicit replacement selection, missing-source refusal and an unconsented second chart. Connector reads leave evaluation/ledger counts unchanged. See the [plan](design/plans/synthetic-workflow-acceptance.md), [runbook](ops/synthetic-workflow-acceptance.md) and [verification](verification/synthetic-workflow-acceptance.md). This completes the planned synthetic integration sequence; clinical validation, hosted-service acceptance and production release remain open. No retention, clinical gate or production behavior changes.
+
 ## Synthetic correction history and stale views
 
 The local SMART viewer now shows verified selected-evaluation correction metadata and withholds genomic/PDF content when existing evidence gates fail. It rechecks evidence every 15 seconds, clears it before revalidation, and enforces a 30-second freshness cap measured from server read start. Hidden/offline views, failed/expired checks and chart changes clear content and revoke PDF blob links; late responses cannot restore it. See [plan](design/plans/synthetic-correction-history.md), [runbook](ops/correction-history-preview.md) and [verification](verification/synthetic-correction-history.md). No backend writes, retention or clinical gate changes; no push/atomic-snapshot guarantee.
@@ -168,4 +172,4 @@ Python 3 is needed on the PATH for the reader tests. Backup and restore tests ne
 
 ## Synthetic FHIR terminology/profile slice
 
-The local SMART pilot now declares Genomics Reporting 3.0.0 Genotype and Genomic Report profiles, corrects their required code/categories, and verifies generated synthetic examples using a pinned official HL7 validator in CI. Finite terminology tests and negative profile examples fail closed. Local phenotype text remains explicitly unstandardized. Read-only authorization, retention and clinical gates are unchanged. See [validation scope](../packages/smart-pilot/test/fhir-ig/README.md). Full synthetic workflow acceptance remains the next slice.
+The local SMART pilot now declares Genomics Reporting 3.0.0 Genotype and Genomic Report profiles, corrects their required code/categories, and verifies generated synthetic examples using a pinned official HL7 validator in CI. Finite terminology tests and negative profile examples fail closed. Local phenotype text remains explicitly unstandardized. Read-only authorization, retention and clinical gates are unchanged. See [validation scope](../packages/smart-pilot/test/fhir-ig/README.md). The final synthetic workflow acceptance slice is described above.
