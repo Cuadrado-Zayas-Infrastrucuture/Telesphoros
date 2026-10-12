@@ -20,10 +20,16 @@ function clockCheck({ hostBefore, hostAfter, database, emulator }, maxSkewMs = 5
   if (![hostBefore, hostAfter, database, emulator].every(Number.isFinite) || hostAfter < hostBefore || hostAfter - hostBefore > maxSkewMs || Math.max(...[database, emulator].map(t => Math.max(hostBefore - t, t - hostAfter, 0))) > maxSkewMs) throw new Error('Clock synchronization refused.');
   return { maxSkewMs, requestDurationMs: hostAfter - hostBefore, databaseOffsetMs: database - hostAfter, emulatorOffsetMs: emulator - hostAfter, emulatorClockSource: 'HTTP Date from owned native Moto process (same host clock)', passed: true };
 }
-function guardAdmission(reconcile, enable, disable) {
+function guardAdmission(reconcile, enable, disable, record = () => {}) {
   return async () => {
-    try { const result = await reconcile(); await enable(); return result; }
-    catch (error) { await disable(); throw error; }
+    try { const result = await reconcile(); await record({ success: true, result }); await enable(); return result; }
+    catch (error) {
+      await disable();
+      // Recording can itself be the failure. Admission is already closed, and the
+      // original failure must survive even when its failure receipt cannot be saved.
+      try { await record({ success: false }); } catch { /* Retry requires a durable success. */ }
+      throw error;
+    }
   };
 }
 module.exports = { guardAdmission, scheduler, clockCheck, INTERVAL_MS };

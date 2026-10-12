@@ -19,16 +19,21 @@ The runner rejects inherited production mode, enabled clinical processing, and o
 
 ```sh
 pnpm test:storage-ops
+pnpm test:storage-recovery
 pnpm test:storage-rehearsal
 ```
 
-The first command tests ownership refusals and controlled scheduling. The second requires all real local dependencies; it fails rather than skipping them. It runs L2 browser assertions against the L3-owned stack, explicit multipart and HTTP faults, actual writer crash/restart, clock checks, and full setup/teardown/restart acceptance. It saves aggregate JSON in `.local-storage/rehearsal.json` and private browser diagnostics beside it. `L3_EVIDENCE` can select another evidence file. Do not publish private logs without checking their contents.
+The operations command tests ownership refusals and controlled scheduling. The full rehearsal requires all real local dependencies; it fails rather than skipping them. It runs L2 browser assertions against the L3-owned stack, explicit multipart and HTTP faults, actual writer crash/restart, clock checks, and full setup/teardown/restart acceptance. It saves aggregate JSON in `.local-storage/rehearsal.json` and private browser diagnostics beside it. `L3_EVIDENCE` can select another evidence file. Do not publish private logs without checking their contents.
+
+`test:storage-recovery` is the targeted native regression, also included in the full rehearsal. It runs the foreground launcher and checks failed status persistence, admission close/reopen, lock-coordinated maintenance, repeated restart commands and normal shutdown. It fails on missing dependencies and saves `.local-storage/recovery.json`; `L3_RECOVERY_EVIDENCE` selects another evidence file. Hosted CI runs the operations unit controls; these native lifecycle checks remain local-only.
 
 ## Reconciliation and recovery
 
 Startup measures host, PostgreSQL `clock_timestamp()`, and the owned Moto HTTP Date (native process, same host clock). Timing-sensitive startup refuses clock skew or measurement duration over five seconds. No provider clock is changed. A separate test clock exercises the exact lease/grace boundary; monotonic intake deadlines remain independent.
 
 Before accepting traffic, the API worker runs the existing `LocalUploadCleanup` operations library using the owned receipt and complete existing catalogue inventory across tenants, including soft-deleted pins and text references. The ordinary policy remains one-hour lease plus 24-hour grace. Safely cancelled attempts retain the existing prompt-cleanup semantics. The worker schedules another non-overlapping sweep every 15 minutes after completion. It records bounded aggregate outcomes; failures preserve the durable stalled-admission state, close the API listener (including failures before the database can be reached), and are retried on the next interval. The listener reopens only after an affirmative reconciliation. An unknown or unavailable inventory never authorizes deletion.
+
+The success outcome must be durably written before admission opens. A status-write or directory-sync failure closes the actual API listener even if database reconciliation succeeded; retry requires a durable success. Failed atomic writes remove only their own exclusive temporary and preserve the destination. The foreground health monitor acquires the operations lock before reading manifests or checking PIDs, defers to a live maintenance holder, and checks health again after release. Lock publication exposes a complete receipt, never an empty file.
 
 Intake staging uses a separate private `stage/` directory; browser/compiler caches use `tmp/`. Restart reconciliation checks each staging receipt and retains live writers or unexpected entries. It removes a dead writer's owned staging only after receipt validation. Journal eligibility still uses authoritative database time and the existing grace checks.
 

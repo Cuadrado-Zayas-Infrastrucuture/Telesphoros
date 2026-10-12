@@ -1,5 +1,4 @@
-const { setup, teardown, restartApi, sweepNow } = require('./runtime.cjs');
-const o = require('./ownership.cjs');
+const { setup, teardown, restartApi, sweepNow, health } = require('./runtime.cjs');
 let requested = false, wake;
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { requested = true; wake?.(); });
 async function main() {
@@ -11,7 +10,12 @@ async function main() {
   console.log(`Synthetic storage ready: http://127.0.0.1:${run.ports.web}; run ${run.id}`);
   let unhealthy = false;
   const monitor = setInterval(() => {
-    try { if (!o.load(run.id).processes.every(o.live)) { unhealthy = true; wake?.(); } }
+    try {
+      const status = health(run.id);
+      if (status === 'unhealthy') { unhealthy = true; wake?.(); }
+      else if (status === 'removed') wake?.();
+      // A receipted live operation owns maintenance; inspect after its lock releases.
+    }
     catch { unhealthy = true; wake?.(); }
   }, 1000);
   try { if (!requested) await new Promise(resolve => { wake = resolve; }); }

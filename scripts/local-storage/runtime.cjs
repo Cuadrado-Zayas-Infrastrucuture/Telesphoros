@@ -150,6 +150,18 @@ async function restartApi(id) {
     await launch(m, 'api'); await ready(m, 'api'); m.phase = 'ready'; o.seal(m); return m;
   } finally { unlock(); }
 }
+function health(id) {
+  let unlock;
+  try { unlock = o.lock(id); }
+  catch (error) { if (error instanceof o.OperationBusyError) return 'busy'; throw error; }
+  try {
+    // Read and inspect under the same lock used by restart/teardown. A monitor
+    // cannot observe a stopped PID or half-written receipt during maintenance.
+    const m = o.load(id);
+    if (m.phase === 'removed') return 'removed';
+    return m.phase === 'ready' && o.names.every(name => m.processes.some(p => p.name === name && o.live(p))) ? 'healthy' : 'unhealthy';
+  } finally { unlock(); }
+}
 async function sweepNow(id) {
   const m = o.load(id); if (m.phase !== 'ready') throw new Error('Owned run is not ready');
   const worker = m.processes.find(p => p.name === 'api'); if (!worker || !o.live(worker)) throw new Error('Owned API worker unavailable');
@@ -164,4 +176,4 @@ async function sweepNow(id) {
   }
   throw new Error('Reconciliation deadline; inspect owned status');
 }
-module.exports = { setup, teardown, ports, environment, blast, childReceipt, stop, listener, restartApi, sweepNow };
+module.exports = { setup, teardown, ports, environment, blast, childReceipt, stop, listener, restartApi, sweepNow, health };

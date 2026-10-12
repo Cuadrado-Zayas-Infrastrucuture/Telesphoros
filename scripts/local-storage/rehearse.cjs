@@ -82,6 +82,7 @@ async function main() {
       else assert.equal(state.phase, 'removed');
       record('launcher-' + signal, { passed: true, runId: id });
     }
+    await require('./recovery.cjs').recovery(record);
     evidence.status = evidence.limitations.length ? 'passed-local-controls-with-emulator-gaps' : 'passed';
     evidence.finishedAt = new Date().toISOString(); o.atomic(evidenceFile, JSON.stringify(evidence, null, 2));
   } catch (error) {

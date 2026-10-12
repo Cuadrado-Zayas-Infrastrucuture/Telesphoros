@@ -55,3 +55,63 @@ test('any reconciliation failure closes admission; only a successful retry reope
   await assert.rejects(guarded()); assert.deepEqual(events, ['inventory', 'close']);
   fail = false; await guarded(); assert.deepEqual(events, ['inventory', 'close', 'inventory', 'open']);
 });
+test('failed durable sweep recording closes admission; persistence precedes a successful reopen', async () => {
+  const { guardAdmission } = require('./scheduler.cjs'); const events = []; let fail = true;
+  const failure = new Error('Synthetic status write failure');
+  const guarded = guardAdmission(async () => { events.push('reconcile'); return {}; }, async () => events.push('open'), async () => events.push('close'), async result => {
+    events.push(result.success ? 'persist-success' : 'persist-failure');
+    if (fail) throw failure;
+  });
+  await assert.rejects(guarded(), error => error === failure);
+  assert.deepEqual(events, ['reconcile', 'persist-success', 'close', 'persist-failure']);
+  fail = false; await guarded();
+  assert.deepEqual(events.slice(4), ['reconcile', 'persist-success', 'open']);
+});
+test('failed atomic rename removes only its exclusive temporary and preserves the destination', () => {
+  const m = fixture(), target = path.join(m.root, 'sweeps.json'); fs.mkdirSync(target, { mode: 0o700 });
+  const sentinel = path.join(target, 'sentinel'); fs.writeFileSync(sentinel, 'preserve', { mode: 0o600 });
+  try {
+    assert.throws(() => o.atomic(target, 'synthetic'));
+    assert.equal(fs.readFileSync(sentinel, 'utf8'), 'preserve');
+    assert.deepEqual(fs.readdirSync(m.root).sort(), ['manifest.json', 'sweeps.json']);
+    assert.equal(o.load(m.id).id, m.id);
+  } finally { fs.unlinkSync(sentinel); fs.rmdirSync(target); o.remove(m); }
+});
+test('directory fsync failure reports failure without removing the renamed destination', () => {
+  const m = fixture(), target = path.join(m.root, 'sweeps.json'), fsync = fs.fsyncSync; let calls = 0;
+  try {
+    fs.fsyncSync = fd => { if (++calls === 2) throw new Error('Synthetic directory sync failure'); return fsync(fd); };
+    assert.throws(() => o.atomic(target, 'durable-outcome'), /sync failure/);
+    assert.equal(o.read(target), 'durable-outcome');
+    assert.deepEqual(fs.readdirSync(m.root).sort(), ['manifest.json', 'sweeps.json']);
+  } finally { fs.fsyncSync = fsync; o.remove(m); }
+});
+test('supervisor defers locked maintenance without reading partial receipts, then detects failures', () => {
+  const { health } = require('./runtime.cjs'); const m = fixture(), file = path.join(m.root, 'manifest.json'), original = o.read(file);
+  const unlock = o.lock(m.id);
+  try {
+    o.atomic(file, original.replace('disabled', 'enabled'));
+    assert.equal(health(m.id), 'busy');
+  } finally { o.atomic(file, original); unlock(); }
+  assert.equal(health(m.id), 'unhealthy');
+  m.phase = 'ready'; o.seal(m); assert.equal(health(m.id), 'unhealthy', 'missing workers are not healthy');
+  const lockFile = path.join(o.base, 'control', m.id + '.lock'); o.atomic(lockFile, '{}');
+  assert.throws(() => health(m.id), 'invalid locks must not hide a failure'); fs.unlinkSync(lockFile);
+  o.remove(m); assert.equal(health(m.id), 'removed');
+});
+test('lock publication is complete and exclusive; a release race retries health safely', () => {
+  const { health } = require('./runtime.cjs'); const m = fixture(), file = path.join(o.base, 'control', m.id + '.lock');
+  const link = fs.linkSync, lstat = fs.lstatSync; let publications = 0;
+  try {
+    fs.linkSync = (source, destination) => {
+      assert.equal(JSON.parse(o.read(source)).pid, process.pid);
+      publications++; return link(source, destination);
+    };
+    const unlock = o.lock(m.id);
+    assert.throws(() => o.lock(m.id), o.OperationBusyError);
+    let released = false;
+    fs.lstatSync = (...args) => { if (args[0] === file && !released) { released = true; unlock(); } return lstat(...args); };
+    assert.equal(health(m.id), 'unhealthy'); assert.equal(released, true); assert.equal(publications, 2);
+    assert.equal(fs.existsSync(file), false);
+  } finally { fs.linkSync = link; fs.lstatSync = lstat; if (fs.existsSync(file)) fs.unlinkSync(file); o.remove(m); }
+});

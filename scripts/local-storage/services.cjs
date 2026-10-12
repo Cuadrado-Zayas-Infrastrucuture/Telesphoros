@@ -65,6 +65,13 @@ async function api(m) {
   const env = loadEnv({ NODE_ENV: 'development', PORT: String(m.ports.api), LOG_LEVEL: 'silent', AUTH_VERIFIER: 'cognito', COGNITO_APP_CLIENT_ID: 'e2e-client', COGNITO_ISSUER: idp, COGNITO_JWKS_URI: idp + '/.well-known/jwks.json', CORS_ALLOWED_ORIGINS: appOrigin, STORAGE_DRIVER: 'postgres', DATABASE_URL: dbUrl(m), DATABASE_SSL: 'disable', OBJECT_STORAGE_DRIVER: 's3', S3_ENDPOINT: endpoint(m), S3_FORCE_PATH_STYLE: 'true', AWS_REGION: 'us-east-2', REPORTS_BUCKET: m.bucket, LOCAL_STORAGE_RUN_ID: m.id, LAB_REPORT_PIPELINE: 'disabled', RATE_LIMIT_ENABLED: 'false', DOWNLOAD_URL_TTL_SECONDS: '60' });
   let app, listening = false, stopping = false;
   const { scheduler, guardAdmission } = require('./scheduler.cjs');
+  let sequence = 0; let history = [];
+  const record = result => {
+    const dir = o.privateDir(m.root); if (dir.dev !== m.directory.dev || dir.ino !== m.directory.ino) throw new Error('Run directory replaced');
+    const next = [...history, { sequence: sequence + 1, at: new Date().toISOString(), ...result }].slice(-100);
+    o.atomic(path.join(m.root, 'sweeps.json'), JSON.stringify(next));
+    history = next; sequence++;
+  };
   const guarded = guardAdmission(() => sweep(o.load(m.id)), async () => {
     if (app && !listening && !stopping) {
       const server = app.getHttpServer();
@@ -72,10 +79,8 @@ async function api(m) {
     }
   }, async () => {
     if (app && listening) { const server = app.getHttpServer(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); listening = false; }
-  });
-  let sequence = 0; const history = []; const schedule = scheduler(guarded, {
-    record: result => { const dir = o.privateDir(m.root); if (dir.dev !== m.directory.dev || dir.ino !== m.directory.ino) throw new Error('Run directory replaced'); history.push({ sequence: ++sequence, at: new Date().toISOString(), ...result }); if (history.length > 100) history.shift(); o.atomic(path.join(m.root, 'sweeps.json'), JSON.stringify(history)); },
-  });
+  }, record);
+  const schedule = scheduler(guarded);
   await clocks(m); await schedule.start();
   app = await NestFactory.create(AppModule.register(env), { bufferLogs: true, logger: false });
   app.useLogger(app.get(Logger)); configureApp(app, { corsOrigins: env.CORS_ALLOWED_ORIGINS, trustProxyHops: 0 });

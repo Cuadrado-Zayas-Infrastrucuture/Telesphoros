@@ -24,10 +24,20 @@ function ensureBase() {
 function atomic(file, data) {
   const temp = file + '.' + crypto.randomUUID();
   const fd = fs.openSync(temp, 'wx', 0o600);
-  try { fs.writeFileSync(fd, data); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
-  fs.renameSync(temp, file);
-  const dir = fs.openSync(path.dirname(file), 'r');
-  try { fs.fsyncSync(dir); } finally { fs.closeSync(dir); }
+  let renamed = false;
+  try {
+    try { fs.writeFileSync(fd, data); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    fs.renameSync(temp, file); renamed = true;
+    const dir = fs.openSync(path.dirname(file), 'r');
+    try { fs.fsyncSync(dir); } finally { fs.closeSync(dir); }
+  } catch (error) {
+    // Only the exclusive temporary created by this call; never remove the destination.
+    if (!renamed) {
+      try { fs.unlinkSync(temp); }
+      catch (cleanup) { if (cleanup.code !== 'ENOENT') throw new AggregateError([error, cleanup], 'Owned atomic write cleanup failed.'); }
+    }
+    throw error;
+  }
 }
 function read(file, limit = 262144) {
   const s = fs.lstatSync(file);
@@ -97,15 +107,30 @@ function remove(m) {
   fs.rmSync(m.root, { recursive: true });
   m.phase = 'removed'; m.removedAt = new Date().toISOString(); seal(m);
 }
-function lock(id) {
-  const file = path.join(base, 'control', id + '.lock');
-  if (fs.existsSync(file)) {
-    const saved = JSON.parse(read(file));
-    if (identity(saved.pid)) refuse();
-    fs.unlinkSync(file);
-  }
-  const fd = fs.openSync(file, 'wx', 0o600);
-  fs.writeFileSync(fd, JSON.stringify({ pid: process.pid })); fs.fsyncSync(fd); fs.closeSync(fd);
-  return () => fs.unlinkSync(file);
+class OperationBusyError extends Error {
+  constructor() { super('Owned operation in progress; retry after it completes.'); this.name = 'OperationBusyError'; }
 }
-module.exports = { root, base, names, uuid, ensureBase, location, privateDir, atomic, read, identity, seal, load, validate, live, free, checkTree, remove, lock };
+function lock(id) {
+  location(id);
+  const file = path.join(base, 'control', id + '.lock');
+  const temp = file + '.' + crypto.randomUUID();
+  const fd = fs.openSync(temp, 'wx', 0o600);
+  try {
+    try { fs.writeFileSync(fd, JSON.stringify({ pid: process.pid })); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const saved = JSON.parse(read(file));
+        if (identity(saved.pid)) throw new OperationBusyError();
+        fs.unlinkSync(file);
+      } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      // Publish a complete receipt without replacing another holder. Readers
+      // never see an empty lock; release/acquire races retry rather than fail health.
+      try { fs.linkSync(temp, file); return () => fs.unlinkSync(file); }
+      catch (error) { if (error.code !== 'EEXIST') throw error; }
+    }
+    throw new OperationBusyError();
+  } finally {
+    fs.unlinkSync(temp);
+  }
+}
+module.exports = { root, base, names, uuid, ensureBase, location, privateDir, atomic, read, identity, seal, load, validate, live, free, checkTree, remove, lock, OperationBusyError };
