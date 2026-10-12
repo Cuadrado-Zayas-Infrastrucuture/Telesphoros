@@ -10,7 +10,7 @@
   "scripts": {
     "lint": "pnpm -r --if-present lint",
     "typecheck": "node scripts/workspace-build/workspace.cjs run typecheck",
-    "test": "node --test scripts/workspace-build/workspace.test.cjs && node scripts/workspace-build/workspace.cjs run test",
+    "test": "node --test scripts/workspace-build/workspace.test.cjs scripts/local-storage/operations.test.cjs && node scripts/workspace-build/workspace.cjs run test",
     "build": "node scripts/workspace-build/workspace.cjs run build",
     "test:infra": "node --test infrastructure/terraform/guard.test.mjs",
     "test:ci-config": "node --test .github/ci/guard.test.mjs",
@@ -20,6 +20,11 @@
     "test:image": "node --test infrastructure/docker/guard.test.mjs",
     "demo:smart:setup": "pnpm --filter @telesphoros/smart-pilot ehr:start && pnpm --filter @telesphoros/smart-pilot ehr:configure",
     "demo:smart": "pnpm --filter @telesphoros/smart-pilot build && pnpm --filter @telesphoros/smart-pilot start",
-    "test:build-orchestration": "node --test scripts/workspace-build/workspace.test.cjs"
+    "test:build-orchestration": "node --test scripts/workspace-build/workspace.test.cjs",
+    "demo:storage:build": "pnpm --filter @telesphoros/backend build && pnpm --filter @telesphoros/fake-idp build && VITE_LOCAL_STORAGE_INTAKE=true VITE_REPORT_STORAGE_ORIGINS=http://127.0.0.1:5557 pnpm --filter @telesphoros/frontend exec vite build --mode e2e --outDir dist-storage-e2e",
+    "demo:storage": "node scripts/local-storage/start.cjs start",
+    "demo:storage:teardown": "node scripts/local-storage/start.cjs teardown",
+    "test:storage-ops": "node --test scripts/local-storage/operations.test.cjs",
+    "test:storage-rehearsal": "node scripts/local-storage/rehearse.cjs"
   }
 }

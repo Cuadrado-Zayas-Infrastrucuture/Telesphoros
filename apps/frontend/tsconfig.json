@@ -37,6 +37,7 @@
     "playwright.config.ts",
     "eslint.config.js",
     "storage-e2e",
-    "playwright.storage.config.ts"
+    "playwright.storage.config.ts",
+    "playwright.operations.config.ts"
   ]
 }

@@ -1,6 +1,6 @@
 # Owned local synthetic storage API — L1
 
-L1 accepts opaque PDF, VCF and JSON bytes with clinical processing disabled. It does not extract genomic values, run PDF content, invoke OCR/knowledge/evaluations or establish production readiness. L2 browser transport and L3 setup, sweep scheduling and automated teardown remain pending.
+L1 accepts opaque PDF, VCF and JSON bytes with clinical processing disabled. It does not extract genomic values, run PDF content, invoke OCR/knowledge/evaluations or establish production readiness. L2 browser transport is available in owned mode. L3 provides a separate [owned setup, reconciliation and teardown entry point](../ops/local-storage-operations.md).
 
 ## Mode and compatibility
 
@@ -44,4 +44,4 @@ A confirmed failed pin cancels the uncommitted stored attempt. Lost S3 or databa
 
 Sweep bounds: 100 candidates/actions, 30-second deadline, 1,000 pages and 10,000 inventory entries. Missing/repeated cursors, caps, timeouts or unavailable reads fail closed. Interrupted/delete-reply-loss claims are retryable. Failed reconciliation blocks new reservations until an affirmative sweep succeeds. Unknown row-less objects are retained and block admission, even with a matching-looking metadata tag. The FK prevents an application-created journal from losing its corresponding report; absence alone never authorizes deletion. Soft-deleted pins and protected catalogue/text references remain protected.
 
-L3 must provide the manifest, trusted catalogue adapter, startup reconciliation and 15-minute scheduling. No operational schedule or automated stack teardown is claimed by L1. Moto proves local protocol behavior; it does not prove AWS policy, Object Lock custody, billing, signature-expiry enforcement or production identity.
+The separate L3 operations entry point supplies the manifest, trusted catalogue adapter, startup reconciliation and 15-minute scheduling. Those operational controls and full-stack disposal are outside this L1 library. Moto proves local protocol behavior; it does not prove AWS policy, Object Lock custody, billing, signature-expiry enforcement or production identity.

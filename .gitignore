@@ -55,3 +55,6 @@ dist-storage-e2e/
 
 # Public AWS trust roots, independently confirmed by founder for FD-4b.
 !infrastructure/docker/global-bundle.pem
+
+# Owned disposable local storage runs and private ownership receipts
+.local-storage/
