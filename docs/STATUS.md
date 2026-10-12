@@ -161,3 +161,7 @@ TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 pnpm test      # tier 3: ... upload
 
 Python 3 is needed on the PATH for the reader tests. Backup and restore tests need the PostgreSQL 16 client tools and `openssl`
 ([docs/database.md](database.md)).
+
+## Synthetic FHIR terminology/profile slice
+
+The local SMART pilot now declares Genomics Reporting 3.0.0 Genotype and Genomic Report profiles, corrects their required code/categories, and verifies generated synthetic examples using a pinned official HL7 validator in CI. Finite terminology tests and negative profile examples fail closed. Local phenotype text remains explicitly unstandardized. Read-only authorization, retention and clinical gates are unchanged. See [validation scope](../packages/smart-pilot/test/fhir-ig/README.md). Full synthetic workflow acceptance remains the next slice.

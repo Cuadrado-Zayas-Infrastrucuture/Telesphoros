@@ -1,0 +1,50 @@
+{
+  "resourceType": "StructureDefinition",
+  "id": "capture-id",
+  "url": "https://telesphoros.app/synthetic-smart-pilot/StructureDefinition/capture-id",
+  "version": "1.0.0",
+  "name": "capture_id",
+  "status": "draft",
+  "experimental": true,
+  "description": "Local synthetic pilot metadata; no clinical approval or standard terminology equivalence.",
+  "fhirVersion": "4.0.1",
+  "kind": "complex-type",
+  "abstract": false,
+  "context": [
+    {
+      "type": "element",
+      "expression": "DiagnosticReport"
+    }
+  ],
+  "type": "Extension",
+  "baseDefinition": "http://hl7.org/fhir/StructureDefinition/Extension",
+  "derivation": "constraint",
+  "differential": {
+    "element": [
+      {
+        "id": "Extension",
+        "path": "Extension"
+      },
+      {
+        "id": "Extension.extension",
+        "path": "Extension.extension",
+        "max": "0"
+      },
+      {
+        "id": "Extension.url",
+        "path": "Extension.url",
+        "fixedUri": "https://telesphoros.app/synthetic-smart-pilot/StructureDefinition/capture-id"
+      },
+      {
+        "id": "Extension.value[x]",
+        "path": "Extension.value[x]",
+        "min": 1,
+        "type": [
+          {
+            "code": "string"
+          }
+        ]
+      }
+    ]
+  }
+}
