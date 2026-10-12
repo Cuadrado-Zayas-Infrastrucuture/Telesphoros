@@ -4,6 +4,8 @@ Scope: the founder approved L1 and refinement proposals 17/18 on 2026-10-11. The
 
 Draft PR #77 was subsequently authorized and opened. Its first combined-tree CI run exposed two verification-fixture gaps: the PostgreSQL-only upload journal suite was outside the existing `test/db` service tier, and the image rehearsal had no S3 endpoint/versioned bucket for processing-disabled startup. The journal suite now lives in `test/db` with all assertions preserved. The existing image rehearsal explicitly uses its disposable Moto endpoint and creates/verifies a versioned bucket before API startup; no application startup check was weakened. Current main `9c66493` was integrated, retaining merged #73–#76. These are L1 CI repairs, not L3 product setup or teardown. Final remote results belong to the PR checks and dated delivery receipt; the table below retains its original local-baseline results.
 
+The subsequent full-history secret scan flagged the fake Secrets Manager resource name `synthetic/migrator` as a generic API key. An exact-value, exact-file, exact-rule exception allows only this identifier; generated credential controls in the same file and the same identifier in a foreign file still fail the scan. No real credential is stored or suppressed. The repaired no-service profile passed 1,222 tests (201 expected later-tier skips), four PostgreSQL journal controls passed, and the full container rehearsal plus 20 image/readiness guards, typecheck and lint passed locally.
+
 ## Implemented behavior
 
 - Owned local mode accepts opaque PDF/VCF/JSON through bounded private staging, streaming structural/hash/size checks, conditional single-part upload, exact-version read-back and atomic metadata/journal completion.
