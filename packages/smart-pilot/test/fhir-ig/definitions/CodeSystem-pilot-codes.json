@@ -1,0 +1,16 @@
+{
+  "resourceType": "CodeSystem",
+  "id": "pilot-codes",
+  "url": "https://telesphoros.app/synthetic-smart-pilot/codes",
+  "version": "1.0.0",
+  "name": "pilot_codes",
+  "status": "draft",
+  "experimental": true,
+  "caseSensitive": true,
+  "content": "complete",
+  "concept": [
+    {
+      "code": "pgx-phenotype"
+    }
+  ]
+}

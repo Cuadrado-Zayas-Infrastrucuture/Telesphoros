@@ -1,0 +1,16 @@
+{
+  "resourceType": "CodeSystem",
+  "id": "pilot-tags",
+  "url": "https://telesphoros.app/synthetic-smart-pilot",
+  "version": "1.0.0",
+  "name": "pilot_tags",
+  "status": "draft",
+  "experimental": true,
+  "caseSensitive": true,
+  "content": "complete",
+  "concept": [
+    {
+      "code": "synthetic-not-for-clinical-use"
+    }
+  ]
+}

@@ -49,6 +49,8 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
+      - name: Published FHIR Genomics IG validation (synthetic only)
+        run: JAVA_HOME="$JAVA_HOME_21_X64" pnpm --filter @telesphoros/smart-pilot test:ig
       - name: Frontend chunk budget
         run: pnpm --filter @telesphoros/frontend check:chunks
       # Fails if anything synthetic or unreviewed sits in the real knowledge directory.
@@ -326,6 +328,7 @@ jobs:
           ignore-unfixed: true
           severity: CRITICAL,HIGH
           trivyignores: infrastructure/docker/trivy.ignore
+      - run: node --test infrastructure/docker/postgres-readiness.test.cjs
       - run: node infrastructure/docker/rehearsal.cjs telesphoros-fd4b:rehearsal
       # OCI retains SBOM/provenance that the Docker load exporter can discard.
       # Private repository artifact only; no registry push or transparency log.

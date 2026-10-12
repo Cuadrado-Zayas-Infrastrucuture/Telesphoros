@@ -92,7 +92,6 @@ test.each([
   ["held", () => { evaluation().disposition = "held"; }],
   ["retracted", () => { evaluation().state = "retracted"; }],
   ["superseded", () => { evaluation().state = "superseded"; }],
-  ["not current", () => { evaluation().current = false; }],
   ["dispute", () => { evaluation().advisory.activeDisputes = 1; }],
   ["stale acceptance", () => { evaluation().acceptance.current = false; }],
   ["rejected acceptance", () => { evaluation().acceptance.decision = "rejected"; }],
@@ -106,7 +105,10 @@ test.each([
   ["no genes", () => { evaluation().geneStates = []; }],
   ["duplicate gene", () => { evaluation().geneStates.push(evaluation().geneStates[0]); }],
 ])("withholds %s with a successful control", async (_name, mutate) => {
-  expect((await read()).bundle.resourceType).toBe("Bundle"); mutate(); await expect(read()).rejects.toThrow();
+  expect((await read()).bundle.resourceType).toBe("Bundle"); mutate();
+  if (["held", "dispute", "stale acceptance", "rejected acceptance", "capture decision changed"].includes(_name)) {
+    const result = await read(); expect(result.bundle).toBeNull(); expect(result.profile).toEqual([]);
+  } else await expect(read()).rejects.toThrow();
 });
 test.each(["/patients/", "/reports/", "/captures/", "/evaluations/"])("refuses %s changes during assembly", async prefix => {
   await read(); calls.length = 0;
@@ -177,4 +179,44 @@ test("link expiry during closing state reads withholds bytes even while the back
   await reader(selection, clinician, binding); calls.length = 0;
   onRead = (_path, count) => { if (count === 10) now += 31000; };
   await expect(reader(selection, clinician, binding)).rejects.toThrow("stored_token_expired");
+});
+
+
+test("non-current selection returns history only without a fallback or source download", async () => {
+  expect((await read()).bundle.resourceType).toBe("Bundle");
+  evaluation().current = false;
+  const result = await read();
+  expect(result.bundle).toBeNull(); expect(result.profile).toEqual([]);
+  expect(result.history).toMatchObject({ evaluationId: uuid(3), state: "active", current: false, events: [] });
+});
+const correction = (kind, n, previousCorrectionId = null) => ({ id: uuid(n), evaluationId: uuid(3), kind,
+  reasonCode: kind === "reinstatement" ? "retraction-mistaken" : "input-misread", previousCorrectionId,
+  replacementEvaluationId: kind === "supersession" ? uuid(99) : null, note: { id: uuid(50), bodySha256: "e".repeat(64) }, createdAt: time });
+test("retraction, reinstatement and supersession history is bound to the selected evaluation", async () => {
+  const initial = await read();
+  evaluation().corrections = [correction("retraction", 10)]; evaluation().state = "retracted"; evaluation().current = false;
+  config.sourcePdf = { storageOrigin: "http://127.0.0.1:5555" };
+  const download = vi.spyOn(sourcePdf, "readSourcePdf");
+  const withdrawn = await read();
+  expect(withdrawn.bundle).toBeNull(); expect(withdrawn.profile).toEqual([]);
+  expect(withdrawn.history.events).toEqual([{ id: uuid(10), kind: "retraction", reasonCode: "input-misread", createdAt: time }]);
+  expect(download).not.toHaveBeenCalled(); expect(JSON.stringify(withdrawn)).not.toContain("bodySha256");
+  delete config.sourcePdf;
+  evaluation().corrections.push(correction("reinstatement", 11, uuid(10))); evaluation().state = "active"; evaluation().current = true;
+  const restored = await read();
+  expect(validate(restored.bundle)).toBe(true); expect(restored.history.revision).not.toBe(initial.history.revision);
+  expect(restored.bundle.entry.find(e => e.resource.resourceType === "DiagnosticReport").resource.extension).toContainEqual(expect.objectContaining({ valueString: restored.history.revision }));
+  evaluation().corrections.push(correction("supersession", 12, uuid(11))); evaluation().state = "superseded"; evaluation().current = false; evaluation().supersededBy = uuid(99);
+  const superseded = await read(); expect(superseded.bundle).toBeNull(); expect(superseded.history.events).toHaveLength(3);
+  expect(JSON.stringify(superseded)).not.toContain(uuid(99)); // no replacement traversal/identity export
+});
+test.each([
+  ["cross-evaluation event", e => { e.evaluationId = uuid(100); }],
+  ["broken chain", e => { e.previousCorrectionId = uuid(100); }],
+  ["invalid reason", e => { e.reasonCode = "retraction-mistaken"; }],
+  ["invalid replacement", e => { e.replacementEvaluationId = uuid(100); }],
+])("withholds invalid history: %s", async (_name, mutate) => {
+  evaluation().corrections = [correction("retraction", 10)]; evaluation().state = "retracted"; evaluation().current = false;
+  expect((await read()).history.state).toBe("retracted"); mutate(evaluation().corrections[0]);
+  await expect(read()).rejects.toThrow("invalid_correction_history");
 });

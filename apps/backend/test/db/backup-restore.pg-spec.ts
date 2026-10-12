@@ -13,9 +13,23 @@ serializeRestoreSuites();
 
 const dbs: EphemeralDatabase[] = [];
 const scratch: string[] = [];
-afterAll(async () => {
+// A refusal may never create a restore DB (and therefore never trigger its cleanup
+// checkpoint). Retaining migrated source DBs until suite end makes the next real
+// restore pay for all earlier dirty fixtures. Bound fixture lifetime to one test.
+async function cleanupFixtures() {
+  // Only databases/directories created and registered by this suite are removed.
+  // They contain disposable synthetic fixtures; rerunning the test recreates them.
   await Promise.all(dbs.map((d) => d.drop()));
+  dbs.length = 0;
   scratch.forEach((p) => rmSync(p, { recursive: true, force: true }));
+  scratch.length = 0;
+}
+afterEach(cleanupFixtures);
+afterAll(cleanupFixtures); // retry cleanup if a test or its teardown failed
+beforeEach(() => {
+  // Regression guard: no test may inherit another test's expensive live fixtures.
+  expect(dbs.length).toBe(0);
+  expect(scratch.length).toBe(0);
 });
 const tempDir = () => {
   const dir = mkdtempSync(join(tmpdir(), 'backup-test-'));

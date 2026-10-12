@@ -54,3 +54,18 @@ A production adapter would require authorized tenant-bound repository reads, a r
 ### Optional verified synthetic PDF source
 
 With [source-PDF retrieval](ops/source-pdf-preview.md) configured, the stored reader uses the existing authorized pinned download link and independently checks bytes, exact storage response version, SHA-256, size and PDF type/signature before its closing state reads. DocumentReference uses a report/version master identifier, the existing `source-version-id` and `source-sha256` extensions, and `attachment.data`/`size` with `application/pdf`. The signed URL and storage key are never exported. No FHIR `meta.versionId` or standard Attachment.hash is invented. Without this option the metadata-only behavior above remains. Retrieval failures withhold the entire preview; they do not fall back to metadata or older evidence. Clinical and IG conformance limits are unchanged.
+
+
+### Selected correction history and freshness
+
+The [synthetic correction-history contract](ops/correction-history-preview.md) uses the existing evaluation DTO's ordered history. A separate `correctionHistory` response contains only the selected evaluation ID, derived state/current flag, event IDs/kinds/reason codes/timestamps and a deterministic revision digest. Notes and replacement identifiers are not exported or automatically followed. This is a local display contract, not a FHIR correction-history exchange API.
+
+An eligible stored DiagnosticReport carries a local `correction-revision` extension tying it to that history; changes also change the preview report/provenance identity. Source identity remains pinned to its original source. Retracted, superseded, non-current or otherwise ineligible selections return no FHIR bundle or genomic profile, even when verified history is available. No clinical state or correction is written. `freshUntil` caps display freshness at 30 seconds from the evidence request's start, additionally bounded by existing expiry. The viewer clears old content before rechecks, so failed reads cannot retain prior evidence.
+
+## Published profile and terminology validation
+
+The terminology slice adds explicit Genomics Reporting 3.0.0 profiles to genotype Observations and DiagnosticReport. Genotypes carry the required `laboratory` and `GE` categories with LOINC `84413-4`; reports carry `GE` and LOINC `51969-4`. Provenance uses v3-DataOperation `CREATE` for generating the synthetic FHIR snapshot, not an EHR write. Local phenotype text stays local and does not claim therapeutic-implication conformance.
+
+The existing local extensions now have draft experimental StructureDefinitions for offline validation. The official pinned HL7 validator runs on synthetic positive and negative examples in CI, alongside core-schema and finite-terminology tests. See the [validation contract and limitations](../packages/smart-pilot/test/fhir-ig/README.md). This supersedes earlier core-schema-only validation descriptions; it does not claim complete terminology or clinical conformance.
+
+A mapping revision changes IDs for genotype, phenotype, report and provenance because their representations changed. Phenotype references change with genotype IDs. Source, Patient and Device identities remain unchanged when their content is unchanged. Patient/tenant-scoped business identifiers are preserved.

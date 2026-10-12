@@ -16,7 +16,8 @@
     "ehr:start": "node openemr/start.cjs",
     "ehr:configure": "node openemr/configure.cjs",
     "test:browser": "node openemr/verify-browser.cjs",
-    "test:ehr-guard": "node openemr/verify-seed-guard.cjs"
+    "test:ehr-guard": "node openemr/verify-seed-guard.cjs",
+    "test:ig": "node test/fhir-ig/validate.mjs"
   },
   "dependencies": {
     "@telesphoros/shared-types": "workspace:*",

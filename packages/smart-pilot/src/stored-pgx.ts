@@ -4,6 +4,7 @@ import {
   evaluationDtoSchema, patientDtoSchema, reportDtoSchema, captureDtoSchema,
   tenantIdSchema, tenantFromGroups, PIPELINE_SCOPE,
 } from "@telesphoros/shared-types";
+import { correctionHistory } from "./correction-history.js";
 import { readSourcePdf } from "./source-pdf.js";
 import { buildPgxCollection, type FhirBinding } from "./pgx-fhir.js";
 import { fail, loopbackUrl, requestJson } from "./client.js";
@@ -60,21 +61,23 @@ export function createStoredPgxReader(value: unknown, now = Date.now) {
     const evaluation = evaluationDtoSchema.parse(await get(`/evaluations/${selected.evaluationId}`));
     if (patient.id !== selected.patientId || patient.label !== selected.label || evaluation.id !== selected.evaluationId ||
         evaluation.patientId !== patient.id || evaluation.scope !== PIPELINE_SCOPE || evaluation.clinicalUse !== "not-approved" ||
-        evaluation.actionable !== false || !evaluation.current || evaluation.state !== "active" ||
-        evaluation.disposition !== "evaluated" || evaluation.holdCode !== null || evaluation.hold !== null ||
-        evaluation.supersededBy !== null || evaluation.advisory.activeDisputes !== 0 ||
-        !evaluation.acceptance?.current || evaluation.acceptance.decision !== "accepted" ||
-        !evaluation.engineVersion || !evaluation.knowledgeSetId) fail("stored_evaluation_withheld");
-    const genes = completeGenes.parse(evaluation.geneStates);
+        evaluation.actionable !== false || !evaluation.engineVersion || !evaluation.knowledgeSetId) fail("stored_evaluation_withheld");
+    const history = correctionHistory(evaluation);
     const report = reportDtoSchema.parse(await get(`/reports/${evaluation.reportId}`));
     const capture = captureDtoSchema.parse(await get(`/captures/${evaluation.captureId}`));
     if (report.id !== evaluation.reportId || report.patientId !== patient.id || report.type !== "lab-pdf" ||
         !report.fileUploaded || report.contentType !== "application/pdf" || !report.sha256 ||
-        capture.id !== evaluation.captureId || capture.reportId !== report.id || capture.pdfSha256 !== report.sha256 ||
-        capture.latestDecision?.id !== evaluation.acceptance.id || capture.latestDecision.decision !== "accepted" ||
-        capture.latestDecision.captureId !== capture.id || capture.latestDecision.textSha256 !== capture.textSha256 ||
-        capture.latestDecision.popplerVersion !== capture.popplerVersion) fail("stored_source_mismatch");
-    const pdf = config.sourcePdf ? await readSourcePdf(await get(`/reports/${report.id}/download-url`),
+        capture.id !== evaluation.captureId || capture.reportId !== report.id || capture.pdfSha256 !== report.sha256)
+      fail("stored_source_mismatch");
+    // History can explain an unavailable selection, but every existing gate still controls genomic/PDF content.
+    const eligible = evaluation.current && evaluation.state === "active" && evaluation.supersededBy === null &&
+      evaluation.disposition === "evaluated" && evaluation.holdCode === null && evaluation.hold === null &&
+      evaluation.advisory.activeDisputes === 0 && evaluation.acceptance?.current === true && evaluation.acceptance.decision === "accepted" &&
+      capture.latestDecision?.id === evaluation.acceptance.id && capture.latestDecision.decision === "accepted" &&
+      capture.latestDecision.captureId === capture.id && capture.latestDecision.textSha256 === capture.textSha256 &&
+      capture.latestDecision.popplerVersion === capture.popplerVersion;
+    const genes = eligible ? completeGenes.parse(evaluation.geneStates) : [];
+    const pdf = eligible && config.sourcePdf ? await readSourcePdf(await get(`/reports/${report.id}/download-url`),
       config.sourcePdf.storageOrigin, { sizeBytes: report.sizeBytes, sha256: capture.pdfSha256 }, now) : null;
     // Closing reads catch changes during assembly. This is a bounded read, not an atomic DB snapshot or ongoing correction feed.
     for (const [path, schema, before] of [
@@ -87,17 +90,19 @@ export function createStoredPgxReader(value: unknown, now = Date.now) {
     }
     const expires = Math.min(claims.exp * 1000, pdf?.expires ?? Infinity);
     if (expires <= now()) fail("stored_token_expired");
+    if (!eligible) return { bundle: null, expires, profile: [], history };
     const snapshot = {
+      correctionRevision: history.revision,
       evaluationId: evaluation.id, captureId: capture.id, createdAt: evaluation.createdAt,
       engineVersion: evaluation.engineVersion, knowledgeSetId: evaluation.knowledgeSetId,
-      acceptance: { id: evaluation.acceptance.id },
+      acceptance: { id: evaluation.acceptance!.id },
       genes: genes.map(g => ({ gene: g.gene, diplotype: g.diplotype, phenotype: g.phenotype })),
     };
     return {
       bundle: buildPgxCollection(snapshot, { ...binding, tenantId: reader.tenantId, patientId: patient.id },
         pdf ? { kind: "stored-pdf", reportId: report.id, versionId: pdf.versionId, sha256: pdf.sha256, data: pdf.data, size: pdf.size }
           : { kind: "stored-reference", reportId: report.id, sha256: capture.pdfSha256 }),
-      expires,
+      expires, history,
       profile: snapshot.genes.map(g => ({ gene: g.gene, result: `Synthetic stored result: ${g.phenotype}` })),
     };
   };

@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-11**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Synthetic correction history and stale views
+
+The local SMART viewer now shows verified selected-evaluation correction metadata and withholds genomic/PDF content when existing evidence gates fail. It rechecks evidence every 15 seconds, clears it before revalidation, and enforces a 30-second freshness cap measured from server read start. Hidden/offline views, failed/expired checks and chart changes clear content and revoke PDF blob links; late responses cannot restore it. See [plan](design/plans/synthetic-correction-history.md), [runbook](ops/correction-history-preview.md) and [verification](verification/synthetic-correction-history.md). No backend writes, retention or clinical gate changes; no push/atomic-snapshot guarantee.
+
 ## Shared dependency build coordination
 
 Workspace typecheck/test now finish one prerequisite-library build phase before running parallel consumers; recursive build uses pnpm’s topological graph without nested dependency rebuilds. Standalone backend/pilot commands retain their prerequisite builds. This fixes overlapping clean builds observed after #70 without serializing checks, disabling cleaning or changing clinical/retention settings. See [plan](design/plans/shared-build-race.md) and [verification](verification/shared-build-race.md).
@@ -161,3 +165,7 @@ TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 pnpm test      # tier 3: ... upload
 
 Python 3 is needed on the PATH for the reader tests. Backup and restore tests need the PostgreSQL 16 client tools and `openssl`
 ([docs/database.md](database.md)).
+
+## Synthetic FHIR terminology/profile slice
+
+The local SMART pilot now declares Genomics Reporting 3.0.0 Genotype and Genomic Report profiles, corrects their required code/categories, and verifies generated synthetic examples using a pinned official HL7 validator in CI. Finite terminology tests and negative profile examples fail closed. Local phenotype text remains explicitly unstandardized. Read-only authorization, retention and clinical gates are unchanged. See [validation scope](../packages/smart-pilot/test/fhir-ig/README.md). Full synthetic workflow acceptance remains the next slice.
