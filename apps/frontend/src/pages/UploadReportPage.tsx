@@ -1,3 +1,6 @@
+import { Link } from 'react-router-dom';
+import { ownedStorageMode } from '@/lib/storageMode';
+import { cancelOwnedUpload } from '@/lib/ownedStorageApi';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useRef, useState } from 'react';
 import type { Paginated, PatientDto } from '@telesphoros/shared-types';
@@ -42,6 +45,11 @@ export default function UploadReportPage() {
   usePageTitle('Upload report');
   const { apiFetch } = useAuth();
   const progress = useRef<UploadProgress>({});
+  const transfer = useRef<AbortController | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [canStartOver, setCanStartOver] = useState(true);
+  const owned = ownedStorageMode();
+  useEffect(() => () => { transfer.current?.abort(); }, []);
   const [patients, setPatients] = useState<Paginated<PatientDto> | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<PatientDto | null>(null);
   const [patientRequest, setPatientRequest] = useState({ page: 1, attempt: 0 });
@@ -77,18 +85,43 @@ export default function UploadReportPage() {
 
   async function onSubmit(values: ProductUploadValues) {
     setServerError(null);
+    transfer.current = new AbortController();
     try {
-      const result = await submitReport(values, apiFetch, progress.current);
+      const result = await submitReport(values, apiFetch, progress.current, transfer.current.signal);
       setReference(result.reference);
     } catch (error) {
       // Values stay in the form so the user can retry without retyping.
       if (error instanceof SessionEndedError) return;
       setServerError(error instanceof SubmitError ? error.message : 'The upload was interrupted. Your entries are kept; please retry.');
+    } finally {
+      transfer.current = null;
+      if (progress.current.cancelRequested) await cancelUpload();
+      setCanStartOver(!progress.current.declaration || ['cancelled', 'cleaned', 'committed'].includes(progress.current.attempt?.state ?? ''));
     }
+  }
+
+  async function cancelUpload() {
+    setCancelling(true);
+    try {
+      await cancelOwnedUpload(apiFetch, progress.current);
+      setServerError('Upload cancelled. Start a new upload when ready.');
+    } catch (error) {
+      setServerError(error instanceof SubmitError ? error.message : 'Cancellation could not be confirmed. Retry cancellation before starting over.');
+    } finally {
+      setCancelling(false);
+      setCanStartOver(!progress.current.declaration || ['cancelled', 'cleaned', 'committed'].includes(progress.current.attempt?.state ?? ''));
+    }
+  }
+
+  function requestCancel() {
+    progress.current.cancelRequested = true;
+    if (transfer.current) { setCancelling(true); transfer.current.abort(); }
+    else void cancelUpload();
   }
 
   function startOver() {
     progress.current = {};
+    setCanStartOver(true);
     setSelectedPatient(null);
     form.reset(emptyValues);
     setReference(null);
@@ -107,7 +140,8 @@ export default function UploadReportPage() {
           </AlertDescription>
         </Alert>
         <div>
-          <Button onClick={startOver}>Upload another report</Button>
+          <Button disabled={isSubmitting || cancelling} onClick={startOver}>Upload another report</Button>
+          {owned && <Link className="ml-4 underline" to="/reports">View reports</Link>}
         </div>
       </div>
     );
@@ -135,7 +169,7 @@ export default function UploadReportPage() {
         <CardContent>
           <Form {...form}>
             <form key={formKey} onSubmit={event => void form.handleSubmit(onSubmit)(event)} noValidate className="flex flex-col gap-6">
-              <fieldset disabled={isSubmitting} className="flex min-w-0 flex-col gap-6">
+              <fieldset disabled={isSubmitting || cancelling} className="flex min-w-0 flex-col gap-6">
                 <legend className="sr-only">Report details</legend>
 
                 <FormField
@@ -183,7 +217,7 @@ export default function UploadReportPage() {
                       <FormControl>
                         <NativeSelect {...field}>
                           <option value="">Choose a type…</option>
-                          {REPORT_TYPES.map((type) => (
+                          {(owned ? [...REPORT_TYPES, 'lab-pdf'] as const : REPORT_TYPES).map((type) => (
                             <option key={type} value={type}>
                               {REPORT_TYPE_LABELS[type]}
                             </option>
@@ -204,14 +238,14 @@ export default function UploadReportPage() {
                       <FormControl>
                         <Input
                           type="file"
-                          accept=".vcf,.json"
+                          accept={owned ? ".vcf,.json,.pdf" : ".vcf,.json"}
                           name={name}
                           ref={ref}
                           onBlur={onBlur}
                           onChange={(event) => onChange(event.target.files?.[0])}
                         />
                       </FormControl>
-                      <FormDescription>.vcf or .json, up to 10 MB.</FormDescription>
+                      <FormDescription>{owned ? ".pdf, .vcf or .json, up to 10 MiB." : ".vcf or .json, up to 10 MB."}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -242,7 +276,7 @@ export default function UploadReportPage() {
                 />
 
                 <div>
-                  <Button type="submit" size="lg" disabled={isSubmitting} className="w-full sm:w-auto">
+                  <Button type="submit" size="lg" disabled={isSubmitting || cancelling} className="w-full sm:w-auto">
                     {isSubmitting ? (
                       <>
                         <Spinner /> Uploading…
@@ -251,9 +285,10 @@ export default function UploadReportPage() {
                       'Upload report'
                     )}
                   </Button>
-                  {serverError && <Button type="button" variant="outline" disabled={isSubmitting} onClick={startOver} className="mt-2 w-full sm:ml-2 sm:mt-0 sm:w-auto">Start a new upload</Button>}
+                  {serverError && <Button type="button" variant="outline" disabled={isSubmitting || cancelling || (owned && !canStartOver)} onClick={startOver} className="mt-2 w-full sm:ml-2 sm:mt-0 sm:w-auto">Start a new upload</Button>}
                 </div>
               </fieldset>
+              {owned && (isSubmitting || serverError) && <Button type="button" variant="outline" disabled={cancelling} onClick={requestCancel}>{cancelling ? 'Cancelling…' : 'Cancel upload'}</Button>}
             </form>
           </Form>
         </CardContent>

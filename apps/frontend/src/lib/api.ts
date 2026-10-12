@@ -5,9 +5,13 @@ import {
 import { SessionEndedError, NotSignedInError } from '@/auth/AuthProvider';
 import { productUploadSchema, type ProductUploadValues } from './productUploadSchema';
 
+import { ownedStorageMode } from './storageMode';
+import { submitOwnedReport } from './ownedStorageApi';
+import type { OwnedProgress } from './ownedStorageApi';
+
 export class SubmitError extends Error {}
 export type ApiFetch = (path: string, init?: RequestInit) => Promise<Response>;
-export interface UploadProgress { identity?: string; requestId?: string; reportId?: string }
+export interface UploadProgress extends OwnedProgress { identity?: string; requestId?: string; reportId?: string }
 
 /** Explicit configuration; never derive a trusted origin from an API upload response. */
 export function reportStorageOrigins(): string[] {
@@ -47,9 +51,10 @@ export async function listPatients(apiFetch: ApiFetch, page: number, signal?: Ab
 }
 
 /** Retry state lives in the mounted form only, never browser storage or a URL. */
-export async function submitReport(values: ProductUploadValues, apiFetch: ApiFetch, progress: UploadProgress): Promise<{ reference: string }> {
+export async function submitReport(values: ProductUploadValues, apiFetch: ApiFetch, progress: UploadProgress, signal?: AbortSignal): Promise<{ reference: string }> {
   try {
     productUploadSchema.parse(values);
+    if (ownedStorageMode()) return await submitOwnedReport(values, apiFetch, progress, signal);
     const origins = reportStorageOrigins();
     const sha256 = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await values.file.arrayBuffer())), byte => byte.toString(16).padStart(2, '0')).join('');
     const contentType = values.reportType === 'structured' ? 'application/json' : 'text/x-vcf';

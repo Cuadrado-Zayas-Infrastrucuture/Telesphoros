@@ -35,6 +35,8 @@
     "scripts",
     "vite.config.ts",
     "playwright.config.ts",
-    "eslint.config.js"
+    "eslint.config.js",
+    "storage-e2e",
+    "playwright.storage.config.ts"
   ]
 }

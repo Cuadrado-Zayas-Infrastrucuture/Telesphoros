@@ -1,3 +1,4 @@
+import { ownedStorageMode } from '@/lib/storageMode';
 import { Link } from 'react-router-dom';
 import helix from '@/assets/helix.png?w=480;960;1440&format=avif;webp;png&as=picture';
 import { OptimizedPicture } from '@/components/OptimizedPicture';
@@ -25,6 +26,17 @@ const statusCards = [
 
 export default function HomePage() {
   usePageTitle('Overview');
+  if (ownedStorageMode()) return (
+    <div className="flex max-w-prose flex-col gap-6">
+      <h1 className="text-3xl font-bold">Synthetic report storage</h1>
+      <p>Upload and retrieve synthetic PDF, VCF and JSON files. The server verifies file storage; clinical processing is disabled.</p>
+      <p>Use synthetic records only. No clinical interpretation or recommendations are produced.</p>
+      <div className="flex flex-wrap gap-4">
+        <Link className="underline" to="/reports/upload">Upload a synthetic report</Link>
+        <Link className="underline" to="/reports">View reports</Link>
+      </div>
+    </div>
+  );
   return (
     <div className="flex flex-col gap-10">
       <section aria-labelledby="home-title" className="flex max-w-prose flex-col gap-4">

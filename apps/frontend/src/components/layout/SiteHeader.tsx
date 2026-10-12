@@ -1,3 +1,4 @@
+import { ownedStorageMode } from '@/lib/storageMode';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
 import { WRITER_ROLES } from '@/auth/roles';
@@ -8,6 +9,7 @@ export function SiteHeader() {
   const { roles } = useAuth();
   // Links to pages the user cannot use are simply not shown. The pages are guarded as well.
   const links = [
+    { to: '/reports', label: 'Reports', end: true, show: ownedStorageMode() && roles.length > 0 },
     { to: '/', label: 'Overview', end: true, show: true },
     { to: '/reports/upload', label: 'Upload report', end: false, show: roles.some((r) => WRITER_ROLES.includes(r)) },
   ].filter((link) => link.show);

@@ -2,7 +2,9 @@
 import { spawn } from 'node:child_process';
 import net from 'node:net';
 const origin = 'http://127.0.0.1:5557';
-const bucket = 'synthetic-product-upload';
+const runId = process.env.L2_BROWSER_RUN_ID;
+if (runId && !/^[a-f0-9-]{36}$/.test(runId)) throw new Error('Invalid owned browser run');
+const bucket = runId ? `synthetic-storage-${runId}` : 'synthetic-product-upload';
 let child;
 async function main() {
   // Refuse an occupied port rather than initialize somebody else's emulator.
