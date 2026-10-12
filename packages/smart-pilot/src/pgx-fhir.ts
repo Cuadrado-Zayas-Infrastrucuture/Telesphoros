@@ -41,6 +41,8 @@ export const pgxVersionsSchema = z.strictObject({
   versions: z.array(evaluationSchema).min(1).max(20),
 });
 
+export const GENOMICS_IG = "http://hl7.org/fhir/uv/genomics-reporting/StructureDefinition/";
+const geneticsCategory = () => ({ coding: [{ system: "http://terminology.hl7.org/CodeSystem/v2-0074", code: "GE" }] });
 const NS = "https://telesphoros.app/synthetic-smart-pilot";
 const digest = (value: string) => crypto.createHash("sha256").update(value).digest("hex");
 const concept = (code: string, text: string) => ({ coding: [{ system: `${NS}/codes`, code }], text });
@@ -94,7 +96,11 @@ type Resource = { resourceType: string; id: string; [field: string]: unknown };
 export function buildPgxCollection(v: PgxSnapshot, binding: FhirBinding, sourceData: PgxSource) {
   const identity = [binding.tenantId, binding.patientId, binding.issuer, binding.fhirPatient];
   const scopedIdentifier = (kind: string, value: string) => identifier(`${kind}/${digest(JSON.stringify(identity)).slice(0, 32)}`, value);
-  const makeId = (kind: string, values: unknown) => `${kind}-${digest(JSON.stringify([identity, values])).slice(0, 48)}`;
+  // A changed representation must not reuse a prior immutable snapshot identity.
+  // Source/Patient/Device payloads are unchanged by this mapping revision.
+  const makeId = (kind: string, values: unknown) => `${kind}-${digest(JSON.stringify([identity, values,
+    ...(["pgx", "genotype", "phenotype", "provenance"].includes(kind) ? ["genomics-reporting-3.0.0/mapping-1"] : []),
+  ])).slice(0, 48)}`;
   const sourceId = makeId("source", sourceData.kind === "embedded" ? {
     reportId: sourceData.reportId, versionId: sourceData.versionId, sha256: sourceData.sha256, text: sourceData.text,
   } : sourceData);
@@ -111,6 +117,8 @@ export function buildPgxCollection(v: PgxSnapshot, binding: FhirBinding, sourceD
     const phenotypeId = makeId("phenotype", v.genes.length === 1 ? v : [v, gene.gene]);
     const genotype: Resource[] = gene.diplotype === null ? [] : [{
       resourceType: "Observation", id: genotypeId, status: "final",
+      meta: { profile: [`${GENOMICS_IG}genotype|3.0.0`] },
+      category: [{ coding: [{ system: "http://terminology.hl7.org/CodeSystem/observation-category", code: "laboratory" }] }, geneticsCategory()],
       identifier: [scopedIdentifier("genotype", `${v.evaluationId}/${gene.gene}`)], subject,
       code: { coding: [{ system: "http://loinc.org", code: "84413-4" }], text: "Genotype display name" },
       valueCodeableConcept: { text: `${gene.gene} ${gene.diplotype}` }, derivedFrom: [source],
@@ -160,11 +168,12 @@ export function buildPgxCollection(v: PgxSnapshot, binding: FhirBinding, sourceD
     ...observations,
     {
       resourceType: "DiagnosticReport", id: reportId, status: "final",
+      meta: { profile: [`${GENOMICS_IG}genomic-report|3.0.0`] }, category: [geneticsCategory()],
       identifier: [scopedIdentifier("evaluation", v.evaluationId)],
       extension: [extension("knowledge-set-id", v.knowledgeSetId), extension("acceptance-id", v.acceptance.id),
         ...(v.captureId ? [extension("capture-id", v.captureId)] : []),
         ...(v.correctionRevision ? [extension("correction-revision", v.correctionRevision)] : [])],
-      code: concept("pgx-preview", "Synthetic PGx interpretation snapshot"), subject,
+      code: { coding: [{ system: "http://loinc.org", code: "51969-4" }], text: "Synthetic genetic analysis report" }, subject,
       issued: v.createdAt, result: observations.map(o => ref("Observation", o.id)),
       conclusion: "SYNTHETIC ONLY. Not approved for clinical use. No recommendation or risk assessment generated.",
     },
@@ -172,7 +181,8 @@ export function buildPgxCollection(v: PgxSnapshot, binding: FhirBinding, sourceD
       resourceType: "Provenance", id: provenanceId,
       target: [ref("DiagnosticReport", reportId), ...observations.map(o => ref("Observation", o.id))],
       recorded: v.createdAt,
-      activity: concept("synthetic-mapping", "Mapping supplied synthetic evaluation; no clinical engine invocation"),
+      activity: { coding: [{ system: "http://terminology.hl7.org/CodeSystem/v3-DataOperation", code: "CREATE" }],
+        text: "Create a synthetic FHIR snapshot from supplied evaluation; no clinical engine invocation or EHR write" },
       agent: [{ who: ref("Device", deviceId) }], entity: [{ role: "source", what: source }],
     },
   ];
@@ -180,7 +190,7 @@ export function buildPgxCollection(v: PgxSnapshot, binding: FhirBinding, sourceD
     resourceType: "Bundle" as const, type: "collection" as const,
     meta: { tag: [tag] },
     entry: resources.map(resource => ({
-      fullUrl: fullUrl(resource.resourceType, resource.id), resource: { ...resource, meta: { tag: [tag] } },
+      fullUrl: fullUrl(resource.resourceType, resource.id), resource: { ...resource, meta: { ...(resource.meta as object ?? {}), tag: [tag] } },
     })),
   };
 }

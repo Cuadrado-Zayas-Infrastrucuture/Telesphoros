@@ -49,6 +49,8 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
+      - name: Published FHIR Genomics IG validation (synthetic only)
+        run: JAVA_HOME="$JAVA_HOME_21_X64" pnpm --filter @telesphoros/smart-pilot test:ig
       - name: Frontend chunk budget
         run: pnpm --filter @telesphoros/frontend check:chunks
       # Fails if anything synthetic or unreviewed sits in the real knowledge directory.
