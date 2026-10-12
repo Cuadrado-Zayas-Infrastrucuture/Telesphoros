@@ -40,7 +40,7 @@ The API authenticates the supplied bearer on `/me` using its existing signature/
 
 ## What is read and withheld
 
-Each preview reads `/me`, the exact patient, evaluation, report and capture, then rereads patient/report/capture/evaluation. Shared DTO schemas are reused. The closing reads refuse changed records; the result expires no later than either the SMART session or backend token. No token refresh or polling is added.
+Each preview reads `/me`, the exact patient, evaluation, report and capture, then rereads patient/report/capture/evaluation. Shared DTO schemas are reused. The closing reads refuse changed records; the result expires no later than either the SMART session or backend token. No token refresh is added. The viewer now rechecks evidence under the [bounded freshness contract](correction-history-preview.md).
 
 In addition to existing SMART identity, consent, interpretability and medication gates, the reader requires:
 
@@ -50,7 +50,7 @@ In addition to existing SMART identity, consent, interpretability and medication
 - A verified uploaded lab PDF whose digest matches the capture; capture decision/text digest/Poppler identity agreement.
 - Complete canonical gene states with a supplied phenotype. A phenotype-only state emits no invented genotype. Duplicate, unresolved or incomplete gene states are withheld.
 
-A failed API/schema/state check returns the existing sanitized unavailable response, with no partial profile/source or static substitute. A stored selection without reader configuration reports `pgx_unavailable`. API 401/403/404/503, redirect refusal, timeout and size bounds remain in force.
+Failed API, schema, identity, history-chain or source-integrity checks return the sanitized unavailable response, with no partial data. A verified selected evaluation that fails a content eligibility gate returns history only, with no profile/source or static substitute. A stored selection without reader configuration reports `pgx_unavailable`. API 401/403/404/503, redirect refusal, timeout and size bounds remain in force.
 
 ## Source identity and consistency limits
 
@@ -58,7 +58,7 @@ By default, the stored DocumentReference contains report ID and SHA-256 metadata
 
 The common FHIR builder preserves the original single-gene static fixture identities and supports multiple stored genes with distinct Observation identities. No recommendation text, drug advice, storage key or presigned URL is exported. The existing synthetic FHIR tags, warnings and disabled clinical actionability remain.
 
-These are multiple authorized reads, not a database transaction snapshot. A change after the closing read is not continuously pushed into an already displayed view. Refreshing evidence makes fresh reads; patient changes require a new SMART launch. A full correction-history/live-invalidation contract remains separate. Consent is still the explicit synthetic registration flag, not production consent storage.
+These are multiple authorized reads, not a database transaction snapshot. A change after the closing read is not continuously pushed into an already displayed view. Refreshing evidence makes fresh reads; patient changes require a new SMART launch. The [correction-history and stale-view contract](correction-history-preview.md) adds bounded polling and explicit history; it does not provide push invalidation. Consent is still the explicit synthetic registration flag, not production consent storage.
 
 ## Verification
 

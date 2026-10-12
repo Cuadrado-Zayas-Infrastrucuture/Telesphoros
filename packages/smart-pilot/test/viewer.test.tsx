@@ -44,6 +44,7 @@ describe("synthetic SMART evidence", () => {
           clinician: "Practitioner/synthetic",
           tenant: "synthetic-office",
           expiresAt: new Date(Date.now() + 60000).toISOString(),
+          freshUntil: new Date(Date.now() + 30000).toISOString(),
           pagesRead: 2,
           medications: [],
           uncertainMedicationCount: 0,
@@ -66,7 +67,8 @@ describe("synthetic SMART evidence", () => {
     expect(
       screen.getByText(/Clinical recommendations are disabled/),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Recheck evidence" })).toBeInTheDocument();
   });
   it("withholds context on API failure", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
@@ -93,6 +95,7 @@ const syntheticResponse = () => ({
     clinician: "Practitioner/synthetic",
     tenant: "synthetic-office",
     expiresAt: new Date(Date.now() + 60000).toISOString(),
+          freshUntil: new Date(Date.now() + 30000).toISOString(),
     pagesRead: 1,
     medications: [],
     uncertainMedicationCount: 0,
@@ -165,7 +168,8 @@ it("shows a read-only versioned preview and removes it when the launch changes",
   const view = render(<SmartEvidencePage sessionToken={"a".repeat(43)} />);
   await screen.findByText("Versioned FHIR preview (synthetic only)");
   expect(screen.getByText(/"synthetic-evaluation-2"/)).toBeInTheDocument();
-  expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Recheck evidence" })).toBeInTheDocument();
   view.rerender(<SmartEvidencePage sessionToken={null} />);
   expect(screen.queryByText(/"synthetic-evaluation-2"/)).not.toBeInTheDocument();
 });

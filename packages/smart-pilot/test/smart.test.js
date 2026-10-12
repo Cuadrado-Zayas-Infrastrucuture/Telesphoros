@@ -312,3 +312,21 @@ test("stored read errors expose neither credentials nor partial data", async () 
   expect(response.status).toBe(422); expect(response.body.pgxFhirPreview).toBeUndefined();
   expect(JSON.stringify(response.body)).not.toContain("sensitive-credential-sentinel");
 });
+test("history-only stored response never exports a genomic profile or PDF", async () => {
+  const history = { evaluationId: storedSelection.evaluationId, state: "retracted", current: false, events: [], revision: "a".repeat(64) };
+  await setup({}, async () => ({ bundle: null, profile: [], expires: clock + 60000, history }));
+  fixture.registration.patients[0].stored = storedSelection;
+  const response = await evidence(await login());
+  expect(response.status).toBe(200); expect(response.body.status).toBe("evaluation_withheld");
+  expect(response.body.correctionHistory).toEqual(history);
+  expect(response.body.pgxFhirPreview).toBeNull(); expect(response.body.profile).toEqual([]);
+  expect(Date.parse(response.body.freshUntil)).toBe(clock + 30000);
+});
+test("a slow read cannot issue already-stale evidence", async () => {
+  let slow = false;
+  await setup({}, async () => { if (slow) clock += 31000; return { ...storedOutput(), expires: clock + 60000 }; });
+  fixture.registration.patients[0].stored = storedSelection;
+  const token = await login(); expect((await evidence(token)).status).toBe(200);
+  slow = true; const response = await evidence(token);
+  expect(response.status).toBe(422); expect(response.body.pgxFhirPreview).toBeUndefined();
+});

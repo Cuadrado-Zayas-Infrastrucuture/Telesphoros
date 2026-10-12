@@ -159,6 +159,7 @@ export function createPilotRouter({
       return res.status(401).json({ error: "smart_session_expired" });
     }
     try {
+      const readStarted = now();
       const context = await readContext(session.registration, session);
       // Upstream pagination can outlive a session. Never release its data afterward.
       if (session.expires <= now()) {
@@ -186,12 +187,14 @@ export function createPilotRouter({
         ? await storedReader(fixture.stored, session.user, binding) : null;
       const expires = Math.min(session.expires, stored?.expires ?? session.expires);
       if (expires <= now()) return res.status(401).json({ error: "smart_session_expired" });
+      const freshUntil = Math.min(expires, readStarted + 30000);
+      if (freshUntil <= now()) fail("evidence_read_stale");
       // Selecting stored mode never falls back to registration fixtures, including on missing configuration.
       const preview = fixture.stored ? stored?.bundle ?? null : mapPgxToFhir(fixture.pgx, {
         ...binding, consent: fixture.consent, interpretable: fixture.interpretable,
         contextReady: status === "synthetic_context_ready",
       });
-      if (fixture.stored && !preview && status === "synthetic_context_ready") status = "pgx_unavailable";
+      if (fixture.stored && !preview && status === "synthetic_context_ready") status = stored?.history ? "evaluation_withheld" : "pgx_unavailable";
       return res.json({
         synthetic: true,
         clinicalRecommendationsEnabled: false,
@@ -201,6 +204,8 @@ export function createPilotRouter({
         clinician: session.user,
         tenant: session.registration.tenantId,
         expiresAt: new Date(expires).toISOString(),
+        freshUntil: new Date(freshUntil).toISOString(),
+        correctionHistory: stored?.history ?? null,
         medications: context.medications,
         pagesRead: context.pages,
         uncertainMedicationCount: context.uncertainCount,

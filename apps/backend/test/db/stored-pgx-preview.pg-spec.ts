@@ -16,7 +16,7 @@ const root = resolve(__dirname, '../../../..');
 const clinician = 'Practitioner/synthetic-clinician';
 const binding = { tenantId: 'synthetic-office', patientId: 'pat_000000000000000000000001', fhirPatient: 'patient-a', issuer: 'http://127.0.0.1:8301/fhir' };
 interface Resource { resourceType: string; [key: string]: unknown }
-interface Preview { withheld?: boolean; schemaValid?: boolean; bundle?: { entry: Array<{ resource: Resource }> }; profile?: Array<{ gene: string; result: string }> }
+interface Preview { history?: { evaluationId: string; state: string; current: boolean; events: Array<{ kind: string }>; revision: string }; withheld?: boolean; schemaValid?: boolean; bundle?: { entry: Array<{ resource: Resource }> }; profile?: Array<{ gene: string; result: string }> }
 // The async child leaves this process free to serve actual authenticated HTTP requests.
 function preview(config: unknown, selection: unknown): Promise<Preview> {
   return new Promise((resolveResult, reject) => {
@@ -109,18 +109,18 @@ describe('stored synthetic PGx: real API, signed identity and PostgreSQL', () =>
     const s = await seed(); expect((await preview(config, s.selection)).schemaValid).toBe(true);
     const newer = (await lab.decide(reviewer, s.captureId, { decision: 'accepted' }).expect(201)).body as { id: string };
     const next = (await lab.evaluate(writer, s.reportId, { captureId: s.captureId, acceptanceId: newer.id }).expect(201)).body as EvaluationDto;
-    expect(await preview(config, s.selection)).toEqual({ withheld: true });
+    expect(await preview(config, s.selection)).toMatchObject({ withheld: true, bundle: null, profile: [], schemaValid: false });
     const selection = { ...s.selection, evaluationId: next.id };
     expect((await preview(config, selection)).schemaValid).toBe(true);
     await lab.api().post(`/api/v1/evaluations/${next.id}/corrections`).set(bearer(reviewer.token)).send({ kind: 'retraction', reasonCode: 'input-misread' }).expect(201);
-    expect(await preview(config, selection)).toEqual({ withheld: true });
-    expect(await preview(config, s.selection)).toEqual({ withheld: true });
+    expect(await preview(config, selection)).toMatchObject({ withheld: true, bundle: null, profile: [], schemaValid: false });
+    expect(await preview(config, s.selection)).toMatchObject({ withheld: true, bundle: null, profile: [], schemaValid: false });
   }, 30_000);
 
   it('withholds when a reviewer rejects the formerly accepted capture', async () => {
     const s = await seed(); expect((await preview(config, s.selection)).schemaValid).toBe(true);
     await lab.decide(reviewer, s.captureId, { decision: 'rejected' }).expect(201);
-    expect(await preview(config, s.selection)).toEqual({ withheld: true });
+    expect(await preview(config, s.selection)).toMatchObject({ withheld: true, bundle: null, profile: [], schemaValid: false });
   }, 30_000);
 
   it('honors the existing pipeline-off guard', async () => {
@@ -154,12 +154,39 @@ describe('stored synthetic PGx: real API, signed identity and PostgreSQL', () =>
     expect(await preview(config, s.selection)).toEqual({ withheld: true });
   }, 30_000);
 
+  it('reads retraction, independent reinstatement and supersession history without writing or substituting evidence', async () => {
+    const s = await seed();
+    const initial = await preview(config, s.selection); expect(initial.schemaValid).toBe(true);
+    const retraction = (await lab.api().post(`/api/v1/evaluations/${s.evaluation.id}/corrections`).set(bearer(reviewer.token))
+      .send({ kind: 'retraction', reasonCode: 'input-misread' }).expect(201)).body as { id: string };
+    const before = await counts(); requests.length = 0;
+    const withdrawn = await preview(config, s.selection);
+    expect(withdrawn).toMatchObject({ withheld: true, bundle: null, profile: [], history: { evaluationId: s.evaluation.id, state: 'retracted', current: false } });
+    expect(withdrawn.history?.events.map(e => e.kind)).toEqual(['retraction']);
+    expect(requests).toEqual(Array(9).fill('GET')); expect(await counts()).toEqual(before);
+    const independent = await idp.mintAccessToken({ user: { ...DEFAULT_USERS[6]!, sub: 'synthetic-independent-reinstater', groups: ['reviewer', `tenant:${tenant}`] } });
+    const reinstatement = (await lab.api().post(`/api/v1/evaluations/${s.evaluation.id}/corrections`).set(bearer(independent))
+      .send({ kind: 'reinstatement', reasonCode: 'retraction-mistaken', previousCorrectionId: retraction.id }).expect(201)).body as { id: string };
+    const restored = await preview(config, s.selection);
+    expect(restored.schemaValid).toBe(true); expect(restored.history?.events.map(e => e.kind)).toEqual(['retraction', 'reinstatement']);
+    expect(restored.history?.revision).not.toBe(initial.history?.revision);
+    const decision = (await lab.decide(reviewer, s.captureId, { decision: 'accepted' }).expect(201)).body as { id: string };
+    const replacement = (await lab.evaluate(writer, s.reportId, { captureId: s.captureId, acceptanceId: decision.id }).expect(201)).body as EvaluationDto;
+    await lab.api().post(`/api/v1/evaluations/${s.evaluation.id}/corrections`).set(bearer(reviewer.token))
+      .send({ kind: 'supersession', reasonCode: 'input-misread', previousCorrectionId: reinstatement.id, replacementEvaluationId: replacement.id }).expect(201);
+    const superseded = await preview(config, s.selection);
+    expect(superseded).toMatchObject({ withheld: true, bundle: null, profile: [], history: { evaluationId: s.evaluation.id, state: 'superseded', current: false } });
+    expect(superseded.history?.events.map(e => e.kind)).toEqual(['retraction', 'reinstatement', 'supersession']);
+    expect(JSON.stringify(superseded)).not.toContain(replacement.id);
+    expect((await preview(config, { ...s.selection, evaluationId: replacement.id })).schemaValid).toBe(true);
+  }, 30_000);
+
   it('withholds after an actual active cell dispute appears', async () => {
     const s = await seed(); expect((await preview(config, s.selection)).schemaValid).toBe(true);
     const citation = s.evaluation.results.find(r => r.citation)?.citation as { guidelineId: string; locator: { table: string; row: string; column: string | null } };
     expect(citation).toBeDefined();
     const { column, ...locator } = citation.locator;
     await lab.api().post('/api/v1/cell-disputes').set(bearer(reviewer.token)).send({ guidelineId: citation.guidelineId, locator: { ...locator, ...(column === null ? {} : { column }) }, note: 'Synthetic connector refusal test' }).expect(201);
-    expect(await preview(config, s.selection)).toEqual({ withheld: true });
+    expect(await preview(config, s.selection)).toMatchObject({ withheld: true, bundle: null, profile: [], schemaValid: false });
   }, 30_000);
 });
