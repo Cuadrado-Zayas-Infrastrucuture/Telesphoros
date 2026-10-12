@@ -1,3 +1,4 @@
+import { ownedStorageMode } from '@/lib/storageMode';
 import type { RouteObject } from 'react-router-dom';
 import { ProtectedRoute } from '@/auth/ProtectedRoute';
 import { RequireRole } from '@/auth/RequireRole';
@@ -24,6 +25,7 @@ export const routes: RouteObject[] = [
       {
         element: <ProtectedRoute />,
         children: [
+          ...(ownedStorageMode() ? [{ path: 'reports', lazy: async () => ({ Component: (await import('@/pages/ReportsPage')).default }) }] : []),
           ...(import.meta.env.DEV ? [
             { path: 'local-upload', lazy: async () => ({ Component: (await import('@/pages/LocalUploadReportPage')).default }) },
             { path: 'local-review', lazy: async () => ({ Component: (await import('@/pages/LocalReviewPage')).default }) },
