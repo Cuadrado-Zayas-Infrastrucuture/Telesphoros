@@ -1,14 +1,19 @@
 # Soup pilot: a synthetic-only section classifier
 
-Status: **draft, awaiting founder approval.** Snapshot 2026-10-13. Nothing in this plan is built, installed or run yet. Reading and exploring need no plan; this file is the plan that must be approved before any code, model download, training run or dependency change.
+Status: **draft, awaiting founder decisions.** Snapshot 2026-10-13, revised after mapping the repository. Nothing in this plan is built, installed or run yet. Reading and exploring need no plan; this file is the plan that must be approved before any code, model download, training run or dependency change.
 
-Source evaluation: [Soup](https://github.com/MakazhanAlpamys/Soup) at `819af88` (v0.76.0, Apache-2.0, Alpha). Our read of its docs and config schema is in the discussion that led to this plan; its claims are not verified here.
+Source evaluation: [Soup](https://github.com/MakazhanAlpamys/Soup) at `819af88` (v0.76.0, Apache-2.0, Alpha). Its claims are not verified here.
 
 ## Objective
 
-Test whether a small fine-tuned classifier, trained with Soup, can label the **section type** of a synthetic lab-report text chunk well enough to be worth keeping, measured against a non-ML baseline on a held-out set that people label by hand.
+Test whether a small fine-tuned classifier, trained with Soup, can label the **section type** of a synthetic lab-report text chunk better than a rule-based baseline, measured on a held-out set that people label by hand.
 
-Why this task: the [lab-report reader](../../lab-report-reader.md) already finds genes, diplotypes and results deterministically, and must stay that way. A section classifier is narrow, its labels are checkable by hand, and a wrong label can be caught by a deterministic check, so it is the lowest-risk way to learn what Soup costs us. Clinical meaning, CPIC mapping and recommendations are out of scope and stay in the deterministic engine.
+Why this task, and why it may not be worth running:
+
+- The [lab-report reader](../../lab-report-reader.md) already finds genes, diplotypes and results deterministically, and must stay that way.
+- The 12 synthetic captures (D01 to D12) contain only genotype and result lines, about 925 bytes in total. A rule such as "a line with `GENE: diplotype` is a genotype line" may already classify them perfectly.
+- **The pilot therefore has a gate before any training (see Baseline).** If the rule-based baseline already meets the thresholds, the pilot stops and reports that a model adds nothing on this data.
+- Clinical meaning, CPIC mapping and recommendations are out of scope and stay in the deterministic engine.
 
 Non-goals:
 
@@ -16,44 +21,57 @@ Non-goals:
 - No real patient data. No PHI, no real reports, no identifiers from any source.
 - No change to the reader, the adapter, the CPIC engine, the knowledge tables, migrations, API routes, Terraform or AWS.
 - No hosted training, no cloud backend, no spend, no model publication.
-- No general LLM work, no fine-tuning for recommendations or explanations.
+- No general LLM work, and no fine-tuning for recommendations or explanations.
 
-## Label set (proposed)
+## Label set (revised)
 
-| Label | Meaning |
-| --- | --- |
-| `header` | patient, specimen and report identifiers block |
-| `genotype_table` | rows of gene, diplotype and result |
-| `phenotype_statement` | the one-line phenotype or metabolizer result |
-| `narrative` | free-text interpretation or comments |
-| `disclaimer` | footer, legal or "not for clinical decisions" text |
-| `other` | anything else |
+The first version uses only labels the repository's own data can produce. The earlier six-label set included `header`, `narrative` and `disclaimer`, which appear nowhere in the synthetic captures, so any examples of them would be invented.
 
-Founder decision D1: approve this label set or change it. Each label needs a one-sentence written rule that a second person can apply.
+| Label | Meaning | Written rule (for a second person to apply) |
+| --- | --- | --- |
+| `genotype_line` | A gene with a diplotype | Contains a gene symbol followed by a diplotype such as `*1/*2` |
+| `phenotype_result` | A metabolizer or result statement | Contains a result phrase such as "Intermediate Metabolizer", with no diplotype |
+| `other` | Anything else | Any line that matches neither rule above |
+
+Rules:
+
+- Any line with a gene and a diplotype is `genotype_line`, even if it also contains a result phrase. That keeps genotype data out of `other`.
+- More labels (for example `header` or `disclaimer`) may be added only after a real layout sample is received (see prerequisite P1). Their examples then follow that layout, not invented formats.
+
+Founder decision **D1**: approve the three labels and their rules, or name the layout sample that should drive the label set.
+
+## Prerequisites before any work
+
+These are not optional, and the plan cannot start until both are met:
+
+- **P1, report layout sample.** A synthetic example of the report layout the business actually receives, provided by the founder. Without it, the generator would invent formats, and the eval would only measure those invented formats.
+- **P2, second labeller named.** A second person who is not the template author and who will hand-label the eval set. See D2.
 
 ## Data
 
-All data is synthetic and generated by committed helpers from templates. There are two kinds:
+All data is synthetic and generated by committed helpers from templates derived from P1. Two kinds:
 
 1. **Training chunks.** Generated from templates with randomized synthetic names, IDs, dates and gene/result values. Labels come from the generator, so they are correct by construction. Target: about 2,000 chunks, balanced by label. Generated text must not be copied from any real report.
-2. **Evaluation set.** About 300 chunks written by hand, not generated. Each one is labelled by a person who did not write the template. The twelve hand-written captures in `tests/report_reader/golden.json` may be used as additional eval seeds, after checking they are synthetic. Eval chunks never appear in training, even as near-duplicates. A check enforces zero exact and normalized-text overlap.
+2. **Evaluation set.** About 300 chunks written by hand, not generated. Each one is labelled independently by two people (see D2), and disagreements are settled by the founder. Eval chunks never appear in training, even as near-duplicates. A check enforces zero exact and normalized-text overlap.
 
-Founder decision D2: confirm who labels the eval set. It must not be the same person who wrote the generator templates alone, and no model output may be used as a label.
+**The 12 captures in `knowledge/lab-report-reader/v2-handoff/fixtures/captures/` are not training or eval data.** They are assistant-written, the hand-off states they are "not gold labels", and there are too few of them to measure anything. The hand-written spans in `tests/report_reader/golden.json` are reader spans, not section labels, so they do not serve as labels either.
 
 Data rules: the data directory is `.gitignore`d if it is generated at scale. Only the generator, the hand-written eval set and the manifest with hashes are committed. Run `soup data pii` on the training file and fail if it flags anything, as a second check on the generator.
 
-## Base model and licence
+Founder decision **D2**: name the two labellers. Both must be people other than the template author. Agreement is measured on a 20% double-labelled sample; the pilot proceeds only if Cohen's kappa is at least 0.8. (The threshold is a proposal.)
 
-Founder decision D3: choose the base model. Requirements, which must be checked and recorded before download:
+## Base model, licence and hardware
 
-- An open-weight encoder or small model that Soup's `classifier` task supports.
-- A licence compatible with internal, non-commercial pilot use, with the exact licence text and revision hash recorded.
-- Small enough to train on the hardware in D4.
+Founder decision **D3**: choose the base model. Requirements, which must be checked and recorded before download:
+
+- A small open-weight encoder that Soup's `classifier` task supports. Three short-text classes need no larger model.
+- A permissive licence (Apache-2.0 or MIT preferred) that allows internal pilot use, with the exact licence text and revision hash recorded.
 - The model name, revision and SHA-256 of the weights recorded in the pilot manifest.
+- Inference must be runnable on CPU. The repository already runs a pinned Python sidecar for the reader, so the same pattern may be used if the model is ever promoted.
 
-No model has been selected. The plan does not assume one.
+No model has been selected. Once a candidate is named, its licence is checked before any download.
 
-Founder decision D4: confirm the hardware. The minimum is one GPU with enough memory for the chosen base model, or CPU if the model is small enough. Measured time and memory are recorded; Soup's published numbers are not used as evidence.
+Founder decision **D4**: confirm the hardware. Recommendation: **CPU only.** The infrastructure has no GPU anywhere (the API runs on Fargate CPU tasks), and the training chunks are one or two lines each, so about 2,000 examples is a small job. No GPU purchase is needed for the pilot. Measured time and memory are recorded; Soup's published numbers are not used as evidence.
 
 ## Environment and isolation
 
@@ -66,40 +84,46 @@ Founder decision D4: confirm the hardware. The minimum is one GPU with enough me
 
 ## Configuration
 
-One Soup YAML (`tools/soup-pilot/soup.yaml`) with `task: classifier`, the chosen base model, the label list and the seed fixed. Config is validated with `soup doctor --config`, and any setting that Soup refuses or warns about is fixed before the run, not ignored.
+One Soup YAML (`tools/soup-pilot/soup.yaml`) with `task: classifier`, the chosen base model, the three labels and the seed fixed. Config is validated with `soup doctor --config`, and any setting that Soup refuses or warns about is fixed before the run, not ignored.
 
-## Baseline
+## Baseline (gate before training)
 
-A deterministic baseline is built first:
+A deterministic baseline is built first, and it is the gate for the whole pilot:
 
 1. **Majority class**, measured on the eval set.
-2. **Rule-based classifier** using keywords and line patterns, written and checked before any model is trained. It is the bar the model must clear.
+2. **Rule-based classifier** implementing the three written rules above, checked against the rules before any model is trained.
+
+**Gate:** if the rule-based baseline already meets every threshold in D5 on the hand-labelled eval set, the pilot stops. The report says that a model adds nothing for this task on this data. Training does not start.
 
 The baseline is reported with the same metrics as the model.
 
 ## Evaluation and success criteria (proposed)
 
-Run with `soup eval against` on the held-out set, then `soup eval gate` with the thresholds below. Thresholds are proposals for the founder to set in D5.
+Run with `soup eval against` on the held-out set, then `soup eval gate` with the thresholds below. Thresholds are proposals for the founder to set in D5, and must be recorded before training starts.
 
 - Macro-F1 at least 0.90 on the hand-labelled eval set, and at least 0.05 above the rule-based baseline.
-- **Critical confusion:** zero `genotype_table` rows predicted as `disclaimer` or `other`, and no `phenotype_statement` predicted as `narrative`. Any such error fails the pilot, because it would drop genotype data.
+- **Critical confusion:** zero `genotype_line` rows predicted as `other`. Any such error fails the pilot, because it would drop genotype data.
 - Per-label precision and recall are reported. No label may have recall below 0.80.
 - A seed-variance check: three training seeds, and the spread in macro-F1 is reported.
 - Errors are inspected by hand and listed in the verification record, not only counted.
 
-Founder decision D5: approve, change or replace these thresholds **before** training starts.
+Founder decision **D5**: approve, change or replace these thresholds **before** training starts, and confirm the baseline gate above.
+
+## Model card and evaluation gate
+
+The [AI safety controls](../../ai-safety-and-hallucination-controls.md) doc requires every model to have a model card and an evaluation gate before any use. The pilot produces a model card (`tools/soup-pilot/MODEL-CARD.md`) with: base model and licence, training data source and generator version, eval data and its labellers, the metrics above, known failure modes, and the statement that the model is not approved for clinical use. A model without a card is not evaluated further.
 
 ## Tasks
 
 | Task | Deliverable | Acceptance | Status |
 | --- | --- | --- | --- |
-| T0 | This plan approved; D1 to D5 recorded in the plan | Founder approval recorded | awaiting approval |
+| T0 | This plan approved; D1 to D5 recorded; P1 and P2 received | Founder approval recorded | awaiting approval |
 | T1 | Environment: pinned Soup, lock file, offline install check, `soup doctor` passes on the config | Install reproduces from the lock; no network during run | not started |
-| T2 | Generator, label rules and manifest (hash of every file) | Labels correct by construction; `soup data pii` finds nothing; unit tests for the generator | not started |
-| T3 | Hand-written eval set and overlap check | Zero train/eval overlap; second labeller agreement recorded | not started |
-| T4 | Rule-based baseline and its eval numbers | Baseline reproduces on a second run | not started |
+| T2 | Generator, label rules and manifest (hash of every file), built from P1 | Labels correct by construction; `soup data pii` finds nothing; unit tests for the generator | not started |
+| T3 | Hand-written eval set, double-labelled, with overlap check | Zero train/eval overlap; kappa recorded against the D2 threshold | not started |
+| T4 | Rule-based baseline and its eval numbers, **then the baseline gate** | Baseline reproduces on a second run; pilot stops here if the gate is met | not started |
 | T5 | Training, three seeds, `soup eval against`, `soup eval gate` | Thresholds from D5 applied as written; failures reported as failures | not started |
-| T6 | Error review and a verification record in `docs/verification/` | Every critical error listed; go/no-go written | not started |
+| T6 | Error review, model card and a verification record in `docs/verification/` | Every critical error listed; model card complete; go/no-go written | not started |
 | T7 | Status update and a draft PR, then stop for review | Only after T6; founder decides whether to continue | not started |
 
 Each slice (T1 to T6) is reviewed before the next starts, consistent with the working agreements.
@@ -108,12 +132,14 @@ Each slice (T1 to T6) is reviewed before the next starts, consistent with the wo
 
 Stop and report, without working around them:
 
+- The rule-based baseline meets the D5 thresholds (the baseline gate).
 - Soup refuses or silently changes behaviour for a setting in our config.
 - The base model's licence cannot be confirmed, or its terms forbid this use.
 - Any real or possibly real identifier appears in the data.
 - Training or eval needs network access the plan did not approve.
 - The model fails a D5 threshold after one reasoned attempt. Trying more seeds or new hyperparameters is a new decision for the founder, not a retry.
 - A dependency needs to be added to a production package.
+- P1 or P2 is not provided.
 
 ## Blast radius and rollback
 
@@ -126,13 +152,24 @@ Rollback: delete `tools/soup-pilot/` and its virtual environment. The eval and g
 - Soup's claims about performance, memory and layer streaming. Any number we rely on is re-measured here.
 - Soup's compliance commands. They are not evidence that a pilot run meets any regulation.
 - Soup's long-term maintenance. It is Alpha, and the pilot records the exact version used.
+- Whether any candidate base model's licence permits this use. Not checked until a candidate is named.
 
-## Founder decisions needed
+## Founder decisions and recommendations
 
-- **D1** label set and written rules
-- **D2** who labels the evaluation set
-- **D3** base model and licence check
-- **D4** hardware available for the run
-- **D5** success thresholds and critical-error rule
+| # | Decision | Recommendation |
+| --- | --- | --- |
+| D1 | Label set and written rules | Approve the three labels in this revision, or name the layout sample (P1) that should drive the set |
+| D2 | Two labellers, neither a template author | Name two people; kappa of at least 0.8 on a 20% sample |
+| D3 | Base model and licence | Small permissive encoder that runs on CPU; send candidate names for a licence check |
+| D4 | Hardware | CPU only; no GPU needed |
+| D5 | Thresholds and the baseline gate | Accept the thresholds, and record that a baseline meeting them stops the pilot |
 
-Until D1 to D5 are answered, T1 cannot start.
+Until D1 to D5 and P1 and P2 are answered, T1 cannot start.
+
+## Repository grounding
+
+- Synthetic captures: `knowledge/lab-report-reader/v2-handoff/fixtures/captures/D01` to `D12`, `report.txt` files.
+- Acceptance and reviewer status: `knowledge/lab-report-reader/v2-handoff/ORIGIN.md` and `acceptance-records/`.
+- Reviewer rules: [records-and-corrections.md](../records-and-corrections.md) §16 ("an office therefore needs at least two people able to review").
+- Model rules: [ai-safety-and-hallucination-controls.md](../../ai-safety-and-hallucination-controls.md).
+- No GPU: `infrastructure/terraform/api-compute.tf` (Fargate CPU).
