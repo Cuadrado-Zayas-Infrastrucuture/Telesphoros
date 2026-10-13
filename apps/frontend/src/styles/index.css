@@ -5,6 +5,7 @@
 @theme inline {
   --color-*: initial;
   --color-background: var(--background);
+  --color-panel: var(--panel);
   --color-foreground: var(--foreground);
   --color-surface: var(--surface);
   --color-muted: var(--muted);
@@ -38,9 +39,20 @@
   --radius-sm: var(--radius-1);
   --radius-md: var(--radius-2);
   --radius-lg: var(--radius-3);
+  --shadow-panel: var(--elevation-panel);
 
   --container-page: var(--size-page);
   --container-prose: var(--size-prose);
+}
+
+@layer components {
+  .button-raised {
+    background-image: var(--button-sheen);
+    box-shadow: var(--shadow-button);
+  }
+  .button-raised:not(:disabled):not([aria-disabled='true']):active {
+    box-shadow: var(--shadow-button-pressed);
+  }
 }
 
 @layer base {
