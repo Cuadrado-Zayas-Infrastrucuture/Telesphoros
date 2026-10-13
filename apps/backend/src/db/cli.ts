@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { Client } from 'pg';
+import { MEMBERSHIP_USAGE, runMembership } from '../membership/membership-cli';
+import { PgMembershipAdmin } from '../membership/pg-membership-admin';
 import { createBackup } from './backup';
 import { generateKeyFile, readKeyFile } from './backup-crypto';
 import { parseManifest } from './backup-manifest';
@@ -36,6 +38,7 @@ const USAGE = `Usage: node dist/db/cli.js <command>
                                 Env: PROVISION_ADMIN_USER, PROVISION_ADMIN_PASSWORD (the RDS-managed administrator), DATABASE_HOST,
                                 [DATABASE_PORT=5432] [DATABASE_NAME=telesphoros], PROVISION_SECRET_APP / _VERIFIER / _MIGRATOR (secret ids).
 
+${MEMBERSHIP_USAGE}
   keygen  --out FILE            create a new random backup key (64 hex characters, owner-only; never overwrites).
                                 KEEP COPIES OFFLINE: without this key no backup made with it can ever be restored.
 
@@ -150,6 +153,17 @@ async function main(argv: string[]) {
       } else {
         throw new Error(USAGE);
       }
+    } finally {
+      await client.end();
+    }
+    return;
+  }
+
+  if (command === 'membership') {
+    const client = new Client(pgClientConfig(required('DATABASE_MIGRATOR_URL')));
+    await client.connect();
+    try {
+      process.exitCode = await runMembership(new PgMembershipAdmin(client), [sub, ...rest].filter((a): a is string => a !== undefined), out);
     } finally {
       await client.end();
     }

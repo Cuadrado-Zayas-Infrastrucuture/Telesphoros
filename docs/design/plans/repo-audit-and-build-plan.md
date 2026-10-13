@@ -162,7 +162,7 @@ Each slice is one plan and one draft PR, branched from `main`, following the wor
 | M1.2 | Ledger-incident CI discrepancy | T05 | **done** (#86), pending green `main` run |
 | M1.3 | Docs drift G1 to G4, and remove or label scaffolds G5 | R11 | not started; docs only, smallest next step |
 | M1.4 | Global `Cache-Control: private, no-store` on authenticated responses; `tenantId` in request logs; client cache clearing on sign-out | T04 (E06, O02) | not started |
-| M1.5 | Live membership and revocation: membership table, server-side role resolution, revocation tombstones, fail closed, two-replica test | T03 (I03, I04, I06) | not started; needs DA-1 and DA-2 |
+| M1.5 | Live membership and revocation: membership table, server-side role resolution, revocation tombstones, fail closed, two-replica test | T03 (I03, I04, I06) | draft PR; [slice plan](m1-5-live-membership-revocation.md). DA-1 and DA-2 decided yes on 2026-10-13; the no-role read change (I04) is the separate M1.5b |
 | M1.6 | Security-event audit store (invites, grants, removals, sessions, exports) | T03/T04 (I06) | not started |
 
 ### Milestone M2: data contracts
@@ -198,7 +198,7 @@ Each slice is one plan and one draft PR, branched from `main`, following the wor
 
 1. **M1.3 docs drift and scaffolds.** Smallest, unblocks accurate status.
 2. **M1.4 no-store and tenant logging.** Self-contained, needs no decision, closes E06 and O02.
-3. **M1.5 live membership and revocation.** Highest-severity open control; start once DA-1 and DA-2 are decided.
+3. **M1.5 live membership and revocation.** Highest-severity open control; DA-1 and DA-2 decided yes on 2026-10-13, built on a draft PR.
 
 ## 7. Verification of this audit
 

@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-13**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## M1.5 live membership and revocation (draft PR)
+
+Who may do what now comes from a PostgreSQL membership table read on **every** protected request, not from the token ([auth.md](auth.md#authority-and-revocation), [plan](design/plans/m1-5-live-membership-revocation.md), [verification](verification/m1-5-live-membership-revocation.md)). Removing a person, changing their roles or revoking their sessions (operator command `db membership`, [ops/membership.md](ops/membership.md); there is no API route for it) takes effect on their next request on every API instance. A lookup failure is a 503 and does no work. Every request-driven write re-checks the caller's membership row inside its own transaction just before commit, so no write commits after a removal does. Migration 0016 adds `tenant_memberships` (read-only to the API login, rows never deleted). Cognito still proves identity and MFA. DA-1 and DA-2 were decided yes on 2026-10-13; refusing reads to members with no role (I04) is the separate M1.5b. Not part of this change: browser sessions and the logout endpoint (M5.1) and the append-only membership event trail (M1.6). Proved against a fake identity provider and a local PostgreSQL; not real Cognito or RDS, and nothing is applied in AWS. The first deployment starts with nobody granted.
+
 ## Planned: repository audit and build plan (plan only)
 
 A [draft audit and build plan](design/plans/repo-audit-and-build-plan.md) maps every workspace, CI job and feature on `b292d07`, re-checks the 12 October research audit against current code (R02 and R03 closed by #86 and #81; E04, A08 and R11 partly addressed; I03, I06, E06, O02, A03, O06, R05, R06 still open), lists new doc-drift and scaffold gaps, and orders the remaining backlog into slices. Install, typecheck, lint, build and tier-1 tests passed locally. Founder decisions DA-1 to DA-6 are open; nothing is approved or built by it.
