@@ -149,6 +149,65 @@ describe('migration runner', () => {
     expect(await run(db, (c) => pendingMigrations(c))).toEqual([]);
   });
 
+  it('validates readiness history using only the non-owner runtime login in a read-only transaction', async () => {
+    const db = await createEphemeralDatabase();
+    dbs.push(db);
+    // withAdmin is a short-lived connection helper: passing appUrl uses the real restricted login.
+    await withAdmin(db.appUrl, async c => {
+      const { rows: [role] } = await c.query(`SELECT r.rolsuper, r.rolbypassrls, r.rolcreatedb, r.rolcreaterole,
+        pg_has_role(current_user, t.relowner, 'MEMBER') AS owns_history,
+        has_table_privilege(current_user, 'schema_migrations', 'SELECT') AS can_read,
+        has_table_privilege(current_user, 'schema_migrations', 'INSERT') AS can_insert,
+        has_table_privilege(current_user, 'schema_migrations', 'UPDATE') AS can_update,
+        has_table_privilege(current_user, 'schema_migrations', 'DELETE') AS can_delete
+        FROM pg_roles r CROSS JOIN pg_class t WHERE r.rolname = current_user AND t.oid = 'schema_migrations'::regclass`);
+      expect(role).toEqual({ rolsuper: false, rolbypassrls: false, rolcreatedb: false, rolcreaterole: false,
+        owns_history: false, can_read: true, can_insert: false, can_update: false, can_delete: false });
+      await expect(c.query('UPDATE schema_migrations SET checksum = $1 WHERE version = $2', ['refused', SHIPPED[0]])).rejects.toMatchObject({ code: '42501' });
+      const before = (await c.query('SELECT * FROM schema_migrations ORDER BY version')).rows;
+      await c.query('BEGIN READ ONLY');
+      try {
+        await expect(pendingMigrations(c)).resolves.toEqual([]);
+      } finally {
+        await c.query('ROLLBACK');
+      }
+      expect((await c.query('SELECT * FROM schema_migrations ORDER BY version')).rows).toEqual(before);
+    });
+    await run(db, c => c.query('UPDATE schema_migrations SET checksum = $1 WHERE version = $2', ['t02-drift', SHIPPED[0]]));
+    await withAdmin(db.appUrl, async c => {
+      await c.query('BEGIN READ ONLY');
+      try {
+        await expect(pendingMigrations(c)).rejects.toBeInstanceOf(MigrationError);
+      } finally {
+        await c.query('ROLLBACK');
+      }
+    });
+  });
+
+  it.each(['up', 'down', 'missing pair'] as const)('rejects shipped artifact drift: %s', async fault => {
+    const db = await createEphemeralDatabase();
+    dbs.push(db);
+    const dir = tempMigrations();
+    await expect(withAdmin(db.appUrl, c => pendingMigrations(c, dir))).resolves.toEqual([]);
+    if (fault === 'missing pair') rmSync(join(dir, '0001_core_tables.down.sql'));
+    else writeFileSync(join(dir, `0001_core_tables.${fault}.sql`), '\n-- T02 changed artifact\n', { flag: 'a' });
+    await expect(withAdmin(db.appUrl, c => pendingMigrations(c, dir))).rejects.toBeInstanceOf(MigrationError);
+    await expect(withAdmin(db.appUrl, c => pendingMigrations(c))).resolves.toEqual([]);
+  });
+
+  it('enforces the strict N/N+1 history matrix even for an additive migration', async () => {
+    const db = await createEphemeralDatabase();
+    dbs.push(db);
+    const newer = tempMigrations();
+    writeFileSync(join(newer, `${nextVersion}_t02_expansion.up.sql`), 'CREATE TABLE t02_expansion (id integer);');
+    writeFileSync(join(newer, `${nextVersion}_t02_expansion.down.sql`), 'DROP TABLE t02_expansion;');
+    await expect(withAdmin(db.appUrl, c => pendingMigrations(c))).resolves.toEqual([]); // N / N
+    await expect(withAdmin(db.appUrl, c => pendingMigrations(c, newer))).resolves.toEqual([nextVersion]); // N+1 / N
+    expect(await run(db, c => migrateUp(c, newer))).toEqual([nextVersion]);
+    await expect(withAdmin(db.appUrl, c => pendingMigrations(c))).rejects.toBeInstanceOf(MigrationError); // N / N+1
+    await expect(withAdmin(db.appUrl, c => pendingMigrations(c, newer))).resolves.toEqual([]); // N+1 / N+1
+  });
+
   it('rejects incomplete or gapped migration sets', () => {
     const dir = tempMigrations();
     rmSync(join(dir, '0002_row_level_security.down.sql'));

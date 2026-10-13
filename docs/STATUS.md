@@ -1,7 +1,11 @@
 # Status, history and working agreements
 
-Read this first to pick the project up. Snapshot: **2026-10-11**. Update it in the same pull request as any change it describes.
+Read this first to pick the project up. Snapshot: **2026-10-13**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
+
+## T02 strict migration readiness (review pending)
+
+Founder approved the focused readiness fix with strict version/checksum matching and subsequently authorized commit and draft PR delivery. Readiness now delegates to the existing migration-history validator and rejects checksum drift and unknown newer versions, with generic 503 responses and unchanged liveness. Real PostgreSQL regressions demonstrated both defects before the fix; all three backend profiles passed locally. See [verification](verification/t02-readiness.md) for completed checks and limits. Broader old/new schema compatibility and G01 acceptance remain separate. Merge and deployment are not authorized.
 
 ## Final synthetic OpenEMR workflow acceptance
 
