@@ -47,6 +47,14 @@ describe('AuthProvider', () => {
     expect((init?.headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`);
   });
 
+  it('never lets the browser HTTP cache keep an authenticated API response, even if a caller asks for it', async () => {
+    const { result, fetchImpl } = setup();
+    await act(async () => void (await result.current.completeSignIn()));
+    await act(async () => void (await result.current.apiFetch('/api/v1/patients')));
+    await act(async () => void (await result.current.apiFetch('/api/v1/reports', { cache: 'force-cache' })));
+    expect(fetchImpl.mock.calls.map(([, init]) => init?.cache)).toEqual(['no-store', 'no-store', 'no-store']);
+  });
+
   it('FAILS (and does not redirect again) when the API refuses a brand-new token: no sign-in loop', async () => {
     const { result, client } = setup({ fetchImpl: fakeFetch({ status: 401 }) });
     await act(async () => {
