@@ -7,6 +7,7 @@ import { LedgerStatus } from '../../src/ledger/ledger-status';
 import { LedgerCompromisedError } from '../../src/ledger/ledger-types';
 import { LedgerVerifier, type VerifyOptions, type VerifyResult } from '../../src/ledger/verifier';
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
+import { untilBlocked } from '../helpers/barrier';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { acceptanceFor, captureFor, evaluationFor, type SeededReport, seedLabReport } from '../helpers/ledger-fixtures';
 
@@ -18,8 +19,14 @@ const config = (over: Partial<LedgerWatchConfig> = {}): LedgerWatchConfig => ({
 });
 
 /** The real verifier, recording what it was asked and what it found. */
+type IncidentRecording = {
+  finding: Parameters<LedgerVerifier['recordIncident']>[0];
+  outcome: { status: 'recorded'; id: string } | { status: 'failed'; error: unknown } | null;
+};
+
 class RecordingVerifier implements VerifierPort {
   readonly results: Array<{ options: VerifyOptions; result: VerifyResult }> = [];
+  readonly incidents: IncidentRecording[] = [];
   constructor(private readonly inner: LedgerVerifier) {}
   tenants() { return this.inner.tenants(); }
   async verify(tenantId: string, options: VerifyOptions = {}) {
@@ -27,7 +34,18 @@ class RecordingVerifier implements VerifierPort {
     this.results.push({ options, result });
     return result;
   }
-  recordIncident(finding: Parameters<LedgerVerifier['recordIncident']>[0]) { return this.inner.recordIncident(finding); }
+  async recordIncident(finding: Parameters<LedgerVerifier['recordIncident']>[0]) {
+    const recording: IncidentRecording = { finding, outcome: null };
+    this.incidents.push(recording);
+    try {
+      const id = await this.inner.recordIncident(finding);
+      recording.outcome = { status: 'recorded', id };
+      return id;
+    } catch (error) {
+      recording.outcome = { status: 'failed', error };
+      throw error;
+    }
+  }
   openIncidents() { return this.inner.openIncidents(); }
   close() { return this.inner.close(); }
 }
@@ -80,6 +98,17 @@ async function until(condition: () => boolean, ms = 10_000): Promise<void> {
   const deadline = Date.now() + ms;
   while (!condition() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));
   if (!condition()) throw new Error('the condition did not become true in time');
+}
+
+async function waitForScheduledIncident(watcher: ReturnType<typeof watch>, tenantId: string): Promise<void> {
+  let recording: IncidentRecording | undefined;
+  await until(() => {
+    recording ??= watcher.verifier.incidents.find((attempt) => attempt.finding.tenantId === tenantId && attempt.finding.source === 'scheduled');
+    return recording?.outcome != null;
+  });
+  // Observe the first real call's outcome: a later successful sync must not hide its rejection.
+  const outcome = recording!.outcome!;
+  if (outcome.status === 'failed') throw outcome.error;
 }
 
 const openIncidentTenants = () => withAdmin(pg.adminUrl, async (c) => (await c.query(
@@ -242,38 +271,124 @@ describe('ledger watch: damage that appears while it is running', () => {
 
   it('is found by the timer, contains the tenant, and stops new records; repairing the data does not reopen them: a person clears the incident, and only after a full walk that began later', async () => {
     const err = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    let monitor: LedgerMonitor | undefined;
+    try {
+      const t = await chain();
+      const status = new LedgerStatus();
+      const watcher = watch({ production: true, fullIntervalMs: 200, incidentPollMs: 100 }, status);
+      monitor = watcher.monitor;
+      await monitor.onApplicationBootstrap();
+      await monitor.idle();
+      expect(status.readiness()).toBe('up');
+
+      await tamper((c) => c.query(`UPDATE report_captures SET text_scalars = text_scalars + 1 WHERE id = $1`, [t.ids.capture]));
+      await until(() => status.compromised !== null); // bounded wait for the timer's walk
+      expect(status.compromised).toMatchObject({ tenantId: t.tenantId, kind: 'payload-mismatch', source: 'scheduled' });
+      expect(status.readiness()).toBe('contained');
+      expect(err.mock.calls.flat().some((c) => c?.event === 'ledger-compromised' && c.tenantId === t.tenantId)).toBe(true);
+      await waitForScheduledIncident(watcher, t.tenantId);
+      expect(await openIncidentTenants()).toEqual([t.tenantId]);
+
+      const guarded = new PostgresLedgerRecordsRepository(database, status);
+      const report = await seedLabReport(pg.adminUrl, t.tenantId);
+      await expect(guarded.insertCapture(t.tenantId, report.uploader, captureFor(report))).rejects.toBeInstanceOf(LedgerCompromisedError);
+
+      // Repairing the data does not reopen the writes, and neither does a restart: a person decides, with a full walk as evidence.
+      await tamper((c) => c.query(`UPDATE report_captures SET text_scalars = text_scalars - 1 WHERE id = $1`, [t.ids.capture]));
+      await expect(monitor.verifyNow(t.tenantId, true)).resolves.toMatchObject({ status: 'ok', mode: 'full', checkpointId: expect.any(String) });
+      await expect(guarded.insertCapture(t.tenantId, report.uploader, captureFor(report))).rejects.toBeInstanceOf(LedgerCompromisedError);
+      const restarted = watch({ production: true });
+      try {
+        await restarted.monitor.onApplicationBootstrap();
+        expect(restarted.status.containedTenants()).toEqual([t.tenantId]);
+      } finally {
+        await restarted.monitor.onModuleDestroy();
+      }
+
+      await clearIncidentsAsOperator('damage repaired; full walk ok');
+      await until(() => status.compromised === null); // the running process learns from the database (its poll), without a restart
+      expect(status.readiness()).not.toBe('contained');
+      await expect(guarded.insertCapture(t.tenantId, report.uploader, captureFor(report))).resolves.toBeDefined();
+    } finally {
+      try {
+        await monitor?.onModuleDestroy();
+      } finally {
+        err.mockRestore();
+      }
+    }
+  });
+});
+
+describe('ledger watch: observing scheduled incident recording', () => {
+  beforeEach(fresh, 60_000);
+  afterEach(dispose);
+
+  it('keeps the durable wait pending while PostgreSQL is blocked, then observes the committed incident', async () => {
     const t = await chain();
-    const status = new LedgerStatus();
-    const { monitor } = watch({ production: true, fullIntervalMs: 200, incidentPollMs: 100 }, status);
-    await monitor.onApplicationBootstrap();
-    await monitor.idle();
-    expect(status.readiness()).toBe('up');
+    const watcher = watch({ production: true, fullIntervalMs: 200, incidentPollMs: 100 });
+    const holder = new Client({ connectionString: pg.adminUrl });
+    let waiting: Promise<void> | undefined;
+    let locked = false;
+    try {
+      await watcher.monitor.onApplicationBootstrap();
+      await watcher.monitor.idle();
+      expect(watcher.status.readiness()).toBe('up');
+      await holder.connect();
+      await holder.query('BEGIN');
+      await holder.query('SELECT 1 FROM ledger_heads WHERE tenant_id = $1 FOR UPDATE', [t.tenantId]);
+      locked = true;
+      await tamper((c) => c.query('UPDATE report_captures SET text_scalars = text_scalars + 1 WHERE id = $1', [t.ids.capture]));
+      await until(() => watcher.status.compromised !== null);
+      await untilBlocked(pg.adminUrl, 'telesphoros-ledger-verifier');
+      expect(watcher.status.compromised).toMatchObject({ tenantId: t.tenantId, kind: 'payload-mismatch', source: 'scheduled' });
+      expect(watcher.status.readiness()).toBe('contained');
+      expect(await openIncidentTenants()).toEqual([]);
+      let settled = false;
+      waiting = waitForScheduledIncident(watcher, t.tenantId);
+      void waiting.then(() => { settled = true; }, () => { settled = true; });
+      // One event-loop turn lets a local-only wait resolve; it cannot finish the locked SQL call.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(settled).toBe(false);
+      await holder.query('ROLLBACK');
+      locked = false;
+      await waiting;
+      expect(await openIncidentTenants()).toEqual([t.tenantId]);
+      const report = await seedLabReport(pg.adminUrl, t.tenantId);
+      await expect(repo.insertCapture(t.tenantId, report.uploader, captureFor(report))).rejects.toBeInstanceOf(LedgerCompromisedError);
+    } finally {
+      if (locked) await holder.query('ROLLBACK');
+      await waiting?.catch(() => undefined); // Preserve the test's original failure; the SQL recorder is released above.
+      await watcher.monitor.onModuleDestroy();
+      await holder.end();
+    }
+  });
 
-    await tamper((c) => c.query(`UPDATE report_captures SET text_scalars = text_scalars + 1 WHERE id = $1`, [t.ids.capture]));
-    await until(() => status.compromised !== null); // bounded wait for the timer's walk
-    expect(status.compromised).toMatchObject({ tenantId: t.tenantId, kind: 'payload-mismatch', source: 'scheduled' });
-    expect(status.readiness()).toBe('contained');
-    expect(err.mock.calls.flat().some((c) => c?.event === 'ledger-compromised' && c.tenantId === t.tenantId)).toBe(true);
-    expect(await openIncidentTenants()).toEqual([t.tenantId]);
-
-    const guarded = new PostgresLedgerRecordsRepository(database, status);
-    const report = await seedLabReport(pg.adminUrl, t.tenantId);
-    await expect(guarded.insertCapture(t.tenantId, report.uploader, captureFor(report))).rejects.toBeInstanceOf(LedgerCompromisedError);
-
-    // Repairing the data does not reopen the writes, and neither does a restart: a person decides, with a full walk as evidence.
-    await tamper((c) => c.query(`UPDATE report_captures SET text_scalars = text_scalars - 1 WHERE id = $1`, [t.ids.capture]));
-    await expect(monitor.verifyNow(t.tenantId, true)).resolves.toMatchObject({ status: 'ok', mode: 'full', checkpointId: expect.any(String) });
-    await expect(guarded.insertCapture(t.tenantId, report.uploader, captureFor(report))).rejects.toBeInstanceOf(LedgerCompromisedError);
-    const restarted = watch({ production: true });
-    await restarted.monitor.onApplicationBootstrap();
-    expect(restarted.status.containedTenants()).toEqual([t.tenantId]);
-    await restarted.monitor.onModuleDestroy();
-
-    await clearIncidentsAsOperator('damage repaired; full walk ok');
-    await until(() => status.compromised === null); // the running process learns from the database (its poll), without a restart
-    expect(status.readiness()).not.toBe('contained');
-    await expect(guarded.insertCapture(t.tenantId, report.uploader, captureFor(report))).resolves.toBeDefined();
-    await monitor.onModuleDestroy();
-    jest.restoreAllMocks();
+  it('surfaces the first real recording error even after an existing sync retry succeeds', async () => {
+    const t = await chain();
+    const watcher = watch({ production: true, fullIntervalMs: 200, incidentPollMs: 100 });
+    let revoked = false;
+    try {
+      await watcher.monitor.onApplicationBootstrap();
+      await watcher.monitor.idle();
+      expect(watcher.status.readiness()).toBe('up');
+      await withAdmin(pg.adminUrl, (c) => c.query('REVOKE EXECUTE ON FUNCTION ledger_record_incident(text, text, bigint, text) FROM telesphoros_ledger_verifier'));
+      revoked = true;
+      await tamper((c) => c.query('UPDATE report_captures SET text_scalars = text_scalars + 1 WHERE id = $1', [t.ids.capture]));
+      await until(() => watcher.verifier.incidents[0]?.outcome?.status === 'failed');
+      await expect(waitForScheduledIncident(watcher, t.tenantId)).rejects.toMatchObject({ code: '42501' });
+      expect(watcher.status.unrecorded()).toHaveLength(1);
+      expect(watcher.status.readiness()).toBe('contained');
+      expect(await openIncidentTenants()).toEqual([]);
+      await withAdmin(pg.adminUrl, (c) => c.query('GRANT EXECUTE ON FUNCTION ledger_record_incident(text, text, bigint, text) TO telesphoros_ledger_verifier'));
+      revoked = false;
+      await until(() => watcher.verifier.incidents.some((recording) => recording.outcome?.status === 'recorded'));
+      expect(await openIncidentTenants()).toEqual([t.tenantId]);
+      await expect(waitForScheduledIncident(watcher, t.tenantId)).rejects.toMatchObject({ code: '42501' });
+      const report = await seedLabReport(pg.adminUrl, t.tenantId);
+      await expect(repo.insertCapture(t.tenantId, report.uploader, captureFor(report))).rejects.toBeInstanceOf(LedgerCompromisedError);
+    } finally {
+      if (revoked) await withAdmin(pg.adminUrl, (c) => c.query('GRANT EXECUTE ON FUNCTION ledger_record_incident(text, text, bigint, text) TO telesphoros_ledger_verifier'));
+      await watcher.monitor.onModuleDestroy();
+    }
   });
 });
