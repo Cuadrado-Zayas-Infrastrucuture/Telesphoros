@@ -81,7 +81,7 @@ export class Database {
     await this.pool.query('SELECT 1');
   }
 
-  /** Versions the code ships that the database has not applied yet. */
+  /** Pending versions after strict history validation; invalid or newer recorded history throws. */
   pendingMigrations(): Promise<string[]> {
     return pendingMigrations(this.pool);
   }

@@ -97,12 +97,10 @@ export async function migrationStatus(db: Queryable, dir?: string) {
   return { applied, pending: known.slice(applied.length) };
 }
 
-/** Versions the code ships that the database has not applied. Read-only; safe for the readiness probe. */
+/** Validates recorded history before returning the pending suffix. Read-only; invalid or newer history throws. */
 export async function pendingMigrations(db: Queryable, dir?: string): Promise<string[]> {
-  const known = loadMigrations(dir);
-  const applied = await readApplied(db);
-  const appliedVersions = new Set(applied.map((row) => row.version));
-  return known.filter((migration) => !appliedVersions.has(migration.version)).map((migration) => migration.version);
+  const { pending } = await migrationStatus(db, dir);
+  return pending.map((migration) => migration.version);
 }
 
 async function withLock<T>(client: Client, work: () => Promise<T>): Promise<T> {
