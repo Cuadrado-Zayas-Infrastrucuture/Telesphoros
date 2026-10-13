@@ -38,8 +38,11 @@ export function pinoHttpOptions(config: Pick<Env, 'LOG_LEVEL'>): Options {
       responseTime: value.responseTime,
       route: (req as Request & { [LOG_ROUTE]?: string })[LOG_ROUTE] ?? '[unmatched]',
     }),
+    // The organization is a correlation id for operators (which tenant is slow or failing), not patient data. It comes only from the verified
+    // principal, never from a header or query, and is absent on unauthenticated requests.
     customProps: (req: IncomingMessage) => ({
       userId: (req as Request).principal?.sub,
+      tenantId: (req as Request).principal?.tenantId,
     }),
   };
 }

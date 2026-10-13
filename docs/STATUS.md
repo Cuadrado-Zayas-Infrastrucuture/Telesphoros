@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-13**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## M1.4 no-store responses and tenant logs (draft PR)
+
+Founder asked to start M1.4 of the [audit build plan](design/plans/repo-audit-and-build-plan.md). Every API response, including 401, 403, 404, 429 and the health and readiness probes, now carries `Cache-Control: private, no-store` from one middleware registered before routing; the authenticated browser request wrapper also sends `cache: 'no-store'`. Request-completion and failure logs now carry `tenantId` from the verified principal (never from a header or query) next to `userId`. Tests failed on the unchanged code and pass after the change; a header-sourced tenant is caught by a control. See the [plan](design/plans/m1-4-no-store-tenant-logging.md) and [verification](verification/m1-4-no-store-tenant-logging.md). Closes research-audit E06 and O02 at synthetic scope; the audit event store (M1.6), live revocation (M1.5) and hosted/CDN behavior (T13) remain open. No schema, authorization, retention or clinical-gate change.
+
 ## Planned: repository audit and build plan (plan only)
 
 A [draft audit and build plan](design/plans/repo-audit-and-build-plan.md) maps every workspace, CI job and feature on `b292d07`, re-checks the 12 October research audit against current code (R02 and R03 closed by #86 and #81; E04, A08 and R11 partly addressed; I03, I06, E06, O02, A03, O06, R05, R06 still open), lists new doc-drift and scaffold gaps, and orders the remaining backlog into slices. Install, typecheck, lint, build and tier-1 tests passed locally. Founder decisions DA-1 to DA-6 are open; nothing is approved or built by it.
