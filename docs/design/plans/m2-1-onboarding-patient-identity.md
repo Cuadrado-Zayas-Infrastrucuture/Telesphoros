@@ -70,7 +70,7 @@ Automatic extraction of identifiers from the report text is **not** in this slic
 
 **Verification (M2.1b).** The same identifier in two organizations is two different stored values and never matches across them; a match verifies, a mismatch and a withdrawn identifier do not; the uploader cannot verify their own report, nor can an `admin`; evaluation is refused until verified and allowed after (the existing evaluation suites gain the verification step by hand); a replaced file un-verifies; the link record is in the ledger and is covered by the ledger verifier; privacy scan (no raw identifier in any table, log, security event or response); migration, privilege, backup and restore checks; defect injection per rule.
 
-## M2.1c outline (own plan later)
+## M2.1c outline (now its own plan: [m2-1c-wrong-chart-and-duplicates.md](m2-1c-wrong-chart-and-duplicates.md), split into c-1 quarantine and c-2 duplicates and merge)
 
 Wrong chart: rejecting a verified link quarantines the report and requires reviewer action on every current evaluation (the existing `retraction` correction with reason `wrong-patient`). Duplicates: an ambiguous second registration of the same identifier goes to a review list instead of creating a patient; merge and unmerge are **alias records** resolved at read time, never a rewrite of `tenant_id` or `patient_id` on existing rows (those columns are immutable by trigger and referenced by the append-only records), each needing a second person.
 
