@@ -83,6 +83,16 @@ Each row gives the recommended value, the reason, and its status. All values are
 
 Until D-A1 to D-A7 are answered, no action type may be built beyond T0. Tier-downs additionally wait for a second approver under D-A7.
 
+## Ideas borrowed from autoresearch
+
+From [karpathy/autoresearch](https://github.com/karpathy/autoresearch), where a human edits the agent's instructions (`program.md`) and the agent works only inside the code it is allowed to change:
+
+- **The register is human-edited.** The action register and its tiers are a file that people change under D-A7. The agent may propose a change, shown as a diff, but it cannot apply one.
+- **Read-only checks.** The approval rules and the executor's tests are outside the agent's write scope, the same way `prepare.py` is read-only for the autoresearch agent.
+- **A logged outcome for every attempt.** Each agent action is logged with a status (`executed`, `rejected`, `cancelled`, `failed`), as autoresearch logs `keep`, `discard` and `crash`. Logs are append-only.
+
+Not borrowed: unattended operation and the instruction to disable permissions. Our tiers exist to prevent exactly that.
+
 ## Repository grounding
 
 - Roles and their additive rule: [auth.md](../../auth.md).
