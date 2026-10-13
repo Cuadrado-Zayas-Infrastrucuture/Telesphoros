@@ -6,7 +6,7 @@ export function databaseReachableCheck(db: Database): ReadinessCheck {
   return { name: 'database', check: () => db.ping() };
 }
 
-/** Not ready while migrations are pending: the code would be talking to a schema it was not written for. */
+/** Not ready with pending migrations or history that disagrees with this binary's versions/checksums. */
 export function migrationsAppliedCheck(db: Database): ReadinessCheck {
   return {
     name: 'migrations',

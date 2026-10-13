@@ -77,7 +77,8 @@ pnpm --filter @telesphoros/backend db:migrate:down          # revert the last on
 - An **advisory lock** makes two simultaneous deploys safe (the second waits, then finds nothing to do).
 - A **checksum** is stored; **editing an applied migration is refused**. Add a new migration instead.
 - Versions must be contiguous and every migration needs a `down`.
-- `/api/v1/ready` returns **503 while migrations are pending** or the database is unreachable; `/health` stays 200.
+- `/api/v1/ready` returns **503 while migrations are pending, history disagrees with the shipped versions/checksums, or metadata cannot be read**. It reuses the migration runner's strict history validator with the existing read-only application grant; it never applies migrations or repairs history. `/api/v1/health` stays 200. Failures keep the generic readiness envelope and existing two-second deadline.
+- **Strict artifact compatibility:** an older binary refuses an unknown newer migration, including an additive one. Checksums cover both the `up` and `down` SQL. Preserve applied files and investigate mismatches; do not normalize history to silence readiness. This does not establish rolling-upgrade compatibility, inspect the physical schema, verify migration timestamps, or change startup/request admission. The separate compatibility contract remains open; see [T02 verification](verification/t02-readiness.md).
 
 ## Database TLS
 
