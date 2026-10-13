@@ -166,6 +166,20 @@ Rollback: delete `tools/soup-pilot/` and its virtual environment. The eval and g
 
 Until D1 to D5 and P1 and P2 are answered, T1 cannot start.
 
+## Ideas borrowed from autoresearch
+
+From [karpathy/autoresearch](https://github.com/karpathy/autoresearch) (MIT). We take the discipline, not the loop: no autonomous agent edits or runs anything in this pilot.
+
+- **One pre-registered metric.** Macro-F1 on the eval set is the only number that decides keep or discard. It is written into the config and the plan before any run, and not changed afterwards.
+- **A read-only evaluation.** The eval set and its scoring code are read-only for the training process and for anyone tuning the model. Ideas that tune against it count as overfitting, not progress.
+- **A sealed holdout.** Development uses a separate dev split, generated from the same templates and never used for the final number. The hand-labelled eval set is opened once, for the final go or no-go, and each opening is recorded.
+- **A fixed budget per run.** Each training run gets the same wall-clock and memory cap, so runs are comparable. The cap is recorded in the config, and a run that exceeds it is discarded.
+- **A results log.** Every run appends one row to `tools/soup-pilot/results.tsv` with the columns `commit`, `macro_f1`, `status` (`keep`, `discard`, `crash`) and `description`. The log is never edited to remove rows. Crashes are logged with status `crash`.
+- **A simplicity rule.** If the rule-based baseline matches the model within the noise seen across seeds, keep the baseline. A small gain that needs a complicated model is not a keep.
+- **Human-edited instructions.** The pilot's configuration and this plan are edited by people. Any change to the metric, thresholds, budget or eval set needs a recorded founder decision.
+
+Not borrowed: the unattended loop, the instruction to disable all permissions, the GPU requirement, and the pretraining metric (`val_bpb`). Each of those conflicts with our approval rules or with this task.
+
 ## Repository grounding
 
 - Synthetic captures: `knowledge/lab-report-reader/v2-handoff/fixtures/captures/D01` to `D12`, `report.txt` files.
