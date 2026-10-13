@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-13**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Planned: repository audit and build plan (plan only)
+
+A [draft audit and build plan](design/plans/repo-audit-and-build-plan.md) maps every workspace, CI job and feature on `b292d07`, re-checks the 12 October research audit against current code (R02 and R03 closed by #86 and #81; E04, A08 and R11 partly addressed; I03, I06, E06, O02, A03, O06, R05, R06 still open), lists new doc-drift and scaffold gaps, and orders the remaining backlog into slices. Install, typecheck, lint, build and tier-1 tests passed locally. Founder decisions DA-1 to DA-6 are open; nothing is approved or built by it.
+
 ## Modern reports dashboard and shared branding
 
 The founder approved the researched dashboard sketch for implementation on current main after the owned-storage browser/operations slices. The existing opt-in reports screen now has a bounded patient-filtered list, desktop detail panel, mobile list/detail navigation and native technical disclosure. It retains the existing verified attachment downloader and upload/read/download roles. Shared tokens, Poppins headings, full-name company endorsement and the square/genome company symbol carry through the frontend and local SMART pilot typography. See the [plan](design/plans/reports-dashboard-modern.md) and [verification](verification/reports-dashboard-modern.md). Backend, schema, authentication/tenant policies, owned-storage admission, clinical gates and DEV route boundaries are unchanged. Prepared for draft PR review; local evidence does not claim remote CI acceptance, deployment or clinical approval.
