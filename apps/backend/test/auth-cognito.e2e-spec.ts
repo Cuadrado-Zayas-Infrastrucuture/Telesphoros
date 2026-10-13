@@ -28,14 +28,14 @@ const token = (name: Name) => idp.mintAccessToken({ user: user(name) });
 const api = () => request(app.getHttpServer());
 
 describe('the API, authenticating real RS256 Cognito-shaped tokens', () => {
-  it('roles come from cognito:groups: clinician and admin write, reader reads, no-group users only read their (empty) data', async () => {
+  it('roles come from cognito:groups: clinician and admin write, reader reads, a user with no role group can neither write nor read', async () => {
     const label = () => `SYN-${randomUUID().slice(0, 8)}`;
     await api().post('/api/v1/patients').set(bearer(await token('alice'))).send({ label: label() }).expect(201);
     await api().post('/api/v1/patients').set(bearer(await token('carol'))).send({ label: label() }).expect(201);
     for (const who of ['bob', 'dave'] as const) {
       const res = await api().post('/api/v1/patients').set(bearer(await token(who))).send({ label: label() }).expect(403);
       expect(res.body.error.code).toBe('FORBIDDEN');
-      await api().get('/api/v1/patients').set(bearer(await token(who))).expect(200);
+      await api().get('/api/v1/patients').set(bearer(await token(who))).expect(who === 'bob' ? 200 : 403);
     }
   });
 

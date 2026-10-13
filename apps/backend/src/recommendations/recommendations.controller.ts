@@ -8,7 +8,8 @@ import {
   type RecommendationListQuery,
   recommendationListQuerySchema,
 } from '@telesphoros/shared-types';
-import { CurrentPrincipal } from '../auth/decorators';
+import { CLINICAL_READ_ROLES } from '../auth/clinical-read';
+import { CurrentPrincipal, Roles } from '../auth/decorators';
 import type { Principal } from '../auth/principal';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { toRecommendationDto } from './recommendations.mapper';
@@ -19,6 +20,7 @@ export class RecommendationsController {
   constructor(private readonly service: RecommendationsService) {}
 
   @Get()
+  @Roles(...CLINICAL_READ_ROLES)
   async list(
     @CurrentPrincipal() principal: Principal,
     @Query(new ZodValidationPipe(recommendationListQuerySchema)) query: RecommendationListQuery,
@@ -28,6 +30,7 @@ export class RecommendationsController {
   }
 
   @Get(':id')
+  @Roles(...CLINICAL_READ_ROLES)
   async get(
     @CurrentPrincipal() principal: Principal,
     @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam,
