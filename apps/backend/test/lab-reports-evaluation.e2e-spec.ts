@@ -122,13 +122,16 @@ const golden = (JSON.parse(readFileSync(join(REPO_ROOT, 'tests/report_adapter/go
     expect(result.eventsChecked).toBeGreaterThanOrEqual(12 * 3); // a capture, a decision and an evaluation for each report
   });
 
-  it('reads are open to every role (and refused to a member with none), are tenant-scoped, and list without the engine inputs', async () => {
+  it('reads are open to every clinical role (and refused to an administrator and to a member with none), are tenant-scoped, and list without the engine inputs', async () => {
     const ids = (await lab.row<{ id: string; report_id: string }>(`SELECT id, report_id FROM evaluations WHERE tenant_id = $1 ORDER BY seq`, [lab.tenant]));
     expect(ids).toHaveLength(12);
     const noRole = await lab.person('r', []);
     await lab.api().get('/api/v1/evaluations').set(bearer(noRole.token)).expect(403); // finding I04
     await lab.api().get(`/api/v1/evaluations/${ids[0]!.id}`).set(bearer(noRole.token)).expect(403);
-    for (const roles of [['reader'], ['clinician'], ['reviewer'], ['admin']]) {
+    const adminOnly = await lab.person('r', ['admin']);
+    await lab.api().get('/api/v1/evaluations').set(bearer(adminOnly.token)).expect(403); // administration is not clinical access
+    await lab.api().get(`/api/v1/evaluations/${ids[0]!.id}`).set(bearer(adminOnly.token)).expect(403);
+    for (const roles of [['reader'], ['clinician'], ['reviewer'], ['admin', 'reader']]) {
       const who = await lab.person('r', roles);
       const list = await lab.api().get('/api/v1/evaluations').set(bearer(who.token)).expect(200);
       expect(list.body.data).toHaveLength(12);

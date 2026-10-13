@@ -27,10 +27,10 @@ The API **ignores the role groups in the token**: adding someone to a Cognito gr
 
 | Role | | May |
 | --- | --- | --- |
-| `reader` | | read their own data |
+| `reader` | | read their organization's clinical records (patients, reports, recommendations, evaluations) |
 | `clinician` | | read, create, change, upload |
-| `admin` | | what a clinician may; reserved for administration |
-| `reviewer` | | accept or reject a text capture of a lab report (slice 5B-3.2). It **adds** to whatever else the person holds and is never implied by another role: an `admin` alone cannot accept. The person who created, uploaded or captured a report can never accept its capture, whatever roles they hold |
+| `admin` | | **administration only** (M2.1a): list the organization's members, change their roles, remove them, and record invitations, in **its own organization** and never itself. It reads and writes **no** clinical data: patients, reports, recommendations, captures, evaluations, disputes and file links are 403. `GET /api/v1/ledger/verify` stays `admin` (counts and hashes, no clinical content). A person who needs both holds both roles |
+| `reviewer` | | accept or reject a text capture of a lab report (slice 5B-3.2). It **adds** to whatever else the person holds and is never implied by another role: an `admin` alone cannot accept, and neither can a `clinician` alone. The person who created, uploaded or captured a report can never accept its capture, whatever roles they hold |
 | (no roles) | none | sign in and call `GET /api/v1/me`, nothing else: every read of patients, reports, recommendations, captures, evaluations and disputes is 403 (finding I04; a member of an organization is not thereby allowed to read its records) |
 
 A role the table does not know cannot be stored (a check constraint refuses it), so nothing can grant a role by accident.
@@ -121,8 +121,9 @@ issuer/key-set override is set, storage is PostgreSQL with SSL, files are in S3,
 
 ## Inviting and removing people (runbook)
 
-There is deliberately **no API endpoint** that creates users or changes roles: an API that could mint accounts or grant roles
-would be a privilege-escalation path. Two steps, both by an administrator with AWS access: Cognito proves who the person is, and
+There is deliberately **no API endpoint** that creates users or organizations: an API that could mint accounts would be a privilege-escalation
+path. Since M2.1a an organization's own administrators manage the people already in it through the application (below); creating the
+account, the organization and the first administrator stays with an operator. Two steps, both by an administrator with AWS access: Cognito proves who the person is, and
 `db membership` says what they may do. The full procedure, with the exact commands, is in [ops/membership.md](ops/membership.md).
 
 ```bash
@@ -148,7 +149,30 @@ aws cognito-idp admin-disable-user          --user-pool-id $POOL --username pers
 aws cognito-idp admin-user-global-sign-out  --user-pool-id $POOL --username person@example.org
 ```
 
-The **first administrator** is created the same way, by whoever applies the Terraform: the Cognito account from the console or CLI,
+### Member administration in the application (M2.1a)
+
+An `admin` of an organization has `GET /api/v1/members`, `PUT /api/v1/members/:sub/roles` (a full replacement; an empty list leaves a member
+who can sign in and nothing else), `DELETE /api/v1/members/:sub`, and `POST|GET /api/v1/members/invitations` and
+`DELETE /api/v1/members/invitations/:id`. The rules are enforced by `SECURITY DEFINER` database functions, not by controller code, so no
+route added later can bypass them. The API's database login has **no write privilege** on `tenant_memberships`, `tenants` or `invitations`;
+it can only execute these functions, and each takes the organization and the acting person from the transaction, never from the request:
+
+- **own organization only.** Another organization's person is `404`, the same answer as nobody;
+- **never oneself.** An administrator cannot change or remove themselves (`409 member-self`); another administrator must;
+- **never the last administrator.** A change that would leave the organization with no active administrator is refused (`409 last-administrator`). Two
+  administrators acting on each other at the same moment are serialized by a per-organization lock: one succeeds, the other is refused, and one remains;
+- the organization must be **active**: a suspended organization is refused on every request, administrators included (`403`, a `tenant-suspended` security event).
+
+Every change is a membership security event whose actor is the administrator (`actor_kind` `person`); the operator command's changes are `operator`.
+
+**Invitations are a record, not an account.** The administrator records an address and the roles; the API stores only a keyed digest
+(HMAC-SHA-256 under `INVITATION_DIGEST_KEY`, required in production) and a masked hint such as `j***@example.org`, never the address. At most 100
+are pending per organization, they expire after 14 days, and a second pending invitation for the same address is refused (`409 invitation-pending`).
+Nothing in the API creates a Cognito account or a membership from an invitation. The operator creates the account and runs
+`db invite fulfil --id ID --email ADDRESS --sub SUB --by NAME`, which checks the address against the digest and grants the membership with the
+invited roles and marks the invitation fulfilled in one transaction ([ops/membership.md](ops/membership.md#organizations-and-invitations)).
+
+The **first administrator** of an organization is created the same way, by whoever applies the Terraform: `db tenant create`, the Cognito account from the console or CLI,
 then `db membership grant ... --roles admin`. Until a person has a membership they are refused with 403, so the first deployment
 starts with nobody able to use the API. Moving someone to another organization is `membership remove` there, a change of Cognito
 tenant group, then `membership grant` in the new one; they are refused between the steps, by design (fail closed).

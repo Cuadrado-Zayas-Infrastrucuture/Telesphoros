@@ -31,13 +31,7 @@ test.describe('signing in', () => {
     expect(await axeViolations(page)).toEqual([]);
   });
 
-  test('an admin can use the upload page too', async ({ page }) => {
-    await signInAs(page, 'carol');
-    await expect(page.getByRole('heading', { level: 1, name: 'Upload report' })).toBeVisible();
-    await expect(page.getByText(ROLE.carol, { exact: true })).toBeVisible();
-  });
-
-  for (const persona of ['bob', 'dave'] as const) {
+  for (const persona of ['bob', 'carol', 'dave'] as const) {
     test(`${persona} (${ROLE[persona]}) is told they lack access, and the form is not rendered`, async ({ page }) => {
       await signInAs(page, persona);
       await expect(page.getByRole('heading', { level: 1, name: 'You do not have access to this page' })).toBeVisible();

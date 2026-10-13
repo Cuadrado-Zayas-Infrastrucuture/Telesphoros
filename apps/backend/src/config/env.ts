@@ -109,6 +109,13 @@ export const envSchema = z
      * a client spoof its address. Must be set explicitly in production.
      */
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).optional(),
+
+    /**
+     * The key for the digest of an invited person's e-mail address (64 hex characters = 256 bits). An invitation stores only this keyed digest and a
+     * masked hint; the operator command that fulfils it needs the same key. Required in production; development and tests use a fixed key that
+     * is not secret.
+     */
+    INVITATION_DIGEST_KEY: z.string().regex(/^[0-9a-f]{64}$/, 'must be 64 lower-case hex characters').optional(),
   })
   .superRefine((env, ctx) => {
     const problem = (path: string, message: string) => ctx.addIssue({ code: 'custom', path: [path], message });
@@ -153,6 +160,7 @@ export const envSchema = z
       if (env.STORAGE_DRIVER !== 'postgres') problem('STORAGE_DRIVER', 'must be postgres in production (the in-memory store loses data)');
       if (env.OBJECT_STORAGE_DRIVER !== 's3') problem('OBJECT_STORAGE_DRIVER', 'must be s3 in production');
       if (env.DATABASE_SSL !== 'require') problem('DATABASE_SSL', 'must be require in production');
+      if (!env.INVITATION_DIGEST_KEY) problem('INVITATION_DIGEST_KEY', 'is required in production (invitations store only a keyed digest of the address)');
       if (!env.LEDGER_VERIFIER_DATABASE_URL) problem('LEDGER_VERIFIER_DATABASE_URL', 'is required in production (the record log is verified at start and re-verified while running)');
       if (!env.RATE_LIMIT_ENABLED) problem('RATE_LIMIT_ENABLED', 'must be true in production');
       if (env.TRUST_PROXY_HOPS === undefined) problem('TRUST_PROXY_HOPS', 'must be set explicitly in production (0 if nothing sits in front, 1 behind one load balancer): a wrong value defeats or poisons the address limit');

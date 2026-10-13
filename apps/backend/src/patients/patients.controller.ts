@@ -17,8 +17,8 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { toPatientDto } from './patients.mapper';
 import { PatientsService } from './patients.service';
 
-// Reading needs only a valid token; changing data needs the clinician (or admin) role.
-const CAN_WRITE = ['clinician', 'admin'] as const;
+// Reading needs a clinical role; changing data needs the clinician role (admin is administration only).
+const CAN_WRITE = ['clinician'] as const;
 
 @Controller('patients')
 export class PatientsController {

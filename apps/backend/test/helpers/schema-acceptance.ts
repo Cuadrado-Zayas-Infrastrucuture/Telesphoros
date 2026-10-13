@@ -3,6 +3,8 @@ import type { Client } from 'pg';
 // Hand-reviewed against the relationship design and original SQL, not generated from the live catalog.
 // Global containment clearances intentionally lack tenant-composite FKs: their functions check scope.
 const relationships: [string, string, string, string][] = [
+  ['tenant_memberships_tenant_fk', 'tenant_memberships', 'tenant_id', 'tenants:id'],
+  ['invitations_tenant_id_fkey', 'invitations', 'tenant_id', 'tenants:id'],
   ['upload_attempt_report_fk', 'report_upload_attempts', 'tenant_id,patient_id,report_id', 'reports:tenant_id,patient_id,id'],
   ['upload_attempt_run_fk', 'report_upload_attempts', 'tenant_id,run_id', 'report_upload_runs:tenant_id,run_id'],
   ['reports_patient_fk', 'reports', 'patient_id,tenant_id', 'patients:id,tenant_id'],
@@ -35,7 +37,7 @@ const primaryKeys: Record<string, string> = {
   report_captures: 'id', capture_acceptances: 'id', evaluations: 'id', evaluation_results: 'id',
   evaluation_gene_states: 'id', corrections: 'id', cell_disputes: 'id', cell_dispute_decisions: 'id',
   ledger_incidents: 'id', ledger_incident_clearances: 'id', tenant_memberships: 'tenant_id, sub',
-  security_audit_events: 'id', security_events: 'id',
+  security_audit_events: 'id', security_events: 'id', tenants: 'id', invitations: 'id',
 };
 const uniqueKeys: Record<string, string> = {
   report_upload_runs_tenant_id_run_id_key: 'tenant_id, run_id', upload_attempt_request_uq: 'tenant_id, report_id, principal, request_id', upload_attempt_key_uq: 'storage_key',
@@ -56,6 +58,8 @@ const uniqueKeys: Record<string, string> = {
 };
 // Complete CHECK inventory; semantic refusal/control tests remain in the existing behavior suites.
 const checkNames: Record<string, string> = {
+  tenants: 'id_len display_name_len status_check created_by_len changed_by_len',
+  invitations: 'digest_len hint_len roles_check status_check created_by_len decided_shape fulfilled_sub_len',
   security_events: 'tenant_id_len type_check outcome_check actor_kind_check actor_ref_len subject_kind_check subject_ref_len request_id_len db_user_len details_shape',
   tenant_memberships: 'tenant_id_len sub_len status_check roles_check version_check changed_by_len reason_len',
   report_upload_runs: 'reserved_bytes_check',
@@ -111,6 +115,8 @@ const queryIndexes: Record<string, string> = {
   ledger_incidents_tenant_idx: "INDEX ledger_incidents_tenant_idx ON public.ledger_incidents USING btree (tenant_id) WHERE (scope = 'tenant'::text)",
   security_events_tenant_time_idx: 'INDEX security_events_tenant_time_idx ON public.security_events USING btree (tenant_id, occurred_at)',
   security_events_refusal_idx: "INDEX security_events_refusal_idx ON public.security_events USING btree (tenant_id, actor_ref, ((details ->> 'reason'::text)), occurred_at DESC) WHERE (event_type = 'access.refused'::text)",
+  invitations_one_pending_uq: "UNIQUE INDEX invitations_one_pending_uq ON public.invitations USING btree (tenant_id, email_digest) WHERE (status = 'pending'::text)",
+  invitations_tenant_idx: 'INDEX invitations_tenant_idx ON public.invitations USING btree (tenant_id, created_at)',
   tenant_memberships_one_active_uq: "UNIQUE INDEX tenant_memberships_one_active_uq ON public.tenant_memberships USING btree (sub) WHERE (status = 'active'::text)",
   ledger_incidents_global_idx: "INDEX ledger_incidents_global_idx ON public.ledger_incidents USING btree (scope) WHERE (scope = 'global'::text)",
   security_audit_tenant_time: 'INDEX security_audit_tenant_time ON public.security_audit_events USING btree (tenant_id, occurred_at DESC, id) WHERE (tenant_id IS NOT NULL)',
@@ -137,7 +143,7 @@ export async function assertSchemaAcceptance(c: Client): Promise<void> {
     const deferred = name.endsWith('_event_fk');
     expect(fks.find(r => r.conname === name)).toEqual({
       conname: name, child, parent, child_columns: columns.split(','), parent_columns: parentColumns!.split(','),
-      confdeltype: 'r', confupdtype: name === 'recommendations_report_patient_fk' ? 'r' : 'a',
+      confdeltype: 'r', confupdtype: ['recommendations_report_patient_fk', 'tenant_memberships_tenant_fk', 'invitations_tenant_id_fkey'].includes(name) ? 'r' : 'a',
       convalidated: true, condeferrable: deferred, condeferred: deferred,
     });
   }

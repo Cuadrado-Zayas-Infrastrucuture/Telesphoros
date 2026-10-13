@@ -8,6 +8,7 @@ import { PostgresReportsRepository } from '../../src/storage/postgres/reports.re
 import { PostgresRecommendationsRepository } from '../../src/storage/postgres/recommendations.repository';
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
+import { registerTenantRow } from '../helpers/membership';
 import { acceptanceFor, captureFor, evaluationFor, seedLabReport, sha } from '../helpers/ledger-fixtures';
 
 // A reproducible workload sample, not a load test or a latency CI threshold. Never force planner choices.
@@ -32,6 +33,7 @@ beforeAll(async () => {
   ledger = new PostgresLedgerRecordsRepository(db);
   await withAdmin(pg.adminUrl, async c => {
     for (const tenant of tenants) {
+      await registerTenantRow(c, tenant);
       // The lookup made on every protected request, in a table with thousands of members.
       await c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by)
         SELECT $1, $1 || '-member-' || g, 'active', '{clinician}', 'syn-operator' FROM generate_series(1,$2::int) g`, [tenant, CORE_PATIENTS]);

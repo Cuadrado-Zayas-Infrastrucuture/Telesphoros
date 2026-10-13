@@ -13,6 +13,8 @@ export interface MembershipRecord {
   tokensValidAfter: number;
   /** Increases on every change. A write is admitted under one version and refused at commit if the row has moved. */
   version: number;
+  /** Whether the organization is active (set by the lookup the API makes on every request; absent on rows the operator command returns). */
+  tenantActive?: boolean;
 }
 
 export interface MembershipChange {
@@ -29,7 +31,7 @@ export interface MembershipGrant extends MembershipChange {
   roles: Role[];
 }
 
-export type MembershipFailure = 'already-active' | 'not-active' | 'in-another-organization' | 'invalid';
+export type MembershipFailure = 'already-active' | 'not-active' | 'in-another-organization' | 'unknown-tenant' | 'invalid';
 
 /** The change was refused. The message is safe to print on the operator's terminal. */
 export class MembershipAdminError extends Error {
@@ -77,3 +79,19 @@ export function checkChange(input: MembershipChange): void {
   }
   if ((input.reason ?? '').length > 500) throw new MembershipAdminError('invalid', 'reason must be at most 500 characters.');
 }
+
+
+export interface TenantRecord {
+  id: string;
+  displayName: string;
+  status: 'active' | 'suspended';
+}
+
+/** The organization registry the operator command maintains. A membership can only name a registered organization. */
+export interface TenantAdmin {
+  registerTenant(input: { id: string; displayName: string; by: string }): Promise<TenantRecord>;
+  setTenantStatus(input: { id: string; status: 'active' | 'suspended'; by: string }): Promise<TenantRecord>;
+  listTenants(): Promise<TenantRecord[]>;
+}
+
+export const MAX_TENANT_NAME = 120;

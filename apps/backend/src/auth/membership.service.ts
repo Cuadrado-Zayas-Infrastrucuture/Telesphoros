@@ -16,6 +16,7 @@ export interface ResolvedCaller {
  * come from the database, read fresh on every protected request (no allow decision is cached).
  *
  *   no active membership in the token's organization   -> 403  (known person, not allowed in; same as an account with no organization)
+ *   the organization is suspended                      -> 403
  *   token issued at or before the revocation instant   -> 401  (the browser signs in again and gets a newer token)
  *   the lookup itself fails                            -> 503  (nothing is done; not 401, which would send the browser round a sign-in loop)
  */
@@ -40,6 +41,11 @@ export class MembershipService {
     if (!membership || membership.status !== 'active') {
       this.logger.warn({ event: 'membership-refused', reason: membership ? 'removed' : 'none', tenantId: identity.tenantId }, 'No active membership');
       await this.events.recordRefusal(identity.tenantId, identity.sub, membership ? 'removed' : 'no-membership');
+      throw AppException.forbidden();
+    }
+    if (membership.tenantActive === false) {
+      this.logger.warn({ event: 'membership-refused', reason: 'tenant-suspended', tenantId: identity.tenantId }, 'The organization is suspended');
+      await this.events.recordRefusal(identity.tenantId, identity.sub, 'tenant-suspended');
       throw AppException.forbidden();
     }
     if (identity.issuedAt <= membership.tokensValidAfter) {

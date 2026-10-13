@@ -22,7 +22,7 @@ export class IntakeService {
     constructor(private readonly reports: ReportsRepository, private readonly storage: ObjectStorage, 
     @Inject(ENV)
     private readonly env: Env) { }
-    private allowed(p: Principal) { if (!p.roles.some(r => r === 'clinician' || r === 'admin'))
+    private allowed(p: Principal) { if (!p.roles.some(r => r === 'clinician'))
         throw AppException.forbidden(); assertLocalStorage(this.env); }
     private identity(p: Principal, reportId: string, id: string, revision: unknown): AttemptIdentity {
         const parsed = revisionHeaderSchema.safeParse(revision);

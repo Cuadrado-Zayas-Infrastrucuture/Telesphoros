@@ -75,21 +75,29 @@ test('real report reads filter and paginate without retaining the previous selec
   await page.getByRole('button', { name: 'Back to reports' }).click();
 });
 
-for (const persona of ['bob', 'gina', 'carol'] as const) {
+for (const persona of ['bob', 'gina'] as const) {
   test(`${persona} keeps existing read permissions and role-aware upload`, async ({ page }) => {
     await signInAs(page, persona, '/reports');
     await expect(page.getByRole('heading', { level: 1, name: 'Reports' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Refresh reports' })).toHaveAttribute('aria-disabled', 'false');
     await expect(page.getByRole('navigation', { name: 'Report pages' })).toBeVisible();
     await expect(page.getByRole('alert')).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Upload synthetic report' })).toHaveCount(persona === 'carol' ? 1 : 0);
+    await expect(page.getByRole('link', { name: 'Upload synthetic report' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Upload report', exact: true })).toHaveCount(0);
     await expect(page.getByRole('link', { name: /Local|Review queue/ })).toHaveCount(0);
-    if (persona !== 'carol') {
-      // A hard navigation intentionally clears in-memory credentials; sign in again for the route guard check.
-      await page.context().clearCookies(); // Clear this test's fake-IdP session so its account chooser is shown again.
-      await signInAs(page, persona, '/reports/upload');
-      await expect(page.getByRole('heading', { name: 'You do not have access to this page' })).toBeVisible();
-    }
+    // A hard navigation intentionally clears in-memory credentials; sign in again for the route guard check.
+    await page.context().clearCookies(); // Clear this test's fake-IdP session so its account chooser is shown again.
+    await signInAs(page, persona, '/reports/upload');
+    await expect(page.getByRole('heading', { name: 'You do not have access to this page' })).toBeVisible();
   });
 }
+
+// An organization administrator manages people and reads no clinical data (M2.1a): the report list and the upload page are both closed to them.
+test('carol (administrator only) is told she lacks access to the reports and the upload page', async ({ page }) => {
+  await signInAs(page, 'carol', '/reports');
+  await expect(page.getByRole('heading', { name: 'You do not have access to this page' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Upload synthetic report' })).toHaveCount(0);
+  await page.context().clearCookies();
+  await signInAs(page, 'carol', '/reports/upload');
+  await expect(page.getByRole('heading', { name: 'You do not have access to this page' })).toBeVisible();
+});

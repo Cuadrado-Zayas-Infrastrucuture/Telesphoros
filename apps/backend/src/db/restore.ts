@@ -280,9 +280,11 @@ async function verifyIsolation(db: Client, tables: string[], record: (n: string,
   }
   const problems: string[] = [];
   for (const table of tables) {
-    const tenant = (await db.query<{ tenant_id: string }>(`SELECT tenant_id FROM ${quoteIdent(table)} LIMIT 1`)).rows[0]?.tenant_id;
+    // The registry of organizations is keyed by the organization's own id; every other table carries it as tenant_id.
+    const key = table === 'tenants' ? 'id' : 'tenant_id';
+    const tenant = (await db.query<{ k: string }>(`SELECT ${key} AS k FROM ${quoteIdent(table)} LIMIT 1`)).rows[0]?.k;
     if (tenant === undefined) continue; // an empty table proves nothing and breaks nothing
-    const expected = Number((await db.query<{ n: string }>(`SELECT count(*) AS n FROM ${quoteIdent(table)} WHERE tenant_id = $1`, [tenant])).rows[0]!.n);
+    const expected = Number((await db.query<{ n: string }>(`SELECT count(*) AS n FROM ${quoteIdent(table)} WHERE ${key} = $1`, [tenant])).rows[0]!.n);
     for (const scenario of ['with tenant', 'without tenant'] as const) {
       await db.query('BEGIN');
       try {

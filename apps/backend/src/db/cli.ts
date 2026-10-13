@@ -1,6 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { Client } from 'pg';
+import { InvitationDigest } from '../members/invitation-digest';
 import { MEMBERSHIP_USAGE, runMembership } from '../membership/membership-cli';
+import { PgInvitationAdmin } from '../membership/pg-invitation-admin';
+import { PgTenantAdmin } from '../membership/pg-tenant-admin';
+import { runInvite, runTenant, TENANT_USAGE } from '../membership/tenant-cli';
 import { PgMembershipAdmin } from '../membership/pg-membership-admin';
 import { runSecurityEvents, SECURITY_EVENTS_USAGE } from '../security-events/security-events-cli';
 import { createBackup } from './backup';
@@ -40,6 +44,7 @@ const USAGE = `Usage: node dist/db/cli.js <command>
                                 [DATABASE_PORT=5432] [DATABASE_NAME=telesphoros], PROVISION_SECRET_APP / _VERIFIER / _MIGRATOR (secret ids).
 
 ${MEMBERSHIP_USAGE}
+${TENANT_USAGE}
 ${SECURITY_EVENTS_USAGE}
   keygen  --out FILE            create a new random backup key (64 hex characters, owner-only; never overwrites).
                                 KEEP COPIES OFFLINE: without this key no backup made with it can ever be restored.
@@ -166,6 +171,24 @@ async function main(argv: string[]) {
     await client.connect();
     try {
       process.exitCode = await runMembership(new PgMembershipAdmin(client), [sub, ...rest].filter((a): a is string => a !== undefined), out);
+    } finally {
+      await client.end();
+    }
+    return;
+  }
+
+  if (command === 'tenant' || command === 'invite') {
+    const client = new Client(pgClientConfig(required('DATABASE_MIGRATOR_URL')));
+    await client.connect();
+    try {
+      const rest2 = [sub, ...rest].filter((a): a is string => a !== undefined);
+      if (command === 'tenant') {
+        process.exitCode = await runTenant(new PgTenantAdmin(client), rest2, out);
+      } else {
+        const key = process.env.INVITATION_DIGEST_KEY;
+        if (!key && process.env.NODE_ENV === 'production') throw new Error('INVITATION_DIGEST_KEY is not set');
+        process.exitCode = await runInvite(new PgInvitationAdmin(client, new InvitationDigest(key)), rest2, out);
+      }
     } finally {
       await client.end();
     }

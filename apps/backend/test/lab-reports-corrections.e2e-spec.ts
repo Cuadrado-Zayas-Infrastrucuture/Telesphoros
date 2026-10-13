@@ -338,27 +338,28 @@ import { bearer } from './helpers/tokens';
     const NOTE = 'SYN: zebra-17 note text that must never appear in a response list or a log';
     const getNote = (who: Person, id: string) => lab.api().get(`/api/v1/notes/${id}`).set(bearer(who.token));
 
-    it('the correction carries only the note digest; GET /notes/:id returns the text to clinician, reviewer and admin, not to a reader', async () => {
+    it('the correction carries only the note digest; GET /notes/:id returns the text to a clinician or reviewer, not to a reader or an administrator', async () => {
       const s = await scenario();
       const res = await correct(s.reviewer, s.e1.id, { kind: 'retraction', reasonCode: 'clinical-review-disagrees', note: NOTE }).expect(201);
       expect(res.body.note).toEqual({ id: expect.any(String), bodySha256: sha(NOTE) });
       expect(JSON.stringify((await read(s.clinician, s.e1.id)).body)).not.toContain('zebra-17');
       expect(JSON.stringify((await list(s.clinician)).body)).not.toContain('zebra-17');
 
-      for (const roles of [['clinician'], ['reviewer'], ['admin']]) {
+      for (const roles of [['clinician'], ['reviewer'], ['admin', 'clinician']]) {
         const who = await lab.person('x', roles);
         const note = await getNote(who, res.body.note.id).expect(200);
         expect(noteDtoSchema.safeParse(note.body).success).toBe(true);
         expect(note.body).toMatchObject({ id: res.body.note.id, body: NOTE, bodySha256: sha(NOTE), redacted: false });
       }
       await getNote(await lab.person('reader', ['reader']), res.body.note.id).expect(403);
+      await getNote(await lab.person('admin', ['admin']), res.body.note.id).expect(403); // administration is not clinical access
       await lab.api().get(`/api/v1/notes/${res.body.note.id}`).expect(401);
       // The ledger holds the digest only: no event row contains the text anywhere.
       const leaked = await lab.row(`SELECT 1 FROM ledger_events WHERE row_to_json(ledger_events)::text LIKE '%zebra-17%'`);
       expect(leaked).toEqual([]);
 
       // Another tenant, or an id that is not a note, is 404.
-      await getNote(await lab.person('stranger', ['admin'], 'tenant-elsewhere'), res.body.note.id).expect(404);
+      await getNote(await lab.person('stranger', ['clinician'], 'tenant-elsewhere'), res.body.note.id).expect(404);
       await getNote(await lab.person('clin', ['clinician']), randomUUID()).expect(404);
       await getNote(await lab.person('clin', ['clinician']), 'not-a-uuid').expect(400);
     });

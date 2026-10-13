@@ -64,9 +64,9 @@ describe('no route is open to a person with no role, except /me', () => {
 
   it('the walk can see a route that does declare roles, and a public one (control)', () => {
     const all = routes();
-    expect(all.find((r) => r.key === 'POST /api/v1/patients')?.roles).toEqual(['clinician', 'admin']);
+    expect(all.find((r) => r.key === 'POST /api/v1/patients')?.roles).toEqual(['clinician']);
     expect(all.find((r) => r.key === 'GET /api/v1/health')?.isPublic).toBe(true);
-    expect(all.find((r) => r.key === 'GET /api/v1/patients')?.roles).toEqual(['reader', 'clinician', 'admin', 'reviewer']);
+    expect(all.find((r) => r.key === 'GET /api/v1/patients')?.roles).toEqual(['reader', 'clinician', 'reviewer']);
   });
 });
 
@@ -92,14 +92,21 @@ describe('the clinical reads', () => {
     }
   });
 
-  it.each(READS)('GET %s is %i for every role (controls)', async (path, expected) => {
-    for (const role of ['reader', 'clinician', 'admin', 'reviewer']) {
+  it.each(READS)('GET %s is %i for every clinical role (controls)', async (path, expected) => {
+    for (const role of ['reader', 'clinician', 'reviewer']) {
       expect([path, role, (await get(path, [role])).status]).toEqual([path, role, expected]);
     }
   });
 
-  it.each(PIPELINE_READS)('GET %s is not 403 for any role', async (path) => {
-    for (const role of ['reader', 'clinician', 'admin', 'reviewer']) {
+  // DP-1: an organization administrator manages people and reads no clinical data, whatever the record's existence.
+  it.each([...READS.map(([p]) => p), ...PIPELINE_READS])('GET %s is 403 for an administrator who holds no clinical role', async (path) => {
+    const res = await get(path, ['admin']);
+    expect([path, res.status]).toEqual([path, 403]);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+  });
+
+  it.each(PIPELINE_READS)('GET %s is not 403 for any clinical role', async (path) => {
+    for (const role of ['reader', 'clinician', 'reviewer']) {
       expect([path, role, (await get(path, [role])).status]).not.toEqual([path, role, 403]);
     }
   });

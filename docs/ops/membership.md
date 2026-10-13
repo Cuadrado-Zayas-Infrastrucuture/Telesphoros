@@ -9,7 +9,10 @@ only; nothing here has been applied in AWS.
 
 Only an administrator with AWS access, as a **one-off task with the migration login** (`DATABASE_MIGRATOR_URL`, the table owner), the same way
 as `migrate` and `provision-logins` ([api-hosting.md](api-hosting.md#the-database-logins-db-provision-logins)). There is no API endpoint for any
-of this, by design: the API's own database login can only read the table, so nothing a request does can grant or remove anyone.
+of this, by design: the API's own database login can only read the table, so nothing a request does can grant or remove anyone *except* through the
+member-administration functions an organization's administrators use ([auth.md](../auth.md#member-administration-in-the-application-m21a)), which
+are confined to their own organization, never themselves and never the last administrator. This command remains for the first administrator of an
+organization, for break-glass, and for everything the application cannot do.
 
 ```
 node dist/db/cli.js membership <command> --tenant ID --sub SUB ... --by NAME [--reason TEXT]
@@ -44,8 +47,35 @@ old roles after the change.
 **Move a person to another organization.** `remove` in the old one, change the Cognito `tenant:` group, `grant` in the new one. They are refused
 between the steps.
 
-**The first deployment starts empty.** Nobody can use the API until the first administrator is granted:
-create the Cognito account, then `membership grant --roles admin`. A one-time import of existing Cognito users is not provided.
+**The first deployment starts empty.** Nobody can use the API until the organization is registered and its first administrator is granted:
+`tenant create`, the Cognito account, then `membership grant --roles admin`. A one-time import of existing Cognito users is not provided.
+
+## Organizations and invitations
+
+A membership must name a **registered organization** (a foreign key to `tenants`): a typo in `--tenant` is refused instead of creating an
+organization nobody can see. Organizations are never deleted; they are suspended.
+
+```
+node dist/db/cli.js tenant create   --id ID --name NAME --by NAME
+node dist/db/cli.js tenant list
+node dist/db/cli.js tenant suspend  --id ID --by NAME
+node dist/db/cli.js tenant activate --id ID --by NAME
+node dist/db/cli.js invite list     --tenant ID
+node dist/db/cli.js invite fulfil   --id INVITATION_ID --email ADDRESS --sub SUB --by NAME     # needs INVITATION_DIGEST_KEY
+```
+
+`ID` is lower-case letters, digits and hyphens and must equal the `<id>` of the Cognito `tenant:<id>` group. A **suspended** organization is
+refused on every request (403) until `tenant activate`: use it to stop all access for an organization at once without touching its people.
+Migration 0018 registered the organizations that already had memberships; an organization that only has records (no member) is registered by
+`tenant create` before its first grant.
+
+**Onboard a new clinic.** 1) `tenant create`. 2) Create the Cognito group `tenant:<id>` and the first administrator's account in it. 3) `membership grant --roles admin`.
+From there the administrator invites and manages the others in the application.
+
+**Fulfil an invitation.** The administrator records the invitation (address, roles). You create the person's Cognito account in the organization's
+group, then `invite fulfil` with the address the administrator invited and the new account's `sub`. A wrong address, an expired, cancelled or
+already fulfilled invitation, or a person who is already an active member is refused and changes nothing. `INVITATION_DIGEST_KEY` must be the
+application's key, or no address will match.
 
 ## If something is wrong
 

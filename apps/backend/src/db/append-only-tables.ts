@@ -30,7 +30,7 @@ export const MUTABLE_OPERATIONAL_TABLES = ['report_upload_runs','report_upload_a
  * Authority state (migration 0017): who belongs to which organization with which roles. Written only by the operator command (the table's
  * owner); the application role can only read its own organization's rows. Rows are never deleted: a removed person's row is the revocation record.
  */
-export const AUTHORITY_TABLES = ['tenant_memberships'] as const;
+export const AUTHORITY_TABLES = ['tenant_memberships', 'tenants', 'invitations'] as const;
 
 /**
  * The security-event record (migration 0018): append-only, no privilege for the application role (it calls security_event_append()), readable only by the

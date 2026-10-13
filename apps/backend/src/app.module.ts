@@ -12,6 +12,7 @@ import { LabReportsModule } from './lab-reports/lab-reports.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { pinoHttpOptions } from './logger-options';
 import { MeModule } from './me/me.module';
+import { MembersModule } from './members/members.module';
 import { ObjectStorageModule } from './object-storage/object-storage.module';
 import type { RecoveryObjectStorage } from './object-storage/recovery-object-storage';
 import { PatientsModule } from './patients/patients.module';
@@ -42,6 +43,7 @@ export class AppModule {
         RecommendationsModule,
         HealthModule,
         MeModule,
+        MembersModule,
       ],
       providers: [
         { provide: APP_FILTER, useClass: AllExceptionsFilter },

@@ -56,7 +56,7 @@ export default function HomePage() {
         <div>
           {canUpload ? <Button asChild size="lg" className="h-auto min-h-control whitespace-normal"><Link to="/reports/upload">Upload a synthetic report</Link></Button>
             : status !== 'signedIn' ? <Button asChild size="lg"><Link to="/signin">Sign in to continue</Link></Button>
-              : <p className="text-sm text-muted-foreground">Report upload requires a clinician or admin role.</p>}
+              : <p className="text-sm text-muted-foreground">Report upload requires a clinician role.</p>}
         </div>
       </section>
 

@@ -3,7 +3,7 @@ import { asOrganizationWork, currentRequestId } from '../auth/authority-context'
 import { Database } from '../db/database';
 
 /** Why a caller with a valid token was refused (the membership checks of M1.5). */
-export type RefusalReason = 'no-membership' | 'removed' | 'token-revoked' | 'authority-changed';
+export type RefusalReason = 'no-membership' | 'removed' | 'token-revoked' | 'authority-changed' | 'tenant-suspended';
 
 /**
  * The security-event record (docs/design/plans/m1-6-security-events.md). What the application may write: refusals (best effort, throttled by the

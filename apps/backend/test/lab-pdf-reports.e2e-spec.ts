@@ -69,10 +69,11 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
     [['reader'], 403],
     [['reviewer'], 403],
     [['clinician'], 201],
-    [['admin'], 201],
+    [['admin'], 403],
     [['clinician', 'reviewer'], 201],
-    [['admin', 'reviewer'], 201],
-  ] as const)('with the roles %j, creating a (vcf) report answers %i: the whole set of roles counts, and reviewer alone never writes', async (roles, status) => {
+    [['admin', 'reviewer'], 403],
+    [['admin', 'clinician'], 201],
+  ] as const)('with the roles %j, creating a (vcf) report answers %i: the whole set of roles counts, and neither reviewer nor admin alone ever writes', async (roles, status) => {
     const writer = await tenantToken('clin-1', ['clinician']);
     const patientId = await newPatient(app, writer);
     const token = await tenantToken(`person-${roles.join('-')}`, [...roles]);
@@ -155,7 +156,7 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
   it('keeps the FIRST requester, and a repeated complete changes nobody\'s identity', async () => {
     const alice = await tenantToken('alice', ['clinician']);
     const bob = await tenantToken('bob', ['clinician']);
-    const carol = await tenantToken('carol', ['admin']);
+    const carol = await tenantToken('carol', ['admin', 'clinician']);
     const patientId = await newPatient(app, alice);
     const id = (await createReport(app, alice, patientId).expect(201)).body.id as string;
     await uploadUrl(bob, id).expect(200); // bob asks first

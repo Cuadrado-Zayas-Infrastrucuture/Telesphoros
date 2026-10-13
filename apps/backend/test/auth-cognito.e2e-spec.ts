@@ -22,20 +22,19 @@ afterAll(async () => {
   await idp.stop();
 });
 
-type Name = 'alice' | 'bob' | 'carol' | 'dave' | 'erin' | 'frank';
+type Name = 'alice' | 'bob' | 'carol' | 'dave' | 'erin' | 'frank' | 'gina' | 'hal';
 const user = (name: Name) => idp.users.find((u) => u.email.startsWith(name))!;
 const token = (name: Name) => idp.mintAccessToken({ user: user(name) });
 const api = () => request(app.getHttpServer());
 
 describe('the API, authenticating real RS256 Cognito-shaped tokens', () => {
-  it('roles come from cognito:groups: clinician and admin write, reader reads, a user with no role group can neither write nor read', async () => {
+  it('roles come from cognito:groups: a clinician writes, a reader reads, an administrator (carol) reads and writes no clinical data, a user with no role group can neither write nor read', async () => {
     const label = () => `SYN-${randomUUID().slice(0, 8)}`;
     await api().post('/api/v1/patients').set(bearer(await token('alice'))).send({ label: label() }).expect(201);
-    await api().post('/api/v1/patients').set(bearer(await token('carol'))).send({ label: label() }).expect(201);
-    for (const who of ['bob', 'dave'] as const) {
+    for (const who of ['bob', 'carol', 'dave'] as const) {
       const res = await api().post('/api/v1/patients').set(bearer(await token(who))).send({ label: label() }).expect(403);
       expect(res.body.error.code).toBe('FORBIDDEN');
-      await api().get('/api/v1/patients').set(bearer(await token(who))).expect(who === 'bob' ? 200 : 403);
+      await api().get('/api/v1/patients').set(bearer(await token(who))).expect(who === 'bob' ? 200 : 403); // carol: administration only (DP-1)
     }
   });
 
@@ -47,9 +46,11 @@ describe('the API, authenticating real RS256 Cognito-shaped tokens', () => {
     await api().get(`/api/v1/patients/${created.id}`).set(bearer(await token('alice'))).expect(200);
   });
 
-  it('members of one tenant share records: alice and carol (tenant alpha) see each other’s, bob (beta) sees neither', async () => {
+  it('members of one tenant share records: alice and hal (tenant alpha) see each other’s, bob (beta) sees neither', async () => {
     const created = (await api().post('/api/v1/patients').set(bearer(await token('alice'))).send({ label: `SYN-${randomUUID().slice(0, 8)}` }).expect(201)).body;
-    await api().get(`/api/v1/patients/${created.id}`).set(bearer(await token('carol'))).expect(200);
+    await api().get(`/api/v1/patients/${created.id}`).set(bearer(await token('hal'))).expect(200);
+    await api().get(`/api/v1/patients/${created.id}`).set(bearer(await token('gina'))).expect(200);
+    await api().get(`/api/v1/patients/${created.id}`).set(bearer(await token('carol'))).expect(403); // same tenant, administration only
     await api().get(`/api/v1/patients/${created.id}`).set(bearer(await token('bob'))).expect(404);
   });
 

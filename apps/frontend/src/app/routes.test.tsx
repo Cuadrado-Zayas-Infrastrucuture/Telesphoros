@@ -51,9 +51,15 @@ describe('protected pages', () => {
     expect(screen.getByLabelText(/report file/i)).toBeInTheDocument();
   });
 
-  it('let an admin in too', async () => {
-    renderApp('/reports/upload', { signedInAs: ['admin'] });
+  it('let an administrator in only if they also hold a clinical role', async () => {
+    renderApp('/reports/upload', { signedInAs: ['admin', 'clinician'] });
     expect(await heading('Upload report')).toBeInTheDocument();
+  });
+
+  it('tell an administrator alone that administration is not clinical access', async () => {
+    renderApp('/reports/upload', { signedInAs: ['admin'] });
+    expect(await heading('You do not have access to this page')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/report file/i)).not.toBeInTheDocument();
   });
 
   it.each([

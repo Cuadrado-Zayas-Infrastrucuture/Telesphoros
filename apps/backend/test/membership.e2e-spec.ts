@@ -181,6 +181,7 @@ describe('when authority cannot be established, nothing is done', () => {
       const memory = new InMemoryMembershipRepository();
       store.inner = usingPostgres() ? new PostgresMembershipRepository(guarded.get(Database)) : memory;
       const operator: MembershipAdmin = usingPostgres() ? membershipOf(guarded) : memory;
+      if (!usingPostgres()) await memory.registerTenant({ id: TENANT, displayName: 'Test clinic', by: 'operator-test' });
       const person = sub();
       await operator.grant({ tenantId: TENANT, sub: person, roles: ['clinician'], ...OPERATOR });
       const t = await token(person);

@@ -107,23 +107,24 @@ import { DOCUMENT_IDS, FIXTURES, fixtureManifest, fixturePdf, fixtureText, LabPi
       await lab.capture(clinician, '00000000-0000-4000-8000-000000000000').expect(404);
     });
 
-    it('needs a role that may capture: reader and a person with no role are 403', async () => {
+    it('needs a role that may capture: reader, administrator and a person with no role are 403', async () => {
       const clinician = await lab.person('clin', ['clinician']);
       const { reportId } = await lab.uploadedLabPdf(clinician, fixturePdf('D01'));
-      for (const roles of [['reader'], []]) await lab.capture(await lab.person('x', roles), reportId).expect(403);
-      for (const roles of [['reviewer'], ['admin'], ['clinician', 'reviewer']]) {
+      for (const roles of [['reader'], ['admin'], []]) await lab.capture(await lab.person('x', roles), reportId).expect(403);
+      for (const roles of [['reviewer'], ['admin', 'clinician'], ['clinician', 'reviewer']]) {
         expect([200, 201]).toContain((await lab.capture(await lab.person('y', roles), reportId)).status);
       }
     });
   });
 
   describe('reading a capture', () => {
-    it('any role can read a capture of its own tenant, a member with no role cannot; another tenant gets 404', async () => {
+    it('any clinical role can read a capture of its own tenant, an administrator or a member with no role cannot; another tenant gets 404', async () => {
       const clinician = await lab.person('clin', ['clinician']);
       const { reportId } = await lab.uploadedLabPdf(clinician, fixturePdf('D01'));
       const captured = (await lab.capture(clinician, reportId).expect(201)).body;
       await lab.api().get(`/api/v1/captures/${captured.id}`).set(bearer((await lab.person('r', [])).token)).expect(403); // finding I04
-      for (const roles of [['reader'], ['clinician'], ['reviewer'], ['admin']]) {
+      await lab.api().get(`/api/v1/captures/${captured.id}`).set(bearer((await lab.person('r', ['admin'])).token)).expect(403);
+      for (const roles of [['reader'], ['clinician'], ['reviewer'], ['admin', 'reader']]) {
         const res = await lab.api().get(`/api/v1/captures/${captured.id}`).set(bearer((await lab.person('r', roles)).token)).expect(200);
         expect(captureDtoSchema.safeParse(res.body).success).toBe(true);
       }

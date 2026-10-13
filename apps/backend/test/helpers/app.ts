@@ -12,12 +12,14 @@ import { MirrorTokenVerifier } from '../../src/auth/mirror-token-verifier';
 import { TokenVerifier } from '../../src/auth/token-verifier';
 import type { MembershipAdmin } from '../../src/membership/membership';
 import { PgMembershipAdmin } from '../../src/membership/pg-membership-admin';
+import { PgTenantAdmin } from '../../src/membership/pg-tenant-admin';
+import type { TenantAdmin } from '../../src/membership/membership';
 import { InMemorySecurityEvents, SecurityEvents } from '../../src/security-events/security-events';
 import { InMemoryMembershipRepository, MembershipRepository } from '../../src/storage/membership.repository';
 import { loadEnv } from '../../src/config/env';
 import { READINESS_CHECKS, type ReadinessCheck } from '../../src/health/readiness.service';
 import { createEphemeralDatabase, ownerUrlFor, verifierUrlFor } from './database';
-import { PgMembershipMirror } from './membership';
+import { PgMembershipMirror, RegisteringMembershipAdmin } from './membership';
 import { FIXTURES, TEST_KNOWLEDGE } from './lab-pipeline';
 import { TEST_AUDIENCE, TEST_ISSUER, TEST_SECRET } from './env';
 import type { RecoveryObjectStorage } from '../../src/object-storage/recovery-object-storage';
@@ -155,7 +157,9 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
           .map((r) => ({ tenantId: r.tenant_id, eventType: r.event_type, outcome: r.outcome, actorRef: r.actor_ref, subjectKind: r.subject_kind, subjectRef: r.subject_ref, requestId: r.request_id ?? undefined, details: r.details }) as SeenSecurityEvent)
       : async () => (app.get(SecurityEvents as never) as InMemorySecurityEvents).events.map((e) => Object.fromEntries(Object.entries(e).filter(([key]) => key !== 'at')) as unknown as SeenSecurityEvent),
   );
-  handles.set(app, adminPool ? new PgMembershipAdmin(adminPool) : app.get(MembershipRepository as never));
+  const tenantAdmin: TenantAdmin = adminPool ? new PgTenantAdmin(adminPool) : (app.get(MembershipRepository as never) as unknown as TenantAdmin);
+  tenantHandles.set(app, tenantAdmin);
+  handles.set(app, new RegisteringMembershipAdmin(adminPool ? new PgMembershipAdmin(adminPool) : (app.get(MembershipRepository as never) as unknown as MembershipAdmin), tenantAdmin));
   const close = app.close.bind(app);
   app.close = async () => {
     await close();
@@ -166,6 +170,14 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
 }
 
 const handles = new WeakMap<object, MembershipAdmin>();
+const tenantHandles = new WeakMap<object, TenantAdmin>();
+
+/** The organization registry handle for an app made by createTestApp. */
+export function tenantsOf(app: object): TenantAdmin {
+  const handle = tenantHandles.get(app);
+  if (!handle) throw new Error('tenantsOf: not an app made by createTestApp');
+  return handle;
+}
 
 export interface SeenSecurityEvent {
   tenantId: string | null;

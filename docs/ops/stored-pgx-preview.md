@@ -36,7 +36,7 @@ Add `stored` to the exact patient's existing ignored `registration.json` entry, 
 
 Restart the standalone pilot to load these bindings. A stored selection disables static-profile fallback even if credentials are absent, expired or invalid. `ehr:configure` recreates the static rehearsal registration; reapply explicit stored bindings afterward. No demographic, “latest result” or automatic clinician matching exists. Mapping a user to a credential is an explicit local setup decision, not delegated production authorization. The credential may have broader backend permissions; the connector's request path uses GET only. Do not use a production credential.
 
-The API authenticates the supplied bearer on `/me` using its existing signature/issuer/access-token checks. Only after that successful response does the connector decode the same token to pin subject, tenant, issuer, client and expiry to the explicit configuration. It requires a clinician/reviewer/admin role. Decoding alone is never accepted as authentication. The EHR bearer is never sent to the backend; backend credentials never enter the browser response.
+The API authenticates the supplied bearer on `/me` using its existing signature/issuer/access-token checks. Only after that successful response does the connector decode the same token to pin subject, tenant, issuer, client and expiry to the explicit configuration. It requires a clinician or reviewer role (an administrator alone reads no clinical data). Decoding alone is never accepted as authentication. The EHR bearer is never sent to the backend; backend credentials never enter the browser response.
 
 ## What is read and withheld
 

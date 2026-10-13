@@ -14,7 +14,7 @@ Reloading, leaving the page, or signing out loses this in-memory retry state. Ab
 
 ## Reports and downloads
 
-The owned-mode `/reports` page reuses tenant-bound pagination (20 rows) in the API's existing creation order. Clinicians/admins can upload; clinicians/reviewers/admins can download verified files. Readers can see their tenant's metadata only. The server remains authoritative for all access decisions.
+The owned-mode `/reports` page reuses tenant-bound pagination (20 rows) in the API's existing creation order. Clinicians can upload; clinicians and reviewers can download verified files. An administrator alone is refused the page (administration is not clinical access). Readers can see their tenant's metadata only. The server remains authoritative for all access decisions.
 
 Downloads obtain a fresh signed attachment link, validate its contract, expiry and explicit allowed origin, and fetch with no cookies, API bearer, referrer or redirects. The client bounds the received bytes and verifies size/SHA-256 against the listed metadata before saving an opaque attachment. Temporary object URLs are revoked; no file is rendered and signed URLs are not persisted. A changed or unavailable file produces a safe retry message. Signed links remain bearer credentials until expiry; logout cannot revoke already issued links.
 
@@ -34,10 +34,13 @@ Use the owner connection of the same disposable database (`E2E_OWNER_URL` below 
 
 ```
 CLI="node apps/backend/dist/db/cli.js"; export DATABASE_MIGRATOR_URL="$E2E_OWNER_URL"
+# Since M2.1a a membership must name a registered organization:
+$CLI tenant create --id alpha --name "Alpha synthetic clinic" --by browser-suite
+$CLI tenant create --id beta  --name "Beta synthetic clinic"  --by browser-suite
 grant() { $CLI membership grant --tenant "$1" --sub "$2" --roles "$3" --by browser-suite --reason "local acceptance persona"; }
 grant alpha 11111111-1111-4111-8111-111111111111 clinician            # alice
 grant beta  22222222-2222-4222-8222-222222222222 reader               # bob
-grant alpha 33333333-3333-4333-8333-333333333333 admin                # carol
+grant alpha 33333333-3333-4333-8333-333333333333 admin                # carol: administration only, so she is refused the reports and the upload page
 grant beta  44444444-4444-4444-8444-444444444444 ""                   # dave: signs in, holds no role
 grant alpha 77777777-7777-4777-8777-777777777777 reviewer             # gina
 grant alpha 88888888-8888-4888-8888-888888888888 clinician,reviewer   # hal

@@ -34,7 +34,7 @@ export class NotesController {
   constructor(private readonly corrections: CorrectionsService) {}
 
   @Get(':id')
-  @Roles('clinician', 'reviewer', 'admin')
+  @Roles('clinician', 'reviewer')
   get(@CurrentPrincipal() principal: Principal, @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam): Promise<NoteDto> {
     return this.corrections.note(principal, id);
   }

@@ -19,7 +19,7 @@ import { EvaluationsService } from './evaluations.service';
 import { RequiresPipeline } from './pipeline-switch';
 import { RateLimitClass } from '../rate-limit/rate-limit.decorators';
 
-const CAN_EVALUATE = ['clinician', 'reviewer', 'admin'] as const;
+const CAN_EVALUATE = ['clinician', 'reviewer'] as const;
 
 /** `POST /reports/:id/evaluations`: the report-side route of the pipeline's last step. */
 @Controller('reports')

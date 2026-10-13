@@ -27,13 +27,18 @@ describe('reports page with real auth and route guards', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }));
     expect(client.signIn).toHaveBeenCalledWith('/reports');
   });
-  it.each([['reviewer'], ['reader'], ['clinician'], ['admin'], ['reviewer', 'clinician']] as Role[][])('uses additive roles %j without adding a role preview control', async (...roles: Role[]) => {
+  it.each([['reviewer'], ['reader'], ['clinician'], ['admin', 'clinician'], ['reviewer', 'clinician']] as Role[][])('uses additive roles %j without adding a role preview control', async (...roles: Role[]) => {
     renderApp('/reports', { signedInAs: roles, fetchImpl: fetcher(roles) }); await heading();
     await screen.findByRole('button', { name: 'Open synthetic.vcf' });
-    expect(Boolean(screen.queryByRole('link', { name: 'Upload synthetic report' }))).toBe(roles.some(role => ['clinician', 'admin'].includes(role)));
+    expect(Boolean(screen.queryByRole('link', { name: 'Upload synthetic report' }))).toBe(roles.some(role => ['clinician'].includes(role)));
     const user = userEvent.setup(); await user.click(screen.getByRole('button', { name: 'Open synthetic.vcf' }));
-    expect(Boolean(screen.queryByRole('button', { name: 'Download synthetic.vcf' }))).toBe(roles.some(role => ['clinician', 'reviewer', 'admin'].includes(role)));
+    expect(Boolean(screen.queryByRole('button', { name: 'Download synthetic.vcf' }))).toBe(roles.some(role => ['clinician', 'reviewer'].includes(role)));
     expect(screen.queryByLabelText('Preview roles')).not.toBeInTheDocument();
+  });
+  it('refuses an administrator who holds no clinical role (administration is not clinical access)', async () => {
+    renderApp('/reports', { signedInAs: ['admin'], fetchImpl: fetcher(['admin']) });
+    expect(await screen.findByRole('heading', { level: 1, name: 'You do not have access to this page' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open synthetic.vcf' })).not.toBeInTheDocument();
   });
   it('keeps upload verification separate from received status, with keyboard-accessible details', async () => {
     const { container } = renderApp('/reports', { signedInAs: ['reviewer'], fetchImpl: fetcher(['reviewer']) });

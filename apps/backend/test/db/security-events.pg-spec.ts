@@ -3,10 +3,11 @@ import type { Request, Response } from 'express';
 import { Client } from 'pg';
 import { authorityContextMiddleware, bindRequestAuthority, type RequestAuthority } from '../../src/auth/authority-context';
 import { Database } from '../../src/db/database';
-import { PgMembershipAdmin } from '../../src/membership/pg-membership-admin';
+import type { MembershipAdmin } from '../../src/membership/membership';
 import { PostgresSecurityEvents } from '../../src/security-events/security-events';
 import { runSecurityEvents } from '../../src/security-events/security-events-cli';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
+import { registeringAdmin } from '../helpers/membership';
 
 const TENANT = 'tenant-events-pg';
 const OPERATOR = { by: 'ops-person', reason: 'a reason with spaces and an e-mail someone@example.test' };
@@ -146,7 +147,7 @@ describe('what the application may write, and as whom', () => {
 });
 
 describe('membership changes are recorded by the database, in the same transaction', () => {
-  const ops = <T>(work: (a: PgMembershipAdmin) => Promise<T>) => owner((c) => work(new PgMembershipAdmin(c)));
+  const ops = <T>(work: (a: MembershipAdmin) => Promise<T>) => owner((c) => work(registeringAdmin(c)));
 
   it('one event per change, in order, with the before and after roles, the operator name, and no free text', async () => {
     const who = person();
@@ -213,7 +214,7 @@ describe('the application records what happens to its callers', () => {
     new PostgresSecurityEvents(database); // wires the refusal hook
     try {
       const sub = person();
-      const granted = await owner((c) => new PgMembershipAdmin(c).grant({ tenantId: TENANT, sub, roles: ['clinician'], ...OPERATOR }));
+      const granted = await owner((c) => registeringAdmin(c).grant({ tenantId: TENANT, sub, roles: ['clinician'], ...OPERATOR }));
       let inserted!: () => void;
       const insertedSignal = new Promise<void>((resolve) => (inserted = resolve));
       let release!: () => void;
@@ -227,7 +228,7 @@ describe('the application records what happens to its callers', () => {
       );
       const outcome = write.then(() => 'committed', (e: { status?: number }) => `refused ${e.status}`);
       await insertedSignal;
-      await owner((c) => new PgMembershipAdmin(c).remove({ tenantId: TENANT, sub, ...OPERATOR }));
+      await owner((c) => registeringAdmin(c).remove({ tenantId: TENANT, sub, ...OPERATOR }));
       release();
       expect(await outcome).toBe('refused 403');
       const rows = await events(`actor_ref = $1 AND event_type = 'access.refused'`, [sub]);
@@ -243,7 +244,7 @@ describe('the auditor command', () => {
     const tenant = `tenant-cli-${randomUUID().slice(0, 6)}`;
     const who = person();
     await owner(async (c) => {
-      const a = new PgMembershipAdmin(c);
+      const a = registeringAdmin(c);
       await a.grant({ tenantId: tenant, sub: who, roles: ['reader'], ...OPERATOR });
       await a.setRoles({ tenantId: tenant, sub: who, roles: ['clinician'], ...OPERATOR });
     });

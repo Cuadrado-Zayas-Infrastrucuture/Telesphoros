@@ -55,7 +55,7 @@ export function createStoredPgxReader(value: unknown, now = Date.now) {
     const tenant = tenantFromGroups(claims["cognito:groups"]);
     if (claims.sub !== reader.subject || claims.iss !== config.issuer || claims.client_id !== config.clientId ||
         !tenant.ok || tenant.tenantId !== reader.tenantId ||
-        !me.roles.some(role => ["clinician", "reviewer", "admin"].includes(role)) || claims.exp * 1000 <= now())
+        !me.roles.some(role => ["clinician", "reviewer"].includes(role)) || claims.exp * 1000 <= now())
       fail("stored_principal_mismatch");
     const patient = patientDtoSchema.parse(await get(`/patients/${selected.patientId}`));
     const evaluation = evaluationDtoSchema.parse(await get(`/evaluations/${selected.evaluationId}`));

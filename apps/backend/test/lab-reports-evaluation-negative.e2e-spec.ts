@@ -122,11 +122,11 @@ const real = new SubprocessReportReader({ mode: 'non-production' });
       expect((await local.api().get(`/api/v1/evaluations/${before.body.id}`).set(bearer(clin.token))).body.advisory.activeDisputes).toBe(0);
     });
 
-    it('needs a role that may evaluate (reader and no role are 403), and takes only the two ids', async () => {
+    it('needs a role that may evaluate (reader, administrator and no role are 403), and takes only the two ids', async () => {
       const s = await lab.reviewedCapture(fixturePdf('D04'));
-      for (const roles of [['reader'], []]) await lab.evaluate(await lab.person('x', roles), s.reportId, body(s)).expect(403);
+      for (const roles of [['reader'], ['admin'], []]) await lab.evaluate(await lab.person('x', roles), s.reportId, body(s)).expect(403);
       for (const bad of [{}, { captureId: s.captureId }, { ...body(s), extra: 1 }, { captureId: 'x', acceptanceId: s.acceptanceId }]) await lab.evaluate(s.clinician, s.reportId, bad).expect(400);
-      expect([200, 201]).toContain((await lab.evaluate(await lab.person('adm', ['admin']), s.reportId, body(s))).status);
+      expect([200, 201]).toContain((await lab.evaluate(await lab.person('adm', ['admin', 'clinician']), s.reportId, body(s))).status);
       expect([200, 201]).toContain((await lab.evaluate(await lab.person('rv', ['reviewer']), s.reportId, body(s))).status);
     });
   });

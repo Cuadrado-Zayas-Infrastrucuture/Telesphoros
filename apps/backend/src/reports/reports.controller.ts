@@ -29,7 +29,7 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { toReportDto } from './reports.mapper';
 import { ReportsService } from './reports.service';
 
-const CAN_WRITE = ['clinician', 'admin'] as const;
+const CAN_WRITE = ['clinician'] as const;
 
 @Controller('reports')
 export class ReportsController {

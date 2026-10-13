@@ -1,6 +1,6 @@
 # M2.1: clinic onboarding and patient identity (plan)
 
-Status: **plan only, awaiting founder approval.** No code, migration or script has been written. Slice M2.1 of the [repo audit and build plan](repo-audit-and-build-plan.md), research task **T06** (audit findings **A04**, **A06**). Working agreement 1 requires the founder to approve it first. Kept as a local branch at the founder's request (no push, so no CI spend).
+Status: **M2.1a built on a local branch** (`claude/m2-1a-tenants-member-admin`; DP-1 to DP-6 answered yes by the founder on 2026-10-13; see [verification](../../verification/m2-1a-tenants-member-admin.md) and [Changes from this plan](#changes-from-this-plan-m21a)). **M2.1b and M2.1c are still plan only.** Slice M2.1 of the [repo audit and build plan](repo-audit-and-build-plan.md), research task **T06** (audit findings **A04**, **A06**). Working agreement 1 requires the founder to approve each slice first. Kept as local branches at the founder's request (no push, so no CI spend).
 
 T06 is too large for one pull request, so this plan splits it into three, each with its own verification and its own draft PR:
 
@@ -37,6 +37,20 @@ The application role still has **no write privilege on `tenant_memberships`**; i
 **Invitations (DP-2).** An invitation is a record: organization, e-mail address kept only as a keyed digest plus a masked hint, roles, expiry, state. **The API still creates no Cognito account**: no application path can mint identities (the rule behind DM-1). A person with a pending invitation is created in Cognito and put in the organization's group by an operator command (`db invite fulfil`) today, and by the worker from M2.3 later; on first sign-in their membership is created from the invitation. Fresh-clinic acceptance (T06: "reaches the first patient without ad hoc SQL") is then: `tenant create`, create the first administrator's Cognito account and `membership grant --roles admin`, and the administrator does the rest in the application.
 
 **Verification (M2.1a).** Tenant FK and registration; every rule above has a refusal test and a control that succeeds (own organization, another administrator changing roles, a reader refused); defect injection for each rule (allow self-change, allow removing the last administrator, read another organization, let `admin` read a patient); the role-matrix change is proved by the existing role tables in the test suites, rewritten by hand; the full local tiers and browser tier; docs (`auth.md` role table, `ops/membership.md`).
+
+### Changes from this plan (M2.1a)
+
+What was built differs from the text above in these ways; each is a consequence found while building, none changes a decision DP-1 to DP-6.
+
+- **Backfill.** Migration 0018 registers the organizations named by existing `tenant_memberships` rows (created by `migration-0018`), not "the ids they already use" in every table. An organization that only owns records, with no member, is registered by `tenant create` before its first grant. A clinic with records but no members cannot have been using the API anyway (M1.5).
+- **Suspended organizations (new).** `tenants.status` is enforced on every request: a suspended organization is refused (403, a `tenant-suspended` refusal event) and its administrators cannot administer. The plan registered the status but did not say who enforces it.
+- **"Never the last administrator" is a backstop.** Because self-change is refused first and the actor must itself be an active administrator, the rule can only fire when two administrators act on each other at the same moment. A per-organization advisory lock serializes them; the loser is refused with `last-administrator` (409) or `not-administrator` (403), depending on when it read its own standing. The tests prove the invariant (one administrator remains) rather than a single error code, and each rule has an injected defect that fails a test.
+- **Empty role sets are allowed** in `PUT /members/:sub/roles` (a member who can sign in and nothing else, as in M1.5b). Invitations also accept an empty set.
+- **Security events for administration.** Role changes and removals made by an administrator are recorded by the existing membership trigger, with `actor_kind` `person` (the trigger now compares the transaction's actor with the row's `changed_by`). Creating, cancelling and fulfilling an invitation write **no** event: the M1.6 catalogue is fixed and changing it is its own decision. **Not built:** "admin may read the organization's security events". No route reads events for an organization; that needs the auditor's read path exposed with its own plan.
+- **Terraform (the plan said it is untouched).** Making `INVITATION_DIGEST_KEY` mandatory in production means the API task definition must carry it, or the service cannot start. A secret *container* `api/invitation-digest-key`, its read permission for the service's execution role and its injection into the task were added in the existing pattern (value set by hand, never in Terraform), and the compute and profile guards were extended with controls. Nothing is applied.
+- **Restore check.** The restore verification's row-level-security isolation check assumed every such table has a `tenant_id` column; `tenants` is keyed by `id`. The check now knows that, so a restored registry is checked for isolation too.
+- **Frontend.** `admin` leaves `WRITER_ROLES`; a new `CLINICAL_READ_ROLES` guard closes the reports page to an administrator who holds no clinical role (the API already refuses them; the page now says so instead of showing an error). No screen for member administration was built: the routes are API-only in this slice.
+- **Tests that encoded the old matrix were rewritten by hand** (about twenty, listed in the verification note), not loosened: where `admin` used to succeed, the test now asserts 403 and adds a control that `admin` plus a clinical role succeeds.
 
 ## M2.1b: scoped patient identifiers and a verified report link
 
@@ -80,7 +94,7 @@ Real patient data and the BAA; Cognito and Terraform (nothing applied); the work
 - **Role-matrix blast radius** (DP-1): `admin` appears in the clinical role lists, the frontend's `WRITER_ROLES`, the browser personas (carol is admin), and many tests. The change is mechanical but wide, and it is the reason it comes first and alone.
 - **First-administrator lockout**: the last-administrator rule must not trap an organization whose only administrator is the operator-created one; the operator command can always repair.
 - **Per-organization key handling** (DP-4): where the key lives and how it rotates (rotation re-digests only if raw values are retained, which this design avoids, so a rotation would orphan existing identifiers). Needs a short key-custody note before M2.1b is built.
-- **Depends on M1.5, M1.5b and M1.6** (membership authority, the role-required reads, security events). They are built on local branches and not merged; implementation starts after they are merged, in that order.
+- **Depends on M1.5, M1.5b and M1.6** (membership authority, the role-required reads, security events). M2.1a is built on a local branch that contains all three; none is merged. Push order, when the founder allows pushing: M1.5, then M1.5b, then M1.6, then M2.1a.
 
 ## What I need from the founder
 

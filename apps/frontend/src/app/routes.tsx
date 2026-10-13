@@ -2,7 +2,7 @@ import { ownedStorageMode } from '@/lib/storageMode';
 import type { RouteObject } from 'react-router-dom';
 import { ProtectedRoute } from '@/auth/ProtectedRoute';
 import { RequireRole } from '@/auth/RequireRole';
-import { WRITER_ROLES } from '@/auth/roles';
+import { CLINICAL_READ_ROLES, WRITER_ROLES } from '@/auth/roles';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { RouteError } from '@/components/RouteError';
 
@@ -25,7 +25,9 @@ export const routes: RouteObject[] = [
       {
         element: <ProtectedRoute />,
         children: [
-          ...(ownedStorageMode() ? [{ path: 'reports', lazy: async () => ({ Component: (await import('@/pages/ReportsPage')).default }) }] : []),
+          ...(ownedStorageMode()
+            ? [{ element: <RequireRole anyOf={CLINICAL_READ_ROLES} />, children: [{ path: 'reports', lazy: async () => ({ Component: (await import('@/pages/ReportsPage')).default }) }] }]
+            : []),
           ...(import.meta.env.DEV ? [
             { path: 'local-interpretation', lazy: async () => ({ Component: (await import('@/pages/LocalInterpretationPage')).default }) },
             { path: 'local-upload', lazy: async () => ({ Component: (await import('@/pages/LocalUploadReportPage')).default }) },
