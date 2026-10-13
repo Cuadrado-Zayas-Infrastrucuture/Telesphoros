@@ -14,9 +14,9 @@ The founder approved the researched dashboard sketch for implementation on curre
 ## Planned: Soup training pilot (plan only)
 
 A [draft plan](design/plans/soup-pilot.md) proposes a dev-only pilot of [Soup](https://github.com/MakazhanAlpamys/Soup) (Apache-2.0, Alpha, pinned v0.76.0) as a synthetic-only section classifier for lab-report text, measured against a rule-based baseline on a hand-labelled set. It needs founder decisions D1 to D5 before any environment, data, model download or training. Nothing is installed or run, and the reader, engine, API, database and AWS are untouched.
-## T02 strict migration readiness (review pending)
+## T02 strict migration readiness (merged, #81)
 
-Founder approved the focused readiness fix with strict version/checksum matching and subsequently authorized commit and draft PR delivery. Readiness now delegates to the existing migration-history validator and rejects checksum drift and unknown newer versions, with generic 503 responses and unchanged liveness. Real PostgreSQL regressions demonstrated both defects before the fix; all three backend profiles passed locally. See [verification](verification/t02-readiness.md) for completed checks and limits. Broader old/new schema compatibility and G01 acceptance remain separate. Merge and deployment are not authorized.
+Founder approved the focused readiness fix with strict version/checksum matching and subsequently authorized commit and draft PR delivery. Readiness now delegates to the existing migration-history validator and rejects checksum drift and unknown newer versions, with generic 503 responses and unchanged liveness. Real PostgreSQL regressions demonstrated both defects before the fix; all three backend profiles passed locally. See [verification](verification/t02-readiness.md) for completed checks and limits. Broader old/new schema compatibility and G01 acceptance remain separate. Merged as #81; its `main` CI run passed. Deployment is not authorized.
 
 ## Final synthetic OpenEMR workflow acceptance
 
@@ -39,7 +39,7 @@ The OpenEMR pilot can now opt into fresh, explicitly bound reads of stored synth
 
 ## L1 owned synthetic storage API
 
-The founder approved L1 plus intake/cancellation refinements and the explicit legacy compatibility boundary. The branch adds bounded validated PDF/VCF/JSON intake, immutable upload attempts/revision CAS, exact-version attachment access and conservative owned compensation libraries. See [API](design/local-storage-intake.md) and [verification](verification/local-storage-intake.md). The full local three-tier regression and final negative controls passed. Delivery still requires committed-head recovery evidence and separate PR authorization. No PR/remote CI or merge is claimed. New owned-mode apps keep clinical processing disabled. L2 browser transport and L3 operational runner/scheduling/teardown remain pending; AWS upgrades, spending, agreements and production use remain deferred.
+The founder approved L1 plus intake/cancellation refinements and the explicit legacy compatibility boundary. The branch adds bounded validated PDF/VCF/JSON intake, immutable upload attempts/revision CAS, exact-version attachment access and conservative owned compensation libraries. See [API](design/local-storage-intake.md) and [verification](verification/local-storage-intake.md). The full local three-tier regression and final negative controls passed. Merged as #77. New owned-mode apps keep clinical processing disabled. L2 browser transport merged as #79 ([verification](verification/local-storage-browser.md)), and the L3 local operational runner, reconciliation and teardown merged as #80 ([runbook](ops/local-storage-operations.md), [verification](verification/local-storage-operations.md)); both are local and synthetic only. AWS upgrades, production scheduling, spending, agreements and production use remain deferred.
 
 ## Synthetic versioned PGx FHIR preview
 

@@ -30,5 +30,5 @@ choice below is settled but not deployed. This page records the intended flow so
 Until then, CI ([ci-cd.md](ci-cd.md)) validates the Terraform text and nothing more.
 
 The [H1 hosting and DNS checklist](domains-and-hosting.md) describes the optional frontend resources,
-manual certificate validation, staged checks and rollback. API hosting is F3: the edge (F3a) is written ([api-hosting.md](api-hosting.md)); the compute (F3b) is written too; the image and the pipeline (F4) are not. No Vercel project
+manual certificate validation, staged checks and rollback. API hosting is F3: the edge (F3a) is written ([api-hosting.md](api-hosting.md)); the compute (F3b) is written too. The API image is built, scanned and rehearsed by the required `image` CI job ([image runbook](../../infrastructure/docker/README.md)) but never published; the deployment pipeline (F4) is not written. No Vercel project
 has been inspected; the company site's source/project is still needed.
