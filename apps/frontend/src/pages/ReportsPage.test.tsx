@@ -66,8 +66,9 @@ describe('reports page with real auth and route guards', () => {
     renderApp('/reports', { signedInAs: ['reviewer'], fetchImpl: fetcher(['reviewer'], async () => ++attempts === 1 ? json({ message: 'do-not-display' }, 503) : json({ data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } })) });
     await heading(); expect(await screen.findByRole('alert')).toHaveTextContent('Reports could not be loaded');
     expect(screen.queryByText('do-not-display')).not.toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Refresh reports' }));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry loading reports' }));
     expect(await screen.findByText('No reports found for this selection.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Report records' })).toHaveFocus();
     expect(screen.getByRole('button', { name: 'Next report page' })).toHaveAttribute('aria-disabled', 'true');
   });
   it('keeps page controls mounted and focused through slow reads and refusal without stale rows', async () => {
@@ -80,6 +81,8 @@ describe('reports page with real auth and route guards', () => {
     const user = userEvent.setup(), next = screen.getByRole('button', { name: 'Next report page' });
     await user.click(next);
     expect(next).toHaveFocus(); expect(next).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('region', { name: 'Report records table' })).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByText('Loading reports…')).toHaveAttribute('role', 'status');
     expect(screen.queryByRole('button', { name: 'Open synthetic.vcf' })).not.toBeInTheDocument();
     await user.click(next); // In-flight controls cannot launch a duplicate request.
     expect(api.mock.calls.filter(([url]) => String(url).includes('/reports?page=2'))).toHaveLength(1);
@@ -99,6 +102,44 @@ describe('reports page with real auth and route guards', () => {
     await user.click(screen.getByText('Technical details')); expect(disclosure).toHaveAttribute('open');
     await user.click(screen.getByRole('button', { name: 'Back to reports' }));
     await waitFor(() => expect(trigger).toHaveFocus()); expect(screen.queryByText('Yes — server verified')).not.toBeInTheDocument();
+  });
+  it('clears a patient filter during a slow read without losing focus or restoring a late result', async () => {
+    let finish: (value: Response) => void = () => {};
+    const api = fetcher(['reader'], async url => url.searchParams.has('patientId')
+      ? new Promise<Response>(resolve => { finish = resolve; })
+      : json({ data: [row()], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } }));
+    const { container } = renderApp('/reports', { signedInAs: ['reader'], fetchImpl: api });
+    const user = userEvent.setup(); await screen.findByRole('button', { name: 'Open synthetic.vcf' });
+    await user.selectOptions(screen.getByLabelText('Filter by patient'), p2);
+    const table = screen.getByRole('region', { name: 'Report records table' });
+    expect(table).toHaveAttribute('aria-busy', 'true');
+    expect(within(table).queryByRole('button')).not.toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+    await user.click(screen.getByRole('button', { name: 'Clear patient filter' }));
+    await screen.findByRole('button', { name: 'Open synthetic.vcf' });
+    expect(screen.getByRole('heading', { name: 'Report records' })).toHaveFocus();
+    expect(screen.getByLabelText('Filter by patient')).toHaveValue('');
+    expect(table).toHaveAttribute('aria-busy', 'false');
+    finish(json({ data: [row(p2, false)], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } }));
+    await waitFor(() => expect(api.mock.calls.filter(([url]) => String(url).includes('/reports?'))).toHaveLength(3));
+    expect(screen.queryByText('Not complete')).not.toBeInTheDocument();
+  });
+  it.each([['reader', false], ['reviewer', false], ['clinician', true], ['admin', true]] as const)('offers empty-state upload only for an existing writer role: %s', async (role, allowed) => {
+    renderApp('/reports', { signedInAs: [role], fetchImpl: fetcher([role], async () => json({ data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } })) });
+    await screen.findByText('No reports found for this selection.');
+    expect(Boolean(screen.queryByRole('link', { name: 'Upload first synthetic report' }))).toBe(allowed);
+  });
+  it('returns an emptied later page to page one while retaining the patient filter', async () => {
+    const api = fetcher(['reviewer'], async url => json({ data: url.searchParams.get('page') === '2' ? [] : [row(p2)], meta: { page: Number(url.searchParams.get('page')), pageSize: 20, total: 21, totalPages: 2 } }));
+    renderApp('/reports', { signedInAs: ['reviewer'], fetchImpl: api });
+    const user = userEvent.setup(); await screen.findByRole('button', { name: 'Open synthetic.vcf' });
+    await user.selectOptions(screen.getByLabelText('Filter by patient'), p2);
+    await user.click(screen.getByRole('button', { name: 'Next report page' }));
+    await user.click(await screen.findByRole('button', { name: 'Go to first page' }));
+    await screen.findByRole('button', { name: 'Open synthetic.vcf' });
+    expect(screen.getByRole('heading', { name: 'Report records' })).toHaveFocus();
+    expect(screen.getByLabelText('Filter by patient')).toHaveValue(p2);
+    expect(api).toHaveBeenLastCalledWith(`${API}/api/v1/reports?page=1&pageSize=20&patientId=${p2}`, expect.anything());
   });
   it('keeps a download focused while busy, refuses duplicate activation and safely allows retry', async () => {
     let finish: (error: Error) => void = () => {};
@@ -128,4 +169,25 @@ describe('reports page with real auth and route guards', () => {
     expect(screen.getByRole('button', { name: 'Open synthetic.vcf' })).toBeInTheDocument();
     expect(downloadReport).not.toHaveBeenCalled();
   });
+});
+
+it('opens a separate synthetic preview without passing report or patient context', async () => {
+  vi.stubGlobal('location', { hostname: '127.0.0.1' });
+  try {
+    const api = fetcher(['reader']);
+    const { router } = renderApp('/reports', { signedInAs: ['reader'], fetchImpl: api });
+    await heading();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Open synthetic.vcf' }));
+    const link = screen.getByRole('link', { name: 'Open PGx explanation preview' });
+    expect(link).toHaveAttribute('href', '/local-interpretation');
+    const calls = api.mock.calls.length;
+    await user.click(link);
+    await screen.findByRole('heading', { name: 'PGx interpretation workspace' });
+    expect(router.state.location.search).toBe(''); expect(router.state.location.state).toBeNull();
+    expect(screen.queryByText('synthetic.vcf')).not.toBeInTheDocument();
+    expect(screen.queryByText('SYN-1')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Download/ })).not.toBeInTheDocument();
+    expect(api.mock.calls.length).toBe(calls);
+  } finally { vi.unstubAllGlobals(); }
 });

@@ -27,6 +27,7 @@ export const routes: RouteObject[] = [
         children: [
           ...(ownedStorageMode() ? [{ path: 'reports', lazy: async () => ({ Component: (await import('@/pages/ReportsPage')).default }) }] : []),
           ...(import.meta.env.DEV ? [
+            { path: 'local-interpretation', lazy: async () => ({ Component: (await import('@/pages/LocalInterpretationPage')).default }) },
             { path: 'local-upload', lazy: async () => ({ Component: (await import('@/pages/LocalUploadReportPage')).default }) },
             { path: 'local-review', lazy: async () => ({ Component: (await import('@/pages/LocalReviewPage')).default }) },
             { path: 'local-operations', lazy: async () => ({ Component: (await import('@/pages/LocalOperationsPage')).default }) },
