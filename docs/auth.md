@@ -146,6 +146,6 @@ real email delivery, `terraform plan`/`apply`, and Cognito's own session and cod
 
 ## Known gaps
 
-No audit log of sign-ins in our own database (Cognito's CloudTrail events only; Phase 10). No rate limiting on the
-API yet (Phase 9); Cognito does its own lockout on repeated bad passwords. Password-change-while-signed-in is not
+No audit log of sign-ins in our own database (Cognito's CloudTrail events only; Phase 10). API rate limiting exists
+but is per process ([ops/rate-limiting.md](ops/rate-limiting.md)); Cognito also does its own lockout on repeated bad passwords. Password-change-while-signed-in is not
 notified (above). The sign-in page is Cognito's, unbranded for now (web design is parked).
