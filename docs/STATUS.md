@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-13**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Planned: M1.5 live membership and revocation (plan only)
+
+A [slice plan](design/plans/m1-5-live-membership-revocation.md) moves who may do what from the token to a PostgreSQL membership table checked on every request (closing I03, and I04 with DA-1): removal or a role change takes effect on the next request on every API replica, a lookup failure denies protected work (503), and writes re-check authority inside their own transaction so none commits after a removal does. Cognito stays the identity provider. No code, migration or script exists yet; the founder's yes or change on DA-1, DA-2, DM-1 and DM-2 is needed first.
+
 ## Planned: repository audit and build plan (plan only)
 
 A [draft audit and build plan](design/plans/repo-audit-and-build-plan.md) maps every workspace, CI job and feature on `b292d07`, re-checks the 12 October research audit against current code (R02 and R03 closed by #86 and #81; E04, A08 and R11 partly addressed; I03, I06, E06, O02, A03, O06, R05, R06 still open), lists new doc-drift and scaffold gaps, and orders the remaining backlog into slices. Install, typecheck, lint, build and tier-1 tests passed locally. Founder decisions DA-1 to DA-6 are open; nothing is approved or built by it.
