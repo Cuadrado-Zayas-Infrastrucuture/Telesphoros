@@ -88,7 +88,10 @@ describe('migrations run for a migrator that is not a superuser', () => {
     const db = await databaseOwnedBy(WITH_MEMBERSHIP);
     await asMigrator(WITH_MEMBERSHIP, db, async (c) => {
       await migrateUp(c);
-      expect(await migrateDown(c, 8)).toEqual(['0019', '0018', '0017', '0016', '0015', '0014', '0013', '0012']);
+      // 0020 holds audit records (patient-link decisions), so reverting it needs the same deliberate setting as the other audit migrations.
+      await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
+      expect(await migrateDown(c, 9)).toEqual(['0020', '0019', '0018', '0017', '0016', '0015', '0014', '0013', '0012']);
+      await c.query(`RESET telesphoros.allow_audit_drop`);
       await expect(migrateDown(c, 1)).rejects.toThrow(/Refusing to drop ledger incidents/); // 0011 removes audit data, so it is guarded too
       await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
       await migrateDown(c, 1); // 0011, as a migrator that is not a superuser (it replaces ledger_append, which needs CREATE on the schema for a moment)

@@ -126,7 +126,8 @@ person who captured it (409 `self-review`; a rejection is open to any reviewer).
 
 **An evaluation is refused before the reader runs, and nothing is stored, when:** the decision named is not an acceptance
 (`capture-not-accepted`), a later decision about that capture exists (`stale-acceptance`: always 409, even if the result exists; read history
-with GET), the stored text is no longer the captured text (`text-hash-mismatch`), or the ids do not belong together (`mismatch`; unknown or foreign
+with GET), the report's patient link is not verified for the file it holds now (`patient-link-unverified`, M2.1b: a second person must record that
+this file belongs to its patient, see "Patient link" below; the check is repeated inside the storing transaction), the stored text is no longer the captured text (`text-hash-mismatch`), or the ids do not belong together (`mismatch`; unknown or foreign
 ids are 404). **A dispute no longer refuses an evaluation** (until slice 5B-3.3b any dispute in the tenant did, `dispute-active`): the disputed
 cell is held and everything else is evaluated; see "Disputes" below.
 
@@ -171,3 +172,18 @@ returns their stored text. It says nothing about real PDF extraction, which need
 ## Finding evaluations that cited a disputed cell
 
 `GET /api/v1/cell-disputes/:id/evaluations` (clinician, reviewer, admin) accepts `limit` (1–100, default 50) and `afterSeq` (decimal sequence, default 0). The stored dispute supplies the cell identity. It lists historical evaluations, including corrected ones, with exact-file versus historical-identity-unverified matches and whether wording was exposed. Known different file hashes are excluded. A page may have no entries and still have a continuation cursor; follow it until null. It never changes an evaluation. See [the contract and limits](clinical-validation/cell-usage-listing.md).
+
+## Patient link (M2.1b)
+
+A report names a patient only because someone chose that patient when registering it. Before anything is evaluated, a **second person** records that the
+report's exact file version belongs to that patient ([design note](design/plans/m2-1b-identifiers-and-patient-link.md)).
+
+| Route | Roles | Notes |
+| --- | --- | --- |
+| `GET /reports/:id/patient-link` | clinical read | `state` `unverified`, `verified` or `rejected` for the file the report holds now; `staleDecision` is true when the newest decision was about an earlier file |
+| `POST /reports/:id/patient-link/decisions` | `clinician`, `reviewer` | Three shapes: `{decision: "verified", method: "identifier-match", system, value}` (the identifier read off the report, matched against the patient's registered ones; a mismatch is 409 `identifier-mismatch` and records nothing), `{decision: "verified", method: "person-confirmed", basisCode}` (the weaker method) and `{decision: "rejected", method: "person-confirmed", basisCode}`. 201 for a new decision, 200 when the newest decision about this file already says the same |
+
+Refusals: `self-review` (409) for the person who registered the report, asked for its first upload link or completed the upload; `not-uploaded` (409);
+`source-changed` (409) when the report changed while deciding; 403 for a role that may not decide (an administrator alone, a reader). Another
+organization's report is 404. Both routes are pipeline routes (503 while the pipeline is off). Identifiers themselves are registered on the patient
+(`/patients/:id/identifiers`, [patient identifiers](ops/patient-identifiers.md)).

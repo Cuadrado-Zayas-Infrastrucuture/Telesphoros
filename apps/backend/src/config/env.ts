@@ -116,6 +116,13 @@ export const envSchema = z
      * is not secret.
      */
     INVITATION_DIGEST_KEY: z.string().regex(/^[0-9a-f]{64}$/, 'must be 64 lower-case hex characters').optional(),
+
+    /**
+     * The master secret for the digests of patient identifiers (64 hex characters = 256 bits). A key per organization is derived from it
+     * (HKDF, keyed by the organization's id), so no secret is created per clinic. Required in production; development and tests use a fixed key that is
+     * not secret. Raw identifiers are never stored, so replacing this key orphans every stored identifier (docs/design/plans/m2-1b-identifiers-and-patient-link.md).
+     */
+    IDENTIFIER_DIGEST_KEY: z.string().regex(/^[0-9a-f]{64}$/, 'must be 64 lower-case hex characters').optional(),
   })
   .superRefine((env, ctx) => {
     const problem = (path: string, message: string) => ctx.addIssue({ code: 'custom', path: [path], message });
@@ -161,6 +168,7 @@ export const envSchema = z
       if (env.OBJECT_STORAGE_DRIVER !== 's3') problem('OBJECT_STORAGE_DRIVER', 'must be s3 in production');
       if (env.DATABASE_SSL !== 'require') problem('DATABASE_SSL', 'must be require in production');
       if (!env.INVITATION_DIGEST_KEY) problem('INVITATION_DIGEST_KEY', 'is required in production (invitations store only a keyed digest of the address)');
+      if (!env.IDENTIFIER_DIGEST_KEY) problem('IDENTIFIER_DIGEST_KEY', 'is required in production (patient identifiers are stored only as keyed digests)');
       if (!env.LEDGER_VERIFIER_DATABASE_URL) problem('LEDGER_VERIFIER_DATABASE_URL', 'is required in production (the record log is verified at start and re-verified while running)');
       if (!env.RATE_LIMIT_ENABLED) problem('RATE_LIMIT_ENABLED', 'must be true in production');
       if (env.TRUST_PROXY_HOPS === undefined) problem('TRUST_PROXY_HOPS', 'must be set explicitly in production (0 if nothing sits in front, 1 behind one load balancer): a wrong value defeats or poisons the address limit');

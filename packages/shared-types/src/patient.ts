@@ -1,8 +1,9 @@
 import { z } from 'zod';
 
 /**
- * Patients are identified ONLY by a synthetic label (e.g. SYN-0001). No name, date of birth,
- * or real identifier exists anywhere in this model, by design.
+ * Patients are identified by a synthetic label (e.g. SYN-0001). No name or date of birth exists anywhere in this model, by design.
+ * A clinic's own identifier for a patient (a record number) can be attached, but only as a keyed digest that is never shown
+ * back (see patient-identity.ts); the label stays the only human handle.
  */
 export const patientLabelSchema = z
   .string()

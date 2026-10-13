@@ -52,9 +52,10 @@ const SECRET_PLACEHOLDERS = {
   DATABASE_URL: 'postgres://app_login@db.example:5432/telesphoros',
   LEDGER_VERIFIER_DATABASE_URL: 'postgres://verifier_login@db.example:5432/telesphoros',
   INVITATION_DIGEST_KEY: 'ab'.repeat(32),
+  IDENTIFIER_DIGEST_KEY: 'cd'.repeat(32),
 };
 /** Values that must never be plain environment: secrets, and anything the production start-up refuses. */
-const FORBIDDEN_ENVIRONMENT = ['DATABASE_URL', 'LEDGER_VERIFIER_DATABASE_URL', 'INVITATION_DIGEST_KEY', 'DATABASE_MIGRATOR_URL', 'DATABASE_ADMIN_URL', 'JWT_SECRET', 'LAB_REPORT_PIPELINE', 'COGNITO_ISSUER', 'COGNITO_JWKS_URI', 'S3_ENDPOINT', 'KNOWLEDGE_DIR', 'LAB_REPORT_FIXTURES_DIR', 'LAB_REPORT_PIPELINE'];
+const FORBIDDEN_ENVIRONMENT = ['DATABASE_URL', 'LEDGER_VERIFIER_DATABASE_URL', 'INVITATION_DIGEST_KEY', 'IDENTIFIER_DIGEST_KEY', 'DATABASE_MIGRATOR_URL', 'DATABASE_ADMIN_URL', 'JWT_SECRET', 'LAB_REPORT_PIPELINE', 'COGNITO_ISSUER', 'COGNITO_JWKS_URI', 'S3_ENDPOINT', 'KNOWLEDGE_DIR', 'LAB_REPORT_FIXTURES_DIR', 'LAB_REPORT_PIPELINE'];
 
 /** The task environment as Terraform would write it: name -> value, plus problems for anything this guard cannot evaluate. */
 function environmentOf(text, problems) {
@@ -106,7 +107,7 @@ export function apiComputeProblems(tf, sources = {}) {
 
   // Secrets: containers only, encrypted, no value anywhere.
   need(!/aws_secretsmanager_secret_version|secret_string|secret_binary/.test(text), 'no secret value may be in Terraform (no secret version, no secret string)');
-  for (const name of ['api_database_url', 'api_ledger_verifier_url', 'api_invitation_digest_key', 'api_migrator_url']) need(has(one(`resource "aws_secretsmanager_secret" "${name}"`), 'kms_key_id = aws_kms_key.data.arn'), `the ${name} secret must be encrypted with the data key`);
+  for (const name of ['api_database_url', 'api_ledger_verifier_url', 'api_invitation_digest_key', 'api_identifier_digest_key', 'api_migrator_url']) need(has(one(`resource "aws_secretsmanager_secret" "${name}"`), 'kms_key_id = aws_kms_key.data.arn'), `the ${name} secret must be encrypted with the data key`);
 
   // Roles.
   need(!text.includes('AmazonECSTaskExecutionRolePolicy'), 'the broad managed execution policy must not be used');
@@ -116,7 +117,7 @@ export function apiComputeProblems(tf, sources = {}) {
   need(has(assume, 'identifiers = ["ecs-tasks.amazonaws.com"]') && has(assume, 'variable = "aws:SourceAccount"'), 'the roles must be assumable by ECS tasks of this account only');
   for (const role of ['api_task', 'api_execution_service', 'api_execution_migrate', 'api_execution_provision', 'api_provision_task']) need(has(one(`resource "aws_iam_role" "${role}"`), 'assume_role_policy = data.aws_iam_policy_document.api_ecs_assume.json'), `the ${role} role must use the ECS-only trust`);
   for (const [doc, secrets, other] of [
-    ['api_execution_service', ['api_database_url[0].arn', 'api_ledger_verifier_url[0].arn', 'api_invitation_digest_key[0].arn'], 'api_migrator_url'],
+    ['api_execution_service', ['api_database_url[0].arn', 'api_ledger_verifier_url[0].arn', 'api_invitation_digest_key[0].arn', 'api_identifier_digest_key[0].arn'], 'api_migrator_url'],
     ['api_execution_migrate', ['api_migrator_url[0].arn'], 'api_database_url'],
   ]) {
     const body = one(`data "aws_iam_policy_document" "${doc}"`);
@@ -149,6 +150,7 @@ export function apiComputeProblems(tf, sources = {}) {
   need(has(task, '"awslogs-group" = aws_cloudwatch_log_group.api[0].name') && has(task, 'logDriver = "awslogs"'), 'logs must go to the API log group');
   need(has(task, 'name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.api_database_url[0].arn') && has(task, 'name = "LEDGER_VERIFIER_DATABASE_URL", valueFrom = aws_secretsmanager_secret.api_ledger_verifier_url[0].arn'), 'the two database logins must be injected from their secrets');
   need(has(task, 'name = "INVITATION_DIGEST_KEY", valueFrom = aws_secretsmanager_secret.api_invitation_digest_key[0].arn'), 'the invitation digest key must be injected from its secret (production refuses to start without it)');
+  need(has(task, 'name = "IDENTIFIER_DIGEST_KEY", valueFrom = aws_secretsmanager_secret.api_identifier_digest_key[0].arn'), 'the identifier digest key must be injected from its secret (production refuses to start without it)');
   need(!has(task, 'DATABASE_MIGRATOR_URL'), 'the service must never hold the migrator login');
   need(has(task, 'condition = length(var.api_cors_origins) >= 1'), 'the task must require at least one CORS origin');
 
@@ -276,8 +278,9 @@ test('the API compute guard reports each way the text could be weakened (control
     ['the task role gets its own policy', 'resource "aws_iam_role_policy_attachment" "api_task_runtime" {', 'resource "aws_iam_role_policy" "api_task" {\n  count  = local.api_count\n  name   = "x"\n  role   = aws_iam_role.api_task[0].id\n  policy = "{}"\n}\n\nresource "aws_iam_role_policy_attachment" "api_task_runtime" {'],
     ['the task role loses the app policy', 'policy_arn = aws_iam_policy.app_runtime.arn', 'policy_arn = aws_iam_policy.backup_job.arn'],
     ['trust not limited to this account', 'variable = "aws:SourceAccount"', 'variable = "aws:Other"'],
-    ['the service reads the migrator secret', 'aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_invitation_digest_key[0].arn]', 'aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_invitation_digest_key[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn]'],
-    ['the service cannot read the digest key', 'aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_invitation_digest_key[0].arn]', 'aws_secretsmanager_secret.api_ledger_verifier_url[0].arn]'],
+    ['the service reads the migrator secret', 'aws_secretsmanager_secret.api_invitation_digest_key[0].arn, aws_secretsmanager_secret.api_identifier_digest_key[0].arn]', 'aws_secretsmanager_secret.api_invitation_digest_key[0].arn, aws_secretsmanager_secret.api_identifier_digest_key[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn]'],
+    ['the service cannot read the invitation key', 'aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_invitation_digest_key[0].arn, aws_secretsmanager_secret.api_identifier_digest_key[0].arn]', 'aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_identifier_digest_key[0].arn]'],
+    ['the service cannot read the identifier key', 'aws_secretsmanager_secret.api_invitation_digest_key[0].arn, aws_secretsmanager_secret.api_identifier_digest_key[0].arn]', 'aws_secretsmanager_secret.api_invitation_digest_key[0].arn]'],
     ['the migration reads a runtime secret', 'resources = [aws_secretsmanager_secret.api_migrator_url[0].arn]', 'resources = [aws_secretsmanager_secret.api_migrator_url[0].arn, aws_secretsmanager_secret.api_database_url[0].arn]'],
     ['secrets decrypted outside Secrets Manager', 'values   = ["secretsmanager.${var.region}.amazonaws.com"]\n    }\n  }\n}\n\ndata "aws_iam_policy_document" "api_execution_migrate"', 'values   = ["s3.${var.region}.amazonaws.com"]\n    }\n  }\n}\n\ndata "aws_iam_policy_document" "api_execution_migrate"'],
     ['pulls from any repository', 'resources = [local.api_repository]', 'resources = ["*"]'],
@@ -288,6 +291,8 @@ test('the API compute guard reports each way the text could be weakened (control
     ['stop timeout dropped', 'stopTimeout            = 30', 'stopTimeout            = 2'],
     ['image is a free variable', 'image                  = var.api_image\n      essential              = true\n      user                   = local.api_user\n      readonlyRootFilesystem = true\n      stopTimeout', 'image                  = "x:latest"\n      essential              = true\n      user                   = local.api_user\n      readonlyRootFilesystem = true\n      stopTimeout'],
     ['the service holds the migrator login', '{ name = "LEDGER_VERIFIER_DATABASE_URL", valueFrom = aws_secretsmanager_secret.api_ledger_verifier_url[0].arn },', '{ name = "LEDGER_VERIFIER_DATABASE_URL", valueFrom = aws_secretsmanager_secret.api_ledger_verifier_url[0].arn },\n        { name = "DATABASE_MIGRATOR_URL", valueFrom = aws_secretsmanager_secret.api_migrator_url[0].arn },'],
+    ['the identifier key not injected', '        { name = "IDENTIFIER_DIGEST_KEY", valueFrom = aws_secretsmanager_secret.api_identifier_digest_key[0].arn },\n', ''],
+    ['the identifier key put in plain environment', '  api_environment = {\n    NODE_ENV                          = "production"', '  api_environment = {\n    IDENTIFIER_DIGEST_KEY             = "0000"\n    NODE_ENV                          = "production"'],
     ['the digest key not injected', '        { name = "INVITATION_DIGEST_KEY", valueFrom = aws_secretsmanager_secret.api_invitation_digest_key[0].arn },\n', ''],
     ['the digest key put in plain environment', '  api_environment = {\n    NODE_ENV                          = "production"', '  api_environment = {\n    INVITATION_DIGEST_KEY             = "0000"\n    NODE_ENV                          = "production"'],
     ['the verifier login not injected', '{ name = "LEDGER_VERIFIER_DATABASE_URL", valueFrom = aws_secretsmanager_secret.api_ledger_verifier_url[0].arn },', ''],

@@ -46,7 +46,7 @@ const RELAXING = /local\.(synthetic|synthetic_network|network_count|offsite_coun
  * created) must be seen, which a set of distinct lines would not.
  */
 export const EXPECTED_USES = {
-  'api-compute.tf': { 'assign_public_ip = local.tasks_public_ip': 1, 'deletion_window_in_days = local.kms_deletion_days': 1, 'recovery_window_in_days = local.secret_recovery_days': 4 },
+  'api-compute.tf': { 'assign_public_ip = local.tasks_public_ip': 1, 'deletion_window_in_days = local.kms_deletion_days': 1, 'recovery_window_in_days = local.secret_recovery_days': 5 },
   'audit.tf': { 'days = local.audit_lock_days': 1, 'deletion_window_in_days = local.kms_deletion_days': 1, 'force_destroy = local.synthetic': 1, 'is_multi_region_trail = !local.synthetic': 1 },
   'cognito.tf': { 'deletion_protection = local.cognito_protection': 1 },
   'database.tf': {

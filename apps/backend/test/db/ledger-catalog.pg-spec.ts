@@ -1,5 +1,5 @@
 import type { Client } from 'pg';
-import { ALL_CLASSIFIED_TABLES, APPEND_ONLY_CLASSES, AUTHORITY_TABLES, MUTABLE_OPERATIONAL_TABLES, SECURITY_AUDIT_TABLES } from '../../src/db/append-only-tables';
+import { ALL_CLASSIFIED_TABLES, APPEND_ONLY_CLASSES, AUTHORITY_TABLES, MUTABLE_OPERATIONAL_TABLES, PATIENT_IDENTITY_TABLES, SECURITY_AUDIT_TABLES } from '../../src/db/append-only-tables';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 
 let pg: EphemeralDatabase;
@@ -37,6 +37,24 @@ describe('catalog guard: the audit tables are classified and protected as their 
     const grants=await q<{table_name:string;privilege_type:string}>("SELECT table_name,privilege_type FROM information_schema.role_table_grants WHERE table_schema='public' AND grantee='telesphoros_app' AND table_name=ANY($1)",[[...MUTABLE_OPERATIONAL_TABLES]]);
     for(const table of MUTABLE_OPERATIONAL_TABLES)expect(grants.filter(g=>g.table_name===table).map(g=>g.privilege_type).sort()).toEqual(['INSERT','SELECT','UPDATE']);
     const policies=await q<{tablename:string;qual:string;with_check:string}>("SELECT tablename,qual,with_check FROM pg_policies WHERE schemaname='public' AND tablename=ANY($1)",[[...MUTABLE_OPERATIONAL_TABLES]]);expect(policies).toHaveLength(2);for(const p of policies){expect(p.qual).toContain('app.current_tenant_id');expect(p.with_check).toContain('app.current_tenant_id');}
+  });
+
+  it('patient identifiers have forced tenant RLS, may be read and registered by the application, and can be changed by it only to withdraw (a column grant), never deleted or truncated', async () => {
+    const tables = await q<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>(`SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relname = ANY($1)`, [[...PATIENT_IDENTITY_TABLES]]);
+    expect(tables).toHaveLength(PATIENT_IDENTITY_TABLES.length);
+    for (const t of tables) expect(t).toMatchObject({ relrowsecurity: true, relforcerowsecurity: true });
+    for (const table of PATIENT_IDENTITY_TABLES) {
+      const grants = await q<{ privilege_type: string }>(`SELECT privilege_type FROM information_schema.role_table_grants WHERE table_schema = 'public' AND grantee = 'telesphoros_app' AND table_name = $1 ORDER BY privilege_type`, [table]);
+      expect(grants.map((g) => g.privilege_type)).toEqual(['INSERT', 'SELECT']); // no table-wide UPDATE, DELETE or TRUNCATE
+      const updatable = await q<{ column_name: string }>(`SELECT column_name FROM information_schema.column_privileges WHERE table_schema = 'public' AND grantee = 'telesphoros_app' AND table_name = $1 AND privilege_type = 'UPDATE' ORDER BY column_name`, [table]);
+      expect(updatable.map((c) => c.column_name)).toEqual(['status', 'withdrawn_at', 'withdrawn_by']);
+      const policies = await q<{ cmd: string; roles: string; qual: string; with_check: string }>(`SELECT cmd, roles::text, qual, with_check FROM pg_policies WHERE schemaname = 'public' AND tablename = $1`, [table]);
+      expect(policies).toHaveLength(1);
+      expect(policies[0]).toMatchObject({ cmd: 'ALL' });
+      expect(policies[0]!.roles).toContain('telesphoros_app');
+      expect(policies[0]!.qual).toContain('app.current_tenant_id');
+      expect(policies[0]!.with_check).toContain('app.current_tenant_id');
+    }
   });
 
   it('authority tables are read-only to the application, tenant-scoped, and never deleted', async () => {

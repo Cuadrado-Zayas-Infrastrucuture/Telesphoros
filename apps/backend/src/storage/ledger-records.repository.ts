@@ -1,5 +1,5 @@
 import type {
-  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationReadContext, EvaluationState, InsertResult, NoteRecord, Projected,
+  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationReadContext, EvaluationState, InsertResult, NoteRecord, PatientDecisionInput, Projected,
 } from './ledger-records';
 import type { DisputeStatusValue } from '@telesphoros/shared-types';
 import type { Page, PageRequest } from './records';
@@ -18,6 +18,14 @@ export abstract class LedgerRecordsRepository {
   abstract findCapture(tenantId: string, id: string): Promise<Projected | undefined>;
   /** The capture already stored for this content identity, if any. */
   abstract findCaptureByIdentity(tenantId: string, identity: { reportId: string; textSha256: string; popplerVersion: string }): Promise<Projected | undefined>;
+
+  /**
+   * Records a patient-link decision. Locks the report row, re-reads the file and patient the caller relied on and throws SourceChangedError if
+   * any differs. If the newest decision for this file already says the same thing, returns it and writes nothing (`created: false`).
+   */
+  abstract insertPatientDecision(tenantId: string, actor: string, input: PatientDecisionInput): Promise<InsertResult>;
+  /** The newest patient-link decision about the report (any file version), or undefined. */
+  abstract latestPatientDecision(tenantId: string, reportId: string): Promise<Projected | undefined>;
 
   abstract insertAcceptance(tenantId: string, actor: string, input: AcceptanceInput): Promise<InsertResult>;
   abstract findAcceptance(tenantId: string, id: string): Promise<Projected | undefined>;

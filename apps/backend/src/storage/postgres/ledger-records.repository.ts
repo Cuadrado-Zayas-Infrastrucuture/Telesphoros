@@ -5,12 +5,12 @@ import type { Page, PageRequest } from '../records';
 import { Database } from '../../db/database';
 import { LedgerStatus } from '../../ledger/ledger-status';
 import { appendEvent, newId } from '../../ledger/ledger-writer';
-import { DisputeChangedError, StaleAcceptanceError, SourceChangedError, toLedgerError, type RecordTable } from '../../ledger/ledger-types';
+import { DisputeChangedError, PatientLinkUnverifiedError, StaleAcceptanceError, SourceChangedError, toLedgerError, type RecordTable } from '../../ledger/ledger-types';
 import { loadProjections } from '../../ledger/projections';
 import { canonicalHash } from '../../services/report-adapter/canonical-json';
 import { LedgerRecordsRepository } from '../ledger-records.repository';
 import type {
-  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationReadContext, EvaluationState, InsertResult, NoteRecord, Projected,
+  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationReadContext, EvaluationState, InsertResult, NoteRecord, PatientDecisionInput, Projected,
 } from '../ledger-records';
 
 /**
@@ -80,6 +80,66 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
     return this.read(tenantId, (client) => this.one(client, tenantId, 'capture_acceptances', id));
   }
 
+  insertPatientDecision(tenantId: string, actor: string, input: PatientDecisionInput): Promise<InsertResult> {
+    return this.write(tenantId, actor, async (client) => {
+      // The report row is locked FOR SHARE for the rest of this transaction, then what the caller looked at is compared with what is there NOW.
+      const locked = await client.query<{ patient_id: string; sha256: string | null; object_version: string | null; uploaded: boolean; deleted: boolean }>(
+        `SELECT patient_id::text AS patient_id, sha256, object_version, uploaded_at IS NOT NULL AS uploaded, deleted_at IS NOT NULL AS deleted
+           FROM reports WHERE id = $1 AND tenant_id = $2 FOR SHARE`,
+        [input.reportId, tenantId],
+      );
+      const report = locked.rows[0];
+      const expected = input.expectedReport;
+      if (!report || report.deleted || !report.uploaded || report.patient_id !== expected.patientId || report.sha256 !== expected.sha256 || report.object_version !== expected.objectVersion) {
+        throw new SourceChangedError();
+      }
+      // The same decision about the same file, again: nothing new to record.
+      const newest = await client.query<{ id: string; decision: string; report_sha256: string; object_version: string; patient_id: string }>(
+        `SELECT id::text AS id, decision, report_sha256, object_version, patient_id::text AS patient_id
+           FROM report_patient_decisions WHERE tenant_id = $1 AND report_id = $2 ORDER BY seq DESC LIMIT 1`,
+        [tenantId, input.reportId],
+      );
+      const last = newest.rows[0];
+      if (last && last.decision === input.decision && last.report_sha256 === expected.sha256 && last.object_version === expected.objectVersion && last.patient_id === expected.patientId) {
+        return this.existing(client, tenantId, 'report_patient_decisions', last.id);
+      }
+      const id = newId();
+      await client.query(
+        `INSERT INTO report_patient_decisions (id, tenant_id, created_by, ledger_event_id, report_id, patient_id, report_sha256, object_version, decision, method, basis_code, identifier_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [id, tenantId, actor, newId(), input.reportId, expected.patientId, expected.sha256, expected.objectVersion, input.decision, input.method, input.basisCode ?? null, input.identifierId ?? null],
+      );
+      return this.finish(client, tenantId, 'report_patient_decisions', id);
+    });
+  }
+
+  latestPatientDecision(tenantId: string, reportId: string): Promise<Projected | undefined> {
+    return this.read(tenantId, async (client) => {
+      const { rows } = await client.query<{ id: string }>(
+        `SELECT id::text AS id FROM report_patient_decisions WHERE tenant_id = $1 AND report_id = $2 ORDER BY seq DESC LIMIT 1`,
+        [tenantId, reportId],
+      );
+      return rows[0] ? this.one(client, tenantId, 'report_patient_decisions', rows[0].id) : undefined;
+    });
+  }
+
+  /**
+   * After the ledger lock is held (a patient-link decision appends under the same lock): the decision the evaluation relied on is still the
+   * newest for the report, says `verified`, and was made about the file and patient the report has now. The report row is locked for the rest
+   * of the transaction, so the file cannot change under the evaluation either.
+   */
+  private async assertVerifiedLink(client: PoolClient, tenantId: string, reportId: string, decisionId: string): Promise<void> {
+    const { rows } = await client.query<{ id: string; decision: string; ok: boolean }>(
+      `SELECT d.id::text AS id, d.decision,
+              (d.report_sha256 = r.sha256 AND d.object_version = r.object_version AND d.patient_id = r.patient_id AND r.deleted_at IS NULL) AS ok
+         FROM report_patient_decisions d JOIN reports r ON r.id = d.report_id AND r.tenant_id = d.tenant_id
+        WHERE d.tenant_id = $1 AND d.report_id = $2 ORDER BY d.seq DESC LIMIT 1 FOR SHARE OF r`,
+      [tenantId, reportId],
+    );
+    const newest = rows[0];
+    if (!newest || newest.id !== decisionId || newest.decision !== 'verified' || !newest.ok) throw new PatientLinkUnverifiedError();
+  }
+
   insertAcceptance(tenantId: string, actor: string, input: AcceptanceInput): Promise<InsertResult> {
     return this.write(tenantId, actor, async (client) => {
       const id = newId();
@@ -140,6 +200,7 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
       const stored = await this.finish(client, tenantId, 'evaluations', id);
       // Capture decisions append under this same lock. A fresh statement sees any decision committed before we acquired it.
       if (input.captureAcceptanceId !== null) await this.assertCurrentAcceptance(client, tenantId, input.captureId, input.captureAcceptanceId);
+      if (input.patientLinkDecisionId !== undefined) await this.assertVerifiedLink(client, tenantId, input.reportId, input.patientLinkDecisionId);
       // The append above took the tenant's ledger head lock and keeps it until COMMIT. Raising or deciding a dispute also appends, so it
       // needs the same lock: every dispute change is either committed before we got the lock (and this separate statement, a new
       // snapshot under READ COMMITTED, sees it) or queued behind us (and is ordered after this evaluation).

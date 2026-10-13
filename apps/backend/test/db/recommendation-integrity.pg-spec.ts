@@ -97,7 +97,10 @@ it('rolls back validation to an unvalidated enforced constraint, then removes/re
   const disposable = await createEphemeralDatabase();
   try {
     await withAdmin(disposable.adminUrl, async c => {
-      expect(await migrateDown(c, 6)).toEqual(['0019', '0018', '0017', '0016', '0015', '0014']);
+      // 0020 holds audit records (patient-link decisions), so reverting it needs the same deliberate setting as the other audit migrations.
+      await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
+      expect(await migrateDown(c, 7)).toEqual(['0020', '0019', '0018', '0017', '0016', '0015', '0014']);
+      await c.query(`RESET telesphoros.allow_audit_drop`);
       expect(await migrateDown(c, 1)).toEqual(['0013']);
       expect((await c.query('SELECT convalidated FROM pg_constraint WHERE conname = $1', [FK])).rows).toEqual([{ convalidated: false }]);
       expect(await migrateDown(c, 1)).toEqual(['0012']);

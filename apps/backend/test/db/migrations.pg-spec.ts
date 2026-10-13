@@ -86,6 +86,9 @@ describe('migration runner', () => {
     await run(db, (c) => migrateUp(c));
     // 0011 removes the incident tables, so it needs the setting like the other audit migrations. 0010 only guards a database that holds
     // evidence identities (tested in report-evidence), so on an empty one it reverts freely; the audit migrations start below it.
+    // 0020 holds audit records (patient-link decisions): it is guarded like the other audit migrations.
+    await expect(run(db, (c) => migrateDown(c, 1))).rejects.toThrow(/Refusing to drop patient-link decisions/);
+    expect(await down(db, 1)).toEqual(['0020']);
     expect(await run(db, c => migrateDown(c, 8))).toEqual(['0019', '0018', '0017', '0016', '0015', '0014', '0013', '0012']);
     await expect(run(db, (c) => migrateDown(c, 1))).rejects.toThrow(/Refusing to drop ledger incidents/);
     expect(await down(db, 1)).toEqual(['0011']);

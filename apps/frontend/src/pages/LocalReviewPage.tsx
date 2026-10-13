@@ -32,6 +32,7 @@ export default function LocalReviewPage() {
   const [text, setText] = useState('');
   const [compared, setCompared] = useState(false);
   const [result, setResult] = useState('');
+  const [linked, setLinked] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [fields, setFields] = useState<Record<string, string>>({});
@@ -80,6 +81,7 @@ export default function LocalReviewPage() {
     setText('');
     setCompared(false);
     setResult('');
+    setLinked(false);
     const c = captureDtoSchema.parse(await json('/captures/' + id));
     const p = await link('/reports/' + c.reportId + '/download-url');
     const t = await link('/captures/' + c.id + '/text-url');
@@ -149,6 +151,17 @@ export default function LocalReviewPage() {
       throw new Error('Reviewer comparison is required.');
     await json('/captures/' + capture.id + '/decision', { decision });
     await load(capture.id);
+  }
+  async function verifyLink() {
+    if (!capture || !compared || !roles.includes('reviewer'))
+      throw new Error('Reviewer comparison is required.');
+    // The weaker, coded attestation: the registered identifier route is for a screen that does not exist yet.
+    await json('/reports/' + capture.reportId + '/patient-link/decisions', {
+      decision: 'verified',
+      method: 'person-confirmed',
+      basisCode: 'documented-clinic-procedure',
+    });
+    setLinked(true);
   }
   async function evaluate() {
     if (!capture || capture.latestDecision?.decision !== 'accepted')
@@ -327,9 +340,18 @@ export default function LocalReviewPage() {
           >
             Reject capture
           </Button>
+          <Button
+            disabled={busy || !compared || !roles.includes('reviewer')}
+            onClick={() => void act(verifyLink)}
+          >
+            Confirm this report belongs to its patient
+          </Button>
+          {linked && <p role="status">Patient link recorded as verified.</p>}
           <p>
             The API independently refuses decisions by anyone who created,
-            uploaded, completed or captured this report.
+            uploaded, completed or captured this report. An evaluation also
+            needs a second person to have confirmed that the report belongs to
+            its patient.
           </p>
           <Button
             disabled={busy || capture.latestDecision?.decision !== 'accepted'}

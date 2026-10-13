@@ -89,16 +89,32 @@ export class LabPipeline {
     return this.api().post(`/api/v1/reports/${reportId}/evaluations`).set(bearer(who.token)).send(body);
   }
 
-  /**
+  patientLink(who: Person, reportId: string) {
+    return this.api().get(`/api/v1/reports/${reportId}/patient-link`).set(bearer(who.token));
+  }
+
+  /** `POST /reports/:id/patient-link/decisions`. */
+  decideLink(who: Person, reportId: string, body: object) {
+    return this.api().post(`/api/v1/reports/${reportId}/patient-link/decisions`).set(bearer(who.token)).send(body);
+  }
+
+  /** A second person attests that this file belongs to its patient (the weaker method, which needs no registered identifier). */
+  verifyLink(who: Person, reportId: string) {
+    return this.decideLink(who, reportId, { decision: 'verified', method: 'person-confirmed', basisCode: 'documented-clinic-procedure' });
+  }
+
+    /**
    * The whole run up to an evaluation, by different people: a clinician uploads and captures, an independent reviewer accepts.
+   * Then (unless `verified: false`) the reviewer, who took no part in registering or uploading it, verifies the report's patient link.
    * Returns the ids an evaluation request names.
    */
-  async reviewedCapture(bytes: Buffer, who: { clinician?: Person; reviewer?: Person } = {}) {
+  async reviewedCapture(bytes: Buffer, who: { clinician?: Person; reviewer?: Person; verified?: boolean } = {}) {
     const clinician = who.clinician ?? (await this.person('clin', ['clinician']));
     const reviewer = who.reviewer ?? (await this.person('rev', ['reviewer']));
     const up = await this.uploadedLabPdf(clinician, bytes);
     const capture = (await this.capture(clinician, up.reportId).expect(201)).body;
     const acceptance = (await this.decide(reviewer, capture.id, { decision: 'accepted' }).expect(201)).body;
+    if (who.verified !== false) await this.verifyLink(reviewer, up.reportId).expect(201);
     return { clinician, reviewer, reportId: up.reportId, patientId: up.patientId, captureId: capture.id as string, acceptanceId: acceptance.id as string, upload: up };
   }
 

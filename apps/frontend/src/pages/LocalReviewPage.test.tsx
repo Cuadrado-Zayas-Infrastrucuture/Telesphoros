@@ -145,3 +145,34 @@ it("shows each missing upload field without starting a request", async () => {
 });
 
 it('allows only one capture request from two same-turn clicks',()=>{mocks.apiFetch.mockReturnValue(new Promise(()=>{}));render(<MemoryRouter><LocalReviewPage/></MemoryRouter>);fireEvent.change(screen.getByLabelText('Capture ID'),{target:{value:id}});const button=screen.getByText('Open capture');act(()=>{button.dispatchEvent(new MouseEvent('click',{bubbles:true}));button.dispatchEvent(new MouseEvent('click',{bubbles:true}));});expect(mocks.apiFetch).toHaveBeenCalledTimes(1);});
+
+it("records the patient link only after comparison, only for a reviewer, with a coded reason and no identifier", async () => {
+  setup("accepted");
+  await screen.findByText("SYNTHETIC TEXT");
+  const confirm = screen.getByText("Confirm this report belongs to its patient");
+  expect(confirm).toBeDisabled();
+  fireEvent.click(
+    screen.getByLabelText("I compared the PDF and stored text, including field associations"),
+  );
+  expect(confirm).toBeEnabled();
+  mocks.apiFetch.mockClear();
+  fireEvent.click(confirm);
+  await screen.findByText("Patient link recorded as verified.");
+  expect(mocks.apiFetch).toHaveBeenCalledTimes(1);
+  const [path, init] = mocks.apiFetch.mock.calls[0]!;
+  expect(path).toBe("/api/v1/reports/" + id + "/patient-link/decisions");
+  expect(JSON.parse((init as { body: string }).body)).toEqual({
+    decision: "verified",
+    method: "person-confirmed",
+    basisCode: "documented-clinic-procedure",
+  });
+});
+it("does not let a clinician record the patient link from this page", async () => {
+  mocks.roles = ["clinician"];
+  setup("accepted");
+  await screen.findByText("SYNTHETIC TEXT");
+  fireEvent.click(
+    screen.getByLabelText("I compared the PDF and stored text, including field associations"),
+  );
+  expect(screen.getByText("Confirm this report belongs to its patient")).toBeDisabled();
+});

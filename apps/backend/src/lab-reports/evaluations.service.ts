@@ -8,7 +8,8 @@ import { evaluate } from '../services/recommendation-engine/recommendation-engin
 import { adaptReport, adapterKnowledgeFrom, type AdapterResult } from '../services/report-adapter';
 import { applyDisputeOverlay, type DisputedCell, OVERLAY_VERSION, type OverlayResult } from '../services/knowledge/dispute-overlay';
 import type { KnowledgeSet } from '../services/knowledge/knowledge-set';
-import { DisputeChangedError } from '../ledger/ledger-types';
+import { DisputeChangedError, PatientLinkUnverifiedError } from '../ledger/ledger-types';
+import { linkState } from '../patient-identity/link-state';
 import { type ReaderResult } from '../services/report-reader/reader-result';
 import type { ReportReader } from '../services/report-reader/report-reader';
 import { LedgerRecordsRepository } from '../storage/ledger-records.repository';
@@ -85,6 +86,11 @@ export class EvaluationsService {
     const latest = await ledger.latestAcceptance(principal.tenantId, capture.id);
     if (!latest || latest.id !== acceptance.id) throw AppException.conflictBecause('stale-acceptance', 'A later decision about this capture supersedes the one named.');
 
+    // M2.1b: nothing is evaluated for a patient until a second person has recorded that THIS file belongs to them. Checked here, before the reader
+    // spends any effort, and again inside the storing transaction after the ledger lock (a decision or a file that changed in between cannot slip past).
+    const link = linkState(report, await ledger.latestPatientDecision(principal.tenantId, report.id));
+    if (link.state !== 'verified') throw this.unverified();
+
     // The stored text must still be the text that was captured and accepted.
     const stored = await this.storage.getObject(capture.textStorageKey as string, { maxBytes: MAX_TEXT_BYTES });
     if (!stored) throw AppException.conflictBecause('source-missing', 'The captured text is no longer available.');
@@ -104,11 +110,12 @@ export class EvaluationsService {
     // appeared in between, the repository refuses and we evaluate once more with the new set (the reader is not run again).
     for (let attempt = 1; ; attempt++) {
       const active = (await ledger.listDisputes(principal.tenantId)).filter((d) => d.status !== 'dismissed');
-      const input = this.build(report.patientId, report.id, capture.id, adapted, knowledge, runner, active);
+      const input = { ...this.build(report.patientId, report.id, capture.id, adapted, knowledge, runner, active), patientLinkDecisionId: link.decision!.id };
       try {
         const result = await ledger.insertEvaluation(principal.tenantId, principal.sub, input);
         return { evaluation: await this.present(principal.tenantId, result.record), created: result.created };
       } catch (error) {
+        if (error instanceof PatientLinkUnverifiedError) throw this.unverified();
         if (!(error instanceof DisputeChangedError) || attempt >= 2) throw error;
         this.logger.warn({ event: 'dispute-changed-retry' }, 'A dispute changed while evaluating; evaluating once more');
       }
@@ -138,6 +145,10 @@ export class EvaluationsService {
   }
 
   // ---- helpers ---------------------------------------------------------------------------------------------------------------
+
+  private unverified(): AppException {
+    return AppException.conflictBecause('patient-link-unverified', 'This report has not been verified as belonging to its patient. A second person must verify it first.');
+  }
 
   /** The reader could not run or ran out of time: say so, store NOTHING. A repeating failure shows in the log, never as a record. */
   private failIfOperational(read: ReaderResult): void {

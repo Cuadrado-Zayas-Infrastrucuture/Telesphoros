@@ -177,6 +177,15 @@ resource "aws_secretsmanager_secret" "api_invitation_digest_key" {
   recovery_window_in_days = local.secret_recovery_days
 }
 
+resource "aws_secretsmanager_secret" "api_identifier_digest_key" {
+  count       = local.api_count
+  name        = "${local.name}/api/identifier-digest-key"
+  description = "IDENTIFIER_DIGEST_KEY: 64 hex characters (openssl rand -hex 32), the master for the digests of patient identifiers. Value set by hand and NEVER rotated casually: raw identifiers are not kept, so replacing it orphans every stored identifier (docs/ops/patient-identifiers.md)."
+  kms_key_id  = aws_kms_key.data.arn
+
+  recovery_window_in_days = local.secret_recovery_days
+}
+
 resource "aws_secretsmanager_secret" "api_migrator_url" {
   count       = local.api_count
   name        = "${local.name}/api/migrator-database-url"
@@ -188,7 +197,7 @@ resource "aws_secretsmanager_secret" "api_migrator_url" {
 
 # ------------------------------------------------------------------------------------------------
 # Roles. The TASK role is the application's own identity (the report-file policy from iam.tf, nothing else). Two EXECUTION roles let ECS start a
-# task: the service's can read the three runtime secrets, the migration task's can read only the migrator secret. Neither is the application's identity.
+# task: the service's can read the runtime secrets, the migration task's can read only the migrator secret. Neither is the application's identity.
 # ------------------------------------------------------------------------------------------------
 data "aws_iam_policy_document" "api_ecs_assume" {
   statement {
@@ -246,7 +255,7 @@ data "aws_iam_policy_document" "api_execution_service" {
   statement {
     sid       = "ReadTheRuntimeSecrets"
     actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_invitation_digest_key[0].arn]
+    resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_invitation_digest_key[0].arn, aws_secretsmanager_secret.api_identifier_digest_key[0].arn]
   }
   statement {
     sid       = "DecryptSecretsThroughSecretsManager"
@@ -415,6 +424,7 @@ resource "aws_ecs_task_definition" "api" {
         { name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.api_database_url[0].arn },
         { name = "LEDGER_VERIFIER_DATABASE_URL", valueFrom = aws_secretsmanager_secret.api_ledger_verifier_url[0].arn },
         { name = "INVITATION_DIGEST_KEY", valueFrom = aws_secretsmanager_secret.api_invitation_digest_key[0].arn },
+        { name = "IDENTIFIER_DIGEST_KEY", valueFrom = aws_secretsmanager_secret.api_identifier_digest_key[0].arn },
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -669,6 +679,7 @@ output "api_secret_arns" {
     ledger_verifier_database_url = aws_secretsmanager_secret.api_ledger_verifier_url[0].arn
     migrator_database_url        = aws_secretsmanager_secret.api_migrator_url[0].arn
     invitation_digest_key        = aws_secretsmanager_secret.api_invitation_digest_key[0].arn
+    identifier_digest_key        = aws_secretsmanager_secret.api_identifier_digest_key[0].arn
   } : null
 }
 

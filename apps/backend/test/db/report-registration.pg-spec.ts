@@ -94,7 +94,10 @@ it('upgrades legacy rows unchanged and guards populated rollback before explicit
   const disposable = await createEphemeralDatabase();
   try {
     await withAdmin(disposable.adminUrl, async c => {
-      expect(await migrateDown(c, 6)).toEqual(['0019', '0018', '0017', '0016', '0015', '0014']);
+      // 0020 holds audit records (patient-link decisions), so reverting it needs the same deliberate setting as the other audit migrations.
+      await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
+      expect(await migrateDown(c, 7)).toEqual(['0020', '0019', '0018', '0017', '0016', '0015', '0014']);
+      await c.query(`RESET telesphoros.allow_audit_drop`);
       const p = (await c.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ($1,$2,'SYN-LEGACY') RETURNING id`, [tenant, actor])).rows[0].id;
       const row = (await c.query(`INSERT INTO reports (tenant_id,created_by,patient_id,type,original_filename,size_bytes)
         VALUES ($1,$2,$3,'vcf','legacy.vcf',100) RETURNING *`, [tenant, actor, p])).rows[0];
@@ -102,7 +105,10 @@ it('upgrades legacy rows unchanged and guards populated rollback before explicit
       const upgraded = (await c.query('SELECT * FROM reports WHERE id=$1 AND tenant_id=$2', [row.id, tenant])).rows[0];
       expect(upgraded).toEqual({ ...row, creation_request_id: null, creation_request_hash: null, upload_revision: expect.any(String) });
       // Keep the 0014 rollback guard under test at its own version boundary.
-      expect(await migrateDown(c, 5)).toEqual(['0019', '0018', '0017', '0016', '0015']);
+      // 0020 holds audit records (patient-link decisions), so reverting it needs the same deliberate setting as the other audit migrations.
+      await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
+      expect(await migrateDown(c, 6)).toEqual(['0020', '0019', '0018', '0017', '0016', '0015']);
+      await c.query(`RESET telesphoros.allow_audit_drop`);
       // The only data loss here is retry metadata in this helper-owned disposable database.
       const key = randomUUID();
       await c.query(`INSERT INTO reports (tenant_id,created_by,patient_id,type,original_filename,size_bytes,creation_request_id,creation_request_hash)
@@ -125,7 +131,7 @@ it('fails migration on bounded lock contention without a partial upgrade, then s
   const disposable = await createEphemeralDatabase();
   const blocker = new Client({ connectionString: disposable.adminUrl });
   try {
-    await withAdmin(disposable.adminUrl, c => migrateDown(c, 6));
+    await withAdmin(disposable.adminUrl, async c => { await c.query(`SET telesphoros.allow_audit_drop = 'yes'`); await migrateDown(c, 7); }); // 0020 is an audit migration
     await blocker.connect(); await blocker.query('BEGIN'); await blocker.query('LOCK TABLE reports IN ACCESS EXCLUSIVE MODE');
     await expect(withAdmin(disposable.adminUrl, c => migrateUp(c))).rejects.toThrow(/lock timeout/);
     await blocker.query('ROLLBACK');

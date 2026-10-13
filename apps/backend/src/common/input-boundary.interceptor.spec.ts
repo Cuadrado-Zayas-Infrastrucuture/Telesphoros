@@ -15,6 +15,7 @@ import { LedgerController } from '../ledger/ledger.controller';
 import { HealthController } from '../health/health.controller';
 import { MeController } from '../me/me.controller';
 import { MembersController } from '../members/members.controller';
+import { PatientIdentifiersController, ReportPatientLinkController } from '../patient-identity/patient-identity.controller';
 import { InputBoundaryInterceptor } from './input-boundary.interceptor';
 import { ZodValidationPipe } from './zod-validation.pipe';
 
@@ -33,6 +34,8 @@ const controllers: Type[] = [
   HealthController,
   MeController,
   MembersController,
+  PatientIdentifiersController,
+  ReportPatientLinkController,
 ];
 const routes = controllers.flatMap((controller) =>
   Object.getOwnPropertyNames(controller.prototype)
@@ -61,7 +64,7 @@ it('inventories every registered production controller and strict input pipe', (
     .filter((file) => String(file).endsWith('.controller.ts'))
     .flatMap((file) => [...readFileSync(resolve(source, String(file)), 'utf8').matchAll(/export class (\w+Controller)\b/g)].map((match) => match[1]));
   expect(controllers.map((c) => c.name).sort()).toEqual(declared.sort());
-  expect(controllers).toHaveLength(14);
+  expect(controllers).toHaveLength(16);
   expect(routes.length).toBeGreaterThan(30);
   for (const { controller, name } of routes) {
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, controller, name) ?? {};

@@ -21,6 +21,7 @@ export const EVENT_TYPE_FOR_TABLE = {
   corrections: 'correction',
   cell_disputes: 'dispute',
   cell_dispute_decisions: 'dispute-decision',
+  report_patient_decisions: 'patient-link-decision',
 } as const;
 export type RecordTable = keyof typeof EVENT_TYPE_FOR_TABLE;
 export const RECORD_TABLES = Object.keys(EVENT_TYPE_FOR_TABLE) as RecordTable[];
@@ -57,6 +58,17 @@ export class DisputeChangedError extends Error {
   constructor() {
     super('A dispute changed while the evaluation was being made.');
     this.name = 'DisputeChangedError';
+  }
+}
+
+/**
+ * The report's patient link is not verified for the file it holds now: no decision, a rejection, or a decision made about an earlier file. Raised
+ * AFTER the ledger lock is held, so a decision recorded or a file replaced in between cannot slip past. Nothing was saved.
+ */
+export class PatientLinkUnverifiedError extends Error {
+  constructor() {
+    super('The report is not verified as belonging to its patient.');
+    this.name = 'PatientLinkUnverifiedError';
   }
 }
 

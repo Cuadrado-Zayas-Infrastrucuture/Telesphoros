@@ -15,6 +15,7 @@ import { MeModule } from './me/me.module';
 import { MembersModule } from './members/members.module';
 import { ObjectStorageModule } from './object-storage/object-storage.module';
 import type { RecoveryObjectStorage } from './object-storage/recovery-object-storage';
+import { PatientIdentityModule } from './patient-identity/patient-identity.module';
 import { PatientsModule } from './patients/patients.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
 import { ReportsModule } from './reports/reports.module';
@@ -39,6 +40,7 @@ export class AppModule {
         ObjectStorageModule.register(env, recovery),
         LabReportsModule,
         PatientsModule,
+        PatientIdentityModule,
         ReportsModule,
         RecommendationsModule,
         HealthModule,

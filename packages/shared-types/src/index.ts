@@ -3,6 +3,7 @@ export * from './errors';
 export * from './lab-report';
 export * from './members';
 export * from './pagination';
+export * from './patient-identity';
 export * from './patient';
 export * from './recommendation';
 export * from './report';

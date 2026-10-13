@@ -44,6 +44,9 @@ const { startFakeIdp, DEFAULT_USERS } = require('../../packages/fake-idp/dist/in
     const reject=await(await call(`/captures/${capture.id}/decision`,{decision:'rejected'},gina)).json();
     assert.equal((await call(`/reports/${report.id}/evaluations`,{captureId:capture.id,acceptanceId:reject.id},hal)).status,409);console.log('PASS rejected capture refused');
     const ac=await call(`/captures/${capture.id}/decision`,{decision:'accepted'},gina);assert.equal(ac.status,201);const accept=await ac.json();
+    assert.equal((await call(`/reports/${report.id}/evaluations`,{captureId:capture.id,acceptanceId:accept.id},hal)).status,409);console.log('PASS unverified patient link refused');
+    assert.equal((await call(`/reports/${report.id}/patient-link/decisions`,{decision:'verified',method:'person-confirmed',basisCode:'documented-clinic-procedure'},hal)).status,409);console.log('PASS the uploader cannot verify the patient link');
+    assert.equal((await call(`/reports/${report.id}/patient-link/decisions`,{decision:'verified',method:'person-confirmed',basisCode:'documented-clinic-procedure'},gina)).status,201);console.log('PASS patient link verified by a second person');
     const er=await call(`/reports/${report.id}/evaluations`,{captureId:capture.id,acceptanceId:accept.id},hal);assert.equal(er.status,201);const e=await er.json();
     const expected=JSON.parse(readFileSync(path.join(root,'tests/report_adapter/golden.json'),'utf8')).cases.find(c=>c.id==='D01');assert.equal(e.disposition,expected.disposition);for(const result of e.results){const want=expected.engine[result.drug];assert.deepEqual({outcome:result.outcome,strength:result.strength,recommendationText:result.recommendationText},want);}
     assert.equal(e.scope,'synthetic-test-only/1');assert.equal(e.clinicalUse,'not-approved');assert.equal(e.actionable,false);
