@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmdirSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { evaluate } from '../recommendation-engine/recommendation-engine';
 import { evaluationResultSchema, type GeneInput } from '@telesphoros/cpic-schema';
@@ -6,7 +7,8 @@ import { KnowledgeLoadError, loadKnowledge } from '../knowledge/knowledge-loader
 import type { KnowledgeSet } from '../knowledge/knowledge-set';
 import { PINNED_POPPLER_VERSION } from '../report-reader/pinned-reader';
 import type { ReaderResult } from '../report-reader/reader-result';
-import { SubprocessReportReader } from '../report-reader/subprocess-report-reader';
+import { DEFAULT_CLI_PATH, DEFAULT_ENGINE_DIR, SubprocessReportReader } from '../report-reader/subprocess-report-reader';
+import type { ReportReader } from '../report-reader/report-reader';
 import { adaptReport } from './adapt-report';
 import { type AdapterKnowledge, adapterKnowledgeFrom } from './adapter-knowledge';
 import { canonicalHash, sha256Hex } from './canonical-json';
@@ -52,9 +54,84 @@ async function accept(text: string, over: Partial<Parameters<InMemoryCaptureAcce
 /** Read a text with the real reader and adapt it, with an acceptance on file unless told otherwise. */
 async function full(text: string, tweak?: (result: ReaderResult) => ReaderResult): Promise<AdapterResult> {
   const acceptance = await accept(text);
-  const raw = await reader.read(text);
+  const raw = await readFixture(text);
   return adaptReport({ tenantId: TENANT, captureAcceptanceId: acceptance.id, text, reader: tweak ? tweak(structuredClone(raw)) : raw }, { captures: store, knowledge: adapterKnowledge });
 }
+
+async function readFixture(text: string, source: ReportReader = reader): Promise<ReaderResult> {
+  const first = await source.read(text);
+  // Golden assertions exercise content, while deadline enforcement has its own real-process
+  // controls. Follow the existing timeout action once; a repeated failure stays a hold and
+  // fails the golden. Keep both the engine's and the subprocess's deadlines unchanged.
+  if (first.projection.status !== 'held' || first.projection.reason !== 'source-time-budget') return first;
+  process.stderr.write('[adapter fixture] Retrying one source-time-budget hold.\n');
+  return source.read(text);
+}
+
+describe('adapter fixture reader timeouts', () => {
+  const directories: string[] = [];
+  afterEach(() => {
+    for (const directory of directories.splice(0)) {
+      const marker = join(directory, 'attempt');
+      if (existsSync(marker)) unlinkSync(marker);
+      rmdirSync(directory);
+    }
+  });
+  // Real process controls: the first CLI launch is delayed, then the same command runs the
+  // unchanged sidecar and imported engine. No fabricated successful reader packet is used.
+  const delayedReader = (alwaysDelay: boolean) => {
+    const directory = mkdtempSync(join(tmpdir(), 'adapter-reader-'));
+    directories.push(directory);
+    const marker = join(directory, 'attempt');
+    const command = [
+      'python3', '-I', '-B', '-c',
+      'import os, pathlib, sys, time; marker = pathlib.Path(sys.argv[1]); delay = not marker.exists() or sys.argv[4] == "always"; marker.write_text("attempted"); time.sleep(2 if delay else 0); os.execv(sys.executable, [sys.executable, "-I", "-B", sys.argv[2], sys.argv[3], "process"])',
+      marker, DEFAULT_CLI_PATH, DEFAULT_ENGINE_DIR, alwaysDelay ? 'always' : 'once',
+    ];
+    const attempts: ReaderResult[] = [];
+    const real = new SubprocessReportReader({ mode: 'non-production', command, deadlineMs: 1_000 });
+    const source: ReportReader = { read: async (text) => {
+      const result = await real.read(text);
+      attempts.push(result);
+      return result;
+    } };
+    return { source, attempts };
+  };
+
+  it('retries one real timeout and still meets the hand-written D01 adapter expectation', async () => {
+    const { source, attempts } = delayedReader(false);
+    const text = captureText('D01');
+    const acceptance = await accept(text);
+    const raw = await readFixture(text, source);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]!.projection).toMatchObject({ status: 'held', reason: 'source-time-budget' });
+    const result = await adaptReport({ tenantId: TENANT, captureAcceptanceId: acceptance.id, text, reader: raw }, { captures: store, knowledge: adapterKnowledge });
+    expect(result.disposition).toBe('evaluated');
+    expect(evaluated(result).geneInputs).toEqual(golden.find((c) => c.id === 'D01')!.geneInputs);
+  });
+
+  it('stops after a second real timeout and preserves the operational hold', async () => {
+    const { source, attempts } = delayedReader(true);
+    const result = await readFixture(captureText('D01'), source);
+    expect(attempts).toHaveLength(2);
+    expect(result.projection).toMatchObject({ status: 'held', reason: 'source-time-budget', payload: null });
+  });
+
+  it('does not retry a content hold or a broken worker', async () => {
+    for (const command of [['python3', '-I', '-B', DEFAULT_CLI_PATH, DEFAULT_ENGINE_DIR, 'process'], ['python3', '-I', '-B', '-c', 'print("not-json")']]) {
+      const attempts: ReaderResult[] = [];
+      const real = new SubprocessReportReader({ mode: 'non-production', command });
+      const result = await readFixture(captureText('D08'), { read: async (text) => {
+        const outcome = await real.read(text);
+        attempts.push(outcome);
+        return outcome;
+      } });
+      expect(attempts).toHaveLength(1);
+      expect(result.projection.status).toBe('held');
+      expect(result.projection.reason).toBe(command.length === 6 ? 'alignment-unsupported' : 'worker-error');
+    }
+  });
+});
 
 const held = (result: AdapterResult) => {
   if (result.disposition !== 'held') throw new Error('expected a hold');
