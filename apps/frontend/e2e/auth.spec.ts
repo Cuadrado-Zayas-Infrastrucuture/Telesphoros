@@ -135,3 +135,10 @@ test.describe('the keyboard', () => {
     await expect(page.getByRole('heading', { name: /Fake identity provider/ })).toBeVisible();
   });
 });
+
+
+test('reports remains unavailable without the owned-storage opt-in', async ({ page }) => {
+  await page.goto('/reports');
+  await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Reports', exact: true })).toHaveCount(0);
+});

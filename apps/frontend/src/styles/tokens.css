@@ -1,3 +1,12 @@
+/* Shared brand font; this token sheet is also imported by the local SMART pilot. */
+@font-face {
+  font-family: 'Poppins';
+  src: url('../assets/fonts/Poppins-SemiBold.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
 /*
  * Design tokens — the ONE place colors, fonts, spacing and control sizes are defined.
  * index.css maps these into the Tailwind theme; ESLint bans arbitrary values so nothing
@@ -6,16 +15,16 @@
  */
 :root {
   /* Color */
-  --background: #ffffff;
-  --foreground: #0f172a;
-  --surface: #f8fafc;
-  --muted: #f1f5f9;
-  --muted-foreground: #475569;
-  --border: #64748b; /* 4.8:1 on white — meets 3:1 for UI controls */
-  --divider: #cbd5e1; /* decorative separators only */
-  --primary: #0b5cad;
-  --primary-hover: #084a8c;
-  --primary-foreground: #ffffff;
+  --background: #F5F6F7;
+  --foreground: #225560;
+  --surface: #E8E7E2;
+  --muted: #DCEBE7;
+  --muted-foreground: #46616a;
+  --border: #59777e; /* Control boundary; decorative dividers are separate. */
+  --divider: #cadbdc; /* decorative teal-tinted separators only */
+  --primary: #225560;
+  --primary-hover: #173e47;
+  --primary-foreground: #F5F6F7;
   --destructive: #b91c1c;
   --destructive-foreground: #ffffff;
   --destructive-surface: #fef2f2;
@@ -23,9 +32,13 @@
   --success-surface: #f0fdf4;
   --warning: #92400e;
   --warning-surface: #fffbeb;
-  --ring: #0b5cad;
+  --ring: #225560;
+
+  /* Brand graphics only: not body text, success, or warning. */
+  --brand-accent: #368798;
 
   /* Type */
+  --font-family-heading: Poppins, Arial, sans-serif;
   --font-family-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
@@ -46,4 +59,5 @@
   /* Layout */
   --size-page: 72rem;
   --size-prose: 40rem;
+  --size-report-list: 24rem;
 }

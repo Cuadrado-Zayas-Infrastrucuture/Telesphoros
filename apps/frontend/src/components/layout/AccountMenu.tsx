@@ -14,11 +14,11 @@ export function AccountMenu() {
     );
   }
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-sm text-muted-foreground">
-        Signed in as <strong className="text-foreground">{primaryRole(roles) ?? 'user with no role'}</strong>
+    <div className="flex items-center gap-2 sm:gap-3">
+      <span className="text-xs text-muted-foreground sm:text-sm">
+        <span className="hidden sm:inline">Signed in as </span><strong className="text-foreground">{primaryRole(roles) ?? 'user with no role'}</strong>
       </span>
-      <Button variant="outline" onClick={() => void signOut()}>
+      <Button variant="outline" className="text-sm" onClick={() => void signOut()}>
         Sign out
       </Button>
     </div>

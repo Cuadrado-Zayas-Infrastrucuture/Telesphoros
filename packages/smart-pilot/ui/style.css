@@ -15,11 +15,15 @@ dd {
   font: inherit;
   color: var(--foreground);
   background: var(--background);
-  border: 1px solid var(--divider);
+  border: 1px solid var(--border);
   border-radius: var(--radius-2);
+  min-height: var(--size-control);
   padding: calc(2 * var(--space-unit)) calc(3 * var(--space-unit));
   margin-top: calc(3 * var(--space-unit));
 }
 .pilot-recheck:disabled {
   color: var(--muted-foreground);
 }
+
+h1, h2, h3 { font-family: var(--font-family-heading); font-weight: 600; }
+:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; }

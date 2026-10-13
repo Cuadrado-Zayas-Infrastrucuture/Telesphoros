@@ -39,3 +39,19 @@ export async function signInWithPatient(page: Page) {
   }
   throw new Error('Synthetic patient fixture was not listed within the bounded test pages.');
 }
+
+/** Selects a real synthetic fixture from independently bounded patient-option pages. */
+export async function selectReportsPatient(page: Page, fixture: { id: string; label: string }) {
+  const refresh = page.getByRole('button', { name: 'Refresh patient options', exact: true });
+  await expect(refresh).toHaveAttribute('aria-disabled', 'false'); await refresh.click();
+  for (let attempt = 0; attempt < 100; attempt++) {
+    await expect(refresh).toHaveAttribute('aria-disabled', 'false');
+    if (await page.getByRole('option', { name: fixture.label, exact: true }).count()) {
+      await page.getByLabel('Filter by patient').selectOption(fixture.id); return;
+    }
+    const next = page.getByRole('button', { name: 'Next patient page', exact: true });
+    if (!(await next.count()) || await next.getAttribute('aria-disabled') === 'true') break;
+    await next.click();
+  }
+  throw new Error('Synthetic report patient was not listed within bounded option pages.');
+}
