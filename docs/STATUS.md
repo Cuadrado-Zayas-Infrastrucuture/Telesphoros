@@ -3,6 +3,9 @@
 Read this first to pick the project up. Snapshot: **2026-10-13**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Planned: M1.5 live membership and revocation (plan only)
+
+A [slice plan](design/plans/m1-5-live-membership-revocation.md) moves who may do what from the token to a PostgreSQL membership table checked on every request (closing I03, and I04 with DA-1): removal or a role change takes effect on the next request on every API replica, a lookup failure denies protected work (503), and writes re-check authority inside their own transaction so none commits after a removal does. Cognito stays the identity provider. No code, migration or script exists yet; the founder's yes or change on DA-1, DA-2, DM-1 and DM-2 is needed first.
 ## M1.4 no-store responses and tenant logs (draft PR)
 
 Founder asked to start M1.4 of the [audit build plan](design/plans/repo-audit-and-build-plan.md). Every API response, including 401, 403, 404, 429 and the health and readiness probes, now carries `Cache-Control: private, no-store` from one middleware registered before routing; the authenticated browser request wrapper also sends `cache: 'no-store'`. Request-completion and failure logs now carry `tenantId` from the verified principal (never from a header or query) next to `userId`. Tests failed on the unchanged code and pass after the change; a header-sourced tenant is caught by a control. See the [plan](design/plans/m1-4-no-store-tenant-logging.md) and [verification](verification/m1-4-no-store-tenant-logging.md). Closes research-audit E06 and O02 at synthetic scope; the audit event store (M1.6), live revocation (M1.5) and hosted/CDN behavior (T13) remain open. No schema, authorization, retention or clinical-gate change.
