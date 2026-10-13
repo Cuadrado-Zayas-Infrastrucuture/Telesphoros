@@ -64,6 +64,8 @@ export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthPr
       const doFetch = fetchImpl ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
       return doFetch(`${apiBaseUrl}${path}`, {
         ...init,
+        // After the caller's options on purpose: an authenticated response (patients, reports, results) is never kept in the browser HTTP cache.
+        cache: 'no-store',
         headers: { ...(init.headers as Record<string, string> | undefined), Authorization: `Bearer ${held.accessToken}` },
       });
     },
