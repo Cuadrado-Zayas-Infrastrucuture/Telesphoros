@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { Pool, type PoolClient } from 'pg';
 import { pendingMigrations } from './migrator';
 import { pgClientConfig } from './tls';
+import type { SecurityAuditEvent } from '../auth/security-audit';
 
 export interface DatabaseOptions {
   /** Shown in pg_stat_activity. Tests give each pool its own, to tell which connection is waiting. */
@@ -79,6 +80,13 @@ export class Database {
   /** Cheap liveness probe for /ready. */
   async ping(): Promise<void> {
     await this.pool.query('SELECT 1');
+  }
+
+  /** The app role has EXECUTE on this writer, but no table privileges. */
+  async recordSecurityEvent(event: SecurityAuditEvent): Promise<void> {
+    await this.pool.query('SELECT public.security_audit_record($1,$2,$3,$4,$5,$6,$7)', [
+      event.type, event.outcome, event.tenantId, event.actorSub, event.routeKey, event.subjectId, event.requestId,
+    ]);
   }
 
   /** Pending versions after strict history validation; invalid or newer recorded history throws. */

@@ -33,6 +33,10 @@ A [draft plan](design/plans/soup-pilot.md) proposes a dev-only pilot of [Soup](h
 
 Founder approved the focused readiness fix with strict version/checksum matching and subsequently authorized commit and draft PR delivery. Readiness now delegates to the existing migration-history validator and rejects checksum drift and unknown newer versions, with generic 503 responses and unchanged liveness. Real PostgreSQL regressions demonstrated both defects before the fix; all three backend profiles passed locally. See [verification](verification/t02-readiness.md) for completed checks and limits. Broader old/new schema compatibility and G01 acceptance remain separate. Merged as #81; its `main` CI run passed. Deployment is not authorized.
 
+## T04 application access audit (focused PR)
+
+The separate `feat/local-access-audit` branch adds append-only API authentication, private-read and report download-link events with restricted PostgreSQL access and fail-closed private reads. See the [event contract and limits](ops/application-access-audit.md). This is synthetic local verification only: the unmerged T03 membership branch has a conflicting migration number, and operator membership events, true IdP sign-in, hosted custody, retention and G05/G09 acceptance remain separate. No merge or deployment is claimed.
+
 ## Final synthetic OpenEMR workflow acceptance
 
 An explicit local acceptance command now connects real OpenEMR chart launches and SMART OAuth/PKCE to the built reader/viewer, actual API, restricted PostgreSQL role and versioned Moto PDFs. It verifies source download, correction rechecks, offline clearing/revocation, explicit replacement selection, missing-source refusal and an unconsented second chart. Connector reads leave evaluation/ledger counts unchanged. See the [plan](design/plans/synthetic-workflow-acceptance.md), [runbook](ops/synthetic-workflow-acceptance.md) and [verification](verification/synthetic-workflow-acceptance.md). This completes the planned synthetic integration sequence; clinical validation, hosted-service acceptance and production release remain open. No retention, clinical gate or production behavior changes.

@@ -1,13 +1,15 @@
 import { Test } from '@nestjs/testing';
 import { ConfigModule } from '../config/config.module';
 import { loadEnv } from '../config/env';
+import { StorageModule } from '../storage/storage.module';
 import { AuthModule } from './auth.module';
 import { CognitoTokenVerifier } from './cognito-token-verifier';
 import { HmacTokenVerifier, TokenVerifier } from './token-verifier';
 
 // The e2e harness replaces the verifier, so THIS is what proves production wiring picks the right one.
 async function verifierFor(source: Record<string, string>) {
-  const module = await Test.createTestingModule({ imports: [ConfigModule.forRoot(loadEnv(source)), AuthModule] }).compile();
+  const env = loadEnv(source);
+  const module = await Test.createTestingModule({ imports: [ConfigModule.forRoot(env), StorageModule.register(env), AuthModule] }).compile();
   return module.get(TokenVerifier);
 }
 const optionsOf = (verifier: unknown) => (verifier as { options: { issuer: string; clientId: string; jwksUri?: string } }).options;

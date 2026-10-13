@@ -158,15 +158,15 @@ describe('readiness against a real database', () => {
     await request(app.getHttpServer()).get('/api/v1/health').expect(200);
   });
 
-  it('API calls fail cleanly (500 in the standard envelope, no database details) while the database is down', async () => {
+  it('private API calls fail closed (503 without database details) when access auditing is down', async () => {
     const db = await createEphemeralDatabase();
     dbs.push(db);
     const app = await boot(db);
     await db.drop();
     const token = await signToken({ sub: 'user-a', roles: ['reader'] });
     const res = await request(app.getHttpServer()).get('/api/v1/patients').set(bearer(token));
-    expect(res.status).toBe(500);
-    expect(res.body.error.code).toBe('INTERNAL_ERROR');
+    expect(res.status).toBe(503);
+    expect(res.body.error.code).toBe('SERVICE_UNAVAILABLE');
     expect(res.text).not.toMatch(/does not exist|test_[0-9a-f]{12}|postgres/i);
   });
 });
