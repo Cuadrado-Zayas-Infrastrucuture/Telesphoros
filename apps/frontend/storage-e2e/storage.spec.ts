@@ -38,11 +38,11 @@ async function rows(page: Page, fixture: Awaited<ReturnType<typeof signInWithPat
 }
 async function findReport(page: Page, id: string) {
   for (let attempt = 0; attempt < 100; attempt++) {
-    await expect(page.getByRole('button', { name: 'Refresh reports' })).toBeEnabled();
-    const item = page.getByRole('list', { name: 'Reports', exact: true }).getByRole('listitem').filter({ hasText: id });
-    if (await item.count()) return item;
-    const next = page.getByRole('button', { name: 'Next reports', exact: true });
-    if (!(await next.isEnabled())) break;
+    await expect(page.getByRole('button', { name: 'Refresh reports' })).toHaveAttribute('aria-disabled', 'false');
+    const trigger = page.getByTestId(`report-${id}`);
+    if (await trigger.count()) { await trigger.click(); return page.getByRole('region', { name: 'Report details', exact: true }); }
+    const next = page.getByRole('button', { name: 'Next report page', exact: true });
+    if (await next.getAttribute('aria-disabled') === 'true') break;
     await next.click();
   }
   throw new Error('Synthetic report not found within bounded pages.');
@@ -133,7 +133,7 @@ test('reader sees metadata but cannot request a file or upload', async ({ page }
   const reply = await me; const headers = { Authorization: reply.request().headers().authorization! };
   await expect(page.getByText('Your role can view report metadata only.')).toBeVisible();
   await expect(page.getByRole('button', { name: /^Download / })).toHaveCount(0);
-  await expect(page.getByText(`Reference ${report.id}`, { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId(`report-${report.id}`)).toHaveCount(0);
   const foreign = await page.request.get(`${fixture.api}/api/v1/reports/${report.id}`, { headers }); expect(foreign.status()).toBe(404);
   const refused = await page.request.get(`${fixture.api}/api/v1/reports/${report.id}/download-url`, { headers }); expect(refused.status()).toBe(403);
 });
@@ -151,7 +151,7 @@ test('reports pagination, keyboard download, reviewer access and accessibility',
   }
   await page.getByRole('button', { name: /sign out/i }).click();
   await signInAs(page, 'gina', '/reports');
-  await expect(page.getByRole('button', { name: 'Next reports', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Next report page', exact: true })).toHaveAttribute('aria-disabled', 'false');
   const require = createRequire(import.meta.url);
   await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
   const violations = await page.evaluate(async () => {
@@ -160,7 +160,7 @@ test('reports pagination, keyboard download, reviewer access and accessibility',
   });
   expect(violations).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  const button = (await findReport(page, report.id)).getByRole('button');
+  const button = (await findReport(page, report.id)).getByRole('button', { name: `Download ${report.filename}`, exact: true });
   await button.focus(); await expect(button).toBeFocused();
   const downloaded = page.waitForEvent('download'); await page.keyboard.press('Enter');
   expect(await readFile((await (await downloaded).path())!)).toEqual(sample.bytes);
@@ -168,5 +168,7 @@ test('reports pagination, keyboard download, reviewer access and accessibility',
   await page.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Synthetic report storage' })).toBeVisible();
   await expect(page.getByRole('contentinfo')).toContainText('Clinical processing is disabled');
-  await page.getByRole('link', { name: 'Upload a synthetic report' }).click(); await expect(page.getByRole('heading', { name: /do not have access/i })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Upload a synthetic report' })).toHaveCount(0);
+  await page.context().clearCookies(); await signInAs(page, 'gina', '/reports/upload');
+  await expect(page.getByRole('heading', { name: /do not have access/i })).toBeVisible();
 });

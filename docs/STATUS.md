@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-13**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Modern reports dashboard and shared branding
+
+The founder approved the researched dashboard sketch for implementation on current main after the owned-storage browser/operations slices. The existing opt-in reports screen now has a bounded patient-filtered list, desktop detail panel, mobile list/detail navigation and native technical disclosure. It retains the existing verified attachment downloader and upload/read/download roles. Shared tokens, Poppins headings, full-name company endorsement and the square/genome company symbol carry through the frontend and local SMART pilot typography. See the [plan](design/plans/reports-dashboard-modern.md) and [verification](verification/reports-dashboard-modern.md). Backend, schema, authentication/tenant policies, owned-storage admission, clinical gates and DEV route boundaries are unchanged. Prepared for draft PR review; local evidence does not claim remote CI acceptance, deployment or clinical approval.
+
 ## Planned: Soup training pilot (plan only)
 
 A [draft plan](design/plans/soup-pilot.md) proposes a dev-only pilot of [Soup](https://github.com/MakazhanAlpamys/Soup) (Apache-2.0, Alpha, pinned v0.76.0) as a synthetic-only section classifier for lab-report text, measured against a rule-based baseline on a hand-labelled set. It needs founder decisions D1 to D5 before any environment, data, model download or training. Nothing is installed or run, and the reader, engine, API, database and AWS are untouched.

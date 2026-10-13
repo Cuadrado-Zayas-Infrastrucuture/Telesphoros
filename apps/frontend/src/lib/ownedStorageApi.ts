@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { fileLinkDtoSchema, paginatedSchema, reportCreateSchema, reportDtoSchema } from '@telesphoros/shared-types';
+import { fileLinkDtoSchema, paginatedSchema, reportCreateSchema, reportDtoSchema, reportListQuerySchema } from '@telesphoros/shared-types';
 import { SessionEndedError, NotSignedInError } from '@/auth/AuthProvider';
 import { SubmitError, reportStorageOrigins, type ApiFetch, type UploadProgress } from './api';
 import type { ProductUploadValues } from './productUploadSchema';
@@ -97,18 +97,26 @@ export async function submitOwnedReport(values: ProductUploadValues, api: ApiFet
   return verified(await request(api, `/reports/${existing.id}`));
 }
 
-export async function listReports(api: ApiFetch, page: number, signal?: AbortSignal) {
+/** One bounded tenant-authorized page; the dashboard keeps filters out of browser history. */
+export async function listReports(api: ApiFetch, page: number, signal?: AbortSignal, patientId?: string) {
   try {
-    const response = await api(`/api/v1/reports?page=${page}&pageSize=20`, { signal });
+    const query = reportListQuerySchema.parse({ page, pageSize: 20, ...(patientId ? { patientId } : {}) });
+    if (!Number.isSafeInteger(query.page)) throw new Error();
+    const params = new URLSearchParams({ page: String(query.page), pageSize: '20', ...(query.patientId ? { patientId: query.patientId } : {}) });
+    const response = await api(`/api/v1/reports?${params}`, { signal });
     if (!response.ok) throw new Error();
     const result = paginatedSchema(reportDtoSchema).parse(await response.json());
-    if (result.meta.page !== page || result.meta.pageSize !== 20 || result.data.length > 20) throw new Error();
+    const { meta, data } = result;
+    if (meta.page !== query.page || meta.pageSize !== 20 || data.length > 20
+      || meta.totalPages !== Math.ceil(meta.total / 20) || data.length > meta.total
+      || data.some(report => query.patientId && report.patientId !== query.patientId)) throw new Error();
     return result;
   } catch (error) {
     if (signal?.aborted || error instanceof SessionEndedError || error instanceof NotSignedInError) throw error;
     throw new SubmitError('Reports could not be loaded. Please retry.');
   }
 }
+
 export async function downloadReport(api: ApiFetch, id: string, filename: string, sizeBytes: number, sha256: string | null) {
   try {
     const origins = reportStorageOrigins();
