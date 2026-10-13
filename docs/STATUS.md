@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-11**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Planned: Soup training pilot (plan only)
+
+A [draft plan](design/plans/soup-pilot.md) proposes a dev-only pilot of [Soup](https://github.com/MakazhanAlpamys/Soup) (Apache-2.0, Alpha, pinned v0.76.0) as a synthetic-only section classifier for lab-report text, measured against a rule-based baseline on a hand-labelled set. It needs founder decisions D1 to D5 before any environment, data, model download or training. Nothing is installed or run, and the reader, engine, API, database and AWS are untouched.
+
 ## Final synthetic OpenEMR workflow acceptance
 
 An explicit local acceptance command now connects real OpenEMR chart launches and SMART OAuth/PKCE to the built reader/viewer, actual API, restricted PostgreSQL role and versioned Moto PDFs. It verifies source download, correction rechecks, offline clearing/revocation, explicit replacement selection, missing-source refusal and an unconsented second chart. Connector reads leave evaluation/ledger counts unchanged. See the [plan](design/plans/synthetic-workflow-acceptance.md), [runbook](ops/synthetic-workflow-acceptance.md) and [verification](verification/synthetic-workflow-acceptance.md). This completes the planned synthetic integration sequence; clinical validation, hosted-service acceptance and production release remain open. No retention, clinical gate or production behavior changes.
