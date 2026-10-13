@@ -18,7 +18,7 @@ import { type DatabaseTls, pgClientConfig } from './tls';
  * it would inherit the right to append), and the group privileges that matter are read back with `has_function_privilege`.
  */
 
-export const PRIVILEGE_GROUPS = ['telesphoros_app', 'telesphoros_ledger', 'telesphoros_redactor', 'telesphoros_ledger_verifier', 'telesphoros_ledger_operator'] as const;
+export const PRIVILEGE_GROUPS = ['telesphoros_app', 'telesphoros_ledger', 'telesphoros_redactor', 'telesphoros_ledger_verifier', 'telesphoros_ledger_operator', 'telesphoros_security_auditor'] as const;
 
 /** The attributes the migrations give every group role (0002, 0005, 0006). A static test keeps this and those statements in agreement. */
 export const GROUP_ATTRIBUTES = 'NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS';

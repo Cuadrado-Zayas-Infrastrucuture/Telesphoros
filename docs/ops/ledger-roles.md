@@ -13,6 +13,7 @@ administrator must provide.
 | `telesphoros_redactor` | no | migration 0006 | Owns the redaction function. `UPDATE` on three columns of `event_notes` (body, redacted_at, redaction_basis_code), and nothing else. |
 | `telesphoros_ledger_verifier` | no (group) | migration 0005 | Reads every tenant's ledger and records, and the incident tables. May execute exactly two functions: `ledger_record_checkpoint` and `ledger_record_incident` (0011). Writes no record. |
 | `telesphoros_ledger_operator` | no (group) | migration 0006 | May execute `redact_event_note`, and (0011) `ledger_set_global_hold` and `ledger_clear_incident`; reads the incident tables. Runbook use only, never an API: no application code calls these (a static test pins it). See [ledger-watch.md](ledger-watch.md). |
+| `telesphoros_security_auditor` | no (group) | migration 0017 | Reads the security-event record (`SELECT` on `security_events`) and nothing else. Its login is provisioned by a person, outside the repository, like the operator's. See [security-events.md](security-events.md). |
 
 The **application**, **verifier** and **migrator** logins are created by `db provision-logins` (FD-4, [api-hosting.md](api-hosting.md#the-database-logins-db-provision-logins)); the **operator** login is provisioned outside the repository, by a person. Each login is a
 member of exactly its one group and of nothing else. The verifier login must **not** be a member of `telesphoros_app`: it would then

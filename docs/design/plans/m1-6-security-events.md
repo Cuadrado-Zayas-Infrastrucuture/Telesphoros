@@ -1,6 +1,6 @@
 # M1.6: security-event audit store (plan)
 
-Status: **plan only, awaiting founder approval.** No code, migration or script has been written. Slice M1.6 of the [repo audit and build plan](repo-audit-and-build-plan.md), closing research-audit finding **I06** (no application security-event audit store) and the security half of task **T04** ("sensitive read/export events are recorded in a restricted audit store"). Working agreement 1 requires the founder to approve this before code. Kept as local branches at the founder's request (no push, so no CI spend).
+Status: **implemented on a local branch (stacked on the local M1.5 branch, not pushed).** The founder answered yes to DS-1, DS-2, DS-3 and DS-4 on 2026-10-13 and asked to start. Slice M1.6 of the [repo audit and build plan](repo-audit-and-build-plan.md), closing research-audit finding **I06** and the security half of task **T04**. Evidence: [verification](../../verification/m1-6-security-events.md). Kept local at the founder's request (no push, so no CI spend); the branch is based on the local M1.5 branch because the trigger sits on the table M1.5 creates.
 
 ## Problem
 
@@ -94,6 +94,13 @@ Changed: the membership guard and commit check (throttled refusal events), the t
 - **A new restricted role** touches the privilege lists (`privilege-facts`, the restore's required roles, the test cluster setup); the change is mechanical and the restore check proves it.
 - Events say "authorized and the link was created", not "the file was downloaded": the download happens at the object store, outside the application (CloudTrail's S3 data events cover that).
 
-## What I need from the founder
+## Changes from this plan
 
-Yes or change on DS-1, DS-2, DS-3 and DS-4. With the recommendations as written, implementation is one PR after M1.5 merges.
+1. **Event details use only letters, digits and hyphens** (at most 64 characters per string), which excludes URLs, dotted names, tokens and spaces by construction; the allowlist of keys is `reportId`, `captureId`, `reason`, `roles`, `before`, `after`, `ttlSeconds`, `kind`.
+2. **The `authority-changed` refusal is recorded from `Database.withTenant` after the rollback** through a hook the recorder sets, as organization work (the refused person's own authority must not decide whether their refusal is written), with the request id captured first.
+3. **`CapturesService.pdfLink`**, a third link-issuing method that no route calls today, records the same `file.link.issued` event so a future route cannot issue a link unrecorded; it has no test of its own for that reason.
+4. **A new in-memory recorder** serves development and tier 1 with the same throttle; production requires PostgreSQL.
+
+## What I needed from the founder
+
+DS-1, DS-2, DS-3 and DS-4: all four answered yes on 2026-10-13.

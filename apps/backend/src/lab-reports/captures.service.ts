@@ -20,6 +20,7 @@ export const MAX_TEXT_SCALARS = 100_000;
 /** The roles that may open a stored file (the PDF or its text). A `reader` may not: a PDF is the most sensitive artifact here. */
 export { FILE_LINK_ROLES } from '../auth/file-access';
 import { FILE_LINK_ROLES } from '../auth/file-access';
+import { SecurityEvents } from '../security-events/security-events';
 
 export interface CaptureOutcome {
   capture: CaptureDto;
@@ -36,6 +37,7 @@ export class CapturesService {
     private readonly reports: ReportsRepository,
     private readonly storage: ObjectStorage,
     private readonly pipeline: PipelineSwitch,
+    private readonly events: SecurityEvents,
     @Optional() private readonly ledger?: LedgerRecordsRepository,
     @Optional() private readonly runner?: TextCaptureRunner,
   ) {}
@@ -122,6 +124,7 @@ export class CapturesService {
     if (!inspected) throw AppException.conflictBecause('source-missing', 'The captured text is no longer available.');
     if (inspected.sha256 !== capture.textSha256) throw AppException.conflictBecause('text-hash-mismatch', 'The stored text is not the text that was captured.');
     if (!inspected.version) throw AppException.conflictBecause('source-unpinned', 'The stored text has no version, so it cannot be linked as evidence.');
+    await this.events.recordFileLink(principal, { kind: 'capture', id: captureId, ttlSeconds: this.pipeline.downloadUrlTtlSeconds }); // no link without its security event
     return this.link(await this.storage.createDownloadUrl(key, inspected.version, this.pipeline.downloadUrlTtlSeconds));
   }
 
@@ -129,6 +132,7 @@ export class CapturesService {
   async pdfLink(principal: Principal, reportId: string): Promise<FileLinkDto> {
     this.requireFileRole(principal);
     const report = await this.requireUploadedLabPdf(principal, reportId);
+    await this.events.recordFileLink(principal, { kind: 'report', id: reportId, ttlSeconds: this.pipeline.downloadUrlTtlSeconds }); // no link without its security event
     return this.link(await this.storage.createDownloadUrl(report.storageKey!, report.objectVersion!, this.pipeline.downloadUrlTtlSeconds));
   }
 

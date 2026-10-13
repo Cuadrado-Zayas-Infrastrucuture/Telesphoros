@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AppException } from '../common/app-exception';
+import { SecurityEvents } from '../security-events/security-events';
 import { MembershipRepository } from '../storage/membership.repository';
 import type { Principal } from './principal';
 import type { TokenIdentity } from './token-verifier';
@@ -22,7 +23,10 @@ export interface ResolvedCaller {
 export class MembershipService {
   private readonly logger = new Logger('Membership');
 
-  constructor(private readonly memberships: MembershipRepository) {}
+  constructor(
+    private readonly memberships: MembershipRepository,
+    private readonly events: SecurityEvents,
+  ) {}
 
   async resolve(identity: TokenIdentity): Promise<ResolvedCaller> {
     let membership;
@@ -35,10 +39,12 @@ export class MembershipService {
     }
     if (!membership || membership.status !== 'active') {
       this.logger.warn({ event: 'membership-refused', reason: membership ? 'removed' : 'none', tenantId: identity.tenantId }, 'No active membership');
+      await this.events.recordRefusal(identity.tenantId, identity.sub, membership ? 'removed' : 'no-membership');
       throw AppException.forbidden();
     }
     if (identity.issuedAt <= membership.tokensValidAfter) {
       this.logger.warn({ event: 'membership-refused', reason: 'token-revoked', tenantId: identity.tenantId }, 'Token issued before the revocation instant');
+      await this.events.recordRefusal(identity.tenantId, identity.sub, 'token-revoked');
       throw AppException.unauthorized();
     }
     return { principal: { sub: identity.sub, tenantId: identity.tenantId, roles: membership.roles }, version: membership.version };

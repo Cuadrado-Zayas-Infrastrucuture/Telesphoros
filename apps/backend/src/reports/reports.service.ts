@@ -18,6 +18,7 @@ import { ObjectStorage } from '../object-storage/object-storage';
 import { PatientsRepository } from '../storage/patients.repository';
 import type { ReportRecord } from '../storage/records';
 import { ReportsRepository } from '../storage/reports.repository';
+import { SecurityEvents } from '../security-events/security-events';
 
 @Injectable()
 export class ReportsService {
@@ -26,6 +27,7 @@ export class ReportsService {
     private readonly patients: PatientsRepository,
     private readonly storage: ObjectStorage,
     private readonly pipeline: PipelineSwitch,
+    private readonly events: SecurityEvents,
   ) {}
 
   list(principal: Principal, { page, pageSize, patientId }: ReportListQuery) {
@@ -97,6 +99,7 @@ export class ReportsService {
     if(!stored||stored.version!==report.objectVersion||stored.sha256!==report.sha256||stored.sizeBytes!==report.sizeBytes||stored.contentType!==report.contentType)throw AppException.conflictBecause('source-changed','The stored version is missing or does not match the verified file.');
     const current=await this.get(principal,id);if(current.objectVersion!==report.objectVersion||current.storageKey!==report.storageKey)throw AppException.conflict('The report changed during verification.');
     const ttl=this.pipeline.downloadUrlTtlSeconds;
+    await this.events.recordFileLink(principal,{kind:'report',id,ttlSeconds:ttl}); // no link without its security event
     return {url:await this.storage.createDownloadUrl(report.storageKey,report.objectVersion,ttl,{filename:current.filename}),expiresAt:new Date(Date.now()+ttl*1000).toISOString()};
   }
 

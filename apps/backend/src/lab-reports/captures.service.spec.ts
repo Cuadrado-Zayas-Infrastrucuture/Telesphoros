@@ -8,6 +8,7 @@ import type { LedgerRecordsRepository } from '../storage/ledger-records.reposito
 import { InMemoryReportsRepository } from '../storage/reports.repository';
 import type { ReportRecord } from '../storage/records';
 import { CapturesService } from './captures.service';
+import { InMemorySecurityEvents } from '../security-events/security-events';
 import { PipelineSwitch } from './pipeline-switch';
 import type { TextCaptureRunner } from './runner/text-capture-runner';
 
@@ -26,7 +27,7 @@ async function setup(storage: ObjectStorage = new InMemoryObjectStorage()) {
   };
   await reports.insert(report);
   const ledger = { findCaptureByIdentity: jest.fn(), insertCapture: jest.fn(), latestAcceptance: jest.fn() } as unknown as jest.Mocked<LedgerRecordsRepository>;
-  return { service: new CapturesService(reports, storage, pipeline, ledger, runnerFor()), report, ledger };
+  return { service: new CapturesService(reports, storage, pipeline, new InMemorySecurityEvents(), ledger, runnerFor()), report, ledger };
 }
 
 class WrongBytesStorage extends InMemoryObjectStorage {
@@ -80,7 +81,7 @@ describe('CapturesService: file links are for the roles that may open files', ()
 describe('CapturesService without its collaborators', () => {
   it('answers PIPELINE_MISCONFIGURED, never a crash, if it is reached without the ledger or the runner', async () => {
     const reports = new InMemoryReportsRepository();
-    const service = new CapturesService(reports, new InMemoryObjectStorage(), pipeline);
+    const service = new CapturesService(reports, new InMemoryObjectStorage(), pipeline, new InMemorySecurityEvents());
     await expectAppException(service.capture(principal(['clinician']), randomUUID()), 500, 'PIPELINE_MISCONFIGURED');
     await expectAppException(service.get(principal(['clinician']), randomUUID()), 500, 'PIPELINE_MISCONFIGURED');
   });

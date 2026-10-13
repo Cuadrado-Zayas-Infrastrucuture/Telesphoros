@@ -9,6 +9,8 @@ export interface RequestAuthority {
 
 interface RequestStore {
   authority?: RequestAuthority;
+  /** The request's correlation id, so a security event can be matched to the diagnostic log line for the same request. */
+  requestId?: string;
 }
 
 const storage = new AsyncLocalStorage<RequestStore>();
@@ -17,8 +19,13 @@ const storage = new AsyncLocalStorage<RequestStore>();
  * Opens a per-request slot that AuthGuard fills after it has resolved the caller's membership. Registered by configureApp before routing, so
  * everything the request does (including work started with `await` or a promise) runs inside it.
  */
-export function authorityContextMiddleware(_req: Request, _res: Response, next: NextFunction) {
-  storage.run({}, next);
+export function authorityContextMiddleware(req: Request, _res: Response, next: NextFunction) {
+  storage.run({ requestId: typeof req.id === 'string' ? req.id : undefined }, next);
+}
+
+/** The correlation id of the request this code is running for, if any. */
+export function currentRequestId(): string | undefined {
+  return storage.getStore()?.requestId;
 }
 
 /** Called by AuthGuard. Throws if the slot is missing: running protected work without the commit-time check would fail open. */
