@@ -215,7 +215,11 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
     } finally {
       storage.versioned = true;
     }
-    await send(alice, id, attempt).expect(200); // control: with versions kept, the same attempt goes through
+    await send(alice, id, attempt).expect(409); // the refused attempt was cancelled before any write: a cancelled attempt is never reused
+    const retry = await declare(alice, id); // control: with versions kept, a fresh attempt for the same report goes through
+    expect(retry.res.status).toBe(201);
+    await send(alice, id, retry.attempt).expect(200);
+    expect((await row(id)).uploaded_at).not.toBeNull();
   });
 
   it('a report with a capture can no longer change type or be deleted (409, not 500), and its status can still change', async () => {
