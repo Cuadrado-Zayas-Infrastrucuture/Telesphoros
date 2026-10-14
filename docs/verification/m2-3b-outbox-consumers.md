@@ -64,6 +64,7 @@ Each rule was broken on purpose with a script that edits the source or the migra
 | In-memory tier (`pnpm test`, no services) | pass (backend 1,392; worker 41; jobs 13; frontend 291) |
 | Worker on PostgreSQL and the S3 emulator | 112 passed, repeated twice |
 | Backend on PostgreSQL uploading over S3, 153 suites | 2,206 passed, 1 skipped, 0 failed |
+| Backend on PostgreSQL with the in-memory object store (CI's tier 2), 153 suites | all passed once the unversioned-bucket e2e control was fixed (it ran only in tiers 1 and 2; fixed on #100 in `649eb76`) |
 | Recovery suites (backup/restore, recovery CLI, application and independent recovery, restore check, catalogue, off-site restore) as an unprivileged user from a repository copy | 97 passed |
 
 ## What this does not show
