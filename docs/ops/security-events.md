@@ -10,14 +10,11 @@ here has been applied in AWS.
 | --- | --- | --- |
 | `membership.granted`, `membership.reinstated`, `membership.roles-changed`, `membership.removed`, `membership.sessions-revoked` | a trigger on `tenant_memberships`, in the same transaction as the change | the operator command ([membership.md](membership.md)) or any other change to a membership row; the `details` hold the roles before and after |
 | `access.refused` (reason `no-membership`, `removed`, `token-revoked`, `authority-changed`) | the application | a valid token is refused by the membership checks ([auth.md](../auth.md#authority-and-revocation)), or a write is refused at commit because the caller's membership changed under it. One event per person, organization and reason per minute |
-| `file.link.issued` | the application | a report download link or a capture text link is created. The event is recorded **first**: if it cannot be recorded the request answers 503 and no link is created |
 
-Not recorded here: sign-ins and sign-outs (the API cannot see them; Cognito's events are in CloudTrail, [audit-trail.md](audit-trail.md)), refusals for a missing
-role (diagnostic logs only), and clinical reads (the clinical audit stream, a separate slice). An event means "authorized and the link was created", not "the file was
-downloaded": the download happens at the object store, which CloudTrail's S3 data events cover.
+Not recorded here: file links (the [application access audit](application-access-audit.md) already records every one, as `download-link` for a report and `private-read` for a capture text link, and refuses the response if it cannot), sign-ins and sign-outs (the API cannot see them; Cognito's events are in CloudTrail, [audit-trail.md](audit-trail.md)), refusals for a missing
+role (diagnostic logs only), and clinical reads (the clinical audit stream, a separate slice).
 
-Each event holds: time, organization, type, outcome, who (`person:<sub>`, or `operator:<the --by name>`), what it was about (a person's `sub`, a report id or a capture
-id), the request id (to find the diagnostic log line), the database user that wrote it, and a few short codes. **No token, URL, signed link, file name, label, free-text
+Each event holds: time, organization, type, outcome, who (`person:<sub>`, or `operator:<the --by name>`), what it was about (a person's `sub`), the request id (to find the diagnostic log line), the database user that wrote it, and a few short codes. **No token, URL, signed link, file name, label, free-text
 reason, e-mail address or patient value is ever stored**: the table accepts only a short list of keys holding strings of at most 64 letters, digits and hyphens.
 
 ## Who can write and read
@@ -53,10 +50,9 @@ A restore server needs the `telesphoros_security_auditor` role to exist (like th
 
 | Symptom | Likely cause |
 | --- | --- |
-| Download links answer 503 | The event could not be recorded: the database is unreachable, or `security_event_append` is not executable by the application role. Links are refused on purpose until it is fixed |
 | A membership change fails with an integrity error | The event insert failed (for example a constraint on the table was altered). The change was rolled back; nothing happened |
 | No `access.refused` for a refusal | Throttled (one a minute per person and reason), or the database could not be reached; refusals never block the response |
 
 ## Relationship to the application access audit
 
-`main` also has `security_audit_events` ([application-access-audit.md](application-access-audit.md)): per-request records of authentication, private reads and report download links, read by the ledger verifier role. This store is different: it records membership changes and the reasons a valid token was refused, and is read by the auditor role. The two tables are independent. A report download link is currently recorded in both (as `download-link` there and `file.link.issued` here); see the open decision in the [plan](../design/plans/m1-6-security-events.md).
+`main` also has `security_audit_events` ([application-access-audit.md](application-access-audit.md)): per-request records of authentication, private reads and report download links, read by the ledger verifier role. This store is different: it records membership changes and the reasons a valid token was refused, and is read by the auditor role. The two tables are independent and record different acts: a report download link or a capture text link is recorded there only, and a membership change or a refusal with its reason is recorded here only (decided 2026-10-14: keep both, record each act once).

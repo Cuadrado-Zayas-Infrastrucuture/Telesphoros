@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { acceptanceDtoSchema, captureDtoSchema, fileLinkDtoSchema } from '@telesphoros/shared-types';
 import { ObjectStorage } from '../src/object-storage/object-storage';
-import { createTestApp, securityEventsOf, usingPostgres } from './helpers/app';
+import { createTestApp, usingPostgres } from './helpers/app';
 import { createEphemeralDatabase, type EphemeralDatabase } from './helpers/database';
 import { bearer } from './helpers/tokens';
 import { DOCUMENT_IDS, FIXTURES, fixtureManifest, fixturePdf, fixtureText, LabPipeline, sha } from './helpers/lab-pipeline';
@@ -240,25 +240,6 @@ import { DOCUMENT_IDS, FIXTURES, fixtureManifest, fixturePdf, fixtureText, LabPi
       const stranger = await lab.person('m', ['clinician'], 'tenant-two');
       await lab.api().get(`/api/v1/reports/${up.reportId}/download-url`).set(bearer(stranger.token)).expect(404);
       await lab.api().get(`/api/v1/captures/${captureId}/text-url`).set(bearer(stranger.token)).expect(404);
-    });
-
-    it('every link issued leaves a security event naming the person and the report or capture (identifiers only), and a refused link leaves none', async () => {
-      const clinician = await lab.person('clin-events', ['clinician']);
-      const up = await lab.uploadedLabPdf(clinician, fixturePdf('D01'));
-      const captureId = (await lab.capture(clinician, up.reportId).expect(201)).body.id as string;
-      const reader = await lab.person('reader-events', ['reader']);
-      await lab.api().get(`/api/v1/reports/${up.reportId}/download-url`).set(bearer(reader.token)).expect(403);
-      const pdfLink = (await lab.api().get(`/api/v1/reports/${up.reportId}/download-url`).set(bearer(clinician.token)).expect(200)).body;
-      const textLink = (await lab.api().get(`/api/v1/captures/${captureId}/text-url`).set(bearer(clinician.token)).expect(200)).body;
-      const links = (await securityEventsOf(app)).filter((e) => e.eventType === 'file.link.issued');
-      expect(links.filter((e) => e.subjectRef === up.reportId).map((e) => [e.subjectKind, e.tenantId])).toEqual([['report', lab.tenant]]);
-      expect(links.filter((e) => e.subjectRef === captureId).map((e) => [e.subjectKind, e.tenantId])).toEqual([['capture', lab.tenant]]);
-      expect(links.filter((e) => e.actorRef === clinician.sub).map((e) => e.subjectKind).sort()).toEqual(['capture', 'report']); // exactly the two links issued
-      expect(links.filter((e) => e.actorRef === reader.sub)).toEqual([]); // the refused one left no link event
-      const stored = JSON.stringify(links);
-      expect(stored).not.toContain(pdfLink.url);
-      expect(stored).not.toContain(textLink.url);
-      expect(stored).not.toMatch(/https?:|X-Amz|Signature/i);
     });
 
     it('no link for a report whose file is not uploaded (409), and none for a report of another type', async () => {

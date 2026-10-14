@@ -105,7 +105,7 @@ Work with no request behind it (background and organization-owned processing) is
 A removed person's row is kept, never deleted, and `tokens_valid_after` only moves forward, so reinstating someone does not revive
 a token issued before their removal.
 
-**What is recorded.** The security-event record ([ops/security-events.md](ops/security-events.md)) keeps who was granted, re-roled, removed or had their sessions revoked (by a database trigger, in the same transaction as the change), every refusal by the checks above (once a minute per person and reason), and every file link issued (before the link is created: no link without its event). It holds identifiers and short codes only, and only the auditor role can read it.
+**What is recorded.** The security-event record ([ops/security-events.md](ops/security-events.md)) keeps who was granted, re-roled, removed or had their sessions revoked (by a database trigger, in the same transaction as the change), and every refusal by the checks above (once a minute per person and reason). File links are recorded by the application access audit, not here. It holds identifiers and short codes only, and only the auditor role can read it.
 
 Not in this slice: an application logout endpoint and browser sessions (M5.1). The membership row itself still keeps only the latest change's author and reason; the full history is in the security-event record. No authenticated route skips the membership check.
 

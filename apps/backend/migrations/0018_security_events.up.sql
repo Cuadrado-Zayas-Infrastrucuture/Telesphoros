@@ -1,5 +1,6 @@
--- The security-event audit store (docs/design/plans/m1-6-security-events.md): an append-only record of security-relevant acts, kept apart from the
--- clinical ledger and from diagnostic logs.
+-- The security-event audit store (docs/design/plans/m1-6-security-events.md): an append-only record of who changed who may do what and why a valid
+-- token was refused, kept apart from the clinical ledger, from diagnostic logs and from the application access audit (security_audit_events, 0016),
+-- which already records every file link, so links are deliberately not recorded here.
 --
 --   * Nobody updates, deletes or truncates a row (the owner included; refuse_mutation, as on the ledger tables).
 --   * The application role has NO privilege on the table. It can only call security_event_append(), which takes the organization and the person from
@@ -37,11 +38,11 @@ CREATE TABLE security_events (
   CONSTRAINT security_events_tenant_id_len CHECK (tenant_id IS NULL OR length(tenant_id) BETWEEN 1 AND 128),
   CONSTRAINT security_events_type_check CHECK (event_type IN (
     'membership.granted', 'membership.reinstated', 'membership.roles-changed', 'membership.removed', 'membership.sessions-revoked',
-    'access.refused', 'file.link.issued')),
+    'access.refused')),
   CONSTRAINT security_events_outcome_check CHECK (outcome IN ('succeeded', 'refused')),
   CONSTRAINT security_events_actor_kind_check CHECK (actor_kind IN ('person', 'operator', 'system')),
   CONSTRAINT security_events_actor_ref_len CHECK (length(actor_ref) BETWEEN 1 AND 128),
-  CONSTRAINT security_events_subject_kind_check CHECK (subject_kind IN ('person', 'report', 'capture')),
+  CONSTRAINT security_events_subject_kind_check CHECK (subject_kind = 'person'),
   CONSTRAINT security_events_subject_ref_len CHECK (length(subject_ref) BETWEEN 1 AND 128),
   CONSTRAINT security_events_request_id_len CHECK (request_id IS NULL OR length(request_id) BETWEEN 1 AND 128),
   CONSTRAINT security_events_db_user_len CHECK (length(db_user) BETWEEN 1 AND 128),
@@ -49,7 +50,7 @@ CREATE TABLE security_events (
   CONSTRAINT security_events_details_shape CHECK (
     jsonb_typeof(details) = 'object'
     AND pg_column_size(details) <= 2048
-    AND (details - ARRAY['reportId', 'captureId', 'reason', 'roles', 'before', 'after', 'ttlSeconds', 'kind']) = '{}'::jsonb
+    AND (details - ARRAY['reason', 'roles', 'before', 'after']) = '{}'::jsonb
     AND NOT jsonb_path_exists(details, '$.** ? (@.type() == "string" && !(@ like_regex "^[A-Za-z0-9-]{1,64}$"))')
   )
 );
@@ -76,7 +77,7 @@ BEGIN
   IF v_tenant IS NULL OR v_actor IS NULL THEN
     RAISE EXCEPTION 'A security event needs an organization and a person bound to the transaction.' USING ERRCODE = 'insufficient_privilege';
   END IF;
-  IF p_event_type NOT IN ('access.refused', 'file.link.issued') THEN
+  IF p_event_type <> 'access.refused' THEN
     RAISE EXCEPTION 'The application may not record this kind of security event.' USING ERRCODE = 'insufficient_privilege';
   END IF;
   -- A refused caller must not be able to flood the table: one event per person, organization and reason per minute.

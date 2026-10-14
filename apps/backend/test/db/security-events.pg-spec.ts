@@ -1,15 +1,12 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
 import { Client } from 'pg';
-import request from 'supertest';
 import { authorityContextMiddleware, bindRequestAuthority, type RequestAuthority } from '../../src/auth/authority-context';
 import { Database } from '../../src/db/database';
 import { PgMembershipAdmin } from '../../src/membership/pg-membership-admin';
 import { PostgresSecurityEvents } from '../../src/security-events/security-events';
 import { runSecurityEvents } from '../../src/security-events/security-events-cli';
-import { createTestApp, membershipOf } from '../helpers/app';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
-import { bearer, signToken } from '../helpers/tokens';
 
 const TENANT = 'tenant-events-pg';
 const OPERATOR = { by: 'ops-person', reason: 'a reason with spaces and an e-mail someone@example.test' };
@@ -78,6 +75,11 @@ describe('the table cannot be changed, and only the auditor can read it', () => 
     });
   });
 
+  it('has no file-link event type at all, even for the owner', async () => {
+    await expect(owner((c) => c.query(`INSERT INTO security_events (tenant_id, event_type, outcome, actor_kind, actor_ref, subject_kind, subject_ref) VALUES ($1, 'file.link.issued', 'succeeded', 'person', 'x', 'person', 'y')`, [TENANT]))).rejects.toMatchObject({ code: '23514' });
+    await expect(owner((c) => c.query(`INSERT INTO security_events (tenant_id, event_type, outcome, actor_kind, actor_ref, subject_kind, subject_ref) VALUES ($1, 'access.refused', 'refused', 'person', 'x', 'report', 'y')`, [TENANT]))).rejects.toMatchObject({ code: '23514' });
+  });
+
   it('keeps the application function callable by the application role only', async () => {
     await owner(async (c) => {
       for (const role of ['telesphoros_security_auditor', 'telesphoros_ledger_verifier', 'telesphoros_ledger_operator']) {
@@ -91,17 +93,18 @@ describe('the table cannot be changed, and only the auditor can read it', () => 
 describe('what the application may write, and as whom', () => {
   it('records an event in the organization and for the person the transaction is bound to, and nobody else', async () => {
     const ref = randomUUID();
-    await asApplication((c) => append(c, 'file.link.issued', 'succeeded', 'report', ref, { reportId: ref, ttlSeconds: 120 }, 'req-1'), 'tenant-a', 'person-a');
+    await asApplication((c) => append(c, 'access.refused', 'refused', 'person', ref, { reason: 'no-membership' }, 'req-1'), 'tenant-a', 'person-a');
     const [row] = await events('subject_ref = $1', [ref]);
-    expect(row).toMatchObject({ tenant_id: 'tenant-a', actor_kind: 'person', actor_ref: 'person-a', event_type: 'file.link.issued', outcome: 'succeeded', subject_kind: 'report', request_id: 'req-1', details: { reportId: ref, ttlSeconds: 120 } });
+    expect(row).toMatchObject({ tenant_id: 'tenant-a', actor_kind: 'person', actor_ref: 'person-a', event_type: 'access.refused', outcome: 'refused', subject_kind: 'person', request_id: 'req-1', details: { reason: 'no-membership' } });
     expect(row.db_user).toBe('telesphoros_test_app');
   });
 
   it('refuses without an organization or a person bound, and refuses the event types it must not write', async () => {
     const ref = randomUUID();
-    await expect(asApplication((c) => append(c, 'file.link.issued', 'succeeded', 'report', ref, {}), null, 'person-a')).rejects.toMatchObject({ code: '42501' });
-    await expect(asApplication((c) => append(c, 'file.link.issued', 'succeeded', 'report', ref, {}), 'tenant-a', null)).rejects.toMatchObject({ code: '42501' });
-    for (const type of ['membership.granted', 'membership.removed', 'membership.roles-changed', 'membership.sessions-revoked', 'membership.reinstated']) {
+    await expect(asApplication((c) => append(c, 'access.refused', 'refused', 'person', ref, {}), null, 'person-a')).rejects.toMatchObject({ code: '42501' });
+    await expect(asApplication((c) => append(c, 'access.refused', 'refused', 'person', ref, {}), 'tenant-a', null)).rejects.toMatchObject({ code: '42501' });
+    // File links are not recorded here: the application access audit records them, so the type no longer exists in this table.
+    for (const type of ['membership.granted', 'membership.removed', 'membership.roles-changed', 'membership.sessions-revoked', 'membership.reinstated', 'file.link.issued']) {
       await expect(asApplication((c) => append(c, type, 'succeeded', 'person', ref, {}))).rejects.toMatchObject({ code: '42501' });
     }
     await expect(asApplication((c) => append(c, 'something.else', 'succeeded', 'person', ref, {}))).rejects.toMatchObject({ code: '42501' });
@@ -112,15 +115,15 @@ describe('what the application may write, and as whom', () => {
     const ref = randomUUID();
     const bad: unknown[] = [
       { url: 'x' }, { reason: 'https://example.test/file?X-Amz-Signature=abc' }, { reason: 'eyJhbGciOiJIUzI1NiJ9.e30.sig' }, { reason: 'has space' }, { reason: 'a'.repeat(65) },
-      { reason: 'name.pdf' }, { roles: ['clinician', 'x/y'] }, { before: { nested: 'https://x.test' } }, { reason: 'ok', ttlSeconds: 1, extra: 'no' }, [],
+      { reason: 'name.pdf' }, { roles: ['clinician', 'x/y'] }, { before: { nested: 'https://x.test' } }, { reason: 'ok', extra: 'no' }, { reportId: 'abc' }, { ttlSeconds: 1 }, [],
       { roles: Array.from({ length: 400 }, () => 'abcdefghij') },
     ];
     for (const details of bad) {
-      await expect(asApplication((c) => append(c, 'file.link.issued', 'succeeded', 'report', ref, details))).rejects.toMatchObject({ code: expect.stringMatching(/^(23514|22023|42501)$/) });
+      await expect(asApplication((c) => append(c, 'access.refused', 'refused', 'person', ref, details))).rejects.toMatchObject({ code: expect.stringMatching(/^(23514|22023|42501)$/) });
     }
     // Controls: values of the allowed shape are accepted.
     await asApplication((c) => append(c, 'access.refused', 'refused', 'person', ref, { reason: 'no-membership' }));
-    await asApplication((c) => append(c, 'file.link.issued', 'succeeded', 'capture', ref, { captureId: ref, ttlSeconds: 300, roles: ['reader', 'clinician'] }));
+    await asApplication((c) => append(c, 'access.refused', 'refused', 'person', ref, { reason: 'removed', roles: ['reader', 'clinician'] }));
     expect(await events('subject_ref = $1', [ref])).toHaveLength(2);
   });
 
@@ -233,35 +236,6 @@ describe('the application records what happens to its callers', () => {
       await database.onModuleDestroy();
     }
   });
-
-  it('a download link is refused (503) and never created when the event function cannot run, then works again', async () => {
-    const own = await createEphemeralDatabase();
-    const app = await createTestApp({ postgresUrl: own.appUrl, membershipFromTokens: false });
-    try {
-      const sub = person();
-      await membershipOf(app).grant({ tenantId: 'tenant-user-a', sub, roles: ['clinician'], ...OPERATOR });
-      const t = bearer(await signToken({ sub, tenant: 'tenant-user-a' }));
-      const bytes = Buffer.from('##fileformat=VCFv4.3\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n');
-      const api = () => request(app.getHttpServer());
-      const patientId = (await api().post('/api/v1/patients').set(t).send({ label: `SYN-${randomUUID().slice(0, 8)}` }).expect(201)).body.id;
-      const reportId = (await api().post('/api/v1/reports').set(t).send({ patientId, type: 'vcf', filename: 'x.vcf', sizeBytes: bytes.length }).expect(201)).body.id;
-      const revision = (await api().get(`/api/v1/reports/${reportId}/upload-state`).set(t).expect(200)).body.revision;
-      const attempt = (await api().post(`/api/v1/reports/${reportId}/upload-attempts`).set(t).send({ requestId: randomUUID(), revision, contentType: 'text/x-vcf', sha256: createHash('sha256').update(bytes).digest('hex') }).expect(201)).body;
-      await api().put(`/api/v1/reports/${reportId}/upload-attempts/${attempt.attemptId}/bytes`).set(t).set('X-Upload-Revision', attempt.revision).set('Content-Type', 'text/x-vcf').send(bytes).expect(200);
-
-      await withAdmin(own.adminUrl, (c) => c.query('REVOKE EXECUTE ON FUNCTION security_event_append(text, text, text, text, jsonb, text) FROM telesphoros_app'));
-      const refused = await api().get(`/api/v1/reports/${reportId}/download-url`).set(t);
-      expect(refused.status).toBe(503);
-      expect(JSON.stringify(refused.body)).not.toMatch(/permission|security_event|function/i);
-      await withAdmin(own.adminUrl, (c) => c.query('GRANT EXECUTE ON FUNCTION security_event_append(text, text, text, text, jsonb, text) TO telesphoros_app'));
-      await api().get(`/api/v1/reports/${reportId}/download-url`).set(t).expect(200);
-      const linkEvents = await withAdmin(own.adminUrl, async (c) => (await c.query(`SELECT * FROM security_events WHERE event_type = 'file.link.issued'`)).rows);
-      expect(linkEvents).toHaveLength(1); // the refused attempt left nothing and issued nothing
-    } finally {
-      await app.close();
-      await own.drop();
-    }
-  });
 });
 
 describe('the auditor command', () => {
@@ -300,6 +274,6 @@ describe('privacy, over everything this file recorded', () => {
     expect(all.length).toBeGreaterThan(20); // the earlier tests really recorded events
     const text = JSON.stringify(all.map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'occurred_at'))));
     expect(text).not.toMatch(/eyJ[A-Za-z0-9_-]{5,}|https?:|X-Amz|Signature|@|someone|a reason with spaces/i);
-    for (const row of all) expect(Object.keys(row.details).every((k) => ['reportId', 'captureId', 'reason', 'roles', 'before', 'after', 'ttlSeconds', 'kind'].includes(k))).toBe(true);
+    for (const row of all) expect(Object.keys(row.details).every((k) => ['reason', 'roles', 'before', 'after'].includes(k))).toBe(true);
   });
 });
