@@ -1,3 +1,4 @@
+import { isSystemActor } from '@telesphoros/jobs';
 import { ROLES, type Role } from '@telesphoros/shared-types';
 
 /**
@@ -77,6 +78,8 @@ export function checkChange(input: MembershipChange): void {
   for (const [field, value] of [['tenant', input.tenantId], ['sub', input.sub], ['by', input.by]] as const) {
     if (!value || value.length > MAX_TEXT || control.test(value)) throw bad(field);
   }
+  // A membership is a person's. The name a background job acts under can never be given one (the database refuses it too: migration 0023).
+  if (isSystemActor(input.sub)) throw new MembershipAdminError('invalid', 'sub must be a person, not a system actor.');
   if ((input.reason ?? '').length > 500) throw new MembershipAdminError('invalid', 'reason must be at most 500 characters.');
 }
 

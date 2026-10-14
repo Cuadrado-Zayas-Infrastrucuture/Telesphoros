@@ -42,6 +42,8 @@ the two must agree or the person gets 403.
 **Change a role.** `membership set-roles`. A downgrade also refuses a write the person had in flight (403, once), so nothing commits under the
 old roles after the change.
 
+**A subject starting `system:` is refused** by `membership grant` (and by the database, and by token verification): that is the name a background job acts under ([jobs](jobs.md)), and it can never be a person.
+
 **Reinstate.** `membership grant` again. Tokens issued before the removal stay refused (the person signs in once).
 
 **Move a person to another organization.** `remove` in the old one, change the Cognito `tenant:` group, `grant` in the new one. They are refused

@@ -50,4 +50,11 @@ export const PATIENT_DUPLICATE_TABLES = ['patient_duplicate_flags'] as const;
  */
 export const SECURITY_AUDIT_TABLES = ['security_events'] as const;
 
-export const ALL_CLASSIFIED_TABLES: readonly string[] = [...Object.values(APPEND_ONLY_CLASSES).flat(), ...LEGACY_TABLES, ...MUTABLE_OPERATIONAL_TABLES, ...AUTHORITY_TABLES, ...PATIENT_IDENTITY_TABLES, ...PATIENT_DUPLICATE_TABLES, ...SECURITY_AUDIT_TABLES];
+/**
+ * The background-job queue (migration 0023), owned by `telesphoros_jobs` and written only by its SECURITY DEFINER functions: the application and the worker can
+ * read their organization's `jobs` and `job_attempts` and call functions, nothing more. `job_attempts` is append-only for everyone, the owner included; `jobs`,
+ * `job_schedules` and `job_workers` are operational state that advances under the functions' guards (a job's state changes; its history does not).
+ */
+export const JOB_TABLES = ['jobs', 'job_attempts', 'job_schedules', 'job_workers'] as const;
+
+export const ALL_CLASSIFIED_TABLES: readonly string[] = [...Object.values(APPEND_ONLY_CLASSES).flat(), ...LEGACY_TABLES, ...MUTABLE_OPERATIONAL_TABLES, ...AUTHORITY_TABLES, ...PATIENT_IDENTITY_TABLES, ...PATIENT_DUPLICATE_TABLES, ...SECURITY_AUDIT_TABLES, ...JOB_TABLES];

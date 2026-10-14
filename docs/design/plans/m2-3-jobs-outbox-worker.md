@@ -1,6 +1,6 @@
 # M2.3: jobs, an outbox and an idempotent worker (plan)
 
-Status: **plan drafted; nothing is built; waiting for the founder's answers to DJ-1 to DJ-9** (working agreement 1). Backlog T08 of the [build plan](repo-audit-and-build-plan.md); founder decision DA-5 (a separate `apps/worker` process sharing contracts with the API) is the starting point and DJ-1 makes it concrete. Synthetic data only; nothing here lifts the BAA or clinical hold; nothing is applied in AWS.
+Status: **approved by the founder on 2026-10-14 (DJ-1 to DJ-9: yes to all, recommendations as written). M2.3a is built on the local branch `claude/m2-3a-queue-core` (stacked on the M2.3 plan; not pushed).** Backlog T08 of the [build plan](repo-audit-and-build-plan.md); founder decision DA-5 (a separate `apps/worker` process sharing contracts with the API) is the starting point and DJ-1 makes it concrete. Synthetic data only; nothing here lifts the BAA or clinical hold; nothing is applied in AWS.
 
 ## Problem, as the repository stands after M2.2c
 
@@ -104,3 +104,17 @@ The ledger's format, projections and event types; what a capture, evaluation, li
 - The queue lives in the application's database: heavy job traffic competes with requests. Fine at these volumes; measured, not assumed, in M5.3.
 - No AWS behavior is proven; Terraform is guard-tested only. The worker login, grants and alarms need the first real deployment to be proven.
 - Cognito account creation from invitations and every clinical automation are deliberately later and need their own plans.
+
+## M2.3a as built, and where it differs from the plan
+
+Built: migration 0023, `packages/jobs`, `apps/worker`, the system-actor rules and their pins, and the `jobs` operator command ([runbook](../../ops/jobs.md), [verification](../../verification/m2-3a-queue-core.md)). Differences, each a decision for the founder to confirm or reverse:
+
+- **`jobs.tenant_id` is NOT NULL.** The plan allowed a null for platform jobs. No platform job exists, and a null would have been a way around row-level security; the first one needs its own decision.
+- **A suspended organization's jobs are held, not claimed** (the plan said "claimed but not run"). Claiming and not running is a state with nothing useful in it; not claiming means nothing changes until activation.
+- **The worker is plain Node in this slice**, not a NestJS application context: it registers no job that needs a service. The Nest context (so a handler is given `EvaluationsService`, tenancy and logging as the API has them) arrives with the first consumer in M2.3b. Until then a source-level test lets a handler import only Node built-ins, `zod` and `@telesphoros/jobs`.
+- **Two database roles instead of one.** `telesphoros_jobs` owns the tables and functions (a definer that cannot log in), and `telesphoros_worker` is the group the worker login joins. Both are created by the migration and listed with the other groups in `provision-logins`.
+- **The worker login is not yet provisioned by `provision-logins`.** The command still creates three logins (application, verifier, migrator); adding a fourth needs a secret and its Terraform, which belong with the ECS service in M2.3c. Tests and the runbook use a login that is a member of `telesphoros_worker` only.
+- **A claim's lease is one value per worker**: the shortest `leaseSeconds` among the job types it runs; the heartbeat renews it. A job type's own limit is its `timeoutSeconds`.
+- **Operator commands do not take a free-text reason.** The history is append-only and shape-checked; the person's name is recorded, a reason is not.
+- **System actors are refused at three more places than the plan listed**: the authentication layer (both token verifiers), the membership command, and `patient_identifiers.withdrawn_by`.
+- **Found by testing and fixed in the slice:** `tenants` is under row-level security, so the definer role needs its own read policy to see which organizations are active (without it nothing was ever claimed); a claim that waited on another claimer's organization lock deadlocked; a capped organization's backlog hid everyone behind it; and a payload check in `jsonpath` lax mode let an array through.

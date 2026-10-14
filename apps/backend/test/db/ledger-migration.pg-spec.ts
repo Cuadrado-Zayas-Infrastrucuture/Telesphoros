@@ -16,7 +16,7 @@ const loginTag = randomBytes(5).toString('hex');
 const WITH_MEMBERSHIP = `test_ledger_migrator_${loginTag}`;
 const WITHOUT_MEMBERSHIP = `test_ledger_migrator_bare_${loginTag}`;
 const ROLE_LOCK = 4242;
-const DEFINER_ROLES = ['telesphoros_ledger', 'telesphoros_redactor'];
+const DEFINER_ROLES = ['telesphoros_ledger', 'telesphoros_redactor', 'telesphoros_jobs', 'telesphoros_worker'];
 
 const urlFor = (user: string, database: string) => {
   const u = new URL(adminUrl());
@@ -39,6 +39,7 @@ beforeAll(async () => {
     // The administrator's one-time step: let the migrator act as the definer roles (SET only; it inherits nothing from them).
     await c.query(`DO $$ BEGIN IF NOT pg_has_role('${WITH_MEMBERSHIP}', 'telesphoros_ledger', 'SET') THEN GRANT telesphoros_ledger TO ${WITH_MEMBERSHIP} WITH SET TRUE, INHERIT FALSE; END IF; END $$`);
     await c.query(`DO $$ BEGIN IF NOT pg_has_role('${WITH_MEMBERSHIP}', 'telesphoros_redactor', 'SET') THEN GRANT telesphoros_redactor TO ${WITH_MEMBERSHIP} WITH SET TRUE, INHERIT FALSE; END IF; END $$`);
+    await c.query(`DO $$ BEGIN IF NOT pg_has_role('${WITH_MEMBERSHIP}', 'telesphoros_jobs', 'SET') THEN GRANT telesphoros_jobs TO ${WITH_MEMBERSHIP} WITH SET TRUE, INHERIT FALSE; END IF; END $$`);
     await c.query('SELECT pg_advisory_unlock($1)', [ROLE_LOCK]);
   });
 });
@@ -90,7 +91,7 @@ describe('migrations run for a migrator that is not a superuser', () => {
       await migrateUp(c);
       // 0021 and 0020 hold audit records (merge and patient-link decisions), so reverting them needs the same deliberate setting as the other audit migrations.
       await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
-      expect(await migrateDown(c, 11)).toEqual(['0022', '0021', '0020', '0019', '0018', '0017', '0016', '0015', '0014', '0013', '0012']);
+      expect(await migrateDown(c, 12)).toEqual(['0023', '0022', '0021', '0020', '0019', '0018', '0017', '0016', '0015', '0014', '0013', '0012']);
       await c.query(`RESET telesphoros.allow_audit_drop`);
       await expect(migrateDown(c, 1)).rejects.toThrow(/Refusing to drop ledger incidents/); // 0011 removes audit data, so it is guarded too
       await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);

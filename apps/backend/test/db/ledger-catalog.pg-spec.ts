@@ -1,5 +1,5 @@
 import type { Client } from 'pg';
-import { ALL_CLASSIFIED_TABLES, APPEND_ONLY_CLASSES, AUTHORITY_TABLES, MUTABLE_OPERATIONAL_TABLES, PATIENT_DUPLICATE_TABLES, PATIENT_IDENTITY_TABLES, SECURITY_AUDIT_TABLES } from '../../src/db/append-only-tables';
+import { ALL_CLASSIFIED_TABLES, APPEND_ONLY_CLASSES, AUTHORITY_TABLES, JOB_TABLES, MUTABLE_OPERATIONAL_TABLES, PATIENT_DUPLICATE_TABLES, PATIENT_IDENTITY_TABLES, SECURITY_AUDIT_TABLES } from '../../src/db/append-only-tables';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 
 let pg: EphemeralDatabase;
@@ -76,6 +76,22 @@ describe('catalog guard: the audit tables are classified and protected as their 
     }
   });
 
+  it('the job tables are forced-RLS, readable (own organization) but never writable by the application or the worker, and the history is append-only', async () => {
+    const tables = await q<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean; owner: string }>(`SELECT relname, relrowsecurity, relforcerowsecurity, pg_get_userbyid(relowner) AS owner FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relname = ANY($1) ORDER BY relname`, [[...JOB_TABLES]]);
+    expect(tables.map((t) => t.relname)).toEqual([...JOB_TABLES].sort());
+    for (const t of tables) expect(t.owner).toBe('telesphoros_jobs');
+    for (const t of tables.filter((x) => ['jobs', 'job_attempts'].includes(x.relname))) expect(t).toMatchObject({ relrowsecurity: true, relforcerowsecurity: true });
+    const grants = await q<{ table_name: string; grantee: string; privilege_type: string }>(`SELECT table_name, grantee, privilege_type FROM information_schema.role_table_grants WHERE table_schema = 'public' AND grantee IN ('telesphoros_app', 'telesphoros_worker') AND table_name = ANY($1) ORDER BY 1, 2, 3`, [[...JOB_TABLES]]);
+    expect(grants.map((g) => `${g.table_name}:${g.grantee}:${g.privilege_type}`)).toEqual(['job_attempts:telesphoros_app:SELECT', 'job_attempts:telesphoros_worker:SELECT', 'jobs:telesphoros_app:SELECT', 'jobs:telesphoros_worker:SELECT']);
+    const policies = await q<{ tablename: string; cmd: string; roles: string }>(`SELECT tablename, cmd, roles::text FROM pg_policies WHERE schemaname = 'public' AND tablename = ANY($1) ORDER BY 1, 3`, [[...JOB_TABLES]]);
+    expect(policies.map((p) => `${p.tablename}:${p.cmd}:${p.roles}`).sort()).toEqual(
+      ['job_attempts:ALL:{telesphoros_jobs}', 'job_attempts:SELECT:{telesphoros_app,telesphoros_worker}', 'jobs:ALL:{telesphoros_jobs}', 'jobs:SELECT:{telesphoros_app,telesphoros_worker}'],
+    );
+    const history = await q<{ ev: number }>(`SELECT t.tgtype::int AS ev FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_proc p ON p.oid = t.tgfoid WHERE c.relnamespace = 'public'::regnamespace AND NOT t.tgisinternal AND p.proname = 'refuse_mutation' AND c.relname = 'job_attempts'`);
+    expect(history.some((r) => r.ev & 1 && r.ev & 2 && (r.ev & 8) && (r.ev & 16))).toBe(true); // row, before, delete and update
+    expect(history.some((r) => r.ev & 32)).toBe(true); // truncate
+  });
+
   it('authority tables are read-only to the application, tenant-scoped, and never deleted', async () => {
     const tables = await q<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>(`SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relname = ANY($1)`, [[...AUTHORITY_TABLES]]);
     expect(tables).toHaveLength(AUTHORITY_TABLES.length);
@@ -84,12 +100,14 @@ describe('catalog guard: the audit tables are classified and protected as their 
     const grants = await q<{ table_name: string; privilege_type: string }>(`SELECT table_name, privilege_type FROM information_schema.role_table_grants WHERE table_schema = 'public' AND grantee = 'telesphoros_app' AND table_name = ANY($1)`, [[...AUTHORITY_TABLES]]);
     for (const table of AUTHORITY_TABLES) expect(grants.filter((g) => g.table_name === table).map((g) => g.privilege_type)).toEqual(['SELECT']);
     const policies = await q<{ tablename: string; cmd: string; roles: string; qual: string }>(`SELECT tablename, cmd, roles::text, qual FROM pg_policies WHERE schemaname = 'public' AND tablename = ANY($1)`, [[...AUTHORITY_TABLES]]);
-    expect(policies).toHaveLength(AUTHORITY_TABLES.length);
-    for (const p of policies) {
+    // One policy per table for the application, plus the single read-everything policy the queue's definer role needs to know which organizations are active.
+    const forApplication = policies.filter((p) => p.roles.includes('telesphoros_app'));
+    expect(forApplication).toHaveLength(AUTHORITY_TABLES.length);
+    for (const p of forApplication) {
       expect(p.cmd).toBe('SELECT');
-      expect(p.roles).toContain('telesphoros_app');
       expect(p.qual).toContain('app.current_tenant_id');
     }
+    expect(policies.filter((p) => !p.roles.includes('telesphoros_app'))).toEqual([{ tablename: 'tenants', cmd: 'SELECT', roles: '{telesphoros_jobs}', qual: 'true' }]);
     const triggers = await q<{ table: string; ev: number }>(`SELECT c.relname AS "table", t.tgtype::int AS ev FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid WHERE c.relnamespace = 'public'::regnamespace AND NOT t.tgisinternal AND c.relname = ANY($1)`, [[...AUTHORITY_TABLES]]);
     for (const table of AUTHORITY_TABLES) {
       const own = triggers.filter((r) => r.table === table);

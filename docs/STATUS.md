@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-13**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## M2.3a the job queue, the worker and the system-actor rules (draft pull request, stacked on the M2.3 plan)
+
+First slice of the approved [M2.3 plan](design/plans/m2-3-jobs-outbox-worker.md) (DJ-1 to DJ-9 answered yes on 2026-10-14; [verification](verification/m2-3a-queue-core.md), [runbook](ops/jobs.md)). Migration 0023 adds a PostgreSQL job queue (`jobs`, append-only `job_attempts`, `job_schedules`, `job_workers`) behind `SECURITY DEFINER` functions: leases and heartbeats, retry with backoff (60 s, 5x, capped at an hour, +-20%), dead letters, a per-organization cap, suspended organizations' jobs held, and idempotent scheduling by slot. Payloads are flat ids and codes and errors are short codes, **enforced by CHECK constraints**. New `packages/jobs` (contracts) and `apps/worker` (claim loop, drain, health, scheduler; plain Node, registers no production job type). A background job acts as `system:<job type>`, which is **never a person**: refused by the database on every human-decision table and on memberships, and by token verification and the membership command. New operator command `jobs status|list|dead|show|retry|cancel`. **Not built here:** the outbox and the two real consumers (M2.3b), Terraform, alarms, the worker login in `provision-logins` and the image target (M2.3c). Deviations from the plan are listed in the plan. An existing deployment must run `provision-logins` before applying 0023 (it now grants the migration login the queue's owner role). The pull request carries the whole unmerged M2.x stack beneath it; no remote CI has run.
+
 ## M2.2c browser reload recovery (built locally, stacked on M2.2b, not yet a PR)
 
 Third slice of the approved [M2.2 plan](design/plans/m2-2-durable-intake.md) ([verification](verification/m2-2c-reload-recovery.md)); closes audit finding A08. Frontend only. The tab keeps one `sessionStorage` record of an in-flight upload (report id, registration key, original declaration, last attempt state, file type, name, size and SHA-256; never the bytes, a token or the patient); after a reload the upload page offers to finish it (same patient and file again: no second report, original declaration replayed, no second transfer) or cancel it through the server; it is cleared on verification, on an acknowledged cancel and on sign-out. Also fixes a leftover of M2.2b: Cancel and Start over no longer depend on the build flag. Backend untouched. **Not built:** a screen listing past interrupted uploads, recovery across tabs or after the tab closes, any change to what the server does with attempts nobody resumes (the operator sweep remains). Not pushed: no remote CI has run.
@@ -236,6 +240,7 @@ cd apps/backend
 pnpm test                                                   # tier 1 (+ the database and S3 specs when the variables are set)
 TEST_STORAGE=postgres pnpm test                             # tier 2: the whole API suite on PostgreSQL
 TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 pnpm test      # tier 3: ... uploading over the S3 protocol
+cd ../worker && pnpm test                                    # the job queue and real worker processes (needs TEST_DATABASE_URL)
 ```
 
 Python 3 is needed on the PATH for the reader tests. Backup and restore tests need the PostgreSQL 16 client tools and `openssl`
