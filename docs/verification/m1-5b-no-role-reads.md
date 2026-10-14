@@ -1,6 +1,6 @@
 # M1.5b members with no role cannot read clinical records: verification
 
-Implementation on local branch `claude/m1-5b-no-role-reads`, based on main `0e7e8d8` (after #91). Plan and the one departure from the approved wording: [m1-5b-no-role-reads.md](../design/plans/m1-5b-no-role-reads.md). Results were captured locally on 2026-10-13. **Nothing was pushed, so no remote CI has run and none of the required checks is claimed.** Synthetic data only; nothing applied in AWS.
+Implementation on branch `claude/m1-5b-no-role-reads`. It was written on main `0e7e8d8` (after #91) and then merged with main `63822c2` (after #95, live membership); the only conflict was `docs/auth.md`, resolved by keeping main's membership wording and this change's no-role row. Plan and the one departure from the approved wording: [m1-5b-no-role-reads.md](../design/plans/m1-5b-no-role-reads.md). **No remote CI had run when this note was written; the pull request's own checks are the record.** Synthetic data only; nothing applied in AWS.
 
 ## What changed
 
@@ -17,13 +17,16 @@ Defect injection: removing `@Roles` from `GET /recommendations/:id` failed the r
 
 ## Local results
 
+Captured on 2026-10-14 on the merge with main `63822c2`.
+
 | Check | Result |
 | --- | --- |
-| `pnpm typecheck`, `lint`, `build`, `test:ci-config`, `test:infra` | passed |
-| Tier 1 backend | 1,262 passed, 201 announced skips, 0 failed (up 26 from 1,236, all new tests) |
-| Tier 2 and tier 3, full runs | Each had 2 failures: PostgreSQL-only lab-report suites (`lab-reports-capture`, `lab-reports-evaluation`) that still expected a role-less caller to read. I updated them (and the dispute suite's equivalent) and re-ran the five affected suites on tier 2 and on tier 3: 178 passed, 0 failed. **I did not re-run the full tiers 2 and 3 after that edit**; the other suites passed in the full runs (tier 2: 1,908 passed; tier 3: 1,928 passed) |
-| Recovery suites (37 tests) as an unprivileged OS user | 37 passed |
-| Browser, in-memory API | 56 + 18 passed |
+| `pnpm typecheck`, `lint`, `test:ci-config`, `test:infra` | passed |
+| Tier 1 backend (in memory) | 86 suites, 1,281 passed, 201 announced skips, 0 failed |
+| Tiers 2 and 3 together (PostgreSQL 16 plus Moto S3), full run, recovery suites excluded | 134 suites, 1,966 passed, 0 failed |
+| Before the merge (on `0e7e8d8`) | Recovery suites (37 tests) as an unprivileged OS user passed; browser tier with the in-memory API passed (56 + 18) |
+
+**Not re-run after the merge:** the three recovery suites and the browser tier. This change has no database, frontend or Terraform edit, and the merge from main did not touch those paths in this change, but that is an argument, not a run.
 
 ## Limits
 
