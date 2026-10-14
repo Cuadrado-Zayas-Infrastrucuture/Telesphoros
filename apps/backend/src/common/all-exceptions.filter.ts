@@ -21,19 +21,22 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const mapped = mapException(exception);
     // pino-http types req.id loosely; our middleware always sets a string.
     const requestId = String(req.id);
+    // Set by AuthGuard from the verified token; undefined (and so omitted from the JSON line) when nobody is authenticated.
+    const tenantId = req.principal?.tenantId;
 
     if (mapped.status >= 500) {
       this.logger.error(
         {
           event: 'api-error',
           requestId,
+          tenantId,
           status: mapped.status,
           code: mapped.code,
         },
         'Request failed',
       );
     } else {
-      this.logger.warn({ requestId, status: mapped.status, code: mapped.code }, 'Request rejected');
+      this.logger.warn({ requestId, tenantId, status: mapped.status, code: mapped.code }, 'Request rejected');
     }
 
     if (res.headersSent) return;

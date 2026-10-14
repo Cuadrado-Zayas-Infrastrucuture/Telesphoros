@@ -6,7 +6,7 @@ Implementation on branch `claude/m1-5-live-membership`, based on main `eb6d31f`.
 
 | Change | Where |
 | --- | --- |
-| Migration 0016: `tenant_memberships` (never deleted, one active row per person, version bumped by trigger, revocation instant never moves back), read-only RLS for the API login, `membership_assert_current()` (`SECURITY DEFINER`, execute for the API role only) | `apps/backend/migrations/0016_membership.{up,down}.sql` |
+| Migration 0017: `tenant_memberships` (never deleted, one active row per person, version bumped by trigger, revocation instant never moves back), read-only RLS for the API login, `membership_assert_current()` (`SECURITY DEFINER`, execute for the API role only) | `apps/backend/migrations/0017_membership.{up,down}.sql` |
 | Authority from the row on every protected request: 403 no active membership, 401 token older than the revocation instant, 503 when the lookup fails; roles come from the row | `auth/auth.guard.ts`, `auth/membership.service.ts`, `storage/membership.repository.ts`, `storage/postgres/membership.repository.ts` |
 | Commit boundary: a request's write transaction locks the caller's membership row shared and compares the version just before `COMMIT` (read-only transactions skip it) | `db/database.ts`, `auth/authority-context.ts`, `app.factory.ts` |
 | Organization-owned close-out of a failed upload transfer is not tied to the person | `reports/intake/intake.service.ts` |
@@ -72,3 +72,7 @@ Measured cost of the per-request lookup on this machine: 0.68 ms sequential, 0.4
 - Membership changes keep only the latest author and reason on the row; the append-only trail is M1.6. Browser sessions and a logout endpoint are M5.1. The no-role read change (finding I04, DA-1) is the separate M1.5b and is **not** in this change.
 - The first deployment starts with nobody granted; there is no import of existing Cognito users.
 - Because no push was made, the required CI checks have not run for this branch.
+
+## Integration with main after #94 (2026-10-14)
+
+While this branch waited, `main` gained the local application access audit (PR #94, migration `0016_security_access_audit`, `SecurityAuditStore`), which had also taken migration number 0016 and which its own note said could not be integrated unchanged with this branch. Merged `main` into this branch: the membership migration is now **0017** (files, lists in six migration specs, the recovery manifest count, docs), `AuthGuard` takes both `MembershipService` and `SecurityAuditStore` (it records `api-auth accepted` right after the token verifies, before the membership is read, and `refused` as before), `app.factory` keeps both middlewares, and the readiness outage test keeps the membership version of its assertion. `security-audit.pg-spec` now allows the membership drop on purpose to reach the audit migration's own guard, then re-applies 0017. Re-run after the merge: typecheck, lint, build, `test:ci-config` and `test:infra`; backend in memory (85 suites, 1255 tests) and on PostgreSQL plus S3 (134 suites, 1946 tests, after the two fixes above); the three recovery suites as an unprivileged user (37); frontend unit (22 files, 258 tests); browser tier in memory (58 and 26). Not run against anything real: still no Cognito, RDS or CI.

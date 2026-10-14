@@ -4,22 +4,28 @@ import type { Role } from '@telesphoros/shared-types';
 import type { Request } from 'express';
 import { AppException } from '../common/app-exception';
 import { ROLES_KEY } from './decorators';
+import { SecurityAuditStore } from './security-audit';
+import { accessEvent } from './security-audit.interceptor';
 
 /** Global guard, runs after AuthGuard: enforces @Roles() when a route declares it. */
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector) {}
+  constructor(private readonly reflector: Reflector, private readonly audit: SecurityAuditStore) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const required = this.reflector.getAllAndOverride<Role[] | undefined>(ROLES_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
     if (!required || required.length === 0) return true;
 
-    const principal = context.switchToHttp().getRequest<Request>().principal;
+    const req = context.switchToHttp().getRequest<Request>();
+    const principal = req.principal;
     // No principal here means the route was @Public(): a public route must not also require roles.
-    if (!principal || !required.some((role) => principal.roles.includes(role))) throw AppException.forbidden();
+    if (!principal || !required.some((role) => principal.roles.includes(role))) {
+      if (principal && req.method === 'GET') await this.audit.record(accessEvent(context, req, 'refused'));
+      throw AppException.forbidden();
+    }
     return true;
   }
 }

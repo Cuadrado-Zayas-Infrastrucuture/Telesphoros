@@ -11,7 +11,7 @@ afterAll(async () => {
 });
 const q = <T = Record<string, unknown>>(sql: string, values: unknown[] = []) => withAdmin(pg.adminUrl, async (c: Client) => (await c.query(sql, values)).rows as T[]);
 
-const GUARDED = [...APPEND_ONLY_CLASSES.record, ...APPEND_ONLY_CLASSES.child, ...APPEND_ONLY_CLASSES.ledger, ...APPEND_ONLY_CLASSES.incident];
+const GUARDED = [...APPEND_ONLY_CLASSES.record, ...APPEND_ONLY_CLASSES.child, ...APPEND_ONLY_CLASSES.ledger, ...APPEND_ONLY_CLASSES.incident, ...APPEND_ONLY_CLASSES.security];
 const TENANT_POLICIED = [...APPEND_ONLY_CLASSES.record, ...APPEND_ONLY_CLASSES.child, ...APPEND_ONLY_CLASSES.notes];
 const FORCED = [...APPEND_ONLY_CLASSES.record, ...APPEND_ONLY_CLASSES.child, ...APPEND_ONLY_CLASSES.notes];
 

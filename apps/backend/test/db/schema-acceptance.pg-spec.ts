@@ -1,4 +1,3 @@
-import { migrateDown, migrateUp } from '../../src/db/migrator';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { assertSchemaAcceptance } from '../helpers/schema-acceptance';
 
@@ -12,9 +11,13 @@ it('accepts all reviewed relationships and query-index definitions, with no unva
 
 it('catches the unvalidated state even though the FK name, columns and count are unchanged', async () => {
   await withAdmin(pg.adminUrl, async c => {
-    await migrateDown(c, 1);
-    try { await expect(assertSchemaAcceptance(c)).rejects.toThrow(); }
-    finally { await migrateUp(c); }
+    const definition = (await c.query("SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conname='recommendations_report_patient_fk'")).rows[0].definition as string;
+    await c.query('BEGIN');
+    try {
+      await c.query('ALTER TABLE recommendations DROP CONSTRAINT recommendations_report_patient_fk');
+      await c.query(`ALTER TABLE recommendations ADD CONSTRAINT recommendations_report_patient_fk ${definition} NOT VALID`);
+      await expect(assertSchemaAcceptance(c)).rejects.toThrow();
+    } finally { await c.query('ROLLBACK'); }
     await assertSchemaAcceptance(c);
   });
 });

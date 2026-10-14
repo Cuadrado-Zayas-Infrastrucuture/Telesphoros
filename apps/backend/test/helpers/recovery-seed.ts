@@ -13,6 +13,7 @@ export const EXPECTED_ROWS: Record<string, number> = {
   patients: 306, reports: 306, recommendations: 300, report_captures: 6, capture_acceptances: 6,
   evaluations: 24, evaluation_results: 72, evaluation_gene_states: 48, corrections: 12,
   cell_disputes: 6, cell_dispute_decisions: 3, ledger_checkpoints: 3, ledger_events: 60,
+  security_audit_events: 1,
 };
 
 /** Valid one-page PDF, padded with PDF comments before its xref. No clinical or personal data. */
@@ -97,6 +98,9 @@ export async function seedRecovery(pg: EphemeralDatabase, storage: S3ObjectStora
       }
       expect(await verifier.verify(tenant, { mode: 'full', recordCheckpoint: true })).toMatchObject({ status: 'ok' });
     }
+    // A protected synthetic access event proves recovery carries the new audit table's data, not only its schema.
+    await database.recordSecurityEvent({ type: 'api-auth', outcome: 'accepted', tenantId: firstCapture!.tenant,
+      actorSub: 'syn-reviewer', routeKey: 'ReportCaptureController.get', subjectId: null, requestId: randomUUID() });
     return firstCapture!;
   } finally { await verifier.close(); await database.onModuleDestroy(); }
 }

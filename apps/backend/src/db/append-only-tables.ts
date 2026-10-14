@@ -16,6 +16,8 @@ export const APPEND_ONLY_CLASSES = {
   notes: ['event_notes'],
   /** Containment of a damaged ledger (migration 0011): written only by its functions, never updated; open until a clearance names the incident. */
   incident: ['ledger_incidents', 'ledger_incident_clearances'],
+  /** Application access evidence: app calls a constrained writer but cannot read or mutate rows. */
+  security: ['security_audit_events'],
 } as const;
 
 /** Tables from before the ledger: protected by tenant isolation, not by append-only rules. */
@@ -25,7 +27,7 @@ export const LEGACY_TABLES = ['patients', 'reports', 'recommendations', 'schema_
 export const MUTABLE_OPERATIONAL_TABLES = ['report_upload_runs','report_upload_attempts'] as const;
 
 /**
- * Authority state (migration 0016): who belongs to which organization with which roles. Written only by the operator command (the table's
+ * Authority state (migration 0017): who belongs to which organization with which roles. Written only by the operator command (the table's
  * owner); the application role can only read its own organization's rows. Rows are never deleted: a removed person's row is the revocation record.
  */
 export const AUTHORITY_TABLES = ['tenant_memberships'] as const;

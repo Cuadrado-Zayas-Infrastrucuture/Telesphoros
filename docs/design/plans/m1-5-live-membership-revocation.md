@@ -24,7 +24,7 @@ These are the audit plan's DA-1 and DA-2, restated as what they mean for this sl
 
 ## Design
 
-### 1. Data (one new migration, `0016_membership.up.sql` and a `.down.sql`)
+### 1. Data (one new migration, `0017_membership.up.sql` and a `.down.sql`)
 
 `tenant_memberships`, one row per person per tenant, **never deleted** (a removed person's row is the tombstone):
 
@@ -93,7 +93,7 @@ In-memory storage (tier 1) gets an equivalent store with the same rules so the t
 
 ## Files expected to change
 
-New: `apps/backend/migrations/0016_membership.{up,down}.sql`; a membership module (repository abstract class, in-memory and PostgreSQL implementations, service); the command-line tool; `docs/ops/membership.md`; new specs and a verification note.
+New: `apps/backend/migrations/0017_membership.{up,down}.sql`; a membership module (repository abstract class, in-memory and PostgreSQL implementations, service); the command-line tool; `docs/ops/membership.md`; new specs and a verification note.
 Changed: `auth.guard.ts`, `principal.ts`, `database.ts` and the four Postgres repositories (pass `authority`), `me.controller.ts`, `storage.module.ts` and `auth.module.ts` wiring, `privilege-facts.ts`, the restore manifest, `test/helpers`, `docs/auth.md`, `docs/database.md`, `docs/STATUS.md`, this plan.
 
 ## Risks to watch

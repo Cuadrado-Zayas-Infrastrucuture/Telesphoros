@@ -158,7 +158,7 @@ describe('readiness against a real database', () => {
     await request(app.getHttpServer()).get('/api/v1/health').expect(200);
   });
 
-  it('API calls are refused cleanly (503 in the standard envelope, no database details) while the database is down, before any work is done', async () => {
+  it('private API calls fail closed (503 in the standard envelope, no database details) while the database is down, before any work is done', async () => {
     const db = await createEphemeralDatabase();
     dbs.push(db);
     // No token mirroring: the caller's standing is looked up in the database for real, and the database is the thing that is down.

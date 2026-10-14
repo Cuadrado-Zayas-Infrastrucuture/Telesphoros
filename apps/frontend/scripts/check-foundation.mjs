@@ -86,3 +86,21 @@ assert.ok(
   ),
   'local browser suite is not required by e2e',
 );
+
+// The synthetic AI preview and its fixtures must be absent, not merely hidden.
+for (const path of files('dist/assets').filter(path => path.endsWith('.js'))) {
+  const code = readFileSync(path, 'utf8');
+  for (const marker of ['SYN-PGX-UI-01', 'Open PGx explanation preview', 'Prompt Kit preview']) {
+    assert.ok(!code.includes(marker), `${path}: development interpretation preview leaked into production`);
+  }
+}
+console.log('interpretation preview excluded from production assets');
+
+// Source maps prove SDK/transport modules were tree-shaken out, even if minified names change.
+for (const path of files('dist/assets').filter(path => path.endsWith('.js.map'))) {
+  const map = JSON.parse(readFileSync(path, 'utf8'));
+  for (const source of map.sources) {
+    assert.ok(!/(@ai-sdk|\/ai\/|syntheticChatTransport|useSyntheticChat)/.test(source), `${path}: development AI SDK module leaked into production: ${source}`);
+  }
+}
+console.log('AI SDK and synthetic transport excluded from production source maps');
