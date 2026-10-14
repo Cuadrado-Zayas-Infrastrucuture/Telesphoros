@@ -35,6 +35,7 @@ const primaryKeys: Record<string, string> = {
   report_captures: 'id', capture_acceptances: 'id', evaluations: 'id', evaluation_results: 'id',
   evaluation_gene_states: 'id', corrections: 'id', cell_disputes: 'id', cell_dispute_decisions: 'id',
   ledger_incidents: 'id', ledger_incident_clearances: 'id',
+  security_audit_events: 'id',
 };
 const uniqueKeys: Record<string, string> = {
   report_upload_runs_tenant_id_run_id_key: 'tenant_id, run_id', upload_attempt_request_uq: 'tenant_id, report_id, principal, request_id', upload_attempt_key_uq: 'storage_key',
@@ -75,6 +76,7 @@ const checkNames: Record<string, string> = {
   ledger_heads: 'hash_format seq_nonneg tenant_id_len',
   ledger_incidents: 'basis failed_seq kind recorded_by scope scope_tenant source tenant_len',
   ledger_clearances: 'basis cleared_by', // constraint prefix differs from table ledger_incident_clearances
+  security_audit: 'identity kind request route',
 };
 for (const table of ['report_captures', 'capture_acceptances', 'evaluations', 'corrections', 'cell_disputes', 'cell_dispute_decisions', 'ledger_checkpoints']) {
   relationships.push([`${table}_event_fk`, table, 'ledger_event_id,tenant_id', 'ledger_events:id,tenant_id']);
@@ -106,6 +108,8 @@ const queryIndexes: Record<string, string> = {
   ledger_checkpoints_tenant_seq_idx: 'INDEX ledger_checkpoints_tenant_seq_idx ON public.ledger_checkpoints USING btree (tenant_id, up_to_seq DESC)',
   ledger_incidents_tenant_idx: "INDEX ledger_incidents_tenant_idx ON public.ledger_incidents USING btree (tenant_id) WHERE (scope = 'tenant'::text)",
   ledger_incidents_global_idx: "INDEX ledger_incidents_global_idx ON public.ledger_incidents USING btree (scope) WHERE (scope = 'global'::text)",
+  security_audit_tenant_time: 'INDEX security_audit_tenant_time ON public.security_audit_events USING btree (tenant_id, occurred_at DESC, id) WHERE (tenant_id IS NOT NULL)',
+  security_audit_request_id: 'INDEX security_audit_request_id ON public.security_audit_events USING btree (request_id)',
 };
 
 /** Reusable acceptance gate for a migrated or restored database; counts/names alone are insufficient. */

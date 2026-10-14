@@ -11,6 +11,7 @@ import { AllExceptionsFilter } from '../src/common/all-exceptions.filter';
 import { InputBoundaryInterceptor } from '../src/common/input-boundary.interceptor';
 import { AuthGuard } from '../src/auth/auth.guard';
 import { Public } from '../src/auth/decorators';
+import { InMemorySecurityAuditStore, SecurityAuditStore } from '../src/auth/security-audit';
 import { TokenVerifier } from '../src/auth/token-verifier';
 import { pinoHttpOptions } from '../src/logger-options';
 
@@ -61,6 +62,7 @@ beforeAll(async () => {
     controllers: [ProbeController],
     providers: [
       { provide: TokenVerifier, useValue: verifier },
+      { provide: SecurityAuditStore, useClass: InMemorySecurityAuditStore },
       { provide: APP_GUARD, useClass: AuthGuard },
       { provide: APP_FILTER, useClass: AllExceptionsFilter },
       { provide: APP_INTERCEPTOR, useClass: InputBoundaryInterceptor },

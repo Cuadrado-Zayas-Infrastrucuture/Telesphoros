@@ -16,6 +16,8 @@ export const APPEND_ONLY_CLASSES = {
   notes: ['event_notes'],
   /** Containment of a damaged ledger (migration 0011): written only by its functions, never updated; open until a clearance names the incident. */
   incident: ['ledger_incidents', 'ledger_incident_clearances'],
+  /** Application access evidence: app calls a constrained writer but cannot read or mutate rows. */
+  security: ['security_audit_events'],
 } as const;
 
 /** Tables from before the ledger: protected by tenant isolation, not by append-only rules. */
