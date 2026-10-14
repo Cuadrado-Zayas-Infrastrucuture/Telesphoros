@@ -1,6 +1,6 @@
 # M1.5b: members with no role cannot read clinical records
 
-Status: **implemented on a local branch (not pushed).** The founder approved the rule on 2026-10-13 (decision DA-1 and DM-2 in the [M1.5 plan](m1-5-live-membership-revocation.md), which names this slice) and asked to start it the same day, so this note records what was done rather than asking again. Closes audit finding **I04**. Evidence: [verification](../../verification/m1-5b-no-role-reads.md).
+Status: **implemented; open for review as its own pull request.** The founder approved the rule on 2026-10-13 (decision DA-1 and DM-2 in the [M1.5 plan](m1-5-live-membership-revocation.md), which names this slice) and asked to start it the same day, so this note records what was done rather than asking again. Closes audit finding **I04**. Evidence: [verification](../../verification/m1-5b-no-role-reads.md).
 
 ## Problem
 
