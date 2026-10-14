@@ -24,12 +24,16 @@ export class PatientIdentityService {
     this.digest = new IdentifierDigest(env.IDENTIFIER_DIGEST_KEY);
   }
 
-  private async requirePatient(principal: Principal, patientId: string): Promise<void> {
-    if (!(await this.patients.findById(principal.tenantId, patientId))) throw AppException.notFound('Patient not found.');
+  private async requirePatient(principal: Principal, patientId: string): Promise<{ mergedInto: string | null }> {
+    const patient = await this.patients.findById(principal.tenantId, patientId);
+    if (!patient) throw AppException.notFound('Patient not found.');
+    return { mergedInto: patient.mergedInto ?? null };
   }
 
   async add(principal: Principal, patientId: string, body: IdentifierCreate): Promise<IdentifierDto> {
-    await this.requirePatient(principal, patientId);
+    const patient = await this.requirePatient(principal, patientId);
+    // A merged-away patient keeps its identifiers but takes no new ones: they belong on the patient it was merged into.
+    if (patient.mergedInto) throw AppException.conflictBecause('patient-merged', `That patient was merged into patient ${patient.mergedInto}. Register the identifier there.`);
     try {
       const stored = await this.identifiers.add(principal.tenantId, principal.sub, {
         patientId,

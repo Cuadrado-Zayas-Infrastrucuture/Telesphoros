@@ -22,5 +22,7 @@ export const patientDtoSchema = z.strictObject({
   label: z.string(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
+  /** The patient this one was merged into (M2.1c-2), or null. A merged-away patient keeps every record; reads resolve the pair as one. */
+  mergedInto: z.uuid().nullable().default(null),
 });
 export type PatientDto = z.infer<typeof patientDtoSchema>;

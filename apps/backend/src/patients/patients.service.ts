@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import type { PaginationQuery, PatientInput } from '@telesphoros/shared-types';
+import type { PatientInput, PatientListQuery } from '@telesphoros/shared-types';
 import { AppException } from '../common/app-exception';
 import type { Principal } from '../auth/principal';
 import { PatientsRepository } from '../storage/patients.repository';
@@ -14,8 +14,8 @@ export class PatientsService {
     private readonly reports: ReportsRepository,
   ) {}
 
-  list(principal: Principal, { page, pageSize }: PaginationQuery) {
-    return this.patients.list(principal.tenantId, { offset: (page - 1) * pageSize, limit: pageSize });
+  list(principal: Principal, { page, pageSize, includeMerged }: Pick<PatientListQuery, 'page' | 'pageSize'> & { includeMerged?: boolean }) {
+    return this.patients.list(principal.tenantId, { offset: (page - 1) * pageSize, limit: pageSize }, { includeMerged });
   }
 
   /** Someone else's patient is reported as NOT_FOUND, so ids cannot be probed for existence. */

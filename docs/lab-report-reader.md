@@ -187,3 +187,16 @@ Refusals: `self-review` (409) for the person who registered the report, asked fo
 `source-changed` (409) when the report changed while deciding; 403 for a role that may not decide (an administrator alone, a reader). Another
 organization's report is 404. Both routes are pipeline routes (503 while the pipeline is off). **Quarantine (M2.1c-1).** A `rejected` decision about the file the report holds now quarantines the report: its evaluations stop being `current` (`GET /evaluations?current=true` leaves them out), and every evaluation read carries `advisory.patientLink` (`verified`, `unverified` for no decision for the current file, which includes evaluations made before the link existed, or `rejected`). `GET /patient-link/quarantine` (role `reviewer`, pipeline route, paged) lists quarantined reports that still have an active evaluation, with the coded reason and the evaluation ids; a reviewer retracts each with the existing `wrong-patient` correction, and a report leaves the list when none is active or the link is verified again. Nothing is corrected automatically, and a report cannot be re-pointed to another patient: upload it again under the right one. Identifiers themselves are registered on the patient
 (`/patients/:id/identifiers`, [patient identifiers](ops/patient-identifiers.md)).
+
+## Duplicate patients and merges (M2.1c-2)
+
+[Design note](design/plans/m2-1c-2-duplicates-and-merge.md). A patient-identifier collision (`409 identifier-in-use`) leaves a possible-duplicate flag; a person proposes a merge and a different person decides it. The records are ledger records, so merge routes answer 503 while the ledger is absent (in-memory mode); the duplicate list works either way.
+
+| Route | Roles | Notes |
+| --- | --- | --- |
+| `GET /patient-duplicates` | clinical read | Pairs flagged by a collision and not yet reviewed (a declined merge dismisses a pair); paged; no identifier or digest |
+| `POST /patient-merges` | `clinician`, `reviewer` | `{kind: "merge" or "unmerge", sourcePatientId, targetPatientId, reasonCode}`; the reason must go with the kind. 409 `merge-<reason>` for a pair the graph cannot take, `merge-proposal-pending` for an undecided duplicate |
+| `POST /patient-merges/:id/decision` | `clinician`, `reviewer` | `{decision: "approved" or "declined"}`; 409 `self-review` for the proposer and for a proposal already decided differently; the graph is checked again at commit |
+| `GET /patient-merges`, `GET /patient-merges/:id` | clinical read | History newest first, filterable by state, with the decision |
+
+An administrator alone has none of these. Reads: `GET /patients` hides merged-away patients unless `includeMerged=true` and shows `mergedInto`; `patientId` on reports, evaluations and recommendations means the whole group; `POST /reports` and `POST /patients/:id/identifiers` on a merged-away patient are 409 `patient-merged`.

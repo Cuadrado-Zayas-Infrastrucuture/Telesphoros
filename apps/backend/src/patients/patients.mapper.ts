@@ -8,5 +8,6 @@ export function toPatientDto(record: PatientRecord): PatientDto {
     label: record.label,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
+    mergedInto: record.mergedInto ?? null,
   });
 }

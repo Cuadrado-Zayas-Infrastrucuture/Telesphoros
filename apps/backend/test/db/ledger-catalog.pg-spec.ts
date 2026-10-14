@@ -1,5 +1,5 @@
 import type { Client } from 'pg';
-import { ALL_CLASSIFIED_TABLES, APPEND_ONLY_CLASSES, AUTHORITY_TABLES, MUTABLE_OPERATIONAL_TABLES, PATIENT_IDENTITY_TABLES, SECURITY_AUDIT_TABLES } from '../../src/db/append-only-tables';
+import { ALL_CLASSIFIED_TABLES, APPEND_ONLY_CLASSES, AUTHORITY_TABLES, MUTABLE_OPERATIONAL_TABLES, PATIENT_DUPLICATE_TABLES, PATIENT_IDENTITY_TABLES, SECURITY_AUDIT_TABLES } from '../../src/db/append-only-tables';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 
 let pg: EphemeralDatabase;
@@ -54,6 +54,25 @@ describe('catalog guard: the audit tables are classified and protected as their 
       expect(policies[0]!.roles).toContain('telesphoros_app');
       expect(policies[0]!.qual).toContain('app.current_tenant_id');
       expect(policies[0]!.with_check).toContain('app.current_tenant_id');
+    }
+  });
+
+  it('duplicate flags have forced tenant RLS, may be read and added by the application and nothing else, and refuse even the owner an edit, a delete or a truncate', async () => {
+    const tables = await q<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>(`SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relname = ANY($1)`, [[...PATIENT_DUPLICATE_TABLES]]);
+    expect(tables).toHaveLength(PATIENT_DUPLICATE_TABLES.length);
+    for (const t of tables) expect(t).toMatchObject({ relrowsecurity: true, relforcerowsecurity: true });
+    for (const table of PATIENT_DUPLICATE_TABLES) {
+      const grants = await q<{ privilege_type: string }>(`SELECT privilege_type FROM information_schema.role_table_grants WHERE table_schema = 'public' AND grantee = 'telesphoros_app' AND table_name = $1 ORDER BY privilege_type`, [table]);
+      expect(grants.map((g) => g.privilege_type)).toEqual(['INSERT', 'SELECT']);
+      const updatable = await q<{ column_name: string }>(`SELECT column_name FROM information_schema.column_privileges WHERE table_schema = 'public' AND grantee = 'telesphoros_app' AND table_name = $1 AND privilege_type = 'UPDATE'`, [table]);
+      expect(updatable).toEqual([]); // not even a column grant: a flag is never changed
+      const policies = await q<{ cmd: string; roles: string; qual: string; with_check: string }>(`SELECT cmd, roles::text, qual, with_check FROM pg_policies WHERE schemaname = 'public' AND tablename = $1`, [table]);
+      expect(policies).toHaveLength(1);
+      expect(policies[0]).toMatchObject({ cmd: 'ALL' });
+      expect(policies[0]!.qual).toContain('app.current_tenant_id');
+      expect(policies[0]!.with_check).toContain('app.current_tenant_id');
+      const triggers = await q<{ tgname: string }>(`SELECT t.tgname FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid WHERE c.relname = $1 AND NOT t.tgisinternal ORDER BY 1`, [table]);
+      expect(triggers.map((t) => t.tgname)).toEqual(['patient_duplicate_flags_append_only', 'patient_duplicate_flags_no_truncate']);
     }
   });
 

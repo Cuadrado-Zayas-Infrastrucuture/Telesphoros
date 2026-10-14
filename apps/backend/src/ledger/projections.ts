@@ -99,6 +99,20 @@ const LOADERS: Record<Exclude<RecordTable, 'evaluations'>, Loader> = {
       decision: r.decision, method: r.method, basisCode: r.basis_code, identifierId: r.identifier_id,
     }),
   },
+  patient_merge_proposals: {
+    sql: `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
+                 kind, source_patient_id::text AS source_patient_id, target_patient_id::text AS target_patient_id, reason_code
+            FROM patient_merge_proposals WHERE id = ANY($1::uuid[])`,
+    project: (r) => ({
+      kind: 'patient-merge-proposal', ...common(r), mergeKind: r.kind, sourcePatientId: r.source_patient_id, targetPatientId: r.target_patient_id, reasonCode: r.reason_code,
+    }),
+  },
+  patient_merge_decisions: {
+    sql: `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
+                 proposal_id::text AS proposal_id, decision
+            FROM patient_merge_decisions WHERE id = ANY($1::uuid[])`,
+    project: (r) => ({ kind: 'patient-merge-decision', ...common(r), proposalId: r.proposal_id, decision: r.decision }),
+  },
 };
 
 const EVALUATION_SQL = `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,

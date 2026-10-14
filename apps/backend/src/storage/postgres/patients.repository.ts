@@ -24,6 +24,9 @@ const toRecord = (row: PatientRow): PatientRecord => ({
   updatedAt: row.updated_at.toISOString(),
 });
 
+/** A patient that was merged into another says so; one that was not carries no `mergedInto` at all (so it equals what any other store returns). */
+const withMergedInto = (row: PatientRow & { merged_into: string | null }): PatientRecord => ({ ...toRecord(row), ...(row.merged_into ? { mergedInto: row.merged_into } : {}) });
+
 /**
  * Every query names `tenant_id` explicitly AND runs under row-level security: two independent
  * layers, so a mistake in one still cannot expose another tenant's rows. "Delete" is a soft delete.
@@ -34,27 +37,33 @@ export class PostgresPatientsRepository extends PatientsRepository {
     super();
   }
 
-  list(tenantId: string, { offset, limit }: PageRequest): Promise<Page<PatientRecord>> {
+  list(tenantId: string, { offset, limit }: PageRequest, options: { includeMerged?: boolean } = {}): Promise<Page<PatientRecord>> {
     return this.db.withTenant(tenantId, async (client) => {
-      const rows = await client.query<PatientRow>(
-        `SELECT ${COLUMNS} FROM patients WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY seq LIMIT $2 OFFSET $3`,
-        [tenantId, limit, offset],
+      // The alias edges in force (a merge makes the source an alias of the target; nothing on the patient row changes).
+      const rows = await client.query<PatientRow & { merged_into: string | null }>(
+        `WITH edges AS MATERIALIZED (SELECT * FROM patient_alias_edges($1))
+         SELECT ${COLUMNS.split(', ').map((c) => `p.${c}`).join(', ')}, e.target_patient_id::text AS merged_into
+           FROM patients p LEFT JOIN edges e ON e.source_patient_id = p.id
+          WHERE p.tenant_id = $1 AND p.deleted_at IS NULL AND ($4::boolean OR e.source_patient_id IS NULL) ORDER BY p.seq LIMIT $2 OFFSET $3`,
+        [tenantId, limit, offset, options.includeMerged === true],
       );
       const total = await client.query<{ n: number }>(
-        'SELECT count(*)::int AS n FROM patients WHERE tenant_id = $1 AND deleted_at IS NULL',
-        [tenantId],
+        `WITH edges AS MATERIALIZED (SELECT * FROM patient_alias_edges($1))
+         SELECT count(*)::int AS n FROM patients p LEFT JOIN edges e ON e.source_patient_id = p.id
+          WHERE p.tenant_id = $1 AND p.deleted_at IS NULL AND ($2::boolean OR e.source_patient_id IS NULL)`,
+        [tenantId, options.includeMerged === true],
       );
-      return { items: rows.rows.map(toRecord), total: total.rows[0]!.n };
+      return { items: rows.rows.map(withMergedInto), total: total.rows[0]!.n };
     });
   }
 
   findById(tenantId: string, id: string): Promise<PatientRecord | undefined> {
     return this.db.withTenant(tenantId, async (client) => {
-      const { rows } = await client.query<PatientRow>(
-        `SELECT ${COLUMNS} FROM patients WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+      const { rows } = await client.query<PatientRow & { merged_into: string | null }>(
+        `SELECT ${COLUMNS}, patient_merged_into($2, id)::text AS merged_into FROM patients WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
         [id, tenantId],
       );
-      return rows[0] ? toRecord(rows[0]) : undefined;
+      return rows[0] ? withMergedInto(rows[0]) : undefined;
     });
   }
 

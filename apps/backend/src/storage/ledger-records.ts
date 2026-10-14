@@ -131,6 +131,28 @@ export interface QuarantineEntry {
   activeEvaluationIds: string[];
 }
 
+/** A proposal to merge one patient into another, or to undo that merge (M2.1c-2). */
+export interface MergeProposalInput {
+  kind: 'merge' | 'unmerge';
+  /** The patient that becomes (or stops being) an alias. */
+  sourcePatientId: string;
+  /** The patient it is (or was) merged into. */
+  targetPatientId: string;
+  reasonCode: string;
+}
+
+export interface MergeDecisionInput {
+  proposalId: string;
+  decision: 'approved' | 'declined';
+}
+
+/** A proposal and where it stands: pending, or the decision that settled it. */
+export interface MergeStatus {
+  proposal: Projected;
+  status: 'pending' | 'approved' | 'declined';
+  decision: Projected | null;
+}
+
 /** What a read returns. */
 export type Projected = Record<string, unknown> & { id: string; tenantId: string; seq: string; createdBy: string; createdAt: string };
 

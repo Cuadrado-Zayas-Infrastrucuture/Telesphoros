@@ -80,7 +80,8 @@ export class PostgresReportsRepository extends ReportsRepository {
   list(tenantId: string, { offset, limit }: PageRequest, filter: ReportFilter): Promise<Page<ReportRecord>> {
     return this.db.withTenant(tenantId, async (client) => {
       // `$2::uuid IS NULL OR patient_id = $2` keeps ONE static query text for both filtered and unfiltered lists.
-      const where = 'tenant_id = $1 AND deleted_at IS NULL AND ($2::uuid IS NULL OR patient_id = $2::uuid)';
+      // The patient filter means the patient's whole group (a merged patient and the one it was merged into), so a bookmark to either finds everything.
+      const where = 'tenant_id = $1 AND deleted_at IS NULL AND ($2::uuid IS NULL OR patient_id IN (SELECT patient_group_ids($1, $2::uuid)))';
       const rows = await client.query<ReportRow>(
         `SELECT ${COLUMNS} FROM reports WHERE ${where} ORDER BY seq LIMIT $3 OFFSET $4`,
         [tenantId, filter.patientId ?? null, limit, offset],

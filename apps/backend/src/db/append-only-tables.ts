@@ -5,7 +5,7 @@
  */
 export const APPEND_ONLY_CLASSES = {
   /** One row per fact, with its own ledger event (`ledger_event_id`, `created_by`, `seq`). Insert-only for everyone. */
-  record: ['report_captures', 'capture_acceptances', 'evaluations', 'corrections', 'cell_disputes', 'cell_dispute_decisions', 'report_patient_decisions'],
+  record: ['report_captures', 'capture_acceptances', 'evaluations', 'corrections', 'cell_disputes', 'cell_dispute_decisions', 'report_patient_decisions', 'patient_merge_proposals', 'patient_merge_decisions'],
   /** Parts of a record, covered by the parent's event. Insert-only; frozen once the parent's event is visible. */
   child: ['evaluation_results', 'evaluation_gene_states'],
   /** The chain itself. Written only by the ledger functions. */
@@ -39,9 +39,15 @@ export const AUTHORITY_TABLES = ['tenant_memberships', 'tenants', 'invitations']
 export const PATIENT_IDENTITY_TABLES = ['patient_identifiers'] as const;
 
 /**
+ * Possible-duplicate flags (migration 0021): tenant-isolated like the patient rows and truly append-only (no update, delete or truncate for anyone).
+ * Not a ledger record: a flag says two patients' identifiers collided, holds no identifier, and decides nothing.
+ */
+export const PATIENT_DUPLICATE_TABLES = ['patient_duplicate_flags'] as const;
+
+/**
  * The security-event record (migration 0018): append-only, no privilege for the application role (it calls security_event_append()), readable only by the
  * auditor role. Not part of the clinical ledger and not clinical data.
  */
 export const SECURITY_AUDIT_TABLES = ['security_events'] as const;
 
-export const ALL_CLASSIFIED_TABLES: readonly string[] = [...Object.values(APPEND_ONLY_CLASSES).flat(), ...LEGACY_TABLES, ...MUTABLE_OPERATIONAL_TABLES, ...AUTHORITY_TABLES, ...PATIENT_IDENTITY_TABLES, ...SECURITY_AUDIT_TABLES];
+export const ALL_CLASSIFIED_TABLES: readonly string[] = [...Object.values(APPEND_ONLY_CLASSES).flat(), ...LEGACY_TABLES, ...MUTABLE_OPERATIONAL_TABLES, ...AUTHORITY_TABLES, ...PATIENT_IDENTITY_TABLES, ...PATIENT_DUPLICATE_TABLES, ...SECURITY_AUDIT_TABLES];

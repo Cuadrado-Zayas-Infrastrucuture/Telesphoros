@@ -11,6 +11,8 @@ export interface PatientRecord {
   label: string;
   createdAt: string;
   updatedAt: string;
+  /** The patient this one was merged into (M2.1c-2), if any. Read from the merge records; never stored on the patient row. */
+  mergedInto?: string | null;
 }
 
 export interface ReportRecord {

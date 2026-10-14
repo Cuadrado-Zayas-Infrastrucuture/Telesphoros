@@ -7,7 +7,12 @@ const relationships: [string, string, string, string][] = [
   ['invitations_tenant_id_fkey', 'invitations', 'tenant_id', 'tenants:id'],
   ['patient_identifiers_patient_fk', 'patient_identifiers', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   ['report_patient_decisions_report_fk', 'report_patient_decisions', 'tenant_id,patient_id,report_id', 'reports:tenant_id,patient_id,id'],
-  ['report_patient_decisions_identifier_fk', 'report_patient_decisions', 'identifier_id,tenant_id,patient_id', 'patient_identifiers:id,tenant_id,patient_id'],
+  ['report_patient_decisions_identifier_fk', 'report_patient_decisions', 'identifier_id,tenant_id', 'patient_identifiers:id,tenant_id'],
+  ['patient_duplicate_flags_patient_fk', 'patient_duplicate_flags', 'patient_id,tenant_id', 'patients:id,tenant_id'],
+  ['patient_duplicate_flags_other_fk', 'patient_duplicate_flags', 'other_patient_id,tenant_id', 'patients:id,tenant_id'],
+  ['patient_merge_proposals_source_fk', 'patient_merge_proposals', 'source_patient_id,tenant_id', 'patients:id,tenant_id'],
+  ['patient_merge_proposals_target_fk', 'patient_merge_proposals', 'target_patient_id,tenant_id', 'patients:id,tenant_id'],
+  ['patient_merge_decisions_proposal_fk', 'patient_merge_decisions', 'proposal_id,tenant_id', 'patient_merge_proposals:id,tenant_id'],
   ['upload_attempt_report_fk', 'report_upload_attempts', 'tenant_id,patient_id,report_id', 'reports:tenant_id,patient_id,id'],
   ['upload_attempt_run_fk', 'report_upload_attempts', 'tenant_id,run_id', 'report_upload_runs:tenant_id,run_id'],
   ['reports_patient_fk', 'reports', 'patient_id,tenant_id', 'patients:id,tenant_id'],
@@ -42,6 +47,7 @@ const primaryKeys: Record<string, string> = {
   ledger_incidents: 'id', ledger_incident_clearances: 'id', tenant_memberships: 'tenant_id, sub',
   security_audit_events: 'id', security_events: 'id', tenants: 'id', invitations: 'id',
   patient_identifiers: 'id', report_patient_decisions: 'id',
+  patient_duplicate_flags: 'id', patient_merge_proposals: 'id', patient_merge_decisions: 'id',
 };
 const uniqueKeys: Record<string, string> = {
   report_upload_runs_tenant_id_run_id_key: 'tenant_id, run_id', upload_attempt_request_uq: 'tenant_id, report_id, principal, request_id', upload_attempt_key_uq: 'storage_key',
@@ -60,11 +66,16 @@ const uniqueKeys: Record<string, string> = {
   cell_dispute_decisions_dispute_uq: 'dispute_id', cell_dispute_decisions_id_tenant_uq: 'id, tenant_id',
   ledger_clearances_incident_uq: 'incident_id', security_events_seq_uq: 'seq',
   patient_identifiers_id_tenant_patient_uq: 'id, tenant_id, patient_id', report_patient_decisions_id_tenant_uq: 'id, tenant_id',
+  patient_identifiers_id_tenant_uq: 'id, tenant_id', patient_duplicate_flags_pair_uq: 'tenant_id, patient_id, other_patient_id',
+  patient_merge_proposals_id_tenant_uq: 'id, tenant_id', patient_merge_decisions_proposal_uq: 'tenant_id, proposal_id', patient_merge_decisions_id_tenant_uq: 'id, tenant_id',
 };
 // Complete CHECK inventory; semantic refusal/control tests remain in the existing behavior suites.
 const checkNames: Record<string, string> = {
   patient_identifiers: 'tenant_id_len created_by_len system_shape digest_len key_version status withdrawal_shape withdrawn_by_len',
   report_patient_decisions: 'tenant_id_len created_by_len hash version_len decision method shape',
+  patient_duplicate_flags: 'tenant_id_len flagged_by_len system_shape pair_order',
+  patient_merge_proposals: 'tenant_id_len created_by_len kind distinct reason',
+  patient_merge_decisions: 'tenant_id_len created_by_len decision',
   tenants: 'id_len display_name_len status_check created_by_len changed_by_len',
   invitations: 'digest_len hint_len roles_check status_check created_by_len decided_shape fulfilled_sub_len',
   security_events: 'tenant_id_len type_check outcome_check actor_kind_check actor_ref_len subject_kind_check subject_ref_len request_id_len db_user_len details_shape',
@@ -91,7 +102,7 @@ const checkNames: Record<string, string> = {
   ledger_clearances: 'basis cleared_by', // constraint prefix differs from table ledger_incident_clearances
   security_audit: 'identity kind request route',
 };
-for (const table of ['report_captures', 'capture_acceptances', 'evaluations', 'corrections', 'cell_disputes', 'cell_dispute_decisions', 'report_patient_decisions', 'ledger_checkpoints']) {
+for (const table of ['report_captures', 'capture_acceptances', 'evaluations', 'corrections', 'cell_disputes', 'cell_dispute_decisions', 'report_patient_decisions', 'patient_merge_proposals', 'patient_merge_decisions', 'ledger_checkpoints']) {
   relationships.push([`${table}_event_fk`, table, 'ledger_event_id,tenant_id', 'ledger_events:id,tenant_id']);
 }
 
@@ -126,6 +137,10 @@ const queryIndexes: Record<string, string> = {
   patient_identifiers_active_uq: "UNIQUE INDEX patient_identifiers_active_uq ON public.patient_identifiers USING btree (tenant_id, system, value_digest) WHERE (status = 'active'::text)",
   patient_identifiers_patient_idx: 'INDEX patient_identifiers_patient_idx ON public.patient_identifiers USING btree (tenant_id, patient_id, seq)',
   report_patient_decisions_report_idx: 'INDEX report_patient_decisions_report_idx ON public.report_patient_decisions USING btree (tenant_id, report_id, seq)',
+  patient_duplicate_flags_tenant_idx: 'INDEX patient_duplicate_flags_tenant_idx ON public.patient_duplicate_flags USING btree (tenant_id, seq DESC)',
+  patient_merge_proposals_source_idx: 'INDEX patient_merge_proposals_source_idx ON public.patient_merge_proposals USING btree (tenant_id, source_patient_id, seq)',
+  patient_merge_proposals_target_idx: 'INDEX patient_merge_proposals_target_idx ON public.patient_merge_proposals USING btree (tenant_id, target_patient_id, seq)',
+  patient_merge_decisions_seq_idx: 'INDEX patient_merge_decisions_seq_idx ON public.patient_merge_decisions USING btree (tenant_id, seq)',
   invitations_tenant_idx: 'INDEX invitations_tenant_idx ON public.invitations USING btree (tenant_id, created_at)',
   tenant_memberships_one_active_uq: "UNIQUE INDEX tenant_memberships_one_active_uq ON public.tenant_memberships USING btree (sub) WHERE (status = 'active'::text)",
   ledger_incidents_global_idx: "INDEX ledger_incidents_global_idx ON public.ledger_incidents USING btree (scope) WHERE (scope = 'global'::text)",

@@ -164,6 +164,25 @@ it('measures filtered/public pages, complete internal reads and sparse/dense con
   }
 });
 
+it('resolves a patient group (merged patients) with real merge data in the organization, and every read still returns hand-computed results', async () => {
+  const t = tenants[0]!; const page = { offset: 0, limit: 20 };
+  const ids = (await withAdmin(pg.adminUrl, c => c.query(`SELECT id::text AS id FROM patients WHERE tenant_id=$1 ORDER BY seq OFFSET 200 LIMIT 120`, [t]))).rows.map(r => r.id as string);
+  for (let i = 0; i < 60; i++) { // 60 approved merges: the odd one of each pair becomes an alias of the even one
+    const proposal = await ledger.insertMergeProposal(t, 'syn-proposer', { kind: 'merge', sourcePatientId: ids[2 * i + 1]!, targetPatientId: ids[2 * i]!, reasonCode: 'entered-twice' });
+    await ledger.insertMergeDecision(t, 'syn-decider', { proposalId: proposal.record.id, decision: 'approved' });
+  }
+  const root = ids[0]!; const alias = ids[1]!;
+  expect((await measure('patients-list-with-merges', () => patients.list(t, page))).total).toBe(1502 - 60);
+  expect((await measure('patients-list-include-merged', () => patients.list(t, page, { includeMerged: true }))).total).toBe(1502);
+  expect((await measure('patient-detail-alias', () => patients.findById(t, alias)))?.mergedInto).toBe(root);
+  expect((await measure('reports-by-patient-group', () => reports.list(t, page, { patientId: alias }))).total).toBe(4); // two reports on each of the two patients, found from either end
+  expect((await measure('recommendations-by-patient-group', () => recommendations.list(t, page, { patientId: root }))).total).toBe(4);
+  expect((await measure('merges-page', () => ledger.pageMerges(t, page))).total).toBe(60);
+  expect((await measure('merges-pending', () => ledger.pageMerges(t, page, 'pending'))).total).toBe(0);
+  // The plans are recorded as evidence like every other read here; the planner's index choice is not asserted (this file never forces one).
+  expect((evidence.find(e => e.label === 'merges-page') as { statements: number }).statements).toBeLessThanOrEqual(4); // the page, then its proposals and its decisions in one statement each: no per-row lookups
+});
+
 it('looks up a caller\'s membership by primary key, whatever the table holds', async () => {
   const t = tenants[0]!;
   const found = await measure('membership-lookup', () => new PostgresMembershipRepository(db).find(t, `${t}-member-1`));

@@ -1,5 +1,5 @@
 import type {
-  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationReadContext, EvaluationState, InsertResult, NoteRecord, PatientDecisionInput, PatientLinkStateValue, Projected, QuarantineEntry,
+  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationReadContext, EvaluationState, InsertResult, MergeDecisionInput, MergeProposalInput, MergeStatus, NoteRecord, PatientDecisionInput, PatientLinkStateValue, Projected, QuarantineEntry,
 } from './ledger-records';
 import type { DisputeStatusValue } from '@telesphoros/shared-types';
 import type { Page, PageRequest } from './records';
@@ -33,6 +33,22 @@ export abstract class LedgerRecordsRepository {
    * and paged from one statement.
    */
   abstract pageQuarantine(tenantId: string, page: PageRequest): Promise<Page<QuarantineEntry>>;
+
+  /**
+   * Records a proposal to merge (or unmerge) two patients of the organization. In the writing transaction it asks the database's rule whether the
+   * merge is possible now (throws MergeRefusedError with the reason if not) and refuses a second undecided proposal for the same pair and kind
+   * (MergeRefusedError 'proposal-pending'). The decision is what changes anything.
+   */
+  abstract insertMergeProposal(tenantId: string, actor: string, input: MergeProposalInput): Promise<InsertResult>;
+  /**
+   * Records the decision on a proposal. The same decision again returns the stored one (`created: false`); a different one throws
+   * MergeAlreadyDecidedError. An approved decision is checked by the database at COMMIT, under the ledger lock, against the patients as they are
+   * then: MergeRefusedError with the reason if the merge is no longer possible. The decider must differ from the proposer (the database repeats it).
+   */
+  abstract insertMergeDecision(tenantId: string, actor: string, input: MergeDecisionInput): Promise<InsertResult>;
+  abstract findMerge(tenantId: string, proposalId: string): Promise<MergeStatus | undefined>;
+  /** Proposals newest first, with where each stands; optionally only those in one state. */
+  abstract pageMerges(tenantId: string, page: PageRequest, status?: 'pending' | 'approved' | 'declined'): Promise<Page<MergeStatus>>;
 
   abstract insertAcceptance(tenantId: string, actor: string, input: AcceptanceInput): Promise<InsertResult>;
   abstract findAcceptance(tenantId: string, id: string): Promise<Projected | undefined>;

@@ -41,9 +41,12 @@ export class ReportsService {
   /** Registers report metadata for one of the caller's own patients. The new status is always "received". */
   async create(principal: Principal, input: ReportCreate): Promise<ReportRecord> {
     // Same NOT_FOUND whether the patient is missing or belongs to someone else.
-    if (!(await this.patients.findById(principal.tenantId, input.patientId))) {
+    const patient = await this.patients.findById(principal.tenantId, input.patientId);
+    if (!patient) {
       throw AppException.notFound('Patient not found.');
     }
+    // A merged-away patient keeps what it has but takes nothing new: the report belongs on the patient it was merged into.
+    if (patient.mergedInto) throw AppException.conflictBecause('patient-merged', `That patient was merged into patient ${patient.mergedInto}. Register the report there.`);
     const now = new Date().toISOString();
     const record: ReportRecord = {
       id: randomUUID(),

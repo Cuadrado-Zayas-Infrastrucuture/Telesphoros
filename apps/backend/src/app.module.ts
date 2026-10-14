@@ -16,6 +16,7 @@ import { MembersModule } from './members/members.module';
 import { ObjectStorageModule } from './object-storage/object-storage.module';
 import type { RecoveryObjectStorage } from './object-storage/recovery-object-storage';
 import { PatientIdentityModule } from './patient-identity/patient-identity.module';
+import { PatientMergeModule } from './patient-merge/patient-merge.module';
 import { PatientsModule } from './patients/patients.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
 import { ReportsModule } from './reports/reports.module';
@@ -41,6 +42,7 @@ export class AppModule {
         LabReportsModule,
         PatientsModule,
         PatientIdentityModule,
+        PatientMergeModule,
         ReportsModule,
         RecommendationsModule,
         HealthModule,

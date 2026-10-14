@@ -5,12 +5,12 @@ import type { Page, PageRequest } from '../records';
 import { Database } from '../../db/database';
 import { LedgerStatus } from '../../ledger/ledger-status';
 import { appendEvent, newId } from '../../ledger/ledger-writer';
-import { DisputeChangedError, PatientLinkUnverifiedError, StaleAcceptanceError, SourceChangedError, toLedgerError, type RecordTable } from '../../ledger/ledger-types';
+import { DisputeChangedError, MergeAlreadyDecidedError, MergeRefusedError, PatientLinkUnverifiedError, StaleAcceptanceError, SourceChangedError, toLedgerError, type RecordTable } from '../../ledger/ledger-types';
 import { loadProjections } from '../../ledger/projections';
 import { canonicalHash } from '../../services/report-adapter/canonical-json';
 import { LedgerRecordsRepository } from '../ledger-records.repository';
 import type {
-  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationReadContext, EvaluationState, InsertResult, NoteRecord, PatientDecisionInput, PatientLinkStateValue, Projected, QuarantineEntry,
+  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationReadContext, EvaluationState, InsertResult, MergeDecisionInput, MergeProposalInput, MergeStatus, NoteRecord, PatientDecisionInput, PatientLinkStateValue, Projected, QuarantineEntry,
 } from '../ledger-records';
 
 /**
@@ -167,6 +167,88 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
     });
   }
 
+  insertMergeProposal(tenantId: string, actor: string, input: MergeProposalInput): Promise<InsertResult> {
+    return this.write(tenantId, actor, async (client) => {
+      // The database's own rule, asked before anything is written so an impossible proposal is refused early. The decision is what is guaranteed.
+      const refusal = await client.query<{ why: string | null }>(`SELECT patient_merge_refusal($1, $2, $3::uuid, $4::uuid) AS why`, [tenantId, input.kind, input.sourcePatientId, input.targetPatientId]);
+      if (refusal.rows[0]!.why !== null) throw new MergeRefusedError(refusal.rows[0]!.why);
+      const pending = await client.query(
+        `SELECT 1 FROM patient_merge_proposals p
+          WHERE p.tenant_id = $1 AND p.kind = $2 AND p.source_patient_id = $3 AND p.target_patient_id = $4
+            AND NOT EXISTS (SELECT 1 FROM patient_merge_decisions d WHERE d.tenant_id = p.tenant_id AND d.proposal_id = p.id) LIMIT 1`,
+        [tenantId, input.kind, input.sourcePatientId, input.targetPatientId],
+      );
+      if (pending.rowCount) throw new MergeRefusedError('proposal-pending');
+      const id = newId();
+      await client.query(
+        `INSERT INTO patient_merge_proposals (id, tenant_id, created_by, ledger_event_id, kind, source_patient_id, target_patient_id, reason_code) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [id, tenantId, actor, newId(), input.kind, input.sourcePatientId, input.targetPatientId, input.reasonCode],
+      );
+      return this.finish(client, tenantId, 'patient_merge_proposals', id);
+    });
+  }
+
+  insertMergeDecision(tenantId: string, actor: string, input: MergeDecisionInput): Promise<InsertResult> {
+    return this.write(tenantId, actor, async (client) => {
+      const existing = await client.query<{ id: string; decision: string }>(`SELECT id::text AS id, decision FROM patient_merge_decisions WHERE tenant_id = $1 AND proposal_id = $2`, [tenantId, input.proposalId]);
+      if (existing.rows[0]) {
+        if (existing.rows[0].decision !== input.decision) throw new MergeAlreadyDecidedError();
+        return this.existing(client, tenantId, 'patient_merge_decisions', existing.rows[0].id);
+      }
+      const id = newId();
+      const inserted = await client.query(
+        `INSERT INTO patient_merge_decisions (id, tenant_id, created_by, ledger_event_id, proposal_id, decision) VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT ON CONSTRAINT patient_merge_decisions_proposal_uq DO NOTHING RETURNING id`,
+        [id, tenantId, actor, newId(), input.proposalId, input.decision],
+      );
+      // A concurrent decision on the same proposal won the race between our look-up and our insert.
+      if (inserted.rowCount === 0) throw new MergeAlreadyDecidedError();
+      return this.finish(client, tenantId, 'patient_merge_decisions', id);
+    });
+  }
+
+  findMerge(tenantId: string, proposalId: string): Promise<MergeStatus | undefined> {
+    return this.read(tenantId, async (client) => {
+      const { rows } = await client.query<{ decision_id: string | null }>(
+        `SELECT d.id::text AS decision_id FROM patient_merge_proposals p
+           LEFT JOIN patient_merge_decisions d ON d.tenant_id = p.tenant_id AND d.proposal_id = p.id WHERE p.tenant_id = $1 AND p.id = $2`,
+        [tenantId, proposalId],
+      );
+      if (!rows[0]) return undefined;
+      return this.mergeStatus(client, tenantId, proposalId, rows[0].decision_id);
+    });
+  }
+
+  pageMerges(tenantId: string, page: PageRequest, status?: 'pending' | 'approved' | 'declined'): Promise<Page<MergeStatus>> {
+    return this.read(tenantId, async (client) => {
+      const { rows } = await client.query<{ id: string | null; decision_id: string | null; total: number }>(
+        `WITH matching AS MATERIALIZED (SELECT p.id, p.seq, d.id AS decision_id FROM patient_merge_proposals p
+          LEFT JOIN patient_merge_decisions d ON d.tenant_id = p.tenant_id AND d.proposal_id = p.id
+          WHERE p.tenant_id = $1 AND ($2::text IS NULL OR CASE WHEN d.id IS NULL THEN 'pending' ELSE d.decision END = $2)),
+          page AS (SELECT id, seq, decision_id FROM matching ORDER BY seq DESC LIMIT $3 OFFSET $4)
+          SELECT page.id::text AS id, page.decision_id::text AS decision_id, totals.total
+            FROM (SELECT count(*)::int AS total FROM matching) totals LEFT JOIN page ON true ORDER BY page.seq DESC`,
+        [tenantId, status ?? null, page.limit, page.offset],
+      );
+      // The whole page's proposals and decisions in one statement each, not one lookup per row.
+      const selected = rows.flatMap((r) => r.id === null ? [] : [{ id: r.id, decisionId: r.decision_id }]);
+      const proposals = await this.many(client, tenantId, 'patient_merge_proposals', selected.map((r) => r.id));
+      const decisionIds = selected.flatMap((r) => r.decisionId === null ? [] : [r.decisionId]);
+      const decisions = new Map((await this.many(client, tenantId, 'patient_merge_decisions', decisionIds)).map((d) => [d.id, d]));
+      const items: MergeStatus[] = selected.map((r, i) => {
+        const decision = r.decisionId === null ? null : decisions.get(r.decisionId)!;
+        return { proposal: proposals[i]!, decision, status: decision === null ? 'pending' : (decision.decision as 'approved' | 'declined') };
+      });
+      return { items, total: rows[0]!.total };
+    });
+  }
+
+  private async mergeStatus(client: PoolClient, tenantId: string, proposalId: string, decisionId: string | null): Promise<MergeStatus> {
+    const proposal = await this.mustOne(client, tenantId, 'patient_merge_proposals', proposalId);
+    const decision = decisionId === null ? null : await this.mustOne(client, tenantId, 'patient_merge_decisions', decisionId);
+    return { proposal, decision, status: decision === null ? 'pending' : (decision.decision as 'approved' | 'declined') };
+  }
+
   /**
    * After the ledger lock is held (a patient-link decision appends under the same lock): the decision the evaluation relied on is still the
    * newest for the report, says `verified`, and was made about the file and patient the report has now. The report row is locked for the rest
@@ -291,7 +373,7 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
       // Count and page use ONE statement snapshot, including when the requested page is empty.
       const { rows } = await client.query<{ id: string | null; total: number }>(
         `WITH matching AS MATERIALIZED (SELECT e.id, e.seq FROM evaluations e
-          WHERE e.tenant_id = $1 AND ($2::uuid IS NULL OR e.report_id = $2::uuid) AND ($3::uuid IS NULL OR e.patient_id = $3::uuid)
+          WHERE e.tenant_id = $1 AND ($2::uuid IS NULL OR e.report_id = $2::uuid) AND ($3::uuid IS NULL OR e.patient_id IN (SELECT patient_group_ids($1, $3::uuid)))
             AND (NOT $4::boolean OR e.id IN (${CURRENT_EVALUATIONS_SQL}))),
           page AS (SELECT id, seq FROM matching ORDER BY seq LIMIT $5 OFFSET $6)
           SELECT page.id::text AS id, totals.total FROM (SELECT count(*)::int AS total FROM matching) totals
