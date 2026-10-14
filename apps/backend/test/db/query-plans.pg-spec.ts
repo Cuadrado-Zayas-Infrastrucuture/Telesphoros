@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { Client } from 'pg';
 import { Database } from '../../src/db/database';
+import { PostgresMembershipRepository } from '../../src/storage/postgres/membership.repository';
 import { PostgresPatientsRepository } from '../../src/storage/postgres/patients.repository';
 import { PostgresReportsRepository } from '../../src/storage/postgres/reports.repository';
 import { PostgresRecommendationsRepository } from '../../src/storage/postgres/recommendations.repository';
@@ -31,6 +32,9 @@ beforeAll(async () => {
   ledger = new PostgresLedgerRecordsRepository(db);
   await withAdmin(pg.adminUrl, async c => {
     for (const tenant of tenants) {
+      // The lookup made on every protected request, in a table with thousands of members.
+      await c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by)
+        SELECT $1, $1 || '-member-' || g, 'active', '{clinician}', 'syn-operator' FROM generate_series(1,$2::int) g`, [tenant, CORE_PATIENTS]);
       await c.query(`INSERT INTO patients (tenant_id, created_by, label)
         SELECT $1, 'syn-author', 'SYN-' || g FROM generate_series(1,$2::int) g`, [tenant, CORE_PATIENTS]);
       await c.query(`INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes)
@@ -148,4 +152,12 @@ it('measures filtered/public pages, complete internal reads and sparse/dense con
     expect(await measure(`${name}-complete-corrections`, () => ledger.listCorrections(t,h.evaluationIds[0]!))).toHaveLength(2);
     expect((await measure(`${name}-context-batch`, () => ledger.evaluationContexts(t,h.evaluationIds.slice(0,20)))).size).toBe(Math.min(h.evaluationIds.length,20));
   }
+});
+
+it('looks up a caller\'s membership by primary key, whatever the table holds', async () => {
+  const t = tenants[0]!;
+  const found = await measure('membership-lookup', () => new PostgresMembershipRepository(db).find(t, `${t}-member-1`));
+  expect(found).toMatchObject({ tenantId: t, sub: `${t}-member-1`, status: 'active', roles: ['clinician'], version: 1 });
+  expect(evidence.find(e => e.label === 'membership-lookup')).toMatchObject({ indexes: ['tenant_memberships_pkey'], statements: 1 });
+  expect(await new PostgresMembershipRepository(db).find(t, `${tenants[1]}-member-1`)).toBeUndefined(); // another organization's person is not visible
 });

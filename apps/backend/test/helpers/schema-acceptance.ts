@@ -34,7 +34,7 @@ const primaryKeys: Record<string, string> = {
   ledger_heads: 'tenant_id', ledger_events: 'id', ledger_checkpoints: 'id', event_notes: 'id',
   report_captures: 'id', capture_acceptances: 'id', evaluations: 'id', evaluation_results: 'id',
   evaluation_gene_states: 'id', corrections: 'id', cell_disputes: 'id', cell_dispute_decisions: 'id',
-  ledger_incidents: 'id', ledger_incident_clearances: 'id',
+  ledger_incidents: 'id', ledger_incident_clearances: 'id', tenant_memberships: 'tenant_id, sub',
   security_audit_events: 'id',
 };
 const uniqueKeys: Record<string, string> = {
@@ -56,6 +56,7 @@ const uniqueKeys: Record<string, string> = {
 };
 // Complete CHECK inventory; semantic refusal/control tests remain in the existing behavior suites.
 const checkNames: Record<string, string> = {
+  tenant_memberships: 'tenant_id_len sub_len status_check roles_check version_check changed_by_len reason_len',
   report_upload_runs: 'reserved_bytes_check',
   report_upload_attempts: 'principal_check type_check size_bytes_check content_type_check sha256_check storage_key_check state_check object_version_check',
   upload_attempt: 'committed_pin',
@@ -107,6 +108,7 @@ const queryIndexes: Record<string, string> = {
   ledger_events_tenant_seq_uq: 'UNIQUE INDEX ledger_events_tenant_seq_uq ON public.ledger_events USING btree (tenant_id, seq)',
   ledger_checkpoints_tenant_seq_idx: 'INDEX ledger_checkpoints_tenant_seq_idx ON public.ledger_checkpoints USING btree (tenant_id, up_to_seq DESC)',
   ledger_incidents_tenant_idx: "INDEX ledger_incidents_tenant_idx ON public.ledger_incidents USING btree (tenant_id) WHERE (scope = 'tenant'::text)",
+  tenant_memberships_one_active_uq: "UNIQUE INDEX tenant_memberships_one_active_uq ON public.tenant_memberships USING btree (sub) WHERE (status = 'active'::text)",
   ledger_incidents_global_idx: "INDEX ledger_incidents_global_idx ON public.ledger_incidents USING btree (scope) WHERE (scope = 'global'::text)",
   security_audit_tenant_time: 'INDEX security_audit_tenant_time ON public.security_audit_events USING btree (tenant_id, occurred_at DESC, id) WHERE (tenant_id IS NOT NULL)',
   security_audit_request_id: 'INDEX security_audit_request_id ON public.security_audit_events USING btree (request_id)',

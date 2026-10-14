@@ -17,7 +17,7 @@ A human approves every costly or external action. The rule is enforced by the to
 | **T2** | Costly or external: messages to customers, billing or contract changes, merging or deleting records, any bulk action over the limit in D-A3. | A named approver with the role in D-A1, never the requester | Runs only after explicit approval of that payload |
 | **T3** | Forbidden to the agent: clinical results or clinical decisions, the audit ledger, cross-tenant access, changes to permissions or the approval rules themselves. | Not applicable: human-only outside the agent | The tool is not offered to the agent at all |
 
-**Approver roles (D-A1, recommended).** Where the agent acts on clinical records in this repository, reuse the existing `reviewer` role from [auth.md](../../auth.md): it is additive, and no other role implies it. Customer messages and billing changes have no role in this repository, so they need new Cognito groups, defined under D-A1 before any such action type is built.
+**Approver roles (D-A1, recommended).** Where the agent acts on clinical records in this repository, reuse the existing `reviewer` role from [auth.md](../../auth.md): it is additive, and no other role implies it. Customer messages and billing changes have no role in this repository, so they need new roles, defined under D-A1 before any such action type is built (since M1.5 a role is a value in the membership table, set with `db membership`, not a Cognito group).
 
 Action types are assigned to tiers one by one in an action register. The register below is an illustrative starting point for the founder to correct, not a decision:
 

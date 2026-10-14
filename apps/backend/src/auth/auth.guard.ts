@@ -2,16 +2,19 @@ import { type CanActivate, type ExecutionContext, Injectable } from '@nestjs/com
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import { AppException } from '../common/app-exception';
+import { bindRequestAuthority } from './authority-context';
 import { IS_PUBLIC_KEY } from './decorators';
+import { MembershipService } from './membership.service';
 import { NoTenantError, TokenVerifier } from './token-verifier';
 import { SecurityAuditStore } from './security-audit';
 
-/** Global guard: every route requires a valid bearer token unless it is marked @Public(). */
+/** Global guard: every route requires a valid bearer token AND a current membership unless it is marked @Public(). */
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly verifier: TokenVerifier,
+    private readonly membership: MembershipService,
     private readonly audit: SecurityAuditStore,
   ) {}
 
@@ -32,8 +35,9 @@ export class AuthGuard implements CanActivate {
       throw AppException.unauthorized();
     }
 
+    let identity;
     try {
-      req.principal = await this.verifier.verify(token);
+      identity = await this.verifier.verify(token);
     } catch (error) {
       await refused();
       // A genuine token for a user without exactly one tenant: known, but not allowed in.
@@ -41,8 +45,12 @@ export class AuthGuard implements CanActivate {
       // intentional: never reveal why verification failed
       throw AppException.unauthorized();
     }
-    await this.audit.record({ type: 'api-auth', outcome: 'accepted', tenantId: req.principal.tenantId,
-      actorSub: req.principal.sub, routeKey, subjectId: null, requestId: String(req.id) });
+    // The token was verified (this does not yet say the membership allows anything: that is the next step).
+    await this.audit.record({ type: 'api-auth', outcome: 'accepted', tenantId: identity.tenantId, actorSub: identity.sub, routeKey, subjectId: null, requestId: String(req.id) });
+    // The token proved who this is. What they may do now comes from the membership row, read fresh (a throw here is a refusal, never a guess).
+    const { principal, version } = await this.membership.resolve(identity);
+    req.principal = principal;
+    bindRequestAuthority({ sub: principal.sub, version });
     return true;
   }
 }

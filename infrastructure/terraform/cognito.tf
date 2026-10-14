@@ -76,7 +76,8 @@ resource "aws_cognito_user_pool" "main" {
   }
 }
 
-# Roles are Cognito groups. The API reads `cognito:groups` from the access token and ignores any group it does not know.
+# Role groups. Since M1.5 the API takes a person's roles from its own membership table (docs/auth.md) and ignores these groups; they remain only as a
+# convenience for administrators in the console. The tenant:<id> group is still read, and must agree with the membership row.
 resource "aws_cognito_user_group" "role" {
   for_each     = toset(local.roles)
   name         = each.value

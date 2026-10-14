@@ -3,6 +3,8 @@ import { Database } from '../db/database';
 import { InMemorySecurityAuditStore, PostgresSecurityAuditStore, SecurityAuditStore } from '../auth/security-audit';
 import type { Env } from '../config/env';
 import { LedgerRecordsRepository } from './ledger-records.repository';
+import { InMemoryMembershipRepository, MembershipRepository } from './membership.repository';
+import { PostgresMembershipRepository } from './postgres/membership.repository';
 import { PostgresLedgerRecordsRepository } from './postgres/ledger-records.repository';
 import { InMemoryPatientsRepository, PatientsRepository } from './patients.repository';
 import { PostgresPatientsRepository } from './postgres/patients.repository';
@@ -19,7 +21,7 @@ import { InMemoryReportsRepository, ReportsRepository } from './reports.reposito
 @Module({})
 export class StorageModule {
   static register(env: Env): DynamicModule {
-    const repositories = [PatientsRepository, ReportsRepository, RecommendationsRepository];
+    const repositories = [PatientsRepository, ReportsRepository, RecommendationsRepository, MembershipRepository];
 
     if (env.STORAGE_DRIVER === 'postgres') {
       const providers: Provider[] = [
@@ -29,6 +31,7 @@ export class StorageModule {
         { provide: PatientsRepository, useClass: PostgresPatientsRepository },
         { provide: ReportsRepository, useClass: PostgresReportsRepository },
         { provide: RecommendationsRepository, useClass: PostgresRecommendationsRepository },
+        { provide: MembershipRepository, useClass: PostgresMembershipRepository },
         // The ledger's guarantees are database guarantees: there is deliberately no in-memory version.
         { provide: LedgerRecordsRepository, useClass: PostgresLedgerRecordsRepository },
       ];
@@ -42,6 +45,7 @@ export class StorageModule {
         { provide: PatientsRepository, useClass: InMemoryPatientsRepository },
         { provide: ReportsRepository, useClass: InMemoryReportsRepository },
         { provide: RecommendationsRepository, useClass: InMemoryRecommendationsRepository },
+        { provide: MembershipRepository, useClass: InMemoryMembershipRepository },
       ],
       exports: [SecurityAuditStore, ...repositories],
     };

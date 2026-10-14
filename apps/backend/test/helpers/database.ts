@@ -37,6 +37,11 @@ export function verifierUrlFor(appUrl: string): string {
   return parsed.toString();
 }
 
+/** The owner (superuser) URL for the database an application URL points at: what the operator command's login would use. */
+export function ownerUrlFor(appUrl: string): string {
+  return withDatabase(adminUrl(), new URL(appUrl).pathname.slice(1));
+}
+
 export interface EphemeralDatabase {
   name: string;
   /** Superuser/owner connection (what a migrator or backup job would use). */

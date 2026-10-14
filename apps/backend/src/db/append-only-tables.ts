@@ -26,4 +26,10 @@ export const LEGACY_TABLES = ['patients', 'reports', 'recommendations', 'schema_
 // Local operational state advances under CAS/identity guards; it is not a clinical append-only fact.
 export const MUTABLE_OPERATIONAL_TABLES = ['report_upload_runs','report_upload_attempts'] as const;
 
-export const ALL_CLASSIFIED_TABLES: readonly string[] = [...Object.values(APPEND_ONLY_CLASSES).flat(), ...LEGACY_TABLES, ...MUTABLE_OPERATIONAL_TABLES];
+/**
+ * Authority state (migration 0017): who belongs to which organization with which roles. Written only by the operator command (the table's
+ * owner); the application role can only read its own organization's rows. Rows are never deleted: a removed person's row is the revocation record.
+ */
+export const AUTHORITY_TABLES = ['tenant_memberships'] as const;
+
+export const ALL_CLASSIFIED_TABLES: readonly string[] = [...Object.values(APPEND_ONLY_CLASSES).flat(), ...LEGACY_TABLES, ...MUTABLE_OPERATIONAL_TABLES, ...AUTHORITY_TABLES];

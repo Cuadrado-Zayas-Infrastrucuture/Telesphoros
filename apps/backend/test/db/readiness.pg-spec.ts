@@ -1,7 +1,7 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { errorResponseSchema } from '@telesphoros/shared-types';
 import request from 'supertest';
-import { createTestApp } from '../helpers/app';
+import { createTestApp, membershipOf } from '../helpers/app';
 import { bearer, signToken } from '../helpers/tokens';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { pendingMigrations, MigrationError } from '../../src/db/migrator';
@@ -158,12 +158,16 @@ describe('readiness against a real database', () => {
     await request(app.getHttpServer()).get('/api/v1/health').expect(200);
   });
 
-  it('private API calls fail closed (503 without database details) when access auditing is down', async () => {
+  it('private API calls fail closed (503 in the standard envelope, no database details) while the database is down, before any work is done', async () => {
     const db = await createEphemeralDatabase();
     dbs.push(db);
-    const app = await boot(db);
-    await db.drop();
+    // No token mirroring: the caller's standing is looked up in the database for real, and the database is the thing that is down.
+    const app = await createTestApp({ postgresUrl: db.appUrl, membershipFromTokens: false });
+    apps.push(app);
+    await membershipOf(app).grant({ tenantId: 'tenant-user-a', sub: 'user-a', roles: ['reader'], by: 'operator-test' });
     const token = await signToken({ sub: 'user-a', roles: ['reader'] });
+    await request(app.getHttpServer()).get('/api/v1/patients').set(bearer(token)).expect(200); // control: works while the database is up
+    await db.drop();
     const res = await request(app.getHttpServer()).get('/api/v1/patients').set(bearer(token));
     expect(res.status).toBe(503);
     expect(res.body.error.code).toBe('SERVICE_UNAVAILABLE');

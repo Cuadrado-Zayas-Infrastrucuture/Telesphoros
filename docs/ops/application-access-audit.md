@@ -15,7 +15,7 @@ The restricted table stores event/outcome, validated tenant and actor identifier
 
 ## Limits and sequencing
 
-- The current branch is based on `origin/main` at `98cd931` and uses migration `0016`. The separate, unmerged T03 branch also uses `0016` for live membership. **Both cannot be integrated unchanged.** Keep the branches separate now; after one is incorporated into the future baseline, renumber/rebase the other and repeat full migration-history and real-PostgreSQL verification before its PR or merge.
+- This slice uses migration `0016`. The live-membership slice (M1.5) was built against the same number; it has been renumbered to `0017` on top of this one and re-verified (migration history, real PostgreSQL, recovery). The guard records `api-auth` `accepted` as soon as the token verifies and **before** the membership is read, so the event keeps its stated meaning: it does not prove the membership allowed anything.
 - Operator membership grant/change/removal events belong with T03's mutation transaction. They are not implemented here.
 - True IdP sign-in/sign-out requires a provider event feed and protected custody. API authentication events must not be relabeled as logins.
 - The audit store is protected by PostgreSQL grants and append-only triggers, but this local slice does not establish independent hosted custody, retention, delivery, reviewer access, or resistance to a compromised application credential forging calls to its writer.

@@ -2,15 +2,22 @@ import { Test } from '@nestjs/testing';
 import { ConfigModule } from '../config/config.module';
 import { loadEnv } from '../config/env';
 import { StorageModule } from '../storage/storage.module';
-import { AuthModule } from './auth.module';
+import { InMemoryMembershipRepository, type MembershipRepository } from '../storage/membership.repository';
+import { AuthModule, createApplicationVerifier } from './auth.module';
 import { CognitoTokenVerifier } from './cognito-token-verifier';
+import { MirrorTokenVerifier } from './mirror-token-verifier';
 import { HmacTokenVerifier, TokenVerifier } from './token-verifier';
 
 // The e2e harness replaces the verifier, so THIS is what proves production wiring picks the right one.
-async function verifierFor(source: Record<string, string>) {
+async function wiredVerifier(source: Record<string, string>) {
   const env = loadEnv(source);
   const module = await Test.createTestingModule({ imports: [ConfigModule.forRoot(env), StorageModule.register(env), AuthModule] }).compile();
   return module.get(TokenVerifier);
+}
+/** The identity verifier, whether or not the development mirror wraps it. */
+const unwrap = (verifier: TokenVerifier): TokenVerifier => (verifier instanceof MirrorTokenVerifier ? (verifier as unknown as { inner: TokenVerifier }).inner : verifier);
+async function verifierFor(source: Record<string, string>) {
+  return unwrap(await wiredVerifier(source));
 }
 const optionsOf = (verifier: unknown) => (verifier as { options: { issuer: string; clientId: string; jwksUri?: string } }).options;
 
@@ -36,5 +43,21 @@ describe('AuthModule picks the verifier from the environment', () => {
       AUTH_VERIFIER: 'cognito', COGNITO_APP_CLIENT_ID: 'c', COGNITO_ISSUER: 'http://127.0.0.1:4010', COGNITO_JWKS_URI: 'http://127.0.0.1:4010/keys',
     });
     expect(optionsOf(verifier)).toMatchObject({ issuer: 'http://127.0.0.1:4010', jwksUri: 'http://127.0.0.1:4010/keys', clientId: 'c' });
+  });
+
+  it('the in-memory development store mirrors the token into membership; PostgreSQL (and so production) never does', async () => {
+    expect(await wiredVerifier({ JWT_SECRET: 'x'.repeat(40) })).toBeInstanceOf(MirrorTokenVerifier);
+    const postgres = loadEnv({ JWT_SECRET: 'x'.repeat(40), STORAGE_DRIVER: 'postgres', DATABASE_URL: 'postgres://app@127.0.0.1:1/none' });
+    const database = createApplicationVerifier(postgres, { find: async () => undefined } as MembershipRepository);
+    expect(database).toBeInstanceOf(HmacTokenVerifier);
+    expect(database).not.toBeInstanceOf(MirrorTokenVerifier);
+  });
+
+  it('refuses to mirror anywhere but the in-memory store, even if the wiring is misconfigured', () => {
+    const memory = loadEnv({ JWT_SECRET: 'x'.repeat(40) });
+    expect(() => createApplicationVerifier(memory, { find: async () => undefined } as MembershipRepository)).toThrow(/in-memory development store only/);
+    expect(createApplicationVerifier(memory, new InMemoryMembershipRepository())).toBeInstanceOf(MirrorTokenVerifier);
+    // loadEnv already refuses the in-memory store when NODE_ENV=production; the factory refuses it too, independently.
+    expect(() => createApplicationVerifier({ ...memory, NODE_ENV: 'production' }, new InMemoryMembershipRepository())).toThrow(/in-memory development store only/);
   });
 });

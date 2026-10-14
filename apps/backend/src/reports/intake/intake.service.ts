@@ -3,6 +3,7 @@ import { createReadStream } from 'node:fs';
 import { Readable } from 'node:stream';
 import { Inject, Injectable } from '@nestjs/common';
 import { REPORT_CONTENT_TYPES } from '@telesphoros/shared-types';
+import { asOrganizationWork } from '../../auth/authority-context';
 import type { Principal } from '../../auth/principal';
 import { AppException } from '../../common/app-exception';
 import { ENV, type Env } from '../../config/env';
@@ -158,9 +159,14 @@ export class IntakeService {
         catch (error) {
             // A lost reply is unknown, not a rollback certificate. Reconcile on retry/owned sweep; never blindly delete.
             try {
-                if (!attemptedWrite)
-                    await this.reports.cancelAttempt(i);
-                safelyQuiesced = await this.reports.settleAttempt(i, writer, attemptedWrite && !(control.signal.aborted && a.version) ? 'unresolved' : 'cancelled', a.version ?? undefined) && !(error instanceof StagingDisposalError);
+                // Closing out a transfer that did not complete is the organization's housekeeping, not something the person asked for, so it
+                // still runs if they were removed mid-transfer (otherwise their reservation would sit until the lease expires).
+                const attempt = a;
+                safelyQuiesced = await asOrganizationWork(async () => {
+                    if (!attemptedWrite)
+                        await this.reports.cancelAttempt(i);
+                    return await this.reports.settleAttempt(i, writer, attemptedWrite && !(control.signal.aborted && attempt.version) ? 'unresolved' : 'cancelled', attempt.version ?? undefined) && !(error instanceof StagingDisposalError);
+                });
             }
             catch { /* durable lease/journal survives database outage */ }
             if (control.signal.aborted && attemptedWrite)
@@ -174,8 +180,11 @@ export class IntakeService {
             if (staged)
                 await staged.dispose();
             // Release only after owned staging disposal and affirmative empty inventory; failed reads retain the reservation.
-            if (!attemptedWrite && safelyQuiesced)
-                await this.releaseEmpty(a);
+            // Same reason: releasing the reservation of a transfer that wrote nothing is the organization's housekeeping.
+            if (!attemptedWrite && safelyQuiesced) {
+                const reservation = a;
+                await asOrganizationWork(() => this.releaseEmpty(reservation));
+            }
         }
     }
     private async releaseEmpty(a: UploadAttempt) { try {

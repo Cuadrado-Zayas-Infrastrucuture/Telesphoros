@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Client } from 'pg';
 import request from 'supertest';
-import { migrateDown } from '../../src/db/migrator';
+import { migrateDown, migrateUp } from '../../src/db/migrator';
 import { createTestApp } from '../helpers/app';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { bearer, clinicianA, readerA } from '../helpers/tokens';
@@ -101,7 +101,9 @@ it('prevents the restricted app role from reading or editing audit rows', async 
 it('refuses rollback of populated audit evidence without deleting it', async () => {
   const before = await withAdmin(pg.adminUrl, async c => (await c.query('SELECT count(*)::int AS n FROM security_audit_events')).rows[0].n as number);
   expect(before).toBeGreaterThan(0);
-  await expect(withAdmin(pg.adminUrl, c => migrateDown(c, 1))).rejects.toThrow(/Refusing to drop populated security audit events/);
+  // The newest migration is the membership table (0017), which also refuses to be dropped with rows in it; allow that one on purpose so the audit table's own guard is what is tested.
+  await expect(withAdmin(pg.adminUrl, async c => { await c.query(`SET telesphoros.allow_membership_drop = 'yes'`); return migrateDown(c, 2); })).rejects.toThrow(/Refusing to drop populated security audit events/);
+  await withAdmin(pg.adminUrl, c => migrateUp(c)); // 0017 was reverted on the way to the audit migration's guard: put it back (its rows were removed with it, which this test does not use)
   const after = await withAdmin(pg.adminUrl, async c => (await c.query('SELECT count(*)::int AS n FROM security_audit_events')).rows[0].n as number);
   expect(after).toBe(before);
 });

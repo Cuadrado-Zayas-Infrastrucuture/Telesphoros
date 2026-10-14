@@ -1,5 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { Pool, type PoolClient } from 'pg';
+import { currentRequestAuthority } from '../auth/authority-context';
+import { AppException } from '../common/app-exception';
 import { pendingMigrations } from './migrator';
 import { pgClientConfig } from './tls';
 import type { SecurityAuditEvent } from '../auth/security-audit';
@@ -32,6 +34,11 @@ export interface TenantWorkOptions {
  * `withTenant` runs a unit of work inside ONE transaction that first sets `app.current_tenant_id`
  * (transaction-local, so it cannot leak to the next request on a pooled connection). The row-level
  * security policies read that setting: if it is missing, the application role sees no rows.
+ *
+ * Commit boundary for people (docs/auth.md): when the work runs for a request, and the transaction WROTE anything, the caller's membership
+ * row is locked SHARED and compared with the version the request was admitted under just before COMMIT. A removal or role change waits for
+ * that lock, so a write either commits before the change commits or is rolled back; none commits after it. Read-only transactions skip
+ * the lock. Work with no request behind it (background and organization-owned processing) is not tied to a person and is not checked.
  */
 export class Database {
   private readonly logger = new Logger('Database');
@@ -62,6 +69,7 @@ export class Database {
       await client.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
       if (actor !== undefined) await client.query(`SELECT set_config('app.current_actor', $1, true)`, [actor]);
       const result = await work(client);
+      await this.assertAuthorityStillCurrent(client);
       await client.query('COMMIT');
       return result;
     } catch (error) {
@@ -75,6 +83,17 @@ export class Database {
     } finally {
       client.release(discard);
     }
+  }
+
+  private async assertAuthorityStillCurrent(client: PoolClient): Promise<void> {
+    const authority = currentRequestAuthority();
+    if (!authority) return;
+    // An id is assigned at the first write (including a row lock), never to a read.
+    const wrote = await client.query<{ wrote: boolean }>('SELECT txid_current_if_assigned() IS NOT NULL AS wrote');
+    if (!wrote.rows[0]!.wrote) return;
+    const current = await client.query<{ ok: boolean }>('SELECT membership_assert_current($1, $2) AS ok', [authority.sub, authority.version]);
+    // Rolled back by the caller's catch: nothing this request wrote is committed. 403, like any other refusal of authority.
+    if (current.rows[0]?.ok !== true) throw AppException.forbidden();
   }
 
   /** Cheap liveness probe for /ready. */
