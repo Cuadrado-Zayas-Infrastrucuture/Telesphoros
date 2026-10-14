@@ -1,6 +1,6 @@
 # M2.1c-1 wrong-chart quarantine: verification
 
-Implementation on local branch `claude/m2-1c-1-quarantine`, **stacked on the local M2.1c plan branch and so on M2.1b** (which carries M2.1a, M1.6, M1.5b and M1.5; none is merged). Plan and decisions DQ-1 to DQ-8 (answered yes by the founder on 2026-10-14): [m2-1c-wrong-chart-and-duplicates.md](../design/plans/m2-1c-wrong-chart-and-duplicates.md). Results below were captured locally on 2026-10-14. **Nothing was pushed, so no remote CI has run and none of the required checks is claimed.** Synthetic data only; nothing applied in AWS.
+Implementation on local branch `claude/m2-1c-1-quarantine-v2`, **stacked on the M2.1b branch** (`claude/m2-1b-patient-identifiers-link-v2`, which carries M2.1a; neither is a pull request yet; M1.5, M1.5b and M1.6 are merged into `main`). It has no migration of its own, so nothing was renumbered when it was moved here by cherry-pick from the earlier local stack (`claude/m2-1c-1-quarantine`, kept as the old branch). Plan and decisions DQ-1 to DQ-8 (answered yes by the founder on 2026-10-14): [m2-1c-wrong-chart-and-duplicates.md](../design/plans/m2-1c-wrong-chart-and-duplicates.md). Results below were captured locally on 2026-10-14 on the moved branch. **Not pushed, no pull request yet (kept local at the founder's request), so no remote CI has run and none of the required checks is claimed.** Synthetic data only; nothing applied in AWS.
 
 ## What was implemented
 
@@ -49,16 +49,20 @@ Each rule was broken on purpose with a script that edits the source, runs the na
 | --- | --- |
 | Typecheck, lint, build (whole workspace) | pass |
 | `test:ci-config`, `test:infra` | 35 of 35, 31 of 31 |
-| Backend, in memory | 92 suites passed, 11 skipped; 1362 tests passed, 240 skipped |
-| Backend, PostgreSQL 16 plus Moto S3 | 146 suites, 2152 tests passed (the three recovery suites excluded) |
-| Frontend unit | 19 files, 228 tests passed |
+| Backend, in memory | 92 suites passed, 11 skipped; 1,360 tests passed, 239 skipped |
+| Backend, PostgreSQL 16 plus Moto S3 | 146 suites, 2,150 tests passed (the three recovery suites excluded) |
+| Frontend unit | 22 files, 263 tests passed |
 | Smart-pilot package | 9 files, 188 tests passed |
+| Shared types | 25 tests passed |
+| Recovery suites (application, independent, CLI) as an unprivileged user from a copy of the repository | 3 suites, 37 tests passed |
+| Browser, in memory (desktop and mobile) | 58 and 26 passed |
+| Browser, PostgreSQL storage mode (`e2e:storage`), on a database migrated to 0020 with the runbook's tenants and personas | 26 passed, 1 failed: `version-pin.spec.ts` (waits for the old report list's "Next reports" button; failing before this slice, recorded in the M2.1a note) |
 
-**Not re-run for this slice:** the three recovery suites as an unprivileged user and the browser tiers. There is no migration, so recovery is unaffected in principle, and the only browser-facing change is one added field in the mock evaluation of `local-e2e/foundation.spec.ts`; neither was verified.
+The recovery suites and both browser tiers, which the earlier version of this note listed as not re-run, were run on the moved branch (rows above). The defect-injection runs above were done before the move and not repeated; their guarding tests ran in the full runs.
 
 ## What this does not show
 
-- No remote CI has run. Nothing was pushed.
+- No remote CI has run. Nothing was pushed, and there is no pull request yet.
 - The query-plan sample has a handful of rows per tenant, so it proves the statements run and are counted once, not their cost at scale; the decision lookup uses the existing `(tenant_id, report_id, seq)` index but at this size the planner does not choose it.
 - No screen shows the link state or the work list. The DEV-only local review page is unchanged.
 - A quarantined report is not blocked anywhere else: its file, capture and evaluations stay readable (reviewers must be able to look), and nothing yet prevents someone relying on an evaluation that a reviewer has not retracted except the derived labels and the removal from "current".
