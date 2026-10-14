@@ -8,7 +8,7 @@ import { runInvite, runTenant } from '../../src/membership/tenant-cli';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 
 /**
- * The tenant registry, the invitation table and the SECURITY DEFINER member-administration functions (migration 0018), tested at the database:
+ * The tenant registry, the invitation table and the SECURITY DEFINER member-administration functions (migration 0019), tested at the database:
  * what the application login may and may not do, the rules the functions enforce, and who the membership events name.
  */
 let db: EphemeralDatabase;

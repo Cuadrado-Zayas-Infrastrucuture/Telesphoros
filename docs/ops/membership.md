@@ -66,7 +66,7 @@ node dist/db/cli.js invite fulfil   --id INVITATION_ID --email ADDRESS --sub SUB
 
 `ID` is lower-case letters, digits and hyphens and must equal the `<id>` of the Cognito `tenant:<id>` group. A **suspended** organization is
 refused on every request (403) until `tenant activate`: use it to stop all access for an organization at once without touching its people.
-Migration 0018 registered the organizations that already had memberships; an organization that only has records (no member) is registered by
+Migration 0019 registered the organizations that already had memberships; an organization that only has records (no member) is registered by
 `tenant create` before its first grant.
 
 **Onboard a new clinic.** 1) `tenant create`. 2) Create the Cognito group `tenant:<id>` and the first administrator's account in it. 3) `membership grant --roles admin`.

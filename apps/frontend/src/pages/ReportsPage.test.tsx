@@ -129,8 +129,8 @@ describe('reports page with real auth and route guards', () => {
     await waitFor(() => expect(api.mock.calls.filter(([url]) => String(url).includes('/reports?'))).toHaveLength(3));
     expect(screen.queryByText('Not complete')).not.toBeInTheDocument();
   });
-  it.each([['reader', false], ['reviewer', false], ['clinician', true], ['admin', true]] as const)('offers empty-state upload only for an existing writer role: %s', async (role, allowed) => {
-    renderApp('/reports', { signedInAs: [role], fetchImpl: fetcher([role], async () => json({ data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } })) });
+  it.each([[['reader'], false], [['reviewer'], false], [['clinician'], true], [['admin', 'clinician'], true]] as [Role[], boolean][])('offers empty-state upload only for an existing writer role: %j', async (roles, allowed) => {
+    renderApp('/reports', { signedInAs: roles, fetchImpl: fetcher(roles, async () => json({ data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } })) });
     await screen.findByText('No reports found for this selection.');
     expect(Boolean(screen.queryByRole('link', { name: 'Upload first synthetic report' }))).toBe(allowed);
   });

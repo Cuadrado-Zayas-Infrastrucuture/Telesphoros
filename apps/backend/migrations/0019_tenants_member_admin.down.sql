@@ -1,5 +1,5 @@
 DO $$ BEGIN
- IF (EXISTS (SELECT 1 FROM invitations) OR EXISTS (SELECT 1 FROM tenants WHERE created_by <> 'migration-0018')) AND current_setting('telesphoros.allow_membership_drop', true) IS DISTINCT FROM 'yes' THEN
+ IF (EXISTS (SELECT 1 FROM invitations) OR EXISTS (SELECT 1 FROM tenants WHERE created_by <> 'migration-0019')) AND current_setting('telesphoros.allow_membership_drop', true) IS DISTINCT FROM 'yes' THEN
   RAISE EXCEPTION 'Refusing to drop the tenant registry or invitations (they hold organizations and pending invitations); explicit disposable-fixture opt-in (telesphoros.allow_membership_drop) required.';
  END IF;
 END $$;

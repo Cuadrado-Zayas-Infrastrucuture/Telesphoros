@@ -27,7 +27,7 @@ CREATE TABLE tenants (
 -- Organizations that already have people (M1.5 memberships) are registered under their own id. An organization that has records but no member has
 -- nobody who can sign in; the operator registers it with `db tenant create` if it is ever needed.
 INSERT INTO tenants (id, display_name, created_by, changed_by)
-SELECT DISTINCT tenant_id, tenant_id, 'migration-0018', 'migration-0018' FROM tenant_memberships;
+SELECT DISTINCT tenant_id, tenant_id, 'migration-0019', 'migration-0019' FROM tenant_memberships;
 
 ALTER TABLE tenant_memberships ADD CONSTRAINT tenant_memberships_tenant_fk FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE RESTRICT ON UPDATE RESTRICT;
 

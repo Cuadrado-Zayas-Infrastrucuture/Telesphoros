@@ -1,12 +1,12 @@
 # M2.1a tenant registry and member administration: verification
 
-Implementation on local branch `claude/m2-1a-tenants-member-admin`, **stacked on the local M1.6 branch** (which contains M1.5 and M1.5b, none merged), because it extends the membership table and trigger those slices create and its migration follows 0017. Plan, decisions DP-1 to DP-6 and what changed from it: [m2-1-onboarding-patient-identity.md](../design/plans/m2-1-onboarding-patient-identity.md#changes-from-this-plan-m21a). Results below were captured locally on 2026-10-13. **Nothing was pushed, so no remote CI has run and none of the required checks is claimed.** Synthetic data only; nothing applied in AWS; nothing tested against real Cognito or RDS.
+Implementation on local branch `claude/m2-1a-tenants-member-admin-v2`, **stacked on the M1.6 branch** (`claude/m1-6-security-events`, open as draft PR #97), because it extends the membership table and trigger and its migration follows M1.6's 0018: this slice is migration **0019**. M1.5 and M1.5b are merged into `main`. It was first written on a stack of local branches (as migration 0018) and moved here by cherry-pick; the earlier branch `claude/m2-1a-tenants-member-admin` is kept locally as the old stack. Plan, decisions DP-1 to DP-6 and what changed from it: [m2-1-onboarding-patient-identity.md](../design/plans/m2-1-onboarding-patient-identity.md#changes-from-this-plan-m21a). Results below were captured locally on 2026-10-14 on the moved branch. **Not pushed, no pull request yet (kept local at the founder's request), so no remote CI has run and none of the required checks is claimed.** Synthetic data only; nothing applied in AWS; nothing tested against real Cognito or RDS.
 
 ## What was implemented
 
 | Change | Where |
 | --- | --- |
-| Migration 0018: `tenants` registry (immutable id and creation record, never deleted, row-level security), foreign key from `tenant_memberships`, `invitations` (keyed digest and masked hint, never the address; one pending per address; decided rows immutable), `member_admin_context()`, `member_change_roles()`, `member_remove()`, `invitation_create()`, `invitation_cancel()` (`SECURITY DEFINER`, organization and person from the transaction), membership audit trigger naming a person when an administrator acted | `apps/backend/migrations/0018_tenants_member_admin.{up,down}.sql` |
+| Migration 0019: `tenants` registry (immutable id and creation record, never deleted, row-level security), foreign key from `tenant_memberships`, `invitations` (keyed digest and masked hint, never the address; one pending per address; decided rows immutable), `member_admin_context()`, `member_change_roles()`, `member_remove()`, `invitation_create()`, `invitation_cancel()` (`SECURITY DEFINER`, organization and person from the transaction), membership audit trigger naming a person when an administrator acted | `apps/backend/migrations/0019_tenants_member_admin.{up,down}.sql` |
 | `admin` is administration only: removed from every clinical read and write list, file links, intake; `GET /ledger/verify` stays `admin` | `auth/clinical-read.ts`, `auth/file-access.ts`, patients, reports, captures, evaluations, corrections, disputes controllers, `reports/intake` |
 | Members module: six routes, rule errors mapped to stable answers | `members/*`, `storage/member-admin.repository.ts`, `storage/postgres/member-admin.repository.ts`, `storage/membership.repository.ts` (in-memory twin) |
 | Suspended organization refused on every request, with a `tenant-suspended` refusal event | `auth/membership.service.ts`, `security-events/security-events.ts` |
@@ -55,23 +55,25 @@ Each rule was broken on purpose with a script that edits the migration or source
 
 | Check | Result |
 | --- | --- |
-| Typecheck, lint, build (whole workspace) | pass, no warnings |
+| Typecheck (all packages), lint, build (whole workspace) | pass, no warnings |
 | `test:ci-config` | 35 of 35 |
-| `test:infra` | 31 of 31 (after the Terraform change above; it failed 3 before) |
-| Backend, in memory | 88 suites passed, 9 skipped; 1328 tests passed, 202 skipped |
-| Backend, PostgreSQL 16 plus Moto S3 | 138 suites, 2051 tests passed (the three recovery suites run separately) |
+| `test:infra` | 31 of 31 |
+| Backend, in memory | 88 suites passed, 9 skipped; 1,326 tests passed, 201 skipped |
+| Backend, PostgreSQL 16 plus Moto S3 (the three recovery suites run separately) | 138 suites, 2,049 tests passed |
 | Recovery suites (application, independent, CLI) as an unprivileged user from a copy of the repository | 3 suites, 37 tests passed |
-| Frontend unit | 19 files, 226 tests passed |
+| Frontend unit | 22 files, 261 tests passed |
 | Smart-pilot package | 9 files, 186 tests passed |
-| Browser, in memory (desktop and mobile) | 56 and 18 passed |
-| Browser, PostgreSQL storage mode (`e2e:storage`) | 24 passed, 1 failed: `version-pin.spec.ts` looks for a report *list* that the dashboard replaced with a table in an earlier commit (db2e601); it fails on the unchanged dashboard and is queued as its own task. The new `carol` test passed in both viewports |
+| Browser, in memory (desktop and mobile) | 58 and 26 passed |
+| Browser, PostgreSQL storage mode (`e2e:storage`), on a database migrated to 0019 with the runbook's tenants and personas | 26 passed, 1 failed: `version-pin.spec.ts` still waits for the old report list's "Next reports" button (the dashboard became a table in an earlier commit); it is unrelated to this slice and was failing before it |
+
+Moving onto `main` needed these changes beyond renumbering to 0019: the migration lists in six database specs and the recovery CLI's migration count; the security-event spec's membership helper; the schema-acceptance tables (`tenants`, `invitations` beside `security_events`); and one frontend test that `main` gained after this slice was written (`ReportsPage` empty-state upload offered to `admin` alone, now `admin` plus `clinician`, because `admin` no longer reads clinical records). The defect-injection runs recorded above were done before the move and not repeated; their guarding tests ran in the full runs.
 
 ## What this does not show
 
-- No remote CI has run. Nothing was pushed.
+- No remote CI has run. Nothing was pushed, and there is no pull request yet.
 - Nothing ran against real Cognito, RDS, Secrets Manager or ECS. The Terraform change is checked only by the repository's text guards, not by `terraform plan`.
 - No screen exists for member administration; the routes are API-only.
-- An organization's administrator cannot read its security events (planned, deferred); invitation creation, cancellation and fulfilment write no security event because the M1.6 catalogue is fixed.
+- An organization's administrator cannot read its security events (planned, deferred); invitation creation, cancellation and fulfilment write no security event because the M1.6 catalogue is fixed (membership grants made by `invite fulfil` are recorded by the M1.6 trigger).
 - `invite fulfil` grants a membership but does not create the Cognito account or its `tenant:` group; the operator does that first.
 - The "last administrator" rule can only fire through a race; it was proved through that race, not by a sequential request.
 - `docs/STATUS.md` on `main` is stale in places beyond this slice.
