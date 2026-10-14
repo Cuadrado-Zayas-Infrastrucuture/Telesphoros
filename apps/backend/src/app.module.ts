@@ -12,8 +12,11 @@ import { LabReportsModule } from './lab-reports/lab-reports.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { pinoHttpOptions } from './logger-options';
 import { MeModule } from './me/me.module';
+import { MembersModule } from './members/members.module';
 import { ObjectStorageModule } from './object-storage/object-storage.module';
 import type { RecoveryObjectStorage } from './object-storage/recovery-object-storage';
+import { PatientIdentityModule } from './patient-identity/patient-identity.module';
+import { PatientMergeModule } from './patient-merge/patient-merge.module';
 import { PatientsModule } from './patients/patients.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
 import { ReportsModule } from './reports/reports.module';
@@ -38,10 +41,13 @@ export class AppModule {
         ObjectStorageModule.register(env, recovery),
         LabReportsModule,
         PatientsModule,
+        PatientIdentityModule,
+        PatientMergeModule,
         ReportsModule,
         RecommendationsModule,
         HealthModule,
         MeModule,
+        MembersModule,
       ],
       providers: [
         { provide: APP_FILTER, useClass: AllExceptionsFilter },

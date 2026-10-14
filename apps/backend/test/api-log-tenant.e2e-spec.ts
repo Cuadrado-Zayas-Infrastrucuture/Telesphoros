@@ -63,6 +63,7 @@ beforeAll(async () => {
       done();
     },
   });
+  await memberships.registerTenant({ id: 'tenant-synthetic', displayName: 'Synthetic clinic', by: 'operator-test' });
   await memberships.grant({ tenantId: 'tenant-synthetic', sub: 'user-synthetic', roles: ['clinician'], by: 'operator-test' });
   const moduleRef = await Test.createTestingModule({
     imports: [LoggerModule.forRoot({ pinoHttp: [pinoHttpOptions({ LOG_LEVEL: 'info' }), stream] })],

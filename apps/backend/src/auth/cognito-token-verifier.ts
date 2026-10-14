@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { type Role, roleSchema, tenantFromGroups } from '@telesphoros/shared-types';
 import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from 'jose';
 import { z } from 'zod';
-import { InvalidTokenError, NoTenantError, type TokenIdentity, TokenVerifier } from './token-verifier';
+import { InvalidTokenError, NoTenantError, subjectClaim, type TokenIdentity, TokenVerifier } from './token-verifier';
 
 export interface CognitoVerifierOptions {
   /** `https://cognito-idp.<region>.amazonaws.com/<user pool id>` */
@@ -17,7 +17,6 @@ export interface CognitoVerifierOptions {
   cooldownMs?: number;
 }
 
-const subjectClaim = z.string().min(1).max(128);
 
 /**
  * Verifies Amazon Cognito ACCESS tokens (the API never accepts ID tokens).

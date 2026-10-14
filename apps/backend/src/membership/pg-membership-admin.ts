@@ -63,6 +63,9 @@ export class PgMembershipAdmin implements MembershipAdmin {
       if (!rows[0]) throw new MembershipAdminError('already-active', 'That person is already an active member of this organization. Use set-roles to change their roles.');
       return toMembershipRecord(rows[0]);
     } catch (error) {
+      if ((error as { code?: string }).code === '23503' && (error as { constraint?: string }).constraint === 'tenant_memberships_tenant_fk') {
+        throw new MembershipAdminError('unknown-tenant', 'That organization is not registered. Register it first with `tenant create`.');
+      }
       if ((error as { code?: string; constraint?: string }).code === '23505' && (error as { constraint?: string }).constraint === ONE_ACTIVE_PER_PERSON) {
         throw new MembershipAdminError('in-another-organization', 'That person is an active member of another organization. Remove them there first.');
       }

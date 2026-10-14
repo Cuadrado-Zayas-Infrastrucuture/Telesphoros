@@ -111,7 +111,7 @@ test('cancel after an interrupted transfer receives acknowledgement and permits 
   expect(cancels).toBe(1); expect((await rows(page, fixture))[0].fileUploaded).toBe(false);
 });
 
-test('malformed file refused by server without verified success or legacy fallback', async ({ page }) => {
+test('malformed file refused by server without verified success or any direct-upload route', async ({ page }) => {
   const fixture = await signInWithPatient(page); let legacy = 0;
   const before = await storageInventory();
   page.on('request', req => { if (req.url().endsWith('/upload-url')) legacy++; });
@@ -171,4 +171,39 @@ test('reports pagination, keyboard download, reviewer access and accessibility',
   await expect(page.getByRole('link', { name: 'Upload a synthetic report' })).toHaveCount(0);
   await page.context().clearCookies(); await signInAs(page, 'gina', '/reports/upload');
   await expect(page.getByRole('heading', { name: /do not have access/i })).toBeVisible();
+});
+
+test('a reload during the transfer finishes the same upload against the real database and bucket: one report, one stored version', async ({ page }) => {
+  const fixture = await signInWithPatient(page); const sample = samples[1]!;
+  const before = await storageInventory();
+  let seen!: () => void; const arrived = new Promise<void>(resolve => { seen = resolve; });
+  let release!: () => void; const released = new Promise<void>(resolve => { release = resolve; });
+  let first = true;
+  await page.route('**/api/v1/reports/*/upload-attempts/*/bytes', async route => {
+    if (!first) return route.continue();
+    first = false; seen(); await released; await route.abort('failed');
+  });
+  await fill(page, fixture.id, sample);
+  await page.getByRole('button', { name: 'Upload report', exact: true }).click();
+  await arrived;
+  expect(await storageInventory()).toEqual(before); // nothing is in the bucket yet
+  release();
+  await page.reload();
+  await expect(page).toHaveURL(/\/signin$/);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.waitForURL('**/reports/upload');
+  await expect(page.getByText('An upload was interrupted')).toBeVisible();
+  for (let attempts = 0; attempts < 100; attempts++) { // the patient list is paged and starts on page 1 again after a reload
+    await expect(page.getByRole('button', { name: 'Refresh patients' })).toBeEnabled();
+    if (await page.getByRole('option', { name: fixture.label, exact: true }).count()) break;
+    const next = page.getByRole('button', { name: 'Next patients' });
+    if (!(await next.count()) || !(await next.isEnabled())) throw new Error('The fixture patient was not listed within the bounded test pages.');
+    await next.click();
+  }
+  await fill(page, fixture.id, sample);
+  await page.getByRole('button', { name: 'Upload report', exact: true }).click();
+  await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
+  const reports = await rows(page, fixture);
+  expect(reports).toHaveLength(1); expect(reports[0].fileUploaded).toBe(true);
+  expect((await storageInventory()).length - before.length).toBe(1); // exactly one stored version, from the one report
 });

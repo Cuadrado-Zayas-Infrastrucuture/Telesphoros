@@ -84,6 +84,7 @@ export function legacyRequiredRoles(migrations: string[]): string[] {
   if (has('0005')) ['telesphoros_ledger', 'telesphoros_ledger_verifier'].forEach((r) => roles.add(r));
   if (has('0006')) ['telesphoros_redactor', 'telesphoros_ledger_operator'].forEach((r) => roles.add(r));
   if (has('0018')) roles.add('telesphoros_security_auditor');
+  if (has('0023')) ['telesphoros_jobs', 'telesphoros_worker'].forEach((r) => roles.add(r));
   return [...roles].sort();
 }
 

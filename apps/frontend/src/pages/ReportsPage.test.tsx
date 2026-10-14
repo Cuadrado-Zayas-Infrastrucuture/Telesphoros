@@ -23,7 +23,8 @@ function fetcher(roles: Role[], reports: (url: URL) => Promise<Response> = async
 }
 const heading = () => screen.findByRole('heading', { level: 1, name: 'Reports' });
 describe('reports page with real auth and route guards', () => {
-  it.each([['clinician'], ['reviewer'], ['reader'], ['admin']] as Role[][])('makes the synthetic assistant discoverable before selecting a report for %j', async (...roles: Role[]) => {
+  // An administrator is not listed: administration is not clinical access, so the page refuses them (see the test of that name below).
+  it.each([['clinician'], ['reviewer'], ['reader']] as Role[][])('makes the synthetic assistant discoverable before selecting a report for %j', async (...roles: Role[]) => {
     vi.stubGlobal('location', { hostname: '127.0.0.1' });
     const { container } = renderApp('/reports', { signedInAs: roles, fetchImpl: fetcher(roles) });
     await heading();
@@ -32,13 +33,13 @@ describe('reports page with real auth and route guards', () => {
     expect(preview.getByRole('textbox', { name: 'Sample question' })).toBeInTheDocument();
     expect(preview.getByText(/No live model or CPIC mapping/)).toBeInTheDocument();
     await userEvent.setup().click(preview.getByText('Example context and tools'));
-    expect(Boolean(preview.queryByRole('button', { name: 'Choose file' }))).toBe(roles.some(role => ['clinician', 'admin'].includes(role)));
+    expect(Boolean(preview.queryByRole('button', { name: 'Choose file' }))).toBe(roles.some(role => role === 'clinician'));
     expect(screen.getByRole('link', { name: 'AI preview' })).toBeInTheDocument();
-    expect(Boolean(screen.queryByRole('link', { name: 'Upload synthetic report' }))).toBe(roles.some(role => ['clinician', 'admin'].includes(role)));
+    expect(Boolean(screen.queryByRole('link', { name: 'Upload synthetic report' }))).toBe(roles.some(role => role === 'clinician'));
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Open synthetic.vcf' }));
     const detail = within(screen.getByRole('region', { name: 'Report details' }));
     expect(detail.getByText('Yes — server verified')).toBeInTheDocument();
-    expect(Boolean(detail.queryByRole('button', { name: 'Download synthetic.vcf' }))).toBe(roles.some(role => ['clinician', 'reviewer', 'admin'].includes(role)));
+    expect(Boolean(detail.queryByRole('button', { name: 'Download synthetic.vcf' }))).toBe(roles.some(role => ['clinician', 'reviewer'].includes(role)));
     await userEvent.setup().click(detail.getByText('Technical details'));
     expect(detail.getByText(/does not establish capture acceptance/)).toBeVisible();
     expect(await axe(container)).toHaveNoViolations();
@@ -97,13 +98,18 @@ describe('reports page with real auth and route guards', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }));
     expect(client.signIn).toHaveBeenCalledWith('/reports');
   });
-  it.each([['reviewer'], ['reader'], ['clinician'], ['admin'], ['reviewer', 'clinician']] as Role[][])('uses additive roles %j without adding a role preview control', async (...roles: Role[]) => {
+  it.each([['reviewer'], ['reader'], ['clinician'], ['admin', 'clinician'], ['reviewer', 'clinician']] as Role[][])('uses additive roles %j without adding a role preview control', async (...roles: Role[]) => {
     renderApp('/reports', { signedInAs: roles, fetchImpl: fetcher(roles) }); await heading();
     await screen.findByRole('button', { name: 'Open synthetic.vcf' });
-    expect(Boolean(screen.queryByRole('link', { name: 'Upload synthetic report' }))).toBe(roles.some(role => ['clinician', 'admin'].includes(role)));
+    expect(Boolean(screen.queryByRole('link', { name: 'Upload synthetic report' }))).toBe(roles.some(role => ['clinician'].includes(role)));
     const user = userEvent.setup(); await user.click(screen.getByRole('button', { name: 'Open synthetic.vcf' }));
-    expect(Boolean(screen.queryByRole('button', { name: 'Download synthetic.vcf' }))).toBe(roles.some(role => ['clinician', 'reviewer', 'admin'].includes(role)));
+    expect(Boolean(screen.queryByRole('button', { name: 'Download synthetic.vcf' }))).toBe(roles.some(role => ['clinician', 'reviewer'].includes(role)));
     expect(screen.queryByLabelText('Preview roles')).not.toBeInTheDocument();
+  });
+  it('refuses an administrator who holds no clinical role (administration is not clinical access)', async () => {
+    renderApp('/reports', { signedInAs: ['admin'], fetchImpl: fetcher(['admin']) });
+    expect(await screen.findByRole('heading', { level: 1, name: 'You do not have access to this page' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open synthetic.vcf' })).not.toBeInTheDocument();
   });
   it('keeps upload verification separate from received status, with keyboard-accessible details', async () => {
     const { container } = renderApp('/reports', { signedInAs: ['reviewer'], fetchImpl: fetcher(['reviewer']) });
@@ -194,8 +200,8 @@ describe('reports page with real auth and route guards', () => {
     await waitFor(() => expect(api.mock.calls.filter(([url]) => String(url).includes('/reports?'))).toHaveLength(3));
     expect(screen.queryByText('Not complete')).not.toBeInTheDocument();
   });
-  it.each([['reader', false], ['reviewer', false], ['clinician', true], ['admin', true]] as const)('offers empty-state upload only for an existing writer role: %s', async (role, allowed) => {
-    renderApp('/reports', { signedInAs: [role], fetchImpl: fetcher([role], async () => json({ data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } })) });
+  it.each([[['reader'], false], [['reviewer'], false], [['clinician'], true], [['admin', 'clinician'], true]] as [Role[], boolean][])('offers empty-state upload only for an existing writer role: %j', async (roles, allowed) => {
+    renderApp('/reports', { signedInAs: roles, fetchImpl: fetcher(roles, async () => json({ data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } })) });
     await screen.findByText('No reports found for this selection.');
     expect(Boolean(screen.queryByRole('link', { name: 'Upload first synthetic report' }))).toBe(allowed);
   });

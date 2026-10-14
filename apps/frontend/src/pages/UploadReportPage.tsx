@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ownedStorageMode } from '@/lib/storageMode';
-import { cancelOwnedUpload } from '@/lib/ownedStorageApi';
+import { cancelOwnedUpload, restoreProgress } from '@/lib/ownedStorageApi';
+import { clearRecovery, readRecovery, type RecoveryEntry } from '@/lib/uploadRecovery';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useRef, useState } from 'react';
 import type { Paginated, PatientDto } from '@telesphoros/shared-types';
@@ -33,6 +34,10 @@ import { listPatients, SubmitError, submitReport, type UploadProgress } from '@/
 import { productUploadSchema, type ProductUploadValues } from '@/lib/productUploadSchema';
 import { REPORT_TYPE_LABELS, REPORT_TYPES } from '@/types/report';
 
+function describeSize(bytes: number) {
+  return bytes < 1024 ? `${bytes} bytes` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KiB` : `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
+}
+
 // The file starts unset; the schema reports "Choose a report file." until one is picked.
 const emptyValues = {
   patientId: '',
@@ -44,7 +49,10 @@ const emptyValues = {
 export default function UploadReportPage() {
   usePageTitle('Upload report');
   const { apiFetch } = useAuth();
-  const progress = useRef<UploadProgress>({});
+  // After a reload the browser may still hold an interrupted upload of this tab (see lib/uploadRecovery.ts): offer to finish or cancel it.
+  const [interrupted, setInterrupted] = useState<RecoveryEntry | undefined>(() => readRecovery());
+  const [startingProgress] = useState<UploadProgress>(() => (interrupted ? restoreProgress(interrupted) : {}));
+  const progress = useRef<UploadProgress>(startingProgress);
   const transfer = useRef<AbortController | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [canStartOver, setCanStartOver] = useState(true);
@@ -73,6 +81,7 @@ export default function UploadReportPage() {
 
   const [serverError, setServerError] = useState<string | null>(null);
   const [reference, setReference] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   // Changing the key remounts the file input, the only way to clear a native file control.
   const [formKey, setFormKey] = useState(0);
 
@@ -97,6 +106,7 @@ export default function UploadReportPage() {
       transfer.current = null;
       if (progress.current.cancelRequested) await cancelUpload();
       setCanStartOver(!progress.current.declaration || ['cancelled', 'cleaned', 'committed'].includes(progress.current.attempt?.state ?? ''));
+      setInterrupted(readRecovery());
     }
   }
 
@@ -105,6 +115,7 @@ export default function UploadReportPage() {
     try {
       await cancelOwnedUpload(apiFetch, progress.current);
       setServerError('Upload cancelled. Start a new upload when ready.');
+      setInterrupted(readRecovery());
     } catch (error) {
       setServerError(error instanceof SubmitError ? error.message : 'Cancellation could not be confirmed. Retry cancellation before starting over.');
     } finally {
@@ -119,7 +130,26 @@ export default function UploadReportPage() {
     else void cancelUpload();
   }
 
+  /** Cancels the upload that a reload interrupted; the server must acknowledge it before the page lets go of it. */
+  async function cancelInterrupted() {
+    setCancelling(true);
+    setServerError(null);
+    try {
+      await cancelOwnedUpload(apiFetch, progress.current);
+      progress.current = {};
+      setInterrupted(undefined);
+      setNotice('The interrupted upload was cancelled. You can start a new one.');
+    } catch (error) {
+      if (!(error instanceof SessionEndedError)) setServerError(error instanceof SubmitError ? error.message : 'Cancellation could not be confirmed. Retry cancellation before starting over.');
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   function startOver() {
+    clearRecovery();
+    setInterrupted(undefined);
+    setNotice(null);
     progress.current = {};
     setCanStartOver(true);
     setSelectedPatient(null);
@@ -153,6 +183,20 @@ export default function UploadReportPage() {
         <h1 className="text-3xl leading-tight font-bold">Upload report</h1>
         <p className="text-muted-foreground">Synthetic test reports only. Fields marked required must be completed.</p>
       </div>
+
+      {notice && <Alert><AlertDescription>{notice}</AlertDescription></Alert>}
+
+      {interrupted && !serverError && !isSubmitting && (
+        <Alert>
+          <AlertTitle>An upload was interrupted</AlertTitle>
+          <AlertDescription>
+            <p>
+              <strong>{interrupted.file.name}</strong> ({describeSize(interrupted.file.sizeBytes)}) was not finished. Choose the same patient and the same file again and press Upload report to finish it, or cancel it.
+            </p>
+            <Button type="button" variant="outline" className="mt-2" disabled={cancelling} onClick={() => void cancelInterrupted()}>{cancelling ? 'Cancelling…' : 'Cancel the interrupted upload'}</Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {serverError && (
         <Alert variant="destructive">
@@ -285,10 +329,10 @@ export default function UploadReportPage() {
                       'Upload report'
                     )}
                   </Button>
-                  {serverError && <Button type="button" variant="outline" disabled={isSubmitting || cancelling || (owned && !canStartOver)} onClick={startOver} className="mt-2 w-full sm:ml-2 sm:mt-0 sm:w-auto">Start a new upload</Button>}
+                  {serverError && <Button type="button" variant="outline" disabled={isSubmitting || cancelling || !canStartOver} onClick={startOver} className="mt-2 w-full sm:ml-2 sm:mt-0 sm:w-auto">Start a new upload</Button>}
                 </div>
               </fieldset>
-              {owned && (isSubmitting || serverError) && <Button type="button" variant="outline" disabled={cancelling} onClick={requestCancel}>{cancelling ? 'Cancelling…' : 'Cancel upload'}</Button>}
+              {(isSubmitting || serverError) && <Button type="button" variant="outline" disabled={cancelling} onClick={requestCancel}>{cancelling ? 'Cancelling…' : 'Cancel upload'}</Button>}
             </form>
           </Form>
         </CardContent>

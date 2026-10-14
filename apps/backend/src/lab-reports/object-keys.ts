@@ -1,13 +1,8 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 
 /** The tenant appears only as a hash: a stable per-tenant prefix (for storage policies) with no raw identifier or unsafe characters. */
 export function tenantPrefix(tenantId: string): string {
   return createHash('sha256').update(tenantId).digest('hex').slice(0, 32);
-}
-
-/** Where an uploaded report file lives. Random, so a key can never be guessed from the report id. */
-export function reportObjectKey(tenantId: string, reportId: string): string {
-  return `reports/${tenantPrefix(tenantId)}/${reportId}/${randomUUID()}`;
 }
 
 /**

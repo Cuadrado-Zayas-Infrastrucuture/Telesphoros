@@ -9,6 +9,7 @@ import { InMemoryRecommendationsRepository, RecommendationsRepository } from '..
 import type { PatientRecord, RecommendationRecord, ReportRecord } from '../../src/storage/records';
 import { InMemoryReportsRepository, ReportsRepository } from '../../src/storage/reports.repository';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
+import { declareUpload, finishUpload } from '../helpers/uploads';
 
 interface Stores {
   patients: PatientsRepository;
@@ -163,13 +164,14 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
       const r = report(o, p.id);
       await reports.insert(r);
       const hash = 'c'.repeat(64);
-      expect(await reports.recordUploadRequest({ ...r, storageKey: 'k/1', contentType: 'application/json', sha256: hash, uploadRequestedBy: 'syn-first', updatedAt: stamp(5) })).toBe(true);
+      const declared = (await declareUpload(reports, r, { principal: 'syn-first', sha256: hash, contentType: 'application/json', key: 'k/1' }))!;
+      expect(declared).toBeDefined();
       // A stale copy of the record, written back by update(), must not erase or replace the declared file.
       await reports.update({ ...r, filename: 'c.vcf', storageKey: 'other', sha256: 'd'.repeat(64), uploadRequestedBy: 'syn-other', updatedAt: stamp(10) });
       expect(await reports.findById(o, r.id)).toMatchObject({ filename: 'c.vcf', storageKey: 'k/1', sha256: hash, uploadRequestedBy: 'syn-first' });
     });
 
-    it('records the declared file and the FIRST requester, then marks the upload done exactly once', async () => {
+    it('records the declared file and the FIRST requester, then pins the upload exactly once, to the person who sent it', async () => {
       const { patients, reports } = await make();
       const o = tenant();
       const p = patient(o, 'SYN-A');
@@ -177,22 +179,22 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
       const r = report(o, p.id);
       await reports.insert(r);
       const hash = 'b'.repeat(64);
-      const declared = { ...r, storageKey: `reports/${randomUUID()}`, contentType: 'application/json', sha256: hash, updatedAt: stamp(5) };
-      expect(await reports.recordUploadRequest({ ...declared, uploadRequestedBy: 'syn-first' })).toBe(true);
-      // Asking again before the upload completes is allowed and changes nobody's identity.
-      expect(await reports.recordUploadRequest({ ...declared, uploadRequestedBy: 'syn-second', updatedAt: stamp(6) })).toBe(true);
-      expect(await reports.findById(o, r.id)).toMatchObject({ uploadRequestedBy: 'syn-first', sha256: hash, uploadedAt: null });
+      const first = (await declareUpload(reports, r, { principal: 'syn-first', sha256: hash, contentType: 'application/json' }))!;
+      expect(await reports.findById(o, r.id)).toMatchObject({ uploadRequestedBy: 'syn-first', sha256: hash, uploadedAt: null, storageKey: first.attempt.key });
+      // Declaring again before the upload completes is allowed and changes nobody's identity, but it supersedes the earlier attempt (the report's revision moves).
+      const second = (await declareUpload(reports, r, { principal: 'syn-second', sha256: hash, contentType: 'application/json' }))!;
+      expect(second).toBeDefined();
+      expect(await reports.findById(o, r.id)).toMatchObject({ uploadRequestedBy: 'syn-first', sha256: hash, uploadedAt: null, storageKey: second.attempt.key });
+      expect(await finishUpload(reports, first, 'ver-0')).toBe(false); // stale revision cannot pin
 
-      const current = (await reports.findById(o, r.id))!;
-      expect(await reports.markUploaded({ ...declared, uploadedAt: stamp(7) })).toBe(false); // stale revision cannot pin
-      const done = { ...current, uploadedAt: stamp(7), objectVersion: 'ver-1', uploadedBy: 'syn-completer', updatedAt: stamp(7) };
-      expect(await reports.markUploaded(done)).toBe(true);
-      expect(await reports.findById(o, r.id)).toMatchObject({ uploadedAt: done.uploadedAt, objectVersion: 'ver-1', uploadedBy: 'syn-completer', uploadRequestedBy: 'syn-first' });
+      expect(await finishUpload(reports, second, 'ver-1')).toBe(true);
+      expect(await reports.findById(o, r.id)).toMatchObject({ objectVersion: 'ver-1', uploadedBy: 'syn-second', uploadRequestedBy: 'syn-first', sha256: hash });
+      expect(await reports.findById(o, r.id)).toMatchObject({ uploadedAt: expect.any(String) });
 
-      // The loser of a race to complete, and a late upload-url request, both find the upload already done and change nothing.
-      expect(await reports.markUploaded({ ...done, objectVersion: 'ver-2', uploadedBy: 'syn-late', uploadedAt: stamp(20) })).toBe(false);
-      expect(await reports.recordUploadRequest({ ...declared, sha256: 'e'.repeat(64), uploadRequestedBy: 'syn-late', updatedAt: stamp(21) })).toBe(false);
-      expect(await reports.findById(o, r.id)).toMatchObject({ objectVersion: 'ver-1', uploadedBy: 'syn-completer', sha256: hash, uploadRequestedBy: 'syn-first' });
+      // A late declaration, and a late commit attempt by someone else, find the upload already done and change nothing.
+      expect(await declareUpload(reports, r, { principal: 'syn-late', sha256: 'e'.repeat(64), contentType: 'application/json', expectedRevision: second.attempt.revision })).toBeUndefined();
+      expect(await reports.commitAttempt(first.identity)).toBe(false);
+      expect(await reports.findById(o, r.id)).toMatchObject({ objectVersion: 'ver-1', uploadedBy: 'syn-second', sha256: hash, uploadRequestedBy: 'syn-first' });
     });
 
     it('is tenant-scoped', async () => {

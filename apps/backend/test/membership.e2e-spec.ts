@@ -153,6 +153,13 @@ describe('the operator rules', () => {
     await expect(ops().remove({ tenantId: TENANT, sub: person, ...OPERATOR })).rejects.toMatchObject({ failure: 'not-active' });
   });
 
+  it('refuses to make a system actor a member: the name a background job acts under is never a person', async () => {
+    for (const name of ['system:uploads.sweep', 'system:']) {
+      await expect(ops().grant({ tenantId: TENANT, sub: name, roles: ['admin'], ...OPERATOR })).rejects.toMatchObject({ failure: 'invalid' });
+    }
+    await expect(ops().show(TENANT, 'system:uploads.sweep')).resolves.toBeUndefined();
+  });
+
   it('every change moves the version; showing a person changes nothing', async () => {
     const person = sub();
     const granted = await ops().grant({ tenantId: TENANT, sub: person, roles: ['reader'], ...OPERATOR });
@@ -181,6 +188,7 @@ describe('when authority cannot be established, nothing is done', () => {
       const memory = new InMemoryMembershipRepository();
       store.inner = usingPostgres() ? new PostgresMembershipRepository(guarded.get(Database)) : memory;
       const operator: MembershipAdmin = usingPostgres() ? membershipOf(guarded) : memory;
+      if (!usingPostgres()) await memory.registerTenant({ id: TENANT, displayName: 'Test clinic', by: 'operator-test' });
       const person = sub();
       await operator.grant({ tenantId: TENANT, sub: person, roles: ['clinician'], ...OPERATOR });
       const t = await token(person);

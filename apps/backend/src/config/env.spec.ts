@@ -70,7 +70,7 @@ describe('loadEnv', () => {
       NODE_ENV: 'production', AUTH_VERIFIER: 'cognito', COGNITO_REGION: 'us-east-2', COGNITO_USER_POOL_ID: 'us-east-2_AbCdEf123',
       COGNITO_APP_CLIENT_ID: 'client123', STORAGE_DRIVER: 'postgres', DATABASE_URL: 'postgres://app@db/app', DATABASE_SSL: 'require',
       OBJECT_STORAGE_DRIVER: 's3', REPORTS_BUCKET: 'a-bucket', CORS_ALLOWED_ORIGINS: 'https://app.example.com',
-      LEDGER_VERIFIER_DATABASE_URL: 'postgres://verifier@db/app', TRUST_PROXY_HOPS: '1',
+      LEDGER_VERIFIER_DATABASE_URL: 'postgres://verifier@db/app', TRUST_PROXY_HOPS: '1', INVITATION_DIGEST_KEY: 'ab'.repeat(32), IDENTIFIER_DIGEST_KEY: 'cd'.repeat(32),
     };
 
     it('starts with the real setup', () => {
@@ -87,6 +87,10 @@ describe('loadEnv', () => {
       ['a plain-http CORS origin', { CORS_ALLOWED_ORIGINS: 'http://app.example.com' }, /CORS_ALLOWED_ORIGINS/],
       ['rate limiting switched off', { RATE_LIMIT_ENABLED: 'false' }, /RATE_LIMIT_ENABLED.*production/],
       ['an unset proxy setting (it would defeat or poison the address limit)', { TRUST_PROXY_HOPS: undefined }, /TRUST_PROXY_HOPS.*production/],
+      ['a missing invitation digest key', { INVITATION_DIGEST_KEY: undefined }, /INVITATION_DIGEST_KEY.*production/],
+      ['a malformed invitation digest key', { INVITATION_DIGEST_KEY: 'short' }, /INVITATION_DIGEST_KEY/],
+      ['a missing identifier digest key', { IDENTIFIER_DIGEST_KEY: undefined }, /IDENTIFIER_DIGEST_KEY.*production/],
+      ['a malformed identifier digest key', { IDENTIFIER_DIGEST_KEY: 'short' }, /IDENTIFIER_DIGEST_KEY/],
       ['a missing ledger verifier login', { LEDGER_VERIFIER_DATABASE_URL: undefined }, /LEDGER_VERIFIER_DATABASE_URL.*production/],
       ['the synthetic lab-report pipeline', { LAB_REPORT_PIPELINE: 'enabled', LAB_REPORT_FIXTURES_DIR: '/some/recorded/pdfs', KNOWLEDGE_DIR: '/k', BUILD_VERSION: 'b1' }, /LAB_REPORT_PIPELINE.*production/],
     ])('refuses %s', (_name, change, message) => {

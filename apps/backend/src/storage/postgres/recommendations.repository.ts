@@ -47,7 +47,7 @@ export class PostgresRecommendationsRepository extends RecommendationsRepository
   list(tenantId: string, { offset, limit }: PageRequest, filter: RecommendationFilter): Promise<Page<RecommendationRecord>> {
     return this.db.withTenant(tenantId, async (client) => {
       const where = `tenant_id = $1 AND deleted_at IS NULL
-                     AND ($2::uuid IS NULL OR patient_id = $2::uuid)
+                     AND ($2::uuid IS NULL OR patient_id IN (SELECT patient_group_ids($1, $2::uuid)))
                      AND ($3::uuid IS NULL OR report_id = $3::uuid)`;
       const params = [tenantId, filter.patientId ?? null, filter.reportId ?? null];
       const rows = await client.query<RecommendationRow>(

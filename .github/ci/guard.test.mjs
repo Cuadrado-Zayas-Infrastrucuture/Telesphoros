@@ -30,6 +30,13 @@ function recoveryMetricControl() {
     runtime: { node: 'v22.22.0', platform: 'linux', architecture: 'x64', gitHead: 'a'.repeat(40), storage: 'loopback PostgreSQL/Moto; synthetic gateway, not AWS IAM', freshProcess: true }, sourceDatabase: volume(300), measurements, applicationRecoveryComplete: false, nativeReplicationVerified: false };
 }
 
+test('CI runs the worker against PostgreSQL after the API tiers, and a skipped tier fails the job', () => {
+  const step = workflow.indexOf('pnpm --filter @telesphoros/worker test 2>&1 | tee tier-worker.log');
+  assert.ok(step > workflow.indexOf('TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 pnpm'));
+  assert.ok(workflow.slice(step, step + 200).includes('! grep -F "NOT RUNNING" tier-worker.log'));
+  assert.ok(workflow.includes('tier*.log'));
+});
+
 test('CI validates all three recovery artifacts after the service tiers', () => {
   const command = '      - name: Validate all three independent-recovery measurement profiles\n        run: node .github/ci/verify-recovery-metrics.mjs';
   assert.ok(workflow.includes(command));

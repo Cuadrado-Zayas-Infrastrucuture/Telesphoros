@@ -342,7 +342,7 @@ import { bearer } from './helpers/tokens';
   });
 
   describe('reading disputes', () => {
-    it('every role may list and read, a member with none may not; a status filter narrows; another tenant sees none of them', async () => {
+    it('every clinical role may list and read, an administrator or a member with no role may not; a status filter narrows; another tenant sees none of them', async () => {
       const s = await evaluatedD01();
       const raised = (await raise(s.rev, { ...(cellOf(resultFor(s.e, 'drugq'))), note: 'SYN: x' }).expect(201)).body;
       const other = await lab.person('rev-other', ['reviewer']);
@@ -352,7 +352,10 @@ import { bearer } from './helpers/tokens';
       const noRole = await lab.person('x', []);
       await lab.api().get('/api/v1/cell-disputes').set(bearer(noRole.token)).expect(403); // finding I04
       await lab.api().get(`/api/v1/cell-disputes/${raised.id}`).set(bearer(noRole.token)).expect(403);
-      for (const roles of [['reader'], ['clinician'], ['reviewer'], ['admin']]) {
+      const admin = await lab.person('x', ['admin']);
+      await lab.api().get('/api/v1/cell-disputes').set(bearer(admin.token)).expect(403); // administration is not clinical access
+      await lab.api().get(`/api/v1/cell-disputes/${raised.id}`).set(bearer(admin.token)).expect(403);
+      for (const roles of [['reader'], ['clinician'], ['reviewer'], ['admin', 'reader']]) {
         const who = await lab.person('x', roles);
         const list = await lab.api().get('/api/v1/cell-disputes').set(bearer(who.token)).expect(200);
         expect(list.body.data.map((d: Json) => d.id)).toEqual(expect.arrayContaining([raised.id, second.id]));
@@ -365,7 +368,7 @@ import { bearer } from './helpers/tokens';
       expect((await lab.api().get('/api/v1/cell-disputes?status=dismissed').set(bearer(s.clin.token)).expect(200)).body.data.map((d: Json) => d.id)).toContain(second.id);
       await lab.api().get('/api/v1/cell-disputes?status=nope').set(bearer(s.clin.token)).expect(400);
 
-      const stranger = await lab.person('stranger', ['admin'], 'tenant-elsewhere');
+      const stranger = await lab.person('stranger', ['clinician'], 'tenant-elsewhere');
       expect((await lab.api().get('/api/v1/cell-disputes').set(bearer(stranger.token)).expect(200)).body.data).toEqual([]);
       await lab.api().get(`/api/v1/cell-disputes/${raised.id}`).set(bearer(stranger.token)).expect(404);
       await lab.api().get(`/api/v1/cell-disputes/${randomUUID()}`).set(bearer(s.clin.token)).expect(404);

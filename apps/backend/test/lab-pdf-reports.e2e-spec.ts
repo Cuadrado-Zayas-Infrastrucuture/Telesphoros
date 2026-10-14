@@ -34,7 +34,7 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
     app = await createTestApp();
     storageCalls = [];
     const storage = app.get(ObjectStorage);
-    for (const method of ['createUploadTarget', 'inspect', 'getObject', 'putObject', 'createDownloadUrl'] as const) {
+    for (const method of ['inspect', 'getObject', 'putObject', 'createDownloadUrl'] as const) {
       const original = (storage[method] as (...args: unknown[]) => unknown).bind(storage);
       (storage as unknown as Record<string, unknown>)[method] = (...args: unknown[]) => {
         storageCalls.push(method);
@@ -69,10 +69,11 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
     [['reader'], 403],
     [['reviewer'], 403],
     [['clinician'], 201],
-    [['admin'], 201],
+    [['admin'], 403],
     [['clinician', 'reviewer'], 201],
-    [['admin', 'reviewer'], 201],
-  ] as const)('with the roles %j, creating a (vcf) report answers %i: the whole set of roles counts, and reviewer alone never writes', async (roles, status) => {
+    [['admin', 'reviewer'], 403],
+    [['admin', 'clinician'], 201],
+  ] as const)('with the roles %j, creating a (vcf) report answers %i: the whole set of roles counts, and neither reviewer nor admin alone ever writes', async (roles, status) => {
     const writer = await tenantToken('clin-1', ['clinician']);
     const patientId = await newPatient(app, writer);
     const token = await tenantToken(`person-${roles.join('-')}`, [...roles]);
@@ -123,103 +124,109 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
     await db.drop();
   });
 
-  const uploadUrl = (token: string, id: string, body: object = { contentType: PDF_TYPE, sha256: sha(PDF) }) =>
-    api(app).post(`/api/v1/reports/${id}/upload-url`).set(bearer(token)).send(body);
-  const complete = (token: string, id: string) => api(app).post(`/api/v1/reports/${id}/complete`).set(bearer(token));
+  /** Declares an attempt for a lab PDF and returns what the bytes route needs (the declared hash is `declared`, default the bytes' own). */
+  async function declare(token: string, id: string, bytes: Buffer = PDF, declared: Buffer = bytes, target = app) {
+    const revision = (await api(target).get(`/api/v1/reports/${id}/upload-state`).set(bearer(token)).expect(200)).body.revision;
+    const res = await api(target).post(`/api/v1/reports/${id}/upload-attempts`).set(bearer(token)).send({ requestId: randomUUID(), revision, contentType: PDF_TYPE, sha256: sha(declared) });
+    return { res, attempt: res.body as { attemptId: string; revision: string } };
+  }
+  const send = (token: string, id: string, a: { attemptId: string; revision: string }, bytes: Buffer = PDF, target = app) =>
+    api(target).put(`/api/v1/reports/${id}/upload-attempts/${a.attemptId}/bytes`).set(bearer(token)).set('X-Upload-Revision', a.revision).set('Content-Type', PDF_TYPE).send(bytes);
+  const resume = (token: string, id: string, a: { attemptId: string; revision: string }, target = app) =>
+    api(target).post(`/api/v1/reports/${id}/upload-attempts/${a.attemptId}/resume`).set(bearer(token)).set('X-Upload-Revision', a.revision);
+  /** A finished upload through the intake, by one person. */
+  async function uploaded(token: string, id: string, bytes: Buffer = PDF) {
+    const { res, attempt } = await declare(token, id, bytes);
+    expect(res.status).toBe(201);
+    await send(token, id, attempt, bytes).expect(200);
+    return attempt;
+  }
   const row = (id: string) => withAdmin(db.adminUrl, async (c) => (await c.query(`SELECT * FROM reports WHERE id = $1`, [id])).rows[0]);
 
-  /** What the browser does: PUT the bytes straight to the URL with the headers it was given. Returns the version the store reported. */
-  async function put(target: { uploadUrl: string; headers: Record<string, string> }, bytes: Buffer): Promise<string | undefined> {
-    if (target.uploadUrl.startsWith('memory://')) {
-      return (app.get(ObjectStorage) as InMemoryObjectStorage).put(target.uploadUrl.replace('memory://reports/', ''), bytes, target.headers['Content-Type']!);
-    }
-    const res = await fetch(target.uploadUrl, { method: 'PUT', headers: target.headers, body: bytes });
-    expect(res.ok).toBe(true);
-    return res.headers.get('x-amz-version-id') ?? undefined;
-  }
 
-  it('creates a lab-pdf, uploads it, and pins the exact version that was verified, with who asked and who completed', async () => {
+  it('creates a lab-pdf, uploads it through the intake, and pins the exact version that was verified, with the person who declared and sent it', async () => {
     const alice = await tenantToken('alice', ['clinician']);
-    const bob = await tenantToken('bob', ['clinician']);
     const patientId = await newPatient(app, alice);
     const id = (await createReport(app, alice, patientId).expect(201)).body.id as string;
-    const target = (await uploadUrl(alice, id).expect(200)).body;
-    const v1 = await put(target, PDF);
-    const done = await complete(bob, id).expect(200);
+    await uploaded(alice, id);
+    const done = await api(app).get(`/api/v1/reports/${id}`).set(bearer(alice)).expect(200);
     expect(done.body).toMatchObject({ type: 'lab-pdf', fileUploaded: true, sha256: sha(PDF), contentType: PDF_TYPE });
-    expect(JSON.stringify(done.body)).not.toMatch(/alice|bob|object_?version|upload_?requested|uploaded_?by/); // internals never leave the API
-    expect(await row(id)).toMatchObject({ created_by: 'alice', upload_requested_by: 'alice', uploaded_by: 'bob', object_version: v1 });
-    expect(v1).toEqual(expect.any(String));
+    expect(JSON.stringify(done.body)).not.toMatch(/alice|object_?version|upload_?requested|uploaded_?by/); // internals never leave the API
+    const stored = await row(id);
+    expect(stored).toMatchObject({ created_by: 'alice', upload_requested_by: 'alice', uploaded_by: 'alice' });
+    expect(stored.object_version).toEqual(expect.any(String));
+    expect(stored.object_version).not.toBe('null');
   });
 
-  it('keeps the FIRST requester, and a repeated complete changes nobody\'s identity', async () => {
+  it('keeps the attempt with the person who declared it: another clinician cannot send its bytes, and repeating a resume changes nobody\'s identity', async () => {
     const alice = await tenantToken('alice', ['clinician']);
     const bob = await tenantToken('bob', ['clinician']);
-    const carol = await tenantToken('carol', ['admin']);
     const patientId = await newPatient(app, alice);
     const id = (await createReport(app, alice, patientId).expect(201)).body.id as string;
-    await uploadUrl(bob, id).expect(200); // bob asks first
-    const target = (await uploadUrl(alice, id).expect(200)).body; // alice asks again
-    await put(target, PDF);
-    await complete(carol, id).expect(200);
-    await complete(bob, id).expect(200); // a repeat
-    expect(await row(id)).toMatchObject({ created_by: 'alice', upload_requested_by: 'bob', uploaded_by: 'carol' });
+    const { attempt } = await declare(alice, id);
+    await send(bob, id, attempt).expect(404); // not bob's attempt
+    expect((await row(id)).uploaded_at).toBeNull();
+    await send(alice, id, attempt).expect(200);
+    await resume(alice, id, attempt).expect(200);
+    await resume(alice, id, attempt).expect(200);
+    expect(await row(id)).toMatchObject({ created_by: 'alice', upload_requested_by: 'alice', uploaded_by: 'alice' });
   });
 
-  it('refuses a second upload URL once uploaded, and an overwrite through the old URL does not move the pin', async () => {
+  it('refuses a second attempt once uploaded, and a later write to the same key does not move the pin', async () => {
     const alice = await tenantToken('alice', ['clinician']);
     const patientId = await newPatient(app, alice);
     const id = (await createReport(app, alice, patientId).expect(201)).body.id as string;
-    const target = (await uploadUrl(alice, id).expect(200)).body;
-    const v1 = (await put(target, PDF))!;
-    await complete(alice, id).expect(200);
-    await uploadUrl(alice, id).expect(409);
+    const attempt = await uploaded(alice, id);
+    const v1 = (await row(id)).object_version as string;
+    expect((await declare(alice, id)).res.status).toBe(409);
 
-    const v2 = await put(target, PDF2); // the still-valid upload link writes new bytes to the same key
-    expect(v2).not.toBe(v1);
     const stored = await row(id);
-    expect(stored.object_version).toBe(v1);
     const storage = app.get(ObjectStorage);
-    expect((await storage.inspect(stored.storage_key, { version: stored.object_version }))!.sha256).toBe(sha(PDF)); // the pinned version still holds the verified bytes
+    const v2 = (await storage.putObject(stored.storage_key, PDF2, PDF_TYPE)).version; // someone with write access to the bucket writes new bytes to the same key
+    expect(v2).not.toBe(v1);
+    expect((await row(id)).object_version).toBe(v1);
+    expect((await storage.inspect(stored.storage_key, { version: v1 }))!.sha256).toBe(sha(PDF)); // the pinned version still holds the verified bytes
     expect((await storage.inspect(stored.storage_key))!.sha256).toBe(sha(PDF2)); // while the "latest" is now different
-    await complete(alice, id).expect(200); // a repeated complete does not re-verify or re-pin
+    await resume(alice, id, attempt).expect(200); // a repeated resume does not re-verify or re-pin
     expect((await row(id)).object_version).toBe(v1);
   });
 
-  it('rejects bytes that do not match the declared checksum, even when the key now holds something else', async () => {
+  it('rejects bytes that do not match the declared checksum (same size), stores nothing and pins nothing', async () => {
     const alice = await tenantToken('alice', ['clinician']);
     const patientId = await newPatient(app, alice);
     const id = (await createReport(app, alice, patientId).expect(201)).body.id as string;
-    await put((await uploadUrl(alice, id).expect(200)).body, PDF2); // declared PDF, sent PDF2: the same size
-    const res = await complete(alice, id).expect(409);
-    expect(res.body.error.message).toMatch(/checksum/i); // same length (58 bytes), so only the hash can tell them apart
+    const { attempt } = await declare(alice, id, PDF2, PDF); // declared PDF, sent PDF2: the same length (58 bytes), so only the hash can tell them apart
+    expect(PDF2.length).toBe(PDF.length);
+    await send(alice, id, attempt, PDF2).expect(400);
     expect((await row(id)).uploaded_at).toBeNull();
   });
 
-  it('refuses a lab-pdf upload that has no storage version (an unversioned bucket), and says why', async () => {
+  it('refuses a lab-pdf upload that has no storage version (an unversioned bucket) and pins nothing', async () => {
     const storage = app.get(ObjectStorage);
     if (!(storage instanceof InMemoryObjectStorage)) return; // the S3 tier runs on a versioned bucket; the rule is proven in-memory and by the contract tests
     const alice = await tenantToken('alice', ['clinician']);
     const patientId = await newPatient(app, alice);
     const id = (await createReport(app, alice, patientId).expect(201)).body.id as string;
-    const target = (await uploadUrl(alice, id).expect(200)).body;
+    const { attempt } = await declare(alice, id);
     storage.versioned = false;
     try {
-      await put(target, PDF);
-      const res = await complete(alice, id).expect(409);
-      expect(res.body.error).toMatchObject({ code: 'CONFLICT', details: [{ reason: 'source-unpinned' }] });
+      await send(alice, id, attempt).expect(409);
       expect((await row(id)).uploaded_at).toBeNull();
     } finally {
       storage.versioned = true;
     }
+    await send(alice, id, attempt).expect(409); // the refused attempt was cancelled before any write: a cancelled attempt is never reused
+    const retry = await declare(alice, id); // control: with versions kept, a fresh attempt for the same report goes through
+    expect(retry.res.status).toBe(201);
+    await send(alice, id, retry.attempt).expect(200);
+    expect((await row(id)).uploaded_at).not.toBeNull();
   });
 
   it('a report with a capture can no longer change type or be deleted (409, not 500), and its status can still change', async () => {
     const alice = await tenantToken('alice', ['clinician'], 'tenant-cap');
     const patientId = await newPatient(app, alice);
     const id = (await createReport(app, alice, patientId).expect(201)).body.id as string;
-    await put((await uploadUrl(alice, id).expect(200)).body, PDF);
-    await complete(alice, id).expect(200);
+    await uploaded(alice, id);
     const stored = await row(id);
     const seeded: SeededReport = { tenantId: 'tenant-cap', uploader: 'alice', patientId, reportId: id, pdfSha256: stored.sha256, objectVersion: stored.object_version, storageKey: stored.storage_key };
     await app.get(LedgerRecordsRepository).insertCapture('tenant-cap', 'cap-person', captureFor(seeded));
@@ -233,25 +240,26 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
     await api(app).delete(`/api/v1/reports/${free}`).set(bearer(alice)).expect(204);
   });
 
-  it('switching the pipeline off later preserves the legacy PDF processing gate outside an owned run (503), while reading it and deleting it still work', async () => {
+  it('switching the pipeline off later keeps the lab-PDF gate (503) on declaring, sending and resuming, while reading and deleting still work', async () => {
     const alice = await tenantToken('alice', ['clinician'], 'tenant-off');
     const patientId = await newPatient(app, alice);
     const id = (await createReport(app, alice, patientId).expect(201)).body.id as string;
-    const target = (await uploadUrl(alice, id).expect(200)).body;
-    await put(target, PDF);
+    const { attempt } = await declare(alice, id);
+    const other = (await createReport(app, alice, patientId).expect(201)).body.id as string;
 
-    const off = await createTestApp({ postgresUrl: db.appUrl,legacyTransport:true }); // the same database, the switch back to its default
+    const off = await createTestApp({ postgresUrl: db.appUrl, organizationIntake: true }); // the same database, the switch back to its default
     try {
       const get = (path: string) => request(off.getHttpServer()).get(`/api/v1/${path}`).set(bearer(alice));
-      const post = (path: string, body: object = {}) => request(off.getHttpServer()).post(`/api/v1/${path}`).set(bearer(alice)).send(body);
-      expect((await post(`reports/${id}/upload-url`, { contentType: PDF_TYPE, sha256: sha(PDF) }).expect(503)).body.error.code).toBe('PIPELINE_DISABLED');
-      expect((await post(`reports/${id}/complete`).expect(503)).body.error.code).toBe('PIPELINE_DISABLED');
+      expect((await declare(alice, other, PDF, PDF, off)).res.status).toBe(503);
+      const refused = await send(alice, id, attempt, PDF, off);
+      expect([refused.status, refused.body.error.code]).toEqual([503, 'PIPELINE_DISABLED']);
+      expect((await resume(alice, id, attempt, off)).status).toBe(503);
       expect((await row(id)).uploaded_at).toBeNull(); // nothing was verified or pinned while off
       await get(`reports/${id}`).expect(200);
     } finally {
       await off.close();
     }
-    await complete(alice, id).expect(200); // control: back on, the same request works
+    await send(alice, id, attempt).expect(200); // control: back on, the same request works
   });
 
   it('stays isolated by tenant', async () => {
@@ -259,7 +267,9 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
     const mallory = await tenantToken('mallory', ['clinician'], 'tenant-two');
     const patientId = await newPatient(app, alice);
     const id = (await createReport(app, alice, patientId).expect(201)).body.id as string;
-    await uploadUrl(mallory, id).expect(404);
-    await complete(mallory, id).expect(404);
+    const { attempt } = await declare(alice, id);
+    await api(app).get(`/api/v1/reports/${id}/upload-state`).set(bearer(mallory)).expect(404);
+    await api(app).post(`/api/v1/reports/${id}/upload-attempts`).set(bearer(mallory)).send({ requestId: randomUUID(), revision: attempt.revision, contentType: PDF_TYPE, sha256: sha(PDF) }).expect(404);
+    await send(mallory, id, attempt).expect(404);
   });
 });

@@ -5,6 +5,9 @@ import {
   CORRECTION_REASON_CODES,
   correctionCreateSchema,
   evaluationListQuerySchema,
+  identifierCreateSchema,
+  identifierDtoSchema,
+  patientLinkDecisionCreateSchema,
   disputeListQuerySchema,
   REASONS_FOR_KIND,
   ErrorCode,
@@ -17,8 +20,7 @@ import {
   reportCreateSchema,
   reportDtoSchema,
   reportPatchSchema,
-  reportUploadUrlRequestSchema,
-  reportUploadUrlResponseSchema,
+  reportFileDeclarationSchema,
   TENANT_GROUP_PREFIX,
   tenantFromGroups,
   tenantIdSchema,
@@ -97,20 +99,14 @@ describe('error envelope', () => {
   });
 });
 
-describe('upload contract', () => {
+describe('upload contract (the declaration an upload makes)', () => {
   const sha = 'a'.repeat(64);
   it('requires a lowercase hex SHA-256 and a content type, and refuses extra fields (no client-chosen storage key)', () => {
-    expect(reportUploadUrlRequestSchema.safeParse({ contentType: 'text/x-vcf', sha256: sha }).success).toBe(true);
-    expect(reportUploadUrlRequestSchema.safeParse({ contentType: 'text/x-vcf', sha256: sha.toUpperCase() }).success).toBe(false);
-    expect(reportUploadUrlRequestSchema.safeParse({ contentType: 'text/x-vcf', sha256: 'abc' }).success).toBe(false);
-    expect(reportUploadUrlRequestSchema.safeParse({ contentType: 'text/x-vcf' }).success).toBe(false);
-    expect(reportUploadUrlRequestSchema.safeParse({ contentType: 'text/x-vcf', sha256: sha, storageKey: 'reports/x' }).success).toBe(false);
-  });
-  it('describes the upload target the browser needs, and nothing else', () => {
-    const ok = { uploadUrl: 'https://example.test/x', method: 'PUT', headers: { 'Content-Type': 'text/plain' }, expiresAt: new Date().toISOString() };
-    expect(reportUploadUrlResponseSchema.safeParse(ok).success).toBe(true);
-    expect(reportUploadUrlResponseSchema.safeParse({ ...ok, method: 'POST' }).success).toBe(false);
-    expect(reportUploadUrlResponseSchema.safeParse({ ...ok, storageKey: 'k' }).success).toBe(false);
+    expect(reportFileDeclarationSchema.safeParse({ contentType: 'text/x-vcf', sha256: sha }).success).toBe(true);
+    expect(reportFileDeclarationSchema.safeParse({ contentType: 'text/x-vcf', sha256: sha.toUpperCase() }).success).toBe(false);
+    expect(reportFileDeclarationSchema.safeParse({ contentType: 'text/x-vcf', sha256: 'abc' }).success).toBe(false);
+    expect(reportFileDeclarationSchema.safeParse({ contentType: 'text/x-vcf' }).success).toBe(false);
+    expect(reportFileDeclarationSchema.safeParse({ contentType: 'text/x-vcf', sha256: sha, storageKey: 'reports/x' }).success).toBe(false);
   });
   it('accepts a content type per report type, and the DTO never carries a storage key', () => {
     expect(REPORT_CONTENT_TYPES.vcf).toContain('text/x-vcf');
@@ -191,5 +187,41 @@ describe('the evaluation list query', () => {
   it('accepts only current=true, never false or a number', () => {
     expect(evaluationListQuerySchema.safeParse({ current: 'true' }).success).toBe(true);
     for (const current of ['false', '1', 'yes', true, 1]) expect(evaluationListQuerySchema.safeParse({ current }).success, String(current)).toBe(false);
+  });
+});
+
+describe('patient identifiers and the patient link', () => {
+  const create = (body: unknown) => identifierCreateSchema.safeParse(body);
+
+  it('takes a system code and a printable value, trims both, lower-cases the system, and nothing else', () => {
+    expect(create({ system: ' Hospital-A-MRN ', value: '  mrn-1 ' })).toMatchObject({ success: true, data: { system: 'hospital-a-mrn', value: 'mrn-1' } });
+    for (const bad of [{ system: 'hospital a', value: 'x' }, { system: '-a', value: 'x' }, { system: 'a'.repeat(41), value: 'x' }, { system: 'a', value: '' }, { system: 'a', value: 'x'.repeat(65) }, { system: 'a', value: 'x\u0000y' }, { system: 'a', value: 'x', extra: 1 }, { value: 'x' }]) {
+      expect(create(bad).success, JSON.stringify(bad)).toBe(false);
+    }
+    expect(create({ system: 'a'.repeat(40), value: 'x'.repeat(64) }).success).toBe(true);
+  });
+
+  it('shows an identifier without a value or a digest, and refuses a DTO that carries one', () => {
+    const dto = { id: '2b2f0a52-9a43-4f2a-8bd2-7e0f8a2f5d11', patientId: '3b2f0a52-9a43-4f2a-8bd2-7e0f8a2f5d11', system: 'hospital-a-mrn', status: 'active', createdAt: '2026-10-13T00:00:00.000Z', withdrawnAt: null };
+    expect(identifierDtoSchema.safeParse(dto).success).toBe(true);
+    expect(identifierDtoSchema.safeParse({ ...dto, value: 'x' }).success).toBe(false);
+    expect(identifierDtoSchema.safeParse({ ...dto, digest: 'ab' }).success).toBe(false);
+  });
+
+  describe('a link decision', () => {
+    const ok = (body: unknown) => patientLinkDecisionCreateSchema.safeParse(body).success;
+    it('is one of three shapes, and a reason goes only with the decision it supports', () => {
+      expect(ok({ method: 'identifier-match', decision: 'verified', system: 'hospital-a-mrn', value: 'mrn-1' })).toBe(true);
+      expect(ok({ method: 'person-confirmed', decision: 'verified', basisCode: 'no-identifier-on-report' })).toBe(true);
+      expect(ok({ method: 'person-confirmed', decision: 'rejected', basisCode: 'different-person' })).toBe(true);
+      expect(ok({ method: 'person-confirmed', decision: 'verified', basisCode: 'different-person' })).toBe(false);
+      expect(ok({ method: 'person-confirmed', decision: 'rejected', basisCode: 'documented-clinic-procedure' })).toBe(false);
+      expect(ok({ method: 'person-confirmed', decision: 'verified' })).toBe(false);
+      expect(ok({ method: 'identifier-match', decision: 'rejected', system: 'hospital-a-mrn', value: 'mrn-1' })).toBe(false);
+      expect(ok({ method: 'identifier-match', decision: 'verified', system: 'hospital-a-mrn' })).toBe(false);
+      expect(ok({ method: 'identifier-match', decision: 'verified', system: 'hospital-a-mrn', value: 'x', basisCode: 'no-identifier-on-report' })).toBe(false);
+      expect(ok({ method: 'person-confirmed', decision: 'verified', basisCode: 'no-identifier-on-report', createdBy: 'me' })).toBe(false);
+      expect(ok({ method: 'guess', decision: 'verified' })).toBe(false);
+    });
   });
 });

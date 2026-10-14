@@ -7,7 +7,8 @@ import { byCreatedAt, type Page, type PageRequest, type PatientRecord, slicePage
  * Phase 3 provides a database-backed implementation of this same class.
  */
 export abstract class PatientsRepository {
-  abstract list(tenantId: string, page: PageRequest): Promise<Page<PatientRecord>>;
+  /** Merged-away patients (M2.1c-2) are left out unless `includeMerged`; each record says what it was merged into. */
+  abstract list(tenantId: string, page: PageRequest, options?: { includeMerged?: boolean }): Promise<Page<PatientRecord>>;
   abstract findById(tenantId: string, id: string): Promise<PatientRecord | undefined>;
   abstract findByLabel(tenantId: string, label: string): Promise<PatientRecord | undefined>;
   abstract insert(record: PatientRecord): Promise<void>;

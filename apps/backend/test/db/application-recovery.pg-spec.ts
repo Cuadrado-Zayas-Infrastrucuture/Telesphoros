@@ -64,7 +64,7 @@ if (!both) process.stderr.write('[jest] NOT RUNNING: test/db/application-recover
     source = new S3EvidenceStorage({ ...settings, bucket: primaryBucket, prefix: 'reports/' });
     copy = new S3EvidenceStorage({ ...settings, bucket: await newBucket(), prefix: 'catalogues/' });
     backup = new S3EvidenceStorage({ ...settings, bucket: await newBucket(), prefix: 'backups/' });
-    const storage = new S3ObjectStorage(emulator(), primaryBucket, 60);
+    const storage = new S3ObjectStorage(emulator(), primaryBucket);
     const app = await createTestApp({ labReportPipeline: true, postgresUrl: pg.appUrl, overrides: [{ provide: ObjectStorage, useValue: storage }] });
     try {
       const lab = new LabPipeline(app, pg.adminUrl, 'syn-f3-a');

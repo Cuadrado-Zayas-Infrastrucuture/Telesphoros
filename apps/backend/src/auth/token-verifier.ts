@@ -1,4 +1,5 @@
 import { jwtVerify } from 'jose';
+import { isSystemActor } from '@telesphoros/jobs';
 import { roleSchema, tenantIdSchema } from '@telesphoros/shared-types';
 import { z } from 'zod';
 import type { Env } from '../config/env';
@@ -33,7 +34,8 @@ export class NoTenantError extends Error {
 }
 
 const rolesClaim = z.array(roleSchema).max(10);
-const subjectClaim = z.string().min(1).max(128);
+/** A token's subject is a person. A background job's name (`system:<job type>`) is never one, so no token may carry it (see packages/jobs/src/actor.ts). */
+export const subjectClaim = z.string().min(1).max(128).refine((sub) => !isSystemActor(sub), 'a system actor is not a person');
 
 /**
  * DEVELOPMENT/TEST ONLY: verifies HS256 tokens signed with a shared secret. loadEnv() refuses to

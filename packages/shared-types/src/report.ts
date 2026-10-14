@@ -84,18 +84,9 @@ export const REPORT_CONTENT_TYPES: Record<ReportType, readonly string[]> = {
 
 export const sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/, 'Provide the lowercase hex SHA-256 of the file.');
 
-/** Step 1 of an upload: say what you are about to send, and its checksum. */
-export const reportUploadUrlRequestSchema = z.strictObject({
+/** What a file upload declares before any byte is sent: its content type and its SHA-256 (the validated intake checks both against the bytes). */
+export const reportFileDeclarationSchema = z.strictObject({
   contentType: z.string().min(1).max(100),
   sha256: sha256HexSchema,
 });
-export type ReportUploadUrlRequest = z.infer<typeof reportUploadUrlRequestSchema>;
-
-/** A short-lived, single-object URL. The browser PUTs the file straight to storage with these headers. */
-export const reportUploadUrlResponseSchema = z.strictObject({
-  uploadUrl: z.string().min(1),
-  method: z.literal('PUT'),
-  headers: z.record(z.string(), z.string()),
-  expiresAt: z.iso.datetime(),
-});
-export type ReportUploadUrlResponse = z.infer<typeof reportUploadUrlResponseSchema>;
+export type ReportFileDeclaration = z.infer<typeof reportFileDeclarationSchema>;

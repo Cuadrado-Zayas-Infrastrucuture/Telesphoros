@@ -48,7 +48,7 @@ it('resumes unresolved storage without resending bytes', async () => {
   expect(api.mock.calls.some(call => call[0].endsWith('/resume'))).toBe(true);
   expect(api.mock.calls.some(call => call[1]?.method === 'PUT')).toBe(false);
 });
-it('never falls back to legacy upload after refusal', async () => {
+it('has no direct-upload fallback after a refusal', async () => {
   const api = vi.fn().mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response({}, 503));
   await expect(submitReport(values, api, {})).rejects.toThrow();
   expect(api.mock.calls.some(call => call[0].endsWith('/upload-url'))).toBe(false); expect(fetch).not.toHaveBeenCalled();

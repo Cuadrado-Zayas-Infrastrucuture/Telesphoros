@@ -85,7 +85,7 @@ suite('built format 2 CLI current-schema recovery rehearsal', () => {
     gateway = await startGateway(S3_ENDPOINT, { keys: { AKUPLOADONLY: ['put'], AKREADONLY: ['get', 'list'] }, strict: true });
     const primaryBucket = await newBucket({ lock: false });
     await emulator().send(new PutBucketVersioningCommand({ Bucket: primaryBucket, VersioningConfiguration: { Status: 'Enabled' } }));
-    storage = new S3ObjectStorage(emulator(), primaryBucket, 60); evidence.primaryBucket = primaryBucket;
+    storage = new S3ObjectStorage(emulator(), primaryBucket); evidence.primaryBucket = primaryBucket;
     remote = `s3://${await newBucket()}/rehearsal`;
     source = await createEphemeralDatabase(); target = await recoveryTarget();
     firstCapture = await seedRecovery(source, storage);
@@ -102,7 +102,7 @@ suite('built format 2 CLI current-schema recovery rehearsal', () => {
     expect(backup.code).toBe(0);
     const produced = /^backup written: (.+)$/m.exec(backup.output); expect(produced).not.toBeNull(); backupDir = produced![1]!;
     manifest = parseManifest(readFileSync(join(backupDir, 'manifest.json'), 'utf8')) as BackupManifestV2;
-    expect(manifest.formatVersion).toBe(2); expect(manifest.migrations).toHaveLength(18);
+    expect(manifest.formatVersion).toBe(2); expect(manifest.migrations).toHaveLength(23);
     for (const [table, rows] of Object.entries(EXPECTED_ROWS)) expect(manifest.tables[table]?.rows).toBe(rows);
     const dump = backup.events.find(e => e.phase === 'pg_dump')!; expect(dump.plaintextDumpBytes).toBeGreaterThan(0);
     evidence.plaintextCustomDump = volume(dump.plaintextDumpBytes!); evidence.encryptedArchive = volume(manifest.dump.bytes);

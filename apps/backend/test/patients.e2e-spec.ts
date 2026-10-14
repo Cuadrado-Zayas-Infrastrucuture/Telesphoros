@@ -20,7 +20,8 @@ const makePatient = async (token: string, label: string) =>
 describe('patients: roles and shape', () => {
   it('lets a clinician create a patient and returns exactly the public fields', async () => {
     const res = await api().post(BASE).set(bearer(await clinicianA())).send({ label: 'SYN-0001' }).expect(201);
-    expect(Object.keys(res.body).sort()).toEqual(['createdAt', 'id', 'label', 'updatedAt']);
+    expect(Object.keys(res.body).sort()).toEqual(['createdAt', 'id', 'label', 'mergedInto', 'updatedAt']);
+    expect(res.body.mergedInto).toBeNull();
     expect(patientDtoSchema.safeParse(res.body).success).toBe(true);
     expect(JSON.stringify(res.body)).not.toMatch(/owner|tenant|created_?by|user-a/i);
   });

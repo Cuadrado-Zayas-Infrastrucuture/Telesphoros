@@ -3,7 +3,7 @@ import { ArrowRight, Check, FileText, Minus, Upload } from 'lucide-react';
 import '@/styles/landing-workflow.css';
 
 const steps = [
-  { label: 'Upload', title: 'Start with the patient.', description: 'Select an existing synthetic patient and attach their report. The file is checked before submission.', boundary: 'Uploads require a clinician or administrator role.' },
+  { label: 'Upload', title: 'Start with the patient.', description: 'Select an existing synthetic patient and attach their report. The file is checked before submission.', boundary: 'Uploads require a clinician role.' },
   { label: 'Check', title: 'See whether the upload completed.', description: 'Check whether the server verified the stored file. A report record can exist even when its upload is incomplete.', boundary: 'File verification does not indicate clinical review.' },
   { label: 'Find', title: 'Find the record. Check the details.', description: 'In the storage workspace, browse reports by patient and open a record to see its format and upload status.', boundary: 'File retrieval follows your existing permissions. This example does not download files.' },
 ] as const;

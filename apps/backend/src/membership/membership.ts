@@ -1,3 +1,4 @@
+import { isSystemActor } from '@telesphoros/jobs';
 import { ROLES, type Role } from '@telesphoros/shared-types';
 
 /**
@@ -13,6 +14,8 @@ export interface MembershipRecord {
   tokensValidAfter: number;
   /** Increases on every change. A write is admitted under one version and refused at commit if the row has moved. */
   version: number;
+  /** Whether the organization is active (set by the lookup the API makes on every request; absent on rows the operator command returns). */
+  tenantActive?: boolean;
 }
 
 export interface MembershipChange {
@@ -29,7 +32,7 @@ export interface MembershipGrant extends MembershipChange {
   roles: Role[];
 }
 
-export type MembershipFailure = 'already-active' | 'not-active' | 'in-another-organization' | 'invalid';
+export type MembershipFailure = 'already-active' | 'not-active' | 'in-another-organization' | 'unknown-tenant' | 'invalid';
 
 /** The change was refused. The message is safe to print on the operator's terminal. */
 export class MembershipAdminError extends Error {
@@ -75,5 +78,23 @@ export function checkChange(input: MembershipChange): void {
   for (const [field, value] of [['tenant', input.tenantId], ['sub', input.sub], ['by', input.by]] as const) {
     if (!value || value.length > MAX_TEXT || control.test(value)) throw bad(field);
   }
+  // A membership is a person's. The name a background job acts under can never be given one (the database refuses it too: migration 0023).
+  if (isSystemActor(input.sub)) throw new MembershipAdminError('invalid', 'sub must be a person, not a system actor.');
   if ((input.reason ?? '').length > 500) throw new MembershipAdminError('invalid', 'reason must be at most 500 characters.');
 }
+
+
+export interface TenantRecord {
+  id: string;
+  displayName: string;
+  status: 'active' | 'suspended';
+}
+
+/** The organization registry the operator command maintains. A membership can only name a registered organization. */
+export interface TenantAdmin {
+  registerTenant(input: { id: string; displayName: string; by: string }): Promise<TenantRecord>;
+  setTenantStatus(input: { id: string; status: 'active' | 'suspended'; by: string }): Promise<TenantRecord>;
+  listTenants(): Promise<TenantRecord[]>;
+}
+
+export const MAX_TENANT_NAME = 120;

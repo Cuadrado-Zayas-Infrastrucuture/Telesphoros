@@ -62,6 +62,16 @@ describe('HmacTokenVerifier', () => {
     expect((error as Error).message).toBe('Invalid token');
   });
 
+  it('refuses a token whose subject is a system actor: no person can hold the name a background job acts under', async () => {
+    for (const sub of ['system:uploads.sweep', 'system:', 'system:scheduler']) {
+      const error = await verifier.verify(await signToken({ sub, tenant: 'acme', roles: ['admin'] })).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(InvalidTokenError);
+      expect((error as Error).message).toBe('Invalid token');
+    }
+    // Only the exact prefix is reserved.
+    for (const sub of ['systemic', 'a:system:b', 'System:x', 'sys']) await expect(verifier.verify(await signToken({ sub, tenant: 'acme' }))).resolves.toMatchObject({ sub });
+  });
+
   it('rejects non-JWT input', async () => {
     await expect(verifier.verify('')).rejects.toBeInstanceOf(InvalidTokenError);
     await expect(verifier.verify('abc')).rejects.toBeInstanceOf(InvalidTokenError);

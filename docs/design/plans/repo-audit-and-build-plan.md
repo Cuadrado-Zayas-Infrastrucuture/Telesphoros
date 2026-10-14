@@ -170,7 +170,7 @@ Each slice is one plan and one draft PR, branched from `main`, following the wor
 
 | Slice | Content | Backlog |
 | --- | --- | --- |
-| M2.1 | Clinic onboarding and patient identity (scoped identifiers, verified report link, merge events) | T06 |
+| M2.1 | Clinic onboarding and patient identity (scoped identifiers, verified report link, merge events) | T06 (plan drafted, awaiting approval: [m2-1-onboarding-patient-identity.md](m2-1-onboarding-patient-identity.md); split into M2.1a tenant registry and member administration, M2.1b identifiers and verified link, M2.1c quarantine and merge; needs DP-1 to DP-6) |
 | M2.2 | Durable quarantined intake on every path: legacy validation or retirement (E04), browser reload recovery (A08) | T07 |
 | M2.3 | Jobs, outbox and an idempotent worker (new `apps/worker`) | T08 |
 | M2.4 | Reviewed knowledge release pipeline, including the March 2026 CPIC/ClinPGx field changes | T09 |

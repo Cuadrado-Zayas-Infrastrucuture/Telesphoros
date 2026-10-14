@@ -8,11 +8,12 @@ import { asOrganizationWork, authorityContextMiddleware, bindRequestAuthority, c
 import { MembershipService } from '../../src/auth/membership.service';
 import { Database } from '../../src/db/database';
 import { runMembership } from '../../src/membership/membership-cli';
-import { PgMembershipAdmin } from '../../src/membership/pg-membership-admin';
+import type { MembershipAdmin } from '../../src/membership/membership';
 import { InMemorySecurityEvents } from '../../src/security-events/security-events';
 import { PostgresMembershipRepository } from '../../src/storage/postgres/membership.repository';
 import { ReportsRepository } from '../../src/storage/reports.repository';
 import { createTestApp, membershipOf } from '../helpers/app';
+import { registeringAdmin, registerTenantRow } from '../helpers/membership';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { bearer, clinicianA } from '../helpers/tokens';
 
@@ -32,7 +33,7 @@ afterAll(async () => {
 
 const person = () => `person-${randomUUID().slice(0, 8)}`;
 const owner = <T>(work: (c: Client) => Promise<T>) => withAdmin(db.adminUrl, work);
-const admin = async <T>(work: (a: PgMembershipAdmin) => Promise<T>) => owner((c) => work(new PgMembershipAdmin(c)));
+const admin = async <T>(work: (a: MembershipAdmin) => Promise<T>) => owner((c) => work(registeringAdmin(c)));
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function asApplication<T>(work: (c: Client) => Promise<T>, tenant: string | null = TENANT): Promise<T> {
@@ -57,8 +58,10 @@ function asRequest<T>(authority: RequestAuthority, work: () => Promise<T>): Prom
 }
 
 describe('the membership table', () => {
-  const insert = (c: Client, tenant: string, sub: string, extra = '') =>
-    c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ($1, $2, 'active', '{reader}', 'test') ${extra}`, [tenant, sub]);
+  const insert = async (c: Client, tenant: string, sub: string, extra = '') => {
+    await registerTenantRow(c, tenant);
+    return c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ($1, $2, 'active', '{reader}', 'test') ${extra}`, [tenant, sub]);
+  };
 
   it('lets the application login READ only its own organization, and nothing else', async () => {
     const a = person();
@@ -352,7 +355,7 @@ describe('the operator command', () => {
   it('grants, changes, removes and shows through the same code the tests use, and prints no secret', async () => {
     const who = person();
     const lines: string[] = [];
-    const run = (args: string[]) => owner((c) => runMembership(new PgMembershipAdmin(c), args, (line) => lines.push(line)));
+    const run = (args: string[]) => owner((c) => runMembership(registeringAdmin(c), args, (line) => lines.push(line)));
     const base = ['--tenant', TENANT, '--sub', who, '--by', 'ops-person', '--reason', 'new clinician'];
     expect(await run(['grant', ...base, '--roles', 'clinician,reviewer'])).toBe(0);
     expect(await run(['grant', ...base, '--roles', 'clinician'])).toBe(1); // already active

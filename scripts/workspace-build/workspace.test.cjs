@@ -42,7 +42,7 @@ test('recursive build delegates the dependency graph once without nested rebuild
 });
 
 test('standalone hooks still build every declared prerequisite', () => {
-  for (const file of ['apps/backend/package.json', 'packages/smart-pilot/package.json']) {
+  for (const [file, required] of [['apps/backend/package.json', 'shared-types'], ['packages/smart-pilot/package.json', 'shared-types'], ['apps/worker/package.json', 'jobs']]) {
     const pkg = JSON.parse(readFileSync(resolve(__dirname, '../..', file), 'utf8'));
     for (const name of ['pretypecheck', 'prebuild', 'pretest']) {
       const script = pkg.scripts[name];
@@ -50,7 +50,7 @@ test('standalone hooks still build every declared prerequisite', () => {
       const args = script.split(' ').slice(2);
       assert.equal(args[0], 'prepare');
       const expected = args.slice(1);
-      assert.ok(expected.includes('shared-types'));
+      assert.ok(expected.includes(required));
       const calls = [];
       assert.equal(run(args, {}, (_bin, argv) => { calls.push(argv); return { status: 0 }; }), 0);
       assert.deepEqual(calls, [expected.flatMap(n => ['--filter', `@telesphoros/${n}`]).concat('build')]);

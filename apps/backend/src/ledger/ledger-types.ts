@@ -21,6 +21,9 @@ export const EVENT_TYPE_FOR_TABLE = {
   corrections: 'correction',
   cell_disputes: 'dispute',
   cell_dispute_decisions: 'dispute-decision',
+  report_patient_decisions: 'patient-link-decision',
+  patient_merge_proposals: 'patient-merge-proposal',
+  patient_merge_decisions: 'patient-merge-decision',
 } as const;
 export type RecordTable = keyof typeof EVENT_TYPE_FOR_TABLE;
 export const RECORD_TABLES = Object.keys(EVENT_TYPE_FOR_TABLE) as RecordTable[];
@@ -60,6 +63,37 @@ export class DisputeChangedError extends Error {
   }
 }
 
+/**
+ * The report's patient link is not verified for the file it holds now: no decision, a rejection, or a decision made about an earlier file. Raised
+ * AFTER the ledger lock is held, so a decision recorded or a file replaced in between cannot slip past. Nothing was saved.
+ */
+export class PatientLinkUnverifiedError extends Error {
+  constructor() {
+    super('The report is not verified as belonging to its patient.');
+    this.name = 'PatientLinkUnverifiedError';
+  }
+}
+
+/**
+ * A merge or unmerge may not happen in the state the patients are in now: the source is already merged, the target is, the source has aliases of
+ * its own, no merge is in force to undo, or a patient is gone. `reason` is the code the database's rule returned. Raised by the repository's own
+ * look at the rule, or by the database at COMMIT (SQLSTATE PM001) under the ledger lock. Nothing was saved.
+ */
+export class MergeRefusedError extends Error {
+  constructor(readonly reason: string) {
+    super('The merge is not possible in the current state of the patients.');
+    this.name = 'MergeRefusedError';
+  }
+}
+
+/** The proposal already has a decision, and it is not the one being recorded. Nothing was saved. */
+export class MergeAlreadyDecidedError extends Error {
+  constructor() {
+    super('The proposal was already decided.');
+    this.name = 'MergeAlreadyDecidedError';
+  }
+}
+
 /** The acceptance was superseded before the evaluation acquired the ledger lock. Nothing was saved. */
 export class StaleAcceptanceError extends Error {
   constructor() {
@@ -94,6 +128,8 @@ const INTEGRITY_CLASS = '23';
 const LOCK_NOT_AVAILABLE = '55P03';
 /** Raised by `ledger_append` (migration 0011) while the tenant has an open incident or a global hold is open. */
 export const LEDGER_CONTAINED = 'LC001';
+/** Raised at COMMIT by the merge-decision rule (migration 0021); the message is the reason code. */
+export const MERGE_REFUSED = 'PM001';
 /**
  * SQLSTATE class 23 (integrity constraint violation) becomes a LedgerIntegrityError; a lock timeout (55P03) becomes a LedgerBusyError;
  * the database's containment refusal (LC001) becomes a LedgerCompromisedError; anything else is returned untouched.
@@ -103,5 +139,6 @@ export function toLedgerError(error: unknown): unknown {
   if (typeof code === 'string' && code.startsWith(INTEGRITY_CLASS)) return new LedgerIntegrityError('A ledger or record integrity rule refused this write.', code, constraint);
   if (code === LOCK_NOT_AVAILABLE) return new LedgerBusyError();
   if (code === LEDGER_CONTAINED) return new LedgerCompromisedError();
+  if (code === MERGE_REFUSED) return new MergeRefusedError((error as Error).message);
   return error;
 }

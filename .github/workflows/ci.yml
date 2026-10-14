@@ -129,6 +129,12 @@ jobs:
           set -o pipefail
           TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 pnpm --filter @telesphoros/backend test 2>&1 | tee tier3.log
           ! grep -F "[jest] NOT RUNNING" tier3.log
+      # The background-job queue and real worker processes (claim races, a killed worker, a drain) need PostgreSQL; a skip fails the job as above.
+      - name: "Worker: the job queue and real worker processes on PostgreSQL"
+        run: |
+          set -o pipefail
+          pnpm --filter @telesphoros/worker test 2>&1 | tee tier-worker.log
+          ! grep -F "NOT RUNNING" tier-worker.log
       - name: Validate all three independent-recovery measurement profiles
         run: node .github/ci/verify-recovery-metrics.mjs
       - name: Validate all three application-recovery measurement profiles

@@ -126,7 +126,8 @@ person who captured it (409 `self-review`; a rejection is open to any reviewer).
 
 **An evaluation is refused before the reader runs, and nothing is stored, when:** the decision named is not an acceptance
 (`capture-not-accepted`), a later decision about that capture exists (`stale-acceptance`: always 409, even if the result exists; read history
-with GET), the stored text is no longer the captured text (`text-hash-mismatch`), or the ids do not belong together (`mismatch`; unknown or foreign
+with GET), the report's patient link is not verified for the file it holds now (`patient-link-unverified`, M2.1b: a second person must record that
+this file belongs to its patient, see "Patient link" below; the check is repeated inside the storing transaction), the stored text is no longer the captured text (`text-hash-mismatch`), or the ids do not belong together (`mismatch`; unknown or foreign
 ids are 404). **A dispute no longer refuses an evaluation** (until slice 5B-3.3b any dispute in the tenant did, `dispute-active`): the disputed
 cell is held and everything else is evaluated; see "Disputes" below.
 
@@ -171,3 +172,31 @@ returns their stored text. It says nothing about real PDF extraction, which need
 ## Finding evaluations that cited a disputed cell
 
 `GET /api/v1/cell-disputes/:id/evaluations` (clinician, reviewer, admin) accepts `limit` (1–100, default 50) and `afterSeq` (decimal sequence, default 0). The stored dispute supplies the cell identity. It lists historical evaluations, including corrected ones, with exact-file versus historical-identity-unverified matches and whether wording was exposed. Known different file hashes are excluded. A page may have no entries and still have a continuation cursor; follow it until null. It never changes an evaluation. See [the contract and limits](clinical-validation/cell-usage-listing.md).
+
+## Patient link (M2.1b)
+
+A report names a patient only because someone chose that patient when registering it. Before anything is evaluated, a **second person** records that the
+report's exact file version belongs to that patient ([design note](design/plans/m2-1b-identifiers-and-patient-link.md)).
+
+| Route | Roles | Notes |
+| --- | --- | --- |
+| `GET /reports/:id/patient-link` | clinical read | `state` `unverified`, `verified` or `rejected` for the file the report holds now; `staleDecision` is true when the newest decision was about an earlier file |
+| `POST /reports/:id/patient-link/decisions` | `clinician`, `reviewer` | Three shapes: `{decision: "verified", method: "identifier-match", system, value}` (the identifier read off the report, matched against the patient's registered ones; a mismatch is 409 `identifier-mismatch` and records nothing), `{decision: "verified", method: "person-confirmed", basisCode}` (the weaker method) and `{decision: "rejected", method: "person-confirmed", basisCode}`. 201 for a new decision, 200 when the newest decision about this file already says the same |
+
+Refusals: `self-review` (409) for the person who registered the report, asked for its first upload link or completed the upload; `not-uploaded` (409);
+`source-changed` (409) when the report changed while deciding; 403 for a role that may not decide (an administrator alone, a reader). Another
+organization's report is 404. Both routes are pipeline routes (503 while the pipeline is off). **Quarantine (M2.1c-1).** A `rejected` decision about the file the report holds now quarantines the report: its evaluations stop being `current` (`GET /evaluations?current=true` leaves them out), and every evaluation read carries `advisory.patientLink` (`verified`, `unverified` for no decision for the current file, which includes evaluations made before the link existed, or `rejected`). `GET /patient-link/quarantine` (role `reviewer`, pipeline route, paged) lists quarantined reports that still have an active evaluation, with the coded reason and the evaluation ids; a reviewer retracts each with the existing `wrong-patient` correction, and a report leaves the list when none is active or the link is verified again. Nothing is corrected automatically, and a report cannot be re-pointed to another patient: upload it again under the right one. Identifiers themselves are registered on the patient
+(`/patients/:id/identifiers`, [patient identifiers](ops/patient-identifiers.md)).
+
+## Duplicate patients and merges (M2.1c-2)
+
+[Design note](design/plans/m2-1c-2-duplicates-and-merge.md). A patient-identifier collision (`409 identifier-in-use`) leaves a possible-duplicate flag; a person proposes a merge and a different person decides it. The records are ledger records, so merge routes answer 503 while the ledger is absent (in-memory mode); the duplicate list works either way.
+
+| Route | Roles | Notes |
+| --- | --- | --- |
+| `GET /patient-duplicates` | clinical read | Pairs flagged by a collision and not yet reviewed (a declined merge dismisses a pair); paged; no identifier or digest |
+| `POST /patient-merges` | `clinician`, `reviewer` | `{kind: "merge" or "unmerge", sourcePatientId, targetPatientId, reasonCode}`; the reason must go with the kind. 409 `merge-<reason>` for a pair the graph cannot take, `merge-proposal-pending` for an undecided duplicate |
+| `POST /patient-merges/:id/decision` | `clinician`, `reviewer` | `{decision: "approved" or "declined"}`; 409 `self-review` for the proposer and for a proposal already decided differently; the graph is checked again at commit |
+| `GET /patient-merges`, `GET /patient-merges/:id` | clinical read | History newest first, filterable by state, with the decision |
+
+An administrator alone has none of these. Reads: `GET /patients` hides merged-away patients unless `includeMerged=true` and shows `mergedInto`; `patientId` on reports, evaluations and recommendations means the whole group; `POST /reports` and `POST /patients/:id/identifiers` on a merged-away patient are 409 `patient-merged`.

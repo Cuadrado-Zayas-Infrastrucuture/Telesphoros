@@ -41,7 +41,7 @@ export class DisputesController {
   }
 
   @Get(':id/evaluations')
-  @Roles('clinician', 'reviewer', 'admin')
+  @Roles('clinician', 'reviewer')
   evaluations(
     @CurrentPrincipal() principal: Principal,
     @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam,

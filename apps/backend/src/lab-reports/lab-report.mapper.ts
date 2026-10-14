@@ -71,6 +71,8 @@ export interface EvaluationContext {
   corrections: Projected[];
   current: boolean;
   activeDisputes: number;
+  /** Whether the report's file is verified as the patient's, rejected (quarantined), or not decided. */
+  patientLink: 'verified' | 'unverified' | 'rejected';
 }
 
 const text = (value: unknown): string | null => (typeof value === 'string' ? value : null);
@@ -112,7 +114,7 @@ export function toEvaluationDto(record: Projected, context: EvaluationContext): 
     geneInputs: record.geneInputs,
     corrections: context.corrections.map(toCorrectionDto),
     current: context.current,
-    advisory: { activeDisputes: context.activeDisputes },
+    advisory: { activeDisputes: context.activeDisputes, patientLink: context.patientLink },
     // Not approved for clinical use, so never "actionable" at this stage; also false whenever the state is not active or a dispute is open.
     actionable: false,
     createdAt: record.createdAt,

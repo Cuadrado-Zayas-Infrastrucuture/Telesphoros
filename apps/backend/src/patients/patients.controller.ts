@@ -4,11 +4,11 @@ import {
   type IdParam,
   idParamSchema,
   type Paginated,
-  type PaginationQuery,
-  paginationQuerySchema,
   type PatientDto,
   type PatientInput,
   patientInputSchema,
+  type PatientListQuery,
+  patientListQuerySchema,
 } from '@telesphoros/shared-types';
 import { CLINICAL_READ_ROLES } from '../auth/clinical-read';
 import { CurrentPrincipal, Roles } from '../auth/decorators';
@@ -17,8 +17,8 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { toPatientDto } from './patients.mapper';
 import { PatientsService } from './patients.service';
 
-// Reading needs only a valid token; changing data needs the clinician (or admin) role.
-const CAN_WRITE = ['clinician', 'admin'] as const;
+// Reading needs a clinical role; changing data needs the clinician role (admin is administration only).
+const CAN_WRITE = ['clinician'] as const;
 
 @Controller('patients')
 export class PatientsController {
@@ -28,7 +28,7 @@ export class PatientsController {
   @Roles(...CLINICAL_READ_ROLES)
   async list(
     @CurrentPrincipal() principal: Principal,
-    @Query(new ZodValidationPipe(paginationQuerySchema)) query: PaginationQuery,
+    @Query(new ZodValidationPipe(patientListQuerySchema)) query: PatientListQuery,
   ): Promise<Paginated<PatientDto>> {
     const { items, total } = await this.service.list(principal, query);
     return { data: items.map(toPatientDto), meta: buildMeta(query.page, query.pageSize, total) };

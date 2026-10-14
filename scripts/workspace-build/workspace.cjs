@@ -3,7 +3,7 @@ const { resolve } = require('node:path');
 
 const root = resolve(__dirname, '../..');
 const prepared = 'TELESPHOROS_WORKSPACE_PREPARED';
-const libraries = ['shared-types', 'cpic-schema', 'fake-idp'];
+const libraries = ['shared-types', 'cpic-schema', 'fake-idp', 'jobs'];
 
 // Only redundant dependency builds are suppressed; consumer build/check commands always run.
 function run(args, env = process.env, execute = spawnSync) {

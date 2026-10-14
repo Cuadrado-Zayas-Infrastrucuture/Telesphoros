@@ -8,6 +8,7 @@ import { PostgresReportsRepository } from '../../src/storage/postgres/reports.re
 import { PostgresRecommendationsRepository } from '../../src/storage/postgres/recommendations.repository';
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
+import { registerTenantRow } from '../helpers/membership';
 import { acceptanceFor, captureFor, evaluationFor, seedLabReport, sha } from '../helpers/ledger-fixtures';
 
 // A reproducible workload sample, not a load test or a latency CI threshold. Never force planner choices.
@@ -32,6 +33,7 @@ beforeAll(async () => {
   ledger = new PostgresLedgerRecordsRepository(db);
   await withAdmin(pg.adminUrl, async c => {
     for (const tenant of tenants) {
+      await registerTenantRow(c, tenant);
       // The lookup made on every protected request, in a table with thousands of members.
       await c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by)
         SELECT $1, $1 || '-member-' || g, 'active', '{clinician}', 'syn-operator' FROM generate_series(1,$2::int) g`, [tenant, CORE_PATIENTS]);
@@ -61,6 +63,11 @@ beforeAll(async () => {
         }
       }
       await ledger.insertAcceptance(tenant, 'syn-independent', acceptanceFor(capture.record.id, captureInput, { decision: 'rejected' }));
+      // The big history is verified as its patient's; the small one was rejected (quarantined), so both clauses of the current-evaluation query have something to find.
+      await ledger.insertPatientDecision(tenant, 'syn-verifier', {
+        reportId: report.reportId, expectedReport: { patientId: report.patientId, sha256: report.pdfSha256, objectVersion: report.objectVersion },
+        decision: count === 60 ? 'verified' : 'rejected', method: 'person-confirmed', basisCode: count === 60 ? 'no-identifier-on-report' : 'different-person',
+      });
       if (tenant === tenants[0]) histories.push({ reportId: report.reportId, patientId: report.patientId, captureId: capture.record.id, evaluationIds });
     }
     for (let i = 0; i < 25; i++) {
@@ -143,7 +150,10 @@ it('measures filtered/public pages, complete internal reads and sparse/dense con
   const dense=histories[0]!; const sparse=histories[1]!;
   expect((await measure('evaluations-by-report', () => ledger.listEvaluations(t,{ reportId:dense.reportId },page))).total).toBe(60);
   expect((await measure('evaluations-by-patient', () => ledger.listEvaluations(t,{ patientId:dense.patientId },page))).total).toBe(60);
-  expect((await measure('evaluations-current', () => ledger.listEvaluations(t,{ current:true },page))).total).toBe(2);
+  expect((await measure('evaluations-current', () => ledger.listEvaluations(t,{ current:true },page))).total).toBe(1); // the quarantined report's evaluation is not current
+  expect([...(await measure('patient-link-states', () => ledger.patientLinkStates(t,[dense.reportId,sparse.reportId]))).entries()]).toEqual([[dense.reportId,'verified'],[sparse.reportId,'rejected']]);
+  const quarantine = await measure('quarantine-page', () => ledger.pageQuarantine(t,page));
+  expect([quarantine.total, quarantine.items.map(e => [e.reportId, e.activeEvaluationIds.length])]).toEqual([1, [[sparse.reportId, 5]]]);
   expect((await measure('disputes-page', () => ledger.pageDisputes(t,page))).total).toBe(25);
   expect((await measure('disputes-open', () => ledger.pageDisputes(t,page,'open'))).total).toBe(12);
   expect(await measure('disputes-complete-safety-read', () => ledger.listDisputes(t))).toHaveLength(25);
@@ -152,6 +162,25 @@ it('measures filtered/public pages, complete internal reads and sparse/dense con
     expect(await measure(`${name}-complete-corrections`, () => ledger.listCorrections(t,h.evaluationIds[0]!))).toHaveLength(2);
     expect((await measure(`${name}-context-batch`, () => ledger.evaluationContexts(t,h.evaluationIds.slice(0,20)))).size).toBe(Math.min(h.evaluationIds.length,20));
   }
+});
+
+it('resolves a patient group (merged patients) with real merge data in the organization, and every read still returns hand-computed results', async () => {
+  const t = tenants[0]!; const page = { offset: 0, limit: 20 };
+  const ids = (await withAdmin(pg.adminUrl, c => c.query(`SELECT id::text AS id FROM patients WHERE tenant_id=$1 ORDER BY seq OFFSET 200 LIMIT 120`, [t]))).rows.map(r => r.id as string);
+  for (let i = 0; i < 60; i++) { // 60 approved merges: the odd one of each pair becomes an alias of the even one
+    const proposal = await ledger.insertMergeProposal(t, 'syn-proposer', { kind: 'merge', sourcePatientId: ids[2 * i + 1]!, targetPatientId: ids[2 * i]!, reasonCode: 'entered-twice' });
+    await ledger.insertMergeDecision(t, 'syn-decider', { proposalId: proposal.record.id, decision: 'approved' });
+  }
+  const root = ids[0]!; const alias = ids[1]!;
+  expect((await measure('patients-list-with-merges', () => patients.list(t, page))).total).toBe(1502 - 60);
+  expect((await measure('patients-list-include-merged', () => patients.list(t, page, { includeMerged: true }))).total).toBe(1502);
+  expect((await measure('patient-detail-alias', () => patients.findById(t, alias)))?.mergedInto).toBe(root);
+  expect((await measure('reports-by-patient-group', () => reports.list(t, page, { patientId: alias }))).total).toBe(4); // two reports on each of the two patients, found from either end
+  expect((await measure('recommendations-by-patient-group', () => recommendations.list(t, page, { patientId: root }))).total).toBe(4);
+  expect((await measure('merges-page', () => ledger.pageMerges(t, page))).total).toBe(60);
+  expect((await measure('merges-pending', () => ledger.pageMerges(t, page, 'pending'))).total).toBe(0);
+  // The plans are recorded as evidence like every other read here; the planner's index choice is not asserted (this file never forces one).
+  expect((evidence.find(e => e.label === 'merges-page') as { statements: number }).statements).toBeLessThanOrEqual(4); // the page, then its proposals and its decisions in one statement each: no per-row lookups
 });
 
 it('looks up a caller\'s membership by primary key, whatever the table holds', async () => {

@@ -18,9 +18,6 @@ import {
   reportListQuerySchema,
   type ReportPatch,
   reportPatchSchema,
-  type ReportUploadUrlRequest,
-  reportUploadUrlRequestSchema,
-  type ReportUploadUrlResponse,
 } from '@telesphoros/shared-types';
 import { CLINICAL_READ_ROLES } from '../auth/clinical-read';
 import { CurrentPrincipal, Roles } from '../auth/decorators';
@@ -29,7 +26,7 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { toReportDto } from './reports.mapper';
 import { ReportsService } from './reports.service';
 
-const CAN_WRITE = ['clinician', 'admin'] as const;
+const CAN_WRITE = ['clinician'] as const;
 
 @Controller('reports')
 export class ReportsController {
@@ -72,29 +69,6 @@ export class ReportsController {
     @Body(new ZodValidationPipe(reportPatchSchema)) body: ReportPatch,
   ): Promise<ReportDto> {
     return toReportDto(await this.service.patch(principal, id, body));
-  }
-
-  /** Upload step 1: get a short-lived URL to PUT the file to. */
-  @Post(':id/upload-url')
-  @Roles(...CAN_WRITE)
-  @HttpCode(200)
-  createUploadUrl(
-    @CurrentPrincipal() principal: Principal,
-    @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam,
-    @Body(new ZodValidationPipe(reportUploadUrlRequestSchema)) body: ReportUploadUrlRequest,
-  ): Promise<ReportUploadUrlResponse> {
-    return this.service.createUploadUrl(principal, id, body);
-  }
-
-  /** Upload step 2: the server verifies the stored file (size, type, SHA-256), then marks it uploaded. */
-  @Post(':id/complete')
-  @Roles(...CAN_WRITE)
-  @HttpCode(200)
-  async complete(
-    @CurrentPrincipal() principal: Principal,
-    @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam,
-  ): Promise<ReportDto> {
-    return toReportDto(await this.service.completeUpload(principal, id));
   }
 
   @Get(':id/download-url')

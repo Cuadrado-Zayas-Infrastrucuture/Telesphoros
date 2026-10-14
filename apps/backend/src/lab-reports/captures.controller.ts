@@ -17,7 +17,7 @@ import { CapturesService } from './captures.service';
 import { RequiresPipeline } from './pipeline-switch';
 import { RateLimitClass } from '../rate-limit/rate-limit.decorators';
 
-const CAN_CAPTURE = ['clinician', 'reviewer', 'admin'] as const;
+const CAN_CAPTURE = ['clinician', 'reviewer'] as const;
 const CAN_REVIEW = ['reviewer'] as const;
 
 /** `POST /reports/:id/capture`: the report-side processing route. */

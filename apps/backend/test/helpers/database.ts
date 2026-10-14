@@ -17,7 +17,8 @@ const APP_LOGIN_PASSWORD = 'test-only-password';
 const VERIFIER_LOGIN = 'telesphoros_test_verifier';
 const OPERATOR_LOGIN = 'telesphoros_test_operator';
 const AUDITOR_LOGIN = 'telesphoros_test_auditor';
-const PRIVILEGE_ROLES = ['telesphoros_ledger', 'telesphoros_redactor', 'telesphoros_ledger_verifier', 'telesphoros_ledger_operator', 'telesphoros_security_auditor'];
+const WORKER_LOGIN = 'telesphoros_test_worker';
+const PRIVILEGE_ROLES = ['telesphoros_ledger', 'telesphoros_redactor', 'telesphoros_ledger_verifier', 'telesphoros_ledger_operator', 'telesphoros_security_auditor', 'telesphoros_jobs', 'telesphoros_worker'];
 const ROLE_LOCK = 4242;
 
 function withDatabase(url: string, database: string, credentials?: { user: string; password: string }): string {
@@ -55,6 +56,8 @@ export interface EphemeralDatabase {
   operatorUrl: string;
   /** The security auditor's login: a member of `telesphoros_security_auditor` only (it can read the security events and nothing else). */
   auditorUrl: string;
+  /** The job worker's login: a member of `telesphoros_worker` only (it can claim jobs and nothing else; it is not a member of the application role). */
+  workerUrl: string;
   drop(): Promise<void>;
 }
 
@@ -80,7 +83,7 @@ export async function createEphemeralDatabase(options: { migrate?: boolean } = {
     for (const role of PRIVILEGE_ROLES) {
       await admin.query(`DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${role}') THEN CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS; END IF; END $$`);
     }
-    for (const [login, group] of [[VERIFIER_LOGIN, 'telesphoros_ledger_verifier'], [OPERATOR_LOGIN, 'telesphoros_ledger_operator'], [AUDITOR_LOGIN, 'telesphoros_security_auditor']] as const) {
+    for (const [login, group] of [[VERIFIER_LOGIN, 'telesphoros_ledger_verifier'], [OPERATOR_LOGIN, 'telesphoros_ledger_operator'], [AUDITOR_LOGIN, 'telesphoros_security_auditor'], [WORKER_LOGIN, 'telesphoros_worker']] as const) {
       await admin.query(`DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${login}') THEN
         CREATE ROLE ${login} LOGIN PASSWORD '${APP_LOGIN_PASSWORD}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS IN ROLE ${group}; END IF; END $$`);
     }
@@ -108,6 +111,7 @@ export async function createEphemeralDatabase(options: { migrate?: boolean } = {
     verifierUrl: withDatabase(base, name, { user: VERIFIER_LOGIN, password: APP_LOGIN_PASSWORD }),
     operatorUrl: withDatabase(base, name, { user: OPERATOR_LOGIN, password: APP_LOGIN_PASSWORD }),
     auditorUrl: withDatabase(base, name, { user: AUDITOR_LOGIN, password: APP_LOGIN_PASSWORD }),
+    workerUrl: withDatabase(base, name, { user: WORKER_LOGIN, password: APP_LOGIN_PASSWORD }),
     async drop() {
       const dropper = new Client({ connectionString: base });
       await dropper.connect();

@@ -1,13 +1,5 @@
 import type { UploadVersion, UploadMultipart } from './upload-inventory';
 import type { Readable } from 'node:stream';
-export interface UploadTarget {
-  url: string;
-  method: 'PUT';
-  /** Headers the uploader MUST send; they are part of what the URL was signed for. */
-  headers: Record<string, string>;
-  expiresAt: string;
-}
-
 export interface InspectedObject {
   sizeBytes: number;
   contentType: string | undefined;
@@ -40,8 +32,6 @@ export class ObjectTooLargeError extends Error {
  * Reads of evidence name a VERSION. A missing version is "not found" (undefined); it never falls back to the latest object.
  */
 export abstract class ObjectStorage {
-  abstract createUploadTarget(input: { key: string; contentType: string; sizeBytes: number }): Promise<UploadTarget>;
-
   /**
    * Streams the stored object to measure it, in ONE request: hash, size and version all describe the same bytes. Without `version`
    * it reads the current object (the upload check); with it, exactly that version (the capture check). Returns undefined if no such

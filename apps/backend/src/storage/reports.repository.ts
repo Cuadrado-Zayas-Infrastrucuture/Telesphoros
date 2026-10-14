@@ -19,13 +19,6 @@ export abstract class ReportsRepository {
   abstract insertOrReplay(record: ReportRecord): Promise<ReportRecord>;
   /** Changes only what a person may edit: type, file name, status. Never the stored file's identity. */
   abstract update(record: ReportRecord): Promise<void>;
-  /**
-   * Records the declared file (key, content type, hash) and, once, the first requester. Only while the report is not uploaded:
-   * returns false if it already is, so a request that lost a race to `markUploaded` cannot rewrite an uploaded file's identity.
-   */
-  abstract recordUploadRequest(record: ReportRecord): Promise<boolean>;
-  /** Marks the report uploaded, once, with the verified version and uploader. False means it was already uploaded (by someone else). */
-  abstract markUploaded(record: ReportRecord): Promise<boolean>;
   abstract declareAttempt(attempt: UploadAttempt, expectedRevision: string): Promise<UploadAttempt | undefined>;
   abstract findAttempt(identity: AttemptIdentity): Promise<UploadAttempt | undefined>;
   abstract beginAttempt(identity: AttemptIdentity, writer: string): Promise<boolean>;
@@ -37,6 +30,10 @@ export abstract class ReportsRepository {
   abstract runStatus(tenantId:string,runId:string):Promise<{pendingBytes:number;pendingCount:number;lastReconciledAt:string|null;cleanupStalled:boolean}>;
   abstract recordReconciliation(tenantId:string,runId:string,success:boolean):Promise<void>;
   abstract runAttempts(tenantId: string, runId: string): Promise<UploadAttempt[]>;
+  /** Every intake attempt of one report (any state); refuses rather than truncates. */
+  abstract reportAttempts(tenantId: string, reportId: string): Promise<UploadAttempt[]>;
+  /** True when the report has ever had an intake attempt: the legacy direct-upload routes then refuse it. */
+  abstract hasAttempts(tenantId: string, reportId: string): Promise<boolean>;
   abstract sweepCandidates(tenantId: string, runId: string): Promise<UploadAttempt[]>;
   abstract claimCleanup(tenantId: string, id: string, graceSeconds: number): Promise<boolean>;
   abstract finishCleanup(tenantId: string, id: string): Promise<void>;
@@ -94,24 +91,6 @@ export class InMemoryReportsRepository extends ReportsRepository {
     if (row.uploadedAt && row.type !== record.type) throw new IntegrityError('reports_uploaded_type');
     this.rows.set(record.id, { ...row, type: record.type, filename: record.filename, status: record.status, updatedAt: record.updatedAt, uploadRevision: row.type !== record.type ? randomUUID() : row.uploadRevision });
   }
-  async recordUploadRequest(record: ReportRecord) {
-    const row = this.rows.get(record.id);
-    if (!row || row.tenantId !== record.tenantId || row.deletedAt || row.uploadedAt) return false;
-    this.rows.set(record.id, {
-      ...row, storageKey: record.storageKey, contentType: record.contentType, sha256: record.sha256, uploadRevision: row.storageKey !== record.storageKey || row.contentType !== record.contentType || row.sha256 !== record.sha256 ? randomUUID() : row.uploadRevision,
-      uploadRequestedBy: row.uploadRequestedBy ?? record.uploadRequestedBy ?? null, updatedAt: record.updatedAt,
-    });
-    return true;
-  }
-  async markUploaded(record: ReportRecord) {
-    const row = this.rows.get(record.id);
-    if (!row || row.tenantId !== record.tenantId || row.deletedAt || row.uploadedAt) return false;
-    if(row.uploadRevision!==record.uploadRevision || row.storageKey!==record.storageKey || row.sha256!==record.sha256 || row.type!==record.type || row.contentType!==record.contentType)return false;
-    this.rows.set(record.id, {
-      ...row, uploadedAt: record.uploadedAt, objectVersion: record.objectVersion ?? null, uploadedBy: record.uploadedBy ?? null, updatedAt: record.updatedAt,
-    });
-    return true;
-  }
   async declareAttempt(a: UploadAttempt, expectedRevision: string) {
     const prior = [...this.attempts.values()].find(x => x.tenantId === a.tenantId && x.reportId === a.reportId && x.principal === a.principal && x.requestId === a.requestId);
     if (prior) return sameAttempt(prior, a) && !['cancelled','cleanup','cleaned'].includes(prior.state) ? { ...prior } : undefined;
@@ -163,6 +142,8 @@ export class InMemoryReportsRepository extends ReportsRepository {
   async runStatus(tenantId:string,runId:string){const pending=[...this.attempts.values()].filter(a=>a.tenantId===tenantId&&a.runId===runId&&!['committed','cleaned'].includes(a.state));return {pendingBytes:pending.reduce((n,a)=>n+a.sizeBytes,0),pendingCount:pending.length,...(this.reconciliation.get(JSON.stringify([tenantId,runId]))??{lastReconciledAt:null,cleanupStalled:false})};}
   async recordReconciliation(tenantId:string,runId:string,success:boolean){const key=JSON.stringify([tenantId,runId]);this.reconciliation.set(key,{lastReconciledAt:success?new Date().toISOString():this.reconciliation.get(key)?.lastReconciledAt??null,cleanupStalled:!success});}
   async runAttempts(tenantId: string, runId: string) { return [...this.attempts.values()].filter(a=>a.tenantId===tenantId && a.runId===runId).map(a=>({...a})); }
+  async reportAttempts(tenantId: string, reportId: string) { return [...this.attempts.values()].filter(a=>a.tenantId===tenantId && a.reportId===reportId).map(a=>({...a})); }
+  async hasAttempts(tenantId: string, reportId: string) { return [...this.attempts.values()].some(a=>a.tenantId===tenantId && a.reportId===reportId); }
   async sweepCandidates(tenantId: string, runId: string) { return [...this.attempts.values()].filter(a => a.tenantId === tenantId && a.runId === runId && !['committed','cleaned'].includes(a.state)).map(a => ({...a})); }
   async referenced(tenantId: string, key: string, version: string) { return [...this.rows.values()].some(r => r.tenantId === tenantId && r.storageKey === key && !!r.uploadedAt && (!r.objectVersion || r.objectVersion === version)); }
   async claimCleanup(tenantId: string, id: string, graceSeconds: number) {

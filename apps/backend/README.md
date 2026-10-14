@@ -21,8 +21,10 @@ pnpm --filter @telesphoros/backend build && JWT_SECRET=<32+ chars> pnpm --filter
 | GET, PUT, DELETE | `/patients/:id` | any token / `clinician`,`admin` | PUT replaces; delete is refused (409) while reports exist |
 | GET, POST | `/reports` | any token / `clinician`,`admin` | Metadata only; optional UUID `requestId` makes registration retryable for that tenant/creator. Status is always set by the system. |
 | GET, PATCH, DELETE | `/reports/:id` | any token / `clinician`,`admin` | PATCH corrects `type` / `filename`; DELETE is a soft delete |
-| POST | `/reports/:id/upload-url` | `clinician`,`admin` | Step 1 of an upload: short-lived URL for ONE object (body: `contentType`, `sha256`) |
-| POST | `/reports/:id/complete` | `clinician`,`admin` | Step 2: the server verifies size, type and SHA-256 of the stored file, then marks it uploaded |
+| GET | `/reports/:id/upload-state` | `clinician` | The report's upload revision (the token a declaration must carry) and the organization's reservation status |
+| POST | `/reports/:id/upload-attempts` | `clinician` | Declare an upload: `requestId`, `revision`, `contentType`, `sha256` (replaying the same declaration returns the attempt) |
+| PUT | `/reports/:id/upload-attempts/:attemptId/bytes` | `clinician` | The raw bytes, with `X-Upload-Revision`: the server validates, stores, pins and commits |
+| POST | `/reports/:id/upload-attempts/:attemptId/resume`, `/cancel` | `clinician` | Reconcile a lost reply; cancel (both need `X-Upload-Revision`) |
 | GET | `/recommendations`, `/recommendations/:id` | any token | **Read-only.** Only the rules engine (Phase 5) creates recommendations; a client cannot. |
 
 Health vs ready: use **health** for "restart this process if it fails", and **ready** for "stop
@@ -90,7 +92,6 @@ See `.env.example` at the repo root. Real secrets belong in AWS Secrets Manager,
 | `DATABASE_SSL_CA` | path to the authority file the `pg_dump`/`pg_restore` tools verify against when `DATABASE_SSL=require` (falls back to `NODE_EXTRA_CA_CERTS`) |
 | `OBJECT_STORAGE_DRIVER` | `memory` (default) or `s3` (AWS S3 or S3-compatible such as MinIO) |
 | `REPORTS_BUCKET`, `AWS_REGION`, `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE` | S3 settings; credentials come from the standard AWS provider chain, never from our config |
-| `UPLOAD_URL_TTL_SECONDS` | presigned URL lifetime, 60 to 900 (default 300) |
 | `DATABASE_MIGRATOR_URL`, `DATABASE_ADMIN_URL` | read only by the `db:*` CLI (migrations; backup/restore), never by the API |
 
 ## Tests

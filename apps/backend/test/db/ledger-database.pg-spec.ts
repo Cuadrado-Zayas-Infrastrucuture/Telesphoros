@@ -36,6 +36,10 @@ async function stored(tenantId = newTenant()) {
     guidelineId: 'syn-guideline', guidelineVersion: '1', guidelineContentSha256: 'a'.repeat(64), locator: { table: 'recommendations', row: 'poor' }, note: 'disputed',
   });
   await repo.decideDispute(tenantId, 'syn-reviewer-2', { disputeId: d.record.id, decision: 'upheld', evidenceNote: 'evidence' });
+  await repo.insertPatientDecision(tenantId, 'syn-verifier', {
+    reportId: report.reportId, expectedReport: { patientId: report.patientId, sha256: report.pdfSha256, objectVersion: report.objectVersion },
+    decision: 'verified', method: 'person-confirmed', basisCode: 'no-identifier-on-report',
+  });
   await verifier.verify(tenantId, { recordCheckpoint: true });
   return { tenantId, report, capture, c, a, e };
 }
@@ -43,7 +47,7 @@ const CAPTURE_INSERT = `INSERT INTO report_captures (id, tenant_id, created_by, 
                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 5, '26.03.0', 'fake')`;
 const captureValues = (r: SeededReport, id: string, eventId: string, createdBy: string) => [id, r.tenantId, createdBy, eventId, r.reportId, r.pdfSha256, `text/${uuid()}`, sha(`t${id}`)];
 
-const RECORD_TABLES = ['report_captures', 'capture_acceptances', 'evaluations', 'evaluation_results', 'evaluation_gene_states', 'corrections', 'cell_disputes', 'cell_dispute_decisions'];
+const RECORD_TABLES = ['report_captures', 'capture_acceptances', 'evaluations', 'evaluation_results', 'evaluation_gene_states', 'corrections', 'cell_disputes', 'cell_dispute_decisions', 'report_patient_decisions'];
 const APPEND_ONLY = [...RECORD_TABLES, 'ledger_events', 'ledger_checkpoints'];
 
 describe('append-only: nobody updates, deletes or truncates, the owner included', () => {
@@ -74,7 +78,7 @@ describe('append-only: nobody updates, deletes or truncates, the owner included'
     expect((await attempt(pg.appUrl, tenantId, 'syn-x', (c) => c.query(`UPDATE ledger_heads SET seq = 99`)))?.code).toBe('42501');
     const own = await run(pg.appUrl, tenantId, 'syn-x', (c) => c.query(`SELECT count(*)::int AS n FROM ledger_events`));
     const foreign = await run(pg.appUrl, other, 'syn-x', (c) => c.query(`SELECT count(*)::int AS n FROM ledger_events`));
-    expect([own.rows[0].n, foreign.rows[0].n]).toEqual([7, 0]);
+    expect([own.rows[0].n, foreign.rows[0].n]).toEqual([8, 0]);
   });
 });
 
@@ -268,8 +272,8 @@ describe('redaction of a note', () => {
     expect(await redact(s.tenantId, note.id, 'phi-in-note')).toBeUndefined();
     const row = await withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT body, redacted_at IS NOT NULL AS redacted, redaction_basis_code, body_sha256 FROM event_notes WHERE id = $1`, [note.id])).rows[0]);
     expect(row).toEqual({ body: '[redacted]', redacted: true, redaction_basis_code: 'phi-in-note', body_sha256: note.bodySha });
-    expect(await events(s.tenantId)).toBe(8);
-    expect(await verifier.verify(s.tenantId)).toMatchObject({ status: 'ok', eventsChecked: 8 });
+    expect(await events(s.tenantId)).toBe(9);
+    expect(await verifier.verify(s.tenantId)).toMatchObject({ status: 'ok', eventsChecked: 9 });
     // The parent record's own event still verifies: it committed to the digest, not to the text.
     expect(await repo.findEvaluation(s.tenantId, s.e.record.id)).toEqual(s.e.record);
   });
@@ -282,7 +286,7 @@ describe('redaction of a note', () => {
     expect((await redact(s.tenantId, note.id, 'phi-in-note', pg.verifierUrl))?.code).toBe('42501');
     expect(await redact(s.tenantId, note.id, 'legal-order')).toBeUndefined();
     expect((await redact(s.tenantId, note.id, 'legal-order'))?.code).toBe('23000');
-    expect(await events(s.tenantId)).toBe(8);
+    expect(await events(s.tenantId)).toBe(9);
   });
 
   it('cannot redact a note of a tenant other than the one in force', async () => {

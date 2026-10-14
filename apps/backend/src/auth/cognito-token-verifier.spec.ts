@@ -126,6 +126,13 @@ describe('CognitoTokenVerifier: rejects', () => {
   });
 });
 
+describe('CognitoTokenVerifier: system actors', () => {
+  it('refuses a genuine, correctly signed access token whose subject is a system actor', async () => {
+    await rejects(await idp.mintAccessToken({ user: { ...alice!, sub: 'system:uploads.sweep' } }));
+    await expect(verifier().verify(await idp.mintAccessToken({ user: { ...alice!, sub: 'systemic' } }))).resolves.toMatchObject({ sub: 'systemic' });
+  });
+});
+
 describe('CognitoTokenVerifier: the published key set', () => {
   it('picks up a rotated key, and tokens signed by the old key keep working during the overlap', async () => {
     const v = verifier();

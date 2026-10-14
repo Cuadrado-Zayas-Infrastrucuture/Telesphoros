@@ -80,7 +80,8 @@ export class PostgresReportsRepository extends ReportsRepository {
   list(tenantId: string, { offset, limit }: PageRequest, filter: ReportFilter): Promise<Page<ReportRecord>> {
     return this.db.withTenant(tenantId, async (client) => {
       // `$2::uuid IS NULL OR patient_id = $2` keeps ONE static query text for both filtered and unfiltered lists.
-      const where = 'tenant_id = $1 AND deleted_at IS NULL AND ($2::uuid IS NULL OR patient_id = $2::uuid)';
+      // The patient filter means the patient's whole group (a merged patient and the one it was merged into), so a bookmark to either finds everything.
+      const where = 'tenant_id = $1 AND deleted_at IS NULL AND ($2::uuid IS NULL OR patient_id IN (SELECT patient_group_ids($1, $2::uuid)))';
       const rows = await client.query<ReportRow>(
         `SELECT ${COLUMNS} FROM reports WHERE ${where} ORDER BY seq LIMIT $3 OFFSET $4`,
         [tenantId, filter.patientId ?? null, limit, offset],
@@ -160,38 +161,6 @@ export class PostgresReportsRepository extends ReportsRepository {
     }
   }
 
-  async recordUploadRequest(record: ReportRecord): Promise<boolean> {
-    try {
-      return await this.db.withTenant(record.tenantId, async (client) => {
-        // COALESCE keeps the FIRST requester; `uploaded_at IS NULL` means a request that lost a race to completion changes nothing.
-        const result = await client.query(
-          `UPDATE reports
-              SET storage_key = $3, content_type = $4, sha256 = $5, upload_requested_by = COALESCE(upload_requested_by, $6), updated_at = $7
-            WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL AND uploaded_at IS NULL`,
-          [record.id, record.tenantId, record.storageKey ?? null, record.contentType ?? null, record.sha256 ?? null, record.uploadRequestedBy ?? null, record.updatedAt],
-        );
-        return (result.rowCount ?? 0) > 0;
-      });
-    } catch (error) {
-      throw toStorageError(error);
-    }
-  }
-
-  async markUploaded(record: ReportRecord): Promise<boolean> {
-    try {
-      return await this.db.withTenant(record.tenantId, async (client) => {
-        const result = await client.query(
-          `UPDATE reports SET uploaded_at = $3, object_version = $4, uploaded_by = $5, updated_at = $6
-            WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL AND uploaded_at IS NULL AND upload_revision=$7 AND storage_key=$8 AND sha256=$9 AND content_type=$10 AND type=$11`,
-          [record.id, record.tenantId, record.uploadedAt ?? null, record.objectVersion ?? null, record.uploadedBy ?? null, record.updatedAt, record.uploadRevision, record.storageKey, record.sha256, record.contentType, record.type],
-        );
-        return (result.rowCount ?? 0) > 0;
-      });
-    } catch (error) {
-      throw toStorageError(error);
-    }
-  }
-
   async declareAttempt(a: UploadAttempt, expectedRevision: string) {
     return this.db.withTenant(a.tenantId, async c => {
       await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [a.runId]);
@@ -251,6 +220,8 @@ export class PostgresReportsRepository extends ReportsRepository {
   async runStatus(tenantId:string,runId:string){return this.db.withTenant(tenantId,async c=>{const r=(await c.query(`SELECT reserved_bytes,last_reconciled_at,cleanup_stalled,(SELECT count(*) FROM report_upload_attempts WHERE tenant_id=$1 AND run_id=$2 AND state NOT IN ('committed','cleaned')) AS pending_count FROM report_upload_runs WHERE tenant_id=$1 AND run_id=$2`,[tenantId,runId])).rows[0];return {pendingBytes:Number(r?.reserved_bytes??0),pendingCount:Number(r?.pending_count??0),lastReconciledAt:r?.last_reconciled_at?.toISOString()??null,cleanupStalled:r?.cleanup_stalled??false};});}
   async recordReconciliation(tenantId:string,runId:string,success:boolean){await this.db.withTenant(tenantId,async c=>{await c.query('UPDATE report_upload_runs SET cleanup_stalled=NOT $3,last_reconciled_at=CASE WHEN $3 THEN now() ELSE last_reconciled_at END,updated_at=now() WHERE tenant_id=$1 AND run_id=$2',[tenantId,runId,success]);});}
   async runAttempts(tenantId: string,runId: string) {return this.db.withTenant(tenantId,async c=>{const r=await c.query('SELECT * FROM report_upload_attempts WHERE tenant_id=$1 AND run_id=$2 LIMIT 10001',[tenantId,runId]);if(r.rows.length>10000)throw new Error('Incomplete attempt inventory.');return r.rows.map(attemptRecord);});}
+  async reportAttempts(tenantId: string, reportId: string) {return this.db.withTenant(tenantId,async c=>{const r=await c.query('SELECT * FROM report_upload_attempts WHERE tenant_id=$1 AND report_id=$2 LIMIT 1001',[tenantId,reportId]);if(r.rows.length>1000)throw new Error('Incomplete attempt inventory.');return r.rows.map(attemptRecord);});}
+  async hasAttempts(tenantId: string, reportId: string) {return this.db.withTenant(tenantId,async c=>(await c.query('SELECT EXISTS(SELECT 1 FROM report_upload_attempts WHERE tenant_id=$1 AND report_id=$2) AS found',[tenantId,reportId])).rows[0].found===true);}
   async sweepCandidates(tenantId: string, runId: string) { return this.db.withTenant(tenantId,async c => {
     const r=await c.query("SELECT * FROM report_upload_attempts WHERE tenant_id=$1 AND run_id=$2 AND state NOT IN ('committed','cleaned') ORDER BY created_at LIMIT 101",[tenantId,runId]);
     if(r.rows.length>100) throw new Error('Incomplete cleanup candidate inventory.'); return r.rows.map(attemptRecord);

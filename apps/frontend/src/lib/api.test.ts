@@ -12,38 +12,50 @@ const report = (uploaded = false) => ({ id, patientId, type: 'structured', filen
   status: 'received', fileUploaded: uploaded, contentType: uploaded ? 'application/json' : null,
   sha256: uploaded ? sha : null, createdAt: date, updatedAt: date });
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
-const target = () => ({ uploadUrl: 'https://storage.example.test/bucket/file?signature=synthetic', method: 'PUT',
-  headers: { 'Content-Type': 'application/json' }, expiresAt: new Date(Date.now() + 300000).toISOString() });
+const revision = '33333333-3333-4333-8333-333333333333';
+const attemptId = '44444444-4444-4444-8444-444444444444';
+const original = '55555555-5555-4555-8555-555555555555';
+const attempt = (state: string) => ({ attemptId, revision, state, expiresAt: new Date(Date.now() + 300000).toISOString() });
 function file(name = 'synthetic.json', bytes = 'x') {
   const result = new File([bytes], name);
   Object.defineProperty(result, 'arrayBuffer', { value: async () => new TextEncoder().encode(bytes).buffer });
   return result;
 }
 let values: ProductUploadValues;
-let put: ReturnType<typeof vi.fn<typeof fetch>>;
+let storage: ReturnType<typeof vi.fn<typeof fetch>>;
 beforeEach(() => {
   vi.stubGlobal('crypto', webcrypto);
-  vi.stubEnv('VITE_REPORT_STORAGE_ORIGINS', 'https://storage.example.test');
   values = { patientId, reportType: 'structured', file: file(), syntheticConfirmed: true };
-  put = vi.fn<typeof fetch>().mockResolvedValue(new Response('', { status: 200 })); vi.stubGlobal('fetch', put);
+  // Nothing in an upload talks to object storage from the browser any more: this must stay untouched.
+  storage = vi.fn<typeof fetch>(); vi.stubGlobal('fetch', storage);
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+/** The whole happy path: register, read the revision, declare, send the bytes through the API, read the report back. */
 function api() {
-  return vi.fn().mockResolvedValueOnce(response(report(), 201)).mockResolvedValueOnce(response(target()))
-    .mockResolvedValueOnce(response(report(true)));
+  return vi.fn().mockResolvedValueOnce(response(report(), 201)).mockResolvedValueOnce(response({ revision: original, fileUploaded: false }))
+    .mockResolvedValueOnce(response(attempt('declared'))).mockResolvedValueOnce(response(attempt('committed'))).mockResolvedValueOnce(response(report(true)));
 }
 
-describe('standard report upload transport', () => {
-  it('uses an existing patient and authenticated registration; success requires verified completion', async () => {
+describe('standard report upload (the validated intake)', () => {
+  it('uses an existing patient and authenticated registration; success requires a committed attempt and a verified report', async () => {
     const apiFetch = api(); const progress: UploadProgress = {};
     await expect(submitReport(values, apiFetch, progress)).resolves.toEqual({ reference: id });
-    expect(apiFetch.mock.calls.map(call => call[0])).toEqual(['/api/v1/reports', `/api/v1/reports/${id}/upload-url`, `/api/v1/reports/${id}/complete`]);
+    expect(apiFetch.mock.calls.map(call => call[0])).toEqual([
+      '/api/v1/reports', `/api/v1/reports/${id}/upload-state`, `/api/v1/reports/${id}/upload-attempts`,
+      `/api/v1/reports/${id}/upload-attempts/${attemptId}/bytes`, `/api/v1/reports/${id}`,
+    ]);
     const body = JSON.parse(apiFetch.mock.calls[0]![1].body);
     expect(body).toMatchObject({ patientId, type: 'structured', filename: 'synthetic.json', sizeBytes: 1, requestId: progress.requestId });
     expect(body.requestId).toMatch(/^[a-f0-9-]{36}$/);
-    expect(put.mock.calls[0]![1]).toEqual({ method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: values.file,
-      credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer' });
-    expect(JSON.parse(apiFetch.mock.calls[1]![1].body)).toEqual({ contentType: 'application/json', sha256: sha });
+    expect(JSON.parse(apiFetch.mock.calls[2]![1].body)).toMatchObject({ revision: original, contentType: 'application/json', sha256: sha });
+    // The bytes go to the API with the attempt's revision, never to a storage URL, and no direct-upload route is used.
+    expect(apiFetch.mock.calls[3]![1]).toMatchObject({ method: 'PUT', body: values.file, redirect: 'error', credentials: 'omit', referrerPolicy: 'no-referrer', headers: { 'Content-Type': 'application/json', 'X-Upload-Revision': revision } });
+    expect(apiFetch.mock.calls.some(call => /upload-url|\/complete$/.test(call[0]))).toBe(false);
+    expect(storage).not.toHaveBeenCalled();
+  });
+  it('works in a production build on a real host (no local-browser restriction any more)', async () => {
+    vi.stubEnv('MODE', 'production'); vi.stubGlobal('window', { location: { hostname: 'app.example.test' } });
+    await expect(submitReport(values, api(), {})).resolves.toEqual({ reference: id });
   });
   it('retains the request key after a lost registration response, including reselected identical bytes', async () => {
     const progress: UploadProgress = {}; const lost = vi.fn().mockRejectedValue(new Error('signed-url or raw secret error'));
@@ -59,21 +71,15 @@ describe('standard report upload transport', () => {
     const apiFetch = api(); await submitReport(values, apiFetch, progress);
     expect(JSON.parse(apiFetch.mock.calls[0]![1].body).requestId).toMatch(/^[a-f0-9-]{36}$/);
   });
-  it('recovers a lost completion reply through GET without another PUT or registration', async () => {
-    const progress: UploadProgress = {}; const first = api();
-    first.mockReset().mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response(target())).mockRejectedValueOnce(new Error('lost'));
+  it('recovers a lost transfer reply without registering or declaring again, and without sending the bytes twice', async () => {
+    const progress: UploadProgress = {};
+    const first = vi.fn().mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response({ revision: original, fileUploaded: false }))
+      .mockResolvedValueOnce(response(attempt('declared'))).mockRejectedValueOnce(new Error('lost'));
     await expect(submitReport(values, first, progress)).rejects.toThrow('interrupted');
-    const retry = vi.fn().mockResolvedValue(response(report(true))); put.mockClear();
+    const retry = vi.fn().mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response(attempt('committed'))).mockResolvedValueOnce(response(report(true)));
     await expect(submitReport(values, retry, progress)).resolves.toEqual({ reference: id });
-    expect(retry).toHaveBeenCalledTimes(1); expect(retry.mock.calls[0]![0]).toBe(`/api/v1/reports/${id}`); expect(put).not.toHaveBeenCalled();
-  });
-  it('never completes after failed PUT; retry obtains a fresh target for the same report', async () => {
-    const progress: UploadProgress = {}; const first = api(); put.mockResolvedValueOnce(new Response('', { status: 503 }));
-    await expect(submitReport(values, first, progress)).rejects.toThrow('File transfer failed');
-    expect(first).toHaveBeenCalledTimes(2);
-    const retry = vi.fn().mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response(target())).mockResolvedValueOnce(response(report(true)));
-    await expect(submitReport(values, retry, progress)).resolves.toEqual({ reference: id });
-    expect(retry.mock.calls[0]![0]).toBe(`/api/v1/reports/${id}`);
+    expect(retry.mock.calls.map(call => call[0])).toEqual([`/api/v1/reports/${id}`, `/api/v1/reports/${id}/upload-attempts`, `/api/v1/reports/${id}`]);
+    expect(retry.mock.calls.some(call => call[1]?.method === 'PUT')).toBe(false);
   });
   it.each(['patient', 'type', 'filename', 'bytes'])('allocates a fresh key after changing %s', async change => {
     const progress: UploadProgress = {}; const lost = vi.fn().mockRejectedValue(new Error('lost'));
@@ -85,29 +91,25 @@ describe('standard report upload transport', () => {
     if (change === 'bytes') changed.file = file('synthetic.json', 'y');
     await expect(submitReport(changed, lost, progress)).rejects.toThrow('interrupted'); expect(progress.requestId).not.toBe(key);
   });
-  it.each([{ patientId: id }, { type: 'vcf' }, { filename: 'other.json' }, { sizeBytes: 2 }])('refuses inconsistent registration %j before sending bytes', async mismatch => {
+  it.each([{ patientId: id }, { type: 'vcf' }, { filename: 'other.json' }, { sizeBytes: 2 }])('refuses inconsistent registration %j before declaring or sending bytes', async mismatch => {
     const apiFetch = vi.fn().mockResolvedValue(response({ ...report(), ...mismatch }));
-    await expect(submitReport(values, apiFetch, {})).rejects.toThrow('does not match'); expect(put).not.toHaveBeenCalled();
+    await expect(submitReport(values, apiFetch, {})).rejects.toThrow('interrupted');
+    expect(apiFetch).toHaveBeenCalledTimes(1);
   });
-  it.each([{ fileUploaded: false }, { sha256: '0'.repeat(64) }, { contentType: 'text/plain' }, { id: patientId }])('refuses inconsistent completion %j', async mismatch => {
-    const apiFetch = vi.fn().mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response(target())).mockResolvedValueOnce(response({ ...report(true), ...mismatch }));
-    await expect(submitReport(values, apiFetch, {})).rejects.toThrow(mismatch.id ? 'does not match' : 'did not verify');
+  it.each([{ fileUploaded: false }, { sha256: '0'.repeat(64) }, { contentType: 'text/plain' }, { id: patientId }])('refuses an inconsistent final report %j', async mismatch => {
+    const apiFetch = vi.fn().mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response({ revision: original, fileUploaded: false }))
+      .mockResolvedValueOnce(response(attempt('declared'))).mockResolvedValueOnce(response(attempt('committed'))).mockResolvedValueOnce(response({ ...report(true), ...mismatch }));
+    await expect(submitReport(values, apiFetch, {})).rejects.toThrow('interrupted');
   });
-  it.each([
-    { uploadUrl: 'https://storage.example.test.evil.test/file' },
-    { uploadUrl: 'https://operator:password@storage.example.test/file' },
-    { uploadUrl: 'https://storage.example.test/file#fragment' },
-    { uploadUrl: 'http://storage.example.test/file' },
-    { expiresAt: date }, { headers: { Authorization: 'dummy' } },
-    { headers: { 'Content-Type': 'text/plain' } }, { headers: { 'Content-Type': 'application/json', Cookie: 'dummy' } },
-    { method: 'POST' },
-  ])('rejects unsafe target %j before PUT', async mismatch => {
-    const apiFetch = vi.fn().mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response({ ...target(), ...mismatch }));
-    await expect(submitReport(values, apiFetch, {})).rejects.toThrow(); expect(put).not.toHaveBeenCalled(); expect(apiFetch).toHaveBeenCalledTimes(2);
+  it('does not treat an attempt that is not committed as a success', async () => {
+    const apiFetch = vi.fn().mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response({ revision: original, fileUploaded: false }))
+      .mockResolvedValueOnce(response(attempt('declared'))).mockResolvedValueOnce(response(attempt('stored')));
+    await expect(submitReport(values, apiFetch, {})).rejects.toThrow('interrupted');
+    expect(apiFetch).toHaveBeenCalledTimes(4); // it never read the report back as uploaded
   });
   it.each([403, 404, 409, 429, 500])('handles API %i without exposing the response', async status => {
     const apiFetch = vi.fn().mockResolvedValue(response({ message: 'sensitive raw payload' }, status));
-    await expect(submitReport(values, apiFetch, {})).rejects.not.toThrow('sensitive raw payload'); expect(put).not.toHaveBeenCalled();
+    await expect(submitReport(values, apiFetch, {})).rejects.not.toThrow('sensitive raw payload'); expect(storage).not.toHaveBeenCalled();
   });
   it('preserves existing expired-session handling', async () => {
     const error = new SessionEndedError('Session expired');
@@ -118,11 +120,11 @@ describe('standard report upload transport', () => {
     for (const value of [{ ...values, syntheticConfirmed: false }, { ...values, file: file('bad.vcf') }, { ...values, file: file('bad name.json') }, { ...values, file: file('empty.json', '') }]) {
       await expect(submitReport(value, apiFetch, {})).rejects.toThrow();
     }
-    expect(apiFetch).not.toHaveBeenCalled(); expect(put).not.toHaveBeenCalled();
+    expect(apiFetch).not.toHaveBeenCalled(); expect(storage).not.toHaveBeenCalled();
   });
 });
 
-describe('storage configuration', () => {
+describe('storage configuration (signed download links)', () => {
   it('accepts multiple exact HTTPS origins', () => {
     vi.stubEnv('VITE_REPORT_STORAGE_ORIGINS', 'https://one.example.test, https://two.example.test');
     expect(reportStorageOrigins()).toEqual(['https://one.example.test', 'https://two.example.test']);

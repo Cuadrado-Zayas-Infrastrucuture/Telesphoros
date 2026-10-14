@@ -14,7 +14,7 @@ const input = (patientId: string) => ({ patientId, type: 'vcf' as const, filenam
 
 async function setup() {
   const patients = new InMemoryPatientsRepository();
-  const service = new ReportsService(new InMemoryReportsRepository(), patients, new InMemoryObjectStorage(300), new PipelineSwitch({ LAB_REPORT_PIPELINE: 'enabled', DOWNLOAD_URL_TTL_SECONDS: 120 } as Env));
+  const service = new ReportsService(new InMemoryReportsRepository(), patients, new InMemoryObjectStorage(), new PipelineSwitch({ LAB_REPORT_PIPELINE: 'enabled', DOWNLOAD_URL_TTL_SECONDS: 120 } as Env));
   const now = new Date().toISOString();
   const mkPatient = async (tenantId: string) => {
     const id = randomUUID();

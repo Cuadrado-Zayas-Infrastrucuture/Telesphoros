@@ -1,5 +1,5 @@
 import type {
-  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationReadContext, EvaluationState, InsertResult, NoteRecord, Projected,
+  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationReadContext, EvaluationState, InsertResult, MergeDecisionInput, MergeProposalInput, MergeStatus, NoteRecord, PatientDecisionInput, PatientLinkStateValue, Projected, QuarantineEntry,
 } from './ledger-records';
 import type { DisputeStatusValue } from '@telesphoros/shared-types';
 import type { Page, PageRequest } from './records';
@@ -18,6 +18,37 @@ export abstract class LedgerRecordsRepository {
   abstract findCapture(tenantId: string, id: string): Promise<Projected | undefined>;
   /** The capture already stored for this content identity, if any. */
   abstract findCaptureByIdentity(tenantId: string, identity: { reportId: string; textSha256: string; popplerVersion: string }): Promise<Projected | undefined>;
+
+  /**
+   * Records a patient-link decision. Locks the report row, re-reads the file and patient the caller relied on and throws SourceChangedError if
+   * any differs. If the newest decision for this file already says the same thing, returns it and writes nothing (`created: false`).
+   */
+  abstract insertPatientDecision(tenantId: string, actor: string, input: PatientDecisionInput): Promise<InsertResult>;
+  /** The newest patient-link decision about the report (any file version), or undefined. */
+  abstract latestPatientDecision(tenantId: string, reportId: string): Promise<Projected | undefined>;
+  /** For each asked report, its link state for the file it holds now, in one statement. Every asked report has an entry (`unverified` when unknown). */
+  abstract patientLinkStates(tenantId: string, reportIds: string[]): Promise<Map<string, PatientLinkStateValue>>;
+  /**
+   * Reports whose link was REJECTED for the file they hold now and that still have an active evaluation, oldest rejection first (M2.1c-1). Counted
+   * and paged from one statement.
+   */
+  abstract pageQuarantine(tenantId: string, page: PageRequest): Promise<Page<QuarantineEntry>>;
+
+  /**
+   * Records a proposal to merge (or unmerge) two patients of the organization. In the writing transaction it asks the database's rule whether the
+   * merge is possible now (throws MergeRefusedError with the reason if not) and refuses a second undecided proposal for the same pair and kind
+   * (MergeRefusedError 'proposal-pending'). The decision is what changes anything.
+   */
+  abstract insertMergeProposal(tenantId: string, actor: string, input: MergeProposalInput): Promise<InsertResult>;
+  /**
+   * Records the decision on a proposal. The same decision again returns the stored one (`created: false`); a different one throws
+   * MergeAlreadyDecidedError. An approved decision is checked by the database at COMMIT, under the ledger lock, against the patients as they are
+   * then: MergeRefusedError with the reason if the merge is no longer possible. The decider must differ from the proposer (the database repeats it).
+   */
+  abstract insertMergeDecision(tenantId: string, actor: string, input: MergeDecisionInput): Promise<InsertResult>;
+  abstract findMerge(tenantId: string, proposalId: string): Promise<MergeStatus | undefined>;
+  /** Proposals newest first, with where each stands; optionally only those in one state. */
+  abstract pageMerges(tenantId: string, page: PageRequest, status?: 'pending' | 'approved' | 'declined'): Promise<Page<MergeStatus>>;
 
   abstract insertAcceptance(tenantId: string, actor: string, input: AcceptanceInput): Promise<InsertResult>;
   abstract findAcceptance(tenantId: string, id: string): Promise<Projected | undefined>;

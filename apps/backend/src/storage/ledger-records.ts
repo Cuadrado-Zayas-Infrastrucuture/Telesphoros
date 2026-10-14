@@ -63,11 +63,33 @@ export interface EvaluationInput {
    * considered", so any active dispute refuses (fail closed). Not stored; the effective knowledge set id records what was applied.
    */
   disputeBasis?: readonly string[];
+  /**
+   * The patient-link decision the caller relied on (the report's latest). A NEW evaluation is refused (PatientLinkUnverifiedError) if, once the
+   * ledger lock is held, that decision is not still the latest, is not `verified`, or was made about a file or patient the report no longer has.
+   * Omitted means no such check: only the evaluations service creates evaluations in production, and it always passes this (a test enforces that).
+   */
+  patientLinkDecisionId?: string;
   /** The adapter's audit trail (offsets, hashes, states, codes); empty when held. */
   occurrences: unknown[];
   /** The engine's output, stored as it was shown. Empty when held. */
   results: DrugResult[];
   geneStates: GeneStateResult[];
+}
+
+/**
+ * A person's decision that a report's exact file version belongs to a patient (M2.1b). The caller states the file and patient it relied on; the
+ * transaction locks the report row, re-reads them and refuses (SourceChangedError) if any differs, so a decision can only ever describe the file
+ * that was actually looked at.
+ */
+export interface PatientDecisionInput {
+  reportId: string;
+  expectedReport: { patientId: string; sha256: string; objectVersion: string };
+  decision: 'verified' | 'rejected';
+  method: 'identifier-match' | 'person-confirmed';
+  /** Required with `person-confirmed`, absent with `identifier-match`. */
+  basisCode?: string;
+  /** Required with `identifier-match`: the registered identifier that matched. Never the value. */
+  identifierId?: string;
 }
 
 export type CorrectionKind = 'retraction' | 'supersession' | 'reinstatement';
@@ -95,6 +117,40 @@ export interface DisputeDecisionInput {
   disputeId: string;
   decision: 'upheld' | 'dismissed';
   evidenceNote: string;
+}
+
+/** Where a report's link to its patient stands for the file it holds NOW (derived from the newest decision; see `linkState`). */
+export type PatientLinkStateValue = 'verified' | 'unverified' | 'rejected';
+
+/** A quarantined report that still has active evaluations (M2.1c-1). */
+export interface QuarantineEntry {
+  reportId: string;
+  patientId: string;
+  basisCode: string | null;
+  rejectedAt: string;
+  activeEvaluationIds: string[];
+}
+
+/** A proposal to merge one patient into another, or to undo that merge (M2.1c-2). */
+export interface MergeProposalInput {
+  kind: 'merge' | 'unmerge';
+  /** The patient that becomes (or stops being) an alias. */
+  sourcePatientId: string;
+  /** The patient it is (or was) merged into. */
+  targetPatientId: string;
+  reasonCode: string;
+}
+
+export interface MergeDecisionInput {
+  proposalId: string;
+  decision: 'approved' | 'declined';
+}
+
+/** A proposal and where it stands: pending, or the decision that settled it. */
+export interface MergeStatus {
+  proposal: Projected;
+  status: 'pending' | 'approved' | 'declined';
+  decision: Projected | null;
 }
 
 /** What a read returns. */

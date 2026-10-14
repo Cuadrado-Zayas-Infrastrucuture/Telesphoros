@@ -30,7 +30,7 @@ export default function ReportsPage() {
   const [selected, setSelected] = useState<ReportDto | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<{ id: string; message: string } | null>(null);
-  const canDownload = roles.some(role => ['clinician', 'reviewer', 'admin'].includes(role));
+  const canDownload = roles.some(role => ['clinician', 'reviewer'].includes(role));
   const [reportError, setReportError] = useState<string | null>(null);
   const [patientRequest, setPatientRequest] = useState({ page: 1, attempt: 0 });
   const [patients, setPatients] = useState<Paginated<PatientDto> | null>(null);

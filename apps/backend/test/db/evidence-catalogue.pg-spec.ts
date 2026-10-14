@@ -93,7 +93,7 @@ producerSuite('catalogue production on PostgreSQL and Moto (metadata/protocol on
     const settings = { region: 'us-east-1', endpoint: S3_ENDPOINT, credentials: { accessKeyId: 'syn-evidence-ops', secretAccessKey: 'synthetic-only' } };
     source = new S3EvidenceStorage({ ...settings, bucket, prefix: 'reports/' });
     destination = new S3EvidenceStorage({ ...settings, bucket: copy, prefix: 'catalogues/' });
-    storage = new S3ObjectStorage(emulator(), bucket, 300);
+    storage = new S3ObjectStorage(emulator(), bucket);
     async function uploaded(tenant: string, type: 'lab-pdf' | 'vcf' | 'structured', bytes: Buffer, pinnedVersion = true): Promise<SeededReport> {
       const patientId = randomUUID(); const reportId = randomUUID(); const key = 'reports/' + reportId;
       const contentType = type === 'lab-pdf' ? 'application/pdf' : type === 'vcf' ? 'text/x-vcf' : 'application/json';

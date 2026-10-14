@@ -19,16 +19,12 @@ beforeAll(async () => {
   await client.send(new CreateBucketCommand({ Bucket: versionedBucket }));
   await client.send(new PutBucketVersioningCommand({ Bucket: versionedBucket, VersioningConfiguration: { Status: 'Enabled' } }));
   await client.send(new CreateBucketCommand({ Bucket: plainBucket }));
-  versioned = new S3ObjectStorage(client, versionedBucket, 300);
-  unversioned = new S3ObjectStorage(client, plainBucket, 300);
+  versioned = new S3ObjectStorage(client, versionedBucket);
+  unversioned = new S3ObjectStorage(client, plainBucket);
 });
 
 async function upload(storage: S3ObjectStorage, key: string, bytes: Buffer): Promise<string | undefined> {
-  const target = await storage.createUploadTarget({ key, contentType: 'application/pdf', sizeBytes: bytes.length });
-  const response = await fetch(target.url, { method: 'PUT', headers: target.headers, body: bytes });
-  expect(response.ok).toBe(true);
-  const id = response.headers.get('x-amz-version-id');
-  return id && id !== 'null' ? id : undefined;
+  return (await storage.putObject(key, bytes, 'application/pdf')).version;
 }
 
 describeStorageContract('S3ObjectStorage', () => ({

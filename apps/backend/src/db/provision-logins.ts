@@ -18,7 +18,7 @@ import { type DatabaseTls, pgClientConfig } from './tls';
  * it would inherit the right to append), and the group privileges that matter are read back with `has_function_privilege`.
  */
 
-export const PRIVILEGE_GROUPS = ['telesphoros_app', 'telesphoros_ledger', 'telesphoros_redactor', 'telesphoros_ledger_verifier', 'telesphoros_ledger_operator', 'telesphoros_security_auditor'] as const;
+export const PRIVILEGE_GROUPS = ['telesphoros_app', 'telesphoros_ledger', 'telesphoros_redactor', 'telesphoros_ledger_verifier', 'telesphoros_ledger_operator', 'telesphoros_security_auditor', 'telesphoros_jobs', 'telesphoros_worker'] as const;
 
 /** The attributes the migrations give every group role (0002, 0005, 0006). A static test keeps this and those statements in agreement. */
 export const GROUP_ATTRIBUTES = 'NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS';
@@ -104,7 +104,7 @@ export function loginUrl(name: string, password: string, target: { host: string;
 const EXPECTED_GROUPS: Record<LoginKind, string[]> = {
   app: ['telesphoros_app'],
   verifier: ['telesphoros_ledger_verifier'],
-  migrator: ['telesphoros_ledger', 'telesphoros_redactor'],
+  migrator: ['telesphoros_jobs', 'telesphoros_ledger', 'telesphoros_redactor'],
 };
 
 /**
@@ -172,7 +172,7 @@ export async function provisionLogins(options: ProvisionOptions): Promise<Provis
     // The migrator first: it owns the database, so the others' grants (made by the migrations) are made by an owner.
     await ensureLogin('migrator');
     await makeOwner(admin, names.migrator, database);
-    for (const group of ['telesphoros_ledger', 'telesphoros_redactor']) {
+    for (const group of ['telesphoros_ledger', 'telesphoros_redactor', 'telesphoros_jobs']) {
       const has = (await admin.query('SELECT pg_has_role($1, $2, \'SET\') AS ok', [names.migrator, group])).rows[0].ok as boolean;
       if (!has) await admin.query(`GRANT ${q(group)} TO ${q(names.migrator)} WITH SET TRUE, INHERIT FALSE`);
     }
@@ -196,7 +196,7 @@ export async function provisionLogins(options: ProvisionOptions): Promise<Provis
   }
 }
 
-/** Creates the five privilege groups the migrations expect, with exactly their attributes. A group that exists with other attributes is left alone and fails the checks. */
+/** Creates the privilege groups the migrations expect, with exactly their attributes. A group that exists with other attributes is left alone and fails the checks. */
 async function ensureGroups(admin: Client): Promise<void> {
   for (const group of PRIVILEGE_GROUPS) {
     const exists = (await admin.query('SELECT 1 FROM pg_roles WHERE rolname = $1', [group])).rowCount === 1;

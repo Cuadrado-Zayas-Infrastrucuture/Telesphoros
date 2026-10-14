@@ -1,3 +1,4 @@
+import { clearRecovery } from '@/lib/uploadRecovery';
 import { type Role, meDtoSchema } from '@telesphoros/shared-types';
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import type { AuthClient } from './authClient';
@@ -113,6 +114,7 @@ export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthPr
 
   const signOut = useCallback(async () => {
     clear();
+    clearRecovery(); // an interrupted upload is not carried into another person's session on this tab
     setStatus('signedOut');
     await client.signOut();
   }, [clear, client]);

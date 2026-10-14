@@ -3,10 +3,12 @@ import type { Request, Response } from 'express';
 import { Client } from 'pg';
 import { authorityContextMiddleware, bindRequestAuthority, type RequestAuthority } from '../../src/auth/authority-context';
 import { Database } from '../../src/db/database';
-import { PgMembershipAdmin } from '../../src/membership/pg-membership-admin';
+import { migrateDown, migrateUp } from '../../src/db/migrator';
+import type { MembershipAdmin } from '../../src/membership/membership';
 import { PostgresSecurityEvents } from '../../src/security-events/security-events';
 import { runSecurityEvents } from '../../src/security-events/security-events-cli';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
+import { registeringAdmin } from '../helpers/membership';
 
 const TENANT = 'tenant-events-pg';
 const OPERATOR = { by: 'ops-person', reason: 'a reason with spaces and an e-mail someone@example.test' };
@@ -145,8 +147,50 @@ describe('what the application may write, and as whom', () => {
   });
 });
 
+describe('a refused file is recorded (0022)', () => {
+  it('lets the application record an intake rejection for the bound person, throttled per type and reason, with the same detail rules as a refusal', async () => {
+    const who = person();
+    const reject = (reason: string, actor = who) => asApplication((c) => append(c, 'intake.rejected', 'refused', 'person', actor, { reason }), TENANT, actor);
+    for (let i = 0; i < 5; i++) await reject('structure');
+    await reject('checksum');
+    // The same word under the other type is its own event: the throttle is per type.
+    await asApplication((c) => append(c, 'access.refused', 'refused', 'person', who, { reason: 'structure' }), TENANT, who);
+    const rows = await events('actor_ref = $1', [who]);
+    expect(rows.map((r) => `${r.event_type}/${r.details.reason}`)).toEqual(['intake.rejected/structure', 'intake.rejected/checksum', 'access.refused/structure']);
+    expect(rows.every((r) => r.tenant_id === TENANT && r.actor_kind === 'person' && r.outcome === 'refused')).toBe(true);
+    // A fresh person each time, so the throttle (which answers before the table's checks) cannot be what refuses.
+    for (const details of [{ filename: 'x' }, { reason: 'report.pdf' }, { reason: 'has space' }, { reason: 'a'.repeat(65) }, { reason: 'structure', sha256: 'abc' }]) {
+      const fresh = person();
+      await expect(asApplication((c) => append(c, 'intake.rejected', 'refused', 'person', fresh, details), TENANT, fresh)).rejects.toMatchObject({ code: expect.stringMatching(/^(23514|22023)$/) });
+    }
+    await expect(asApplication((c) => append(c, 'intake.rejected', 'refused', 'person', who, { reason: 'size' }), null, who)).rejects.toMatchObject({ code: '42501' });
+  });
+
+  it('reverts only with the deliberate setting once a rejection is recorded, and then forgets the type', async () => {
+    const disposable = await createEphemeralDatabase();
+    try {
+      const asApp = async (work: (c: Client) => Promise<unknown>) => as(disposable.appUrl, async (c) => {
+        await c.query(`SELECT set_config('app.current_tenant_id', 'tenant-rev', false)`);
+        await c.query(`SELECT set_config('app.current_actor', 'person-rev', false)`);
+        return work(c);
+      });
+      await asApp((c) => append(c, 'intake.rejected', 'refused', 'person', 'person-rev', { reason: 'structure' }));
+      expect(await withAdmin(disposable.adminUrl, (c) => migrateDown(c, 1))).toEqual(['0023']); // the job queue (no attempts recorded) is not what is being tested
+      await expect(withAdmin(disposable.adminUrl, (c) => migrateDown(c, 1))).rejects.toThrow(/Refusing to drop recorded intake rejections/);
+      expect((await withAdmin(disposable.adminUrl, (c) => c.query(`SELECT 1 FROM security_events WHERE event_type = 'intake.rejected'`))).rowCount).toBe(1);
+      expect(await withAdmin(disposable.adminUrl, async (c) => { await c.query(`SET telesphoros.allow_audit_drop = 'yes'`); return migrateDown(c, 1); })).toEqual(['0022']);
+      await expect(asApp((c) => append(c, 'intake.rejected', 'refused', 'person', 'person-rev', { reason: 'structure' }))).rejects.toMatchObject({ code: '42501' });
+      await asApp((c) => append(c, 'access.refused', 'refused', 'person', 'person-rev', { reason: 'removed' })); // control: the older type still works
+      expect(await withAdmin(disposable.adminUrl, (c) => migrateUp(c))).toEqual(['0022', '0023']);
+      await asApp((c) => append(c, 'intake.rejected', 'refused', 'person', 'person-rev', { reason: 'structure' }));
+    } finally {
+      await disposable.drop();
+    }
+  });
+});
+
 describe('membership changes are recorded by the database, in the same transaction', () => {
-  const ops = <T>(work: (a: PgMembershipAdmin) => Promise<T>) => owner((c) => work(new PgMembershipAdmin(c)));
+  const ops = <T>(work: (a: MembershipAdmin) => Promise<T>) => owner((c) => work(registeringAdmin(c)));
 
   it('one event per change, in order, with the before and after roles, the operator name, and no free text', async () => {
     const who = person();
@@ -213,7 +257,7 @@ describe('the application records what happens to its callers', () => {
     new PostgresSecurityEvents(database); // wires the refusal hook
     try {
       const sub = person();
-      const granted = await owner((c) => new PgMembershipAdmin(c).grant({ tenantId: TENANT, sub, roles: ['clinician'], ...OPERATOR }));
+      const granted = await owner((c) => registeringAdmin(c).grant({ tenantId: TENANT, sub, roles: ['clinician'], ...OPERATOR }));
       let inserted!: () => void;
       const insertedSignal = new Promise<void>((resolve) => (inserted = resolve));
       let release!: () => void;
@@ -227,7 +271,7 @@ describe('the application records what happens to its callers', () => {
       );
       const outcome = write.then(() => 'committed', (e: { status?: number }) => `refused ${e.status}`);
       await insertedSignal;
-      await owner((c) => new PgMembershipAdmin(c).remove({ tenantId: TENANT, sub, ...OPERATOR }));
+      await owner((c) => registeringAdmin(c).remove({ tenantId: TENANT, sub, ...OPERATOR }));
       release();
       expect(await outcome).toBe('refused 403');
       const rows = await events(`actor_ref = $1 AND event_type = 'access.refused'`, [sub]);
@@ -243,7 +287,7 @@ describe('the auditor command', () => {
     const tenant = `tenant-cli-${randomUUID().slice(0, 6)}`;
     const who = person();
     await owner(async (c) => {
-      const a = new PgMembershipAdmin(c);
+      const a = registeringAdmin(c);
       await a.grant({ tenantId: tenant, sub: who, roles: ['reader'], ...OPERATOR });
       await a.setRoles({ tenantId: tenant, sub: who, roles: ['clinician'], ...OPERATOR });
     });
@@ -257,6 +301,12 @@ describe('the auditor command', () => {
     lines.length = 0;
     expect(await run(['list', '--tenant', tenant, '--type', 'membership.granted', '--limit', '1'])).toBe(0);
     expect(lines.filter((l) => l.startsWith('{'))).toHaveLength(1);
+    lines.length = 0;
+    // The auditor can ask for refused files by type (the filter knows every type the table holds).
+    await owner(async (c) => { await c.query(`SELECT set_config('app.current_tenant_id', $1, false)`, [tenant]); await c.query(`SELECT set_config('app.current_actor', $1, false)`, [who]); await append(c, 'intake.rejected', 'refused', 'person', who, { reason: 'structure' }); });
+    lines.length = 0;
+    expect(await run(['list', '--tenant', tenant, '--type', 'intake.rejected'])).toBe(0);
+    expect(lines.filter((l) => l.startsWith('{')).map((l) => JSON.parse(l)).map((e) => [e.type, e.details])).toEqual([['intake.rejected', { reason: 'structure' }]]);
     lines.length = 0;
     expect(await run(['list', '--tenant', tenant, '--since', '2999-01-01T00:00:00Z'])).toBe(0);
     expect(lines).toEqual(['0 events']);

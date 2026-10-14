@@ -125,6 +125,32 @@ describe('AuthProvider', () => {
     expect(result.current.roles).toEqual([]);
   });
 
+  it('sign out also forgets an interrupted upload kept for reload recovery', async () => {
+    window.sessionStorage.setItem('telesphoros.upload-recovery.v1', '{}');
+    try {
+      const { result } = setup();
+      await act(async () => void (await result.current.completeSignIn()));
+      expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v1')).toBe('{}');
+      await act(async () => void (await result.current.signOut()));
+      expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v1')).toBeNull();
+    } finally {
+      window.sessionStorage.clear();
+    }
+  });
+
+  it('a session that merely ends (401) keeps the interrupted upload, so the same person can finish it after signing in again', async () => {
+    window.sessionStorage.setItem('telesphoros.upload-recovery.v1', '{}');
+    try {
+      const fetchImpl = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ roles: ['clinician'] }), { status: 200 })).mockResolvedValueOnce(new Response('{}', { status: 401 }));
+      const { result } = setup({ fetchImpl: fetchImpl as never });
+      await act(async () => void (await result.current.completeSignIn()));
+      await act(async () => { await expect(result.current.apiFetch('/api/v1/patients')).rejects.toBeInstanceOf(SessionEndedError); });
+      expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v1')).toBe('{}');
+    } finally {
+      window.sessionStorage.clear();
+    }
+  });
+
   it('sign out forgets everything locally and ends the provider session', async () => {
     const { result, client } = setup();
     await act(async () => void (await result.current.completeSignIn()));
