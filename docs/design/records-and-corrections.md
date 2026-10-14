@@ -221,6 +221,8 @@ The current evaluation of a report is its latest (`seq`) evaluation, **if that o
 (amended in section 22: an older active evaluation is never promoted). Older evaluations, and retracted or superseded ones, are history. A newer evaluation of the same report made with newer knowledge is **not** a
 correction: it is a new row, and the older one stays `active` (decision 10).
 
+**Quarantine (M2.1c-1).** A report is *quarantined* when the newest patient-link decision about it ([3.6a](#36a-report_patient_decisions-m21b)) names the file (hash and storage version) and the patient it holds now and says `rejected`. It is derived, never stored, and changes nothing about any stored row. A quarantined report has **no current evaluation** (the rule above gains this second way to be "none"); its evaluations stay `active` in the correction model until a reviewer retracts each with `wrong-patient`, which the system never does by itself. Every evaluation read shows `advisory.patientLink` (`verified`, `unverified` or `rejected`). The quarantine lifts when a later decision for the same file says `verified`; a rejection about an earlier file leaves the report merely unverified. A reviewer's work list (`GET /patient-link/quarantine`) shows quarantined reports that still have an active evaluation. See [the M2.1c plan](plans/m2-1c-wrong-chart-and-duplicates.md).
+
 ## 5. Disputed cells
 
 Guideline cells live in signed knowledge files; a cell becomes `verified` only through a file change and a re-sign. Database

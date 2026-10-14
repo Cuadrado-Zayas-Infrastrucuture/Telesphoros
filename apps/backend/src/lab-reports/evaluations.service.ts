@@ -128,12 +128,14 @@ export class EvaluationsService {
     const { items: records, total } = await ledger.listEvaluations(principal.tenantId, { ...filter, current: current === 'true' }, { offset: (page - 1) * pageSize, limit: pageSize });
     const contexts = await ledger.evaluationContexts(principal.tenantId, records.map((r) => r.id));
     const disputes = await this.activeDisputes(principal.tenantId);
-    const currentIds = await ledger.currentEvaluationIds(principal.tenantId, [...new Set(records.map((r) => r.reportId as string))]);
+    const reportIds = [...new Set(records.map((r) => r.reportId as string))];
+    const currentIds = await ledger.currentEvaluationIds(principal.tenantId, reportIds);
+    const links = await ledger.patientLinkStates(principal.tenantId, reportIds);
     const out: EvaluationSummaryDto[] = [];
     for (const record of records) {
       const context = contexts.get(record.id);
       if (!context) throw AppException.pipelineMisconfigured();
-      out.push(toEvaluationSummaryDto(record, { ...context, current: currentIds.get(record.reportId as string) === record.id, activeDisputes: disputes }));
+      out.push(toEvaluationSummaryDto(record, { ...context, current: currentIds.get(record.reportId as string) === record.id, activeDisputes: disputes, patientLink: links.get(record.reportId as string) ?? 'unverified' }));
     }
     return { data: out, meta: buildMeta(page, pageSize, total) };
   }
@@ -211,7 +213,8 @@ export class EvaluationsService {
     const corrections = await ledger.listCorrections(tenantId, record.id);
     const reportId = record.reportId as string;
     const currentId = (currentIds ?? (await ledger.currentEvaluationIds(tenantId, [reportId]))).get(reportId) ?? null;
-    return { acceptance, corrections, current: currentId === record.id, activeDisputes: disputes };
+    const patientLink = (await ledger.patientLinkStates(tenantId, [reportId])).get(reportId) ?? 'unverified';
+    return { acceptance, corrections, current: currentId === record.id, activeDisputes: disputes, patientLink };
   }
 
   private async present(tenantId: string, record: Projected): Promise<EvaluationDto> {

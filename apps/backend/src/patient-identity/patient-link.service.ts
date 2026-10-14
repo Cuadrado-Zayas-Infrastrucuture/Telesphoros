@@ -1,5 +1,5 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import type { PatientLinkDecisionCreate, PatientLinkDecisionDto, PatientLinkDto } from '@telesphoros/shared-types';
+import { buildMeta, type Paginated, type PaginationQuery, type PatientLinkDecisionCreate, type PatientLinkDecisionDto, type PatientLinkDto, type QuarantineEntryDto } from '@telesphoros/shared-types';
 import type { Principal } from '../auth/principal';
 import { AppException } from '../common/app-exception';
 import { ENV, type Env } from '../config/env';
@@ -38,6 +38,15 @@ export class PatientLinkService {
     const report = await this.reports.findById(principal.tenantId, reportId);
     if (!report) throw AppException.notFound('Report not found.');
     return report;
+  }
+
+  /**
+   * The reviewer's work list (M2.1c-1): reports whose link was rejected for the file they hold now and that still have an active evaluation. Nothing is
+   * written here and no correction is made for the reviewer: each evaluation is retracted (`wrong-patient`) by a person.
+   */
+  async quarantine(principal: Principal, { page, pageSize }: PaginationQuery): Promise<Paginated<QuarantineEntryDto>> {
+    const { items, total } = await this.need(this.ledger).pageQuarantine(principal.tenantId, { offset: (page - 1) * pageSize, limit: pageSize });
+    return { data: items.map((e) => ({ reportId: e.reportId, patientId: e.patientId, basisCode: e.basisCode, rejectedAt: e.rejectedAt, activeEvaluationIds: e.activeEvaluationIds })), meta: buildMeta(page, pageSize, total) };
   }
 
   async get(principal: Principal, reportId: string): Promise<PatientLinkDto> {

@@ -27,7 +27,7 @@ beforeEach(() => {
     [`/captures/${uuid(4)}`]: { id: uuid(4), reportId: uuid(2), pdfSha256: "a".repeat(64), textSha256: "b".repeat(64), textScalars: 50, popplerVersion: "synthetic/1", runner: "fake", createdAt: time, latestDecision: decision },
     [`/evaluations/${uuid(3)}`]: { id: uuid(3), reportId: uuid(2), patientId: uuid(1), captureId: uuid(4), acceptance: { id: uuid(5), decision: "accepted", current: true },
       disposition: "evaluated", holdCode: null, hold: null, knowledgeSetId: "stored-knowledge-digest", engineVersion: "stored-engine-1", scope: "synthetic-test-only/1", clinicalUse: "not-approved", actionable: false, state: "active", supersededBy: null, current: true,
-      results: [], geneInputs: [], geneStates: [{ gene: "CYP2C19", state: "canonical", phenotype: "intermediate metabolizer", diplotype: "*1/*2", activityScore: null, reasonCode: null }], corrections: [], advisory: { activeDisputes: 0 }, createdAt: time },
+      results: [], geneInputs: [], geneStates: [{ gene: "CYP2C19", state: "canonical", phenotype: "intermediate metabolizer", diplotype: "*1/*2", activityScore: null, reasonCode: null }], corrections: [], advisory: { activeDisputes: 0, patientLink: "verified" }, createdAt: time },
   };
   calls = []; onRead = () => {};
   vi.spyOn(client, "requestJson").mockImplementation(async (url, options) => {
@@ -93,6 +93,8 @@ test.each([
   ["retracted", () => { evaluation().state = "retracted"; }],
   ["superseded", () => { evaluation().state = "superseded"; }],
   ["dispute", () => { evaluation().advisory.activeDisputes = 1; }],
+  ["patient link not verified", () => { evaluation().advisory.patientLink = "unverified"; }],
+  ["patient link rejected", () => { evaluation().advisory.patientLink = "rejected"; }],
   ["stale acceptance", () => { evaluation().acceptance.current = false; }],
   ["rejected acceptance", () => { evaluation().acceptance.decision = "rejected"; }],
   ["capture decision changed", () => { capture().latestDecision.id = uuid(99); }],
@@ -106,7 +108,7 @@ test.each([
   ["duplicate gene", () => { evaluation().geneStates.push(evaluation().geneStates[0]); }],
 ])("withholds %s with a successful control", async (_name, mutate) => {
   expect((await read()).bundle.resourceType).toBe("Bundle"); mutate();
-  if (["held", "dispute", "stale acceptance", "rejected acceptance", "capture decision changed"].includes(_name)) {
+  if (["held", "dispute", "patient link not verified", "patient link rejected", "stale acceptance", "rejected acceptance", "capture decision changed"].includes(_name)) {
     const result = await read(); expect(result.bundle).toBeNull(); expect(result.profile).toEqual([]);
   } else await expect(read()).rejects.toThrow();
 });

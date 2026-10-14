@@ -72,7 +72,7 @@ export function createStoredPgxReader(value: unknown, now = Date.now) {
     // History can explain an unavailable selection, but every existing gate still controls genomic/PDF content.
     const eligible = evaluation.current && evaluation.state === "active" && evaluation.supersededBy === null &&
       evaluation.disposition === "evaluated" && evaluation.holdCode === null && evaluation.hold === null &&
-      evaluation.advisory.activeDisputes === 0 && evaluation.acceptance?.current === true && evaluation.acceptance.decision === "accepted" &&
+      evaluation.advisory.activeDisputes === 0 && evaluation.advisory.patientLink === "verified" && evaluation.acceptance?.current === true && evaluation.acceptance.decision === "accepted" &&
       capture.latestDecision?.id === evaluation.acceptance.id && capture.latestDecision.decision === "accepted" &&
       capture.latestDecision.captureId === capture.id && capture.latestDecision.textSha256 === capture.textSha256 &&
       capture.latestDecision.popplerVersion === capture.popplerVersion;

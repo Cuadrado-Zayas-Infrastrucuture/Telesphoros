@@ -10,7 +10,7 @@ import { loadProjections } from '../../ledger/projections';
 import { canonicalHash } from '../../services/report-adapter/canonical-json';
 import { LedgerRecordsRepository } from '../ledger-records.repository';
 import type {
-  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationReadContext, EvaluationState, InsertResult, NoteRecord, PatientDecisionInput, Projected,
+  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationReadContext, EvaluationState, InsertResult, NoteRecord, PatientDecisionInput, PatientLinkStateValue, Projected, QuarantineEntry,
 } from '../ledger-records';
 
 /**
@@ -120,6 +120,50 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
         [tenantId, reportId],
       );
       return rows[0] ? this.one(client, tenantId, 'report_patient_decisions', rows[0].id) : undefined;
+    });
+  }
+
+  patientLinkStates(tenantId: string, reportIds: string[]): Promise<Map<string, PatientLinkStateValue>> {
+    return this.read(tenantId, async (client) => {
+      const { rows } = await client.query<{ report_id: string; state: PatientLinkStateValue }>(
+        `SELECT r.id::text AS report_id,
+                CASE WHEN d.id IS NULL OR NOT (${LINK_APPLIES}) THEN 'unverified' WHEN d.decision = 'verified' THEN 'verified' ELSE 'rejected' END AS state
+           FROM reports r
+           LEFT JOIN LATERAL (SELECT x.* FROM report_patient_decisions x WHERE x.tenant_id = r.tenant_id AND x.report_id = r.id ORDER BY x.seq DESC LIMIT 1) d ON true
+          WHERE r.tenant_id = $1 AND r.id = ANY($2::uuid[])`,
+        [tenantId, reportIds],
+      );
+      const found = new Map(rows.map((r) => [r.report_id, r.state]));
+      return new Map(reportIds.map((id) => [id, found.get(id) ?? 'unverified']));
+    });
+  }
+
+  pageQuarantine(tenantId: string, page: PageRequest): Promise<Page<QuarantineEntry>> {
+    return this.read(tenantId, async (client) => {
+      // One statement for the count and the page. An evaluation is active unless its last correction (the one with no child) retracts or supersedes it.
+      const { rows } = await client.query<{ report_id: string | null; patient_id: string; basis_code: string | null; rejected_at: string; evaluation_ids: string[]; total: number }>(
+        `WITH quarantined AS MATERIALIZED (
+           SELECT r.id AS report_id, r.patient_id, d.basis_code, d.seq AS decision_seq,
+                  to_char(d.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS rejected_at,
+                  array_agg(e.id::text ORDER BY e.seq) AS evaluation_ids
+             FROM reports r
+             JOIN LATERAL (SELECT x.* FROM report_patient_decisions x WHERE x.tenant_id = r.tenant_id AND x.report_id = r.id ORDER BY x.seq DESC LIMIT 1) d ON true
+             JOIN evaluations e ON e.tenant_id = r.tenant_id AND e.report_id = r.id
+            WHERE r.tenant_id = $1 AND d.decision = 'rejected' AND (${LINK_APPLIES})
+              AND NOT EXISTS (
+                SELECT 1 FROM corrections c
+                 WHERE c.tenant_id = e.tenant_id AND c.evaluation_id = e.id AND c.kind IN ('retraction', 'supersession')
+                   AND NOT EXISTS (SELECT 1 FROM corrections n WHERE n.tenant_id = c.tenant_id AND n.previous_correction_id = c.id))
+            GROUP BY r.id, r.patient_id, d.basis_code, d.seq, d.created_at),
+         page AS (SELECT * FROM quarantined ORDER BY decision_seq, report_id LIMIT $2 OFFSET $3)
+         SELECT page.report_id::text AS report_id, page.patient_id::text AS patient_id, page.basis_code, page.rejected_at, page.evaluation_ids, totals.total
+           FROM (SELECT count(*)::int AS total FROM quarantined) totals LEFT JOIN page ON true ORDER BY page.decision_seq, page.report_id`,
+        [tenantId, page.limit, page.offset],
+      );
+      return {
+        items: rows.flatMap((r) => r.report_id === null ? [] : [{ reportId: r.report_id, patientId: r.patient_id, basisCode: r.basis_code, rejectedAt: r.rejected_at, activeEvaluationIds: r.evaluation_ids }]),
+        total: rows[0]!.total,
+      };
     });
   }
 
@@ -505,6 +549,12 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 }
 
 /**
+ * The newest decision `d` about the report `r` still applies: it names the file (hash and storage version) and the patient the report has now. A decision about an
+ * earlier file leaves the report unverified, not quarantined.
+ */
+const LINK_APPLIES = `d.report_sha256 = r.sha256 AND d.object_version = r.object_version AND d.patient_id = r.patient_id`;
+
+/**
  * The current evaluation of each report (specification 4.5, amended in section 22): the NEWEST (`seq`) evaluation of the report, if it is
  * ACTIVE, and otherwise none. An older active evaluation is never promoted when the newest is retracted: a retraction says "do not rely on
  * this", and nobody has said the older one is what to rely on instead. An evaluation is not active when its last correction (the one with
@@ -513,11 +563,16 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
  */
 const CURRENT_EVALUATIONS_SQL = `
   SELECT newest.id
-    FROM (SELECT DISTINCT ON (a.report_id) a.id, a.tenant_id
+    FROM (SELECT DISTINCT ON (a.report_id) a.id, a.tenant_id, a.report_id
             FROM evaluations a
            WHERE a.tenant_id = $1
            ORDER BY a.report_id, a.seq DESC) newest
    WHERE NOT EXISTS (
+     -- M2.1c-1: a report whose patient link was rejected for the file it holds now is quarantined, and nothing on it is current.
+     SELECT 1 FROM reports r
+       JOIN LATERAL (SELECT x.* FROM report_patient_decisions x WHERE x.tenant_id = r.tenant_id AND x.report_id = r.id ORDER BY x.seq DESC LIMIT 1) d ON true
+      WHERE r.id = newest.report_id AND r.tenant_id = newest.tenant_id AND d.decision = 'rejected' AND (${LINK_APPLIES}))
+   AND NOT EXISTS (
      SELECT 1 FROM corrections c
       WHERE c.tenant_id = newest.tenant_id AND c.evaluation_id = newest.id AND c.kind IN ('retraction', 'supersession')
         AND NOT EXISTS (SELECT 1 FROM corrections n WHERE n.tenant_id = c.tenant_id AND n.previous_correction_id = c.id))`;

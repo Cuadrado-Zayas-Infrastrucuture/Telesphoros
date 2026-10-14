@@ -63,6 +63,11 @@ beforeAll(async () => {
         }
       }
       await ledger.insertAcceptance(tenant, 'syn-independent', acceptanceFor(capture.record.id, captureInput, { decision: 'rejected' }));
+      // The big history is verified as its patient's; the small one was rejected (quarantined), so both clauses of the current-evaluation query have something to find.
+      await ledger.insertPatientDecision(tenant, 'syn-verifier', {
+        reportId: report.reportId, expectedReport: { patientId: report.patientId, sha256: report.pdfSha256, objectVersion: report.objectVersion },
+        decision: count === 60 ? 'verified' : 'rejected', method: 'person-confirmed', basisCode: count === 60 ? 'no-identifier-on-report' : 'different-person',
+      });
       if (tenant === tenants[0]) histories.push({ reportId: report.reportId, patientId: report.patientId, captureId: capture.record.id, evaluationIds });
     }
     for (let i = 0; i < 25; i++) {
@@ -145,7 +150,10 @@ it('measures filtered/public pages, complete internal reads and sparse/dense con
   const dense=histories[0]!; const sparse=histories[1]!;
   expect((await measure('evaluations-by-report', () => ledger.listEvaluations(t,{ reportId:dense.reportId },page))).total).toBe(60);
   expect((await measure('evaluations-by-patient', () => ledger.listEvaluations(t,{ patientId:dense.patientId },page))).total).toBe(60);
-  expect((await measure('evaluations-current', () => ledger.listEvaluations(t,{ current:true },page))).total).toBe(2);
+  expect((await measure('evaluations-current', () => ledger.listEvaluations(t,{ current:true },page))).total).toBe(1); // the quarantined report's evaluation is not current
+  expect([...(await measure('patient-link-states', () => ledger.patientLinkStates(t,[dense.reportId,sparse.reportId]))).entries()]).toEqual([[dense.reportId,'verified'],[sparse.reportId,'rejected']]);
+  const quarantine = await measure('quarantine-page', () => ledger.pageQuarantine(t,page));
+  expect([quarantine.total, quarantine.items.map(e => [e.reportId, e.activeEvaluationIds.length])]).toEqual([1, [[sparse.reportId, 5]]]);
   expect((await measure('disputes-page', () => ledger.pageDisputes(t,page))).total).toBe(25);
   expect((await measure('disputes-open', () => ledger.pageDisputes(t,page,'open'))).total).toBe(12);
   expect(await measure('disputes-complete-safety-read', () => ledger.listDisputes(t))).toHaveLength(25);

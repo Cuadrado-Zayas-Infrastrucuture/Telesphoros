@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Query, Res } from '@nestjs/common';
 import {
   type IdentifierCreate,
   identifierCreateSchema,
@@ -11,6 +11,10 @@ import {
   type PatientLinkDecisionDto,
   patientLinkDecisionCreateSchema,
   type PatientLinkDto,
+  type Paginated,
+  type PaginationQuery,
+  paginationQuerySchema,
+  type QuarantineEntryDto,
 } from '@telesphoros/shared-types';
 import type { Response } from 'express';
 import { CLINICAL_READ_ROLES } from '../auth/clinical-read';
@@ -79,5 +83,18 @@ export class ReportPatientLinkController {
     const { decision, created } = await this.service.decide(principal, id, body);
     res.status(created ? 201 : 200);
     return decision;
+  }
+}
+
+/** The reviewer's work list of quarantined reports (M2.1c-1). A pipeline route: the evaluations it is about exist only with the pipeline. */
+@Controller('patient-link/quarantine')
+@RequiresPipeline()
+export class PatientLinkQuarantineController {
+  constructor(private readonly service: PatientLinkService) {}
+
+  @Get()
+  @Roles('reviewer')
+  list(@CurrentPrincipal() principal: Principal, @Query(new ZodValidationPipe(paginationQuerySchema)) query: PaginationQuery): Promise<Paginated<QuarantineEntryDto>> {
+    return this.service.quarantine(principal, query);
   }
 }

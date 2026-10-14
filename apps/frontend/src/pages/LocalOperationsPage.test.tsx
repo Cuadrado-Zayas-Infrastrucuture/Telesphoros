@@ -110,7 +110,7 @@ const summary = {
   reportId: '11111111-1111-4111-8111-111111111111', patientId: '11111111-1111-4111-8111-111111111111', captureId: '11111111-1111-4111-8111-111111111111',
   acceptance: null, disposition: 'held', holdCode: 'unsupported-layout', hold: { message: 'Synthetic hold', reviewerAction: 'Review' },
   knowledgeSetId: 'syn', engineVersion: 'test', scope: null, clinicalUse: 'not-approved', state: 'active', supersededBy: null,
-  results: [], geneStates: [], corrections: [], current: true, advisory: { activeDisputes: 0 }, actionable: false, createdAt: 'now',
+  results: [], geneStates: [], corrections: [], current: true, advisory: { activeDisputes: 0, patientLink: 'verified' }, actionable: false, createdAt: 'now',
 };
 const response = (data: unknown) => new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } });
 

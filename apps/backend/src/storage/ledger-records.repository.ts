@@ -1,5 +1,5 @@
 import type {
-  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationReadContext, EvaluationState, InsertResult, NoteRecord, PatientDecisionInput, Projected,
+  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationReadContext, EvaluationState, InsertResult, NoteRecord, PatientDecisionInput, PatientLinkStateValue, Projected, QuarantineEntry,
 } from './ledger-records';
 import type { DisputeStatusValue } from '@telesphoros/shared-types';
 import type { Page, PageRequest } from './records';
@@ -26,6 +26,13 @@ export abstract class LedgerRecordsRepository {
   abstract insertPatientDecision(tenantId: string, actor: string, input: PatientDecisionInput): Promise<InsertResult>;
   /** The newest patient-link decision about the report (any file version), or undefined. */
   abstract latestPatientDecision(tenantId: string, reportId: string): Promise<Projected | undefined>;
+  /** For each asked report, its link state for the file it holds now, in one statement. Every asked report has an entry (`unverified` when unknown). */
+  abstract patientLinkStates(tenantId: string, reportIds: string[]): Promise<Map<string, PatientLinkStateValue>>;
+  /**
+   * Reports whose link was REJECTED for the file they hold now and that still have an active evaluation, oldest rejection first (M2.1c-1). Counted
+   * and paged from one statement.
+   */
+  abstract pageQuarantine(tenantId: string, page: PageRequest): Promise<Page<QuarantineEntry>>;
 
   abstract insertAcceptance(tenantId: string, actor: string, input: AcceptanceInput): Promise<InsertResult>;
   abstract findAcceptance(tenantId: string, id: string): Promise<Projected | undefined>;

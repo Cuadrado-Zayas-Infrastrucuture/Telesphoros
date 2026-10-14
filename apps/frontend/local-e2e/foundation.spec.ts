@@ -213,7 +213,7 @@ test('evaluation history scrolls inside its region and correction errors are fie
     geneStates: [],
     corrections: [],
     current: true,
-    advisory: { activeDisputes: 0 },
+    advisory: { activeDisputes: 0, patientLink: 'verified' },
     actionable: false,
     createdAt: 'now',
   };

@@ -172,9 +172,19 @@ export const evaluationDtoSchema = z.strictObject({
   geneInputs: z.array(z.looseObject({ gene: z.string(), state: z.string() })),
   /** Every correction about this evaluation, oldest first. The evaluation itself is never changed; `state` is derived from the last one. */
   corrections: z.array(correctionDtoSchema),
-  /** True for the NEWEST evaluation of its report if it is active; a report whose newest is retracted has none (specification 4.5, amended in section 22). */
+  /**
+   * True for the NEWEST evaluation of its report if it is active; a report whose newest is retracted has none (specification 4.5, amended in section 22).
+   * A report whose patient link was REJECTED for the file it holds now (quarantined, M2.1c) has none either.
+   */
   current: z.boolean(),
-  advisory: z.strictObject({ activeDisputes: z.number().int().min(0) }),
+  advisory: z.strictObject({
+    activeDisputes: z.number().int().min(0),
+    /**
+     * Whether a second person has recorded that the report's file belongs to its patient: `verified`; `unverified` (no decision for the file the report
+     * holds now, which includes every evaluation made before the link existed); `rejected` (the report is quarantined: it must not be relied on).
+     */
+    patientLink: z.enum(['verified', 'unverified', 'rejected']),
+  }),
   actionable: z.literal(false),
   createdAt: timestamp,
 });
@@ -284,3 +294,20 @@ export const ledgerVerifyResultSchema = z.strictObject({
   checkpointId: z.uuid().nullable(),
 });
 export type LedgerVerifyResult = z.infer<typeof ledgerVerifyResultSchema>;
+
+// ------------------------------------------------------------------------------------------------------------ quarantine (M2.1c-1)
+
+/**
+ * `GET /patient-link/quarantine`: a report whose patient link was rejected for the file it holds now and that still has at least one ACTIVE
+ * evaluation. A reviewer retracts each with the `wrong-patient` correction; the report leaves the list when none is active or the link is verified again.
+ */
+export const quarantineEntryDtoSchema = z.strictObject({
+  reportId: z.uuid(),
+  patientId: z.uuid(),
+  /** The coded reason of the rejection (never free text). */
+  basisCode: z.string().nullable(),
+  rejectedAt: timestamp,
+  /** The evaluations of the report that still need a retraction, oldest first. */
+  activeEvaluationIds: z.array(z.uuid()),
+});
+export type QuarantineEntryDto = z.infer<typeof quarantineEntryDtoSchema>;

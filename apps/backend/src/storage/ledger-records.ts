@@ -119,6 +119,18 @@ export interface DisputeDecisionInput {
   evidenceNote: string;
 }
 
+/** Where a report's link to its patient stands for the file it holds NOW (derived from the newest decision; see `linkState`). */
+export type PatientLinkStateValue = 'verified' | 'unverified' | 'rejected';
+
+/** A quarantined report that still has active evaluations (M2.1c-1). */
+export interface QuarantineEntry {
+  reportId: string;
+  patientId: string;
+  basisCode: string | null;
+  rejectedAt: string;
+  activeEvaluationIds: string[];
+}
+
 /** What a read returns. */
 export type Projected = Record<string, unknown> & { id: string; tenantId: string; seq: string; createdBy: string; createdAt: string };
 
