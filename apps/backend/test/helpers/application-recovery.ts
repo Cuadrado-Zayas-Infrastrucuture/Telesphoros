@@ -61,7 +61,7 @@ export async function applicationAcceptance(url: string, catalogue: EvidenceCata
       });
     } finally { await db.onModuleDestroy(); }
     apiControls.push('restricted-login-rls');
-    app = await createTestApp({ postgresUrl: appUrl, verifierUrl, labReportPipeline: true, recoveryStorage: storage });
+    app = await createTestApp({ postgresUrl: appUrl, ownerUrl: url, verifierUrl, labReportPipeline: true, recoveryStorage: storage });
     assert.equal(app.get(ObjectStorage), storage); // real module registration, no provider override
     const lab = new LabPipeline(app, url, 'syn-f3-a');
     const who = await lab.person('recovered-clinician', ['clinician']);

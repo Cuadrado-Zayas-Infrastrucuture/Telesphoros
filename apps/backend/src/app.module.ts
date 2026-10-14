@@ -4,6 +4,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 import { InputBoundaryInterceptor } from './common/input-boundary.interceptor';
 import { AuthModule } from './auth/auth.module';
+import { SecurityAuditInterceptor } from './auth/security-audit.interceptor';
 import { ConfigModule } from './config/config.module';
 import { ENV, type Env } from './config/env';
 import { HealthModule } from './health/health.module';
@@ -44,6 +45,7 @@ export class AppModule {
       ],
       providers: [
         { provide: APP_FILTER, useClass: AllExceptionsFilter },
+        { provide: APP_INTERCEPTOR, useClass: SecurityAuditInterceptor },
         { provide: APP_INTERCEPTOR, useClass: InputBoundaryInterceptor },
       ],
     };

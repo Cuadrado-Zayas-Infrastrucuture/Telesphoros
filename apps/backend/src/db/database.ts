@@ -1,7 +1,10 @@
 import { Logger } from '@nestjs/common';
 import { Pool, type PoolClient } from 'pg';
+import { currentRequestAuthority } from '../auth/authority-context';
+import { AppException } from '../common/app-exception';
 import { pendingMigrations } from './migrator';
 import { pgClientConfig } from './tls';
+import type { SecurityAuditEvent } from '../auth/security-audit';
 
 export interface DatabaseOptions {
   /** Shown in pg_stat_activity. Tests give each pool its own, to tell which connection is waiting. */
@@ -31,9 +34,19 @@ export interface TenantWorkOptions {
  * `withTenant` runs a unit of work inside ONE transaction that first sets `app.current_tenant_id`
  * (transaction-local, so it cannot leak to the next request on a pooled connection). The row-level
  * security policies read that setting: if it is missing, the application role sees no rows.
+ *
+ * Commit boundary for people (docs/auth.md): when the work runs for a request, and the transaction WROTE anything, the caller's membership
+ * row is locked SHARED and compared with the version the request was admitted under just before COMMIT. A removal or role change waits for
+ * that lock, so a write either commits before the change commits or is rolled back; none commits after it. Read-only transactions skip
+ * the lock. Work with no request behind it (background and organization-owned processing) is not tied to a person and is not checked.
  */
 export class Database {
   private readonly logger = new Logger('Database');
+  /**
+   * Called (best effort, after the rollback) when a request's write was refused because its caller's membership changed under it.
+   * The security-event recorder sets it; it is not part of the constructor so the database layer needs no knowledge of it.
+   */
+  onAuthorityRefused?: (tenantId: string, sub: string) => Promise<void>;
   private readonly pool: Pool;
 
   constructor(options: DatabaseOptions) {
@@ -56,11 +69,16 @@ export class Database {
     if (actor !== undefined && (!actor || actor.length > MAX_ACTOR_LENGTH || CONTROL_CHARACTERS.test(actor))) throw new Error('Invalid actor');
     const client = await this.pool.connect();
     let discard = false;
+    let refused: ReturnType<typeof currentRequestAuthority>;
     try {
       await client.query('BEGIN');
       await client.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
       if (actor !== undefined) await client.query(`SELECT set_config('app.current_actor', $1, true)`, [actor]);
       const result = await work(client);
+      if (!(await this.authorityStillCurrent(client))) {
+        refused = currentRequestAuthority();
+        throw AppException.forbidden();
+      }
       await client.query('COMMIT');
       return result;
     } catch (error) {
@@ -70,15 +88,34 @@ export class Database {
         // intentional: the connection is already broken; release(true) below throws it away
         discard = true;
       }
+      if (refused && this.onAuthorityRefused) await this.onAuthorityRefused(tenantId, refused.sub).catch(() => undefined);
       throw error;
     } finally {
       client.release(discard);
     }
   }
 
+  /** False when the transaction wrote and the caller's membership is no longer the one the request was admitted under. */
+  private async authorityStillCurrent(client: PoolClient): Promise<boolean> {
+    const authority = currentRequestAuthority();
+    if (!authority) return true;
+    // An id is assigned at the first write (including a row lock), never to a read.
+    const wrote = await client.query<{ wrote: boolean }>('SELECT txid_current_if_assigned() IS NOT NULL AS wrote');
+    if (!wrote.rows[0]!.wrote) return true;
+    const current = await client.query<{ ok: boolean }>('SELECT membership_assert_current($1, $2) AS ok', [authority.sub, authority.version]);
+    return current.rows[0]?.ok === true;
+  }
+
   /** Cheap liveness probe for /ready. */
   async ping(): Promise<void> {
     await this.pool.query('SELECT 1');
+  }
+
+  /** The app role has EXECUTE on this writer, but no table privileges. */
+  async recordSecurityEvent(event: SecurityAuditEvent): Promise<void> {
+    await this.pool.query('SELECT public.security_audit_record($1,$2,$3,$4,$5,$6,$7)', [
+      event.type, event.outcome, event.tenantId, event.actorSub, event.routeKey, event.subjectId, event.requestId,
+    ]);
   }
 
   /** Pending versions after strict history validation; invalid or newer recorded history throws. */

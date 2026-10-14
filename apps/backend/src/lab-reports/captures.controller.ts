@@ -9,6 +9,7 @@ import {
   idParamSchema,
 } from '@telesphoros/shared-types';
 import type { Response } from 'express';
+import { CLINICAL_READ_ROLES } from '../auth/clinical-read';
 import { CurrentPrincipal, Roles } from '../auth/decorators';
 import type { Principal } from '../auth/principal';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
@@ -48,6 +49,7 @@ export class CapturesController {
   constructor(private readonly captures: CapturesService) {}
 
   @Get(':id')
+  @Roles(...CLINICAL_READ_ROLES)
   get(@CurrentPrincipal() principal: Principal, @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam): Promise<CaptureDto> {
     return this.captures.get(principal, id);
   }

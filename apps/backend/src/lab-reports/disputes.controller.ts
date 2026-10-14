@@ -3,6 +3,7 @@ import {
   type Paginated,
   type CellUsageDto, type CellUsageQuery, cellUsageQuerySchema, type DisputeCreate, disputeCreateSchema, type DisputeDecisionCreate, disputeDecisionCreateSchema, type DisputeDto, type DisputeListQuery, disputeListQuerySchema, type IdParam, idParamSchema,
 } from '@telesphoros/shared-types';
+import { CLINICAL_READ_ROLES } from '../auth/clinical-read';
 import { CurrentPrincipal, Roles } from '../auth/decorators';
 import type { Principal } from '../auth/principal';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
@@ -34,6 +35,7 @@ export class DisputesController {
   }
 
   @Get()
+  @Roles(...CLINICAL_READ_ROLES)
   list(@CurrentPrincipal() principal: Principal, @Query(new ZodValidationPipe(disputeListQuerySchema)) query: DisputeListQuery): Promise<Paginated<DisputeDto>> {
     return this.disputes.list(principal, query);
   }
@@ -49,6 +51,7 @@ export class DisputesController {
   }
 
   @Get(':id')
+  @Roles(...CLINICAL_READ_ROLES)
   get(@CurrentPrincipal() principal: Principal, @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam): Promise<DisputeDto> {
     return this.disputes.get(principal, id);
   }

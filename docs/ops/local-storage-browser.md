@@ -25,3 +25,23 @@ Downloads obtain a fresh signed attachment link, validate its contract, expiry a
 The existing browser fixture owns a fresh in-memory Moto process and refuses occupied ports. L2 tests use one worker, a generated run/bucket identity, disabled processing, and synthetic inputs. The final version-pin test deliberately adds a newer version only after other tests: L1's complete-inventory invariant must continue to reject subsequent intake in such a run. The fixture stops only its own children. This is test harness configuration, not L3 product setup, scheduler, teardown, multipart rehearsal, or production readiness.
 
 Run the existing `pnpm --filter @telesphoros/frontend e2e` separately to verify non-owned and experimental compatibility. Do not point either suite at clinical-review services, shared Moto, AWS, or real records.
+
+## Memberships
+
+Since M1.5 the API reads each person's standing from the database, so the PostgreSQL browser suite needs its personas granted once, after the
+database is migrated and before `e2e:storage` (the in-memory browser suite needs nothing: there the development mirror grants whoever signs in).
+Use the owner connection of the same disposable database (`E2E_OWNER_URL` below is the loopback superuser or table-owner URL, never the application role's):
+
+```
+CLI="node apps/backend/dist/db/cli.js"; export DATABASE_MIGRATOR_URL="$E2E_OWNER_URL"
+grant() { $CLI membership grant --tenant "$1" --sub "$2" --roles "$3" --by browser-suite --reason "local acceptance persona"; }
+grant alpha 11111111-1111-4111-8111-111111111111 clinician            # alice
+grant beta  22222222-2222-4222-8222-222222222222 reader               # bob
+grant alpha 33333333-3333-4333-8333-333333333333 admin                # carol
+grant beta  44444444-4444-4444-8444-444444444444 ""                   # dave: signs in, holds no role
+grant alpha 77777777-7777-4777-8777-777777777777 reviewer             # gina
+grant alpha 88888888-8888-4888-8888-888888888888 clinician,reviewer   # hal
+grant alpha 99999999-9999-4999-8999-999999999999 admin,reviewer       # ivy
+```
+
+erin (no tenant group) and frank (two) are refused before the membership is read and need no row. These are the fake identity provider's synthetic personas.

@@ -118,11 +118,12 @@ import { DOCUMENT_IDS, FIXTURES, fixtureManifest, fixturePdf, fixtureText, LabPi
   });
 
   describe('reading a capture', () => {
-    it('any signed-in role can read a capture of its own tenant; another tenant gets 404', async () => {
+    it('any role can read a capture of its own tenant, a member with no role cannot; another tenant gets 404', async () => {
       const clinician = await lab.person('clin', ['clinician']);
       const { reportId } = await lab.uploadedLabPdf(clinician, fixturePdf('D01'));
       const captured = (await lab.capture(clinician, reportId).expect(201)).body;
-      for (const roles of [['reader'], ['clinician'], ['reviewer'], ['admin'], []]) {
+      await lab.api().get(`/api/v1/captures/${captured.id}`).set(bearer((await lab.person('r', [])).token)).expect(403); // finding I04
+      for (const roles of [['reader'], ['clinician'], ['reviewer'], ['admin']]) {
         const res = await lab.api().get(`/api/v1/captures/${captured.id}`).set(bearer((await lab.person('r', roles)).token)).expect(200);
         expect(captureDtoSchema.safeParse(res.body).success).toBe(true);
       }

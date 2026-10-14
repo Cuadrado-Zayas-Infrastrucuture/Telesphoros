@@ -1,6 +1,6 @@
 # M1.5: live membership and revocation (plan)
 
-Status: **plan only, awaiting founder approval.** No code, migration or script has been written. Slice M1.5 of the [repo audit and build plan](repo-audit-and-build-plan.md), closing research-audit finding **I03** (removing a person or changing a role does not revoke API authority) and, with DA-1, **I04** (a tenant member with no role can read clinical metadata). It is research task **T03**. The founder asked to start M1.5 on 2026-10-13; [working agreement 1](../../STATUS.md) says the plan is approved before code, so this PR carries the plan alone.
+Status: **implemented on a draft PR; the founder approved the plan and answered yes to DA-1, DA-2, DM-1 and DM-2 on 2026-10-13.** Slice M1.5 of the [repo audit and build plan](repo-audit-and-build-plan.md), closing research-audit finding **I03** (removing a person or changing a role does not revoke API authority). It is research task **T03**. DA-1 (finding **I04**, the nine read routes) ships as the separate small PR **M1.5b**, per DM-2. What was built, and where it differs from the text below, is in "Changes from this plan" at the end; evidence is in [the verification note](../../verification/m1-5-live-membership-revocation.md).
 
 ## Problem
 
@@ -24,7 +24,7 @@ These are the audit plan's DA-1 and DA-2, restated as what they mean for this sl
 
 ## Design
 
-### 1. Data (one new migration, `0016_membership.up.sql` and a `.down.sql`)
+### 1. Data (one new migration, `0017_membership.up.sql` and a `.down.sql`)
 
 `tenant_memberships`, one row per person per tenant, **never deleted** (a removed person's row is the tombstone):
 
@@ -93,7 +93,7 @@ In-memory storage (tier 1) gets an equivalent store with the same rules so the t
 
 ## Files expected to change
 
-New: `apps/backend/migrations/0016_membership.{up,down}.sql`; a membership module (repository abstract class, in-memory and PostgreSQL implementations, service); the command-line tool; `docs/ops/membership.md`; new specs and a verification note.
+New: `apps/backend/migrations/0017_membership.{up,down}.sql`; a membership module (repository abstract class, in-memory and PostgreSQL implementations, service); the command-line tool; `docs/ops/membership.md`; new specs and a verification note.
 Changed: `auth.guard.ts`, `principal.ts`, `database.ts` and the four Postgres repositories (pass `authority`), `me.controller.ts`, `storage.module.ts` and `auth.module.ts` wiring, `privilege-facts.ts`, the restore manifest, `test/helpers`, `docs/auth.md`, `docs/database.md`, `docs/STATUS.md`, this plan.
 
 ## Risks to watch
@@ -103,6 +103,18 @@ Changed: `auth.guard.ts`, `principal.ts`, `database.ts` and the four Postgres re
 - **Extra query per request.** Measured, not assumed; caching is deliberately not added.
 - **Concurrent tenant move.** Removing from A and granting to B are two commands; between them the person is refused, the same fail-closed behavior as today's Cognito move.
 
-## What I need from the founder
+## Changes from this plan
 
-Reply yes or change for DA-1, DA-2, DM-1 and DM-2. With the recommendations as written, implementation is one draft PR (M1.5) followed by the small M1.5b.
+Differences between what is written above and what was built, each in the direction of a stronger or simpler result:
+
+1. **The commit-time check runs just before `COMMIT`, not at the start of the transaction.** A write that has done its work and then finds the person removed is rolled back whole. This is a stronger boundary than the "re-check at the start" described in section 3: nothing commits after the removal commits. The check is skipped for transactions that wrote nothing (detected with `txid_current_if_assigned()`), so reads take no lock.
+2. **No signature changes across the 35 call sites.** The request's membership version travels in a per-request `AsyncLocalStorage` slot (`authority-context.ts`), opened by a middleware in `configureApp` and filled by `AuthGuard`; `Database.withTenant` reads it. Code with no request behind it (background work) is not tied to a person; `asOrganizationWork()` detaches work that is the organization's rather than the person's; it is used for closing out a failed upload transfer (recording that nothing was stored and releasing the quota reservation), so a person removed mid-upload leaves nothing stranded. If the slot is missing when the guard runs, the request fails rather than skipping the check.
+3. **The check is a `SECURITY DEFINER` function, not a plain `SELECT ... FOR SHARE`.** PostgreSQL requires the UPDATE privilege to take a row lock, and the application role must stay read-only. The function reads only the organization the transaction is bound to.
+4. **A role change does not move `tokens_valid_after`.** Roles are read live, so a downgrade already takes effect on the next request; forcing a fresh sign-in on every role change would only add friction. Removal, reinstatement and `revoke-sessions` move it. (`revoke-sessions` is a small addition: refuse every token issued so far without removing anyone.)
+5. **A development mirror.** On the in-memory store (never production, never PostgreSQL) the membership mirrors the verified token so a local server and the default browser suite have people to check; the existing token-minting test suites use the same mirror over the real table, and the new suites run without it. A test asserts the production wiring never contains it.
+6. **The verifier reports `issuedAt`** (the token's `iat`) alongside the identity.
+7. **Browser suite on PostgreSQL** (`e2e:storage`, a manual local procedure) needs its personas granted once; the steps are in [local-storage-browser.md](../../ops/local-storage-browser.md#memberships).
+
+## What I needed from the founder
+
+DA-1, DA-2, DM-1 and DM-2: all four answered yes on 2026-10-13.

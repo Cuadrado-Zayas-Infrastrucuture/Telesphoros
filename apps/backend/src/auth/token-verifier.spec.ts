@@ -6,21 +6,28 @@ const verifier = new HmacTokenVerifier({ JWT_SECRET: TEST_SECRET, JWT_ISSUER: TE
 
 describe('HmacTokenVerifier', () => {
   it('returns the subject, tenant and roles from a valid token', async () => {
-    await expect(verifier.verify(await signToken({ sub: 'u1', tenant: 'acme', roles: ['clinician', 'admin'] }))).resolves.toEqual({
+    await expect(verifier.verify(await signToken({ sub: 'u1', tenant: 'acme', roles: ['clinician', 'admin'] }))).resolves.toMatchObject({
       sub: 'u1',
       tenantId: 'acme',
       roles: ['clinician', 'admin'],
     });
   });
 
+  it('reports when the token was issued, in seconds (the membership revocation instant is compared with it)', async () => {
+    const before = Math.floor(Date.now() / 1000);
+    const identity = await verifier.verify(await signToken({ sub: 'u1', tenant: 'acme', iat: -30 }));
+    expect(identity.issuedAt).toBeGreaterThanOrEqual(before - 31);
+    expect(identity.issuedAt).toBeLessThanOrEqual(before - 29);
+  });
+
   it('keeps every role the token carries, reviewer included, in any combination', async () => {
     for (const roles of [['reviewer'], ['clinician', 'reviewer'], ['admin', 'reviewer'], ['reader', 'clinician', 'admin', 'reviewer']] as const) {
-      await expect(verifier.verify(await signToken({ sub: 'u1', tenant: 'acme', roles: [...roles] }))).resolves.toEqual({ sub: 'u1', tenantId: 'acme', roles: [...roles] });
+      await expect(verifier.verify(await signToken({ sub: 'u1', tenant: 'acme', roles: [...roles] }))).resolves.toMatchObject({ sub: 'u1', tenantId: 'acme', roles: [...roles] });
     }
   });
 
   it('treats a missing roles claim as NO roles (least privilege)', async () => {
-    await expect(verifier.verify(await signToken({ sub: 'u1', tenant: 'acme' }))).resolves.toEqual({ sub: 'u1', tenantId: 'acme', roles: [] });
+    await expect(verifier.verify(await signToken({ sub: 'u1', tenant: 'acme' }))).resolves.toMatchObject({ sub: 'u1', tenantId: 'acme', roles: [] });
   });
 
   it.each([

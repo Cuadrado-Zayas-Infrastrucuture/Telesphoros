@@ -3,18 +3,25 @@
 Read this first to pick the project up. Snapshot: **2026-10-13**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
-## Product landing refresh (prepared for commit, 2026-10-14)
+## Product landing refresh (draft PR, 2026-10-14)
 
 The approved landing page uses self-hosted Inter, the Poppins wordmark, teal branding, original static diagonal DNA and the unchanged companion mascot. It includes role-aware account actions, a synthetic Upload / Check / Find walkthrough, current feature descriptions, FAQs and the founder-approved direction “Working toward less trial-and-error prescribing,” distinguished from today's storage-only preview. No clinical interpretation or prescribing claim is added.
 
-Frontend unit tests (264), focused browser checks (28), lint, TypeScript/build and production guards passed; see [verification and desktop/mobile evidence](verification/telesphoros-landing.md). This delivery includes the landing page only. Earlier dashboard contrast and AI welcome edits remain local and are not part of this commit. No Vercel deployment is performed or configured. The branch remains based on `98cd931`; reconcile newer `origin/main` (`1b4fb4e`) before PR delivery.
+Reconciled the committed landing work with `origin/main` at `41d019d` (including PRs #94–97). Only this status document conflicted; current backend, membership, audit, schema and permissions are preserved exactly. Earlier uncommitted dashboard contrast and AI welcome edits remain in the original checkout and are outside this PR. Reconciliation checks passed: 264 frontend tests, 64 standard and 26 DEV browser cases, 46 in-memory permission tests, lint/build and production-exclusion guards. See [verification](verification/telesphoros-landing.md).
 
-## Planned: M1.5 live membership and revocation (plan only)
+The founder approved the separate [Vercel visual preview](https://telesphoros-site-ogws77vab.vercel.app), based on landing commit `353ac60`. Its packaging has no sign-in, upload, assistant or backend access and is not part of this repository change. The existing production deployment and domains were verified unchanged. This reconciliation does not redeploy or promote anything.
 
-A [slice plan](design/plans/m1-5-live-membership-revocation.md) moves who may do what from the token to a PostgreSQL membership table checked on every request (closing I03, and I04 with DA-1): removal or a role change takes effect on the next request on every API replica, a lookup failure denies protected work (503), and writes re-check authority inside their own transaction so none commits after a removal does. Cognito stays the identity provider. No code, migration or script exists yet; the founder's yes or change on DA-1, DA-2, DM-1 and DM-2 is needed first.
+## M1.5 live membership and revocation (draft PR)
+
+Who may do what now comes from a PostgreSQL membership table read on **every** protected request, not from the token ([auth.md](auth.md#authority-and-revocation), [plan](design/plans/m1-5-live-membership-revocation.md), [verification](verification/m1-5-live-membership-revocation.md)). Removing a person, changing their roles or revoking their sessions (operator command `db membership`, [ops/membership.md](ops/membership.md); there is no API route for it) takes effect on their next request on every API instance. A lookup failure is a 503 and does no work. Every request-driven write re-checks the caller's membership row inside its own transaction just before commit, so no write commits after a removal does. Migration 0017 adds `tenant_memberships` (read-only to the API login, rows never deleted). Cognito still proves identity and MFA. DA-1 and DA-2 were decided yes on 2026-10-13; refusing reads to members with no role (I04) is the separate M1.5b. Not part of this change: browser sessions and the logout endpoint (M5.1) and the append-only membership event trail (M1.6). Proved against a fake identity provider and a local PostgreSQL; not real Cognito or RDS, and nothing is applied in AWS. The first deployment starts with nobody granted.
+
 ## M1.4 no-store responses and tenant logs (draft PR)
 
 Founder asked to start M1.4 of the [audit build plan](design/plans/repo-audit-and-build-plan.md). Every API response, including 401, 403, 404, 429 and the health and readiness probes, now carries `Cache-Control: private, no-store` from one middleware registered before routing; the authenticated browser request wrapper also sends `cache: 'no-store'`. Request-completion and failure logs now carry `tenantId` from the verified principal (never from a header or query) next to `userId`. Tests failed on the unchanged code and pass after the change; a header-sourced tenant is caught by a control. See the [plan](design/plans/m1-4-no-store-tenant-logging.md) and [verification](verification/m1-4-no-store-tenant-logging.md). Closes research-audit E06 and O02 at synthetic scope; the audit event store (M1.6), live revocation (M1.5) and hosted/CDN behavior (T13) remain open. No schema, authorization, retention or clinical-gate change.
+
+## M1.5b members with no role cannot read clinical records (in review)
+
+Closes finding I04 (decision DA-1, decided yes on 2026-10-13): the eleven clinical read routes (`GET` list and by-id for patients, reports, recommendations, evaluations and cell disputes, and `GET /captures/:id`; the audit listed nine) now require a role. A member who holds no role can still sign in and call `/me`, and gets 403 everywhere else. Any role qualifies, `reviewer` included, because reviewer-only people already capture and evaluate on their own and the reviewer browser persona reads the same lists; if the founder wants reviewer to be refused alone, change one constant (`auth/clinical-read.ts`). A test walks the real route table so a new route that forgets `@Roles()` fails. Plan: [m1-5b-no-role-reads.md](design/plans/m1-5b-no-role-reads.md); evidence: [verification](verification/m1-5b-no-role-reads.md). Proved locally; the pull request's checks are the remote record. The frontend is unchanged: a member with no role who opens the reports page gets the page's generic error, not a dedicated message.
 
 ## Planned: repository audit and build plan (plan only)
 
@@ -38,6 +45,14 @@ A [draft plan](design/plans/soup-pilot.md) proposes a dev-only pilot of [Soup](h
 ## T02 strict migration readiness (merged, #81)
 
 Founder approved the focused readiness fix with strict version/checksum matching and subsequently authorized commit and draft PR delivery. Readiness now delegates to the existing migration-history validator and rejects checksum drift and unknown newer versions, with generic 503 responses and unchanged liveness. Real PostgreSQL regressions demonstrated both defects before the fix; all three backend profiles passed locally. See [verification](verification/t02-readiness.md) for completed checks and limits. Broader old/new schema compatibility and G01 acceptance remain separate. Merged as #81; its `main` CI run passed. Deployment is not authorized.
+
+## M1.6 security-event audit store (in review)
+
+An append-only `security_events` table (migration 0018) records who changed membership (a trigger, in the same transaction as the change), why a valid token was refused (best effort, throttled). The application role has no privilege on the table; only the auditor role reads it, through `db security-events list`. Closes audit finding I06 and the security half of T04. Plan: [m1-6-security-events.md](design/plans/m1-6-security-events.md); evidence: [verification](verification/m1-6-security-events.md); runbook: [ops/security-events.md](ops/security-events.md). `main` also has the application access audit below (`security_audit_events`), which records every file link; founder decision 2026-10-14: keep both tables and record each act once, so file links are recorded there only. Proved locally against PostgreSQL and Moto; not real Cognito or RDS, and no off-site copy of the record.
+
+## T04 application access audit (focused PR)
+
+The separate `feat/local-access-audit` branch adds append-only API authentication, private-read and report download-link events with restricted PostgreSQL access and fail-closed private reads. See the [event contract and limits](ops/application-access-audit.md). This is synthetic local verification only: the unmerged T03 membership branch has a conflicting migration number, and operator membership events, true IdP sign-in, hosted custody, retention and G05/G09 acceptance remain separate. No merge or deployment is claimed.
 
 ## Final synthetic OpenEMR workflow acceptance
 
