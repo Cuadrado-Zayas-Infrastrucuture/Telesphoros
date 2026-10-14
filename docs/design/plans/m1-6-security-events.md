@@ -1,6 +1,6 @@
 # M1.6: security-event audit store (plan)
 
-Status: **implemented on a local branch (stacked on the local M1.5 branch, not pushed).** The founder answered yes to DS-1, DS-2, DS-3 and DS-4 on 2026-10-13 and asked to start. Slice M1.6 of the [repo audit and build plan](repo-audit-and-build-plan.md), closing research-audit finding **I06** and the security half of task **T04**. Evidence: [verification](../../verification/m1-6-security-events.md). Kept local at the founder's request (no push, so no CI spend); the branch is based on the local M1.5 branch because the trigger sits on the table M1.5 creates.
+Status: **implemented; open for review as its own pull request (on current `main`, after M1.5 and M1.5b).** The founder answered yes to DS-1, DS-2, DS-3 and DS-4 on 2026-10-13 and asked to start. Slice M1.6 of the [repo audit and build plan](repo-audit-and-build-plan.md), closing research-audit finding **I06** and the security half of task **T04**. Evidence: [verification](../../verification/m1-6-security-events.md).
 
 ## Problem
 
@@ -83,12 +83,12 @@ The clinical ledger and its verifier, CloudTrail and Terraform (nothing applied)
 
 ## Files expected to change
 
-New: migration `0017_security_events.{up,down}.sql` (after M1.5's 0016), a security-events module (service, repository, event-type list), the operator `security-events` command, `docs/ops/security-events.md`, specs and a verification note.
+New: migration `0018_security_events.{up,down}.sql` (after the membership migration 0017), a security-events module (service, repository, event-type list), the operator `security-events` command, `docs/ops/security-events.md`, specs and a verification note.
 Changed: the membership guard and commit check (throttled refusal events), the two file-link services, `Database` settings for the actor (already present), `append-only-tables.ts`, schema acceptance and catalog tests, the recovery and backup fixtures' role lists, `docs/auth.md`, `docs/database.md`, `docs/STATUS.md`, this plan.
 
 ## Risks to watch
 
-- **Depends on M1.5 being merged**: the trigger is on a table M1.5 creates, and the migration number follows its 0016. Implementation starts after that merge.
+- **Depended on M1.5 being merged**: the trigger is on a table M1.5 creates. It is merged; this migration follows it as 0018 (it was 0016 and then 0017 while `main` moved).
 - **File links gain a write** (the event), so a link request now takes M1.5's commit-time membership lock; a removed person can no longer obtain a link in a race, which is the intended result.
 - **Event volume**: refusals are throttled, link events are one per link, membership events are rare. Nothing here writes per clinical read.
 - **A new restricted role** touches the privilege lists (`privilege-facts`, the restore's required roles, the test cluster setup); the change is mechanical and the restore check proves it.
@@ -100,6 +100,12 @@ Changed: the membership guard and commit check (throttled refusal events), the t
 2. **The `authority-changed` refusal is recorded from `Database.withTenant` after the rollback** through a hook the recorder sets, as organization work (the refused person's own authority must not decide whether their refusal is written), with the request id captured first.
 3. **`CapturesService.pdfLink`**, a third link-issuing method that no route calls today, records the same `file.link.issued` event so a future route cannot issue a link unrecorded; it has no test of its own for that reason.
 4. **A new in-memory recorder** serves development and tier 1 with the same throttle; production requires PostgreSQL.
+
+5. **Overlap with the application access audit (#94), found after this plan was approved.** `main` now has `security_audit_events` (migration 0016, `SecurityAuditStore`): a second append-only table that records `api-auth` (accepted or refused), `private-read` and `download-link`. It and this store were designed apart. They overlap in one place: a report download link is recorded twice, as `download-link` there and `file.link.issued` here, and both writes fail closed. They do not overlap on membership changes, valid-token refusals with a reason, or the capture text link, which only this store records. DS-1 and DS-3 were approved before #94 existed, so this slice keeps the approved catalogue unchanged. See "Open decision" below.
+
+## Open decision (new)
+
+**One audit stream or two?** Recommendation: keep both tables, because they answer different questions (what each request did, and who changed who may do what), but remove the duplicate so each act is recorded once. Concretely, drop `file.link.issued` for report downloads (keep #94's `download-link`) and keep this store's membership events and refusal reasons; the capture text link would then move to #94's `download-link` as well. That is a small follow-up (one event type, three call sites, their tests), deliberately not done here because it changes what the founder approved in DS-1 and DS-3. The alternative is to merge both into one table, which rewrites a merged migration's data shape and is not recommended.
 
 ## What I needed from the founder
 

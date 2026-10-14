@@ -56,3 +56,7 @@ A restore server needs the `telesphoros_security_auditor` role to exist (like th
 | Download links answer 503 | The event could not be recorded: the database is unreachable, or `security_event_append` is not executable by the application role. Links are refused on purpose until it is fixed |
 | A membership change fails with an integrity error | The event insert failed (for example a constraint on the table was altered). The change was rolled back; nothing happened |
 | No `access.refused` for a refusal | Throttled (one a minute per person and reason), or the database could not be reached; refusals never block the response |
+
+## Relationship to the application access audit
+
+`main` also has `security_audit_events` ([application-access-audit.md](application-access-audit.md)): per-request records of authentication, private reads and report download links, read by the ledger verifier role. This store is different: it records membership changes and the reasons a valid token was refused, and is read by the auditor role. The two tables are independent. A report download link is currently recorded in both (as `download-link` there and `file.link.issued` here); see the open decision in the [plan](../design/plans/m1-6-security-events.md).

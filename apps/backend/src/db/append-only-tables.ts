@@ -33,7 +33,7 @@ export const MUTABLE_OPERATIONAL_TABLES = ['report_upload_runs','report_upload_a
 export const AUTHORITY_TABLES = ['tenant_memberships'] as const;
 
 /**
- * The security-event record (migration 0017): append-only, no privilege for the application role (it calls security_event_append()), readable only by the
+ * The security-event record (migration 0018): append-only, no privilege for the application role (it calls security_event_append()), readable only by the
  * auditor role. Not part of the clinical ledger and not clinical data.
  */
 export const SECURITY_AUDIT_TABLES = ['security_events'] as const;
