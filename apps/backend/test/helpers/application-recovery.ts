@@ -25,7 +25,7 @@ export async function applicationAcceptance(url: string, catalogue: EvidenceCata
   const inventory = await readEvidenceInventory(url, new EvidenceBudget());
   const client = new S3Client({ region: 'us-east-1', endpoint: config.endpoint, forcePathStyle: true, maxAttempts: 1,
     credentials: { accessKeyId: 'SYNRECOVERYAPP', secretAccessKey: 'synthetic-only' } });
-  const target = new S3ObjectStorage(client, catalogue.destinationBucket, 60);
+  const target = new S3ObjectStorage(client, catalogue.destinationBucket);
   const get = target.getObject.bind(target);
   let targetReads = 0;
   let liveFault = config.applicationFault === 'startup-missing';
@@ -138,7 +138,6 @@ export async function applicationAcceptance(url: string, catalogue: EvidenceCata
     assert.equal((await verifier.verify(lab.tenant, { mode: 'full' })).status, 'ok');
     apiControls.push('ledger-validity');
     await assert.rejects(storage.putObject(), /read only/);
-    await assert.rejects(storage.createUploadTarget(), /read only/);
     await assert.rejects(storage.getObject(pdf.storage_key, { version: 'missing-logical-pin', maxBytes: Number(pdf.size_bytes) }), /missing/);
     apiControls.push('read-only-and-exact-pin-refusal');
     const finalInventory = await readEvidenceInventory(url, new EvidenceBudget());

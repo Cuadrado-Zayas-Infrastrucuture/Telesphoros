@@ -1,7 +1,7 @@
 // Live local API + S3-protocol refusal checks. Never invokes an AWS endpoint.
 const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
-const { createHash } = require('node:crypto');
+const { createHash, randomUUID } = require('node:crypto');
 const { createRequire } = require('node:module');
 const path = require('node:path');
 const root=path.resolve(__dirname,'../..');
@@ -28,6 +28,15 @@ const { startFakeIdp, DEFAULT_USERS } = require('../../packages/fake-idp/dist/in
     const token = await idp.mintAccessToken();
     const reader = await idp.mintAccessToken({ user: DEFAULT_USERS[1] });
     const call = (p, body, auth = token, method = 'POST') => fetch(`${origin}/api/v1${p}`, { method, headers: { 'Content-Type': 'application/json', ...(auth ? { Authorization: `Bearer ${auth}` } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    // Upload through the validated intake: declare an attempt, then send the bytes through the API (nothing goes to storage directly any more).
+    const intake = async (reportId, bytes, contentType, who, declared = bytes, header = contentType) => {
+      const state = await (await call(`/reports/${reportId}/upload-state`, undefined, who, 'GET')).json();
+      const declaration = await call(`/reports/${reportId}/upload-attempts`, { requestId: randomUUID(), revision: state.revision, contentType, sha256: createHash('sha256').update(declared).digest('hex') }, who);
+      if (declaration.status !== 201) return { declaration, put: undefined, attempt: undefined };
+      const attempt = await declaration.json();
+      const put = async (body = bytes) => fetch(`${origin}/api/v1/reports/${reportId}/upload-attempts/${attempt.attemptId}/bytes`, { method: 'PUT', headers: { Authorization: `Bearer ${who}`, 'Content-Type': header, 'X-Upload-Revision': attempt.revision }, body });
+      return { declaration, attempt, put };
+    };
 
     const hal=await idp.mintAccessToken({user:DEFAULT_USERS[7]});
     const gina=await idp.mintAccessToken({user:DEFAULT_USERS[6]});
@@ -35,10 +44,7 @@ const { startFakeIdp, DEFAULT_USERS } = require('../../packages/fake-idp/dist/in
     const bytes=readFileSync(path.join(root,'knowledge/lab-report-reader/v2-handoff/fixtures/captures/D01/source.pdf'));
     const sha=createHash('sha256').update(bytes).digest('hex');
     const cr=await call('/reports',{patientId:patient.id,type:'lab-pdf',filename:'source.pdf',sizeBytes:bytes.length},hal);assert.equal(cr.status,201);const report=await cr.json();
-    const target=await(await call(`/reports/${report.id}/upload-url`,{contentType:'application/pdf',sha256:sha},hal)).json();
-    assert.equal(new URL(target.uploadUrl).origin,'http://127.0.0.1:'+(process.env.LOCAL_REVIEW_MOTO_PORT||'5555'));
-    assert.equal((await fetch(target.uploadUrl,{method:'PUT',headers:target.headers,body:bytes})).status,200);
-    assert.equal((await call(`/reports/${report.id}/complete`,{},hal)).status,200);
+    const upload=await intake(report.id,bytes,'application/pdf',hal);assert.equal(upload.declaration.status,201);assert.equal((await upload.put()).status,200);
     const cap=await call(`/reports/${report.id}/capture`,{},hal);assert.equal(cap.status,201);const capture=await cap.json();assert.equal(capture.runner,'fake');
     assert.equal((await call(`/captures/${capture.id}/decision`,{decision:'accepted'},hal)).status,409);console.log('PASS same actor refused');
     const reject=await(await call(`/captures/${capture.id}/decision`,{decision:'rejected'},gina)).json();

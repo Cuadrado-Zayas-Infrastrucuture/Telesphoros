@@ -103,7 +103,7 @@ suite('F2 fresh-process independent byte recovery (synthetic translated copies)'
     source = new S3EvidenceStorage({ ...settings, bucket: primaryBucket, prefix: 'reports/' });
     copy = new S3EvidenceStorage({ ...settings, bucket: await newBucket(), prefix: 'catalogues/' });
     backupStore = new S3EvidenceStorage({ ...settings, bucket: await newBucket(), prefix: 'backups/' });
-    sourceStorage = new S3ObjectStorage(emulator(), primaryBucket, 60);
+    sourceStorage = new S3ObjectStorage(emulator(), primaryBucket);
     async function uploaded(tenant: string, kind: 'lab-pdf' | 'vcf' | 'structured', bytes: Buffer, pinned: boolean) {
       const patientId = randomUUID(); const reportId = randomUUID(); const storageKey = 'reports/' + reportId;
       const contentType = kind === 'lab-pdf' ? 'application/pdf' : kind === 'vcf' ? 'text/x-vcf' : 'application/json';

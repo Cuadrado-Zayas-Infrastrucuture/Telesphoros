@@ -60,6 +60,5 @@ describe('authenticated recovery storage, explicit activation only', () => {
     await expect(storage.inspect(f.item.reference.key)).rejects.toMatchObject({ code: 'integrity' });
     await expect(storage.createDownloadUrl(f.item.reference.key, 'mem-v1', 901)).rejects.toMatchObject({ code: 'policy' });
     await expect(storage.putObject()).rejects.toMatchObject({ status: 503 });
-    await expect(storage.createUploadTarget()).rejects.toMatchObject({ status: 503 });
   });
 });

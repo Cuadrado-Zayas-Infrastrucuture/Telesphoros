@@ -7,6 +7,7 @@ import { PostgresReportsRepository } from '../../src/storage/postgres/reports.re
 import type { ReportRecord } from '../../src/storage/records';
 import { type EphemeralDatabase, withAdmin } from './database';
 import { acceptanceFor, captureFor, evaluationFor, type SeededReport, sha } from './ledger-fixtures';
+import { commitUpload } from './uploads';
 
 export const GENERATOR = { tenants: 3, coreRowsPerTenant: 100, uploadedPdfsPerTenant: 2, evaluationsPerCapture: 4, pdfBytes: 262144 };
 export const EXPECTED_ROWS: Record<string, number> = {
@@ -70,12 +71,10 @@ export async function seedRecovery(pg: EphemeralDatabase, storage: S3ObjectStora
         const record: ReportRecord = { id: reportId, tenantId: tenant, patientId, createdBy: 'syn-uploader', type: 'lab-pdf',
           filename: 'synthetic.pdf', sizeBytes: bytes.length, status: 'received', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
         await reports.insert(record);
-        Object.assign(record, { sha256: hash, storageKey: key, contentType: 'application/pdf', uploadRequestedBy: 'syn-uploader' });
-        expect(await reports.recordUploadRequest(record)).toBe(true);
         const uploaded = await storage.putObject(key, bytes, 'application/pdf');
         expect(uploaded.version).toBeTruthy();
-        Object.assign(record, await reports.findById(tenant,reportId), { objectVersion: uploaded.version, uploadedAt: new Date().toISOString(), uploadedBy: 'syn-uploader' });
-        expect(await reports.markUploaded(record)).toBe(true);
+        // The same repository steps the validated intake takes; the attempt's key is the object just written.
+        await commitUpload(reports, record, { principal: 'syn-uploader', sha256: hash, contentType: 'application/pdf', version: uploaded.version!, key });
         // Latest bytes deliberately differ: recovery must read the pinned version, never latest.
         await storage.putObject(key, Buffer.from('Synthetic later version'), 'application/pdf');
         const r: SeededReport = { tenantId: tenant, uploader: 'syn-uploader', patientId, reportId, pdfSha256: hash, objectVersion: uploaded.version!, storageKey: key };

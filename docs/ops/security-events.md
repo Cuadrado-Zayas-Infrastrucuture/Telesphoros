@@ -9,6 +9,7 @@ here has been applied in AWS.
 | Event type | Written by | When |
 | --- | --- | --- |
 | `membership.granted`, `membership.reinstated`, `membership.roles-changed`, `membership.removed`, `membership.sessions-revoked` | a trigger on `tenant_memberships`, in the same transaction as the change | the operator command ([membership.md](membership.md)) or any other change to a membership row; the `details` hold the roles before and after |
+| `intake.rejected` (reason `structure`, `size`, `checksum`, `timeout`, `slow`) | the application | the validated upload intake refused a file; who tried and a short code, never the file, its name, its hash or the report. A transfer the person cancelled is not recorded. Throttled like refusals (one a minute per person, organization and reason) |
 | `access.refused` (reason `no-membership`, `removed`, `token-revoked`, `authority-changed`) | the application | a valid token is refused by the membership checks ([auth.md](../auth.md#authority-and-revocation)), or a write is refused at commit because the caller's membership changed under it. One event per person, organization and reason per minute |
 
 Not recorded here: file links (the [application access audit](application-access-audit.md) already records every one, as `download-link` for a report and `private-read` for a capture text link, and refuses the response if it cannot), sign-ins and sign-outs (the API cannot see them; Cognito's events are in CloudTrail, [audit-trail.md](audit-trail.md)), refusals for a missing

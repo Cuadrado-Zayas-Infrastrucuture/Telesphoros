@@ -1,9 +1,8 @@
 import { z } from 'zod';
 import { fileLinkDtoSchema, paginatedSchema, reportCreateSchema, reportDtoSchema, reportListQuerySchema } from '@telesphoros/shared-types';
 import { SessionEndedError, NotSignedInError } from '@/auth/AuthProvider';
-import { SubmitError, reportStorageOrigins, type ApiFetch, type UploadProgress } from './api';
+import { SubmitError, refusal, reportStorageOrigins, type ApiFetch, type UploadProgress } from './api';
 import type { ProductUploadValues } from './productUploadSchema';
-import { assertOwnedStorageBrowser } from './storageMode';
 
 const attemptSchema = z.strictObject({
   attemptId: z.uuid(), revision: z.uuid(), expiresAt: z.iso.datetime(),
@@ -23,9 +22,12 @@ async function request(api: ApiFetch, path: string, body?: unknown, revision?: s
     redirect: 'error', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store',
     headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(revision ? { 'X-Upload-Revision': revision } : {}) },
   });
-  if (!response.ok) throw new SubmitError(response.status === 409
-    ? 'The upload needs reconciliation or a new attempt. Retry or cancel before starting over.'
-    : 'The file operation is unavailable. Your entries are kept; please retry.');
+  if (!response.ok) {
+    if ([403, 404, 429].includes(response.status)) throw refusal(response.status); // permission, missing patient or report, rate limit: said plainly
+    throw new SubmitError(response.status === 409
+      ? 'The upload needs reconciliation or a new attempt. Retry or cancel before starting over.'
+      : 'The file operation is unavailable. Your entries are kept; please retry.');
+  }
   return response.json();
 }
 function acceptAttempt(progress: UploadProgress, value: unknown) {
@@ -47,7 +49,6 @@ export async function cancelOwnedUpload(api: ApiFetch, progress: UploadProgress)
   if (result.state === 'committed') throw new SubmitError('The file was already stored. Check Reports before starting another upload.');
 }
 export async function submitOwnedReport(values: ProductUploadValues, api: ApiFetch, progress: UploadProgress, signal?: AbortSignal): Promise<{ reference: string }> {
-  assertOwnedStorageBrowser();
   signal?.throwIfAborted();
   const sha256 = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await values.file.arrayBuffer())), b => b.toString(16).padStart(2, '0')).join('');
   signal?.throwIfAborted();

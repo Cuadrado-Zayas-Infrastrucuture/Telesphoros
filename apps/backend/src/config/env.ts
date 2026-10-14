@@ -64,7 +64,6 @@ export const envSchema = z
     AWS_REGION: z.string().min(1).default('us-east-2'),
     S3_ENDPOINT: z.url().optional(),
     S3_FORCE_PATH_STYLE: booleanString.default(false),
-    UPLOAD_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(900).default(300),
     /** How long a download link for a stored report lives. Short on purpose: a link is a bearer credential and is never revoked early. */
     DOWNLOAD_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(600).default(120),
 

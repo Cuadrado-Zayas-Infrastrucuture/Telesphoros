@@ -161,38 +161,6 @@ export class PostgresReportsRepository extends ReportsRepository {
     }
   }
 
-  async recordUploadRequest(record: ReportRecord): Promise<boolean> {
-    try {
-      return await this.db.withTenant(record.tenantId, async (client) => {
-        // COALESCE keeps the FIRST requester; `uploaded_at IS NULL` means a request that lost a race to completion changes nothing.
-        const result = await client.query(
-          `UPDATE reports
-              SET storage_key = $3, content_type = $4, sha256 = $5, upload_requested_by = COALESCE(upload_requested_by, $6), updated_at = $7
-            WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL AND uploaded_at IS NULL`,
-          [record.id, record.tenantId, record.storageKey ?? null, record.contentType ?? null, record.sha256 ?? null, record.uploadRequestedBy ?? null, record.updatedAt],
-        );
-        return (result.rowCount ?? 0) > 0;
-      });
-    } catch (error) {
-      throw toStorageError(error);
-    }
-  }
-
-  async markUploaded(record: ReportRecord): Promise<boolean> {
-    try {
-      return await this.db.withTenant(record.tenantId, async (client) => {
-        const result = await client.query(
-          `UPDATE reports SET uploaded_at = $3, object_version = $4, uploaded_by = $5, updated_at = $6
-            WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL AND uploaded_at IS NULL AND upload_revision=$7 AND storage_key=$8 AND sha256=$9 AND content_type=$10 AND type=$11`,
-          [record.id, record.tenantId, record.uploadedAt ?? null, record.objectVersion ?? null, record.uploadedBy ?? null, record.updatedAt, record.uploadRevision, record.storageKey, record.sha256, record.contentType, record.type],
-        );
-        return (result.rowCount ?? 0) > 0;
-      });
-    } catch (error) {
-      throw toStorageError(error);
-    }
-  }
-
   async declareAttempt(a: UploadAttempt, expectedRevision: string) {
     return this.db.withTenant(a.tenantId, async c => {
       await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [a.runId]);

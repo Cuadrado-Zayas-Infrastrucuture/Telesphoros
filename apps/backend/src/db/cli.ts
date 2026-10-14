@@ -5,6 +5,7 @@ import { MEMBERSHIP_USAGE, runMembership } from '../membership/membership-cli';
 import { PgInvitationAdmin } from '../membership/pg-invitation-admin';
 import { PgTenantAdmin } from '../membership/pg-tenant-admin';
 import { runInvite, runTenant, TENANT_USAGE } from '../membership/tenant-cli';
+import { runUploads, UPLOADS_USAGE } from '../reports/intake/sweep';
 import { PgMembershipAdmin } from '../membership/pg-membership-admin';
 import { runSecurityEvents, SECURITY_EVENTS_USAGE } from '../security-events/security-events-cli';
 import { createBackup } from './backup';
@@ -45,7 +46,7 @@ const USAGE = `Usage: node dist/db/cli.js <command>
 
 ${MEMBERSHIP_USAGE}
 ${TENANT_USAGE}
-${SECURITY_EVENTS_USAGE}
+${SECURITY_EVENTS_USAGE}${UPLOADS_USAGE}
   keygen  --out FILE            create a new random backup key (64 hex characters, owner-only; never overwrites).
                                 KEEP COPIES OFFLINE: without this key no backup made with it can ever be restored.
 
@@ -189,6 +190,17 @@ async function main(argv: string[]) {
         if (!key && process.env.NODE_ENV === 'production') throw new Error('INVITATION_DIGEST_KEY is not set');
         process.exitCode = await runInvite(new PgInvitationAdmin(client, new InvitationDigest(key)), rest2, out);
       }
+    } finally {
+      await client.end();
+    }
+    return;
+  }
+
+  if (command === 'uploads') {
+    const client = new Client(pgClientConfig(required('DATABASE_MIGRATOR_URL')));
+    await client.connect();
+    try {
+      process.exitCode = await runUploads(client, [sub, ...rest].filter((a): a is string => a !== undefined), out);
     } finally {
       await client.end();
     }

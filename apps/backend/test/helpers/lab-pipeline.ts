@@ -47,33 +47,60 @@ export class LabPipeline {
     return (await this.api().post('/api/v1/patients').set(bearer(who.token)).send({ label: `SYN-${randomUUID().slice(0, 8)}` }).expect(201)).body.id as string;
   }
 
-  /** What the browser does: PUT the bytes to the URL with the headers it was given. Returns the version the store reported. */
-  async put(target: { uploadUrl: string; headers: Record<string, string> }, bytes: Buffer): Promise<string | undefined> {
-    if (target.uploadUrl.startsWith('memory://')) {
-      return (this.app.get(ObjectStorage) as InMemoryObjectStorage).put(target.uploadUrl.replace('memory://reports/', ''), bytes, target.headers['Content-Type']!);
-    }
-    const res = await fetch(target.uploadUrl, { method: 'PUT', headers: target.headers, body: bytes });
-    if (!res.ok) throw new Error(`upload failed: ${res.status}`);
-    const id = res.headers.get('x-amz-version-id');
-    return id && id !== 'null' ? id : undefined;
+  /** Writes bytes at a key in the report store, as a person with write access to the bucket could (a newer version). Returns the version the store assigned. */
+  async put(target: { key: string }, bytes: Buffer): Promise<string | undefined> {
+    return (await this.app.get(ObjectStorage).putObject(target.key, bytes, 'application/pdf')).version;
   }
 
   /**
-   * Creates a lab-pdf report, asks for the upload link (as `requester`), uploads, and completes it (as `completer`).
-   * Each step may be a different person, which is what the independence rules are about.
+   * Creates a lab-pdf report and stores its file through the validated intake: declare, then send the bytes (unless `complete: false`, which stops after
+   * the declaration). One person does all of it: the attempt belongs to whoever declared it, so the report's upload requester and uploader are that person.
+   *
+   * Tests of the independence rules need a requester or an uploader who is a different person; the intake cannot produce that, so for `requester` or
+   * `completer` the report is seeded at the database with a real stored object instead (see `seededLabPdf`).
    */
   async uploadedLabPdf(creator: Person, bytes: Buffer, options: { requester?: Person; completer?: Person; patientId?: string; complete?: boolean } = {}) {
+    if (options.requester || options.completer) return this.seededLabPdf(creator, bytes, options);
+    const patientId = options.patientId ?? (await this.patient(creator));
+    const reportId = (
+      await this.api().post('/api/v1/reports').set(bearer(creator.token)).send({ patientId, type: 'lab-pdf', filename: 'sample.pdf', sizeBytes: bytes.length }).expect(201)
+    ).body.id as string;
+    const state = (await this.api().get(`/api/v1/reports/${reportId}/upload-state`).set(bearer(creator.token)).expect(200)).body;
+    const attempt = (
+      await this.api().post(`/api/v1/reports/${reportId}/upload-attempts`).set(bearer(creator.token))
+        .send({ requestId: randomUUID(), revision: state.revision, contentType: 'application/pdf', sha256: sha(bytes) }).expect(201)
+    ).body as { attemptId: string; revision: string };
+    if (options.complete !== false) {
+      await this.api().put(`/api/v1/reports/${reportId}/upload-attempts/${attempt.attemptId}/bytes`).set(bearer(creator.token))
+        .set('X-Upload-Revision', attempt.revision).set('Content-Type', 'application/pdf').send(bytes).expect(200);
+    }
+    const [row] = await this.row<{ storage_key: string; object_version: string | null }>('SELECT storage_key, object_version FROM reports WHERE id = $1', [reportId]);
+    return { reportId, patientId, target: { key: row!.storage_key }, version: row!.object_version ?? undefined, pdfSha256: sha(bytes) };
+  }
+
+  /**
+   * A lab-pdf report whose requester and uploader are chosen people, for the tests of the independence rules. The report is created through the API; the
+   * file is written to the store directly and the evidence columns are set with one owner statement, the way the legacy completion once set them.
+   * Test fixture only: no route can do this.
+   */
+  async seededLabPdf(creator: Person, bytes: Buffer, options: { requester?: Person; completer?: Person; patientId?: string; complete?: boolean } = {}) {
     const requester = options.requester ?? creator;
     const completer = options.completer ?? creator;
     const patientId = options.patientId ?? (await this.patient(creator));
     const reportId = (
       await this.api().post('/api/v1/reports').set(bearer(creator.token)).send({ patientId, type: 'lab-pdf', filename: 'sample.pdf', sizeBytes: bytes.length }).expect(201)
     ).body.id as string;
-    const target = (
-      await this.api().post(`/api/v1/reports/${reportId}/upload-url`).set(bearer(requester.token)).send({ contentType: 'application/pdf', sha256: sha(bytes) }).expect(200)
-    ).body;
+    const key = `reports/seeded/${reportId}/${randomUUID()}`;
+    const target = { key };
+    if (options.complete === false) {
+      await this.row('UPDATE reports SET storage_key = $2, content_type = $3, sha256 = $4, upload_requested_by = $5 WHERE id = $1', [reportId, key, 'application/pdf', sha(bytes), requester.sub]);
+      return { reportId, patientId, target, version: undefined as string | undefined, pdfSha256: sha(bytes) };
+    }
     const version = await this.put(target, bytes);
-    if (options.complete !== false) await this.api().post(`/api/v1/reports/${reportId}/complete`).set(bearer(completer.token)).expect(200);
+    await this.row(
+      'UPDATE reports SET storage_key = $2, content_type = $3, sha256 = $4, upload_requested_by = $5, uploaded_at = now(), object_version = $6, uploaded_by = $7 WHERE id = $1',
+      [reportId, key, 'application/pdf', sha(bytes), requester.sub, version, completer.sub],
+    );
     return { reportId, patientId, target, version, pdfSha256: sha(bytes) };
   }
 

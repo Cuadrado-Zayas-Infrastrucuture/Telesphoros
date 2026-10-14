@@ -15,7 +15,19 @@ data "aws_iam_policy_document" "app_runtime" {
     actions   = ["s3:GetBucketVersioning"]
     resources = [aws_s3_bucket.reports.arn]
   }
-  # Presigned URLs are signed with the application's own credentials, so it needs the key too.
+  # The validated intake lists a report's own intake prefix (versions and unfinished multipart uploads) before it accepts a new attempt, and
+  # treats a listing it cannot finish as "not empty". Listing only: no delete action, and only keys under reports/.
+  statement {
+    sid       = "ReportIntakeInventory"
+    actions   = ["s3:ListBucketVersions", "s3:ListBucketMultipartUploads"]
+    resources = [aws_s3_bucket.reports.arn]
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["reports/*"]
+    }
+  }
+  # The application's own credentials write the validated bytes (and read them back), so it needs the key too.
   statement {
     sid       = "ReportFileEncryption"
     actions   = ["kms:GenerateDataKey", "kms:Decrypt"]

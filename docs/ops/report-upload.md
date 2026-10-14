@@ -1,27 +1,32 @@
 # Standard synthetic report upload
 
-Owned local synthetic runs use the [L1 validated intake contract](../design/local-storage-intake.md). Their direct-upload routes are refused. The browser flow below describes the existing compatibility transport outside that mode; replacing it is pending L2.
+Every report file reaches storage through the **validated server intake** ([design](../design/local-storage-intake.md), [M2.2 plan](../design/plans/m2-2-durable-intake.md)). The direct-upload routes (`POST /reports/:id/upload-url` and `/complete`) were removed in M2.2b and answer 404.
 
+## How a file is uploaded
 
-Since M2.2a the validated intake also works outside a disposable run, in the organization's own scope ([design](../design/local-storage-intake.md#organization-scope-m22a)); the browser flow below still uses the direct-upload routes until M2.2b switches it, and a report that has had an intake attempt is closed to those routes.
+The signed-in clinician screen at `/reports/upload` uploads VCF or structured JSON (and lab PDFs where the pipeline is on). Select an existing synthetic patient from bounded pages of 20; it never creates patients. If none exist, someone with a clinician role must add one through the existing API.
 
-The signed-in clinician screen at `/reports/upload` uploads VCF or structured JSON through the existing report endpoints. Select an existing synthetic patient from bounded pages of 20; it never creates patients. If none exist, someone with a clinician role must add one through the existing API. PDF capture, clinical processing/review and release remain separate.
+The browser validates patient UUID, type/extension, filename, nonempty file and 10 MiB limit, computes SHA-256 and registers metadata with a UUID requestId (`POST /reports`). It then reads the report's upload revision (`GET /reports/:id/upload-state`), **declares an attempt** (`POST /reports/:id/upload-attempts` with the content type and SHA-256), and **sends the bytes to the API** (`PUT /reports/:id/upload-attempts/:attemptId/bytes`, raw, the declared content type, `X-Upload-Revision`). The server stages them privately, checks size, SHA-256 and bounded structure, and only then writes them to the reports bucket under `reports/<tenant hash>/<report id>/intake/<attempt id>`, pins the stored version and marks the report uploaded. The page shows success only when the attempt is `committed` and the report read back names the same patient, type, file name, size, SHA-256 and content type. A file the server refuses is never stored; the refusal is recorded as a security event ([security-events](security-events.md)).
 
-The browser validates patient UUID, type/extension, filename, nonempty file and 10 MiB limit, computes SHA-256, registers metadata with a UUID requestId, requests a presigned PUT target, sends bytes directly and requests completion. It shows success only when the returned report identity, size, content type and checksum match and the server marks the file verified. A completed report recovered after a lost response is checked the same way.
+The browser sends nothing to object storage when uploading. Quota: 100 MiB of uncommitted uploads per organization; two concurrent transfers per API process. A lab PDF is accepted only while the lab-report pipeline is on.
 
 ## Build configuration
 
-Set `VITE_REPORT_STORAGE_ORIGINS` to an explicit comma-separated list of object-storage origins, e.g. `https://synthetic-reports.s3.us-east-2.amazonaws.com`. Use the exact origin returned by the approved bucket configuration, without paths, trailing slash, credentials, query or fragment. There is no inferred origin or wildcard fallback. Production-mode builds accept HTTPS only. Loopback HTTP is allowed only outside production mode when the frontend is also on 127.0.0.1, for synthetic rehearsals.
+`VITE_REPORT_STORAGE_ORIGINS` (a comma-separated list of exact origins, e.g. `https://synthetic-reports.s3.us-east-2.amazonaws.com`) is now needed **only for downloading** a stored file: the page fetches a signed link and refuses any origin not on the list, a URL with credentials or a fragment, or an expired link. Missing or invalid configuration fails before a download starts; uploads do not read it. Live bucket CORS must allow the approved frontend origin to `GET` (it no longer needs `PUT`); no cloud configuration is applied by this feature.
 
-Missing/invalid configuration fails before registration; an unexpected URL/credentials/fragment, expired target or unexpected headers fails before bytes are sent. Only the declared Content-Type header is accepted. Object-storage fetch omits cookies and credentials, sends no API bearer, rejects redirects and omits the referrer. Raw service/transport messages, URLs, hashes and file contents are not displayed or logged.
-
-The API origin uses existing `VITE_API_BASE_URL`/OIDC settings. Live bucket CORS must allow the approved frontend origin and PUT/Content-Type; no cloud configuration is applied by this feature. The backend's memory object store returns memory:// targets for test helpers and cannot support browser PUT. A configured HTTP S3 service is required for actual upload; the client refuses a memory:// target.
+The API origin uses existing `VITE_API_BASE_URL`/OIDC settings.
 
 ## Retry boundaries
 
-One mounted form keeps its original request key, report ID and input/checksum identity in memory. Unchanged input, including reselecting identical bytes with the same name, retains the key. Lost registration responses safely replay the merged server contract. After a lost completion response, GET confirms the same uploaded report without another PUT. Failed transfer requests another presigned target for the same server-owned object key. Changed patient/type/name/size/bytes or “Upload another report” creates a new identity. Partially registered abandoned reports are retained; the UI does not delete them.
+One mounted form keeps its original request key, report ID, declaration and attempt in memory. Unchanged input, including reselecting identical bytes with the same name, retains them. A lost registration response replays safely (same request key); a lost declaration or transfer reply replays the original declaration, which returns the durable state of the attempt, so a file the server already stored is never sent twice. A refused transfer keeps the form and the same attempt; Cancel asks the server to cancel it.
 
-There is no background automatic retry or browser-storage persistence. Reset, navigation, reload and sign-out discard mounted retry state and file input. Reopening/reselecting after a reload can register a new report; cross-reload recovery needs its own design. Conflicts/deletion refusals preserve the form for inspection. HTTP 429 errors ask the user to wait and retry. Success means stored file verification, not clinical ingestion or acceptance.
+There is no background automatic retry or browser-storage persistence. Reset, navigation, reload and sign-out discard mounted retry state and file input, and reopening the page can register a new report; surviving a reload is the next slice (M2.2c).
+
+## Abandoned attempts (operator)
+
+An attempt that was cancelled, or whose lease ended and was never resumed, holds part of the organization's 100 MiB quota. `node dist/db/cli.js uploads sweep [--tenant ID] [--grace-seconds N] [--dry-run]` (run with `DATABASE_MIGRATOR_URL`) closes them: cancelled attempts at once, others once their lease ended more than N seconds ago (default 86400, at most 604800), never one a writer holds and never one a report or captured text points at. Start with `--dry-run`. **It deletes nothing from the bucket**: neither the application nor the operator login may, and a validated file that was stored but never committed is kept on purpose. The attempt stays on record as `cleaned`, its key stays known (so it does not block the report's next declaration), and the output says how many of the closed attempts may have left an object. Removing such an object is a break-glass act ([break-glass](break-glass.md)).
+
+If a stray object appears under a report's `intake/` prefix that no attempt of the report accounts for (for example, one written by hand), that report's declarations answer 503 until an operator resolves it; other reports are unaffected.
 
 ## Verification commands
 

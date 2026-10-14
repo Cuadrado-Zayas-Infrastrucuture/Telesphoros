@@ -96,6 +96,5 @@ export class RecoveryObjectStorage extends ObjectStorage {
     return this.target.createDownloadUrl(entry.key, entry.version, ttlSeconds, options);
   }
   async versioningEnabled(): Promise<boolean> { return this.target.versioningEnabled(); }
-  async createUploadTarget(): Promise<never> { throw AppException.unavailable('Recovery file storage is read only.'); }
   async putObject(): Promise<never> { throw AppException.unavailable('Recovery file storage is read only.'); }
 }

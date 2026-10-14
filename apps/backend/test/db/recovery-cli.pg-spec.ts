@@ -85,7 +85,7 @@ suite('built format 2 CLI current-schema recovery rehearsal', () => {
     gateway = await startGateway(S3_ENDPOINT, { keys: { AKUPLOADONLY: ['put'], AKREADONLY: ['get', 'list'] }, strict: true });
     const primaryBucket = await newBucket({ lock: false });
     await emulator().send(new PutBucketVersioningCommand({ Bucket: primaryBucket, VersioningConfiguration: { Status: 'Enabled' } }));
-    storage = new S3ObjectStorage(emulator(), primaryBucket, 60); evidence.primaryBucket = primaryBucket;
+    storage = new S3ObjectStorage(emulator(), primaryBucket); evidence.primaryBucket = primaryBucket;
     remote = `s3://${await newBucket()}/rehearsal`;
     source = await createEphemeralDatabase(); target = await recoveryTarget();
     firstCapture = await seedRecovery(source, storage);

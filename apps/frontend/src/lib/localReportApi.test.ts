@@ -4,67 +4,70 @@ import { submitReport, localStorageOrigin, type UploadProgress } from './localRe
 import type { UploadReportValues } from './uploadReportSchema';
 
 const id = '11111111-1111-4111-8111-111111111111';
+const revision = '33333333-3333-4333-8333-333333333333';
+const attemptId = '44444444-4444-4444-8444-444444444444';
+const original = '55555555-5555-4555-8555-555555555555';
 const date = '2026-10-08T00:00:00.000Z';
 const sha = '2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881';
+const patient = { id, label: 'SYN-TEST', createdAt: date, updatedAt: date };
 const report = (uploaded = false) => ({ id, patientId: id, type: 'structured', filename: 'synthetic.json', sizeBytes: 1, status: 'received', fileUploaded: uploaded, contentType: uploaded ? 'application/json' : null, sha256: uploaded ? sha : null, createdAt: date, updatedAt: date });
+const attempt = (state: string) => ({ attemptId, revision, state, expiresAt: new Date(Date.now() + 300000).toISOString() });
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
-const target = (uploadUrl = 'http://127.0.0.1:5555/demo/file') => ({ uploadUrl, method: 'PUT', headers: { 'Content-Type': 'application/json' }, expiresAt: date });
 
-describe('local upload orchestration', () => {
+describe('local upload orchestration (through the validated intake)', () => {
   let values: UploadReportValues;
   beforeEach(() => {
     vi.stubGlobal('crypto', webcrypto);
     vi.stubGlobal('window', { location: { hostname: '127.0.0.1' } });
+    vi.stubGlobal('fetch', vi.fn());
     const file = new File(['x'], 'synthetic.json');
     Object.defineProperty(file, 'arrayBuffer', { value: async () => new TextEncoder().encode('x').buffer });
     values = { patientLabel: 'SYN-TEST', reportType: 'structured', file, syntheticConfirmed: true };
   });
   afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
-  function api() {
-    return vi.fn().mockResolvedValueOnce(response({ id, label: 'SYN-TEST', createdAt: date, updatedAt: date })).mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response(target())).mockResolvedValueOnce(response(report(true)));
-  }
+  /** patient, report, revision, declaration, bytes, read-back */
+  const api = () => vi.fn().mockResolvedValueOnce(response(patient, 201)).mockResolvedValueOnce(response(report(), 201)).mockResolvedValueOnce(response({ revision: original, fileUploaded: false }))
+    .mockResolvedValueOnce(response(attempt('declared'))).mockResolvedValueOnce(response(attempt('committed'))).mockResolvedValueOnce(response(report(true)));
 
-  it('returns success only after verified completion and sends no bearer to storage', async () => {
-    const apiFetch = api(); const put = vi.fn().mockResolvedValue(new Response('', { status: 200 })); vi.stubGlobal('fetch', put);
+  it('returns success only after a committed attempt and a verified report, sending the bytes through the API and nothing to storage', async () => {
+    const apiFetch = api();
     await expect(submitReport(values, apiFetch, {})).resolves.toEqual({ reference: id });
-    expect(apiFetch.mock.calls.at(-1)?.[0]).toBe(`/api/v1/reports/${id}/complete`);
-    expect(put.mock.calls[0]?.[1]).toEqual({ method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: values.file, credentials: 'omit', redirect: 'error' });
+    expect(apiFetch.mock.calls.map(call => call[0])).toEqual([
+      '/api/v1/patients', '/api/v1/reports', `/api/v1/reports/${id}/upload-state`, `/api/v1/reports/${id}/upload-attempts`,
+      `/api/v1/reports/${id}/upload-attempts/${attemptId}/bytes`, `/api/v1/reports/${id}`,
+    ]);
+    expect(apiFetch.mock.calls[4]![1]).toMatchObject({ method: 'PUT', body: values.file, headers: { 'X-Upload-Revision': revision } });
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it.each([
     { fileUploaded: false }, { sha256: '0'.repeat(64) }, { contentType: 'text/plain' }, { sizeBytes: 2 },
-  ])('refuses inconsistent completion %j', async (change) => {
-    const apiFetch = api(); apiFetch.mockReset();
-    apiFetch.mockResolvedValueOnce(response({ id, label: 'SYN-TEST', createdAt: date, updatedAt: date })).mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response(target())).mockResolvedValueOnce(response({ ...report(true), ...change }));
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 200 })));
-    await expect(submitReport(values, apiFetch, {})).rejects.toThrow('did not verify');
+  ])('refuses an inconsistent final report %j', async (change) => {
+    const apiFetch = vi.fn().mockResolvedValueOnce(response(patient, 201)).mockResolvedValueOnce(response(report(), 201)).mockResolvedValueOnce(response({ revision: original, fileUploaded: false }))
+      .mockResolvedValueOnce(response(attempt('declared'))).mockResolvedValueOnce(response(attempt('committed'))).mockResolvedValueOnce(response({ ...report(true), ...change }));
+    await expect(submitReport(values, apiFetch, {})).rejects.toThrow();
   });
 
-  it('does not complete after a failed PUT; retry reuses metadata', async () => {
-    const apiFetch = api(); const progress: UploadProgress = {};
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Interrupted')));
-    await expect(submitReport(values, apiFetch, progress)).rejects.toThrow('Interrupted');
-    expect(apiFetch).toHaveBeenCalledTimes(4);
-    const retry = vi.fn().mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response(target())).mockResolvedValueOnce(response(report(true)));
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 200 })));
+  it('does not read the report back after a failed transfer; a retry reuses the patient and report and replays the declaration', async () => {
+    const progress: UploadProgress = {};
+    const first = vi.fn().mockResolvedValueOnce(response(patient, 201)).mockResolvedValueOnce(response(report(), 201)).mockResolvedValueOnce(response({ revision: original, fileUploaded: false }))
+      .mockResolvedValueOnce(response(attempt('declared'))).mockRejectedValueOnce(new Error('Interrupted'));
+    await expect(submitReport(values, first, progress)).rejects.toThrow();
+    expect(first).toHaveBeenCalledTimes(5);
+    const retry = vi.fn().mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response(attempt('committed'))).mockResolvedValueOnce(response(report(true)));
     await expect(submitReport(values, retry, progress)).resolves.toEqual({ reference: id });
-    expect(retry.mock.calls[0]?.[0]).toBe(`/api/v1/reports/${id}`);
-    expect(retry).toHaveBeenCalledTimes(3);
+    expect(retry.mock.calls.map(call => call[0])).toEqual([`/api/v1/reports/${id}`, `/api/v1/reports/${id}/upload-attempts`, `/api/v1/reports/${id}`]);
   });
 
-  it('recovers a lost completion response without reuploading', async () => {
-    const progress: UploadProgress = { file: values.file, label: values.patientLabel, type: values.reportType, patientId: id, reportId: id };
-    const put = vi.fn(); vi.stubGlobal('fetch', put);
-    await expect(submitReport(values, vi.fn().mockResolvedValue(response(report(true))), progress)).resolves.toEqual({ reference: id });
-    expect(put).not.toHaveBeenCalled();
-  });
-
-  it('rejects an external destination before sending bytes', async () => {
-    const apiFetch = api(); apiFetch.mockReset(); apiFetch.mockResolvedValueOnce(response({ id, label: 'SYN-TEST', createdAt: date, updatedAt: date })).mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response(target('https://example.com/file')));
-    const put = vi.fn(); vi.stubGlobal('fetch', put);
-    await expect(submitReport(values, apiFetch, {})).rejects.toThrow('not the local emulator');
-    expect(put).not.toHaveBeenCalled();
+  it('recovers a file that is already stored without sending it again', async () => {
+    const progress: UploadProgress = {};
+    await expect(submitReport(values, api(), progress)).resolves.toEqual({ reference: id });
+    // Same file, label and type again: no second patient, no second report, no second transfer.
+    const again = vi.fn().mockResolvedValue(response(report(true)));
+    await expect(submitReport(values, again, progress)).resolves.toEqual({ reference: id });
+    expect(again.mock.calls.map(call => call[0])).toEqual([`/api/v1/reports/${id}`]);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('refuses missing synthetic confirmation without creating records', async () => {
@@ -78,11 +81,9 @@ describe('local upload orchestration', () => {
     await expect(submitReport(values, apiFetch, {})).rejects.toThrow('local only');
     expect(apiFetch).not.toHaveBeenCalled();
   });
-  it('refuses unexpected storage authorization headers', async () => {
-    const apiFetch = vi.fn().mockResolvedValueOnce(response({ id, label: 'SYN-TEST', createdAt: date, updatedAt: date })).mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response({ ...target(), headers: { Authorization: 'dummy-test-header' } }));
-    const put = vi.fn(); vi.stubGlobal('fetch', put);
-    await expect(submitReport(values, apiFetch, {})).rejects.toThrow('Unexpected upload headers');
-    expect(put).not.toHaveBeenCalled();
+  it('reports a conflicting synthetic label without exposing the response', async () => {
+    const apiFetch = vi.fn().mockResolvedValue(response({ message: 'sensitive raw payload' }, 409));
+    await expect(submitReport(values, apiFetch, {})).rejects.toThrow('new synthetic label');
   });
 });
 

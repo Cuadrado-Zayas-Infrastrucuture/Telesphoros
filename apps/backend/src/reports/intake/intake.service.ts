@@ -27,6 +27,11 @@ export class IntakeService {
     private readonly env: Env) { }
     private allowed(p: Principal) { if (!p.roles.some(r => r === 'clinician'))
         throw AppException.forbidden(); assertIntakeAllowed(this.env); }
+    /** Lab PDFs belong to the lab-report pipeline: with it off, nothing about one is declared, sent or resumed (a disposable local run stores them as opaque bytes). */
+    private gate(type: string) {
+        if (type === 'lab-pdf' && !this.env.LOCAL_STORAGE_RUN_ID)
+            this.pipeline.assertEnabled();
+    }
     private identity(p: Principal, reportId: string, id: string, revision: unknown): AttemptIdentity {
         const parsed = revisionHeaderSchema.safeParse(revision);
         if (!parsed.success)
@@ -49,8 +54,7 @@ export class IntakeService {
             throw AppException.validation([{ field: 'contentType', message: 'The declared MIME type must match the report.' }]);
         const scope = intakeScope(this.env, p.tenantId, id);
         // Lab PDFs exist for the lab-report pipeline: with it off they are refused here exactly as the legacy routes refuse them. A disposable local run stores them as opaque bytes.
-        if (scope.kind === 'organization' && r.type === 'lab-pdf')
-            this.pipeline.assertEnabled();
+        this.gate(r.type);
         // A store that cannot list (no permission, an adapter without inventory, a listing that did not finish) is not evidence that the prefix is empty.
         const [inventory, multipart] = await Promise.all([
             this.storage.uploadVersions(scope.prefix, AbortSignal.timeout(30000)),
@@ -94,6 +98,7 @@ export class IntakeService {
             throw AppException.notFound();
         if (a.state === 'committed')
             return publicAttempt(a);
+        this.gate(a.type);
         if (!['stored', 'unresolved'].includes(a.state) || !a.validated || a.writer)
             throw conflict();
         const versions = await this.storage.uploadVersions(a.key, AbortSignal.timeout(30000));
@@ -120,6 +125,7 @@ export class IntakeService {
         let a = await this.reports.findAttempt(i);
         if (!a)
             throw AppException.notFound();
+        this.gate(a.type);
         if (headers['content-type'] !== a.contentType || (headers['content-encoding'] !== undefined && headers['content-encoding'] !== 'identity'))
             throw AppException.validation([{ field: 'Content-Type', message: 'Send raw bytes with the declared MIME type and no compression.' }]);
         if (a.state !== 'declared')

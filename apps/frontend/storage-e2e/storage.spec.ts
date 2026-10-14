@@ -111,7 +111,7 @@ test('cancel after an interrupted transfer receives acknowledgement and permits 
   expect(cancels).toBe(1); expect((await rows(page, fixture))[0].fileUploaded).toBe(false);
 });
 
-test('malformed file refused by server without verified success or legacy fallback', async ({ page }) => {
+test('malformed file refused by server without verified success or any direct-upload route', async ({ page }) => {
   const fixture = await signInWithPatient(page); let legacy = 0;
   const before = await storageInventory();
   page.on('request', req => { if (req.url().endsWith('/upload-url')) legacy++; });

@@ -16,30 +16,15 @@ beforeAll(async () => {
   process.env.AWS_SECRET_ACCESS_KEY ??= 'test';
   client = new S3Client({ region: 'us-east-1', endpoint, forcePathStyle: true });
   await client.send(new CreateBucketCommand({ Bucket: bucket }));
-  storage = new S3ObjectStorage(client, bucket, 300);
+  storage = new S3ObjectStorage(client, bucket);
 });
 
 const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
 async function upload(key: string, bytes: Buffer, contentType: string) {
-  const target = await storage.createUploadTarget({ key, contentType, sizeBytes: bytes.length });
-  const res = await fetch(target.url, { method: 'PUT', headers: target.headers, body: bytes });
-  expect(res.ok).toBe(true);
+  await storage.putObject(key, bytes, contentType);
 }
 
 describe('S3ObjectStorage', () => {
-  it('issues a URL for exactly one object, valid for the configured time, signing type and length', async () => {
-    const target = await storage.createUploadTarget({ key: 'reports/abc/1/xyz', contentType: 'text/plain', sizeBytes: 42 });
-    const url = new URL(target.url);
-    expect(url.pathname).toBe(`/${bucket}/reports/abc/1/xyz`);
-    expect(url.searchParams.get('X-Amz-Expires')).toBe('300');
-    const signed = (url.searchParams.get('X-Amz-SignedHeaders') ?? '').split(';');
-    expect(signed).toEqual(expect.arrayContaining(['content-type', 'content-length', 'host']));
-    expect(url.searchParams.get('X-Amz-Signature')).toMatch(/^[0-9a-f]{64}$/);
-    expect(target.method).toBe('PUT');
-    expect(target.headers).toEqual({ 'Content-Type': 'text/plain' });
-    expect(Date.parse(target.expiresAt) - Date.now()).toBeLessThanOrEqual(300_000);
-  });
-
   it('inspects an uploaded object: size, content type and a SHA-256 computed by streaming', async () => {
     const bytes = randomBytes(3 * 1024 * 1024); // multi-chunk
     await upload('reports/t/1/a', bytes, 'text/x-vcf');

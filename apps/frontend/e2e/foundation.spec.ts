@@ -74,7 +74,7 @@ test('keyboard: the whole upload form can be completed without a mouse', async (
   await page.keyboard.press('v');
   await expect(page.getByLabel(/report type/i)).toHaveValue('vcf');
   await page.keyboard.press('Tab');
-  await page.getByLabel(/report file/i).setInputFiles({ name: 'ok.vcf', mimeType: 'text/plain', buffer: Buffer.from('x') });
+  await page.getByLabel(/report file/i).setInputFiles({ name: 'ok.vcf', mimeType: 'text/plain', buffer: Buffer.from('##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n') });
   await page.keyboard.press('Tab');
   await page.keyboard.press('Space');
   await page.keyboard.press('Tab');

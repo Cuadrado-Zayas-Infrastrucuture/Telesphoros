@@ -44,7 +44,6 @@ it.each(samples)('stores and retrieves exact $type bytes while clinical processi
         expect(app.get(provider)).toBeUndefined();
     await api().post(`/api/v1/reports/${id}/upload-attempts/${a.attemptId}/resume`).set(bearer(token)).set('X-Upload-Revision', a.revision).expect(200);
 });
-it('refuses legacy write targets before storage while off', async () => { const id = await registration(); const storage = app.get(ObjectStorage); const target = jest.spyOn(storage, 'createUploadTarget'); const r = await api().post(`/api/v1/reports/${id}/upload-url`).set(bearer(token)).send({ contentType: samples[0].mime, sha256: sha(samples[0].bytes) }).expect(409); expect(r.body.error.details[0].reason).toBe('validated-intake-required'); expect(target).not.toHaveBeenCalled(); target.mockRestore(); });
 it.each([{ ...samples[0], bytes: Buffer.from('<html>opaque</html>') }, { ...samples[1], bytes: Buffer.from('##fileformat=VCFv4.3\n#CHROM\tPOS\n') }, { ...samples[2], bytes: Buffer.from('{"x":}') }])('rejects malformed $type with zero S3 writes and cancels its lease', async (s) => {
     const id = await registration(s);
     const a = await declare(id, s);

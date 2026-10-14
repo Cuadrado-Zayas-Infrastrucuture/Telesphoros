@@ -7,7 +7,7 @@ export const SECURITY_EVENTS_USAGE = `  security-events list --tenant ID [--sinc
 `;
 
 export const EVENT_TYPES = [
-  'membership.granted', 'membership.reinstated', 'membership.roles-changed', 'membership.removed', 'membership.sessions-revoked', 'access.refused',
+  'membership.granted', 'membership.reinstated', 'membership.roles-changed', 'membership.removed', 'membership.sessions-revoked', 'access.refused', 'intake.rejected',
 ] as const;
 
 const MAX_LIMIT = 500;

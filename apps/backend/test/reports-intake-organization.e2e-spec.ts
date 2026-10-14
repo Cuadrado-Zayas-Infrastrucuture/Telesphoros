@@ -11,8 +11,8 @@ import { createEphemeralDatabase, type EphemeralDatabase } from './helpers/datab
 import { DOCUMENT_IDS, fixturePdf, LabPipeline } from './helpers/lab-pipeline';
 import { bearer, clinicianA, clinicianB, readerA, signToken } from './helpers/tokens';
 
-// The validated intake in the organization's own scope (M2.2a): no disposable run, keys under the report, a per-organization quota, and the legacy direct-upload
-// routes closed to a report once it has had an intake attempt. Synthetic data only. Runs on memory, PostgreSQL and PostgreSQL plus S3.
+// The validated intake in the organization's own scope (M2.2a): no disposable run, keys under the report, a per-organization quota and a refused file recorded as
+// a security event. Synthetic data only. Runs on memory, PostgreSQL and PostgreSQL plus S3.
 const vcf = { type: 'vcf', mime: 'text/x-vcf', name: 'sample.vcf', bytes: Buffer.from('##fileformat=VCFv4.3\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n1\t100\t.\tA\tG\t.\t.\t.\n') };
 const json = { type: 'structured', mime: 'application/json', name: 'sample.json', bytes: Buffer.from('{"synthetic":true,"values":[1,2,3]}') };
 const pdf = { type: 'lab-pdf', mime: 'application/pdf', name: 'sample.pdf', bytes: Buffer.from('%PDF-1.7\nSynthetic opaque bytes\n%%EOF\n') };
@@ -43,7 +43,7 @@ describe('validated intake in the organization scope', () => {
   beforeEach(async () => { app = await createTestApp({ organizationIntake: true }); token = await clinicianA(); });
   afterEach(async () => { await app.close(); });
 
-  it.each([vcf, json])('stores a valid $type once, under the report, pinned to a real version, with the same identities the legacy completion records', async (s) => {
+  it.each([vcf, json])('stores a valid $type once, under the report, pinned to a real version, with the person who declared and sent it as both requester and uploader', async (s) => {
     const id = await registration(s);
     const a = await declare(id, s);
     expect((await send(id, a, s).expect(200)).body.state).toBe('committed');
@@ -120,18 +120,6 @@ describe('validated intake in the organization scope', () => {
     expect((await securityEventsOf(app)).filter((e) => e.eventType === 'intake.rejected')).toEqual([]);
   });
 
-  it('keeps a file that reached the attempt\'s key some other way out of the report: the legacy completion refuses it', async () => {
-    const malformed = Buffer.from('{"x":}');
-    const id = await registration(json, token, malformed.length);
-    const a = await declareReq(id, json, token, malformed);
-    expect(a.status).toBe(201);
-    const key = (await row(id))!.storageKey!;
-    // Bytes with exactly the declared size, type and hash, written straight into the bucket: the legacy completion alone would accept them.
-    await app.get(ObjectStorage).putStream(key, Readable.from([malformed]), json.mime, malformed.length, AbortSignal.timeout(5000));
-    await api().post(`/api/v1/reports/${id}/complete`).set(bearer(token)).expect(409);
-    expect((await row(id))!.uploadedAt).toBeFalsy();
-  });
-
   it('keeps the quota per organization: ten declared 10 MiB files fill it, an eleventh is refused, another organization is unaffected, and a cancelled one frees its share', async () => {
     const size = 10 * 1024 * 1024;
     const mine: { id: string; a: { attemptId: string; revision: string } }[] = [];
@@ -172,17 +160,6 @@ describe('validated intake in the organization scope', () => {
     await declare(id, json);
   });
 
-  it('closes the legacy direct-upload routes to a report that has had an attempt, and leaves them open to one that has not', async () => {
-    const [untouched, taken] = [await registration(json), await registration(json)];
-    await declare(taken, json);
-    const asked = (id: string) => api().post(`/api/v1/reports/${id}/upload-url`).set(bearer(token)).send({ contentType: json.mime, sha256: sha(json.bytes) });
-    const refused = await asked(taken);
-    expect(refused.status).toBe(409);
-    expect(refused.body.error.details[0]).toMatchObject({ reason: 'validated-intake-required' });
-    await api().post(`/api/v1/reports/${taken}/complete`).set(bearer(token)).expect(409);
-    await asked(untouched).expect(200); // control: the legacy route still serves a report with no attempt (it is retired in M2.2b)
-  });
-
   it('refuses a reader, a stale revision and another organization, as in a local run', async () => {
     const id = await registration(json);
     const a = await declare(id, json);
@@ -192,7 +169,7 @@ describe('validated intake in the organization scope', () => {
     await send(id, a, json).expect(200); // control
   });
 
-  it('refuses a lab PDF while the lab-report pipeline is off, exactly as the legacy routes do', async () => {
+  it('refuses a lab PDF while the lab-report pipeline is off, as the retired direct-upload routes did', async () => {
     const id = await registration(pdf);
     const st = await api().get(`/api/v1/reports/${id}/upload-state`).set(bearer(token)).expect(200);
     const r = await api().post(`/api/v1/reports/${id}/upload-attempts`).set(bearer(token)).send({ requestId: randomUUID(), revision: st.body.revision, contentType: pdf.mime, sha256: sha(pdf.bytes) });
@@ -240,13 +217,12 @@ describe('validated intake in the organization scope', () => {
     await lab.capture(clinician, up.reportId).expect(201);
   });
 
-  it('refuses a malformed PDF with no object and records the refusal; and nothing but a committed attempt sets uploaded_at on an intake report', async () => {
+  it('refuses a malformed PDF with no object and records the refusal', async () => {
     const clinician = await lab.person('clin', ['clinician']);
     const bytes = Buffer.from('<html>not a pdf</html>');
     const up = await intakePdf(clinician, bytes);
     await up.put().expect(400);
     expect((await lab.row<{ uploaded_at: Date | null }>('SELECT uploaded_at FROM reports WHERE id = $1', [up.reportId]))[0]!.uploaded_at).toBeNull();
-    await lab.api().post(`/api/v1/reports/${up.reportId}/complete`).set(bearer(clinician.token)).expect(409); // the legacy completion cannot mark it uploaded
     expect((await lab.row<{ uploaded_at: Date | null }>('SELECT uploaded_at FROM reports WHERE id = $1', [up.reportId]))[0]!.uploaded_at).toBeNull();
     const events = await lab.row<{ details: { reason: string } }>("SELECT details FROM security_events WHERE event_type = 'intake.rejected' AND actor_ref = $1", [clinician.sub]);
     expect(events.map((e) => e.details)).toEqual([{ reason: 'structure' }]);

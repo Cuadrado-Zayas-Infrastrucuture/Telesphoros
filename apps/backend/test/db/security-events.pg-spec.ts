@@ -301,6 +301,12 @@ describe('the auditor command', () => {
     expect(await run(['list', '--tenant', tenant, '--type', 'membership.granted', '--limit', '1'])).toBe(0);
     expect(lines.filter((l) => l.startsWith('{'))).toHaveLength(1);
     lines.length = 0;
+    // The auditor can ask for refused files by type (the filter knows every type the table holds).
+    await owner(async (c) => { await c.query(`SELECT set_config('app.current_tenant_id', $1, false)`, [tenant]); await c.query(`SELECT set_config('app.current_actor', $1, false)`, [who]); await append(c, 'intake.rejected', 'refused', 'person', who, { reason: 'structure' }); });
+    lines.length = 0;
+    expect(await run(['list', '--tenant', tenant, '--type', 'intake.rejected'])).toBe(0);
+    expect(lines.filter((l) => l.startsWith('{')).map((l) => JSON.parse(l)).map((e) => [e.type, e.details])).toEqual([['intake.rejected', { reason: 'structure' }]]);
+    lines.length = 0;
     expect(await run(['list', '--tenant', tenant, '--since', '2999-01-01T00:00:00Z'])).toBe(0);
     expect(lines).toEqual(['0 events']);
     for (const bad of [['list'], ['list', '--tenant', tenant, '--type', 'nope'], ['list', '--tenant', tenant, '--limit', '0'], ['list', '--tenant', tenant, '--limit', '501'], ['list', '--tenant', tenant, '--since', 'yesterday'], ['delete', '--tenant', tenant]]) {

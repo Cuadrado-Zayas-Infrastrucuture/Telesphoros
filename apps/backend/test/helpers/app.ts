@@ -26,9 +26,7 @@ import type { RecoveryObjectStorage } from '../../src/object-storage/recovery-ob
 
 export interface TestAppOptions {
   recoveryStorage?: RecoveryObjectStorage;
-  /** Explicit legacy compatibility control, never an owned local intake run. */
-  legacyTransport?: boolean;
-  /** The validated intake in the organization's own scope (M2.2a): no disposable run, any storage the mode allows. Both transports are available. */
+  /** The validated intake in the organization's own scope (M2.2a): no disposable run, any storage the mode allows. The default test app is a disposable local run. */
   organizationIntake?: boolean;
   controllers?: Type<unknown>[];
   readinessChecks?: ReadinessCheck[];
@@ -99,7 +97,7 @@ async function createBucket(runId?: string) {
  */
 export async function createTestApp(options: TestAppOptions = {}): Promise<NestExpressApplication> {
   const database = usingPostgres() && !options.postgresUrl ? await createEphemeralDatabase() : undefined;
-  const runId = options.labReportPipeline || options.recoveryStorage || options.legacyTransport || options.organizationIntake ? undefined : randomUUID();
+  const runId = options.labReportPipeline || options.recoveryStorage || options.organizationIntake ? undefined : randomUUID();
   const s3 = usingS3() ? await createBucket(runId) : undefined;
   const env = loadEnv({
     NODE_ENV: 'test',

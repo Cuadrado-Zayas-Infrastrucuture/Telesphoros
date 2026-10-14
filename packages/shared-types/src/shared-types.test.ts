@@ -20,8 +20,7 @@ import {
   reportCreateSchema,
   reportDtoSchema,
   reportPatchSchema,
-  reportUploadUrlRequestSchema,
-  reportUploadUrlResponseSchema,
+  reportFileDeclarationSchema,
   TENANT_GROUP_PREFIX,
   tenantFromGroups,
   tenantIdSchema,
@@ -100,20 +99,14 @@ describe('error envelope', () => {
   });
 });
 
-describe('upload contract', () => {
+describe('upload contract (the declaration an upload makes)', () => {
   const sha = 'a'.repeat(64);
   it('requires a lowercase hex SHA-256 and a content type, and refuses extra fields (no client-chosen storage key)', () => {
-    expect(reportUploadUrlRequestSchema.safeParse({ contentType: 'text/x-vcf', sha256: sha }).success).toBe(true);
-    expect(reportUploadUrlRequestSchema.safeParse({ contentType: 'text/x-vcf', sha256: sha.toUpperCase() }).success).toBe(false);
-    expect(reportUploadUrlRequestSchema.safeParse({ contentType: 'text/x-vcf', sha256: 'abc' }).success).toBe(false);
-    expect(reportUploadUrlRequestSchema.safeParse({ contentType: 'text/x-vcf' }).success).toBe(false);
-    expect(reportUploadUrlRequestSchema.safeParse({ contentType: 'text/x-vcf', sha256: sha, storageKey: 'reports/x' }).success).toBe(false);
-  });
-  it('describes the upload target the browser needs, and nothing else', () => {
-    const ok = { uploadUrl: 'https://example.test/x', method: 'PUT', headers: { 'Content-Type': 'text/plain' }, expiresAt: new Date().toISOString() };
-    expect(reportUploadUrlResponseSchema.safeParse(ok).success).toBe(true);
-    expect(reportUploadUrlResponseSchema.safeParse({ ...ok, method: 'POST' }).success).toBe(false);
-    expect(reportUploadUrlResponseSchema.safeParse({ ...ok, storageKey: 'k' }).success).toBe(false);
+    expect(reportFileDeclarationSchema.safeParse({ contentType: 'text/x-vcf', sha256: sha }).success).toBe(true);
+    expect(reportFileDeclarationSchema.safeParse({ contentType: 'text/x-vcf', sha256: sha.toUpperCase() }).success).toBe(false);
+    expect(reportFileDeclarationSchema.safeParse({ contentType: 'text/x-vcf', sha256: 'abc' }).success).toBe(false);
+    expect(reportFileDeclarationSchema.safeParse({ contentType: 'text/x-vcf' }).success).toBe(false);
+    expect(reportFileDeclarationSchema.safeParse({ contentType: 'text/x-vcf', sha256: sha, storageKey: 'reports/x' }).success).toBe(false);
   });
   it('accepts a content type per report type, and the DTO never carries a storage key', () => {
     expect(REPORT_CONTENT_TYPES.vcf).toContain('text/x-vcf');

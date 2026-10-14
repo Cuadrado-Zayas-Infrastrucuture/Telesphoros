@@ -1,7 +1,7 @@
 import type { Readable } from 'node:stream';
 import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import { type FetchedObject, type InspectedObject, ObjectStorage, ObjectTooLargeError, type UploadTarget } from './object-storage';
+import { type FetchedObject, type InspectedObject, ObjectStorage, ObjectTooLargeError } from './object-storage';
 
 interface StoredVersion {
   version: string;
@@ -20,20 +20,7 @@ export class InMemoryObjectStorage extends ObjectStorage {
   /** Set false to behave like an unversioned bucket: writes get no version id. */
   versioned = true;
 
-  constructor(private readonly ttlSeconds = 300) {
-    super();
-  }
-
-  async createUploadTarget({ key, contentType }: { key: string; contentType: string; sizeBytes: number }): Promise<UploadTarget> {
-    return {
-      url: `memory://reports/${key}`,
-      method: 'PUT',
-      headers: { 'Content-Type': contentType },
-      expiresAt: new Date(Date.now() + this.ttlSeconds * 1000).toISOString(),
-    };
-  }
-
-  /** Test helper: the browser's PUT. Returns the version id the store assigned (a second call overwrites with a NEW version). */
+  /** Test helper: a direct write. Returns the version id the store assigned (a second call overwrites with a NEW version). */
   put(key: string, bytes: Buffer, contentType: string): string | undefined {
     const version = this.versioned ? `mem-v${++this.counter}` : undefined;
     const kept = this.versioned ? (this.objects.get(key) ?? []) : [];

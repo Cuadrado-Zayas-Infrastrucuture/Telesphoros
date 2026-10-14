@@ -9,7 +9,7 @@ import { bearer, signToken } from './helpers/tokens';
 
 let app: NestExpressApplication;
 beforeAll(async () => {
-  app = await createTestApp({legacyTransport:true});
+  app = await createTestApp({organizationIntake: true});
 });
 afterAll(async () => {
   await app.close();
@@ -101,7 +101,8 @@ describe('tenancy: stored files are grouped by tenant, not by person', () => {
     const keyFor = async (token: string, tenantId: string) => {
       const patient = (await api().post('/api/v1/patients').set(bearer(token)).send({ label: label() }).expect(201)).body;
       const report = (await api().post('/api/v1/reports').set(bearer(token)).send({ patientId: patient.id, type: 'vcf', filename: 'a.vcf', sizeBytes: 10 }).expect(201)).body;
-      await api().post(`/api/v1/reports/${report.id}/upload-url`).set(bearer(token)).send({ contentType: 'text/plain', sha256: 'a'.repeat(64) }).expect(200);
+      const revision = (await api().get(`/api/v1/reports/${report.id}/upload-state`).set(bearer(token)).expect(200)).body.revision;
+      await api().post(`/api/v1/reports/${report.id}/upload-attempts`).set(bearer(token)).send({ requestId: randomUUID(), revision, contentType: 'text/plain', sha256: 'a'.repeat(64) }).expect(201);
       return (await app.get(ReportsRepository).findById(tenantId, report.id))!.storageKey!;
     };
     const [annKey, benKey, gusKey] = [await keyFor(await ann(), acme), await keyFor(await ben(), acme), await keyFor(await gus(), globex)];

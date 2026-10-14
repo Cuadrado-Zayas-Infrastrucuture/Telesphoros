@@ -4,7 +4,7 @@ L1 accepts opaque PDF, VCF and JSON bytes with clinical processing disabled. It 
 
 ## Organization scope (M2.2a)
 
-Without `LOCAL_STORAGE_RUN_ID` the same routes work in the organization's own scope, in any mode: keys `reports/<tenant hash>/<report id>/intake/<attempt id>`, an inventory per report, a 100 MiB reservation quota per organization, a lab PDF only while the lab-report pipeline is on, and a refused file recorded as a security event (`intake.rejected`, reason code only). The legacy direct-upload routes refuse a report that has had an attempt. Everything below describes the local-run mode unless it says otherwise. See [the M2.2 plan](plans/m2-2-durable-intake.md) and [verification](../verification/m2-2a-organization-intake.md).
+Without `LOCAL_STORAGE_RUN_ID` the same routes work in the organization's own scope, in any mode: keys `reports/<tenant hash>/<report id>/intake/<attempt id>`, an inventory per report, a 100 MiB reservation quota per organization, a lab PDF only while the lab-report pipeline is on, and a refused file recorded as a security event (`intake.rejected`, reason code only). The legacy direct-upload routes were removed in M2.2b. Everything below describes the local-run mode unless it says otherwise. See [the M2.2 plan](plans/m2-2-durable-intake.md) and [verification](../verification/m2-2a-organization-intake.md).
 
 ## Mode and compatibility
 
@@ -12,7 +12,7 @@ Set `LOCAL_STORAGE_RUN_ID` to the disposable run UUID. This requires non-product
 
 An owned run belongs to one synthetic tenant, with up to two concurrent intakes per process and 100 MiB of durable uncommitted reservations. Use a separate run/bucket for another tenant. Tenant roles, RLS and patient/report composite foreign keys remain enforced. This is not a production tenant provisioning scheme.
 
-In this mode `/upload-url` and `/complete` refuse the legacy direct transport. Outside this explicit mode, pre-existing VCF/JSON browser transport remains available until L2; it makes no new structural-validation claim. Legacy PDF transport outside this mode retains its processing gate. The founder approved this compatibility boundary separately.
+The legacy direct-upload routes (`/upload-url` and `/complete`) no longer exist (M2.2b); every upload, in a disposable run or the organization scope, goes through this intake. The founder approved this compatibility boundary separately.
 
 ## API sequence
 

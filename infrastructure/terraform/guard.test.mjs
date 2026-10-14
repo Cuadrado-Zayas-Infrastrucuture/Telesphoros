@@ -101,6 +101,16 @@ test('the reports bucket keeps versions, and the application may read an exact v
   lacks(code(iam), /s3:Delete|s3:\*/, 'the application policy must not be able to delete or administer objects');
 });
 
+test('the application may list a report\'s intake prefix (versions and multipart uploads) and only under reports/', () => {
+  const [inventory] = blocks(code(iam), 'statement').filter((s) => /sid\s*=\s*"ReportIntakeInventory"/.test(s));
+  assert.ok(inventory, 'the validated intake needs a listing statement');
+  has(inventory, '"s3:ListBucketVersions"');
+  has(inventory, '"s3:ListBucketMultipartUploads"');
+  has(inventory, 'aws_s3_bucket.reports.arn]');
+  assert.ok(/variable\s*=\s*"s3:prefix"/.test(inventory) && /values\s*=\s*\["reports\/\*"\]/.test(inventory), 'the listing must be limited to the reports/ prefix');
+  lacks(inventory, /s3:Delete|s3:Put|s3:Get|"s3:\*"/, 'the listing statement grants nothing but listing');
+});
+
 test('no policy in this module grants deletion of object versions (a break-glass role outside this module is the only holder)', () => {
   for (const [name, text] of [['storage.tf', storage], ['iam.tf', iam], ['lambda.tf', lambda]]) {
     for (const statement of blocks(code(text), 'statement')) {

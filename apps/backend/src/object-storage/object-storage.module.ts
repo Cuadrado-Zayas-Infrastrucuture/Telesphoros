@@ -27,7 +27,6 @@ export class ObjectStorageModule {
                 // Credentials come from the default provider chain (an IAM role in AWS), never from our config.
                 new S3Client({ region: env.AWS_REGION, endpoint: env.S3_ENDPOINT, forcePathStyle: env.S3_FORCE_PATH_STYLE, ...(env.LOCAL_STORAGE_RUN_ID ? { credentials: { accessKeyId: 'local-synthetic', secretAccessKey: 'local-synthetic' }, maxAttempts: 1 } : {}) }),
                 env.REPORTS_BUCKET!,
-                env.UPLOAD_URL_TTL_SECONDS,
               ),
           },
         ],
@@ -36,7 +35,7 @@ export class ObjectStorageModule {
     }
     return {
       module: ObjectStorageModule,
-      providers: [{ provide: ObjectStorage, useValue: new InMemoryObjectStorage(env.UPLOAD_URL_TTL_SECONDS) }],
+      providers: [{ provide: ObjectStorage, useValue: new InMemoryObjectStorage() }],
       exports: [ObjectStorage],
     };
   }
