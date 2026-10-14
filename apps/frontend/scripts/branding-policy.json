@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "tokens": {
+    "background": "#F5F6F7",
+    "panel": "#ffffff",
+    "foreground": "#225560",
+    "surface": "#E8E7E2",
+    "muted": "#DCEBE7",
+    "muted-foreground": "#46616a",
+    "border": "#59777e",
+    "divider": "#cadbdc",
+    "primary": "#225560",
+    "primary-hover": "#173e47",
+    "primary-foreground": "#F5F6F7",
+    "destructive": "#b91c1c",
+    "destructive-foreground": "#ffffff",
+    "destructive-surface": "#fef2f2",
+    "success": "#166534",
+    "success-surface": "#f0fdf4",
+    "warning": "#92400e",
+    "warning-surface": "#fffbeb",
+    "ring": "#225560",
+    "brand-accent": "#368798",
+    "font-family-heading": "Poppins, Arial, sans-serif",
+    "font-family-landing": "Inter, Arial, sans-serif",
+    "font-family-sans": "Inter, Arial, sans-serif",
+    "font-family-ui-heading": "var(--font-family-sans)",
+    "size-control": "2.75rem",
+    "font-family-mono": "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+    "dashboard-foreground": "#173E47",
+    "dashboard-muted-foreground": "#36515A"
+  },
+  "allowedColorLiterals": [
+    "#041a2440",
+    "#081e25",
+    "#123c47",
+    "#166534",
+    "#173e47",
+    "#173e4724",
+    "#225560",
+    "#22556008",
+    "#22556024",
+    "#36515a",
+    "#368798",
+    "#46616a",
+    "#59777e",
+    "#92400e",
+    "#b91c1c",
+    "#c5dcd9",
+    "#cadbdc",
+    "#dcebe7",
+    "#e8e7e2",
+    "#f0fdf4",
+    "#f5f6f7",
+    "#fef2f2",
+    "#fffbeb",
+    "#ffffff",
+    "#ffffff00",
+    "#ffffff0d",
+    "#ffffff24"
+  ],
+  "assets": {
+    "apps/frontend/src/assets/telesphoros-shield-rx.png": "f1dd8c3152dc16a1f5ccc4d8a90ebea7befee360b5a926dbcf9c9e0a2e65a8de",
+    "apps/frontend/src/assets/company-symbol.svg": "5497105dc88622f521edeb36185d1fb6582b47c3ae97eda125f0a14b999633b7",
+    "apps/frontend/src/assets/particle-dna-reference.png": "2e4c1dcfdd618cf63c9b5699108695b2665c43867efde375b4ba26d380a0c8c8",
+    "apps/frontend/src/assets/telesphoros-mascot.png": "1dfa2dc62d132b9898e86e3493e47fc2e47f66eb22337ce0c1748c88b49e0c8b",
+    "apps/frontend/src/assets/fonts/Poppins-SemiBold.ttf": "d3bf1bdaf0550e83da9ac0b1d1d9fe6db086835a83aa28578e609a394b9a0286",
+    "apps/frontend/src/assets/fonts/Poppins-Regular.ttf": "7e65201e9b79159e2300267cc885e16c8dcef2424cdfa09a29bfb0980a94a7ba",
+    "apps/frontend/src/assets/fonts/InterVariable.woff2": "693b77d4f32ee9b8bfc995589b5fad5e99adf2832738661f5402f9978429a8e3"
+  },
+  "contrast": [
+    {
+      "foreground": "foreground",
+      "background": "background",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "muted-foreground",
+      "background": "panel",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "primary-foreground",
+      "background": "primary",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "border",
+      "background": "panel",
+      "minimum": 3
+    },
+    {
+      "foreground": "success",
+      "background": "panel",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "destructive",
+      "background": "panel",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "warning",
+      "background": "panel",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "dashboard-foreground",
+      "background": "background",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "dashboard-muted-foreground",
+      "background": "panel",
+      "minimum": 4.5
+    }
+  ],
+  "references": {
+    "apps/frontend/src/components/layout/SiteHeader.tsx": "@/assets/telesphoros-shield-rx.png",
+    "apps/frontend/src/components/layout/SiteFooter.tsx": "@/assets/company-symbol.svg",
+    "apps/frontend/src/components/MascotWelcome.tsx": "@/assets/telesphoros-mascot.png",
+    "apps/frontend/src/components/landing/ProductLanding.tsx": "@/assets/particle-dna-reference.png",
+    "apps/frontend/src/components/SyntheticAssistant.tsx": "@/components/MascotWelcome"
+  }
+}

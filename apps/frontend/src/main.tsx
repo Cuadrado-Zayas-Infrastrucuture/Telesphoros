@@ -23,7 +23,7 @@ try {
   // A bad build configuration: say so plainly instead of showing a blank page. No stack trace.
   const message = error instanceof AuthConfigError ? error.message : 'The application could not start.';
   root.render(
-    <main style={{ fontFamily: 'system-ui, sans-serif', padding: '2rem', maxWidth: '40rem' }}>
+    <main style={{ fontFamily: 'var(--font-family-sans)', padding: '2rem', maxWidth: '40rem' }}>
       <h1>Telesphoros cannot start</h1>
       <p role="alert">{message}</p>
     </main>,
