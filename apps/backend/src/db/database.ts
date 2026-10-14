@@ -42,6 +42,11 @@ export interface TenantWorkOptions {
  */
 export class Database {
   private readonly logger = new Logger('Database');
+  /**
+   * Called (best effort, after the rollback) when a request's write was refused because its caller's membership changed under it.
+   * The security-event recorder sets it; it is not part of the constructor so the database layer needs no knowledge of it.
+   */
+  onAuthorityRefused?: (tenantId: string, sub: string) => Promise<void>;
   private readonly pool: Pool;
 
   constructor(options: DatabaseOptions) {
@@ -64,12 +69,16 @@ export class Database {
     if (actor !== undefined && (!actor || actor.length > MAX_ACTOR_LENGTH || CONTROL_CHARACTERS.test(actor))) throw new Error('Invalid actor');
     const client = await this.pool.connect();
     let discard = false;
+    let refused: ReturnType<typeof currentRequestAuthority>;
     try {
       await client.query('BEGIN');
       await client.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
       if (actor !== undefined) await client.query(`SELECT set_config('app.current_actor', $1, true)`, [actor]);
       const result = await work(client);
-      await this.assertAuthorityStillCurrent(client);
+      if (!(await this.authorityStillCurrent(client))) {
+        refused = currentRequestAuthority();
+        throw AppException.forbidden();
+      }
       await client.query('COMMIT');
       return result;
     } catch (error) {
@@ -79,21 +88,22 @@ export class Database {
         // intentional: the connection is already broken; release(true) below throws it away
         discard = true;
       }
+      if (refused && this.onAuthorityRefused) await this.onAuthorityRefused(tenantId, refused.sub).catch(() => undefined);
       throw error;
     } finally {
       client.release(discard);
     }
   }
 
-  private async assertAuthorityStillCurrent(client: PoolClient): Promise<void> {
+  /** False when the transaction wrote and the caller's membership is no longer the one the request was admitted under. */
+  private async authorityStillCurrent(client: PoolClient): Promise<boolean> {
     const authority = currentRequestAuthority();
-    if (!authority) return;
+    if (!authority) return true;
     // An id is assigned at the first write (including a row lock), never to a read.
     const wrote = await client.query<{ wrote: boolean }>('SELECT txid_current_if_assigned() IS NOT NULL AS wrote');
-    if (!wrote.rows[0]!.wrote) return;
+    if (!wrote.rows[0]!.wrote) return true;
     const current = await client.query<{ ok: boolean }>('SELECT membership_assert_current($1, $2) AS ok', [authority.sub, authority.version]);
-    // Rolled back by the caller's catch: nothing this request wrote is committed. 403, like any other refusal of authority.
-    if (current.rows[0]?.ok !== true) throw AppException.forbidden();
+    return current.rows[0]?.ok === true;
   }
 
   /** Cheap liveness probe for /ready. */

@@ -105,8 +105,9 @@ Work with no request behind it (background and organization-owned processing) is
 A removed person's row is kept, never deleted, and `tokens_valid_after` only moves forward, so reinstating someone does not revive
 a token issued before their removal.
 
-Not in this slice: an application logout endpoint and browser sessions (M5.1), and an append-only record of grants and removals
-(M1.6; today the row keeps only who made the latest change, and why). No authenticated route skips the membership check.
+**What is recorded.** The security-event record ([ops/security-events.md](ops/security-events.md)) keeps who was granted, re-roled, removed or had their sessions revoked (by a database trigger, in the same transaction as the change), and every refusal by the checks above (once a minute per person and reason). File links are recorded by the application access audit, not here. It holds identifiers and short codes only, and only the auditor role can read it.
+
+Not in this slice: an application logout endpoint and browser sessions (M5.1). The membership row itself still keeps only the latest change's author and reason; the full history is in the security-event record. No authenticated route skips the membership check.
 
 **Development.** On the in-memory store (no database, `STORAGE_DRIVER=memory`, never production), the membership mirrors the
 verified token's claims so a local server and the browser tests have people to check. PostgreSQL never mirrors; the tests that prove
@@ -186,6 +187,6 @@ real email delivery, `terraform plan`/`apply`, and Cognito's own session and cod
 
 ## Known gaps
 
-No audit log of sign-ins in our own database (Cognito's CloudTrail events only; Phase 10), and no append-only record of membership changes yet (M1.6: today a row keeps only the latest change's author and reason). The membership checks were proved against a fake identity provider and a local PostgreSQL, not real Cognito or RDS. API rate limiting exists
+No audit log of sign-ins in our own database (Cognito's CloudTrail events only; Phase 10), and membership changes are recorded in the security-event record (it is in the same database; an off-site Object Lock copy is a later slice). The membership checks were proved against a fake identity provider and a local PostgreSQL, not real Cognito or RDS. API rate limiting exists
 but is per process ([ops/rate-limiting.md](ops/rate-limiting.md)); Cognito also does its own lockout on repeated bad passwords. Password-change-while-signed-in is not
 notified (above). The sign-in page is Cognito's, unbranded for now (web design is parked).

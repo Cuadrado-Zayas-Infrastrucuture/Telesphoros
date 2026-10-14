@@ -1,5 +1,5 @@
 import type { Client } from 'pg';
-import { ALL_CLASSIFIED_TABLES, APPEND_ONLY_CLASSES, AUTHORITY_TABLES, MUTABLE_OPERATIONAL_TABLES } from '../../src/db/append-only-tables';
+import { ALL_CLASSIFIED_TABLES, APPEND_ONLY_CLASSES, AUTHORITY_TABLES, MUTABLE_OPERATIONAL_TABLES, SECURITY_AUDIT_TABLES } from '../../src/db/append-only-tables';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 
 let pg: EphemeralDatabase;
@@ -59,6 +59,18 @@ describe('catalog guard: the audit tables are classified and protected as their 
       expect([table, own.some((r) => r.ev & 1 && r.ev & 2 && r.ev & 8)]).toEqual([table, true]); // row, before, delete
       expect([table, own.some((r) => r.ev & 32)]).toEqual([table, true]); // truncate
     }
+  });
+
+  it('security-event tables are append-only, closed to the application role, and readable only by the auditor', async () => {
+    const triggers = await q<{ table: string; ev: number }>(`SELECT c.relname AS "table", t.tgtype::int AS ev FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_proc p ON p.oid = t.tgfoid
+       WHERE c.relnamespace = 'public'::regnamespace AND NOT t.tgisinternal AND p.proname = 'refuse_mutation' AND c.relname = ANY($1)`, [[...SECURITY_AUDIT_TABLES]]);
+    for (const table of SECURITY_AUDIT_TABLES) {
+      const own = triggers.filter((r) => r.table === table);
+      expect([table, own.some((r) => r.ev & 1 && r.ev & 2 && r.ev & 8 && r.ev & 16)]).toEqual([table, true]); // row, before, delete and update
+      expect([table, own.some((r) => r.ev & 32)]).toEqual([table, true]); // truncate
+    }
+    const grants = await q<{ table_name: string; grantee: string; privilege_type: string }>(`SELECT table_name, grantee, privilege_type FROM information_schema.role_table_grants WHERE table_schema = 'public' AND table_name = ANY($1) AND grantee <> current_user`, [[...SECURITY_AUDIT_TABLES]]);
+    for (const table of SECURITY_AUDIT_TABLES) expect(grants.filter((g) => g.table_name === table).map((g) => `${g.grantee}:${g.privilege_type}`)).toEqual(['telesphoros_security_auditor:SELECT']);
   });
 
   it('every guarded table refuses UPDATE/DELETE per row and TRUNCATE per statement', async () => {

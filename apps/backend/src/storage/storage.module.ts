@@ -3,6 +3,7 @@ import { Database } from '../db/database';
 import { InMemorySecurityAuditStore, PostgresSecurityAuditStore, SecurityAuditStore } from '../auth/security-audit';
 import type { Env } from '../config/env';
 import { LedgerRecordsRepository } from './ledger-records.repository';
+import { InMemorySecurityEvents, PostgresSecurityEvents, SecurityEvents } from '../security-events/security-events';
 import { InMemoryMembershipRepository, MembershipRepository } from './membership.repository';
 import { PostgresMembershipRepository } from './postgres/membership.repository';
 import { PostgresLedgerRecordsRepository } from './postgres/ledger-records.repository';
@@ -21,7 +22,7 @@ import { InMemoryReportsRepository, ReportsRepository } from './reports.reposito
 @Module({})
 export class StorageModule {
   static register(env: Env): DynamicModule {
-    const repositories = [PatientsRepository, ReportsRepository, RecommendationsRepository, MembershipRepository];
+    const repositories = [PatientsRepository, ReportsRepository, RecommendationsRepository, MembershipRepository, SecurityEvents];
 
     if (env.STORAGE_DRIVER === 'postgres') {
       const providers: Provider[] = [
@@ -32,6 +33,7 @@ export class StorageModule {
         { provide: ReportsRepository, useClass: PostgresReportsRepository },
         { provide: RecommendationsRepository, useClass: PostgresRecommendationsRepository },
         { provide: MembershipRepository, useClass: PostgresMembershipRepository },
+        { provide: SecurityEvents, useClass: PostgresSecurityEvents },
         // The ledger's guarantees are database guarantees: there is deliberately no in-memory version.
         { provide: LedgerRecordsRepository, useClass: PostgresLedgerRecordsRepository },
       ];
@@ -46,6 +48,7 @@ export class StorageModule {
         { provide: ReportsRepository, useClass: InMemoryReportsRepository },
         { provide: RecommendationsRepository, useClass: InMemoryRecommendationsRepository },
         { provide: MembershipRepository, useClass: InMemoryMembershipRepository },
+        { provide: SecurityEvents, useClass: InMemorySecurityEvents },
       ],
       exports: [SecurityAuditStore, ...repositories],
     };

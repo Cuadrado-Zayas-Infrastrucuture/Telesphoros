@@ -9,6 +9,7 @@ import { MembershipService } from '../../src/auth/membership.service';
 import { Database } from '../../src/db/database';
 import { runMembership } from '../../src/membership/membership-cli';
 import { PgMembershipAdmin } from '../../src/membership/pg-membership-admin';
+import { InMemorySecurityEvents } from '../../src/security-events/security-events';
 import { PostgresMembershipRepository } from '../../src/storage/postgres/membership.repository';
 import { ReportsRepository } from '../../src/storage/reports.repository';
 import { createTestApp, membershipOf } from '../helpers/app';
@@ -374,7 +375,7 @@ describe('when the database cannot answer', () => {
   it('the lookup fails closed with 503, and the connection error never reaches the caller', async () => {
     const unreachable = new Database({ url: 'postgres://nobody:secret-password@127.0.0.1:1/none', ssl: 'disable' });
     try {
-      const service = new MembershipService(new PostgresMembershipRepository(unreachable));
+      const service = new MembershipService(new PostgresMembershipRepository(unreachable), new InMemorySecurityEvents());
       const error = await service.resolve({ sub: 'x', tenantId: TENANT, roles: [], issuedAt: Math.floor(Date.now() / 1000) }).catch((e: unknown) => e);
       expect(error).toMatchObject({ status: 503 });
       expect(JSON.stringify((error as { response?: unknown }).response)).not.toMatch(/secret-password|127\.0\.0\.1|ECONNREFUSED/);

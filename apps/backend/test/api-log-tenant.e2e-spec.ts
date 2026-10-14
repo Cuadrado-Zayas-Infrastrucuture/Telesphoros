@@ -15,6 +15,7 @@ import { InMemorySecurityAuditStore, SecurityAuditStore } from '../src/auth/secu
 import { MembershipService } from '../src/auth/membership.service';
 import { TokenVerifier } from '../src/auth/token-verifier';
 import { pinoHttpOptions } from '../src/logger-options';
+import { InMemorySecurityEvents, SecurityEvents } from '../src/security-events/security-events';
 import { InMemoryMembershipRepository, MembershipRepository } from '../src/storage/membership.repository';
 
 /**
@@ -69,6 +70,7 @@ beforeAll(async () => {
     providers: [
       { provide: TokenVerifier, useValue: verifier },
       { provide: MembershipRepository, useValue: memberships },
+      { provide: SecurityEvents, useClass: InMemorySecurityEvents },
       MembershipService,
       { provide: SecurityAuditStore, useClass: InMemorySecurityAuditStore },
       { provide: APP_GUARD, useClass: AuthGuard },

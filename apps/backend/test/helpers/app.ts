@@ -12,6 +12,7 @@ import { MirrorTokenVerifier } from '../../src/auth/mirror-token-verifier';
 import { TokenVerifier } from '../../src/auth/token-verifier';
 import type { MembershipAdmin } from '../../src/membership/membership';
 import { PgMembershipAdmin } from '../../src/membership/pg-membership-admin';
+import { InMemorySecurityEvents, SecurityEvents } from '../../src/security-events/security-events';
 import { InMemoryMembershipRepository, MembershipRepository } from '../../src/storage/membership.repository';
 import { loadEnv } from '../../src/config/env';
 import { READINESS_CHECKS, type ReadinessCheck } from '../../src/health/readiness.service';
@@ -147,6 +148,13 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
   // requests built in the same expression race for it.
   await app.listen(0);
 
+  readers.set(
+    app,
+    adminPool
+      ? async () => (await adminPool.query(`SELECT tenant_id, event_type, outcome, actor_ref, subject_kind, subject_ref, request_id, details FROM security_events ORDER BY seq`)).rows
+          .map((r) => ({ tenantId: r.tenant_id, eventType: r.event_type, outcome: r.outcome, actorRef: r.actor_ref, subjectKind: r.subject_kind, subjectRef: r.subject_ref, requestId: r.request_id ?? undefined, details: r.details }) as SeenSecurityEvent)
+      : async () => (app.get(SecurityEvents as never) as InMemorySecurityEvents).events.map((e) => Object.fromEntries(Object.entries(e).filter(([key]) => key !== 'at')) as unknown as SeenSecurityEvent),
+  );
   handles.set(app, adminPool ? new PgMembershipAdmin(adminPool) : app.get(MembershipRepository as never));
   const close = app.close.bind(app);
   app.close = async () => {
@@ -158,6 +166,25 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
 }
 
 const handles = new WeakMap<object, MembershipAdmin>();
+
+export interface SeenSecurityEvent {
+  tenantId: string | null;
+  eventType: string;
+  outcome: string;
+  actorRef: string;
+  subjectKind: string;
+  subjectRef: string;
+  requestId?: string;
+  details: Record<string, unknown>;
+}
+const readers = new WeakMap<object, () => Promise<SeenSecurityEvent[]>>();
+
+/** Every security event the app's store holds, oldest first (read over the owner connection on PostgreSQL, from memory otherwise). */
+export function securityEventsOf(app: object): Promise<SeenSecurityEvent[]> {
+  const read = readers.get(app);
+  if (!read) throw new Error('securityEventsOf: not an app made by createTestApp');
+  return read();
+}
 
 /** The operator-side handle for an app made by createTestApp: grant, set roles, remove and revoke a person, on the app's own store. */
 export function membershipOf(app: object): MembershipAdmin {
