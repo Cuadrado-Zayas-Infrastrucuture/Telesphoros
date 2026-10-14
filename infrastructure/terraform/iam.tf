@@ -67,3 +67,29 @@ resource "aws_iam_policy" "backup_job" {
   description = "Write-only access for the backup job. It cannot read, list or delete backups."
   policy      = data.aws_iam_policy_document.backup_job[0].json
 }
+
+# The worker's task role: READ-ONLY on the report files, for the stored-file integrity re-check. No Put, no delete, no listing, no versioning check, and no
+# permission to create data keys (it never writes). It reads exact versions only.
+data "aws_iam_policy_document" "worker_runtime" {
+  statement {
+    sid       = "ReadReportFileVersions"
+    actions   = ["s3:GetObject", "s3:GetObjectVersion"]
+    resources = ["${aws_s3_bucket.reports.arn}/reports/*"]
+  }
+  statement {
+    sid       = "DecryptReportFiles"
+    actions   = ["kms:Decrypt"]
+    resources = [aws_kms_key.data.arn]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["s3.${var.region}.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_policy" "worker_runtime" {
+  name        = "${local.name}-worker-runtime"
+  description = "Read-only report-file access for the Telesphoros background worker."
+  policy      = data.aws_iam_policy_document.worker_runtime.json
+}

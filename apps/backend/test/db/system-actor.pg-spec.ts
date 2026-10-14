@@ -52,7 +52,7 @@ describe('what a job records', () => {
       await registerTenantRow(c, 'tenant-system-actor-2');
       await c.query(`INSERT INTO job_schedules (type, interval_seconds) VALUES ('test.echo', 3600)`);
       await c.query(`SELECT job_schedule_tick()`);
-      const { rows } = await c.query(`SELECT requested_by FROM jobs WHERE tenant_id = 'tenant-system-actor-2'`);
+      const { rows } = await c.query(`SELECT requested_by FROM jobs WHERE tenant_id = 'tenant-system-actor-2' AND type = 'test.echo'`);
       expect(rows).toEqual([{ requested_by: 'system:scheduler' }]);
     });
   });

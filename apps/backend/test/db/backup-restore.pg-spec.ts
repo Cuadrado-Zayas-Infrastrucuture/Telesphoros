@@ -164,7 +164,8 @@ describe('restore (the one-command procedure, actually executed)', () => {
     ]);
     expect(report.ok).toBe(true);
     // 6 patients (3 live + 3 soft-deleted) + 3 reports + 3 recommendations + one row per applied migration
-    const manifestRows = 12 + readdirSync(join(__dirname, '..', '..', 'migrations')).filter((f) => f.endsWith('.up.sql')).length;
+    // 12 seeded rows, one history row per migration, and the 3 rows migration 0024 seeds (one outbox route, two schedules)
+    const manifestRows = 12 + 3 + readdirSync(join(__dirname, '..', '..', 'migrations')).filter((f) => f.endsWith('.up.sql')).length;
     expect(byName(report.checks, 'row counts')!.detail).toMatch(new RegExp(`^all \\d+ tables match \\(${manifestRows} rows\\)$`));
     expect(await throwawayDatabases()).toBe(before); // the throwaway was dropped
   });
@@ -261,7 +262,7 @@ describe('restore verification is not a rubber stamp (negative controls)', () =>
   it('catches a copy that lost its row-level security settings', async () => {
     const db = await seededDatabase();
     const { dir, manifest } = await createBackup({ adminUrl: db.adminUrl, destDir: tempDir() });
-    manifest.tables.reports!.policies = 2; // baseline claims something the copy cannot have
+    manifest.tables.reports!.policies = 3; // baseline claims something the copy cannot have (the table has two: the application's and the queue role's)
     writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest));
     failing(await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir }), 'row-level security settings');
   });

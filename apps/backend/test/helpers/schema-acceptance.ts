@@ -7,6 +7,8 @@ const relationships: [string, string, string, string][] = [
   ['invitations_tenant_id_fkey', 'invitations', 'tenant_id', 'tenants:id'],
   ['jobs_tenant_id_fkey', 'jobs', 'tenant_id', 'tenants:id'],
   ['job_attempts_job_id_fkey', 'job_attempts', 'job_id', 'jobs:id'],
+  ['file_verifications_report_fk', 'file_verifications', 'report_id,tenant_id', 'reports:id,tenant_id'],
+  ['file_verifications_job_id_fkey', 'file_verifications', 'job_id', 'jobs:id'],
   ['patient_identifiers_patient_fk', 'patient_identifiers', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   ['report_patient_decisions_report_fk', 'report_patient_decisions', 'tenant_id,patient_id,report_id', 'reports:tenant_id,patient_id,id'],
   ['report_patient_decisions_identifier_fk', 'report_patient_decisions', 'identifier_id,tenant_id', 'patient_identifiers:id,tenant_id'],
@@ -49,7 +51,7 @@ const primaryKeys: Record<string, string> = {
   ledger_incidents: 'id', ledger_incident_clearances: 'id', tenant_memberships: 'tenant_id, sub',
   security_audit_events: 'id', security_events: 'id', tenants: 'id', invitations: 'id',
   patient_identifiers: 'id', report_patient_decisions: 'id',
-  jobs: 'id', job_attempts: 'id', job_schedules: 'type', job_workers: 'worker_id',
+  jobs: 'id', job_attempts: 'id', job_schedules: 'type', job_workers: 'worker_id', outbox_routes: 'event_type', outbox_events: 'id', file_verifications: 'id',
   patient_duplicate_flags: 'id', patient_merge_proposals: 'id', patient_merge_decisions: 'id',
 };
 const uniqueKeys: Record<string, string> = {
@@ -72,6 +74,7 @@ const uniqueKeys: Record<string, string> = {
   patient_identifiers_id_tenant_uq: 'id, tenant_id', patient_duplicate_flags_pair_uq: 'tenant_id, patient_id, other_patient_id',
   patient_merge_proposals_id_tenant_uq: 'id, tenant_id', patient_merge_decisions_proposal_uq: 'tenant_id, proposal_id', patient_merge_decisions_id_tenant_uq: 'id, tenant_id',
   jobs_seq_uq: 'seq', jobs_idempotency_uq: 'tenant_id, type, idempotency_key', job_attempts_seq_uq: 'seq',
+  outbox_events_seq_uq: 'seq', outbox_events_subject_uq: 'tenant_id, event_type, subject_id', file_verifications_seq_uq: 'seq',
 };
 // Complete CHECK inventory; semantic refusal/control tests remain in the existing behavior suites.
 const checkNames: Record<string, string> = {
@@ -82,6 +85,9 @@ const checkNames: Record<string, string> = {
   job_attempts: 'outcome_check worker_len attempt_range error_code_shape',
   job_schedules: 'type_shape interval_range attempts_range',
   job_workers: 'id_len',
+  outbox_routes: 'job_type_shape subject_key_shape attempts_range',
+  outbox_events: 'type_check tenant_len relay_check',
+  file_verifications: 'source_check outcome_check reason_check version_len',
   patient_merge_proposals: 'tenant_id_len created_by_len kind distinct reason created_by_human',
   patient_merge_decisions: 'tenant_id_len created_by_len decision created_by_human',
   tenants: 'id_len display_name_len status_check created_by_len changed_by_len',

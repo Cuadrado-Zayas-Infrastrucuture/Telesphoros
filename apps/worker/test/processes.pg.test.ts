@@ -136,6 +136,18 @@ describe('health', () => {
   });
 });
 
+describe('queue statistics', () => {
+  it('logs the depth and the age of the oldest ready job as one line, which is what the alarms read', async () => {
+    await begin();
+    const w = worker({ WORKER_ID: 'stats', WORKER_STATS_SECONDS: '10' });
+    const line = await until('a queue-stats line', async () => w.output().split('\n').find((l) => l.includes('"event":"queue-stats"')));
+    const parsed = JSON.parse(line) as Record<string, unknown>;
+    expect(parsed).toMatchObject({ event: 'queue-stats', level: 'info', service: 'worker', count: expect.any(Number), running: expect.any(Number), dead: expect.any(Number), ageSeconds: expect.any(Number) });
+    w.child.kill('SIGTERM');
+    expect(await w.exited).toEqual({ code: 0, signal: null });
+  });
+});
+
 describe('start-up refusals', () => {
   const run = (env: Record<string, string>) =>
     spawnSync(process.execPath, [join(__dirname, '..', 'dist', 'main.js')], { env: { PATH: process.env.PATH ?? '', ...env }, encoding: 'utf8', timeout: 20_000 });

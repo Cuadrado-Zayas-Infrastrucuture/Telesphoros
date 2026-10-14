@@ -5,6 +5,8 @@ export interface HandlerContext {
   job: ClaimedJob;
   /** `system:<job type>`: what the job records as `created_by`. Never a person (see packages/jobs/src/actor.ts). */
   actor: string;
+  /** The worker holding the job: the database asks for it, with the job id, before it lets a handler act. */
+  workerId: string;
   /** Aborted when the job times out, its lease is lost, or the worker is shutting down. A handler stops promptly when it is. */
   signal: AbortSignal;
 }
@@ -200,7 +202,7 @@ export class Runner {
           clearTimeout(timer);
           clearInterval(beat);
         };
-        const handling = Promise.resolve().then(() => registered.handler({ job, actor: systemActor(job.type), signal: abort.signal }));
+        const handling = Promise.resolve().then(() => registered.handler({ job, actor: systemActor(job.type), workerId, signal: abort.signal }));
         handling.catch(() => undefined); // an abandoned handler's late failure is not an unhandled rejection
         try {
           await Promise.race([handling, timeout.then(() => Promise.reject(new Error('timeout')))]);

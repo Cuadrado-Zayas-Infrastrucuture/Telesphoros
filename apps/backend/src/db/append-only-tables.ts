@@ -57,4 +57,12 @@ export const SECURITY_AUDIT_TABLES = ['security_events'] as const;
  */
 export const JOB_TABLES = ['jobs', 'job_attempts', 'job_schedules', 'job_workers'] as const;
 
-export const ALL_CLASSIFIED_TABLES: readonly string[] = [...Object.values(APPEND_ONLY_CLASSES).flat(), ...LEGACY_TABLES, ...MUTABLE_OPERATIONAL_TABLES, ...AUTHORITY_TABLES, ...PATIENT_IDENTITY_TABLES, ...PATIENT_DUPLICATE_TABLES, ...SECURITY_AUDIT_TABLES, ...JOB_TABLES];
+/**
+ * The transactional outbox and the stored-file re-check record (migration 0024), owned by the queue's definer role `telesphoros_jobs`. `outbox_events` is written by
+ * the application only through `outbox_append` (inside the business transaction) and changes only by being relayed once; `outbox_routes` is reviewed configuration.
+ * `file_verifications` is append-only for everyone, the owner included; the application can read its own organization's rows.
+ */
+export const OUTBOX_TABLES = ['outbox_events', 'outbox_routes'] as const;
+export const VERIFICATION_TABLES = ['file_verifications'] as const;
+
+export const ALL_CLASSIFIED_TABLES: readonly string[] = [...Object.values(APPEND_ONLY_CLASSES).flat(), ...LEGACY_TABLES, ...MUTABLE_OPERATIONAL_TABLES, ...AUTHORITY_TABLES, ...PATIENT_IDENTITY_TABLES, ...PATIENT_DUPLICATE_TABLES, ...SECURITY_AUDIT_TABLES, ...JOB_TABLES, ...OUTBOX_TABLES, ...VERIFICATION_TABLES];

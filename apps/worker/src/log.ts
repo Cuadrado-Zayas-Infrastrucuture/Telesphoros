@@ -11,6 +11,9 @@ export interface LogFields {
   code?: string;
   count?: number;
   running?: number;
+  /** Seconds the oldest ready job has waited (the queue-not-draining alarm reads it). */
+  ageSeconds?: number;
+  dead?: number;
   reason?: string;
 }
 

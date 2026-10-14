@@ -129,12 +129,22 @@ jobs:
           set -o pipefail
           TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 pnpm --filter @telesphoros/backend test 2>&1 | tee tier3.log
           ! grep -F "[jest] NOT RUNNING" tier3.log
+      # The job log ends with the database container's own log, and the log reader keeps only the last few thousand lines, so a worker failure
+      # could not be read. From here on the server logs only fatal errors (the earlier tiers keep theirs).
+      - name: "Worker: quiet the database server's log so the test report stays readable"
+        run: |
+          PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 \
+            -c "ALTER SYSTEM SET log_min_messages = 'fatal'" -c "ALTER SYSTEM SET log_checkpoints = off" -c "SELECT pg_reload_conf()"
       # The background-job queue and real worker processes (claim races, a killed worker, a drain) need PostgreSQL; a skip fails the job as above.
       - name: "Worker: the job queue and real worker processes on PostgreSQL"
         run: |
           set -o pipefail
           pnpm --filter @telesphoros/worker test 2>&1 | tee tier-worker.log
           ! grep -F "NOT RUNNING" tier-worker.log
+      # The job's log ends with the database container's output, which buries the test report; print the failing tests where they can be read.
+      - name: "Worker: show the failing tests"
+        if: failure() && hashFiles('tier-worker.log') != ''
+        run: grep -n -B2 -A30 -E "FAIL|AssertionError|Error:|NOT RUNNING" tier-worker.log | head -400
       - name: Validate all three independent-recovery measurement profiles
         run: node .github/ci/verify-recovery-metrics.mjs
       - name: Validate all three application-recovery measurement profiles
