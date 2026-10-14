@@ -1,13 +1,14 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Role } from '@telesphoros/shared-types';
 import { API, renderApp } from '@/test/authTestUtils';
 import { downloadReport } from '@/lib/ownedStorageApi';
 vi.mock('@/lib/storageMode', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/storageMode')>(), ownedStorageMode: () => true }));
 vi.mock('@/lib/ownedStorageApi', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/ownedStorageApi')>(), downloadReport: vi.fn(async () => undefined) }));
 beforeEach(() => vi.mocked(downloadReport).mockReset());
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 const p1 = '11111111-1111-4111-8111-111111111111', p2 = '22222222-2222-4222-8222-222222222222';
 const date = '2026-10-12T00:00:00Z';
 const row = (patientId = p1, fileUploaded = true) => ({ id: '33333333-3333-4333-8333-333333333333', patientId, type: 'vcf', filename: 'synthetic.vcf', sizeBytes: 8, status: 'received', fileUploaded, contentType: fileUploaded ? 'text/x-vcf' : null, sha256: fileUploaded ? 'a'.repeat(64) : null, createdAt: date, updatedAt: date });
@@ -22,6 +23,76 @@ function fetcher(roles: Role[], reports: (url: URL) => Promise<Response> = async
 }
 const heading = () => screen.findByRole('heading', { level: 1, name: 'Reports' });
 describe('reports page with real auth and route guards', () => {
+  // An administrator is not listed: administration is not clinical access, so the page refuses them (see the test of that name below).
+  it.each([['clinician'], ['reviewer'], ['reader']] as Role[][])('makes the synthetic assistant discoverable before selecting a report for %j', async (...roles: Role[]) => {
+    vi.stubGlobal('location', { hostname: '127.0.0.1' });
+    const { container } = renderApp('/reports', { signedInAs: roles, fetchImpl: fetcher(roles) });
+    await heading();
+    expect(screen.getByRole('region', { name: 'Report details' })).toHaveTextContent('Select a report');
+    const preview = within(await screen.findByRole('region', { name: 'AI-assisted PGx preview' }));
+    expect(preview.getByRole('textbox', { name: 'Sample question' })).toBeInTheDocument();
+    expect(preview.getByText(/No live model or CPIC mapping/)).toBeInTheDocument();
+    await userEvent.setup().click(preview.getByText('Example context and tools'));
+    expect(Boolean(preview.queryByRole('button', { name: 'Choose file' }))).toBe(roles.some(role => role === 'clinician'));
+    expect(screen.getByRole('link', { name: 'AI preview' })).toBeInTheDocument();
+    expect(Boolean(screen.queryByRole('link', { name: 'Upload synthetic report' }))).toBe(roles.some(role => role === 'clinician'));
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Open synthetic.vcf' }));
+    const detail = within(screen.getByRole('region', { name: 'Report details' }));
+    expect(detail.getByText('Yes — server verified')).toBeInTheDocument();
+    expect(Boolean(detail.queryByRole('button', { name: 'Download synthetic.vcf' }))).toBe(roles.some(role => ['clinician', 'reviewer'].includes(role)));
+    await userEvent.setup().click(detail.getByText('Technical details'));
+    expect(detail.getByText(/does not establish capture acceptance/)).toBeVisible();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+  it('keeps secondary questions discoverable and restores focus when the compact question menu closes', async () => {
+    vi.stubGlobal('location', { hostname: '127.0.0.1' });
+    renderApp('/reports', { signedInAs: ['clinician'], fetchImpl: fetcher(['clinician']) }); await heading();
+    const preview = within(await screen.findByRole('region', { name: 'AI-assisted PGx preview' }));
+    const user = userEvent.setup(), trigger = preview.getByText('Questions');
+    const menu = trigger.closest('details')!;
+    expect(menu).not.toHaveAttribute('open');
+    await user.click(trigger); expect(menu).toHaveAttribute('open');
+    await user.keyboard('{Escape}'); expect(menu).not.toHaveAttribute('open'); expect(trigger).toHaveFocus();
+    await user.click(trigger);
+    await user.click(preview.getByRole('button', { name: 'What are the limitations?' }));
+    await preview.findByText(/^These words are/);
+    expect(menu).not.toHaveAttribute('open');
+    expect(preview.getByRole('textbox', { name: 'Sample question' })).toHaveFocus();
+  });
+  it('runs inline, retains the sample across report selection and collapse, and resets without sending report data', async () => {
+    vi.stubGlobal('location', { hostname: '127.0.0.1' });
+    const outbound = vi.fn(); vi.stubGlobal('fetch', outbound);
+    const { router } = renderApp('/reports', { signedInAs: ['clinician'], fetchImpl: fetcher(['clinician']) });
+    await heading();
+    const preview = within(await screen.findByRole('region', { name: 'AI-assisted PGx preview' }));
+    const user = userEvent.setup();
+    await user.click(preview.getByText('Questions'));
+    await user.click(preview.getByRole('button', { name: 'What evidence is missing?' }));
+    await preview.findByText(/^This example has no accepted/);
+    await user.click(await screen.findByRole('button', { name: 'Open synthetic.vcf' }));
+    expect(router.state.location.pathname).toBe('/reports');
+    expect(preview.getByText(/^This example has no accepted/)).toBeInTheDocument();
+    expect(preview.queryByText('synthetic.vcf')).not.toBeInTheDocument();
+    await user.click(preview.getByText('AI-assisted PGx preview', { exact: true }));
+    expect(preview.getByText('AI-assisted PGx preview', { exact: true }).closest('details')).not.toHaveAttribute('open');
+    await user.click(screen.getByRole('link', { name: 'AI preview' }));
+    expect(preview.getByText(/^This example has no accepted/)).toBeInTheDocument();
+    expect(preview.getByText('AI-assisted PGx preview', { exact: true })).toHaveFocus();
+    await user.click(preview.getByRole('button', { name: 'Reset' }));
+    await preview.findByRole('img', { name: 'Telesphoros mascot in a teal cloak' });
+    expect(preview.getByRole('textbox', { name: 'Sample question' })).toHaveFocus();
+    expect(outbound).not.toHaveBeenCalled();
+  });
+  it.each([
+    { hostname: 'localhost', dev: true },
+    { hostname: 'example.com', dev: true },
+    { hostname: '127.0.0.1', dev: false },
+  ])('does not offer the assistant outside the permitted development host: %j', async ({ hostname, dev }) => {
+    vi.stubGlobal('location', { hostname }); vi.stubEnv('DEV', dev);
+    renderApp('/reports', { signedInAs: ['clinician'], fetchImpl: fetcher(['clinician']) }); await heading();
+    expect(screen.queryByRole('region', { name: 'AI-assisted PGx preview' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'AI preview' })).not.toBeInTheDocument();
+  });
   it('redirects an anonymous visitor and preserves the return path', async () => {
     const { client } = renderApp('/reports'); await screen.findByRole('heading', { name: 'Sign in' });
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }));
@@ -184,7 +255,8 @@ it('opens a separate synthetic preview without passing report or patient context
     await heading();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Open synthetic.vcf' }));
-    const link = screen.getByRole('link', { name: 'Open PGx explanation preview' });
+    await user.click(await screen.findByText('Example context and tools'));
+    const link = await screen.findByRole('link', { name: 'Open full preview' });
     expect(link).toHaveAttribute('href', '/local-interpretation');
     const calls = api.mock.calls.length;
     await user.click(link);

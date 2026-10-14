@@ -1,0 +1,42 @@
+/* Dashboard typography and surfaces inherit the shared brand; no clinical colors are overridden. */
+.workspace-shell :is(h1, h2, h3) {
+  font-family: var(--font-family-ui-heading);
+  font-weight: var(--workspace-section-weight);
+  letter-spacing: -.025em;
+}
+.workspace-shell main h1 {
+  font-size: var(--workspace-title-size);
+  font-weight: var(--workspace-title-weight);
+  line-height: 1.2;
+  letter-spacing: -.04em;
+}
+.workspace-shell main { font-variant-numeric: lining-nums; }
+.workspace-shell header { background: var(--panel); }
+.workspace-shell .reports-workspace { gap: var(--workspace-content-gap); }
+.workspace-shell .reports-workspace > div:first-child { padding-bottom: .5rem; }
+.workspace-shell .reports-workspace table th { font-weight: 550; }
+.workspace-shell .reports-workspace table button { font-weight: 500; }
+.workspace-shell .reports-workspace table td { font-variant-numeric: tabular-nums; }
+@media (max-width: 40rem) {
+  .workspace-shell header > div { gap: .75rem; }
+  .workspace-shell header a[href='/'] { gap: .625rem; }
+  .workspace-shell header a[href='/'] > span > span:first-child { font-size: 1.375rem; }
+  .workspace-shell header a[href='/'] > span > span:last-child { font-size: .6875rem; }
+}
+
+.reports-workspace { color: var(--dashboard-foreground); }
+.reports-workspace .text-foreground { color: var(--dashboard-foreground); }
+.reports-workspace .text-muted-foreground { color: var(--dashboard-muted-foreground); }
+
+/* The compact workspace is applied only when the development assistant is available. */
+.workspace-shell main:has(.reports-workspace--compact) { padding-block: 1rem; }
+.workspace-shell main .reports-workspace--compact h1 { font-size: var(--workspace-compact-title-size); }
+.workspace-shell .reports-workspace--compact { gap: 1rem; }
+.workspace-shell .reports-workspace--compact > div:first-child { padding-bottom: 0; }
+.reports-workspace--compact > p:first-of-type { padding-block: .5rem; }
+.reports-workspace--compact .reports-sidebar { gap: .75rem; }
+.reports-workspace--compact #report-detail-panel > div:first-child { padding: .25rem .75rem; }
+.reports-workspace--compact .report-records-region { height: clamp(12rem, calc(100dvh - 31rem), 24rem); }
+@media (max-width: 63.99rem) {
+  .reports-workspace--compact .report-records-region { height: 14rem; }
+}

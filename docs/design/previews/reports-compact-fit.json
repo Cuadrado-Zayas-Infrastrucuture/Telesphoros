@@ -1,0 +1,30 @@
+{
+  "desktop1280": {
+    "detailsBottom": 448.59375,
+    "height": 800,
+    "overflow": false,
+    "promptBottom": 791.59375,
+    "reportsBottom": 791.59375,
+    "scrollY": 0,
+    "width": 1280
+  },
+  "desktop1440": {
+    "detailsBottom": 448.59375,
+    "height": 900,
+    "overflow": false,
+    "promptBottom": 823.59375,
+    "reportsBottom": 871.59375,
+    "scrollY": 0,
+    "width": 1440
+  },
+  "mobile": {
+    "widths": [
+      320,
+      390
+    ],
+    "horizontalOverflow": false,
+    "visibleControlsUnder44px390": 0,
+    "sourceAndFeedbackPromptDocTopBefore": 1021.59375,
+    "sourceAndFeedbackPromptDocTopAfter": 1021.59375
+  }
+}

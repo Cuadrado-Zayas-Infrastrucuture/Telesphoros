@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, ArrowUpFromLine, ChevronRight, RefreshCw, SlidersHorizontal, X } from 'lucide-react';
 import type { Paginated, PaginationMeta, PatientDto, ReportDto } from '@telesphoros/shared-types';
@@ -13,6 +13,8 @@ import { usePageTitle } from '@/hooks/usePageTitle';
 import { listPatients, SubmitError } from '@/lib/api';
 import { downloadReport, listReports } from '@/lib/ownedStorageApi';
 
+const AssistantPreviewCard = import.meta.env.DEV ? lazy(() => import('@/components/AssistantPreviewCard').then(module => ({ default: module.AssistantPreviewCard }))) : null;
+
 const REPORT_PAGE_SIZE = 20;
 
 const EMPTY_META: PaginationMeta = { page: 1, pageSize: REPORT_PAGE_SIZE, total: 0, totalPages: 0 };
@@ -20,6 +22,7 @@ const EMPTY_META: PaginationMeta = { page: 1, pageSize: REPORT_PAGE_SIZE, total:
 export default function ReportsPage() {
   usePageTitle('Reports');
   const { apiFetch, roles } = useAuth();
+  const showAssistant = import.meta.env.DEV && location.hostname === '127.0.0.1';
   const [request, setRequest] = useState({ page: 1, patientId: '', attempt: 0 });
   const [reports, setReports] = useState<Paginated<ReportDto> | null>(null);
   const [reportMeta, setReportMeta] = useState(EMPTY_META);
@@ -104,15 +107,15 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className={`reports-workspace flex flex-col gap-6 ${showAssistant ? "reports-workspace--compact" : ""}`}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><h1 className="text-3xl leading-tight tracking-tight">Reports</h1><p className="mt-1 text-sm text-muted-foreground">Report records and verified upload information.</p></div>
         {roles.some(role => WRITER_ROLES.includes(role)) && <Button asChild className="min-h-control w-full whitespace-normal px-5 sm:w-auto"><Link to="/reports/upload"><ArrowUpFromLine aria-hidden="true" className="size-4 shrink-0" />Upload synthetic report</Link></Button>}
       </div>
       <p className="rounded-lg border border-divider bg-muted px-4 py-3 text-sm"><strong>Synthetic data only.</strong> Clinical use not approved. Clinical processing is disabled. Storage verification does not indicate clinical review.</p>
       {!canDownload && <p className="text-sm text-muted-foreground">Your role can view report metadata only.</p>}
-      <div className="grid min-w-0 grid-cols-1 items-start gap-5 lg:grid-cols-3">
-        <section aria-labelledby="reports-heading" className={`${selected ? 'hidden lg:block ' : ''}min-w-0 rounded-lg border border-divider bg-panel shadow-panel lg:col-span-2`}>
+      <div className={`grid min-w-0 grid-cols-1 items-start gap-5 ${showAssistant ? 'lg:grid-cols-5' : 'lg:grid-cols-3'}`}>
+        <section aria-labelledby="reports-heading" className={`${selected ? 'hidden lg:block ' : ''}min-w-0 rounded-lg border border-divider bg-panel shadow-panel ${showAssistant ? 'lg:col-span-3' : 'lg:col-span-2'}`}>
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-divider px-4 py-3 sm:px-5">
             <h2 id="reports-heading" ref={reportsHeading} tabIndex={-1} className="text-xl">Report records</h2>
             <Button variant="outline" size="sm" aria-label="Refresh reports" aria-disabled={reportsLoading} onClick={() => { if (!reportsLoading) loadReports(reports && reports.data.length === 0 ? 1 : request.page); }}><RefreshCw aria-hidden="true" className="size-4 shrink-0" />Refresh</Button>
@@ -139,7 +142,7 @@ export default function ReportsPage() {
             {patientMeta.totalPages > 1 && <PaginationControls label="Patient" meta={patientMeta} busy={patientsLoading} preserveFocus statusMessage={patientsLoading ? 'Loading patient options…' : patientError ? 'Patient page unavailable.' : `Patient options: page ${patientMeta.page} of ${patientMeta.totalPages}.`} onPage={loadPatientOptions} />}
           </div>
           {reportError && <p role="alert" className="border-t border-divider bg-destructive-surface px-5 py-3 text-sm text-destructive">{reportError}</p>}
-          <div role="region" aria-label="Report records table" aria-busy={reportsLoading} tabIndex={0} className="h-report-list max-w-full overflow-auto border-y border-divider">
+          <div role="region" aria-label="Report records table" aria-busy={reportsLoading} tabIndex={0} className="report-records-region h-report-list max-w-full overflow-auto border-y border-divider">
             {reportsLoading || reports?.data.length ? <table className="w-full table-fixed text-left text-sm">
               <caption className="sr-only">Reports on the selected page</caption>
               <thead className="sticky top-0 bg-background text-xs text-muted-foreground"><tr><th scope="col" className="w-1/2 px-3 py-3">Report / patient</th><th scope="col" className="w-1/4 px-2 py-3 sm:px-3">Record status</th><th scope="col" className="w-1/4 px-2 py-3 sm:px-3">Upload</th></tr></thead>
@@ -148,7 +151,7 @@ export default function ReportsPage() {
                   <Button variant="ghost" data-testid={`report-${report.id}`} aria-label={`Open ${report.filename}`} aria-controls="report-detail-panel" title={report.filename} aria-pressed={selected?.id === report.id} className="group h-auto min-h-control w-full scroll-mt-16 justify-start rounded-sm px-0 py-2 text-left text-sm whitespace-normal" onClick={event => { selectionTrigger.current = event.currentTarget; setDownloadError(null); if (selected?.id === report.id) detailHeading.current?.focus(); else setSelected(report); }}><span className="min-w-0 wrap-anywhere group-hover:underline group-focus-visible:underline">{report.filename}</span><ChevronRight aria-hidden="true" className="ml-auto size-4 shrink-0 text-muted-foreground" /></Button>
                   <p className={patientLabel(report.patientId) ? 'truncate pb-2 text-xs text-muted-foreground' : 'truncate pb-2 font-mono text-xs text-muted-foreground'} title={patientLabel(report.patientId) ?? report.patientId}>{patientLabel(report.patientId) ?? report.patientId}</p>
                 </td>
-                <td className="break-words px-2 py-2 capitalize sm:px-3">{report.status}</td><td className={report.fileUploaded ? 'break-words px-2 py-2 text-success sm:px-3' : 'break-words px-2 py-2 sm:px-3'}>{report.fileUploaded ? 'Verified' : 'Not complete'}</td>
+                <td className="break-words px-2 py-2 capitalize text-primary sm:px-3">{report.status}</td><td className={report.fileUploaded ? 'break-words px-2 py-2 text-success sm:px-3' : 'break-words px-2 py-2 text-primary sm:px-3'}>{report.fileUploaded ? 'Verified' : 'Not complete'}</td>
               </tr>)}</tbody>}
             </table> : <div className="flex h-full flex-col items-start justify-center gap-3 p-5 text-sm text-muted-foreground">
               <h3 className="text-base text-foreground">{reportError ? 'Reports unavailable' : reports?.meta.total === 0 ? 'No reports found for this selection.' : 'No reports on this page'}</h3>
@@ -160,13 +163,16 @@ export default function ReportsPage() {
           </div>
           <div className="px-4 py-3 sm:px-5"><PaginationControls label="Report" meta={reportMeta} busy={reportsLoading} preserveFocus statusMessage={reportsLoading ? 'Loading reports…' : reportError ? 'Report page unavailable.' : undefined} onPage={loadReports} /></div>
         </section>
+        <div className={`reports-sidebar flex min-w-0 flex-col gap-5 ${showAssistant ? 'lg:col-span-2' : ''}`}>
         <section id="report-detail-panel" aria-labelledby="report-detail-heading" className={`${selected ? '' : 'hidden lg:block '}min-w-0 rounded-lg border border-divider bg-panel shadow-panel`}>
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-divider px-5 py-3">
             <h2 id="report-detail-heading" ref={detailHeading} tabIndex={-1} className="text-xl">Report details</h2>
             {selected && <Button variant="ghost" size="sm" className="px-2" onClick={() => { setSelected(null); setDownloadError(null); }}><ArrowLeft aria-hidden="true" className="size-4 shrink-0" />Back to reports</Button>}
           </div>
-          <ReportDetails report={selected} patientLabel={selected ? patientLabel(selected.patientId) : undefined} canDownload={canDownload} downloading={downloading} downloadError={downloadError?.id === selected?.id ? downloadError?.message : undefined} onDownload={download} />
+          <ReportDetails compact={showAssistant} report={selected} patientLabel={selected ? patientLabel(selected.patientId) : undefined} canDownload={canDownload} downloading={downloading} downloadError={downloadError?.id === selected?.id ? downloadError?.message : undefined} onDownload={download} />
         </section>
+          {import.meta.env.DEV && location.hostname === '127.0.0.1' && AssistantPreviewCard && <Suspense fallback={<p role="status" className="rounded-lg border border-divider bg-panel p-5 text-sm">Loading synthetic assistant…</p>}><AssistantPreviewCard /></Suspense>}
+        </div>
       </div>
     </div>
   );

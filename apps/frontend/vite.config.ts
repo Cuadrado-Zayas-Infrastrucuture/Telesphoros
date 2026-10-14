@@ -1,11 +1,12 @@
 import { fileURLToPath, URL } from 'node:url';
+import { brandingPlugin } from './scripts/branding-plugin.mjs';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { imagetools } from 'vite-imagetools';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), imagetools()],
+  plugins: [brandingPlugin, react(), tailwindcss(), imagetools()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

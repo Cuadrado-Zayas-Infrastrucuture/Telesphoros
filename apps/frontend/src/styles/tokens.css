@@ -1,9 +1,24 @@
-/* Shared brand font; this token sheet is also imported by the local SMART pilot. */
+/* Shared brand fonts; this sheet is also imported by the local SMART pilot. */
 @font-face {
   font-family: 'Poppins';
   src: url('../assets/fonts/Poppins-SemiBold.ttf') format('truetype');
   font-style: normal;
   font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Poppins';
+  src: url('../assets/fonts/Poppins-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('../assets/fonts/InterVariable.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 900;
   font-display: swap;
 }
 
@@ -21,6 +36,9 @@
   --surface: #E8E7E2;
   --muted: #DCEBE7;
   --muted-foreground: #46616a;
+  /* Approved stronger dashboard text; fills and statuses keep their shared colors. */
+  --dashboard-foreground: #173E47;
+  --dashboard-muted-foreground: #36515A;
   --border: #59777e; /* Control boundary; decorative dividers are separate. */
   --divider: #cadbdc; /* decorative teal-tinted separators only */
   --primary: #225560;
@@ -40,7 +58,9 @@
 
   /* Type */
   --font-family-heading: Poppins, Arial, sans-serif;
-  --font-family-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-family-landing: Inter, Arial, sans-serif;
+  --font-family-sans: Inter, Arial, sans-serif;
+  --font-family-ui-heading: var(--font-family-sans);
   --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* Spacing (Tailwind multiplies this base: p-4 = 4 * --space-unit) */
@@ -62,6 +82,7 @@
   --size-prose: 40rem;
   --size-report-list: 24rem;
   --size-conversation: 27rem;
+  --workspace-compact-title-size: 1.75rem;
   --size-image-dialog: 44rem;
   --size-source-image-zoom: 76.5rem;
   --duration-preview-shimmer: 3s;
@@ -71,4 +92,25 @@
   --shadow-button: 0 1px 2px #22556024, inset 0 1px 0 #ffffff24;
   --shadow-button-pressed: inset 0 1px 3px #173e4724;
   --button-sheen: linear-gradient(180deg, #ffffff0d, #ffffff00);
+}
+
+/* Product landing: decorative depth, kept separate from operational surfaces. */
+:root {
+  --landing-night: #081e25;
+  --landing-depth: #123c47;
+  --landing-soft-text: #c5dcd9;
+  --landing-gradient: radial-gradient(ellipse at 56% 8%, var(--primary) 0%, var(--landing-depth) 48%, var(--landing-night) 100%);
+  --landing-preview-shadow: 0 24px 64px #041a2440;
+  --landing-hero-type: clamp(2.75rem, 6.4vw, 5rem);
+  --landing-section-type: clamp(2rem, 3.5vw, 2.875rem);
+  --landing-dna-width: 31.25rem;
+  --landing-dna-mobile-width: 20rem;
+}
+
+/* Compact editorial hierarchy for operational screens. */
+:root {
+  --workspace-title-size: clamp(1.75rem, 3vw, 2.25rem);
+  --workspace-title-weight: 500;
+  --workspace-section-weight: 500;
+  --workspace-content-gap: 1.5rem;
 }
