@@ -135,6 +135,10 @@ jobs:
           set -o pipefail
           pnpm --filter @telesphoros/worker test 2>&1 | tee tier-worker.log
           ! grep -F "NOT RUNNING" tier-worker.log
+      # The job's log ends with the database container's output, which buries the test report; print the failing tests where they can be read.
+      - name: "Worker: show the failing tests"
+        if: failure() && hashFiles('tier-worker.log') != ''
+        run: grep -n -B2 -A30 -E "FAIL|AssertionError|Error:|NOT RUNNING" tier-worker.log | head -400
       - name: Validate all three independent-recovery measurement profiles
         run: node .github/ci/verify-recovery-metrics.mjs
       - name: Validate all three application-recovery measurement profiles
