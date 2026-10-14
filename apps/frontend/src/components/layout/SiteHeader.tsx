@@ -7,12 +7,15 @@ import { AccountMenu } from '@/components/layout/AccountMenu';
 import { cn } from '@/lib/utils';
 
 export function SiteHeader() {
-  const landing = useLocation().pathname === '/' && !ownedStorageMode();
+  const pathname = useLocation().pathname;
+  const landing = pathname === '/' && !ownedStorageMode();
   const { roles } = useAuth();
   // Links to pages the user cannot use are simply not shown. The pages are guarded as well.
   const links = [
     { to: '/', label: 'Overview', end: true, show: !landing },
     { to: '/reports', label: 'Reports', end: true, show: ownedStorageMode() && roles.length > 0 },
+    ...(import.meta.env.DEV && location.hostname === '127.0.0.1' && ownedStorageMode() && roles.length > 0 && pathname !== '/reports'
+      ? [{ to: '/local-interpretation', label: 'AI preview', end: true, show: true }] : []),
     { to: '/reports/upload', label: 'Upload report', end: false, show: !ownedStorageMode() && roles.some((r) => WRITER_ROLES.includes(r)) },
   ].filter((link) => link.show);
 
@@ -42,6 +45,7 @@ export function SiteHeader() {
                 </NavLink>
               </li>
             ))}
+            {import.meta.env.DEV && location.hostname === '127.0.0.1' && ownedStorageMode() && roles.length > 0 && pathname === '/reports' && <li><a href="#ai-assistant" className="inline-flex min-h-control items-center border-b-2 border-transparent px-2 text-sm font-medium text-foreground hover:bg-muted" onClick={event => { const panel = document.getElementById('ai-assistant') as HTMLDetailsElement | null; if (panel) { event.preventDefault(); panel.open = true; panel.scrollIntoView?.({ block: 'start' }); panel.querySelector('summary')?.focus({ preventScroll: true }); } }}>AI preview</a></li>}
           </ul>
         </nav>
         <AccountMenu />

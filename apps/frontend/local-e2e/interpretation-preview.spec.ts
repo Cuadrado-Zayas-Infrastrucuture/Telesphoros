@@ -74,6 +74,10 @@ test('attachments, image dialog, feedback and scroll controls remain local and k
   const brand = page.getByRole('img', { name: 'Telesphoros shield and Rx logo', exact: true });
   await expect(brand).toBeVisible();
   expect((await brand.boundingBox())!.width).toBeGreaterThanOrEqual(64);
+  const mascot = page.getByRole('img', { name: 'Telesphoros mascot in a teal cloak', exact: true });
+  await expect(mascot).toBeVisible();
+  await expect(mascot).toHaveJSProperty('naturalWidth', 162);
+  await expect(page.locator('[data-mascot-context="assistant"]')).toHaveAttribute('data-mascot-variant', 'centered');
   const imageTrigger = page.getByRole('button', { name: 'Preview bundled source image' });
   await imageTrigger.click();
   await expect(page.getByRole('dialog')).toBeVisible();

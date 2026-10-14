@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import './tokens.css';
+@import './workspace.css';
 
 /* Remove Tailwind's default palette/radii so utilities can only resolve to our tokens. */
 @theme inline {
@@ -58,6 +59,7 @@
 @layer base {
   html {
     font-family: var(--font-family-sans);
+    font-optical-sizing: auto;
     -webkit-text-size-adjust: 100%;
   }
   body {

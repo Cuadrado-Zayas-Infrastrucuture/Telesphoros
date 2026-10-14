@@ -8,13 +8,15 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useRouteFocus } from '@/hooks/useRouteFocus';
 
 export function AppLayout() {
-  const landing = useLocation().pathname === '/' && !ownedStorageMode();
+  const { pathname } = useLocation();
+  const landing = pathname === '/' && !ownedStorageMode();
+  const workspace = pathname.startsWith('/reports') || pathname.startsWith('/local-') || (pathname === '/' && ownedStorageMode());
   const mainRef = useRef<HTMLElement>(null);
   const navigation = useNavigation();
   useRouteFocus(mainRef, landing);
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className={`flex min-h-dvh flex-col${workspace ? ' workspace-shell' : ''}`}>
       <SkipLink />
       <SiteHeader />
       {/* Announced politely while a lazy route's JavaScript is being fetched. */}

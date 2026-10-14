@@ -1,5 +1,14 @@
-/* Imported only by the DEV preview page. All colors and sizes use brand tokens. */
+/* Imported only by the DEV assistant. All colors and sizes use brand tokens. */
 .preview-conversation { height: var(--size-conversation); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.dashboard-assistant .preview-conversation { height: clamp(5rem, calc(100dvh - 45rem), 7rem); }
+.dashboard-assistant .mascot-welcome--assistant.mascot-welcome--centered { flex-direction: row; gap: .75rem; padding: 0; text-align: left; }
+.dashboard-assistant .mascot-welcome--assistant.mascot-welcome--centered .mascot-welcome-image { width: 3rem; }
+.dashboard-assistant .assistant-footer { position: relative; }
+.dashboard-assistant .assistant-latest { position: absolute; bottom: 100%; right: .25rem; margin-bottom: .25rem; z-index: 10; }
+.dashboard-assistant .assistant-question-menu > div { position: absolute; bottom: 100%; left: 0; right: 0; z-index: 20; }
+.dashboard-assistant .assistant-composer textarea { max-height: 5rem; }
+.dashboard-assistant > div, .dashboard-assistant > div > div { gap: .5rem; }
+@media (max-width: 40rem) { .dashboard-assistant .preview-conversation { height: 5rem; } }
 .preview-image-dialog { width: min(var(--size-image-dialog), calc(100% - 2rem)); max-height: calc(100dvh - 2rem); margin: auto; }
 .preview-image-viewport { max-height: 60dvh; overflow: auto; overscroll-behavior: contain; }
 .preview-image-zoom { width: var(--size-source-image-zoom); }
