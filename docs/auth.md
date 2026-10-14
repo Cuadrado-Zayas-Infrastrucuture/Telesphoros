@@ -31,7 +31,7 @@ The API **ignores the role groups in the token**: adding someone to a Cognito gr
 | `clinician` | | read, create, change, upload |
 | `admin` | | what a clinician may; reserved for administration |
 | `reviewer` | | accept or reject a text capture of a lab report (slice 5B-3.2). It **adds** to whatever else the person holds and is never implied by another role: an `admin` alone cannot accept. The person who created, uploaded or captured a report can never accept its capture, whatever roles they hold |
-| (no roles) | none | sign in, and see their tenant's data without changing anything (a decision to refuse reads too is pending: M1.5b, finding I04) |
+| (no roles) | none | sign in and call `GET /api/v1/me`, nothing else: every read of patients, reports, recommendations, captures, evaluations and disputes is 403 (finding I04; a member of an organization is not thereby allowed to read its records) |
 
 A role the table does not know cannot be stored (a check constraint refuses it), so nothing can grant a role by accident.
 

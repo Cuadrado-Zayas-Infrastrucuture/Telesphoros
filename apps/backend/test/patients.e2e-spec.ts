@@ -25,12 +25,14 @@ describe('patients: roles and shape', () => {
     expect(JSON.stringify(res.body)).not.toMatch(/owner|tenant|created_?by|user-a/i);
   });
 
-  it('forbids a reader and a role-less caller from changing data, but not from reading', async () => {
+  it('forbids a reader and a role-less caller from changing data; a reader may read, a role-less caller may not', async () => {
     for (const token of [await readerA(), await noRolesA()]) {
       const res = await api().post(BASE).set(bearer(token)).send({ label: 'SYN-9999' }).expect(403);
       expect(res.body.error.code).toBe('FORBIDDEN');
-      await api().get(BASE).set(bearer(token)).expect(200);
     }
+    await api().get(BASE).set(bearer(await readerA())).expect(200);
+    const refused = await api().get(BASE).set(bearer(await noRolesA())).expect(403); // finding I04: belonging to an organization is not permission to read its records
+    expect(refused.body.error.code).toBe('FORBIDDEN');
   });
 });
 

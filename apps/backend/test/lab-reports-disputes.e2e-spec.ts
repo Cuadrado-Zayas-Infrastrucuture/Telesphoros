@@ -342,13 +342,16 @@ import { bearer } from './helpers/tokens';
   });
 
   describe('reading disputes', () => {
-    it('every signed-in role may list and read; a status filter narrows; another tenant sees none of them', async () => {
+    it('every role may list and read, a member with none may not; a status filter narrows; another tenant sees none of them', async () => {
       const s = await evaluatedD01();
       const raised = (await raise(s.rev, { ...(cellOf(resultFor(s.e, 'drugq'))), note: 'SYN: x' }).expect(201)).body;
       const other = await lab.person('rev-other', ['reviewer']);
       const second = (await raise(s.rev, { ...(cellOf(resultFor(s.e, 'drugr'))), note: 'SYN: y' }).expect(201)).body;
       await decide(other, second.id, { decision: 'dismissed', evidenceNote: 'SYN: z' }).expect(201);
 
+      const noRole = await lab.person('x', []);
+      await lab.api().get('/api/v1/cell-disputes').set(bearer(noRole.token)).expect(403); // finding I04
+      await lab.api().get(`/api/v1/cell-disputes/${raised.id}`).set(bearer(noRole.token)).expect(403);
       for (const roles of [['reader'], ['clinician'], ['reviewer'], ['admin']]) {
         const who = await lab.person('x', roles);
         const list = await lab.api().get('/api/v1/cell-disputes').set(bearer(who.token)).expect(200);

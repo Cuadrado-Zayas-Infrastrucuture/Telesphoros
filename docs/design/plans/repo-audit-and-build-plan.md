@@ -127,7 +127,7 @@ Only the findings whose status changed, or that need a decision, are listed. The
 
 | ID | Finding | Note |
 | --- | --- | --- |
-| I04 | A tenant member with no role can read patient and report metadata | Nine read routes (`GET /patients`, `/patients/:id`, `/reports`, `/reports/:id`, `/captures/:id`, `/evaluations`, `/evaluations/:id`, `/cell-disputes`, `/recommendations`) have no `@Roles`. This matches [auth.md](../../auth.md), which says a member with no role group may "see their tenant's data without changing anything". The research package recommends the opposite (no clinical read without a role). Decision **DA-1** below. |
+| I04 | A tenant member with no role can read patient and report metadata | Nine read routes (`GET /patients`, `/patients/:id`, `/reports`, `/reports/:id`, `/captures/:id`, `/evaluations`, `/evaluations/:id`, `/cell-disputes`, `/recommendations`) have no `@Roles`. This matches [auth.md](../../auth.md), which says a member with no role group may "see their tenant's data without changing anything". The research package recommends the opposite (no clinical read without a role). Decision **DA-1** below: decided yes on 2026-10-13, fixed in M1.5b (11 routes, not 9: `GET /recommendations/:id` and `GET /cell-disputes/:id` were also open). |
 
 ## 5. Gaps and defects found in this audit
 

@@ -68,7 +68,7 @@ describe('the lab-report pipeline routes', () => {
   it('every controller of the module carries the gate, and every route that is not open to all names its roles', () => {
     for (const controller of moduleControllers) expect(Reflect.getMetadata(REQUIRES_PIPELINE, controller)).toBe(true);
     const open = routes.filter((r) => r.roles === undefined).map((r) => `${r.method} ${r.path.replace(ID, ':id')}`);
-    expect(open.sort()).toEqual(['GET /api/v1/captures/:id', 'GET /api/v1/cell-disputes', 'GET /api/v1/cell-disputes/:id', 'GET /api/v1/evaluations', 'GET /api/v1/evaluations/:id']); // reads open to every signed-in role
+    expect(open).toEqual([]); // no route is open to a member who holds no role (finding I04); the reads name every role instead
   });
 });
 
@@ -120,8 +120,9 @@ describe('with the pipeline switched off', () => {
   it.each(routes.map((r) => [`${r.method} ${r.path.replace(ID, ':id')}`, r] as const))('%s: 401 without a token and 403 without the role, never 503', async (_name, route) => {
     expect((await send(route)).status).toBe(401);
     if (route.roles) {
-      const wrong = ['reader', 'clinician', 'reviewer', 'admin'].find((role) => !route.roles!.includes(role))!;
-      const res = await send(route, await tokenWith([wrong]));
+      // A route that every role may use is still refused to a member who holds none.
+      const wrong = ['reader', 'clinician', 'reviewer', 'admin'].find((role) => !route.roles!.includes(role));
+      const res = await send(route, await tokenWith(wrong ? [wrong] : []));
       expect(res.status).toBe(403);
       expect(res.body.error.code).toBe('FORBIDDEN');
     }

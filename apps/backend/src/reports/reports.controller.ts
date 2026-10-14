@@ -22,6 +22,7 @@ import {
   reportUploadUrlRequestSchema,
   type ReportUploadUrlResponse,
 } from '@telesphoros/shared-types';
+import { CLINICAL_READ_ROLES } from '../auth/clinical-read';
 import { CurrentPrincipal, Roles } from '../auth/decorators';
 import type { Principal } from '../auth/principal';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
@@ -35,6 +36,7 @@ export class ReportsController {
   constructor(private readonly service: ReportsService, private readonly intake: IntakeService) {}
 
   @Get()
+  @Roles(...CLINICAL_READ_ROLES)
   async list(
     @CurrentPrincipal() principal: Principal,
     @Query(new ZodValidationPipe(reportListQuerySchema)) query: ReportListQuery,
@@ -44,6 +46,7 @@ export class ReportsController {
   }
 
   @Get(':id')
+  @Roles(...CLINICAL_READ_ROLES)
   async get(
     @CurrentPrincipal() principal: Principal,
     @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam,
