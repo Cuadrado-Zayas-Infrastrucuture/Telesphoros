@@ -65,6 +65,7 @@ export const EXPECTED_USES = {
   'kms.tf': { 'count = local.offsite_count': 2, 'deletion_window_in_days = local.kms_deletion_days': 2 },
   'outputs.tf': { 'value = local.synthetic ? null : aws_iam_policy.backup_job[0].arn': 1, 'value = local.synthetic ? null : aws_kms_key.backup[0].arn': 1, 'value = local.synthetic ? null : aws_s3_bucket.backups[0].bucket': 1 },
   'storage.tf': { 'count = local.offsite_count': 9, 'force_destroy = local.synthetic': 2 },
+  'worker.tf': { 'assign_public_ip = local.tasks_public_ip': 1, 'deletion_window_in_days = local.kms_deletion_days': 1, 'recovery_window_in_days = local.secret_recovery_days': 1 },
 };
 
 /** The definitions in profile.tf. In the production branch of every one of them the value is the variable, unchanged. */

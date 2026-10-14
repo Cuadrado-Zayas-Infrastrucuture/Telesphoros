@@ -358,6 +358,17 @@ describe('what the worker login can and cannot do', () => {
 });
 
 describe('statistics and liveness', () => {
+  it('counts a suspended organization\'s held jobs but does not let them age the queue (the alarm reads the age of what could run)', async () => {
+    await reset();
+    await enqueueAs(f.db, TENANT_A, PERSON, 'test.echo', { n: 1 }, key(), { runAfter: new Date(Date.now() - 60_000) });
+    await f.admin.query(`INSERT INTO jobs (tenant_id, type, payload, idempotency_key, requested_by, run_after) VALUES ($1, 'test.echo', '{}', $2, $3, now() - interval '5 hours')`, [TENANT_SUSPENDED, key(), PERSON]);
+    const queued = (await queue.stats()).find((s) => s.type === 'test.echo' && s.state === 'queued')!;
+    expect(queued.count).toBe(2);
+    expect(queued.oldestReadySeconds).toBeGreaterThan(50);
+    expect(queued.oldestReadySeconds).toBeLessThan(600); // not the five hours the held job has waited
+    await reset();
+  });
+
   it('reports counts and ages by type and state, and records that a worker was seen', async () => {
     await reset();
     await enqueueAs(f.db, TENANT_A, PERSON, 'test.echo', { n: 1 }, key(), { runAfter: new Date(Date.now() - 120_000) });

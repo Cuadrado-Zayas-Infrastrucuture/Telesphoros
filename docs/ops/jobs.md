@@ -1,6 +1,6 @@
 # Background jobs: the queue, the worker and the operator command
 
-Synthetic data only. Nothing here is applied in AWS, and no job in this milestone touches a clinical record. Built in [M2.3a](../design/plans/m2-3-jobs-outbox-worker.md#m23a-as-built-and-where-it-differs-from-the-plan) ([verification](../verification/m2-3a-queue-core.md)) and [M2.3b](../design/plans/m2-3-jobs-outbox-worker.md#m23b-as-built-and-where-it-differs-from-the-plan) ([verification](../verification/m2-3b-outbox-consumers.md)); the deployment (Terraform, alarms, image target) is M2.3c.
+Synthetic data only. Nothing here is applied in AWS, and no job in this milestone touches a clinical record. Built in [M2.3a](../design/plans/m2-3-jobs-outbox-worker.md#m23a-as-built-and-where-it-differs-from-the-plan) ([verification](../verification/m2-3a-queue-core.md)) and [M2.3b](../design/plans/m2-3-jobs-outbox-worker.md#m23b-as-built-and-where-it-differs-from-the-plan) ([verification](../verification/m2-3b-outbox-consumers.md))and [M2.3c](../design/plans/m2-3-jobs-outbox-worker.md#m23c-as-built-and-where-it-differs-from-the-plan) ([verification](../verification/m2-3c-worker-deploy.md)): the deployment (Terraform written, not applied; alarms; image target; the worker login).
 
 ## What exists
 
@@ -64,7 +64,7 @@ Its log is one JSON line per event with a fixed set of fields (worker id, job id
 ```
 jobs status                                   counts and the age of the oldest ready job, by type and state; workers seen
 jobs list [--tenant ID] [--type T] [--state S] [--limit N]
-jobs dead [--tenant ID] [--limit N]           the dead letters (an alarm in M2.3c)
+jobs dead [--tenant ID] [--limit N]           the dead letters (an alarm raises when one appears)
 jobs show --id JOB_ID                         the job, its payload (ids and codes) and its attempt history
 jobs retry --id JOB_ID --by NAME              re-queue one DEAD job with fresh attempts
 jobs cancel --id JOB_ID --by NAME             stop a job that has not started (queued or waiting to retry)
@@ -74,6 +74,38 @@ jobs cancel --id JOB_ID --by NAME             stop a job that has not started (q
 
 **A dead job is a decision, not a chore.** Read `jobs show`, find out why from the error code and the log, fix the cause, then retry. Retrying a job whose cause is not fixed only produces another dead letter.
 
-## Not yet (carried to M2.3c)
+## Deployment (M2.3c; written, never applied)
 
-The ECS service for the worker, its read-only bucket role, the alarms (a dead job, a stale worker heartbeat, a queue that is not draining, a failed file check), the image target and CI image guard, and the worker's database login in `provision-logins` with its Terraform secret. Until then the worker is run by hand or in tests, and no environment has one. A screen for the verification record, and a notification when a check fails, belong to a later slice.
+The worker is the **same image as the API**, started with the command `node worker/main.js` (the image holds `dist/main.js` for the API and `worker/main.js`, a single bundle, for the worker). Terraform is `infrastructure/terraform/worker.tf` and follows the API's switch: it exists only when `enable_api_hosting` is on, and its task definition and service also need `api_image`. Nothing here has been applied; the first real apply is the FD-7 rehearsal.
+
+| Piece | What it is |
+| --- | --- |
+| Service | One Fargate task by default (`worker_desired_count`, 1 to 5; jobs wait in the database and two workers never run the same job), on the API's cluster, **no load balancer**, no shell (`enable_execute_command = false`), read-only filesystem, non-root, `stopTimeout` 60 s (longer than the 30 s drain), circuit breaker with rollback |
+| Network | Its own security group: **no inbound traffic at all**, out only to the database (5432) and HTTPS. The health check is the container fetching `127.0.0.1:8081/livez` itself |
+| Login | Secret `<name>/worker/database-url`, injected as `DATABASE_URL`. Written by `provision-logins` (login `telesphoros_job_worker`, member of `telesphoros_worker` **only**); Terraform creates the container, never a value |
+| Task role | **Read-only on report files**: `s3:GetObject` and `s3:GetObjectVersion` on `reports/*` of the reports bucket, `kms:Decrypt` through S3 only. No put, delete, list, key creation, secrets or IAM right |
+| Execution role | Pulls this repository, writes its own log group, reads **only the worker secret** |
+| Logs | Own log group and own key (`/ecs/<name>-worker`), same retention floor as the API |
+
+### Alarms (one email list: the audit topic)
+
+| Alarm | Fires when | What to do |
+| --- | --- | --- |
+| `worker-job-dead` | a job logged `job-finished` with outcome `dead` | `jobs dead`, `jobs show`, fix the cause, then `jobs retry` |
+| `worker-file-check-failed` | a stored-file check (`file-verified`, outcome not `ok`) or a daily re-check found a problem | Read the finding (see below). Nothing was repaired or deleted |
+| `worker-queue-not-draining` | the oldest *ready* job has waited more than 15 minutes, two five-minute checks running | `jobs status`; look for workers down, stuck or too slow. A suspended organization's held jobs are **not** counted: they wait on purpose |
+| `worker-heartbeat-stale` | no `queue-stats` line for five minutes (or no data) | The worker is stopped, crash-looping or cut off from the database. Nothing is lost: jobs wait |
+
+The worker writes one `queue-stats` line a minute (`WORKER_STATS_SECONDS`, default 60: waiting count, running count, dead count and `ageSeconds`), which feeds the last two alarms. The patterns and the worker's own log literals are pinned by tests in both directions (`worker.guard.test.mjs`, `apps/worker/src/deploy-contract.test.ts`), so renaming a log field fails a build instead of silencing an alarm.
+
+**A failed re-check.** `jobs dead` lists the job (`files.verify-stored` or `files.verify-stale`); `jobs show` gives its error code (`file-missing`, `file-changed`) and the `file_verifications` rows name the reason (`version-missing`, `size-mismatch`, `hash-mismatch`, `type-mismatch`). A missing version or different bytes in a versioned bucket that only the application writes means something happened to the file (a deletion, a lifecycle rule, a restore, tampering): treat it as an incident, not a retry. The job is retried only after the cause is understood.
+
+### First deployment of the worker
+
+1. Add the fourth secret to the provisioning run: `provision-logins` now creates `telesphoros_job_worker` and writes its secret (the provisioning task already names it). Run it **before migration 0023 and again after** (`--require-migrated`) as for the other logins; the second run reads the worker's privileges back and fails if it can read any table the queue's functions should guard.
+2. Migrate (0023 to 0025).
+3. Start the worker service. `worker-started` and `queue-stats` appear in its log group; the heartbeat alarm clears.
+
+## Not yet
+
+A Nest application context for handlers that write clinical records (the first such consumer is M3.x), a screen for the verification record, a notification channel other than the alarm email, and any real apply of this Terraform. The worker has never run in AWS: the Docker image build and the worker rehearsal mode (`infrastructure/docker/rehearsal-driver.cjs`) run in CI only.

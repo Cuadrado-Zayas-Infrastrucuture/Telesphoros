@@ -10,7 +10,7 @@ const {pgClientConfig} = require('/app/dist/db/tls');
 const sm = new SecretsManagerClient({});
 const hash = text => createHash('sha256').update(text).digest('hex');
 async function credentials() {
-  for (const [kind, key] of [['APP','DATABASE_URL'],['VERIFIER','LEDGER_VERIFIER_DATABASE_URL'],['MIGRATOR','DATABASE_MIGRATOR_URL']]) {
+  for (const [kind, key] of [['APP','DATABASE_URL'],['VERIFIER','LEDGER_VERIFIER_DATABASE_URL'],['MIGRATOR','DATABASE_MIGRATOR_URL'],['WORKER','WORKER_DATABASE_URL']]) {
     process.env[key] = (await sm.send(new GetSecretValueCommand({SecretId:process.env[`PROVISION_SECRET_${kind}`]}))).SecretString;
   }
 }
@@ -33,6 +33,33 @@ async function api() {
   const child=spawn(process.execPath,['dist/main.js'],{env:process.env,stdio:'inherit'});
   for(const signal of ['SIGTERM','SIGINT']) process.on(signal,()=>child.kill(signal));
   child.on('exit',code=>process.exit(code ?? 1));
+}
+// The background worker, started as the image starts it (`node worker/main.js`, production mode, its own login and nothing else): it must come up, answer its
+// health probe, and stop cleanly on SIGTERM. Nothing it logs is printed (the output may hold a connection detail).
+async function workerCheck() {
+  await credentials();
+  const env={...process.env,DATABASE_URL:process.env.WORKER_DATABASE_URL,WORKER_ID:'rehearsal-worker',WORKER_HEALTH_PORT:'8081',WORKER_DRAIN_SECONDS:'5'};
+  for(const key of ['WORKER_DATABASE_URL','LEDGER_VERIFIER_DATABASE_URL','DATABASE_MIGRATOR_URL','PROVISION_ADMIN_PASSWORD']) delete env[key];
+  const child=spawn(process.execPath,['worker/main.js'],{env,stdio:['ignore','pipe','pipe']});
+  let output='';child.stdout.on('data',b=>output+=b);child.stderr.on('data',b=>output+=b);
+  const exited=new Promise(resolve=>child.on('exit',(code,signal)=>resolve({code,signal})));
+  try {
+    let live=false;
+    for(let i=0;i<40&&!live;i++){
+      await new Promise(r=>setTimeout(r,1000));
+      try{live=(await fetch('http://127.0.0.1:8081/livez',{signal:AbortSignal.timeout(2000)})).status===200;}catch{}
+    }
+    assert.equal(live,true,'worker live');
+    assert.equal((await fetch('http://127.0.0.1:8081/readyz')).status,200);
+    assert.match(output,/"event":"worker-started"/);
+    assert.doesNotMatch(output,/job-types-disabled/); // the bucket is configured, so the file jobs are registered
+  } finally {
+    child.kill('SIGTERM');
+  }
+  const done=await Promise.race([exited,new Promise(resolve=>setTimeout(()=>resolve({code:'timeout'}),45000))]);
+  assert.deepEqual(done,{code:0,signal:null});
+  assert.match(output,/"event":"worker-stopped"/);
+  console.log('PASS worker started with its own login, answered its probes and stopped cleanly');
 }
 async function seed(tenant) {
   const patient=randomUUID(), report=randomUUID(), sha=hash(report), version='synthetic-v1', key=`synthetic/${report}`;
@@ -61,7 +88,7 @@ async function main() {
   assert.throws(()=>fs.writeFileSync('/app/should-not-write','test'));
   const mode=process.argv[2];
   if(mode==='initialize') {
-    for(const kind of ['APP','VERIFIER','MIGRATOR']) await sm.send(new CreateSecretCommand({Name:process.env[`PROVISION_SECRET_${kind}`]}));
+    for(const kind of ['APP','VERIFIER','MIGRATOR','WORKER']) await sm.send(new CreateSecretCommand({Name:process.env[`PROVISION_SECRET_${kind}`]}));
     await cli(['provision-logins']); await credentials();
     // Negative TLS control: same server and credentials, a hostname absent from its certificate.
     const wrong=new URL(process.env.DATABASE_URL);wrong.hostname=process.env.REHEARSAL_WRONG_HOST;
@@ -81,6 +108,7 @@ async function main() {
     await cli(['migrate','up']); await cli(['provision-logins','--require-migrated']);
     console.log('PASS provisioning, pristine startup refusal, migrations, privilege verification');
   } else if(mode==='api') await api();
+  else if(mode==='worker') await workerCheck();
   else if(mode==='record') {
     await credentials();const input=await seed('synthetic-contained');await write('synthetic-contained',input);
     await connected(process.env.LEDGER_VERIFIER_DATABASE_URL,c=>c.query('SELECT ledger_record_incident($1,$2,$3::bigint,$4)',['synthetic-contained','payload-mismatch',1,'background']));

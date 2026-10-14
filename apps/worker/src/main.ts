@@ -40,9 +40,23 @@ async function main(): Promise<void> {
   const runner = new Runner({ workerId: config.workerId, queue, jobs, concurrency: config.concurrency, tenantCap: config.tenantCap, pollMs: config.pollMs, drainSeconds: config.drainSeconds, log });
   const scheduler = new Ticker('schedule', () => queue.scheduleTick(), config.scheduleTickSeconds, log);
   const relay = new Ticker('outbox-relay', () => queue.relayOutbox(), config.relaySeconds, log);
+  // The queue's depth and the age of its oldest ready job, as one log line a minute: the "queue is not draining" alarm reads `ageSeconds` (suspended organizations'
+  // jobs are not counted: they are held on purpose).
+  const stats = new Ticker('queue-stats', async () => {
+    const rows = await queue.stats();
+    const waiting = rows.filter((r) => r.state === 'queued' || r.state === 'retry');
+    log('info', 'queue-stats', {
+      count: waiting.reduce((n, r) => n + r.count, 0),
+      running: rows.filter((r) => r.state === 'running').reduce((n, r) => n + r.count, 0),
+      dead: rows.filter((r) => r.state === 'dead').reduce((n, r) => n + r.count, 0),
+      ageSeconds: Math.round(Math.max(0, ...waiting.map((r) => r.oldestReadySeconds ?? 0))),
+    });
+    return 0;
+  }, config.statsSeconds, log);
   runner.start();
   scheduler.start();
   relay.start();
+  stats.start();
   const health = await startHealthServer(runner, { host: config.healthHost, port: config.healthPort, staleAfterMs: Math.max(30_000, config.pollMs * 5) });
   log('info', 'health-listening', { count: (health.address() as AddressInfo).port });
 
@@ -52,7 +66,7 @@ async function main(): Promise<void> {
     stopping = true;
     log('info', 'shutdown-requested', { reason: signal });
     health.close();
-    await Promise.all([scheduler.stop(), relay.stop()]);
+    await Promise.all([scheduler.stop(), relay.stop(), stats.stop()]);
     await runner.stop();
     await pool.end().catch(() => undefined);
     process.exit(0);

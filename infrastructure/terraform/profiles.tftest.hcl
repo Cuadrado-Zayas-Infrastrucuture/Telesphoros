@@ -61,6 +61,10 @@ run "default_variables_plan" {
     condition     = length(aws_ecs_service.api) == 0 && length(aws_lb.api) == 0 && length(aws_ecs_task_definition.api_provision) == 0 && length(data.aws_iam_policy_document.api_provision_task) == 0
     error_message = "API hosting, and with it the provisioning task, is off by default"
   }
+  assert {
+    condition     = length(aws_ecs_service.worker) == 0 && length(aws_ecs_task_definition.worker) == 0 && length(aws_cloudwatch_metric_alarm.worker_heartbeat_stale) == 0 && length(aws_secretsmanager_secret.worker_database_url) == 0
+    error_message = "the worker, with its secret and alarms, is off by default"
+  }
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -170,6 +174,14 @@ run "production_hosting_on" {
     condition     = aws_secretsmanager_secret.api_database_url[0].recovery_window_in_days == 30 && aws_kms_key.api_logs[0].deletion_window_in_days == 30
     error_message = "production keeps the 30-day recovery windows"
   }
+  assert {
+    condition     = length(aws_ecs_service.worker) == 1 && length(aws_ecs_task_definition.worker) == 1 && length(aws_cloudwatch_metric_alarm.worker_heartbeat_stale) == 1
+    error_message = "hosting on creates the worker service, its task definition and its alarms"
+  }
+  assert {
+    condition     = aws_secretsmanager_secret.worker_database_url[0].recovery_window_in_days == 30 && aws_kms_key.worker_logs[0].deletion_window_in_days == 30 && one(aws_ecs_service.worker[0].network_configuration).assign_public_ip == false
+    error_message = "the worker follows the profile: production keeps the 30-day windows and gives tasks no public address"
+  }
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -270,6 +282,10 @@ run "synthetic_hosting_on" {
   assert {
     condition     = aws_kms_key.api_logs[0].deletion_window_in_days == 7
     error_message = "synthetic's log key uses the shortest deletion window"
+  }
+  assert {
+    condition     = length(aws_ecs_service.worker) == 1 && aws_secretsmanager_secret.worker_database_url[0].recovery_window_in_days == 0 && one(aws_ecs_service.worker[0].network_configuration).assign_public_ip == true
+    error_message = "the worker follows the synthetic profile: its secret is deleted at once and its tasks get a public address"
   }
 }
 

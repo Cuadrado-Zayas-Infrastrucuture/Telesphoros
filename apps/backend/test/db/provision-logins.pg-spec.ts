@@ -83,7 +83,7 @@ afterAll(async () => {
 async function fixture(): Promise<Fixture> {
   const tag = randomBytes(4).toString('hex');
   const database = `test_prov_${tag}`;
-  const names: LoginNames = { app: `prov_app_${tag}`, verifier: `prov_ver_${tag}`, migrator: `prov_mig_${tag}` };
+  const names: LoginNames = { app: `prov_app_${tag}`, verifier: `prov_ver_${tag}`, migrator: `prov_mig_${tag}`, worker: `prov_wrk_${tag}` };
   databases.push(database);
   logins.push(...Object.values(names));
   await withAdmin(adminUrl(), (c) => c.query(`CREATE DATABASE ${database}`));
@@ -101,7 +101,7 @@ async function fixture(): Promise<Fixture> {
     adminUrl: admin.toString(),
     tls: 'disable',
     target: { host: base.hostname, port: Number(base.port) },
-    secrets: { app: 'secret-app', verifier: 'secret-verifier', migrator: 'secret-migrator' },
+    secrets: { app: 'secret-app', verifier: 'secret-verifier', migrator: 'secret-migrator', worker: 'secret-worker' },
     store,
     names,
   };
@@ -123,16 +123,16 @@ async function asLogin<T>(value: string, work: (c: Client) => Promise<T>): Promi
 const failing = (report: ProvisionReport) => report.checks.filter((c) => !c.ok).map((c) => `${c.name}: ${c.detail}`);
 
 describe('provisioning on a database nothing has been applied to', () => {
-  it('creates the three logins, stores working connection strings, and makes the migrator the owner so the migrations run as it', async () => {
+  it('creates the four logins, stores working connection strings, and makes the migrator the owner so the migrations run as it', async () => {
     const f = await fixture();
     const report = await provisionLogins(f.options);
     expect(failing(report)).toEqual([]);
     expect(report.ok).toBe(true);
-    expect(report.logins.map((l) => [l.kind, l.action])).toEqual([['migrator', 'created'], ['app', 'created'], ['verifier', 'created']]);
+    expect(report.logins.map((l) => [l.kind, l.action])).toEqual([['migrator', 'created'], ['app', 'created'], ['verifier', 'created'], ['worker', 'created']]);
     expect(report.checks.find((c) => c.name === 'group privileges')).toMatchObject({ skipped: true, ok: true }); // nothing to read back before the migrations
 
     // Every stored string signs in as the login it names (a real connection, not a string check).
-    for (const [kind, user] of [['app', f.names.app], ['verifier', f.names.verifier], ['migrator', f.names.migrator]] as const) {
+    for (const [kind, user] of [['app', f.names.app], ['verifier', f.names.verifier], ['migrator', f.names.migrator], ['worker', f.names.worker]] as const) {
       const value = f.store.values.get(f.options.secrets[kind])!;
       expect(await asLogin(value, async (c) => (await c.query('SELECT current_user AS u')).rows[0].u)).toBe(user);
     }
@@ -149,7 +149,7 @@ describe('provisioning on a database nothing has been applied to', () => {
     const after = await provisionLogins({ ...f.options, requireMigrated: true });
     expect(failing(after)).toEqual([]);
     const privileges = after.checks.filter((c) => /login privileges$/.test(c.name));
-    expect(privileges.map((c) => [c.name, c.ok, c.skipped ?? false])).toEqual([['app login privileges', true, false], ['verifier login privileges', true, false]]);
+    expect(privileges.map((c) => [c.name, c.ok, c.skipped ?? false])).toEqual([['app login privileges', true, false], ['verifier login privileges', true, false], ['worker login privileges', true, false]]);
     expect(after.logins.every((l) => l.action === 'unchanged')).toBe(true);
   });
 
@@ -172,6 +172,21 @@ describe('provisioning on a database nothing has been applied to', () => {
       await expect(c.query('SELECT * FROM ledger_incident_clearances')).rejects.toMatchObject({ code: '42501' }); // the application may not
     });
   });
+
+  it('the provisioned worker login can run the queue\'s functions and nothing else (live attempts)', async () => {
+    const f = await fixture();
+    await provisionLogins(f.options);
+    await asLogin(f.store.values.get('secret-migrator')!, (c) => migrateUp(c));
+    await asLogin(f.store.values.get('secret-worker')!, async (c) => {
+      await expect(c.query('SELECT * FROM job_stats()')).resolves.toBeDefined();
+      await expect(c.query('SELECT outbox_relay(1)')).resolves.toBeDefined();
+      await expect(c.query('SELECT job_schedule_tick()')).resolves.toBeDefined();
+      for (const sql of ["INSERT INTO jobs (tenant_id, type, idempotency_key, requested_by) VALUES ('t', 'x.y', 'k', 'u')", 'SELECT * FROM patients', 'SELECT * FROM reports', 'SELECT * FROM ledger_events', 'SELECT * FROM tenants',
+        "SELECT ledger_append('00000000-0000-0000-0000-000000000000', 'x', 'y', gen_random_uuid(), 'z', 1::smallint)", "SELECT outbox_append('report.file-committed', gen_random_uuid())", 'SELECT * FROM uploads_sweep(\'t\', 0, true)', 'SET ROLE telesphoros_jobs']) {
+        await expect(c.query(sql)).rejects.toMatchObject({ code: '42501' });
+      }
+    });
+  });
 });
 
 describe('running it again', () => {
@@ -182,7 +197,7 @@ describe('running it again', () => {
     const putsBefore = f.store.puts.length;
     const again = await provisionLogins(f.options);
     expect(again.ok).toBe(true);
-    expect(again.logins.map((l) => l.action)).toEqual(['unchanged', 'unchanged', 'unchanged']);
+    expect(again.logins.map((l) => l.action)).toEqual(['unchanged', 'unchanged', 'unchanged', 'unchanged']);
     expect(f.store.puts.length).toBe(putsBefore);
     expect(f.store.values).toEqual(before);
     for (const value of before.values()) await asLogin(value, (c) => c.query('SELECT 1'));
@@ -194,7 +209,7 @@ describe('running it again', () => {
     const old = new Map(f.store.values);
     const rotated = await provisionLogins({ ...f.options, rotate: true });
     expect(rotated.ok).toBe(true);
-    expect(rotated.logins.map((l) => l.action)).toEqual(['rotated', 'rotated', 'rotated']);
+    expect(rotated.logins.map((l) => l.action)).toEqual(['rotated', 'rotated', 'rotated', 'rotated']);
     for (const [id, value] of f.store.values) {
       expect(value).not.toBe(old.get(id));
       await asLogin(value, (c) => c.query('SELECT 1')); // control: the new string works
@@ -209,7 +224,7 @@ describe('running it again', () => {
     await withAdmin(f.options.adminUrl, (c) => c.query(`ALTER ROLE ${f.names.app} PASSWORD 'changed-by-someone'`));
     const report = await provisionLogins(f.options);
     expect(report.ok).toBe(true);
-    expect(Object.fromEntries(report.logins.map((l) => [l.kind, l.action]))).toEqual({ migrator: 'unchanged', app: 'repaired', verifier: 'repaired' });
+    expect(Object.fromEntries(report.logins.map((l) => [l.kind, l.action]))).toEqual({ migrator: 'unchanged', app: 'repaired', verifier: 'repaired', worker: 'unchanged' });
     for (const value of f.store.values.values()) await asLogin(value, (c) => c.query('SELECT 1'));
   });
 
@@ -270,6 +285,25 @@ describe('what it refuses to call ready', () => {
     expect(failing(bad).join('\n')).toMatch(/app login privileges: .*ledger_events \(CAN write\)/);
   });
 
+  it('a worker that can read a clinical table, write a queue table or run an application function fails the check', async () => {
+    const f = await fixture();
+    await provisionLogins(f.options);
+    await asLogin(f.store.values.get('secret-migrator')!, (c) => migrateUp(c));
+    expect((await provisionLogins({ ...f.options, requireMigrated: true })).ok).toBe(true); // control
+    for (const [grant, revoke, expected] of [
+      [`GRANT SELECT ON patients TO ${f.names.worker}`, `REVOKE SELECT ON patients FROM ${f.names.worker}`, /worker login privileges: .*patients \(CAN read\)/],
+      [`GRANT INSERT ON jobs TO ${f.names.worker}`, `REVOKE INSERT ON jobs FROM ${f.names.worker}`, /worker login privileges: .*jobs \(CAN write\)/],
+      [`GRANT EXECUTE ON FUNCTION job_enqueue(text, jsonb, text, timestamptz, integer) TO ${f.names.worker}`, `REVOKE EXECUTE ON FUNCTION job_enqueue(text, jsonb, text, timestamptz, integer) FROM ${f.names.worker}`, /worker login privileges: .*job_enqueue/],
+    ] as const) {
+      await withAdmin(f.options.adminUrl, (c) => c.query(grant));
+      const bad = await provisionLogins({ ...f.options, requireMigrated: true });
+      expect(bad.ok).toBe(false);
+      expect(failing(bad).join('\n')).toMatch(expected);
+      await withAdmin(f.options.adminUrl, (c) => c.query(revoke));
+      expect((await provisionLogins({ ...f.options, requireMigrated: true })).ok).toBe(true); // and it recovers
+    }
+  });
+
   it('a secret that cannot be written stops the run before any role is created', async () => {
     const f = await fixture();
     const broken: SecretStore = { get: async () => undefined, put: async () => { throw new Error('the secret store is down'); } };
@@ -307,11 +341,11 @@ describe('the password never leaves the process except as a hash', () => {
     } finally {
       Client.prototype.query = original;
     }
-    expect(new Set(passwords).size).toBe(6); // three created, three replaced: all different
+    expect(new Set(passwords).size).toBe(8); // four created, four replaced: all different
     const everything = sent.join('\n');
     expect(everything).toContain('SCRAM-SHA-256$'); // control: the statements that set passwords were captured, and they carry the verifier
-    expect(sent.filter((s) => /^CREATE ROLE .*PASSWORD/.test(s)).length).toBeGreaterThanOrEqual(3);
-    expect(sent.filter((s) => /^ALTER ROLE .*PASSWORD/.test(s)).length).toBeGreaterThanOrEqual(3);
+    expect(sent.filter((s) => /^CREATE ROLE .*PASSWORD/.test(s)).length).toBeGreaterThanOrEqual(4);
+    expect(sent.filter((s) => /^ALTER ROLE .*PASSWORD/.test(s)).length).toBeGreaterThanOrEqual(4);
     for (const password of passwords) {
       expect(everything).not.toContain(password);
       expect(JSON.stringify(reports)).not.toContain(password);

@@ -37,7 +37,7 @@ const run = <T>(db: EphemeralDatabase, work: (c: Client) => Promise<T>) => withA
  * migration. (Every other test derives from it rather than repeating it, and a separate test proves the loader finds exactly these,
  * so a discovery bug cannot hide itself by supplying both the actual and the expected value.)
  */
-const SHIPPED = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010', '0011', '0012', '0013', '0014', '0015', '0016', '0017', '0018', '0019', '0020', '0021', '0022', '0023', '0024'];
+const SHIPPED = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010', '0011', '0012', '0013', '0014', '0015', '0016', '0017', '0018', '0019', '0020', '0021', '0022', '0023', '0024', '0025'];
 /** The first migration that creates append-only audit tables: reverting it (and everything after it) needs the explicit setting. */
 const FIRST_AUDIT_MIGRATION = '0005';
 const nextVersion = String(SHIPPED.length + 1).padStart(4, '0');
@@ -88,7 +88,7 @@ describe('migration runner', () => {
     // evidence identities (tested in report-evidence), so on an empty one it reverts freely; the audit migrations start below it.
     // 0021 (merge records and duplicate flags) and 0020 (patient-link decisions) hold audit records: both are guarded like the other audit migrations.
     // 0023 (the job queue) reverts freely while no attempt is recorded, and so does 0022 (intake rejections) while no rejection is recorded; the guards on populated ones are tested in jobs and security-events.
-    expect(await down(db, 3)).toEqual(['0024', '0023', '0022']);
+    expect(await down(db, 4)).toEqual(['0025', '0024', '0023', '0022']);
     await expect(run(db, (c) => migrateDown(c, 1))).rejects.toThrow(/Refusing to drop patient merge records/);
     expect(await down(db, 1)).toEqual(['0021']);
     await expect(run(db, (c) => migrateDown(c, 1))).rejects.toThrow(/Refusing to drop patient-link decisions/);
@@ -97,7 +97,7 @@ describe('migration runner', () => {
     await expect(run(db, (c) => migrateDown(c, 1))).rejects.toThrow(/Refusing to drop ledger incidents/);
     expect(await down(db, 1)).toEqual(['0011']);
     expect(await run(db, (c) => migrateDown(c, 1))).toEqual(['0010']);
-    const SHIPPED_NOW = SHIPPED.slice(0, -15);
+    const SHIPPED_NOW = SHIPPED.slice(0, -16);
     const attempt = (setting: string | null) =>
       run(db, async (c) => {
         if (setting !== null) await c.query(`SET telesphoros.allow_audit_drop = '${setting}'`);

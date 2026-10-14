@@ -5,10 +5,14 @@ RUN npm install --global pnpm@10.28.0
 COPY . .
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @telesphoros/backend build
+# The background worker is one self-contained bundle (its workspace packages are compiled in); it runs from this same image as `node worker/main.js` and needs only
+# modules the API already ships (pg, zod, the AWS SDK).
+RUN pnpm --filter @telesphoros/worker build
 # Legacy deploy keeps workspace isolation without altering the shared lockfile.
 RUN node infrastructure/docker/dependency-graph.cjs record && pnpm --filter @telesphoros/backend deploy --legacy --prod /output && node infrastructure/docker/dependency-graph.cjs compare
 # Removes only throwaway build output, never the checkout.
 RUN rm -rf /output/src /output/test /output/scripts /output/*.mjs /output/jest.config.js /output/tsconfig*.json /output/README.md && find /output -name '*.map' -delete
+RUN mkdir /output/worker && cp apps/worker/dist/main.js /output/worker/main.js
 
 FROM node:22.22.0-bookworm-slim@sha256:dd9d21971ec4395903fa6143c2b9267d048ae01ca6d3ea96f16cb30df6187d94 AS runtime
 WORKDIR /app

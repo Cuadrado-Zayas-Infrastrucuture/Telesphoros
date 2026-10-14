@@ -29,11 +29,13 @@ export interface LoginNames {
   app: string;
   /** Member of `telesphoros_ledger_verifier` only, never of `telesphoros_app`. */
   verifier: string;
-  /** Owns the database and every object the migrations create; may act as the two definer roles. Used only by the migration task. */
+  /** Owns the database and every object the migrations create; may act as the definer roles. Used only by the migration task. */
   migrator: string;
+  /** Member of `telesphoros_worker` only: the background worker. It can claim and report jobs through functions and read its organization's job rows, nothing else. */
+  worker: string;
 }
 
-export const DEFAULT_LOGINS: LoginNames = { app: 'telesphoros_api', verifier: 'telesphoros_ledger_watch', migrator: 'telesphoros_migrator' };
+export const DEFAULT_LOGINS: LoginNames = { app: 'telesphoros_api', verifier: 'telesphoros_ledger_watch', migrator: 'telesphoros_migrator', worker: 'telesphoros_job_worker' };
 
 export type LoginKind = keyof LoginNames;
 
@@ -105,13 +107,14 @@ const EXPECTED_GROUPS: Record<LoginKind, string[]> = {
   app: ['telesphoros_app'],
   verifier: ['telesphoros_ledger_verifier'],
   migrator: ['telesphoros_jobs', 'telesphoros_ledger', 'telesphoros_redactor'],
+  worker: ['telesphoros_worker'],
 };
 
 /**
  * What each login may execute, by function name (every overload). `true` = at least one overload is executable, `false` = none is.
  * These are the guarantees the ledger rests on (docs/ops/ledger-roles.md): only the gate appends, only the verifier records checkpoints and incidents.
  */
-const FUNCTION_RIGHTS: Record<'app' | 'verifier', Record<string, boolean>> = {
+const FUNCTION_RIGHTS: Record<'app' | 'verifier' | 'worker', Record<string, boolean>> = {
   app: {
     ledger_append: true,
     ledger_append_internal: false,
@@ -130,14 +133,33 @@ const FUNCTION_RIGHTS: Record<'app' | 'verifier', Record<string, boolean>> = {
     ledger_clear_incident: false,
     redact_event_note: false,
   },
+  // The background worker touches the ledger in no way.
+  worker: {
+    ledger_append: false,
+    ledger_append_internal: false,
+    ledger_record_checkpoint: false,
+    ledger_record_incident: false,
+    ledger_set_global_hold: false,
+    ledger_clear_incident: false,
+    redact_event_note: false,
+  },
 };
+
+/** The queue's functions (migrations 0023 and 0024), by who may run them. Checked only on a database that has them. */
+const WORKER_FUNCTIONS = ['job_claim', 'job_heartbeat', 'job_succeed', 'job_fail', 'job_release', 'job_schedule_tick', 'job_worker_seen', 'job_stats', 'outbox_relay',
+  'file_verification_target', 'file_verification_stale', 'file_verification_record', 'job_uploads_sweep'];
+const APPLICATION_FUNCTIONS = ['job_enqueue', 'outbox_append'];
+const OWNER_ONLY_FUNCTIONS = ['uploads_sweep', 'uploads_organization_run_id', 'job_held'];
+const JOB_TABLES = ['jobs', 'job_attempts', 'job_schedules', 'job_workers', 'outbox_events', 'outbox_routes', 'file_verifications'];
+/** Tables the worker login must not even read (it reaches data only through the queue's functions). */
+const WORKER_UNREADABLE = ['patients', 'reports', 'report_captures', 'report_upload_attempts', 'evaluations', 'ledger_events', 'tenant_memberships', 'security_events', 'tenants', 'invitations'];
 
 const LEDGER_TABLES = ['ledger_events', 'ledger_heads', 'ledger_checkpoints'];
 
 export async function provisionLogins(options: ProvisionOptions): Promise<ProvisionReport> {
   const names = options.names ?? DEFAULT_LOGINS;
   for (const name of Object.values(names)) if (!IDENTIFIER.test(name)) throw new Error('A login name must be lowercase letters, digits and underscores.');
-  if (new Set(Object.values(names)).size !== 3) throw new Error('The three login names must differ.');
+  if (new Set(Object.values(names)).size !== 4) throw new Error('The four login names must differ.');
 
   const admin = new Client(pgClientConfig(options.adminUrl, options.tls));
   await admin.connect();
@@ -176,7 +198,7 @@ export async function provisionLogins(options: ProvisionOptions): Promise<Provis
       const has = (await admin.query('SELECT pg_has_role($1, $2, \'SET\') AS ok', [names.migrator, group])).rows[0].ok as boolean;
       if (!has) await admin.query(`GRANT ${q(group)} TO ${q(names.migrator)} WITH SET TRUE, INHERIT FALSE`);
     }
-    for (const kind of ['app', 'verifier'] as const) {
+    for (const kind of ['app', 'verifier', 'worker'] as const) {
       await ensureLogin(kind);
       const group = EXPECTED_GROUPS[kind][0]!;
       const member = (await admin.query('SELECT pg_has_role($1, $2, \'MEMBER\') AS ok', [names[kind], group])).rows[0].ok as boolean;
@@ -251,7 +273,7 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
   const checks: Check[] = [];
   const add = (name: string, ok: boolean, detail: string, skipped = false) => checks.push({ name, ok, detail, ...(skipped ? { skipped } : {}) });
 
-  for (const kind of ['app', 'verifier', 'migrator'] as const) {
+  for (const kind of ['app', 'verifier', 'migrator', 'worker'] as const) {
     const name = names[kind];
     const row = (await admin.query('SELECT rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolbypassrls, rolreplication FROM pg_roles WHERE rolname = $1', [name])).rows[0];
     const plain = row && row.rolcanlogin && !row.rolsuper && !row.rolcreatedb && !row.rolcreaterole && !row.rolbypassrls && !row.rolreplication;
@@ -279,18 +301,38 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
     add('group privileges', !options.requireMigrated, detail, !options.requireMigrated);
     return checks;
   }
-  for (const kind of ['app', 'verifier'] as const) {
+  const hasQueue = (await admin.query("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'job_claim' AND pronamespace = 'public'::regnamespace) AS ok")).rows[0].ok as boolean;
+  const canExecute = async (login: string, fn: string): Promise<boolean | undefined> => {
+    const rows = (await admin.query<{ ok: boolean }>(`SELECT has_function_privilege($1, p.oid, 'EXECUTE') AS ok FROM pg_proc p WHERE p.proname = $2 AND p.pronamespace = 'public'::regnamespace`, [login, fn])).rows;
+    return rows.length === 0 ? undefined : rows.some((r) => r.ok);
+  };
+  const canWrite = async (login: string, table: string) =>
+    (await admin.query<{ ok: boolean }>(`SELECT (has_table_privilege($1, $2, 'INSERT') OR has_table_privilege($1, $2, 'UPDATE') OR has_table_privilege($1, $2, 'DELETE') OR has_table_privilege($1, $2, 'TRUNCATE')) AS ok`, [login, `public.${table}`])).rows[0].ok as boolean;
+  for (const kind of ['app', 'verifier', 'worker'] as const) {
     const wrong: string[] = [];
     for (const [fn, allowed] of Object.entries(FUNCTION_RIGHTS[kind])) {
-      const rows = (await admin.query<{ ok: boolean }>(`SELECT has_function_privilege($1, p.oid, 'EXECUTE') AS ok FROM pg_proc p WHERE p.proname = $2 AND p.pronamespace = 'public'::regnamespace`, [names[kind], fn])).rows;
-      if (rows.length === 0) wrong.push(`${fn} (missing)`);
-      else if (rows.some((r) => r.ok) !== allowed) wrong.push(`${fn} (${allowed ? 'cannot' : 'CAN'} execute)`);
+      const can = await canExecute(names[kind], fn);
+      if (can === undefined) wrong.push(`${fn} (missing)`);
+      else if (can !== allowed) wrong.push(`${fn} (${allowed ? 'cannot' : 'CAN'} execute)`);
     }
-    for (const table of LEDGER_TABLES) {
-      const writable = (await admin.query<{ ok: boolean }>(`SELECT (has_table_privilege($1, $2, 'INSERT') OR has_table_privilege($1, $2, 'UPDATE') OR has_table_privilege($1, $2, 'DELETE') OR has_table_privilege($1, $2, 'TRUNCATE')) AS ok`, [names[kind], `public.${table}`])).rows[0].ok as boolean;
-      if (writable) wrong.push(`${table} (CAN write)`);
+    for (const table of LEDGER_TABLES) if (await canWrite(names[kind], table)) wrong.push(`${table} (CAN write)`);
+    if (hasQueue) {
+      for (const fn of [...WORKER_FUNCTIONS, ...APPLICATION_FUNCTIONS, ...OWNER_ONLY_FUNCTIONS]) {
+        const allowed = kind === 'worker' ? WORKER_FUNCTIONS.includes(fn) : kind === 'app' ? APPLICATION_FUNCTIONS.includes(fn) : false;
+        const can = await canExecute(names[kind], fn);
+        if (can === undefined) wrong.push(`${fn} (missing)`);
+        else if (can !== allowed) wrong.push(`${fn} (${allowed ? 'cannot' : 'CAN'} execute)`);
+      }
+      for (const table of JOB_TABLES) if (await canWrite(names[kind], table)) wrong.push(`${table} (CAN write)`);
     }
-    add(`${kind} login privileges`, wrong.length === 0, wrong.length ? wrong.join('; ') : 'only the functions it needs, and it writes no ledger table');
+    if (kind === 'worker') {
+      for (const table of WORKER_UNREADABLE) {
+        const readable = (await admin.query<{ ok: boolean }>(`SELECT has_table_privilege($1, $2, 'SELECT') AS ok`, [names.worker, `public.${table}`])).rows[0].ok;
+        if (readable) wrong.push(`${table} (CAN read)`);
+      }
+    }
+    add(`${kind} login privileges`, wrong.length === 0, wrong.length ? wrong.join('; ') : kind === 'worker' ? 'only the queue\'s functions; it writes no table and reads no clinical table' : 'only the functions it needs, and it writes no ledger table');
   }
+  if (!hasQueue) add('queue privileges', !options.requireMigrated, 'the job queue (migrations 0023 and 0024) is not applied yet; run this command again after `migrate up`', !options.requireMigrated);
   return checks;
 }

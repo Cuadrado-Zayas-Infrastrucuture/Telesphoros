@@ -16,6 +16,8 @@ const schema = z.object({
   WORKER_SCHEDULE_TICK_SECONDS: number(5, 3600, 30),
   /** How often pending outbox events are turned into jobs. */
   WORKER_RELAY_SECONDS: number(1, 600, 5),
+  /** How often the worker logs the queue's depth and age (an alarm reads it). */
+  WORKER_STATS_SECONDS: number(10, 3600, 60),
   /** The bucket the stored-file re-check reads (read-only). Required in production; without it the file jobs are not registered. */
   REPORTS_BUCKET: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/).optional(),
   S3_ENDPOINT: z.string().url().optional(),
@@ -40,6 +42,7 @@ export interface WorkerConfig {
   drainSeconds: number;
   scheduleTickSeconds: number;
   relaySeconds: number;
+  statsSeconds: number;
   reportsBucket: string | undefined;
   s3Endpoint: string | undefined;
   s3ForcePathStyle: boolean;
@@ -73,6 +76,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, hostname = 'wor
     drainSeconds: c.WORKER_DRAIN_SECONDS,
     scheduleTickSeconds: c.WORKER_SCHEDULE_TICK_SECONDS,
     relaySeconds: c.WORKER_RELAY_SECONDS,
+    statsSeconds: c.WORKER_STATS_SECONDS,
     reportsBucket: c.REPORTS_BUCKET,
     s3Endpoint: c.S3_ENDPOINT,
     s3ForcePathStyle: c.S3_FORCE_PATH_STYLE === 'true',

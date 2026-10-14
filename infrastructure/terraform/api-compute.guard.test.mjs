@@ -164,21 +164,22 @@ export function apiComputeProblems(tf, sources = {}) {
   need(has(migrate, 'environment = [{ name = "DATABASE_SSL", value = "require" }]'), 'the migration task must set DATABASE_SSL=require: TLS comes only from that setting, never from the connection string');
   need(has(text, 'family = "${local.name}-api-migrate"') && !/aws_ecs_service" "api_migrate/.test(text), 'the migration task must be a task definition only, never a service');
 
-  // The one-off provisioning task: creates the three logins. Its execution role injects the administrator's credentials; its task role can touch ONLY the three
+  // The one-off provisioning task: creates the four logins. Its execution role injects the administrator's credentials; its task role can touch ONLY the four
   // connection-string secrets and can NOT read the administrator secret.
   const provision = one('resource "aws_ecs_task_definition" "api_provision"');
   need(has(provision, 'task_role_arn = aws_iam_role.api_provision_task[0].arn') && has(provision, 'execution_role_arn = aws_iam_role.api_execution_provision[0].arn'), 'the provisioning task must use its own two roles');
   need(has(provision, 'command = ["node", "dist/db/cli.js", "provision-logins"]'), 'the provisioning task must run the provision-logins command');
   need(has(provision, 'readonlyRootFilesystem = true') && has(provision, 'user = local.api_user') && has(provision, 'image = var.api_image'), 'the provisioning task must be read-only, non-root and run the pinned image');
   need(has(provision, '{ name = "DATABASE_SSL", value = "require" }'), 'the provisioning task must set DATABASE_SSL=require');
+  need(has(provision, '{ name = "PROVISION_SECRET_WORKER", value = aws_secretsmanager_secret.worker_database_url[0].arn }'), 'the provisioning task must name the worker login secret');
   need(has(provision, 'valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:username::"') && has(provision, 'valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::"'), "the administrator's credentials must be injected as the username and password keys of the RDS-managed secret, and nothing else of it");
   need(!/DATABASE_URL|DATABASE_MIGRATOR_URL|DATABASE_ADMIN_URL|LEDGER_VERIFIER/.test(code(provision)), 'the provisioning task must not be given any connection string');
   need(has(text, 'family = "${local.name}-api-provision"') && !/aws_ecs_service" "api_provision/.test(text), 'the provisioning task must be a task definition only, never a service');
   const provisionTask = one('data "aws_iam_policy_document" "api_provision_task"');
   const readWrite = statements(provisionTask).find((s) => s.actions.includes('secretsmanager:PutSecretValue'));
   need(readWrite !== undefined && readWrite.actions.replace(/\s/g, '') === '["secretsmanager:GetSecretValue","secretsmanager:PutSecretValue"]', 'the provisioning task role may only read and write secret values');
-  for (const ref of ['api_database_url[0].arn', 'api_ledger_verifier_url[0].arn', 'api_migrator_url[0].arn']) need(readWrite?.resources.includes(`aws_secretsmanager_secret.${ref}`), `the provisioning task role must reach ${ref}`);
-  need(readWrite ? (readWrite.resources.match(/aws_secretsmanager_secret\./g) ?? []).length === 3 && !readWrite.resources.includes('"*"') : false, 'the provisioning task role must reach exactly the three connection-string secrets');
+  for (const ref of ['api_database_url[0].arn', 'api_ledger_verifier_url[0].arn', 'api_migrator_url[0].arn', 'worker_database_url[0].arn']) need(readWrite?.resources.includes(`aws_secretsmanager_secret.${ref}`), `the provisioning task role must reach ${ref}`);
+  need(readWrite ? (readWrite.resources.match(/aws_secretsmanager_secret\./g) ?? []).length === 4 && !readWrite.resources.includes('"*"') : false, 'the provisioning task role must reach exactly the four connection-string secrets');
   need(!has(provisionTask, 'master_user_secret') && !/"secretsmanager:\*"|"iam:|"kms:\*"|resources\s*=\s*\["\*"\]/.test(code(provisionTask)), 'the provisioning task role must not read the administrator secret, hold iam or wildcard rights');
   const provisionDecrypt = statements(provisionTask).find((s) => s.actions.includes('kms:Decrypt'));
   need(provisionDecrypt !== undefined && has(provisionDecrypt.body, 'variable = "kms:ViaService"') && provisionDecrypt.resources.includes('aws_kms_key.data.arn'), 'the provisioning task role must use the data key only through Secrets Manager');
@@ -337,10 +338,11 @@ test('the API compute guard reports each way the text could be weakened (control
     ['running-tasks threshold fixed', 'threshold           = var.api_desired_count', 'threshold           = 0'],
     ['Container Insights off', 'value = "enabled"', 'value = "disabled"'],
     ['output removed', 'output "api_cluster_name"', 'output "api_other"'],
-    ['provisioning task role can read the administrator secret', 'resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn]', 'resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn, aws_db_instance.main.master_user_secret[0].secret_arn]'],
-    ['provisioning task role reaches only two secrets', 'resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn]', 'resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn]'],
+    ['provisioning task role can read the administrator secret', 'resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn, aws_secretsmanager_secret.worker_database_url[0].arn]', 'resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn, aws_secretsmanager_secret.worker_database_url[0].arn, aws_db_instance.main.master_user_secret[0].secret_arn]'],
+    ['provisioning task role cannot write the worker secret', ', aws_secretsmanager_secret.worker_database_url[0].arn]\n  }\n  statement {\n    sid       = "UseTheDataKeyThroughSecretsManager"', ']\n  }\n  statement {\n    sid       = "UseTheDataKeyThroughSecretsManager"'],
+    ['provisioning does not pass the worker secret', '        { name = "PROVISION_SECRET_WORKER", value = aws_secretsmanager_secret.worker_database_url[0].arn },\n', ''],
     ['provisioning task role may do anything with secrets', 'actions   = ["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue"]', 'actions   = ["secretsmanager:*"]'],
-    ['provisioning task role gains iam', 'sid       = "ReadAndWriteTheThreeConnectionStrings"', 'sid       = "ReadAndWriteTheThreeConnectionStrings"\n    # x\n    actions2  = ["iam:PassRole"]'],
+    ['provisioning task role gains iam', 'sid       = "ReadAndWriteTheFourConnectionStrings"', 'sid       = "ReadAndWriteTheFourConnectionStrings"\n    # x\n    actions2  = ["iam:PassRole"]'],
     ['provisioning execution role reads more than the administrator secret', 'resources = [aws_db_instance.main.master_user_secret[0].secret_arn]', 'resources = [aws_db_instance.main.master_user_secret[0].secret_arn, aws_secretsmanager_secret.api_database_url[0].arn]'],
     ['provisioning runs the wrong command', 'command                = ["node", "dist/db/cli.js", "provision-logins"]', 'command                = ["node", "dist/db/cli.js", "migrate", "up"]'],
     ['provisioning gets the whole administrator secret', ':password::"', '"'],
