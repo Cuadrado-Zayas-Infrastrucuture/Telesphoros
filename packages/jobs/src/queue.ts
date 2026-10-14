@@ -72,6 +72,11 @@ export class JobQueue {
     return Number((await this.db.query('SELECT job_schedule_tick($1) AS n', [now ?? new Date()])).rows[0]!.n);
   }
 
+  /** Turns pending outbox events into jobs, and marks them, in one transaction. Returns how many jobs were created. */
+  async relayOutbox(batch = 50): Promise<number> {
+    return Number((await this.db.query('SELECT outbox_relay($1) AS n', [batch])).rows[0]!.n);
+  }
+
   async workerSeen(workerId: string): Promise<void> {
     await this.db.query('SELECT job_worker_seen($1)', [workerId]);
   }

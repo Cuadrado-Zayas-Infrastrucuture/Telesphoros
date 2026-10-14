@@ -1,5 +1,4 @@
 import type { Client } from 'pg';
-import { organizationRunId } from './scope';
 
 export interface SweepResult {
   tenantId: string;
@@ -19,38 +18,19 @@ export interface SweepResult {
  * stored but never committed file is kept on purpose: it was validated, belongs to the report's own prefix, and the six-year retention floor applies to
  * overwritten versions. The attempt stays on record as `cleaned`, so its key remains a known key and does not block the report's next declaration.
  *
- * Runs as the table owner (DATABASE_MIGRATOR_URL) with the organization bound for the transaction, so row-level security still applies to every statement.
+ * Runs the database function `uploads_sweep` (DATABASE_MIGRATOR_URL, acting as the queue's owner role), the same one the scheduled `uploads.sweep` job calls, so the
+ * two can never disagree.
  */
 export async function sweepTenantUploads(client: Client, tenantId: string, options: { graceSeconds: number; dryRun: boolean }): Promise<SweepResult> {
   if (!Number.isInteger(options.graceSeconds) || options.graceSeconds < 0 || options.graceSeconds > 604800) throw new Error('graceSeconds must be between 0 and 604800.');
-  const run = organizationRunId(tenantId);
   await client.query('BEGIN');
   try {
-    await client.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
-    const abandoned = await client.query<{ id: string; size_bytes: string; state: string; object_version: string | null }>(
-      `SELECT a.id, a.size_bytes, a.state, a.object_version
-         FROM report_upload_attempts a
-        WHERE a.tenant_id = $1 AND a.run_id = $2 AND a.state NOT IN ('committed', 'cleaned')
-          AND (a.state IN ('cancelled', 'cleanup') OR a.lease_until + $3 * interval '1 second' <= now())
-          AND (a.writer IS NULL OR a.lease_until + $3 * interval '1 second' <= now())
-          AND NOT EXISTS (SELECT 1 FROM reports r WHERE r.tenant_id = a.tenant_id AND r.storage_key = a.storage_key AND r.uploaded_at IS NOT NULL)
-          AND NOT EXISTS (SELECT 1 FROM report_captures c WHERE c.tenant_id = a.tenant_id AND c.text_storage_key = a.storage_key)
-        ORDER BY a.created_at
-        FOR UPDATE`,
-      [tenantId, run, options.graceSeconds],
-    );
-    const result: SweepResult = {
-      tenantId,
-      released: abandoned.rowCount ?? 0,
-      releasedBytes: abandoned.rows.reduce((n, r) => n + Number(r.size_bytes), 0),
-      objectsKept: abandoned.rows.filter((r) => r.object_version !== null || r.state === 'stored' || r.state === 'unresolved').length,
-    };
-    if (!options.dryRun && result.released > 0) {
-      await client.query(`UPDATE report_upload_attempts SET state = 'cleaned', writer = NULL, updated_at = now() WHERE tenant_id = $1 AND id = ANY($2::uuid[])`, [tenantId, abandoned.rows.map((r) => r.id)]);
-      await client.query('UPDATE report_upload_runs SET reserved_bytes = GREATEST(reserved_bytes - $3, 0), updated_at = now() WHERE tenant_id = $1 AND run_id = $2', [tenantId, run, result.releasedBytes]);
-    }
+    // The one implementation is a database function owned by the queue's definer role (migration 0024), which the scheduled job also uses; it binds the organization
+    // itself, so row-level security still applies to every statement.
+    await client.query('SET LOCAL ROLE telesphoros_jobs');
+    const { rows } = await client.query<{ released: number; released_bytes: string; objects_kept: number }>('SELECT * FROM uploads_sweep($1, $2, $3)', [tenantId, options.graceSeconds, options.dryRun]);
     await client.query(options.dryRun ? 'ROLLBACK' : 'COMMIT');
-    return result;
+    return { tenantId, released: Number(rows[0]!.released), releasedBytes: Number(rows[0]!.released_bytes), objectsKept: Number(rows[0]!.objects_kept) };
   } catch (error) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw error;

@@ -26,9 +26,16 @@ describe('worker configuration', () => {
     expect(error?.message).not.toContain('hunter2');
   });
   it('refuses, in production, a connection without TLS and the test jobs', () => {
-    expect(() => loadConfig({ DATABASE_URL: URL, NODE_ENV: 'production' })).toThrow(/DATABASE_SSL=require/);
-    expect(() => loadConfig({ DATABASE_URL: URL, NODE_ENV: 'production', DATABASE_SSL: 'require', WORKER_TEST_JOBS: 'yes', WORKER_TEST_EFFECT_DIR: '/tmp/x' })).toThrow(/Test jobs are refused/);
-    expect(loadConfig({ DATABASE_URL: URL, NODE_ENV: 'production', DATABASE_SSL: 'require' }).databaseTls).toBe('require');
+    const prod = { DATABASE_URL: URL, NODE_ENV: 'production', REPORTS_BUCKET: 'synthetic-reports' };
+    expect(() => loadConfig(prod)).toThrow(/DATABASE_SSL=require/);
+    expect(() => loadConfig({ ...prod, DATABASE_SSL: 'require', WORKER_TEST_JOBS: 'yes', WORKER_TEST_EFFECT_DIR: '/tmp/x' })).toThrow(/Test jobs are refused/);
+    expect(loadConfig({ ...prod, DATABASE_SSL: 'require' }).databaseTls).toBe('require');
+  });
+  it('needs the reports bucket in production (the stored-file re-check reads it) and accepts the optional storage settings', () => {
+    expect(() => loadConfig({ DATABASE_URL: URL, NODE_ENV: 'production', DATABASE_SSL: 'require' })).toThrow(/REPORTS_BUCKET/);
+    expect(loadConfig({ DATABASE_URL: URL, REPORTS_BUCKET: 'synthetic-reports', S3_ENDPOINT: 'http://127.0.0.1:5555', S3_FORCE_PATH_STYLE: 'true', AWS_REGION: 'us-east-2' }))
+      .toMatchObject({ reportsBucket: 'synthetic-reports', s3Endpoint: 'http://127.0.0.1:5555', s3ForcePathStyle: true, awsRegion: 'us-east-2', relaySeconds: 5 });
+    for (const bad of ['UPPER', 'a', 'has space', 'x'.repeat(70)]) expect(() => loadConfig({ DATABASE_URL: URL, REPORTS_BUCKET: bad })).toThrow(/REPORTS_BUCKET/);
   });
   it('needs a marker directory for the test jobs and a short-code host name', () => {
     expect(() => loadConfig({ DATABASE_URL: URL, WORKER_TEST_JOBS: 'yes' })).toThrow(/WORKER_TEST_EFFECT_DIR/);

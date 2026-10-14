@@ -214,6 +214,8 @@ export class PostgresReportsRepository extends ReportsRepository {
       AND content_type=$9 AND sha256=$10 AND storage_key=$11 AND EXISTS(SELECT 1 FROM report_upload_attempts WHERE tenant_id=$1 AND id=$12 AND state='stored' AND lease_until>now())`,
     [i.tenantId,i.reportId,a.principal,a.version,a.revision,a.patientId,a.type,a.sizeBytes,a.contentType,a.sha256,a.key,a.id]);
     if(!pin.rowCount) return false;
+    // The follow-up (a re-check of the stored file) is recorded in THIS transaction: a commit that rolls back leaves no event, and one that commits cannot lose it.
+    await c.query('SELECT outbox_append($1, $2)',['report.file-committed',i.reportId]);
     await c.query("UPDATE report_upload_attempts SET state='committed',updated_at=now() WHERE tenant_id=$1 AND id=$2 AND state='stored'",[i.tenantId,a.id]);
     await c.query('UPDATE report_upload_runs SET reserved_bytes=reserved_bytes-$3,updated_at=now() WHERE tenant_id=$1 AND run_id=$2',[i.tenantId,a.runId,a.sizeBytes]); return true;
   }); }

@@ -1,57 +1,64 @@
 import type { AddressInfo } from 'node:net';
+import { S3Client } from '@aws-sdk/client-s3';
 import { Pool } from 'pg';
 import { JobQueue } from '@telesphoros/jobs';
 import { pgClientConfig } from '../../backend/src/db/tls';
-import { loadConfig } from './config';
+import { loadConfig, type WorkerConfig } from './config';
+import type { HandlerDeps } from './deps';
 import { startHealthServer } from './health';
+import { filesVerifyJobs } from './handlers/files-verify';
 import { testJobs } from './handlers/test-jobs';
+import { uploadsSweepJob } from './handlers/uploads-sweep';
+import { PgJobData } from './job-data';
 import { jsonLogger } from './log';
 import { Runner, type RegisteredJob } from './runner';
-import { Scheduler } from './scheduler';
+import { Ticker } from './scheduler';
+import { S3ObjectInspector } from './storage';
 
 /**
- * Production consumers are registered here, one reviewed line per job type (M2.3b adds the first two). This slice registers none: the worker can run
- * only the test jobs, and only when WORKER_TEST_JOBS=yes outside production.
+ * Production consumers are registered here, one reviewed line per job type. The upload sweep needs only the database; the stored-file re-check also needs the
+ * bucket (read-only) and is not registered without one (a production worker refuses to start without it, config.ts). The test job types are registered only
+ * when WORKER_TEST_JOBS=yes outside production.
  */
-function registeredJobs(config: ReturnType<typeof loadConfig>): RegisteredJob[] {
-  return config.testJobs ? testJobs(config.testEffectDir as string) : [];
+function registeredJobs(config: WorkerConfig, deps: HandlerDeps): RegisteredJob[] {
+  const jobs: RegisteredJob[] = [uploadsSweepJob(deps)];
+  if (config.reportsBucket) jobs.push(...filesVerifyJobs(deps));
+  else deps.log('warn', 'job-types-disabled', { reason: 'no-reports-bucket' });
+  if (config.testJobs) jobs.push(...testJobs(config.testEffectDir as string));
+  return jobs;
 }
 
 async function main(): Promise<void> {
   const log = jsonLogger();
   const config = loadConfig();
-  const jobs = registeredJobs(config);
-  if (jobs.length === 0) {
-    log('warn', 'worker-idle', { workerId: config.workerId, reason: 'no-job-types' });
-    // Nothing to run yet: stay up and healthy so the service can be deployed ahead of its first consumer, without claiming anything.
-  }
   const pool = new Pool({ ...pgClientConfig(config.databaseUrl, config.databaseTls), max: config.concurrency + 3, application_name: 'telesphoros-worker' });
   pool.on('error', () => log('error', 'database-connection-error', { code: 'pool-error' }));
   const queue = new JobQueue(pool);
-  const runner = jobs.length > 0 ? new Runner({ workerId: config.workerId, queue, jobs, concurrency: config.concurrency, tenantCap: config.tenantCap, pollMs: config.pollMs, drainSeconds: config.drainSeconds, log }) : undefined;
-  const scheduler = new Scheduler(queue, config.scheduleTickSeconds, log);
-  runner?.start();
-  if (runner) scheduler.start();
-  const health = runner
-    ? await startHealthServer(runner, { host: config.healthHost, port: config.healthPort, staleAfterMs: Math.max(30_000, config.pollMs * 5) })
-    : undefined;
-
-  if (health) log('info', 'health-listening', { count: (health.address() as AddressInfo).port });
+  const s3 = new S3Client({ ...(config.awsRegion ? { region: config.awsRegion } : {}), ...(config.s3Endpoint ? { endpoint: config.s3Endpoint } : {}), forcePathStyle: config.s3ForcePathStyle });
+  const deps: HandlerDeps = { data: new PgJobData(pool), inspector: new S3ObjectInspector(s3, config.reportsBucket ?? 'unconfigured'), log };
+  const jobs = registeredJobs(config, deps);
+  const runner = new Runner({ workerId: config.workerId, queue, jobs, concurrency: config.concurrency, tenantCap: config.tenantCap, pollMs: config.pollMs, drainSeconds: config.drainSeconds, log });
+  const scheduler = new Ticker('schedule', () => queue.scheduleTick(), config.scheduleTickSeconds, log);
+  const relay = new Ticker('outbox-relay', () => queue.relayOutbox(), config.relaySeconds, log);
+  runner.start();
+  scheduler.start();
+  relay.start();
+  const health = await startHealthServer(runner, { host: config.healthHost, port: config.healthPort, staleAfterMs: Math.max(30_000, config.pollMs * 5) });
+  log('info', 'health-listening', { count: (health.address() as AddressInfo).port });
 
   let stopping = false;
   const shutdown = async (signal: string) => {
     if (stopping) return;
     stopping = true;
     log('info', 'shutdown-requested', { reason: signal });
-    health?.close();
-    await scheduler.stop();
-    await runner?.stop();
+    health.close();
+    await Promise.all([scheduler.stop(), relay.stop()]);
+    await runner.stop();
     await pool.end().catch(() => undefined);
     process.exit(0);
   };
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
   process.on('SIGINT', () => void shutdown('SIGINT'));
-  if (!runner) await new Promise<void>(() => undefined);
 }
 
 main().catch((error: unknown) => {

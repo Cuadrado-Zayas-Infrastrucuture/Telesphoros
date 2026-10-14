@@ -1,4 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { createHash, randomUUID } from 'node:crypto';
+import { CreateBucketCommand, PutBucketVersioningCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -23,9 +25,13 @@ export async function createFixture(): Promise<Fixture> {
   const db = await createEphemeralDatabase();
   const worker = new Pool({ connectionString: db.workerUrl, max: 12 });
   const admin = new Pool({ connectionString: db.adminUrl, max: 4 });
+  // Dropping the database (WITH FORCE) ends any connection still open; that is not a test failure.
+  for (const pool of [worker, admin]) pool.on('error', () => undefined);
   for (const [id, status] of [[TENANT_A, 'active'], [TENANT_B, 'active'], [TENANT_SUSPENDED, 'suspended']]) {
     await admin.query(`INSERT INTO tenants (id, display_name, status, created_by, changed_by) VALUES ($1, $1, $2, 'worker-test', 'worker-test')`, [id, status]);
   }
+  // The migrations seed the recurring jobs (hourly sweep, daily re-check). These tests enqueue what they need themselves, so a worker under test does not also run those.
+  await admin.query('DELETE FROM job_schedules');
   return {
     db,
     worker,
@@ -113,4 +119,41 @@ export function startWorker(db: EphemeralDatabase, env: Record<string, string>):
   child.stderr.on('data', (d) => (out += d));
   const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => child.once('exit', (code, signal) => resolve({ code, signal })));
   return { child, output: () => out, exited };
+}
+
+export const REPORTS_BUCKET = 'worker-test-reports';
+
+export async function s3Client(): Promise<S3Client> {
+  const client = new S3Client({ region: 'us-east-2', endpoint: process.env.TEST_S3_ENDPOINT, forcePathStyle: true, credentials: { accessKeyId: 'synthetic', secretAccessKey: 'synthetic' } });
+  await client.send(new CreateBucketCommand({ Bucket: REPORTS_BUCKET, CreateBucketConfiguration: { LocationConstraint: 'us-east-2' } })).catch(() => undefined);
+  await client.send(new PutBucketVersioningCommand({ Bucket: REPORTS_BUCKET, VersioningConfiguration: { Status: 'Enabled' } }));
+  return client;
+}
+
+export interface SeededReport {
+  reportId: string;
+  key: string;
+  version: string;
+  bytes: Buffer;
+}
+
+/**
+ * A report whose file is really stored (Moto) and whose row is pinned to that stored version. `claim` overrides what the report says about the file (to make it disagree
+ * with the object); `pinVersion` pins a version the bucket does not have.
+ */
+export async function seedReport(f: Fixture, s3: S3Client, tenant: string, options: { bytes?: Buffer; contentType?: string; claim?: { sha256?: string; sizeBytes?: number; contentType?: string }; pinVersion?: string } = {}): Promise<SeededReport> {
+  const reportId = randomUUID();
+  const patientId = randomUUID();
+  const bytes = options.bytes ?? Buffer.from(`##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n${randomUUID()}\n`);
+  const contentType = options.contentType ?? 'text/x-vcf';
+  const key = `reports/${tenant}/${reportId}/file`;
+  const put = await s3.send(new PutObjectCommand({ Bucket: REPORTS_BUCKET, Key: key, Body: bytes, ContentType: contentType }));
+  const version = options.pinVersion ?? put.VersionId!;
+  await f.admin.query(`INSERT INTO patients (id, tenant_id, created_by, label) VALUES ($1, $2, 'worker-test', $3)`, [patientId, tenant, `SYN-${patientId.slice(0, 8)}`]);
+  await f.admin.query(
+    `INSERT INTO reports (id, tenant_id, created_by, patient_id, type, original_filename, size_bytes, status, content_type, sha256, storage_key, uploaded_at, object_version, upload_requested_by, uploaded_by)
+     VALUES ($1, $2, 'worker-test', $3, 'vcf', 'synthetic.vcf', $4, 'received', $5, $6, $7, now(), $8, 'worker-test', 'worker-test')`,
+    [reportId, tenant, patientId, options.claim?.sizeBytes ?? bytes.length, options.claim?.contentType ?? contentType, options.claim?.sha256 ?? createHash('sha256').update(bytes).digest('hex'), key, version],
+  );
+  return { reportId, key, version, bytes };
 }
