@@ -16,6 +16,7 @@
 :root {
   /* Color */
   --background: #F5F6F7;
+  --panel: #ffffff;
   --foreground: #225560;
   --surface: #E8E7E2;
   --muted: #DCEBE7;
@@ -51,13 +52,23 @@
   --radius-3: 0.75rem;
 
   /* Control sizes — md meets the 44px minimum touch target */
-  --size-button-sm: 2.25rem;
-  --size-button-md: 2.75rem;
-  --size-button-lg: 3.25rem;
+  --size-button-sm: 2.75rem;
+  --size-button-md: 3rem;
+  --size-button-lg: 3.5rem;
   --size-control: 2.75rem;
 
   /* Layout */
   --size-page: 72rem;
   --size-prose: 40rem;
   --size-report-list: 24rem;
+  --size-conversation: 27rem;
+  --size-image-dialog: 44rem;
+  --size-source-image-zoom: 76.5rem;
+  --duration-preview-shimmer: 3s;
+
+  /* Subtle depth on opaque surfaces; no blur over operational data. */
+  --elevation-panel: 0 2px 8px #22556008;
+  --shadow-button: 0 1px 2px #22556024, inset 0 1px 0 #ffffff24;
+  --shadow-button-pressed: inset 0 1px 3px #173e4724;
+  --button-sheen: linear-gradient(180deg, #ffffff0d, #ffffff00);
 }

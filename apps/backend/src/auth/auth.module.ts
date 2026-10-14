@@ -1,15 +1,18 @@
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ENV, type Env } from '../config/env';
 import { IpRateLimitGuard, PersonRateLimitGuard } from '../rate-limit/rate-limit.guard';
 import { RateLimitModule } from '../rate-limit/rate-limit.module';
+import { InMemoryMembershipRepository, MembershipRepository } from '../storage/membership.repository';
 import { AuthGuard } from './auth.guard';
 import { CognitoTokenVerifier } from './cognito-token-verifier';
+import { MembershipService } from './membership.service';
+import { MirrorTokenVerifier } from './mirror-token-verifier';
 import { RolesGuard } from './roles.guard';
 import { HmacTokenVerifier, TokenVerifier } from './token-verifier';
 
 /** loadEnv() guarantees the settings each branch needs, and refuses `hmac` in production. */
-function createVerifier(env: Env): TokenVerifier {
+export function createVerifier(env: Env): TokenVerifier {
   if (env.AUTH_VERIFIER === 'cognito') {
     return new CognitoTokenVerifier({
       issuer: env.COGNITO_ISSUER ?? `https://cognito-idp.${env.COGNITO_REGION}.amazonaws.com/${env.COGNITO_USER_POOL_ID}`,
@@ -20,10 +23,23 @@ function createVerifier(env: Env): TokenVerifier {
   return new HmacTokenVerifier({ JWT_SECRET: env.JWT_SECRET!, JWT_ISSUER: env.JWT_ISSUER, JWT_AUDIENCE: env.JWT_AUDIENCE });
 }
 
+/**
+ * The verifier the application uses. On the in-memory store (development) the membership mirrors the verified token so there is something to
+ * check without a database; PostgreSQL, and therefore production (which requires it), always uses the real table and nothing is mirrored.
+ */
+export function createApplicationVerifier(env: Env, memberships: MembershipRepository): TokenVerifier {
+  const verifier = createVerifier(env);
+  if (env.STORAGE_DRIVER !== 'memory') return verifier;
+  if (env.NODE_ENV === 'production' || !(memberships instanceof InMemoryMembershipRepository)) throw new Error('Token-mirrored membership is for the in-memory development store only');
+  new Logger('Auth').warn('Development store: each verified token\'s roles are mirrored into membership, so there is no operator step. Never used with PostgreSQL or in production.');
+  return new MirrorTokenVerifier(verifier, memberships);
+}
+
 @Module({
   imports: [RateLimitModule],
   providers: [
-    { provide: TokenVerifier, useFactory: createVerifier, inject: [ENV] },
+    { provide: TokenVerifier, useFactory: createApplicationVerifier, inject: [ENV, MembershipRepository] },
+    MembershipService,
     // Order matters. The address limit comes FIRST (a flood of bad tokens must be stopped before token verification), then authenticate,
     // then check roles, then the per-person limit (so a request that is refused or not signed in never spends a person's tokens).
     { provide: APP_GUARD, useClass: IpRateLimitGuard },

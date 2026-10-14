@@ -3,13 +3,20 @@ import { CreateBucketCommand, PutBucketVersioningCommand, S3Client } from '@aws-
 import { Controller, Get, type Type } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
+import { Pool } from 'pg';
 import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.factory';
 import { Public } from '../../src/auth/decorators';
+import { createVerifier } from '../../src/auth/auth.module';
+import { MirrorTokenVerifier } from '../../src/auth/mirror-token-verifier';
 import { TokenVerifier } from '../../src/auth/token-verifier';
+import type { MembershipAdmin } from '../../src/membership/membership';
+import { PgMembershipAdmin } from '../../src/membership/pg-membership-admin';
+import { InMemoryMembershipRepository, MembershipRepository } from '../../src/storage/membership.repository';
 import { loadEnv } from '../../src/config/env';
 import { READINESS_CHECKS, type ReadinessCheck } from '../../src/health/readiness.service';
-import { createEphemeralDatabase, verifierUrlFor } from './database';
+import { createEphemeralDatabase, ownerUrlFor, verifierUrlFor } from './database';
+import { PgMembershipMirror } from './membership';
 import { FIXTURES, TEST_KNOWLEDGE } from './lab-pipeline';
 import { TEST_AUDIENCE, TEST_ISSUER, TEST_SECRET } from './env';
 import type { RecoveryObjectStorage } from '../../src/object-storage/recovery-object-storage';
@@ -22,6 +29,8 @@ export interface TestAppOptions {
   readinessChecks?: ReadinessCheck[];
   /** Force the PostgreSQL store against this application-role URL (managed by the caller). */
   postgresUrl?: string;
+  /** The owner (superuser) URL of that same database, when it is not on the default test cluster (a rig that restores into its own server). */
+  ownerUrl?: string;
   /** Replace the token verifier (e.g. with a CognitoTokenVerifier pointed at the fake identity provider). */
   tokenVerifier?: TokenVerifier;
   /** Browser origins allowed to call the API (CORS). */
@@ -48,6 +57,12 @@ export interface TestAppOptions {
    */
   rateLimit?: { ip?: number; read?: number; write?: number; expensive?: number };
   trustProxyHops?: number;
+  /**
+   * Default true: after the real verifier accepts a token, the person's membership is made to match the token's claims, so the many suites
+   * that mint tokens keep exercising routes. The membership CHECK still runs on every request. Pass false to manage membership explicitly
+   * (membershipOf(app)) and prove that the database, not the token, decides.
+   */
+  membershipFromTokens?: boolean;
   /** Replace providers by token (e.g. the report reader, to make it slow or fail on purpose). */
   overrides?: Array<{ provide: unknown; useValue: unknown }>;
 }
@@ -107,12 +122,23 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
     ...(s3 ? { REPORTS_BUCKET: s3.bucket, S3_ENDPOINT: s3.endpoint, S3_FORCE_PATH_STYLE: 'true', AWS_REGION: 'us-east-1' } : {}),
   });
 
+  const mirror = options.membershipFromTokens ?? true;
+  const adminPool = usingPostgres() || options.postgresUrl ? new Pool({ connectionString: database?.adminUrl ?? options.ownerUrl ?? ownerUrlFor(options.postgresUrl!), max: 2 }) : undefined;
+  // Idle connections die when a test drops its database on purpose; that must not become an unhandled 'error' event.
+  adminPool?.on('error', () => undefined);
   let builder = Test.createTestingModule({
     imports: [AppModule.register(env, options.recoveryStorage)],
     controllers: options.controllers ?? [],
   });
   if (options.readinessChecks) builder = builder.overrideProvider(READINESS_CHECKS).useValue(options.readinessChecks);
-  if (options.tokenVerifier) builder = builder.overrideProvider(TokenVerifier).useValue(options.tokenVerifier);
+  builder = builder.overrideProvider(TokenVerifier).useFactory({
+    inject: [MembershipRepository],
+    factory: (memberships: MembershipRepository) => {
+      const base = options.tokenVerifier ?? createVerifier(env);
+      if (!mirror) return base;
+      return new MirrorTokenVerifier(base, adminPool ? new PgMembershipMirror(adminPool) : (memberships as InMemoryMembershipRepository));
+    },
+  });
   for (const override of options.overrides ?? []) builder = builder.overrideProvider(override.provide).useValue(override.useValue);
   const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication<NestExpressApplication>();
@@ -121,12 +147,23 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
   // requests built in the same expression race for it.
   await app.listen(0);
 
+  handles.set(app, adminPool ? new PgMembershipAdmin(adminPool) : app.get(MembershipRepository as never));
   const close = app.close.bind(app);
   app.close = async () => {
     await close();
+    await adminPool?.end();
     await database?.drop();
   };
   return app;
+}
+
+const handles = new WeakMap<object, MembershipAdmin>();
+
+/** The operator-side handle for an app made by createTestApp: grant, set roles, remove and revoke a person, on the app's own store. */
+export function membershipOf(app: object): MembershipAdmin {
+  const handle = handles.get(app);
+  if (!handle) throw new Error('membershipOf: not an app made by createTestApp');
+  return handle;
 }
 
 /** Test-only routes that misbehave on purpose, to prove nothing internal leaks. */

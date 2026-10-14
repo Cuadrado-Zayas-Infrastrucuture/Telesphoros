@@ -4,18 +4,18 @@ import type { ButtonHTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 rounded-md font-medium whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+  'inline-flex min-w-control items-center justify-center gap-2 rounded-lg font-semibold whitespace-nowrap transition-colors duration-150 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:opacity-60',
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary-hover',
-        outline: 'border border-border bg-background text-foreground hover:bg-muted',
-        ghost: 'text-foreground hover:bg-muted',
-        destructive: 'bg-destructive text-destructive-foreground hover:opacity-90',
+        default: 'button-raised border border-primary bg-primary text-primary-foreground not-disabled:not-aria-disabled:hover:bg-primary-hover',
+        outline: 'border border-border bg-panel text-foreground not-disabled:not-aria-disabled:hover:bg-muted',
+        ghost: 'text-foreground not-disabled:not-aria-disabled:hover:bg-muted',
+        destructive: 'button-raised border border-destructive bg-destructive text-destructive-foreground not-disabled:not-aria-disabled:hover:opacity-90',
       },
       size: {
         sm: 'h-button-sm px-3 text-sm',
-        md: 'h-button-md px-4 text-base',
+        md: 'h-button-md px-4 text-sm',
         lg: 'h-button-lg px-6 text-lg',
       },
     },

@@ -11,8 +11,11 @@ import { AllExceptionsFilter } from '../src/common/all-exceptions.filter';
 import { InputBoundaryInterceptor } from '../src/common/input-boundary.interceptor';
 import { AuthGuard } from '../src/auth/auth.guard';
 import { Public } from '../src/auth/decorators';
+import { InMemorySecurityAuditStore, SecurityAuditStore } from '../src/auth/security-audit';
+import { MembershipService } from '../src/auth/membership.service';
 import { TokenVerifier } from '../src/auth/token-verifier';
 import { pinoHttpOptions } from '../src/logger-options';
+import { InMemoryMembershipRepository, MembershipRepository } from '../src/storage/membership.repository';
 
 /**
  * O02 (research audit): request-completion logs carried `userId` but no tenant, so an operator could not tell which organization a failing or
@@ -40,9 +43,12 @@ class ProbeController {
 const verifier: TokenVerifier = {
   verify: async (token) => {
     if (token !== 'good') throw new Error('bad token');
-    return { sub: 'user-synthetic', tenantId: 'tenant-synthetic', roles: ['clinician'] };
+    return { sub: 'user-synthetic', tenantId: 'tenant-synthetic', roles: ['clinician'], issuedAt: Math.floor(Date.now() / 1000) };
   },
 };
+
+// The person is a member (the real guard reads membership); the tenant in the logs still comes from the verified principal.
+const memberships = new InMemoryMembershipRepository();
 
 type Entry = Record<string, unknown>;
 const chunks: string[] = [];
@@ -56,11 +62,15 @@ beforeAll(async () => {
       done();
     },
   });
+  await memberships.grant({ tenantId: 'tenant-synthetic', sub: 'user-synthetic', roles: ['clinician'], by: 'operator-test' });
   const moduleRef = await Test.createTestingModule({
     imports: [LoggerModule.forRoot({ pinoHttp: [pinoHttpOptions({ LOG_LEVEL: 'info' }), stream] })],
     controllers: [ProbeController],
     providers: [
       { provide: TokenVerifier, useValue: verifier },
+      { provide: MembershipRepository, useValue: memberships },
+      MembershipService,
+      { provide: SecurityAuditStore, useClass: InMemorySecurityAuditStore },
       { provide: APP_GUARD, useClass: AuthGuard },
       { provide: APP_FILTER, useClass: AllExceptionsFilter },
       { provide: APP_INTERCEPTOR, useClass: InputBoundaryInterceptor },

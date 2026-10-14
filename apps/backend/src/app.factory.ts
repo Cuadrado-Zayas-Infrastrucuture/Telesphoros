@@ -4,6 +4,7 @@ import { isIntakePath } from './reports/intake/raw-intake';
 import { VersioningType } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { requestIdMiddleware } from './common/request-id.middleware';
+import { authorityContextMiddleware } from './auth/authority-context';
 import { noStoreMiddleware } from './common/no-store.middleware';
 
 export const API_PREFIX = 'api';
@@ -29,6 +30,8 @@ export function configureApp(app: NestExpressApplication, options: ConfigureOpti
   // Before everything else, so even 404s and parse errors carry a request id.
   app.use(requestIdMiddleware);
   app.use(noStoreMiddleware);
+  // Opens the slot AuthGuard fills with the caller's membership version; the database layer reads it at commit.
+  app.use(authorityContextMiddleware);
   app.use((req:Request,res:Response,next:NextFunction)=>{
     if(isIntakePath((req.url??'').split('?')[0]!,req.method)){
       const socket=req.socket;const previous=socket.timeout??0;const timeout=()=>req.destroy();

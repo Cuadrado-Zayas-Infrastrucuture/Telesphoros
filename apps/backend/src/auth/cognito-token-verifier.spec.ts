@@ -21,25 +21,25 @@ const rejects = async (token: string, v = verifier()) => {
 
 describe('CognitoTokenVerifier: accepts', () => {
   it('a valid access token, mapping cognito:groups to roles', async () => {
-    await expect(verifier().verify(await idp.mintAccessToken({ user: alice }))).resolves.toEqual({ sub: alice!.sub, tenantId: 'alpha', roles: ['clinician'] });
-    await expect(verifier().verify(await idp.mintAccessToken({ user: bob }))).resolves.toEqual({ sub: bob!.sub, tenantId: 'beta', roles: ['reader'] });
-    await expect(verifier().verify(await idp.mintAccessToken({ user: carol }))).resolves.toEqual({ sub: carol!.sub, tenantId: 'alpha', roles: ['admin'] });
+    await expect(verifier().verify(await idp.mintAccessToken({ user: alice }))).resolves.toMatchObject({ sub: alice!.sub, tenantId: 'alpha', roles: ['clinician'] });
+    await expect(verifier().verify(await idp.mintAccessToken({ user: bob }))).resolves.toMatchObject({ sub: bob!.sub, tenantId: 'beta', roles: ['reader'] });
+    await expect(verifier().verify(await idp.mintAccessToken({ user: carol }))).resolves.toMatchObject({ sub: carol!.sub, tenantId: 'alpha', roles: ['admin'] });
   });
 
   it('keeps every role group a person holds, so a reviewer who is also a clinician or admin is both', async () => {
     const [gina, hal, ivy] = ['gina', 'hal', 'ivy'].map((n) => DEFAULT_USERS.find((u) => u.email.startsWith(n))!);
-    await expect(verifier().verify(await idp.mintAccessToken({ user: gina! }))).resolves.toEqual({ sub: gina!.sub, tenantId: 'alpha', roles: ['reviewer'] });
-    await expect(verifier().verify(await idp.mintAccessToken({ user: hal! }))).resolves.toEqual({ sub: hal!.sub, tenantId: 'alpha', roles: ['clinician', 'reviewer'] });
-    await expect(verifier().verify(await idp.mintAccessToken({ user: ivy! }))).resolves.toEqual({ sub: ivy!.sub, tenantId: 'alpha', roles: ['admin', 'reviewer'] });
+    await expect(verifier().verify(await idp.mintAccessToken({ user: gina! }))).resolves.toMatchObject({ sub: gina!.sub, tenantId: 'alpha', roles: ['reviewer'] });
+    await expect(verifier().verify(await idp.mintAccessToken({ user: hal! }))).resolves.toMatchObject({ sub: hal!.sub, tenantId: 'alpha', roles: ['clinician', 'reviewer'] });
+    await expect(verifier().verify(await idp.mintAccessToken({ user: ivy! }))).resolves.toMatchObject({ sub: ivy!.sub, tenantId: 'alpha', roles: ['admin', 'reviewer'] });
   });
 
   it('a user in a tenant but with no role group: authenticated with NO roles (least privilege)', async () => {
-    await expect(verifier().verify(await idp.mintAccessToken({ user: dave }))).resolves.toEqual({ sub: dave!.sub, tenantId: 'beta', roles: [] });
+    await expect(verifier().verify(await idp.mintAccessToken({ user: dave }))).resolves.toMatchObject({ sub: dave!.sub, tenantId: 'beta', roles: [] });
   });
 
   it('ignores groups it does not know, so an unrecognised group can never grant anything', async () => {
     const token = await idp.mintAccessToken({ user: alice, claims: { 'cognito:groups': ['superuser', 'clinician', 'clinician', 'root', 'tenant:alpha'] } });
-    await expect(verifier().verify(token)).resolves.toEqual({ sub: alice!.sub, tenantId: 'alpha', roles: ['clinician'] });
+    await expect(verifier().verify(token)).resolves.toMatchObject({ sub: alice!.sub, tenantId: 'alpha', roles: ['clinician'] });
   });
 
   it('treats a groups claim of the wrong shape as no groups at all: no roles and no tenant, so the user is refused', async () => {
@@ -76,7 +76,7 @@ describe('CognitoTokenVerifier: the tenant (exactly one "tenant:<id>" group)', (
   it('accepts the longest valid id (63 characters) and ignores a group that merely resembles the prefix', async () => {
     const longest = 'a'.repeat(63);
     const token = await idp.mintAccessToken({ user: alice, claims: { 'cognito:groups': ['clinician', `tenant:${longest}`, 'tenants', 'tenant'] } });
-    await expect(verifier().verify(token)).resolves.toEqual({ sub: alice!.sub, tenantId: longest, roles: ['clinician'] });
+    await expect(verifier().verify(token)).resolves.toMatchObject({ sub: alice!.sub, tenantId: longest, roles: ['clinician'] });
   });
 
   it('only a verified token can learn it lacks a tenant: a forged one with no tenant is just "Invalid token"', async () => {

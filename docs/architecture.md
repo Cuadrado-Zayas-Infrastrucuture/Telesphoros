@@ -10,7 +10,7 @@ applied in AWS.
     │  HTTPS, bearer token (Amazon Cognito access token)
     ▼
  NestJS API (apps/backend), prefix /api/v1
-    │  every request: authenticate → roles → (pipeline gate) → validate → work
+    │  every request: authenticate → membership and roles (database) → (pipeline gate) → validate → work
     ├──► PostgreSQL 16 ── row-level security by tenant; append-only record tables; per-tenant hash-chained ledger
     ├──► S3 (versioned bucket) ── report files; presigned upload; version-pinned reads and links
     ├──► knowledge/ (signed content, loaded at start) ──► phenotype engine ──► recommendation engine
@@ -18,9 +18,11 @@ applied in AWS.
 ```
 
 ## Identity, tenancy and roles
-- **Authentication:** Cognito access tokens in production; an HMAC verifier for development and tests only (refused in production). The
-  backend reads the whole set of groups a token carries: `reader`, `clinician`, `admin`, `reviewer`, plus exactly one `tenant:<id>` group.
-  See [auth.md](auth.md).
+- **Authentication:** Cognito access tokens in production; an HMAC verifier for development and tests only (refused in production). A
+  verified token proves who the caller is and names exactly one `tenant:<id>` group.
+- **Authority:** what the caller may do is read from the database on every request (`tenant_memberships`: active or removed, and the roles
+  `reader`, `clinician`, `admin`, `reviewer`), so a removal or role change takes effect on the next request on every instance, and a lookup
+  failure refuses the request. Request-driven writes re-check it at commit. See [auth.md](auth.md#authority-and-revocation).
 - **Tenancy:** every record belongs to an organization (`tenant_id`) and records the individual who made it (`created_by`). The database
   enforces the tenant boundary with forced row-level security; the application role cannot bypass it. A foreign or unknown id is 404.
 - **Roles are additive.** `reviewer` is never implied by another role; an `admin` alone cannot accept a lab-report capture.

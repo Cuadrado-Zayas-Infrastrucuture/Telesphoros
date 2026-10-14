@@ -16,10 +16,12 @@
     "e2e:storage": "pnpm --filter @telesphoros/fake-idp build && pnpm --filter @telesphoros/backend build && VITE_LOCAL_STORAGE_INTAKE=true VITE_REPORT_STORAGE_ORIGINS=http://127.0.0.1:5557 vite build --mode e2e --outDir dist-storage-e2e && playwright test --config playwright.storage.config.ts"
   },
   "dependencies": {
+    "@ai-sdk/react": "4.0.142",
     "@hookform/resolvers": "^5.9.1",
     "@radix-ui/react-label": "^2.1.16",
     "@radix-ui/react-slot": "^1.4.0",
     "@telesphoros/shared-types": "workspace:*",
+    "ai": "7.0.139",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.52.0",

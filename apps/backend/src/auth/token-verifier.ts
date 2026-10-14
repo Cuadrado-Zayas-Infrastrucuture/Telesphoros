@@ -4,9 +4,19 @@ import { z } from 'zod';
 import type { Env } from '../config/env';
 import type { Principal } from './principal';
 
-/** Anything that can turn a bearer token into a Principal. Phase 4 adds the real provider's verifier. */
+/**
+ * What a verified token proves: who the caller is (`sub`), which organization the identity provider put them in, and when the token was issued.
+ * `roles` are the token's CLAIMS, kept for diagnostics and the test-only mirror; the caller's authority is the membership row
+ * (MembershipService), never these.
+ */
+export interface TokenIdentity extends Principal {
+  /** The token's `iat`, in seconds. Compared with the membership's revocation instant. */
+  issuedAt: number;
+}
+
+/** Anything that can turn a bearer token into a verified identity. Phase 4 adds the real provider's verifier. */
 export abstract class TokenVerifier {
-  abstract verify(token: string): Promise<Principal>;
+  abstract verify(token: string): Promise<TokenIdentity>;
 }
 
 export class InvalidTokenError extends Error {}
@@ -39,7 +49,7 @@ export class HmacTokenVerifier extends TokenVerifier {
     this.key = new TextEncoder().encode(env.JWT_SECRET);
   }
 
-  async verify(token: string): Promise<Principal> {
+  async verify(token: string): Promise<TokenIdentity> {
     try {
       const { payload } = await jwtVerify(token, this.key, {
         algorithms: ['HS256'],
@@ -54,7 +64,7 @@ export class HmacTokenVerifier extends TokenVerifier {
       // The development token carries the tenant directly; a missing or malformed one is "no tenant".
       const tenant = tenantIdSchema.safeParse(payload.tenant);
       if (!tenant.success) throw new NoTenantError();
-      return { sub, tenantId: tenant.data, roles };
+      return { sub, tenantId: tenant.data, roles, issuedAt: payload.iat! };
     } catch (error) {
       if (error instanceof NoTenantError) throw error;
       // intentional: one generic error, so callers cannot learn WHY a token was rejected
