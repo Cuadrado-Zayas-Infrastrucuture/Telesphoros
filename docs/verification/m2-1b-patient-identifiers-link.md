@@ -1,12 +1,12 @@
 # M2.1b patient identifiers and a verified report link: verification
 
-Implementation on local branch `claude/m2-1b-patient-identifiers-link`, **stacked on the local M2.1a branch** (which contains M1.6, M1.5b and M1.5; none is merged), because it adds to the role matrix and the tenant registry of M2.1a and its migration follows 0018. Design, the key-custody section and where it differs from the plan: [m2-1b-identifiers-and-patient-link.md](../design/plans/m2-1b-identifiers-and-patient-link.md). Results below were captured locally on 2026-10-13. **Nothing was pushed, so no remote CI has run and none of the required checks is claimed.** Synthetic data only; nothing applied in AWS; nothing tested against real Cognito or RDS.
+Implementation on local branch `claude/m2-1b-patient-identifiers-link-v2`, **stacked on the local M2.1a branch** (`claude/m2-1a-tenants-member-admin-v2`, not yet a pull request; M1.5, M1.5b and M1.6 are merged into `main`), because it adds to the role matrix and the tenant registry of M2.1a and its migration follows M2.1a's 0019: this slice is migration **0020**. It was first written on a stack of local branches (as migration 0019) and moved here by cherry-pick; the earlier branch `claude/m2-1b-patient-identifiers-link` is kept locally as the old stack. Design, the key-custody section and where it differs from the plan: [m2-1b-identifiers-and-patient-link.md](../design/plans/m2-1b-identifiers-and-patient-link.md). Results below were captured locally on 2026-10-14 on the moved branch. **Not pushed, no pull request yet (kept local at the founder's request), so no remote CI has run and none of the required checks is claimed.** Synthetic data only; nothing applied in AWS; nothing tested against real Cognito or RDS.
 
 ## What was implemented
 
 | Change | Where |
 | --- | --- |
-| Migration 0019: `patient_identifiers` (keyed digest only; one active holder per number; the one change is active to withdrawn, once, by the person making the request), `report_patient_decisions` (a ledger record naming the exact file and patient; triggers for independence and currency), the ledger learns event type `patient-link-decision` | `apps/backend/migrations/0019_patient_identifiers_and_link.{up,down}.sql` |
+| Migration 0020: `patient_identifiers` (keyed digest only; one active holder per number; the one change is active to withdrawn, once, by the person making the request), `report_patient_decisions` (a ledger record naming the exact file and patient; triggers for independence and currency), the ledger learns event type `patient-link-decision` | `apps/backend/migrations/0019_patient_identifiers_and_link.{up,down}.sql` |
 | Key derivation and digest (HKDF per organization from one master, HMAC-SHA-256, exact-match normalization) | `patient-identity/identifier-digest.ts`, `config/env.ts` |
 | Identifier routes (register, list, withdraw) and their repositories (in memory and PostgreSQL) | `patient-identity/*`, `storage/patient-identifiers.repository.ts`, `storage/postgres/patient-identifiers.repository.ts` |
 | Link routes (state, decide) and the ledger record: projection, repository, event type | `patient-identity/patient-link.service.ts`, `ledger/ledger-types.ts`, `ledger/projections.ts`, `storage/postgres/ledger-records.repository.ts` |
@@ -32,7 +32,7 @@ No new dependency.
 
 ### Existing tests changed by hand
 
-The lab-report helper `reviewedCapture` now has the reviewer verify the link (and takes `verified: false` for the tests of the gate); `ledger-watch` counts one more event; `ledger-database.pg-spec` seeds one decision (event counts moved by one); migration lists in six specs moved to 0019, and reverting 0019 now needs the audit setting like the other audit migrations; the schema acceptance helper, the interceptor inventory (16 controllers) and the restore check (see below) know the new tables and controllers.
+The lab-report helper `reviewedCapture` now has the reviewer verify the link (and takes `verified: false` for the tests of the gate); `ledger-watch` counts one more event; `ledger-database.pg-spec` seeds one decision (event counts moved by one); migration lists in six specs moved to 0020, and reverting 0020 now needs the audit setting like the other audit migrations; the schema acceptance helper, the interceptor inventory (16 controllers) and the restore check (see below) know the new tables and controllers.
 
 ## A defect the tests found in my own migration
 

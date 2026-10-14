@@ -101,7 +101,7 @@ it('upgrades legacy rows unchanged and guards populated rollback before explicit
       const p = (await c.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ($1,$2,'SYN-LEGACY') RETURNING id`, [tenant, actor])).rows[0].id;
       const row = (await c.query(`INSERT INTO reports (tenant_id,created_by,patient_id,type,original_filename,size_bytes)
         VALUES ($1,$2,$3,'vcf','legacy.vcf',100) RETURNING *`, [tenant, actor, p])).rows[0];
-      expect(await migrateUp(c)).toEqual(['0014', '0015', '0016', '0017', '0018', '0019']);
+      expect(await migrateUp(c)).toEqual(['0014', '0015', '0016', '0017', '0018', '0019', '0020']);
       const upgraded = (await c.query('SELECT * FROM reports WHERE id=$1 AND tenant_id=$2', [row.id, tenant])).rows[0];
       expect(upgraded).toEqual({ ...row, creation_request_id: null, creation_request_hash: null, upload_revision: expect.any(String) });
       // Keep the 0014 rollback guard under test at its own version boundary.
@@ -121,7 +121,7 @@ it('upgrades legacy rows unchanged and guards populated rollback before explicit
       await c.query("SELECT set_config('telesphoros.allow_report_retry_drop','yes',false)");
       expect(await migrateDown(c, 1)).toEqual(['0014']);
       expect((await c.query('SELECT count(*)::int AS n FROM reports WHERE tenant_id=$1', [tenant])).rows).toEqual([{ n: 2 }]);
-      expect(await migrateUp(c)).toEqual(['0014', '0015', '0016', '0017', '0018', '0019']);
+      expect(await migrateUp(c)).toEqual(['0014', '0015', '0016', '0017', '0018', '0019', '0020']);
       await assertSchemaAcceptance(c);
     });
   } finally { await disposable.drop(); }
@@ -137,7 +137,7 @@ it('fails migration on bounded lock contention without a partial upgrade, then s
     await blocker.query('ROLLBACK');
     await withAdmin(disposable.adminUrl, async c => {
       expect((await c.query("SELECT 1 FROM information_schema.columns WHERE table_name='reports' AND column_name='creation_request_id'")).rows).toEqual([]);
-      expect(await migrateUp(c)).toEqual(['0014', '0015', '0016', '0017', '0018', '0019']);
+      expect(await migrateUp(c)).toEqual(['0014', '0015', '0016', '0017', '0018', '0019', '0020']);
       await assertSchemaAcceptance(c);
     });
   } finally { await blocker.end(); await disposable.drop(); }

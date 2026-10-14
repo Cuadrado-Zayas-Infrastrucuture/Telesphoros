@@ -88,7 +88,7 @@ it('commits NOT VALID without changing legacy mismatches, refuses new violations
     expect((await withAdmin(legacy.adminUrl, c => c.query('SELECT * FROM recommendations WHERE id = $1 AND tenant_id = $2', [bad.rows[0].id, tenant]))).rows).toEqual(before.rows);
     // Fixture-only repair of a deliberately planted synthetic violation; never an operational remediation script.
     await withAdmin(legacy.adminUrl, c => c.query('UPDATE recommendations SET report_id = $1 WHERE id = $2 AND tenant_id = $3', [old.otherReport, bad.rows[0].id, tenant]));
-    expect(await withAdmin(legacy.adminUrl, c => migrateUp(c))).toEqual(['0013', '0014', '0015', '0016', '0017', '0018', '0019']);
+    expect(await withAdmin(legacy.adminUrl, c => migrateUp(c))).toEqual(['0013', '0014', '0015', '0016', '0017', '0018', '0019', '0020']);
     expect((await withAdmin(legacy.adminUrl, c => c.query('SELECT convalidated FROM pg_constraint WHERE conname = $1', [FK]))).rows).toEqual([{ convalidated: true }]);
   } finally { await legacy.drop(); }
 });
@@ -105,7 +105,7 @@ it('rolls back validation to an unvalidated enforced constraint, then removes/re
       expect((await c.query('SELECT convalidated FROM pg_constraint WHERE conname = $1', [FK])).rows).toEqual([{ convalidated: false }]);
       expect(await migrateDown(c, 1)).toEqual(['0012']);
       expect((await c.query('SELECT 1 FROM pg_constraint WHERE conname = $1', [FK])).rows).toEqual([]);
-      expect(await migrateUp(c)).toEqual(['0012', '0013', '0014', '0015', '0016', '0017', '0018', '0019']);
+      expect(await migrateUp(c)).toEqual(['0012', '0013', '0014', '0015', '0016', '0017', '0018', '0019', '0020']);
       expect((await c.query('SELECT convalidated FROM pg_constraint WHERE conname = $1', [FK])).rows).toEqual([{ convalidated: true }]);
     });
   } finally { await disposable.drop(); }
@@ -125,6 +125,6 @@ it('bounds lock waits and rolls back DDL while another connection holds the repo
     expect((await withAdmin(disposable.adminUrl, c => c.query('SELECT 1 FROM pg_constraint WHERE conname = $1', [FK]))).rowCount).toBe(0);
     await blocker.query('ROLLBACK');
     expect(await through(disposable, '0012')).toEqual(['0012']);
-    expect(await withAdmin(disposable.adminUrl, c => migrateUp(c))).toEqual(['0013', '0014', '0015', '0016', '0017', '0018', '0019']);
+    expect(await withAdmin(disposable.adminUrl, c => migrateUp(c))).toEqual(['0013', '0014', '0015', '0016', '0017', '0018', '0019', '0020']);
   } finally { await blocker.end(); await disposable.drop(); }
 });

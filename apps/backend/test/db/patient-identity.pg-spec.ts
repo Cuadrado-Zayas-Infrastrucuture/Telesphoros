@@ -7,7 +7,7 @@ import { acceptanceFor, captureFor, evaluationFor, type SeededReport, seedLabRep
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 
 /**
- * Patient identifiers and the report-to-patient decision, at the database (migration 0019): what the application login may and may not do, the
+ * Patient identifiers and the report-to-patient decision, at the database (migration 0020): what the application login may and may not do, the
  * rules the tables enforce on their own, and the repository's rules at the moment of storing an evaluation.
  */
 let pg: EphemeralDatabase;

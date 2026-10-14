@@ -3,7 +3,7 @@ import { relative, resolve } from 'node:path';
 
 /**
  * The rule "no evaluation without a verified patient link" is enforced by the evaluations service and re-checked inside the storing transaction
- * (migration 0019's design note explains why it is not a table trigger). That only holds while nothing else in production source creates an
+ * (migration 0020's design note explains why it is not a table trigger). That only holds while nothing else in production source creates an
  * evaluation, so this walks the source and fails the day another caller appears: a new caller must go through the service, or change this test on
  * purpose in review.
  */
