@@ -1,5 +1,6 @@
+import { ownedStorageMode } from '@/lib/storageMode';
 import { useRef } from 'react';
-import { Outlet, useNavigation } from 'react-router-dom';
+import { Outlet, useNavigation, useLocation } from 'react-router-dom';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SkipLink } from '@/components/layout/SkipLink';
@@ -7,9 +8,10 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useRouteFocus } from '@/hooks/useRouteFocus';
 
 export function AppLayout() {
+  const landing = useLocation().pathname === '/' && !ownedStorageMode();
   const mainRef = useRef<HTMLElement>(null);
   const navigation = useNavigation();
-  useRouteFocus(mainRef);
+  useRouteFocus(mainRef, landing);
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -27,7 +29,7 @@ export function AppLayout() {
         id="main"
         ref={mainRef}
         tabIndex={-1}
-        className="mx-auto w-full max-w-page flex-1 px-4 py-6 focus:outline-none sm:px-6 sm:py-10"
+        className={landing ? "w-full flex-1 focus:outline-none" : "mx-auto w-full max-w-page flex-1 px-4 py-6 focus:outline-none sm:px-6 sm:py-10"}
       >
         <Outlet />
       </main>

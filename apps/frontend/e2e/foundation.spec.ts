@@ -113,21 +113,21 @@ test('form: field-level errors, input preserved after a failed submit, loading s
   await expect(submit).toBeEnabled();
 });
 
-test('images: lazy attribute, meaningful alt, and only AVIF/WebP are served to a modern browser', async ({ page }) => {
+test('images: decorative DNA preserves the supplied artwork and reserved dimensions', async ({ page }) => {
   const requests: string[] = [];
   page.on('request', (req) => requests.push(req.url()));
   await page.goto('/');
   await page.waitForLoadState('networkidle');
-  const img = page.getByRole('img', { name: /double helix/i });
-  // Chromium begins lazy fetches well before an image scrolls into view (and this page is short),
-  // so we assert what we control: the attribute, dimensions (no layout shift) and the served format.
-  await expect(img).toHaveAttribute('loading', 'lazy');
+  const img = page.locator('.landing-dna img');
+  // Above-the-fold decoration loads eagerly; empty alt keeps it out of the reading order.
+  await expect(img).toHaveAttribute('loading', 'eager');
+  await expect(img).toHaveAttribute('alt', '');
   await expect(img).toHaveAttribute('width', /\d+/);
   await expect(img).toHaveAttribute('height', /\d+/);
-  await img.scrollIntoViewIfNeeded();
-  await expect.poll(() => requests.filter((url) => url.includes('helix')).length).toBeGreaterThan(0);
-  const served = requests.filter((url) => url.includes('helix'));
-  expect(served.every((url) => /\.(avif|webp)$/.test(url))).toBe(true);
+  await expect(page.locator('.landing-dna')).toHaveCSS('filter', 'none');
+  await expect.poll(() => requests.filter((url) => url.includes('particle-dna-reference')).length).toBeGreaterThan(0);
+  const served = requests.filter((url) => url.includes('particle-dna-reference'));
+  expect(served.every((url) => /\.png$/.test(url))).toBe(true);
 });
 
 test('unknown routes show the not-found page, not a blank screen', async ({ page }) => {

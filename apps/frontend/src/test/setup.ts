@@ -14,3 +14,6 @@ configure({ asyncUtilTimeout: 20_000 });
 // axe-core probes <canvas> for colour-contrast checks; jsdom has no canvas and logs noise.
 // Contrast is verified in the real browser by the Playwright suite instead.
 HTMLCanvasElement.prototype.getContext = (() => null) as typeof HTMLCanvasElement.prototype.getContext;
+
+// JSDOM has no viewport; landing navigation scroll is checked in Playwright.
+window.scrollTo = () => {};
