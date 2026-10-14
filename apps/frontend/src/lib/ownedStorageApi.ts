@@ -3,17 +3,21 @@ import { fileLinkDtoSchema, paginatedSchema, reportCreateSchema, reportDtoSchema
 import { SessionEndedError, NotSignedInError } from '@/auth/AuthProvider';
 import { SubmitError, refusal, reportStorageOrigins, type ApiFetch, type UploadProgress } from './api';
 import type { ProductUploadValues } from './productUploadSchema';
+import { attemptSchema, type FileFacts } from './uploadProgress';
+import { clearRecovery, rememberUpload, sameFile, type RecoveryEntry } from './uploadRecovery';
 
-const attemptSchema = z.strictObject({
-  attemptId: z.uuid(), revision: z.uuid(), expiresAt: z.iso.datetime(),
-  state: z.enum(['declared', 'intaking', 'stored', 'unresolved', 'cancelling', 'cancelled', 'committed', 'cleanup', 'cleaned']),
-});
-type Attempt = z.infer<typeof attemptSchema>;
-type Declaration = { requestId: string; revision: string; contentType: string; sha256: string };
-export interface OwnedProgress {
-  declaration?: Declaration;
-  attempt?: Attempt;
-  cancelRequested?: boolean;
+export type { OwnedProgress } from './uploadProgress';
+
+/** Progress objects whose uploads are remembered for recovery after a reload (the local experiment's are not). */
+const remembered = new WeakSet<object>();
+const save = (progress: UploadProgress) => { if (remembered.has(progress)) rememberUpload(progress); };
+
+/** A progress object restored from what the browser kept before a reload; the server confirms or refuses it on the first request. */
+export function restoreProgress(entry: RecoveryEntry): UploadProgress {
+  const progress: UploadProgress = { requestId: entry.requestId, reportId: entry.reportId, facts: entry.file, restored: true,
+    ...(entry.declaration ? { declaration: entry.declaration } : {}), ...(entry.attempt ? { attempt: entry.attempt } : {}) };
+  remembered.add(progress);
+  return progress;
 }
 async function request(api: ApiFetch, path: string, body?: unknown, revision?: string) {
   const response = await api(`/api/v1${path}`, {
@@ -26,7 +30,7 @@ async function request(api: ApiFetch, path: string, body?: unknown, revision?: s
     if ([403, 404, 429].includes(response.status)) throw refusal(response.status); // permission, missing patient or report, rate limit: said plainly
     throw new SubmitError(response.status === 409
       ? 'The upload needs reconciliation or a new attempt. Retry or cancel before starting over.'
-      : 'The file operation is unavailable. Your entries are kept; please retry.');
+      : 'The file operation is unavailable. Your entries are kept; please retry.', response.status);
   }
   return response.json();
 }
@@ -34,6 +38,7 @@ function acceptAttempt(progress: UploadProgress, value: unknown) {
   const result = attemptSchema.parse(value);
   if (progress.attempt && (result.attemptId !== progress.attempt.attemptId || result.revision !== progress.attempt.revision)) throw new Error('Attempt changed');
   progress.attempt = result;
+  save(progress);
   return result;
 }
 async function declare(api: ApiFetch, progress: UploadProgress) {
@@ -42,36 +47,63 @@ async function declare(api: ApiFetch, progress: UploadProgress) {
 /** Cancel is acknowledged by the server; aborting a browser request alone is not cancellation. */
 export async function cancelOwnedUpload(api: ApiFetch, progress: UploadProgress) {
   progress.cancelRequested = true;
-  if (!progress.reportId || !progress.declaration) return;
+  if (!progress.reportId || !progress.declaration) {
+    if (remembered.has(progress)) clearRecovery(); // registered but nothing was ever declared: there is no attempt to cancel
+    return;
+  }
   const attempt = progress.attempt ?? await declare(api, progress);
   const result = acceptAttempt(progress, await request(api, `/reports/${progress.reportId}/upload-attempts/${attempt.attemptId}/cancel`, {}, attempt.revision));
   if (!['cancelled', 'cleaned', 'committed'].includes(result.state)) throw new SubmitError('Cancellation is pending. Retry cancellation before starting over.');
+  if (remembered.has(progress)) clearRecovery(); // acknowledged by the server: nothing is left to recover
   if (result.state === 'committed') throw new SubmitError('The file was already stored. Check Reports before starting another upload.');
 }
-export async function submitOwnedReport(values: ProductUploadValues, api: ApiFetch, progress: UploadProgress, signal?: AbortSignal): Promise<{ reference: string }> {
+export async function submitOwnedReport(values: ProductUploadValues, api: ApiFetch, progress: UploadProgress, signal?: AbortSignal, options: { remember?: boolean } = {}): Promise<{ reference: string }> {
+  if (options.remember !== false) remembered.add(progress);
   signal?.throwIfAborted();
   const sha256 = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await values.file.arrayBuffer())), b => b.toString(16).padStart(2, '0')).join('');
   signal?.throwIfAborted();
   const contentType = values.reportType === 'lab-pdf' ? 'application/pdf' : values.reportType === 'structured' ? 'application/json' : 'text/x-vcf';
   const identity = JSON.stringify([values.patientId.toLowerCase(), values.reportType, values.file.name, values.file.size, sha256]);
-  if (progress.identity && progress.identity !== identity && progress.declaration && !['cancelled', 'cleaned', 'committed'].includes(progress.attempt?.state ?? '')) {
-    throw new SubmitError('Cancel the previous upload before changing the patient or file.');
+  const facts: FileFacts = { reportType: values.reportType, name: values.file.name, sizeBytes: values.file.size, sha256 };
+  // A progress that was restored after a reload has its facts and keys already; the first thing the person does is choose the patient and file again.
+  const restoredFile = progress.restored && !progress.identity ? progress.facts : undefined;
+  const sameUpload = restoredFile ? sameFile(restoredFile, facts) : progress.identity === identity;
+  if ((progress.identity || restoredFile) && !sameUpload && progress.declaration && !['cancelled', 'cleaned', 'committed'].includes(progress.attempt?.state ?? '')) {
+    throw new SubmitError(restoredFile ? 'An interrupted upload of another file is waiting. Choose that file to finish it, or cancel it first.' : 'Cancel the previous upload before changing the patient or file.');
   }
-  if (progress.identity !== identity || !progress.requestId) {
+  if (restoredFile && sameUpload) {
+    progress.identity = identity; // the same file: carry on with the restored report, declaration and attempt
+  } else if (progress.identity !== identity || !progress.requestId) {
+    if (restoredFile) clearRecovery(); // the interrupted upload has nothing on the server to finish: this is a new one
     const cancelled = progress.cancelRequested;
     for (const key of Object.keys(progress)) delete progress[key as keyof UploadProgress];
-    Object.assign(progress, { identity, requestId: crypto.randomUUID(), cancelRequested: cancelled });
+    Object.assign(progress, { identity, requestId: crypto.randomUUID(), cancelRequested: cancelled, facts });
   }
+  progress.facts = facts;
   function report(value: unknown) {
     const result = reportDtoSchema.parse(value);
+    if (progress.restored && progress.reportId === result.id && result.patientId !== values.patientId) throw new SubmitError('The interrupted upload was for another patient. Choose that patient to finish it, or cancel it first.');
     if (result.patientId !== values.patientId || result.type !== values.reportType || result.filename !== values.file.name || result.sizeBytes !== values.file.size || (progress.reportId && result.id !== progress.reportId)) throw new Error('Report mismatch');
     return result;
   }
-  const existing = report(await request(api, progress.reportId ? `/reports/${progress.reportId}` : '/reports', progress.reportId ? undefined : reportCreateSchema.parse({ patientId: values.patientId, type: values.reportType, filename: values.file.name, sizeBytes: values.file.size, requestId: progress.requestId })));
+  const register = () => request(api, '/reports', reportCreateSchema.parse({ patientId: values.patientId, type: values.reportType, filename: values.file.name, sizeBytes: values.file.size, requestId: progress.requestId }));
+  let existing: ReturnType<typeof report>;
+  try {
+    existing = report(await (progress.reportId ? request(api, `/reports/${progress.reportId}`) : register()));
+  } catch (error) {
+    if (!(progress.restored && error instanceof SubmitError && error.status === 404)) throw error;
+    // The restored report is gone (deleted, or it was another person's): this is a new upload.
+    clearRecovery();
+    for (const key of Object.keys(progress)) delete progress[key as keyof UploadProgress];
+    Object.assign(progress, { identity, requestId: crypto.randomUUID(), facts });
+    existing = report(await register());
+  }
   progress.reportId = existing.id;
+  save(progress);
   const verified = (value: unknown) => {
     const result = report(value);
     if (!result.fileUploaded || result.sha256 !== sha256 || result.contentType !== contentType) throw new Error('File not verified');
+    if (remembered.has(progress)) clearRecovery(); // finished and verified: nothing is left to recover
     return { reference: result.id };
   };
   if (existing.fileUploaded) return verified(existing);
@@ -79,6 +111,7 @@ export async function submitOwnedReport(values: ProductUploadValues, api: ApiFet
   if (!progress.declaration) {
     const state = z.object({ revision: z.uuid(), fileUploaded: z.boolean() }).parse(await request(api, `/reports/${existing.id}/upload-state`));
     progress.declaration = { requestId: crypto.randomUUID(), revision: state.revision, contentType, sha256 };
+    save(progress);
   }
   // Replaying the original declaration recovers a lost reply and returns the durable state.
   const attempt = await declare(api, progress);

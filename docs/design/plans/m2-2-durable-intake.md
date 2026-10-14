@@ -1,6 +1,6 @@
 # M2.2: one validated, durable intake path for every report (plan)
 
-Status: **approved by the founder on 2026-10-14 (DI-1 to DI-7: yes to all, recommendations as written). M2.2a and M2.2b are built on local branches (`claude/m2-2a-validated-intake`, then `claude/m2-2b-retire-legacy-upload`, stacked; not pushed); M2.2c is not started.** Backlog T07 of the [build plan](repo-audit-and-build-plan.md); closes audit findings E04 (no structural validation on the legacy path) and A08 (upload recovery across a browser reload) and finishes founder decision DA-3 (recommended: retire the legacy path). Synthetic data only; nothing here lifts the BAA or clinical hold; nothing is applied in AWS.
+Status: **approved by the founder on 2026-10-14 (DI-1 to DI-7: yes to all, recommendations as written). M2.2a, M2.2b and M2.2c are built on local branches (`claude/m2-2a-validated-intake`, `claude/m2-2b-retire-legacy-upload`, `claude/m2-2c-reload-recovery`, stacked; not pushed).** Backlog T07 of the [build plan](repo-audit-and-build-plan.md); closes audit findings E04 (no structural validation on the legacy path) and A08 (upload recovery across a browser reload) and finishes founder decision DA-3 (recommended: retire the legacy path). Synthetic data only; nothing here lifts the BAA or clinical hold; nothing is applied in AWS.
 
 ## Problem, as the repository stands after M2.1c-2
 
@@ -72,6 +72,17 @@ The ledger, projections and every event type; link decisions, quarantine and mer
 4. **Requester and uploader are now one person.** An attempt belongs to the person who declared it and is committed with that person as uploader, so `upload_requested_by` and `uploaded_by` are equal for every intake report (the legacy path let them differ). The capture independence rule excludes the creator, requester, uploader and capturer, so it loses no protection; tests that needed distinct requester and uploader seed the evidence columns directly (`LabPipeline.seededLabPdf`, a fixture no route can reproduce).
 5. **Lab PDFs are gated at every step**, not only when declared: sending bytes or resuming an attempt for a lab PDF answers 503 while the pipeline is off, as the retired completion did.
 6. **Not done here:** the lab-PDF-pipeline-only uploaded guard in the database (a trigger) was replaced by the source-level pin; a database trigger would break every fixture that seeds a report directly, and no route can write the column now.
+
+## M2.2c as built, and where it differs from the plan
+
+[Verification](../../verification/m2-2c-reload-recovery.md). Frontend only; no backend, migration or Terraform change. While an upload is in flight the tab keeps one record in `sessionStorage` (`telesphoros.upload-recovery.v1`): report id, registration key, the original declaration, the last attempt state the server reported, and the file's type, name, size and SHA-256. After a reload and the instant sign-in, the upload page offers the interrupted upload ("Cancel the interrupted upload"); choosing the same patient and file and pressing Upload finishes it (the report is read back, the original declaration is replayed, and bytes are sent only if the server does not already hold them), and the record is cleared when the report is verified, when the server acknowledges a cancel, and on sign-out. Differences and decisions made while building:
+
+1. **The file name is kept** (DI-6 listed identifiers, not the name) because the person needs to see which file to choose again and the match needs it; report file names are already restricted to letters, digits, dots, dashes and underscores and are stored on the report by the server. The patient is **not** kept: it is chosen again, and the server's report must name that patient or the upload is refused with a plain message.
+2. **A different file or patient is refused while an attempt is pending** ("choose that file to finish it, or cancel it first"), the same rule the page already applied within one session. If nothing was ever declared, a different file simply starts a new upload.
+3. **A report that is gone (404) starts a new upload** instead of failing forever; any other refusal is shown and the record is kept.
+4. **A session that merely ends (401) keeps the record**, so the same person can finish after signing in again; only an explicit sign-out clears it. Storage that is unavailable is tolerated: the upload works without recovery.
+5. **Cancel and "start over" no longer depend on the build flag** (`VITE_LOCAL_STORAGE_INTAKE`). M2.2b left both hidden in the default build although every build now has attempts to cancel; this slice makes them unconditional.
+6. The local review page's experiment does not write the record.
 
 ## Verification (what each slice must show before it is called done)
 

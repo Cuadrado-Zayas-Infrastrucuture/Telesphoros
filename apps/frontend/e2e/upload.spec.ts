@@ -93,3 +93,149 @@ test('a malformed file is refused by the server and cannot show upload success',
   await expect(page.getByText('Upload complete', { exact: true })).toHaveCount(0);
   expect((await stored(page, fixture))[0]!.fileUploaded).toBe(false); expect(storage).toEqual([]);
 });
+
+// --- Reload recovery (M2.2c) ---------------------------------------------------------------------------------------------------------------------------
+// A reload signs the app out locally and signs in again instantly; the tab keeps one small record of the interrupted upload.
+
+const RECOVERY_KEY = 'telesphoros.upload-recovery.v1';
+const VCF = Buffer.from('##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n');
+
+/**
+ * Holds the first transfer request (it never reaches the server) until `interrupt()` is called, which fails it the way a closing tab does; later requests pass.
+ * `arrived` resolves when the request has been seen, so the test can reload while the bytes are "on their way".
+ */
+async function holdTransfer(page: Page) {
+  let seen!: () => void; const arrived = new Promise<void>(resolve => { seen = resolve; });
+  let release!: () => void; const released = new Promise<void>(resolve => { release = resolve; });
+  let first = true;
+  await page.route('**/api/v1/reports/*/upload-attempts/*/bytes', async route => {
+    if (!first) return route.continue();
+    first = false; seen(); await released; await route.abort('failed');
+  });
+  return { arrived, interrupt: () => release() };
+}
+async function reloadAndSignIn(page: Page, interrupt?: () => void) {
+  interrupt?.();
+  await page.reload();
+  await expect(page).toHaveURL(/\/signin$/);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.waitForURL('**/reports/upload');
+  await expect(page.getByRole('heading', { level: 1, name: 'Upload report' })).toBeVisible();
+}
+async function reselect(page: Page, fixture: { id: string; label: string }, name: string, bytes: Buffer) {
+  // The patient list is paged; after a reload it starts on page 1 again, so walk to the page that holds the fixture patient.
+  for (let attempts = 0; attempts < 100; attempts++) {
+    await expect(page.getByRole('button', { name: 'Refresh patients' })).toBeEnabled();
+    if (await page.getByRole('option', { name: fixture.label, exact: true }).count()) break;
+    const next = page.getByRole('button', { name: 'Next patients' });
+    if (!(await next.count()) || !(await next.isEnabled())) throw new Error('The fixture patient was not listed within the bounded test pages.');
+    await next.click();
+  }
+  await fill(page, fixture.id, 'vcf', name, bytes);
+}
+
+test('a reload during the transfer finishes the same upload: one report, one stored file, the same declaration, and nothing sensitive kept', async ({ page }) => {
+  const fixture = await signInWithPatient(page);
+  const registrations: string[] = []; const declarations: string[] = []; let transfers = 0;
+  page.on('request', request => {
+    if (request.method() === 'POST' && request.url().endsWith('/api/v1/reports')) registrations.push(request.postData() ?? '');
+    if (request.method() === 'POST' && request.url().endsWith('/upload-attempts')) declarations.push(request.postData() ?? '');
+    if (request.method() === 'PUT' && request.url().endsWith('/bytes')) transfers++;
+  });
+  const held = await holdTransfer(page);
+  await fill(page, fixture.id, 'vcf', 'reload.vcf', VCF);
+  await page.getByRole('button', { name: 'Upload report' }).click();
+  await held.arrived;
+  const kept = await page.evaluate(key => window.sessionStorage.getItem(key), RECOVERY_KEY);
+  expect(kept).toBeTruthy();
+  expect(kept).not.toContain(fixture.id);
+  expect(kept).not.toMatch(/Bearer|eyJ|patientId|uploadUrl|X-Amz/i);
+  expect(JSON.parse(kept!)).toMatchObject({ v: 1, file: { name: 'reload.vcf', sizeBytes: VCF.length, reportType: 'vcf', sha256: createHash('sha256').update(VCF).digest('hex') } });
+  expect((await stored(page, fixture))[0]!.fileUploaded).toBe(false);
+
+  await reloadAndSignIn(page, held.interrupt);
+  await expect(page.getByText('An upload was interrupted')).toBeVisible();
+  await expect(page.getByText('reload.vcf', { exact: true })).toBeVisible();
+  await page.screenshot({ path: `test-results/screens/upload-interrupted-${test.info().project.name}.png`, fullPage: true });
+  await reselect(page, fixture, 'reload.vcf', VCF);
+  await page.getByRole('button', { name: 'Upload report' }).click();
+  await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
+
+  const reports = await stored(page, fixture);
+  expect(reports).toHaveLength(1);
+  expect(reports[0]).toMatchObject({ fileUploaded: true, sizeBytes: VCF.length, sha256: createHash('sha256').update(VCF).digest('hex') });
+  expect(registrations).toHaveLength(1); // the reload did not register a second report
+  expect(declarations).toHaveLength(2); expect(declarations[0]).toBe(declarations[1]); // the original declaration was replayed
+  expect(transfers).toBe(2); // the held one never reached the server
+  expect(await page.evaluate(key => window.sessionStorage.getItem(key), RECOVERY_KEY)).toBeNull();
+});
+
+test('a reload after the server stored the file finishes without sending it again', async ({ page }) => {
+  const fixture = await signInWithPatient(page); let transfers = 0;
+  page.on('request', request => { if (request.method() === 'PUT' && request.url().endsWith('/bytes')) transfers++; });
+  let replied!: () => void; const stored$ = new Promise<void>(resolve => { replied = resolve; });
+  let lose!: () => void; const lost = new Promise<void>(resolve => { lose = resolve; });
+  let first = true;
+  await page.route('**/api/v1/reports/*/upload-attempts/*/bytes', async route => {
+    if (!first) return route.continue();
+    first = false; const reply = await route.fetch(); expect(reply.status()).toBe(200); replied(); await lost; await route.abort('failed'); // the server stored it; the reply never arrives
+  });
+  await fill(page, fixture.id, 'vcf', 'stored.vcf', VCF);
+  await page.getByRole('button', { name: 'Upload report' }).click();
+  await stored$;
+
+  await reloadAndSignIn(page, lose);
+  await reselect(page, fixture, 'stored.vcf', VCF);
+  await page.getByRole('button', { name: 'Upload report' }).click();
+  await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
+  expect(await stored(page, fixture)).toHaveLength(1);
+  expect(transfers).toBe(1);
+});
+
+test('a different patient or file after a reload is refused until the interrupted upload is finished or cancelled', async ({ page }) => {
+  const fixture = await signInWithPatient(page);
+  const held = await holdTransfer(page);
+  await fill(page, fixture.id, 'vcf', 'first.vcf', VCF);
+  await page.getByRole('button', { name: 'Upload report' }).click();
+  await held.arrived;
+  await reloadAndSignIn(page, held.interrupt);
+  await reselect(page, fixture, 'second.vcf', Buffer.concat([VCF, Buffer.from('1\t100\t.\tA\tG\t.\t.\t.\n')]));
+  await page.getByRole('button', { name: 'Upload report' }).click();
+  await expect(page.getByRole('alert')).toContainText('interrupted upload of another file');
+  expect(await stored(page, fixture)).toHaveLength(1);
+});
+
+test('cancelling the interrupted upload after a reload leaves nothing stored, clears the record, and the next upload works', async ({ page }) => {
+  const fixture = await signInWithPatient(page); let cancels = 0;
+  page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/cancel')) cancels++; });
+  const held = await holdTransfer(page);
+  await fill(page, fixture.id, 'vcf', 'cancel.vcf', VCF);
+  await page.getByRole('button', { name: 'Upload report' }).click();
+  await held.arrived;
+  await reloadAndSignIn(page, held.interrupt);
+  await page.getByRole('button', { name: 'Cancel the interrupted upload' }).click();
+  await expect(page.getByText('The interrupted upload was cancelled. You can start a new one.')).toBeVisible();
+  await expect(page.getByText('An upload was interrupted')).toHaveCount(0);
+  expect(cancels).toBe(1);
+  expect(await page.evaluate(key => window.sessionStorage.getItem(key), RECOVERY_KEY)).toBeNull();
+  expect((await stored(page, fixture)).every(report => !report.fileUploaded)).toBe(true);
+
+  await reselect(page, fixture, 'cancel.vcf', VCF);
+  await page.getByRole('button', { name: 'Upload report' }).click();
+  await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
+  const reports = await stored(page, fixture);
+  expect(reports.filter(report => report.fileUploaded)).toHaveLength(1);
+});
+
+test('signing out clears an interrupted upload, so the next person on this tab is not offered it', async ({ page }) => {
+  const fixture = await signInWithPatient(page);
+  const held = await holdTransfer(page);
+  await fill(page, fixture.id, 'vcf', 'signout.vcf', VCF);
+  await page.getByRole('button', { name: 'Upload report' }).click();
+  await held.arrived;
+  await reloadAndSignIn(page, held.interrupt);
+  await expect(page.getByText('An upload was interrupted')).toBeVisible();
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await expect(page).toHaveURL(/\/signed-out$/);
+  expect(await page.evaluate(key => window.sessionStorage.getItem(key), RECOVERY_KEY)).toBeNull();
+});

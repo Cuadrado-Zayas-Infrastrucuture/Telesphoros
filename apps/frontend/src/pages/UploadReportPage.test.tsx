@@ -4,6 +4,8 @@ import { axe } from 'vitest-axe';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import UploadReportPage from '@/pages/UploadReportPage';
 import { SubmitError, submitReport } from '@/lib/api';
+import { cancelOwnedUpload } from '@/lib/ownedStorageApi';
+import { readRecovery, rememberUpload } from '@/lib/uploadRecovery';
 
 const patientId = '11111111-1111-4111-8111-111111111111';
 const date = '2026-10-10T00:00:00.000Z';
@@ -19,6 +21,17 @@ vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   submitReport: vi.fn(),
 }));
+vi.mock('@/lib/ownedStorageApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/ownedStorageApi')>()),
+  cancelOwnedUpload: vi.fn(),
+}));
+const cancelMock = vi.mocked(cancelOwnedUpload);
+const reportId = '22222222-2222-4222-8222-222222222222';
+const interruptedUpload = () => rememberUpload({
+  requestId: '55555555-5555-4555-8555-555555555555', reportId, facts: { reportType: 'vcf', name: 'half.vcf', sizeBytes: 2048, sha256: 'a'.repeat(64) },
+  declaration: { requestId: '66666666-6666-4666-8666-666666666666', revision: '33333333-3333-4333-8333-333333333333', contentType: 'text/x-vcf', sha256: 'a'.repeat(64) },
+  attempt: { attemptId: '44444444-4444-4444-8444-444444444444', revision: '77777777-7777-4777-8777-777777777777', state: 'declared', expiresAt: '2099-01-01T00:00:00.000Z' },
+});
 const submitMock = vi.mocked(submitReport);
 
 async function fillValidForm(user: ReturnType<typeof userEvent.setup>, fileName = 'sample.vcf') {
@@ -32,6 +45,8 @@ async function fillValidForm(user: ReturnType<typeof userEvent.setup>, fileName 
 describe('UploadReportPage', () => {
   // Braces matter: returning the mock from a hook makes Vitest call it as a teardown callback.
   beforeEach(() => {
+    window.sessionStorage.clear();
+    cancelMock.mockReset();
     submitMock.mockReset();
     patientApi.mockReset().mockImplementation(async () => pageResponse());
   });
@@ -93,6 +108,64 @@ describe('UploadReportPage', () => {
 
     finish({ reference: 'SYN-TEST1234' });
     expect(await screen.findByText(/SYN-TEST1234/)).toBeInTheDocument();
+  });
+
+  it('offers to finish or cancel an upload that a reload interrupted, naming the file, and says nothing when there is none', async () => {
+    const { unmount } = render(<UploadReportPage />);
+    await screen.findByRole('option', { name: 'SYN-0001' });
+    expect(screen.queryByText('An upload was interrupted')).not.toBeInTheDocument();
+    unmount();
+    interruptedUpload();
+    render(<UploadReportPage />);
+    expect(await screen.findByText('An upload was interrupted')).toBeInTheDocument();
+    expect(screen.getByText('half.vcf')).toBeInTheDocument();
+    expect(screen.getByText(/2\.0 KiB/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel the interrupted upload' })).toBeEnabled();
+  });
+
+  it('cancels the interrupted upload through the server, and only then lets go of it', async () => {
+    interruptedUpload();
+    cancelMock.mockRejectedValueOnce(new SubmitError('Cancellation is pending. Retry cancellation before starting over.'));
+    const user = userEvent.setup();
+    render(<UploadReportPage />);
+    await user.click(await screen.findByRole('button', { name: 'Cancel the interrupted upload' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Cancellation is pending');
+    expect(readRecovery()).toBeDefined();
+    expect(cancelMock.mock.calls[0]![1]).toMatchObject({ reportId, restored: true, attempt: { state: 'declared' } });
+    cancelMock.mockImplementationOnce(async () => { window.sessionStorage.clear(); });
+    await user.click(screen.getByRole('button', { name: 'Cancel upload' }));
+    expect(await screen.findByText('Upload cancelled. Start a new upload when ready.')).toBeInTheDocument();
+  });
+
+  it('removes the banner once the interrupted upload is cancelled and starts the next one from nothing', async () => {
+    interruptedUpload();
+    cancelMock.mockImplementationOnce(async () => { window.sessionStorage.clear(); });
+    const user = userEvent.setup();
+    render(<UploadReportPage />);
+    await user.click(await screen.findByRole('button', { name: 'Cancel the interrupted upload' }));
+    expect(await screen.findByText('The interrupted upload was cancelled. You can start a new one.')).toBeInTheDocument();
+    expect(screen.queryByText('An upload was interrupted')).not.toBeInTheDocument();
+    submitMock.mockResolvedValueOnce({ reference: reportId });
+    await fillValidForm(user, 'next.vcf');
+    await user.click(screen.getByRole('button', { name: 'Upload report' }));
+    expect(submitMock.mock.calls[0]![2]).toEqual({}); // a clean progress: nothing of the cancelled upload is carried over
+  });
+
+  it('has no detectable accessibility violations while offering an interrupted upload', async () => {
+    interruptedUpload();
+    const { container } = render(<UploadReportPage />);
+    await screen.findByText('An upload was interrupted');
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('hands the restored upload to the submit, so the same file continues it', async () => {
+    interruptedUpload();
+    submitMock.mockResolvedValueOnce({ reference: reportId });
+    const user = userEvent.setup();
+    render(<UploadReportPage />);
+    await fillValidForm(user, 'half.vcf');
+    await user.click(screen.getByRole('button', { name: 'Upload report' }));
+    expect(submitMock.mock.calls[0]![2]).toMatchObject({ reportId, restored: true, requestId: '55555555-5555-4555-8555-555555555555' });
   });
 
   it('has no detectable accessibility violations (empty and error states)', async () => {

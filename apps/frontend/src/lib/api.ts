@@ -3,9 +3,12 @@ import { SessionEndedError, NotSignedInError } from '@/auth/AuthProvider';
 import { productUploadSchema, type ProductUploadValues } from './productUploadSchema';
 
 import { submitOwnedReport } from './ownedStorageApi';
-import type { OwnedProgress } from './ownedStorageApi';
+import type { OwnedProgress } from './uploadProgress';
 
-export class SubmitError extends Error {}
+export class SubmitError extends Error {
+  /** The HTTP status that caused it, when one did (the recovery of a reloaded upload tells a missing report from other failures). */
+  constructor(message: string, readonly status?: number) { super(message); }
+}
 export type ApiFetch = (path: string, init?: RequestInit) => Promise<Response>;
 export interface UploadProgress extends OwnedProgress { identity?: string; requestId?: string; reportId?: string }
 
@@ -26,11 +29,11 @@ export function reportStorageOrigins(): string[] {
 }
 
 export function refusal(status: number): SubmitError {
-  if (status === 409) return new SubmitError('This upload conflicts with a stored report. Check the selected patient and file before starting a new upload.');
-  if (status === 403) return new SubmitError('You do not have permission to upload this report.');
-  if (status === 404) return new SubmitError('The selected patient or report is no longer available.');
-  if (status === 429) return new SubmitError('Too many requests. Wait a moment, then retry; your entries are kept.');
-  return new SubmitError('The upload could not be verified. Your entries are kept; please retry.');
+  if (status === 409) return new SubmitError('This upload conflicts with a stored report. Check the selected patient and file before starting a new upload.', status);
+  if (status === 403) return new SubmitError('You do not have permission to upload this report.', status);
+  if (status === 404) return new SubmitError('The selected patient or report is no longer available.', status);
+  if (status === 429) return new SubmitError('Too many requests. Wait a moment, then retry; your entries are kept.', status);
+  return new SubmitError('The upload could not be verified. Your entries are kept; please retry.', status);
 }
 
 export async function listPatients(apiFetch: ApiFetch, page: number, signal?: AbortSignal) {

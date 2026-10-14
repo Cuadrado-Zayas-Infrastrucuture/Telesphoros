@@ -1,6 +1,7 @@
 import { patientDtoSchema, reportCreateSchema } from '@telesphoros/shared-types';
 import { SubmitError, type ApiFetch } from './api';
-import { submitOwnedReport, type OwnedProgress } from './ownedStorageApi';
+import { submitOwnedReport } from './ownedStorageApi';
+import type { OwnedProgress } from './uploadProgress';
 import type { UploadReportValues } from '@/lib/uploadReportSchema';
 
 export function localStorageOrigin(): string {
@@ -33,5 +34,5 @@ export async function submitReport(values: Omit<UploadReportValues, 'reportType'
     if (!response.ok) throw new SubmitError(response.status === 409 ? 'A record conflicts with this request. Use a new synthetic label for a new upload.' : `Upload step failed (${response.status}). Your entries are kept.`);
     known.patientId = patientDtoSchema.parse(await response.json()).id;
   }
-  return submitOwnedReport({ patientId: known.patientId, reportType: values.reportType, file: values.file, syntheticConfirmed: values.syntheticConfirmed }, apiFetch, progress);
+  return submitOwnedReport({ patientId: known.patientId, reportType: values.reportType, file: values.file, syntheticConfirmed: values.syntheticConfirmed }, apiFetch, progress, undefined, { remember: false });
 }
