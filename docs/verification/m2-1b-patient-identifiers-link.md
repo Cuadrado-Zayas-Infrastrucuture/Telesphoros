@@ -68,19 +68,20 @@ Each rule was broken on purpose with a script that edits the source or migration
 | Typecheck, lint, build (whole workspace) | pass |
 | `test:ci-config` | 35 of 35 |
 | `test:infra` | 31 of 31 |
-| Backend, in memory | 92 suites passed, 10 skipped; 1361 tests passed, 230 skipped |
-| Backend, PostgreSQL 16 plus Moto S3 | 144 suites, 2132 tests passed (the three recovery suites run separately) |
+| Backend, in memory | 92 suites passed, 10 skipped; 1,359 tests passed, 229 skipped |
+| Backend, PostgreSQL 16 plus Moto S3 | 144 suites, 2,130 tests passed (the three recovery suites run separately) |
 | Recovery suites (application, independent, CLI) as an unprivileged user from a copy of the repository | 3 suites, 37 tests passed |
-| Frontend unit | 19 files, 228 tests passed |
+| Frontend unit | 22 files, 263 tests passed |
 | Smart-pilot package | 9 files, 186 tests passed |
 | Shared types | 25 tests passed |
-| Browser, in memory (desktop and mobile) | 56 and 18 passed |
+| Browser, in memory (desktop and mobile) | 58 and 26 passed |
+| Browser, PostgreSQL storage mode (`e2e:storage`), on a database migrated to 0020 with the runbook's tenants and personas | 26 passed, 1 failed: `version-pin.spec.ts` (waits for the old report list's "Next reports" button; failing before this slice, recorded in the M2.1a note) |
 
-Not re-run for this slice: the manual PostgreSQL browser suite (`e2e:storage`), which this slice does not touch; its `version-pin` test was already failing for an unrelated reason recorded in the M2.1a note.
+These results are from the branch after it was moved onto the M2.1a branch as migration 0020 (2026-10-14); the earlier results on the old stack were within a few tests of these. The defect-injection runs below were done before the move and not repeated; their guarding tests ran in the full runs.
 
 ## What this does not show
 
-- No remote CI has run. Nothing was pushed. Nothing ran against real Cognito, RDS, Secrets Manager or ECS; the Terraform change is checked only by the repository's text guards, not by `terraform plan`.
+- No remote CI has run. Nothing was pushed, and there is no pull request yet. Nothing ran against real Cognito, RDS, Secrets Manager or ECS; the Terraform change is checked only by the repository's text guards, not by `terraform plan`.
 - **Key rotation is not built.** Replacing `IDENTIFIER_DIGEST_KEY` orphans every stored identifier (raw values are not kept). The column that would carry a key version exists; the procedure is written, not exercised.
 - **The evaluation gate is not a table trigger.** It is in the evaluations service and re-checked inside the storing transaction. A caller that wrote evaluations through the repository without naming a decision would bypass it; a test pins that the service is the only such caller in production source, and the future worker (M2.3) must go through the service.
 - Registering and withdrawing an identifier writes no ledger record or security event (the row keeps who and when); only the link decision is a ledger record, as the plan said.
