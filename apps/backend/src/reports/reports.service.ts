@@ -115,7 +115,7 @@ export class ReportsService {
    */
   async createUploadUrl(principal: Principal, id: string, input: ReportUploadUrlRequest): Promise<ReportUploadUrlResponse> {
     const report = await this.get(principal, id);
-    if (this.pipeline.localStorageOnly) throw AppException.conflictBecause('validated-intake-required', 'Use validated server intake before storage.');
+    if (this.pipeline.localStorageOnly || await this.reports.hasAttempts(principal.tenantId, id)) throw AppException.conflictBecause('validated-intake-required', 'Use validated server intake before storage.');
     if(report.type==='lab-pdf')this.pipeline.assertEnabled();
     if (report.uploadedAt) throw AppException.conflict('The file for this report was already uploaded.');
     if (!REPORT_CONTENT_TYPES[report.type].includes(input.contentType)) {
@@ -145,6 +145,8 @@ export class ReportsService {
   async completeUpload(principal: Principal, id: string): Promise<ReportRecord> {
     const report = await this.get(principal, id);
     if (this.pipeline.localStorageOnly) throw AppException.conflictBecause('validated-intake-required', 'Use validated server intake before storage.');
+    // A report that has had an intake attempt is the intake's: its file reaches the report only by committing an attempt, never by this route.
+    if (!report.uploadedAt && await this.reports.hasAttempts(principal.tenantId, id)) throw AppException.conflictBecause('validated-intake-required', 'Use validated server intake before storage.');
     if(report.type==='lab-pdf')this.pipeline.assertEnabled();
     if (report.uploadedAt) return report;
     if (!report.storageKey || !report.sha256 || !report.contentType) {

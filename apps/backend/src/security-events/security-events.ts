@@ -14,12 +14,19 @@ export type RefusalReason = 'no-membership' | 'removed' | 'token-revoked' | 'aut
 export abstract class SecurityEvents {
   /** Never throws and never delays the refusal it describes by more than the write itself. */
   abstract recordRefusal(tenantId: string, sub: string, reason: RefusalReason): Promise<void>;
+  /** A file the intake refused (M2.2a): who tried and a short code for why, never the file, its name, its hash or the report. Same guarantees as `recordRefusal`. */
+  abstract recordIntakeRejected(tenantId: string, sub: string, reason: IntakeRejectionReason): Promise<void>;
 }
+
+/** Why the validated intake refused a file (the structural check, the declared size or hash, or the transfer limits). */
+export type IntakeRejectionReason = 'structure' | 'size' | 'checksum' | 'timeout' | 'slow';
+
+export type SecurityEventType = 'access.refused' | 'intake.rejected';
 
 /** The fields of one recorded event, as the in-memory store and the tests see them. */
 export interface RecordedSecurityEvent {
   tenantId: string;
-  eventType: 'access.refused';
+  eventType: SecurityEventType;
   outcome: 'succeeded' | 'refused';
   actorRef: string;
   subjectKind: 'person';
@@ -30,8 +37,8 @@ export interface RecordedSecurityEvent {
 }
 
 /** What goes into security_event_append for a refusal (shared by both stores, so they cannot drift). */
-function refusalRow(sub: string, reason: RefusalReason) {
-  return { eventType: 'access.refused' as const, outcome: 'refused' as const, subjectKind: 'person' as const, subjectRef: sub, details: { reason } };
+function eventRow(eventType: SecurityEventType, sub: string, reason: RefusalReason | IntakeRejectionReason) {
+  return { eventType, outcome: 'refused' as const, subjectKind: 'person' as const, subjectRef: sub, details: { reason } };
 }
 
 /** Development and tier-1 store: keeps events in memory with the same throttle as the database function. Lost on restart; production requires PostgreSQL. */
@@ -40,10 +47,17 @@ export class InMemorySecurityEvents extends SecurityEvents {
   readonly events: RecordedSecurityEvent[] = [];
 
   async recordRefusal(tenantId: string, sub: string, reason: RefusalReason): Promise<void> {
-    const row = refusalRow(sub, reason);
-    const recent = this.events.some((e) => e.eventType === 'access.refused' && e.tenantId === tenantId && e.actorRef === sub && e.details.reason === reason && Date.now() - e.at < 60_000);
+    this.record(tenantId, eventRow('access.refused', sub, reason));
+  }
+
+  async recordIntakeRejected(tenantId: string, sub: string, reason: IntakeRejectionReason): Promise<void> {
+    this.record(tenantId, eventRow('intake.rejected', sub, reason));
+  }
+
+  private record(tenantId: string, row: ReturnType<typeof eventRow>): void {
+    const recent = this.events.some((e) => e.eventType === row.eventType && e.tenantId === tenantId && e.actorRef === row.subjectRef && e.details.reason === row.details.reason && Date.now() - e.at < 60_000);
     if (recent) return;
-    this.events.push({ tenantId, actorRef: sub, requestId: currentRequestId(), at: Date.now(), ...row });
+    this.events.push({ tenantId, actorRef: row.subjectRef, requestId: currentRequestId(), at: Date.now(), ...row });
   }
 }
 
@@ -59,17 +73,24 @@ export class PostgresSecurityEvents extends SecurityEvents {
   }
 
   async recordRefusal(tenantId: string, sub: string, reason: RefusalReason): Promise<void> {
-    const row = refusalRow(sub, reason);
+    await this.write(tenantId, sub, eventRow('access.refused', sub, reason));
+  }
+
+  async recordIntakeRejected(tenantId: string, sub: string, reason: IntakeRejectionReason): Promise<void> {
+    await this.write(tenantId, sub, eventRow('intake.rejected', sub, reason));
+  }
+
+  private async write(tenantId: string, sub: string, row: ReturnType<typeof eventRow>): Promise<void> {
     const requestId = currentRequestId(); // read before leaving the request's context below
     try {
       // Organization work: the person was refused, so their own authority must not decide whether the refusal is written.
       await asOrganizationWork(() => this.append(tenantId, sub, row, requestId));
     } catch (error) {
-      this.logger.warn({ event: 'security-event-not-recorded', type: row.eventType, error: (error as Error).name }, 'A refusal could not be recorded');
+      this.logger.warn({ event: 'security-event-not-recorded', type: row.eventType, error: (error as Error).name }, 'A security event could not be recorded');
     }
   }
 
-  private append(tenantId: string, actor: string, row: ReturnType<typeof refusalRow>, requestId: string | undefined) {
+  private append(tenantId: string, actor: string, row: ReturnType<typeof eventRow>, requestId: string | undefined) {
     return this.db.withTenant(
       tenantId,
       (client) => client.query('SELECT security_event_append($1, $2, $3, $4, $5::jsonb, $6)', [row.eventType, row.outcome, row.subjectKind, row.subjectRef, JSON.stringify(row.details), requestId ?? null]),

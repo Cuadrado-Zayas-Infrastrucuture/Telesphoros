@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { Client } from 'pg';
 import { authorityContextMiddleware, bindRequestAuthority, type RequestAuthority } from '../../src/auth/authority-context';
 import { Database } from '../../src/db/database';
+import { migrateDown, migrateUp } from '../../src/db/migrator';
 import type { MembershipAdmin } from '../../src/membership/membership';
 import { PostgresSecurityEvents } from '../../src/security-events/security-events';
 import { runSecurityEvents } from '../../src/security-events/security-events-cli';
@@ -143,6 +144,47 @@ describe('what the application may write, and as whom', () => {
       VALUES (clock_timestamp() - interval '2 minutes', $1, 'access.refused', 'refused', 'person', $2, 'person', $2, '{"reason":"removed"}')`, [TENANT, old]));
     await refuse('removed', TENANT, old);
     expect(await events('actor_ref = $1', [old])).toHaveLength(2);
+  });
+});
+
+describe('a refused file is recorded (0022)', () => {
+  it('lets the application record an intake rejection for the bound person, throttled per type and reason, with the same detail rules as a refusal', async () => {
+    const who = person();
+    const reject = (reason: string, actor = who) => asApplication((c) => append(c, 'intake.rejected', 'refused', 'person', actor, { reason }), TENANT, actor);
+    for (let i = 0; i < 5; i++) await reject('structure');
+    await reject('checksum');
+    // The same word under the other type is its own event: the throttle is per type.
+    await asApplication((c) => append(c, 'access.refused', 'refused', 'person', who, { reason: 'structure' }), TENANT, who);
+    const rows = await events('actor_ref = $1', [who]);
+    expect(rows.map((r) => `${r.event_type}/${r.details.reason}`)).toEqual(['intake.rejected/structure', 'intake.rejected/checksum', 'access.refused/structure']);
+    expect(rows.every((r) => r.tenant_id === TENANT && r.actor_kind === 'person' && r.outcome === 'refused')).toBe(true);
+    // A fresh person each time, so the throttle (which answers before the table's checks) cannot be what refuses.
+    for (const details of [{ filename: 'x' }, { reason: 'report.pdf' }, { reason: 'has space' }, { reason: 'a'.repeat(65) }, { reason: 'structure', sha256: 'abc' }]) {
+      const fresh = person();
+      await expect(asApplication((c) => append(c, 'intake.rejected', 'refused', 'person', fresh, details), TENANT, fresh)).rejects.toMatchObject({ code: expect.stringMatching(/^(23514|22023)$/) });
+    }
+    await expect(asApplication((c) => append(c, 'intake.rejected', 'refused', 'person', who, { reason: 'size' }), null, who)).rejects.toMatchObject({ code: '42501' });
+  });
+
+  it('reverts only with the deliberate setting once a rejection is recorded, and then forgets the type', async () => {
+    const disposable = await createEphemeralDatabase();
+    try {
+      const asApp = async (work: (c: Client) => Promise<unknown>) => as(disposable.appUrl, async (c) => {
+        await c.query(`SELECT set_config('app.current_tenant_id', 'tenant-rev', false)`);
+        await c.query(`SELECT set_config('app.current_actor', 'person-rev', false)`);
+        return work(c);
+      });
+      await asApp((c) => append(c, 'intake.rejected', 'refused', 'person', 'person-rev', { reason: 'structure' }));
+      await expect(withAdmin(disposable.adminUrl, (c) => migrateDown(c, 1))).rejects.toThrow(/Refusing to drop recorded intake rejections/);
+      expect((await withAdmin(disposable.adminUrl, (c) => c.query(`SELECT 1 FROM security_events WHERE event_type = 'intake.rejected'`))).rowCount).toBe(1);
+      expect(await withAdmin(disposable.adminUrl, async (c) => { await c.query(`SET telesphoros.allow_audit_drop = 'yes'`); return migrateDown(c, 1); })).toEqual(['0022']);
+      await expect(asApp((c) => append(c, 'intake.rejected', 'refused', 'person', 'person-rev', { reason: 'structure' }))).rejects.toMatchObject({ code: '42501' });
+      await asApp((c) => append(c, 'access.refused', 'refused', 'person', 'person-rev', { reason: 'removed' })); // control: the older type still works
+      expect(await withAdmin(disposable.adminUrl, (c) => migrateUp(c))).toEqual(['0022']);
+      await asApp((c) => append(c, 'intake.rejected', 'refused', 'person', 'person-rev', { reason: 'structure' }));
+    } finally {
+      await disposable.drop();
+    }
   });
 });
 

@@ -37,6 +37,10 @@ export abstract class ReportsRepository {
   abstract runStatus(tenantId:string,runId:string):Promise<{pendingBytes:number;pendingCount:number;lastReconciledAt:string|null;cleanupStalled:boolean}>;
   abstract recordReconciliation(tenantId:string,runId:string,success:boolean):Promise<void>;
   abstract runAttempts(tenantId: string, runId: string): Promise<UploadAttempt[]>;
+  /** Every intake attempt of one report (any state); refuses rather than truncates. */
+  abstract reportAttempts(tenantId: string, reportId: string): Promise<UploadAttempt[]>;
+  /** True when the report has ever had an intake attempt: the legacy direct-upload routes then refuse it. */
+  abstract hasAttempts(tenantId: string, reportId: string): Promise<boolean>;
   abstract sweepCandidates(tenantId: string, runId: string): Promise<UploadAttempt[]>;
   abstract claimCleanup(tenantId: string, id: string, graceSeconds: number): Promise<boolean>;
   abstract finishCleanup(tenantId: string, id: string): Promise<void>;
@@ -163,6 +167,8 @@ export class InMemoryReportsRepository extends ReportsRepository {
   async runStatus(tenantId:string,runId:string){const pending=[...this.attempts.values()].filter(a=>a.tenantId===tenantId&&a.runId===runId&&!['committed','cleaned'].includes(a.state));return {pendingBytes:pending.reduce((n,a)=>n+a.sizeBytes,0),pendingCount:pending.length,...(this.reconciliation.get(JSON.stringify([tenantId,runId]))??{lastReconciledAt:null,cleanupStalled:false})};}
   async recordReconciliation(tenantId:string,runId:string,success:boolean){const key=JSON.stringify([tenantId,runId]);this.reconciliation.set(key,{lastReconciledAt:success?new Date().toISOString():this.reconciliation.get(key)?.lastReconciledAt??null,cleanupStalled:!success});}
   async runAttempts(tenantId: string, runId: string) { return [...this.attempts.values()].filter(a=>a.tenantId===tenantId && a.runId===runId).map(a=>({...a})); }
+  async reportAttempts(tenantId: string, reportId: string) { return [...this.attempts.values()].filter(a=>a.tenantId===tenantId && a.reportId===reportId).map(a=>({...a})); }
+  async hasAttempts(tenantId: string, reportId: string) { return [...this.attempts.values()].some(a=>a.tenantId===tenantId && a.reportId===reportId); }
   async sweepCandidates(tenantId: string, runId: string) { return [...this.attempts.values()].filter(a => a.tenantId === tenantId && a.runId === runId && !['committed','cleaned'].includes(a.state)).map(a => ({...a})); }
   async referenced(tenantId: string, key: string, version: string) { return [...this.rows.values()].some(r => r.tenantId === tenantId && r.storageKey === key && !!r.uploadedAt && (!r.objectVersion || r.objectVersion === version)); }
   async claimCleanup(tenantId: string, id: string, graceSeconds: number) {

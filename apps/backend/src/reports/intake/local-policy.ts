@@ -19,3 +19,13 @@ export function assertLocalStorage(env: Env) {
         throw AppException.unavailable('Validated intake requires an owned disposable local storage run with clinical processing disabled.');
     }
 }
+
+/**
+ * Where the validated intake may run. A disposable local run (LOCAL_STORAGE_RUN_ID) keeps every L1 restriction. Without a run id (M2.2a) it runs
+ * in the organization's own scope in any mode, because configuration validation already decides what storage a mode may use; what remains is
+ * that the bucket keeps object versions, which the intake checks again before it writes.
+ */
+export function assertIntakeAllowed(env: Env) {
+    if (env.LOCAL_STORAGE_RUN_ID)
+        assertLocalStorage(env);
+}

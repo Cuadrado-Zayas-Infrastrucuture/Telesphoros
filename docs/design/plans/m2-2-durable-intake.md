@@ -1,6 +1,6 @@
 # M2.2: one validated, durable intake path for every report (plan)
 
-Status: **plan drafted; nothing is built; waiting for the founder's answers to DI-1 to DI-7** (working agreement 1). Backlog T07 of the [build plan](repo-audit-and-build-plan.md); closes audit findings E04 (no structural validation on the legacy path) and A08 (upload recovery across a browser reload) and finishes founder decision DA-3 (recommended: retire the legacy path). Synthetic data only; nothing here lifts the BAA or clinical hold; nothing is applied in AWS.
+Status: **approved by the founder on 2026-10-14 (DI-1 to DI-7: yes to all, recommendations as written). M2.2a is built on a local branch (`claude/m2-2a-validated-intake`, stacked on this plan; not pushed); M2.2b and M2.2c are not started.** Backlog T07 of the [build plan](repo-audit-and-build-plan.md); closes audit findings E04 (no structural validation on the legacy path) and A08 (upload recovery across a browser reload) and finishes founder decision DA-3 (recommended: retire the legacy path). Synthetic data only; nothing here lifts the BAA or clinical hold; nothing is applied in AWS.
 
 ## Problem, as the repository stands after M2.1c-2
 
@@ -50,6 +50,17 @@ The ledger, projections and every event type; link decisions, quarantine and mer
 | DI-5 | Must the lab-PDF pipeline use the new path before it is allowed anywhere beyond synthetic use? | **Yes**: M2.2a makes `LAB_REPORT_PIPELINE=enabled` and the intake compatible, and a test pins that a lab PDF cannot become `uploaded` any other way. |
 | DI-6 | Reload recovery keeps identifiers (not the file, never a patient identifier) in `sessionStorage` and requires re-selecting the file? | **Yes.** A browser cannot keep a `File` across a reload; matching by SHA-256 on re-selection proves it is the same bytes. Sign-out clears the entry. |
 | DI-7 | Order: M2.2a, M2.2b, M2.2c, one pull request each, and none pushed until you say (as for M2.1)? | As written. |
+
+## M2.2a as built, and where it differs from the plan
+
+[Verification](../../verification/m2-2a-organization-intake.md). The plan's wording is kept above; the build made these concrete:
+
+1. **Two scopes live side by side until M2.2b.** The disposable local run (`LOCAL_STORAGE_RUN_ID`) keeps every L1 restriction and its keys; without a run id the intake works in the **organization scope** in any mode (`intake/scope.ts`, `assertIntakeAllowed`). M2.2b deletes the local-run scope together with the legacy routes, so no test or runbook has to change twice.
+2. **Keys are `reports/<tenant hash>/<report id>/intake/<attempt id>`**, one level more specific than DI-3's sketch: the extra `intake/` segment keeps the per-report inventory from ever meeting the legacy key (`…/<report id>/<random>`) or the captured text (`…/<report id>/text/…`). The inventory before a new attempt is per report, so its cost does not grow with the organization.
+3. **The quota is the existing `report_upload_runs` row**, with a fixed id derived from the organization, so no migration was needed for it: 100 MiB of uncommitted reservations per organization (database check), released when an attempt is committed or cleaned.
+4. **A lab PDF still needs the pipeline** to be declared (503 while it is off), exactly as the legacy routes require. DI-5's "must use the new path" is met from the other side: once an attempt exists for a report the legacy upload link and completion refuse it (`409 validated-intake-required`), and a test pins that a malformed file written straight to the attempt's key cannot be completed through the legacy route. A guard that no *other* code path sets `uploaded_at` on a lab PDF waits for M2.2b, when the legacy routes go.
+5. **DI-4 needed one migration, 0022**: security event type `intake.rejected` (reason codes `structure`, `size`, `checksum`, `timeout`, `slow`; never the file, name, hash or report), the same one-per-minute throttle per person, organization, type and reason. A transfer the person cancelled is not an event.
+6. **A bucket that cannot be listed fails closed** (503, nothing reserved). The application's Terraform policy (`iam.tf`, written, never applied) grants `PutObject`, `GetObject` and `GetObjectVersion` only, **not** `s3:ListBucketVersions` or `s3:ListBucketMultipartUploads`, which the inventory needs. M2.2a changes no Terraform (as planned), so in AWS the intake would answer 503 until that is added. **Prerequisite for M2.2b**: add the two list actions (with a prefix condition on `reports/*`) and a guard test before the legacy routes are retired.
 
 ## Verification (what each slice must show before it is called done)
 
