@@ -40,6 +40,7 @@
 
   /* Type */
   --font-family-heading: Poppins, Arial, sans-serif;
+  --font-family-landing: Inter, Arial, sans-serif;
   --font-family-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
@@ -71,4 +72,17 @@
   --shadow-button: 0 1px 2px #22556024, inset 0 1px 0 #ffffff24;
   --shadow-button-pressed: inset 0 1px 3px #173e4724;
   --button-sheen: linear-gradient(180deg, #ffffff0d, #ffffff00);
+}
+
+/* Product landing: decorative depth, kept separate from operational surfaces. */
+:root {
+  --landing-night: #081e25;
+  --landing-depth: #123c47;
+  --landing-soft-text: #c5dcd9;
+  --landing-gradient: radial-gradient(ellipse at 56% 8%, var(--primary) 0%, var(--landing-depth) 48%, var(--landing-night) 100%);
+  --landing-preview-shadow: 0 24px 64px #041a2440;
+  --landing-hero-type: clamp(2.75rem, 6.4vw, 5rem);
+  --landing-section-type: clamp(2rem, 3.5vw, 2.875rem);
+  --landing-dna-width: 31.25rem;
+  --landing-dna-mobile-width: 20rem;
 }

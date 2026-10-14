@@ -6,7 +6,7 @@ import { useLocation } from 'react-router-dom';
  * users land on the new content instead of staying on the link they activated.
  * Skips the first render so the page doesn't steal focus on load.
  */
-export function useRouteFocus(target: RefObject<HTMLElement | null>) {
+export function useRouteFocus(target: RefObject<HTMLElement | null>, includeHeader = false) {
   const { pathname } = useLocation();
   const first = useRef(true);
   useEffect(() => {
@@ -14,6 +14,7 @@ export function useRouteFocus(target: RefObject<HTMLElement | null>) {
       first.current = false;
       return;
     }
-    target.current?.focus();
-  }, [pathname, target]);
+    target.current?.focus({ preventScroll: includeHeader });
+    if (includeHeader) window.scrollTo(0, 0);
+  }, [pathname, target, includeHeader]);
 }

@@ -1,0 +1,17 @@
+.mascot-welcome { max-width: 54rem; margin-inline: auto; min-width: 0; }
+.mascot-welcome-content { min-width: 0; overflow-wrap: anywhere; }
+.mascot-welcome-image { display: block; width: 10.125rem; max-width: 162px; height: auto; flex-shrink: 0; margin: 0; align-self: center; }
+.mascot-welcome--companion { display: grid; grid-template-columns: minmax(0, 1fr) 10.125rem; align-items: center; gap: 3rem; text-align: left; }
+.mascot-welcome--landing.mascot-welcome--companion .mascot-welcome-image { grid-column: 2; grid-row: 1; }
+.mascot-welcome--landing.mascot-welcome--companion .mascot-welcome-content { grid-column: 1; grid-row: 1; }
+.mascot-welcome--landing.mascot-welcome--companion .landing-actions { justify-content: flex-start; }
+.mascot-welcome--centered { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; text-align: center; }
+.mascot-welcome--centered .mascot-welcome-image { width: 7.5rem; }
+.mascot-welcome--assistant { padding-block: 1rem; }
+.mascot-welcome--assistant.mascot-welcome--centered { gap: 1rem; }
+.mascot-welcome--assistant.mascot-welcome--centered .mascot-welcome-image { width: 6rem; }
+@media (max-width: 40rem) {
+  .mascot-welcome--companion { display: flex; flex-direction: column; gap: 1.5rem; text-align: center; }
+  .mascot-welcome--companion .mascot-welcome-image { width: 7.5rem; }
+  .mascot-welcome--landing.mascot-welcome--companion .landing-actions { justify-content: center; }
+}

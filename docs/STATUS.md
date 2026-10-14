@@ -3,6 +3,12 @@
 Read this first to pick the project up. Snapshot: **2026-10-13**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Product landing refresh (prepared for commit, 2026-10-14)
+
+The approved landing page uses self-hosted Inter, the Poppins wordmark, teal branding, original static diagonal DNA and the unchanged companion mascot. It includes role-aware account actions, a synthetic Upload / Check / Find walkthrough, current feature descriptions, FAQs and the founder-approved direction “Working toward less trial-and-error prescribing,” distinguished from today's storage-only preview. No clinical interpretation or prescribing claim is added.
+
+Frontend unit tests (264), focused browser checks (28), lint, TypeScript/build and production guards passed; see [verification and desktop/mobile evidence](verification/telesphoros-landing.md). This delivery includes the landing page only. Earlier dashboard contrast and AI welcome edits remain local and are not part of this commit. No Vercel deployment is performed or configured. The branch remains based on `98cd931`; reconcile newer `origin/main` (`1b4fb4e`) before PR delivery.
+
 ## Planned: M1.5 live membership and revocation (plan only)
 
 A [slice plan](design/plans/m1-5-live-membership-revocation.md) moves who may do what from the token to a PostgreSQL membership table checked on every request (closing I03, and I04 with DA-1): removal or a role change takes effect on the next request on every API replica, a lookup failure denies protected work (503), and writes re-check authority inside their own transaction so none commits after a removal does. Cognito stays the identity provider. No code, migration or script exists yet; the founder's yes or change on DA-1, DA-2, DM-1 and DM-2 is needed first.
