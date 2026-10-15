@@ -8,6 +8,9 @@ import { generateKeyFile, manifestMac, readKeyFile } from '../../src/db/backup-c
 import { restoreAndVerify } from '../../src/db/restore';
 import { adminUrl, createEphemeralDatabase, type EphemeralDatabase, serializeRestoreSuites, withAdmin } from '../helpers/database';
 
+// Native migrations/dumps/restores and checkpoint cleanup share this bounded service budget.
+jest.setTimeout(30_000);
+
 // Counts shared state (throwaway databases, temp dirs): must not overlap another restoring suite.
 serializeRestoreSuites();
 
