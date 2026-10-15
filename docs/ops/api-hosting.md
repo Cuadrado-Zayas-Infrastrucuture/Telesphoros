@@ -73,6 +73,8 @@ What the command does, in order: takes a lock; creates the privilege groups (inc
 3. Run the provisioning task again with the command `provision-logins --require-migrated` (an ECS run-task override). Now the group privileges are read back and must pass.
 4. Start the service.
 
+For the staged synthetic environment, [staging-rehearsal.md](staging-rehearsal.md) has the runner for these tasks (`scripts/staging/run-task.sh`) and notes that setting `api_image` starts the services before step 1.
+
 The task's execution role injects the administrator's `username` and `password` from the RDS-managed secret; the **task role** can read and write only the four connection-string secrets and cannot read the administrator secret (a guard test pins both). The task role *can* read the four connection strings it wrote; that is how it recognises an unchanged login, and the task runs only when a person starts it.
 
 **Not verified until a real account exists:** RDS itself. The command is proved against PostgreSQL 16 (the automated tests use the cluster's superuser; a non-superuser administrator on a pristine cluster, with the migrator then applying all 11 migrations, was run once by hand for FD-4a and becomes an automated check in the FD-4b container rehearsal), but `rds_superuser` is not a stock administrator and Postgres 16 restricts who may grant a role; the first run on RDS (FD-7) is the real test. IAM, the execution-role injection of the administrator secret, and Fargate's read-only filesystem are likewise unproven. The human **operator** login (break-glass, [ledger-roles.md](ledger-roles.md)) is deliberately not created by this command.

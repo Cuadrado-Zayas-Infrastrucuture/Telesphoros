@@ -65,6 +65,10 @@ run "default_variables_plan" {
     condition     = length(aws_ecs_service.worker) == 0 && length(aws_ecs_task_definition.worker) == 0 && length(aws_cloudwatch_metric_alarm.worker_heartbeat_stale) == 0 && length(aws_secretsmanager_secret.worker_database_url) == 0
     error_message = "the worker, with its secret and alarms, is off by default"
   }
+  assert {
+    condition     = output.api_task_subnet_ids == null && output.api_task_assign_public_ip == null && output.api_service_name == null
+    error_message = "the one-off task network and the service name are null while API hosting is off"
+  }
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -182,6 +186,10 @@ run "production_hosting_on" {
     condition     = aws_secretsmanager_secret.worker_database_url[0].recovery_window_in_days == 30 && aws_kms_key.worker_logs[0].deletion_window_in_days == 30 && one(aws_ecs_service.worker[0].network_configuration).assign_public_ip == false
     error_message = "the worker follows the profile: production keeps the 30-day windows and gives tasks no public address"
   }
+  assert {
+    condition     = output.api_task_assign_public_ip == false && output.api_task_subnet_ids == tolist(["subnet-aaaa1111", "subnet-bbbb2222"])
+    error_message = "the one-off tasks run in the operator's private subnets without a public address in production"
+  }
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -286,6 +294,10 @@ run "synthetic_hosting_on" {
   assert {
     condition     = length(aws_ecs_service.worker) == 1 && aws_secretsmanager_secret.worker_database_url[0].recovery_window_in_days == 0 && one(aws_ecs_service.worker[0].network_configuration).assign_public_ip == true
     error_message = "the worker follows the synthetic profile: its secret is deleted at once and its tasks get a public address"
+  }
+  assert {
+    condition     = output.api_task_assign_public_ip == true && output.api_service_name == "telesphoros-staging-api"
+    error_message = "the one-off tasks are told to take a public address under the synthetic profile (no NAT), and the service name is the documented one"
   }
 }
 
