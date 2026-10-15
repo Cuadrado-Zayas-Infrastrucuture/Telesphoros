@@ -3,7 +3,8 @@
 # The three offline plans of the FD-7 staged synthetic environment, with the values of synthetic-staging.tfvars.example (staging.guard.test.mjs keeps the two
 # in step). Every provider is mocked: no AWS account, no credentials, nothing is created. This proves the SHAPE the review page (docs/ops/staging-plan-review.md)
 # tells a person to expect, and that the example's values satisfy the module's own preconditions. It does NOT prove AWS accepts the plan (limits, quotas, the free
-# plan, a service the account refuses): that is the first real plan and apply.
+# plan, a service the account refuses): that is the first real plan and apply. Policy-input assertions below read the configured statements,
+# not the fixed mocked JSON. Saved-plan action checks are exercised separately by scripts/staging/check-plan.test.mjs.
 
 mock_provider "aws" {
   mock_data "aws_iam_policy_document" {
@@ -75,6 +76,10 @@ run "plan_a_foundations_and_api_edge" {
     error_message = "no web hosting in plan A"
   }
   assert {
+    condition     = local.api_repository == "arn:aws:ecr:${var.region}:${local.audit_account_id}:repository/none" && one([for statement in data.aws_iam_policy_document.api_execution_common.statement : statement.resources if statement.sid == "PullThisRepositoryOnly"]) == toset([local.api_repository]) && one([for statement in data.aws_iam_policy_document.worker_execution[0].statement : statement.resources if statement.sid == "PullThisRepositoryOnly"]) == toset([local.api_repository])
+    error_message = "before an image, existing API and worker execution policies are configured to pull repository/none"
+  }
+  assert {
     condition     = length(aws_ecs_service.api) == 0 && length(aws_ecs_task_definition.api) == 0 && length(aws_ecs_task_definition.api_migrate) == 0 && length(aws_ecs_task_definition.api_provision) == 0 && length(aws_ecs_service.worker) == 0 && length(aws_ecs_task_definition.worker) == 0
     error_message = "without api_image there are no task definitions and no services"
   }
@@ -95,6 +100,10 @@ run "plan_b_with_web_hosting" {
   assert {
     condition     = length(aws_ecs_service.api) == 0 && length(aws_ecs_service.worker) == 0
     error_message = "still no services without an image"
+  }
+  assert {
+    condition     = local.api_repository == "arn:aws:ecr:${var.region}:${local.audit_account_id}:repository/none" && length(aws_iam_role_policy.api_execution_service) == 1 && length(aws_iam_role_policy.api_execution_migrate) == 1 && length(aws_iam_role_policy.api_execution_provision) == 1 && length(aws_iam_role_policy.worker_execution) == 1
+    error_message = "the four execution policies already exist in B, before the image changes their pull repository"
   }
 }
 
@@ -124,5 +133,9 @@ run "plan_c_with_image" {
   assert {
     condition     = aws_ecs_service.api[0].desired_count == 1 && aws_ecs_service.worker[0].desired_count == 1
     error_message = "one API task and one worker task"
+  }
+  assert {
+    condition     = local.api_repository == "arn:aws:ecr:us-east-2:123456789012:repository/telesphoros-staging-api" && one([for statement in data.aws_iam_policy_document.api_execution_common.statement : statement.resources if statement.sid == "PullThisRepositoryOnly"]) == toset([local.api_repository]) && one([for statement in data.aws_iam_policy_document.worker_execution[0].statement : statement.resources if statement.sid == "PullThisRepositoryOnly"]) == toset([local.api_repository])
+    error_message = "setting api_image changes the configured API and worker pull resources to its exact repository, even though JSON serialization is mocked"
   }
 }

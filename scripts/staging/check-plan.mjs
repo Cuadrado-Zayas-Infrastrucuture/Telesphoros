@@ -1,0 +1,93 @@
+// Read-only action check for saved FD-7 A/B/C plans. This does not approve a plan or inspect every resource setting.
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+export const IMAGE_POLICY_UPDATES = [
+  'aws_iam_role_policy.api_execution_service[0]',
+  'aws_iam_role_policy.api_execution_migrate[0]',
+  'aws_iam_role_policy.api_execution_provision[0]',
+  'aws_iam_role_policy.worker_execution[0]',
+];
+const PULL_ACTIONS = ['ecr:BatchCheckLayerAvailability', 'ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer'];
+const canonical = (value) => JSON.stringify(value, (_key, item) => item && !Array.isArray(item) && typeof item === 'object'
+  ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
+const unknown = (value) => value === true || (value && typeof value === 'object' && Object.values(value).some(unknown));
+const withoutPolicy = (value) => Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'policy'));
+
+function repositoryOnly(change, repository) {
+  if (!change.before || !change.after || unknown(change.after_unknown)) return false;
+  if (canonical(withoutPolicy(change.before)) !== canonical(withoutPolicy(change.after))) return false;
+  try {
+    const before = JSON.parse(change.before.policy);
+    const after = JSON.parse(change.after.policy);
+    const pull = (policy) => policy.Statement.filter((statement) => statement.Sid === 'PullThisRepositoryOnly');
+    const oldPull = pull(before);
+    const newPull = pull(after);
+    if (oldPull.length !== 1 || newPull.length !== 1) return false;
+    const list = (value) => Array.isArray(value) ? value : [value];
+    if (oldPull[0].Effect !== 'Allow' || canonical([...list(oldPull[0].Action)].sort()) !== canonical(PULL_ACTIONS)) return false;
+    const fallback = repository.replace(/:repository\/.*$/, ':repository/none');
+    if (canonical(list(oldPull[0].Resource)) !== canonical([fallback]) || canonical(list(newPull[0].Resource)) !== canonical([repository])) return false;
+    // Everything except that one Resource must stay exactly the same, including all other statements and role attributes.
+    newPull[0].Resource = oldPull[0].Resource;
+    return canonical(before) === canonical(after);
+  } catch {
+    return false;
+  }
+}
+
+export function planProblems(plan, stage) {
+  const problems = [];
+  const need = (ok, reason) => { if (!ok) problems.push(reason); };
+  if (!['A', 'B', 'C'].includes(stage)) return ['stage must be A, B or C'];
+  if (!plan || !/^1\./.test(plan.format_version ?? '') || !Array.isArray(plan.resource_changes)) return ['expected terraform show -json plan output with resource_changes'];
+  need(plan.errored !== true && plan.complete !== false && plan.applyable !== false, 'plan must be complete, applicable and free of errors');
+  const variable = (name) => plan.variables?.[name]?.value;
+  // Saved plan JSON retains string values from -var, even when Terraform converts the declared input to bool.
+  const bool = (name) => variable(name) === true || variable(name) === 'true' ? true
+    : variable(name) === false || variable(name) === 'false' ? false : undefined;
+  need(variable('deployment_profile') === 'synthetic' && variable('environment') === 'staging', 'only the staging/synthetic profile is supported');
+  need(bool('enable_api_hosting') === true && bool('enable_web_hosting') === (stage !== 'A'), 'hosting switches do not match this stage');
+  const image = variable('api_image');
+  const parts = typeof image === 'string' && /^([0-9]{12})\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com\/([a-z0-9._/-]+)@sha256:[0-9a-f]{64}$/.exec(image);
+  const repository = parts ? `arn:aws:ecr:${parts[2]}:${parts[1]}:repository/${parts[3]}` : null;
+  if (stage === 'C') need(parts && parts[2] === variable('region') && parts[3] !== 'none', 'C needs a digest-pinned image in the stack Region');
+  else need(image === '', 'A and B must have no api_image');
+  need(!(plan.resource_drift ?? []).some((entry) => canonical(entry.change?.actions) !== canonical(['no-op'])), 'resource drift requires separate review');
+  const seen = new Set();
+  const updated = new Set();
+  let creates = 0;
+  for (const entry of plan.resource_changes) {
+    const { address, mode, change } = entry;
+    need(typeof address === 'string' && !seen.has(address), 'resource addresses must be present and unique');
+    seen.add(address);
+    if (!change || entry.deposed || change.importing) { problems.push(`${address}: incomplete, deposed or imported resource`); continue; }
+    const actions = canonical(change.actions);
+    if (mode === 'data' && [canonical(['read']), canonical(['no-op'])].includes(actions)) continue;
+    if (mode !== 'managed') { problems.push(`${address}: unsupported resource mode or data action`); continue; }
+    if (actions === canonical(['no-op'])) continue;
+    if (actions === canonical(['create']) && change.before === null) { creates++; continue; }
+    if (stage === 'C' && actions === canonical(['update']) && IMAGE_POLICY_UPDATES.includes(address) && repository && repositoryOnly(change, repository)) {
+      updated.add(address);
+      continue;
+    }
+    problems.push(`${address}: unexpected action or change beyond the image pull repository`);
+  }
+  need(creates > 0, 'this first-bring-up stage must create resources');
+  if (stage === 'C') for (const address of IMAGE_POLICY_UPDATES) need(updated.has(address), `${address}: missing expected first-image policy update`);
+  return problems;
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    if (process.argv.length !== 4) throw new Error('usage: node scripts/staging/check-plan.mjs A|B|C plan.json');
+    const problems = planProblems(JSON.parse(readFileSync(process.argv[3], 'utf8')), process.argv[2]);
+    for (const problem of problems) console.error(problem);
+    if (problems.length) process.exitCode = 1;
+    else console.log(`Stage ${process.argv[2]} action checks passed; line-by-line resource and cost review is still required.`);
+  } catch {
+    console.error('Cannot check plan: use A|B|C and a readable terraform show -json plan file.');
+    process.exitCode = 1;
+  }
+}
