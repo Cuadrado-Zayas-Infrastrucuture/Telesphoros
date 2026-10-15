@@ -31,12 +31,16 @@ test('a newer object version cannot replace the verified attachment', async ({ p
     await route.fulfill({ response: reply });
   });
   await page.getByRole('link', { name: 'View reports' }).click();
-  const item = page.getByRole('list', { name: 'Reports', exact: true }).getByRole('listitem').filter({ hasText: report.id });
+  const trigger = page.getByTestId(`report-${report.id}`);
   for (let attempt = 0; attempt < 100; attempt++) {
-    await expect(page.getByRole('button', { name: 'Refresh reports' })).toBeEnabled();
-    if (await item.count()) break;
-    await page.getByRole('button', { name: 'Next reports', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Refresh reports' })).toHaveAttribute('aria-disabled', 'false');
+    if (await trigger.count()) break;
+    const next = page.getByRole('button', { name: 'Next report page', exact: true });
+    if (await next.getAttribute('aria-disabled') === 'true') break;
+    await next.click();
   }
-  const downloaded = page.waitForEvent('download'); await item.getByRole('button').click();
+  await trigger.click();
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('region', { name: 'Report details', exact: true }).getByRole('button', { name: 'Download pinned.json', exact: true }).click();
   expect(await readFile((await (await downloaded).path())!)).toEqual(bytes);
 });
