@@ -4,6 +4,10 @@ Read this first to pick the project up. Snapshot: **2026-10-14**. Update it in t
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
 ## Delivery snapshot and capability boundaries
+## Upload navigation recovery retirement (local, 2026-10-15)
+
+`fix/upload-navigation-retirement` fixes F06-R01 independently from main `301b035`: upload page exit retires started progress so late responses/bodies cannot replace newer recovery or continue abandoned work. Recovery remains available for retry/reload and acknowledged cancellation. Reviewed F06 `cf10828` and F07 remain frozen; their changes are not included. Local verification passed 299 frontend tests, 50 desktop/mobile auth/upload/navigation browser cases and a disposable F06 composition (322 frontend tests, 60 browser cases). Both weakened browser controls reproduced the original overwrite. See [verification](verification/upload-navigation-retirement.md). No push, PR, merge or deployment.
+
 ## Local launcher CORS controls (local branch)
 
 `fix/local-launcher-cors-parity` disables Moto's global CORS fallback in both the owned storage runner and the older review launcher's explicit child environments. Native browser probes reproduce the excluded-origin failure before the change and require refusal plus success after allowing that same real origin after the change. See [verification](verification/local-launcher-cors.md). F06/F07 remain frozen and separate; integration of the older launcher's PUT-only rule with F07's shared GET contract is deferred until F07 reaches main. No push, PR, merge or deployment.
