@@ -73,6 +73,10 @@ run "default_variables_plan" {
     condition     = output.web_bucket == null && output.web_cloudfront_domain == null && output.web_distribution_id == null
     error_message = "web hosting, and with it the bucket, the domain and the distribution id, is off by default"
   }
+  assert {
+    condition     = output.api_task_subnet_ids == null && output.api_task_assign_public_ip == null && output.api_service_name == null
+    error_message = "the one-off task network and the service name are null while API hosting is off"
+  }
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -198,6 +202,10 @@ run "production_hosting_on" {
     condition     = aws_ecr_repository.api[0].image_tag_mutability == "IMMUTABLE" && one(aws_ecr_repository.api[0].image_scanning_configuration).scan_on_push == true && one(aws_ecr_repository.api[0].encryption_configuration).encryption_type == "AES256"
     error_message = "the registry has immutable tags, scans on push and is encrypted with the AWS-managed key"
   }
+  assert {
+    condition     = output.api_task_assign_public_ip == false && output.api_task_subnet_ids == tolist(["subnet-aaaa1111", "subnet-bbbb2222"])
+    error_message = "the one-off tasks run in the operator's private subnets without a public address in production"
+  }
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -306,6 +314,10 @@ run "synthetic_hosting_on" {
   assert {
     condition     = length(aws_ecr_repository.api) == 1 && aws_ecr_repository.api[0].force_delete == true && aws_ecr_repository.api[0].image_tag_mutability == "IMMUTABLE"
     error_message = "the synthetic registry can be destroyed with images in it, and its tags are still immutable"
+  }
+  assert {
+    condition     = output.api_task_assign_public_ip == true && output.api_service_name == "telesphoros-staging-api"
+    error_message = "the one-off tasks are told to take a public address under the synthetic profile (no NAT), and the service name is the documented one"
   }
 }
 

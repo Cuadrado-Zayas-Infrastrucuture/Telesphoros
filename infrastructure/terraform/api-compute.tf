@@ -697,3 +697,18 @@ output "api_provision_task_family" {
   description = "Run this task definition once before the first migration, and again after it (docs/ops/api-hosting.md, \"The database logins\")."
   value       = local.api_service_count == 1 ? aws_ecs_task_definition.api_provision[0].family : null
 }
+
+output "api_service_name" {
+  description = "The API service, for `aws ecs update-service --force-new-deployment` once the database logins and migrations are done (docs/ops/staging-rehearsal.md). Null until api_image is set."
+  value       = local.api_service_count == 1 ? aws_ecs_service.api[0].name : null
+}
+
+output "api_task_subnet_ids" {
+  description = "The subnets the one-off tasks run in (scripts/staging/run-task.sh, TASK_SUBNETS): the service's own subnets."
+  value       = var.enable_api_hosting ? local.data_subnet_ids : null
+}
+
+output "api_task_assign_public_ip" {
+  description = "Whether the one-off tasks need a public address to reach the registry and AWS services (true only in the synthetic profile with its own network, which has no NAT). scripts/staging/run-task.sh, TASK_ASSIGN_PUBLIC_IP."
+  value       = var.enable_api_hosting ? local.tasks_public_ip : null
+}
