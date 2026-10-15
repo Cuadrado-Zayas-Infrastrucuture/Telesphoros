@@ -5,7 +5,7 @@ const o = require('./ownership.cjs'); const runtime = require('./runtime.cjs'); 
 const { protocol, client } = require('./protocol.cjs');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const evidenceFile = path.resolve(process.env.L3_EVIDENCE || path.join(o.base, 'rehearsal.json'));
-const evidence = { schema: 1, synthetic: true, startedAt: new Date().toISOString(), base: execFileSync('git', ['merge-base', 'HEAD', 'origin/main'], { cwd: o.root, encoding: 'utf8' }).trim(), gitHead: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: o.root, encoding: 'utf8' }).trim(), node: process.versions.node, moto: '5.2.3', mode: 'native-loopback', checks: [], runs: [], status: 'running', limitations: [] };
+const evidence = { schema: 1, synthetic: true, startedAt: new Date().toISOString(), base: execFileSync('git', ['merge-base', 'HEAD', 'origin/main'], { cwd: o.root, encoding: 'utf8' }).trim(), gitHead: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: o.root, encoding: 'utf8' }).trim(), node: process.versions.node, moto: runtime.motoVersion(), mode: 'native-loopback', checks: [], runs: [], status: 'running', limitations: [] };
 function record(name, detail) { evidence.checks.push({ name, ...detail }); o.atomic(evidenceFile, JSON.stringify(evidence, null, 2)); console.log(name + ': ' + (detail.passed === false ? 'FAIL' : 'recorded')); }
 async function begin() { const m = await runtime.setup(); evidence.runs.push({ id: m.id, ports: m.ports, database: m.database, bucket: m.bucket }); record('owned-setup', { passed: true, runId: m.id }); return m; }
 async function destroy(m) { const removed = await runtime.teardown(m.id); assert.equal(removed.phase, 'removed'); assert.equal(fs.existsSync(m.root), false); await runtime.teardown(m.id); record('teardown-idempotent-no-residuals', { passed: true, runId: m.id }); }
@@ -18,6 +18,7 @@ async function main() {
   o.ensureBase(); let m;
   try {
     m = process.env.L3_EXISTING_RUN ? o.load(process.env.L3_EXISTING_RUN) : await begin();
+    evidence.moto = m.versions.moto;
     process.env.TMPDIR = path.join(m.root, 'tmp');
     record('clock-synchronization', await services.clocks(m));
     // Browser acceptance reuses L2's actual upload/download and authorization assertions,
@@ -41,7 +42,7 @@ async function main() {
     const expired = await fetch(expiry.url, { redirect: 'error', signal: AbortSignal.timeout(10000) }); await expired.body?.cancel();
     const enforced = expired.status === 403;
     record('live-signed-url-expiry', { passed: enforced, observedStatus: expired.status, enforcement: enforced ? 'enforced' : 'emulator-gap', ttlSeconds: 60 });
-    if (!enforced) evidence.limitations.push('Moto 5.2.3 accepted the expired signed URL. Provider signature expiry remains unverified; no AWS check was attempted.');
+    if (!enforced) evidence.limitations.push(`Moto ${evidence.moto} accepted the expired signed URL. Provider signature expiry remains unverified; no AWS check was attempted.`);
     // Clinical tables are counted by the owned administrative connection, not hidden by RLS.
     const { Client } = services.backend('pg'); const c = new Client({ connectionString: services.dbUrl(m, 'storage_owner') });
     try { await c.connect(); const tables = ['report_captures', 'evaluations', 'capture_acceptances', 'corrections', 'cell_disputes']; for (const table of tables) assert.equal(Number((await c.query('SELECT count(*) AS n FROM ' + table)).rows[0].n), 0); record('clinical-tables-empty', { passed: true, tables }); } finally { await c.end(); }
