@@ -18,7 +18,7 @@
 | Audit trail | CloudTrail (multi-region, signed digests, S3 data events on the reports bucket), a locked log bucket with its own KMS key, and six email alarms ([audit-trail.md](../../docs/ops/audit-trail.md)) |
 | Access | Two **unattached** IAM policies: `app_runtime` (read/write report files) and `backup_job` (write-only to the backup bucket) |
 
-It does **not** create: the VPC and subnets, the image registry and image, DNS records, the database roles
+It does **not** create: the VPC and subnets, the image itself (the registry that holds it exists once API hosting is on: `registry.tf`, [image-push.md](../../docs/ops/image-push.md)), DNS records, the database roles
 (the privilege roles are created by the migrations and the three logins by `db provision-logins`, run as a one-off task: [api-hosting.md](../../docs/ops/api-hosting.md#the-database-logins-db-provision-logins)), dashboards, or the application's own alarms (the audit-trail alarms are the only ones; Phase 7/10).
 
 **F3a optional API edge:** `api-edge.tf` adds an ACM certificate, an HTTPS-only load balancer, a firewall (WAF) and exact security

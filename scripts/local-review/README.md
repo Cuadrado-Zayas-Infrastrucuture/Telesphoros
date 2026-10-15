@@ -6,6 +6,8 @@ The launcher's child environment explicitly sets `MOTO_DISABLE_GLOBAL_CORS=true`
 
 ## Prerequisites and start
 
+From the repository root, `pnpm test:launcher-cors` verifies both launcher child environments with real synthetic Moto/Chromium origin controls. Install the pinned Moto package from `.github/ci/requirements.txt` and the workspace Playwright Chromium runtime first; `LOCAL_MOTO_PYTHON` may select that Python interpreter. The required browser CI job installs these prerequisites and runs the command. See [coverage and limits](../../docs/verification/launcher-cors-regression-coverage.md). This does not start the full database/API demo or adopt F07's policy.
+
 Use Node **22.22.0** (Unicode16), pnpm **10.28.0**, PostgreSQL **16**, Python with `.github/ci/requirements.txt` installed for the Moto emulator, and the repository's pinned reader runtime dependencies. The optional real extractor requires `pdftotext` **26.03.0** on PATH. No AWS credentials are required.
 
 ```sh

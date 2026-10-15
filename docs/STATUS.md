@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-14**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Launcher CORS reconciliation (local, 2026-10-15)
+
+`fix/launcher-cors-current-main` carries PR #105's launcher regression controls and Moto pin validation onto main `7bf283a`, which already contains the merged #116 worker-cap test repair. The original #105 branch remains at `25ddb18`; its historical failed CI run has not tested this replacement. Both launchers retain their current policies: owned GET/HEAD and older review PUT. The five native controls cover actual child environments, the owned worker handoff and real-origin refusal/success. See [coverage verification](verification/launcher-cors-regression-coverage.md). #111 and F06/F07 branches remain unchanged. This reconciliation is local; no push, merge or deployment.
+
 ## Delivery snapshot and capability boundaries
 ## Upload navigation recovery retirement (local, 2026-10-15)
 
@@ -72,6 +76,9 @@ The founder approved the separate [Vercel visual preview](https://telesphoros-si
 ## FD-7 slice 4: staged variables and plan-review checklist (draft PR, 2026-10-15)
 
 Fourth and last Phase 1 slice of the [staged synthetic deployment plan](design/plans/fd7-staged-synthetic-deploy.md). `infrastructure/terraform/synthetic-staging.tfvars.example` (placeholders only, the approved `staging.telesphoros.app` convention, `synthetic` profile, both hosting switches on) is planned offline by a new `staging.tftest.hcl` in three stages, and `staging.guard.test.mjs` keeps the example equal to that test's values, inside the staging envelope, and checks the one coupling the module does not enforce (`api_domain` must be `api.<web_domain>`, because the web page's policy allows exactly that host). [staging-plan-review.md](ops/staging-plan-review.md) lists what each real plan must and must not contain, quick `grep` checks, stop conditions and the billable items to price. **Found while building it:** there is no plan with both hosting switches off (the database can only name the API tasks' security group, which exists only with API hosting on), so the first plan and apply already include the API edge and wait for its certificate's DNS record; the plan's Phase 2 is corrected. Proved offline: `terraform test` (4 runs; 17 with the existing 13), the guard with 20 injected defects, `terraform fmt` and `validate`. **Not proved:** anything in AWS, and cost. No default, guard or existing example changed.
+## FD-7 slice 1: the API image registry (draft PR, 2026-10-15)
+
+First build slice of the [staged synthetic deployment plan](design/plans/fd7-staged-synthetic-deploy.md) (founder approved D1 to D3 and AES-256). `registry.tf` adds one ECR repository and its lifecycle policy behind `enable_api_hosting` (immutable tags, scan on push, AWS-managed AES-256, the last 10 images kept, `force_delete` only under the `synthetic` profile) and the output `api_repository_url`; [image-push.md](ops/image-push.md) is the runbook (build linux/amd64, push, read the digest from the registry, then set `api_image`). Before this, `api_image` was validated and the execution roles could pull from the repository it names, but nothing created the repository. Proved offline: `terraform fmt`, `validate`, `terraform test` (the registry is absent by default and under the profiles' hosting runs present with the expected settings), a new text guard with 14 injected defects, and the profile ratchet extended for `force_delete`. **Not proved** in AWS: that a push works, that the execution roles can pull the pushed digest, that the lifecycle rule expires images, and cost. Nothing is applied; the Dockerfile, CI, task definitions and IAM are untouched.
 
 ## M1.5 live membership and revocation (merged, #95)
 

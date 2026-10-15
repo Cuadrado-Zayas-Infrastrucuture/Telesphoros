@@ -1,6 +1,6 @@
 # L3 owned synthetic storage operations
 
-This runtime provides a separate storage-only demonstration. It uses Node 22, PostgreSQL 16, Moto **5.2.3**, the existing fake identity provider, and L2's browser build. It accepts only synthetic data. Clinical processing stays disabled. It does not call AWS or make a production-readiness claim.
+This runtime provides a separate storage-only demonstration. It uses Node 22, PostgreSQL 16, Moto pinned in [the CI requirements](../../.github/ci/requirements.txt), the existing fake identity provider, and L2's browser build. It accepts only synthetic data. Clinical processing stays disabled. It does not call AWS or make a production-readiness claim.
 
 ## Start and verify
 
@@ -24,6 +24,8 @@ pnpm test:storage-ops
 pnpm test:storage-recovery
 pnpm test:storage-rehearsal
 ```
+
+`pnpm test:launcher-cors` separately verifies both actual launcher child environments against fresh native Moto/Chromium services. It requires pinned Moto and the workspace Chromium installation; `LOCAL_MOTO_PYTHON` may select that interpreter. It tests actual policy readback, permitted-method success and the simple-GET global fallback with paired real-origin controls and setting-removal defects. Required browser CI runs it; full DB/API lifecycle remains separate. See [coverage verification](../verification/launcher-cors-regression-coverage.md).
 
 The operations command tests ownership refusals and controlled scheduling. The full rehearsal requires all real local dependencies; it fails rather than skipping them. It runs L2 browser assertions against the L3-owned stack, explicit multipart and HTTP faults, actual writer crash/restart, clock checks, and full setup/teardown/restart acceptance. It saves aggregate JSON in `.local-storage/rehearsal.json` and private browser diagnostics beside it. `L3_EVIDENCE` can select another evidence file. Do not publish private logs without checking their contents.
 
