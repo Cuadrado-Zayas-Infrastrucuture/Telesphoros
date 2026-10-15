@@ -1,6 +1,24 @@
 # Plan: motion and drawn visual elements on the product landing
 
-Status: **draft, plan only; nothing built.** Requested 2026-10-15: "keep the current design, focus on other aspects such as adding some motion and visual elements that prevent the page from looking too static." The founder first asked for alternative sketches using the [taste-skill](https://github.com/Leonxlnx/taste-skill), then chose to keep the approved landing. This plan adds motion and code-drawn elements to that landing without changing its layout, copy, palette, fonts or artwork.
+Status: **approved 2026-10-15 (founder: "go, use your recommendations": M1 to M6 as recommended) and built on this branch.** See [verification](../../verification/landing-motion-and-visuals.md). Requested 2026-10-15: "keep the current design, focus on other aspects such as adding some motion and visual elements that prevent the page from looking too static." The founder first asked for alternative sketches using the [taste-skill](https://github.com/Leonxlnx/taste-skill), then chose to keep the approved landing. This plan adds motion and code-drawn elements to that landing without changing its layout, copy, palette, fonts or artwork.
+
+## Decisions recorded and deviations from the plan as written
+
+M1 to M6 were answered as recommended:
+- particles in the hero and, more faintly, in the closing;
+- particles move with the scroll;
+- all three capability fragments;
+- the labelled fictional digest;
+- the masked headline;
+- no walkthrough autoplay.
+
+Where the build differs from the text below:
+
+- **Item 8, off-screen pause, is not built because nothing needs it.** With scroll-linked particles nothing runs continuously: the scroll cue stops after three nudges and the typing dots after three cycles. The browser test asserts that no animation repeats forever.
+- **FAQ answers settle with a transform** instead of opening with `::details-content` and `interpolate-size`. Height is a layout property, and the motion rules here are transform and opacity only. The "+" already turned into "×" on `main`.
+- **The fragments are three files** (`PatientLinkFragment.tsx`, `FileStatusFragment.tsx`, `AssistantFragment.tsx`), not one `LandingFragments.tsx`: the foundation guard allows one component per file. `useLandingMotion.ts` did not need to change.
+- **The closing particles are hidden on phones.** There the mascot stacks above the text and no area is clear of it.
+- **The Check step's digest is a third checklist row** ("File digest"). An incomplete upload shows "Not available" instead of a value.
 
 ## Starting point (measured on `main`, 2026-10-15)
 

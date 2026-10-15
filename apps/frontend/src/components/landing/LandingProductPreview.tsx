@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { ArrowRight, Check, FileText, Minus, Upload } from 'lucide-react';
 import '@/styles/landing-workflow.css';
 
@@ -11,6 +11,8 @@ const records = [
   { name: 'SYN-001.vcf', type: 'VCF', format: 'Variant Call Format', uploaded: true },
   { name: 'SYN-002.json', type: 'JSON', format: 'JSON', uploaded: false },
 ] as const;
+/** An invented, shortened value that only illustrates what the server compares. It is labelled fictional on screen. */
+const fictionalDigest = 'SHA-256 9f2c…41ad';
 
 /** A state-only walkthrough. It never uploads, fetches, interprets, or downloads a report. */
 export function LandingProductPreview() {
@@ -22,7 +24,7 @@ export function LandingProductPreview() {
   const record = records[selected];
 
   return <figure className="workflow-demo" data-reveal="2">
-    <ol className="workflow-steps" aria-label="Explore the report workflow">
+    <ol className="workflow-steps" aria-label="Explore the report workflow" style={{ '--workflow-step': step } as CSSProperties}>
       {steps.map((item, index) => <li key={item.label}>
         <button type="button" aria-pressed={step === index} aria-controls="workflow-scene" onClick={() => setStep(index)}>
           <span className="workflow-step-number" aria-hidden="true">0{index + 1}</span>
@@ -44,20 +46,20 @@ export function LandingProductPreview() {
         {step === 0 && <div className="workflow-intake">
           <div className="workflow-field"><span>Synthetic patient</span><strong>Example patient</strong><span className="workflow-field-note">An existing record, selected before upload</span></div>
           <div className="workflow-format"><span>Try a report format</span><div>{records.map((item, index) => <button key={item.type} type="button" aria-pressed={format === index} onClick={() => setFormat(index)}>{item.type}</button>)}</div></div>
-          <div className="workflow-file" aria-live="polite"><div className="workflow-file-art" aria-hidden="true"><FileText /><span>.{records[format].type.toLowerCase()}</span></div><div><strong>{records[format].name}</strong><p>{records[format].format}</p><span>Synthetic sample file</span></div><Upload aria-hidden="true" className="workflow-file-upload" /></div>
+          <div aria-live="polite"><div key={format} className="workflow-file"><div className="workflow-file-art" aria-hidden="true"><FileText /><span>.{records[format].type.toLowerCase()}</span></div><div><strong>{records[format].name}</strong><p>{records[format].format}</p><span>Synthetic sample file</span></div><Upload aria-hidden="true" className="workflow-file-upload" /></div></div>
           <p className="workflow-example-note">This example changes the file format only. No file is selected from your device or uploaded.</p>
         </div>}
         {step === 1 && <div className="workflow-check">
           <div className={`workflow-check-result${incomplete ? ' workflow-check-incomplete' : ''}`} aria-live="polite">
             {incomplete ? <Minus aria-hidden="true" /> : <Check aria-hidden="true" />}<p>File uploaded</p><h4>{incomplete ? 'Not complete' : 'Server verified'}</h4><span>SYN-001.vcf · Synthetic example</span>
           </div>
-          <dl className="workflow-checklist"><div><dt>Report record</dt><dd>Registered</dd></div><div><dt>Stored file</dt><dd>{incomplete ? 'Not verified' : 'Verified'}</dd></div></dl>
+          <dl className="workflow-checklist"><div><dt>Report record</dt><dd>Registered</dd></div><div><dt>Stored file</dt><dd>{incomplete ? 'Not verified' : 'Verified'}</dd></div><div><dt>File digest</dt><dd>{incomplete ? 'Not available' : `${fictionalDigest} · fictional example`}</dd></div></dl>
           <button type="button" className="workflow-compare" aria-pressed={incomplete} onClick={() => setIncomplete(!incomplete)}>Compare an incomplete upload<ArrowRight aria-hidden="true" className="size-4" /></button>
           <p className="workflow-example-note" aria-live="polite">{incomplete ? 'The record exists, but the upload is not complete. A record alone does not confirm file storage.' : 'Verification confirms storage. Genotypes, phenotypes, and clinical interpretation are separate.'}</p>
         </div>}
         {step === 2 && <div className="workflow-inspect">
           <div className="workflow-records" aria-label="Fictional report records">{records.map((item, index) => <button key={item.name} type="button" aria-pressed={selected === index} aria-controls="landing-file-detail" onClick={() => setSelected(index)}><FileText aria-hidden="true" className="size-5" /><span>{item.name}</span><ArrowRight aria-hidden="true" className="size-4" /></button>)}</div>
-          <section id="landing-file-detail" className="workflow-details" aria-labelledby="landing-detail-title" aria-live="polite" aria-atomic="true"><p>Selected report</p><h4 id="landing-detail-title">{record.name}</h4><dl><div><dt>Format</dt><dd>{record.format}</dd></div><div><dt>Record status</dt><dd>Received</dd></div><div><dt>File uploaded</dt><dd className={record.uploaded ? 'workflow-success' : undefined}>{record.uploaded ? 'Yes — server verified' : 'No — not complete'}</dd></div></dl><div className="workflow-detail-note"><strong>{record.uploaded ? 'Upload verified' : 'Upload not complete'}</strong><p>{record.uploaded ? 'The stored file was verified. This does not establish a clinical result.' : 'Only metadata is available. The file has not been marked uploaded.'}</p></div></section>
+          <section id="landing-file-detail" className="workflow-details" aria-labelledby="landing-detail-title" aria-live="polite" aria-atomic="true"><div key={selected} className="workflow-details-body"><p>Selected report</p><h4 id="landing-detail-title">{record.name}</h4><dl><div><dt>Format</dt><dd>{record.format}</dd></div><div><dt>Record status</dt><dd>Received</dd></div><div><dt>File uploaded</dt><dd className={record.uploaded ? 'workflow-success' : undefined}>{record.uploaded ? 'Yes — server verified' : 'No — not complete'}</dd></div></dl><div className="workflow-detail-note"><strong>{record.uploaded ? 'Upload verified' : 'Upload not complete'}</strong><p>{record.uploaded ? 'The stored file was verified. This does not establish a clinical result.' : 'Only metadata is available. The file has not been marked uploaded.'}</p></div></div></section>
         </div>}
         <p className="workflow-boundary">{scene.boundary}</p>
       </div>

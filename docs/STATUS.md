@@ -104,17 +104,18 @@ Closes finding I04 (decision DA-1, decided yes on 2026-10-13): the eleven clinic
 
 Founder approved the [plan](design/plans/ui-polish-landing-and-dashboard.md) (P1 to P6 as recommended). Slice A changes the product landing only: a five-step type scale held in tokens (`--landing-fs-*`), 16px running text, headings within two lines at 1440, 768 and 390, consistent section spacing with a tone step instead of a divider for two sections, and a transform-only scroll entrance (`useLandingMotion`) with control feedback and a full reduced-motion fallback. The approved brand elements, copy, DNA, mascot, fonts and `branding-policy.json` are unchanged and the DNA and mascot are never animated. Measured with the taste-skill inspector: 11 FAIL / 4 WARN before, 7 FAIL / 3 WARN after; every remaining FAIL is a decision kept under P1/P2 (eyebrows, 01/02/03, gradient, hairlines, no archive pictures) or the shared Button's approved sheen. Local checks: typecheck, lint, `check:brand` with its 24 mutation tests, 291 unit tests, 74 standard browser cases (axe included), chunk and foundation guards. DEV, local-review and owned-storage browser suites were not run (no change to those screens). Slice B (Reports and upload) has not started. See [verification](verification/ui-polish-landing.md). No deployment, merge or clinical change.
 
-## Planned: landing motion and drawn visual elements (plan only, 2026-10-15)
+## Landing motion and drawn visual elements (draft PR, 2026-10-15)
 
-The founder kept the approved landing design after reviewing alternative taste-skill sketches, and asked for motion and visual elements so the page looks less static. The [draft plan](design/plans/landing-motion-and-visuals.md) adds:
+The founder kept the approved landing design after reviewing alternative taste-skill sketches, asked for motion and visual elements so the page looks less static, and approved the [plan](design/plans/landing-motion-and-visuals.md) with "go, use your recommendations" (M1 to M6). Built on the product landing only:
 
-- a masked headline rise;
-- a code-drawn particle field echoing the DNA (the DNA and mascot stay still);
-- walkthrough transitions with a labelled fictional digest;
-- three code-drawn interface fragments in the capability rows;
-- varied row-by-row entrances and FAQ motion.
+- the headline's two lines rise out of their own masks on load;
+- a code-drawn particle field in the hero and, faintly, the closing; it settles on load, then drifts only with the scroll, so nothing moves on its own for more than five seconds;
+- a scroll cue that nudges three times;
+- walkthrough transitions: a travelling step marker, the file card settling, checklist rows in order with a third "File digest" row labelled fictional, and the details panel sliding in;
+- three code-drawn, `aria-hidden` interface fragments in the capability rows (patient to file, a file status list, a sample assistant exchange ending on "Sample response. Not connected to your reports.");
+- row-by-row entrances for capabilities and FAQ, and FAQ answers that settle in.
 
-All of it is transform and opacity only and gated for reduced motion and no script. It changes no layout, copy, palette, font, artwork, permission or backend. Decisions M1 to M6 are open (the recommendation is scroll-linked particles, so WCAG 2.2.2 needs no pause control). The company page is still outside this repository. Nothing is built.
+Motion is transform only on text (opacity only on decorative dots) and is gated behind `is-motion`, so no script, old browsers and reduced motion all get the complete still page. The DNA and mascot never move. New tokens live in `tokens.css`; no layout, copy (other than the labelled fictional samples), palette, font, artwork, permission, route or backend changed. The taste-skill inspector counts 118 moving elements at 1440 (19 before) with no new FAIL or WARN. Checks and limits: [verification](verification/landing-motion-and-visuals.md). No deployment, merge or clinical change. The company page is still outside this repository.
 
 ## Planned: staged synthetic deployment in AWS, FD-7 (plan only)
 

@@ -1,0 +1,241 @@
+/*
+ * Landing motion layer and the code-drawn elements it moves (plan: docs/design/plans/landing-motion-and-visuals.md).
+ *
+ * Rules held throughout:
+ * - Transform only on anything that carries text, so contrast is real at every frame; opacity only on decorative,
+ *   aria-hidden shapes (particles, typing dots).
+ * - Every starting offset exists only under `.is-motion`, which useLandingMotion adds when IntersectionObserver
+ *   exists and the visitor has not asked for reduced motion. Without it the page is complete and still.
+ * - Nothing here selects the approved DNA artwork or the mascot image, and nothing repeats forever: the particles
+ *   move with the scroll, so no moving content starts on its own for more than five seconds (WCAG 2.2.2).
+ */
+
+/* Static styles for the new elements. */
+.product-landing .landing-headline .landing-line,
+.product-landing .landing-headline .landing-line > span { display: block; }
+.product-landing .landing-cue { display: inline-block; }
+
+.product-landing .landing-particles {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: clip;
+  pointer-events: none;
+}
+.product-landing .landing-particle {
+  position: absolute;
+  left: var(--particle-x);
+  top: var(--particle-y);
+  width: var(--landing-particle-size-sm);
+  height: var(--landing-particle-size-sm);
+}
+.product-landing .landing-particle--md { width: var(--landing-particle-size-md); height: var(--landing-particle-size-md); }
+.product-landing .landing-particle--lg { width: var(--landing-particle-size-lg); height: var(--landing-particle-size-lg); }
+.product-landing .landing-particle > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--brand-accent);
+  opacity: var(--landing-particle-opacity);
+}
+.product-landing .landing-particle--soft > span { background: var(--landing-soft-text); opacity: var(--landing-particle-soft-opacity); }
+.product-landing .landing-particle--deep > span { background: var(--primary); }
+.product-landing .landing-closing { position: relative; isolation: isolate; }
+.product-landing .landing-particles--closing { opacity: var(--landing-particle-closing-opacity); }
+
+.product-landing .landing-fragment {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  max-width: 26rem;
+  margin-top: 1.25rem;
+  padding: 1rem;
+  background: var(--panel);
+  border-radius: var(--radius-2);
+  font-size: var(--landing-fs-small);
+  line-height: 1.4;
+}
+.product-landing .landing-fragment svg { width: 1rem; height: 1rem; flex: none; }
+.product-landing .landing-fragment--link { flex-direction: row; align-items: center; gap: 0; }
+.product-landing .landing-fragment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .375rem;
+  padding: .375rem .75rem;
+  border-radius: 999px;
+  background: var(--muted);
+  color: var(--primary-hover);
+  font-weight: 600;
+  min-width: 0;
+  max-width: 100%;
+}
+.product-landing .landing-fragment-chip--file { background: var(--primary); color: var(--primary-foreground); }
+.product-landing .landing-fragment-wire {
+  flex: 1;
+  min-width: 1.5rem;
+  height: 2px;
+  margin-inline: .5rem;
+  background: var(--brand-accent);
+  transform-origin: left center;
+}
+.product-landing .landing-fragment-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: .5rem .75rem;
+  border-radius: var(--radius-1);
+  background: var(--background);
+  color: var(--primary-hover);
+}
+.product-landing .landing-fragment-row > span:first-child { display: inline-flex; align-items: center; gap: .375rem; min-width: 0; }
+.product-landing .landing-fragment-row > span:last-child { color: var(--muted-foreground); }
+.product-landing .landing-fragment-row > span.landing-fragment-verified { display: inline-block; color: var(--success); font-weight: 600; }
+.product-landing .landing-fragment--assistant { gap: .625rem; }
+.product-landing .landing-fragment-bubble { max-width: 85%; padding: .5rem .75rem; border-radius: .875rem; }
+.product-landing .landing-fragment-bubble--question {
+  align-self: flex-end;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-bottom-right-radius: var(--radius-1);
+}
+.product-landing .landing-fragment-reply { display: grid; justify-items: start; }
+.product-landing .landing-fragment-reply > * { grid-area: 1 / 1; }
+.product-landing .landing-fragment-answer {
+  background: var(--muted);
+  color: var(--primary-hover);
+  border-bottom-left-radius: var(--radius-1);
+  transform-origin: left bottom;
+}
+.product-landing .landing-fragment-typing {
+  display: none;
+  align-self: center;
+  gap: .3125rem;
+  padding: .75rem .875rem;
+  border-radius: .875rem;
+  background: var(--muted);
+}
+.product-landing .landing-fragment-typing > span { display: block; width: .4375rem; height: .4375rem; border-radius: 50%; background: var(--primary); }
+
+/* Signature moment: the two headline lines rise out of their own masks on load. */
+.product-landing.is-motion .landing-headline .landing-line {
+  overflow: clip;
+  padding-block: .04em .08em;
+  margin-block: -.04em -.08em;
+}
+.product-landing.is-motion .landing-headline .landing-line > span {
+  animation: landing-line-up var(--landing-line-duration) var(--landing-ease-out) both;
+}
+.product-landing.is-motion .landing-headline .landing-line + .landing-line > span { animation-delay: var(--landing-line-step); }
+/* The rest of the hero follows the headline instead of rising with it. */
+.product-landing.is-motion .landing-hero [data-reveal="2"] { transition-delay: calc(var(--landing-reveal-step) * 4); }
+.product-landing.is-motion .landing-hero [data-reveal="3"] { transition-delay: calc(var(--landing-reveal-step) * 5); }
+.product-landing.is-motion .landing-hero [data-reveal="4"] { transition-delay: calc(var(--landing-reveal-step) * 6); }
+.product-landing.is-motion [data-reveal="5"] { transition-delay: calc(var(--landing-reveal-step) * 4); }
+
+/* Scroll cue: three nudges, then still. */
+.product-landing.is-motion .landing-cue {
+  animation: landing-cue var(--landing-cue-duration) var(--landing-ease-travel) var(--landing-cue-delay) 3;
+}
+
+/* Particles: settle into place on load, then drift only as the page scrolls. */
+.product-landing.is-motion .landing-particles--hero .landing-particle {
+  animation: landing-particle-settle var(--landing-settle-duration) var(--landing-ease-soft) var(--particle-delay) both;
+}
+@supports (animation-timeline: view()) {
+  .product-landing.is-motion .landing-hero { view-timeline: --landing-hero-view block; }
+  .product-landing.is-motion .landing-closing { view-timeline: --landing-closing-view block; }
+  .product-landing.is-motion .landing-particles--hero .landing-particle > span {
+    animation: landing-particle-drift linear both;
+    animation-timeline: --landing-hero-view;
+    animation-range: exit 0% exit 100%;
+  }
+  .product-landing.is-motion .landing-particles--closing .landing-particle > span {
+    animation: landing-particle-drift linear both;
+    animation-timeline: --landing-closing-view;
+    animation-range: cover 0% cover 100%;
+  }
+}
+
+/* Walkthrough: show what changed. */
+.product-landing.is-motion .workflow-steps::before { transition: transform var(--landing-scene-duration) var(--landing-ease-travel); }
+.product-landing.is-motion .workflow-steps button[aria-pressed="true"] { border-top-color: var(--divider); }
+.product-landing.is-motion .workflow-file { animation: landing-file-settle var(--landing-scene-duration) var(--landing-ease-out) both; }
+.product-landing.is-motion .workflow-check-result > svg { animation: landing-pop var(--landing-scene-duration) var(--landing-ease-out) var(--landing-fragment-step) both; }
+.product-landing.is-motion .workflow-checklist > div { animation: landing-row-in var(--landing-scene-duration) var(--landing-ease-out) both; }
+.product-landing.is-motion .workflow-checklist > div:nth-child(2) { animation-delay: var(--landing-fragment-step); }
+.product-landing.is-motion .workflow-checklist > div:nth-child(3) { animation-delay: calc(var(--landing-fragment-step) * 2); }
+.product-landing.is-motion .workflow-details-body { animation: landing-panel-in var(--landing-scene-duration) var(--landing-ease-out) both; }
+
+/* Capability fragments: each plays once when its row is revealed. */
+.product-landing.is-motion .landing-fragment-wire { transition: transform var(--landing-reveal-duration) var(--landing-ease-out) calc(var(--landing-fragment-step) * 2); }
+.product-landing.is-motion .landing-fragment-chip--file { transition: transform var(--landing-scene-duration) var(--landing-ease-out) calc(var(--landing-fragment-step) * 6); }
+.product-landing.is-motion .landing-fragment-row { transition: transform var(--landing-scene-duration) var(--landing-ease-out); }
+.product-landing.is-motion .landing-fragment-row:nth-child(2) { transition-delay: var(--landing-fragment-step); }
+.product-landing.is-motion .landing-fragment-row:nth-child(3) { transition-delay: calc(var(--landing-fragment-step) * 2); }
+.product-landing.is-motion .landing-fragment-verified { transition: transform var(--landing-scene-duration) var(--landing-ease-out) calc(var(--landing-fragment-step) * 5); }
+.product-landing.is-motion .landing-fragment-bubble--question { transition: transform var(--landing-scene-duration) var(--landing-ease-out); }
+.product-landing.is-motion :not(.is-revealed) > div > .landing-fragment .landing-fragment-wire { transform: scaleX(0); }
+.product-landing.is-motion :not(.is-revealed) > div > .landing-fragment :is(.landing-fragment-chip--file, .landing-fragment-verified) { transform: scale(.6); }
+.product-landing.is-motion :not(.is-revealed) > div > .landing-fragment :is(.landing-fragment-row, .landing-fragment-bubble--question) { transform: translateY(.625rem); }
+.product-landing.is-motion .landing-fragment-typing { display: flex; }
+.product-landing.is-motion .landing-fragment-answer { transform: scale(0); }
+.product-landing.is-motion .is-revealed .landing-fragment-typing {
+  animation: landing-typing-out .2s linear calc(var(--landing-typing-cycle) * 3 + var(--landing-scene-duration)) both;
+}
+.product-landing.is-motion .is-revealed .landing-fragment-typing > span {
+  animation: landing-typing-dot var(--landing-typing-cycle) ease-in-out var(--landing-scene-duration) 3;
+}
+.product-landing.is-motion .is-revealed .landing-fragment-typing > span:nth-child(2) { animation-delay: calc(var(--landing-scene-duration) + var(--landing-fragment-step)); }
+.product-landing.is-motion .is-revealed .landing-fragment-typing > span:nth-child(3) { animation-delay: calc(var(--landing-scene-duration) + var(--landing-fragment-step) * 2); }
+.product-landing.is-motion .is-revealed .landing-fragment-answer {
+  animation: landing-answer-in var(--landing-scene-duration) var(--landing-ease-out) calc(var(--landing-typing-cycle) * 3 + var(--landing-scene-duration) + .1s) both;
+}
+
+/* FAQ: the answer settles in as its question opens (the + already turns into ×). */
+.product-landing.is-motion .landing-questions details[open] p { animation: landing-answer-open var(--landing-scene-duration) var(--landing-ease-out) both; }
+
+@keyframes landing-line-up { from { transform: translateY(105%); } to { transform: none; } }
+@keyframes landing-cue { 0%, 100% { transform: none; } 50% { transform: translateY(var(--landing-cue-distance)); } }
+@keyframes landing-particle-settle { from { transform: translateY(var(--landing-settle-distance)); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes landing-particle-drift {
+  from { transform: translateY(calc(var(--particle-depth) * var(--landing-drift-distance))); }
+  to { transform: translateY(calc(var(--particle-depth) * var(--landing-drift-distance) * -1)); }
+}
+@keyframes landing-file-settle { from { transform: translateY(.375rem) scale(.97); } to { transform: none; } }
+@keyframes landing-pop { from { transform: scale(.6); } to { transform: none; } }
+@keyframes landing-row-in { from { transform: translateY(.625rem); } to { transform: none; } }
+@keyframes landing-panel-in { from { transform: translateX(1rem); } to { transform: none; } }
+@keyframes landing-typing-dot { 0%, 100% { transform: none; } 50% { transform: translateY(-.25rem); } }
+@keyframes landing-typing-out { from { transform: none; opacity: 1; } to { transform: scale(.8); opacity: 0; } }
+@keyframes landing-answer-in { from { transform: scale(0); } to { transform: none; } }
+@keyframes landing-answer-open { from { transform: translateY(-.5rem); } to { transform: none; } }
+
+/*
+ * Reduced motion, including a preference that changes after load: everything sits in its final place.
+ * landing.css already stops every animation and transition on the landing.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .product-landing .landing-headline .landing-line > span,
+  .product-landing .landing-fragment-wire,
+  .product-landing .landing-fragment-chip--file,
+  .product-landing .landing-fragment-verified,
+  .product-landing .landing-fragment-row,
+  .product-landing .landing-fragment-bubble--question,
+  .product-landing .landing-fragment-answer { transform: none !important; }
+  .product-landing .landing-fragment-typing { display: none !important; }
+}
+@media (forced-colors: active) {
+  .product-landing .landing-particles { display: none; }
+}
+/* A fragment never widens its row's text column. */
+.product-landing .landing-capability-rows article > div { min-width: 0; }
+@media (max-width: 45rem) {
+  .product-landing .landing-particles--closing { display: none; }
+  .product-landing .landing-fragment { max-width: none; }
+  /* Too narrow for patient, wire and file side by side: stack them, and the wire draws downwards. */
+  .product-landing .landing-fragment--link { flex-direction: column; align-items: flex-start; }
+  .product-landing .landing-fragment-wire { flex: none; width: 2px; min-width: 0; height: 1.25rem; margin: .375rem 0 .375rem 1.25rem; transform-origin: center top; }
+  .product-landing.is-motion :not(.is-revealed) > div > .landing-fragment .landing-fragment-wire { transform: scaleY(0); }
+}
