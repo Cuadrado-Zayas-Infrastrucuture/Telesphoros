@@ -12,7 +12,7 @@ Native Chromium/Moto probes used the owned runner's actual exported environment 
 
 Both unchanged launchers failed the excluded-origin assertion: expected refusal, received the exact synthetic object. After the change each passed seven controls: exact bucket readback; approved-origin pinned GET bytes; browser PUT refusal; second-origin GET refusal; success from that same document after allowing its origin; original pinned bytes after overwriting the object; restored/read-back policy. All owned services stopped.
 
-The GET policy came from the frozen F07 contract **only in scratch** to isolate the launcher environment defect. It was not copied into this main-based branch. This proves the child environment permits the intended bucket-origin enforcement; it does not claim the launchers' main PUT-only rules have been repaired or that Moto proves actual AWS method enforcement.
+The GET policy came from the frozen F07 contract **only in scratch** to isolate the launcher environment defect. It was not copied into this main-based branch. This proves the child environment permits the intended bucket-origin enforcement; it does not claim the differing main launcher policies (owned GET/HEAD; older review PUT) have been aligned with F07 or that Moto proves actual AWS method enforcement.
 
 `node --test scripts/workspace-build/workspace.test.cjs scripts/local-storage/operations.test.cjs`: **22 passed, zero failed/skipped**. Cleanup touched only freshly generated, ownership-checked test fixtures. Source syntax and whitespace checks passed. No frontend/backend build or PostgreSQL tier was rerun for this two-setting change; no schema, API or app behavior changed.
 
