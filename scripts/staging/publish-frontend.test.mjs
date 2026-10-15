@@ -40,12 +40,19 @@ exit 0
 }
 
 /** A build as `vite build` leaves it (with source maps, because vite.config.ts sets sourcemap: true). */
-function fixtureBuild({ withSettings = true, extra = {} } = {}) {
+function fixtureBuild({ withSettings = true, settings = {}, quote = '"', extra = {} } = {}) {
   const dist = mkdtempSync(join(sandbox, 'dist-'));
   mkdirSync(join(dist, 'assets'));
-  const settings = withSettings ? `const c={a:"${GOOD.VITE_API_BASE_URL}",o:"${GOOD.VITE_OIDC_AUTHORITY}"};` : 'const c={};';
+  const compiled = Object.fromEntries(Object.entries(GOOD).filter(([name]) => name.startsWith('VITE_')));
+  const values = { ...compiled, ...settings };
+  let config = withSettings ? `const c=${JSON.stringify(values)};` : 'const c={};';
+  if (withSettings && quote !== '"') {
+    for (const value of Object.values(values).filter((value) => value !== undefined)) {
+      config = config.replace(JSON.stringify(value), `${quote}${value}${quote}`);
+    }
+  }
   writeFileSync(join(dist, 'index.html'), '<!doctype html><div id="root"></div><script type="module" src="/assets/index-abc123.js"></script>');
-  writeFileSync(join(dist, 'assets/index-abc123.js'), `${settings}\n//# sourceMappingURL=index-abc123.js.map`);
+  writeFileSync(join(dist, 'assets/index-abc123.js'), `${config}\n//# sourceMappingURL=index-abc123.js.map`);
   writeFileSync(join(dist, 'assets/index-abc123.js.map'), '{"version":3}');
   writeFileSync(join(dist, 'assets/style-def456.css'), 'body{margin:0}');
   writeFileSync(join(dist, 'favicon.svg'), '<svg/>');
@@ -170,6 +177,29 @@ test('a build that was not made with these settings, or is not a build, is refus
   const none = run({ dist: empty });
   assert.notEqual(none.status, 0);
   assert.match(none.out, /no index\.html/);
+});
+
+test('complete settings in double quotes, single quotes and minifier backticks are accepted', () => {
+  for (const quote of ['"', "'", '`']) {
+    for (const args of [[], ['--yes']]) {
+      const { status, out } = run({ dist: fixtureBuild({ quote }), args });
+      assert.equal(status, 0, out);
+    }
+  }
+});
+
+test('each compiled auth/API setting must match exactly in both dry-run and upload modes', () => {
+  for (const name of ['VITE_API_BASE_URL', 'VITE_OIDC_AUTHORITY', 'VITE_OIDC_CLIENT_ID', 'VITE_COGNITO_DOMAIN']) {
+    for (const value of [undefined, 'stale-setting', `${GOOD[name]}-stale`]) {
+      const dist = fixtureBuild({ settings: { [name]: value } });
+      for (const args of [[], ['--yes']]) {
+        const { status, out, calls } = run({ dist, args });
+        assert.notEqual(status, 0, `${name} must refuse missing, stale and prefix-only matches`);
+        assert.ok(out.includes(`does not contain ${name}`), out);
+        assert.equal(calls, '', `${name}: no identity, upload or invalidation call may precede verification`);
+      }
+    }
+  }
 });
 
 test('the source-map guard fires: with the exclusion removed the script refuses', () => {
