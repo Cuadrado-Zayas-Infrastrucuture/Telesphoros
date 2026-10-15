@@ -20,6 +20,10 @@ CDN proxies. Use the Vercel project's **actual displayed** A/CNAME/TXT values; d
 generic addresses from a tutorial. Existing Google MX, SPF, DKIM, DMARC and verification
 records stay in place. This change neither configures SES nor moves human mail to SES.
 
+## Design previews on Vercel (frontend only)
+
+Founder decision 2026-10-16: Telesphoros frontend **previews** may run on Vercel; the product itself stays on AWS (the address map above). The root `vercel.json` and `apps/frontend/scripts/build-vercel-preview.sh` build a visual-only preview: placeholder `.invalid` sign-in and API settings, no backend, no data, `noindex`, behind Vercel Authentication in a separate `telesphoros-previews` project with no custom domain. See the [plan](../design/plans/vercel-frontend-preview.md). It does not use or change `telesphoros-site` or any address above.
+
 ## What H1 adds
 
 `infrastructure/terraform/web.tf` adds optional frontend resources to the existing root.
