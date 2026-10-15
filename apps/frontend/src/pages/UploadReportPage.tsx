@@ -3,6 +3,7 @@ import { ownedStorageMode } from '@/lib/storageMode';
 import { cancelOwnedUpload, restoreProgress, retireOwnedUpload } from '@/lib/ownedStorageApi';
 import { clearRecovery, readRecovery, type RecoveryEntry } from '@/lib/uploadRecovery';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { RefreshCw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { Paginated, PatientDto } from '@telesphoros/shared-types';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
@@ -169,21 +170,23 @@ export default function UploadReportPage() {
             Reference <strong>{reference}</strong>. The server verified the stored file. This does not indicate clinical review or processing.
           </AlertDescription>
         </Alert>
-        <div>
+        <div className="flex flex-wrap items-center gap-3">
           <Button disabled={isSubmitting || cancelling} onClick={startOver}>Upload another report</Button>
-          {owned && <Link className="ml-4 underline" to="/reports">View reports</Link>}
+          {owned && <Button asChild variant="outline"><Link to="/reports">View reports</Link></Button>}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex max-w-prose flex-col gap-6">
+    <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl leading-tight font-bold">Upload report</h1>
         <p className="text-muted-foreground">Synthetic test reports only. Fields marked required must be completed.</p>
       </div>
 
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+      <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
       {notice && <Alert><AlertDescription>{notice}</AlertDescription></Alert>}
 
       {interrupted && !serverError && !isSubmitting && (
@@ -205,7 +208,7 @@ export default function UploadReportPage() {
         </Alert>
       )}
 
-      <Card>
+      <Card className="bg-panel shadow-panel">
         <CardHeader>
           <CardTitle>Report details</CardTitle>
           <CardDescription>The file is checked in your browser before anything is submitted.</CardDescription>
@@ -216,6 +219,7 @@ export default function UploadReportPage() {
               <fieldset disabled={isSubmitting || cancelling} className="flex min-w-0 flex-col gap-6">
                 <legend className="sr-only">Report details</legend>
 
+                <div className="flex flex-col gap-2">
                 <FormField
                   control={form.control}
                   name="patientId"
@@ -240,16 +244,17 @@ export default function UploadReportPage() {
                   )}
                 />
 
-                <div className="flex flex-col gap-2">
-                  <p role="status">{patientsLoading ? 'Loading patients…' : patients?.meta.total === 0 ? 'No patients available. Ask a clinician to add a synthetic patient, then refresh the list.' : patients ? `Patient page ${patients.meta.page} of ${patients.meta.totalPages}` : 'Patients unavailable.'}</p>
-                  {patientError && <p role="alert" className="text-destructive">{patientError}</p>}
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" disabled={patientsLoading || isSubmitting} onClick={() => loadPatients(patientError ? patientRequest.page : patients?.meta.page ?? 1)}>Refresh patients</Button>
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                  <p role="status" className="text-sm text-muted-foreground">{patientsLoading ? 'Loading patients…' : patients?.meta.total === 0 ? 'No patients available. Ask a clinician to add a synthetic patient, then refresh the list.' : patients ? `Patient page ${patients.meta.page} of ${patients.meta.totalPages}` : 'Patients unavailable.'}</p>
+                  <div className="-ml-3 flex flex-wrap gap-1 sm:ml-0">
+                    <Button type="button" variant="ghost" size="sm" disabled={patientsLoading || isSubmitting} onClick={() => loadPatients(patientError ? patientRequest.page : patients?.meta.page ?? 1)}><RefreshCw aria-hidden="true" className="size-4 shrink-0" />Refresh patients</Button>
                     {patients && patients.meta.totalPages > 1 && <>
-                      <Button type="button" variant="outline" disabled={patientsLoading || isSubmitting || patients.meta.page <= 1} onClick={() => loadPatients(patients.meta.page - 1)}>Previous patients</Button>
-                      <Button type="button" variant="outline" disabled={patientsLoading || isSubmitting || patients.meta.page >= patients.meta.totalPages} onClick={() => loadPatients(patients.meta.page + 1)}>Next patients</Button>
+                      <Button type="button" variant="ghost" size="sm" disabled={patientsLoading || isSubmitting || patients.meta.page <= 1} onClick={() => loadPatients(patients.meta.page - 1)}>Previous patients</Button>
+                      <Button type="button" variant="ghost" size="sm" disabled={patientsLoading || isSubmitting || patients.meta.page >= patients.meta.totalPages} onClick={() => loadPatients(patients.meta.page + 1)}>Next patients</Button>
                     </>}
                   </div>
+                </div>
+                {patientError && <p role="alert" className="text-sm text-destructive">{patientError}</p>}
                 </div>
 
                 <FormField
@@ -300,7 +305,7 @@ export default function UploadReportPage() {
                   name="syntheticConfirmed"
                   render={({ field: { value, onChange, onBlur, name, ref } }) => (
                     <FormItem>
-                      <div className="flex items-start gap-3">
+                      <div className="flex items-center gap-3">
                         <FormControl>
                           <Checkbox
                             name={name}
@@ -337,6 +342,16 @@ export default function UploadReportPage() {
           </Form>
         </CardContent>
       </Card>
+      </div>
+      <aside aria-labelledby="upload-guide-heading" className="rounded-lg border border-divider bg-panel p-5 shadow-panel">
+        <h2 id="upload-guide-heading" className="text-lg">Before you upload</h2>
+        <ul className="mt-3 flex list-disc flex-col gap-3 pl-5 text-sm">
+          <li>Use synthetic records only. Real patient information must not be uploaded.</li>
+          <li>The server verifies the stored file. Verification confirms storage; it is not clinical review.</li>
+          {owned && <li>Afterwards, find the report on the <Link className="underline" to="/reports">Reports page</Link>.</li>}
+        </ul>
+      </aside>
+      </div>
     </div>
   );
 }

@@ -268,3 +268,45 @@ it('opens a separate synthetic preview without passing report or patient context
     expect(api.mock.calls.length).toBe(calls);
   } finally { vi.unstubAllGlobals(); }
 });
+
+describe('dashboard presentation', () => {
+  it('shows the patient on each row only while the list is not filtered to one patient', async () => {
+    renderApp('/reports', { signedInAs: ['reader'], fetchImpl: fetcher(['reader']) });
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: 'Open synthetic.vcf' });
+    const table = screen.getByRole('region', { name: 'Report records table' });
+    expect(within(table).getByText('SYN-1')).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'Report / patient' })).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Filter by patient'), p2);
+    await screen.findByRole('button', { name: 'Open synthetic.vcf' });
+    expect(within(table).queryByText('SYN-2')).not.toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'Report' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Clear patient filter' }));
+    await within(table).findByText('SYN-1');
+  });
+
+  it.each([[true, 'Upload verified'], [false, 'Upload not complete']] as const)('leads the details panel with the upload state (uploaded: %s) and hides its icon from assistive technology', async (uploaded, title) => {
+    const api = fetcher(['clinician'], async () => json({ data: [row(p1, uploaded)], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } }));
+    renderApp('/reports', { signedInAs: ['clinician'], fetchImpl: api });
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Open synthetic.vcf' }));
+    const detail = within(screen.getByRole('region', { name: 'Report details' }));
+    const state = detail.getByRole('heading', { name: title });
+    expect(state.compareDocumentPosition(detail.getByText('Record status')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(state.parentElement!.previousElementSibling).toHaveAttribute('aria-hidden', 'true');
+    expect(Boolean(detail.queryByRole('button', { name: 'Download synthetic.vcf' }))).toBe(uploaded);
+  });
+
+  it('keeps patient-option paging reachable by the same names in its quieter form', async () => {
+    const api = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/me')) return json({ roles: ['reader'] });
+      if (url.pathname.endsWith('/patients')) return json({ data: [{ id: p1, label: 'SYN-1', createdAt: date, updatedAt: date }], meta: { page: 1, pageSize: 20, total: 21, totalPages: 2 } });
+      return json({ data: [row()], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } });
+    });
+    renderApp('/reports', { signedInAs: ['reader'], fetchImpl: api });
+    expect(await screen.findByText('Patient options: page 1 of 2.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next patient page' })).toHaveAttribute('aria-disabled', 'false');
+    expect(screen.getByRole('button', { name: 'Previous patient page' })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('button', { name: 'Refresh patient options' })).toBeInTheDocument();
+  });
+});

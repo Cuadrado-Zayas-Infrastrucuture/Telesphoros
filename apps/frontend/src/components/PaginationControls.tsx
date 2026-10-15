@@ -2,7 +2,7 @@ import type { PaginationMeta } from '@telesphoros/shared-types';
 import { Button } from '@/components/ui/Button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-export function PaginationControls({ label, meta, busy, onPage, preserveFocus = false, statusMessage }: {
+export function PaginationControls({ label, meta, busy, onPage, preserveFocus = false, statusMessage, compact = false }: {
   label: string;
   meta: PaginationMeta;
   busy: boolean;
@@ -10,14 +10,16 @@ export function PaginationControls({ label, meta, busy, onPage, preserveFocus = 
   /** Use guarded aria-disabled controls when loading must preserve keyboard focus. */
   preserveFocus?: boolean;
   statusMessage?: string;
+  /** Secondary pager (for example patient options): quiet ghost buttons, same names and behavior. */
+  compact?: boolean;
 }) {
   const previousUnavailable = busy || meta.page <= 1;
   const nextUnavailable = busy || meta.page >= meta.totalPages;
-  const previous = <Button variant="outline" aria-label={preserveFocus ? `Previous ${label.toLowerCase()} page` : undefined} disabled={!preserveFocus && previousUnavailable} aria-disabled={preserveFocus ? previousUnavailable : undefined} className={preserveFocus ? 'h-auto min-h-control whitespace-normal px-3 text-sm aria-disabled:cursor-not-allowed aria-disabled:opacity-60' : undefined} onClick={() => { if (!previousUnavailable) onPage(meta.page - 1); }}>
+  const previous = <Button variant={compact ? 'ghost' : 'outline'} aria-label={preserveFocus ? `Previous ${label.toLowerCase()} page` : undefined} disabled={!preserveFocus && previousUnavailable} aria-disabled={preserveFocus ? previousUnavailable : undefined} className={preserveFocus ? 'h-auto min-h-control whitespace-normal px-3 text-sm aria-disabled:cursor-not-allowed aria-disabled:opacity-60' : undefined} onClick={() => { if (!previousUnavailable) onPage(meta.page - 1); }}>
     {preserveFocus && <ChevronLeft aria-hidden="true" className="size-4 shrink-0" />}
     {preserveFocus ? 'Previous' : `Previous ${label.toLowerCase()} page`}
   </Button>;
-  const next = <Button variant="outline" aria-label={preserveFocus ? `Next ${label.toLowerCase()} page` : undefined} disabled={!preserveFocus && nextUnavailable} aria-disabled={preserveFocus ? nextUnavailable : undefined} className={preserveFocus ? 'h-auto min-h-control whitespace-normal px-3 text-sm aria-disabled:cursor-not-allowed aria-disabled:opacity-60' : undefined} onClick={() => { if (!nextUnavailable) onPage(meta.page + 1); }}>
+  const next = <Button variant={compact ? 'ghost' : 'outline'} aria-label={preserveFocus ? `Next ${label.toLowerCase()} page` : undefined} disabled={!preserveFocus && nextUnavailable} aria-disabled={preserveFocus ? nextUnavailable : undefined} className={preserveFocus ? 'h-auto min-h-control whitespace-normal px-3 text-sm aria-disabled:cursor-not-allowed aria-disabled:opacity-60' : undefined} onClick={() => { if (!nextUnavailable) onPage(meta.page + 1); }}>
     {preserveFocus ? 'Next' : `Next ${label.toLowerCase()} page`}
     {preserveFocus && <ChevronRight aria-hidden="true" className="size-4 shrink-0" />}
   </Button>;
