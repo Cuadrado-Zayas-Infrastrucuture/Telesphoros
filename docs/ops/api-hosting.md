@@ -99,7 +99,7 @@ The task's execution role injects the administrator's `username` and `password` 
 1. The three gates in the Terraform README (BAA, remote state, plan reviewed line by line) and the prerequisites in [deployment.md](deployment.md).
 2. A VPC with at least two public subnets (in different zones) and private subnets with a **route to a NAT gateway**; set `public_subnet_ids`. Without a VPC, create it first, as its own change.
 3. Apply with `enable_api_hosting = true`; add the certificate validation record in Cloudflare while the apply waits.
-4. Fill the three secrets (previous section), build and push the image (F4), set `api_image`, `api_cors_origins` and `api_desired_count`, apply again.
+4. Fill the three secrets (previous section), build and push the image ([image-push.md](image-push.md); the registry is created by the same switch), set `api_image`, `api_cors_origins` and `api_desired_count`, apply again.
 5. Only after a healthy service is behind it: add the DNS-only CNAME from the API name to `api_alb_dns_name`. Until then the load balancer answers 404 or 503 and nothing else.
 6. Check, with synthetic data: TLS 1.2 accepted and 1.1 refused, port 80 refused, `/` answers 404, `/api/v1/health` and `/api/v1/ready` answer, a request from the firewall's block list is refused, the unhealthy-target path works by stopping a task.
 7. Test every alarm: `aws cloudwatch set-alarm-state` on each (the email must arrive), and for `ledger-compromised` also produce a real log line in staging (a deliberate, reverted change to one stored event in a throwaway tenant) and watch the metric filter count it.

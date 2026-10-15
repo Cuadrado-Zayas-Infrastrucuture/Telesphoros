@@ -64,6 +64,7 @@ export const EXPECTED_USES = {
   'iam.tf': { 'count = local.offsite_count': 2 },
   'kms.tf': { 'count = local.offsite_count': 2, 'deletion_window_in_days = local.kms_deletion_days': 2 },
   'outputs.tf': { 'value = local.synthetic ? null : aws_iam_policy.backup_job[0].arn': 1, 'value = local.synthetic ? null : aws_kms_key.backup[0].arn': 1, 'value = local.synthetic ? null : aws_s3_bucket.backups[0].bucket': 1 },
+  'registry.tf': { 'force_delete = local.synthetic': 1 },
   'storage.tf': { 'count = local.offsite_count': 9, 'force_destroy = local.synthetic': 2 },
   'worker.tf': { 'assign_public_ip = local.tasks_public_ip': 1, 'deletion_window_in_days = local.kms_deletion_days': 1, 'recovery_window_in_days = local.secret_recovery_days': 1 },
 };
@@ -101,6 +102,7 @@ const REFUSALS = [
 /** Written in place, these make the profile irrelevant: a relaxation that does not go through the profile locals. */
 const LITERAL_RELAXATIONS = [
   [/force_destroy\s*=\s*true/, 'a bucket made force-destroyable by a literal'],
+  [/force_delete\s*=\s*true/, 'a repository made force-deletable by a literal'],
   [/skip_final_snapshot\s*=\s*true/, 'the final snapshot skipped by a literal'],
   [/deletion_protection\s*=\s*(false|"INACTIVE")/, 'deletion protection removed by a literal'],
   [/recovery_window_in_days\s*=\s*0\b/, 'a secret deleted at once by a literal'],
@@ -199,6 +201,7 @@ test('the profile guard reports each way the profile could be weakened (controls
     ['the network refusal is removed', edit('profile.tf', 'length(local.data_subnet_ids) >= 2', 'true')],
     ['the COMPLIANCE-lock refusal is removed', edit('profile.tf', '(var.audit_lock_mode == "GOVERNANCE" && var.backup_lock_mode == "GOVERNANCE")', 'true')],
     ['a bucket force-destroyable by a literal', edit('storage.tf', 'resource "aws_s3_bucket" "reports" {\n  bucket        = "${local.name}-reports-${data.aws_caller_identity.current.account_id}"\n  force_destroy = local.synthetic', 'resource "aws_s3_bucket" "reports" {\n  bucket        = "${local.name}-reports-${data.aws_caller_identity.current.account_id}"\n  force_destroy = true')],
+    ['a repository force-deletable by a literal', edit('registry.tf', 'force_delete = local.synthetic', 'force_delete = true')],
     ['the backups bucket always created', edit('storage.tf', 'resource "aws_s3_bucket" "backups" {\n  count               = local.offsite_count\n', 'resource "aws_s3_bucket" "backups" {\n')],
     ['the replication always created', edit('database.tf', 'resource "aws_db_instance_automated_backups_replication" "offsite" {\n  count                  = local.offsite_count\n', 'resource "aws_db_instance_automated_backups_replication" "offsite" {\n')],
     ['the trail single-Region by a literal', edit('audit.tf', 'is_multi_region_trail         = !local.synthetic', 'is_multi_region_trail         = false')],
