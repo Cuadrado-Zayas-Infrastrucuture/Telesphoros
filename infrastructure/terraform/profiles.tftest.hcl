@@ -68,6 +68,8 @@ run "default_variables_plan" {
   assert {
     condition     = output.web_bucket == null && output.web_cloudfront_domain == null && output.web_distribution_id == null
     error_message = "web hosting, and with it the bucket, the domain and the distribution id, is off by default"
+    condition     = length(aws_ecr_repository.api) == 0 && length(aws_ecr_lifecycle_policy.api) == 0 && output.api_repository_url == null
+    error_message = "the image registry is off by default, with the rest of API hosting"
   }
 }
 
@@ -186,6 +188,14 @@ run "production_hosting_on" {
     condition     = aws_secretsmanager_secret.worker_database_url[0].recovery_window_in_days == 30 && aws_kms_key.worker_logs[0].deletion_window_in_days == 30 && one(aws_ecs_service.worker[0].network_configuration).assign_public_ip == false
     error_message = "the worker follows the profile: production keeps the 30-day windows and gives tasks no public address"
   }
+  assert {
+    condition     = length(aws_ecr_repository.api) == 1 && aws_ecr_repository.api[0].name == "telesphoros-production-api" && aws_ecr_repository.api[0].force_delete == false
+    error_message = "production hosting creates one registry, and a repository that still holds images cannot be deleted"
+  }
+  assert {
+    condition     = aws_ecr_repository.api[0].image_tag_mutability == "IMMUTABLE" && one(aws_ecr_repository.api[0].image_scanning_configuration).scan_on_push == true && one(aws_ecr_repository.api[0].encryption_configuration).encryption_type == "AES256"
+    error_message = "the registry has immutable tags, scans on push and is encrypted with the AWS-managed key"
+  }
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -290,6 +300,10 @@ run "synthetic_hosting_on" {
   assert {
     condition     = length(aws_ecs_service.worker) == 1 && aws_secretsmanager_secret.worker_database_url[0].recovery_window_in_days == 0 && one(aws_ecs_service.worker[0].network_configuration).assign_public_ip == true
     error_message = "the worker follows the synthetic profile: its secret is deleted at once and its tasks get a public address"
+  }
+  assert {
+    condition     = length(aws_ecr_repository.api) == 1 && aws_ecr_repository.api[0].force_delete == true && aws_ecr_repository.api[0].image_tag_mutability == "IMMUTABLE"
+    error_message = "the synthetic registry can be destroyed with images in it, and its tags are still immutable"
   }
 }
 
