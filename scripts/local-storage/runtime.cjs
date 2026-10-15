@@ -5,7 +5,7 @@ const s = require('./services.cjs');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const ports = { postgres: 54481, moto: 5557, api: 3010, idp: 4010, web: 4173 };
 function environment(m) {
-  return { PATH: process.env.PATH, LC_ALL: 'C', TMPDIR: path.join(m.root, 'tmp'), PYTHONUNBUFFERED: '1', NODE_ENV: 'development', LAB_REPORT_PIPELINE: 'disabled', AWS_EC2_METADATA_DISABLED: 'true', AWS_ACCESS_KEY_ID: 'synthetic-local', AWS_SECRET_ACCESS_KEY: 'synthetic-local', AWS_DEFAULT_REGION: 'us-east-2', MOTO_ALLOW_NONEXISTENT_REGION: 'false' };
+  return { PATH: process.env.PATH, LC_ALL: 'C', TMPDIR: path.join(m.root, 'tmp'), PYTHONUNBUFFERED: '1', NODE_ENV: 'development', LAB_REPORT_PIPELINE: 'disabled', AWS_EC2_METADATA_DISABLED: 'true', AWS_ACCESS_KEY_ID: 'synthetic-local', AWS_SECRET_ACCESS_KEY: 'synthetic-local', AWS_DEFAULT_REGION: 'us-east-2', MOTO_ALLOW_NONEXISTENT_REGION: 'false', MOTO_DISABLE_GLOBAL_CORS: 'true' };
 }
 function configuration() {
   if (process.env.NODE_ENV === 'production' || (process.env.LAB_REPORT_PIPELINE && process.env.LAB_REPORT_PIPELINE !== 'disabled') || process.env.S3_UPLOAD_PART_MIN_SIZE) throw new Error('Storage-only mode or multipart limits refused.');
