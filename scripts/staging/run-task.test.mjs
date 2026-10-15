@@ -55,7 +55,7 @@ function run(argv, { env = {}, stub = {} } = {}) {
   const log = join(dir, 'calls.log');
   const full = { PATH: `${dir}:${process.env.PATH}`, HOME: sandbox, STUB_LOG: log, STUB_TASK_ARN: TASK_ARN, LOG_DELAY_SECONDS: '0', ...ENV, ...env, ...stub };
   for (const [k, v] of Object.entries(full)) if (v === undefined) delete full[k];
-  const result = spawnSync('bash', [script, ...argv], { encoding: 'utf8', env: full });
+  const result = spawnSync('bash', [script, ...argv], { encoding: 'utf8', env: full, cwd: sandbox });
   const raw = existsSync(log) ? readFileSync(log, 'utf8') : '';
   const calls = raw
     .split('CALL\n')
@@ -117,7 +117,9 @@ test('the network comes from the environment, and a public address is asked for 
 
 test('free text is passed as data: quotes, $(...), semicolons and spaces arrive unchanged and nothing is executed', () => {
   const canary = join(sandbox, 'canary');
-  const name = `Pilot "Clinic" $(touch ${canary}); \`touch ${canary}\` & more`;
+  // A relative canary keeps the payload within the real 120-character name limit even on macOS's long temporary paths.
+  const name = 'Pilot "Clinic" $(touch canary); `touch canary` & more';
+  assert.ok(name.length <= 120);
   const { overrides } = started(['tenant-create', '--id', 'pilot-clinic', '--name', name, '--by', "O'Brien; rm -rf /"]);
   assert.deepEqual(overrides.containerOverrides[0].command.slice(-4), ['--name', name, '--by', "O'Brien; rm -rf /"]);
   assert.equal(existsSync(canary), false, 'a value was interpreted by a shell');
@@ -186,6 +188,24 @@ test('a missing or malformed setting is refused, and there is no default for the
     assert.notEqual(status, 0, `must refuse: ${name}`);
     assert.match(out, pattern, name);
     assert.deepEqual(calls, []);
+  }
+});
+
+test('log group names accept the full 1 to 512 ASCII character range and reject invalid names before any AWS call', () => {
+  for (const value of ['a', '/ecs/Stage_1.#-logs', 'a'.repeat(256), 'a'.repeat(512)]) {
+    const result = run(['migrate-status'], { env: { API_LOG_GROUP: value } });
+    assert.equal(result.status, 0, result.out);
+    assert.deepEqual(result.calls, [], 'a valid name does not change the default dry run');
+  }
+  const longest = 'a'.repeat(512);
+  const { result } = started(['migrate-status'], { env: { API_LOG_GROUP: longest } });
+  assert.equal(after_(find(result.calls, 'logs', 'get-log-events')[0], '--log-group-name'), longest);
+
+  for (const value of ['', 'a'.repeat(513), '/ecs/a b', '/ecs/a:b', '/ecs/a\nb', '/ecs/café']) {
+    const result = run(['migrate-status', '--yes'], { env: { API_LOG_GROUP: value } });
+    assert.notEqual(result.status, 0, `must refuse ${JSON.stringify(value)}`);
+    assert.match(result.out, /API_LOG_GROUP is (?:not set|not a log group name)/);
+    assert.deepEqual(result.calls, [], 'validation must finish before identity, task or log calls');
   }
 });
 
