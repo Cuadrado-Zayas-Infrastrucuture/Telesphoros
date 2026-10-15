@@ -7,16 +7,24 @@ const ports = { postgres: 54481, moto: 5557, api: 3010, idp: 4010, web: 4173 };
 function environment(m) {
   return { PATH: process.env.PATH, LC_ALL: 'C', TMPDIR: path.join(m.root, 'tmp'), PYTHONUNBUFFERED: '1', NODE_ENV: 'development', LAB_REPORT_PIPELINE: 'disabled', AWS_EC2_METADATA_DISABLED: 'true', AWS_ACCESS_KEY_ID: 'synthetic-local', AWS_SECRET_ACCESS_KEY: 'synthetic-local', AWS_DEFAULT_REGION: 'us-east-2', MOTO_ALLOW_NONEXISTENT_REGION: 'false', MOTO_DISABLE_GLOBAL_CORS: 'true' };
 }
+function motoVersion() {
+  const requirements = fs.readFileSync(path.join(o.root, '.github/ci/requirements.txt'), 'utf8');
+  const entries = requirements.split(/\r?\n/).map(line => line.trim()).filter(line => /^moto(?:\W|$)/i.test(line));
+  const pin = entries.length === 1 && /^moto\[server\]==(\d+\.\d+\.\d+)(?:\s+#.*)?$/.exec(entries[0]);
+  if (!pin) throw new Error('Exactly one pinned Moto requirement required in .github/ci/requirements.txt.');
+  return pin[1];
+}
 function configuration() {
   if (process.env.NODE_ENV === 'production' || (process.env.LAB_REPORT_PIPELINE && process.env.LAB_REPORT_PIPELINE !== 'disabled') || process.env.S3_UPLOAD_PART_MIN_SIZE) throw new Error('Storage-only mode or multipart limits refused.');
   const pg = process.env.LOCAL_PG_BIN; const moto = process.env.MOTO_SERVER;
   if (!pg || !path.isAbsolute(pg) || !moto || !path.isAbsolute(moto)) throw new Error('Explicit absolute LOCAL_PG_BIN and MOTO_SERVER required.');
   if (!/\b16\./.test(execFileSync(path.join(pg, 'postgres'), ['--version'], { encoding: 'utf8' }))) throw new Error('PostgreSQL 16 required.');
   // Pin the emulator package using its own Python runtime, not a different PATH install.
+  const version = motoVersion();
   const python = path.join(path.dirname(moto), 'python');
-  if (execFileSync(python, ['-c', 'import importlib.metadata; print(importlib.metadata.version("moto"))'], { encoding: 'utf8' }).trim() !== '5.2.3') throw new Error('Moto 5.2.3 required.');
+  if (execFileSync(python, ['-c', 'import importlib.metadata; print(importlib.metadata.version("moto"))'], { encoding: 'utf8' }).trim() !== version) throw new Error(`Moto ${version} required.`);
   if (Number(process.versions.node.split('.')[0]) !== 22) throw new Error('Node 22 required.');
-  return { pg, moto };
+  return { pg, moto, motoVersion: version };
 }
 function blast(m) {
   return `# Written teardown blast-radius check\n\nRun ${m.id}; synthetic only.\n\nExact removal boundary: ${m.root}\nDatabase ${m.database}, role ${m.role}, and all cluster roles live only inside ${m.root}/postgres.\nMoto bucket ${m.bucket}, IAM/policies, multipart parts and objects live only in this owned process and ${m.root}/moto.\nPorts: ${JSON.stringify(m.ports)} on 127.0.0.1. These are refusal checks, never kill targets.\n\nTeardown validates the control copy, root inode, private permissions and every PID/start identity before signaling. It stops the owned API/scheduler before IDP/web/Moto/PostgreSQL. It then removes this exact run directory, including all synthetic bytes, database/roles and staging. No shared-cluster DROP, AWS request, blanket prune or wildcard deletion. Existing review services and any foreign listener or sentinel are protected by refusal.\n\nLoss: all synthetic run data. Recovery: run setup with a new UUID and replay synthetic fixtures. This is full disposable-stack teardown, not pin-preserving orphan sweeping. Process mismatch, unexpected file, symlink or residual listener leaves resources for inspection and returns failure. Aggregate evidence and the control tombstone survive outside the removal boundary.\n`;
@@ -60,7 +68,7 @@ async function setup({ failAfter } = {}) {
   const config = configuration(); o.ensureBase();
   for (const port of Object.values(ports)) await o.free(port);
   const id = randomUUID(); const dir = o.location(id); fs.mkdirSync(dir, { mode: 0o700 });
-  const m = { schema: 1, synthetic: true, id, root: dir, directory: o.privateDir(dir), host: '127.0.0.1', ports, database: 'synthetic_storage_' + id.replaceAll('-', ''), role: 'storage_app', bucket: 'synthetic-storage-' + id, clinicalProcessing: 'disabled', phase: 'preparing', createdAt: new Date().toISOString(), processes: [], gitHead: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: o.root, encoding: 'utf8' }).trim(), versions: { node: process.versions.node, moto: '5.2.3', postgres: '16' } };
+  const m = { schema: 1, synthetic: true, id, root: dir, directory: o.privateDir(dir), host: '127.0.0.1', ports, database: 'synthetic_storage_' + id.replaceAll('-', ''), role: 'storage_app', bucket: 'synthetic-storage-' + id, clinicalProcessing: 'disabled', phase: 'preparing', createdAt: new Date().toISOString(), processes: [], gitHead: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: o.root, encoding: 'utf8' }).trim(), versions: { node: process.versions.node, moto: config.motoVersion, postgres: '16' } };
   o.seal(m);
   for (const name of ['moto', 'tmp', 'stage', 'logs']) fs.mkdirSync(path.join(dir, name), { mode: 0o700 });
   s.saveMultipart(m, []); o.atomic(path.join(dir, 'blast-radius.md'), blast(m));
@@ -176,4 +184,4 @@ async function sweepNow(id) {
   }
   throw new Error('Reconciliation deadline; inspect owned status');
 }
-module.exports = { setup, teardown, ports, environment, blast, childReceipt, stop, listener, restartApi, sweepNow, health };
+module.exports = { setup, teardown, ports, environment, motoVersion, blast, childReceipt, stop, listener, restartApi, sweepNow, health };

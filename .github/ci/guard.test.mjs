@@ -176,6 +176,51 @@ function runSteps(text, key) {
   return [...block.matchAll(/^ {6}- run:\s*(.+)$/gm)].map((m) => m[1].trim());
 }
 
+/** The native launcher check belongs to the required browser job, with its dependencies ready. */
+export function launcherCorsJobProblems(text) {
+  const command = 'pnpm test:launcher-cors';
+  const job = text.split(/^jobs:\s*$/m)[1]?.split(/^ {2}(?=[a-z][a-z0-9-]*:\s*$)/m).find(b => b.startsWith('browser:')) ?? '';
+  const problems = [];
+  if (/^ {4}if:/m.test(job)) problems.push('the required browser job must not be conditional');
+  if (runSteps(text, 'browser').filter(s => s === command).length !== 1) problems.push('one native launcher test command is required');
+  const step = job.split(/^ {6}(?=- )/m).find(b => b.startsWith('- run: ' + command)) ?? '';
+  if (step.trim() !== '- run: ' + command) problems.push('the launcher step must run unconditionally and propagate failure');
+  const at = job.indexOf(command);
+  for (const dependency of ['pip install -r .github/ci/requirements.txt', 'pnpm exec playwright install-deps chromium', 'pnpm exec playwright install --with-deps chromium']) {
+    if (job.indexOf(dependency) < 0 || job.indexOf(dependency) > at) problems.push('launcher dependencies must precede the native check');
+  }
+  return problems;
+}
+
+test('required browser CI runs self-contained launcher origin controls after dependencies are installed', () => {
+  assert.deepEqual(launcherCorsJobProblems(workflow), []);
+  const pkg = JSON.parse(read('../../package.json'));
+  assert.equal(pkg.scripts['test:launcher-cors'], 'node --test scripts/local-storage/launcher-cors.test.cjs');
+  assert.ok(existsSync(new URL('../../scripts/local-storage/launcher-cors.test.cjs', import.meta.url)));
+});
+
+test('launcher CI guard rejects missing, swallowed, optional and premature native checks', () => {
+  const step = '      - run: pnpm test:launcher-cors\n';
+  for (const changed of [
+    workflow.replace(step, ''),
+    workflow.replace(step, step + step),
+    workflow.replace(step, step.trimEnd() + ' || true\n'),
+    workflow.replace(step, step + '        continue-on-error: true\n'),
+    workflow.replace(step, step + '        if: false\n'),
+    workflow.replace('  browser:\n', '  browser:\n    if: false\n'),
+    workflow.replace(step, '').replace('      - name: Install the browser\n', step + '      - name: Install the browser\n'),
+  ]) assert.ok(launcherCorsJobProblems(changed).length > 0);
+});
+
+test('the actual launcher CI command propagates a failed test producer', () => {
+  const command = runSteps(workflow, 'browser').find(s => s === 'pnpm test:launcher-cors');
+  assert.ok(command);
+  for (const status of [0, 17]) {
+    const result = spawnSync('bash', ['-e', '-c', `pnpm() { return ${status}; };\n${command}`], { encoding: 'utf8' });
+    assert.equal(result.status, status);
+  }
+});
+
 /** What is wrong with how the terraform job proves the deployment profiles (empty when nothing is). */
 export function terraformJobProblems(text) {
   const steps = runSteps(text, 'terraform');

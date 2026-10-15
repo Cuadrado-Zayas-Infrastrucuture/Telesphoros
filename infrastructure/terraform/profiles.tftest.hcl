@@ -66,6 +66,10 @@ run "default_variables_plan" {
     error_message = "the worker, with its secret and alarms, is off by default"
   }
   assert {
+    condition     = length(aws_ecr_repository.api) == 0 && length(aws_ecr_lifecycle_policy.api) == 0 && output.api_repository_url == null
+    error_message = "the image registry is off by default, with the rest of API hosting"
+  }
+  assert {
     condition     = output.api_task_subnet_ids == null && output.api_task_assign_public_ip == null && output.api_service_name == null
     error_message = "the one-off task network and the service name are null while API hosting is off"
   }
@@ -187,6 +191,14 @@ run "production_hosting_on" {
     error_message = "the worker follows the profile: production keeps the 30-day windows and gives tasks no public address"
   }
   assert {
+    condition     = length(aws_ecr_repository.api) == 1 && aws_ecr_repository.api[0].name == "telesphoros-production-api" && aws_ecr_repository.api[0].force_delete == false
+    error_message = "production hosting creates one registry, and a repository that still holds images cannot be deleted"
+  }
+  assert {
+    condition     = aws_ecr_repository.api[0].image_tag_mutability == "IMMUTABLE" && one(aws_ecr_repository.api[0].image_scanning_configuration).scan_on_push == true && one(aws_ecr_repository.api[0].encryption_configuration).encryption_type == "AES256"
+    error_message = "the registry has immutable tags, scans on push and is encrypted with the AWS-managed key"
+  }
+  assert {
     condition     = output.api_task_assign_public_ip == false && output.api_task_subnet_ids == tolist(["subnet-aaaa1111", "subnet-bbbb2222"])
     error_message = "the one-off tasks run in the operator's private subnets without a public address in production"
   }
@@ -294,6 +306,10 @@ run "synthetic_hosting_on" {
   assert {
     condition     = length(aws_ecs_service.worker) == 1 && aws_secretsmanager_secret.worker_database_url[0].recovery_window_in_days == 0 && one(aws_ecs_service.worker[0].network_configuration).assign_public_ip == true
     error_message = "the worker follows the synthetic profile: its secret is deleted at once and its tasks get a public address"
+  }
+  assert {
+    condition     = length(aws_ecr_repository.api) == 1 && aws_ecr_repository.api[0].force_delete == true && aws_ecr_repository.api[0].image_tag_mutability == "IMMUTABLE"
+    error_message = "the synthetic registry can be destroyed with images in it, and its tags are still immutable"
   }
   assert {
     condition     = output.api_task_assign_public_ip == true && output.api_service_name == "telesphoros-staging-api"
