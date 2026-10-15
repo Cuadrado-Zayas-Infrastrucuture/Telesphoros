@@ -51,7 +51,7 @@ Each rule was broken on purpose with a script that edits the source, runs the fr
 | `test:ci-config`, `test:infra` | 35 of 35, 32 of 32 |
 | Frontend unit | 23 files, 277 tests passed |
 | Browser, in memory (desktop and mobile) | 68 and 26 passed |
-| Browser, PostgreSQL storage mode (`e2e:storage`), on a database migrated to 0022 with the runbook's tenants and personas | 28 passed, 1 failed: `version-pin.spec.ts` (failing before this slice, recorded in the M2.1a note) |
+| Browser, PostgreSQL storage mode (`e2e:storage`), on a database migrated to 0022 with the runbook's tenants and personas | 28 passed, 1 failed: `version-pin.spec.ts` (stale selectors in the spec itself; fixed in [#115](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/115)) |
 | The new browser spec repeated three times | 18 of 18 each time |
 
 Not re-run (untouched by this slice): backend tiers, recovery suites, shared types, smart-pilot.

@@ -65,7 +65,7 @@ Each rule was broken on purpose with a script that edits the source, runs the na
 | Frontend unit | 22 files, 254 tests passed |
 | Shared types | 24 tests passed |
 | Browser, in memory (desktop and mobile) | 58 and 26 passed |
-| Browser, PostgreSQL storage mode (`e2e:storage`), on a database migrated to 0022 with the runbook's tenants and personas | 26 passed, 1 failed: `version-pin.spec.ts` (failing before this slice, recorded in the M2.1a note) |
+| Browser, PostgreSQL storage mode (`e2e:storage`), on a database migrated to 0022 with the runbook's tenants and personas | 26 passed, 1 failed: `version-pin.spec.ts` (stale selectors in the spec itself; fixed in [#115](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/115)) |
 | `scripts/local-review/verify-upload.cjs` against Moto | all six checks pass (declaration, checksum, size, type, missing-then-recovered, success) |
 | `uploads sweep --dry-run` through the built command line on a migrated database | runs, reports `would release 0 attempt(s)` for two organizations |
 

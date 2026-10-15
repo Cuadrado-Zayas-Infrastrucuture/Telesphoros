@@ -64,7 +64,7 @@ Each rule was broken on purpose with a script that edits the migration or source
 | Frontend unit | 22 files, 261 tests passed |
 | Smart-pilot package | 9 files, 186 tests passed |
 | Browser, in memory (desktop and mobile) | 58 and 26 passed |
-| Browser, PostgreSQL storage mode (`e2e:storage`), on a database migrated to 0019 with the runbook's tenants and personas | 26 passed, 1 failed: `version-pin.spec.ts` still waits for the old report list's "Next reports" button (the dashboard became a table in an earlier commit); it is unrelated to this slice and was failing before it |
+| Browser, PostgreSQL storage mode (`e2e:storage`), on a database migrated to 0019 with the runbook's tenants and personas | 26 passed, 1 failed: `version-pin.spec.ts`, whose selectors were stale (unrelated to this slice); fixed in [#115](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/115) |
 
 Moving onto `main` needed these changes beyond renumbering to 0019: the migration lists in six database specs and the recovery CLI's migration count; the security-event spec's membership helper; the schema-acceptance tables (`tenants`, `invitations` beside `security_events`); and one frontend test that `main` gained after this slice was written (`ReportsPage` empty-state upload offered to `admin` alone, now `admin` plus `clinician`, because `admin` no longer reads clinical records). The defect-injection runs recorded above were done before the move and not repeated; their guarding tests ran in the full runs.
 
