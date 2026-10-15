@@ -33,8 +33,7 @@ A green run is evidence about the code at that commit. It is not evidence about 
 - **gitleaks is built from source** (`go install`, verified by the Go checksum database) rather than using the maintainers'
   GitHub Action, which requires a paid licence for organization repositories.
 - **Playwright's browser is cached** (key: lockfile hash); the pnpm store and pip downloads are cached by the setup actions.
-- **The Terraform provider lock file is not committed**, so `init` resolves the newest `5.x` AWS provider each run. Commit
-  `.terraform.lock.hcl` once someone with registry access has generated it (follow-up).
+- **The Terraform provider lock file is committed.** `versions.tf` constrains AWS to `~> 6.67`; the current lock selects AWS 6.68.0 and archive 2.8.1. Provider updates must preserve the reviewed lock/checksums and supported platforms; CI does not resolve an unreviewed newest 5.x provider.
 - **Native GitHub secret scanning / code scanning** are not configured here. On a private repository they need GitHub
   Advanced Security. If the plan includes it, turn secret scanning on (Settings → Code security) as a second layer.
 

@@ -12,10 +12,12 @@ applied in AWS.
  NestJS API (apps/backend), prefix /api/v1
     │  every request: authenticate → membership and roles (database) → (pipeline gate) → validate → work
     ├──► PostgreSQL 16 ── row-level security by tenant; append-only record tables; per-tenant hash-chained ledger
-    ├──► S3 (versioned bucket) ── report files; presigned upload; version-pinned reads and links
+    ├──► S3 (versioned bucket) ── validated API intake; version-pinned reads and signed GET links
     ├──► knowledge/ (signed content, loaded at start) ──► phenotype engine ──► recommendation engine
     └──► sidecars/report-reader (Python subprocess) ── the imported, test-only reader engine
 ```
+
+The product [capability matrix](product-capabilities.md) distinguishes normal builds, local-storage opt-in, development routes and server pipeline gates. Main still declares PUT-only reports CORS; the GET-only download repair is local F07, so this architecture does not claim hosted browser downloads are accepted.
 
 ## Identity, tenancy and roles
 - **Authentication:** Cognito access tokens in production; an HMAC verifier for development and tests only (refused in production). A
@@ -40,6 +42,10 @@ Report files live in a **versioned** S3 bucket. On upload the server streams the
 version**; the database then refuses any change to that file's identity, and later reads and links name the version. See
 [ops/report-evidence.md](ops/report-evidence.md).
 
+## Jobs and operational acceptance
+
+M2.3 is merged: the PostgreSQL queue, transactional outbox, stored-file verification, hourly upload sweep, scheduler and separate worker process exist. Worker Terraform, login provisioning, deployment contracts and alarms are written; they have not been accepted in a hosted environment. Scheduling code is not evidence that a worker is provisioned or that alarms are delivered. See [jobs](ops/jobs.md).
+
 ## Knowledge and engines
 - `knowledge/cpic` is loaded at start under production rules (nothing synthetic or unreviewed). It is empty until clinical sign-off, so in
   production every drug reports "no matching guideline". Test-only knowledge for the pipeline lives in `data/fixtures/knowledge/test-only-reader`.
@@ -52,7 +58,7 @@ version**; the database then refuses any change to that file's identity, and lat
 Off by default (`LAB_REPORT_PIPELINE`); refused in production and with the in-memory store. A PDF goes through these steps, each by a
 different person where the rules say so:
 
-1. **Upload** a `lab-pdf` report (presigned PUT); the server verifies size, type and SHA-256 and pins the object version.
+1. **Upload** a `lab-pdf` through an immutable attempt and raw-byte API intake; structural validation precedes any bucket write, and the committed file pins size, type, SHA-256 and storage version. The pipeline gate applies to declaration, transfer and resume.
 2. **Capture** (`POST /reports/:id/capture`): fetch the pinned version, re-hash, extract text, store it, record a capture, all inside a
    protocol that refuses if the report changed in between. The text runner is currently a **recorded-text substitute** for twelve development PDFs.
 3. **Decision** (`POST /captures/:id/decision`, reviewer): someone who did not create, upload or capture the report accepts or rejects.

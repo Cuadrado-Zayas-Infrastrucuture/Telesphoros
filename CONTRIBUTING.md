@@ -15,7 +15,7 @@
 ## Merging to `main`
 
 - `main` is protected by a ruleset (`.github/rulesets/main.json`, steps in [docs/ops/ci-cd.md](docs/ops/ci-cd.md)): a pull request is required, and
-  `verify`, `database-and-storage`, `browser`, `terraform` and `secret-scan` must be green. Force pushes and deletion are blocked.
+  `verify`, `database-and-storage`, `browser`, `terraform`, `secret-scan` and `image` must be green. Force pushes and deletion are blocked.
 - **Required approvals are 0 while there is one maintainer** (the author cannot approve their own PR). When a second
   maintainer is added, the policy becomes **1 approval + the checks**, with code-owner review required for the paths in `.github/CODEOWNERS`.
 - Every GitHub Action is pinned to a commit SHA; Dependabot updates them. Run `pnpm test:ci-config` after touching `.github/`.
