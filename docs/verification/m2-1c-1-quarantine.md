@@ -56,7 +56,7 @@ Each rule was broken on purpose with a script that edits the source, runs the na
 | Shared types | 25 tests passed |
 | Recovery suites (application, independent, CLI) as an unprivileged user from a copy of the repository | 3 suites, 37 tests passed |
 | Browser, in memory (desktop and mobile) | 58 and 26 passed |
-| Browser, PostgreSQL storage mode (`e2e:storage`), on a database migrated to 0020 with the runbook's tenants and personas | 26 passed, 1 failed: `version-pin.spec.ts` (waits for the old report list's "Next reports" button; failing before this slice, recorded in the M2.1a note) |
+| Browser, PostgreSQL storage mode (`e2e:storage`), on a database migrated to 0020 with the runbook's tenants and personas | 26 passed, 1 failed: `version-pin.spec.ts` (stale selectors in the spec itself; fixed in [#115](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/115)) |
 
 The recovery suites and both browser tiers, which the earlier version of this note listed as not re-run, were run on the moved branch (rows above). The defect-injection runs above were done before the move and not repeated; their guarding tests ran in the full runs.
 

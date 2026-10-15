@@ -63,7 +63,7 @@ Each rule was broken on purpose with a script that edits the source or the migra
 | Smart-pilot package | 9 files, 188 tests passed |
 | Shared types | 25 tests passed |
 | Browser, in memory (desktop and mobile) | 58 and 26 passed |
-| Browser, PostgreSQL storage mode (`e2e:storage`), on a database migrated to 0021 with the runbook's tenants and personas | 26 passed, 1 failed: `version-pin.spec.ts` (waits for the old report list's "Next reports" button; failing before this slice, recorded in the M2.1a note) |
+| Browser, PostgreSQL storage mode (`e2e:storage`), on a database migrated to 0021 with the runbook's tenants and personas | 26 passed, 1 failed: `version-pin.spec.ts` (stale selectors in the spec itself; fixed in [#115](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/115)) |
 
 ## What this does not show
 

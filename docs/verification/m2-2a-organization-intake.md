@@ -54,7 +54,7 @@ Each rule was broken on purpose with a script that edits the source or the migra
 | Backend, PostgreSQL 16 plus Moto S3 | 152 suites, 2,227 tests passed (1 skipped); the three recovery suites refuse to run as root and are the next row |
 | Recovery suites (application, independent, CLI) as an unprivileged user from a copy of the repository | 3 suites, 37 tests passed |
 | Browser, in memory (desktop and mobile) | 58 and 26 passed |
-| Browser, PostgreSQL storage mode (`e2e:storage`), on a database migrated to 0022 with the runbook's tenants and personas | 26 passed, 1 failed: `version-pin.spec.ts` (failing before this slice, recorded in the M2.1a note) |
+| Browser, PostgreSQL storage mode (`e2e:storage`), on a database migrated to 0022 with the runbook's tenants and personas | 26 passed, 1 failed: `version-pin.spec.ts` (stale selectors in the spec itself; fixed in [#115](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/115)) |
 
 The frontend, shared-types and smart-pilot packages are untouched by this slice and were not re-run.
 
