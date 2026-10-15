@@ -315,7 +315,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - run: node --test infrastructure/docker/guard.test.mjs
       - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
-      - uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: infrastructure/docker/api.Dockerfile
@@ -326,7 +326,7 @@ jobs:
           outputs: type=oci,dest=${{ runner.temp }}/api.oci.tar
       # Classic Docker stores cannot load attested manifest lists. Reuse the same
       # builder/cache for the runtime export; retain evidence in the OCI archive.
-      - uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: infrastructure/docker/api.Dockerfile
