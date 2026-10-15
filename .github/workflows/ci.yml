@@ -222,6 +222,7 @@ jobs:
           cache-dependency-path: .github/ci/requirements.txt
       - name: Install the pinned browser S3 emulator
         run: pip install -r .github/ci/requirements.txt
+      - run: pnpm test:launcher-cors
       - name: Browser tests
         run: pnpm --filter @telesphoros/frontend e2e
       - if: failure()

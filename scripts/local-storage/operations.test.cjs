@@ -2,6 +2,67 @@ const { test } = require('node:test'); const assert = require('node:assert/stric
 const fs = require('node:fs'); const path = require('node:path'); const { randomUUID } = require('node:crypto');
 const { scheduler, clockCheck, INTERVAL_MS } = require('./scheduler.cjs'); const o = require('./ownership.cjs');
 const { ports } = require('./runtime.cjs');
+
+// Exercise real configuration and initial manifest creation without starting services
+// or creating files. Only the external requirements bytes and installed version vary.
+function versionFixture(requirements, installed) {
+  const file = require.resolve('./runtime.cjs');
+  const root = path.resolve(__dirname, '../..');
+  const boundary = new Error('Synthetic initial manifest captured');
+  const state = { effects: 0 };
+  const ownership = {
+    root, ensureBase() { state.effects++; }, free: async () => {},
+    location: id => path.join('/synthetic', id), privateDir: () => ({}),
+    seal(m) { state.manifest = m; throw boundary; },
+  };
+  const module = { exports: {} };
+  const localRequire = require('node:module').createRequire(file);
+  require('node:vm').runInNewContext(fs.readFileSync(file, 'utf8'), {
+    module, __dirname, setTimeout,
+    process: { env: { LOCAL_PG_BIN: '/synthetic/pg', MOTO_SERVER: '/synthetic/moto/bin/moto_server' }, versions: { node: '22.22.0' } },
+    require: name => {
+      if (name === './ownership.cjs') return ownership;
+      if (name === './services.cjs') return {};
+      if (name === 'node:fs') return {
+        readFileSync(target) { assert.equal(target, path.join(root, '.github/ci/requirements.txt')); return requirements; },
+        mkdirSync() { state.effects++; },
+      };
+      if (name === 'node:child_process') return { execFileSync(bin, args) {
+        if (args.includes('--version')) return 'PostgreSQL 16.0';
+        if (args.includes('-c')) { assert.equal(bin, '/synthetic/moto/bin/python'); return installed + '\n'; }
+        return 'synthetic-head';
+      }, fork() { assert.fail('no service may start in a version control'); } };
+      return localRequire(name);
+    },
+  }, { filename: file, timeout: 5000 });
+  return { runtime: module.exports, state, boundary };
+}
+
+test('requirements pin changes propagate to launcher validation and its manifest without code changes', async () => {
+  const requirements = fs.readFileSync(path.resolve(__dirname, '../../.github/ci/requirements.txt'), 'utf8');
+  const current = /^moto\[server\]==(\d+\.\d+\.\d+)/m.exec(requirements)[1];
+  for (const pin of [current, '9.8.7']) {
+    const changed = requirements.replace(/^moto\[server\]==[^\r\n]+/m, 'moto[server]==' + pin);
+    const accepted = versionFixture(changed, pin);
+    await assert.rejects(accepted.runtime.setup(), error => error === accepted.boundary);
+    assert.equal(accepted.state.manifest.versions.moto, pin);
+    for (const installed of new Set(['0.0.0', current])) {
+      if (installed === pin) continue;
+      const refused = versionFixture(changed, installed);
+      await assert.rejects(refused.runtime.setup(), error => error.message === `Moto ${pin} required.`);
+      assert.equal(refused.state.effects, 0, 'mismatch refuses before creating owned resources');
+    }
+  }
+});
+
+test('missing, unpinned, malformed and duplicate Moto requirements fail before setup', async () => {
+  for (const requirements of ['', '# moto[server]==9.8.7\n', 'moto[server]>=9.8.7\n', 'moto[server]==garbage\n',
+    'moto[server]==9.8.7\nmoto[server]==9.8.7\n', 'moto[server]==9.8.7\nmoto[server]>=9.8.7\n']) {
+    const refused = versionFixture(requirements, '9.8.7');
+    await assert.rejects(refused.runtime.setup(), /Exactly one pinned Moto requirement/);
+    assert.equal(refused.state.effects, 0);
+  }
+});
 test('startup reconciles before arming the 15-minute non-overlapping schedule', async () => {
   const callbacks = []; const events = []; let calls = 0, release;
   const scheduled = scheduler(async () => { calls++; if (calls === 2) await new Promise(r => { release = r; }); return { cleaned: 0 }; }, { later: (fn, ms) => { assert.equal(ms, 900000); callbacks.push(fn); return callbacks.length; }, cancel: () => {}, record: e => events.push(e) });

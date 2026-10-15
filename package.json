@@ -25,6 +25,7 @@
     "demo:storage": "node scripts/local-storage/start.cjs start",
     "demo:storage:teardown": "node scripts/local-storage/start.cjs teardown",
     "test:storage-ops": "node --test scripts/local-storage/operations.test.cjs",
+    "test:launcher-cors": "node --test scripts/local-storage/launcher-cors.test.cjs",
     "test:storage-rehearsal": "node scripts/local-storage/rehearse.cjs",
     "test:storage-recovery": "node scripts/local-storage/recovery.cjs"
   }
