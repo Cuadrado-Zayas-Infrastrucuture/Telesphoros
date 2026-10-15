@@ -70,6 +70,10 @@ run "default_variables_plan" {
     error_message = "the image registry is off by default, with the rest of API hosting"
   }
   assert {
+    condition     = output.web_bucket == null && output.web_cloudfront_domain == null && output.web_distribution_id == null
+    error_message = "web hosting, and with it the bucket, the domain and the distribution id, is off by default"
+  }
+  assert {
     condition     = output.api_task_subnet_ids == null && output.api_task_assign_public_ip == null && output.api_service_name == null
     error_message = "the one-off task network and the service name are null while API hosting is off"
   }
