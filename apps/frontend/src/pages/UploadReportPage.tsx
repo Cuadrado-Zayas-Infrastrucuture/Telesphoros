@@ -241,7 +241,7 @@ export default function UploadReportPage() {
                 />
 
                 <div className="flex flex-col gap-2">
-                  <p role="status">{patientsLoading ? 'Loading patients…' : patients?.meta.total === 0 ? 'No patients available. Ask an administrator to add a synthetic patient.' : patients ? `Patient page ${patients.meta.page} of ${patients.meta.totalPages}` : 'Patients unavailable.'}</p>
+                  <p role="status">{patientsLoading ? 'Loading patients…' : patients?.meta.total === 0 ? 'No patients available. Ask a clinician to add a synthetic patient, then refresh the list.' : patients ? `Patient page ${patients.meta.page} of ${patients.meta.totalPages}` : 'Patients unavailable.'}</p>
                   {patientError && <p role="alert" className="text-destructive">{patientError}</p>}
                   <div className="flex flex-wrap gap-2">
                     <Button type="button" variant="outline" disabled={patientsLoading || isSubmitting} onClick={() => loadPatients(patientError ? patientRequest.page : patients?.meta.page ?? 1)}>Refresh patients</Button>
