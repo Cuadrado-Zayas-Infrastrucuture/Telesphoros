@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-14**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Launcher CORS reconciliation (local, 2026-10-15)
+
+`fix/launcher-cors-current-main` carries PR #105's launcher regression controls and Moto pin validation onto main `7bf283a`, which already contains the merged #116 worker-cap test repair. The original #105 branch remains at `25ddb18`; its historical failed CI run has not tested this replacement. Both launchers retain their current policies: owned GET/HEAD and older review PUT. The five native controls cover actual child environments, the owned worker handoff and real-origin refusal/success. See [coverage verification](verification/launcher-cors-regression-coverage.md). #111 and F06/F07 branches remain unchanged. This reconciliation is local; no push, merge or deployment.
+
 ## Delivery snapshot and capability boundaries
 ## Upload navigation recovery retirement (local, 2026-10-15)
 
