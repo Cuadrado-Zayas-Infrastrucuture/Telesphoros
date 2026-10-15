@@ -12,6 +12,9 @@ import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledg
 import { adminUrl, createEphemeralDatabase, type EphemeralDatabase, serializeRestoreSuites, withAdmin } from '../helpers/database';
 import { acceptanceFor, captureFor, evaluationFor, seedLabReport } from '../helpers/ledger-fixtures';
 
+// Native migrations/dumps/restores and checkpoint cleanup share this bounded service budget.
+jest.setTimeout(30_000);
+
 // The restore's `ledger chain` check (slice 5B-3.3c): after a restore, every tenant's whole chain is walked as `telesphoros_ledger_verifier`.
 // Counts shared state (throwaway databases, temp dirs): must not overlap another restoring suite. Synthetic data only.
 serializeRestoreSuites();
@@ -62,10 +65,21 @@ async function populated(damage?: (c: Client, ids: { capture: string; tenantId: 
   return { pg, tenantId, backupDir };
 }
 
-afterAll(async () => {
+async function cleanupFixtures() {
+  // Only this suite's registered synthetic targets, sources and scratch directories.
   for (const name of restored) await withAdmin(adminUrl(), (c) => c.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`));
+  restored.length = 0;
   for (const pg of sources) await pg.drop();
+  sources.length = 0;
   for (const d of dirs) rmSync(d, { recursive: true, force: true });
+  dirs.length = 0;
+}
+afterEach(cleanupFixtures);
+afterAll(cleanupFixtures); // retry registered cleanup after a test or teardown failure
+beforeEach(() => {
+  expect(restored.length).toBe(0);
+  expect(sources.length).toBe(0);
+  expect(dirs.length).toBe(0);
 });
 
 const chainCheck = (report: Awaited<ReturnType<typeof restoreAndVerify>>) => report.checks.find((c) => c.name === 'ledger chain');
