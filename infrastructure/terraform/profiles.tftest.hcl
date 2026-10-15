@@ -65,6 +65,10 @@ run "default_variables_plan" {
     condition     = length(aws_ecs_service.worker) == 0 && length(aws_ecs_task_definition.worker) == 0 && length(aws_cloudwatch_metric_alarm.worker_heartbeat_stale) == 0 && length(aws_secretsmanager_secret.worker_database_url) == 0
     error_message = "the worker, with its secret and alarms, is off by default"
   }
+  assert {
+    condition     = output.web_bucket == null && output.web_cloudfront_domain == null && output.web_distribution_id == null
+    error_message = "web hosting, and with it the bucket, the domain and the distribution id, is off by default"
+  }
 }
 
 # ------------------------------------------------------------------------------------------------

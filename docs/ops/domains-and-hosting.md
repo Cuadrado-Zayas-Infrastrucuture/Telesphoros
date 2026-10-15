@@ -71,8 +71,9 @@ Any H2 WAF/CloudTrail/observability plan needs its own redaction and retention r
    `AuthProvider` already appends `/api/v1/me`; adding that prefix to the base would double it.
    The upload form still uses a synthetic browser-only stub; hosting does not integrate it
    with the existing upload API. Vite settings are public; no secret may
-   be bundled. Exclude generated `*.map` source maps from the public upload. No upload
-   script, release workflow, account role or artifact is supplied in this PR.
+   be bundled. Exclude generated `*.map` source maps from the public upload. The synthetic
+   staging upload script and its runbook are [frontend-publish.md](frontend-publish.md); there
+   is still no release workflow, account role or artifact.
 6. Test a staged deployment with synthetic data: TLS, headers, BrowserRouter deep links,
    callback/logout, API CORS, presigned uploads, denied direct S3 access, missing-asset errors
    and apex/www redirects. The app is not usable until the H2 API and auth dependencies exist.
