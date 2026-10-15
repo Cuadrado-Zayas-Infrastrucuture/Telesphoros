@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { Client } from 'pg';
-import { JobQueue, retryDelaySeconds } from '@telesphoros/jobs';
+import { Client, type PoolClient } from 'pg';
+import { JobQueue, retryDelaySeconds, type ClaimedJob } from '@telesphoros/jobs';
 import { PERSON, TENANT_A, TENANT_B, TENANT_SUSPENDED, attemptsOf, createFixture, enqueueAs, jobRow, type Fixture } from './support';
 
 let f: Fixture;
@@ -15,6 +15,24 @@ let counter = 0;
 const key = () => `k-${++counter}`;
 const claim = (worker: string, types = ['test.echo'], batch = 10, tenantCap = 50, leaseSeconds = 30) => queue.claim(worker, { types, batch, tenantCap, leaseSeconds });
 const reset = () => f.admin.query(`UPDATE jobs SET state = 'cancelled', lease_until = NULL, locked_by = NULL, finished_at = now() WHERE state IN ('queued', 'retry', 'running')`);
+
+function expectCapSafety(jobs: ClaimedJob[]): void {
+  expect(new Set(jobs.map((j) => j.id)).size).toBe(jobs.length);
+  for (const tenant of [TENANT_A, TENANT_B]) {
+    expect(jobs.filter((j) => j.tenantId === tenant).length).toBeLessThanOrEqual(2);
+  }
+}
+
+async function expectCommittedClaims(jobs: ClaimedJob[]): Promise<void> {
+  expectCapSafety(jobs);
+  const { rows } = await f.admin.query<{ tenant_id: string; count: number }>(
+    `SELECT tenant_id, count(*)::integer AS count FROM jobs WHERE tenant_id = ANY($1::text[]) AND state = 'running' GROUP BY tenant_id`,
+    [[TENANT_A, TENANT_B]],
+  );
+  for (const tenant of [TENANT_A, TENANT_B]) {
+    expect(rows.find((r) => r.tenant_id === tenant)?.count ?? 0).toBe(jobs.filter((j) => j.tenantId === tenant).length);
+  }
+}
 
 describe('enqueue (the application login)', () => {
   it('takes the organization and the person from the transaction, never from arguments', async () => {
@@ -126,12 +144,59 @@ describe('claim', () => {
     for (let i = 0; i < 3; i += 1) await enqueueAs(f.db, TENANT_B, PERSON, 'test.echo', { n: i }, key());
     const batches = await Promise.all(Array.from({ length: 6 }, (_, i) => claim(`cap-${i}`, ['test.echo'], 10, 2)));
     const got = batches.flat();
-    expect(got.filter((j) => j.tenantId === TENANT_A)).toHaveLength(2);
-    expect(got.filter((j) => j.tenantId === TENANT_B)).toHaveLength(2);
+    await expectCommittedClaims(got);
+    // Busy tenant/candidate locks may leave a slot for the next poll. Once every concurrent call has settled, a serial claim can fill it.
+    const settled = [...got, ...await claim('cap-settled', ['test.echo'], 10, 2)];
+    await expectCommittedClaims(settled);
+    expect(settled.filter((j) => j.tenantId === TENANT_A)).toHaveLength(2);
+    expect(settled.filter((j) => j.tenantId === TENANT_B)).toHaveLength(2);
+    expect(await claim('cap-full', ['test.echo'], 10, 2)).toEqual([]);
     // A finished job frees a place.
-    const first = got.find((j) => j.tenantId === TENANT_A)!;
+    const first = settled.find((j) => j.tenantId === TENANT_A)!;
     expect(await queue.succeed(first.id, (await jobRow(f.admin, first.id)).locked_by as string)).toBe(true);
-    expect((await claim('cap-next', ['test.echo'], 10, 2)).filter((j) => j.tenantId === TENANT_A)).toHaveLength(1);
+    const refill = await claim('cap-next', ['test.echo'], 10, 2);
+    expect(refill).toHaveLength(1);
+    expect(refill[0]!.tenantId).toBe(TENANT_A);
+    expect(refill[0]!.id).not.toBe(first.id);
+    await expectCommittedClaims([...settled.filter((j) => j.id !== first.id), ...refill]);
+  });
+
+  it('preserves the cap and fills deferred capacity after busy claimers release their candidate rows', async () => {
+    await reset();
+    for (let i = 0; i < 8; i += 1) await enqueueAs(f.db, TENANT_A, PERSON, 'test.echo', { n: i }, key());
+    for (let i = 0; i < 3; i += 1) await enqueueAs(f.db, TENANT_B, PERSON, 'test.echo', { n: i }, key());
+    const options = { types: ['test.echo'], batch: 10, tenantCap: 2, leaseSeconds: 30 };
+    const holders: PoolClient[] = [];
+    try {
+      for (let i = 0; i < 3; i += 1) {
+        const client = await f.worker.connect();
+        holders.push(client);
+        await client.query('BEGIN');
+      }
+      const [owner, one, two] = holders as [PoolClient, PoolClient, PoolClient];
+      // Force a real worker-role interleaving: other claimers skip B's busy tenant lock but retain candidate row locks until commit.
+      await owner.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`job-cap:${TENANT_B}`]);
+      const first = await new JobQueue(one).claim('busy-one', options);
+      expect(first.filter((j) => j.tenantId === TENANT_A)).toHaveLength(2);
+      expect(first.filter((j) => j.tenantId === TENANT_B)).toHaveLength(0);
+      const second = await new JobQueue(two).claim('busy-two', options);
+      expect(second).toEqual([]);
+      const third = await new JobQueue(owner).claim('busy-owner', options);
+      const rest = (await Promise.all(Array.from({ length: 3 }, (_, i) => claim(`busy-extra-${i}`, ['test.echo'], 10, 2)))).flat();
+      const got = [...first, ...second, ...third, ...rest];
+      expectCapSafety(got);
+      for (const client of holders) await client.query('COMMIT');
+      await expectCommittedClaims(got);
+      const settled = [...got, ...await claim('busy-settled', ['test.echo'], 10, 2)];
+      await expectCommittedClaims(settled);
+      expect(settled.filter((j) => j.tenantId === TENANT_A)).toHaveLength(2);
+      expect(settled.filter((j) => j.tenantId === TENANT_B)).toHaveLength(2);
+      expect(await claim('busy-full', ['test.echo'], 10, 2)).toEqual([]);
+    } finally {
+      await Promise.all(holders.map(async (client) => {
+        try { await client.query('ROLLBACK'); } finally { client.release(); }
+      }));
+    }
   });
 
   it('does not let an organization at its cap hide everyone else behind its backlog', async () => {
