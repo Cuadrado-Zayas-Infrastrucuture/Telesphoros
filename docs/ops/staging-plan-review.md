@@ -29,12 +29,34 @@ There is no plan with both hosting switches off. With the profile's own network 
 | --- | --- | --- | --- |
 | A. foundations and API edge | `terraform plan -var-file=<yours> -var enable_web_hosting=false -out=a.tfplan` | 132 | API certificate: a DNS-only validation CNAME in Cloudflare |
 | B. plus web hosting | `terraform plan -var-file=<yours> -out=b.tfplan` | 12 more (144) | web certificate: a validation CNAME |
-| C. with the image | `terraform plan -var-file=<yours> -var 'api_image=<repository url>@sha256:<64 hex>' -out=c.tfplan` | 9 more (153) | nothing |
+| C. with the image | `terraform plan -var-file=<yours> -var 'api_image=<repository url>@sha256:<64 hex>' -out=c.tfplan` | 9 more (153), plus 4 policy updates | nothing |
 
 The counts are the offline plan of the commit that wrote this page; the root keeps growing, so compare the **shape** below and investigate a large difference, not a small one.
-Once the image registry is merged, plan A also adds the registry and its retention policy ([image-push.md](image-push.md)). Read each plan as text: `terraform show a.tfplan > a.txt`.
+The merged image registry adds the registry and its retention policy to plan A ([image-push.md](image-push.md)). Read each plan as text: `terraform show a.tfplan > a.txt`.
 
-For plan A the first apply is **create-only**: `Plan: N to add, 0 to change, 0 to destroy.` Plans B and C against the state left by the one before must be create-only too. Any `change`, `destroy` or `replace` in these steps is a stop.
+Plan A against empty state and plan B against A's state are **create-only**: `Plan: N to add, 0 to change, 0 to destroy.` Plan C against B's state also updates the **four existing execution-role policies** listed below. Any other update, any deletion or any replacement is a stop. These are first-bring-up stages, not rules for later releases or an already running environment.
+
+Before an image is set, API hosting already creates these policies with `PullThisRepositoryOnly.Resource` pointing to `arn:aws:ecr:<region>:<account>:repository/none`. C changes that one resource to the repository derived from the digest-pinned `api_image`:
+
+- `aws_iam_role_policy.api_execution_service[0]`
+- `aws_iam_role_policy.api_execution_migrate[0]`
+- `aws_iam_role_policy.api_execution_provision[0]`
+- `aws_iam_role_policy.worker_execution[0]`
+
+In each policy, only that statement's `Resource` may change. The role, all actions, conditions and other statements must stay the same. No wildcard pull repository is permitted. The image must belong to the selected stack Region; a cross-account or other unexpected transition requires separate review.
+
+Save JSON as well as text, with private file permissions; plan files can contain sensitive values. From the repository root, run the read-only action check against each **actual saved plan** after the preceding stage was applied:
+
+```sh
+umask 077
+terraform -chdir=infrastructure/terraform show -json a.tfplan > infrastructure/terraform/.terraform/a.plan.json
+node scripts/staging/check-plan.mjs A infrastructure/terraform/.terraform/a.plan.json
+# Repeat with B/b.tfplan/b.plan.json and C/c.tfplan/c.plan.json at their respective stages.
+```
+
+The check rejects unrelated updates, deletions, replacements, drift, incomplete plans and changes beyond the four exact repository transitions. It does not apply anything, approve the plan, validate every created resource or estimate cost; the tables and human line-by-line review still apply. Do not print or commit saved plan JSON.
+
+Offline verification: `pnpm test:infra` checks the saved-plan action rules with synthetic before/after fixtures, including attempted permission expansion on every permitted policy address. `terraform test` checks the actual configured pull repositories before and after setting the image and that the four policies exist before C. Its independent empty-state plans and constant mocked policy JSON do **not** prove the A→B→C state transition or AWS's resulting plan; the saved-plan review remains required.
 
 ### Quick checks (each must print nothing)
 
@@ -42,7 +64,8 @@ For plan A the first apply is **create-only**: `Plan: N to add, 0 to change, 0 t
 grep -nE 'aws_nat_gateway|aws_eip|aws_default_vpc|aws_default_subnet' a.txt b.txt c.txt   # no NAT, no elastic address, never the default VPC
 grep -nE 'secret_version|secret_string|secret_binary' a.txt b.txt c.txt                    # secret VALUES are never in Terraform
 grep -nE 'publicly_accessible +\= true' a.txt b.txt c.txt                                  # the database is private
-grep -nE 'will be (destroyed|replaced|updated)|must be replaced' a.txt b.txt c.txt         # create-only
+grep -nE 'will be (destroyed|replaced)|must be replaced' a.txt b.txt c.txt               # never destroy or replace
+grep -nE 'will be updated' a.txt b.txt                                                   # A/B stay create-only; C uses check-plan.mjs
 grep -nE 'aws_s3_bucket\.backups|aws_kms_key\.backup|automated_backups_replication' a.txt  # the second-Region backups do not exist in the synthetic profile
 ```
 
@@ -69,14 +92,14 @@ Check: aliases are `app.<web_domain>`, `<web_domain>` and `www.<web_domain>`; th
 
 ## What plan C adds (9)
 
-2 services (API and worker, `desired_count = 1` each), 4 task definitions (API, migration, provisioning, worker), 3 alarms (running tasks, unhealthy targets, 5xx).
+2 services (API and worker, `desired_count = 1` each), 4 task definitions (API, migration, provisioning, worker), 3 alarms (running tasks, unhealthy targets, 5xx), **plus the four repository-only policy updates above**.
 Check in every task definition: the image is `...@sha256:<64 hex>` (never a tag), `readonlyRootFilesystem = true`, user `10001`, `DATABASE_SSL = require`, no secret in `environment` (secrets come from `secrets` with ARNs), and the migration task has **no task role**.
 Tasks and services get a **public address** here (`assign_public_ip = true`) because the synthetic network has no NAT; that is expected in the synthetic profile only.
 **Setting `api_image` starts the services at once**, before the logins and the schema exist, so they will fail until the one-off steps are done: that is expected and described in [staging-rehearsal.md](staging-rehearsal.md).
 
 ## Stop and ask when
 
-- anything is destroyed, replaced or changed in a plan that should only create;
+- anything is destroyed or replaced; any update appears in A/B; C updates anything beyond the four specified repository-only policy changes, or any one of those changes is missing;
 - a relaxation (`force_destroy`, no deletion protection, a 7-day key window, `recovery_window_in_days = 0`, a public task address) appears for a resource that is not in the tables above, or `deployment_profile` is not `synthetic`;
 - a resource named in the quick checks appears; a second Region, a backups bucket or a CloudTrail trail that is multi-Region appears;
 - a value that should be known is `(known after apply)` and the table says it is a literal (bucket names contain the account id, which the offline plan replaces with a random string, so read the real plan's names for the account you decided in D1);
