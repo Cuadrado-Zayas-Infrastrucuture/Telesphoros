@@ -4,6 +4,9 @@ Read this first to pick the project up. Snapshot: **2026-10-14**. Update it in t
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
 ## Delivery snapshot and capability boundaries
+## Local launcher CORS controls (local branch)
+
+`fix/local-launcher-cors-parity` disables Moto's global CORS fallback in both the owned storage runner and the older review launcher's explicit child environments. Native browser probes reproduce the excluded-origin failure before the change and require refusal plus success after allowing that same real origin after the change. See [verification](verification/local-launcher-cors.md). F06/F07 remain frozen and separate; integration of the older launcher's PUT-only rule with F07's shared GET contract is deferred until F07 reaches main. No push, PR, merge or deployment.
 ## Patient setup guidance (local branch)
 
 `fix/patient-setup-guidance` corrects the upload page's empty-roster handoff to a clinician and the existing Refresh patients control. Patient creation remains the authorized clinician-only API workflow; this slice adds no patient-create screen or permission. See [setup guidance](ops/patient-setup.md). F06/F07 remain frozen; no push, PR or deployment.

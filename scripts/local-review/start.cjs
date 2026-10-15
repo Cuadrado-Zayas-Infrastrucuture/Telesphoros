@@ -23,7 +23,7 @@ const env = {
   COGNITO_ISSUER: IDP, COGNITO_JWKS_URI: `${IDP}/.well-known/jwks.json`,
   CORS_ALLOWED_ORIGINS: APP, OBJECT_STORAGE_DRIVER: 's3',
   S3_ENDPOINT: `http://127.0.0.1:${ports.moto}`, S3_FORCE_PATH_STYLE: 'true', AWS_REGION: 'us-east-2',
-  REPORTS_BUCKET: 'telesphoros-local-demo', AWS_ACCESS_KEY_ID: 'local-emulator', AWS_SECRET_ACCESS_KEY: 'local-emulator', AWS_EC2_METADATA_DISABLED: 'true',
+  REPORTS_BUCKET: 'telesphoros-local-demo', AWS_ACCESS_KEY_ID: 'local-emulator', AWS_SECRET_ACCESS_KEY: 'local-emulator', AWS_EC2_METADATA_DISABLED: 'true', MOTO_DISABLE_GLOBAL_CORS: 'true',
   LAB_REPORT_PIPELINE: 'enabled',
   STORAGE_DRIVER: 'postgres', DATABASE_URL: `postgresql://demo_app@127.0.0.1:${ports.pg}/synthetic_review`,
   LEDGER_VERIFIER_DATABASE_URL: `postgresql://demo_verifier@127.0.0.1:${ports.pg}/synthetic_review`,

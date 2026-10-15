@@ -15,7 +15,9 @@ The foreground launcher reports the generated run UUID and browser address. The 
 
 Each invocation creates a new private `.local-storage/runs/<UUID>/` directory and an independent control receipt under `.local-storage/control/`. PostgreSQL owns its **own cluster**, database and roles inside that run, with loopback trust authentication for disposable synthetic use. The API uses a non-owner `storage_app` login without superuser, role/database creation, or RLS bypass. Migrations and the protected-evidence inventory use the separate owned-cluster administrative identity. The fake personas upload in tenant `alpha`; reader `bob` belongs to `beta`.
 
-The runner rejects inherited production mode, enabled clinical processing, and overrides of Moto's multipart minimum. It passes an explicit child environment and dummy storage credentials, with metadata credential lookup disabled. API/IDP/web/Moto/PostgreSQL bind only to `127.0.0.1`. Service readiness checks require a matching recorded listener PID before contacting the endpoint. It does not reuse an existing database or emulator.
+The runner rejects inherited production mode, enabled clinical processing, and overrides of Moto's multipart minimum. It passes an explicit child environment and dummy storage credentials, with metadata credential lookup disabled. `MOTO_DISABLE_GLOBAL_CORS=true` is set in that environment so Moto cannot use its global Flask fallback to admit an origin excluded by the bucket's policy. API/IDP/web/Moto/PostgreSQL bind only to `127.0.0.1`. Service readiness checks require a matching recorded listener PID before contacting the endpoint. It does not reuse an existing database or emulator.
+
+The GET-only shared download policy is a separate local F07 fix and is not part of this main-based launcher-control branch. Until F07 is merged and integrated, this runner and the older review launcher retain the bucket methods declared on main. Disabling Moto's global fallback does not prove S3 method enforcement; verify actual policy readback and browser GET/PUT controls separately. See [launcher verification](../verification/local-launcher-cors.md).
 
 ```sh
 pnpm test:storage-ops
