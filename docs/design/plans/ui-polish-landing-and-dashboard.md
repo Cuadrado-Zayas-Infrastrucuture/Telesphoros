@@ -1,6 +1,12 @@
 # Plan: polish the product landing page and the Reports dashboard
 
-Status: **plan only, awaiting founder approval.** No UI code, token, asset or policy is changed by this document. Requested 2026-10-15: install the [taste-skill](https://github.com/Leonxlnx/taste-skill) design skill, use [awesome-design-md](https://github.com/VoltAgent/awesome-design-md) as further inspiration for an AI SaaS product, and polish the landing page and dashboard.
+Status: **approved 2026-10-15 (decisions P1 to P6 as recommended); slice A (the landing) is built on this branch, slice B (Reports and upload) has not started.** See [landing verification](../../verification/ui-polish-landing.md). Requested 2026-10-15: install the [taste-skill](https://github.com/Leonxlnx/taste-skill) design skill, use [awesome-design-md](https://github.com/VoltAgent/awesome-design-md) as further inspiration for an AI SaaS product, and polish the landing page and dashboard.
+
+## Decisions recorded (founder, 2026-10-15: "go, use your recommendations")
+
+P1 keep the approved brand elements the skill bans; P2 no open-archive pictures or footage; P3 landing motion yes; P4 landing first, then dashboard and upload; P5 the skill stays installed per user, not vendored; P6 landing running text 16px, dashboard stays compact. The same message also asked to work on the Cuadrado Zayas Infrastructure company page; that page is not in this repository (see the verification document) and has no plan yet.
+
+**Deviation from the plan as written (motion):** entrances are a rise into place with **no opacity change**. The first build faded blocks in from opacity 0 and the axe contrast audit in `e2e/landing.spec.ts` failed on every not-yet-revealed block below the fold; a static scanner such as Lighthouse would report the same. Hiding with `visibility` would have removed those controls from keyboard reach. Transform-only keeps contrast real at every moment. Everything else in slice A follows the plan.
 
 ## What was done so far (reading and measuring only)
 
