@@ -1,0 +1,42 @@
+# FD-7 staged synthetic environment (docs/design/plans/fd7-staged-synthetic-deploy.md). NOT APPLIED. Copy to a file outside version control, replace the three
+# PLACEHOLDER lines, and read docs/ops/staging-plan-review.md BEFORE the first plan. Synthetic data only: nothing here is approved for real records.
+# example.tfvars.example (production shape) is a different file and is not changed by this one. A test (staging.guard.test.mjs) keeps every value below
+# equal to the values staging.tftest.hcl plans offline.
+#
+# Three plans, in this order (the review page says what each must show). There is no "hosting off" plan: with the profile's own network the database can
+# only name the API tasks' security group, which exists only when API hosting is on, so the module refuses to plan the database without it.
+#   A. API edge and foundations, no web:  terraform plan -var-file=<yours> -var enable_web_hosting=false
+#   B. plus web hosting, no image:        terraform plan -var-file=<yours>
+#   C. with the image:                    terraform plan -var-file=<yours> -var 'api_image=<account>.dkr.ecr.<region>.amazonaws.com/telesphoros-staging-api@sha256:<64 hex>'
+# Each apply that adds a certificate waits for DNS-only validation CNAMEs that a person adds in Cloudflare.
+
+# The profile: one Region, small, destroyable, creates its own network (no NAT). Allowed only with environment = "staging"; the module refuses it otherwise.
+environment        = "staging"
+deployment_profile = "synthetic"
+
+# Hostnames (decision D3). web_domain is a BASE domain: the app is app.<web_domain>, the API host the page's CSP allows is api.<web_domain>.
+# api_domain is NOT derived from it (its default is api.telesphoros.app), so it is set here to match, or the browser would block every API call.
+web_domain = "staging.telesphoros.app"
+api_domain = "api.staging.telesphoros.app"
+
+# Hosting switches. With api_image empty, hosting creates the foundations and not the task definitions or services.
+enable_web_hosting = true
+enable_api_hosting = true
+
+# The module's own precondition requires these exact app URLs when web hosting is on.
+reports_cors_origins = ["https://app.staging.telesphoros.app"]
+app_callback_urls    = ["https://app.staging.telesphoros.app/auth/callback"]
+app_logout_urls      = ["https://app.staging.telesphoros.app/signed-out"]
+api_cors_origins     = ["https://app.staging.telesphoros.app"]
+
+# PLACEHOLDER: globally unique in the Region; the sign-in page becomes https://<prefix>.auth.<region>.amazoncognito.com. Pick one nobody else has taken.
+cognito_domain_prefix = "telesphoros-staging"
+# PLACEHOLDER: must be an address or domain verified in SES (still in the sandbox: only verified addresses receive mail).
+ses_from_email = "no-reply@staging.telesphoros.app"
+# PLACEHOLDER: an inbox a person reads. SNS emails a confirmation link; until it is confirmed no audit alarm reaches anyone.
+alarm_email = "security@example.com"
+
+# Left at their defaults on purpose: region = "us-east-2" (decision D1 will confirm it), db sizing (the profile forces db.t4g.micro, single-AZ, no deletion protection),
+# audit_lock_mode = "GOVERNANCE" (the profile refuses COMPLIANCE), api_desired_count = 1, worker_desired_count = 1.
+# vpc_id, private_subnet_ids, public_subnet_ids and app_security_group_ids are NOT set: the profile creates the network and the API tasks' own group is used.
+# api_image is NOT set: push the image first (docs/ops/image-push.md), then plan C.
