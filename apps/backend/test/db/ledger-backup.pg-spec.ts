@@ -11,6 +11,9 @@ import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledg
 import { adminUrl, createEphemeralDatabase, type EphemeralDatabase, serializeRestoreSuites, withAdmin } from '../helpers/database';
 import { acceptanceFor, captureFor, evaluationFor, seedLabReport } from '../helpers/ledger-fixtures';
 
+// Native migrations/dumps/restores and checkpoint cleanup share this bounded service budget.
+jest.setTimeout(30_000);
+
 // Counts shared state (throwaway databases, temp dirs): must not overlap another restoring suite.
 serializeRestoreSuites();
 
@@ -29,6 +32,7 @@ const restored: string[] = [];
 let pg: EphemeralDatabase;
 let tenantId: string;
 let backupDir: string;
+let backupRoot: string;
 
 beforeAll(async () => {
   pg = await createEphemeralDatabase();
@@ -45,12 +49,26 @@ beforeAll(async () => {
   await verifier.verify(tenantId, { recordCheckpoint: true });
   await verifier.close();
   await database.onModuleDestroy();
-  backupDir = (await createBackup({ adminUrl: pg.adminUrl, destDir: tempDir() })).dir;
+  backupRoot = tempDir();
+  backupDir = (await createBackup({ adminUrl: pg.adminUrl, destDir: backupRoot })).dir;
+});
+async function cleanupRestores() {
+  // The shared source/backup live for the suite; only each test's copies are removed here.
+  for (const name of restored) await withAdmin(adminUrl(), (c) => c.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`));
+  restored.length = 0;
+  for (const d of dirs) if (d !== backupRoot) rmSync(d, { recursive: true, force: true });
+  dirs.splice(0, dirs.length, ...dirs.filter((d) => d === backupRoot));
+}
+afterEach(cleanupRestores);
+beforeEach(() => {
+  expect(restored.length).toBe(0);
+  expect(dirs.filter((d) => d !== backupRoot).length).toBe(0);
 });
 afterAll(async () => {
-  for (const name of restored) await withAdmin(adminUrl(), (c) => c.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`));
+  await cleanupRestores();
   await pg.drop();
   for (const d of dirs) rmSync(d, { recursive: true, force: true });
+  dirs.length = 0;
 });
 
 const target = () => {
