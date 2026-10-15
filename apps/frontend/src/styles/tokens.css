@@ -105,6 +105,21 @@
   --landing-section-type: clamp(2rem, 3.5vw, 2.875rem);
   --landing-dna-width: 31.25rem;
   --landing-dna-mobile-width: 20rem;
+
+  /* Landing type scale: five steps, fluid, used for every size on the landing route. */
+  --landing-fs-display: clamp(2.25rem, 7.2vw, 5rem);
+  --landing-fs-heading: clamp(1.75rem, 3.4vw, 2.5rem);
+  --landing-fs-lead: 1.25rem;
+  --landing-fs-body: 1rem;
+  --landing-fs-small: 0.875rem;
+  --landing-section-gap: clamp(4rem, 8vw, 7rem);
+
+  /* Landing motion: transform and opacity only; reduced motion removes all of it. */
+  --landing-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --landing-reveal-distance: 1.25rem;
+  --landing-reveal-duration: 0.7s;
+  --landing-reveal-step: 80ms;
+  --landing-feedback-duration: 0.18s;
 }
 
 /* Compact editorial hierarchy for operational screens. */
