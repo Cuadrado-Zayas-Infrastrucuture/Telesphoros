@@ -8,6 +8,7 @@ import './api-compute.guard.test.mjs';
 import './api.guard.test.mjs';
 import './audit.guard.test.mjs';
 import './profile.guard.test.mjs';
+import './staging.guard.test.mjs';
 import './web.guard.test.mjs';
 import './worker.guard.test.mjs';
 

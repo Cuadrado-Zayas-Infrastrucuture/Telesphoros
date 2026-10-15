@@ -65,6 +65,7 @@ one cannot slip in. The synthetic profile holds **synthetic data only** and is n
 ```bash
 cd infrastructure/terraform
 cp example.tfvars.example synthetic.tfvars   # *.tfvars is gitignored; set deployment_profile = "synthetic", environment = "staging", and leave vpc_id out
+# the staged FD-7 environment has its own example and review page: synthetic-staging.tfvars.example and docs/ops/staging-plan-review.md
 terraform init
 terraform plan -var-file=synthetic.tfvars    # review it line by line, as for any plan
 # apply and destroy are the FD-7 rehearsal; they need the gates in the status page (a founder-run session, a budget alert, a plan for the free window)
