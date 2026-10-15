@@ -75,9 +75,23 @@ hidden="$(find "$stage" -name '.*' ! -path "$stage" | head -n 1)"
 [[ -z "$hidden" ]] || die "a hidden file is in the upload set: $hidden"
 [[ -f "$stage/index.html" ]] || die "index.html is missing from the upload set"
 excluded="$(cd "$dist" && find . -type f -name '*.map' | wc -l | tr -d ' ')"
-# The bundle must carry the settings it was built with: a build made without them would start as "Telesphoros cannot start".
-grep -rqF -- "$VITE_API_BASE_URL" "$stage/assets" || die "the build does not contain VITE_API_BASE_URL ($VITE_API_BASE_URL): it was not built with these settings"
-grep -rqF -- "$VITE_OIDC_AUTHORITY" "$stage/assets" || die "the build does not contain VITE_OIDC_AUTHORITY ($VITE_OIDC_AUTHORITY): it was not built with these settings"
+# Check all four compiled public settings, including the sign-in client and logout domain.
+# Quoted string literals prevent a stale value with the expected value as a prefix from passing.
+for name in VITE_API_BASE_URL VITE_OIDC_AUTHORITY VITE_OIDC_CLIENT_ID VITE_COGNITO_DOMAIN; do
+  # The production minifier uses backticks today; accept all three JavaScript string delimiters.
+  literal="$(node -e '
+    const value = process.argv[1];
+    const slash = String.fromCharCode(92);
+    const quoted = (code) => {
+      const quote = String.fromCharCode(code);
+      let body = value.replaceAll(slash, slash + slash).replaceAll(quote, slash + quote);
+      if (code === 96) body = body.replaceAll("${", slash + "${");
+      return quote + body + quote;
+    };
+    process.stdout.write([JSON.stringify(value), quoted(39), quoted(96)].join("\n"));
+  ' -- "${!name}")"
+  grep -rqF -- "$literal" "$stage/assets" || die "the build does not contain $name (${!name}): it was not built with these settings"
+done
 files="$(find "$stage" -type f | wc -l | tr -d ' ')"
 
 # ---- 4. What happens ---------------------------------------------------------------------------------------------------

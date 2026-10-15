@@ -32,7 +32,8 @@ a path on `VITE_API_BASE_URL`; a bucket given as `s3://...`; a malformed distrib
 (they belong to local and end-to-end builds). The accepted values are also accepted by the application's own `loadAuthConfig` in production mode (a test hands them to it).
 
 After building, it copies the build into a directory of its own **without source maps and without Vite's build manifest (`.vite/`)**, then stops if a source map is still there, if any other hidden file is there,
-if `index.html` is missing, or if the bundle does not contain the API address and the sign-in authority it was told to use (a build made without the settings would show "Telesphoros cannot start").
+if `index.html` is missing, or if the bundle does not contain all four expected public settings as complete string literals: API address, sign-in authority, browser client id and Cognito sign-in/logout domain.
+This check also applies to an existing build selected by `DIST_DIR`; a bundle from before a client or domain change must be rebuilt before publishing. A matching prefix is insufficient.
 `vite.config.ts` sets `sourcemap: true`, so the build always writes `*.map` files; the H1 rule is that they are never public. The compiled files still end with a `sourceMappingURL` comment, so a browser's developer tools
 may ask for a map and get an error: that is expected and harmless.
 
