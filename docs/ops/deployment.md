@@ -27,7 +27,7 @@ choice below is settled but not deployed. This page records the intended flow so
 | DNS location for both domains | Jan's single Cloudflare account, administered by Jan; Google email records preserved |
 | Backups on a different provider than the database | not met: see the backup requirement in [../database.md](../database.md) |
 
-Until then, CI ([ci-cd.md](ci-cd.md)) validates the Terraform text and nothing more.
+CI ([ci-cd.md](ci-cd.md)) validates Terraform and runs offline provider-mocked plans, and builds/scans/rehearses the application image. These checks supply no live-provider acceptance and publish/deploy nothing. The [capability matrix](../product-capabilities.md) records which source changes are merged versus local.
 
 The [H1 hosting and DNS checklist](domains-and-hosting.md) describes the optional frontend resources,
 manual certificate validation, staged checks and rollback. API hosting is F3: the edge (F3a) is written ([api-hosting.md](api-hosting.md)); the compute (F3b) is written too. The API image is built, scanned and rehearsed by the required `image` CI job ([image runbook](../../infrastructure/docker/README.md)) but never published; the deployment pipeline (F4) is not written. No Vercel project
