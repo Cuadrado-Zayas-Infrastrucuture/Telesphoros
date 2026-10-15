@@ -43,6 +43,7 @@ None of this changes application behavior, production values or any existing gua
 Order follows `api-hosting.md` ("Before the first apply") and `domains-and-hosting.md`, adapted for the synthetic profile (own VPC, no NAT).
 
 1. `terraform init` against the remote state; `plan` with hosting switches off; **review the plan line by line**; apply the foundations (network, keys, database, buckets, Cognito, audit trail).
+   **Correction found while building slice 4:** there is no plan with both hosting switches off. With the profile's own network the database can only name the API tasks' security group, which exists only when API hosting is on (`database.tf` precondition), so the first plan already includes the API edge, and its apply waits for the API certificate's validation CNAME. The stages are: A (API edge and foundations, web off), B (plus web hosting), C (with the image); see [staging-plan-review.md](../../ops/staging-plan-review.md).
 2. Enable web and API hosting; apply; Jan adds the certificate validation CNAMEs while the apply waits.
 3. Set the two hand-made secrets (`INVITATION_DIGEST_KEY`, `IDENTIFIER_DIGEST_KEY`, each from `openssl rand -hex 32`); run the **provision-logins** task; run the **migration** task; seed one or two synthetic organizations and the synthetic testers' memberships.
 4. Build, scan and push the image by digest; set `api_image`, `api_cors_origins` and `api_desired_count`; apply again; the worker comes up from the same image.
