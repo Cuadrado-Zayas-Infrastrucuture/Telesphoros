@@ -252,3 +252,8 @@ output "web_cloudfront_domain" {
   description = "DNS target for app, apex (flattened CNAME), and www; not an API target."
   value       = var.enable_web_hosting ? aws_cloudfront_distribution.web[0].domain_name : null
 }
+
+output "web_distribution_id" {
+  description = "The CloudFront distribution id, for scripts/staging/publish-frontend.sh (optional invalidation) and for checking the distribution's state."
+  value       = var.enable_web_hosting ? aws_cloudfront_distribution.web[0].id : null
+}

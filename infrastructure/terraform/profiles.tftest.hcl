@@ -69,6 +69,10 @@ run "default_variables_plan" {
     condition     = length(aws_ecr_repository.api) == 0 && length(aws_ecr_lifecycle_policy.api) == 0 && output.api_repository_url == null
     error_message = "the image registry is off by default, with the rest of API hosting"
   }
+  assert {
+    condition     = output.web_bucket == null && output.web_cloudfront_domain == null && output.web_distribution_id == null
+    error_message = "web hosting, and with it the bucket, the domain and the distribution id, is off by default"
+  }
 }
 
 # ------------------------------------------------------------------------------------------------
