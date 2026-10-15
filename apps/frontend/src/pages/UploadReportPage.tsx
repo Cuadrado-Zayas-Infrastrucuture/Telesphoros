@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { ownedStorageMode } from '@/lib/storageMode';
-import { cancelOwnedUpload, restoreProgress } from '@/lib/ownedStorageApi';
+import { cancelOwnedUpload, restoreProgress, retireOwnedUpload } from '@/lib/ownedStorageApi';
 import { clearRecovery, readRecovery, type RecoveryEntry } from '@/lib/uploadRecovery';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { RefreshCw } from 'lucide-react';
@@ -58,7 +58,7 @@ export default function UploadReportPage() {
   const [cancelling, setCancelling] = useState(false);
   const [canStartOver, setCanStartOver] = useState(true);
   const owned = ownedStorageMode();
-  useEffect(() => () => { transfer.current?.abort(); }, []);
+  useEffect(() => () => { retireOwnedUpload(progress.current); transfer.current?.abort(); }, []);
   const [patients, setPatients] = useState<Paginated<PatientDto> | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<PatientDto | null>(null);
   const [patientRequest, setPatientRequest] = useState({ page: 1, attempt: 0 });

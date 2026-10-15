@@ -1,7 +1,7 @@
 import { webcrypto } from 'node:crypto';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { submitReport, type UploadProgress } from './api';
-import { cancelOwnedUpload, downloadReport } from './ownedStorageApi';
+import { cancelOwnedUpload, downloadReport, retireOwnedUpload } from './ownedStorageApi';
 import { productUploadSchema } from './productUploadSchema';
 const patientId = '11111111-1111-4111-8111-111111111111';
 const id = '22222222-2222-4222-8222-222222222222';
@@ -93,4 +93,35 @@ it('keeps the known attempt identity when an intake response does not match it',
 it('does not register metadata when the caller already cancelled', async () => {
   const api = vi.fn(); const controller = new AbortController(); controller.abort();
   await expect(submitReport(values, api, {}, controller.signal)).rejects.toThrow(); expect(api).not.toHaveBeenCalled();
+});
+
+
+it.each(['registration', 'state', 'declaration', 'bytes', 'cancel'] as const)('retiring pending %s work prevents late progress and further API calls', async stage => {
+  const progress: UploadProgress = stage === 'cancel' ? { reportId: id, declaration: { requestId: original, revision, contentType: 'application/json', sha256: sha }, attempt: { attemptId, revision, state: 'declared', expiresAt: new Date(Date.now() + 300000).toISOString() } } : {};
+  let reached!: () => void; const pendingBody = new Promise<void>(resolve => { reached = resolve; });
+  let finish!: (body: unknown) => void;
+  const at = stage === 'registration' ? 0 : stage === 'state' ? 1 : stage === 'declaration' ? 2 : stage === 'bytes' ? 3 : 0;
+  const bodies = stage === 'cancel' ? [attempt('cancelled')] : [report(), {revision: original, fileUploaded: false}, attempt('declared'), attempt('committed'), report(true)];
+  let calls = 0;
+  const api = vi.fn(async () => { const index = calls++; const reply = response(bodies[index]); if (index === at) reply.json = () => { reached(); return new Promise(resolve => { finish = resolve; }); }; return reply; });
+  const operation = stage === 'cancel' ? cancelOwnedUpload(api, progress) : submitReport(values, api, progress);
+  const refused = expect(operation).rejects.toThrow('Upload page ended');
+  await pendingBody;
+  const snapshot = JSON.stringify(progress);
+  retireOwnedUpload(progress); finish(bodies[at]); await refused;
+  expect(JSON.stringify(progress)).toBe(snapshot);
+  expect(api).toHaveBeenCalledTimes(at + 1);
+});
+
+it('idle progress survives initial cleanup replay, but retired active progress cannot restart', async () => {
+  const progress: UploadProgress = {};
+  retireOwnedUpload(progress);
+  const interrupted = vi.fn().mockRejectedValue(new Error('synthetic interruption'));
+  await expect(submitReport(values, interrupted, progress)).rejects.toThrow('interrupted');
+  expect(interrupted).toHaveBeenCalledTimes(1);
+  retireOwnedUpload(progress);
+  const none = vi.fn();
+  await expect(submitReport(values, none, progress)).rejects.toThrow('Upload page ended');
+  await expect(cancelOwnedUpload(none, progress)).rejects.toThrow('Upload page ended');
+  expect(none).not.toHaveBeenCalled();
 });

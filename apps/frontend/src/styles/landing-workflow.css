@@ -1,64 +1,70 @@
-/* State-only landing demonstration; all color values inherit the shared brand tokens. */
+/* State-only landing demonstration; all color values inherit the shared brand tokens. Sizes use the landing scale. */
 .product-landing .workflow-demo { margin: 0; }
 .product-landing .workflow-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem; list-style: none; margin: 0 0 1.5rem; padding: 0; }
-.product-landing .workflow-steps button { display: flex; align-items: center; gap: .875rem; width: 100%; min-height: 5rem; padding: 1rem 0; border-top: 2px solid var(--divider); background: transparent; color: var(--muted-foreground); text-align: left; font: inherit; font-size: .9375rem; cursor: pointer; }
+.product-landing .workflow-steps button { display: flex; align-items: center; gap: .875rem; width: 100%; min-height: 5rem; padding: 1rem 0; border-top: 2px solid var(--divider); background: transparent; color: var(--muted-foreground); text-align: left; font: inherit; font-size: var(--landing-fs-body); cursor: pointer; }
+.product-landing .workflow-steps button:hover { color: var(--primary); border-color: var(--brand-accent); }
 .product-landing .workflow-steps button[aria-pressed="true"] { border-color: var(--primary); color: var(--primary); font-weight: 600; }
-.product-landing .workflow-step-number { font-size: 1.5rem; letter-spacing: -.06em; flex: none; }
+.product-landing .workflow-step-number { font-size: var(--landing-fs-lead); letter-spacing: -.04em; flex: none; }
 .product-landing .workflow-step-arrow { margin-left: auto; width: 1.25rem; flex: none; }
 .product-landing .workflow-scene { display: grid; grid-template-columns: .9fr 1.1fr; border: 1px solid var(--divider); border-radius: var(--radius-3); overflow: hidden; }
 .product-landing .workflow-story { display: flex; flex-direction: column; padding: 3rem; background: var(--primary-hover); color: var(--primary-foreground); }
-.product-landing .workflow-kicker { color: var(--landing-soft-text); font-size: .75rem; margin-bottom: 2.25rem; }
-.product-landing .workflow-story h3 { font-size: clamp(1.75rem, 3vw, 2.5rem); line-height: 1.2; letter-spacing: -.045em; max-width: 20rem; }
-.product-landing .workflow-description { margin-block: 1.5rem 2rem; color: var(--landing-soft-text); font-size: .9375rem; line-height: 1.85; }
-.product-landing .workflow-next { display: inline-flex; align-items: center; justify-content: space-between; gap: 1rem; width: 100%; min-height: var(--size-control); margin-top: auto; background: transparent; color: var(--primary-foreground); border: 0; padding: .75rem 0; font: inherit; font-size: .8125rem; text-align: left; cursor: pointer; text-decoration: underline; text-underline-offset: .3em; }
+.product-landing .workflow-kicker { color: var(--landing-soft-text); font-size: var(--landing-fs-small); margin-bottom: 2.25rem; }
+.product-landing .workflow-story h3 { font-size: var(--landing-fs-heading); line-height: 1.15; letter-spacing: -.03em; }
+.product-landing .workflow-description { margin-block: 1.5rem 2rem; color: var(--landing-soft-text); font-size: var(--landing-fs-body); line-height: 1.65; }
+.product-landing .workflow-next { display: inline-flex; align-items: center; justify-content: space-between; gap: 1rem; width: 100%; min-height: var(--size-control); margin-top: auto; background: transparent; color: var(--primary-foreground); border: 0; padding: .75rem 0; font: inherit; font-size: var(--landing-fs-body); text-align: left; cursor: pointer; text-decoration: underline; text-underline-offset: .3em; }
 .product-landing .workflow-story button:focus-visible { outline-color: var(--muted); }
 .product-landing .workflow-example { display: flex; flex-direction: column; min-width: 0; background: var(--background); padding: 1.5rem 2rem; }
-.product-landing .workflow-example-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding-bottom: 1.125rem; border-bottom: 1px solid var(--divider); font-size: .8125rem; font-weight: 600; }
-.product-landing .workflow-example-heading > span:last-child { font-size: .6875rem; font-weight: 400; color: var(--muted-foreground); text-align: right; }
-.product-landing .workflow-intake, .product-landing .workflow-check, .product-landing .workflow-inspect { padding-block: 1.5rem; flex: 1; }
+.product-landing .workflow-example-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding-bottom: 1.125rem; border-bottom: 1px solid var(--divider); font-size: var(--landing-fs-small); font-weight: 600; }
+.product-landing .workflow-example-heading > span:last-child { font-weight: 400; color: var(--muted-foreground); text-align: right; }
+.product-landing .workflow-intake, .product-landing .workflow-check, .product-landing .workflow-inspect { padding-block: 1.5rem; flex: 1; animation: landing-scene-in .45s var(--landing-ease) both; }
 .product-landing .workflow-field { display: flex; flex-direction: column; gap: .5rem; }
-.product-landing .workflow-field > span:first-child, .product-landing .workflow-format > span { font-size: .75rem; color: var(--muted-foreground); }
-.product-landing .workflow-field strong { background: var(--panel); border: 1px solid var(--divider); padding: .875rem 1rem; font-size: .875rem; font-weight: 400; }
-.product-landing .workflow-field-note { font-size: .6875rem; color: var(--muted-foreground); }
+.product-landing .workflow-field > span:first-child, .product-landing .workflow-format > span { font-size: var(--landing-fs-small); color: var(--muted-foreground); }
+.product-landing .workflow-field strong { background: var(--panel); border: 1px solid var(--divider); padding: .875rem 1rem; font-size: var(--landing-fs-body); font-weight: 400; }
+.product-landing .workflow-field-note { font-size: var(--landing-fs-small); color: var(--muted-foreground); }
 .product-landing .workflow-format { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-block: 1.5rem; }
 .product-landing .workflow-format > div { display: flex; gap: .5rem; }
-.product-landing .workflow-format button { font: inherit; font-size: .75rem; min-height: var(--size-control); padding: .5rem 1rem; border: 1px solid var(--border); background: var(--panel); color: var(--primary); border-radius: var(--radius-1); cursor: pointer; }
+.product-landing .workflow-format button { font: inherit; font-size: var(--landing-fs-small); min-height: var(--size-control); padding: .5rem 1rem; border: 1px solid var(--border); background: var(--panel); color: var(--primary); border-radius: var(--radius-1); cursor: pointer; }
 .product-landing .workflow-format button[aria-pressed="true"] { background: var(--primary); color: var(--primary-foreground); }
 .product-landing .workflow-file { display: flex; align-items: center; gap: 1.125rem; padding: 1.5rem; background: var(--panel); border: 1px solid var(--divider); border-radius: var(--radius-2); }
 .product-landing .workflow-file-art { display: flex; flex-direction: column; gap: .5rem; align-items: center; justify-content: center; width: 4rem; height: 5rem; flex: none; color: var(--primary); background: var(--muted); border-radius: var(--radius-1); }
 .product-landing .workflow-file-art svg { width: 1.75rem; height: 1.75rem; stroke-width: 1.5; }
-.product-landing .workflow-file-art span { font-size: .75rem; font-weight: 600; }
-.product-landing .workflow-file strong { font-size: .9375rem; }
-.product-landing .workflow-file p { font-size: .75rem; margin-top: .375rem; color: var(--muted-foreground); }
-.product-landing .workflow-file > div > span { display: block; margin-top: .5rem; font-size: .6875rem; color: var(--muted-foreground); }
+.product-landing .workflow-file-art span { font-size: var(--landing-fs-small); font-weight: 600; }
+.product-landing .workflow-file strong { font-size: var(--landing-fs-body); }
+.product-landing .workflow-file p { font-size: var(--landing-fs-small); margin-top: .375rem; color: var(--muted-foreground); }
+.product-landing .workflow-file > div > span { display: block; margin-top: .5rem; font-size: var(--landing-fs-small); color: var(--muted-foreground); }
 .product-landing .workflow-file-upload { width: 1.125rem; flex: none; margin-left: auto; }
-.product-landing .workflow-example-note { font-size: .75rem; line-height: 1.8; color: var(--muted-foreground); margin-top: 1.25rem; }
-.product-landing .workflow-boundary { padding-top: 1rem; border-top: 1px solid var(--divider); font-size: .6875rem; line-height: 1.8; color: var(--muted-foreground); }
+.product-landing .workflow-example-note { font-size: var(--landing-fs-small); line-height: 1.6; color: var(--muted-foreground); margin-top: 1.25rem; }
+.product-landing .workflow-boundary { padding-top: 1rem; border-top: 1px solid var(--divider); font-size: var(--landing-fs-small); line-height: 1.6; color: var(--muted-foreground); }
 .product-landing .workflow-check-result { text-align: center; padding: 1.25rem 0 1.75rem; }
 .product-landing .workflow-check-result > svg { width: 3rem; height: 3rem; margin: 0 auto 1rem; color: var(--success); stroke-width: 1.25; }
-.product-landing .workflow-check-result > p { font-size: .75rem; color: var(--muted-foreground); }
-.product-landing .workflow-check-result h4 { font-size: 1.75rem; letter-spacing: -.04em; margin: .5rem 0; color: var(--success); }
+.product-landing .workflow-check-result > p { font-size: var(--landing-fs-small); color: var(--muted-foreground); }
+.product-landing .workflow-check-result h4 { font-size: var(--landing-fs-lead); letter-spacing: -.02em; margin: .5rem 0; color: var(--success); }
 .product-landing .workflow-check-incomplete h4, .product-landing .workflow-check-incomplete > svg { color: var(--primary); }
-.product-landing .workflow-check-result > span { font-size: .6875rem; color: var(--muted-foreground); }
-.product-landing .workflow-checklist, .product-landing .workflow-details dl { margin: 0; font-size: .8125rem; line-height: 1.8; }
+.product-landing .workflow-check-result > span { font-size: var(--landing-fs-small); color: var(--muted-foreground); }
+.product-landing .workflow-checklist, .product-landing .workflow-details dl { margin: 0; font-size: var(--landing-fs-small); line-height: 1.7; }
 .product-landing .workflow-checklist > div, .product-landing .workflow-details dl > div { display: flex; justify-content: space-between; gap: 1rem; padding-block: .75rem; border-bottom: 1px solid var(--divider); }
 .product-landing .workflow-checklist dt, .product-landing .workflow-details dt { color: var(--muted-foreground); }
 .product-landing .workflow-checklist dd, .product-landing .workflow-details dd { margin: 0; text-align: right; }
-.product-landing .workflow-compare { display: flex; align-items: center; gap: 1rem; width: 100%; min-height: var(--size-control); margin-top: 1rem; padding: .5rem 0; background: transparent; color: var(--primary); border: 0; text-align: left; font: inherit; font-size: .75rem; text-decoration: underline; text-underline-offset: .3em; cursor: pointer; }
+.product-landing .workflow-compare { display: flex; align-items: center; gap: 1rem; width: 100%; min-height: var(--size-control); margin-top: 1rem; padding: .5rem 0; background: transparent; color: var(--primary); border: 0; text-align: left; font: inherit; font-size: var(--landing-fs-small); text-decoration: underline; text-underline-offset: .3em; cursor: pointer; }
 .product-landing .workflow-compare[aria-pressed="true"] { font-weight: 600; }
 .product-landing .workflow-records { display: flex; gap: .5rem; margin-bottom: 1.5rem; }
-.product-landing .workflow-records button { display: flex; align-items: center; gap: .5rem; flex: 1; min-width: 0; min-height: var(--size-control); padding: .75rem; background: var(--panel); border: 1px solid var(--divider); border-bottom: 2px solid var(--divider); color: var(--primary); font: inherit; font-size: .75rem; text-align: left; cursor: pointer; }
+.product-landing .workflow-records button { display: flex; align-items: center; gap: .5rem; flex: 1; min-width: 0; min-height: var(--size-control); padding: .75rem; background: var(--panel); border: 1px solid var(--divider); border-bottom: 2px solid var(--divider); color: var(--primary); font: inherit; font-size: var(--landing-fs-small); text-align: left; cursor: pointer; }
+.product-landing .workflow-records button:hover { background: var(--muted); }
 .product-landing .workflow-records button[aria-pressed="true"] { background: var(--muted); border-bottom-color: var(--primary); font-weight: 600; }
 .product-landing .workflow-records svg { flex: none; }
 .product-landing .workflow-records button > svg:last-child { margin-left: auto; }
 .product-landing .workflow-details { background: var(--panel); border: 1px solid var(--divider); border-radius: var(--radius-2); padding: 1.5rem; }
-.product-landing .workflow-details > p { font-size: .6875rem; color: var(--muted-foreground); }
-.product-landing .workflow-details h4 { font-size: 1.375rem; margin: .5rem 0 1rem; }
+.product-landing .workflow-details > p { font-size: var(--landing-fs-small); color: var(--muted-foreground); }
+.product-landing .workflow-details h4 { font-size: var(--landing-fs-lead); margin: .5rem 0 1rem; }
 .product-landing .workflow-success { color: var(--success); }
-.product-landing .workflow-detail-note { margin-top: 1rem; font-size: .75rem; line-height: 1.8; }
+.product-landing .workflow-detail-note { margin-top: 1rem; font-size: var(--landing-fs-small); line-height: 1.6; }
 .product-landing .workflow-detail-note p { color: var(--muted-foreground); margin-top: .5rem; }
-.product-landing .workflow-demo figcaption { display: flex; gap: 1.5rem; font-size: .6875rem; line-height: 1.8; padding-top: 1rem; color: var(--muted-foreground); }
+.product-landing .workflow-demo figcaption { display: flex; gap: 1.5rem; font-size: var(--landing-fs-small); line-height: 1.6; padding-top: 1rem; color: var(--muted-foreground); }
 .product-landing .workflow-demo figcaption strong { flex: none; }
+@keyframes landing-scene-in {
+  from { transform: translateY(.5rem); }
+  to { transform: none; }
+}
 @media (max-width: 62.5rem) {
   .product-landing .workflow-story { padding: 2rem; }
   .product-landing .workflow-example { padding: 1.5rem; }
@@ -68,18 +74,15 @@
 }
 @media (max-width: 45rem) {
   .product-landing .workflow-steps { gap: .75rem; margin-bottom: 1rem; }
-  .product-landing .workflow-steps button { flex-direction: column; align-items: flex-start; gap: .5rem; height: 100%; font-size: .6875rem; padding-block: .75rem; }
-  .product-landing .workflow-step-number { font-size: 1.25rem; }
+  .product-landing .workflow-steps button { flex-direction: column; align-items: flex-start; gap: .5rem; height: 100%; font-size: var(--landing-fs-small); padding-block: .75rem; }
   .product-landing .workflow-step-arrow { display: none; }
   .product-landing .workflow-scene { grid-template-columns: minmax(0, 1fr); }
   .product-landing .workflow-story { padding: 1.5rem; }
   .product-landing .workflow-kicker { margin-bottom: 1.25rem; }
-  .product-landing .workflow-story h3 { font-size: 1.75rem; max-width: 16rem; }
-  .product-landing .workflow-description { font-size: .875rem; margin-top: 1rem; }
+  .product-landing .workflow-description { margin-top: 1rem; }
   .product-landing .workflow-example { padding: 1.25rem; }
   .product-landing .workflow-format { flex-wrap: wrap; }
   .product-landing .workflow-file-art { width: 3rem; height: 4rem; }
-  .product-landing .workflow-file strong { font-size: .8125rem; }
   .product-landing .workflow-demo figcaption { display: block; }
   .product-landing .workflow-demo figcaption span { display: block; margin-top: .25rem; }
   .product-landing .workflow-details { padding: 1rem; }

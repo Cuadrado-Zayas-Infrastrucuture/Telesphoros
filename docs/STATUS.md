@@ -4,6 +4,10 @@ Read this first to pick the project up. Snapshot: **2026-10-14**. Update it in t
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
 ## Delivery snapshot and capability boundaries
+## Upload navigation recovery retirement (local, 2026-10-15)
+
+`fix/upload-navigation-retirement` fixes F06-R01 independently from main `301b035`: upload page exit retires started progress so late responses/bodies cannot replace newer recovery or continue abandoned work. Recovery remains available for retry/reload and acknowledged cancellation. Reviewed F06 `cf10828` and F07 remain frozen; their changes are not included. Local verification passed 299 frontend tests, 50 desktop/mobile auth/upload/navigation browser cases and a disposable F06 composition (322 frontend tests, 60 browser cases). Both weakened browser controls reproduced the original overwrite. See [verification](verification/upload-navigation-retirement.md). No push, PR, merge or deployment.
+
 ## Local launcher CORS controls (local branch)
 
 `fix/local-launcher-cors-parity` disables Moto's global CORS fallback in both the owned storage runner and the older review launcher's explicit child environments. Native browser probes reproduce the excluded-origin failure before the change and require refusal plus success after allowing that same real origin after the change. See [verification](verification/local-launcher-cors.md). F06/F07 remain frozen and separate; integration of the older launcher's PUT-only rule with F07's shared GET contract is deferred until F07 reaches main. No push, PR, merge or deployment.
@@ -76,6 +80,10 @@ Founder asked to start M1.4 of the [audit build plan](design/plans/repo-audit-an
 ## M1.5b members with no role cannot read clinical records (in review)
 
 Closes finding I04 (decision DA-1, decided yes on 2026-10-13): the eleven clinical read routes (`GET` list and by-id for patients, reports, recommendations, evaluations and cell disputes, and `GET /captures/:id`; the audit listed nine) now require a role. A member who holds no role can still sign in and call `/me`, and gets 403 everywhere else. Any role qualifies, `reviewer` included, because reviewer-only people already capture and evaluate on their own and the reviewer browser persona reads the same lists; if the founder wants reviewer to be refused alone, change one constant (`auth/clinical-read.ts`). A test walks the real route table so a new route that forgets `@Roles()` fails. Plan: [m1-5b-no-role-reads.md](design/plans/m1-5b-no-role-reads.md); evidence: [verification](verification/m1-5b-no-role-reads.md). Proved locally; the pull request's checks are the remote record. The frontend is unchanged: a member with no role who opens the reports page gets the page's generic error, not a dedicated message.
+
+## Landing polish, slice A (draft PR, 2026-10-15)
+
+Founder approved the [plan](design/plans/ui-polish-landing-and-dashboard.md) (P1 to P6 as recommended). Slice A changes the product landing only: a five-step type scale held in tokens (`--landing-fs-*`), 16px running text, headings within two lines at 1440, 768 and 390, consistent section spacing with a tone step instead of a divider for two sections, and a transform-only scroll entrance (`useLandingMotion`) with control feedback and a full reduced-motion fallback. The approved brand elements, copy, DNA, mascot, fonts and `branding-policy.json` are unchanged and the DNA and mascot are never animated. Measured with the taste-skill inspector: 11 FAIL / 4 WARN before, 7 FAIL / 3 WARN after; every remaining FAIL is a decision kept under P1/P2 (eyebrows, 01/02/03, gradient, hairlines, no archive pictures) or the shared Button's approved sheen. Local checks: typecheck, lint, `check:brand` with its 24 mutation tests, 291 unit tests, 74 standard browser cases (axe included), chunk and foundation guards. DEV, local-review and owned-storage browser suites were not run (no change to those screens). Slice B (Reports and upload) has not started. See [verification](verification/ui-polish-landing.md). No deployment, merge or clinical change.
 
 ## Planned: repository audit and build plan (plan only)
 

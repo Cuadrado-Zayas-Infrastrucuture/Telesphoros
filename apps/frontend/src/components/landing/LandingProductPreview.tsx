@@ -21,7 +21,7 @@ export function LandingProductPreview() {
   const scene = steps[step];
   const record = records[selected];
 
-  return <figure className="workflow-demo">
+  return <figure className="workflow-demo" data-reveal="2">
     <ol className="workflow-steps" aria-label="Explore the report workflow">
       {steps.map((item, index) => <li key={item.label}>
         <button type="button" aria-pressed={step === index} aria-controls="workflow-scene" onClick={() => setStep(index)}>
