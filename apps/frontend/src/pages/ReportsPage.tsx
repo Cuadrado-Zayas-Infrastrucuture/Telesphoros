@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, ArrowUpFromLine, ChevronRight, RefreshCw, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowLeft, ArrowUpFromLine, Check, ChevronRight, Minus, RefreshCw, SlidersHorizontal, X } from 'lucide-react';
 import type { Paginated, PaginationMeta, PatientDto, ReportDto } from '@telesphoros/shared-types';
 import { NotSignedInError, SessionEndedError, useAuth } from '@/auth/AuthProvider';
 import { WRITER_ROLES } from '@/auth/roles';
@@ -121,37 +121,35 @@ export default function ReportsPage() {
             <Button variant="outline" size="sm" aria-label="Refresh reports" aria-disabled={reportsLoading} onClick={() => { if (!reportsLoading) loadReports(reports && reports.data.length === 0 ? 1 : request.page); }}><RefreshCw aria-hidden="true" className="size-4 shrink-0" />Refresh</Button>
           </div>
           <div className="flex flex-col gap-2 bg-background px-4 py-4 sm:px-5">
-            <div className="flex min-w-0 items-end gap-2">
-              <div className="min-w-0 flex-1">
-                <label htmlFor="patient-filter" className="mb-2 flex items-center gap-2 text-sm font-medium"><SlidersHorizontal aria-hidden="true" className="size-4" />Filter by patient</label>
-                <NativeSelect id="patient-filter" value={request.patientId} disabled={patientsLoading} onChange={event => {
-                  const id = event.target.value;
-                  setFilterPatient(patients?.data.find(patient => patient.id === id) ?? (filterPatient?.id === id ? filterPatient : null));
-                  loadReports(1, id);
-                }}>
-                  <option value="">All patients</option>
-                  {filterPatient && !patients?.data.some(patient => patient.id === filterPatient.id) && <option value={filterPatient.id}>{filterPatient.label}</option>}
-                  {patients?.data.map(patient => <option key={patient.id} value={patient.id}>{patient.label}</option>)}
-                </NativeSelect>
-              </div>
-              <Button variant="ghost" size="sm" aria-label="Refresh patient options" title="Refresh patient options" aria-disabled={patientsLoading} onClick={() => { if (!patientsLoading) loadPatientOptions(patientRequest.page); }}><RefreshCw aria-hidden="true" className="size-4 shrink-0" /><span className="hidden sm:inline">Refresh</span></Button>
+            <label htmlFor="patient-filter" className="flex items-center gap-2 text-sm font-medium"><SlidersHorizontal aria-hidden="true" className="size-4" />Filter by patient</label>
+            <div className="flex min-w-0 items-center gap-2">
+              <NativeSelect id="patient-filter" className="min-w-0 flex-1" value={request.patientId} disabled={patientsLoading} onChange={event => {
+                const id = event.target.value;
+                setFilterPatient(patients?.data.find(patient => patient.id === id) ?? (filterPatient?.id === id ? filterPatient : null));
+                loadReports(1, id);
+              }}>
+                <option value="">All patients</option>
+                {filterPatient && !patients?.data.some(patient => patient.id === filterPatient.id) && <option value={filterPatient.id}>{filterPatient.label}</option>}
+                {patients?.data.map(patient => <option key={patient.id} value={patient.id}>{patient.label}</option>)}
+              </NativeSelect>
+              <Button variant="outline" size="sm" aria-label="Refresh patient options" title="Refresh patient options" aria-disabled={patientsLoading} className="shrink-0 px-0" onClick={() => { if (!patientsLoading) loadPatientOptions(patientRequest.page); }}><RefreshCw aria-hidden="true" className="size-4 shrink-0" /></Button>
+              {request.patientId && <Button variant="outline" size="sm" aria-label="Clear patient filter" title="Clear patient filter" className="shrink-0 px-0" onClick={() => recoverReports(1, true)}><X aria-hidden="true" className="size-4 shrink-0" /></Button>}
             </div>
-            {request.patientId && <Button variant="ghost" size="sm" aria-label="Clear patient filter" className="self-start px-2" onClick={() => recoverReports(1, true)}><X aria-hidden="true" className="size-4 shrink-0" />Clear patient filter</Button>}
             {patientMeta.totalPages <= 1 && <p role="status" className={patientsLoading || !patients || patients.meta.total === 0 ? 'text-xs text-muted-foreground' : 'sr-only'}>{patientsLoading ? 'Loading patient options…' : patients?.meta.total === 0 ? 'No patient options available.' : patients ? 'Showing available patient options.' : 'Patient options unavailable.'}</p>}
             {patientError && <p role="alert" className="text-sm text-destructive">{patientError}</p>}
-            {patientMeta.totalPages > 1 && <PaginationControls label="Patient" meta={patientMeta} busy={patientsLoading} preserveFocus statusMessage={patientsLoading ? 'Loading patient options…' : patientError ? 'Patient page unavailable.' : `Patient options: page ${patientMeta.page} of ${patientMeta.totalPages}.`} onPage={loadPatientOptions} />}
+            {patientMeta.totalPages > 1 && <PaginationControls compact label="Patient" meta={patientMeta} busy={patientsLoading} preserveFocus statusMessage={patientsLoading ? 'Loading patient options…' : patientError ? 'Patient page unavailable.' : `Patient options: page ${patientMeta.page} of ${patientMeta.totalPages}.`} onPage={loadPatientOptions} />}
           </div>
           {reportError && <p role="alert" className="border-t border-divider bg-destructive-surface px-5 py-3 text-sm text-destructive">{reportError}</p>}
           <div role="region" aria-label="Report records table" aria-busy={reportsLoading} tabIndex={0} className="report-records-region h-report-list max-w-full overflow-auto border-y border-divider">
             {reportsLoading || reports?.data.length ? <table className="w-full table-fixed text-left text-sm">
               <caption className="sr-only">Reports on the selected page</caption>
-              <thead className="sticky top-0 bg-background text-xs text-muted-foreground"><tr><th scope="col" className="w-1/2 px-3 py-3">Report / patient</th><th scope="col" className="w-1/4 px-2 py-3 sm:px-3">Record status</th><th scope="col" className="w-1/4 px-2 py-3 sm:px-3">Upload</th></tr></thead>
-              {reportsLoading ? <ReportListSkeleton /> : <tbody>{reports?.data.map(report => <tr key={report.id} className={selected?.id === report.id ? 'border-b border-divider bg-muted' : 'border-b border-divider hover:bg-surface focus-within:bg-muted'}>
-                <td className="px-3 py-0">
+              <thead className="sticky top-0 bg-background text-xs text-muted-foreground"><tr><th scope="col" className="w-1/2 px-3 py-3 sm:w-5/12">{request.patientId ? 'Report' : 'Report / patient'}</th><th scope="col" className="w-1/4 px-2 py-3 sm:px-3">Record status</th><th scope="col" className="w-1/4 px-2 py-3 sm:w-1/3 sm:px-3">Upload</th></tr></thead>
+              {reportsLoading ? <ReportListSkeleton showPatient={!request.patientId} /> : <tbody>{reports?.data.map(report => <tr key={report.id} className={selected?.id === report.id ? 'border-b border-divider bg-muted' : 'border-b border-divider hover:bg-surface focus-within:bg-muted'}>
+                <td className={`border-l-2 px-3 py-0 ${selected?.id === report.id ? 'border-primary' : 'border-transparent'}`}>
                   <Button variant="ghost" data-testid={`report-${report.id}`} aria-label={`Open ${report.filename}`} aria-controls="report-detail-panel" title={report.filename} aria-pressed={selected?.id === report.id} className="group h-auto min-h-control w-full scroll-mt-16 justify-start rounded-sm px-0 py-2 text-left text-sm whitespace-normal" onClick={event => { selectionTrigger.current = event.currentTarget; setDownloadError(null); if (selected?.id === report.id) detailHeading.current?.focus(); else setSelected(report); }}><span className="min-w-0 wrap-anywhere group-hover:underline group-focus-visible:underline">{report.filename}</span><ChevronRight aria-hidden="true" className="ml-auto size-4 shrink-0 text-muted-foreground" /></Button>
-                  <p className={patientLabel(report.patientId) ? 'truncate pb-2 text-xs text-muted-foreground' : 'truncate pb-2 font-mono text-xs text-muted-foreground'} title={patientLabel(report.patientId) ?? report.patientId}>{patientLabel(report.patientId) ?? report.patientId}</p>
+                  {!request.patientId && <p className={patientLabel(report.patientId) ? 'truncate pb-2 text-xs text-muted-foreground' : 'truncate pb-2 font-mono text-xs text-muted-foreground'} title={patientLabel(report.patientId) ?? report.patientId}>{patientLabel(report.patientId) ?? report.patientId}</p>}
                 </td>
-                <td className="break-words px-2 py-2 capitalize text-primary sm:px-3">{report.status}</td><td className={report.fileUploaded ? 'break-words px-2 py-2 text-success sm:px-3' : 'break-words px-2 py-2 text-primary sm:px-3'}>{report.fileUploaded ? 'Verified' : 'Not complete'}</td>
+                <td className="break-words px-2 py-2 capitalize text-primary sm:px-3">{report.status}</td><td className={report.fileUploaded ? 'break-words px-2 py-2 text-success sm:px-3' : 'break-words px-2 py-2 text-primary sm:px-3'}><span className="inline-flex items-start gap-2">{report.fileUploaded ? <Check aria-hidden="true" className="mt-0.5 hidden size-4 shrink-0 sm:block" /> : <Minus aria-hidden="true" className="mt-0.5 hidden size-4 shrink-0 sm:block" />}<span>{report.fileUploaded ? 'Verified' : 'Not complete'}</span></span></td>
               </tr>)}</tbody>}
             </table> : <div className="flex h-full flex-col items-start justify-center gap-3 p-5 text-sm text-muted-foreground">
               <h3 className="text-base text-foreground">{reportError ? 'Reports unavailable' : reports?.meta.total === 0 ? 'No reports found for this selection.' : 'No reports on this page'}</h3>
