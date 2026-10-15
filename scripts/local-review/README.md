@@ -2,6 +2,8 @@
 
 This is a development-only workflow, not a deployment or clinical release. Production upload code, backend defaults, schema, evidence rules and flags are unchanged. Routes `/local-upload`, `/local-review` and `/local-operations` exist only in Vite development builds.
 
+The launcher's child environment explicitly sets `MOTO_DISABLE_GLOBAL_CORS=true`, preventing Moto's global fallback from admitting origins outside the bucket policy. This local control does not change the existing PUT-only bucket rule. Its integration with F07's shared GET-only download contract is pending that fix's merge to main; neither emulator results nor this launcher establish actual AWS acceptance. See [verification](../../docs/verification/local-launcher-cors.md).
+
 ## Prerequisites and start
 
 Use Node **22.22.0** (Unicode16), pnpm **10.28.0**, PostgreSQL **16**, Python with `.github/ci/requirements.txt` installed for the Moto emulator, and the repository's pinned reader runtime dependencies. The optional real extractor requires `pdftotext` **26.03.0** on PATH. No AWS credentials are required.
