@@ -21,6 +21,7 @@ the stack and the image exist; the plan is [fd7-staged-synthetic-deploy.md](../d
 Values are checked before anything starts, against the application's own rules: organization ids `^[a-z0-9][a-z0-9-]{0,62}$`; roles from `reader, clinician, admin, reviewer` (at least one, no empty entry);
 a subject id of letters, digits and `. _ : @ + -` (at most 128, never `system:...`, stricter than the CLI, which only refuses control characters); `--by` at most 128, `--name` at most 120, `--reason` at most 500 characters, none with control characters.
 Free text is passed to the container as data (the override is built by `node`, never through a shell), so a quote or `$(...)` in a name is just text.
+The runner supports macOS's stock Bash 3.2 as well as Linux Bash. Log-group names accept 1 to 512 ASCII letters, digits and `_ . / # -`; character and length checks are separate so macOS can validate the full range.
 
 ### Environment
 

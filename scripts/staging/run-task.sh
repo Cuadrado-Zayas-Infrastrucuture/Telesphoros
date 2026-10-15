@@ -48,7 +48,8 @@ for name in MIGRATE_TASK_FAMILY PROVISION_TASK_FAMILY; do
 done
 [[ "$TASK_SUBNETS" =~ ^subnet-[0-9a-f]{8,17}(,subnet-[0-9a-f]{8,17})*$ ]] || die "TASK_SUBNETS must be subnet ids separated by commas: $TASK_SUBNETS"
 [[ "$TASK_SECURITY_GROUP" =~ ^sg-[0-9a-f]{8,17}$ ]] || die "TASK_SECURITY_GROUP is not a security group id: $TASK_SECURITY_GROUP"
-[[ "$API_LOG_GROUP" =~ ^[A-Za-z0-9_./#-]{1,512}$ ]] || die "API_LOG_GROUP is not a log group name: $API_LOG_GROUP"
+# macOS's regex engine refuses repetition bounds above 255; check the AWS length limit separately.
+[[ ${#API_LOG_GROUP} -le 512 && "$API_LOG_GROUP" =~ ^[A-Za-z0-9_./#-]+$ ]] || die "API_LOG_GROUP is not a log group name: $API_LOG_GROUP"
 case "$TASK_ASSIGN_PUBLIC_IP" in
   true) public_ip="ENABLED" ;;
   false) public_ip="DISABLED" ;;
