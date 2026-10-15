@@ -210,7 +210,8 @@ it('reports a list failure, preserves selection, and retries the requested page'
 it('handles an empty patient list without creating a patient', async () => {
   patientApi.mockReset().mockResolvedValue(pageResponse([]));
   const user = userEvent.setup(); render(<UploadReportPage />);
-  expect(await screen.findByText(/No patients available/)).toBeInTheDocument();
+  expect(await screen.findByText('No patients available. Ask a clinician to add a synthetic patient, then refresh the list.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Refresh patients' })).toBeEnabled();
   await user.click(screen.getByRole('button', { name: 'Upload report' }));
   expect(await screen.findByText('Choose an existing patient.')).toBeInTheDocument();
   expect(submitMock).not.toHaveBeenCalled(); expect(patientApi).toHaveBeenCalledTimes(1);

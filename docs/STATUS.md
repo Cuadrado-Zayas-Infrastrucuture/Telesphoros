@@ -4,6 +4,11 @@ Read this first to pick the project up. Snapshot: **2026-10-14**. Update it in t
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
 ## Delivery snapshot and capability boundaries
+## Patient setup guidance (local branch)
+
+`fix/patient-setup-guidance` corrects the upload page's empty-roster handoff to a clinician and the existing Refresh patients control. Patient creation remains the authorized clinician-only API workflow; this slice adds no patient-create screen or permission. See [setup guidance](ops/patient-setup.md). F06/F07 remain frozen; no push, PR or deployment.
+
+## M2.3c the worker's deployment (built locally, stacked on M2.3b, not yet a PR)
 
 Main `4400efa` contains the M2.1 and M2.2 slices plus M2.3a merged with [#100](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/100), and M2.3b/c merged with [#101](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/101). Both final PR heads report all seven CI checks successful. That is merged-code evidence, not AWS deployment or clinical acceptance. Original verification documents retain their dated local-run results; stale stacked/local wording there describes their capture time. See the [build capability matrix](product-capabilities.md) and [documentation verification](verification/delivery-docs-current-main.md).
 

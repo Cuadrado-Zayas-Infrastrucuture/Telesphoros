@@ -10,7 +10,7 @@ name: telesphoros-dev
 
 services:
   postgres:
-    image: postgres:16
+    image: postgres:18
     environment:
       POSTGRES_PASSWORD: dev-only-password
       POSTGRES_DB: telesphoros
