@@ -2,6 +2,7 @@
 const { spawn } = require('node:child_process');
 const { createRequire } = require('node:module');
 const path = require('node:path');
+const { reportsCorsRule } = require('../local-storage/cors.cjs');
 const root = path.resolve(__dirname, '../..');
 const poppler = process.argv.includes('--poppler');
 function port(name,fallback){const value=process.env[name]||fallback;if(!/^[1-9][0-9]{3,4}$/.test(value)||Number(value)>65535)throw new Error('Invalid local port');return value;}
@@ -93,7 +94,7 @@ if (process.argv.includes('--api')) {
     const client = new S3Client({ region: env.AWS_REGION, endpoint: env.S3_ENDPOINT, forcePathStyle: true, credentials: { accessKeyId: env.AWS_ACCESS_KEY_ID, secretAccessKey: env.AWS_SECRET_ACCESS_KEY } });
     await client.send(new CreateBucketCommand({ Bucket: env.REPORTS_BUCKET, CreateBucketConfiguration: { LocationConstraint: env.AWS_REGION } }));
     await client.send(new PutBucketVersioningCommand({ Bucket: env.REPORTS_BUCKET, VersioningConfiguration: { Status: 'Enabled' } }));
-    await client.send(new PutBucketCorsCommand({ Bucket: env.REPORTS_BUCKET, CORSConfiguration: { CORSRules: [{ AllowedOrigins: [APP], AllowedMethods: ['PUT'], AllowedHeaders: ['content-type'], ExposeHeaders: ['ETag'] }] } }));
+    await client.send(new PutBucketCorsCommand({ Bucket: env.REPORTS_BUCKET, CORSConfiguration: { CORSRules: [reportsCorsRule(APP)] } }));
     client.destroy();
     start([path.join(root, 'packages/fake-idp/dist/cli.js'), '--port', ports.idp, '--client-id', 'e2e-client', '--redirect-uri', `${APP}/auth/callback`, '--logout-uri', `${APP}/signed-out`]);
     start([__filename, '--api', ...(poppler ? ['--poppler'] : [])]);

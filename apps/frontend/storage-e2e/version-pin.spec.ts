@@ -20,7 +20,7 @@ test('a newer object version cannot replace the verified attachment', async ({ p
   await page.route('**/api/v1/reports/*/download-url', async route => {
     const reply = await route.fetch(); expect(reply.ok()).toBe(true);
     const link = await reply.json(); const url = new URL(link.url);
-    expect(url.origin).toBe('http://127.0.0.1:5557'); expect(url.searchParams.has('versionId')).toBe(true);
+    expect(url.origin).toBe(process.env.E2E_REPORT_STORAGE_ORIGIN ?? 'http://127.0.0.1:5557'); expect(url.searchParams.has('versionId')).toBe(true);
     const [, bucket, ...key] = url.pathname.split('/');
     expect(bucket).toBe(`synthetic-storage-${process.env.L2_BROWSER_RUN_ID}`);
     const client = new S3Client({ endpoint: url.origin, region: 'us-east-1', forcePathStyle: true, credentials: { accessKeyId: 'synthetic', secretAccessKey: 'synthetic' } });

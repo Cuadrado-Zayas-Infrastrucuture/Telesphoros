@@ -169,7 +169,7 @@ async function captureReview(root, webPort, motoPort, runtime, defect) {
   assert.equal(children[0].bin, runtime.python);
   assert.deepEqual(children[0].args, ['-m', 'moto.server', '-H', '127.0.0.1', '-p', String(motoPort)]);
   for (const child of children) assert.notEqual(child.env.AWS_ACCESS_KEY_ID, parentCredential);
-  return { ...children[0], cwd: root, policy: policies[0], method: 'PUT' };
+  return { ...children[0], cwd: root, policy: policies[0], method: 'GET' };
 }
 function pythonRuntime() {
   const python = process.env.LOCAL_MOTO_PYTHON || 'python3';
@@ -207,8 +207,9 @@ async function verifyLauncher(kind, defect) {
     await new Promise(resolve => portProbe.close(resolve));
     const capture = kind === 'owned' ? captureOwned : captureReview;
     const spec = await capture(root, web.address().port, motoPort, runtime, defect);
-    assert.deepEqual(spec.policy.AllowedOrigins, [origin(web)]);
-    assert.deepEqual(spec.policy.AllowedMethods, kind === 'owned' ? ['GET', 'HEAD'] : ['PUT']);
+    // Independent expected policy: do not derive the oracle from the shared implementation contract.
+    assert.deepEqual(spec.policy, { AllowedOrigins: [origin(web)], AllowedMethods: ['GET'],
+      AllowedHeaders: ['Content-Type'], ExposeHeaders: ['ETag'], MaxAgeSeconds: 300 });
     assert.notEqual(spec.env.AWS_ACCESS_KEY_ID, parentCredential);
     let bound = false, startupFailed = false;
     child = spawn(spec.bin, spec.args, { env: spec.env, cwd: spec.cwd, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -234,14 +235,19 @@ async function verifyLauncher(kind, defect) {
       assert.deepEqual((await send(new sdk.GetBucketCorsCommand({ Bucket }))).CORSRules, [rule]);
     };
     await apply(spec.policy);
-    const command = spec.method === 'GET' ? new sdk.GetObjectCommand({ Bucket, Key, VersionId: initial.VersionId }) :
-      new sdk.PutObjectCommand({ Bucket, Key, ContentType: 'application/json' });
+    const command = new sdk.GetObjectCommand({ Bucket, Key, VersionId: initial.VersionId });
     const url = await getSignedUrl(client, command, { expiresIn: 300 });
     const getUrl = await getSignedUrl(client, new sdk.GetObjectCommand({ Bucket, Key, VersionId: initial.VersionId }), { expiresIn: 300 });
     const preflight = await fetch(getUrl, { method: 'OPTIONS', signal: AbortSignal.timeout(5000), headers: {
       Origin: origin(web), 'Access-Control-Request-Method': 'GET', 'Access-Control-Request-Headers': 'Content-Type',
     } });
-    assert.equal((preflight.headers.get('access-control-allow-methods') || '').split(/,\s*/).includes('GET'), kind === 'owned');
+    assert.equal(preflight.status, 200);
+    assert.equal(preflight.headers.get('access-control-allow-origin'), origin(web));
+    assert.deepEqual((preflight.headers.get('access-control-allow-methods') || '').split(/,\s*/), ['GET']);
+    const putPreflight = await fetch(getUrl, { method: 'OPTIONS', signal: AbortSignal.timeout(5000), headers: {
+      Origin: origin(web), 'Access-Control-Request-Method': 'PUT', 'Access-Control-Request-Headers': 'Content-Type',
+    } });
+    assert.ok(!(putPreflight.headers.get('access-control-allow-methods') || '').split(/,\s*/).includes('PUT'));
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
     page.setDefaultTimeout(5000);
@@ -255,21 +261,17 @@ async function verifyLauncher(kind, defect) {
     }, { url: requestUrl, method, bytes });
     const allowed = async () => {
       const result = await request(); assert.equal(result.readable, true); assert.equal(result.ok, true);
-      if (spec.method === 'GET') assert.equal(result.text, bytes);
-      else {
-        const stored = await send(new sdk.GetObjectCommand({ Bucket, Key }));
-        assert.equal(await stored.Body.transformToString(), bytes);
-      }
+      assert.equal(result.text, bytes);
     };
     await page.goto(origin(web)); await allowed();
+    assert.deepEqual(await request(getUrl, 'PUT'), { readable: false }, 'browser must refuse retired storage PUT');
     const allowedGet = async () => {
       const result = await request(getUrl, 'GET');
       assert.deepEqual(result, { readable: true, ok: true, text: bytes });
     };
     await allowedGet();
     await page.goto(origin(other));
-    // Moto can add headers to simple GET even under a PUT-only rule. This is
-    // the global-fallback defect; a PUT preflight alone does not expose it.
+    // Exercise simple GET too: a preflight refusal alone cannot detect Moto's global fallback.
     const refused = await request(getUrl, 'GET');
     if (refused.readable) {
       assert.equal(refused.ok, true, 'defect control must read a successful response');

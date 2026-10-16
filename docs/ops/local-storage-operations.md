@@ -17,7 +17,7 @@ Each invocation creates a new private `.local-storage/runs/<UUID>/` directory an
 
 The runner rejects inherited production mode, enabled clinical processing, and overrides of Moto's multipart minimum. It passes an explicit child environment and dummy storage credentials, with metadata credential lookup disabled. `MOTO_DISABLE_GLOBAL_CORS=true` is set in that environment so Moto cannot use its global Flask fallback to admit an origin excluded by the bucket's policy. API/IDP/web/Moto/PostgreSQL bind only to `127.0.0.1`. Service readiness checks require a matching recorded listener PID before contacting the endpoint. It does not reuse an existing database or emulator.
 
-The GET-only shared download policy is a separate local F07 fix and is not part of this main-based launcher-control branch. Until F07 is merged and integrated, this runner and the older review launcher retain the bucket methods declared on main. Disabling Moto's global fallback does not prove S3 method enforcement; verify actual policy readback and browser GET/PUT controls separately. See [launcher verification](../verification/local-launcher-cors.md).
+This local F07 integration shares the GET-only download contract across Terraform, the browser fixture, this runner and the older review launcher. Each local consumer supplies its exact loopback application origin. Global fallback is disabled independently; verify configured policy readback, allowed GET bytes, refused browser PUT and paired real-origin refusal/success. Emulator behavior does not prove actual AWS method enforcement. See [launcher verification](../verification/local-launcher-cors.md).
 
 ```sh
 pnpm test:storage-ops
@@ -25,7 +25,7 @@ pnpm test:storage-recovery
 pnpm test:storage-rehearsal
 ```
 
-`pnpm test:launcher-cors` separately verifies both actual launcher child environments against fresh native Moto/Chromium services. It requires pinned Moto and the workspace Chromium installation; `LOCAL_MOTO_PYTHON` may select that interpreter. It tests actual policy readback, permitted-method success and the simple-GET global fallback with paired real-origin controls and setting-removal defects. Required browser CI runs it; full DB/API lifecycle remains separate. See [coverage verification](../verification/launcher-cors-regression-coverage.md).
+`pnpm test:launcher-cors` separately verifies both actual launcher child environments against fresh native Moto/Chromium services. It requires pinned Moto and the workspace Chromium installation; `LOCAL_MOTO_PYTHON` may select that interpreter. It tests actual policy readback, GET-only policy and exact-byte success and the simple-GET global fallback with paired real-origin controls and setting-removal defects. Required browser CI runs it; full DB/API lifecycle remains separate. See [coverage verification](../verification/launcher-cors-regression-coverage.md).
 
 The operations command tests ownership refusals and controlled scheduling. The full rehearsal requires all real local dependencies; it fails rather than skipping them. It runs L2 browser assertions against the L3-owned stack, explicit multipart and HTTP faults, actual writer crash/restart, clock checks, and full setup/teardown/restart acceptance. It saves aggregate JSON in `.local-storage/rehearsal.json` and private browser diagnostics beside it. `L3_EVIDENCE` can select another evidence file. Do not publish private logs without checking their contents.
 

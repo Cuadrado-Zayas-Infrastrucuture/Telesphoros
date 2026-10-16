@@ -59,15 +59,19 @@ resource "aws_s3_bucket_lifecycle_configuration" "reports" {
   depends_on = [aws_s3_bucket_versioning.reports]
 }
 
-# Browsers upload straight to storage with a presigned URL, so the bucket must allow that, from our origins only.
+# Browsers retrieve verified attachments with signed GET links; upload bytes go through the API.
+# Local storage/browser fixtures consume this same contract. Origins remain the deployment allowlist.
+locals {
+  reports_cors = jsondecode(file("${path.module}/reports-cors.json"))
+}
 resource "aws_s3_bucket_cors_configuration" "reports" {
   bucket = aws_s3_bucket.reports.id
   cors_rule {
-    allowed_methods = ["PUT"]
+    allowed_methods = local.reports_cors.allowed_methods
     allowed_origins = var.reports_cors_origins
-    allowed_headers = ["Content-Type"]
-    expose_headers  = ["ETag"]
-    max_age_seconds = 300
+    allowed_headers = local.reports_cors.allowed_headers
+    expose_headers  = local.reports_cors.expose_headers
+    max_age_seconds = local.reports_cors.max_age_seconds
   }
 }
 

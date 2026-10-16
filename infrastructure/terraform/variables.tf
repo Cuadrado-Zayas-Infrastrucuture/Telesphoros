@@ -56,11 +56,11 @@ variable "app_security_group_ids" {
 }
 
 variable "reports_cors_origins" {
-  description = "Browser origins allowed to upload report files directly, e.g. [\"https://app.telesphoros.app\"]."
+  description = "Exact HTTPS browser origins allowed to retrieve report attachments, e.g. [\"https://app.telesphoros.app\"]."
   type        = list(string)
   validation {
-    condition     = length(var.reports_cors_origins) >= 1 && alltrue([for o in var.reports_cors_origins : startswith(o, "https://")])
-    error_message = "List at least one origin, and every origin must start with https://."
+    condition     = length(var.reports_cors_origins) >= 1 && alltrue([for o in var.reports_cors_origins : can(regex("^https://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:[0-9]{1,5})?$", o))])
+    error_message = "List at least one exact HTTPS origin: DNS host with optional port; no wildcard, path, query, fragment or userinfo."
   }
 }
 

@@ -1,0 +1,6 @@
+{
+  "allowed_methods": ["GET"],
+  "allowed_headers": ["Content-Type"],
+  "expose_headers": ["ETag"],
+  "max_age_seconds": 300
+}
