@@ -58,3 +58,13 @@ Proposed AGENTS.md convention: “Child dialog closure must not dismiss its pare
 - Final automated checks: frontend typecheck/lint/build, 309 Vitest cases in 26 files, 24 brand rejection checks, chunk budget and foundation guards all passed. Production entry 116.2 kB gzip; DEV preview and synthetic transport excluded from production.
 - Browser checks via Codex browser: 1280px desktop and 375px mobile; native explanation expansion/collapse, source drawer, Escape and source-trigger focus restoration; mobile Stop with no late completed response; no horizontal overflow in inspected states. Screenshots saved under outputs/prompt-kit in the task workspace.
 - Existing full browser regression suite was not rerun for this refinement; its changed staged-label and source-opening expectations were updated. No backend or production acceptance claimed.
+
+## CI browser profile correction
+
+PR #129's browser job on `1b7e37c` passed all 90 production-mode tests and 28 of 30 development-mode tests. Both failures were the new report/chat drawer scenario waiting for a Reports link. The default development profile intentionally leaves `VITE_LOCAL_STORAGE_INTAKE` off; the earlier local review wrapper had enabled it. The tests had been assigned to the wrong profile.
+
+- Preserved the feature gate and all original drawer, rapid-reopen, focus, accessibility and return-to-chat assertions. Moved the scenario to `local-e2e/report-workspace.spec.ts` under a dedicated owned-storage development profile.
+- Default development coverage explicitly asserts Reports is absent while Chat preview and the existing upload remain usable.
+- The existing `e2e` command now requires production, default development and owned-storage development profiles. The foundation guard rejects removing the owned profile from that command. No workflow, product UI, backend, permission, deployment or production setting changed.
+- Ran the complete `pnpm --filter @telesphoros/frontend e2e` command using Node 22.22.0, Chromium and the pinned synthetic loopback services: **90 + 30 + 2 = 122 passed**. No skips or added timeouts. Typecheck, lint, chunk/foundation checks and all 39 CI-configuration controls passed. This is local verification; the pushed corrective commit still needs remote CI.
+- Regenerated tracked preview images were backed up outside the repository and restored to their pre-test versions. Live synthetic preview restarted after the test stack stopped; sample fixture restored separately.

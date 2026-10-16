@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "test": "node --test scripts/check-branding.test.mjs scripts/vercel-preview.test.mjs && vitest run",
     "check:chunks": "node scripts/check-chunks.mjs && node scripts/check-foundation.mjs",
-    "e2e": "pnpm --filter @telesphoros/fake-idp build && pnpm --filter @telesphoros/backend build && VITE_REPORT_STORAGE_ORIGINS=http://127.0.0.1:5557 vite build --mode e2e --outDir dist-e2e && playwright test && playwright test --config playwright.local.config.ts",
+    "e2e": "pnpm --filter @telesphoros/fake-idp build && pnpm --filter @telesphoros/backend build && VITE_REPORT_STORAGE_ORIGINS=http://127.0.0.1:5557 vite build --mode e2e --outDir dist-e2e && playwright test && playwright test --config playwright.local.config.ts && playwright test --config playwright.owned-local.config.ts",
     "build:e2e": "VITE_REPORT_STORAGE_ORIGINS=http://127.0.0.1:5557 vite build --mode e2e --outDir dist-e2e",
     "e2e:storage": "pnpm --filter @telesphoros/fake-idp build && pnpm --filter @telesphoros/backend build && VITE_LOCAL_STORAGE_INTAKE=true VITE_REPORT_STORAGE_ORIGINS=http://127.0.0.1:5557 vite build --mode e2e --outDir dist-storage-e2e && playwright test --config playwright.storage.config.ts",
     "check:brand": "node scripts/check-branding.mjs",

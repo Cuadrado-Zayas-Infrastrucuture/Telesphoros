@@ -86,6 +86,10 @@ assert.ok(
   ),
   'local browser suite is not required by e2e',
 );
+assert.ok(
+  scripts.e2e.includes('&& playwright test --config playwright.owned-local.config.ts'),
+  'owned-storage report/chat browser suite is not required by e2e',
+);
 
 // The synthetic AI preview and its fixtures must be absent, not merely hidden.
 for (const path of files('dist/assets').filter(path => path.endsWith('.js'))) {

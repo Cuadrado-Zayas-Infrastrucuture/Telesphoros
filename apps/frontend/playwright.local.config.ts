@@ -13,6 +13,8 @@ const servers = foundation.webServer as {
 export default defineConfig({
   ...foundation,
   testDir: "./local-e2e",
+  // The report/chat flow needs the explicitly enabled owned-storage profile.
+  testIgnore: "**/report-workspace.spec.ts",
   webServer: [
     ...servers.slice(0, -1),
     {
