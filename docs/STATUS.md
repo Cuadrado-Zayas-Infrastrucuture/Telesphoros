@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-14**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Browser logo readiness (2026-10-16)
+
+The interpretation-preview browser test now targets the authenticated workspace header before measuring its logo. The prior page-wide locator could capture the retiring site-header image during sign-in and return a null bounding box. The original minimum width and all other assertions remain intact; no product, auth, branding, CI or deployment behavior changes. The [verification record](verification/workspace-logo-readiness.md) separates the observed CI failure, controlled handoff/refusal probes and repeated original-scenario results.
+
 ## Repository engineering workflows (2026-10-16)
 
 Seven [repository-scoped engineering workflows](engineering/workflows.md) adapt a pinned Addy Osmani agent-skills revision for planning, implementation, debugging, verification, review, measured optimization and release-readiness assessment. Existing working agreements and the query protocol remain authoritative. The [verification record](verification/engineering-workflows.md) separates deterministic routing checks and synthetic walkthroughs from independent model or hosted acceptance. No runtime, clinical, database, CI gate, cancellation or deployment behavior changes.

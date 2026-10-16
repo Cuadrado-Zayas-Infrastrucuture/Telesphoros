@@ -66,7 +66,8 @@ test('reader may explore fixtures without receiving report permissions', async (
 test('attachments, nested image dialog, feedback and scroll controls remain local and keyboard accessible', async ({ page }, info) => {
   await signInAs(page, 'alice', '/local-interpretation');
   const network: string[] = []; page.on('request', request => { if (['fetch', 'xhr'].includes(request.resourceType())) network.push(new URL(request.url()).pathname); });
-  const brand = page.getByRole('img', { name: 'Telesphoros shield and Rx logo', exact: true });
+  // The URL can change before the signed-in workspace replaces the temporary site header.
+  const brand = page.locator('header.workspace-navigation').getByRole('img', { name: 'Telesphoros shield and Rx logo', exact: true });
   await expect(brand).toBeVisible(); expect((await brand.boundingBox())!.width).toBeGreaterThanOrEqual(64);
   await expect(page.getByRole('img', { name: 'Telesphoros mascot in a teal cloak', exact: true })).toHaveJSProperty('naturalWidth', 162);
   await expect(page.locator('[data-mascot-context="assistant"]')).toHaveAttribute('data-mascot-variant', 'centered');
