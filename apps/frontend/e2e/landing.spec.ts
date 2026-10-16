@@ -2,15 +2,27 @@ import { createRequire } from 'node:module';
 import { expect, test, type Page } from '@playwright/test';
 import { signInAs } from './helpers';
 const require = createRequire(import.meta.url);
-async function checkLayout(page: Page) {
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+async function axeViolations(page: Page) {
   await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
-  const violations = await page.evaluate(async () => {
+  return page.evaluate(async () => {
     // @ts-expect-error axe is injected in the test only.
     const results = await window.axe.run(document, { runOnly: ['wcag2a', 'wcag2aa', 'wcag21aa'] });
     return results.violations.map((item: { id: string; nodes: { target: string[] }[] }) => ({ id: item.id, targets: item.nodes.map(node => node.target) }));
   });
-  expect(violations).toEqual([]);
+}
+/** Time-based motion (the hero sequence, scene changes, the scroll cue) ends; scroll-linked drift has no end of its own. */
+async function settle(page: Page) {
+  await page.waitForFunction(() => document.getAnimations().every(animation => animation.timeline !== document.timeline || animation.playState !== 'running'));
+}
+/** Scroll the whole page in steps, as a reader would, so every section's entrance has run. */
+async function scrollThrough(page: Page) {
+  const height = await page.evaluate(() => document.documentElement.scrollHeight);
+  for (let top = 0; top < height; top += 400) { await page.evaluate(y => window.scrollTo(0, y), top); await page.waitForTimeout(40); }
+}
+async function checkLayout(page: Page) {
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  await settle(page);
+  expect(await axeViolations(page)).toEqual([]);
 }
 test('landing has static DNA, working anchors, readable responsive layout and honest preview', async ({ page }, info) => {
   await page.goto('/?mascot=centered');
@@ -63,13 +75,15 @@ test('landing has static DNA, working anchors, readable responsive layout and ho
   await page.getByRole('button', { name: 'VCF', exact: true }).click();
   expect(illustrationRequests).toEqual([]);
   await page.getByRole('region', { name: 'Add a report. Know what’s stored.' }).screenshot({ path: `../../docs/design/previews/workflow-${info.project.name}.png` });
-  // Load the below-fold original artwork before full-page evidence capture.
+  // Load the below-fold original artwork, and let every entrance run, before full-page evidence capture.
+  await scrollThrough(page);
   await page.getByRole('img', { name: 'Telesphoros mascot in a teal cloak' }).scrollIntoViewIfNeeded();
   await expect(page.getByRole('img', { name: 'Telesphoros mascot in a teal cloak' })).toHaveJSProperty('naturalWidth', 162);
   await page.evaluate(() => window.scrollTo(0, 0));
   await checkLayout(page);
   await page.getByRole('region', { name: 'Working toward less trial-and-error prescribing.' }).screenshot({ path: `../../docs/design/previews/landing-purpose-${info.project.name}.png` });
   await page.evaluate(() => window.scrollTo(0, 0));
+  await settle(page);
   await page.screenshot({ path: `../../docs/design/previews/landing-${info.project.name}.png`, fullPage: true });
   await page.screenshot({ path: `../../docs/design/previews/landing-hero-${info.project.name}.png` });
   for (const [label, hash] of [['Workspace', '#platform'], ['Workflow', '#workflow'], ['FAQ', '#questions']]) {
@@ -88,6 +102,60 @@ test('landing has static DNA, working anchors, readable responsive layout and ho
     await page.getByRole('button', { name, exact: true }).click();
     await checkLayout(page);
   }
+});
+test('landing motion is decorative, finite and leaves a complete still page for reduced motion', async ({ page }, info) => {
+  const apiRequests: string[] = [];
+  page.on('request', request => { if (/\/api\//.test(request.url())) apiRequests.push(request.url()); });
+  await page.goto('/');
+  await expect(page.locator('.product-landing')).toHaveClass(/is-motion/);
+  // During the hero sequence: entrances move text but never fade it, so contrast is real at every frame.
+  expect(await axeViolations(page)).toEqual([]);
+  await expect(page.getByRole('heading', { name: 'A clearer view of your PGx reports.' })).toBeVisible();
+  await expect(page.locator('.landing-headline .landing-line')).toHaveCount(2);
+  // Drawn elements are decoration only.
+  expect(await page.locator('.landing-particles--hero .landing-particle').count()).toBeGreaterThan(20);
+  await expect(page.locator('.landing-fragment')).toHaveCount(3);
+  for (const element of await page.locator('.landing-particles, .landing-fragment').all()) await expect(element).toHaveAttribute('aria-hidden', 'true');
+  // The approved artwork never moves.
+  await expect(page.locator('.landing-dna')).toHaveCSS('animation-name', 'none');
+  await expect(page.locator('.landing-dna img')).toHaveCSS('animation-name', 'none');
+  await expect(page.locator('.mascot-welcome-image')).toHaveCSS('animation-name', 'none');
+  expect(await page.locator('.landing-dna').evaluate(el => getComputedStyle(el).transform)).not.toBe('none');
+  // Nothing repeats forever, and the time-based motion ends.
+  expect(await page.evaluate(() => document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations === Infinity).length)).toBe(0);
+  await settle(page);
+  expect(await page.evaluate(() => new Promise<number>(resolve => {
+    let shift = 0;
+    new PerformanceObserver(list => { for (const entry of list.getEntries() as (PerformanceEntry & { value: number; hadRecentInput: boolean })[]) if (!entry.hadRecentInput) shift += entry.value; }).observe({ type: 'layout-shift', buffered: true });
+    setTimeout(() => resolve(shift), 200);
+  }))).toBeLessThan(0.01);
+  // Reading down the page plays each fragment once; the assistant sample ends on its fixed, labelled answer.
+  await scrollThrough(page);
+  await page.locator('#platform').scrollIntoViewIfNeeded();
+  await expect(page.locator('.landing-fragment-answer')).toBeVisible();
+  await expect(page.locator('.landing-fragment-answer')).toHaveText('Sample response. Not connected to your reports.');
+  // The walkthrough's digest is labelled fictional, and an incomplete upload has none.
+  await page.locator('#workflow').scrollIntoViewIfNeeded();
+  await page.getByRole('button', { name: 'Check', exact: true }).click();
+  await expect(page.locator('.workflow-checklist')).toContainText('SHA-256 9f2c…41ad · fictional example');
+  await page.getByRole('button', { name: 'Compare an incomplete upload', exact: true }).click();
+  await expect(page.locator('.workflow-checklist')).toContainText('Not available');
+  await checkLayout(page);
+  await page.locator('#platform').screenshot({ path: `../../docs/design/previews/landing-fragments-${info.project.name}.png` });
+  expect(apiRequests).toEqual([]);
+
+  // Reduced motion: no motion layer, nothing animating, and every element in its final place.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'A clearer view of your PGx reports.' })).toBeVisible();
+  await expect(page.locator('.product-landing')).not.toHaveClass(/is-motion/);
+  expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
+  await expect(page.locator('.landing-fragment-answer')).toBeVisible();
+  await expect(page.locator('.landing-fragment-typing')).toBeHidden();
+  for (const selector of ['.landing-headline .landing-line > span', '.landing-fragment-wire', '.landing-fragment-answer', '.landing-particles--hero .landing-particle > span']) {
+    for (const element of await page.locator(selector).all()) expect(await element.evaluate(el => getComputedStyle(el).transform)).toBe('none');
+  }
+  await checkLayout(page);
 });
 test('landing sign-in works and returning home includes the brand header', async ({ page }) => {
   await page.goto('/');
