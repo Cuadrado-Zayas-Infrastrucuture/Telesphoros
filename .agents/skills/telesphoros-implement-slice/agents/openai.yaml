@@ -1,0 +1,4 @@
+interface:
+  display_name: "Telesphoros: Implement a slice"
+  short_description: "Build one approved change and verify its behavior"
+  default_prompt: "Use $telesphoros-implement-slice to implement the approved pagination slice using existing contracts."

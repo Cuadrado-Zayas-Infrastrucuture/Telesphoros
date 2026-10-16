@@ -1,0 +1,4 @@
+interface:
+  display_name: "Telesphoros: Verify acceptance"
+  short_description: "Match acceptance claims to actual execution evidence"
+  default_prompt: "Use $telesphoros-verify to assess whether the migration has enough acceptance evidence."

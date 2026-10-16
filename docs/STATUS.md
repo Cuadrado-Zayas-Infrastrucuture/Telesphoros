@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-14**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Repository engineering workflows (2026-10-16)
+
+Seven [repository-scoped engineering workflows](engineering/workflows.md) adapt a pinned Addy Osmani agent-skills revision for planning, implementation, debugging, verification, review, measured optimization and release-readiness assessment. Existing working agreements and the query protocol remain authoritative. The [verification record](verification/engineering-workflows.md) separates deterministic routing checks and synthetic walkthroughs from independent model or hosted acceptance. No runtime, clinical, database, CI gate, cancellation or deployment behavior changes.
+
 ## CI dependency caching (proposed, 2026-10-16)
 
 The founder approved compiler/dependency cache improvements while preserving all six required checks and the policy that main runs are never cancelled. The [plan and verification](verification/ci-dependency-caching.md) cover setup-go's gitleaks inputs, a Playwright-version browser key, Docker dependency layers and a scoped BuildKit cache. Database tests, recovery profiles, scan commands, image attestations and deployment behavior are unchanged. Local and remote verification results are recorded there; no merge or deployment is authorized.

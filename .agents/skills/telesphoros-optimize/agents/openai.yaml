@@ -1,0 +1,4 @@
+interface:
+  display_name: "Telesphoros: Measure an optimization"
+  short_description: "Compare matched performance and cost measurements"
+  default_prompt: "Use $telesphoros-optimize to evaluate slow database CI without weakening recovery tests."

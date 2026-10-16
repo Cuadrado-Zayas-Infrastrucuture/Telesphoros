@@ -1,0 +1,4 @@
+interface:
+  display_name: "Telesphoros: Assess release readiness"
+  short_description: "Identify launch blockers and explicit release gates"
+  default_prompt: "Use $telesphoros-release-readiness to assess synthetic staging readiness without deploying anything."

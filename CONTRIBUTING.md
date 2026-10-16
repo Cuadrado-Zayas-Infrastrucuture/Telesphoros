@@ -12,6 +12,8 @@
 - Run `pnpm test:infra` after touching infrastructure/terraform: it fails if a security setting is weakened.
 - `CLAUDE.md` only points at the documents above; put rules there, not in it. `pnpm test:ci-config` fails if it names a file that does not exist.
 
+Reusable repository-scoped engineering skills and their evaluation commands are listed in [Engineering workflows](docs/engineering/workflows.md). They reference these working agreements and grant no additional permissions.
+
 ## Merging to `main`
 
 - `main` is protected by a ruleset (`.github/rulesets/main.json`, steps in [docs/ops/ci-cd.md](docs/ops/ci-cd.md)): a pull request is required, and
