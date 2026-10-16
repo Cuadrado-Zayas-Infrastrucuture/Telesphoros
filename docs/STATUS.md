@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-14**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## M5.1a browser-session custody (local, 2026-10-16)
+
+`feat/m51a-session-custody`, directly from main `7987a68`, adds the standalone encrypted session-custody primitives, migration 0026 and a tenant-scoped PostgreSQL repository. No auth route, cookie, frontend or runtime provider is enabled. All 50 new cases passed in each backend profile; profile totals were 2,136/2,368/2,388 passed with 253/21/1 expected skips and no missing-service notices. Worker 123, both F2/F3 validators across all profiles, typecheck/lint/build and three controlled defects passed. The migration/restore inventories and rollback controls include 0026 without weakening audit guards. [Design](design/plans/m5-1a-session-custody.md) and [verification](verification/m5-1a-session-custody.md). Original FD-7a and its current-main candidate, F06/F07 sources and combined reference are preserved. M5.1b/c auth/CSRF/browser integration remains open; no Actions/main backend wiring, push, PR, merge or deployment.
+
 ## Catalog policy guard correction (local, 2026-10-16)
 
 `fix/catalog-guard-role-matching`, from main `62675ca`, corrects the catalog test's role-prefix collision: role arrays remain arrays, complete role names are matched, and policy order cannot select the independent verifier as the tenant-scoped ledger role. The 18 new regression controls share the real guard's assertions. [Verification](verification/catalog-guard-role-matching.md) records focused PostgreSQL acceptance and the wider local checks. No database permissions, runtime behavior, Actions, main-backend wiring or deployment changes; FD-7a, F06/F07 and the combined reference are preserved.

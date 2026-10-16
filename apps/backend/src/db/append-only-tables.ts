@@ -32,6 +32,9 @@ export const MUTABLE_OPERATIONAL_TABLES = ['report_upload_runs','report_upload_a
  */
 export const AUTHORITY_TABLES = ['tenant_memberships', 'tenants', 'invitations'] as const;
 
+/** Short-lived encrypted browser credentials: tenant-scoped, immutable except terminal revocation; expired rows alone may be removed. */
+export const BROWSER_SESSION_TABLES = ['browser_sessions'] as const;
+
 /**
  * A clinic's identifiers for patients (migration 0020): tenant-isolated like the patient rows, holding only keyed digests. The one change a row
  * takes is active to withdrawn, once, with the person who did it; nothing is deleted.
@@ -65,4 +68,4 @@ export const JOB_TABLES = ['jobs', 'job_attempts', 'job_schedules', 'job_workers
 export const OUTBOX_TABLES = ['outbox_events', 'outbox_routes'] as const;
 export const VERIFICATION_TABLES = ['file_verifications'] as const;
 
-export const ALL_CLASSIFIED_TABLES: readonly string[] = [...Object.values(APPEND_ONLY_CLASSES).flat(), ...LEGACY_TABLES, ...MUTABLE_OPERATIONAL_TABLES, ...AUTHORITY_TABLES, ...PATIENT_IDENTITY_TABLES, ...PATIENT_DUPLICATE_TABLES, ...SECURITY_AUDIT_TABLES, ...JOB_TABLES, ...OUTBOX_TABLES, ...VERIFICATION_TABLES];
+export const ALL_CLASSIFIED_TABLES: readonly string[] = [...Object.values(APPEND_ONLY_CLASSES).flat(), ...LEGACY_TABLES, ...MUTABLE_OPERATIONAL_TABLES, ...AUTHORITY_TABLES, ...BROWSER_SESSION_TABLES, ...PATIENT_IDENTITY_TABLES, ...PATIENT_DUPLICATE_TABLES, ...SECURITY_AUDIT_TABLES, ...JOB_TABLES, ...OUTBOX_TABLES, ...VERIFICATION_TABLES];

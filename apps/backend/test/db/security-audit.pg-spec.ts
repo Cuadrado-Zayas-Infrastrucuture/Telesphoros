@@ -102,7 +102,7 @@ it('refuses rollback of populated audit evidence without deleting it', async () 
   const before = await withAdmin(pg.adminUrl, async c => (await c.query('SELECT count(*)::int AS n FROM security_audit_events')).rows[0].n as number);
   expect(before).toBeGreaterThan(0);
   // The newer migrations (0021 merges, 0020 patient links, 0019 tenants, 0018 security events, 0017 membership) also refuse to be dropped with rows in them; allow those two on purpose so the audit table's own guard is what is tested.
-  await expect(withAdmin(pg.adminUrl, async c => { await c.query(`SET telesphoros.allow_membership_drop = 'yes'`); await c.query(`SET telesphoros.allow_audit_drop = 'yes'`); return migrateDown(c, 10); })).rejects.toThrow(/Refusing to drop populated security audit events/);
+  await expect(withAdmin(pg.adminUrl, async c => { await c.query(`SET telesphoros.allow_membership_drop = 'yes'`); await c.query(`SET telesphoros.allow_audit_drop = 'yes'`); return migrateDown(c, 11); })).rejects.toThrow(/Refusing to drop populated security audit events/);
   await withAdmin(pg.adminUrl, c => migrateUp(c)); // 0021, 0020, 0019, 0018 and 0017 were reverted on the way to the audit migration's guard: put them back (their rows were removed with them, which this test does not use)
   const after = await withAdmin(pg.adminUrl, async c => (await c.query('SELECT count(*)::int AS n FROM security_audit_events')).rows[0].n as number);
   expect(after).toBe(before);

@@ -87,7 +87,11 @@ describe('the membership table', () => {
     await owner(async (c) => {
       await insert(c, TENANT, who);
       await expect(c.query('DELETE FROM tenant_memberships WHERE sub = $1', [who])).rejects.toMatchObject({ code: '23000' });
-      await expect(c.query('TRUNCATE tenant_memberships')).rejects.toMatchObject({ code: '23000' });
+      // Session custody references memberships: PostgreSQL refuses plain TRUNCATE before triggers run.
+      await expect(c.query('TRUNCATE tenant_memberships')).rejects.toMatchObject({ code: '0A000' });
+      // Explicitly reach the tombstone trigger too; CASCADE must not bypass it.
+      await expect(c.query('TRUNCATE tenant_memberships CASCADE')).rejects.toMatchObject({ code: '23000' });
+      expect((await c.query('SELECT count(*)::int AS n FROM tenant_memberships WHERE tenant_id=$1 AND sub=$2', [TENANT, who])).rows[0].n).toBe(1);
       await expect(c.query('UPDATE tenant_memberships SET sub = $2 WHERE sub = $1', [who, 'someone-else'])).rejects.toMatchObject({ code: '23000' });
       await expect(c.query('UPDATE tenant_memberships SET tenant_id = $2 WHERE sub = $1', [who, 'tenant-elsewhere'])).rejects.toMatchObject({ code: '23000' });
       await c.query(`UPDATE tenant_memberships SET tokens_valid_after = now() WHERE sub = $1`, [who]);
