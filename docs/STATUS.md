@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-14**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Browser logo readiness (2026-10-16)
+
+The interpretation-preview browser test now targets the authenticated workspace header before measuring its logo. The prior page-wide locator could capture the retiring site-header image during sign-in and return a null bounding box. The original minimum width and all other assertions remain intact; no product, auth, branding, CI or deployment behavior changes. The [verification record](verification/workspace-logo-readiness.md) separates the observed CI failure, controlled handoff/refusal probes and repeated original-scenario results.
+
 ## CI dependency caching (proposed, 2026-10-16)
 
 The founder approved compiler/dependency cache improvements while preserving all six required checks and the policy that main runs are never cancelled. The [plan and verification](verification/ci-dependency-caching.md) cover setup-go's gitleaks inputs, a Playwright-version browser key, Docker dependency layers and a scoped BuildKit cache. Database tests, recovery profiles, scan commands, image attestations and deployment behavior are unchanged. Local and remote verification results are recorded there; no merge or deployment is authorized.
