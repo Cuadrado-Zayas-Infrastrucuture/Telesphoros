@@ -137,3 +137,47 @@ snapshots are retained externally in `catalog-guard-status-resolution`. The owne
 cluster is stopped after verification, with its data and logs retained. Local
 verification does not establish exact-head GitHub CI or hosted acceptance.
 No push, PR, deployment, Actions or main-wiring change is authorized by this work.
+
+## PR #143 duplicate-assertion repair (local, 2026-10-16)
+
+PR #142 is merged into main at `365d8ff`. PR #143's later main merge,
+`efe7dc98f200414ef8ff760aad2dc7cc50db5e0c`, retained the array query and canonical
+helper call alongside the previous inline assertions. Its old ledger lookup
+compared `string[]` to `'{telesphoros_ledger}'`, causing TS2367 and a failed catalog
+assertion. Prior verification at `4947957` did not cover that merged spec.
+
+The founder approved a local repair and all 53 focused tests, typecheck and lint.
+Work is on `fix/catalog-guard-duplicate-assertions`, directly from the inspected
+OPEN PR head `efe7dc9`; the original local `fix/catalog-guard-role-matching` branch
+remains at `4947957`. No merge or history rewrite was performed for this repair.
+
+Before editing, backend typecheck reproduced TS2367 at `(171,38)`, native exit 2.
+The full selected test baseline ran on real PostgreSQL: 52 passed, one catalog
+assertion failed, native exit 1. The repair removes nine duplicate inline lines.
+The shared helper is the single assertion path per table and retains exact role
+membership, cardinality one, application tenant USING/WITH CHECK, verifier SELECT
+and ledger tenant/SELECT checks. Both the 34-probe spec and helper are byte-for-byte
+unchanged; the corrected catalog spec matches the previously verified `4947957`.
+
+| Fresh verification | Result |
+| --- | --- |
+| Assertion probes | 34 passed |
+| Real PostgreSQL catalog tests | 19 passed |
+| Selected tests overall | 53 passed; zero failures/skips |
+| Backend typecheck | Native exit 0 |
+| Backend lint | Native exit 0 |
+
+Verification used pinned Node 22.22.0/pnpm 10.28.0 and a fresh synthetic PostgreSQL
+16/SCRAM loopback cluster on port 58761. Only that owned cluster was stopped after
+verification; data/logs were retained. Existing services were untouched. Complete
+producer stdout/stderr, native exits, JSON case results, baseline failures, fixed
+source hashes and protected snapshots are retained externally in
+`pr143-duplicate-assertions-fix`.
+
+These are local working-tree results whose verified bytes match the local repair
+commit. The ordinary Jest config announced unselected S3 suites were not running;
+no selected test skipped. Full profiles, worker, recovery, build/image and GitHub
+CI were not rerun for this focused repair. The remote PR remains unmodified and
+needs separately authorized publication plus all six exact-head required checks.
+No Actions, main wiring, runtime, migrations, protected-source, push, PR metadata,
+merge or deployment changes are included.

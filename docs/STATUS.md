@@ -9,6 +9,8 @@ Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and
 
 The 16 additional review probes are now permanent in the same spec, for 34 assertion tests. Fresh focused verification passed all 34 plus 19 real PostgreSQL catalog tests (53 total), backend typecheck and lint. Two isolated defect controls failed as intended. S3/full-profile/worker/recovery checks were not rerun for this test-only follow-up; their earlier evidence remains separately identified. No publication or deployment is authorized.
 
+After #142 merged, #143's main merge at `efe7dc9` retained duplicate inline assertions alongside the array-based helper. Its serialized-role comparison failed typecheck and the real catalog test. A local repair on `fix/catalog-guard-duplicate-assertions` removes only that redundant block, preserving all 34 probes and the shared tenant/SELECT safeguards. The original failures were reproduced; fresh 53/53 focused tests, typecheck and lint pass. This repair is not pushed; Actions/main wiring and protected references remain unchanged.
+
 ## Browser logo readiness (2026-10-16)
 
 The interpretation-preview browser test now targets the authenticated workspace header before measuring its logo. The prior page-wide locator could capture the retiring site-header image during sign-in and return a null bounding box. The original minimum width and all other assertions remain intact; no product, auth, branding, CI or deployment behavior changes. The [verification record](verification/workspace-logo-readiness.md) separates the observed CI failure, controlled handoff/refusal probes and repeated original-scenario results.

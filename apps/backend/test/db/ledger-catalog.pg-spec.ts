@@ -161,15 +161,6 @@ describe('catalog guard: the audit tables are classified and protected as their 
       `SELECT tablename, policyname, roles::text[] AS roles, cmd, qual, with_check FROM pg_policies WHERE schemaname = 'public'`);
     for (const table of TENANT_POLICIED) {
       expectRecordTablePolicies(table, pol);
-      const own = pol.filter((p) => p.tablename === table);
-      const app = own.find((p) => p.roles.includes('telesphoros_app'));
-      expect([table, app?.qual, app?.with_check]).toEqual([table, expect.stringContaining('app.current_tenant_id'), expect.stringContaining('app.current_tenant_id')]);
-      const verifier = own.find((p) => p.roles.includes('telesphoros_ledger_verifier'));
-      expect([table, verifier?.cmd]).toEqual([table, 'SELECT']);
-      // Forced row-level security blinds even an owner: without its own policy the ledger functions would read ZERO rows of this table.
-      // Match the role exactly: 'telesphoros_ledger' is also a prefix of telesphoros_ledger_verifier and _operator, whose policies read USING (true), and pg_policies has no guaranteed row order.
-      const ledger = own.find((p) => p.roles === '{telesphoros_ledger}');
-      expect([table, ledger?.cmd, ledger?.qual]).toEqual([table, 'SELECT', expect.stringContaining('app.current_tenant_id')]);
     }
   });
 
