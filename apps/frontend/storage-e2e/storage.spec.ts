@@ -2,12 +2,13 @@ import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
-import { openWorkspaceNavigation, signInAs, signInWithPatient } from '../e2e/helpers';
+import { openWorkspaceNavigation, selectReportsPatient, signInAs, signInWithPatient } from '../e2e/helpers';
+const STORAGE_ORIGIN = process.env.E2E_REPORT_STORAGE_ORIGIN ?? 'http://127.0.0.1:5557';
 
 async function storageInventory() {
   const require = createRequire(new URL('../../backend/package.json', import.meta.url));
   const { S3Client, ListObjectVersionsCommand } = require('@aws-sdk/client-s3');
-  const client = new S3Client({ endpoint: 'http://127.0.0.1:5557', region: 'us-east-1', forcePathStyle: true, credentials: { accessKeyId: 'synthetic', secretAccessKey: 'synthetic' } });
+  const client = new S3Client({ endpoint: STORAGE_ORIGIN, region: 'us-east-1', forcePathStyle: true, credentials: { accessKeyId: 'synthetic', secretAccessKey: 'synthetic' } });
   const versions: string[] = []; let keyMarker: string | undefined; let versionMarker: string | undefined;
   try {
     for (let page = 0; page < 100; page++) {
@@ -51,7 +52,7 @@ for (const sample of samples) test(`${sample.type}: browser intake, verified att
   const fixture = await signInWithPatient(page);
   let storagePuts = 0; let authenticatedGets = 0; let downloadedVersion = false;
   page.on('request', req => {
-    if (new URL(req.url()).port === '5557') {
+    if (new URL(req.url()).origin === STORAGE_ORIGIN) {
       if (req.method() === 'PUT') storagePuts++;
       if (req.headers().authorization || req.headers().cookie || req.headers().referer) authenticatedGets++;
       if (req.method() === 'GET') downloadedVersion ||= new URL(req.url()).searchParams.has('versionId');
@@ -127,6 +128,7 @@ test('reader sees metadata but cannot request a file or upload', async ({ page }
   await fill(page, fixture.id, samples[2]!); await page.getByRole('button', { name: 'Upload report', exact: true }).click();
   await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
   const report = (await rows(page, fixture))[0];
+  await openWorkspaceNavigation(page);
   await page.getByRole('button', { name: /sign out/i }).click();
   const me = page.waitForResponse(res => res.url().endsWith('/api/v1/me'));
   await signInAs(page, 'bob', '/reports');
@@ -149,8 +151,10 @@ test('reports pagination, keyboard download, reviewer access and accessibility',
     const response = await page.request.post(`${fixture.api}/api/v1/reports`, { headers: fixture.headers, data: { patientId: fixture.id, type: 'structured', filename: `page-${index}.json`, sizeBytes: 2 } });
     expect(response.status()).toBe(201);
   }
+  await openWorkspaceNavigation(page);
   await page.getByRole('button', { name: /sign out/i }).click();
   await signInAs(page, 'gina', '/reports');
+  await selectReportsPatient(page, fixture);
   await expect(page.getByRole('button', { name: 'Next report page', exact: true })).toHaveAttribute('aria-disabled', 'false');
   const require = createRequire(import.meta.url);
   await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
@@ -165,18 +169,32 @@ test('reports pagination, keyboard download, reviewer access and accessibility',
   const downloaded = page.waitForEvent('download'); await page.keyboard.press('Enter');
   expect(await readFile((await (await downloaded).path())!)).toEqual(sample.bytes);
   await page.screenshot({ path: `test-results/l2-reports-${test.info().project.name}.png`, fullPage: true });
+  await page.getByRole('button', { name: 'Back to reports', exact: true }).click();
   await openWorkspaceNavigation(page);
   await page.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Synthetic report storage' })).toBeVisible();
-  await expect(page.getByRole('contentinfo')).toContainText('Clinical processing is disabled');
+  await expect(page.getByRole('main')).toContainText('clinical processing is disabled');
   await expect(page.getByRole('link', { name: 'Upload a synthetic report' })).toHaveCount(0);
   await page.context().clearCookies(); await signInAs(page, 'gina', '/reports/upload');
   await expect(page.getByRole('heading', { name: /do not have access/i })).toBeVisible();
 });
 
-test('a reload during the transfer finishes the same upload against the real database and bucket: one report, one stored version', async ({ page }) => {
+test('a reload during the transfer recovers and downloads the same report: one upload, one pinned stored version', async ({ page }) => {
   const fixture = await signInWithPatient(page); const sample = samples[1]!;
   const before = await storageInventory();
+  const storageRequests: { method: string; version: string | null; authenticated: boolean }[] = [];
+  page.on('request', request => {
+    const url = new URL(request.url());
+    if (url.origin !== STORAGE_ORIGIN) return;
+    const headers = request.headers();
+    storageRequests.push({ method: request.method(), version: url.searchParams.get('versionId'),
+      authenticated: !!(headers.authorization || headers.cookie || headers.referer) });
+  });
+  const recoveryIdentity = () => page.evaluate(() => {
+    const entry = JSON.parse(sessionStorage.getItem('telesphoros.upload-recovery.v2') ?? 'null');
+    return entry && { requestId: entry.requestId, reportId: entry.reportId, declaration: entry.declaration,
+      attemptId: entry.attempt?.attemptId, savedAt: entry.savedAt };
+  });
   let seen!: () => void; const arrived = new Promise<void>(resolve => { seen = resolve; });
   let release!: () => void; const released = new Promise<void>(resolve => { release = resolve; });
   let first = true;
@@ -188,12 +206,16 @@ test('a reload during the transfer finishes the same upload against the real dat
   await page.getByRole('button', { name: 'Upload report', exact: true }).click();
   await arrived;
   expect(await storageInventory()).toEqual(before); // nothing is in the bucket yet
+  const interrupted = await recoveryIdentity();
+  expect(interrupted).toMatchObject({ requestId: expect.any(String), reportId: expect.any(String),
+    declaration: expect.any(Object), attemptId: expect.any(String), savedAt: expect.any(String) });
   release();
   await page.reload();
   await expect(page).toHaveURL(/\/signin$/);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL('**/reports/upload');
   await expect(page.getByText('An upload was interrupted')).toBeVisible();
+  expect(await recoveryIdentity()).toEqual(interrupted);
   for (let attempts = 0; attempts < 100; attempts++) { // the patient list is paged and starts on page 1 again after a reload
     await expect(page.getByRole('button', { name: 'Refresh patients' })).toBeEnabled();
     if (await page.getByRole('option', { name: fixture.label, exact: true }).count()) break;
@@ -206,5 +228,30 @@ test('a reload during the transfer finishes the same upload against the real dat
   await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
   const reports = await rows(page, fixture);
   expect(reports).toHaveLength(1); expect(reports[0].fileUploaded).toBe(true);
-  expect((await storageInventory()).length - before.length).toBe(1); // exactly one stored version, from the one report
+  const digest = createHash('sha256').update(sample.bytes).digest('hex');
+  expect(reports[0]).toMatchObject({ id: interrupted.reportId, sizeBytes: sample.bytes.length, sha256: digest, contentType: sample.mime });
+  expect(await recoveryIdentity()).toBeNull();
+  const after = await storageInventory();
+  expect(after.length - before.length).toBe(1); // exactly one stored version, from the one report
+  const stored = after.filter(version => !before.includes(version));
+  expect(stored).toHaveLength(1);
+
+  await page.getByRole('link', { name: 'View reports' }).click();
+  await selectReportsPatient(page, fixture);
+  const details = await findReport(page, reports[0].id);
+  const downloaded = page.waitForEvent('download');
+  await details.getByRole('button', { name: `Download ${sample.name}`, exact: true }).click();
+  const download = await downloaded;
+  expect(download.suggestedFilename()).toBe(sample.name);
+  const bytes = await readFile((await download.path())!);
+  expect(bytes).toEqual(sample.bytes);
+  expect(bytes.length).toBe(reports[0].sizeBytes);
+  expect(createHash('sha256').update(bytes).digest('hex')).toBe(digest);
+  expect(storageRequests.filter(request => request.method === 'PUT')).toHaveLength(0);
+  expect(storageRequests.some(request => request.authenticated)).toBe(false);
+  const gets = storageRequests.filter(request => request.method === 'GET');
+  expect(gets).toHaveLength(1);
+  expect(gets[0]!.version).toBeTruthy();
+  expect(stored[0]!.endsWith(':' + gets[0]!.version)).toBe(true);
+  expect(await storageInventory()).toEqual(after);
 });

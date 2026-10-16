@@ -54,6 +54,15 @@ run "default_variables_plan" {
   command = plan
 
   assert {
+    condition     = toset(one(aws_s3_bucket_cors_configuration.reports.cors_rule).allowed_methods) == toset(["GET"])
+    error_message = "reports CORS must permit signed GET downloads only; uploads use the API"
+  }
+  assert {
+    condition     = toset(one(aws_s3_bucket_cors_configuration.reports.cors_rule).allowed_origins) == toset(var.reports_cors_origins)
+    error_message = "reports CORS must use exactly the configured browser origins"
+  }
+
+  assert {
     condition     = var.deployment_profile == "production"
     error_message = "the default profile must be production, so a forgotten variable can never select the relaxed one"
   }
@@ -419,4 +428,140 @@ run "refuses_production_without_deletion_protection" {
   }
 
   expect_failures = [aws_db_instance.main]
+}
+
+run "refuse_reports_cors_wildcard" {
+  command = plan
+  variables {
+    reports_cors_origins = ["https://*.example.test"]
+  }
+  expect_failures = [var.reports_cors_origins]
+}
+
+run "refuse_reports_cors_path" {
+  command = plan
+  variables {
+    reports_cors_origins = ["https://app.example.test/reports"]
+  }
+  expect_failures = [var.reports_cors_origins]
+}
+
+run "refuse_reports_cors_http" {
+  command = plan
+  variables {
+    reports_cors_origins = ["http://app.example.test"]
+  }
+  expect_failures = [var.reports_cors_origins]
+}
+
+# Origin regression corpus: exercise native Terraform validation, including control characters.
+# Every run plans with the mocked providers above; approved origins must remain exact and GET-only.
+run "refuses_reports_cors_origin_empty_list" {
+  command = plan
+  variables {
+    reports_cors_origins = []
+  }
+  expect_failures = [var.reports_cors_origins]
+}
+
+run "refuses_reports_cors_origin_http_scheme" {
+  command = plan
+  variables {
+    reports_cors_origins = ["http://app.example.test"]
+  }
+  expect_failures = [var.reports_cors_origins]
+}
+
+run "refuses_reports_cors_origin_wildcard_host" {
+  command = plan
+  variables {
+    reports_cors_origins = ["https://*.example.test"]
+  }
+  expect_failures = [var.reports_cors_origins]
+}
+
+run "refuses_reports_cors_origin_path" {
+  command = plan
+  variables {
+    reports_cors_origins = ["https://app.example.test/path"]
+  }
+  expect_failures = [var.reports_cors_origins]
+}
+
+run "refuses_reports_cors_origin_query" {
+  command = plan
+  variables {
+    reports_cors_origins = ["https://app.example.test?x=1"]
+  }
+  expect_failures = [var.reports_cors_origins]
+}
+
+run "refuses_reports_cors_origin_fragment" {
+  command = plan
+  variables {
+    reports_cors_origins = ["https://app.example.test#x"]
+  }
+  expect_failures = [var.reports_cors_origins]
+}
+
+run "refuses_reports_cors_origin_userinfo" {
+  command = plan
+  variables {
+    reports_cors_origins = ["https://synthetic@app.example.test"]
+  }
+  expect_failures = [var.reports_cors_origins]
+}
+
+run "refuses_reports_cors_origin_trailing_newline" {
+  command = plan
+  variables {
+    reports_cors_origins = ["https://app.example.test\n"]
+  }
+  expect_failures = [var.reports_cors_origins]
+}
+
+run "refuses_reports_cors_origin_header_injection" {
+  command = plan
+  variables {
+    reports_cors_origins = ["https://app.example.test\r\nX:y"]
+  }
+  expect_failures = [var.reports_cors_origins]
+}
+
+run "refuses_reports_cors_origin_backslash_host" {
+  command = plan
+  variables {
+    reports_cors_origins = ["https://app.example.test\\evil.invalid"]
+  }
+  expect_failures = [var.reports_cors_origins]
+}
+
+run "refuses_reports_cors_origin_encoded_separator" {
+  command = plan
+  variables {
+    reports_cors_origins = ["https://app.example.test%2f.evil.invalid"]
+  }
+  expect_failures = [var.reports_cors_origins]
+}
+
+run "preserves_reports_cors_exact_https_origin" {
+  command = plan
+  variables {
+    reports_cors_origins = ["https://app.example.test"]
+  }
+  assert {
+    condition     = toset(one(aws_s3_bucket_cors_configuration.reports.cors_rule).allowed_origins) == toset(var.reports_cors_origins) && toset(one(aws_s3_bucket_cors_configuration.reports.cors_rule).allowed_methods) == toset(["GET"])
+    error_message = "Exact approved origins and GET-only contract must survive planning"
+  }
+}
+
+run "preserves_reports_cors_exact_https_origin_with_port" {
+  command = plan
+  variables {
+    reports_cors_origins = ["https://api-1.example.test:8443"]
+  }
+  assert {
+    condition     = toset(one(aws_s3_bucket_cors_configuration.reports.cors_rule).allowed_origins) == toset(var.reports_cors_origins) && toset(one(aws_s3_bucket_cors_configuration.reports.cors_rule).allowed_methods) == toset(["GET"])
+    error_message = "Exact approved origins and GET-only contract must survive planning"
+  }
 }

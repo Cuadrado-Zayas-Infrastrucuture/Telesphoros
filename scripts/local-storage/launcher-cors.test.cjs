@@ -5,7 +5,7 @@ const { verifyLauncher } = require('./launcher-cors-fixture.cjs');
 for (const kind of ['owned', 'review']) {
   test(kind + ': actual child environment and bucket policy enforce real browser origin boundaries', { timeout: 30000 }, async () => {
     const result = await verifyLauncher(kind);
-    assert.equal(result.method, kind === 'owned' ? 'GET' : 'PUT');
+    assert.equal(result.method, 'GET');
     assert.ok(Object.entries(result).filter(([key]) => !['kind', 'method'].includes(key)).every(([, value]) => value === true));
   });
   test(kind + ': deleting its child CORS setting is detected by the native refusal control', { timeout: 30000 }, async () => {

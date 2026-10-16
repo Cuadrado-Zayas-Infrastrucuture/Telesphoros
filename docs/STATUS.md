@@ -3,9 +3,13 @@
 Read this first to pick the project up. Snapshot: **2026-10-14**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
-## F06 publication candidate (local, 2026-10-16)
+## F07 publication candidate (local, 2026-10-16)
 
-`fix/f06-upload-recovery-publication` starts from main `75bdc20` and ports F06 runtime `0a45405`, seven permanent races from `fe4251b`, and all 12 recovery-to-download unit probes from `86fb1ca`: **19 promoted probes**. It preserves both merged #111 page retirement and F06 session retirement, verified caller/tenant binding, the original one-hour recovery deadline, roles-only `/me`, separate recovery capability and genuine-404 memory-only fallback. F07 CORS, launchers and its real-storage browser bridge remain separate. Both source integration branches and the combined reference are preserved. The [F06 verification record](verification/f06-upload-recovery.md) separates historical evidence from the fresh candidate's external receipt; no push, PR, merge, deployment or hosted acceptance is claimed.
+`fix/f07-download-cors-publication` starts from current main `6f2ddaa`, after F06 PR #131 and the FD-7 documentation PR #132 merged. It ports F07 from `a4ca244`, including all **38 promoted origin probes**, the shared GET-only storage policy and parity in both the owned and older review launchers. The real-storage browser bridge from `60f1795` verifies recovery through reload and same-caller sign-in to an exact-version download. Both source integration branches and the combined reference remain preserved. The [F07 verification record](verification/f07-download-cors.md) defines the candidate checks and separates earlier evidence from fresh results recorded externally. No push, PR, Terraform apply or deployment is authorized by this local preparation.
+
+## F06 merged with PR #131 (2026-10-16)
+
+Main `11f9157` contains the approved `b668f02` F06 content and all **19 promoted recovery probes**. Independent page/session retirement, verified caller/tenant binding, the original one-hour deadline, roles-only `/me`, separate recovery capability and genuine-404 memory-only compatibility remain unchanged by F07. See the [F06 verification record](verification/f06-upload-recovery.md). Earlier local-only wording below describes historical captures; cached JavaScript still needs refresh to obtain these safeguards. Merged code is not hosted acceptance.
 
 ## Dashboard sidebar and guided workflows (local, 2026-10-15)
 

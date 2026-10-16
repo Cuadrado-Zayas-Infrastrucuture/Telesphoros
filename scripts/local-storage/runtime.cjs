@@ -2,6 +2,7 @@ const fs = require('node:fs'); const path = require('node:path');
 const { randomUUID } = require('node:crypto'); const { fork, execFileSync } = require('node:child_process');
 const o = require('./ownership.cjs');
 const s = require('./services.cjs');
+const { reportsCorsRule } = require('./cors.cjs');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const ports = { postgres: 54481, moto: 5557, api: 3010, idp: 4010, web: 4173 };
 function environment(m) {
@@ -87,7 +88,7 @@ async function setup({ failAfter } = {}) {
     try {
       await client.send(new sdk.CreateBucketCommand({ Bucket: m.bucket, CreateBucketConfiguration: { LocationConstraint: 'us-east-2' } }));
       await client.send(new sdk.PutBucketVersioningCommand({ Bucket: m.bucket, VersioningConfiguration: { Status: 'Enabled' } }));
-      await client.send(new sdk.PutBucketCorsCommand({ Bucket: m.bucket, CORSConfiguration: { CORSRules: [{ AllowedOrigins: [`http://127.0.0.1:${m.ports.web}`], AllowedMethods: ['GET', 'HEAD'], AllowedHeaders: ['*'], ExposeHeaders: ['Content-Length', 'ETag'] }] } }));
+      await client.send(new sdk.PutBucketCorsCommand({ Bucket: m.bucket, CORSConfiguration: { CORSRules: [reportsCorsRule(`http://127.0.0.1:${m.ports.web}`)] } }));
     } finally { client.destroy(); }
     if (failAfter === 'moto') throw new Error('Injected partial setup failure');
     for (const name of ['idp', 'api', 'web']) { await launch(m, name); await ready(m, name); }
