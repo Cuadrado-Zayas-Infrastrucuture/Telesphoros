@@ -3,9 +3,9 @@
 Read this first to pick the project up. Snapshot: **2026-10-14**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
-## F06 local integration (2026-10-15)
+## F06 publication candidate (local, 2026-10-16)
 
-`fix/f06-recovery-integration` started independently from main `b272c75` and was refreshed onto main `75bdc20` after #129 merged and carries reviewed F06 `cf10828` while preserving merged #111's separate upload-page lifetime. Recovery metadata is bound to the verified caller/tenant and a fixed one-hour deadline; roles-only `/me` stays unchanged, with scope negotiated through `/me/recovery-scope`. Only a genuine capability 404 selects memory-only fallback. Page and sign-in retirement both reject late work, including response bodies. F07 is unchanged and remains separate. Verification is recorded in [the F06 receipt](verification/f06-upload-recovery.md). This is local integration only, not a merged, deployed or hosted acceptance claim.
+`fix/f06-upload-recovery-publication` starts from main `75bdc20` and ports F06 runtime `0a45405`, seven permanent races from `fe4251b`, and all 12 recovery-to-download unit probes from `86fb1ca`: **19 promoted probes**. It preserves both merged #111 page retirement and F06 session retirement, verified caller/tenant binding, the original one-hour recovery deadline, roles-only `/me`, separate recovery capability and genuine-404 memory-only fallback. F07 CORS, launchers and its real-storage browser bridge remain separate. Both source integration branches and the combined reference are preserved. The [F06 verification record](verification/f06-upload-recovery.md) separates historical evidence from the fresh candidate's external receipt; no push, PR, merge, deployment or hosted acceptance is claimed.
 
 ## Dashboard sidebar and guided workflows (local, 2026-10-15)
 

@@ -1,4 +1,14 @@
-# F06 local integration verification — 2026-10-15
+# F06 verification — publication candidate and historical integration
+
+## Fresh publication candidate — 2026-10-16
+
+Branch `fix/f06-upload-recovery-publication` is freshly based on fetched main `75bdc20`, carrying runtime `0a45405`, races `fe4251b`, and test-only `86fb1ca`. All **19 promoted probes** are permanent: six delayed-body/stale-404 page/session races, one stale-role-body race, three recovered-state downloads, four download refusals preserving newer recovery, four retirement-before-download races, and one memory-only reconciliation/download. The 12 unit probes use the existing download implementation; they do not depend on F07's policy changes.
+
+The fresh verification plan covers five focused frontend suites; full frontend, branding/preview and shared tests; workspace build/typecheck/lint; controller and memory/real-PostgreSQL-S3 authority/upload tests; default and enabled built-browser auth/upload/reload/navigation; and all four old/new UI/API combinations, including a genuine old-API capability 404. The F07 real-storage browser bridge and policy/launcher checks remain in the later intention. Fresh execution results, final candidate hash, exact commands/exits and preservation/cleanup proof belong to the external `f06-publication-local-verification` receipt. The historical counts below are not claims about this candidate. No remote CI, hosted or clinical acceptance is claimed.
+
+Both source integration branches and combined `86fb1ca` remain preserved. No dependencies, CORS/infrastructure, schema, roles, retention or clinical behavior change is included.
+
+## Historical integration evidence — 2026-10-15
 
 Local branch: `fix/f06-recovery-integration`. Reviewed source: `cf10828`. Initial baseline: `b272c75`; refreshed baseline: `75bdc20` after #129 merged. Existing F06 and both F07 branches remain untouched. No push, PR, deployment, live provider or clinical acceptance.
 
