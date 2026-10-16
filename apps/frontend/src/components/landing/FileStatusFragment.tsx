@@ -1,6 +1,6 @@
 import { FileText } from 'lucide-react';
 
-const statusRows = [
+export const statusRows = [
   { name: 'SYN-001.vcf', status: 'Server verified', verified: true },
   { name: 'SYN-002.json', status: 'Not complete', verified: false },
   { name: 'SYN-003.vcf', status: 'Received', verified: false },

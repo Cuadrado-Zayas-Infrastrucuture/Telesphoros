@@ -106,3 +106,34 @@ tested source hashes and protected-state snapshots are retained in the external
 `catalog-guard-permanent-probes` evidence directory. Publication still requires
 separate approval and the six exact-head CI checks. FD-7a, F06/F07 and the combined
 reference remain protected; no Actions or main-backend wiring change is included.
+
+## Local current-main conflict resolution (2026-10-16)
+
+The founder approved resolving the status-document conflict found between local
+`8cecb6a` and current main `683867a442471b29f89b6f945cece755f527aad4`.
+Main was merged locally into `fix/catalog-guard-role-matching`; no history was
+rewritten. The only conflicting path was `docs/STATUS.md`. Its resolved contents
+are exactly current main's status document plus the candidate's complete catalog
+section. Both that section and main's browser-logo-readiness section are retained
+verbatim; the remaining main status content is preserved.
+
+All three catalog test/helper files are byte-identical to `8cecb6a`, retaining all
+34 assertion probes and the original tenant/SELECT safeguards. Relative to the
+merged main, the candidate still changes only those three test files and the
+three existing status/verification/session records. Actions, main-backend wiring,
+runtime, migrations, frontend and packages have no candidate diff against main.
+
+Fresh focused verification on the resolved working tree passed **53/53 tests**:
+34 assertion probes plus 19 real PostgreSQL catalog tests, with no selected skips.
+Backend typecheck and lint passed. This used pinned Node 22.22.0/pnpm 10.28.0 and
+a fresh task-owned PostgreSQL 16/SCRAM cluster on loopback port 58751 with only
+synthetic fixtures. The ordinary Jest configuration announced unselected S3
+suites were not running; no whole-profile/S3 acceptance is claimed. The prior
+defect controls and wider verification remain historical results, not fresh runs.
+
+Main was rechecked after verification and remained `683867a`. Complete permitted
+outputs, native exits, source hashes, section-preservation checks and protected
+snapshots are retained externally in `catalog-guard-status-resolution`. The owned
+cluster is stopped after verification, with its data and logs retained. Local
+verification does not establish exact-head GitHub CI or hosted acceptance.
+No push, PR, deployment, Actions or main-wiring change is authorized by this work.

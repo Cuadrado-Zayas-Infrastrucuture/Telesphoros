@@ -12,7 +12,7 @@ been inspected or changed by this implementation. Company source/project is stil
 | `cuadradozayasinfrastructure.com` | Company Vercel project | Confirm exact zone/project before cutover |
 | `www.cuadradozayasinfrastructure.com` | Redirect to company apex in Vercel | Prepare in the company project, not this repository |
 | `app.telesphoros.app` | Private frontend S3 origin through CloudFront | H1 Terraform, disabled by default |
-| `telesphoros.app`, `www.telesphoros.app` | 301 to `app.telesphoros.app`, retaining path/query | Same CloudFront distribution and certificate. **Not live yet:** no DNS record is configured for `telesphoros.app` in Cloudflare (founder, 2026-10-16), so nothing is served on these names today. `www.telesphoros.app` is, however, attached to the Vercel project `telesphoros-site`, a competing claim on the same name (see [where things live](#where-things-live-2026-10-16)); who owns it at production launch is open |
+| `telesphoros.app`, `www.telesphoros.app` | 301 to `app.telesphoros.app`, retaining path/query | Same CloudFront distribution and certificate. **Not live yet:** no DNS record is configured for `telesphoros.app` in Cloudflare (founder, 2026-10-16), so nothing is served on these names today. `www.telesphoros.app` is, however, attached to the Vercel project `telesphoros-site`, a competing claim on the same name (see [where things live](#where-things-live-2026-10-16)). **Decided (founder, 2026-10-16): the Vercel `telesphoros-site` project owns the public name `www.telesphoros.app`**, so the `www` redirect in this row is superseded. The bare apex `telesphoros.app` is not covered by that decision and stays an open point (it can redirect to `www` or to `app`) |
 | `api.telesphoros.app` | AWS API host | F3a (edge: certificate, load balancer, firewall) written, disabled by default; compute is F3b; see [api-hosting.md](api-hosting.md). No DNS record until a healthy service exists |
 
 Cloudflare remains authoritative. Use DNS-only for CloudFront records to avoid chaining
@@ -35,7 +35,7 @@ Rules that follow:
 
 - A Vercel project links to one Git repository. The landing site and the product therefore stay two projects unless the site's source is moved into this repository, which is a separate, planned change.
 - The two Vercel projects above never share a domain. Previews have no custom domain, and nothing in this repository changes `telesphoros-site`.
-- This repository also contains its own landing page (`apps/frontend`). Which source is the public page at `www.telesphoros.app` at launch, and whether `www` ends up on Vercel or as the CloudFront redirect in the address map, are **open founder decisions** and not settled by this page.
+- This repository also contains its own landing page (`apps/frontend`). The public page at `www.telesphoros.app` is the `telesphoros-site` project (founder decision, 2026-10-16), so this repository's landing is the signed-in product's front page, not the public marketing site. Still open: where the bare apex points, and the Cloudflare DNS record that makes `www` resolve to Vercel (a founder action in Cloudflare; nothing here creates it).
 
 ## Design previews on Vercel (frontend only)
 

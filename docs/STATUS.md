@@ -9,6 +9,10 @@ Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and
 
 The 16 additional review probes are now permanent in the same spec, for 34 assertion tests. Fresh focused verification passed all 34 plus 19 real PostgreSQL catalog tests (53 total), backend typecheck and lint. Two isolated defect controls failed as intended. S3/full-profile/worker/recovery checks were not rerun for this test-only follow-up; their earlier evidence remains separately identified. No publication or deployment is authorized.
 
+## Browser logo readiness (2026-10-16)
+
+The interpretation-preview browser test now targets the authenticated workspace header before measuring its logo. The prior page-wide locator could capture the retiring site-header image during sign-in and return a null bounding box. The original minimum width and all other assertions remain intact; no product, auth, branding, CI or deployment behavior changes. The [verification record](verification/workspace-logo-readiness.md) separates the observed CI failure, controlled handoff/refusal probes and repeated original-scenario results.
+
 ## Repository engineering workflows (2026-10-16)
 
 Seven [repository-scoped engineering workflows](engineering/workflows.md) adapt a pinned Addy Osmani agent-skills revision for planning, implementation, debugging, verification, review, measured optimization and release-readiness assessment. Existing working agreements and the query protocol remain authoritative. The [verification record](verification/engineering-workflows.md) separates deterministic routing checks and synthetic walkthroughs from independent model or hosted acceptance. No runtime, clinical, database, CI gate, cancellation or deployment behavior changes.
@@ -24,6 +28,10 @@ The founder approved compiler/dependency cache improvements while preserving all
 ## F06 merged with PR #131 (2026-10-16)
 
 Main `11f9157` contains the approved `b668f02` F06 content and all **19 promoted recovery probes**. Independent page/session retirement, verified caller/tenant binding, the original one-hour deadline, roles-only `/me`, separate recovery capability and genuine-404 memory-only compatibility remain unchanged by F07. See the [F06 verification record](verification/f06-upload-recovery.md). Earlier local-only wording below describes historical captures; cached JavaScript still needs refresh to obtain these safeguards. Merged code is not hosted acceptance.
+
+## Landing S2: hero composition (draft PR, 2026-10-16)
+
+Second slice of the [landing alignment plan](design/plans/landing-alignment.md), approved by the founder on 2026-10-16 with the plan's defaults. The hero is now copy on the left and a still, code-drawn synthetic report card on the right (`HeroReportCard`), over a code-drawn backdrop of two soft folds and an A/C/G/T sequence (`HeroBackdrop`) ported from the public site's Product first hero. The card reuses the fictional records and status wording of the capability fragments; it is `aria-hidden`, has nothing to operate and adds no copy beyond a header and the existing "Synthetic data only. Not for clinical use." line. Colours come from tokens only (no literal colours or inline styles, so `check:brand` passes unchanged), nothing in the backdrop moves, and forced colours hides it. Mobile and tablet stack the card under the copy. The particles are kept: in the before and after screenshots they read as a quiet depth layer around the card, not a duplicate of the backdrop. One token added (`--landing-fs-hero`); copy, palette, fonts, artwork and `branding-policy.json` are unchanged. Local checks: typecheck, lint, `check:brand`, 359 unit tests (3 new), the landing and foundation browser specs (30 cases, axe included) and the production build. The full browser suite relies on CI. Slices S3 (EN/ES parity) and S4 (token names) are not started. No deployment or merge.
 
 ## Landing S1: the watermarked DNA image is retired (draft PR, 2026-10-16)
 
@@ -168,7 +176,7 @@ The [draft plan](design/plans/fd7-remote-state.md) covers the one Phase 0 item t
 
 ## Where the repositories, Vercel projects and addresses live (docs only, 2026-10-16)
 
-[domains-and-hosting.md](ops/domains-and-hosting.md) now has one table of the product repository, the `telesphoros-previews` and `telesphoros-site` Vercel projects, the company site and their addresses, and records that no DNS is configured for `telesphoros.app` in Cloudflare yet and that `www.telesphoros.app` is attached to the Vercel `telesphoros-site` project although the address map promises a CloudFront redirect. Who owns `www` at launch is an open founder decision. Nothing in Vercel, DNS or AWS was inspected or changed.
+[domains-and-hosting.md](ops/domains-and-hosting.md) now has one table of the product repository, the `telesphoros-previews` and `telesphoros-site` Vercel projects, the company site and their addresses, and records that no DNS is configured for `telesphoros.app` in Cloudflare yet and that `www.telesphoros.app` is attached to the Vercel `telesphoros-site` project although the address map promises a CloudFront redirect. Decided later the same day (founder): the `telesphoros-site` Vercel project owns `www.telesphoros.app`; the apex and the Cloudflare DNS record remain open. Nothing in Vercel, DNS or AWS was inspected or changed.
 
 ## Planned: repository audit and build plan (plan only)
 
