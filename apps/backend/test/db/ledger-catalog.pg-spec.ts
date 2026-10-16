@@ -1,6 +1,7 @@
 import type { Client } from 'pg';
 import { ALL_CLASSIFIED_TABLES, APPEND_ONLY_CLASSES, AUTHORITY_TABLES, JOB_TABLES, MUTABLE_OPERATIONAL_TABLES, OUTBOX_TABLES, VERIFICATION_TABLES, PATIENT_DUPLICATE_TABLES, PATIENT_IDENTITY_TABLES, SECURITY_AUDIT_TABLES } from '../../src/db/append-only-tables';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
+import { expectRecordTablePolicies, type CatalogPolicy } from '../helpers/catalog-policy-assertions';
 
 let pg: EphemeralDatabase;
 beforeAll(async () => {
@@ -156,18 +157,10 @@ describe('catalog guard: the audit tables are classified and protected as their 
   });
 
   it('record, child and note tables have a tenant policy for the application and explicit read policies for the ledger and the verifier', async () => {
-    const pol = await q<{ tablename: string; policyname: string; roles: string; cmd: string; qual: string; with_check: string | null }>(
-      `SELECT tablename, policyname, roles::text, cmd, qual, with_check FROM pg_policies WHERE schemaname = 'public'`);
+    const pol = await q<CatalogPolicy>(
+      `SELECT tablename, policyname, roles::text[] AS roles, cmd, qual, with_check FROM pg_policies WHERE schemaname = 'public'`);
     for (const table of TENANT_POLICIED) {
-      const own = pol.filter((p) => p.tablename === table);
-      const app = own.find((p) => p.roles.includes('telesphoros_app'));
-      expect([table, app?.qual, app?.with_check]).toEqual([table, expect.stringContaining('app.current_tenant_id'), expect.stringContaining('app.current_tenant_id')]);
-      const verifier = own.find((p) => p.roles.includes('telesphoros_ledger_verifier'));
-      expect([table, verifier?.cmd]).toEqual([table, 'SELECT']);
-      // Forced row-level security blinds even an owner: without its own policy the ledger functions would read ZERO rows of this table.
-      // Match the role exactly: 'telesphoros_ledger' is also a prefix of telesphoros_ledger_verifier and _operator, whose policies read USING (true), and pg_policies has no guaranteed row order.
-      const ledger = own.find((p) => p.roles === '{telesphoros_ledger}');
-      expect([table, ledger?.cmd, ledger?.qual]).toEqual([table, 'SELECT', expect.stringContaining('app.current_tenant_id')]);
+      expectRecordTablePolicies(table, pol);
     }
   });
 
