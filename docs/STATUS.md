@@ -104,7 +104,18 @@ Closes finding I04 (decision DA-1, decided yes on 2026-10-13): the eleven clinic
 
 Founder approved the [plan](design/plans/ui-polish-landing-and-dashboard.md) (P1 to P6 as recommended). Slice A changes the product landing only: a five-step type scale held in tokens (`--landing-fs-*`), 16px running text, headings within two lines at 1440, 768 and 390, consistent section spacing with a tone step instead of a divider for two sections, and a transform-only scroll entrance (`useLandingMotion`) with control feedback and a full reduced-motion fallback. The approved brand elements, copy, DNA, mascot, fonts and `branding-policy.json` are unchanged and the DNA and mascot are never animated. Measured with the taste-skill inspector: 11 FAIL / 4 WARN before, 7 FAIL / 3 WARN after; every remaining FAIL is a decision kept under P1/P2 (eyebrows, 01/02/03, gradient, hairlines, no archive pictures) or the shared Button's approved sheen. Local checks: typecheck, lint, `check:brand` with its 24 mutation tests, 291 unit tests, 74 standard browser cases (axe included), chunk and foundation guards. DEV, local-review and owned-storage browser suites were not run (no change to those screens). Slice B (Reports and upload) has not started. See [verification](verification/ui-polish-landing.md). No deployment, merge or clinical change.
 
-## Landing motion and drawn visual elements (draft PR, 2026-10-15)
+## Vercel design previews, frontend only (draft PR, 2026-10-16)
+
+The founder decided that only the frontend is previewed on Vercel; the product stays on AWS (FD-7 and the hosting map unchanged). The founder also asked whether Vercel offers a BAA: as understood, yes on paid plans, but it would cover only Vercel, so a backend there would need several agreements instead of one with AWS. That is one reason the backend stays on AWS.
+
+What is added (see the [plan and verification](design/plans/vercel-frontend-preview.md)):
+- a root `vercel.json` (frozen pnpm install, single-page fallback, `noindex` and basic security headers);
+- `build-vercel-preview.sh`, which discards inherited `VITE_` settings, builds with placeholder `.invalid` sign-in and API hosts, and publishes no source maps;
+- a guard test with 11 injected defects.
+
+A clean-clone build with hostile inherited settings leaked nothing. Not yet verified: a real Vercel build. The founder imports the repository as a new `telesphoros-previews` project behind Vercel Authentication; the agent's Vercel connector was refused (403) when creating projects. No application, backend, Terraform, DNS or `telesphoros-site` change.
+
+## Landing motion and drawn visual elements (merged, #127, 2026-10-16)
 
 The founder kept the approved landing design after reviewing alternative taste-skill sketches, asked for motion and visual elements so the page looks less static, and approved the [plan](design/plans/landing-motion-and-visuals.md) with "go, use your recommendations" (M1 to M6). Built on the product landing only:
 
