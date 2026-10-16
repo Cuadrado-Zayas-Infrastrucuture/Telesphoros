@@ -165,7 +165,8 @@ describe('catalog guard: the audit tables are classified and protected as their 
       const verifier = own.find((p) => p.roles.includes('telesphoros_ledger_verifier'));
       expect([table, verifier?.cmd]).toEqual([table, 'SELECT']);
       // Forced row-level security blinds even an owner: without its own policy the ledger functions would read ZERO rows of this table.
-      const ledger = own.find((p) => p.roles.includes('telesphoros_ledger'));
+      // Match the role exactly: 'telesphoros_ledger' is also a prefix of telesphoros_ledger_verifier and _operator, whose policies read USING (true), and pg_policies has no guaranteed row order.
+      const ledger = own.find((p) => p.roles === '{telesphoros_ledger}');
       expect([table, ledger?.cmd, ledger?.qual]).toEqual([table, 'SELECT', expect.stringContaining('app.current_tenant_id')]);
     }
   });
