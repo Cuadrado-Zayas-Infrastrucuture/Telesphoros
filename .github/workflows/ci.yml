@@ -200,12 +200,22 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Resolve the installed Playwright browser version
+        id: playwright-version
+        working-directory: apps/frontend
+        run: |
+          node <<'NODE'
+          const { appendFileSync } = require('node:fs');
+          const { version } = require('@playwright/test/package.json');
+          if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Invalid Playwright version');
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);
+          NODE
       - name: Cache the Playwright browser
         id: playwright-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright-version.outputs.version }}
       # System libraries are not part of the cache, so they are installed on every run.
       - name: Install the browser
         working-directory: apps/frontend
@@ -293,7 +303,10 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
-          cache: false
+          # This repository has no go.sum. Hash the file containing the exact
+          # gitleaks install pin; setup-go also keys by OS, architecture and Go version.
+          cache: true
+          cache-dependency-path: .github/workflows/ci.yml
       # Built from source: the Go module checksum database verifies it. (The module still carries its
       # former path, github.com/zricethezav/gitleaks.) The maintainers' GitHub Action needs a paid licence
       # for organization repositories, so it is deliberately not used.
@@ -325,6 +338,8 @@ jobs:
           sbom: true
           provenance: mode=max
           outputs: type=oci,dest=${{ runner.temp }}/api.oci.tar
+          cache-from: type=gha,scope=api-amd64-v1,timeout=2m
+          cache-to: type=gha,scope=api-amd64-v1,mode=max,ignore-error=true,timeout=2m
       # Classic Docker stores cannot load attested manifest lists. Reuse the same
       # builder/cache for the runtime export; retain evidence in the OCI archive.
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0

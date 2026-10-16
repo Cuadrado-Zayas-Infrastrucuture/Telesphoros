@@ -13,7 +13,7 @@
     "test": "node --test scripts/workspace-build/workspace.test.cjs scripts/local-storage/operations.test.cjs && node scripts/workspace-build/workspace.cjs run test",
     "build": "node scripts/workspace-build/workspace.cjs run build",
     "test:infra": "node --test infrastructure/terraform/guard.test.mjs",
-    "test:ci-config": "node --test .github/ci/guard.test.mjs",
+    "test:ci-config": "node --test .github/ci/*.test.mjs",
     "demo:review:setup": "node scripts/local-review/database.cjs setup",
     "demo:review": "node scripts/local-review/start.cjs",
     "demo:review:test": "node --test scripts/local-review/local-poppler-runner.test.cjs",

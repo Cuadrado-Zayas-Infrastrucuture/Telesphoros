@@ -2,8 +2,12 @@
 FROM node:22.22.0-bookworm-slim@sha256:dd9d21971ec4395903fa6143c2b9267d048ae01ca6d3ea96f16cb30df6187d94 AS build
 WORKDIR /workspace
 RUN npm install --global pnpm@10.28.0
+# Dependency fetch depends only on reviewed lock/workspace inputs. Source-only
+# changes reuse that layer; the install and both application builds still run.
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm fetch --frozen-lockfile
 COPY . .
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --offline
 RUN pnpm --filter @telesphoros/backend build
 # The background worker is one self-contained bundle (its workspace packages are compiled in); it runs from this same image as `node worker/main.js` and needs only
 # modules the API already ships (pg, zod, the AWS SDK).
