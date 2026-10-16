@@ -11,7 +11,7 @@ applied: the Terraform is written and validated, and the BAA is still pending.
    password, asks for the authenticator code, and sends the browser back to `/auth/callback?code=…`.
 3. The app redeems the one-time code for tokens. It keeps **only the access token, in memory**, and
    replaces the callback URL in the history so the code does not linger.
-4. The app calls `GET /api/v1/me`; the **server** answers with the user's roles. The UI uses them to decide
+4. The app calls `GET /api/v1/me`; the **server** answers with the user's roles. A separate authenticated `GET /api/v1/me/recovery-scope` supplies the upload-recovery binding when supported. The UI uses the roles to decide
    what to *show*. The API enforces every permission itself, whatever the UI shows.
 5. Each API call carries `Authorization: Bearer <access token>`. The API verifies the signature against the
    user pool's published keys, and reads the person (`sub`), when the token was issued (`iat`) and **exactly one**
@@ -214,3 +214,16 @@ real email delivery, `terraform plan`/`apply`, and Cognito's own session and cod
 No audit log of sign-ins in our own database (Cognito's CloudTrail events only; Phase 10), and membership changes are recorded in the security-event record (it is in the same database; an off-site Object Lock copy is a later slice). The membership checks were proved against a fake identity provider and a local PostgreSQL, not real Cognito or RDS. API rate limiting exists
 but is per process ([ops/rate-limiting.md](ops/rate-limiting.md)); Cognito also does its own lockout on repeated bad passwords. Password-change-while-signed-in is not
 notified (above). The sign-in page is Cognito's, unbranded for now (web design is parked).
+
+
+## Upload recovery binding (F06, local integration)
+
+`GET /api/v1/me` remains exactly `{ roles }`, including for old/cached clients whose parser rejects extra fields. `GET /api/v1/me/recovery-scope` separately returns the strict `{ recoveryScope }` capability under the same verified-token/current-membership guard. The scope is a deterministic SHA-256 correlator of the verified organization and subject, with a versioned domain separator. It is not an authorization credential, and cannot grant access; every API operation still checks membership, roles and tenant isolation. No raw organization/subject/email or bearer token is placed in the tab recovery record.
+
+The new frontend checks permissions first, then the capability. A 404 from an older backend clears both recovery-record versions and creates an in-memory-only session guard: ordinary sign-in and same-page upload retry continue, but reload recovery is disabled. A 401/403, outage, network failure or malformed successful capability reply fails sign-in without a redirect loop. A rollback to an older backend therefore removes stored recovery safely; late callbacks remain retired even without a persistent scope. Already-built roles-only clients can use the repaired backend without fetching the new endpoint. This preserves their sign-in contract; it cannot retrofit the new ownership, expiry or callback guards into previously compiled JavaScript. Those clients must refresh to receive the recovery fix; hosted cache and rollout behavior still require separate acceptance. The earlier local F06 bundle that required a scope inside `/me` was never shipped and is superseded by this replacement branch.
+
+The v2 tab record is offered only after the separate capability verifies the caller/organization. Another caller/organization, legacy v1 data, malformed data, future timestamps and records at least one hour old are discarded before the upload route mounts. The one-hour deadline starts at the first successful metadata save, is preserved across reload/reauthentication and retries, and removes idle metadata by timer (with read/focus checks for suspended tabs). A 401 or local token expiry retires old work while preserving the same caller's eligible record; explicit logout clears both versions. Retired upload callbacks cannot overwrite or clear a later session's record. Recovery still asks for the original patient and file, and reconciles original registration/declaration keys and server state before completion or cancellation.
+
+Upload progress also retains a separate page lifetime: navigating away retires pending callbacks even if the same sign-in continues. Both page and authenticated-session checks run at request, response-body and persistence boundaries. Page retirement preserves eligible stored recovery for the next page and does not end the signed-in session.
+
+Expiration removes browser metadata only. It does not cancel a server attempt or delete a report/file; existing server cleanup remains responsible. Client-side storage/clock tampering is outside this convenience boundary and never bypasses server authority. No clinical, database, role or retention policy changes are included.

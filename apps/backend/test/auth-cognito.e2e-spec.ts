@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { type FakeIdp, startFakeIdp } from '@telesphoros/fake-idp';
-import { errorResponseSchema, meDtoSchema } from '@telesphoros/shared-types';
+import { errorResponseSchema, meDtoSchema, recoveryScopeDtoSchema } from '@telesphoros/shared-types';
 import request from 'supertest';
 import { CognitoTokenVerifier } from '../src/auth/cognito-token-verifier';
 import { createTestApp } from './helpers/app';
@@ -56,7 +56,7 @@ describe('the API, authenticating real RS256 Cognito-shaped tokens', () => {
 
   it('a signed-in user without exactly one tenant group is refused with 403: erin has none, frank has two', async () => {
     for (const who of ['erin', 'frank'] as const) {
-      for (const path of ['/api/v1/me', '/api/v1/patients']) {
+      for (const path of ['/api/v1/me', '/api/v1/me/recovery-scope', '/api/v1/patients']) {
         const res = await api().get(path).set(bearer(await token(who))).expect(403);
         expect(errorResponseSchema.safeParse(res.body).success).toBe(true);
         expect(res.body.error.code).toBe('FORBIDDEN');
@@ -64,12 +64,21 @@ describe('the API, authenticating real RS256 Cognito-shaped tokens', () => {
     }
   });
 
-  it('GET /me returns the caller’s roles and nothing else', async () => {
+  it('keeps GET /me roles-only and supplies a separate verified recovery capability', async () => {
     const res = await api().get('/api/v1/me').set(bearer(await token('alice'))).expect(200);
     expect(res.body).toEqual({ roles: ['clinician'] });
     expect(meDtoSchema.safeParse(res.body).success).toBe(true);
+    const scope = await api().get('/api/v1/me/recovery-scope').set(bearer(await token('alice'))).expect(200);
+    expect(recoveryScopeDtoSchema.safeParse(scope.body).success).toBe(true);
+    expect(scope.body).toEqual({ recoveryScope: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    const repeated = await api().get('/api/v1/me/recovery-scope').set(bearer(await token('alice'))).set('X-Recovery-Scope', 'forged-client-hint').expect(200);
+    expect(repeated.body).toEqual(scope.body);
+    for (const who of ['hal', 'bob'] as const) {
+      expect((await api().get('/api/v1/me/recovery-scope').set(bearer(await token(who))).expect(200)).body.recoveryScope).not.toBe(scope.body.recoveryScope);
+    }
     expect((await api().get('/api/v1/me').set(bearer(await token('dave'))).expect(200)).body).toEqual({ roles: [] });
     await api().get('/api/v1/me').expect(401);
+    await api().get('/api/v1/me/recovery-scope').expect(401);
   });
 
   it.each([
@@ -78,9 +87,11 @@ describe('the API, authenticating real RS256 Cognito-shaped tokens', () => {
     ['a forgery', () => idp.mintAccessToken({ user: user('carol'), signWith: 'foreign' })],
     ['an expired token', () => idp.mintAccessToken({ user: user('carol'), issuedAtOffsetSeconds: -7200, expiresInSeconds: 60 })],
   ])('refuses %s with the standard 401 envelope', async (_name, make) => {
-    const res = await api().get('/api/v1/me').set(bearer(await make())).expect(401);
-    expect(errorResponseSchema.safeParse(res.body).success).toBe(true);
-    expect(res.body.error.code).toBe('UNAUTHORIZED');
+    for (const path of ['/api/v1/me', '/api/v1/me/recovery-scope']) {
+      const res = await api().get(path).set(bearer(await make())).expect(401);
+      expect(errorResponseSchema.safeParse(res.body).success).toBe(true);
+      expect(res.body.error.code).toBe('UNAUTHORIZED');
+    }
   });
 
   it('answers 401 (not 500) while the key set is unreachable and the key is not cached', async () => {

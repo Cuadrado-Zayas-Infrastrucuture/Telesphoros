@@ -1,20 +1,21 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import UploadReportPage from '@/pages/UploadReportPage';
-import { SubmitError, submitReport } from '@/lib/api';
+import { SubmitError, submitReport, type UploadProgress } from '@/lib/api';
 import { cancelOwnedUpload } from '@/lib/ownedStorageApi';
-import { readRecovery, rememberUpload } from '@/lib/uploadRecovery';
+import { bindRecovery, endRecoverySession, readRecovery, rememberUpload, startRecoverySession, type RecoverySession } from '@/lib/uploadRecovery';
 
 const patientId = '11111111-1111-4111-8111-111111111111';
 const date = '2026-10-10T00:00:00.000Z';
 const patient = { id: patientId, label: 'SYN-0001', createdAt: date, updatedAt: date };
 const patientApi = vi.fn();
+let pageOwner: RecoverySession;
 const pageResponse = (data = [patient], page = 1, total = data.length) => new Response(JSON.stringify({ data, meta: { page, pageSize: 20, total, totalPages: Math.ceil(total / 20) } }));
 vi.mock('@/auth/AuthProvider', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/auth/AuthProvider')>()),
-  useAuth: () => ({ apiFetch: patientApi }),
+  useAuth: () => ({ apiFetch: patientApi, recoverySession: pageOwner }),
 }));
 
 vi.mock('@/lib/api', async (importOriginal) => ({
@@ -27,12 +28,18 @@ vi.mock('@/lib/ownedStorageApi', async (importOriginal) => ({
 }));
 const cancelMock = vi.mocked(cancelOwnedUpload);
 const reportId = '22222222-2222-4222-8222-222222222222';
-const interruptedUpload = () => rememberUpload({
+const interruptedUpload = () => { const progress: UploadProgress = {
   requestId: '55555555-5555-4555-8555-555555555555', reportId, facts: { reportType: 'vcf', name: 'half.vcf', sizeBytes: 2048, sha256: 'a'.repeat(64) },
   declaration: { requestId: '66666666-6666-4666-8666-666666666666', revision: '33333333-3333-4333-8333-333333333333', contentType: 'text/x-vcf', sha256: 'a'.repeat(64) },
   attempt: { attemptId: '44444444-4444-4444-8444-444444444444', revision: '77777777-7777-4777-8777-777777777777', state: 'declared', expiresAt: '2099-01-01T00:00:00.000Z' },
-});
+}; bindRecovery(progress, pageOwner); rememberUpload(progress); };
 const submitMock = vi.mocked(submitReport);
+beforeEach(() => {
+  endRecoverySession(pageOwner ?? null);
+  window.sessionStorage.clear();
+  pageOwner = startRecoverySession('a'.repeat(64));
+});
+afterEach(() => { endRecoverySession(pageOwner); vi.useRealTimers(); window.sessionStorage.clear(); });
 
 async function fillValidForm(user: ReturnType<typeof userEvent.setup>, fileName = 'sample.vcf') {
   await screen.findByRole('option', { name: 'SYN-0001' });
@@ -45,7 +52,6 @@ async function fillValidForm(user: ReturnType<typeof userEvent.setup>, fileName 
 describe('UploadReportPage', () => {
   // Braces matter: returning the mock from a hook makes Vitest call it as a teardown callback.
   beforeEach(() => {
-    window.sessionStorage.clear();
     cancelMock.mockReset();
     submitMock.mockReset();
     patientApi.mockReset().mockImplementation(async () => pageResponse());
@@ -130,7 +136,7 @@ describe('UploadReportPage', () => {
     render(<UploadReportPage />);
     await user.click(await screen.findByRole('button', { name: 'Cancel the interrupted upload' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Cancellation is pending');
-    expect(readRecovery()).toBeDefined();
+    expect(readRecovery(pageOwner)).toBeDefined();
     expect(cancelMock.mock.calls[0]![1]).toMatchObject({ reportId, restored: true, attempt: { state: 'declared' } });
     cancelMock.mockImplementationOnce(async () => { window.sessionStorage.clear(); });
     await user.click(screen.getByRole('button', { name: 'Cancel upload' }));
@@ -299,4 +305,14 @@ describe('guided upload questionnaire', () => {
     expect(await screen.findByRole('heading', { name: 'Report received' })).toBeVisible();
     expect(submitMock).toHaveBeenCalledTimes(1);
   });
+});
+
+it('removes an idle recovery banner at the fixed one-hour boundary', async () => {
+  vi.useFakeTimers(); vi.setSystemTime('2026-10-14T12:00:00Z');
+  interruptedUpload();
+  await act(async () => { render(<UploadReportPage />); });
+  expect(screen.getByText('half.vcf')).toBeVisible();
+  await act(async () => { vi.advanceTimersByTime(3600000); });
+  expect(screen.queryByText('half.vcf')).not.toBeInTheDocument();
+  expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v2')).toBeNull();
 });

@@ -4,6 +4,7 @@ import { productUploadSchema, type ProductUploadValues } from './productUploadSc
 
 import { submitOwnedReport } from './ownedStorageApi';
 import type { OwnedProgress } from './uploadProgress';
+import type { RecoverySession } from './uploadRecovery';
 
 export class SubmitError extends Error {
   /** The HTTP status that caused it, when one did (the recovery of a reloaded upload tells a missing report from other failures). */
@@ -51,12 +52,12 @@ export async function listPatients(apiFetch: ApiFetch, page: number, signal?: Ab
 
 /**
  * The one way a report file is uploaded (M2.2b): the validated server intake. Declare an attempt, send the bytes through the API, and the server checks
- * their structure, size and checksum before anything reaches storage. Retry state lives in the mounted form only, never browser storage or a URL.
+ * their structure, size and checksum before anything reaches storage. Scoped, time-bounded reload recovery holds no token or file bytes.
  */
-export async function submitReport(values: ProductUploadValues, apiFetch: ApiFetch, progress: UploadProgress, signal?: AbortSignal): Promise<{ reference: string }> {
+export async function submitReport(values: ProductUploadValues, apiFetch: ApiFetch, progress: UploadProgress, signal?: AbortSignal, recoverySession?: RecoverySession): Promise<{ reference: string }> {
   try {
     productUploadSchema.parse(values);
-    return await submitOwnedReport(values, apiFetch, progress, signal);
+    return await submitOwnedReport(values, apiFetch, progress, signal, { recoverySession });
   } catch (error) {
     if (error instanceof SubmitError || error instanceof SessionEndedError || error instanceof NotSignedInError) throw error;
     // Never display raw transport errors, validation payloads, signed URLs or service responses.

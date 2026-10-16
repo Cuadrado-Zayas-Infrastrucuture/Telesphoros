@@ -1,7 +1,8 @@
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { API, fakeClient, fakeFetch, TOKEN } from '@/test/authTestUtils';
+import { API, fakeClient, fakeFetch, TOKEN, RECOVERY_SCOPE } from '@/test/authTestUtils';
+import { bindRecovery, clearRecovery, readRecovery, rememberUpload, uploadSessionCurrent, type RecoverySession } from '@/lib/uploadRecovery';
 import { AccountNotReadyError, AuthProvider, NotSignedInError, SessionEndedError, useAuth } from './AuthProvider';
 
 function setup(options: { client?: ReturnType<typeof fakeClient>; fetchImpl?: ReturnType<typeof fakeFetch> } = {}) {
@@ -14,9 +15,26 @@ function setup(options: { client?: ReturnType<typeof fakeClient>; fetchImpl?: Re
   );
   return { ...renderHook(() => useAuth(), { wrapper }), client, fetchImpl };
 }
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); clearRecovery(); window.sessionStorage.clear(); });
+function saveInterruption(owner: RecoverySession) {
+  const progress = { requestId: '11111111-1111-4111-8111-111111111111', reportId: '22222222-2222-4222-8222-222222222222',
+    facts: { reportType: 'structured' as const, name: 'SYNTHETIC-private.json', sizeBytes: 2, sha256: 'a'.repeat(64) } };
+  bindRecovery(progress, owner); rememberUpload(progress);
+}
+
 
 describe('AuthProvider', () => {
+  it('discards legacy unbound recovery metadata before a signed-in page can display it', async () => {
+    window.sessionStorage.setItem('telesphoros.upload-recovery.v1', JSON.stringify({
+      v: 1, requestId: '11111111-1111-4111-8111-111111111111', reportId: '22222222-2222-4222-8222-222222222222',
+      file: { reportType: 'structured', name: 'SYNTHETIC-previous-user.json', sizeBytes: 2, sha256: 'a'.repeat(64) }, savedAt: new Date().toISOString(),
+    }));
+    const { result } = setup();
+    await act(async () => void (await result.current.completeSignIn()));
+    expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v1')).toBeNull();
+    window.sessionStorage.clear();
+  });
+
   it('starts signed out with no roles, and refuses API calls', async () => {
     const { result } = setup();
     expect(result.current.status).toBe('signedOut');
@@ -42,7 +60,7 @@ describe('AuthProvider', () => {
     const { result, fetchImpl } = setup();
     await act(async () => void (await result.current.completeSignIn()));
     await act(async () => void (await result.current.apiFetch('/api/v1/patients', { method: 'GET' })));
-    const [url, init] = fetchImpl.mock.calls[1]!;
+    const [url, init] = fetchImpl.mock.calls[2]!;
     expect(url).toBe(`${API}/api/v1/patients`);
     expect((init?.headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`);
   });
@@ -52,7 +70,7 @@ describe('AuthProvider', () => {
     await act(async () => void (await result.current.completeSignIn()));
     await act(async () => void (await result.current.apiFetch('/api/v1/patients')));
     await act(async () => void (await result.current.apiFetch('/api/v1/reports', { cache: 'force-cache' })));
-    expect(fetchImpl.mock.calls.map(([, init]) => init?.cache)).toEqual(['no-store', 'no-store', 'no-store']);
+    expect(fetchImpl.mock.calls.map(([, init]) => init?.cache)).toEqual(['no-store', 'no-store', 'no-store', 'no-store']);
   });
 
   it('FAILS (and does not redirect again) when the API refuses a brand-new token: no sign-in loop', async () => {
@@ -114,7 +132,9 @@ describe('AuthProvider', () => {
   });
 
   it('a 401 from the API (revoked, expired, key rotated) signs the user out and starts a fresh sign-in', async () => {
-    const fetchImpl = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ roles: ['clinician'] }), { status: 200 })).mockResolvedValueOnce(new Response('{}', { status: 401 }));
+    const fetchImpl = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ roles: ['clinician'] })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ recoveryScope: RECOVERY_SCOPE })))
+      .mockResolvedValueOnce(new Response('{}', { status: 401 }));
     const { result, client } = setup({ fetchImpl: fetchImpl as never });
     await act(async () => void (await result.current.completeSignIn()));
     await act(async () => {
@@ -125,30 +145,31 @@ describe('AuthProvider', () => {
     expect(result.current.roles).toEqual([]);
   });
 
-  it('sign out also forgets an interrupted upload kept for reload recovery', async () => {
-    window.sessionStorage.setItem('telesphoros.upload-recovery.v1', '{}');
-    try {
-      const { result } = setup();
-      await act(async () => void (await result.current.completeSignIn()));
-      expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v1')).toBe('{}');
-      await act(async () => void (await result.current.signOut()));
-      expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v1')).toBeNull();
-    } finally {
-      window.sessionStorage.clear();
-    }
+  it('sign out forgets a scoped interrupted upload', async () => {
+    const { result } = setup();
+    await act(async () => void (await result.current.completeSignIn()));
+    saveInterruption(result.current.recoverySession!);
+    expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v2')).not.toBeNull();
+    await act(async () => void (await result.current.signOut()));
+    expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v2')).toBeNull();
   });
 
-  it('a session that merely ends (401) keeps the interrupted upload, so the same person can finish it after signing in again', async () => {
-    window.sessionStorage.setItem('telesphoros.upload-recovery.v1', '{}');
-    try {
-      const fetchImpl = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ roles: ['clinician'] }), { status: 200 })).mockResolvedValueOnce(new Response('{}', { status: 401 }));
-      const { result } = setup({ fetchImpl: fetchImpl as never });
-      await act(async () => void (await result.current.completeSignIn()));
-      await act(async () => { await expect(result.current.apiFetch('/api/v1/patients')).rejects.toBeInstanceOf(SessionEndedError); });
-      expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v1')).toBe('{}');
-    } finally {
-      window.sessionStorage.clear();
-    }
+  it.each([RECOVERY_SCOPE, 'b'.repeat(64)])('a 401 keeps recovery only for the same verified caller/tenant (%s)', async scope => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ roles: ['clinician'] })))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ recoveryScope: RECOVERY_SCOPE })))
+      .mockResolvedValueOnce(new Response('{}', { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ roles: ['clinician'] })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ recoveryScope: scope })));
+    const { result } = setup({ fetchImpl: fetchImpl as never });
+    await act(async () => void (await result.current.completeSignIn()));
+    const first = result.current.recoverySession!;
+    saveInterruption(first);
+    await act(async () => { await expect(result.current.apiFetch('/api/v1/patients')).rejects.toBeInstanceOf(SessionEndedError); });
+    expect(readRecovery(first)).toBeUndefined();
+    expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v2')).not.toBeNull();
+    await act(async () => void (await result.current.completeSignIn()));
+    expect(!!readRecovery(result.current.recoverySession)).toBe(scope === RECOVERY_SCOPE);
+    window.sessionStorage.clear();
   });
 
   it('sign out forgets everything locally and ends the provider session', async () => {
@@ -171,4 +192,130 @@ describe('AuthProvider', () => {
     expect(JSON.stringify({ ...sessionStorage })).not.toContain(TOKEN);
     expect(document.cookie).not.toContain(TOKEN);
   });
+});
+
+it.each([undefined, 'not-a-scope'])('never mounts an authenticated recovery context without a valid recovery capability (%s)', async scope => {
+  const fetchImpl = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ roles: ['clinician'] })))
+    .mockResolvedValueOnce(new Response(JSON.stringify(scope ? { recoveryScope: scope } : {})));
+  const { result } = setup({ fetchImpl: fetchImpl as never });
+  await act(async () => { await expect(result.current.completeSignIn()).rejects.toThrow(); });
+  expect(result.current.status).toBe('failed');
+  expect(result.current.recoverySession).toBeNull();
+});
+
+it('a late 401 from the old session cannot sign out the newly verified person', async () => {
+  let answer!: (r: Response) => void;
+  const fetchImpl = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ roles: ['clinician'] })))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ recoveryScope: RECOVERY_SCOPE })))
+    .mockImplementationOnce(() => new Promise<Response>(resolve => { answer = resolve; }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ roles: ['clinician'] })))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ recoveryScope: 'b'.repeat(64) })));
+  const { result, client } = setup({ fetchImpl: fetchImpl as never });
+  await act(async () => void (await result.current.completeSignIn()));
+  const pending = result.current.apiFetch('/api/v1/patients');
+  const refused = expect(pending).rejects.toBeInstanceOf(SessionEndedError);
+  await act(async () => void (await result.current.completeSignIn()));
+  await act(async () => { answer(new Response('{}', { status: 401 })); await refused; });
+  expect(result.current.status).toBe('signedIn');
+  expect(result.current.recoverySession!.scope).toBe('b'.repeat(64));
+  expect(client.signIn).not.toHaveBeenCalled();
+});
+
+
+it('a superseded identity callback cannot replace the newer verified caller', async () => {
+  let finish!: (s: { accessToken: string; expiresAt: number; returnTo: string }) => void;
+  const client = fakeClient();
+  client.completeSignIn.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const { result, fetchImpl } = setup({ client });
+  const pending = result.current.completeSignIn();
+  const refused = expect(pending).rejects.toBeInstanceOf(SessionEndedError);
+  await act(async () => void (await result.current.completeSignIn()));
+  const current = result.current.recoverySession;
+  await act(async () => { finish({ accessToken: 'old-synthetic-token', expiresAt: Date.now() / 1000 + 900, returnTo: '/' }); await refused; });
+  expect(result.current.status).toBe('signedIn');
+  expect(result.current.recoverySession).toBe(current);
+  expect(fetchImpl).toHaveBeenCalledTimes(2);
+});
+
+it('unmounting retires late upload writers while leaving eligible metadata for reload', async () => {
+  const { result, unmount } = setup();
+  await act(async () => void (await result.current.completeSignIn()));
+  const owner = result.current.recoverySession!;
+  saveInterruption(owner);
+  const kept = window.sessionStorage.getItem('telesphoros.upload-recovery.v2');
+  unmount();
+  expect(readRecovery(owner)).toBeUndefined();
+  expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v2')).toBe(kept);
+});
+
+
+it('signs in against an older backend and clears all stored recovery on capability rollback', async () => {
+  let supported = true;
+  const normal = fakeFetch({ roles: ['clinician'] });
+  const fetchImpl = vi.fn<typeof fetch>((input, init) => String(input).endsWith('/me/recovery-scope') && !supported
+    ? Promise.resolve(new Response('{}', { status: 404 })) : normal(input, init));
+  const { result } = setup({ fetchImpl });
+  await act(async () => void (await result.current.completeSignIn()));
+  const oldOwner = result.current.recoverySession!;
+  saveInterruption(oldOwner);
+  window.sessionStorage.setItem('telesphoros.upload-recovery.v1', '{}');
+  supported = false;
+  await act(async () => void (await result.current.completeSignIn()));
+  expect(result.current.status).toBe('signedIn');
+  expect(result.current.roles).toEqual(['clinician']);
+  expect(result.current.recoverySession!.scope).toBeNull();
+  expect(readRecovery(oldOwner)).toBeUndefined();
+  expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v1')).toBeNull();
+  expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v2')).toBeNull();
+  const progress = { requestId: '11111111-1111-4111-8111-111111111111', reportId: '22222222-2222-4222-8222-222222222222',
+    facts: { reportType: 'structured' as const, name: 'synthetic.json', sizeBytes: 2, sha256: 'a'.repeat(64) } };
+  bindRecovery(progress, result.current.recoverySession!);
+  rememberUpload(progress);
+  expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v2')).toBeNull();
+  await expect(result.current.apiFetch('/api/v1/patients')).resolves.toHaveProperty('status', 200);
+  await act(async () => void (await result.current.signOut()));
+  expect(uploadSessionCurrent(progress)).toBe(false);
+});
+
+it.each([401, 403, 500])('capability HTTP %s fails closed without triggering a sign-in loop', async status => {
+  const fetchImpl = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ roles: ['clinician'] })))
+    .mockResolvedValueOnce(new Response('{}', { status }));
+  const { result, client } = setup({ fetchImpl: fetchImpl as never });
+  await act(async () => { await expect(result.current.completeSignIn()).rejects.toThrow(); });
+  expect(result.current.status).toBe('failed');
+  expect(result.current.roles).toEqual([]);
+  expect(result.current.recoverySession).toBeNull();
+  await expect(result.current.apiFetch('/api/v1/patients')).rejects.toBeInstanceOf(NotSignedInError);
+  expect(client.signIn).not.toHaveBeenCalled();
+});
+
+it('does not treat a network failure as an older backend', async () => {
+  const fetchImpl = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ roles: ['clinician'] })))
+    .mockRejectedValueOnce(new TypeError('synthetic network failure'));
+  const { result } = setup({ fetchImpl: fetchImpl as never });
+  await act(async () => { await expect(result.current.completeSignIn()).rejects.toThrow(); });
+  expect(result.current.status).toBe('failed');
+  expect(result.current.recoverySession).toBeNull();
+});
+
+it('a late capability body cannot replace the newer verified owner', async () => {
+  let reading!: () => void; const reached = new Promise<void>(resolve => { reading = resolve; });
+  let finish!: (value: unknown) => void;
+  const scopeResponse = new Response('{}');
+  scopeResponse.json = () => { reading(); return new Promise(resolve => { finish = resolve; }); };
+  const fetchImpl = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ roles: ['clinician'] })))
+    .mockResolvedValueOnce(scopeResponse)
+    .mockResolvedValueOnce(new Response(JSON.stringify({ roles: ['clinician'] })))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ recoveryScope: 'b'.repeat(64) })));
+  const { result } = setup({ fetchImpl: fetchImpl as never });
+  const old = result.current.completeSignIn();
+  const refused = expect(old).rejects.toBeInstanceOf(SessionEndedError);
+  await reached;
+  await act(async () => void (await result.current.completeSignIn()));
+  const current = result.current.recoverySession;
+  saveInterruption(current!); const kept = window.sessionStorage.getItem('telesphoros.upload-recovery.v2');
+  await act(async () => { finish({ recoveryScope: RECOVERY_SCOPE }); await refused; });
+  expect(result.current.status).toBe('signedIn');
+  expect(result.current.recoverySession).toBe(current);
+  expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v2')).toBe(kept);
 });

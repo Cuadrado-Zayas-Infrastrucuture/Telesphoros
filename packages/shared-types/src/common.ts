@@ -15,6 +15,11 @@ export const readinessDtoSchema = z.strictObject({
 });
 export type ReadinessDto = z.infer<typeof readinessDtoSchema>;
 
-/** `GET /me`: what the signed-in caller may do. Roles only: no identifiers, no email. */
+/** An opaque UI recovery binding, never an authorization credential or a patient identifier. */
+export const recoveryScopeSchema = z.string().regex(/^[0-9a-f]{64}$/);
+/** `GET /me`: keep the roles-only contract compatible with already-built clients. */
 export const meDtoSchema = z.strictObject({ roles: z.array(roleSchema) });
 export type MeDto = z.infer<typeof meDtoSchema>;
+/** Separate authenticated capability; older backends return 404 for this endpoint. */
+export const recoveryScopeDtoSchema = z.strictObject({ recoveryScope: recoveryScopeSchema });
+export type RecoveryScopeDto = z.infer<typeof recoveryScopeDtoSchema>;

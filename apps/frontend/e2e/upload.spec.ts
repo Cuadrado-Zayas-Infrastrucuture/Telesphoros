@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
 import { openWorkspaceNavigation, signInWithPatient } from './helpers';
 
+const STORAGE_ORIGIN = process.env.E2E_REPORT_STORAGE_ORIGIN ?? 'http://127.0.0.1:5557';
+
 async function fill(page: Page, patientId: string, type: 'vcf' | 'structured', name: string, bytes: Buffer) {
   await page.getByLabel(/synthetic patient \(required\)/i).selectOption(patientId);
   await page.getByLabel(/report type/i).selectOption(type);
@@ -19,7 +21,7 @@ test('VCF completes through the validated intake with no browser request to obje
   const storage: string[] = []; const transfers: string[] = []; const legacy: string[] = [];
   page.on('request', request => {
     const url = new URL(request.url());
-    if (url.port === '5557') storage.push(`${request.method()} ${url.pathname}`);
+    if (url.origin === STORAGE_ORIGIN) storage.push(`${request.method()} ${url.pathname}`);
     if (request.method() === 'PUT' && url.pathname.endsWith('/bytes')) transfers.push(url.pathname);
     if (/\/(upload-url|complete)$/.test(url.pathname)) legacy.push(url.pathname);
   });
@@ -86,7 +88,7 @@ test('a refused transfer retains form inputs and retries for the same report wit
 
 test('a malformed file is refused by the server and cannot show upload success', async ({ page }) => {
   const fixture = await signInWithPatient(page); const storage: string[] = [];
-  page.on('request', request => { if (new URL(request.url()).port === '5557') storage.push(request.method()); });
+  page.on('request', request => { if (new URL(request.url()).origin === STORAGE_ORIGIN) storage.push(request.method()); });
   await fill(page, fixture.id, 'structured', 'refuse.json', Buffer.from('{"bad":'));
   await page.getByRole('button', { name: 'Upload report' }).click();
   await expect(page.getByRole('alert')).toContainText('server refused');
@@ -97,7 +99,7 @@ test('a malformed file is refused by the server and cannot show upload success',
 // --- Reload recovery (M2.2c) ---------------------------------------------------------------------------------------------------------------------------
 // A reload signs the app out locally and signs in again instantly; the tab keeps one small record of the interrupted upload.
 
-const RECOVERY_KEY = 'telesphoros.upload-recovery.v1';
+const RECOVERY_KEY = 'telesphoros.upload-recovery.v2';
 const VCF = Buffer.from('##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n');
 
 /**
@@ -150,7 +152,7 @@ test('a reload during the transfer finishes the same upload: one report, one sto
   expect(kept).toBeTruthy();
   expect(kept).not.toContain(fixture.id);
   expect(kept).not.toMatch(/Bearer|eyJ|patientId|uploadUrl|X-Amz/i);
-  expect(JSON.parse(kept!)).toMatchObject({ v: 1, file: { name: 'reload.vcf', sizeBytes: VCF.length, reportType: 'vcf', sha256: createHash('sha256').update(VCF).digest('hex') } });
+  expect(JSON.parse(kept!)).toMatchObject({ v: 2, scope: expect.stringMatching(/^[0-9a-f]{64}$/), file: { name: 'reload.vcf', sizeBytes: VCF.length, reportType: 'vcf', sha256: createHash('sha256').update(VCF).digest('hex') } });
   expect((await stored(page, fixture))[0]!.fileUploaded).toBe(false);
 
   await reloadAndSignIn(page, held.interrupt);
@@ -239,4 +241,50 @@ test('signing out clears an interrupted upload, so the next person on this tab i
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(/\/signed-out$/);
   expect(await page.evaluate(key => window.sessionStorage.getItem(key), RECOVERY_KEY)).toBeNull();
+});
+
+
+test('a different verified caller after a 401 never sees or replays the previous upload', async ({ page, context }) => {
+  const fixture = await signInWithPatient(page);
+  const held = await holdTransfer(page);
+  await fill(page, fixture.id, 'vcf', 'previous-caller.vcf', VCF);
+  await page.getByRole('button', { name: 'Upload report' }).click();
+  await held.arrived;
+  await reloadAndSignIn(page, held.interrupt);
+  await expect(page.getByText('An upload was interrupted')).toBeVisible();
+  const kept = await page.evaluate(key => sessionStorage.getItem(key), RECOVERY_KEY);
+  expect(kept).toBeTruthy();
+  await context.clearCookies(); // End only the synthetic IdP session; product sign-out would clear recovery itself.
+  await page.route('**/api/v1/patients?*', route => route.fulfill({ status: 401, json: { error: { code: 'UNAUTHENTICATED' } } }), { times: 1 });
+  await page.getByRole('button', { name: 'Refresh patients' }).click();
+  await page.getByRole('button', { name: /Sign in as hal\b/ }).click();
+  await page.waitForURL('**/reports/upload');
+  await expect(page.getByRole('heading', { level: 1, name: 'Upload report' })).toBeVisible();
+  await expect(page.getByText('previous-caller.vcf', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('An upload was interrupted')).toHaveCount(0);
+  expect(await page.evaluate(key => sessionStorage.getItem(key), RECOVERY_KEY)).toBeNull();
+});
+
+for (const invalid of ['legacy', 'expired'] as const) test(`${invalid} metadata is discarded before the upload route displays recovery`, async ({ page }) => {
+  const fixture = await signInWithPatient(page);
+  const held = await holdTransfer(page);
+  await fill(page, fixture.id, 'vcf', 'discard.vcf', VCF);
+  await page.getByRole('button', { name: 'Upload report' }).click();
+  await held.arrived;
+  await page.evaluate(({ key, invalid }) => {
+    const entry = JSON.parse(sessionStorage.getItem(key)!);
+    if (invalid === 'legacy') {
+      delete entry.scope; entry.v = 1;
+      sessionStorage.removeItem(key);
+      sessionStorage.setItem('telesphoros.upload-recovery.v1', JSON.stringify(entry));
+    } else {
+      entry.savedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      sessionStorage.setItem(key, JSON.stringify(entry));
+    }
+  }, { key: RECOVERY_KEY, invalid });
+  await reloadAndSignIn(page, held.interrupt);
+  await expect(page.getByText('discard.vcf', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('An upload was interrupted')).toHaveCount(0);
+  expect(await page.evaluate(key => sessionStorage.getItem(key), RECOVERY_KEY)).toBeNull();
+  expect(await page.evaluate(() => sessionStorage.getItem('telesphoros.upload-recovery.v1'))).toBeNull();
 });

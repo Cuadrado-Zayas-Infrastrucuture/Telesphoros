@@ -1,6 +1,6 @@
-import { clearRecovery } from '@/lib/uploadRecovery';
-import { type Role, meDtoSchema } from '@telesphoros/shared-types';
-import { createContext, type ReactNode, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { clearRecovery, endRecoverySession, startRecoverySession, type RecoverySession } from '@/lib/uploadRecovery';
+import { type Role, meDtoSchema, recoveryScopeDtoSchema } from '@telesphoros/shared-types';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { AuthClient } from './authClient';
 
 export type AuthStatus = 'signedOut' | 'signedIn' | 'failed';
@@ -17,6 +17,7 @@ export class AccountNotReadyError extends Error {}
 export interface AuthContextValue {
   status: AuthStatus;
   roles: Role[];
+  recoverySession: RecoverySession | null;
   signIn(returnTo?: string): Promise<void>;
   /** Finishes the redirect back from sign-in. Resolves with where to go next. */
   completeSignIn(): Promise<string>;
@@ -45,10 +46,23 @@ interface AuthProviderProps {
  */
 export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthProviderProps) {
   const token = useRef<{ accessToken: string; expiresAt: number } | null>(null);
+  const epoch = useRef(0);
+  const recovery = useRef<RecoverySession | null>(null);
+  const [recoverySession, setRecoverySession] = useState<RecoverySession | null>(null);
   const [status, setStatus] = useState<AuthStatus>('signedOut');
   const [roles, setRoles] = useState<Role[]>([]);
+  useEffect(() => () => {
+    epoch.current += 1;
+    endRecoverySession(recovery.current);
+    recovery.current = null;
+    token.current = null;
+  }, []);
 
   const clear = useCallback(() => {
+    epoch.current += 1;
+    endRecoverySession(recovery.current);
+    recovery.current = null;
+    setRecoverySession(null);
     token.current = null;
     setRoles([]);
   }, []);
@@ -86,6 +100,8 @@ export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthPr
       if (!held) throw new NotSignedInError('Not signed in');
       if (held.expiresAt - EXPIRY_SKEW_SECONDS <= Date.now() / 1000) return endSessionAndSignInAgain('Session expired');
       const response = await send(path, init);
+      // A late response from an older sign-in must not be delivered to, or sign out, the current person.
+      if (token.current !== held) throw new SessionEndedError('Request belongs to an ended session');
       // The server no longer accepts the token (expired, revoked, key rotated): sign in again.
       if (response.status === 401) return endSessionAndSignInAgain('Session rejected');
       return response;
@@ -94,20 +110,41 @@ export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthPr
   );
 
   const completeSignIn = useCallback(async () => {
+    clear();
+    setStatus('signedOut');
+    const attempt = epoch.current;
     try {
       const session = await client.completeSignIn();
-      token.current = { accessToken: session.accessToken, expiresAt: session.expiresAt };
+      if (epoch.current !== attempt) throw new SessionEndedError('Sign-in superseded');
+      const held = { accessToken: session.accessToken, expiresAt: session.expiresAt };
+      token.current = held;
       // Deliberately NOT apiFetch: if the API refuses a brand-new token, signing in again would loop
       // forever (the identity provider's session bounces straight back). Report failure instead.
       const response = await send('/api/v1/me');
+      if (epoch.current !== attempt || token.current !== held) throw new SessionEndedError('Sign-in superseded');
       if (response.status === 403) throw new AccountNotReadyError('The account is not set up for an organization');
       if (!response.ok) throw new Error('The API did not accept the sign-in');
-      setRoles(meDtoSchema.parse(await response.json()).roles);
+      const me = meDtoSchema.parse(await response.json());
+      if (epoch.current !== attempt || token.current !== held) throw new SessionEndedError('Sign-in superseded');
+      // A missing capability on an older backend disables reload recovery, not ordinary sign-in.
+      // Refusals, outages and malformed successful replies remain failures; never invent a persistent binding.
+      const scopeResponse = await send('/api/v1/me/recovery-scope');
+      if (epoch.current !== attempt || token.current !== held) throw new SessionEndedError('Sign-in superseded');
+      if (scopeResponse.status === 403) throw new AccountNotReadyError('The account is not set up for an organization');
+      if (!scopeResponse.ok && scopeResponse.status !== 404) throw new Error('The API did not accept the recovery binding');
+      const scope = scopeResponse.status === 404 ? undefined : recoveryScopeDtoSchema.parse(await scopeResponse.json()).recoveryScope;
+      if (epoch.current !== attempt || token.current !== held) throw new SessionEndedError('Sign-in superseded');
+      const owner = startRecoverySession(scope);
+      recovery.current = owner;
+      setRecoverySession(owner);
+      setRoles(me.roles);
       setStatus('signedIn');
       return session.returnTo;
     } catch (error) {
-      clear();
-      if (!(error instanceof SessionEndedError)) setStatus('failed');
+      if (epoch.current === attempt) {
+        clear();
+        if (!(error instanceof SessionEndedError)) setStatus('failed');
+      }
       throw error;
     }
   }, [clear, client, send]);
@@ -120,8 +157,8 @@ export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthPr
   }, [clear, client]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, roles, signIn, completeSignIn, signOut, apiFetch }),
-    [status, roles, signIn, completeSignIn, signOut, apiFetch],
+    () => ({ status, roles, recoverySession, signIn, completeSignIn, signOut, apiFetch }),
+    [status, roles, recoverySession, signIn, completeSignIn, signOut, apiFetch],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

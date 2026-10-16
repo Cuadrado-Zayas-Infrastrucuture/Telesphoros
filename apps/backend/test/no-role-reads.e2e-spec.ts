@@ -8,7 +8,7 @@ import { createTestApp } from './helpers/app';
 import { bearer, signToken } from './helpers/tokens';
 
 /**
- * A member of an organization who holds NO role may sign in and call /me and nothing else (finding I04, decision DA-1).
+ * A member with NO role may call only the sign-in permission and recovery-capability endpoints; neither exposes clinical records.
  * The route table is walked from the real application, so a new route that forgets @Roles() fails here instead of being open by default.
  */
 let app: NestExpressApplication;
@@ -19,7 +19,7 @@ afterAll(async () => {
   await app.close();
 });
 
-const ALLOWED_WITHOUT_A_ROLE = new Set(['GET /api/v1/me']);
+const ALLOWED_WITHOUT_A_ROLE = new Set(['GET /api/v1/me', 'GET /api/v1/me/recovery-scope']);
 const HTTP = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'ALL', 'OPTIONS', 'HEAD'];
 
 interface Route {
@@ -113,6 +113,7 @@ describe('the clinical reads', () => {
 
   it('a member with no role can still sign in: /me answers with no roles, and the health probes answer', async () => {
     expect((await get('/api/v1/me')).body).toEqual({ roles: [] });
+    expect((await get('/api/v1/me/recovery-scope')).body).toEqual({ recoveryScope: expect.stringMatching(/^[0-9a-f]{64}$/) });
     await request(app.getHttpServer()).get('/api/v1/health').expect(200);
   });
 

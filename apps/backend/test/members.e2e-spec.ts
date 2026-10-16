@@ -95,8 +95,10 @@ describe('changing roles and removing people', () => {
     const { tenant, admin } = await organization();
     const colleague = await person(tenant, ['clinician']);
     expect((await api().get('/api/v1/patients').set(await as(tenant, colleague))).status).toBe(200);
+    await api().get('/api/v1/me/recovery-scope').set(await as(tenant, colleague)).expect(200);
     await api().delete(`/api/v1/members/${colleague}`).set(await as(tenant, admin)).expect(204);
     expect((await api().get('/api/v1/patients').set(await as(tenant, colleague))).status).toBe(403);
+    await api().get('/api/v1/me/recovery-scope').set(await as(tenant, colleague)).expect(403);
     expect((await listed(tenant, admin)).map((m) => m.sub)).not.toContain(colleague);
   });
 

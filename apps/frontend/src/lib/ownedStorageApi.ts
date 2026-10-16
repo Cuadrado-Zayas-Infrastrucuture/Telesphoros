@@ -4,7 +4,7 @@ import { SessionEndedError, NotSignedInError } from '@/auth/AuthProvider';
 import { SubmitError, refusal, reportStorageOrigins, type ApiFetch, type UploadProgress } from './api';
 import type { ProductUploadValues } from './productUploadSchema';
 import { attemptSchema, type FileFacts } from './uploadProgress';
-import { clearRecovery, rememberUpload, sameFile, type RecoveryEntry } from './uploadRecovery';
+import { bindRecovery, forgetUpload, rememberUpload, sameFile, uploadSessionCurrent, type RecoveryEntry, type RecoverySession } from './uploadRecovery';
 
 export type { OwnedProgress } from './uploadProgress';
 
@@ -14,6 +14,7 @@ const remembered = new WeakSet<object>();
 const lifetimes = new WeakMap<object, 'active' | 'retired'>();
 const assertLiveUpload = (progress: UploadProgress) => {
   if (lifetimes.get(progress) === 'retired') throw new SessionEndedError('Upload page ended');
+  if (!uploadSessionCurrent(progress)) throw new SessionEndedError('Upload session ended');
 };
 const beginUpload = (progress: UploadProgress) => { assertLiveUpload(progress); lifetimes.set(progress, 'active'); };
 /** Retire pending work, retaining its saved recovery entry. Idle progress has no callbacks; StrictMode may replay its initial cleanup. */
@@ -29,10 +30,11 @@ const liveUploadApi = (api: ApiFetch, progress: UploadProgress): ApiFetch => asy
 const save = (progress: UploadProgress) => { assertLiveUpload(progress); if (remembered.has(progress)) rememberUpload(progress); };
 
 /** A progress object restored from what the browser kept before a reload; the server confirms or refuses it on the first request. */
-export function restoreProgress(entry: RecoveryEntry): UploadProgress {
+export function restoreProgress(entry: RecoveryEntry, session: RecoverySession): UploadProgress {
   const progress: UploadProgress = { requestId: entry.requestId, reportId: entry.reportId, facts: entry.file, restored: true,
     ...(entry.declaration ? { declaration: entry.declaration } : {}), ...(entry.attempt ? { attempt: entry.attempt } : {}) };
   remembered.add(progress);
+  bindRecovery(progress, session, entry);
   return progress;
 }
 async function request(api: ApiFetch, path: string, body?: unknown, revision?: string) {
@@ -67,19 +69,19 @@ export async function cancelOwnedUpload(api: ApiFetch, progress: UploadProgress)
   api = liveUploadApi(api, progress);
   progress.cancelRequested = true;
   if (!progress.reportId || !progress.declaration) {
-    if (remembered.has(progress)) clearRecovery(); // registered but nothing was ever declared: there is no attempt to cancel
+    if (remembered.has(progress)) forgetUpload(progress); // no attempt to cancel
     return;
   }
   const attempt = progress.attempt ?? await declare(api, progress);
   const result = acceptAttempt(progress, await request(api, `/reports/${progress.reportId}/upload-attempts/${attempt.attemptId}/cancel`, {}, attempt.revision));
   if (!['cancelled', 'cleaned', 'committed'].includes(result.state)) throw new SubmitError('Cancellation is pending. Retry cancellation before starting over.');
-  if (remembered.has(progress)) clearRecovery(); // acknowledged by the server: nothing is left to recover
+  if (remembered.has(progress)) forgetUpload(progress); // acknowledged by the server
   if (result.state === 'committed') throw new SubmitError('The file was already stored. Check Reports before starting another upload.');
 }
-export async function submitOwnedReport(values: ProductUploadValues, api: ApiFetch, progress: UploadProgress, signal?: AbortSignal, options: { remember?: boolean } = {}): Promise<{ reference: string }> {
+export async function submitOwnedReport(values: ProductUploadValues, api: ApiFetch, progress: UploadProgress, signal?: AbortSignal, options: { remember?: boolean; recoverySession?: RecoverySession } = {}): Promise<{ reference: string }> {
   beginUpload(progress);
   api = liveUploadApi(api, progress);
-  if (options.remember !== false) remembered.add(progress);
+  if (options.remember !== false && options.recoverySession) { bindRecovery(progress, options.recoverySession); remembered.add(progress); }
   signal?.throwIfAborted();
   const sha256 = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await values.file.arrayBuffer())), b => b.toString(16).padStart(2, '0')).join('');
   signal?.throwIfAborted();
@@ -96,7 +98,7 @@ export async function submitOwnedReport(values: ProductUploadValues, api: ApiFet
   if (restoredFile && sameUpload) {
     progress.identity = identity; // the same file: carry on with the restored report, declaration and attempt
   } else if (progress.identity !== identity || !progress.requestId) {
-    if (restoredFile) clearRecovery(); // the interrupted upload has nothing on the server to finish: this is a new one
+    if (restoredFile) forgetUpload(progress); // the interrupted upload has nothing on the server to finish
     const cancelled = progress.cancelRequested;
     for (const key of Object.keys(progress)) delete progress[key as keyof UploadProgress];
     Object.assign(progress, { identity, requestId: crypto.randomUUID(), cancelRequested: cancelled, facts });
@@ -117,7 +119,7 @@ export async function submitOwnedReport(values: ProductUploadValues, api: ApiFet
     assertLiveUpload(progress);
     if (!(progress.restored && error instanceof SubmitError && error.status === 404)) throw error;
     // The restored report is gone (deleted, or it was another person's): this is a new upload.
-    clearRecovery();
+    forgetUpload(progress);
     for (const key of Object.keys(progress)) delete progress[key as keyof UploadProgress];
     Object.assign(progress, { identity, requestId: crypto.randomUUID(), facts });
     existing = report(await register());
@@ -127,7 +129,7 @@ export async function submitOwnedReport(values: ProductUploadValues, api: ApiFet
   const verified = (value: unknown) => {
     const result = report(value);
     if (!result.fileUploaded || result.sha256 !== sha256 || result.contentType !== contentType) throw new Error('File not verified');
-    if (remembered.has(progress)) clearRecovery(); // finished and verified: nothing is left to recover
+    if (remembered.has(progress)) forgetUpload(progress); // finished and verified
     return { reference: result.id };
   };
   if (existing.fileUploaded) return verified(existing);

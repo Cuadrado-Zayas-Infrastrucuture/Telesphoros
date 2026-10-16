@@ -3,6 +3,7 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { submitReport, type UploadProgress } from './api';
 import { cancelOwnedUpload, downloadReport, retireOwnedUpload } from './ownedStorageApi';
 import { productUploadSchema } from './productUploadSchema';
+import { endRecoverySession, startRecoverySession } from './uploadRecovery';
 const patientId = '11111111-1111-4111-8111-111111111111';
 const id = '22222222-2222-4222-8222-222222222222';
 const revision = '33333333-3333-4333-8333-333333333333';
@@ -96,21 +97,30 @@ it('does not register metadata when the caller already cancelled', async () => {
 });
 
 
-it.each(['registration', 'state', 'declaration', 'bytes', 'cancel'] as const)('retiring pending %s work prevents late progress and further API calls', async stage => {
+const pendingStages = ['registration', 'state', 'declaration', 'bytes', 'cancel'] as const;
+it.each(pendingStages.flatMap(stage => (['page', 'session'] as const).map(lifetime => ({ stage, lifetime }))))('retiring the $lifetime during pending $stage work prevents late progress and further API calls', async ({ stage, lifetime }) => {
+  const owner = startRecoverySession('a'.repeat(64));
   const progress: UploadProgress = stage === 'cancel' ? { reportId: id, declaration: { requestId: original, revision, contentType: 'application/json', sha256: sha }, attempt: { attemptId, revision, state: 'declared', expiresAt: new Date(Date.now() + 300000).toISOString() } } : {};
+  // Cancellation can begin with progress restored before this page sent a request.
+  if (stage === 'cancel') {
+    const { bindRecovery } = await import('./uploadRecovery');
+    bindRecovery(progress, owner);
+  }
   let reached!: () => void; const pendingBody = new Promise<void>(resolve => { reached = resolve; });
   let finish!: (body: unknown) => void;
   const at = stage === 'registration' ? 0 : stage === 'state' ? 1 : stage === 'declaration' ? 2 : stage === 'bytes' ? 3 : 0;
   const bodies = stage === 'cancel' ? [attempt('cancelled')] : [report(), {revision: original, fileUploaded: false}, attempt('declared'), attempt('committed'), report(true)];
   let calls = 0;
   const api = vi.fn(async () => { const index = calls++; const reply = response(bodies[index]); if (index === at) reply.json = () => { reached(); return new Promise(resolve => { finish = resolve; }); }; return reply; });
-  const operation = stage === 'cancel' ? cancelOwnedUpload(api, progress) : submitReport(values, api, progress);
-  const refused = expect(operation).rejects.toThrow('Upload page ended');
+  const operation = stage === 'cancel' ? cancelOwnedUpload(api, progress) : submitReport(values, api, progress, undefined, owner);
+  const refused = expect(operation).rejects.toThrow(lifetime === 'page' ? 'Upload page ended' : 'Upload session ended');
   await pendingBody;
   const snapshot = JSON.stringify(progress);
-  retireOwnedUpload(progress); finish(bodies[at]); await refused;
+  if (lifetime === 'page') retireOwnedUpload(progress); else endRecoverySession(owner);
+  finish(bodies[at]); await refused;
   expect(JSON.stringify(progress)).toBe(snapshot);
   expect(api).toHaveBeenCalledTimes(at + 1);
+  endRecoverySession(owner);
 });
 
 it('idle progress survives initial cleanup replay, but retired active progress cannot restart', async () => {

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildMeta,
+  meDtoSchema,
+  recoveryScopeDtoSchema,
   CORRECTION_KINDS,
   CORRECTION_REASON_CODES,
   correctionCreateSchema,
@@ -223,5 +225,23 @@ describe('patient identifiers and the patient link', () => {
       expect(ok({ method: 'person-confirmed', decision: 'verified', basisCode: 'no-identifier-on-report', createdBy: 'me' })).toBe(false);
       expect(ok({ method: 'guess', decision: 'verified' })).toBe(false);
     });
+  });
+});
+
+
+describe('compatible identity capability contracts', () => {
+  it('keeps /me exactly roles-only for old and cached clients', () => {
+    expect(meDtoSchema.parse({ roles: ['clinician'] })).toEqual({ roles: ['clinician'] });
+    expect(meDtoSchema.safeParse({ roles: ['clinician'], recoveryScope: 'a'.repeat(64) }).success).toBe(false);
+  });
+  it('accepts an opaque scope only through its separate strict contract', () => {
+    expect(recoveryScopeDtoSchema.parse({ recoveryScope: 'a'.repeat(64) })).toEqual({ recoveryScope: 'a'.repeat(64) });
+  });
+  it.each([undefined, '', 'tenant:alice', 'A'.repeat(64), 'a'.repeat(63)])('refuses invalid or missing scope %s', recoveryScope => {
+    expect(recoveryScopeDtoSchema.safeParse({ recoveryScope }).success).toBe(false);
+  });
+  it('refuses raw identity fields on either endpoint', () => {
+    expect(meDtoSchema.safeParse({ roles: [], sub: 'synthetic-person' }).success).toBe(false);
+    expect(recoveryScopeDtoSchema.safeParse({ recoveryScope: 'a'.repeat(64), sub: 'synthetic-person' }).success).toBe(false);
   });
 });

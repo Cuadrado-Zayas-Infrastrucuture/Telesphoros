@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ownedStorageMode } from '@/lib/storageMode';
 import { cancelOwnedUpload, restoreProgress, retireOwnedUpload } from '@/lib/ownedStorageApi';
-import { clearRecovery, readRecovery, type RecoveryEntry } from '@/lib/uploadRecovery';
+import { clearRecovery, readRecovery, RECOVERY_LIFETIME_MS, type RecoveryEntry } from '@/lib/uploadRecovery';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { RefreshCw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -53,10 +53,19 @@ const STEP_FIELDS = [['patientId'], ['reportType', 'file'], ['syntheticConfirmed
 
 export default function UploadReportPage() {
   usePageTitle('Upload report');
-  const { apiFetch } = useAuth();
+  const { apiFetch, recoverySession } = useAuth();
   // After a reload the browser may still hold an interrupted upload of this tab (see lib/uploadRecovery.ts): offer to finish or cancel it.
-  const [interrupted, setInterrupted] = useState<RecoveryEntry | undefined>(() => readRecovery());
-  const [startingProgress] = useState<UploadProgress>(() => (interrupted ? restoreProgress(interrupted) : {}));
+  const [interrupted, setInterrupted] = useState<RecoveryEntry | undefined>(() => readRecovery(recoverySession));
+  const [startingProgress] = useState<UploadProgress>(() => (interrupted && recoverySession ? restoreProgress(interrupted, recoverySession) : {}));
+  useEffect(() => {
+    if (!interrupted) return;
+    const refresh = () => setInterrupted(readRecovery(recoverySession));
+    const timer = setTimeout(refresh, Math.max(0, Date.parse(interrupted.savedAt) + RECOVERY_LIFETIME_MS - Date.now()));
+    const visible = () => { if (document.visibilityState === 'visible') refresh(); };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', visible);
+    return () => { clearTimeout(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', visible); };
+  }, [interrupted, recoverySession]);
   const progress = useRef<UploadProgress>(startingProgress);
   const transfer = useRef<AbortController | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -124,7 +133,7 @@ export default function UploadReportPage() {
     setServerError(null);
     transfer.current = new AbortController();
     try {
-      const result = await submitReport(values, apiFetch, progress.current, transfer.current.signal);
+      const result = await submitReport(values, apiFetch, progress.current, transfer.current.signal, recoverySession ?? undefined);
       setReference(result.reference);
     } catch (error) {
       // Values stay in the form so the user can retry without retyping.
@@ -134,7 +143,7 @@ export default function UploadReportPage() {
       transfer.current = null;
       if (progress.current.cancelRequested) await cancelUpload();
       setCanStartOver(!progress.current.declaration || ['cancelled', 'cleaned', 'committed'].includes(progress.current.attempt?.state ?? ''));
-      setInterrupted(readRecovery());
+      setInterrupted(readRecovery(recoverySession));
     }
   }
 
@@ -143,7 +152,7 @@ export default function UploadReportPage() {
     try {
       await cancelOwnedUpload(apiFetch, progress.current);
       setServerError('Upload cancelled. Start a new upload when ready.');
-      setInterrupted(readRecovery());
+      setInterrupted(readRecovery(recoverySession));
     } catch (error) {
       setServerError(error instanceof SubmitError ? error.message : 'Cancellation could not be confirmed. Retry cancellation before starting over.');
     } finally {

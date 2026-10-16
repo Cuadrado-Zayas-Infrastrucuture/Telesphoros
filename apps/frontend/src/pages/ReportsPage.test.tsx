@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Role } from '@telesphoros/shared-types';
-import { API, renderApp } from '@/test/authTestUtils';
+import { API, RECOVERY_SCOPE, renderApp } from '@/test/authTestUtils';
 import { downloadReport } from '@/lib/ownedStorageApi';
 vi.mock('@/lib/storageMode', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/storageMode')>(), ownedStorageMode: () => true }));
 vi.mock('@/lib/ownedStorageApi', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/ownedStorageApi')>(), downloadReport: vi.fn(async () => undefined) }));
@@ -17,6 +17,7 @@ function fetcher(roles: Role[], reports: (url: URL) => Promise<Response> = async
   return vi.fn<typeof fetch>(async input => {
     const url = new URL(String(input));
     if (url.pathname.endsWith('/me')) return json({ roles });
+    if (url.pathname.endsWith('/me/recovery-scope')) return json({ recoveryScope: RECOVERY_SCOPE });
     if (url.pathname.endsWith('/patients')) return json({ data: [p1, p2].map((id, i) => ({ id, label: `SYN-${i + 1}`, createdAt: date, updatedAt: date })), meta: { page: 1, pageSize: 20, total: 2, totalPages: 1 } });
     return reports(url);
   });
@@ -256,6 +257,7 @@ describe('dashboard presentation', () => {
     const api = vi.fn<typeof fetch>(async input => {
       const url = new URL(String(input));
       if (url.pathname.endsWith('/me')) return json({ roles: ['reader'] });
+      if (url.pathname.endsWith('/me/recovery-scope')) return json({ recoveryScope: RECOVERY_SCOPE });
       if (url.pathname.endsWith('/patients')) return json({ data: [{ id: p1, label: 'SYN-1', createdAt: date, updatedAt: date }], meta: { page: 1, pageSize: 20, total: 21, totalPages: 2 } });
       return json({ data: [row()], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } });
     });
@@ -269,7 +271,7 @@ describe('dashboard presentation', () => {
 
 
 it('filters only loaded records, clears stale details and restores records without another request', async () => {
-  const api = vi.fn<typeof fetch>(async input => String(input).includes('/me') ? json({ roles: ['clinician'] }) : String(input).includes('/patients') ? json({ data: [{ id: p1, label: 'SYN-1' }], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } }) : json({ data: [row(), { ...row(p1, false), id: p2, filename: 'pending.json' }], meta: { page: 1, pageSize: 20, total: 40, totalPages: 2 } }));
+  const api = vi.fn<typeof fetch>(async input => String(input).endsWith('/me/recovery-scope') ? json({ recoveryScope: RECOVERY_SCOPE }) : String(input).includes('/me') ? json({ roles: ['clinician'] }) : String(input).includes('/patients') ? json({ data: [{ id: p1, label: 'SYN-1' }], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } }) : json({ data: [row(), { ...row(p1, false), id: p2, filename: 'pending.json' }], meta: { page: 1, pageSize: 20, total: 40, totalPages: 2 } }));
   renderApp('/reports', { signedInAs: ['clinician'], fetchImpl: api }); await heading();
   const user = userEvent.setup();
   await user.click(await screen.findByRole('button', { name: 'Open synthetic.vcf' }));
