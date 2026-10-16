@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-14**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## CI dependency caching (proposed, 2026-10-16)
+
+The founder approved compiler/dependency cache improvements while preserving all six required checks and the policy that main runs are never cancelled. The [plan and verification](verification/ci-dependency-caching.md) cover setup-go's gitleaks inputs, a Playwright-version browser key, Docker dependency layers and a scoped BuildKit cache. Database tests, recovery profiles, scan commands, image attestations and deployment behavior are unchanged. Local and remote verification results are recorded there; no merge or deployment is authorized.
+
 ## F07 publication candidate (local, 2026-10-16)
 
 `fix/f07-download-cors-publication` starts from current main `6f2ddaa`, after F06 PR #131 and the FD-7 documentation PR #132 merged. It ports F07 from `a4ca244`, including all **38 promoted origin probes**, the shared GET-only storage policy and parity in both the owned and older review launchers. The real-storage browser bridge from `60f1795` verifies recovery through reload and same-caller sign-in to an exact-version download. Both source integration branches and the combined reference remain preserved. The [F07 verification record](verification/f07-download-cors.md) defines the candidate checks and separates earlier evidence from fresh results recorded externally. No push, PR, Terraform apply or deployment is authorized by this local preparation.
