@@ -78,6 +78,10 @@
   --size-control: 2.75rem;
 
   /* Layout */
+  --size-sidebar: 15rem;
+  --size-context-drawer: 30rem;
+  --size-chat-workspace: calc(100dvh - 15rem);
+  --size-chat-min: 26rem;
   --size-page: 72rem;
   --size-prose: 40rem;
   --size-report-list: 24rem;

@@ -7,7 +7,8 @@ import { RefreshCw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { Paginated, PatientDto } from '@telesphoros/shared-types';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch, type FieldErrors } from 'react-hook-form';
+import { QuestionnaireProgress } from '@/components/ui/QuestionnaireProgress';
 import { Alert } from '@/components/ui/Alert';
 import { AlertDescription } from '@/components/ui/AlertDescription';
 import { AlertTitle } from '@/components/ui/AlertTitle';
@@ -46,6 +47,9 @@ const emptyValues = {
   file: undefined,
   syntheticConfirmed: false,
 } as unknown as ProductUploadValues;
+
+const GUIDE_STEPS = ['Choose patient', 'Choose file', 'Review upload'] as const;
+const STEP_FIELDS = [['patientId'], ['reportType', 'file'], ['syntheticConfirmed']] as const;
 
 export default function UploadReportPage() {
   usePageTitle('Upload report');
@@ -86,12 +90,35 @@ export default function UploadReportPage() {
   // Changing the key remounts the file input, the only way to clear a native file control.
   const [formKey, setFormKey] = useState(0);
 
+  const [guided, setGuided] = useState(false);
   const form = useForm<ProductUploadValues>({
     resolver: zodResolver(productUploadSchema),
     defaultValues: emptyValues,
-    mode: 'onTouched',
+    // In the guide, clear an error on change so blur cannot move Next during a pointer click.
+    mode: guided ? 'onChange' : 'onTouched',
   });
   const { isSubmitting } = form.formState;
+  const [step, setStep] = useState(0);
+  const stepHeading = useRef<HTMLHeadingElement>(null);
+  const pendingField = useRef<keyof ProductUploadValues | null>(null);
+  const values = useWatch({ control: form.control });
+  useEffect(() => {
+    if (!guided) return;
+    if (pendingField.current) { form.setFocus(pendingField.current); pendingField.current = null; }
+    else stepHeading.current?.focus();
+  }, [guided, step, form]);
+
+  async function nextStep() {
+    if (await form.trigger([...STEP_FIELDS[step]], { shouldFocus: true })) setStep(current => current === step ? Math.min(step + 1, 2) : current);
+  }
+  function showInvalidStep(errors: FieldErrors<ProductUploadValues>) {
+    if (!guided) return;
+    const firstInvalid = STEP_FIELDS.findIndex(fields => fields.some(field => errors[field]));
+    if (firstInvalid >= 0 && firstInvalid !== step) {
+      pendingField.current = STEP_FIELDS[firstInvalid].find(field => errors[field]) ?? null;
+      setStep(firstInvalid);
+    }
+  }
 
   async function onSubmit(values: ProductUploadValues) {
     setServerError(null);
@@ -154,6 +181,7 @@ export default function UploadReportPage() {
     progress.current = {};
     setCanStartOver(true);
     setSelectedPatient(null);
+    setStep(0);
     form.reset(emptyValues);
     setReference(null);
     setServerError(null);
@@ -210,16 +238,28 @@ export default function UploadReportPage() {
 
       <Card className="bg-panel shadow-panel">
         <CardHeader>
-          <CardTitle>Report details</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle>Report details</CardTitle>
+            <Button variant="outline" size="sm" aria-pressed={guided} disabled={isSubmitting || cancelling} onClick={() => { setGuided(current => !current); setStep(0); }}>
+              {guided ? 'Show full form' : 'Guide me step by step'}
+            </Button>
+          </div>
           <CardDescription>The file is checked in your browser before anything is submitted.</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form key={formKey} onSubmit={event => void form.handleSubmit(onSubmit)(event)} noValidate className="flex flex-col gap-6">
+            <form key={formKey} onSubmit={event => {
+              if (guided && step < 2) { event.preventDefault(); void nextStep(); }
+              else void form.handleSubmit(onSubmit, showInvalidStep)(event);
+            }} noValidate className="flex flex-col gap-6">
+              {guided && <>
+                <QuestionnaireProgress steps={GUIDE_STEPS} active={step} />
+                <h2 ref={stepHeading} tabIndex={-1} className="text-xl">{GUIDE_STEPS[step]}</h2>
+              </>}
               <fieldset disabled={isSubmitting || cancelling} className="flex min-w-0 flex-col gap-6">
                 <legend className="sr-only">Report details</legend>
 
-                <div className="flex flex-col gap-2">
+                <div hidden={guided && step !== 0} className={guided && step !== 0 ? 'hidden' : 'flex flex-col gap-2'}>
                 <FormField
                   control={form.control}
                   name="patientId"
@@ -257,6 +297,7 @@ export default function UploadReportPage() {
                 {patientError && <p role="alert" className="text-sm text-destructive">{patientError}</p>}
                 </div>
 
+                <div hidden={guided && step !== 1} className={guided && step !== 1 ? 'hidden' : 'flex flex-col gap-6'}>
                 <FormField
                   control={form.control}
                   name="reportType"
@@ -300,6 +341,17 @@ export default function UploadReportPage() {
                   )}
                 />
 
+                </div>
+                <div hidden={guided && step !== 2} className={guided && step !== 2 ? 'hidden' : 'flex flex-col gap-6'}>
+                {guided && <section aria-label="Upload summary" className="rounded-lg border border-divider bg-background p-4">
+                  <h3 className="text-lg">Check your entries</h3>
+                  <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                    <div><dt className="text-muted-foreground">Synthetic patient</dt><dd className="wrap-anywhere font-medium">{selectedPatient?.label ?? 'Not selected'}</dd></div>
+                    <div><dt className="text-muted-foreground">Report type</dt><dd>{values.reportType ? REPORT_TYPE_LABELS[values.reportType] : 'Not selected'}</dd></div>
+                    <div className="min-w-0 sm:col-span-2"><dt className="text-muted-foreground">Report file</dt><dd className="wrap-anywhere">{values.file?.name ?? 'Not selected'}{values.file && ` (${describeSize(values.file.size)})`}</dd></div>
+                  </dl>
+                  <p className="mt-3 text-sm text-muted-foreground">Nothing has been submitted yet. Storage verification happens after upload and is not clinical review.</p>
+                </section>}
                 <FormField
                   control={form.control}
                   name="syntheticConfirmed"
@@ -324,8 +376,11 @@ export default function UploadReportPage() {
                   )}
                 />
 
-                <div>
-                  <Button type="submit" size="lg" disabled={isSubmitting || cancelling} className="w-full sm:w-auto">
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  {guided && step > 0 && <Button variant="outline" onClick={() => setStep(current => current - 1)}>Previous step</Button>}
+                  {guided && step < 2 && <Button onClick={() => void nextStep()}>Next step</Button>}
+                  <Button hidden={guided && step < 2} type="submit" size="lg" disabled={isSubmitting || cancelling} className={guided && step < 2 ? 'hidden' : 'w-full sm:w-auto'}>
                     {isSubmitting ? (
                       <>
                         <Spinner /> Uploading…

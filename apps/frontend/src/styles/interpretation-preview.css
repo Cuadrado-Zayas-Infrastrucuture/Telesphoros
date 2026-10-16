@@ -17,3 +17,36 @@
 @keyframes preview-shimmer { to { background-position: -200% center; } }
 @media (prefers-reduced-motion: reduce) { .preview-shimmer { animation: none; background: none; -webkit-text-fill-color: currentColor; } }
 @media (forced-colors: active) { .preview-shimmer { animation: none; background: none; color: CanvasText; -webkit-text-fill-color: currentColor; } }
+
+/* Prompt Kit messages and composer occupy the main column. Context stays in the modal drawer. */
+.chat-workspace .chat-surface { display: flex; flex-direction: column; height: var(--size-chat-workspace); min-height: var(--size-chat-min); }
+.chat-workspace .preview-conversation { height: auto; min-height: 0; flex: 1; }
+.chat-workspace .preview-conversation > div { max-width: var(--size-prose); margin-inline: auto; }
+.chat-workspace .chat-surface > div:last-child { flex-shrink: 0; }
+.chat-workspace .mascot-welcome--assistant { padding-block: 2rem; }
+.chat-workspace .context-drawer .preview-conversation { height: auto; }
+@media (max-width: 40rem) {
+  .chat-workspace .chat-surface { height: auto; min-height: var(--size-chat-min); }
+  .chat-workspace .preview-conversation { min-height: 16rem; max-height: 55dvh; }
+}
+
+.chat-workspace .assistant-footer { padding: 1rem; }
+.chat-workspace .assistant-composer textarea { min-height: var(--size-control); max-height: 5rem; }
+
+.chat-workspace .assistant-footer { position: relative; }
+.chat-workspace .assistant-question-menu > div { position: absolute; bottom: 100%; right: 1rem; left: 1rem; z-index: 20; }
+.chat-workspace .mascot-welcome-image { width: 5rem; }
+@media (max-width: 40rem) {
+  .chat-workspace .chat-surface > div:first-child { padding: .75rem 1rem; }
+  .chat-workspace .chat-surface > div:first-child p { display: none; }
+  .chat-workspace .mascot-welcome-image { width: 4rem; }
+  .chat-workspace .mascot-welcome--assistant { padding-block: 1rem; }
+}
+
+.chat-workspace .assistant-latest { position: absolute; bottom: 100%; right: 1rem; z-index: 10; }
+
+/* Prompt Kit disclosures stay quiet until opened. */
+.preview-reasoning > summary { list-style: none; }
+.preview-reasoning > summary::-webkit-details-marker { display: none; }
+.preview-reasoning[open] .preview-disclosure-chevron { transform: rotate(180deg); }
+.preview-thinking { background: var(--panel); }

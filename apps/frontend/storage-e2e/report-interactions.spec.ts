@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { expect, test } from '@playwright/test';
-import { selectReportsPatient, signInWithPatient } from '../e2e/helpers';
+import { openWorkspaceNavigation, selectReportsPatient, signInWithPatient } from '../e2e/helpers';
 
 test('report loading preserves layout and focus, honors reduced motion and recovers from a failed read', async ({ page }) => {
   const fixture = await signInWithPatient(page);
@@ -11,6 +11,7 @@ test('report loading preserves layout and focus, honors reduced motion and recov
     expect(extra.status()).toBe(201);
   }
   // The application intentionally keeps its session in memory; use its own navigation.
+  await openWorkspaceNavigation(page);
   await page.getByRole('link', { name: 'Reports', exact: true }).click();
   await selectReportsPatient(page, fixture);
   const report = page.getByRole('button', { name: 'Open synthetic-interaction.json', exact: true });

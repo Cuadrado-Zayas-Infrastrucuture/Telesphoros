@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
-import { signInAs, signInWithPatient } from '../e2e/helpers';
+import { openWorkspaceNavigation, signInAs, signInWithPatient } from '../e2e/helpers';
 
 async function storageInventory() {
   const require = createRequire(new URL('../../backend/package.json', import.meta.url));
@@ -165,6 +165,7 @@ test('reports pagination, keyboard download, reviewer access and accessibility',
   const downloaded = page.waitForEvent('download'); await page.keyboard.press('Enter');
   expect(await readFile((await (await downloaded).path())!)).toEqual(sample.bytes);
   await page.screenshot({ path: `test-results/l2-reports-${test.info().project.name}.png`, fullPage: true });
+  await openWorkspaceNavigation(page);
   await page.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Synthetic report storage' })).toBeVisible();
   await expect(page.getByRole('contentinfo')).toContainText('Clinical processing is disabled');

@@ -17,3 +17,9 @@ HTMLCanvasElement.prototype.getContext = (() => null) as typeof HTMLCanvasElemen
 
 // JSDOM has no viewport; landing navigation scroll is checked in Playwright.
 window.scrollTo = () => {};
+
+// jsdom has no native modal lifecycle; browser tests exercise real focus containment and Escape.
+if (!HTMLDialogElement.prototype.showModal) {
+  HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
+  HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); this.dispatchEvent(new Event('close')); };
+}

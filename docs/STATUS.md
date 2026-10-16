@@ -3,6 +3,10 @@
 Read this first to pick the project up. Snapshot: **2026-10-14**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Dashboard sidebar and guided workflows (local, 2026-10-15)
+
+`feat/dashboard-guided-workflows` adds sidebar navigation, a wide Prompt Kit chat on its existing development route, native drawers for report metadata and bundled synthetic evidence, and compact chat controls. Guided upload, retained inputs and explicit page-local report filters are included. Existing SDK/transport, backend, roles, recovery, clinical gates, branding and public landing remain unchanged. Final checks: 309 frontend tests, 24 brand rejection tests and lint/typecheck/build/chunk checks. The sidebar revision passed 118 browser cases across three profiles; the later Prompt Kit refinement received targeted desktop/mobile browser checks. See [verification](verification/dashboard-guided-workflows.md) and [approved plan](design/plans/dashboard-guided-workflows.md). Feature-branch commit and push requested; no PR, deployment, real data or database/clinical acceptance.
+
 ## Launcher CORS reconciliation (local, 2026-10-15)
 
 `fix/launcher-cors-current-main` carries PR #105's launcher regression controls and Moto pin validation onto main `7bf283a`, which already contains the merged #116 worker-cap test repair. The original #105 branch remains at `25ddb18`; its historical failed CI run has not tested this replacement. Both launchers retain their current policies: owned GET/HEAD and older review PUT. The five native controls cover actual child environments, the owned worker handoff and real-origin refusal/success. See [coverage verification](verification/launcher-cors-regression-coverage.md). #111 and F06/F07 branches remain unchanged. This reconciliation is local; no push, merge or deployment.

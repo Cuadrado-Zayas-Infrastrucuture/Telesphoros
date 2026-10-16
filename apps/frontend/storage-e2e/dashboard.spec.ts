@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { expect, test } from '@playwright/test';
-import { selectReportsPatient, signInAs, signInWithPatient } from '../e2e/helpers';
+import { openWorkspaceNavigation, selectReportsPatient, signInAs, signInWithPatient } from '../e2e/helpers';
 
 const require = createRequire(import.meta.url);
 
@@ -13,6 +13,7 @@ test('real report reads filter and paginate without retaining the previous selec
     });
     expect(response.status()).toBe(201);
   }
+  await openWorkspaceNavigation(page);
   await page.getByRole('link', { name: 'Reports', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Reports' })).toBeVisible();
   await selectReportsPatient(page, fixture);
@@ -59,7 +60,7 @@ test('real report reads filter and paginate without retaining the previous selec
   await expect(page.getByText('Page 2 of 2. 21 records.', { exact: true })).toBeVisible();
   await expect(next).toBeFocused();
   await expect(page.getByRole('button', { name: /^Open synthetic-/ })).toHaveCount(1);
-  if (test.info().project.name.includes('desktop')) await expect(page.getByText('Select a report to inspect its metadata.')).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Report details' })).toHaveCount(0);
   await expect(page.getByLabel('Filter by patient')).toHaveValue(fixture.id);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.evaluate(() => document.fonts.ready);

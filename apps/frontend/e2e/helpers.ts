@@ -55,3 +55,9 @@ export async function selectReportsPatient(page: Page, fixture: { id: string; la
   }
   throw new Error('Synthetic report patient was not listed within bounded option pages.');
 }
+
+/** Open the compact workspace menu before using a sidebar item on mobile. */
+export async function openWorkspaceNavigation(page: Page) {
+  const menu = page.getByRole('button', { name: 'Workspace navigation', exact: true });
+  if (await menu.isVisible() && await menu.getAttribute('aria-expanded') !== 'true') await menu.click();
+}
