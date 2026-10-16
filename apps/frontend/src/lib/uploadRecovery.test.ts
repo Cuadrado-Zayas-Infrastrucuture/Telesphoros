@@ -1,7 +1,8 @@
 import { webcrypto } from 'node:crypto';
+import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { submitReport as rawSubmitReport, SubmitError, type UploadProgress, type ApiFetch } from './api';
-import { cancelOwnedUpload, restoreProgress, retireOwnedUpload } from './ownedStorageApi';
+import { cancelOwnedUpload, downloadReport, restoreProgress, retireOwnedUpload } from './ownedStorageApi';
 import type { ProductUploadValues } from './productUploadSchema';
 import { bindRecovery, clearRecovery, endRecoverySession, forgetUpload, readRecovery, rememberUpload, startRecoverySession, RECOVERY_LIFETIME_MS, type RecoverySession } from './uploadRecovery';
 
@@ -367,5 +368,97 @@ describe('late responses racing newer recovery', () => {
     expect(JSON.stringify(progress)).toBe(before);
     expect(api).toHaveBeenCalledTimes(1);
     expect(readRecovery(owner)).toEqual(kept);
+  });
+});
+
+
+describe('recovery-to-download', () => {
+  function downloadEnvironment() {
+    const storage = window.sessionStorage;
+    vi.stubGlobal('window', { sessionStorage: storage, location: { hostname: '127.0.0.1' } });
+    const BaseURL = URL;
+    const createObjectURL = vi.fn(() => 'blob:synthetic-review');
+    vi.stubGlobal('URL', class extends BaseURL {
+      static createObjectURL = createObjectURL;
+      static revokeObjectURL = vi.fn();
+    });
+    vi.stubGlobal('Blob', NodeBlob);
+    const click = vi.fn();
+    vi.stubGlobal('document', { createElement: () => ({ href: '', download: '', click, remove: vi.fn() }), body: { append: vi.fn() } });
+    vi.stubEnv('VITE_REPORT_STORAGE_ORIGINS', 'https://storage.example.test');
+    const retrieve = vi.fn().mockResolvedValue(new Response('x'));
+    vi.stubGlobal('fetch', retrieve);
+    return { click, createObjectURL, retrieve };
+  }
+  function downloadLink(over: object = {}) {
+    return { url: 'https://storage.example.test/file?versionId=synthetic-version', expiresAt: new Date(Date.now() + 60000).toISOString(), ...over };
+  }
+  function saveNewerRecoveryForDownload() {
+    const newer = { requestId: otherPatient, reportId: attemptId,
+      facts: { reportType: 'structured' as const, name: 'synthetic-review-newer.json', sizeBytes: 1, sha256: sha } };
+    bindRecovery(newer, owner); rememberUpload(newer);
+    const kept = readRecovery(owner)!;
+    expect(kept.file.name).toBe('synthetic-review-newer.json');
+    return kept;
+  }
+  it.each(['stored', 'unresolved', 'committed'])('recovered %s attempt clears only its recovery and downloads verified bytes', async state => {
+    await interrupt(); const progress = reloaded();
+    const env = downloadEnvironment();
+    const bodies = [report(), attempt(state), ...(state === 'committed' ? [] : [attempt('committed')]), report(true), downloadLink()];
+    const api = vi.fn(); for (const body of bodies) api.mockResolvedValueOnce(response(body));
+    await expect(submitReport(values, api, progress)).resolves.toEqual({ reference: id });
+    expect(readRecovery(owner)).toBeUndefined();
+    await downloadReport(api, id, 'synthetic.json', 1, sha);
+    expect(api.mock.calls.filter(call => call[0] === '/api/v1/reports')).toHaveLength(0);
+    expect(api).toHaveBeenLastCalledWith('/api/v1/reports/' + id + '/download-url', expect.any(Object));
+    expect(env.retrieve).toHaveBeenCalledTimes(1);
+    expect(env.retrieve).toHaveBeenCalledWith(expect.any(URL), expect.objectContaining({ credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer', cache: 'no-store' }));
+    expect(env.retrieve.mock.calls[0]![0].searchParams.get('versionId')).toBe('synthetic-version');
+    expect(env.click).toHaveBeenCalledTimes(1); expect(readRecovery(owner)).toBeUndefined();
+  });
+  it.each(['origin', 'expiry', 'checksum', 'size'])('a recovered-report download %s failure cannot erase newer recovery or emit a file', async fault => {
+    await interrupt(); const progress = reloaded(); const env = downloadEnvironment();
+    const resume = vi.fn().mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response(attempt('committed'))).mockResolvedValueOnce(response(report(true)));
+    await submitReport(values, resume, progress);
+    const kept = saveNewerRecoveryForDownload();
+    const link = downloadLink(fault === 'origin' ? { url: 'https://storage.example.test.evil.invalid/file' } : fault === 'expiry' ? { expiresAt: new Date(Date.now() - 1).toISOString() } : {});
+    const api = vi.fn().mockResolvedValue(response(link));
+    if (fault === 'checksum') env.retrieve.mockResolvedValue(new Response('y'));
+    if (fault === 'size') env.retrieve.mockResolvedValue(new Response('xx'));
+    await expect(downloadReport(api, id, 'synthetic.json', 1, sha)).rejects.toThrow('unavailable');
+    expect(env.click).not.toHaveBeenCalled(); expect(env.createObjectURL).not.toHaveBeenCalled();
+    expect(env.retrieve).toHaveBeenCalledTimes(fault === 'origin' || fault === 'expiry' ? 0 : 1);
+    expect(readRecovery(owner)).toEqual(kept);
+  });
+  it.each((['resume', 'verification'] as const).flatMap(stage => (['page', 'session'] as const).map(lifetime => ({ stage, lifetime }))))(
+    'retiring $lifetime during recovered $stage body prevents downstream download and preserves newer recovery', async ({ stage, lifetime }) => {
+      await interrupt(); const progress = reloaded(); const env = downloadEnvironment();
+      const bodies = [report(), attempt('stored'), attempt('committed'), report(true)];
+      const pendingIndex = stage === 'resume' ? 2 : 3;
+      let arrived!: () => void; const reached = new Promise<void>(resolve => { arrived = resolve; });
+      let finish!: (body: unknown) => void;
+      let calls = 0;
+      const api = vi.fn(async () => {
+        const index = calls++; const reply = response(bodies[index]);
+        if (index === pendingIndex) reply.json = () => { arrived(); return new Promise(resolve => { finish = resolve; }); };
+        return reply;
+      });
+      const pending = submitReport(values, api, progress).then(result => downloadReport(api, result.reference, 'synthetic.json', 1, sha));
+      const refused = expect(pending).rejects.toThrow(lifetime === 'page' ? 'Upload page ended' : 'Upload session ended');
+      await reached; const before = JSON.stringify(progress);
+      if (lifetime === 'page') retireOwnedUpload(progress); else { endRecoverySession(owner); owner = startRecoverySession('b'.repeat(64)); }
+      const kept = saveNewerRecoveryForDownload();
+      finish(bodies[pendingIndex]); await refused;
+      expect(JSON.stringify(progress)).toBe(before); expect(api).toHaveBeenCalledTimes(pendingIndex + 1);
+      expect(env.retrieve).not.toHaveBeenCalled(); expect(env.click).not.toHaveBeenCalled();
+      expect(readRecovery(owner)).toEqual(kept);
+    },
+  );
+  it('memory-only fallback can reconcile a same-page lost reply and download without recovery storage', async () => {
+    endRecoverySession(owner); owner = startRecoverySession();
+    const progress = await interrupt(); const env = downloadEnvironment();
+    const api = vi.fn().mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response(attempt('committed'))).mockResolvedValueOnce(response(report(true))).mockResolvedValueOnce(response(downloadLink()));
+    await submitReport(values, api, progress); await downloadReport(api, id, 'synthetic.json', 1, sha);
+    expect(memory.size).toBe(0); expect(env.retrieve).toHaveBeenCalledTimes(1); expect(env.click).toHaveBeenCalledTimes(1);
   });
 });
