@@ -493,3 +493,111 @@
   .product-landing .workflow-next:hover > svg,
   .product-landing .workflow-compare:hover > svg { transform: none; }
 }
+
+/* Hero composition: copy beside a still synthetic report card, over a code-drawn backdrop (plan: docs/design/plans/landing-alignment.md, S2). */
+.product-landing .landing-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: clip;
+  pointer-events: none;
+}
+.product-landing .landing-backdrop-folds {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: .5;
+}
+.product-landing .landing-backdrop-sequence {
+  position: absolute;
+  top: -2rem;
+  right: -4%;
+  width: min(56rem, 78%);
+  height: auto;
+  opacity: .08;
+}
+.product-landing .landing-backdrop-sequence text {
+  font-family: inherit;
+  font-size: 1.25rem;
+  fill: var(--landing-soft-text);
+}
+.product-landing .landing-backdrop-sequence path {
+  fill: none;
+  stroke: var(--landing-soft-text);
+  stroke-width: .65;
+}
+.product-landing .landing-fold-stop-dark { stop-color: var(--landing-night); }
+.product-landing .landing-fold-stop-mid { stop-color: var(--primary); }
+.product-landing .landing-fold-stop-light { stop-color: var(--landing-depth); }
+.product-landing .landing-fold-edge {
+  fill: none;
+  stroke: var(--brand-accent);
+  stroke-width: 1;
+  opacity: .45;
+}
+.product-landing .landing-hero-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+  align-items: center;
+  gap: clamp(2rem, 5vw, 4.5rem);
+}
+.product-landing .landing-hero-text { min-width: 0; }
+.product-landing .landing-hero h1 { font-size: var(--landing-fs-hero); }
+.product-landing .landing-hero-visual { min-width: 0; }
+.product-landing .landing-report-card {
+  background: var(--panel);
+  color: var(--foreground);
+  border-radius: var(--radius-2);
+  box-shadow: var(--landing-preview-shadow);
+  overflow: hidden;
+  font-size: var(--landing-fs-small);
+  line-height: 1.4;
+}
+.product-landing .landing-report-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.125rem 1.5rem;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.product-landing .landing-report-head > span:first-child { display: inline-flex; align-items: center; gap: .5rem; font-weight: 600; }
+.product-landing .landing-report-head > span:last-child { color: var(--landing-soft-text); }
+.product-landing .landing-report-card svg { width: 1rem; height: 1rem; flex: none; }
+.product-landing .landing-report-body { display: grid; padding: .5rem 1.5rem; }
+.product-landing .landing-report-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 1rem;
+  border-bottom: 1px solid var(--divider);
+}
+.product-landing .landing-report-row:last-child { border-bottom: 0; }
+.product-landing .landing-report-row > span:first-child { display: inline-flex; align-items: center; gap: .5rem; min-width: 0; overflow-wrap: anywhere; }
+.product-landing .landing-report-row > span:last-child { color: var(--muted-foreground); text-align: right; }
+.product-landing .landing-report-row > span.landing-report-verified { color: var(--success); font-weight: 600; }
+.product-landing .landing-report-foot {
+  margin: 0;
+  padding: .875rem 1.5rem;
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+@media(max-width:62.5rem) {
+  .product-landing .landing-hero-content { grid-template-columns: minmax(0, 1fr); }
+  .product-landing .landing-hero h1 { font-size: var(--landing-fs-display); }
+  .product-landing .landing-hero-visual { max-width: 32rem; }
+}
+@media(max-width:45.0rem) {
+  .product-landing .landing-backdrop-folds { width: 140%; left: -20%; opacity: .34; }
+  .product-landing .landing-backdrop-sequence { width: 140%; right: -45%; top: 12rem; opacity: .06; }
+  .product-landing .landing-report-head, .product-landing .landing-report-foot { padding-inline: 1rem; }
+  .product-landing .landing-report-body { padding-inline: 1rem; }
+}
+@media(forced-colors:active) {
+  .product-landing .landing-backdrop { display: none; }
+  .product-landing .landing-report-card { border: 1px solid CanvasText; }
+  .product-landing .landing-report-head { border-bottom: 1px solid CanvasText; }
+}

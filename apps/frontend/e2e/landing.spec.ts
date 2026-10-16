@@ -111,7 +111,10 @@ test('landing motion is decorative, finite and leaves a complete still page for 
   // Drawn elements are decoration only.
   expect(await page.locator('.landing-particles--hero .landing-particle').count()).toBeGreaterThan(20);
   await expect(page.locator('.landing-fragment')).toHaveCount(3);
-  for (const element of await page.locator('.landing-particles, .landing-fragment').all()) await expect(element).toHaveAttribute('aria-hidden', 'true');
+  // The hero's report card and backdrop are still, code-drawn decoration with nothing to operate.
+  await expect(page.locator('.landing-hero .landing-report-card')).toHaveCount(1);
+  await expect(page.locator('.landing-hero .landing-report-card :is(a, button, input, [tabindex])')).toHaveCount(0);
+  for (const element of await page.locator('.landing-particles, .landing-fragment, .landing-backdrop, .landing-report-card').all()) await expect(element).toHaveAttribute('aria-hidden', 'true');
   // The approved artwork never moves.
   await expect(page.locator('.mascot-welcome-image')).toHaveCSS('animation-name', 'none');
   // Nothing repeats forever, and the time-based motion ends.
