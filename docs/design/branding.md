@@ -13,7 +13,7 @@ The updated product/company identity uses Inter for readable editorial and appli
 | Text | Reports use approved `--dashboard-foreground` (#173E47) and `--dashboard-muted-foreground` (#36515A); other surfaces use shared dark teal text. Decorative accent is not body text |
 | Controls | Existing components and approved fills; minimum shared target 2.75rem (44px at the default root size) |
 | Status | Semantic success/warning/error tokens, expressed as words; never decorative badges |
-| Artwork | Exact approved company/product logos, original static DNA, unchanged mascot and bundled fonts |
+| Artwork | Exact approved company/product logos, unchanged mascot and bundled fonts. The watermarked DNA image is retired and must not ship |
 | Data surfaces | Opaque, with clear borders and restrained depth; no blur over operational information |
 | Accessibility | Visible focus, readable text and role/state labels; verify reflow and keyboard behavior |
 
@@ -21,7 +21,7 @@ The canonical values live in `apps/frontend/src/styles/tokens.css`. The reviewed
 
 ## Enforcement
 
-`pnpm --filter @telesphoros/frontend check:brand` checks both frontend and SMART UI sources. It rejects token drift, changed assets, page-local font loading, literal colors outside tokens, external CSS/font imports, unapproved inline font/color declarations, foreign palette utilities, arbitrary Tailwind utilities, poor key contrast pairs, missing dashboard typography and removal of either build gate. Original DNA/mascot selectors cannot acquire animation or filters.
+`pnpm --filter @telesphoros/frontend check:brand` checks both frontend and SMART UI sources. It rejects token drift, changed assets, page-local font loading, literal colors outside tokens, external CSS/font imports, unapproved inline font/color declarations, foreign palette utilities, arbitrary Tailwind utilities, poor key contrast pairs, missing dashboard typography and removal of either build gate. The mascot selector cannot acquire animation or filters. Every shipped file of any type is hashed, and `retiredAssets` in the policy rejects retired artwork (the watermarked DNA image, since 2026-10-16) under any filename.
 
 The `telesphoros-branding` Vite plugin runs this check in `buildStart`. Both frontend and SMART pilot configurations include it, so normal builds and direct `vite build --mode …` invocations are gated. Root workspace builds and CI already use those configurations. Backend-only builds do not produce a UI and do not need visual rules.
 

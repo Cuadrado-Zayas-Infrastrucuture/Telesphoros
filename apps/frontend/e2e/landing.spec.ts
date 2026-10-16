@@ -24,7 +24,7 @@ async function checkLayout(page: Page) {
   await settle(page);
   expect(await axeViolations(page)).toEqual([]);
 }
-test('landing has static DNA, working anchors, readable responsive layout and honest preview', async ({ page }, info) => {
+test('landing has working anchors, readable responsive layout and honest preview', async ({ page }, info) => {
   await page.goto('/?mascot=centered');
   await expect(page.getByRole('heading', { name: 'A clearer view of your PGx reports.' })).toBeVisible();
   // Previous design-review URLs cannot override the approved layout.
@@ -37,10 +37,7 @@ test('landing has static DNA, working anchors, readable responsive layout and ho
   await expect(page.locator('footer')).toHaveCSS('font-family', /Inter/);
   const mark = page.getByRole('img', { name: 'Telesphoros shield and Rx logo' });
   expect((await mark.boundingBox())!.y).toBeGreaterThanOrEqual(0);
-  await expect(page.locator('.landing-dna')).toHaveCSS('animation-name', 'none');
-  await expect(page.locator('.landing-dna img')).toHaveJSProperty('complete', true);
-  expect(await page.locator('.landing-dna img').evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
-  expect(await page.locator('.landing-dna').evaluate(el => getComputedStyle(el).transform)).not.toBe('none');
+  await expect(page.locator('.landing-dna')).toHaveCount(0);
   const illustrationRequests: string[] = [];
   page.on('request', request => { if (/\/api\//.test(request.url())) illustrationRequests.push(request.url()); });
   await page.getByRole('button', { name: 'JSON', exact: true }).click();
@@ -96,7 +93,6 @@ test('landing has static DNA, working anchors, readable responsive layout and ho
   await checkLayout(page);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
-  await expect(page.locator('.landing-dna')).toHaveCSS('animation-name', 'none');
   await checkLayout(page);
   for (const name of ['Check', 'Find']) {
     await page.getByRole('button', { name, exact: true }).click();
@@ -117,10 +113,7 @@ test('landing motion is decorative, finite and leaves a complete still page for 
   await expect(page.locator('.landing-fragment')).toHaveCount(3);
   for (const element of await page.locator('.landing-particles, .landing-fragment').all()) await expect(element).toHaveAttribute('aria-hidden', 'true');
   // The approved artwork never moves.
-  await expect(page.locator('.landing-dna')).toHaveCSS('animation-name', 'none');
-  await expect(page.locator('.landing-dna img')).toHaveCSS('animation-name', 'none');
   await expect(page.locator('.mascot-welcome-image')).toHaveCSS('animation-name', 'none');
-  expect(await page.locator('.landing-dna').evaluate(el => getComputedStyle(el).transform)).not.toBe('none');
   // Nothing repeats forever, and the time-based motion ends.
   expect(await page.evaluate(() => document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations === Infinity).length)).toBe(0);
   await settle(page);

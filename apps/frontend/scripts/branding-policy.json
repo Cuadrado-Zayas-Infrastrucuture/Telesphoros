@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "tokens": {
     "background": "#F5F6F7",
     "panel": "#ffffff",
@@ -62,7 +62,6 @@
   "assets": {
     "apps/frontend/src/assets/telesphoros-shield-rx.png": "f1dd8c3152dc16a1f5ccc4d8a90ebea7befee360b5a926dbcf9c9e0a2e65a8de",
     "apps/frontend/src/assets/company-symbol.svg": "5497105dc88622f521edeb36185d1fb6582b47c3ae97eda125f0a14b999633b7",
-    "apps/frontend/src/assets/particle-dna-reference.png": "2e4c1dcfdd618cf63c9b5699108695b2665c43867efde375b4ba26d380a0c8c8",
     "apps/frontend/src/assets/telesphoros-mascot.png": "1dfa2dc62d132b9898e86e3493e47fc2e47f66eb22337ce0c1748c88b49e0c8b",
     "apps/frontend/src/assets/fonts/Poppins-SemiBold.ttf": "d3bf1bdaf0550e83da9ac0b1d1d9fe6db086835a83aa28578e609a394b9a0286",
     "apps/frontend/src/assets/fonts/Poppins-Regular.ttf": "7e65201e9b79159e2300267cc885e16c8dcef2424cdfa09a29bfb0980a94a7ba",
@@ -119,7 +118,9 @@
     "apps/frontend/src/components/layout/SiteHeader.tsx": "@/assets/telesphoros-shield-rx.png",
     "apps/frontend/src/components/layout/SiteFooter.tsx": "@/assets/company-symbol.svg",
     "apps/frontend/src/components/MascotWelcome.tsx": "@/assets/telesphoros-mascot.png",
-    "apps/frontend/src/components/landing/ProductLanding.tsx": "@/assets/particle-dna-reference.png",
     "apps/frontend/src/components/SyntheticAssistant.tsx": "@/components/MascotWelcome"
+  },
+  "retiredAssets": {
+    "particle-dna-reference.png": "2e4c1dcfdd618cf63c9b5699108695b2665c43867efde375b4ba26d380a0c8c8"
   }
 }

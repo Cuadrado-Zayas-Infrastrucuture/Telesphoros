@@ -1,5 +1,7 @@
 # Verification: landing motion and drawn visual elements
 
+> **Update 2026-10-16:** the `.landing-dna` element and its image were retired (landing-alignment slice S1), so the `.landing-dna` statements below are historical. The brand check now rejects the retired image under any filename.
+
 Plan: [landing-motion-and-visuals.md](../design/plans/landing-motion-and-visuals.md), approved 2026-10-15 with M1 to M6 as recommended.
 
 Scope:

@@ -89,22 +89,6 @@
   background:radial-gradient(ellipse at 84% 45%,var(--primary) 0%,var(--landing-depth) 38%,var(--landing-night) 83%);
   color:var(--background)
 }
-.product-landing .landing-dna {
-  position:absolute;
-  width:28.75rem;
-  right:6.875rem;
-  top:-10.625rem;
-  transform:rotate(-38deg);
-  opacity:.85;
-  mix-blend-mode:screen;
-  z-index:-2;
-  pointer-events:none
-}
-.product-landing .landing-dna img {
-  width:100%;
-  height:auto;
-  display:block
-}
 .product-landing .landing-hero-shade {
   position:absolute;
   inset:0;
@@ -308,16 +292,7 @@
   margin-top:1rem;
   color:var(--muted-foreground)
 }
-@media(min-width:90.0rem) {
-  .product-landing .landing-dna {
-    right:calc((100vw - 80.0rem)/2 + 6.875rem);
-    width:28.75rem
-  }
-}
 @media(max-width:62.5rem) {
-  .product-landing .landing-dna {
-    right:0.9375rem
-  }
   .product-landing .landing-hero-shade {
     background:linear-gradient(90deg,color-mix(in srgb, var(--landing-night) 94%, transparent) 0%,color-mix(in srgb, var(--landing-night) 63%, transparent) 45%,transparent 100%)
   }
@@ -349,13 +324,6 @@
   }
   .product-landing .landing-mobile-break {
     display:block
-  }
-  .product-landing .landing-dna {
-    width:20.0rem;
-    right:2.5rem;
-    top:-6.25rem;
-    opacity:.80;
-    transform:rotate(-38deg)
   }
   .product-landing .landing-hero-shade {
     background:linear-gradient(90deg,color-mix(in srgb, var(--landing-night) 85%, transparent),color-mix(in srgb, var(--landing-night) 40%, transparent) 74%,color-mix(in srgb, var(--landing-night) 15%, transparent)),linear-gradient(0deg,var(--landing-night) 0%,color-mix(in srgb, var(--landing-night) 0%, transparent) 90%)
@@ -410,7 +378,7 @@
   }
 }
 @media(forced-colors:active) {
-  .product-landing .landing-dna,.product-landing .landing-hero-shade {
+  .product-landing .landing-hero-shade {
     display:none
   }
   .product-landing .landing-hero,.product-landing .landing-closing {
