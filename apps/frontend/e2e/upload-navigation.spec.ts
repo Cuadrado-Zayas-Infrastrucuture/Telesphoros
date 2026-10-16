@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { signInWithPatient } from './helpers';
+import { openWorkspaceNavigation, signInWithPatient } from './helpers';
 
 const VCF = Buffer.from('##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n');
 function latch() { let release!: () => void; const promise = new Promise<void>(resolve => { release = resolve; }); return { promise, release }; }
@@ -25,8 +25,10 @@ async function fill(page: Page, fixture: { id: string; label: string }, name: st
   await page.getByRole('button', { name: 'Upload report', exact: true }).click();
 }
 async function navigateAwayAndBack(page: Page) {
+  await openWorkspaceNavigation(page);
   await page.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
+  await openWorkspaceNavigation(page);
   await page.getByRole('link', { name: 'Upload report', exact: true }).click();
   await expect(page).toHaveURL(/\/reports\/upload$/);
 }

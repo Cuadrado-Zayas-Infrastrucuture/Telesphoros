@@ -8,17 +8,59 @@ vi.mock('@/auth/AuthProvider', () => ({ useAuth: () => ({ roles: ['clinician'] }
 
 beforeEach(() => { vi.useFakeTimers(); vi.stubGlobal('location', { hostname: '127.0.0.1' }); });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+function sampleQuestion(name: string) {
+  if (!screen.queryByRole('button', { name })) fireEvent.click(screen.getByText('Questions'));
+  return screen.getByRole('button', { name });
+}
+function armFailure() {
+  fireEvent.click(screen.getByRole('button', { name: 'Report details & evidence' }));
+  const controls = screen.getByText('Preview controls');
+  if (!controls.closest('details')?.open) fireEvent.click(controls);
+  fireEvent.click(screen.getByRole('button', { name: 'Simulate next response failure' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Close report details & evidence' }));
+}
 function open() { return render(<MemoryRouter><LocalInterpretationPage /></MemoryRouter>); }
 async function finish() { await act(async () => { await vi.advanceTimersByTimeAsync(1500); }); }
 it('uses fixed local responses and never calls fetch or writes storage', async () => {
   const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
   const storage = vi.spyOn(Storage.prototype, 'setItem');
   open(); fireEvent.click(screen.getByRole('button', { name: 'Explain this example' }));
-  fireEvent.click(screen.getByRole('button', { name: 'What evidence is missing?' }));
+  fireEvent.click(sampleQuestion('What evidence is missing?'));
   expect(screen.getByRole('status')).toHaveTextContent('Loading a fixed synthetic response');
   await finish(); expect(screen.getByText(/No genotype, phenotype/)).toBeInTheDocument();
   expect(screen.queryByText(/^This example has no accepted/)).not.toBeInTheDocument();
   expect(fetch).not.toHaveBeenCalled(); expect(storage).not.toHaveBeenCalled();
+});
+it('keeps explanation summaries per exchange and accurately labels unmatched questions', async () => {
+  open();
+  expect(screen.getByText('System')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Explain this example' })); await finish();
+  const knownBasis = screen.getByText('Explanation basis');
+  expect(knownBasis.closest('details')).not.toHaveAttribute('open');
+  fireEvent.click(knownBasis);
+  expect(screen.getByText('The question matched a bundled example. Its fixed response was displayed.')).toBeVisible();
+  fireEvent.change(screen.getByLabelText('Sample question'), { target: { value: 'Synthetic unmatched question' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send sample' })); await finish();
+  const disclosures = screen.getAllByText('Explanation basis');
+  expect(disclosures[0].closest('details')).toHaveAttribute('open');
+  expect(disclosures[1].closest('details')).not.toHaveAttribute('open');
+  fireEvent.click(disclosures[1]);
+  expect(screen.getByText('No bundled question matched. The fixed fallback response was displayed.')).toBeVisible();
+  const sources = screen.getAllByRole('button', { name: 'View response evidence' });
+  expect(sources).toHaveLength(2);
+  fireEvent.click(sources[1]);
+  expect(screen.getByText(/not a clinical citation/)).toBeVisible();
+});
+it('shows simulated thinking phases only while pending and clears them when stopped', async () => {
+  open();
+  fireEvent.click(screen.getByRole('button', { name: 'Explain this example' }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+  expect(screen.getByRole('group', { name: 'Sample response preparation' })).toHaveTextContent('Simulated preparation · phase 2 of 3');
+  fireEvent.click(screen.getByRole('button', { name: 'Stop preview' })); await finish();
+  expect(screen.queryByRole('group', { name: 'Sample response preparation' })).not.toBeInTheDocument();
+  expect(screen.queryByText('Explanation basis')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'View response evidence' })).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Sample question')).toHaveFocus();
 });
 it('stop and reset prevent late answers, clear content and restore keyboard focus', async () => {
   open(); await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Explain this example' })); });
@@ -26,15 +68,16 @@ it('stop and reset prevent late answers, clear content and restore keyboard focu
   expect(screen.getByRole('status')).toHaveTextContent('stopped');
   expect(screen.queryByText(/No genotype, phenotype/)).not.toBeInTheDocument();
   expect(screen.getByLabelText('Sample question')).toHaveFocus();
-  fireEvent.click(screen.getByRole('button', { name: 'What are the limitations?' }));
+  fireEvent.click(sampleQuestion('What are the limitations?'));
   fireEvent.click(screen.getByRole('button', { name: 'Reset' })); await finish();
   expect(screen.getByLabelText('Sample question')).toHaveValue('');
   expect(screen.getByRole('status')).toHaveTextContent('reset');
   expect(screen.queryByText(/^These words are/)).not.toBeInTheDocument();
 });
 it('simulated failure retries the same question without duplicate work', async () => {
-  open(); fireEvent.click(screen.getByRole('button', { name: 'Simulate next response failure' }));
-  fireEvent.click(screen.getByRole('button', { name: 'What evidence is missing?' })); await finish();
+  open();
+  armFailure();
+  fireEvent.click(sampleQuestion('What evidence is missing?')); await finish();
   expect(screen.getByRole('alert')).toHaveTextContent('simulated failure');
   fireEvent.click(screen.getByRole('button', { name: 'Retry sample response' })); await finish();
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
@@ -91,9 +134,9 @@ it('uses SDK regeneration for retry and retains one exchange after repeated fail
   const { syntheticChatTransport } = await import('@/lib/syntheticChatTransport');
   const send = vi.spyOn(syntheticChatTransport, 'sendMessages');
   open();
-  fireEvent.click(screen.getByRole('button', { name: 'Simulate next response failure' }));
+  armFailure();
   fireEvent.click(screen.getByRole('button', { name: 'Explain this example' })); await finish();
-  fireEvent.click(screen.getByRole('button', { name: 'Simulate next response failure' }));
+  armFailure();
   fireEvent.click(screen.getByRole('button', { name: 'Retry sample response' })); await finish();
   fireEvent.click(screen.getByRole('button', { name: 'Retry sample response' })); await finish();
   expect(send.mock.calls.map(([request]) => request.trigger)).toEqual(['submit-message', 'regenerate-message', 'regenerate-message']);
@@ -105,7 +148,7 @@ it('reset during SDK preparation cannot resurrect an old exchange and allows a n
   open();
   fireEvent.click(screen.getByRole('button', { name: 'Explain this example' }));
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Reset' })); });
-  fireEvent.click(screen.getByRole('button', { name: 'What evidence is missing?' })); await finish();
+  fireEvent.click(sampleQuestion('What evidence is missing?')); await finish();
   expect(screen.queryByText(/No genotype, phenotype/)).not.toBeInTheDocument();
   expect(screen.getAllByText('Fixed demonstration copy · not model output')).toHaveLength(1);
   expect(screen.getByText(/^This example has no accepted/)).toBeInTheDocument();
@@ -113,7 +156,7 @@ it('reset during SDK preparation cannot resurrect an old exchange and allows a n
 it('stopping later work preserves completed messages and their feedback', async () => {
   open(); fireEvent.click(screen.getByRole('button', { name: 'Explain this example' })); await finish();
   fireEvent.click(screen.getByRole('button', { name: 'Helpful' }));
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'What evidence is missing?' })); });
+  await act(async () => { fireEvent.click(sampleQuestion('What evidence is missing?')); });
   await act(async () => { await vi.advanceTimersByTimeAsync(900); });
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Stop' })); });
   await finish();

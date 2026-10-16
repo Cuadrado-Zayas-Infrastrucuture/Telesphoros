@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { expect, test, type Page } from '@playwright/test';
-import { JWT_PATTERN, ROLE, signInAs } from './helpers';
+import { openWorkspaceNavigation, JWT_PATTERN, ROLE, signInAs } from './helpers';
 
 const require = createRequire(import.meta.url);
 
@@ -24,6 +24,7 @@ test.describe('signing in', () => {
   test('a clinician signs in through the identity provider and lands on the page they wanted', async ({ page }) => {
     await signInAs(page, 'alice');
     await expect(page.getByRole('heading', { level: 1, name: 'Upload report' })).toBeVisible();
+    await openWorkspaceNavigation(page);
     await expect(page.getByText(ROLE.alice, { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
     // The one-time code must not linger in the address bar (or the history).
@@ -100,6 +101,7 @@ test.describe('where the token lives', () => {
 test.describe('signing out', () => {
   test('ends the provider session as well, so the next sign-in asks again', async ({ page }) => {
     await signInAs(page, 'alice');
+    await openWorkspaceNavigation(page);
     await page.getByRole('button', { name: 'Sign out' }).click();
     await expect(page).toHaveURL(/\/signed-out$/);
     await expect(page.getByRole('heading', { level: 1, name: 'You have been signed out' })).toBeVisible();

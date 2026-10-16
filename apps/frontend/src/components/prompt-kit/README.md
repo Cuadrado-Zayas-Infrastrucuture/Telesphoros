@@ -5,7 +5,7 @@ MIT © 2025 Julien Thibeaut. License retained beside these components.
 
 Selected `prompt-input.tsx` and `message.tsx` primitives are vendored following Prompt Kit's source-component distribution model. Split into one component per file for this repository; use Telesphoros tokens and existing Textarea/Button. Removed unused tooltip, avatar, markdown and autosize dependencies. Retained controlled input context, keyboard submission and message composition; added composition-event/loading guards and native form semantics. No remote avatars, HTML/markdown renderer, remote uploads, or model transport.
 
-Prompt Kit is the UI layer, not an inference SDK. This preview deliberately does not install Vercel AI SDK or call a model. A future authorized transport integration requires its own privacy/clinical/evaluation scope.
+Prompt Kit is the UI layer. The existing `useSyntheticChat` hook uses `@ai-sdk/react`'s `useChat` with the local synthetic transport; no model is called. This sidebar revision reuses that lifecycle unchanged. A live transport requires a separately approved privacy/clinical/evaluation scope. The requested https://www.prompt-kit.com/ai-sdk guide returned HTTP 403 during this session; the official `ibelick/prompt-kit` source and the installed hook were inspected instead.
 
 ## Expanded preview adapters
 
@@ -17,3 +17,9 @@ The same pinned upstream was inspected for `tool`, `chain-of-thought`, `steps`, 
 - Source omits upstream external favicon requests. SystemMessage and Tool omit arbitrary colors and pills. FeedbackBar uses local, per-exchange pressed state and 44px controls.
 - Loader/ThinkingBar/TextShimmer share brand tokens, one accessible loading status, and reduced-motion/forced-colors handling. ScrollButton works with the route's actual bounded scroll region and moves focus to its stable end marker.
 - Existing source files retained under this directory remain covered by the accompanying MIT notice.
+
+## Chat reasoning and source presentation
+
+The workspace now composes the existing Prompt Kit Reasoning, ThinkingBar, SystemMessage and Source adapters in the conversation. Each completed exchange has a collapsed explanation summary, with distinct matched-example and fallback descriptions. SourceTrigger opens the existing drawer directly to its expanded fixture source; the toolbar still opens general report context. The three preparation phases are explicitly simulated, use the existing SDK stage events, and disappear on Stop/error/completion. The visible System message is a UI notice; model prompts and transport are unchanged.
+
+The upstream docs again returned 403; the four pinned official source components were inspected directly. Native disclosure, local source details, project tokens, 44px controls and reduced-motion styles are retained. No dependencies, remote favicons, model calls or clinical citations were added.

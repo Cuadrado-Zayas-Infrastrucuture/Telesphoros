@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
-import { signInWithPatient } from './helpers';
+import { openWorkspaceNavigation, signInWithPatient } from './helpers';
 
 async function fill(page: Page, patientId: string, type: 'vcf' | 'structured', name: string, bytes: Buffer) {
   await page.getByLabel(/synthetic patient \(required\)/i).selectOption(patientId);
@@ -235,6 +235,7 @@ test('signing out clears an interrupted upload, so the next person on this tab i
   await held.arrived;
   await reloadAndSignIn(page, held.interrupt);
   await expect(page.getByText('An upload was interrupted')).toBeVisible();
+  await openWorkspaceNavigation(page);
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(/\/signed-out$/);
   expect(await page.evaluate(key => window.sessionStorage.getItem(key), RECOVERY_KEY)).toBeNull();

@@ -253,3 +253,50 @@ it('lets the user explicitly abandon a refused retry and start a new upload', as
   await fillValidForm(user); await user.click(screen.getByRole('button', { name: 'Upload report' })); await screen.findByText(/new-report/);
   expect(submitMock.mock.calls[1]![2]).not.toBe(old);
 });
+
+
+describe('guided upload questionnaire', () => {
+  beforeEach(() => {
+    window.sessionStorage.clear(); submitMock.mockReset(); cancelMock.mockReset();
+    patientApi.mockReset().mockImplementation(async () => pageResponse());
+  });
+  it('validates each step, preserves the file across navigation and mode changes, and submits only after confirmation', async () => {
+    submitMock.mockResolvedValue({ reference: 'SYN-GUIDED' });
+    const user = userEvent.setup(); const { container } = render(<UploadReportPage />);
+    await screen.findByRole('option', { name: 'SYN-0001' });
+    await user.click(screen.getByRole('button', { name: 'Guide me step by step' }));
+    expect(screen.getByRole('progressbar', { name: 'Upload guide progress' })).toHaveAttribute('value', '1');
+    await user.click(screen.getByRole('button', { name: 'Next step' }));
+    expect(await screen.findByText('Choose an existing patient.')).toBeVisible();
+    expect(screen.getByLabelText(/synthetic patient \(required\)/i)).toHaveFocus();
+    await user.selectOptions(screen.getByLabelText(/synthetic patient \(required\)/i), patientId);
+    await user.click(screen.getByRole('button', { name: 'Next step' }));
+    await screen.findByRole('heading', { name: 'Choose file' });
+    await user.click(screen.getByRole('button', { name: 'Next step' }));
+    expect(await screen.findByText('Choose a report type.')).toBeVisible();
+    await user.selectOptions(screen.getByLabelText(/report type/i), 'vcf');
+    await user.upload(screen.getByLabelText(/report file/i), new File(['x'], 'guided.vcf'));
+    await user.click(screen.getByRole('button', { name: 'Next step' }));
+    const review = await screen.findByRole('heading', { name: 'Review upload' });
+    expect(review).toHaveFocus();
+    expect(screen.getByRole('region', { name: 'Upload summary' })).toHaveTextContent('guided.vcf');
+    expect(submitMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Previous step' }));
+    expect((screen.getByLabelText(/report file/i) as HTMLInputElement).files?.[0]?.name).toBe('guided.vcf');
+    await user.click(screen.getByRole('button', { name: 'Show full form' }));
+    expect((screen.getByLabelText(/report file/i) as HTMLInputElement).files?.[0]?.name).toBe('guided.vcf');
+    await user.click(screen.getByRole('button', { name: 'Guide me step by step' }));
+    await user.click(screen.getByRole('button', { name: 'Next step' }));
+    await screen.findByRole('heading', { name: 'Choose file' });
+    await user.click(screen.getByRole('button', { name: 'Next step' }));
+    await screen.findByRole('heading', { name: 'Review upload' });
+    await user.click(screen.getByRole('button', { name: 'Upload report' }));
+    expect(await screen.findByText('Confirm that this file contains synthetic data only.')).toBeVisible();
+    expect(submitMock).not.toHaveBeenCalled();
+    expect(await axe(container)).toHaveNoViolations();
+    await user.click(screen.getByLabelText(/synthetic data only/i));
+    await user.click(screen.getByRole('button', { name: 'Upload report' }));
+    expect(await screen.findByRole('heading', { name: 'Report received' })).toBeVisible();
+    expect(submitMock).toHaveBeenCalledTimes(1);
+  });
+});
