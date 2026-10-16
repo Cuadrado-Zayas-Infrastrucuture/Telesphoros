@@ -1,0 +1,4 @@
+interface:
+  display_name: "Telesphoros: Debug a failure"
+  short_description: "Reproduce failures and fix the demonstrated cause"
+  default_prompt: "Use $telesphoros-debug to investigate a worker that exits successfully but produces stale output."
