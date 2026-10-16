@@ -58,6 +58,11 @@ export async function selectReportsPatient(page: Page, fixture: { id: string; la
 
 /** Open the compact workspace menu before using a sidebar item on mobile. */
 export async function openWorkspaceNavigation(page: Page) {
+  // The URL can change before React commits the signed-in workspace shell.
+  // isVisible() does not wait: checking it first can silently skip the mobile menu.
+  const workspaceRoute = /^\/(?:reports(?:\/|$)|local-)/.test(new URL(page.url()).pathname);
+  await expect(workspaceRoute ? page.locator('header.workspace-navigation') : page.getByRole('banner')).toBeVisible();
   const menu = page.getByRole('button', { name: 'Workspace navigation', exact: true });
   if (await menu.isVisible() && await menu.getAttribute('aria-expanded') !== 'true') await menu.click();
+  await expect(page.getByRole('navigation', { name: 'Primary', exact: true })).toBeVisible();
 }

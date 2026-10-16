@@ -68,3 +68,11 @@ PR #129's browser job on `1b7e37c` passed all 90 production-mode tests and 28 of
 - The existing `e2e` command now requires production, default development and owned-storage development profiles. The foundation guard rejects removing the owned profile from that command. No workflow, product UI, backend, permission, deployment or production setting changed.
 - Ran the complete `pnpm --filter @telesphoros/frontend e2e` command using Node 22.22.0, Chromium and the pinned synthetic loopback services: **90 + 30 + 2 = 122 passed**. No skips or added timeouts. Typecheck, lint, chunk/foundation checks and all 39 CI-configuration controls passed. This is local verification; the pushed corrective commit still needs remote CI.
 - Regenerated tracked preview images were backed up outside the repository and restored to their pre-test versions. Live synthetic preview restarted after the test stack stopped; sample fixture restored separately.
+
+## CI mobile navigation timing correction
+
+The next remote run exposed a timing race in the shared browser helper: after sign-in changed the URL, `isVisible()` returned false before the workspace sidebar was mounted, so the helper skipped opening the mobile menu. The failure trace contains that false result followed by a Sign out timeout, and the captured page shows the menu closed.
+
+The helper now awaits the rendered workspace header for operational routes, preserves the public Overview header path, opens the compact menu when needed, and asserts primary navigation is visible. No sleeps, retries, timeout increases or product changes were added.
+
+Final local verification used Node 22.22.0, `CI=true`, one worker and all three actual browser configurations: **90 production + 30 default development + 2 owned-storage development = 122 passed**. The formerly failing mobile sign-out scenario also passed ten additional repetitions. Lint, typecheck and whitespace checks passed. Generated preview images were preserved outside the repository and restored before delivery. Remote CI is required for the follow-up commit.
