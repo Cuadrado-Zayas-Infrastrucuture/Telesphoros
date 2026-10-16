@@ -178,7 +178,7 @@ The [draft plan](design/plans/fd7-remote-state.md) covers the one Phase 0 item t
 
 ## Where the repositories, Vercel projects and addresses live (docs only, 2026-10-16)
 
-[domains-and-hosting.md](ops/domains-and-hosting.md) now has one table of the product repository, the `telesphoros-previews` and `telesphoros-site` Vercel projects, the company site and their addresses, and records that no DNS is configured for `telesphoros.app` in Cloudflare yet and that `www.telesphoros.app` is attached to the Vercel `telesphoros-site` project although the address map promises a CloudFront redirect. Decided later the same day (founder): the `telesphoros-site` Vercel project owns `www.telesphoros.app`; the apex and the Cloudflare DNS record remain open. Nothing in Vercel, DNS or AWS was inspected or changed.
+[domains-and-hosting.md](ops/domains-and-hosting.md) now has one table of the product repository, the `telesphoros-previews` and `telesphoros-site` Vercel projects, the company site and their addresses, and records that no DNS is configured for `telesphoros.app` in Cloudflare yet and that `www.telesphoros.app` is attached to the Vercel `telesphoros-site` project although the address map promises a CloudFront redirect. Decided later the same day (founder): the `telesphoros-site` Vercel project owns `www.telesphoros.app`, and the founder then added the DNS-only Cloudflare CNAME that makes it live (Vercel reports it configured; confirmed in a browser). The bare apex is still not live and its direction, the mail-guard records and the page's apex canonical URL are open; see the address map. This repository changed nothing in Vercel, DNS or AWS.
 
 ## Planned: repository audit and build plan (plan only)
 
