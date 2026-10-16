@@ -148,6 +148,10 @@ Requested 2026-10-15 ("wire Telesphoros app to go live"), narrowed with the foun
 
 The [draft plan](design/plans/fd7-remote-state.md) covers the one Phase 0 item that is still code: an encrypted, versioned, access-restricted S3 backend with native locking, in its own small Terraform root so that destroying the staged environment cannot delete the state. All four FD-7 Phase 1 slices are merged (#120 to #123), so this is the next buildable piece; the rest of FD-7 waits on the founder (D1 account and Region, D2 budget ceiling, D6 testers, D8 after the rehearsal). D7 was approved on 2026-10-16. Nothing is built, applied or run, and no AWS credential is used.
 
+## Where the repositories, Vercel projects and addresses live (docs only, 2026-10-16)
+
+[domains-and-hosting.md](ops/domains-and-hosting.md) now has one table of the product repository, the `telesphoros-previews` and `telesphoros-site` Vercel projects, the company site and their addresses, and records that no DNS is configured for `telesphoros.app` in Cloudflare yet and that `www.telesphoros.app` is attached to the Vercel `telesphoros-site` project although the address map promises a CloudFront redirect. Who owns `www` at launch is an open founder decision. Nothing in Vercel, DNS or AWS was inspected or changed.
+
 ## Planned: repository audit and build plan (plan only)
 
 A [draft audit and build plan](design/plans/repo-audit-and-build-plan.md) maps every workspace, CI job and feature on `b292d07`, re-checks the 12 October research audit against current code (R02 and R03 closed by #86 and #81; E04, A08 and R11 partly addressed; I03, I06, E06, O02, A03, O06, R05, R06 still open), lists new doc-drift and scaffold gaps, and orders the remaining backlog into slices. Install, typecheck, lint, build and tier-1 tests passed locally. Founder decisions DA-1 to DA-6 are open; nothing is approved or built by it.
