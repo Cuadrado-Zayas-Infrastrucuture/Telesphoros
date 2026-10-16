@@ -35,8 +35,12 @@ export class PostgresBrowserSessionRepository extends BrowserSessionRepository {
     return this.tenant(tenantId, async (client) => {
       // The share lock orders this snapshot against revocation. It ends with this transaction;
       // callers MUST NOT treat the returned snapshot as later protected-write admission.
-      const { rows } = await client.query<SessionRow>(`SELECT ${fields} FROM browser_sessions
-        WHERE tenant_id = $1 AND handle_hash = $2 AND revoked_at IS NULL AND expires_at > clock_timestamp() FOR SHARE`, [tenantId, handleHash]);
+      // Materialization keeps the final database-clock expiry check AFTER the row lock:
+      // the early predicate alone can pass before a wait that outlasts the session.
+      const { rows } = await client.query<SessionRow>(`WITH locked_session AS MATERIALIZED (
+        SELECT ${fields} FROM browser_sessions
+        WHERE tenant_id = $1 AND handle_hash = $2 AND revoked_at IS NULL AND expires_at > clock_timestamp() FOR SHARE
+      ) SELECT ${fields} FROM locked_session WHERE expires_at > clock_timestamp()`, [tenantId, handleHash]);
       return rows[0] ? record(rows[0]) : undefined;
     }, handleHash);
   }

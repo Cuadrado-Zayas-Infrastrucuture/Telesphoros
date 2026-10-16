@@ -5,7 +5,7 @@ import { Client } from 'pg';
 import { BrowserSessionCustody } from '../../src/auth/browser-session';
 import { SessionCrypto } from '../../src/auth/session-crypto';
 import { Database } from '../../src/db/database';
-import { migrateDown } from '../../src/db/migrator';
+import { migrateDown, migrateUp } from '../../src/db/migrator';
 import { PostgresBrowserSessionRepository } from '../../src/storage/postgres/browser-session.repository';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { registeringAdmin } from '../helpers/membership';
@@ -172,6 +172,75 @@ it('a read waiting behind revocation observes the revoked row rather than a stal
   } finally { await end(client); await read; }
 });
 
+it('revokes immediately with an application clock ahead of the database without inventing a future revocation time', async () => {
+  const fast = new BrowserSessionCustody(repository, crypto, () => Date.now() + 25_000);
+  const made = await fast.create({ identity: { tenantId: A, sub: 'person-a', roles: [], issuedAt: Math.floor(Date.now() / 1000) - 180 }, accessToken: 'synthetic-skew-token', tokenExpiresAt: new Date(Date.now() + 60_000) });
+  const hash = hashOf(made.cookie);
+  expect(await fast.read(made.cookie)).toBeDefined();
+  expect(await fast.revoke(made.cookie)).toBe(true);
+  expect(await fast.read(made.cookie)).toBeUndefined();
+  expect(await fast.revoke(made.cookie)).toBe(false);
+  expect(await owner(async (client) => (await client.query(`SELECT revoked_at < created_at AS precedes_application_time,
+    revoked_at <= clock_timestamp() AS not_future, isfinite(revoked_at) AS finite
+    FROM browser_sessions WHERE tenant_id=$1 AND handle_hash=$2`, [A, hash])).rows[0])).toEqual({ precedes_application_time: true, not_future: true, finite: true });
+});
+
+it('refuses database expiry during a lock wait even with a lagging application clock', async () => {
+  const slow = new BrowserSessionCustody(repository, crypto, () => Date.now() - 20_000);
+  const made = await slow.create({ identity: { tenantId: A, sub: 'person-a', roles: [], issuedAt: Math.floor(Date.now() / 1000) - 180 }, accessToken: 'synthetic-lock-expiry-token', tokenExpiresAt: new Date(Date.now() + 1_500) });
+  const hash = hashOf(made.cookie); const client = await appClient(); let read: ReturnType<typeof slow.read> | undefined;
+  try {
+    expect(await slow.read(made.cookie)).toBeDefined();
+    await client.query('SELECT handle_hash FROM browser_sessions WHERE tenant_id=$1 AND handle_hash=$2 FOR UPDATE', [A, hash]);
+    read = slow.read(made.cookie); expect(await waiting('m51-reader')).toBe(true);
+    await owner((c) => c.query('SELECT pg_sleep(greatest(0,extract(epoch FROM ($1::timestamptz-clock_timestamp()))+0.03))', [made.expiresAt]));
+    expect(await owner(async (c) => (await c.query('SELECT clock_timestamp()>$1::timestamptz AS expired', [made.expiresAt])).rows[0].expired)).toBe(true);
+    await client.query('COMMIT');
+    // Compare presence, so a failure does not print credential contents.
+    expect((await read) === undefined).toBe(true);
+    expect(await other.findActive(A, hash)).toBeUndefined();
+  } finally { await end(client); await read; }
+});
+
+it('refuses nonfinite revocation timestamps while the application cannot supply one on insert', async () => {
+  const credential = crypto.sealCredential('synthetic-token', 'finite-fixture');
+  for (const timestamp of ['infinity', '-infinity']) {
+    await expect(owner((c) => c.query(`INSERT INTO browser_sessions
+      (tenant_id,handle_hash,sub,issued_at,created_at,expires_at,credential,revoked_at)
+      VALUES ($1,$2,'person-a',0,clock_timestamp()-interval '2 minutes',clock_timestamp()-interval '1 minute',$3,$4::timestamptz)`,
+    [A, 'd'.repeat(64), credential, timestamp]))).rejects.toMatchObject({ code: '23514', constraint: 'browser_sessions_revoked_at_bound' });
+  }
+  const client = await appClient();
+  try {
+    await expect(client.query(`INSERT INTO browser_sessions
+      (tenant_id,handle_hash,sub,issued_at,created_at,expires_at,credential,revoked_at)
+      VALUES ($1,$2,'person-a',0,clock_timestamp(),clock_timestamp()+interval '1 minute',$3,NULL)`,
+    [A, 'e'.repeat(64), credential])).rejects.toMatchObject({ code: '42501' });
+  } finally { await end(client); }
+});
+
+it('refuses incompatible clock-rule rollback atomically until expired custody is cleaned', async () => {
+  const isolated = await createEphemeralDatabase(); const isolatedDb = new Database({ url: isolated.appUrl, ssl: 'disable' });
+  const isolatedRepo = new PostgresBrowserSessionRepository(isolatedDb); const hash = 'f'.repeat(64);
+  try {
+    await withAdmin(isolated.adminUrl, async (c) => {
+      await registeringAdmin(c).grant({ tenantId: A, sub: 'person-a', roles: ['reader'], by: 'operator-test', reason: 'synthetic rollback fixture' });
+      await c.query(`INSERT INTO browser_sessions (tenant_id,handle_hash,sub,issued_at,created_at,expires_at,credential,revoked_at)
+        VALUES ($1,$2,'person-a',0,clock_timestamp()-interval '2 minutes',clock_timestamp()-interval '1 minute',$3,clock_timestamp()-interval '3 minutes')`,
+      [A, hash, crypto.sealCredential('synthetic-token', 'rollback-fixture')]);
+      await expect(migrateDown(c)).rejects.toThrow(/Migration 0027 failed and was rolled back/);
+      expect((await c.query("SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1")).rows[0].version).toBe('0027');
+      expect((await c.query('SELECT count(*)::int AS n FROM browser_sessions WHERE tenant_id=$1 AND handle_hash=$2', [A, hash])).rows[0].n).toBe(1);
+      expect((await c.query("SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conrelid='browser_sessions'::regclass AND conname='browser_sessions_revoked_at_bound'")).rows[0].def).toContain('isfinite');
+    });
+    expect(await isolatedRepo.cleanupExpired(A, 1)).toBe(1);
+    await withAdmin(isolated.adminUrl, async (c) => {
+      expect(await migrateDown(c)).toEqual(['0027']);
+      expect(await migrateUp(c)).toEqual(['0027']);
+    });
+  } finally { await isolatedDb.onModuleDestroy(); await isolated.drop(); }
+});
+
 it('throws a sanitized failure when the authority store is unavailable', async () => {
   const unreachable = new Database({ url: 'postgres://synthetic:fixture-password@127.0.0.1:1/none', ssl: 'disable' });
   try {
@@ -183,16 +252,19 @@ it('the new migration and rollback execute as a non-superuser owner with no BYPA
   const isolated = await createEphemeralDatabase();
   try {
     await withAdmin(isolated.adminUrl, async (client) => {
-      expect(await migrateDown(client)).toEqual(['0026']);
+      expect(await migrateDown(client, 2)).toEqual(['0027', '0026']);
       await client.query("DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='m51a_migration_owner') THEN CREATE ROLE m51a_migration_owner NOLOGIN NOSUPERUSER NOBYPASSRLS; END IF; END $$");
       await client.query('GRANT USAGE,CREATE ON SCHEMA public TO m51a_migration_owner');
       await client.query('GRANT REFERENCES ON tenant_memberships TO m51a_migration_owner');
-      for (const direction of ['up', 'down', 'up']) {
+      for (const [migration, direction] of [
+        ['0026_browser_sessions', 'up'], ['0026_browser_sessions', 'down'], ['0026_browser_sessions', 'up'],
+        ['0027_browser_session_clocks', 'up'], ['0027_browser_session_clocks', 'down'], ['0027_browser_session_clocks', 'up'],
+      ]) {
         await client.query('BEGIN');
         try {
           await client.query('SET LOCAL ROLE m51a_migration_owner');
           expect((await client.query('SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user')).rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });
-          await client.query(readFileSync(resolve(__dirname, `../../migrations/0026_browser_sessions.${direction}.sql`), 'utf8'));
+          await client.query(readFileSync(resolve(__dirname, `../../migrations/${migration}.${direction}.sql`), 'utf8'));
           await client.query('COMMIT');
         } catch (error) { await client.query('ROLLBACK'); throw error; }
       }

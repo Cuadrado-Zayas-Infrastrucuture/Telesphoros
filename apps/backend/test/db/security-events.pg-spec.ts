@@ -175,13 +175,13 @@ describe('a refused file is recorded (0022)', () => {
         return work(c);
       });
       await asApp((c) => append(c, 'intake.rejected', 'refused', 'person', 'person-rev', { reason: 'structure' }));
-      expect(await withAdmin(disposable.adminUrl, (c) => migrateDown(c, 4))).toEqual(['0026', '0025', '0024', '0023']); // the job queue (nothing recorded) is not what is being tested
+      expect(await withAdmin(disposable.adminUrl, (c) => migrateDown(c, 5))).toEqual(['0027', '0026', '0025', '0024', '0023']); // the job queue (nothing recorded) is not what is being tested
       await expect(withAdmin(disposable.adminUrl, (c) => migrateDown(c, 1))).rejects.toThrow(/Refusing to drop recorded intake rejections/);
       expect((await withAdmin(disposable.adminUrl, (c) => c.query(`SELECT 1 FROM security_events WHERE event_type = 'intake.rejected'`))).rowCount).toBe(1);
       expect(await withAdmin(disposable.adminUrl, async (c) => { await c.query(`SET telesphoros.allow_audit_drop = 'yes'`); return migrateDown(c, 1); })).toEqual(['0022']);
       await expect(asApp((c) => append(c, 'intake.rejected', 'refused', 'person', 'person-rev', { reason: 'structure' }))).rejects.toMatchObject({ code: '42501' });
       await asApp((c) => append(c, 'access.refused', 'refused', 'person', 'person-rev', { reason: 'removed' })); // control: the older type still works
-      expect(await withAdmin(disposable.adminUrl, (c) => migrateUp(c))).toEqual(['0022', '0023', '0024', '0025', '0026']);
+      expect(await withAdmin(disposable.adminUrl, (c) => migrateUp(c))).toEqual(['0022', '0023', '0024', '0025', '0026', '0027']);
       await asApp((c) => append(c, 'intake.rejected', 'refused', 'person', 'person-rev', { reason: 'structure' }));
     } finally {
       await disposable.drop();
