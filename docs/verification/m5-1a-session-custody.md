@@ -60,3 +60,22 @@ Every backend profile passed all 54 session cases (17 crypto, 16 custody, 21 Pos
 Evidence is retained under `work/m51a-clock-fix-verification/` in the task workspace, with distinct producer names per attempt. Both permanent clock cases failed against the unchanged original implementation, then passed after the repairs. The first focused invocation used a nonexistent helper-test path; its other 73 tests passed, but that invocation is not acceptance. The corrected complete selection passed all 107. No full profile failed or required a source repair during this follow-up. Existing crypto/context/lifetime/RLS mutation evidence remains historical and separate; it was not rerun here.
 
 The owned PostgreSQL/Moto services were stopped after verification, retaining their data and logs. Both FD-7a candidates, F06/F07 source branches, combined reference and catalog branch are preserved. All earlier migration SQL checksums, active bearer authentication, frontend, Actions/main wiring and dependencies remain unchanged. The downgrade refusal is deliberate when retained rows cannot satisfy the former cross-clock ordering; retry only after normal expiry cleanup. No live migration, AWS operation, push, PR or deployment occurred. M5.1b/c and all hosted authentication/key-custody/browser acceptance remain open.
+
+## Permanent clock review probes — focused verification
+
+The founder approved promoting all 16 probes from the read-only review of `343e9a9`. They now live in `apps/backend/test/db/browser-session-clock.pg-spec.ts`. All case names, assertions and positive controls are retained. Only explanatory comments and conditional creation of the cluster-wide migration-owner fixture role differ from the review fixture; its non-superuser and non-BYPASSRLS flags are still asserted before migrations execute. This lets the test run repeatedly on one cluster without a duplicate-role failure.
+
+| Probe group | Permanent cases |
+| --- | --- |
+| Immediate revocation with -120s, -20s, 0 and +29s application offsets | 4 |
+| Out-of-tolerance creation refusal without a persisted row | 1 |
+| Database stamping despite caller-selected infinity | 1 |
+| Concurrent revokers with exactly one winner | 1 |
+| Foreign-tenant refusal and own-tenant success | 1 |
+| Locked reads across commit/rollback, expiry and clock offsets | 6 |
+| Cleanup skipping a locked expiring session, then removing it | 1 |
+| Populated upgrade and atomic downgrade refusal under a non-superuser owner | 1 |
+
+Fresh focused verification passed **123/123 across six suites**, with zero failed or skipped cases: 70 session cases (17 crypto, 16 custody, 21 original PostgreSQL cases and these 16), 19 catalog cases and 34 role/order probes. The 16 new cases also passed a second run on the same PostgreSQL cluster, proving the adapted fixture role can be reused. Backend typecheck and lint passed. All native stdout/stderr, producer exits, source-promotion diff and case-name accounting are retained in the task workspace at `work/m51a-clock-probes-verification/`.
+
+This follow-up changes tests and verification/status/session records only; production code, SQL migrations, Actions/main backend wiring and dependencies are unchanged from `343e9a9`. All protected source branches and the combined reference remain unchanged. Test services were stopped with data/logs retained; no push, PR, merge or deployment occurred. Full profiles, worker, build, F2/F3 validators, browser and exact-head CI were not rerun for this test-only promotion. Earlier full-profile results above apply to the previous 54-case session suite and are not claimed as a fresh run of all 70 permanent cases. Hosted authentication and later M5.1 slices remain open.
