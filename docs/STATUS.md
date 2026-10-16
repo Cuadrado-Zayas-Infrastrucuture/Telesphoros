@@ -114,7 +114,8 @@ What is added (see the [plan and verification](design/plans/vercel-frontend-prev
 - a guard test with 11 injected defects.
 
 A clean-clone build with hostile inherited settings leaked nothing. Not yet verified: a real Vercel build. The founder imports the repository as a new `telesphoros-previews` project behind Vercel Authentication; the agent's Vercel connector was refused (403) when creating projects. No application, backend, Terraform, DNS or `telesphoros-site` change.
-## Landing motion and drawn visual elements (draft PR, 2026-10-15)
+
+## Landing motion and drawn visual elements (merged, #127, 2026-10-16)
 
 The founder kept the approved landing design after reviewing alternative taste-skill sketches, asked for motion and visual elements so the page looks less static, and approved the [plan](design/plans/landing-motion-and-visuals.md) with "go, use your recommendations" (M1 to M6). Built on the product landing only:
 
