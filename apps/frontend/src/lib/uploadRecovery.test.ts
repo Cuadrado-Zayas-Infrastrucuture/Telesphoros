@@ -1,7 +1,7 @@
 import { webcrypto } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { submitReport as rawSubmitReport, SubmitError, type UploadProgress, type ApiFetch } from './api';
-import { cancelOwnedUpload, restoreProgress } from './ownedStorageApi';
+import { cancelOwnedUpload, restoreProgress, retireOwnedUpload } from './ownedStorageApi';
 import type { ProductUploadValues } from './productUploadSchema';
 import { bindRecovery, clearRecovery, endRecoverySession, forgetUpload, readRecovery, rememberUpload, startRecoverySession, RECOVERY_LIFETIME_MS, type RecoverySession } from './uploadRecovery';
 
@@ -302,4 +302,70 @@ it('memory-only fallback can finish an upload without persistence and still reti
   expect(api).toHaveBeenCalledTimes(1);
   expect(progress.reportId).toBeUndefined();
   expect(memory.size).toBe(0);
+});
+
+describe('late responses racing newer recovery', () => {
+  const lifetimes = ['page', 'session'] as const;
+  function retire(lifetime: typeof lifetimes[number], progress: UploadProgress) {
+    if (lifetime === 'page') retireOwnedUpload(progress);
+    else { endRecoverySession(owner); owner = startRecoverySession('b'.repeat(64)); }
+  }
+  function saveNewerRecovery() {
+    const newer = { requestId: otherPatient, reportId: attemptId,
+      facts: { reportType: 'structured' as const, name: 'synthetic-newer.json', sizeBytes: 1, sha256: sha } };
+    bindRecovery(newer, owner);
+    rememberUpload(newer);
+    return readRecovery(owner)!;
+  }
+
+  it.each((['resume', 'verification'] as const).flatMap(stage => lifetimes.map(lifetime => ({ stage, lifetime }))))(
+    'a delayed $stage body cannot change progress or newer recovery after $lifetime retirement', async ({ stage, lifetime }) => {
+      const progress: UploadProgress = {};
+      const pendingIndex = stage === 'resume' ? 3 : 4;
+      const bodies = [report(), { revision: original, fileUploaded: false }, attempt(stage === 'resume' ? 'stored' : 'declared'), attempt('committed'), report(true)];
+      let reading!: () => void;
+      const reached = new Promise<void>(resolve => { reading = resolve; });
+      let finish!: (value: unknown) => void;
+      let calls = 0;
+      const api = vi.fn(async () => {
+        const index = calls++;
+        const reply = response(bodies[index]);
+        if (index === pendingIndex) reply.json = () => { reading(); return new Promise(resolve => { finish = resolve; }); };
+        return reply;
+      });
+      const pending = submitReport(values, api, progress);
+      const refused = expect(pending).rejects.toThrow(lifetime === 'page' ? 'Upload page ended' : 'Upload session ended');
+      await reached;
+      const before = JSON.stringify(progress);
+      retire(lifetime, progress);
+      const kept = saveNewerRecovery();
+      expect(kept.file.name).toBe('synthetic-newer.json');
+      finish(bodies[pendingIndex]);
+      await refused;
+      expect(JSON.stringify(progress)).toBe(before);
+      expect(api).toHaveBeenCalledTimes(pendingIndex + 1);
+      expect(readRecovery(owner)).toEqual(kept);
+    },
+  );
+
+  it.each(lifetimes)('a stale restored 404 cannot reset keys or clear newer recovery after %s retirement', async lifetime => {
+    await interrupt();
+    const progress = reloaded();
+    let arrived!: () => void;
+    const reached = new Promise<void>(resolve => { arrived = resolve; });
+    let finish!: (reply: Response) => void;
+    const api = vi.fn(() => { arrived(); return new Promise<Response>(resolve => { finish = resolve; }); });
+    const pending = submitReport(values, api, progress);
+    const refused = expect(pending).rejects.toThrow(lifetime === 'page' ? 'Upload page ended' : 'Upload session ended');
+    await reached;
+    const before = JSON.stringify(progress);
+    retire(lifetime, progress);
+    const kept = saveNewerRecovery();
+    expect(kept.file.name).toBe('synthetic-newer.json');
+    finish(response({}, 404));
+    await refused;
+    expect(JSON.stringify(progress)).toBe(before);
+    expect(api).toHaveBeenCalledTimes(1);
+    expect(readRecovery(owner)).toEqual(kept);
+  });
 });

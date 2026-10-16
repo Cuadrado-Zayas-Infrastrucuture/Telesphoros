@@ -319,3 +319,29 @@ it('a late capability body cannot replace the newer verified owner', async () =>
   expect(result.current.recoverySession).toBe(current);
   expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v2')).toBe(kept);
 });
+
+it('a stale roles body cannot erase a newer verified session', async () => {
+  let reading!: () => void;
+  const reached = new Promise<void>(resolve => { reading = resolve; });
+  let finish!: (value: unknown) => void;
+  const stale = new Response('{}');
+  stale.json = () => { reading(); return new Promise(resolve => { finish = resolve; }); };
+  const fetchImpl = vi.fn().mockResolvedValueOnce(stale)
+    .mockResolvedValueOnce(new Response(JSON.stringify({ roles: ['clinician'] })))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ recoveryScope: 'b'.repeat(64) })));
+  const { result } = setup({ fetchImpl: fetchImpl as never });
+  const old = result.current.completeSignIn();
+  const refused = expect(old).rejects.toBeInstanceOf(SessionEndedError);
+  await reached;
+  await act(async () => void (await result.current.completeSignIn()));
+  const current = result.current.recoverySession;
+  saveInterruption(current!);
+  const kept = window.sessionStorage.getItem('telesphoros.upload-recovery.v2');
+  expect(kept).not.toBeNull();
+  await act(async () => { finish({ roles: ['admin'] }); await refused; });
+  expect(result.current.status).toBe('signedIn');
+  expect(result.current.roles).toEqual(['clinician']);
+  expect(result.current.recoverySession).toBe(current);
+  expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v2')).toBe(kept);
+  expect(fetchImpl).toHaveBeenCalledTimes(3);
+});
