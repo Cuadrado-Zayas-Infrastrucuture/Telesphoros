@@ -6,6 +6,8 @@ import { LandingParticles } from './LandingParticles';
 import { PatientLinkFragment } from './PatientLinkFragment';
 import { FileStatusFragment } from './FileStatusFragment';
 import { AssistantFragment } from './AssistantFragment';
+import { HeroBackdrop } from './HeroBackdrop';
+import { HeroReportCard } from './HeroReportCard';
 import { useLandingMotion } from '@/hooks/useLandingMotion';
 import '@/styles/landing.css';
 import '@/styles/landing-motion.css';
@@ -15,14 +17,18 @@ export function ProductLanding({ canUpload, signedIn }: { canUpload: boolean; si
   useLandingMotion(root);
   return <div ref={root} className="product-landing">
   <section className="landing-hero" aria-labelledby="home-title">
+    <HeroBackdrop />
     <div className="landing-hero-shade" aria-hidden="true"></div>
     <LandingParticles placement="hero" />
     <div className="landing-wrap landing-hero-content">
-      <p className="landing-eyebrow" data-reveal="1">Pharmacogenomic report software</p>
-      <h1 id="home-title" className="landing-headline"><span className="landing-line"><span>A clearer view of</span></span>{' '}<span className="landing-line"><span>your PGx reports.</span></span></h1>
-      <p className="landing-hero-copy" data-reveal="2">Explore patient-linked uploads, file details, and upload status in the Telesphoros development preview.</p>
-      <LandingActions canUpload={canUpload} signedIn={signedIn} reveal={3} />
-      <p className="landing-preview-note" data-reveal="4">Development preview. Synthetic data only.<br className="landing-mobile-break" /> Not for clinical use.</p>
+      <div className="landing-hero-text">
+        <p className="landing-eyebrow" data-reveal="1">Pharmacogenomic report software</p>
+        <h1 id="home-title" className="landing-headline"><span className="landing-line"><span>A clearer view of</span></span>{' '}<span className="landing-line"><span>your PGx reports.</span></span></h1>
+        <p className="landing-hero-copy" data-reveal="2">Explore patient-linked uploads, file details, and upload status in the Telesphoros development preview.</p>
+        <LandingActions canUpload={canUpload} signedIn={signedIn} reveal={3} />
+        <p className="landing-preview-note" data-reveal="4">Development preview. Synthetic data only.<br className="landing-mobile-break" /> Not for clinical use.</p>
+      </div>
+      <div className="landing-hero-visual" data-reveal="2"><HeroReportCard /></div>
     </div>
     <div className="landing-hero-bottom landing-wrap"><span>A product of Cuadrado Zayas Infrastructure</span><span className="landing-hero-index" aria-hidden="true">Explore the workspace below <span className="landing-cue">↓</span></span></div>
   </section>
