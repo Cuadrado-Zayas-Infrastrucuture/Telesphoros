@@ -1,0 +1,4 @@
+interface:
+  display_name: "Telesphoros: Plan a change"
+  short_description: "Scope requirements and verifiable engineering slices"
+  default_prompt: "Use $telesphoros-plan-change to scope the report list API before implementation."

@@ -1,0 +1,135 @@
+[
+  {
+    "name": "telesphoros-plan-change",
+    "upstream_name": "planning-and-task-breakdown",
+    "positive": [
+      "Before we change upload ownership, lay out requirements and acceptance criteria.",
+      "Break the report listing feature into scoped tasks and dependencies.",
+      "Design a proposal for adding bounded pagination; do not write code."
+    ],
+    "negative": [
+      {
+        "prompt": "Build the approved report pagination change in one small slice.",
+        "owner": "telesphoros-implement-slice"
+      },
+      {
+        "prompt": "Run the database and S3 checks and tell me which acceptance claims they prove.",
+        "owner": "telesphoros-verify"
+      }
+    ]
+  },
+  {
+    "name": "telesphoros-implement-slice",
+    "upstream_name": "incremental-implementation",
+    "positive": [
+      "Build the approved report pagination change in one small slice.",
+      "Add a bounded API response using our existing contracts; the plan is approved.",
+      "Refactor the approved function while preserving its behavior."
+    ],
+    "negative": [
+      {
+        "prompt": "The worker exits successfully but the expected output is stale.",
+        "owner": "telesphoros-debug"
+      },
+      {
+        "prompt": "Review this PR for tenant isolation and access-control defects.",
+        "owner": "telesphoros-review"
+      }
+    ]
+  },
+  {
+    "name": "telesphoros-debug",
+    "upstream_name": "debugging-and-error-recovery",
+    "positive": [
+      "The worker exits successfully but the expected output is stale.",
+      "This endpoint returns intermittent errors. Find the root cause.",
+      "Yesterday's recovery test now fails; reproduce the regression."
+    ],
+    "negative": [
+      {
+        "prompt": "Run the database and S3 checks and tell me which acceptance claims they prove.",
+        "owner": "telesphoros-verify"
+      },
+      {
+        "prompt": "CI takes half an hour; find the bottleneck without dropping profiles.",
+        "owner": "telesphoros-optimize"
+      }
+    ]
+  },
+  {
+    "name": "telesphoros-verify",
+    "upstream_name": "test-driven-development",
+    "positive": [
+      "Run the database and S3 checks and tell me which acceptance claims they prove.",
+      "Validate this migration with the application role, beyond unit tests.",
+      "Do these green checks really cover all three profiles and recovery artifacts?"
+    ],
+    "negative": [
+      {
+        "prompt": "Review this PR for tenant isolation and access-control defects.",
+        "owner": "telesphoros-review"
+      },
+      {
+        "prompt": "Can this exact staging candidate go live? List unmet gates and rollback limitations.",
+        "owner": "telesphoros-release-readiness"
+      }
+    ]
+  },
+  {
+    "name": "telesphoros-review",
+    "upstream_name": "code-review-and-quality",
+    "positive": [
+      "Review this PR for tenant isolation and access-control defects.",
+      "Audit this diff for sensitive data leaks; leave the code unchanged.",
+      "Inspect this simplification and report actionable findings."
+    ],
+    "negative": [
+      {
+        "prompt": "CI takes half an hour; find the bottleneck without dropping profiles.",
+        "owner": "telesphoros-optimize"
+      },
+      {
+        "prompt": "Before we change upload ownership, lay out requirements and acceptance criteria.",
+        "owner": "telesphoros-plan-change"
+      }
+    ]
+  },
+  {
+    "name": "telesphoros-optimize",
+    "upstream_name": "performance-optimization",
+    "positive": [
+      "CI takes half an hour; find the bottleneck without dropping profiles.",
+      "Can we shorten database test time and spend fewer runner minutes?",
+      "Measure why the report list is slow before changing its query."
+    ],
+    "negative": [
+      {
+        "prompt": "Can this exact staging candidate go live? List unmet gates and rollback limitations.",
+        "owner": "telesphoros-release-readiness"
+      },
+      {
+        "prompt": "Build the approved report pagination change in one small slice.",
+        "owner": "telesphoros-implement-slice"
+      }
+    ]
+  },
+  {
+    "name": "telesphoros-release-readiness",
+    "upstream_name": "shipping-and-launch",
+    "positive": [
+      "Can this exact staging candidate go live? List unmet gates and rollback limitations.",
+      "Prepare a launch-readiness report for the synthetic environment.",
+      "What prerequisites block this release from deployment?"
+    ],
+    "negative": [
+      {
+        "prompt": "Before we change upload ownership, lay out requirements and acceptance criteria.",
+        "owner": "telesphoros-plan-change"
+      },
+      {
+        "prompt": "The worker exits successfully but the expected output is stale.",
+        "owner": "telesphoros-debug"
+      }
+    ]
+  }
+]

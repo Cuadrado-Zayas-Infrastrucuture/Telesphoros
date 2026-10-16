@@ -1,0 +1,4 @@
+interface:
+  display_name: "Telesphoros: Review a change"
+  short_description: "Find actionable defects with precise source evidence"
+  default_prompt: "Use $telesphoros-review to review this diff for tenant isolation and actionable defects."
