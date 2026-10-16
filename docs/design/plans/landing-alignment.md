@@ -51,7 +51,7 @@ So the product landing is the one surface still carrying an image the other two 
 - **Approve S1** (retire the watermarked image and change the policy). Recommended first.
 - **Copy source of truth:** keep copy in the site repository's `copy.js` and mirror it here, or move shared copy somewhere both can read. Without one, the two will drift again.
 - **Header and navigation:** whether the product landing carries the site's header (Workflow, Genomics, Questions, Company) or keeps the application shell. The application shell was not examined for this plan.
-- **Who owns `www.telesphoros.app` at launch** (see [domains-and-hosting.md](../../ops/domains-and-hosting.md)): it decides whether two Telesphoros landings should exist at all.
+- ~~Who owns `www.telesphoros.app` at launch~~ **Decided 2026-10-16: the `telesphoros-site` project** (see [domains-and-hosting.md](../../ops/domains-and-hosting.md)). This landing is therefore the signed-in product's front page, and S3 and S4 can stay modest.
 
 ## Risks and open points
 
