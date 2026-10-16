@@ -120,6 +120,28 @@
   --landing-reveal-duration: 0.7s;
   --landing-reveal-step: 80ms;
   --landing-feedback-duration: 0.18s;
+
+  /* Landing motion layer: easings, timings and the code-drawn particle field. Never applied to the DNA or mascot. */
+  --landing-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --landing-ease-soft: cubic-bezier(0.33, 1, 0.68, 1);
+  --landing-ease-travel: cubic-bezier(0.76, 0, 0.24, 1);
+  --landing-line-duration: 0.9s;
+  --landing-line-step: 110ms;
+  --landing-settle-duration: 1.2s;
+  --landing-settle-distance: 0.875rem;
+  --landing-drift-distance: 1.5rem;
+  --landing-cue-duration: 1.2s;
+  --landing-cue-delay: 1.6s;
+  --landing-cue-distance: 0.3125rem;
+  --landing-scene-duration: 0.45s;
+  --landing-fragment-step: 120ms;
+  --landing-typing-cycle: 0.9s;
+  --landing-particle-size-sm: 0.1875rem;
+  --landing-particle-size-md: 0.25rem;
+  --landing-particle-size-lg: 0.375rem;
+  --landing-particle-opacity: 0.75;
+  --landing-particle-soft-opacity: 0.45;
+  --landing-particle-closing-opacity: 0.5;
 }
 
 /* Compact editorial hierarchy for operational screens. */

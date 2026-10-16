@@ -114,6 +114,18 @@ What is added (see the [plan and verification](design/plans/vercel-frontend-prev
 - a guard test with 11 injected defects.
 
 A clean-clone build with hostile inherited settings leaked nothing. Not yet verified: a real Vercel build. The founder imports the repository as a new `telesphoros-previews` project behind Vercel Authentication; the agent's Vercel connector was refused (403) when creating projects. No application, backend, Terraform, DNS or `telesphoros-site` change.
+## Landing motion and drawn visual elements (draft PR, 2026-10-15)
+
+The founder kept the approved landing design after reviewing alternative taste-skill sketches, asked for motion and visual elements so the page looks less static, and approved the [plan](design/plans/landing-motion-and-visuals.md) with "go, use your recommendations" (M1 to M6). Built on the product landing only:
+
+- the headline's two lines rise out of their own masks on load;
+- a code-drawn particle field in the hero and, faintly, the closing; it settles on load, then drifts only with the scroll, so nothing moves on its own for more than five seconds;
+- a scroll cue that nudges three times;
+- walkthrough transitions: a travelling step marker, the file card settling, checklist rows in order with a third "File digest" row labelled fictional, and the details panel sliding in;
+- three code-drawn, `aria-hidden` interface fragments in the capability rows (patient to file, a file status list, a sample assistant exchange ending on "Sample response. Not connected to your reports.");
+- row-by-row entrances for capabilities and FAQ, and FAQ answers that settle in.
+
+Motion is transform only on text (opacity only on decorative dots) and is gated behind `is-motion`, so no script, old browsers and reduced motion all get the complete still page. The DNA and mascot never move. New tokens live in `tokens.css`; no layout, copy (other than the labelled fictional samples), palette, font, artwork, permission, route or backend changed. The taste-skill inspector counts 118 moving elements at 1440 (19 before) with no new FAIL or WARN. Checks and limits: [verification](verification/landing-motion-and-visuals.md). No deployment, merge or clinical change. The company page is still outside this repository.
 
 ## Planned: staged synthetic deployment in AWS, FD-7 (plan only)
 

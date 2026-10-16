@@ -1,6 +1,8 @@
 /* State-only landing demonstration; all color values inherit the shared brand tokens. Sizes use the landing scale. */
 .product-landing .workflow-demo { margin: 0; }
-.product-landing .workflow-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem; list-style: none; margin: 0 0 1.5rem; padding: 0; }
+.product-landing .workflow-steps { --workflow-step-gap: 1.5rem; position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--workflow-step-gap); list-style: none; margin: 0 0 1.5rem; padding: 0; }
+/* The active-step marker: one bar that travels between the steps (its motion is in landing-motion.css). */
+.product-landing .workflow-steps::before { content: ''; position: absolute; top: 0; left: 0; z-index: 1; width: calc((100% - 2 * var(--workflow-step-gap)) / 3); height: 2px; background: var(--primary); transform: translateX(calc(var(--workflow-step, 0) * (100% + var(--workflow-step-gap)))); pointer-events: none; }
 .product-landing .workflow-steps button { display: flex; align-items: center; gap: .875rem; width: 100%; min-height: 5rem; padding: 1rem 0; border-top: 2px solid var(--divider); background: transparent; color: var(--muted-foreground); text-align: left; font: inherit; font-size: var(--landing-fs-body); cursor: pointer; }
 .product-landing .workflow-steps button:hover { color: var(--primary); border-color: var(--brand-accent); }
 .product-landing .workflow-steps button[aria-pressed="true"] { border-color: var(--primary); color: var(--primary); font-weight: 600; }
@@ -54,7 +56,7 @@
 .product-landing .workflow-records svg { flex: none; }
 .product-landing .workflow-records button > svg:last-child { margin-left: auto; }
 .product-landing .workflow-details { background: var(--panel); border: 1px solid var(--divider); border-radius: var(--radius-2); padding: 1.5rem; }
-.product-landing .workflow-details > p { font-size: var(--landing-fs-small); color: var(--muted-foreground); }
+.product-landing .workflow-details-body > p { font-size: var(--landing-fs-small); color: var(--muted-foreground); }
 .product-landing .workflow-details h4 { font-size: var(--landing-fs-lead); margin: .5rem 0 1rem; }
 .product-landing .workflow-success { color: var(--success); }
 .product-landing .workflow-detail-note { margin-top: 1rem; font-size: var(--landing-fs-small); line-height: 1.6; }
@@ -73,7 +75,7 @@
   .product-landing .workflow-records { flex-direction: column; }
 }
 @media (max-width: 45rem) {
-  .product-landing .workflow-steps { gap: .75rem; margin-bottom: 1rem; }
+  .product-landing .workflow-steps { --workflow-step-gap: .75rem; margin-bottom: 1rem; }
   .product-landing .workflow-steps button { flex-direction: column; align-items: flex-start; gap: .5rem; height: 100%; font-size: var(--landing-fs-small); padding-block: .75rem; }
   .product-landing .workflow-step-arrow { display: none; }
   .product-landing .workflow-scene { grid-template-columns: minmax(0, 1fr); }
@@ -88,5 +90,6 @@
   .product-landing .workflow-details { padding: 1rem; }
 }
 @media (forced-colors: active) {
+  .product-landing .workflow-steps::before { display: none; }
   .product-landing .workflow-steps button[aria-pressed="true"], .product-landing .workflow-records button[aria-pressed="true"], .product-landing .workflow-format button[aria-pressed="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
 }
