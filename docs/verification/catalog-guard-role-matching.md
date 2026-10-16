@@ -63,3 +63,46 @@ through all profiles. These are working-tree results, not exact-head GitHub CI.
 No local result establishes exact-head GitHub CI or hosted acceptance. The six
 required checks remain mandatory for any later publication. FD-7a, both F06/F07
 source branches and the combined reference are preserved separately.
+
+## Permanent review probes (2026-10-16)
+
+The founder approved retaining all 16 probes from the read-only review of local
+commit `b561217`. They are appended to `catalog-policy-assertions.spec.ts`, reusing
+its existing fixtures and helper. The original 18 tests, assertion helper, catalog
+query, migrations and runtime source are unchanged by this follow-up.
+
+| Promoted controls | Cases |
+| --- | ---: |
+| Missing exact application/ledger/verifier role | 3 |
+| Duplicate exact application/ledger/verifier policy | 3 |
+| Empty role array for each role | 3 |
+| Null application/ledger tenant USING predicate | 2 |
+| Null application WITH CHECK | 1 |
+| Valid and broadened duplicate ledger policies, both orders | 2 |
+| Exact ledger role alongside nonmatching prefix names | 1 |
+| Case-sensitive role equality | 1 |
+| Total | 16 |
+
+Fresh verification on the working tree based at `b561217` passed all **53 selected
+tests**: 34 assertion tests and 19 actual PostgreSQL catalog tests, with zero
+selected-test skips. Backend typecheck and lint passed. The native runner used
+pinned Node 22.22.0/pnpm 10.28.0 and a fresh task-owned PostgreSQL 16 cluster with
+SCRAM authentication, loopback binding and synthetic fixtures. Only that cluster
+was stopped afterward; its data and logs were retained.
+
+The ordinary Jest configuration announced that object-storage suites were not
+running because TEST_S3_ENDPOINT was unset. No S3 suite was selected for this
+focused run. This is not a full backend-profile acceptance claim: S3, the three
+whole-backend profiles, worker, recovery validators, build and GitHub CI were not
+rerun in this test-only follow-up. Their earlier results above remain historical.
+
+Two fresh external defect controls ran all 34 assertion tests: restoring substring
+matching caused eight test failures; removing the ledger command/predicate checks
+caused three. Each returned native exit 1 from assertion failures, as intended.
+Mutants were outside the checkout; the production assertion helper was unchanged.
+
+Complete outputs, native exits, JSON test results, reviewed-to-permanent coverage,
+tested source hashes and protected-state snapshots are retained in the external
+`catalog-guard-permanent-probes` evidence directory. Publication still requires
+separate approval and the six exact-head CI checks. FD-7a, F06/F07 and the combined
+reference remain protected; no Actions or main-backend wiring change is included.

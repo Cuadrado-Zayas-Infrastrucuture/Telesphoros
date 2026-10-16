@@ -7,6 +7,8 @@ Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and
 
 `fix/catalog-guard-role-matching`, from main `62675ca`, corrects the catalog test's role-prefix collision: role arrays remain arrays, complete role names are matched, and policy order cannot select the independent verifier as the tenant-scoped ledger role. The 18 new regression controls share the real guard's assertions. [Verification](verification/catalog-guard-role-matching.md) records focused PostgreSQL acceptance and the wider local checks. No database permissions, runtime behavior, Actions, main-backend wiring or deployment changes; FD-7a, F06/F07 and the combined reference are preserved.
 
+The 16 additional review probes are now permanent in the same spec, for 34 assertion tests. Fresh focused verification passed all 34 plus 19 real PostgreSQL catalog tests (53 total), backend typecheck and lint. Two isolated defect controls failed as intended. S3/full-profile/worker/recovery checks were not rerun for this test-only follow-up; their earlier evidence remains separately identified. No publication or deployment is authorized.
+
 ## Repository engineering workflows (2026-10-16)
 
 Seven [repository-scoped engineering workflows](engineering/workflows.md) adapt a pinned Addy Osmani agent-skills revision for planning, implementation, debugging, verification, review, measured optimization and release-readiness assessment. Existing working agreements and the query protocol remain authoritative. The [verification record](verification/engineering-workflows.md) separates deterministic routing checks and synthetic walkthroughs from independent model or hosted acceptance. No runtime, clinical, database, CI gate, cancellation or deployment behavior changes.

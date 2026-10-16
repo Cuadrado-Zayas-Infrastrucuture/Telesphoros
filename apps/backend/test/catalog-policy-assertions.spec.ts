@@ -65,3 +65,54 @@ describe('record-table catalog policy assertions', () => {
     expect(() => expectRecordTablePolicies(table, rows)).toThrow();
   });
 });
+
+describe('record-table catalog policy review regression controls', () => {
+  it.each([0, 1, 2])('refuses absent exact role at row %s', (index) => {
+    const rows = fresh();
+    rows.splice(index, 1);
+    expect(() => expectRecordTablePolicies(table, rows)).toThrow();
+  });
+
+  it.each([0, 1, 2])('refuses duplicate exact role at row %s', (index) => {
+    const rows = fresh();
+    rows.push({ ...rows[index]!, policyname: 'extra' });
+    expect(() => expectRecordTablePolicies(table, rows)).toThrow();
+  });
+
+  it.each([0, 1, 2])('refuses an empty role array at row %s', (index) => {
+    const rows = fresh();
+    rows[index]!.roles = [];
+    expect(() => expectRecordTablePolicies(table, rows)).toThrow();
+  });
+
+  it.each([0, 1])('refuses null tenant qual at row %s', (index) => {
+    const rows = fresh();
+    rows[index]!.qual = null;
+    expect(() => expectRecordTablePolicies(table, rows)).toThrow();
+  });
+
+  it('refuses null application WITH CHECK', () => {
+    const rows = fresh();
+    rows[0]!.with_check = null;
+    expect(() => expectRecordTablePolicies(table, rows)).toThrow();
+  });
+
+  it.each([false, true])('refuses valid/broadened duplicate ledger policies, reversed=%s', (reverse) => {
+    const rows = fresh();
+    rows.push({ ...rows[1]!, policyname: 'broad', qual: 'true' });
+    if (reverse) rows.reverse();
+    expect(() => expectRecordTablePolicies(table, rows)).toThrow();
+  });
+
+  it('accepts prefix-colliding nonmatching names alongside the exact role', () => {
+    const rows = fresh();
+    rows[1]!.roles = ['telesphoros_ledger_verifier_extra', 'telesphoros_ledger_operator', 'telesphoros_ledger'];
+    expect(() => expectRecordTablePolicies(table, rows)).not.toThrow();
+  });
+
+  it('uses case-sensitive exact role equality', () => {
+    const rows = fresh();
+    rows[1]!.roles = ['TELESPHOROS_LEDGER'];
+    expect(() => expectRecordTablePolicies(table, rows)).toThrow();
+  });
+});
