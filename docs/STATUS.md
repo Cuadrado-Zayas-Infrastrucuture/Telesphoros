@@ -146,7 +146,7 @@ The [draft plan](design/plans/fd7-remote-state.md) covers the one Phase 0 item t
 
 ## Where the repositories, Vercel projects and addresses live (docs only, 2026-10-16)
 
-[domains-and-hosting.md](ops/domains-and-hosting.md) now has one table of the product repository, the `telesphoros-previews` and `telesphoros-site` Vercel projects, the company site and their addresses, and marks `www.telesphoros.app` as served by Vercel today although the address map promises a CloudFront redirect. Who owns `www` at launch is an open founder decision. Nothing in Vercel, DNS or AWS was inspected or changed.
+[domains-and-hosting.md](ops/domains-and-hosting.md) now has one table of the product repository, the `telesphoros-previews` and `telesphoros-site` Vercel projects, the company site and their addresses, and records that no DNS is configured for `telesphoros.app` in Cloudflare yet and that `www.telesphoros.app` is attached to the Vercel `telesphoros-site` project although the address map promises a CloudFront redirect. Who owns `www` at launch is an open founder decision. Nothing in Vercel, DNS or AWS was inspected or changed.
 
 ## Planned: repository audit and build plan (plan only)
 

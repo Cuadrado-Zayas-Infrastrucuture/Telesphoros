@@ -12,7 +12,7 @@ been inspected or changed by this implementation. Company source/project is stil
 | `cuadradozayasinfrastructure.com` | Company Vercel project | Confirm exact zone/project before cutover |
 | `www.cuadradozayasinfrastructure.com` | Redirect to company apex in Vercel | Prepare in the company project, not this repository |
 | `app.telesphoros.app` | Private frontend S3 origin through CloudFront | H1 Terraform, disabled by default |
-| `telesphoros.app`, `www.telesphoros.app` | 301 to `app.telesphoros.app`, retaining path/query | Same CloudFront distribution and certificate. **Not yet true for `www`:** today `www.telesphoros.app` is served by the Vercel project `telesphoros-site` (see [where things live](#where-things-live-2026-10-16)); who owns it at production launch is open |
+| `telesphoros.app`, `www.telesphoros.app` | 301 to `app.telesphoros.app`, retaining path/query | Same CloudFront distribution and certificate. **Not live yet:** no DNS record is configured for `telesphoros.app` in Cloudflare (founder, 2026-10-16), so nothing is served on these names today. `www.telesphoros.app` is, however, attached to the Vercel project `telesphoros-site`, a competing claim on the same name (see [where things live](#where-things-live-2026-10-16)); who owns it at production launch is open |
 | `api.telesphoros.app` | AWS API host | F3a (edge: certificate, load balancer, firewall) written, disabled by default; compute is F3b; see [api-hosting.md](api-hosting.md). No DNS record until a healthy service exists |
 
 Cloudflare remains authoritative. Use DNS-only for CloudFront records to avoid chaining
@@ -22,13 +22,13 @@ records stay in place. This change neither configures SES nor moves human mail t
 
 ## Where things live (2026-10-16)
 
-One table so the repositories, Vercel projects and addresses are not confused. Repository and Vercel-project names come from the founder's Vercel dashboard on 2026-10-16; nothing here was inspected or changed through a Vercel or DNS account.
+One table so the repositories, Vercel projects and addresses are not confused. Repository and Vercel-project names come from the founder's Vercel dashboard on 2026-10-16; nothing here was inspected or changed through a Vercel or DNS account. The DNS state is the founder's statement that no record is configured for `telesphoros.app` in Cloudflare.
 
 | Thing | Repository | Where it runs | Address | Purpose |
 | --- | --- | --- | --- | --- |
 | Telesphoros product (frontend, backend, Terraform) | `Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered` (this repository) | AWS (S3 and CloudFront for the web app, an API host); nothing applied yet | `app.telesphoros.app`, `api.telesphoros.app` (staged rehearsal: `app.staging.telesphoros.app`, `api.staging.telesphoros.app`) | The product. Synthetic data only until the BAA is executed |
 | Frontend design previews | this repository | Vercel project `telesphoros-previews` (the dashboard currently shows the name with a trailing period, `telesphoros-previews.`) | `telesphoros-previews.vercel.app` and per-branch preview URLs; no custom domain; behind Vercel Authentication | Visual-only previews of this repository's frontend. Placeholder `.invalid` sign-in and API settings; no backend |
-| Public Telesphoros landing site | `jzayas03/telesphoros-site` (a separate repository) | Vercel project `telesphoros-site` | `www.telesphoros.app` (and its `.vercel.app` address) | The public marketing page. A separate static package, not built from this repository |
+| Public Telesphoros landing site | `jzayas03/telesphoros-site` (a separate repository) | Vercel project `telesphoros-site` | `www.telesphoros.app` is attached to the project but has no Cloudflare DNS record yet, so it does not resolve to it; the project's design preview runs at a `.vercel.app` address | The public marketing page. A separate static package, not built from this repository |
 | Company site | a separate repository (the dashboard shows `cuadradozayas-site`; unconfirmed, see the address map) | Vercel, company project | `cuadradozayasinfrastructure.com` | Company landing page. Not part of Telesphoros |
 
 Rules that follow:
