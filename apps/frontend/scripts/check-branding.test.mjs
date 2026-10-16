@@ -59,10 +59,29 @@ test('rejects loss of either UI build gate', () => {
     input.textFiles[path] = input.textFiles[path].replace('plugins: [brandingPlugin,', 'plugins: [');
   }, /must gate every Vite build/);
 });
-test('rejects motion/filter changes to original DNA or mascot', () => {
-  for (const css of ['.landing-dna { animation: spin 3s infinite; }', '.mascot-welcome-image { filter: hue-rotate(60deg); }']) rejects(input => {
+test('rejects motion/filter changes to the original mascot', () => {
+  for (const css of ['.mascot-welcome-image { animation: spin 3s infinite; }', '.mascot-welcome-image { filter: hue-rotate(60deg); }']) rejects(input => {
     input.textFiles['apps/frontend/src/styles/new-artwork.css'] = css;
   }, /cannot acquire animation or filters/);
+});
+test('rejects retired artwork returning under its old name or any other name', () => {
+  const [[name, sha]] = Object.entries(approved.policy.retiredAssets);
+  for (const path of [`apps/frontend/src/assets/${name}`, 'apps/frontend/src/assets/renamed-helix.png', 'apps/frontend/public/hero.bin', 'packages/smart-pilot/ui/background.png']) rejects(input => {
+    input.fileHashes[path] = sha;
+  }, /retired artwork .* must not ship/);
+});
+test('rejects retired artwork re-added as an approved asset', () => rejects(input => {
+  const [sha] = Object.values(input.policy.retiredAssets);
+  const path = 'apps/frontend/src/assets/reapproved.png';
+  input.policy.assets[path] = sha;
+  input.assetHashes[path] = sha;
+  input.fileHashes[path] = sha;
+}, /retired artwork/));
+test('the retired list is present and scans real shipped files of every type', () => {
+  assert.ok(Object.keys(approved.policy.retiredAssets ?? {}).length > 0, 'retiredAssets must not be empty');
+  assert.ok(Object.keys(approved.fileHashes).some(path => path.endsWith('InterVariable.woff2')), 'binary fonts must be hashed');
+  assert.ok(Object.keys(approved.fileHashes).some(path => path.endsWith('telesphoros-shield-rx.png')), 'binary images must be hashed');
+  assert.ok(!Object.keys(approved.fileHashes).some(path => /particle-dna/.test(path)), 'the retired image must be gone');
 });
 test('rejects loss of the dashboard UI-font rule', () => rejects(input => {
   delete input.textFiles['apps/frontend/src/styles/workspace.css'];

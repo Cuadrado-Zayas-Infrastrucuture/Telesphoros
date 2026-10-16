@@ -1,5 +1,4 @@
 import { useRef } from 'react';
-import dna from '@/assets/particle-dna-reference.png';
 import { MascotWelcome } from '@/components/MascotWelcome';
 import { LandingActions } from './LandingActions';
 import { LandingProductPreview } from './LandingProductPreview';
@@ -16,7 +15,6 @@ export function ProductLanding({ canUpload, signedIn }: { canUpload: boolean; si
   useLandingMotion(root);
   return <div ref={root} className="product-landing">
   <section className="landing-hero" aria-labelledby="home-title">
-    <div className="landing-dna" aria-hidden="true"><img src={dna} width="474" height="843" alt="" fetchPriority="high" loading="eager" /></div>
     <div className="landing-hero-shade" aria-hidden="true"></div>
     <LandingParticles placement="hero" />
     <div className="landing-wrap landing-hero-content">

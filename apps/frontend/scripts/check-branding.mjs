@@ -1,5 +1,5 @@
 // Build guard for the reviewed brand contract. Human/browser review remains required for visual quality.
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,14 +24,18 @@ export function loadBrandInputs(root = repoRoot) {
   const configs = ['apps/frontend/vite.config.ts', 'packages/smart-pilot/vite.config.ts'];
   const textFiles = Object.fromEntries([...sources, ...configs.map(path => join(root, path))].map(path => [relative(root, path), readFileSync(path, 'utf8')]));
   const assetHashes = Object.fromEntries(Object.keys(policy.assets).map(path => [path, hash(readFileSync(join(root, path)))]));
-  return { policy, textFiles, assetHashes };
+  // Every shipped file of any type, so retired artwork is caught under any filename.
+  const fileHashes = Object.fromEntries(['apps/frontend/src', 'apps/frontend/public', 'packages/smart-pilot/ui']
+    .filter(dir => existsSync(join(root, dir))).flatMap(dir => walk(join(root, dir)))
+    .map(path => [relative(root, path), hash(readFileSync(path))]));
+  return { policy, textFiles, assetHashes, fileHashes };
 }
 function luminance(hex) {
   const values = hex.replace('#', '').match(/../g).map(channel => parseInt(channel, 16) / 255)
     .map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
   return values[0] * .2126 + values[1] * .7152 + values[2] * .0722;
 }
-export function findBrandViolations({ policy, textFiles, assetHashes }) {
+export function findBrandViolations({ policy, textFiles, assetHashes, fileHashes = {} }) {
   const errors = [];
   const tokens = commentsRemoved(textFiles[tokenPath] ?? '');
   const definitions = Object.fromEntries([...tokens.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map(match => [match[1].slice(2), match[2].trim()]));
@@ -46,6 +50,10 @@ export function findBrandViolations({ policy, textFiles, assetHashes }) {
   }
   for (const [path, expected] of Object.entries(policy.assets)) {
     if (assetHashes[path] !== expected) errors.push(`${path}: approved artwork/font bytes changed or are missing`);
+  }
+  const retired = new Map(Object.entries(policy.retiredAssets ?? {}).map(([name, sha]) => [sha, name]));
+  for (const [path, sha] of Object.entries(fileHashes)) {
+    if (retired.has(sha)) errors.push(`${path}: retired artwork (${retired.get(sha)}) must not ship, under any filename`);
   }
   for (const [path, expected] of Object.entries(policy.references)) {
     const ast = ts.createSourceFile(path, textFiles[path] ?? '', ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -82,7 +90,7 @@ export function findBrandViolations({ policy, textFiles, assetHashes }) {
         }
       }
       for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-        if (/\.landing-dna|\.mascot-welcome-image/.test(match[1]) && /(?:animation(?:-name)?|filter)\s*:\s*(?!none\b)[^;]+/.test(match[2])) errors.push(`${path}: original DNA/mascot cannot acquire animation or filters`);
+        if (/\.mascot-welcome-image/.test(match[1]) && /(?:animation(?:-name)?|filter)\s*:\s*(?!none\b)[^;]+/.test(match[2])) errors.push(`${path}: original mascot cannot acquire animation or filters`);
       }
     } else {
       const ast = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, path.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);

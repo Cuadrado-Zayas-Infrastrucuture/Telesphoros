@@ -1,5 +1,7 @@
 # Telesphoros landing verification
 
+> **Update 2026-10-16:** the particle DNA image described below was retired (landing-alignment slice S1): it carries a watermark and its publication rights were never established. Statements here about the DNA artwork are historical. See [landing-alignment.md](../design/plans/landing-alignment.md).
+
 Date: 2026-10-13. Local implementation on `feat/telesphoros-landing`, based on `origin/main` at `98cd931` after verifying the previous dashboard PR was merged. [Approved scope](../design/plans/telesphoros-landing.md).
 
 ## Latest: main reconciliation and draft PR (2026-10-14)

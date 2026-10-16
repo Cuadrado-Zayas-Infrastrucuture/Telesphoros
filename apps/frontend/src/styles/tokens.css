@@ -107,8 +107,6 @@
   --landing-preview-shadow: 0 24px 64px #041a2440;
   --landing-hero-type: clamp(2.75rem, 6.4vw, 5rem);
   --landing-section-type: clamp(2rem, 3.5vw, 2.875rem);
-  --landing-dna-width: 31.25rem;
-  --landing-dna-mobile-width: 20rem;
 
   /* Landing type scale: five steps, fluid, used for every size on the landing route. */
   --landing-fs-display: clamp(2.25rem, 7.2vw, 5rem);
