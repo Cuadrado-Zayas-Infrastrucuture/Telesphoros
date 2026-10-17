@@ -6,6 +6,11 @@ Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and
 
 
 
+## PR #155 watchdog observation repair (2026-10-17)
+
+The PostgreSQL fixture repair in draft PR #155 now incorporates main `59d478b` without rewriting published history. Its first hosted run passed the service profiles, joining gate and new fixture controls but exposed a watchdog test race: successful SIGKILL dispatch was mistaken for synchronous process exit. The [observation repair](verification/watchdog-exit-observation.md) requires actual SIGKILL exits within the existing finite helper and retains late-work cleanup checks. Delayed-delivery reproduction and a suppressed-KILL negative control distinguish the race from failed cleanup. Watchdog behavior, deadlines, profile coverage and required gates are unchanged. Exact refreshed-head hosted acceptance is pending; no merge or deployment is authorized.
+
+
 ## FD-7a reconciliation with current main (local, 2026-10-17)
 
 The separate `feat/fd7a-required-ci-main` candidate now starts at freshly verified main `efb6103`, retaining the local `2fbc1b3` candidate intact. Current-main status/runbook history and all earlier FD-7a records are preserved; the earlier assembly/base statements below remain dated historical records. The approved Terraform payload and CI bytes are unchanged. Fresh local acceptance again passed 171 policy/mutation cases, 21 state guards, 22 standalone plans, 33 main-root plans, 96 infrastructure tests, 59 focused/131 full CI controls and 8 workspace/4 workflow controls with no selected skips. Both roots passed fmt/backend-disabled read-only-lock init/validate and actionlint passed. The final protection proof covers the prior 11 protected checkouts plus preserved `2fbc1b3`. [Verification](verification/fd7a-required-ci.md#local-reconciliation-with-current-main--2026-10-17). Hosted exact-head CI, assembled-candidate review, backend wiring and live AWS acceptance remain open. No publication, hosted CI dispatch/rerun, cloud operation or deployment is authorized by this local reconciliation.

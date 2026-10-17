@@ -8,7 +8,8 @@ import { InMemoryObjectStorage } from '../src/object-storage/in-memory-object-st
 import { ReportsRepository } from '../src/storage/reports.repository';
 import { LAB_KNOWLEDGE, LAB_READER } from '../src/lab-reports/evaluations.service';
 import { TextCaptureRunner } from '../src/lab-reports/runner/text-capture-runner';
-import { createTestApp, usingS3 } from './helpers/app';
+import { createTestApp, usingPostgres, usingS3 } from './helpers/app';
+import { createEphemeralDatabase, type EphemeralDatabase } from './helpers/database';
 import { bearer, clinicianA, clinicianB, readerA, signToken } from './helpers/tokens';
 const samples = [{ type: 'lab-pdf', mime: 'application/pdf', name: 'inert.pdf', bytes: Buffer.from('%PDF-1.7\nSynthetic opaque bytes\n%%EOF\n') }, { type: 'vcf', mime: 'text/x-vcf', name: 'inert.vcf', bytes: Buffer.from('##fileformat=VCFv4.3\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n') }, { type: 'structured', mime: 'application/json', name: 'inert.json', bytes: Buffer.from('{"synthetic":true,"opaque":[1,2]}') }];
 let app: NestExpressApplication;
@@ -16,8 +17,25 @@ let token: string;
 const api = () => request(app.getHttpServer());
 const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
 // Each case owns a fresh database and bucket, including intentional corruptions.
-beforeEach(async () => { app = await createTestApp(); token = await clinicianA(); });
-afterEach(async () => { await app.close(); });
+// Database migration and API startup have separate, unchanged Jest hook budgets.
+// Keep the pending resources, not just their resolved values: Jest timeouts do not cancel async setup.
+let database: Promise<EphemeralDatabase | undefined>;
+let startingApp: Promise<NestExpressApplication> | undefined;
+beforeEach(async () => {
+    startingApp = undefined;
+    database = usingPostgres() ? createEphemeralDatabase() : Promise.resolve(undefined);
+    await database;
+});
+beforeEach(async () => {
+    const pg = await database;
+    startingApp = createTestApp(pg ? { postgresUrl: pg.appUrl } : {});
+    app = await startingApp;
+    token = await clinicianA();
+});
+afterEach(async () => {
+    try { await (await startingApp)?.close(); }
+    finally { await (await database)?.drop(); }
+});
 async function registration(s = samples[0], bytes = s.bytes) { const patient = (await api().post('/api/v1/patients').set(bearer(token)).send({ label: `SYN-${randomUUID().slice(0, 8)}` }).expect(201)).body.id; return (await api().post('/api/v1/reports').set(bearer(token)).send({ patientId: patient, type: s.type, filename: s.name, sizeBytes: bytes.length }).expect(201)).body.id; }
 async function declare(id: string, s = samples[0], bytes = s.bytes, requestId = randomUUID(), revision?: string) { revision ??= (await api().get(`/api/v1/reports/${id}/upload-state`).set(bearer(token)).expect(200)).body.revision; return (await api().post(`/api/v1/reports/${id}/upload-attempts`).set(bearer(token)).send({ requestId, revision, contentType: s.mime, sha256: sha(bytes) }).expect(201)).body; }
 function send(id: string, a: {

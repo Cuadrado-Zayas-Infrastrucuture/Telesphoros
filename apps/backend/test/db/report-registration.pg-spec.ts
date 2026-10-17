@@ -127,20 +127,48 @@ it('upgrades legacy rows unchanged and guards populated rollback before explicit
   } finally { await disposable.drop(); }
 });
 
-it('fails migration on bounded lock contention without a partial upgrade, then succeeds after release', async () => {
-  const disposable = await createEphemeralDatabase();
-  const blocker = new Client({ connectionString: disposable.adminUrl });
-  try {
-    await withAdmin(disposable.adminUrl, async c => { await c.query(`SET telesphoros.allow_audit_drop = 'yes'`); await migrateDown(c, 14); }); // 0021 and 0020 are audit migrations
-    await blocker.connect(); await blocker.query('BEGIN'); await blocker.query('LOCK TABLE reports IN ACCESS EXCLUSIVE MODE');
-    await expect(withAdmin(disposable.adminUrl, c => migrateUp(c))).rejects.toThrow(/lock timeout/);
-    await blocker.query('ROLLBACK');
-    await withAdmin(disposable.adminUrl, async c => {
-      expect((await c.query("SELECT 1 FROM information_schema.columns WHERE table_name='reports' AND column_name='creation_request_id'")).rows).toEqual([]);
-      expect(await migrateUp(c)).toEqual(['0014', '0015', '0016', '0017', '0018', '0019', '0020', '0021', '0022', '0023', '0024', '0025', '0026', '0027']);
-      await assertSchemaAcceptance(c);
-    });
-  } finally { await blocker.end(); await disposable.drop(); }
+describe('bounded migration lock contention', () => {
+  let disposable: Promise<EphemeralDatabase>;
+  let checking: Promise<void> | undefined;
+  let preparing: Promise<void> | undefined;
+  // Full schema creation and rollback are fixture preparation, not the bounded lock check.
+  // Each hook and the test retain Jest's default deadline; SQL lock_timeout stays at two seconds.
+  beforeAll(async () => { disposable = createEphemeralDatabase(); await disposable; });
+  beforeAll(() => {
+    preparing = (async () => {
+      const pg = await disposable;
+      await withAdmin(pg.adminUrl, async c => {
+        await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
+        await migrateDown(c, 14); // 0021 and 0020 are audit migrations
+      });
+    })();
+    return preparing;
+  });
+  afterAll(async () => {
+    // A timed-out test is still running. Drain its finally block before Jest tears down imports.
+    try { await preparing; }
+    finally {
+      try { await checking; }
+      finally { await (await disposable).drop(); }
+    }
+  });
+  it('fails migration on bounded lock contention without a partial upgrade, then succeeds after release', () => {
+    checking = (async () => {
+      const pg = await disposable;
+      const blocker = new Client({ connectionString: pg.adminUrl });
+      try {
+        await blocker.connect(); await blocker.query('BEGIN'); await blocker.query('LOCK TABLE reports IN ACCESS EXCLUSIVE MODE');
+        await expect(withAdmin(pg.adminUrl, c => migrateUp(c))).rejects.toThrow(/lock timeout/);
+        await blocker.query('ROLLBACK');
+        await withAdmin(pg.adminUrl, async c => {
+          expect((await c.query("SELECT 1 FROM information_schema.columns WHERE table_name='reports' AND column_name='creation_request_id'")).rows).toEqual([]);
+          expect(await migrateUp(c)).toEqual(['0014', '0015', '0016', '0017', '0018', '0019', '0020', '0021', '0022', '0023', '0024', '0025', '0026', '0027']);
+          await assertSchemaAcceptance(c);
+        });
+      } finally { await blocker.end(); }
+    })();
+    return checking;
+  });
 });
 
 it('detects an injected uniqueness defect and an injected disabled identity guard, with restored controls', async () => {
