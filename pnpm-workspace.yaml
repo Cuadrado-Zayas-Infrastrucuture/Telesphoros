@@ -10,3 +10,6 @@ onlyBuiltDependencies:
 # the GHSA-g7r4-m6w7-qqqr fix. Allow subsequent compatible security patches.
 overrides:
   esbuild: ^0.28.1
+  # The coverage loader uses yaml.load(), supported by v4. Retire its v3-only
+  # argparse 1 -> sprintf-js chain (GHSA-hp3w-g68c-fv3c); keep all test tooling.
+  "@istanbuljs/load-nyc-config@1.1.0>js-yaml": ^4.3.2

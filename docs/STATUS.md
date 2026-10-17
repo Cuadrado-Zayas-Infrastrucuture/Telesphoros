@@ -18,6 +18,10 @@ A subsequent local synchronization adopts `34d6093` (PR #150) through a merge pr
 
 
 
+## sprintf-js tooling remediation (local, 2026-10-17)
+
+The separate `fix/sprintf-js-toolchain` candidate removes all 55 dev-only Jest paths to the unpatched sprintf-js advisory with a parent-scoped js-yaml 4.3.2 override. The full unfiltered candidate audit exits 0 with zero advisories; Jest/instrumentation versions, all test/coverage settings and all six required CI gates are unchanged. Five regression controls, pinned-runtime local builds/checks, all three real-service backend profiles and worker tests pass. [Cause, scope, results and acceptance limits](verification/sprintf-js-security.md). This remains local and unpublished; default-branch alert closure and exact-head hosted CI remain pending the authorized PR/merge flow. Earlier dated records below remain historical.
+
 ## Dependabot esbuild resolution repair (local, 2026-10-17)
 
 The separate `fix/dependabot-esbuild-security` candidate addresses the hosted esbuild `security_update_not_possible` failure at main `e19e61a`. tsup 8's `^0.27.0` constraint excluded the advisory fix; a narrow pnpm override requires `^0.28.1`, resolving 0.28.2 without upgrading other build tools. The esbuild advisory disappears from the candidate audit; the unpatched `sprintf-js` advisory remains visible and the whole audit still exits 1. [Cause, scope and acceptance limits](verification/dependabot-esbuild-security.md). Local build/test compatibility results are recorded in Obsidian. All existing CI/security checks and deadlines remain unchanged; hosted candidate acceptance, default-branch merge/rescan and the separate sprintf-js remediation remain open. No merge or deployment occurred.
