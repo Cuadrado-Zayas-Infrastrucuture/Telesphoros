@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { Pool, type PoolClient } from 'pg';
 import { currentRequestAuthority } from '../auth/authority-context';
+import { assertSessionCurrent } from '../auth/session-admission';
 import { AppException } from '../common/app-exception';
 import { pendingMigrations } from './migrator';
 import { pgClientConfig } from './tls';
@@ -39,6 +40,8 @@ export interface TenantWorkOptions {
  * row is locked SHARED and compared with the version the request was admitted under just before COMMIT. A removal or role change waits for
  * that lock, so a write either commits before the change commits or is rolled back; none commits after it. Read-only transactions skip
  * the lock. Work with no request behind it (background and organization-owned processing) is not tied to a person and is not checked.
+ * If trusted internal code binds a browser session, a second shared lock checks that immutable session's subject, revocation and
+ * database-time expiry on this same client after the membership check. Both locks are held through commit. No cookie path binds one yet.
  */
 export class Database {
   private readonly logger = new Logger('Database');
@@ -67,7 +70,10 @@ export class Database {
     if (!tenantId || tenantId.length > MAX_TENANT_ID_LENGTH) throw new Error('Invalid tenant id');
     const { actor } = options;
     if (actor !== undefined && (!actor || actor.length > MAX_ACTOR_LENGTH || CONTROL_CHARACTERS.test(actor))) throw new Error('Invalid actor');
-    const client = await this.pool.connect();
+    const client = await this.pool.connect().catch(error => {
+      if (currentRequestAuthority()?.session) throw AppException.unavailable('Access checks are unavailable.');
+      throw error;
+    });
     let discard = false;
     let refused: ReturnType<typeof currentRequestAuthority>;
     try {
@@ -75,7 +81,7 @@ export class Database {
       await client.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
       if (actor !== undefined) await client.query(`SELECT set_config('app.current_actor', $1, true)`, [actor]);
       const result = await work(client);
-      if (!(await this.authorityStillCurrent(client))) {
+      if (!(await this.authorityStillCurrent(client, tenantId))) {
         refused = currentRequestAuthority();
         throw AppException.forbidden();
       }
@@ -95,15 +101,25 @@ export class Database {
     }
   }
 
-  /** False when the transaction wrote and the caller's membership is no longer the one the request was admitted under. */
-  private async authorityStillCurrent(client: PoolClient): Promise<boolean> {
+  /** False for changed membership; throws 401/503 for refused/unavailable session admission. Reads keep admission-time semantics. */
+  private async authorityStillCurrent(client: PoolClient, tenantId: string): Promise<boolean> {
     const authority = currentRequestAuthority();
     if (!authority) return true;
-    // An id is assigned at the first write (including a row lock), never to a read.
-    const wrote = await client.query<{ wrote: boolean }>('SELECT txid_current_if_assigned() IS NOT NULL AS wrote');
-    if (!wrote.rows[0]!.wrote) return true;
-    const current = await client.query<{ ok: boolean }>('SELECT membership_assert_current($1, $2) AS ok', [authority.sub, authority.version]);
-    return current.rows[0]?.ok === true;
+    let memberCurrent: boolean;
+    try {
+      // An id is assigned at the first write (including a row lock), never to a read.
+      const wrote = await client.query<{ wrote: boolean }>('SELECT txid_current_if_assigned() IS NOT NULL AS wrote');
+      if (!wrote.rows[0]!.wrote) return true;
+      const current = await client.query<{ ok: boolean }>('SELECT membership_assert_current($1, $2) AS ok', [authority.sub, authority.version]);
+      memberCurrent = current.rows[0]?.ok === true;
+    } catch (error) {
+      if (authority.session) throw AppException.unavailable('Access checks are unavailable.');
+      throw error;
+    }
+    if (!memberCurrent) return false;
+    // Membership then session, on this client. Both shared locks survive until COMMIT/ROLLBACK.
+    if (authority.session) await assertSessionCurrent(client, tenantId, authority.sub, authority.session);
+    return true;
   }
 
   /** Cheap liveness probe for /ready. */
