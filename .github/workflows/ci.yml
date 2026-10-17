@@ -533,6 +533,11 @@ jobs:
           TEST_STORAGE=postgres pnpm --filter @telesphoros/backend test 2>&1 | tee tier2.log
           ! grep -F "[jest] NOT RUNNING" tier2.log
           PROFILE
+      - name: PostgreSQL fixture lifecycle regressions
+        run: |
+          node .github/ci/service-budget.mjs run <<'BUDGET'
+          pnpm --filter @telesphoros/backend test:fixture-lifecycle
+          BUDGET
       - name: Retain completed profile evidence
         if: always() && steps.deadline.outputs.armed == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
