@@ -7,6 +7,8 @@
 Fresh focused 210, all three complete backend profiles, worker 123, F2/F3 all profiles, workspace typecheck/lint/build, frontend 142, all 57 F06/F07 probes and 97 browser executions pass. Every profile runs all 70 custody cases plus 53 new permanent admission cases without skips; three deliberate defects are caught with passing controls. PostgreSQL/HTTP tests prove revocation/write order, expiry after both waits, current membership, tenant/subject binding, pool/timeout failure, raw-transfer cleanup and refusal to pin a stored object after revocation. The browser bridge and genuine old-API 404/cached-UI compatibility remain intact. Later b-2/b-3 login, cookie/CSRF/generation/configuration and M5.1c frontend/same-origin work remain open. Local evidence is not hosted or exact-head CI acceptance; no publication or deployment command.
 
 
+The 12 subsequent review probes are now permanent in the admission PG spec, retaining all prior cases: 65 b-1 admission cases plus 70 M5.1a cases = 135 session cases. Fresh focused PostgreSQL and PostgreSQL/S3 runs each pass 222/222 with no skips or missing-service notices; backend typecheck and lint pass. The self-revocation rollback control checks the same session cookie. Runtime code is unchanged, and cookie auth remains disabled. Full-profile, worker, browser and build results above remain historical for the earlier test set. Protected sources and references are preserved; no Actions/main wiring or publication/deployment.
+
 Read this first to pick the project up. Snapshot: **2026-10-14**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 

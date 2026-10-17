@@ -430,3 +430,138 @@ it('revocation after object storage succeeds refuses the report pin and retains 
     expect(typeof row.attempt_version).toBe('string');
   } finally { release(); spy.mockRestore(); await upload; await rig.dispose(); }
 });
+
+// Permanent race probes promoted from the read-only fdc2687 review.
+it('expiry during ordinary work refuses and rolls back the pending write', async () => {
+  const { authority, row } = await session(900, -20_000);
+  const id = randomUUID();
+  await expect(asRequest(authority, () => database.withTenant(TENANT, async c => {
+    await insert(c, authority.sub, id); await past(row.expiresAt);
+  }))).rejects.toMatchObject({ status: 401 });
+  expect(await exists(id)).toBe(false);
+});
+
+it('cleanup of an expired snapshot cannot restore write admission', async () => {
+  const { authority, row } = await session(900, -20_000);
+  const id = randomUUID(); await past(row.expiresAt);
+  await otherRepository.cleanupExpired(TENANT, 100);
+  expect(await withAdmin(pg.adminUrl, async c => (await c.query('SELECT count(*)::int AS n FROM browser_sessions WHERE tenant_id=$1 AND handle_hash=$2', [TENANT, row.handleHash])).rows[0].n)).toBe(0);
+  await expect(asRequest(authority, () => database.withTenant(TENANT, c => insert(c, authority.sub, id)))).rejects.toMatchObject({ status: 401 });
+  expect(await exists(id)).toBe(false);
+});
+
+it('final admission remains the expiry boundary while cleanup skips its commit-held lock', async () => {
+  const { authority, row } = await session(1_200, -20_000);
+  const id = randomUUID(), gate = await application();
+  await gate.query('SELECT pg_advisory_lock(846017)');
+  const pending = result(asRequest(authority, () => database.withTenant(TENANT, c => insert(c, authority.sub, id, `SYN-BARRIER-${id.slice(0,20)}`))));
+  try {
+    await blocked('session-admission-writer', 'advisory'); await past(row.expiresAt);
+    await otherRepository.cleanupExpired(TENANT, 100);
+    expect(await withAdmin(pg.adminUrl, async c => (await c.query('SELECT count(*)::int AS n FROM browser_sessions WHERE tenant_id=$1 AND handle_hash=$2', [TENANT, row.handleHash])).rows[0].n)).toBe(1);
+    await gate.query('SELECT pg_advisory_unlock(846017)');
+    expect((await pending).status).toBe(200); expect(await exists(id)).toBe(true);
+    await otherRepository.cleanupExpired(TENANT, 100);
+    expect(await withAdmin(pg.adminUrl, async c => (await c.query('SELECT count(*)::int AS n FROM browser_sessions WHERE tenant_id=$1 AND handle_hash=$2', [TENANT, row.handleHash])).rows[0].n)).toBe(0);
+  } finally { await gate.query('SELECT pg_advisory_unlock(846017)'); await close(gate); await pending; }
+});
+
+it('membership lock timeout is generic 503, rolls back, and allows a current retry', async () => {
+  const { authority } = await session(); const id = randomUUID(), gate = await application(true);
+  await gate.query('SELECT sub FROM tenant_memberships WHERE tenant_id=$1 AND sub=$2 FOR UPDATE', [TENANT, authority.sub]);
+  try {
+    const pending = result(asRequest(authority, () => database.withTenant(TENANT, async c => {
+      await c.query("SET LOCAL lock_timeout='300ms'"); await insert(c, authority.sub, id);
+    })));
+    await blocked('session-admission-writer');
+    expect(await pending).toEqual({ status: 503, message: 'Access checks are unavailable.' }); expect(await exists(id)).toBe(false);
+  } finally { await close(gate); }
+  await asRequest(authority, () => database.withTenant(TENANT, c => insert(c, authority.sub, id))); expect(await exists(id)).toBe(true);
+});
+
+it('simultaneous stale membership and revoked session retain membership refusal precedence', async () => {
+  const { authority, row } = await session(); const id = randomUUID();
+  await otherRepository.revoke(TENANT, row.handleHash);
+  await withAdmin(pg.adminUrl, c => c.query("UPDATE tenant_memberships SET status='removed' WHERE tenant_id=$1 AND sub=$2", [TENANT, authority.sub]));
+  const refused = jest.fn().mockResolvedValue(undefined); database.onAuthorityRefused = refused;
+  try {
+    await expect(asRequest(authority, () => database.withTenant(TENANT, c => insert(c, authority.sub, id)))).rejects.toMatchObject({ status: 403 });
+    expect(refused).toHaveBeenCalledTimes(1); expect(refused).toHaveBeenCalledWith(TENANT, authority.sub); expect(await exists(id)).toBe(false);
+  } finally { database.onAuthorityRefused = undefined; }
+});
+
+it('restoring the original roles never revives the old membership version', async () => {
+  const { authority } = await session(); const id = randomUUID();
+  await withAdmin(pg.adminUrl, async c => {
+    await c.query("UPDATE tenant_memberships SET roles='{reader}' WHERE tenant_id=$1 AND sub=$2", [TENANT, authority.sub]);
+    await c.query("UPDATE tenant_memberships SET roles='{clinician}' WHERE tenant_id=$1 AND sub=$2", [TENANT, authority.sub]);
+  });
+  await expect(asRequest(authority, () => database.withTenant(TENANT, c => insert(c, authority.sub, id)))).rejects.toMatchObject({ status: 403 });
+  expect(await exists(id)).toBe(false);
+  const version = await withAdmin(pg.adminUrl, async c => Number((await c.query('SELECT version FROM tenant_memberships WHERE tenant_id=$1 AND sub=$2', [TENANT, authority.sub])).rows[0].version));
+  await asRequest({ ...authority, version }, () => database.withTenant(TENANT, c => insert(c, authority.sub, id))); expect(await exists(id)).toBe(true);
+});
+
+it('revoking another handle for the same member does not retire the active handle', async () => {
+  const { authority } = await session(); const id = randomUUID();
+  const made = await custody.create({ identity: { tenantId: TENANT, sub: authority.sub, roles: [], issuedAt: authority.session.issuedAt }, accessToken: 'synthetic-other-session', tokenExpiresAt: new Date(Date.now()+60_000) });
+  const row = (await custody.read(made.cookie))!; await otherRepository.revoke(TENANT, row.handleHash);
+  await asRequest(authority, () => database.withTenant(TENANT, c => insert(c, authority.sub, id))); expect(await exists(id)).toBe(true);
+});
+
+it('row-locking reads retain final session admission rather than using plain-read exemption', async () => {
+  const { authority, row } = await session(); const id = randomUUID();
+  await database.withTenant(TENANT, c => insert(c, authority.sub, id)); await otherRepository.revoke(TENANT, row.handleHash);
+  await expect(asRequest(authority, () => database.withTenant(TENANT, c => c.query('SELECT id FROM patients WHERE tenant_id=$1 AND id=$2 FOR SHARE', [TENANT, id])))).rejects.toMatchObject({ status: 401 });
+  expect(await exists(id)).toBe(true);
+});
+
+it('a repeatable-read snapshot cannot commit after concurrent revocation', async () => {
+  const { authority, row } = await session(); const id = randomUUID();
+  // Set isolation before withTenant issues its first query.
+  const url = new URL(pg.appUrl); url.searchParams.set('options', '-c default_transaction_isolation=repeatable\\ read');
+  const snapshotDatabase = new Database({ url: url.toString(), ssl: 'disable' });
+  try {
+    const outcome = await result(asRequest(authority, () => snapshotDatabase.withTenant(TENANT, async c => {
+      expect((await c.query('SHOW transaction_isolation')).rows[0].transaction_isolation).toBe('repeatable read');
+      await c.query('SELECT handle_hash FROM browser_sessions WHERE tenant_id=$1 AND handle_hash=$2', [TENANT, row.handleHash]);
+      await insert(c, authority.sub, id);
+      // Model an independent revoker, outside the writer's request authority.
+      await asOrganizationWork(() => otherRepository.revoke(TENANT, row.handleHash));
+    })));
+    expect(outcome).toEqual({ status: 503, message: 'Access checks are unavailable.' }); expect(await exists(id)).toBe(false);
+  } finally { await snapshotDatabase.onModuleDestroy(); }
+});
+
+it('membership changes wait behind the membership lock while a writer waits for session admission', async () => {
+  const { authority, row } = await session(); const id = randomUUID(), gate = await application();
+  const operator = new Client({ connectionString: pg.adminUrl, application_name: 'review-membership-wait' }); await operator.connect();
+  await gate.query('SELECT handle_hash FROM browser_sessions WHERE tenant_id=$1 AND handle_hash=$2 FOR UPDATE', [TENANT, row.handleHash]);
+  const pending = result(asRequest(authority, () => database.withTenant(TENANT, c => insert(c, authority.sub, id))));
+  let change: Promise<unknown> | undefined;
+  try {
+    const writer = await blocked('session-admission-writer');
+    change = operator.query("UPDATE tenant_memberships SET roles='{reader}' WHERE tenant_id=$1 AND sub=$2", [TENANT, authority.sub]);
+    const changer = await blocked('review-membership-wait'); expect(changer.blockers).toContain(writer.pid);
+    await gate.query('COMMIT'); expect((await pending).status).toBe(200); await change; expect(await exists(id)).toBe(true);
+    await expect(asRequest(authority, () => database.withTenant(TENANT, c => insert(c, authority.sub, randomUUID())))).rejects.toMatchObject({ status: 403 });
+  } finally { await close(gate); await pending; await change; await operator.end(); }
+});
+
+it('unavailable membership infrastructure refuses as 503 and rollback releases the client', async () => {
+  const { authority } = await session(); const id = randomUUID();
+  await withAdmin(pg.adminUrl, c => c.query('ALTER FUNCTION membership_assert_current(text,bigint) RENAME TO synthetic_review_member_check'));
+  try {
+    expect(await result(asRequest(authority, () => database.withTenant(TENANT, c => insert(c, authority.sub, id)))))
+      .toEqual({ status: 503, message: 'Access checks are unavailable.' }); expect(await exists(id)).toBe(false);
+  } finally { await withAdmin(pg.adminUrl, c => c.query('ALTER FUNCTION synthetic_review_member_check(text,bigint) RENAME TO membership_assert_current')); }
+  await asRequest(authority, () => database.withTenant(TENANT, c => insert(c, authority.sub, id))); expect(await exists(id)).toBe(true);
+});
+
+it('ordinary session-bound work cannot bypass admission by revoking its own session', async () => {
+  const { authority, row, cookie } = await session();
+  await expect(asRequest(authority, () => repository.revoke(TENANT, row.handleHash))).rejects.toMatchObject({ code: 'unavailable' });
+  expect(await custody.read(cookie)).toMatchObject({ handleHash: row.handleHash });
+  expect(await withAdmin(pg.adminUrl, async c => (await c.query('SELECT revoked_at FROM browser_sessions WHERE tenant_id=$1 AND handle_hash=$2', [TENANT, row.handleHash])).rows[0].revoked_at)).toBeNull();
+  expect(await otherRepository.revoke(TENANT, row.handleHash)).toBe(true);
+});

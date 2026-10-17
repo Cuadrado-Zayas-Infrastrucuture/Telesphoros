@@ -45,3 +45,20 @@ The application/package source stayed fixed through full profile execution (`tes
 M5.1b-2 login transactions/exchange and b-3 cookie/CSRF/generation/configuration/endpoints remain open. Future logout needs an explicitly authorized terminal transition in consistent lock order; ordinary session-bound admission is not a blanket bypass. Read-time guards and frontend/same-origin integration remain later work. This slice alone is not completed M5.1b or M5.1.
 
 Full native stdout/stderr, exits, exact case/probe inventories, mutation controls, legacy compiled binding and source/protected hashes are retained outside this checkout in the task's `work/m51b1-verification/`. Credentials are private and never printed. Only owned loopback services were stopped, retaining data/logs. No protected source checkout, Actions/main wiring, push, PR, merge, live migration, cloud resource or deployment command is changed/run.
+
+## Permanent review probes (2026-10-16)
+
+The 12 review-only probes from `fdc2687` are now permanent in `apps/backend/test/db/session-admission.pg-spec.ts`. Original tests remain intact. The PG spec now has 40 cases; with 25 unit cases, b-1 has 65 admission cases, plus 70 unchanged M5.1a cases = **135 session cases**. Promotion removes temporary review labels, explains connection-start isolation and independent revoker context, and strengthens the self-revocation rollback control to read the same original session cookie.
+
+Coverage includes ordinary in-flight expiry; expired-row cleanup; final-admission expiry versus commit-held locks and cleanup; membership timeout/retry, refusal precedence and version restoration; another handle's revocation; row-locking reads; stale repeatable-read snapshots; membership locks while waiting for session; missing membership infrastructure; and refusal to bypass admission through self-revocation. No new product behavior is introduced.
+
+Fresh focused verification on the promoted test contents:
+
+| Application profile | Passed | Failed | Skipped | Session cases |
+| --- | ---: | ---: | ---: | ---: |
+| PostgreSQL | 222 | 0 | 0 | 135 |
+| PostgreSQL + S3/Moto | 222 | 0 | 0 | 135 |
+
+Both runs execute ten focused suites with fresh task-owned PostgreSQL 16/SCRAM and Moto, using restricted application roles, actual migrations/RLS and HTTP intake/storage. All 210 original focused case names and all 12 promoted names are accounted for in both results. No missing-service notice occurs. Backend typecheck and lint pass. Full native producer output/status and case/source inventories are retained in the outer workspace's `work/m51b1-probes-verification/`.
+
+Production code, migrations, ACLs, cookie/provider/runtime wiring, Actions/main wiring, dependencies, frontend and all protected sources remain unchanged. Cookie authentication remains disabled. Full-profile/worker/browser/build/recovery acceptance above belongs to the prior build and was not rerun for this test-only promotion; focused PG/S3 runs above are fresh. The unpublished local commit has no remote exact-head CI or hosted acceptance. No push, PR or deployment is authorized.
