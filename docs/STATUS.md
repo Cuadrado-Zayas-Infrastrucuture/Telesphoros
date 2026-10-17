@@ -18,6 +18,11 @@ A subsequent local synchronization adopts `34d6093` (PR #150) through a merge pr
 
 
 
+## Dependabot esbuild resolution repair (local, 2026-10-17)
+
+The separate `fix/dependabot-esbuild-security` candidate addresses the hosted esbuild `security_update_not_possible` failure at main `e19e61a`. tsup 8's `^0.27.0` constraint excluded the advisory fix; a narrow pnpm override requires `^0.28.1`, resolving 0.28.2 without upgrading other build tools. The esbuild advisory disappears from the candidate audit; the unpatched `sprintf-js` advisory remains visible and the whole audit still exits 1. [Cause, scope and acceptance limits](verification/dependabot-esbuild-security.md). Local build/test compatibility results are recorded in Obsidian. All existing CI/security checks and deadlines remain unchanged; hosted candidate acceptance, default-branch merge/rescan and the separate sprintf-js remediation remain open. No merge or deployment occurred.
+
+
 ## PR #155 watchdog observation repair (2026-10-17)
 
 The PostgreSQL fixture repair in draft PR #155 now incorporates main `59d478b` without rewriting published history. Its first hosted run passed the service profiles, joining gate and new fixture controls but exposed a watchdog test race: successful SIGKILL dispatch was mistaken for synchronous process exit. The [observation repair](verification/watchdog-exit-observation.md) requires actual SIGKILL exits within the existing finite helper and retains late-work cleanup checks. Delayed-delivery reproduction and a suppressed-KILL negative control distinguish the race from failed cleanup. Watchdog behavior, deadlines, profile coverage and required gates are unchanged. Exact refreshed-head hosted acceptance is pending; no merge or deployment is authorized.
