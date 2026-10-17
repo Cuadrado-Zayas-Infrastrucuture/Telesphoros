@@ -433,14 +433,25 @@ const policyRefusals = [
   ['duplicate native plans', [policyPlanEvent, policyPlanEvent, passingPolicySummary].map(v => JSON.stringify(v)).join('\n') + '\n', 0, /require exactly one fresh plan/],
   ['malformed native output', 'not-json\n', 0, /SyntaxError/],
   ['stale prior producer output', '', 0, /expected one passing mocked plan/],
+  ['missing executable', '', null, /mocked Terraform producer failed/, { missing: true, error: 'ENOENT' }],
+  ['terminated producer', '', null, /mocked Terraform producer failed/, { body: "process.kill(process.pid, 'SIGTERM');", signal: 'SIGTERM' }],
+  ['empty output', '', 0, /expected one passing mocked plan/, { body: 'process.exit(0);' }],
+  ['timed-out producer', '', null, /mocked Terraform producer failed/, { body: 'setTimeout(() => {}, 10000);', timeout: true, signal: 'SIGTERM', error: 'ETIMEDOUT' }],
+  ['timed-out producer exiting zero', JSON.stringify(passingPolicySummary) + '\n', 0, /mocked Terraform producer failed \(ETIMEDOUT\)/, {
+    body: "process.on('SIGTERM', () => process.exit(0)); process.stdout.write(process.env.FD7A_CONTROL_OUTPUT); setTimeout(() => process.exit(0), 3000);",
+    timeout: true, timeoutMs: 500, error: 'ETIMEDOUT',
+  }],
 ];
-for (const [label, output, status, reason] of policyRefusals) {
+for (const [label, output, status, reason, options = {}] of policyRefusals) {
   test(`actual policy entry refuses ${label}`, () => {
     const parent = process.env.FD7A_CI_CONTROL_EVIDENCE_DIR ?? tmpdir();
     const dir = mkdtempSync(join(parent, 'ci-fd7a-policy-'));
     const binary = join(dir, 'terraform-fixture');
-    writeFileSync(binary, '#!/usr/bin/env node\nprocess.stdout.write(process.env.FD7A_CONTROL_OUTPUT); process.exit(Number(process.env.FD7A_CONTROL_STATUS));\n', { mode: 0o700 });
-    chmodSync(binary, 0o700);
+    if (!options.missing) {
+      const body = options.body ?? 'process.stdout.write(process.env.FD7A_CONTROL_OUTPUT); process.exit(Number(process.env.FD7A_CONTROL_STATUS));';
+      writeFileSync(binary, '#!/usr/bin/env node\n' + body + '\n', { mode: 0o700 });
+      chmodSync(binary, 0o700);
+    }
     const stale = join(dir, 'fd7a-policy-prior');
     if (label.includes('stale')) {
       // A named old fixture must not stand in for the current producer; only this owned directory is seeded.
@@ -449,6 +460,12 @@ for (const [label, output, status, reason] of policyRefusals) {
     }
     const old = readdirSync(dir);
     const args = ['--test', new URL('../../infrastructure/terraform-state/policy.test.mjs', import.meta.url).pathname];
+    if (options.timeout) {
+      // Shorten only this nested test's spawn deadline; the real producer keeps its 120-second timeout.
+      const preload = join(dir, 'bounded-timeout.mjs');
+      writeFileSync(preload, "import cp from 'node:child_process';\nimport { syncBuiltinESMExports } from 'node:module';\nconst original = cp.spawnSync;\ncp.spawnSync = (binary, args, options) => original(binary, args, { ...options, timeout: " + (options.timeoutMs ?? 150) + " });\nsyncBuiltinESMExports();\n", { mode: 0o600 });
+      args.unshift('--import', preload);
+    }
     const childEnv = { ...process.env, PATH: dirname(process.execPath) + ':' + process.env.PATH, FD7A_TERRAFORM_BIN: binary, FD7A_TEST_EVIDENCE_DIR: dir, FD7A_CONTROL_OUTPUT: output, FD7A_CONTROL_STATUS: String(status) };
     // A nested --test launch must execute, rather than inherit the parent's child-runner context.
     delete childEnv.NODE_TEST_CONTEXT;
@@ -461,7 +478,7 @@ for (const [label, output, status, reason] of policyRefusals) {
     assert.equal(result.error, undefined); assert.equal(result.status, 1); assert.match(result.stdout + result.stderr, reason);
     const fresh = readdirSync(dir).filter(name => name.startsWith('fd7a-policy-') && !old.includes(name)); assert.equal(fresh.length, 1);
     const receipt = JSON.parse(readFileSync(join(dir, fresh[0], 'exit.json'), 'utf8'));
-    assert.equal(receipt.binary, binary); assert.equal(receipt.status, status); assert.equal(receipt.signal, null); assert.equal(receipt.error, null);
+    assert.equal(receipt.binary, binary); assert.equal(receipt.status, status); assert.equal(receipt.signal, options.signal ?? null); assert.equal(receipt.error, options.error ?? null);
     assert.deepEqual(receipt.args, ['test', '-filter=tests/policy.tftest.hcl', '-json', '-verbose']);
     assert.equal(readFileSync(join(dir, fresh[0], 'terraform.stdout.jsonl'), 'utf8'), output);
     if (label.includes('stale')) assert.equal(readFileSync(join(stale, 'terraform.stdout.jsonl'), 'utf8'), [policyPlanEvent, passingPolicySummary].map(v => JSON.stringify(v)).join('\n') + '\n');

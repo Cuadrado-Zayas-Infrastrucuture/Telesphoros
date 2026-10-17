@@ -229,3 +229,47 @@ and 59 focused/131 full CI controls, with zero selected skips; the approved root
 fixtures, policies, locks and CI bytes are unchanged. See the dated
 [reconciliation record](../verification/fd7a-required-ci.md#local-reconciliation-with-current-main--2026-10-17).
 No backend activation, cloud operation, hosted rerun or publication occurred.
+
+
+## Permanent producer-fault controls — 2026-10-17
+
+A fresh local main-based candidate promotes the four `cf532cd` review-only
+producer faults into the existing refusal harness: missing executable,
+termination, empty output and timeout. All ten refusal controls now run in the
+63 focused / 135 full CI controls. Policy cases remain 171/171, with 21 source
+guards, 22 standalone plans, 33 main-root plans and 96 infrastructure tests passing
+without selected skips. The timeout test shortens only its isolated child's
+deadline; the real 120-second producer timeout, workflow, resources, locks and
+fixtures are unchanged. Native receipts and full outputs are retained before
+assertions. See the [promotion record](../verification/fd7a-required-ci.md#producer-fault-probes-made-permanent--2026-10-17).
+Both earlier FD-7a candidates, the reviewed candidate and F06/F07/combined remain
+preserved. Hosted Linux CI and every live backend/permission/recovery acceptance
+gate remain separate; no publication, cloud operation or deployment occurred.
+
+
+## Delivery reconciliation on current main — 2026-10-17
+
+The local delivery candidate starts from main `95c6ead`, retaining worker fix
+#154 unchanged. Its standalone root, policies, fixtures, locks and required
+workflow are the reviewed FD-7a bytes; its existing refusal harness retains all
+ten cases, including the four promoted producer faults. The README describes
+current Actions wiring and labels the original handoff as history. Both sets of
+earlier dated records remain verbatim. The [delivery verification record](../verification/fd7a-required-ci.md#delivery-reconciliation-on-current-main--2026-10-17)
+separates this assembly from older captures and future hosted/live acceptance.
+The real producer deadline stays 120 seconds; only the timeout control's nested
+child uses 150 ms. No main-backend activation or cloud operation is included.
+
+
+## Native producer error correction — 2026-10-17
+
+The local correction from `b58ebc5` requires exit 0, no termination signal and no
+native spawn error before parsing a policy plan. Status 0 alone is insufficient:
+a timed-out producer can handle SIGTERM and exit 0 with native `ETIMEDOUT`.
+The new finite refusal control checks this combination and the exact producer
+failure reason; all four earlier fault controls remain. Complete native output
+and exit receipts are still saved before acceptance assertions. The real producer
+deadline remains 120 seconds; only the new nested regression uses 500 ms. No
+resource configuration, backend wiring, workflow, credentials or worker behavior
+changes. Fresh local verification and preserved-checkout proof are external in
+`2026-10-17/new-chat/work/fd7a-native-error-fix`. Hosted CI and live AWS gates
+remain open; no cloud operation, CI rerun, push or merge is part of this repair.

@@ -451,3 +451,51 @@ Python 3 is needed on the PATH for the reader tests. Backup and restore tests ne
 ## Synthetic FHIR terminology/profile slice
 
 The local SMART pilot now declares Genomics Reporting 3.0.0 Genotype and Genomic Report profiles, corrects their required code/categories, and verifies generated synthetic examples using a pinned official HL7 validator in CI. Finite terminology tests and negative profile examples fail closed. Local phenotype text remains explicitly unstandardized. Read-only authorization, retention and clinical gates are unchanged. See [validation scope](../packages/smart-pilot/test/fhir-ig/README.md). The final synthetic workflow acceptance slice is described above.
+
+
+## FD-7a producer-fault probe promotion (local, 2026-10-17)
+
+`feat/fd7a-producer-faults` starts at freshly fetched main `efb6103` and preserves
+reviewed `cf532cd`. Four review-only producer faults are now permanent controls:
+missing executable, terminated producer, empty output and timeout. The existing
+harness passed all 63 focused / 135 full CI controls (focused included in full),
+with exact native refusal receipts; all 171 policy/mutation cases, 21 state guards,
+22 standalone plans, 33 main-root plans, 96 infrastructure tests and 8 workspace /
+4 workflow controls passed without selected skips. Both roots fmt/init/validate
+and actionlint passed. The workflow, resource/policy definitions, locks and native
+fixtures are unchanged from the reviewed candidate. Earlier main and candidate
+history remains intact. [Verification and remaining gates](verification/fd7a-required-ci.md#producer-fault-probes-made-permanent--2026-10-17).
+Both FD-7a candidates, F06/F07 and combined are preserved. Final-candidate review,
+authorized publication/exact-head hosted Linux CI, backend wiring and live AWS
+acceptance remain open; no push, PR, merge, cloud operation or deployment occurred.
+
+
+## FD-7a delivery reconciliation on current main (local, 2026-10-17)
+
+`feat/fd7a-delivery-reconciled` starts from main `95c6ead`, including merged worker
+shutdown fix #154. It carries local `79b727f`'s four permanent producer-fault
+controls and dated records, together with published `bb14e08`'s README Actions
+clarification and preserved historical handoff. The reviewed workflow, standalone
+resource/policy definitions, locks and fixtures are unchanged. Main's worker code
+is retained verbatim; the separate early-stop/session-test experiment is not part
+of this candidate. Earlier history remains intact. See the [dated delivery
+reconciliation record](verification/fd7a-required-ci.md#delivery-reconciliation-on-current-main--2026-10-17).
+Fresh local results and final source/commit binding belong to the external
+completion report; older test results below and above apply only to their stated
+captures. Exact-head hosted acceptance, backend activation and live AWS gates
+remain separate. This reconciliation authorizes no push, hosted CI rerun, merge,
+apply or deployment; protected source checkouts remain preserved.
+
+
+## FD-7a native producer error correction (local, 2026-10-17)
+
+A separate clone from reviewed `b58ebc5` corrects its P2 native-error finding.
+The policy entry now accepts a producer only with exit 0, no signal and no native
+error. A finite regression makes the producer handle timeout SIGTERM and exit 0
+while Node retains `ETIMEDOUT`; rejection must occur at the producer guard. The
+existing ten refusals, including all four permanent fault controls, remain.
+README clarification, worker fix #154, workflow, policies, locks and fixtures are
+unchanged. Fresh local verification and red/green evidence are bound to the final
+commit by the external `fd7a-native-error-fix` report; earlier results above are
+historical. All protected checkouts remain preserved. Publication, exact-head
+hosted CI and live backend acceptance remain separate authorization gates.
