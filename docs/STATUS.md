@@ -1,5 +1,12 @@
 # Status, history and working agreements
 
+## M5.1b-1 internal session write admission (local, 2026-10-16)
+
+`feat/m51b-session-admission`, from fetched main `1da75b1`, extends the transaction boundary with a trusted immutable session binding and a membership-then-session shared lock on the same client, including database expiry after waits. No route accepts a cookie; AuthGuard/provider registration and bearer behavior remain unchanged. No migration, ACL, frontend, runtime-key, dependency, Actions or Terraform main/backend wiring change. [Design](design/plans/m5-1b-1-session-admission.md), [verification](verification/m5-1b-1-session-admission.md).
+
+Fresh focused 210, all three complete backend profiles, worker 123, F2/F3 all profiles, workspace typecheck/lint/build, frontend 142, all 57 F06/F07 probes and 97 browser executions pass. Every profile runs all 70 custody cases plus 53 new permanent admission cases without skips; three deliberate defects are caught with passing controls. PostgreSQL/HTTP tests prove revocation/write order, expiry after both waits, current membership, tenant/subject binding, pool/timeout failure, raw-transfer cleanup and refusal to pin a stored object after revocation. The browser bridge and genuine old-API 404/cached-UI compatibility remain intact. Later b-2/b-3 login, cookie/CSRF/generation/configuration and M5.1c frontend/same-origin work remain open. Local evidence is not hosted or exact-head CI acceptance; no publication or deployment command.
+
+
 Read this first to pick the project up. Snapshot: **2026-10-14**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
