@@ -3,7 +3,24 @@
 Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## M5.1b-1 internal session write admission (local, 2026-10-16)
 
+`feat/m51b-session-admission`, from fetched main `1da75b1`, extends the transaction boundary with a trusted immutable session binding and a membership-then-session shared lock on the same client, including database expiry after waits. No route accepts a cookie; AuthGuard/provider registration and bearer behavior remain unchanged. No migration, ACL, frontend, runtime-key, dependency, Actions or Terraform main/backend wiring change. [Design](design/plans/m5-1b-1-session-admission.md), [verification](verification/m5-1b-1-session-admission.md).
+
+Fresh focused 210, all three complete backend profiles, worker 123, F2/F3 all profiles, workspace typecheck/lint/build, frontend 142, all 57 F06/F07 probes and 97 browser executions pass. Every profile runs all 70 custody cases plus 53 new permanent admission cases without skips; three deliberate defects are caught with passing controls. PostgreSQL/HTTP tests prove revocation/write order, expiry after both waits, current membership, tenant/subject binding, pool/timeout failure, raw-transfer cleanup and refusal to pin a stored object after revocation. The browser bridge and genuine old-API 404/cached-UI compatibility remain intact. Later b-2/b-3 login, cookie/CSRF/generation/configuration and M5.1c frontend/same-origin work remain open. Local evidence is not hosted or exact-head CI acceptance; no publication or deployment command.
+
+
+The 12 subsequent review probes are now permanent in the admission PG spec, retaining all prior cases: 65 b-1 admission cases plus 70 M5.1a cases = 135 session cases. Fresh focused PostgreSQL and PostgreSQL/S3 runs each pass 222/222 with no skips or missing-service notices; backend typecheck and lint pass. The self-revocation rollback control checks the same session cookie. Runtime code is unchanged, and cookie auth remains disabled. Full-profile, worker, browser and build results above remain historical for the earlier test set. Protected sources and references are preserved; no Actions/main wiring or publication/deployment.
+
+A subsequent local synchronization adopts `34d6093` (PR #150) through a merge preserving published fdc2687/e728811. CI and preparation helpers match main exactly; application/tests and cookie auth are unchanged. STATUS retains both histories; only SESSION_STATE required manual resolution, retaining dated provenance. Fresh focused PostgreSQL and PG/S3 runs each pass 222/222, including all 135 session cases. Typecheck, lint, 111 CI controls, eight workspace controls, four workflow controls and actionlint pass. Exact-head hosted acceptance remains unrun for this unpushed merge. No CI rerun, GitHub merge, backend deployment or independent Actions/main wiring edit was performed. See the existing b-1 verification record.
+
+
+
+
+
+## PR #155 watchdog observation repair (2026-10-17)
+
+The PostgreSQL fixture repair in draft PR #155 now incorporates main `59d478b` without rewriting published history. Its first hosted run passed the service profiles, joining gate and new fixture controls but exposed a watchdog test race: successful SIGKILL dispatch was mistaken for synchronous process exit. The [observation repair](verification/watchdog-exit-observation.md) requires actual SIGKILL exits within the existing finite helper and retains late-work cleanup checks. Delayed-delivery reproduction and a suppressed-KILL negative control distinguish the race from failed cleanup. Watchdog behavior, deadlines, profile coverage and required gates are unchanged. Exact refreshed-head hosted acceptance is pending; no merge or deployment is authorized.
 
 
 ## FD-7a reconciliation with current main (local, 2026-10-17)

@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "test": "jest",
     "test:db": "TEST_STORAGE=postgres jest",
+    "test:fixture-lifecycle": "node --test ../../scripts/test-fixtures/lifecycle.test.cjs",
     "db:migrate": "node dist/db/cli.js migrate up",
     "db:migrate:down": "node dist/db/cli.js migrate down",
     "db:status": "node dist/db/cli.js migrate status",

@@ -1,5 +1,7 @@
 import { spawnSync } from 'node:child_process';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { PERSON, TENANT_A, TENANT_B, attemptsOf, createFixture, effectDir, enqueueAs, jobRow, startWorker, until, type Fixture, type WorkerProcess } from './support';
 
@@ -33,6 +35,25 @@ let n = 0;
 const enqueue = (type: string, payload: unknown, tenant = TENANT_A) => enqueueAs(f.db, tenant, PERSON, type, payload, `p-${++n}`).then((r) => r.jobId);
 const stateOf = (id: string) => jobRow(f.admin, id).then((r) => r.state as string);
 const ready = (w: WorkerProcess) => until('the worker to start', async () => w.output().includes('worker-started'));
+const requestShutdown = async (w: WorkerProcess) => {
+  expect(w.child.kill('SIGTERM')).toBe(true);
+  // Sending a signal does not mean the child's application callback has run.
+  await until('the child to acknowledge SIGTERM', async () => w.output().includes('"event":"shutdown-requested","reason":"SIGTERM"'));
+};
+const expectStoppedReadiness = async (get: () => Promise<{ status: number; body: string }>) => {
+  let response;
+  try {
+    response = await get();
+  } catch (error) {
+    if (error instanceof TypeError && error.message === 'fetch failed') {
+      const code = (error.cause as { code?: string } | undefined)?.code;
+      if (['ECONNREFUSED', 'ECONNRESET', 'UND_ERR_SOCKET'].includes(code ?? '')) return;
+    }
+    throw error;
+  }
+  expect(response.status).toBe(503);
+  expect(JSON.parse(response.body)).toEqual({ status: 'unavailable', running: expect.any(Number), stopping: true });
+};
 
 describe('several worker processes', () => {
   it('run every job exactly once to completion, with no job run twice', async () => {
@@ -128,14 +149,61 @@ describe('health', () => {
     expect((await get('/nothing')).status).toBe(404);
     const id = await enqueue('test.slow', { ms: 3_000 });
     await until('the job to start', async () => (await effects.files()).includes(`${id}.started`));
-    w.child.kill('SIGTERM');
-    // The signal reaches the worker asynchronously, and until its handler runs the listener is still open and /readyz still answers 200. The handler logs
-    // `shutdown-requested` and closes the listener in the same synchronous step, so once the line is seen no later probe can be served as ready.
-    await until('the worker to handle SIGTERM', async () => w.output().includes('"event":"shutdown-requested"'));
+    await requestShutdown(w);
     // While draining the listener is closed to new connections or answers not-ready; either way it is no longer ready.
-    const after = await get('/readyz').catch(() => ({ status: 0, body: '' }));
-    expect(after.status).not.toBe(200);
+    await expectStoppedReadiness(() => get('/readyz'));
     expect(await w.exited).toEqual({ code: 0, signal: null });
+    expect(await stateOf(id)).toBe('succeeded');
+  });
+
+  it('waits for child shutdown acknowledgement when SIGTERM handling is held', async () => {
+    await begin();
+    const id = await enqueue('test.slow', { ms: 3_000 });
+    const preload = pathToFileURL(join(__dirname, 'fixtures', 'signal-gate.mjs')).href;
+    const w = worker({ WORKER_ID: 'held-signal', WORKER_DRAIN_SECONDS: '20', NODE_OPTIONS: `--import=${preload}`, WORKER_TEST_SIGNAL_GATE_DIR: effects.dir });
+    const port = await until('the health port', async () => Number(/"event":"health-listening"[^}]*"count":(\d+)/.exec(w.output())?.[1]) || undefined);
+    const get = async () => {
+      const response = await fetch(`http://127.0.0.1:${port}/readyz`);
+      return { status: response.status, body: await response.text() };
+    };
+    await until('the job to start', async () => (await effects.files()).includes(`${id}.started`));
+    expect((await get()).status).toBe(200);
+    let acknowledged = false;
+    const stopping = requestShutdown(w).then(() => { acknowledged = true; });
+    // The original promise is joined in finally; observe rejection while checking the gate.
+    void stopping.catch(() => undefined);
+    try {
+      await until('the signal to reach the test gate', async () => (await effects.files()).includes('signal-held'));
+      expect(acknowledged).toBe(false);
+      // The real worker is still ready until its application signal callback is released.
+      expect((await get()).status).toBe(200);
+      await writeFile(join(effects.dir, 'release-signal'), 'release\n', { flag: 'wx' });
+      await stopping;
+      expect(acknowledged).toBe(true);
+      await expectStoppedReadiness(get);
+      expect(await w.exited).toEqual({ code: 0, signal: null });
+      expect(await stateOf(id)).toBe('succeeded');
+    } finally {
+      await writeFile(join(effects.dir, 'release-signal'), 'release\n');
+      await stopping;
+    }
+  });
+
+  it('accepts only stopped readiness or known closed connections, and propagates unrelated errors', async () => {
+    await expectStoppedReadiness(async () => ({ status: 503, body: JSON.stringify({ status: 'unavailable', running: 1, stopping: true }) }));
+    for (const code of ['ECONNREFUSED', 'ECONNRESET', 'UND_ERR_SOCKET']) {
+      await expectStoppedReadiness(async () => { throw new TypeError('fetch failed', { cause: { code } }); });
+    }
+    for (const unrelated of [new TypeError('fetch failed', { cause: { code: 'EACCES' } }), new Error('unrelated request failure'), null]) {
+      await expect(expectStoppedReadiness(async () => { throw unrelated; })).rejects.toBe(unrelated);
+    }
+    for (const response of [
+      { status: 200, body: '{}' },
+      { status: 404, body: '' },
+      { status: 503, body: JSON.stringify({ status: 'unavailable', running: 1, stopping: false }) },
+    ]) {
+      await expect(expectStoppedReadiness(async () => response)).rejects.toThrow();
+    }
   });
 });
 
