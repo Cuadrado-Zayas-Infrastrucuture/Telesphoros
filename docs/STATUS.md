@@ -3,6 +3,31 @@
 Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+
+
+
+## FD-7a reconciliation with current main (local, 2026-10-17)
+
+The separate `feat/fd7a-required-ci-main` candidate now starts at freshly verified main `efb6103`, retaining the local `2fbc1b3` candidate intact. Current-main status/runbook history and all earlier FD-7a records are preserved; the earlier assembly/base statements below remain dated historical records. The approved Terraform payload and CI bytes are unchanged. Fresh local acceptance again passed 171 policy/mutation cases, 21 state guards, 22 standalone plans, 33 main-root plans, 96 infrastructure tests, 59 focused/131 full CI controls and 8 workspace/4 workflow controls with no selected skips. Both roots passed fmt/backend-disabled read-only-lock init/validate and actionlint passed. The final protection proof covers the prior 11 protected checkouts plus preserved `2fbc1b3`. [Verification](verification/fd7a-required-ci.md#local-reconciliation-with-current-main--2026-10-17). Hosted exact-head CI, assembled-candidate review, backend wiring and live AWS acceptance remain open. No publication, hosted CI dispatch/rerun, cloud operation or deployment is authorized by this local reconciliation.
+
+## FD-7a mandatory CI assembly (local, 2026-10-17)
+
+The separate `feat/fd7a-required-ci` candidate assembles the approved delivery `aec888e` with mandatory coverage in the existing required `terraform` job. Both roots now require fmt, backend-disabled/read-only-lock init, validate and every mocked plan; the standalone source guards and fresh policy producer are mandatory too. Exact Node 22.22.0 / Terraform 1.16.5 pins, all six required check names and the 15-minute Terraform cap remain. Service profiles, joining/evidence gates, cleanup, cancellation and their shared 30-minute budget are unchanged.
+
+Local acceptance passed 171 policy/mutation cases (145 original + 16 promoted + 10 mutations), 21 source guards, 22 standalone plans, 96 existing infrastructure tests and 33 main-root plans; CI controls passed 131/131, including 59 focused workflow controls, with no selected skips. Both roots passed fmt/init/validate; workspace/workflow controls and actionlint passed. Resources, fixtures, provider locks and all approved probes remain identical to `aec888e`. [Verification and limits](verification/fd7a-required-ci.md) distinguish these local results from hosted CI and live AWS acceptance. The earlier records below remain historical snapshots. No hosted CI dispatch/rerun, backend activation, push, PR, merge, apply or deployment is part of this local slice.
+
+## FD-7a standalone state bootstrap (local, 2026-10-16)
+
+`feat/fd7a-current-main` preserves the implementation from `feat/fd7a-state-bootstrap` (`40700c7`) and adds the independent state bucket/key root, explicit owner/Region/retention inputs, exact state/lock permissions, native mocked plans and source weakening controls. [Runbook](ops/terraform-state.md). Built and verified locally; no resources created. Main backend wiring and Actions coverage are separate follow-ups owned outside this slice; no push, PR or deployment. Both F06/F07 source branches and the combined reference are preserved.
+
+Fresh local verification against main `7987a68` passed all 145 policy probes and 10 mutation checks, 21 source guards, 22 standalone mocked plans, 96 existing infrastructure tests and 33 main-root mocked plans; both roots passed fmt/validate. No selected tests skipped. State implementation and permanent probes match `40700c7`; all current-main status sections are preserved. Mandatory standalone-root Actions coverage and exact-candidate CI remain publication gates.
+
+### Delivery refresh from current main (2026-10-17)
+
+`feat/fd7a-delivery` starts directly from main `c12c47a`, preserving original `40700c7` and integration `3243fef`. All ten standalone files, including the 145 policy probes and ten mutations, remain byte-identical. Fresh local verification passed 155 policy/mutation cases, 21 source guards, 22 standalone mocked plans, 96 existing infrastructure tests and 33 main-root mocked plans; both roots passed fmt, backend-disabled read-only-lock initialization and validate. No selected tests skipped. Current main status and both prior session records are retained. Actions and main-backend wiring remain unchanged; mandatory state-root CI coverage is still owned by the other session. No push, PR, merge, cloud apply or deployment.
+
+The 16 subsequent review probes are now permanent in the existing policy suite: 145 original permission cases plus 16 promoted cases and ten unchanged mutations, **171 tests total**. Exact comparison preserved every promoted request and expectation, the original evaluator/cases and all mutations. Fresh verification passed 171 policy/mutation tests, 21 source guards, 22 standalone plans, 96 existing infrastructure tests and 33 main-root plans; both roots passed fmt, backend-disabled read-only-lock initialization and validate. No selected tests skipped. Terraform resources, variables, outputs, fixtures and provider locks are unchanged. The CI handoff is prepared externally in this task and has not been sent; mandatory Actions coverage and live acceptance remain open. No Actions/backend wiring changes, push, PR, merge or deployment.
+
 ## CI documentation merged and verified (#151, 2026-10-17)
 
 [PR #151](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/151) merged as [c12c47a](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/commit/c12c47a7e3865ffec7cdbaa7844aafa4b003041b), preserving reviewed documentation head `2f879fa`'s tree. Only this status file and the CI runbook changed from #150's accepted main snapshot; application code, tests, profiles, cleanup and the shared budget are unchanged.
@@ -426,3 +451,51 @@ Python 3 is needed on the PATH for the reader tests. Backup and restore tests ne
 ## Synthetic FHIR terminology/profile slice
 
 The local SMART pilot now declares Genomics Reporting 3.0.0 Genotype and Genomic Report profiles, corrects their required code/categories, and verifies generated synthetic examples using a pinned official HL7 validator in CI. Finite terminology tests and negative profile examples fail closed. Local phenotype text remains explicitly unstandardized. Read-only authorization, retention and clinical gates are unchanged. See [validation scope](../packages/smart-pilot/test/fhir-ig/README.md). The final synthetic workflow acceptance slice is described above.
+
+
+## FD-7a producer-fault probe promotion (local, 2026-10-17)
+
+`feat/fd7a-producer-faults` starts at freshly fetched main `efb6103` and preserves
+reviewed `cf532cd`. Four review-only producer faults are now permanent controls:
+missing executable, terminated producer, empty output and timeout. The existing
+harness passed all 63 focused / 135 full CI controls (focused included in full),
+with exact native refusal receipts; all 171 policy/mutation cases, 21 state guards,
+22 standalone plans, 33 main-root plans, 96 infrastructure tests and 8 workspace /
+4 workflow controls passed without selected skips. Both roots fmt/init/validate
+and actionlint passed. The workflow, resource/policy definitions, locks and native
+fixtures are unchanged from the reviewed candidate. Earlier main and candidate
+history remains intact. [Verification and remaining gates](verification/fd7a-required-ci.md#producer-fault-probes-made-permanent--2026-10-17).
+Both FD-7a candidates, F06/F07 and combined are preserved. Final-candidate review,
+authorized publication/exact-head hosted Linux CI, backend wiring and live AWS
+acceptance remain open; no push, PR, merge, cloud operation or deployment occurred.
+
+
+## FD-7a delivery reconciliation on current main (local, 2026-10-17)
+
+`feat/fd7a-delivery-reconciled` starts from main `95c6ead`, including merged worker
+shutdown fix #154. It carries local `79b727f`'s four permanent producer-fault
+controls and dated records, together with published `bb14e08`'s README Actions
+clarification and preserved historical handoff. The reviewed workflow, standalone
+resource/policy definitions, locks and fixtures are unchanged. Main's worker code
+is retained verbatim; the separate early-stop/session-test experiment is not part
+of this candidate. Earlier history remains intact. See the [dated delivery
+reconciliation record](verification/fd7a-required-ci.md#delivery-reconciliation-on-current-main--2026-10-17).
+Fresh local results and final source/commit binding belong to the external
+completion report; older test results below and above apply only to their stated
+captures. Exact-head hosted acceptance, backend activation and live AWS gates
+remain separate. This reconciliation authorizes no push, hosted CI rerun, merge,
+apply or deployment; protected source checkouts remain preserved.
+
+
+## FD-7a native producer error correction (local, 2026-10-17)
+
+A separate clone from reviewed `b58ebc5` corrects its P2 native-error finding.
+The policy entry now accepts a producer only with exit 0, no signal and no native
+error. A finite regression makes the producer handle timeout SIGTERM and exit 0
+while Node retains `ETIMEDOUT`; rejection must occur at the producer guard. The
+existing ten refusals, including all four permanent fault controls, remain.
+README clarification, worker fix #154, workflow, policies, locks and fixtures are
+unchanged. Fresh local verification and red/green evidence are bound to the final
+commit by the external `fd7a-native-error-fix` report; earlier results above are
+historical. All protected checkouts remain preserved. Publication, exact-head
+hosted CI and live backend acceptance remain separate authorization gates.
