@@ -6,9 +6,9 @@
 //   - the ruleset and the workflow drifting apart,
 //   - the workflow gaining write permissions or running untrusted code with secrets.
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, mkdtempSync, rmSync, writeFileSync, chmodSync, readdirSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { recoveryMetricControl, applicationMetricControl } from './fixtures/recovery.mjs';
@@ -202,16 +202,41 @@ test('the actual launcher CI command propagates a failed test producer', () => {
   }
 });
 
-/** What is wrong with how the terraform job proves the deployment profiles (empty when nothing is). */
+const terraformCommands = ['infrastructure/terraform', 'infrastructure/terraform-state'].flatMap(root => [
+  `terraform -chdir=${root} fmt -check -recursive -diff`,
+  `terraform -chdir=${root} init -backend=false -input=false -lockfile=readonly`,
+  `terraform -chdir=${root} validate`,
+  `terraform -chdir=${root} test -no-color`,
+]).concat(['node --test infrastructure/terraform-state/guard.test.mjs', 'node --test infrastructure/terraform-state/policy.test.mjs']);
+const policyEvidenceEnv = '\n        env:\n          FD7A_TEST_EVIDENCE_DIR: ${{ runner.temp }}';
+const terraformNode = '- uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0\n        with:\n          node-version: ${{ env.NODE_VERSION }}';
+const terraformSetup = '- uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1\n        with:\n          terraform_version: "1.16.5"\n          terraform_wrapper: false';
+const policyRetention = '- name: Retain standalone policy producer evidence\n        if: always()\n        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2\n        with:\n          name: fd7a-policy-producer-${{ github.run_attempt }}\n          path: ${{ runner.temp }}/fd7a-policy-*/\n          retention-days: 7\n          if-no-files-found: error';
+
+/** Required commands are deliberately canonical: wrappers/conditions must not turn failure into acceptance. */
 export function terraformJobProblems(text) {
+  const job = text.split(/^jobs:\s*$/m)[1]?.split(/^ {2}(?=[a-z][a-z0-9-]*:\s*$)/m).find(b => b.startsWith('terraform:')) ?? '';
   const steps = runSteps(text, 'terraform');
+  const blocks = job.split(/^ {6}(?=- )/m).slice(1).map(b => b.split('\n').filter(line => !/^\s*(?:#.*)?$/.test(line)).join('\n').trim());
   const problems = [];
-  const at = (command) => steps.indexOf(command);
-  if (at('terraform test') < 0) problems.push('the terraform job must run `terraform test` (the offline per-profile plans in profiles.tftest.hcl)');
-  if (at('terraform init -backend=false -input=false') < 0 || at('terraform init -backend=false -input=false') > at('terraform test')) problems.push('terraform test must run after `terraform init -backend=false`');
-  const job = text.split(/^jobs:\s*$/m)[1]?.split(/^ {2}(?=[a-z][a-z0-9-]*:\s*$)/m).find((b) => b.startsWith('terraform:')) ?? '';
+  if (JSON.stringify(steps) !== JSON.stringify(terraformCommands)) problems.push('both roots require every unfiltered command in order');
+  if (blocks.length !== terraformCommands.length + 4) problems.push('unexpected or missing Terraform job step');
+  if (/^ {4}(?:if|continue-on-error|defaults|env):/m.test(job) || /^defaults:/m.test(text.split(/^jobs:\s*$/m)[0])) problems.push('Terraform gate must be unconditional and run from the repository root');
+  if (!/^ {4}timeout-minutes: 15$/m.test(job)) problems.push('retain the existing Terraform timeout');
+  if (!/^ {2}NODE_VERSION: "22\.22\.0"$/m.test(text)) problems.push('retain the exact Node runtime');
+  for (const command of terraformCommands) {
+    const expected = '- run: ' + command + (command.endsWith('/policy.test.mjs') ? policyEvidenceEnv : '');
+    if (blocks.filter(b => b === expected).length !== 1) problems.push('required command must propagate failure without step overrides: ' + command);
+  }
+  for (const [expected, label] of [[terraformNode, 'pinned Node setup'], [terraformSetup, 'pinned Terraform setup'], [policyRetention, 'native policy evidence retention']]) {
+    if (blocks.filter(b => b === expected).length !== 1) problems.push(label);
+  }
+  for (const setup of [terraformNode, terraformSetup]) if (blocks.indexOf(setup) < 0 || blocks.indexOf(setup) > blocks.findIndex(b => b.startsWith('- run:'))) problems.push('runtimes must precede every producer');
+  if (!blocks[0]?.startsWith('- uses: actions/checkout@')) problems.push('checkout must precede setup and producers');
+  if (blocks.at(-1) !== policyRetention) problems.push('retain native policy evidence after the producers');
   if (/AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|PROFILE|ROLE_ARN)|role-to-assume|configure-aws-credentials/.test(job)) problems.push('the terraform job must hold no cloud credentials');
-  return problems;
+  if (/^ {2}(?:FD7A_|TF_|NODE_OPTIONS)/m.test(text.split(/^jobs:\s*$/m)[0])) problems.push('no global producer or test-selection override');
+  return [...new Set(problems)];
 }
 
 test('the terraform job runs the offline profile tests, after init, and holds no credentials', () => {
@@ -219,10 +244,27 @@ test('the terraform job runs the offline profile tests, after init, and holds no
 });
 
 test('the terraform job check reports a missing test step, a wrong order and a credential (controls)', () => {
-  assert.ok(terraformJobProblems(workflow.replace(/^ {6}- run: terraform test\n/m, '')).length > 0, 'a job without terraform test must be reported');
-  const reordered = workflow.replace('      - run: terraform init -backend=false -input=false\n', '').replace('      - run: terraform test\n', '      - run: terraform test\n      - run: terraform init -backend=false -input=false\n');
+  const init = '      - run: ' + terraformCommands[1] + '\n';
+  const plan = '      - run: ' + terraformCommands[3] + '\n';
+  assert.ok(terraformJobProblems(workflow.replace(plan, '')).length > 0, 'a job without terraform test must be reported');
+  const reordered = workflow.replace(init, '').replace(plan, plan + init);
   assert.ok(terraformJobProblems(reordered).length > 0, 'a test before init must be reported');
-  assert.ok(terraformJobProblems(workflow.replace('      - run: terraform test\n', '      - run: terraform test\n        env:\n          AWS_ACCESS_KEY_ID: x\n')).length > 0, 'a credential must be reported');
+  assert.ok(terraformJobProblems(workflow.replace(plan, plan + '        env:\n          AWS_ACCESS_KEY_ID: x\n')).length > 0, 'a credential must be reported');
+});
+
+test('required Terraform CI selects standalone state plans, source guards and fresh policy tests', () => {
+  const steps = runSteps(workflow, 'terraform');
+  for (const command of [
+    'terraform -chdir=infrastructure/terraform-state fmt -check -recursive -diff',
+    'terraform -chdir=infrastructure/terraform-state init -backend=false -input=false -lockfile=readonly',
+    'terraform -chdir=infrastructure/terraform-state validate',
+    'terraform -chdir=infrastructure/terraform-state test -no-color',
+    'node --test infrastructure/terraform-state/guard.test.mjs',
+    'node --test infrastructure/terraform-state/policy.test.mjs',
+  ]) assert.ok(steps.includes(command), `missing required command: ${command}`);
+  for (const path of ['main.tf', '.terraform.lock.hcl', 'state.tftest.hcl', 'tests/policy.tftest.hcl', 'guard.test.mjs', 'policy.test.mjs', 'policy-probes.mjs']) {
+    assert.ok(existsSync(new URL('../../infrastructure/terraform-state/' + path, import.meta.url)), `missing state-root input: ${path}`);
+  }
 });
 
 test('the ruleset protects the default branch and blocks force-push and deletion', () => {
@@ -321,3 +363,107 @@ test('real PostgreSQL suites use one worker without extending test deadlines or 
   assert.equal(postgres.testRegex, memory.testRegex);
   assert.ok(!postgres.testPathIgnorePatterns.includes('/test/db/'), 'database tests must remain enabled');
 });
+
+
+for (const command of terraformCommands) {
+  test(`Terraform gate refuses omitted producer: ${command}`, () => {
+    const changed = workflow.replace('      - run: ' + command + '\n', '');
+    assert.notEqual(changed, workflow);
+    assert.ok(terraformJobProblems(changed).length > 0);
+  });
+}
+
+test('Terraform gate refuses optional, swallowed, filtered, cached or misplaced coverage', () => {
+  const variants = [];
+  for (const command of terraformCommands) {
+    const line = '      - run: ' + command + '\n';
+    for (const suffix of [' || true', '; true', ' --test-skip-pattern=.', ' -filter=state.tftest.hcl']) variants.push(workflow.replace(line, line.trimEnd() + suffix + '\n'));
+    for (const override of ['if: false', 'continue-on-error: true', 'working-directory: infrastructure/terraform', 'shell: bash {0}']) variants.push(workflow.replace(line, line + '        ' + override + '\n'));
+  }
+  for (const setting of ['if: false', 'continue-on-error: true', 'defaults:\n      run:\n        working-directory: infrastructure/terraform', 'env:\n      FD7A_TERRAFORM_BIN: cached-producer']) variants.push(workflow.replace('  terraform:\n', '  terraform:\n    ' + setting + '\n'));
+  variants.push(workflow.replace('jobs:\n', 'defaults:\n  run:\n    working-directory: infrastructure/terraform\njobs:\n'));
+  variants.push(workflow.replace('  NODE_VERSION: "22.22.0"', '  NODE_VERSION: "22"'));
+  variants.push(workflow.replace('  NODE_VERSION: "22.22.0"', '  NODE_VERSION: "22.22.0"\n  TF_CLI_ARGS_test: -filter=tests/policy.tftest.hcl'));
+  variants.push(workflow.replace('  terraform:\n', '  terraform:\n    # adversarial cached result step\n    steps:\n      - uses: actions/cache@' + 'a'.repeat(40) + ' # v1\n'));
+  variants.push(workflow.replace(terraformCommands[1], terraformCommands[1].replace(' -lockfile=readonly', '')));
+  variants.push(workflow.replace(terraformCommands[5], terraformCommands[5].replace(' -backend=false', '')));
+  for (const changed of variants) { assert.notEqual(changed, workflow); assert.ok(terraformJobProblems(changed).length > 0); }
+});
+
+test('Terraform gate requires pinned runtimes before producers and retains native policy evidence', () => {
+  const start = workflow.indexOf('  terraform:\n');
+  const end = workflow.indexOf('  terraform-lint:\n', start);
+  const job = workflow.slice(start, end);
+  const inTerraform = (before, after) => {
+    assert.ok(job.includes(before), 'mutation must select the Terraform job');
+    return workflow.slice(0, start) + job.replace(before, after) + workflow.slice(end);
+  };
+  const variants = [
+    inTerraform(terraformNode, ''), inTerraform(terraformSetup, ''), inTerraform(policyRetention, ''),
+    inTerraform(terraformNode, terraformNode.replace('node-version: ${{ env.NODE_VERSION }}', 'node-version: 24')),
+    inTerraform(terraformSetup, terraformSetup.replace('1.16.5', '1.16.4')),
+    inTerraform(terraformSetup, terraformSetup.replace('terraform_wrapper: false', 'terraform_wrapper: true')),
+    inTerraform(terraformNode, terraformNode + '\n        if: false'),
+    inTerraform(terraformSetup, terraformSetup + '\n        continue-on-error: true'),
+    inTerraform(policyEvidenceEnv, policyEvidenceEnv + '\n          FD7A_TERRAFORM_BIN: cached-producer'),
+    inTerraform(policyRetention, policyRetention.replace('if: always()', 'if: success()')),
+    inTerraform(policyRetention, policyRetention.replace('if-no-files-found: error', 'if-no-files-found: warn')),
+    inTerraform(policyRetention, policyRetention.replace('/fd7a-policy-*/', '/cached-policy/')),
+    inTerraform(policyRetention, policyRetention.replace('retention-days: 7', 'retention-days: 1')),
+    inTerraform('    timeout-minutes: 15\n    steps:\n', '    timeout-minutes: 30\n    steps:\n'),
+  ];
+  const move = '      ' + terraformNode + '\n';
+  variants.push(inTerraform(move, '').replace('      - run: ' + terraformCommands[0] + '\n', '      - run: ' + terraformCommands[0] + '\n' + move));
+  for (const changed of variants) { assert.notEqual(changed, workflow); assert.ok(terraformJobProblems(changed).length > 0); }
+});
+
+test('every actual Terraform and Node producer command preserves a native nonzero exit', () => {
+  for (const command of runSteps(workflow, 'terraform')) for (const status of [0, 17]) {
+    const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', `terraform() { return ${status}; }; node() { return ${status}; };\n${command}`], { encoding: 'utf8' });
+    assert.equal(result.status, status, command + ': ' + result.stderr);
+  }
+});
+
+const passingPolicySummary = { type: 'test_summary', test_summary: { status: 'pass', passed: 1, failed: 0, errored: 0, skipped: 0 } };
+const policyPlanEvent = { type: 'test_plan', '@testfile': 'tests/policy.tftest.hcl', '@testrun': 'policy_probe_fixture', test_plan: { resource_changes: [] } };
+const policyRefusals = [
+  ['nonzero native producer', '', 17, /mocked Terraform producer failed/],
+  ['skipped native fixture', JSON.stringify({ ...passingPolicySummary, test_summary: { ...passingPolicySummary.test_summary, skipped: 1 } }) + '\n', 0, /expected one passing mocked plan/],
+  ['missing native plan', JSON.stringify(passingPolicySummary) + '\n', 0, /require exactly one fresh plan/],
+  ['duplicate native plans', [policyPlanEvent, policyPlanEvent, passingPolicySummary].map(v => JSON.stringify(v)).join('\n') + '\n', 0, /require exactly one fresh plan/],
+  ['malformed native output', 'not-json\n', 0, /SyntaxError/],
+  ['stale prior producer output', '', 0, /expected one passing mocked plan/],
+];
+for (const [label, output, status, reason] of policyRefusals) {
+  test(`actual policy entry refuses ${label}`, () => {
+    const parent = process.env.FD7A_CI_CONTROL_EVIDENCE_DIR ?? tmpdir();
+    const dir = mkdtempSync(join(parent, 'ci-fd7a-policy-'));
+    const binary = join(dir, 'terraform-fixture');
+    writeFileSync(binary, '#!/usr/bin/env node\nprocess.stdout.write(process.env.FD7A_CONTROL_OUTPUT); process.exit(Number(process.env.FD7A_CONTROL_STATUS));\n', { mode: 0o700 });
+    chmodSync(binary, 0o700);
+    const stale = join(dir, 'fd7a-policy-prior');
+    if (label.includes('stale')) {
+      // A named old fixture must not stand in for the current producer; only this owned directory is seeded.
+      mkdirSync(stale);
+      writeFileSync(join(stale, 'terraform.stdout.jsonl'), [policyPlanEvent, passingPolicySummary].map(v => JSON.stringify(v)).join('\n') + '\n');
+    }
+    const old = readdirSync(dir);
+    const args = ['--test', new URL('../../infrastructure/terraform-state/policy.test.mjs', import.meta.url).pathname];
+    const childEnv = { ...process.env, PATH: dirname(process.execPath) + ':' + process.env.PATH, FD7A_TERRAFORM_BIN: binary, FD7A_TEST_EVIDENCE_DIR: dir, FD7A_CONTROL_OUTPUT: output, FD7A_CONTROL_STATUS: String(status) };
+    // A nested --test launch must execute, rather than inherit the parent's child-runner context.
+    delete childEnv.NODE_TEST_CONTEXT;
+    const result = spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 15000, maxBuffer: 2 * 1024 * 1024, env: childEnv });
+    // Retain the complete finite synthetic producer evidence before inspecting the expected refusal.
+    writeFileSync(join(dir, 'control.stdout'), result.stdout ?? '', { mode: 0o600 });
+    writeFileSync(join(dir, 'control.stderr'), result.stderr ?? '', { mode: 0o600 });
+    writeFileSync(join(dir, 'control.exit.json'), JSON.stringify({ args, status: result.status, signal: result.signal, error: result.error?.code ?? null }), { mode: 0o600 });
+    console.log('FD7a refusal control evidence: ' + dir);
+    assert.equal(result.error, undefined); assert.equal(result.status, 1); assert.match(result.stdout + result.stderr, reason);
+    const fresh = readdirSync(dir).filter(name => name.startsWith('fd7a-policy-') && !old.includes(name)); assert.equal(fresh.length, 1);
+    const receipt = JSON.parse(readFileSync(join(dir, fresh[0], 'exit.json'), 'utf8'));
+    assert.equal(receipt.binary, binary); assert.equal(receipt.status, status); assert.equal(receipt.signal, null); assert.equal(receipt.error, null);
+    assert.deepEqual(receipt.args, ['test', '-filter=tests/policy.tftest.hcl', '-json', '-verbose']);
+    assert.equal(readFileSync(join(dir, fresh[0], 'terraform.stdout.jsonl'), 'utf8'), output);
+    if (label.includes('stale')) assert.equal(readFileSync(join(stale, 'terraform.stdout.jsonl'), 'utf8'), [policyPlanEvent, passingPolicySummary].map(v => JSON.stringify(v)).join('\n') + '\n');
+  });
+}

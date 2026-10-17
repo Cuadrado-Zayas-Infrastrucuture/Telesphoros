@@ -1,0 +1,124 @@
+# FD-7a mandatory CI coverage — local verification
+
+## Scope and acceptance
+
+The local `feat/fd7a-required-ci` candidate starts at main `c12c47a` and assembles
+the approved standalone delivery `aec888e` with mandatory coverage in the existing
+required `terraform` job. This record describes local macOS arm64 verification;
+no hosted acceptance or live AWS enforcement is claimed.
+
+The required job keeps its name, Ubuntu runner, 15-minute cap, read-only
+permissions and full action SHA pins. Each root requires recursive fmt checking,
+backend-disabled/read-only-lock initialization, validation and every mocked plan.
+The standalone source guard and policy suite are mandatory. Node remains
+22.22.0, Terraform 1.16.5, pnpm 10.28.0 and AWS provider 6.68.0 with the reviewed
+locks. Each root initializes independently. The policy suite invokes one fresh,
+private native mocked-plan producer and retains stdout, stderr and native exit
+metadata; the workflow retains those files even after failure.
+
+## Native results
+
+| Check | Passed | Failed | Selected skips |
+| --- | ---: | ---: | ---: |
+| Standalone policy/mutation cases | 171 | 0 | 0 |
+| Standalone source guards | 21 | 0 | 0 |
+| Standalone native mocked plans | 22 | 0 | 0 |
+| Existing infrastructure guards | 96 | 0 | 0 |
+| Existing main-root native mocked plans | 33 | 0 | 0 |
+| Full CI configuration controls | 131 | 0 | 0 |
+| Focused workflow controls (included in 131) | 59 | 0 | 0 |
+| Workspace controls | 8 | 0 | 0 |
+| Workflow checker controls | 4 | 0 | 0 |
+
+Both roots passed fmt, backend-disabled init with read-only locks and validate.
+Actionlint 1.7.12 passed. Full native stdout/stderr and producer exits were saved
+before filtering. The 171 cases retain 145 original requests, all 16 promoted
+requests and ten unchanged mutation challenges. The separate native fixture
+reported one passing plan, no failed/errored/skipped runs and native exit zero.
+
+The CI controls reject missing/duplicate producers, wrong order/working
+directory, conditional/optional execution, swallowed native exits, filtering,
+cached-producer overrides, changed runtime pins and lost artifact retention.
+Actual commands propagate native exit 17. Six actual policy-entry controls refuse
+native failure, skipped/missing/duplicate plans, malformed JSON and seeded stale
+output, preserving their native receipts and intended refusal reasons.
+
+## Failures retained and corrected
+
+The intentional initial missing-coverage control failed against the original
+workflow. Initial expanded harness controls exposed selection of an earlier
+setup action and inherited `NODE_TEST_CONTEXT` suppressing a nested launch;
+controls now select the Terraform job and clear that inherited test context.
+Those failures remain in the external evidence; the final controls all pass.
+
+The first existing infrastructure run failed because the fresh checkout lacked
+`zod`. A frozen offline workspace install from the existing cache resolved the
+setup gap. The entire existing suite then passed 96/96; no guard was weakened,
+filtered or skipped. This assembly did not change the dependency lockfile.
+
+## Preservation
+
+All ten standalone root files match `aec888e` byte-for-byte, including resources,
+variables, outputs, both native fixtures, provider lock, source guard, evaluator,
+original/promoted policy requests and all mutation challenges. The existing main
+root, provider lock and application code are unchanged. Only the required
+Terraform job changes in the workflow; every other workflow byte is preserved,
+including service profiles, joining/evidence gates, cleanup/cancellation and the
+single shared 30-minute budget. All six required check names remain.
+
+Before/after comparison matches 11 protected checkouts and 14,963 tracked-file
+hashes, including all refs, statuses and source bytes. Preserved heads include
+both earlier FD-7a candidates `40700c7` and `3243fef`, F06 `fe4251b`, F07 `a4ca244`,
+combined `86fb1ca`, delivery `aec888e`, catalog `b345e7c`, session candidates
+`955f4c7` / `ad3f83d`, published docs `eccd668` and lifecycle repair `2b7d27c`.
+
+## Main drift and remaining gates
+
+While this local assembly was verified, PR #152 advanced main to `efb6103`.
+Read-only comparison shows only additions to `docs/STATUS.md` and
+`docs/ops/ci-cd.md`; application and CI bytes have not drifted. This candidate
+retains its approved `c12c47a` base. Before later publication, integrate the new
+main documentation without dropping either historical record and recheck the
+resulting exact head. No automatic rebase or expansion of scope was performed.
+
+Independent assembled-candidate review and explicitly authorized hosted Linux CI
+remain required. No push, PR, merge or deployment has occurred for FD-7a. Backend
+activation/main wiring remains separate. AWS IAM/KMS/SCP permissions, live lock
+contention, state/version recovery, custody and spending gates are untested;
+mocked plans and the policy subset evaluator do not establish them. Credentials
+were removed, metadata disabled, backends off, and no apply or cloud operation
+was used. The separate lifecycle repair remains outside this candidate.
+
+
+## Local reconciliation with current main — 2026-10-17
+
+The previous sections retain the first assembly's evidence and pending-drift
+record verbatim. The founder subsequently authorized local reconciliation.
+`feat/fd7a-required-ci-main` now starts directly at freshly fetched main
+`efb6103ab7732f489b17d0e35c5fbff6bf073ef1`; `2fbc1b3` remains recoverable in its
+unchanged branch/checkout. Fresh main/PR inspection found only the known two
+documentation changes. No unrelated implementation repair was needed.
+
+The newest main runbook is byte-identical, and every latest-main status line,
+every prior candidate status line and all prior FD-7a documentation are preserved
+in order with their original bytes. Dated reconciliation additions distinguish
+this acceptance from the earlier candidate and historical hosted runs. All ten
+standalone files, original/promoted probes, native fixtures, resource policies,
+provider locks and CI implementation match `2fbc1b3` / `aec888e` exactly.
+
+Fresh verification of the reconciled candidate passed all 171 policy/mutation
+cases, 21 source guards, 22 standalone mocked plans, 33 main-root mocked plans,
+96 existing infrastructure tests, 59 focused controls and 131 full CI controls,
+8 workspace and 4 workflow controls, with zero selected skips. Both roots passed
+fmt, backend-disabled/read-only-lock init and validate; actionlint, whitespace
+and the exact staged-diff secret scan passed. The source used pinned Node22.22.0,
+pnpm10.28.0, Terraform1.16.5 and AWS6.68.0, isolated provider data, disabled cloud
+credentials and no backend activation. One fresh native policy producer and all
+12 refusal invocations from the two final control runs are retained separately
+from the first assembly's failed setup/harness evidence.
+
+Final protection comparison preserves the prior 11 checkouts/14,963 tracked-file
+hashes, plus `2fbc1b3`'s 1,402 files: 12 checkouts/16,365 hashes with refs, statuses
+and source bytes unchanged. The implementation remains local and unpublished;
+independent review, explicitly authorized exact-head hosted Linux CI and every
+live backend/permission/locking/recovery/custody/spending gate remain open.

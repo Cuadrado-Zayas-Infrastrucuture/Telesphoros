@@ -876,14 +876,11 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # No cloud credentials and nothing is applied: formatting, validation of the configuration itself, then an offline mocked plan per profile.
+  # Both roots are mandatory; mocked plans and policy probes use no cloud credentials or apply.
   terraform:
     name: terraform
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: infrastructure/terraform
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -892,13 +889,30 @@ jobs:
         with:
           terraform_version: "1.16.5"
           terraform_wrapper: false
-      - run: terraform fmt -check -recursive -diff
-      # -backend=false: there is no remote state yet, and CI must never touch any.
-      - run: terraform init -backend=false -input=false
-      - run: terraform validate
-      # A plan of the whole root under each deployment profile (profiles.tftest.hcl) with every provider mocked: nothing is created and there
-      # are no credentials. It proves what each profile builds and refuses, and that the default variables plan; it does not prove AWS accepts it.
-      - run: terraform test
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      # Explicit selectors keep both roots independent of a job-default working directory.
+      - run: terraform -chdir=infrastructure/terraform fmt -check -recursive -diff
+      - run: terraform -chdir=infrastructure/terraform init -backend=false -input=false -lockfile=readonly
+      - run: terraform -chdir=infrastructure/terraform validate
+      - run: terraform -chdir=infrastructure/terraform test -no-color
+      - run: terraform -chdir=infrastructure/terraform-state fmt -check -recursive -diff
+      - run: terraform -chdir=infrastructure/terraform-state init -backend=false -input=false -lockfile=readonly
+      - run: terraform -chdir=infrastructure/terraform-state validate
+      - run: terraform -chdir=infrastructure/terraform-state test -no-color
+      - run: node --test infrastructure/terraform-state/guard.test.mjs
+      - run: node --test infrastructure/terraform-state/policy.test.mjs
+        env:
+          FD7A_TEST_EVIDENCE_DIR: ${{ runner.temp }}
+      - name: Retain standalone policy producer evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fd7a-policy-producer-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/fd7a-policy-*/
+          retention-days: 7
+          if-no-files-found: error
 
   # Advisory for now (not a required check): tflint's rules have not yet run on this code.
   # Promote it to a required check once it has been clean on main (docs/ops/ci-cd.md).
