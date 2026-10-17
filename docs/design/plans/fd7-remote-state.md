@@ -1,6 +1,49 @@
 # Plan FD-7a: the remote Terraform state backend
 
-Status: **standalone bootstrap built and verified locally after founder approval on 2026-10-16.** See [the runbook](../../ops/terraform-state.md). Main-backend wiring, Actions coverage and live acceptance remain open; nothing was applied. It needs no AWS access to write; building it needs none either (everything is proved offline), and applying it is the founder's step in Phase 0 of [FD-7](fd7-staged-synthetic-deploy.md).
+Status: **standalone bootstrap and mandatory CI coverage are on main; main-backend source wiring is implemented locally after founder approval on 2026-10-17.** See [the runbook](../../ops/terraform-state.md). The wiring candidate's offline verification is recorded below; publication, backend activation and live acceptance remain separate. No AWS operation is included. Offline tests establish configuration/policy contracts, not AWS enforcement. Applying it is the founder's separate Phase 0 step in [FD-7](fd7-staged-synthetic-deploy.md).
+
+## Main-backend source wiring — approved 2026-10-17
+
+The isolated `feat/terraform-backend-wiring` clone starts from main `6371f83`.
+`versions.tf` now requires Terraform >= 1.11, matching the bootstrap, and declares
+a partial S3 backend with `encrypt = true` and `use_lockfile = true`. This deliberately
+strengthens the earlier empty-block proposal: both safety settings are committed.
+Native S3 locking began in Terraform 1.10; 1.11 remains the project floor.
+[HashiCorp changelog](https://github.com/hashicorp/terraform/blob/v1.10.0/CHANGELOG.md).
+
+The placeholder `backend.s3.tfbackend.example` contains only bucket, exact key,
+Region and KMS-key ARN strings. Live copies/backups are ignored; the effective six
+values must match the existing standalone descriptor. No exporter, runtime wrapper,
+new root, provider/resource/lock change, permission expansion or workflow change is
+included. The main guard aggregator runs permanent source/weakening and isolated
+Git-ignore controls through the existing required `pnpm test:infra` entry point.
+
+The runbook and both main-root init examples now use the reviewed private file.
+Default workspace, separate environment state, owner identity, existing-state
+inventory, encrypted custody and absence of CLI/environment overrides are activation
+gates. Terraform can override source backend values; the source guard does not prove
+a future operator's runtime config. Source rollback before activation is a reviewed
+revert; after activation it does not move state. No automatic migration, force-copy,
+force-unlock, state deletion or teardown is authorized.
+
+Fresh offline verification passed 23 backend guards (included in 119 infrastructure
+tests), 21 standalone source guards, 171 policy/mutation cases, 137 CI controls,
+33 main-root mocked plans and 22 standalone mocked plans, with no selected skips.
+Both roots passed fmt, backend-disabled/read-only-lock init and validate using the
+existing provider locks and cached providers. Node 22.22.0, pnpm 10.28.0 and Terraform
+1.16.5 were used. Full native outputs, exits and candidate identity are retained in
+the originating Codex workspace under `work/terraform-backend-wiring/`.
+
+Live acceptance still requires
+separate account/Region/owner/bucket/key/retention/budget decisions and permission,
+lock-contention/release, recovery and synthetic-teardown evidence. Bootstrap local
+state and its independent custody remain separate from main. Earlier dated sections
+below retain their historical scope and results.
+
+## Historical bootstrap proposal and implementation records
+
+The following proposal and dated records describe their original source state;
+the current wiring and remaining activation gates are documented above.
 
 ## Why
 

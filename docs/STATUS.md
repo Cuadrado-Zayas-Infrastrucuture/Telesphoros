@@ -3,6 +3,24 @@
 Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## FD-7a main-backend source wiring (local, 2026-10-17)
+
+`feat/terraform-backend-wiring`, in a separate clone from main `6371f83`, adds the
+partial S3 backend with explicit encryption/native locking and Terraform >= 1.11.
+The four-field private config has a placeholder example and ignore rules; permanent
+weakening/Git-ignore controls run through the existing infrastructure entry point.
+[Design and verification](design/plans/fd7-remote-state.md#main-backend-source-wiring--approved-2026-10-17),
+[activation and custody gates](ops/terraform-state.md#main-backend-configuration-source-only).
+Fresh offline verification passed 119 infrastructure tests (including 23 new guards),
+21 state source guards, 171 policy/mutation cases, 137 CI controls, 33 main-root and
+22 standalone mocked plans, plus fmt/backend-disabled read-only-lock init/validate
+for both roots; no selected skips. Native outputs, producer exits and final candidate
+commit/tree are retained in the originating Codex workspace under
+`work/terraform-backend-wiring/`. Bootstrap resources/policies/provider locks, required
+CI, application/worker code and protected checkouts are preserved. No push, hosted CI
+rerun, merge, backend activation, AWS operation or deployment. Live identity/config,
+state inventory/migration, permission/locking/recovery and budget gates remain separate.
+
 ## M5.1b-1 internal session write admission (local, 2026-10-16)
 
 `feat/m51b-session-admission`, from fetched main `1da75b1`, extends the transaction boundary with a trusted immutable session binding and a membership-then-session shared lock on the same client, including database expiry after waits. No route accepts a cookie; AuthGuard/provider registration and bearer behavior remain unchanged. No migration, ACL, frontend, runtime-key, dependency, Actions or Terraform main/backend wiring change. [Design](design/plans/m5-1b-1-session-admission.md), [verification](verification/m5-1b-1-session-admission.md).

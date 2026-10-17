@@ -17,7 +17,7 @@ and AWS refuses; each such failure is recorded, not hidden.
    `cognito_domain_prefix` (globally unique in the Region), `ses_from_email` (verified in SES; the sandbox only delivers to verified addresses) and `alarm_email` (an inbox a person reads; it must not still be `@example.com`).
 2. Check the hostnames. `web_domain` is a **base domain**: the app is `app.<web_domain>`. `api_domain` is **not** derived from it, and the web page's policy allows exactly `api.<web_domain>`: if they disagree the browser blocks every API call.
    The example sets `api.staging.telesphoros.app`; a guard fails the build if the example drifts.
-3. `terraform init` against the remote state (a separate approved change; it does not exist yet), and `aws sts get-caller-identity`: the account and the Region are the ones decided in D1.
+3. Complete the separately authorized [backend activation and state-inventory gates](terraform-state.md#main-backend-configuration-source-only), then initialize with `terraform -chdir=infrastructure/terraform init -input=false -backend-config=backend.s3.tfbackend`. Main's partial S3 source wiring does not establish a live backend. Confirm the existing owner with `aws sts get-caller-identity`: the account and the Region are the ones decided in D1. Use only the approved synthetic state key and default workspace; no extra backend overrides.
 4. Leave `region` at its default until D1 confirms it. Do not add `vpc_id`, subnets or `app_security_group_ids` (the synthetic profile creates the network), and do not set `api_image` until the image exists ([image-push.md](image-push.md)).
 
 ## The three plans

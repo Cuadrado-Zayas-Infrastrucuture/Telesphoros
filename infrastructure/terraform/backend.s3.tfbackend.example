@@ -1,0 +1,7 @@
+# Placeholder-only partial S3 configuration. Copy to backend.s3.tfbackend only for
+# separately approved activation; follow docs/ops/terraform-state.md first.
+# encrypt/use_lockfile are true in versions.tf; never override either setting.
+bucket     = "<BOOTSTRAP_BUCKET>"
+key        = "<BOOTSTRAP_EXACT_STATE_KEY>"
+region     = "<BOOTSTRAP_REGION>"
+kms_key_id = "<BOOTSTRAP_KMS_KEY_ARN>"
