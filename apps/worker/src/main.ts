@@ -66,6 +66,7 @@ async function main(): Promise<void> {
     stopping = true;
     log('info', 'shutdown-requested', { reason: signal });
     health.close();
+    health.closeAllConnections();
     await Promise.all([scheduler.stop(), relay.stop(), stats.stop()]);
     await runner.stop();
     await pool.end().catch(() => undefined);
