@@ -1,6 +1,6 @@
 # Continuous integration. See docs/ops/ci-cd.md for what each job proves and how branch protection uses them.
 #
-# The six non-advisory job names below ARE the required status checks in .github/rulesets/main.json.
+# The six external gate names below ARE the required status checks in .github/rulesets/main.json.
 # Renaming a job silently un-requires it, so change both together.
 #
 # Synthetic data only: nothing here has cloud credentials, and nothing is deployed.
@@ -61,12 +61,15 @@ jobs:
       - name: CI configuration tripwire (pinned actions, required checks match the ruleset)
         run: pnpm test:ci-config
 
-  # The tiers a green in-memory run says nothing about: the schema, row-level security, backup/restore,
-  # and the S3 protocol, on a real PostgreSQL 16 and an S3 emulator.
-  database-and-storage:
-    name: database-and-storage
+  # Complete, unchanged profiles run on separate PostgreSQL clusters and runner filesystems.
+  # Every job shares the run-attempt start + 30 minutes; no new job grants a fresh budget.
+  service-memory:
+    name: service-memory
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
     services:
       postgres:
         image: postgres:16
@@ -81,9 +84,299 @@ jobs:
           --health-timeout 5s
           --health-retries 20
     env:
+      SERVICE_WATCHDOG_REQUIRED: "1"
+      SERVICE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
       TEST_S3_ENDPOINT: http://127.0.0.1:5555
     steps:
+      - &service_deadline
+        name: Arm the shared deadline before action setup
+        id: deadline
+        timeout-minutes: 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          umask 077
+          test -d "$RUNNER_TEMP" && test ! -L "$RUNNER_TEMP"
+          (set -o noclobber; cat > "$RUNNER_TEMP/service-deadline.mjs") <<'SERVICE_DEADLINE'
+          import { spawn, execFileSync } from 'node:child_process';
+          import { createHash } from 'node:crypto';
+          import { appendFileSync, lstatSync, readFileSync, readdirSync, readlinkSync, renameSync, writeFileSync } from 'node:fs';
+          import { basename, isAbsolute, join, resolve } from 'node:path';
+          import { fileURLToPath, pathToFileURL } from 'node:url';
+
+          export const budgetMs = 30 * 60_000;
+          const refuse = () => { throw new Error('Service budget validation failed.'); };
+          export function exactKeys(value, names) {
+            if (!value || typeof value !== 'object' || Array.isArray(value)
+              || JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...names].sort())) refuse();
+          }
+          export function identityFromEnv(env) {
+            const value = { repository: env.GITHUB_REPOSITORY, runId: env.GITHUB_RUN_ID, attempt: env.GITHUB_RUN_ATTEMPT,
+              headSha: env.SERVICE_HEAD_SHA, checkout: env.GITHUB_SHA };
+            if (!/^[\w.-]+\/[\w.-]+$/.test(value.repository ?? '')
+              || ![value.runId, value.attempt].every(v => /^[1-9]\d*$/.test(v ?? '') && Number.isSafeInteger(Number(v)))
+              || ![value.headSha, value.checkout].every(v => /^[a-f0-9]{40}$/.test(v ?? ''))) refuse();
+            return value;
+          }
+          export function budgetFromRun(run, identity, now = Date.now()) {
+            if (String(run.id) !== identity.runId || String(run.run_attempt) !== identity.attempt
+              || run.head_sha !== identity.headSha || run.repository?.full_name !== identity.repository
+              || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(run.run_started_at ?? '')) refuse();
+            const startedMs = Date.parse(run.run_started_at);
+            const budget = { format: 1, ...identity, startedMs, deadlineMs: startedMs + budgetMs };
+            remainingMs(budget, now);
+            return budget;
+          }
+          export function remainingMs(budget, now = Date.now()) {
+            exactKeys(budget, ['format', 'repository', 'runId', 'attempt', 'headSha', 'checkout', 'startedMs', 'deadlineMs']);
+            identityFromEnv({ GITHUB_REPOSITORY: budget.repository, GITHUB_RUN_ID: budget.runId, GITHUB_RUN_ATTEMPT: budget.attempt,
+              SERVICE_HEAD_SHA: budget.headSha, GITHUB_SHA: budget.checkout });
+            if (budget.format !== 1 || ![budget.startedMs, budget.deadlineMs, now].every(Number.isSafeInteger)
+              || budget.deadlineMs - budget.startedMs !== budgetMs || now < budget.startedMs || now >= budget.deadlineMs) refuse();
+            return budget.deadlineMs - now;
+          }
+          export function temporary(env) {
+            const directory = env.RUNNER_TEMP;
+            if (!directory || !isAbsolute(directory) || !lstatSync(directory).isDirectory()) refuse();
+            return directory;
+          }
+          export function readJson(file) {
+            const info = lstatSync(file);
+            if (!info.isFile() || info.size > 2 * 1024 * 1024) refuse();
+            return JSON.parse(readFileSync(file, 'utf8'));
+          }
+          export function loadBudget(env = process.env, now = Date.now()) {
+            const budget = readJson(join(temporary(env), 'service-budget.json'));
+            const identity = identityFromEnv(env);
+            if (Object.entries(identity).some(([key, value]) => budget[key] !== value)) refuse();
+            remainingMs(budget, now);
+            if (env.SERVICE_WATCHDOG_REQUIRED === '1') validateWatchdog(env, budget, now);
+            return budget;
+          }
+
+          const digest = value => createHash('sha256').update(value).digest('hex');
+          export const processKey = p => `${p.pid}:${p.start}`;
+          export function parseLinuxProcess(stat, uid) {
+            const end = stat.lastIndexOf(')'); const pid = Number(stat.slice(0, stat.indexOf(' ')));
+            const fields = stat.slice(end + 2).trim().split(/\s+/);
+            if (end < 0 || fields.length < 20 || !Number.isSafeInteger(pid) || pid < 1 || !Number.isSafeInteger(uid) || uid < 0
+              || !/^\d+$/.test(fields[1]) || !/^\d+$/.test(fields[19])) refuse();
+            if (fields[0] === 'Z') return null;
+            return { pid, ppid: Number(fields[1]), uid, start: fields[19], command: stat.slice(stat.indexOf('(') + 1, end) };
+          }
+          function parseDarwinProcesses(output) {
+            const records = [];
+            for (const line of output.trim().split('\n')) {
+              if (!line.trim()) continue;
+              const m = line.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(\w+\s+\w+\s+\d+\s+\d\d:\d\d:\d\d\s+\d{4})\s+(.+)$/);
+              if (!m) refuse();
+              if (!m[4].startsWith('Z')) records.push({ pid: Number(m[1]), ppid: Number(m[2]), uid: Number(m[3]), start: m[5], command: basename(m[6]) });
+            }
+            return new Map(records.map(p => [p.pid, p]));
+          }
+          export function readProcess(pid, platform = process.platform, proc = '/proc') {
+            if (!Number.isSafeInteger(pid) || pid < 1) refuse();
+            try {
+              if (platform === 'linux') {
+                const directory = join(proc, String(pid));
+                const p = parseLinuxProcess(readFileSync(join(directory, 'stat'), 'utf8'), lstatSync(directory).uid);
+                if (p && p.uid === process.getuid()) {
+                  // Executable inspection has stricter Linux permissions than core identity/signal checks.
+                  // Retain cleanup identities when it is unavailable, but never trust mutable comm as an owner.
+                  p.command = '';
+                  try { p.command = basename(readlinkSync(join(directory, 'exe'))); }
+                  catch (error) { if (!['EACCES', 'EPERM', 'ENOENT', 'ESRCH'].includes(error.code)) throw error; }
+                }
+                return p;
+              }
+              if (platform === 'darwin') return parseDarwinProcesses(execFileSync('/bin/ps', ['-p', String(pid), '-o', 'pid=,ppid=,uid=,stat=,lstart=,comm='], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })).get(pid);
+              refuse();
+            } catch (error) {
+              if (error.code === 'ENOENT' || error.code === 'ESRCH' || (platform === 'darwin' && error.status === 1)) return null;
+              throw error;
+            }
+          }
+          export function readProcesses(platform = process.platform, proc = '/proc') {
+            if (platform === 'darwin') return parseDarwinProcesses(execFileSync('/bin/ps', ['-axo', 'pid=,ppid=,uid=,stat=,lstart=,comm='], { encoding: 'utf8' }));
+            if (platform !== 'linux') refuse();
+            const records = [];
+            for (const name of readdirSync(proc)) {
+              if (!/^[1-9]\d*$/.test(name)) continue;
+              const p = readProcess(Number(name), platform, proc); if (p) records.push(p);
+            }
+            return new Map(records.map(p => [p.pid, p]));
+          }
+          export function selectNewProcesses(table, baseline, uid, excluded = new Set()) {
+            return [...table.values()].filter(p => p.uid === uid && !excluded.has(p.pid) && processKey(baseline.get(p.pid) ?? {}) !== processKey(p));
+          }
+          export function selectDescendants(table, known) {
+            const selected = new Map([...known].filter(([pid, p]) => table.get(pid) && processKey(table.get(pid)) === processKey(p)));
+            let changed;
+            do {
+              changed = false;
+              for (const p of table.values()) if (!selected.has(p.pid) && selected.has(p.ppid)) { selected.set(p.pid, p); changed = true; }
+            } while (changed);
+            return [...selected.values()];
+          }
+          export function signalIdentity(p, signal, { read = readProcess, kill = process.kill } = {}) {
+            if (!p || p.pid <= 1 || p.pid === process.pid) return false;
+            const current = read(p.pid);
+            if (!current || current.uid !== p.uid || processKey(current) !== processKey(p)) return false;
+            try { kill(p.pid, signal); return true; }
+            catch (error) { if (error.code === 'ESRCH') return false; throw error; }
+          }
+          const delay = ms => new Promise(r => setTimeout(r, ms));
+          /** Freeze the captured descendants before losing ancestry, then give TERM a bounded cleanup grace. */
+          export async function terminateProcesses(select, { read = readProcesses, signal = signalIdentity, graceMs = 500 } = {}) {
+            const known = new Map();
+            const capture = () => { for (const p of select(read())) known.set(p.pid, p); return [...known.values()]; };
+            const initial = capture(); if (!initial.length) return;
+            for (const p of initial) signal(p, 'SIGSTOP');
+            for (const p of capture()) signal(p, 'SIGTERM');
+            for (const p of known.values()) signal(p, 'SIGCONT');
+            const end = Date.now() + graceMs;
+            do {
+              await delay(Math.min(25, Math.max(1, end - Date.now())));
+              for (const p of capture()) if (!signal(p, 'SIGTERM')) known.delete(p.pid);
+            } while (Date.now() < end);
+            for (const p of capture()) signal(p, 'SIGKILL');
+          }
+          export function hostedOwner(env, table = readProcesses(), platform = process.platform, uid = process.getuid?.()) {
+            if (platform !== 'linux' || env.RUNNER_ENVIRONMENT !== 'github-hosted' || env.RUNNER_OS !== 'Linux' || env.RUNNER_ARCH !== 'X64' || !uid) refuse();
+            let p = table.get(process.pid); const seen = new Set();
+            while (p && !seen.has(p.pid)) {
+              seen.add(p.pid);
+              if (p.command === 'Runner.Worker' && p.uid === uid && p.pid !== process.pid) return p;
+              p = table.get(p.ppid);
+            }
+            refuse();
+          }
+          function atomicJson(file, value) {
+            const temporaryFile = file + '.' + process.pid;
+            writeFileSync(temporaryFile, JSON.stringify(value) + '\n', { mode: 0o600, flag: 'wx' }); renameSync(temporaryFile, file);
+          }
+          export function validateWatchdog(env, budget, now = Date.now(), read = readProcess) {
+            const receipt = readJson(join(temporary(env), 'service-watchdog.json'));
+            exactKeys(receipt, ['format', 'state', 'pid', 'start', 'owner', 'budgetHash', 'sourceHash', 'heartbeatMs']);
+            exactKeys(receipt.owner, ['pid', 'ppid', 'uid', 'start', 'command']);
+            const current = read(receipt.pid), owner = read(receipt.owner.pid);
+            if (receipt.format !== 1 || receipt.state !== 'armed' || !current || current.start !== receipt.start || !owner
+              || processKey(owner) !== processKey(receipt.owner) || owner.command !== 'Runner.Worker'
+              || current.uid !== process.getuid() || owner.uid !== current.uid || receipt.budgetHash !== digest(JSON.stringify(budget))
+              || receipt.sourceHash !== digest(readFileSync(fileURLToPath(import.meta.url)))
+              || !Number.isSafeInteger(receipt.heartbeatMs) || receipt.heartbeatMs > now || now - receipt.heartbeatMs > 5000) refuse();
+            return receipt;
+          }
+          /** A dedicated hosted VM makes new same-UID processes attributable even after reparenting/setsid. */
+          export async function watchJob({ budget, owner, baseline, uid, directory, read = readProcesses, signal = signalIdentity,
+            now = Date.now, sourceHash = digest(readFileSync(fileURLToPath(import.meta.url))), onReady = () => {}, shutdownGraceMs = 5000 }) {
+            const self = readProcess(process.pid); if (!self) refuse();
+            remainingMs(budget, now());
+            const receipt = { format: 1, state: 'armed', pid: process.pid, start: self.start, owner, budgetHash: digest(JSON.stringify(budget)), sourceHash, heartbeatMs: now() };
+            const file = join(directory, 'service-watchdog.json');
+            const publish = () => { receipt.heartbeatMs = now(); atomicJson(file, receipt); };
+            const sameOwner = table => table.get(owner.pid) && processKey(table.get(owner.pid)) === processKey(owner);
+            const targets = table => selectNewProcesses(table, baseline, uid, new Set([process.pid, owner.pid]));
+            let table = read(); if (!sameOwner(table)) refuse();
+            // Supervision errors must retain the same bounded shutdown as expiry, even if receipts cannot be written.
+            const shutdown = async () => {
+              let failed = false;
+              const snapshot = () => { try { table = read(); } catch { failed = true; } return table; };
+              const send = (p, kind) => { try { return signal(p, kind); } catch { failed = true; return false; } };
+              send(owner, 'SIGTERM');
+              try {
+                try { await terminateProcesses(targets, { read: snapshot, signal: send }); } catch { failed = true; }
+                const end = Date.now() + shutdownGraceMs;
+                while (sameOwner(snapshot()) && Date.now() < end) {
+                  for (const p of targets(table)) send(p, 'SIGKILL');
+                  await delay(25);
+                }
+              } finally {
+                // Always attempt escalation. Cached entries still pass live PID/start/UID checks before a signal.
+                if (sameOwner(snapshot())) send(owner, 'SIGKILL');
+                for (const p of targets(snapshot())) send(p, 'SIGKILL');
+              }
+              return !failed;
+            };
+            publish(); onReady();
+            let interrupt = false;
+            const stop = () => { interrupt = true; };
+            process.on('SIGTERM', stop); process.on('SIGINT', stop);
+            try {
+              while (sameOwner(table = read())) {
+                if (interrupt || now() < budget.startedMs || now() >= budget.deadlineMs) {
+                  receipt.state = 'expired'; publish();
+                  // Runner.Worker handles SIGTERM by cancelling its linked job token (Worker_Unloading).
+                  if (!await shutdown()) {
+                    receipt.state = 'failed'; try { publish(); } catch { /* shutdown already attempted */ }
+                    return 1;
+                  }
+                  return 124;
+                }
+                publish(); await delay(Math.min(250, budget.deadlineMs - now()));
+              }
+              await terminateProcesses(targets, { read, signal });
+              receipt.state = 'stopped'; publish(); return 0;
+            } catch {
+              receipt.state = 'failed'; try { publish(); } catch { /* failure still cancels the job */ }
+              await shutdown(); return 1;
+            } finally { process.removeListener('SIGTERM', stop); process.removeListener('SIGINT', stop); }
+          }
+          export async function requestBudget(env = process.env, request = fetch, now = Date.now) {
+            const identity = identityFromEnv(env);
+            if (!env.GH_TOKEN || env.GITHUB_API_URL !== 'https://api.github.com') refuse();
+            const response = await request(`${env.GITHUB_API_URL}/repos/${identity.repository}/actions/runs/${identity.runId}/attempts/${identity.attempt}`, {
+              headers: { Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2026-03-10' },
+              redirect: 'error', signal: AbortSignal.timeout(10_000),
+            });
+            if (!response.ok) refuse();
+            return budgetFromRun(await response.json(), identity, now());
+          }
+          export async function bootstrap(env = process.env, request = fetch, now = Date.now) {
+            // Never run machine-wide cleanup on a workstation, self-hosted runner or shared container runner.
+            if (!isAbsolute(env.GITHUB_OUTPUT ?? '')) refuse();
+            const baseline = readProcesses(); const owner = hostedOwner(env, baseline);
+            const budget = await requestBudget(env, request, now);
+            const directory = temporary(env);
+            writeFileSync(join(directory, 'service-budget.json'), JSON.stringify(budget) + '\n', { mode: 0o600, flag: 'wx' });
+            const self = fileURLToPath(import.meta.url);
+            const ticket = join(directory, 'service-watchdog-ticket.json');
+            writeFileSync(ticket, JSON.stringify({ budget, owner, baseline: [...baseline], uid: process.getuid() }) + '\n', { mode: 0o600, flag: 'wx' });
+            // No token/caller environment or runner tracking marker. It must survive orphan cleanup until the owner exits.
+            const child = spawn(process.execPath, [self, 'watch'], { detached: true, stdio: ['ignore', 'ignore', 'ignore'],
+              env: { PATH: env.PATH, RUNNER_TEMP: directory,
+                RUNNER_ENVIRONMENT: env.RUNNER_ENVIRONMENT, RUNNER_OS: env.RUNNER_OS, RUNNER_ARCH: env.RUNNER_ARCH } });
+            let childFailed = false; child.once('error', () => { childFailed = true; });
+            child.unref();
+            const until = Math.min(now() + 5000, budget.deadlineMs);
+            while (!childFailed && now() < until) {
+              try { validateWatchdog(env, budget, now());
+                if (!isAbsolute(env.GITHUB_OUTPUT ?? '')) refuse();
+                appendFileSync(env.GITHUB_OUTPUT, 'armed=true\n'); return budget;
+              } catch { await delay(20); }
+            }
+            if (child.pid) { const p = readProcess(child.pid); if (p) signalIdentity(p, 'SIGTERM'); }
+            throw new Error('Service watchdog did not arm.');
+          }
+          if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+            try {
+              if (process.argv.length !== 3) refuse();
+              if (process.argv[2] === 'bootstrap') await bootstrap();
+              else if (process.argv[2] === 'watch') {
+                const directory = temporary(process.env); const ticket = readJson(join(directory, 'service-watchdog-ticket.json'));
+                exactKeys(ticket, ['budget', 'owner', 'baseline', 'uid']);
+                const record = readJson(join(directory, 'service-budget.json'));
+                exactKeys(record, Object.keys(ticket.budget));
+                if (Object.keys(record).some(k => record[k] !== ticket.budget[k])) refuse();
+                const table = readProcesses(); const owner = hostedOwner(process.env, table);
+                if (processKey(owner) !== processKey(ticket.owner) || ticket.uid !== process.getuid()) refuse();
+                process.exitCode = await watchJob({ ...ticket, baseline: new Map(ticket.baseline), directory });
+              } else refuse();
+            } catch { process.stderr.write('Service deadline supervision failed.\n'); process.exitCode = 1; }
+          }
+          SERVICE_DEADLINE
+          node "$RUNNER_TEMP/service-deadline.mjs" bootstrap
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -92,19 +385,29 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
+      - name: Establish the shared run-attempt deadline
+        id: budget
+        run: node .github/ci/service-budget.mjs init
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: .github/ci/requirements.txt
-      - run: pnpm install --frozen-lockfile
+      - name: Install locked dependencies within the shared budget
+        run: |
+          node .github/ci/service-budget.mjs run <<'BUDGET'
+          pnpm install --frozen-lockfile
+          BUDGET
       - name: Backup/restore tests need the PostgreSQL 16 client tools and openssl
         run: |
+          node .github/ci/service-budget.mjs run <<'BUDGET'
           pg_dump --version | grep -E ' 16\.' || { echo "pg_dump 16 is required"; exit 1; }
           pg_restore --version | grep -E ' 16\.' || { echo "pg_restore 16 is required"; exit 1; }
           openssl version
+          BUDGET
       - name: Start the S3 emulator
         run: |
+          node .github/ci/service-budget.mjs run <<'BUDGET'
           pip install -r .github/ci/requirements.txt
           moto_server -H 127.0.0.1 -p 5555 > moto.log 2>&1 &
           for i in $(seq 1 30); do
@@ -112,35 +415,353 @@ jobs:
             sleep 1
           done
           echo "the S3 emulator did not start"; cat moto.log; exit 1
-      # Each run is checked for the notice that a tier was skipped. A tier that does not run proves nothing,
-      # so a skip fails the job instead of passing quietly.
+          BUDGET
+      - name: Prepare shared libraries for service tests
+        run: |
+          node .github/ci/service-budget.mjs run <<'BUDGET'
+          node scripts/workspace-build/prepare-service-tests.cjs
+          BUDGET
       - name: "Tier 1: unit + API suite (in-memory), plus the database and S3 specs"
         run: |
+          node .github/ci/service-evidence.mjs run memory <<'PROFILE'
           set -o pipefail
           pnpm --filter @telesphoros/backend test 2>&1 | tee tier1.log
           ! grep -F "[jest] NOT RUNNING" tier1.log
+          PROFILE
+      - name: Retain completed profile evidence
+        if: always() && steps.deadline.outputs.armed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: service-profile-memory-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/service-profile-memory
+          retention-days: 7
+          if-no-files-found: error
+      - name: Retain shared-library build timing
+        if: always() && steps.deadline.outputs.armed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: service-test-prerequisites-memory-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/service-test-prerequisites.json
+          retention-days: 7
+          if-no-files-found: error
+      - if: (failure() || cancelled()) && steps.deadline.outputs.armed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: service-memory-logs-${{ github.run_attempt }}
+          path: |
+            tier*.log
+            moto.log
+          retention-days: 7
+      - name: Require completion within the shared deadline
+        run: node .github/ci/service-budget.mjs check
+
+  service-postgres:
+    name: service-postgres
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          # A throwaway service container on the runner, reachable only from this job. Not a secret.
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      SERVICE_WATCHDOG_REQUIRED: "1"
+      SERVICE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+      TEST_S3_ENDPOINT: http://127.0.0.1:5555
+    steps:
+      - *service_deadline
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Establish the shared run-attempt deadline
+        id: budget
+        run: node .github/ci/service-budget.mjs init
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: .github/ci/requirements.txt
+      - name: Install locked dependencies within the shared budget
+        run: |
+          node .github/ci/service-budget.mjs run <<'BUDGET'
+          pnpm install --frozen-lockfile
+          BUDGET
+      - name: Backup/restore tests need the PostgreSQL 16 client tools and openssl
+        run: |
+          node .github/ci/service-budget.mjs run <<'BUDGET'
+          pg_dump --version | grep -E ' 16\.' || { echo "pg_dump 16 is required"; exit 1; }
+          pg_restore --version | grep -E ' 16\.' || { echo "pg_restore 16 is required"; exit 1; }
+          openssl version
+          BUDGET
+      - name: Start the S3 emulator
+        run: |
+          node .github/ci/service-budget.mjs run <<'BUDGET'
+          pip install -r .github/ci/requirements.txt
+          moto_server -H 127.0.0.1 -p 5555 > moto.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:5555/moto-api/ > /dev/null && exit 0
+            sleep 1
+          done
+          echo "the S3 emulator did not start"; cat moto.log; exit 1
+          BUDGET
+      - name: Prepare shared libraries for service tests
+        run: |
+          node .github/ci/service-budget.mjs run <<'BUDGET'
+          node scripts/workspace-build/prepare-service-tests.cjs
+          BUDGET
       - name: "Tier 2: the whole API suite on PostgreSQL"
         run: |
+          node .github/ci/service-evidence.mjs run postgres <<'PROFILE'
           set -o pipefail
           TEST_STORAGE=postgres pnpm --filter @telesphoros/backend test 2>&1 | tee tier2.log
           ! grep -F "[jest] NOT RUNNING" tier2.log
+          PROFILE
+      - name: Retain completed profile evidence
+        if: always() && steps.deadline.outputs.armed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: service-profile-postgres-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/service-profile-postgres
+          retention-days: 7
+          if-no-files-found: error
+      - name: Retain shared-library build timing
+        if: always() && steps.deadline.outputs.armed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: service-test-prerequisites-postgres-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/service-test-prerequisites.json
+          retention-days: 7
+          if-no-files-found: error
+      - if: (failure() || cancelled()) && steps.deadline.outputs.armed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: service-postgres-logs-${{ github.run_attempt }}
+          path: |
+            tier*.log
+            moto.log
+          retention-days: 7
+      - name: Require completion within the shared deadline
+        run: node .github/ci/service-budget.mjs check
+
+  service-postgres-s3:
+    name: service-postgres-s3
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          # A throwaway service container on the runner, reachable only from this job. Not a secret.
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      SERVICE_WATCHDOG_REQUIRED: "1"
+      SERVICE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+      TEST_S3_ENDPOINT: http://127.0.0.1:5555
+    steps:
+      - *service_deadline
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Establish the shared run-attempt deadline
+        id: budget
+        run: node .github/ci/service-budget.mjs init
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: .github/ci/requirements.txt
+      - name: Install locked dependencies within the shared budget
+        run: |
+          node .github/ci/service-budget.mjs run <<'BUDGET'
+          pnpm install --frozen-lockfile
+          BUDGET
+      - name: Backup/restore tests need the PostgreSQL 16 client tools and openssl
+        run: |
+          node .github/ci/service-budget.mjs run <<'BUDGET'
+          pg_dump --version | grep -E ' 16\.' || { echo "pg_dump 16 is required"; exit 1; }
+          pg_restore --version | grep -E ' 16\.' || { echo "pg_restore 16 is required"; exit 1; }
+          openssl version
+          BUDGET
+      - name: Start the S3 emulator
+        run: |
+          node .github/ci/service-budget.mjs run <<'BUDGET'
+          pip install -r .github/ci/requirements.txt
+          moto_server -H 127.0.0.1 -p 5555 > moto.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:5555/moto-api/ > /dev/null && exit 0
+            sleep 1
+          done
+          echo "the S3 emulator did not start"; cat moto.log; exit 1
+          BUDGET
+      - name: Prepare shared libraries for service tests
+        run: |
+          node .github/ci/service-budget.mjs run <<'BUDGET'
+          node scripts/workspace-build/prepare-service-tests.cjs
+          BUDGET
       - name: "Tier 3: the whole API suite on PostgreSQL, uploading over the S3 protocol"
         run: |
+          node .github/ci/service-evidence.mjs run postgres-s3 <<'PROFILE'
           set -o pipefail
           TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 pnpm --filter @telesphoros/backend test 2>&1 | tee tier3.log
           ! grep -F "[jest] NOT RUNNING" tier3.log
+          PROFILE
+      - name: Retain completed profile evidence
+        if: always() && steps.deadline.outputs.armed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: service-profile-postgres-s3-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/service-profile-postgres-s3
+          retention-days: 7
+          if-no-files-found: error
+      - name: Retain shared-library build timing
+        if: always() && steps.deadline.outputs.armed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: service-test-prerequisites-postgres-s3-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/service-test-prerequisites.json
+          retention-days: 7
+          if-no-files-found: error
+      - if: (failure() || cancelled()) && steps.deadline.outputs.armed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: service-postgres-s3-logs-${{ github.run_attempt }}
+          path: |
+            tier*.log
+            moto.log
+          retention-days: 7
+      - name: Require completion within the shared deadline
+        run: node .github/ci/service-budget.mjs check
+
+  # Keep the existing required check name. Skipped/cancelled/failed producers never satisfy it.
+  database-and-storage:
+    name: database-and-storage
+    if: always()
+    needs: [service-memory, service-postgres, service-postgres-s3]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          # A throwaway service container on the runner, reachable only from this job. Not a secret.
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      SERVICE_WATCHDOG_REQUIRED: "1"
+      SERVICE_NEEDS: ${{ toJSON(needs) }}
+      SERVICE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+      TEST_S3_ENDPOINT: http://127.0.0.1:5555
+    steps:
+      - *service_deadline
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Require all isolated jobs to succeed
+        run: node .github/ci/service-evidence.mjs dependencies
+      - name: Establish the shared run-attempt deadline
+        id: budget
+        run: node .github/ci/service-budget.mjs init
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: .github/ci/requirements.txt
+      - name: Install locked dependencies within the shared budget
+        run: |
+          node .github/ci/service-budget.mjs run <<'BUDGET'
+          pnpm install --frozen-lockfile
+          BUDGET
+      - name: Backup/restore tests need the PostgreSQL 16 client tools and openssl
+        run: |
+          node .github/ci/service-budget.mjs run <<'BUDGET'
+          pg_dump --version | grep -E ' 16\.' || { echo "pg_dump 16 is required"; exit 1; }
+          pg_restore --version | grep -E ' 16\.' || { echo "pg_restore 16 is required"; exit 1; }
+          openssl version
+          BUDGET
+      - name: Start the S3 emulator
+        run: |
+          node .github/ci/service-budget.mjs run <<'BUDGET'
+          pip install -r .github/ci/requirements.txt
+          moto_server -H 127.0.0.1 -p 5555 > moto.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:5555/moto-api/ > /dev/null && exit 0
+            sleep 1
+          done
+          echo "the S3 emulator did not start"; cat moto.log; exit 1
+          BUDGET
+      - name: Download evidence from this run and attempt
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: service-profile-*-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/service-profiles
+          merge-multiple: false
+          digest-mismatch: error
+      - name: Require complete current-profile evidence
+        run: node .github/ci/service-evidence.mjs collect
       # The job log ends with the database container's own log, and the log reader keeps only the last few thousand lines, so a worker failure
       # could not be read. From here on the server logs only fatal errors (the earlier tiers keep theirs).
       - name: "Worker: quiet the database server's log so the test report stays readable"
         run: |
+          node .github/ci/service-budget.mjs run <<'BUDGET'
           PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 \
             -c "ALTER SYSTEM SET log_min_messages = 'fatal'" -c "ALTER SYSTEM SET log_checkpoints = off" -c "SELECT pg_reload_conf()"
+          BUDGET
       # The background-job queue and real worker processes (claim races, a killed worker, a drain) need PostgreSQL; a skip fails the job as above.
       - name: "Worker: the job queue and real worker processes on PostgreSQL"
         run: |
+          node .github/ci/service-evidence.mjs run worker <<'PROFILE'
           set -o pipefail
           pnpm --filter @telesphoros/worker test 2>&1 | tee tier-worker.log
           ! grep -F "NOT RUNNING" tier-worker.log
+          PROFILE
       # The job's log ends with the database container's output, which buries the test report; print the failing tests where they can be read.
       - name: "Worker: show the failing tests"
         if: failure() && hashFiles('tier-worker.log') != ''
@@ -149,40 +770,52 @@ jobs:
         run: node .github/ci/verify-recovery-metrics.mjs
       - name: Validate all three application-recovery measurement profiles
         run: node .github/ci/verify-application-recovery.mjs
+      - name: Require worker completion and unchanged collected evidence
+        run: node .github/ci/service-evidence.mjs finish
       # F1 synthetic aggregates only: no catalogue, report IDs/keys/content, URLs or credentials.
       - name: Retain synthetic evidence-catalogue measurements
-        if: always()
+        if: always() && steps.deadline.outputs.armed == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: evidence-catalogue-measurements
+          name: evidence-catalogue-measurements-${{ github.run_attempt }}
           path: apps/backend/test-results/evidence-catalogue-*.json
           retention-days: 7
           if-no-files-found: error
       # F2 synthetic aggregates only; independent bytes are not application recovery.
       - name: Retain synthetic independent-recovery measurements
-        if: always()
+        if: always() && steps.deadline.outputs.armed == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: independent-recovery-measurements
+          name: independent-recovery-measurements-${{ github.run_attempt }}
           path: apps/backend/test-results/independent-recovery-*.json
           retention-days: 7
           if-no-files-found: error
       - name: Retain synthetic application-recovery measurements
-        if: always()
+        if: always() && steps.deadline.outputs.armed == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: application-recovery-measurements
+          name: application-recovery-measurements-${{ github.run_attempt }}
           path: apps/backend/test-results/application-recovery-*.json
           retention-days: 7
           if-no-files-found: error
-      - if: failure()
+      - name: Retain worker completion evidence
+        if: always() && steps.deadline.outputs.armed == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: database-and-storage-logs
+          name: service-worker-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/service-worker
+          retention-days: 7
+          if-no-files-found: error
+      - if: (failure() || cancelled()) && steps.deadline.outputs.armed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: database-and-storage-logs-${{ github.run_attempt }}
           path: |
             tier*.log
             moto.log
           retention-days: 7
+      - name: Require completion within the shared deadline
+        run: node .github/ci/service-budget.mjs check
 
   # The login flow and the pages, for real: a fake identity provider (test only), the built API, the built
   # frontend, driven by a browser at 375 px and 1280 px.
