@@ -3,6 +3,16 @@
 Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## CI documentation merged and verified (#151, 2026-10-17)
+
+[PR #151](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/151) merged as [c12c47a](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/commit/c12c47a7e3865ffec7cdbaa7844aafa4b003041b), preserving reviewed documentation head `2f879fa`'s tree. Only this status file and the CI runbook changed from #150's accepted main snapshot; application code, tests, profiles, cleanup and the shared budget are unchanged.
+
+Automatic [post-merge main run 39031051513, attempt 1](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/actions/runs/39031051513) passed all six required checks (`verify`, `database-and-storage`, `browser`, `terraform`, `secret-scan`, `image`) and all ten jobs. All three complete backend profiles ran 2,409 tests each with unchanged intentional skips; all 123 worker tests passed. Counters and passing suite filenames match #151's [pre-merge PR run](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/actions/runs/39030205342) and accepted #150 main. All nine recovery aggregates, both all-profile validators and 111 hosted Linux CI controls passed with zero control failures/skips.
+
+The full service path, including setup, transfers, the joining gate and teardown, took **13m23s**, leaving **16m37s** of the original shared 30-minute budget. All four service jobs passed bootstrap/live-watchdog and final clock checks; normal teardown logs record PostgreSQL container removal and Moto termination. Actual GitHub `Runner.Worker` cancellation at expiry was not triggered. CI acceptance grants no deployment or clinical approval.
+
+See the [#151 runbook record](ops/ci-cd.md#documentation-merge-and-post-merge-ci-151-2026-10-17) for profile counts, job timing, exact deadline and evidence limits. The #150 acceptance record and earlier dated captures below remain historical records.
+
 ## Service CI merged and verified (#150, 2026-10-17)
 
 [PR #150](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/150) merged as [34d6093](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/commit/34d6093962d3d029aa3c6a4d8ec6be9b652a0c78), preserving reviewed head `7c35fe3`'s tree. Automatic [post-merge main run 38995941825, attempt 1](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/actions/runs/38995941825) passed all six required checks (`verify`, `database-and-storage`, `browser`, `terraform`, `secret-scan`, `image`) and all ten jobs. The [successful PR run](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/actions/runs/38994847278) is separate pre-merge evidence.

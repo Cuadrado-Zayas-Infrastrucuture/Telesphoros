@@ -21,6 +21,35 @@ runs on `main` are never cancelled. The workflow has read-only repository permis
 
 A green run is evidence about the code at that commit. It is not evidence about AWS: Terraform has never been applied.
 
+### Documentation merge and post-merge CI (#151, 2026-10-17)
+
+[PR #151](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/151) merged as [c12c47a7e3865ffec7cdbaa7844aafa4b003041b](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/commit/c12c47a7e3865ffec7cdbaa7844aafa4b003041b), whose tree matches reviewed documentation head `2f879fa`. Its two-file documentation change preserves #150's application/CI snapshot, test files, profile commands, cleanup and shared 30-minute budget. The earlier #150 acceptance and superseded-draft record below remains unchanged.
+
+Automatic [main run 39031051513, attempt 1](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/actions/runs/39031051513) passed all six required checks named above, with their GitHub Actions app bindings, and all ten jobs. Every checkout log and profile/evidence identity matches the exact main merge commit. The successful [PR run 39030205342](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/actions/runs/39030205342) is separate pre-merge evidence.
+
+| Complete #151 main-run profile | Passed / skipped / failed tests | Passed / total suites | Whole job |
+| --- | --- | --- | --- |
+| memory, including database/S3 specs | 2,156 / 253 / 0 | 155 / 166 | 8m27s |
+| PostgreSQL | 2,388 / 21 / 0 | 164 / 166 | 10m24s |
+| PostgreSQL + S3 | 2,408 / 1 / 0 | 166 / 166 | 11m02s |
+| worker in the joining gate | 123 / 0 / 0 | 13 / 13 | 2m17s joining job; 0m57s test step |
+
+Each backend profile totals 2,409 tests / 166 suites. Counters, intentional skips and every passing suite filename match #151's pre-merge run and accepted #150 main. All nine recovery aggregates passed the unchanged schema, runtime, checkout and hash checks: 12 catalogue, 30 independent-recovery and 13 application-recovery controls per backend profile. Both all-profile validators and final worker/evidence acceptance passed. The hosted Linux CI configuration suite passed **111 controls, zero failures/skips**.
+
+All four completion records bind this repository, run, attempt and exact main checkout to the same original **1,800,000 ms** budget. The joining gate and worker receive no new window. Every pre-checkout bootstrap, live-watchdog check and final clock check passed; service transfers and teardown completed before the deadline.
+
+| #151 main-run service budget event | Puerto Rico, 2026-10-17 | UTC, 2026-10-17 |
+| --- | --- | --- |
+| Original run-attempt start | 08:03:45 | 12:03:45 |
+| Shared deadline | 08:33:45 | 12:33:45 |
+| Last service job complete, including teardown | 08:17:08 | 12:17:08 |
+
+The full service path took **13m23s**, leaving **16m37s**. The joining job alone took 2m17s; it excludes the isolated profile work and is not the end-to-end measurement. These observed times do not guarantee future runner performance or lower billed compute.
+
+Normal teardown logs record PostgreSQL container removal and `moto_server` termination in all four service jobs. Hosted synthetic controls passed for Moto preservation, failed/expired setup, unwrapped-action cancellation, detached children, resistant owners, heartbeat/process-scan errors, failed TERM escalation and Linux executable-permission handling. Seven JSON artifact archives matched GitHub's SHA-256 digests; retained gate metrics equal the corresponding profile producer bytes, and all ten saved job logs passed hash verification. Historical offline replay of the collector, final gate and both recovery validators passed without executing profiles or asserting a live local watchdog.
+
+**Evidence limits:** the successful run finished before expiry; actual GitHub `Runner.Worker` cancellation at the 30-minute boundary was not triggered. Synthetic cleanup controls and recorded teardown operations do not constitute an independent post-VM process census. Pre-bootstrap platform provisioning cannot be cancelled by workflow code; it consumes the same acceptance clock. Bounded failure-cleanup grace grants no additional acceptance time. CI acceptance grants no deployment or clinical approval. These results apply to the merged #151 snapshot; separately prepared local changes require their own verification.
+
 ### Merged acceptance and superseded drafts
 
 [PR #150](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/150) merged as [34d6093962d3d029aa3c6a4d8ec6be9b652a0c78](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/commit/34d6093962d3d029aa3c6a4d8ec6be9b652a0c78), whose tree matches reviewed head `7c35fe3`. Automatic [main run 38995941825, attempt 1](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/actions/runs/38995941825) passed all six required checks named above and all ten jobs, including the advisory lint job. The earlier [PR run 38994847278](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/actions/runs/38994847278) also passed; it is pre-merge evidence, not the main run.
