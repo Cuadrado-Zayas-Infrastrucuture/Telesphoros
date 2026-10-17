@@ -437,6 +437,10 @@ const policyRefusals = [
   ['terminated producer', '', null, /mocked Terraform producer failed/, { body: "process.kill(process.pid, 'SIGTERM');", signal: 'SIGTERM' }],
   ['empty output', '', 0, /expected one passing mocked plan/, { body: 'process.exit(0);' }],
   ['timed-out producer', '', null, /mocked Terraform producer failed/, { body: 'setTimeout(() => {}, 10000);', timeout: true, signal: 'SIGTERM', error: 'ETIMEDOUT' }],
+  ['timed-out producer exiting zero', JSON.stringify(passingPolicySummary) + '\n', 0, /mocked Terraform producer failed \(ETIMEDOUT\)/, {
+    body: "process.on('SIGTERM', () => process.exit(0)); process.stdout.write(process.env.FD7A_CONTROL_OUTPUT); setTimeout(() => process.exit(0), 3000);",
+    timeout: true, timeoutMs: 500, error: 'ETIMEDOUT',
+  }],
 ];
 for (const [label, output, status, reason, options = {}] of policyRefusals) {
   test(`actual policy entry refuses ${label}`, () => {
@@ -459,7 +463,7 @@ for (const [label, output, status, reason, options = {}] of policyRefusals) {
     if (options.timeout) {
       // Shorten only this nested test's spawn deadline; the real producer keeps its 120-second timeout.
       const preload = join(dir, 'bounded-timeout.mjs');
-      writeFileSync(preload, "import cp from 'node:child_process';\nimport { syncBuiltinESMExports } from 'node:module';\nconst original = cp.spawnSync;\ncp.spawnSync = (binary, args, options) => original(binary, args, { ...options, timeout: 150 });\nsyncBuiltinESMExports();\n", { mode: 0o600 });
+      writeFileSync(preload, "import cp from 'node:child_process';\nimport { syncBuiltinESMExports } from 'node:module';\nconst original = cp.spawnSync;\ncp.spawnSync = (binary, args, options) => original(binary, args, { ...options, timeout: " + (options.timeoutMs ?? 150) + " });\nsyncBuiltinESMExports();\n", { mode: 0o600 });
       args.unshift('--import', preload);
     }
     const childEnv = { ...process.env, PATH: dirname(process.execPath) + ':' + process.env.PATH, FD7A_TERRAFORM_BIN: binary, FD7A_TEST_EVIDENCE_DIR: dir, FD7A_CONTROL_OUTPUT: output, FD7A_CONTROL_STATUS: String(status) };

@@ -198,3 +198,35 @@ delivery gate; main-backend activation, live IAM/KMS/SCP, lock contention,
 state/version recovery, custody and spending acceptance remain separate. No
 push, PR creation, hosted dispatch/rerun, merge, cloud apply or deployment is
 included. Every protected checkout and its refs/source bytes remain preserved.
+
+
+## Native-error refusal regression — 2026-10-17
+
+Review of `b58ebc5` found that a producer with native status 0, signal null and
+`ETIMEDOUT` could satisfy the policy entry. A finite synthetic producer reproduced
+that false acceptance with all 171 cases passing; a healthy producer using the
+same synthetic output also passed. This saved output is deliberate fault input,
+not fresh Terraform acceptance evidence.
+
+The correction requires status 0, signal null and an absent native error after
+writing complete stdout/stderr/exit receipts. The eleventh permanent refusal
+handles SIGTERM with exit 0 after a child-only 500 ms deadline, self-exits after
+3 seconds if no signal arrives, and requires the exact `ETIMEDOUT` producer-failure
+reason. Its minimal output contains a passing summary: a later missing-plan
+assertion must not satisfy the control. It failed against the old guard and passes
+with the correction. The paired complete-plan probe now rejects the timeout while
+the healthy producer still passes. All ten earlier refusals, including the four
+permanent native faults, are retained; the original timeout remains 150 ms and
+the real producer deadline remains 120 seconds.
+
+Fresh local acceptance reruns the full FD-7a matrix against fixed source hashes,
+including a new real mocked Terraform policy producer, independently accounted
+145 original / 16 promoted / 10 mutation cases, all eleven refusal receipts in
+both CI-control suites and exact equivalence for the original four faults.
+The external `fd7a-native-error-fix` completion report binds the final local commit
+and tree to the actual counts, red/green evidence, native exits, scope and
+protected-checkout snapshots. Earlier dated results remain historical. README
+clarification, worker #154, workflow, resource policies, locks and fixtures stay
+unchanged. This is local macOS verification; publication, exact-head hosted Linux
+CI and live backend/IAM/KMS/locking/recovery/custody/spending gates remain open.
+No services, cloud operations, CI reruns, push or merge are included.

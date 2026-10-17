@@ -258,3 +258,18 @@ earlier dated records remain verbatim. The [delivery verification record](../ver
 separates this assembly from older captures and future hosted/live acceptance.
 The real producer deadline stays 120 seconds; only the timeout control's nested
 child uses 150 ms. No main-backend activation or cloud operation is included.
+
+
+## Native producer error correction — 2026-10-17
+
+The local correction from `b58ebc5` requires exit 0, no termination signal and no
+native spawn error before parsing a policy plan. Status 0 alone is insufficient:
+a timed-out producer can handle SIGTERM and exit 0 with native `ETIMEDOUT`.
+The new finite refusal control checks this combination and the exact producer
+failure reason; all four earlier fault controls remain. Complete native output
+and exit receipts are still saved before acceptance assertions. The real producer
+deadline remains 120 seconds; only the new nested regression uses 500 ms. No
+resource configuration, backend wiring, workflow, credentials or worker behavior
+changes. Fresh local verification and preserved-checkout proof are external in
+`2026-10-17/new-chat/work/fd7a-native-error-fix`. Hosted CI and live AWS gates
+remain open; no cloud operation, CI rerun, push or merge is part of this repair.

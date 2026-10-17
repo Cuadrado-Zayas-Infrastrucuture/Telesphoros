@@ -38,7 +38,8 @@ writeFileSync(join(evidence, 'exit.json'), JSON.stringify({
   binary, args, cwd: root, status: result.status, signal: result.signal,
   error: result.error?.code ?? null,
 }, null, 2), { mode: 0o600 });
-assert.equal(result.status, 0, `mocked Terraform producer failed (${result.error?.code ?? result.signal}); evidence: ${evidence}`);
+assert.ok(result.status === 0 && result.signal === null && result.error === undefined,
+  `mocked Terraform producer failed (${result.error?.code ?? result.signal}); evidence: ${evidence}`);
 
 const plans = [];
 let summary;

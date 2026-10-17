@@ -485,3 +485,17 @@ completion report; older test results below and above apply only to their stated
 captures. Exact-head hosted acceptance, backend activation and live AWS gates
 remain separate. This reconciliation authorizes no push, hosted CI rerun, merge,
 apply or deployment; protected source checkouts remain preserved.
+
+
+## FD-7a native producer error correction (local, 2026-10-17)
+
+A separate clone from reviewed `b58ebc5` corrects its P2 native-error finding.
+The policy entry now accepts a producer only with exit 0, no signal and no native
+error. A finite regression makes the producer handle timeout SIGTERM and exit 0
+while Node retains `ETIMEDOUT`; rejection must occur at the producer guard. The
+existing ten refusals, including all four permanent fault controls, remain.
+README clarification, worker fix #154, workflow, policies, locks and fixtures are
+unchanged. Fresh local verification and red/green evidence are bound to the final
+commit by the external `fd7a-native-error-fix` report; earlier results above are
+historical. All protected checkouts remain preserved. Publication, exact-head
+hosted CI and live backend acceptance remain separate authorization gates.
