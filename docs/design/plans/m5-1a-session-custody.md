@@ -1,0 +1,29 @@
+# M5.1a: durable browser-session custody
+
+Founder approved this local slice on 2026-10-16 after reviewing the M5.1 design. It starts from main `7987a68`. This is the first session foundation slice, not a completed browser-session or BFF rollout.
+
+## Scope and existing mechanisms
+
+Use the existing `Database.withTenant` transaction boundary, parameterized tenant queries, PostgreSQL roles and catalog classification. Add migration 0026, an explicit PostgreSQL repository, a session-purpose AES-256-GCM envelope and internal custody primitives. No module registers them and no endpoint calls them. The existing token verifier, live membership service, request authority/commit checks, frontend bearer flow, roles-only `/me`, recovery capability and F06/F07 safeguards remain unchanged.
+
+The browser-session handle is 32 random bytes; PostgreSQL stores its SHA-256 digest. An authenticated encrypted locator binds that handle to tenant and expiry before any lookup. Credentials use a separate derived key purpose and authenticated tenant, handle digest, subject, issued-at, creation and expiry metadata. The master is supplied explicitly, copied privately and never inferred from ambient configuration or reused from backup/patient identity keys. A bounded explicit key ring supports retained versions; unknown keys fail. No access/refresh/ID token is placed in the locator. No HTTP cookie is issued by this slice.
+
+The trusted future login flow must verify the access token before calling `create`; the custody helper cannot verify an arbitrary identity on its own. Creation expires at the earlier of the supplied verified-token expiry and 15 minutes. Reads do not extend it. No refresh-token custody or background refresh is added. A returned credential snapshot is not current authorization: future consumers must reverify the token and resolve membership, and protected writes need session admission at their final transaction boundary.
+
+## Database controls and ordering
+
+`browser_sessions` is a distinct catalog class for short-lived encrypted operational custody, not a clinical ledger record. It has forced tenant RLS; an existing membership is required by foreign key, but that does not establish active authority. App privileges are SELECT, INSERT on custody fields, UPDATE only on `revoked_at`, and DELETE only through the expired tenant policy. A trigger keeps every other field immutable and makes revocation terminal and database-timed. The verifier, worker, auditor, operator and PUBLIC get no access. Live rows cannot be deleted, even by the ordinary owner; no truncate is permitted. Expired cleanup is explicit, tenant-bound, ordered, bounded to 100 rows and skips rows locked by another cleaner; no scheduler is added.
+
+`findActive` takes a share lock for its own tenant transaction. A revocation ahead of a waiting read makes it return no session; a prior share-locked read can finish before revocation. That lock ends at transaction completion. It is deliberately not advertised as API write admission or cancellation of work started from a returned snapshot. M5.1b must integrate the session version/lock ordering with request admission and existing membership commit checks before any browser session authenticates a request.
+
+The approved local clock repair adds migration 0027 without changing 0026's checksum. Application creation time and PostgreSQL revocation time are different clocks: revocation remains terminal and database-stamped, but its timestamp need not follow application creation time. The replacement check requires a finite revocation timestamp; the existing trigger and column grants still prevent application-supplied revocation times or other field updates. Downgrading to the original timestamp comparison fails atomically if incompatible rows remain; let ordinary expired cleanup remove them before retrying, without rewriting their timestamps. Expiry is checked again against PostgreSQL time outside a materialized, share-locking query, after the row lock is acquired. The local-clock check remains an additional guard. No read snapshot becomes later authorization or write admission.
+
+## Verification and rollback boundary
+
+Positive controls and refusals cover fresh generated encryption, wrong key/context/purpose, metadata swapping, bounded/canonical inputs, no plaintext storage, expiry, two-instance persistence, cross-tenant/missing-context denial, terminal revocation, restricted role/column grants, cleanup bounds and deterministic PostgreSQL lock waits. Execute 0026 up/down/up as a non-superuser owner with no BYPASSRLS. Run the live catalog suite, all three backend profiles with PostgreSQL16/Moto, affected worker tests and F2/F3 validators for each profile; retain outputs/exits before summaries. Backend typecheck/lint/build are required. Exact results belong in the verification record.
+
+Written test blast radius: migration rollback, failed destructive probes and cleanup affect only the new task-owned loopback synthetic cluster/databases. Existing databases, source checkouts and retained evidence are excluded. A later real rollback removes session custody and requires new sign-in; it is never automatic or authorized here. No production migration, AWS, spend, push, PR, merge or deployment occurs.
+
+## Follow-ups
+
+M5.1b supplies one-time login transactions, backend PKCE/code exchange, configuration/key custody, session/CSRF endpoints, explicit bearer/cookie credential selection, live token/membership checks and final write/session revocation ordering. M5.1c supplies frontend lifecycle and same-origin routing/browser integration. Keep bearer clients and exact `/me` compatibility during the migration; preserve all 19 F06 and 38 F07 probes and the recovery-to-download bridge. The current S3-only frontend distribution is not a same-origin API proxy. Hosted Cognito/CloudFront acceptance and any delivery changes are separately authorized.

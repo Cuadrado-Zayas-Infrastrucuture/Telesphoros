@@ -3,6 +3,7 @@ import type { Client } from 'pg';
 // Hand-reviewed against the relationship design and original SQL, not generated from the live catalog.
 // Global containment clearances intentionally lack tenant-composite FKs: their functions check scope.
 const relationships: [string, string, string, string][] = [
+  ['browser_sessions_membership_fk', 'browser_sessions', 'tenant_id,sub', 'tenant_memberships:tenant_id,sub'],
   ['tenant_memberships_tenant_fk', 'tenant_memberships', 'tenant_id', 'tenants:id'],
   ['invitations_tenant_id_fkey', 'invitations', 'tenant_id', 'tenants:id'],
   ['jobs_tenant_id_fkey', 'jobs', 'tenant_id', 'tenants:id'],
@@ -43,6 +44,7 @@ const relationships: [string, string, string, string][] = [
   ['ledger_clearances_checkpoint_fk', 'ledger_incident_clearances', 'verified_checkpoint_id', 'ledger_checkpoints:id'],
 ];
 const primaryKeys: Record<string, string> = {
+  browser_sessions: 'tenant_id, handle_hash',
   report_upload_runs: 'run_id', report_upload_attempts: 'id',
   patients: 'id', reports: 'id', recommendations: 'id', schema_migrations: 'version',
   ledger_heads: 'tenant_id', ledger_events: 'id', ledger_checkpoints: 'id', event_notes: 'id',
@@ -78,6 +80,7 @@ const uniqueKeys: Record<string, string> = {
 };
 // Complete CHECK inventory; semantic refusal/control tests remain in the existing behavior suites.
 const checkNames: Record<string, string> = {
+  browser_sessions: 'handle_hash_shape issued_at_range lifetime created_at_bound credential_shape revoked_at_bound',
   patient_identifiers: 'tenant_id_len created_by_len system_shape digest_len key_version status withdrawal_shape withdrawn_by_len created_by_human',
   report_patient_decisions: 'tenant_id_len created_by_len hash version_len decision method shape created_by_human',
   patient_duplicate_flags: 'tenant_id_len flagged_by_len system_shape pair_order',
@@ -122,6 +125,7 @@ for (const table of ['report_captures', 'capture_acceptances', 'evaluations', 'c
 
 // Query-facing definitions. Constraint-backed indexes and internal append-only guards are also covered by ledger-catalog/behavior suites.
 const queryIndexes: Record<string, string> = {
+  browser_sessions_expiry_idx: 'INDEX browser_sessions_expiry_idx ON public.browser_sessions USING btree (tenant_id, expires_at, handle_hash)',
   upload_attempt_run_idx: 'INDEX upload_attempt_run_idx ON public.report_upload_attempts USING btree (tenant_id, run_id, state)',
   patients_tenant_label_uq: 'UNIQUE INDEX patients_tenant_label_uq ON public.patients USING btree (tenant_id, lower(label)) WHERE (deleted_at IS NULL)',
   patients_tenant_seq_idx: 'INDEX patients_tenant_seq_idx ON public.patients USING btree (tenant_id, seq) WHERE (deleted_at IS NULL)',
