@@ -23,6 +23,13 @@ async function ready(check) {
   for (let i = 0; i < 300; i++) { if (check()) return; await delay(10); }
   assert.fail('Finite synthetic child did not become ready.');
 }
+async function killed(p) {
+  // kill(2) accepts a signal before the kernel schedules process exit. Keep the
+  // existing finite wait, then require SIGKILL rather than the fixture's fallback exit.
+  await ready(() => p.exitCode !== null || p.signalCode !== null);
+  assert.equal(p.signalCode, 'SIGKILL');
+  assert.ok(!readProcess(p.pid), 'the killed identity must no longer be live');
+}
 function child(t, code) {
   const p = spawn(process.execPath, ['-e', 'setTimeout(() => process.exit(0), 8000);\n' + code], { stdio: 'ignore' });
   const exited = new Promise(r => p.once('exit', r));
@@ -79,7 +86,7 @@ test('a successful shell cannot preserve its service after the shared deadline',
   assert.ok(!readProcess(Number(readFileSync(s.pidFile))));
 });
 
-async function errorControl(t, mode) {
+async function errorControl(t, mode, deferOwnerKill = false) {
   const directory = fixture(t), ownerReady = join(directory, 'owner-ready'), term = join(directory, 'term');
   const latePid = join(directory, 'late-pid');
   const owner = child(t, `const fs=require('node:fs');let stopped=false;process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(term)},'received');if(!stopped){stopped=true;setTimeout(()=>{const c=require('node:child_process').spawn(process.execPath,['-e','setInterval(()=>{},1000);setTimeout(()=>process.exit(0),6000);'],{detached:true,stdio:'ignore',env:{PATH:process.env.PATH}});fs.writeFileSync(${JSON.stringify(latePid)},String(c.pid));c.unref();},650);}});fs.writeFileSync(${JSON.stringify(ownerReady)},'ready');`);
@@ -106,19 +113,30 @@ async function errorControl(t, mode) {
     else armed = true;
   };
   const signals = [];
-  const signal = (p, kind) => { signals.push([p.pid, kind]); return signalIdentity(p, kind); };
+  const signal = (p, kind) => {
+    signals.push([p.pid, kind]);
+    // Exercise asynchronous delivery independently of the host's /proc or ps speed.
+    if (deferOwnerKill && p.pid === owner.pid && kind === 'SIGKILL') {
+      setTimeout(() => signalIdentity(p, kind), 40); return true;
+    }
+    return signalIdentity(p, kind);
+  };
   assert.equal(await watchJob({ budget: clock(1500), owner: baseline.get(owner.pid), baseline, uid: process.getuid(), directory, read, signal,
     shutdownGraceMs: 600, onReady }), 1);
-  assert.ok(existsSync(term)); assert.ok(!readProcess(owner.pid), 'supervision errors must force a resistant owner to stop');
-  assert.ok(!readProcess(action.pid), 'the last verified action identity must still be cleaned');
+  assert.ok(existsSync(term)); await killed(owner);
+  await killed(action);
   assert.ok(signals.some(([pid, kind]) => pid === owner.pid && kind === 'SIGKILL'));
   if (mode !== 'persistent-scan') {
     assert.ok(existsSync(latePid), 'fixture must exercise work born during worker shutdown');
-    assert.ok(!readProcess(Number(readFileSync(latePid))), 'shutdown must sweep late detached work');
+    const pid = Number(readFileSync(latePid));
+    assert.ok(signals.some(([target, kind]) => target === pid && kind === 'SIGKILL'));
+    await ready(() => !readProcess(pid));
+    assert.ok(!readProcess(pid), 'shutdown must sweep late detached work');
   }
 }
 test('heartbeat write errors retain bounded owner shutdown and sweep late detached work', async t => errorControl(t, 'heartbeat'));
 test('transient process-scan errors retain bounded owner shutdown and sweep late detached work', async t => errorControl(t, 'transient-scan'));
+test('delayed owner KILL delivery still requires actual SIGKILL exit and late-work cleanup', async t => errorControl(t, 'transient-scan', true));
 test('persistent process-scan errors retain bounded shutdown using verified cached identities', async t => errorControl(t, 'persistent-scan'));
 
 test('a failed TERM attempt cannot bypass the owner KILL fallback', async t => {
@@ -130,5 +148,5 @@ test('a failed TERM attempt cannot bypass the owner KILL fallback', async t => {
   const signal = (p, kind) => { signals.push(kind); if (kind === 'SIGTERM' && p.pid === owner.pid) throw new Error('synthetic TERM error'); return signalIdentity(p, kind); };
   assert.equal(await watchJob({ budget: clock(80), owner: baseline.get(owner.pid), baseline, uid: process.getuid(), directory, read, signal,
     shutdownGraceMs: 80 }), 1);
-  assert.ok(signals.includes('SIGKILL')); assert.ok(!readProcess(owner.pid));
+  assert.ok(signals.includes('SIGKILL')); await killed(owner);
 });
