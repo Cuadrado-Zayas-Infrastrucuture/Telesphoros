@@ -62,3 +62,25 @@ Fresh focused verification on the promoted test contents:
 Both runs execute ten focused suites with fresh task-owned PostgreSQL 16/SCRAM and Moto, using restricted application roles, actual migrations/RLS and HTTP intake/storage. All 210 original focused case names and all 12 promoted names are accounted for in both results. No missing-service notice occurs. Backend typecheck and lint pass. Full native producer output/status and case/source inventories are retained in the outer workspace's `work/m51b1-probes-verification/`.
 
 Production code, migrations, ACLs, cookie/provider/runtime wiring, Actions/main wiring, dependencies, frontend and all protected sources remain unchanged. Cookie authentication remains disabled. Full-profile/worker/browser/build/recovery acceptance above belongs to the prior build and was not rerun for this test-only promotion; focused PG/S3 runs above are fresh. The unpublished local commit has no remote exact-head CI or hosted acceptance. No push, PR or deployment is authorized.
+
+## Local synchronization with main 34d6093 (2026-10-16)
+
+After PR #149's e728811 run exhausted the older sequential job's 30-minute budget, the approved local update adopts main `34d6093962d3d029aa3c6a4d8ec6be9b652a0c78` through a merge that preserves published fdc2687/e728811 as ancestors. Main's PR #150 workflow, helpers and preparation scripts are inherited byte-for-byte. There are no independent Actions, deadline, required-check, permission or main-backend wiring edits. Cookie authentication remains disabled.
+
+STATUS combined cleanly, preserving both main's CI history and the M5.1b sections. SESSION_STATE was the sole manual conflict; the current integration summary and both dated prior session records are retained. Production code, application/package tests, migrations, dependencies and preview configuration remain unchanged from e728811. All 135 session cases, 12 promoted probes, 57 F06/F07 probes and the additional browser bridge are preserved.
+
+Fresh verification on the fixed integrated source:
+
+| Check | Result |
+| --- | --- |
+| Focused PostgreSQL, 10 suites | 222 passed, zero failed/skipped; all 135 session cases |
+| Focused PostgreSQL + S3/Moto, 10 suites | 222 passed, zero failed/skipped; all 135 session cases |
+| Backend typecheck and lint | passed |
+| Unchanged current-main CI controls | 111 passed, zero failed/skipped |
+| Workspace orchestration controls | 8 passed, zero failed/skipped |
+| Workflow-pack check and controls | check passed; 4 tests passed |
+| actionlint and whitespace | passed |
+
+Native accounting matches every original 210 focused case name plus all 12 promoted names in both profiles. Inheritance checks cover 145 files under `.github`, `scripts`, `docs/ops` and `infrastructure`. Node 22.22.0/pnpm 10.28.0 and fresh owned PostgreSQL 16/SCRAM and Moto were used; there was no missing-service notice. Complete native output/exits and fixed application/package hashes are retained externally in `work/pr149-local-main-sync/`. Protected checkout/ref hashes and final merge-parent, cleanup and secret-scan receipts are recorded there at completion.
+
+These are local focused/static results. Full backend, worker, browser, build, recovery and GitHub/Linux producer/joining-gate acceptance were not rerun for this synchronization. The new evidence gate's Linux/current-run/attempt/checkout metadata must come from a fresh CI run after separately authorized publication; local macOS output is not relabeled or substituted. Earlier full-suite and cancelled-run passing test-step evidence remains historical. The local merge commit stays unpushed; PR #149's remote head remains e728811. No CI rerun, PR edit, GitHub merge, manual/backend deployment or integration-setting change was performed.

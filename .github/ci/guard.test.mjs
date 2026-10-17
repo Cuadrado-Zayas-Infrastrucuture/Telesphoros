@@ -11,6 +11,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
+import { recoveryMetricControl, applicationMetricControl } from './fixtures/recovery.mjs';
+import { serviceLayoutProblems, internalJobs } from './service-layout.mjs';
 import { verifyAllProfiles, verifyRecoveryMetrics } from './verify-recovery-metrics.mjs';
 import { verifyApplicationRecovery, verifyApplicationProfiles } from './verify-application-recovery.mjs';
 
@@ -18,17 +20,6 @@ const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const workflow = read('../workflows/ci.yml');
 const ruleset = JSON.parse(read('../rulesets/main.json'));
 const dependabot = read('../dependabot.yml');
-
-function recoveryMetricControl() {
-  const volume = bytes => ({ bytes, GB: bytes / 1e9, GiB: bytes / 1024 ** 3 });
-  const metric = { format: 1, databaseRecoveryVerified: true, independentBytesRecovered: true, applicationRecoveryComplete: false, identityMode: 'translated-test-only', references: 5, recoveredObjects: 5, concurrency: 1,
-    requiredByKind: Object.fromEntries(['lab-pdf', 'vcf', 'structured', 'text'].map(kind => [kind, { objects: kind === 'lab-pdf' ? 2 : 1, ...volume(10) }])),
-    volumes: { restoredDatabase: volume(300), archive: volume(100), catalogue: volume(90), recoveredObjects: volume(40), read: volume(100), writeAttempted: volume(10) },
-    seconds: { backupDownload: 1, catalogue: 1, restoreAndEvidence: 3, evidenceVerification: 2, total: 5 } };
-  const measurements = Array.from({ length: 7 }, () => structuredClone(metric)); measurements.at(-1).volumes.writeAttempted = volume(0);
-  return { format: 1, synthetic: true, status: 'passed', controls: Array.from({ length: 30 }, (_, i) => ({ name: 'control-' + i, passed: true })),
-    runtime: { node: 'v22.22.0', platform: 'linux', architecture: 'x64', gitHead: 'a'.repeat(40), storage: 'loopback PostgreSQL/Moto; synthetic gateway, not AWS IAM', freshProcess: true }, sourceDatabase: volume(300), measurements, applicationRecoveryComplete: false, nativeReplicationVerified: false };
-}
 
 test('CI runs the worker against PostgreSQL after the API tiers, and a skipped tier fails the job', () => {
   const step = workflow.indexOf('pnpm --filter @telesphoros/worker test 2>&1 | tee tier-worker.log');
@@ -68,18 +59,7 @@ test('recovery evidence requires each profile, not merely one matching artifact 
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-function applicationMetricControl() {
-  const value = recoveryMetricControl();
-  const r = value.measurements[0]; r.references = 7; r.recoveredObjects = 7;
-  for (const [kind, v] of Object.entries(r.requiredByKind)) v.objects = kind === 'lab-pdf' ? 3 : kind === 'text' ? 2 : 1;
-  const application = { applicationRecoveryComplete: true, clinicalUseApproved: false, apiControls: ['restricted-login-rls', 'module-health-readiness', 'link-authentication-roles-and-tenant', 'verified-version-links',
-    'standard-and-pdf-bytes', 'soft-deletion', 'golden-evaluations-and-clinical-holds', 'evaluation-tenant-isolation', 'database-evidence-guard', 'ledger-validity', 'read-only-and-exact-pin-refusal', 'unchanged-evidence-inventory'], linkedBytes: 20, seconds: 1 };
-  const measurements = [{ recovery: r, application }, structuredClone({ recovery: r, application })];
-  measurements[1].recovery.volumes.writeAttempted = { bytes: 0, GB: 0, GiB: 0 };
-  const names = ['application-primary-copy-reads-and-target-writes-denied', 'actual-app-api-links-evaluations-isolation-and-holds',
-    'tampered-install', 'foreign-destination', 'foreign-db', 'startup-missing', 'runtime-pdf', 'runtime-text', 'missing-object', 'text-corrupt', 'missing-mapping', 'truncated', 'healthy-safe-resume-after-faults'];
-  return { ...value, controls: names.map(name => ({ name, passed: true })), measurements, applicationRecoveryComplete: true, clinicalUseApproved: false };
-}
+
 test('application recovery gates all profiles after tiers and retains aggregate artifacts', () => {
   const command = '        run: node .github/ci/verify-application-recovery.mjs';
   assert.ok(workflow.includes(command)); assert.ok(workflow.indexOf(command) > workflow.indexOf('TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 pnpm'));
@@ -159,12 +139,13 @@ test('each job is named like its key, so the check name is predictable', () => {
 });
 
 test('the ruleset requires exactly the non-advisory jobs of the workflow', () => {
-  const gates = jobsOf(workflow).filter((j) => !ADVISORY.has(j.key)).map((j) => j.name).sort();
+  const gates = jobsOf(workflow).filter((j) => !ADVISORY.has(j.key) && !internalJobs.includes(j.key)).map((j) => j.name).sort();
   const required = ruleset.rules
     .find((r) => r.type === 'required_status_checks')
     .parameters.required_status_checks.map((c) => c.context)
     .sort();
   assert.deepEqual(required, gates);
+  assert.deepEqual(serviceLayoutProblems(workflow), [], 'internal producers must all feed the required joining gate');
   for (const j of jobsOf(workflow)) if (ADVISORY.has(j.key)) assert.ok(j.continueOnError, `${j.key} is advisory, so it must be continue-on-error`);
   for (const j of jobsOf(workflow)) if (!ADVISORY.has(j.key)) assert.ok(!j.continueOnError, `${j.key} is a gate, so it must not be continue-on-error`);
 });
@@ -306,7 +287,7 @@ for(const [token,rule] of [['load: true','runtime load'],['push: false','no push
 // Execute the three actual tier scripts with a stub test command. A failed producer must
 // survive tee; a skipped service must fail; successful tests must retain their log.
 test('database tier pipelines preserve test failures and missing-service refusal', () => {
-  const scripts = [...workflow.matchAll(/^ {8}run: \|\n((?: {10}.*\n)+)/gm)]
+  const scripts = [...workflow.matchAll(/^          node \.github\/ci\/service-evidence\.mjs run [a-z0-9-]+ <<'PROFILE'\n([\s\S]*?)^          PROFILE$/gm)]
     .map(m => m[1].replace(/^ {10}/gm, '')).filter(script => /\| tee tier[123]\.log/.test(script));
   assert.equal(scripts.length, 3, 'all three database tier scripts must be exercised');
   const dir = mkdtempSync(join(tmpdir(), 'ci-tier-controls-'));

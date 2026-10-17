@@ -9,8 +9,14 @@ Fresh focused 210, all three complete backend profiles, worker 123, F2/F3 all pr
 
 The 12 subsequent review probes are now permanent in the admission PG spec, retaining all prior cases: 65 b-1 admission cases plus 70 M5.1a cases = 135 session cases. Fresh focused PostgreSQL and PostgreSQL/S3 runs each pass 222/222 with no skips or missing-service notices; backend typecheck and lint pass. The self-revocation rollback control checks the same session cookie. Runtime code is unchanged, and cookie auth remains disabled. Full-profile, worker, browser and build results above remain historical for the earlier test set. Protected sources and references are preserved; no Actions/main wiring or publication/deployment.
 
+A subsequent local synchronization adopts `34d6093` (PR #150) through a merge preserving published fdc2687/e728811. CI and preparation helpers match main exactly; application/tests and cookie auth are unchanged. STATUS retains both histories; only SESSION_STATE required manual resolution, retaining dated provenance. Fresh focused PostgreSQL and PG/S3 runs each pass 222/222, including all 135 session cases. Typecheck, lint, 111 CI controls, eight workspace controls, four workflow controls and actionlint pass. Exact-head hosted acceptance remains unrun for this unpushed merge. No CI rerun, GitHub merge, backend deployment or independent Actions/main wiring edit was performed. See the existing b-1 verification record.
+
 Read this first to pick the project up. Snapshot: **2026-10-14**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
+
+## Isolated service CI and deadline supervision (local, 2026-10-16)
+
+`fix/ci-service-lifecycle` starts from main `1da75b1` and carries the unpublished candidate from `3f91713`, including PR #146’s unchanged prerequisite producer. Original `bd9b6cb`/`3f91713` checkouts and refs and the draft PR remain untouched. Three complete backend profiles still feed the required joining gate and whole worker profile. The [lifecycle repairs](verification/ci-service-lifecycle.md) preserve Moto after successful setup and bound worker shutdown after watchdog errors. Every existing test file, profile script, runtime pin and clock rule remains unchanged. Local checks pass: 94 CI controls, eight workspace controls, the actual detached reader and three defect injections. Hosted Linux cancellation, real service acceptance and runtime comparison remain unrun. No publication, CI run or merge is authorized.
 
 ## M5.1a browser-session custody (local, 2026-10-16)
 
