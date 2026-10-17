@@ -1,7 +1,19 @@
 # Status, history and working agreements
 
-Read this first to pick the project up. Snapshot: **2026-10-14**. Update it in the same pull request as any change it describes.
+Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
+
+## Service CI merged and verified (#150, 2026-10-17)
+
+[PR #150](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/150) merged as [34d6093](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/commit/34d6093962d3d029aa3c6a4d8ec6be9b652a0c78), preserving reviewed head `7c35fe3`'s tree. Automatic [post-merge main run 38995941825, attempt 1](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/actions/runs/38995941825) passed all six required checks (`verify`, `database-and-storage`, `browser`, `terraform`, `secret-scan`, `image`) and all ten jobs. The [successful PR run](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/actions/runs/38994847278) is separate pre-merge evidence.
+
+All three complete backend profiles ran 2,409 tests each with their existing intentional skips, and all 123 worker tests passed. Counters and passing suite filenames match the pre-merge evidence. All nine recovery aggregates and both existing all-profile validators passed; the hosted CI configuration suite passed 111 controls with zero failures/skips. Linux executable-permission and filesystem-freshness repairs retain process identities, executable-verified runner ownership and refusal of stale evidence.
+
+The main run completed the entire service path in **13m58s**, leaving **16m02s** inside the original shared 30-minute run-attempt budget. All four service jobs passed bootstrap/live-watchdog and final clock checks; normal teardown logs record PostgreSQL container removal and Moto termination. Native hosted controls cover detached children, Moto handoff and bounded watchdog-error shutdown. Actual GitHub `Runner.Worker` cancellation at expiry was not triggered; pre-bootstrap platform provisioning cannot be cancelled by workflow code. No deployment or clinical approval follows from CI acceptance.
+
+Earlier drafts [#146](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/146) and [#148](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/148) were closed as superseded by #150 on 2026-10-17. Their branches, `fix/ci-service-test-prerequisites` and `fix/ci-service-lifecycle`, remain at `9904bd1` and `8af0b59`. The prerequisite producer and previous controls are preserved or adapted in #150; #146's initial verification note remains in its PR/commit history. See the [CI runbook's acceptance record](ops/ci-cd.md#merged-acceptance-and-superseded-drafts) for profile counts, timing and evidence limits.
+
+The dated local entries below preserve earlier capture states, including their then-pending hosted acceptance and runtime investigation. Historical verification records remain unchanged.
 
 ## Isolated service CI and deadline supervision (local, 2026-10-16)
 
