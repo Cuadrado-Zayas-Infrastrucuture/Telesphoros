@@ -129,6 +129,9 @@ describe('health', () => {
     const id = await enqueue('test.slow', { ms: 3_000 });
     await until('the job to start', async () => (await effects.files()).includes(`${id}.started`));
     w.child.kill('SIGTERM');
+    // The signal reaches the worker asynchronously, and until its handler runs the listener is still open and /readyz still answers 200. The handler logs
+    // `shutdown-requested` and closes the listener in the same synchronous step, so once the line is seen no later probe can be served as ready.
+    await until('the worker to handle SIGTERM', async () => w.output().includes('"event":"shutdown-requested"'));
     // While draining the listener is closed to new connections or answers not-ready; either way it is no longer ready.
     const after = await get('/readyz').catch(() => ({ status: 0, body: '' }));
     expect(after.status).not.toBe(200);
