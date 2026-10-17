@@ -6,3 +6,7 @@ onlyBuiltDependencies:
   - esbuild
   - sharp
   - "@swc/core"
+# tsup 8 constrains esbuild to vulnerable 0.27.x; retain its API while requiring
+# the GHSA-g7r4-m6w7-qqqr fix. Allow subsequent compatible security patches.
+overrides:
+  esbuild: ^0.28.1
