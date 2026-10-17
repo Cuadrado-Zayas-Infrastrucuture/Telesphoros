@@ -40,3 +40,42 @@ for (const [mode, file, name, expected] of [
     assert.deepEqual(await databases(), before, 'fixture databases must be reclaimed, including after a timed-out hook');
   });
 }
+
+// Unlike the single-case finite-delay controls, this outlasts setup AND teardown.
+test('late setup retains its original scope across the next test', () => {
+  const fs = require('node:fs'), os = require('node:os');
+  const ts = backendRequire('typescript');
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-scope-'));
+  const events = path.join(directory, 'result.json');
+  const source = fs.readFileSync(path.join(cwd, 'test/local-storage-intake.e2e-spec.ts'), 'utf8');
+  const hooks = source.slice(source.indexOf('interface IntakeFixture'), source.indexOf('async function registration'));
+  assert.ok(hooks.startsWith('interface IntakeFixture'), 'must exercise the actual scoped fixture hooks');
+  const prelude = `import {writeFileSync} from 'node:fs';
+    type EphemeralDatabase={appUrl:string,drop:()=>Promise<void>}; type NestExpressApplication={close:()=>Promise<void>};
+    const live=new Set<string>(); const events:string[]=[];let databases=0,apps=0;
+    const delay=(ms:number)=>new Promise(r=>setTimeout(r,ms));
+    const usingPostgres=()=>true;
+    const createEphemeralDatabase=async()=>{const appUrl='db'+(++databases);live.add(appUrl);return{appUrl,drop:async()=>{events.push('drop:'+appUrl);live.delete(appUrl);}};};
+    const createTestApp=async(options:any)=>{if(++apps===1)await delay(11500);return{close:async()=>{events.push('close:'+options.postgresUrl);}};};
+    const clinicianA=async()=> 'synthetic';let app:NestExpressApplication;let token:string;
+`;
+  const cases = `it('first times out',()=>{});it('second owns its database',async()=>{await delay(2500);expect(live.has('db2')).toBe(true);});afterAll(()=>writeFileSync(${JSON.stringify(events)},JSON.stringify({events,remaining:[...live]})));`;
+  fs.writeFileSync(path.join(directory, 'scope.spec.js'), ts.transpileModule(prelude + hooks + cases, {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText);
+  const config = path.join(directory, 'jest.json');
+  fs.writeFileSync(config, JSON.stringify({rootDir:directory,testEnvironment:'node',transform:{},testMatch:['**/scope.spec.js']}));
+  const result = spawnSync(process.execPath, [backendRequire.resolve('jest/bin/jest'),'--config',config,'--runInBand'], {encoding:'utf8',timeout:25000,maxBuffer:2*1024*1024});
+  process.stdout.write(result.stdout ?? '');process.stderr.write(result.stderr ?? '');
+  assert.ifError(result.error);assert.equal(result.signal,null);assert.equal(result.status,1);
+  assert.match(result.stderr,/1 failed, 1 passed, 2 total/);
+  const outcome = JSON.parse(fs.readFileSync(events,'utf8'));
+  assert.deepEqual(outcome.remaining,[]);assert.ok(outcome.events.includes('drop:db1'));
+});
+
+test('construction rejection reclaims real resources and preserves unrelated fixtures', () => {
+  const result = spawnSync(process.execPath, [backendRequire.resolve('jest/bin/jest'),'--runInBand',
+    '--runTestsByPath','test/helpers/fixture-construction.control.ts','--testRegex','fixture-construction\\.control\\.ts$'], {
+    cwd,env:{...process.env,TEST_STORAGE:'postgres',TEST_OBJECT_STORAGE:'memory'},encoding:'utf8',timeout:25000,maxBuffer:2*1024*1024,
+  });
+  process.stdout.write(result.stdout ?? '');process.stderr.write(result.stderr ?? '');
+  assert.ifError(result.error);assert.equal(result.signal,null);assert.equal(result.status,0);
+});

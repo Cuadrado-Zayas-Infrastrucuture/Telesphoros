@@ -19,22 +19,36 @@ const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
 // Each case owns a fresh database and bucket, including intentional corruptions.
 // Database migration and API startup have separate, unchanged Jest hook budgets.
 // Keep the pending resources, not just their resolved values: Jest timeouts do not cancel async setup.
-let database: Promise<EphemeralDatabase | undefined>;
-let startingApp: Promise<NestExpressApplication> | undefined;
+interface IntakeFixture {
+    database: Promise<EphemeralDatabase | undefined>;
+    startingApp?: Promise<NestExpressApplication>;
+    cancellation: AbortController;
+}
+let fixture: IntakeFixture;
 beforeEach(async () => {
-    startingApp = undefined;
-    database = usingPostgres() ? createEphemeralDatabase() : Promise.resolve(undefined);
-    await database;
+    const cancellation = new AbortController();
+    const current = { cancellation, database: usingPostgres() ? createEphemeralDatabase({ signal: cancellation.signal }) : Promise.resolve(undefined) };
+    fixture = current;
+    await current.database;
 });
 beforeEach(async () => {
-    const pg = await database;
-    startingApp = createTestApp(pg ? { postgresUrl: pg.appUrl } : {});
-    app = await startingApp;
-    token = await clinicianA();
+    const current = fixture;
+    const pg = await current.database;
+    current.cancellation.signal.throwIfAborted();
+    current.startingApp = createTestApp({ ...(pg ? { postgresUrl: pg.appUrl } : {}), signal: current.cancellation.signal });
+    const started = await current.startingApp;
+    // A timed-out hook may settle during the next case. Never publish its app/token there.
+    if (current.cancellation.signal.aborted) { await started.close(); current.cancellation.signal.throwIfAborted(); }
+    const signed = await clinicianA();
+    current.cancellation.signal.throwIfAborted();
+    app = started;
+    token = signed;
 });
 afterEach(async () => {
-    try { await (await startingApp)?.close(); }
-    finally { await (await database)?.drop(); }
+    const current = fixture;
+    current.cancellation.abort(new Error('Intake fixture scope ended'));
+    try { await (await current.startingApp)?.close(); }
+    finally { await (await current.database)?.drop(); }
 });
 async function registration(s = samples[0], bytes = s.bytes) { const patient = (await api().post('/api/v1/patients').set(bearer(token)).send({ label: `SYN-${randomUUID().slice(0, 8)}` }).expect(201)).body.id; return (await api().post('/api/v1/reports').set(bearer(token)).send({ patientId: patient, type: s.type, filename: s.name, sizeBytes: bytes.length }).expect(201)).body.id; }
 async function declare(id: string, s = samples[0], bytes = s.bytes, requestId = randomUUID(), revision?: string) { revision ??= (await api().get(`/api/v1/reports/${id}/upload-state`).set(bearer(token)).expect(200)).body.revision; return (await api().post(`/api/v1/reports/${id}/upload-attempts`).set(bearer(token)).send({ requestId, revision, contentType: s.mime, sha256: sha(bytes) }).expect(201)).body; }
