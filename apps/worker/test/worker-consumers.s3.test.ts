@@ -118,6 +118,8 @@ describe('the worker process with the consumers', () => {
       throw error;
     } finally {
       await disposeFixtures([gate.close], errors);
+    } finally {
+      await gate.close();
     }
   });
 
