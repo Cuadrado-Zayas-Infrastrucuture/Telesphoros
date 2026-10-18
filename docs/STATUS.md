@@ -3,6 +3,22 @@
 Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Test application loopback listener repair (local, 2026-10-18)
+
+The real test helper now binds its persistent listener to `127.0.0.1`, matching
+Supertest's client address. A deterministic macOS reproduction showed that the
+previous wildcard IPv6 bind could share its port with another IPv4 listener and
+send the health request to that server, returning 404. A permanent regression
+first reproduces that failure, then proves exclusive port ownership and the first
+health response without retries. All eight existing health cases and the local
+PR #161 Terraform candidate remain intact. [Cause and verification scope](verification/test-app-loopback-listener.md).
+Fresh full-check evidence belongs to the external delivery report; hosted
+acceptance, publication and deployment are not granted by this local repair.
+
+## PR #161 current-main repair (local, 2026-10-18)
+
+This local candidate retains the published Terraform backend source wiring from `515e249` on main `c49f9d8`, including the existing fixture cleanup and diagnostic support. All six main health cases remain, with the reviewed generated/captured request-ID pair added for eight cases. The captured UUID containing `5432` reproduces the original assertion false positive; correlation data and sanitized diagnostics have separate strict checks. Existing deadlines, response schemas, exact error envelopes and cleanup controls remain. Fresh offline and synthetic PostgreSQL/Moto evidence belongs to the external candidate report. Earlier records are preserved as history, including the separately unresolved patient-link HTTP500 acceptance failure at local `bd9c32c`. No hosted CI acceptance, publication, backend activation, cloud operation or deployment is granted.
+
 ## FD-7a main-backend source wiring (local, 2026-10-17)
 
 `feat/terraform-backend-wiring`, in a separate clone from main `6371f83`, adds the
@@ -20,6 +36,22 @@ commit/tree are retained in the originating Codex workspace under
 CI, application/worker code and protected checkouts are preserved. No push, hosted CI
 rerun, merge, backend activation, AWS operation or deployment. Live identity/config,
 state inventory/migration, permission/locking/recovery and budget gates remain separate.
+
+## Documentation merge and main acceptance (#162, 2026-10-17)
+
+[PR #162](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/162) merged the reviewed two-file CI documentation update as [c18c503](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/commit/c18c50387573ac727596c070e1b4356fab83991e), whose tree matches published head 808147c. All earlier historical text was retained; application code, tests, profiles, dependencies and the shared service budget were unchanged.
+
+Automatic [post-merge main run 39085190419, attempt 1](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/actions/runs/39085190419) passed all six required checks and all ten jobs at the exact merge. Each backend profile accounted for 2,479 tests with its intentional skips; all 125 worker tests passed, including SIGTERM readiness/acknowledgement, drain and release. Six fixture lifecycle controls, including eight construction-failure cases, passed. Four bound completion receipts, twelve producer-file hashes and nine recovery reports were verified, and both all-profile recovery validators passed.
+
+All four service jobs passed deadline checks and stopped containers. The full service path took **14m38s**, leaving **15m22s** within the unchanged shared 30-minute budget; the joining job alone took **2m26s**. Actual hosted cancellation or expiry was not deliberately exercised. See the [#162 runbook record](ops/ci-cd.md#documentation-merge-and-post-merge-ci-162-2026-10-17) for exact counts, timing and limits. Acceptance applies to c18c503; separate feature candidates retain their own acceptance gates. Earlier #160/#159 and local-stage records below remain dated history; no deployment or clinical approval is granted.
+
+## Fixture repair merged and verified (#160, 2026-10-17)
+
+[PR #160](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/160) merged the reviewed fixture repair as [22209af](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/commit/22209afa2e94bddef4926a0c5a61f1b81c8d9ec6), with the same tree as published head `85dbb89`. Automatic [post-merge main run 39081340588, attempt 1](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/actions/runs/39081340588) passed all six required checks (`verify`, `database-and-storage`, `browser`, `terraform`, `secret-scan`, `image`) and all ten jobs. Each complete backend profile accounted for 2,479 tests with its existing intentional skips; all 125 worker tests passed, including SIGTERM health/acknowledgement, drain and release.
+
+All six fixture lifecycle controls, including eight construction-failure cases, passed. Both all-profile recovery validators, four completion receipts, twelve producer-file hashes and nine collected recovery reports were verified; 137 hosted CI controls passed. All four service jobs passed deadline checks and stopped containers. The full service path took **15m12s**, leaving **14m48s** within the unchanged shared 30-minute budget; the joining job took 2m36s. Actual hosted cancellation at expiry was not triggered, and CI acceptance grants no deployment or clinical approval.
+
+Earlier draft [#159](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/159) was closed unmerged as superseded by #160 on 2026-10-17, with a [comment linking the successful main CI](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/159#issuecomment-6243732928). Its branch `fix/fixture-scope-main727-cleanup` remains at `1647e19`. All eight files and complete patches match the repair merged through #160; the original #159 commit was not merged. Its failed CI and earlier local records remain history. See the [#160 runbook record](ops/ci-cd.md#fixture-repair-acceptance-and-superseded-draft-160-2026-10-17) for exact counts, timing, closure evidence and limits. Acceptance is bound to `22209af`; earlier dated sections below are preserved.
 
 ## M5.1b-1 internal session write admission (local, 2026-10-16)
 

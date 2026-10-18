@@ -30,3 +30,22 @@ remained alive until the existing CI deadline cancelled the process. Async Jest
 timeouts do not cancel the underlying setup promise. Reading only the final
 cancellation missed the earlier failures. Production application code and applied
 migrations are unchanged by this repair.
+
+## Scope and constructor failure controls
+
+The follow-up keeps every original test/assertion and default timer. Each intake
+case captures its own resource promises and cancellation signal before awaiting.
+Late setup cannot publish its app/token into the next case; late teardown always
+disposes its captured database. The cross-case control delays first setup 11.5s,
+past both five-second hook windows, while the second case checks its database.
+The first case remains failed and exits naturally; neither database remains.
+
+The explicit `test/helpers/fixture-construction.control.ts` file is outside normal
+profile discovery. It checks real migrator connect/migration rejection, compile
+and bound-listener failure, cancellation after compile, concurrent idempotent
+close, and retaining original plus cleanup errors. A pre-existing fixture remains
+protected; owned database and session inventory must return to baseline. Constructors
+unwind on failure even if the caller never receives a cleanup handle. Cancellation
+fences prevent work starting after a scope ends; pending library operations must
+still settle. The absolute service watchdog remains the final bound for an
+operation that never settles; these controls do not claim a durable expiry receipt.
