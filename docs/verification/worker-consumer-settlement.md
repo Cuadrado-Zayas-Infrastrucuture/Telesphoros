@@ -38,8 +38,6 @@ even if an earlier cleanup step fails. It reuses `disposeFixtures` and
 are preserved together with cleanup errors; repeated cleanup callers share one
 disposal. A failed drop remains visible as a test failure, and the enclosing
 fixture still drops its disposable database. Its DDL lock wait is bounded. It is not a migration,
-The gate always releases its lock, removes its fixture trigger/function and closes
-its connection in cleanup. Its DDL lock wait is bounded. It is not a migration,
 runtime hook or change to worker/queue SQL, and never runs against AWS or an
 existing database. No arbitrary sleep, CI retry, timeout increase or assertion
 accepting unfinished work was added.
@@ -68,7 +66,6 @@ local verification.
 
 Only the process test, test-only gate and its failure-path tests, and this
 documentation/status record change.
-Only the process test, test-only gate and this documentation/status record change.
 Worker/queue runtime, migrations, permissions, provider configuration, CI coverage
 and deadlines remain unchanged. PR #166 remains a separate documentation draft;
 this fix is branched directly from main rather than stacked onto it.

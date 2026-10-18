@@ -5,7 +5,6 @@ import type { Fixture } from './support';
 /** TEST ONLY: hold terminal updates in this disposable database after verification commits. */
 export async function holdSettlements(f: Fixture) {
   const client = new Client({ connectionString: f.db.adminUrl });
-  await client.connect();
   let locked = false;
   let createdFunction = false;
   let createdTrigger = false;
@@ -23,16 +22,6 @@ export async function holdSettlements(f: Fixture) {
   ]));
   try {
     await client.connect();
-  const close = async () => {
-    try {
-      await release();
-      if (createdTrigger) await client.query('DROP TRIGGER worker_test_hold_settlement ON public.jobs');
-      if (createdFunction) await client.query('DROP FUNCTION public.worker_test_hold_settlement()');
-    } finally {
-      await client.end();
-    }
-  };
-  try {
     await client.query("SELECT set_config('lock_timeout', $1, false)", ['2s']);
     // Static fixture DDL, never a migration or a change to the real worker's SQL.
     await client.query(`CREATE FUNCTION public.worker_test_hold_settlement() RETURNS trigger
@@ -61,7 +50,6 @@ export async function holdSettlements(f: Fixture) {
     };
   } catch (error) {
     await disposeFixtures([close], [error]);
-    await close();
     throw error;
   }
 }

@@ -3,23 +3,6 @@
 Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
-## Worker consumer settlement observation (local, 2026-10-18)
-
-The separate `fix/worker-consumer-completion-race` branch repairs the process-test
-failure found in PR #166 CI. A disposable PostgreSQL gate deterministically
-reproduced the original observation of verification rows before terminal job
-updates. The test now uses the existing bounded wait for the two report/tenant
-jobs to settle, preserving strict success/dead/error and privacy assertions. A
-permanent real-process regression captures the held `running` snapshot before
-release; a premature-observation mutation fails it. [Cause and verification](verification/worker-consumer-settlement.md).
-
-Focused/restored suites each passed 4/4; the full worker suite passed 126/126
-across 13 files, with build/typecheck/lint and owned-service cleanup passing.
-No selected full-suite skips or missing-service notices. Runtime, migrations,
-permissions, CI and deadlines are unchanged. PR #166 stays a separate draft;
-exact-head hosted CI for this fix remains a delivery gate. No AWS access,
-deployment or merge is included.
-
 ## Test application loopback listener repair (local, 2026-10-18)
 
 The real test helper now binds its persistent listener to `127.0.0.1`, matching
