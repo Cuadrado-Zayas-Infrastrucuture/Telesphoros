@@ -3,6 +3,28 @@
 Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## PR #161 current-main repair (local, 2026-10-18)
+
+This local candidate retains the published Terraform backend source wiring from `515e249` on main `c49f9d8`, including the existing fixture cleanup and diagnostic support. All six main health cases remain, with the reviewed generated/captured request-ID pair added for eight cases. The captured UUID containing `5432` reproduces the original assertion false positive; correlation data and sanitized diagnostics have separate strict checks. Existing deadlines, response schemas, exact error envelopes and cleanup controls remain. Fresh offline and synthetic PostgreSQL/Moto evidence belongs to the external candidate report. Earlier records are preserved as history, including the separately unresolved patient-link HTTP500 acceptance failure at local `bd9c32c`. No hosted CI acceptance, publication, backend activation, cloud operation or deployment is granted.
+
+## FD-7a main-backend source wiring (local, 2026-10-17)
+
+`feat/terraform-backend-wiring`, in a separate clone from main `6371f83`, adds the
+partial S3 backend with explicit encryption/native locking and Terraform >= 1.11.
+The four-field private config has a placeholder example and ignore rules; permanent
+weakening/Git-ignore controls run through the existing infrastructure entry point.
+[Design and verification](design/plans/fd7-remote-state.md#main-backend-source-wiring--approved-2026-10-17),
+[activation and custody gates](ops/terraform-state.md#main-backend-configuration-source-only).
+Fresh offline verification passed 119 infrastructure tests (including 23 new guards),
+21 state source guards, 171 policy/mutation cases, 137 CI controls, 33 main-root and
+22 standalone mocked plans, plus fmt/backend-disabled read-only-lock init/validate
+for both roots; no selected skips. Native outputs, producer exits and final candidate
+commit/tree are retained in the originating Codex workspace under
+`work/terraform-backend-wiring/`. Bootstrap resources/policies/provider locks, required
+CI, application/worker code and protected checkouts are preserved. No push, hosted CI
+rerun, merge, backend activation, AWS operation or deployment. Live identity/config,
+state inventory/migration, permission/locking/recovery and budget gates remain separate.
+
 ## Documentation merge and main acceptance (#162, 2026-10-17)
 
 [PR #162](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/162) merged the reviewed two-file CI documentation update as [c18c503](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/commit/c18c50387573ac727596c070e1b4356fab83991e), whose tree matches published head 808147c. All earlier historical text was retained; application code, tests, profiles, dependencies and the shared service budget were unchanged.

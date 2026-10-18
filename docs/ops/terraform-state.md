@@ -1,9 +1,11 @@
 # Terraform state bootstrap: built locally, not applied
 
-FD-7a now has an independent root at `infrastructure/terraform-state/`. Its scope
-is the state bucket, its key, policies, version lifecycle and a future backend
-descriptor. It does not wire `infrastructure/terraform/versions.tf`, provision an
-identity or run AWS commands. The bootstrap root keeps local state;
+FD-7a has an independent root at `infrastructure/terraform-state/`. Its scope
+is the state bucket, its key, policies, version lifecycle and a backend
+descriptor. Main now declares a partial S3 backend in
+`infrastructure/terraform/versions.tf`; this is source wiring only, with no backend
+activation, identity provisioning or AWS operation performed by this change.
+The bootstrap root keeps separate local state;
 the synthetic environment cannot destroy it as part of its own teardown.
 
 ## Trust boundary
@@ -48,6 +50,84 @@ expiring eligible old versions; select the age knowingly and retain an independe
 approved state backup. [S3 expiration semantics](https://docs.aws.amazon.com/AmazonS3/latest/userguide/lifecycle-expire-general-considerations.html).
 Native state locking is concurrency coordination, not S3 Object Lock.
 
+## Main backend configuration (source only)
+
+Main requires Terraform >= 1.11, matching the standalone root; CI remains pinned to
+1.16.5. Native S3 locking was introduced in 1.10; 1.11 is the project's conservative
+floor, not the feature's introduction version.
+[HashiCorp changelog](https://github.com/hashicorp/terraform/blob/v1.10.0/CHANGELOG.md).
+
+`versions.tf` commits `encrypt = true` and `use_lockfile = true`. The example
+`infrastructure/terraform/backend.s3.tfbackend.example` supplies four placeholder
+strings only. During a separately approved activation, prepare the private copy
+`backend.s3.tfbackend` from the actual standalone `backend_config` output:
+
+| Descriptor field | Effective main-backend configuration |
+| --- | --- |
+| `bucket` | private file: exact bootstrap bucket |
+| `key` | private file: exact approved state key |
+| `region` | private file: exact bootstrap Region |
+| `kms_key_id` | private file: exact bootstrap KMS key ARN |
+| `encrypt` | `true` in `versions.tf` |
+| `use_lockfile` | `true` in `versions.tf` |
+
+Use top-level HCL attributes in the private file, with no enclosing block. Transcribe
+and privately compare the four strings against the descriptor; do not rename its JSON
+output as HCL. Do not include credentials, profiles, role assumptions, endpoints,
+workspace prefixes, DynamoDB settings or bypass flags. Both the live file and backup
+copies are gitignored; the placeholder example and provider locks remain trackable.
+Keep private files, cached backend metadata, state and saved plans on approved
+encrypted storage with restrictive permissions (`umask 077` before creating them).
+Gitignore is not custody or encryption evidence.
+
+Terraform merges backend files/CLI arguments over source settings. Before activation,
+reject unexpected `TF_CLI_ARGS*` overrides and extra `-backend-config` flags; review the
+four-field file and require the effective six values above to match the descriptor.
+Never print private config, cached metadata, state or credentials to logs/chat.
+The source guard protects the committed contract; it cannot validate a future private
+file or prevent CLI overrides. The bucket policy does not enforce lock acquisition:
+the client must retain native locking. [Configuration precedence](https://developer.hashicorp.com/terraform/language/backend).
+
+Only the `default` workspace is supported. Before any real init, check both the selected
+workspace/cache and any `TF_WORKSPACE` setting; stop if not default. A nondefault
+workspace uses a different state path outside this policy's contract. Synthetic and
+production must never share a state location. Another environment needs its own
+separately approved state/trust contract; do not broaden paths to make it work.
+[S3 workspace paths and locking](https://developer.hashicorp.com/terraform/language/backend/s3).
+
+### Initialization and migration gate
+
+Inventory local authoritative state, cached backend metadata and any existing remote
+state privately before init. This source change has not inspected AWS or proved that
+any target is empty. Unknown ownership, lineage, a conflicting target, wrong identity,
+wrong account/Region or a profile/key mismatch is a stop. Preserve a protected backup;
+do not discard an old state file because an earlier document described an empty stack.
+
+After the separate activation authorization and the gates below, an approved new-target
+session uses this command from the repository root (never the example file):
+
+```sh
+terraform -chdir=infrastructure/terraform init -input=false -backend-config=backend.s3.tfbackend
+```
+
+Real-backend init is an activation operation that can acquire locks/write state; it is
+not an offline connectivity probe. Existing state or cached backend changes require a
+separate migration decision first. Do not automatically add `-reconfigure` (which
+disregards the old backend without migrating), `-migrate-state`, `-force-copy` or
+force-unlock. [Initialization options](https://developer.hashicorp.com/terraform/cli/commands/init).
+
+If initialization, locking or permission checks fail, preserve private native errors
+and exit status, stop writers and investigate. Do not switch to local state, disable
+locking, weaken encryption or expand policies to bypass the refusal. Before activation,
+the source PR can be reverted normally. After activation, reverting code does not move
+or recover state: preserve version/lineage records and follow a separately approved
+recovery/migration procedure. No state deletion, bucket/key recreation or automatic
+teardown is a rollback for this wiring.
+
+CI still uses backend-disabled/read-only-provider-lock initialization and mocked tests
+for both roots. No workflow or deployment identity is added. Offline checks do not
+establish live permissions, locking, custody or recovery.
+
 ## Before any later activation
 
 1. Obtain separate live authorization and record the account, Region, named owner,
@@ -62,9 +142,9 @@ Native state locking is concurrency coordination, not S3 Object Lock.
    appear. An apply, backend migration or state change needs its own authorization.
 4. After separately approved creation, retain bucket/key identifiers and protected
    state custody records. Never infer permission success from a mocked plan.
-5. Wire the main backend in a separate change. Start with the default workspace,
-   correct key ARN and encryption/locking settings; this policy intentionally does
-   not authorize arbitrary workspace state paths.
+5. Review the source wiring and private configuration through the initialization gate
+   above. Confirm the effective six-field descriptor, default workspace, owner and
+   account/Region; this policy intentionally does not authorize arbitrary state paths.
 6. In the approved environment prove write/read, historical recovery, refusal to
    delete state, rejection of a second concurrent lock holder, lock release, wrong
    identity/path/key/header refusals and preservation through synthetic teardown.

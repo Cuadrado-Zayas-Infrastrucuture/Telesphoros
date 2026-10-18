@@ -44,6 +44,9 @@ test-results/
 *.tfstate.*
 *.tfvars
 !*.tfvars.example
+*.tfbackend
+*.tfbackend.*
+!*.tfbackend.example
 crash.log
 
 # Browser-test build output

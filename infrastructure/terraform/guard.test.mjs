@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import './backend.guard.test.mjs';
 import './api-compute.guard.test.mjs';
 import './api.guard.test.mjs';
 import './audit.guard.test.mjs';
