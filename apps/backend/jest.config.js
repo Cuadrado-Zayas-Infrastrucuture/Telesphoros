@@ -14,6 +14,8 @@ if (skipped.length > 0) process.stderr.write(`[jest] NOT RUNNING: ${skipped.join
 module.exports = {
   rootDir: '.',
   testEnvironment: 'node',
+  // Opt-in diagnostic observer; profile commands, selection and deadlines stay unchanged.
+  ...(process.env.OFFSITE_PHASE_TRACE_DIR ? { setupFilesAfterEnv: ['<rootDir>/../../.github/ci/offsite-phase-timings.cjs'] } : {}),
   // Service-backed suites share one PostgreSQL instance. Host CPU-count worker defaults
   // oversubscribe that service during concurrent migrations/restores/checkpoints. Keep
   // suites sequential; concurrency exercised inside a suite and all deadlines stay intact.
