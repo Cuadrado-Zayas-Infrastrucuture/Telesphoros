@@ -3,6 +3,18 @@
 Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Test application loopback listener repair (local, 2026-10-18)
+
+The real test helper now binds its persistent listener to `127.0.0.1`, matching
+Supertest's client address. A deterministic macOS reproduction showed that the
+previous wildcard IPv6 bind could share its port with another IPv4 listener and
+send the health request to that server, returning 404. A permanent regression
+first reproduces that failure, then proves exclusive port ownership and the first
+health response without retries. All eight existing health cases and the local
+PR #161 Terraform candidate remain intact. [Cause and verification scope](verification/test-app-loopback-listener.md).
+Fresh full-check evidence belongs to the external delivery report; hosted
+acceptance, publication and deployment are not granted by this local repair.
+
 ## Worker settlement fixture review (local, 2026-10-18)
 
 Review of draft PR #167 confirmed a fixture failure-path issue: a cleanup error
@@ -32,18 +44,6 @@ No selected full-suite skips or missing-service notices. Runtime, migrations,
 permissions, CI and deadlines are unchanged. PR #166 stays a separate draft;
 exact-head hosted CI for this fix remains a delivery gate. No AWS access,
 deployment or merge is included.
-
-## Test application loopback listener repair (local, 2026-10-18)
-
-The real test helper now binds its persistent listener to `127.0.0.1`, matching
-Supertest's client address. A deterministic macOS reproduction showed that the
-previous wildcard IPv6 bind could share its port with another IPv4 listener and
-send the health request to that server, returning 404. A permanent regression
-first reproduces that failure, then proves exclusive port ownership and the first
-health response without retries. All eight existing health cases and the local
-PR #161 Terraform candidate remain intact. [Cause and verification scope](verification/test-app-loopback-listener.md).
-Fresh full-check evidence belongs to the external delivery report; hosted
-acceptance, publication and deployment are not granted by this local repair.
 
 ## PR #161 current-main repair (local, 2026-10-18)
 
