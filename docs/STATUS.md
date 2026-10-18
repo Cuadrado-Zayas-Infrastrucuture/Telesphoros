@@ -3,6 +3,14 @@
 Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Documentation merge and main acceptance (#162, 2026-10-17)
+
+[PR #162](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/162) merged the reviewed two-file CI documentation update as [c18c503](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/commit/c18c50387573ac727596c070e1b4356fab83991e), whose tree matches published head 808147c. All earlier historical text was retained; application code, tests, profiles, dependencies and the shared service budget were unchanged.
+
+Automatic [post-merge main run 39085190419, attempt 1](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/actions/runs/39085190419) passed all six required checks and all ten jobs at the exact merge. Each backend profile accounted for 2,479 tests with its intentional skips; all 125 worker tests passed, including SIGTERM readiness/acknowledgement, drain and release. Six fixture lifecycle controls, including eight construction-failure cases, passed. Four bound completion receipts, twelve producer-file hashes and nine recovery reports were verified, and both all-profile recovery validators passed.
+
+All four service jobs passed deadline checks and stopped containers. The full service path took **14m38s**, leaving **15m22s** within the unchanged shared 30-minute budget; the joining job alone took **2m26s**. Actual hosted cancellation or expiry was not deliberately exercised. See the [#162 runbook record](ops/ci-cd.md#documentation-merge-and-post-merge-ci-162-2026-10-17) for exact counts, timing and limits. Acceptance applies to c18c503; separate feature candidates retain their own acceptance gates. Earlier #160/#159 and local-stage records below remain dated history; no deployment or clinical approval is granted.
+
 ## Fixture repair merged and verified (#160, 2026-10-17)
 
 [PR #160](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/160) merged the reviewed fixture repair as [22209af](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/commit/22209afa2e94bddef4926a0c5a61f1b81c8d9ec6), with the same tree as published head `85dbb89`. Automatic [post-merge main run 39081340588, attempt 1](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/actions/runs/39081340588) passed all six required checks (`verify`, `database-and-storage`, `browser`, `terraform`, `secret-scan`, `image`) and all ten jobs. Each complete backend profile accounted for 2,479 tests with its existing intentional skips; all 125 worker tests passed, including SIGTERM health/acknowledgement, drain and release.
