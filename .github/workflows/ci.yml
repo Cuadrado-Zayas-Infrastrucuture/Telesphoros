@@ -637,6 +637,8 @@ jobs:
           node scripts/workspace-build/prepare-service-tests.cjs
           BUDGET
       - name: "Tier 3: the whole API suite on PostgreSQL, uploading over the S3 protocol"
+        env:
+          OFFSITE_PHASE_TRACE_DIR: ${{ runner.temp }}/offsite-phase-timings
         run: |
           node .github/ci/service-evidence.mjs run postgres-s3 <<'PROFILE'
           set -o pipefail
@@ -667,6 +669,14 @@ jobs:
             tier*.log
             moto.log
           retention-days: 7
+      - name: Retain offsite phase timings
+        if: always() && steps.deadline.outputs.armed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: offsite-phase-timings-postgres-s3-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/offsite-phase-timings/offsite-phases.jsonl
+          retention-days: 7
+          if-no-files-found: error
       - name: Require completion within the shared deadline
         run: node .github/ci/service-budget.mjs check
 
