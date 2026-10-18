@@ -12,7 +12,10 @@ choice below is settled but not deployed. This page records the intended flow so
    a PR check; it never applies.
 3. **Apply only from `main`, only after a person approves** it in a protected GitHub *environment* (required reviewer).
    The apply role is a different, narrower role than the plan role. State lives in a remote S3 backend with locking and
-   encryption, which does not exist yet (`versions.tf` says so).
+    encryption. Main's partial S3 backend is source wiring only; actual bootstrap,
+    activation and live acceptance remain separate gates in [terraform-state.md](terraform-state.md).
+    That bootstrap uses one approved existing owner; this wiring creates no OIDC,
+    plan, apply or deployment role.
 4. **Application release** is a separate, later workflow that deploys a built artifact and runs the migrations
    (`db:migrate`) as the migrator role, never as the API's role.
 5. **Plans and apply output are kept only when a run fails**, for 7 days, and never contain secret values.

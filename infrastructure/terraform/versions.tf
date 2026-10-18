@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.6"
+  required_version = ">= 1.11"
 
   required_providers {
     aws = {
@@ -12,8 +12,12 @@ terraform {
     }
   }
 
-  # No backend is configured on purpose. Before the first apply, add a remote backend (S3 with
-  # locking, encrypted, access-restricted): the state holds resource identifiers and must be protected.
+  # Partial configuration only; activation needs the reviewed private backend file and
+  # separate authorization in docs/ops/terraform-state.md. CI keeps the backend disabled.
+  backend "s3" {
+    encrypt      = true
+    use_lockfile = true
+  }
 }
 
 locals {

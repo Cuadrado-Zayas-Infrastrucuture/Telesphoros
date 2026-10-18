@@ -1,12 +1,12 @@
 # Terraform: database and storage (NOT APPLIED)
 
-> **Status: written and validated, never applied.**
+> **Status: source wiring only; backend activation and live acceptance remain unverified.**
 > Do **not** run `terraform apply` until **all** of these are true:
 > 1. The AWS **BAA is executed** for the target account (AWS Artifact), and you hold the signed copy.
 > 2. A **remote state backend** is configured (encrypted S3 bucket with locking, restricted access).
 > 3. A human has reviewed `terraform plan` output line by line.
 >
-> Until then the product runs on synthetic data only, and nothing here exists in AWS.
+> Until then the product runs on synthetic data only. This wiring change creates no AWS resources.
 
 ## What it would create
 
@@ -34,10 +34,17 @@ creating the existing database/auth resources. Read the [hosting/DNS checklist](
 
 ## How to use it later
 
+Requires Terraform >= 1.11 (CI pins 1.16.5). First complete the separately approved
+[backend activation gates](../../docs/ops/terraform-state.md#main-backend-configuration-source-only):
+review the owner, workspace, existing state and private `backend.s3.tfbackend` file.
+Its four strings come from the standalone bootstrap descriptor; encryption and native
+locking are true in `versions.tf`. The commands below are for that later authorized
+session, not offline verification. Never initialize against the placeholder example.
+
 ```bash
 cd infrastructure/terraform
 cp example.tfvars.example production.tfvars   # fill in; *.tfvars is gitignored
-terraform init
+terraform init -input=false -backend-config=backend.s3.tfbackend
 terraform validate && terraform plan -var-file=production.tfvars   # review!
 terraform apply -var-file=production.tfvars                        # only after the three conditions above
 ```
@@ -62,11 +69,14 @@ one cannot slip in. The synthetic profile holds **synthetic data only** and is n
 
 ### Running a synthetic rehearsal and destroying it
 
+Complete the same backend activation gates first. Use only the approved synthetic
+environment's state key; never reuse production state or select another workspace.
+
 ```bash
 cd infrastructure/terraform
 cp example.tfvars.example synthetic.tfvars   # *.tfvars is gitignored; set deployment_profile = "synthetic", environment = "staging", and leave vpc_id out
 # the staged FD-7 environment has its own example and review page: synthetic-staging.tfvars.example and docs/ops/staging-plan-review.md
-terraform init
+terraform init -input=false -backend-config=backend.s3.tfbackend
 terraform plan -var-file=synthetic.tfvars    # review it line by line, as for any plan
 # apply and destroy are the FD-7 rehearsal; they need the gates in the status page (a founder-run session, a budget alert, a plan for the free window)
 terraform destroy -var-file=synthetic.tfvars
@@ -77,10 +87,16 @@ than a day old can only be removed with the bypass header, and `force_destroy` u
 verified**; FD-7 tests it with a real destroy, and if it does not, the runbook gains a short emptying step. Things a destroy can leave behind: the RDS log
 groups that AWS creates by itself (`/aws/rds/instance/...`) (check the console after the first real destroy).
 
-**Resource addresses changed.** The off-site resources are now counted (`aws_kms_key.backup[0]`, `aws_s3_bucket.backups[0]`, and so on), as are the two API execution
-policy documents. Nothing has ever been applied, so there is no state to move and no `moved` blocks are needed; if you hold a local test state or an old saved plan from before FD-3, discard it.
+**Resource addresses changed in FD-3.** The off-site resources are counted (`aws_kms_key.backup[0]`, `aws_s3_bucket.backups[0]`, and so on), as are the two API execution
+policy documents. Do not reuse an old saved plan. If you hold any earlier local state,
+preserve it and establish ownership/lineage before initialization; do not discard
+potentially authoritative state. A state migration needs its own review and authorization.
 
 ### What `terraform test` proves, and what it does not
+
+Offline checks use `terraform init -backend=false -input=false -lockfile=readonly`,
+then `terraform validate` and `terraform test -no-color`, as CI does. Backend-disabled
+initialization is for verification only; it does not activate remote state or permit apply.
 
 `terraform test` (CI runs it in the `terraform` job; no credentials) plans the whole root offline under each profile with every provider mocked: that the default variables plan,
 what each profile creates and switches off, and that the refusals refuse (`profiles.tftest.hcl`). It proves the **shape**. It does **not** prove that AWS accepts it (quotas, the

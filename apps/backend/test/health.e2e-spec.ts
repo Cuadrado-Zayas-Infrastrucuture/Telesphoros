@@ -66,6 +66,41 @@ describe('health (liveness) and ready (readiness)', () => {
     }
   });
 
+  it.each([
+    { label: 'generated request ID', suppliedId: undefined },
+    { label: 'request ID contains 5432', suppliedId: 'e124ce6d-5432-4b25-ad80-7dbeb5e28f52' },
+  ])('ready returns 503 while a dependency is down, but health stays 200 ($label)', async ({ suppliedId }) => {
+    const app = await createTestApp({
+      readinessChecks: [
+        { name: 'database', check: async () => { throw new Error('connection refused to db.internal:5432'); } },
+        { name: 'cache', check: async () => undefined },
+      ],
+    });
+    try {
+      const probe = request(app.getHttpServer()).get('/api/v1/ready');
+      if (suppliedId !== undefined) probe.set('X-Request-Id', suppliedId);
+      const res = await probe.expect(503);
+      expect(errorResponseSchema.safeParse(res.body).success).toBe(true);
+      const { requestId, ...diagnostics } = res.body.error;
+      expect(requestId).toBe(res.headers['x-request-id']);
+      if (suppliedId !== undefined) expect(requestId).toBe(suppliedId);
+      else expect(requestId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      expect(res.body).toEqual({
+        error: {
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'The service is not ready.',
+          details: [{ field: 'database', message: 'unavailable' }],
+          requestId,
+        },
+      });
+      // Correlation data may contain the port digits; every diagnostic field must stay sanitized.
+      expect(JSON.stringify(diagnostics)).not.toMatch(/db\.internal|5432|refused/);
+      await request(app.getHttpServer()).get('/api/v1/health').expect(200);
+    } finally {
+      await app.close();
+    }
+  });
+
   it('ready fails (instead of hanging) when a dependency never answers', async () => {
     const app = await createTestApp({
       readinessChecks: [{ name: 'slow', check: () => new Promise<void>(() => undefined) }],
