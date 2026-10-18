@@ -168,10 +168,12 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
     app = moduleRef.createNestApplication<NestExpressApplication>();
     closeApplication = app.close.bind(app);
     configureApp(app, { corsOrigins: options.corsOrigins, trustProxyHops: options.trustProxyHops });
-    // Listen once on a free port. Otherwise supertest starts/stops the server per request, and two
-    // requests built in the same expression race for it.
+    // Listen once on the client's loopback address. On macOS a wildcard IPv6
+    // bind can share its port with another process's IPv4 loopback listener,
+    // sending supertest's requests to that process instead of this application.
+    // Keeping the listener open also avoids per-request start/stop races.
     options.signal?.throwIfAborted();
-    await app.listen(0);
+    await app.listen(0, '127.0.0.1');
     options.signal?.throwIfAborted();
 
     const readyApp = app;
