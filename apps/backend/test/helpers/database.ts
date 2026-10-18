@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { Client } from 'pg';
+import { disposeFixtures, onceFixtureCleanup } from './fixture-cleanup';
 import { migrateUp } from '../../src/db/migrator';
 
 /** Admin (superuser) URL of a disposable PostgreSQL. Start one with scripts/dev-postgres.sh. */
@@ -65,74 +66,77 @@ export interface EphemeralDatabase {
  * A fresh, fully migrated database on the real test cluster. Roles are cluster-wide, so they are
  * created once under an advisory lock (parallel Jest workers would otherwise race to create them).
  */
-export async function createEphemeralDatabase(options: { migrate?: boolean } = {}): Promise<EphemeralDatabase> {
+export async function createEphemeralDatabase(options: { migrate?: boolean; signal?: AbortSignal } = {}): Promise<EphemeralDatabase> {
   const base = adminUrl();
   const name = `test_${randomBytes(6).toString('hex')}`;
-  const admin = new Client({ connectionString: base });
-  await admin.connect();
+  let created = false;
+  const drop = onceFixtureCleanup(async () => {
+    if (created) await withAdmin(base, async client => {
+      await client.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+    });
+  });
   try {
-    await admin.query('SELECT pg_advisory_lock($1)', [ROLE_LOCK]);
-    await admin.query(`DO $$ BEGIN
-      IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'telesphoros_app') THEN
-        CREATE ROLE telesphoros_app NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
-      END IF;
-      IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${APP_LOGIN}') THEN
-        CREATE ROLE ${APP_LOGIN} LOGIN PASSWORD '${APP_LOGIN_PASSWORD}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS IN ROLE telesphoros_app;
-      END IF;
-    END $$`);
-    for (const role of PRIVILEGE_ROLES) {
-      await admin.query(`DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${role}') THEN CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS; END IF; END $$`);
-    }
-    for (const [login, group] of [[VERIFIER_LOGIN, 'telesphoros_ledger_verifier'], [OPERATOR_LOGIN, 'telesphoros_ledger_operator'], [AUDITOR_LOGIN, 'telesphoros_security_auditor'], [WORKER_LOGIN, 'telesphoros_worker']] as const) {
-      await admin.query(`DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${login}') THEN
-        CREATE ROLE ${login} LOGIN PASSWORD '${APP_LOGIN_PASSWORD}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS IN ROLE ${group}; END IF; END $$`);
-    }
-    await admin.query('SELECT pg_advisory_unlock($1)', [ROLE_LOCK]);
-    await admin.query(`CREATE DATABASE ${name}`);
-  } finally {
-    await admin.end();
-  }
-
-  const url = withDatabase(base, name);
-  if (options.migrate !== false) {
-    const migrator = new Client({ connectionString: url });
-    await migrator.connect();
-    try {
-      await migrateUp(migrator);
-    } finally {
-      await migrator.end();
-    }
-  }
-
-  return {
-    name,
-    adminUrl: url,
-    appUrl: withDatabase(base, name, { user: APP_LOGIN, password: APP_LOGIN_PASSWORD }),
-    verifierUrl: withDatabase(base, name, { user: VERIFIER_LOGIN, password: APP_LOGIN_PASSWORD }),
-    operatorUrl: withDatabase(base, name, { user: OPERATOR_LOGIN, password: APP_LOGIN_PASSWORD }),
-    auditorUrl: withDatabase(base, name, { user: AUDITOR_LOGIN, password: APP_LOGIN_PASSWORD }),
-    workerUrl: withDatabase(base, name, { user: WORKER_LOGIN, password: APP_LOGIN_PASSWORD }),
-    async drop() {
-      const dropper = new Client({ connectionString: base });
-      await dropper.connect();
-      try {
-        // WITH (FORCE) disconnects stragglers: pool.end() can resolve before the server has dropped the backend.
-        await dropper.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
-      } finally {
-        await dropper.end();
+    options.signal?.throwIfAborted();
+    await withAdmin(base, async admin => {
+      options.signal?.throwIfAborted();
+      await admin.query('SELECT pg_advisory_lock($1)', [ROLE_LOCK]);
+      await admin.query(`DO $$ BEGIN
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'telesphoros_app') THEN
+          CREATE ROLE telesphoros_app NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+        END IF;
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${APP_LOGIN}') THEN
+          CREATE ROLE ${APP_LOGIN} LOGIN PASSWORD '${APP_LOGIN_PASSWORD}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS IN ROLE telesphoros_app;
+        END IF;
+      END $$`);
+      for (const role of PRIVILEGE_ROLES) {
+        await admin.query(`DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${role}') THEN CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS; END IF; END $$`);
       }
-    },
-  };
+      for (const [login, group] of [[VERIFIER_LOGIN, 'telesphoros_ledger_verifier'], [OPERATOR_LOGIN, 'telesphoros_ledger_operator'], [AUDITOR_LOGIN, 'telesphoros_security_auditor'], [WORKER_LOGIN, 'telesphoros_worker']] as const) {
+        await admin.query(`DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${login}') THEN
+          CREATE ROLE ${login} LOGIN PASSWORD '${APP_LOGIN_PASSWORD}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS IN ROLE ${group}; END IF; END $$`);
+      }
+      await admin.query('SELECT pg_advisory_unlock($1)', [ROLE_LOCK]);
+      await admin.query(`CREATE DATABASE ${name}`);
+      created = true;
+    });
+    options.signal?.throwIfAborted();
+    const url = withDatabase(base, name);
+    if (options.migrate !== false) {
+      await withAdmin(url, async migrator => {
+        options.signal?.throwIfAborted();
+        await migrateUp(migrator);
+        options.signal?.throwIfAborted();
+      });
+    }
+
+    return {
+      name,
+      adminUrl: url,
+      appUrl: withDatabase(base, name, { user: APP_LOGIN, password: APP_LOGIN_PASSWORD }),
+      verifierUrl: withDatabase(base, name, { user: VERIFIER_LOGIN, password: APP_LOGIN_PASSWORD }),
+      operatorUrl: withDatabase(base, name, { user: OPERATOR_LOGIN, password: APP_LOGIN_PASSWORD }),
+      auditorUrl: withDatabase(base, name, { user: AUDITOR_LOGIN, password: APP_LOGIN_PASSWORD }),
+      workerUrl: withDatabase(base, name, { user: WORKER_LOGIN, password: APP_LOGIN_PASSWORD }),
+      drop,
+    };
+  } catch (error) {
+    await disposeFixtures([drop], [error]);
+    throw error;
+  }
 }
 
 /** Runs `work` on a short-lived admin connection to the given database. */
 export async function withAdmin<T>(url: string, work: (client: Client) => Promise<T>): Promise<T> {
   const client = new Client({ connectionString: url });
-  await client.connect();
+  const errors: unknown[] = [];
   try {
+    await client.connect();
     return await work(client);
+  } catch (error) {
+    errors.push(error);
+    throw error;
   } finally {
-    await client.end();
+    await disposeFixtures([() => client.end()], errors);
   }
 }
 

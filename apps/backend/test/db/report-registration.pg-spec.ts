@@ -128,15 +128,17 @@ it('upgrades legacy rows unchanged and guards populated rollback before explicit
 });
 
 describe('bounded migration lock contention', () => {
+  const cancellation = new AbortController();
   let disposable: Promise<EphemeralDatabase>;
   let checking: Promise<void> | undefined;
   let preparing: Promise<void> | undefined;
   // Full schema creation and rollback are fixture preparation, not the bounded lock check.
   // Each hook and the test retain Jest's default deadline; SQL lock_timeout stays at two seconds.
-  beforeAll(async () => { disposable = createEphemeralDatabase(); await disposable; });
+  beforeAll(async () => { disposable = createEphemeralDatabase({ signal: cancellation.signal }); await disposable; });
   beforeAll(() => {
     preparing = (async () => {
       const pg = await disposable;
+      cancellation.signal.throwIfAborted();
       await withAdmin(pg.adminUrl, async c => {
         await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
         await migrateDown(c, 14); // 0021 and 0020 are audit migrations
@@ -145,6 +147,7 @@ describe('bounded migration lock contention', () => {
     return preparing;
   });
   afterAll(async () => {
+    cancellation.abort(new Error('Migration fixture scope ended'));
     // A timed-out test is still running. Drain its finally block before Jest tears down imports.
     try { await preparing; }
     finally {
