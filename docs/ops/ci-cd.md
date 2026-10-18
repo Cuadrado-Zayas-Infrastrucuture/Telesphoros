@@ -21,6 +21,35 @@ runs on `main` are never cancelled. The workflow has read-only repository permis
 
 A green run is evidence about the code at that commit. It is not evidence about AWS: Terraform has never been applied.
 
+### Fixture repair acceptance and superseded draft (#160, 2026-10-17)
+
+[PR #160](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/160) merged as [22209afa2e94bddef4926a0c5a61f1b81c8d9ec6](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/commit/22209afa2e94bddef4926a0c5a61f1b81c8d9ec6), whose tree matches reviewed/published head `85dbb89`. The repair retains each case's pending fixture ownership, fences cancelled setup and unwinds failed construction while preserving original and cleanup errors. Existing assertions, profiles, hook deadlines, dependency pins and the shared service budget remain unchanged by the repair.
+
+Automatic [main run 39081340588, attempt 1](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/actions/runs/39081340588) passed all six required checks named above and all ten jobs. Head and tested checkout both identify the exact main merge; commit check-run results match the required GitHub Actions app and this main run. The successful [PR run 39080466424](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/actions/runs/39080466424) is separate pre-merge evidence.
+
+| Complete #160 main-run profile | Passed / skipped / failed tests | Passed / total suites | Whole job |
+| --- | --- | --- | --- |
+| memory, including database/S3 specs | 2,226 / 253 / 0 | 158 / 169 | 8m58s |
+| PostgreSQL | 2,458 / 21 / 0 | 167 / 169 | 11m08s |
+| PostgreSQL + S3 | 2,478 / 1 / 0 | 169 / 169 | 12m31s |
+| worker in the joining gate | 125 / 0 / 0 | 13 / 13 | 2m36s joining job; 65.296 s producer |
+
+Each backend profile accounts for 2,479 tests / 169 suites with unchanged intentional skips and no missing required service tier. All six fixture lifecycle parent controls passed, including eight real construction-failure cases. Expected timeout children retained failure and exited naturally; parent controls checked database/session reclamation and preservation of an unrelated fixture. All 125 worker tests passed, including SIGTERM readiness, held-signal shutdown acknowledgement, drain without new claims, and release/takeover of unfinished work. The hosted CI configuration suite passed **137 controls, zero failures/skips**.
+
+Four completion receipts bind all three profiles and worker to this repository, run, attempt, head and checkout. All twelve producer-file hashes match; all nine recovery aggregates pass the existing validators and match the gate's collected copies. Both hosted all-profile F2/F3 validators, final worker/unchanged-evidence acceptance and all four deadline checks passed. Normal cleanup is evidenced by the lifecycle inventory controls and successful container-stop steps in all four service jobs.
+
+All receipts share the original **1,800,000 ms** run-attempt budget; setup and the joining job receive no fresh window. Times show Puerto Rico time (UTC−04:00) and the producer's UTC timestamps.
+
+| #160 main-run service budget event | Puerto Rico, 2026-10-17 | UTC, 2026-10-18 |
+| --- | --- | --- |
+| Original run-attempt start | 20:03:23 | 00:03:23 |
+| Shared deadline | 20:33:23 | 00:33:23 |
+| Last service job complete, including teardown | 20:18:35 | 00:18:35 |
+
+The full service path took **15m12s**, leaving **14m48s**; the joining job alone took **2m36s** and is not the end-to-end measurement. **Evidence limits:** this successful run did not trigger actual hosted action cancellation or the 30-minute expiry boundary. Normal teardown and synthetic fixture controls do not establish an independent post-VM process census. These results apply to merged `22209af`; they grant no AWS deployment or clinical approval.
+
+Draft [#159](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/159) was closed unmerged as superseded by #160 at **20:29:22 Puerto Rico time on 2026-10-17**, with a [comment linking the successful post-merge CI](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/159#issuecomment-6243732928). Its branch `fix/fixture-scope-main727-cleanup` remains at `1647e19bc66a3b2aa2126aa4039b29c7930932e5`. The eight files/modes and full patch match #160/main; the original #159 commit is not a main ancestor, so it was closed as superseded rather than merged. Its original failed CI remains a failure. The #150/#151 acceptance and earlier local-stage records below remain unchanged as dated history.
+
 ### Documentation merge and post-merge CI (#151, 2026-10-17)
 
 [PR #151](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/151) merged as [c12c47a7e3865ffec7cdbaa7844aafa4b003041b](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/commit/c12c47a7e3865ffec7cdbaa7844aafa4b003041b), whose tree matches reviewed documentation head `2f879fa`. Its two-file documentation change preserves #150's application/CI snapshot, test files, profile commands, cleanup and shared 30-minute budget. The earlier #150 acceptance and superseded-draft record below remains unchanged.
