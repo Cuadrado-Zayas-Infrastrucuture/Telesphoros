@@ -61,6 +61,25 @@ describe('readiness against a real database', () => {
     expect(res.body).toEqual({ status: 'ready', checks: { database: 'up', migrations: 'up' } });
   });
 
+  it('stays ready while the database is ahead of the code by an expand migration, and refuses once it is a breaking one', async () => {
+    const db = await createEphemeralDatabase();
+    dbs.push(db);
+    const app = await boot(db);
+    const api = () => request(app.getHttpServer());
+    const last = (await withAdmin(db.adminUrl, async c => (await c.query<{ version: string }>('SELECT max(version) AS version FROM schema_migrations')).rows[0]!.version));
+    const newer = String(Number(last) + 1).padStart(4, '0');
+    await withAdmin(db.adminUrl, c => c.query(
+      `INSERT INTO schema_migrations (version, name, checksum, compat) VALUES ($1, 't_newer_expand', 'unknown-to-this-code', 'expand')`, [newer]));
+    const ready = await api().get('/api/v1/ready').expect(200);
+    expect(ready.body).toEqual({ status: 'ready', checks: { database: 'up', migrations: 'up' } }); // the public body does not change
+    await withAdmin(db.adminUrl, c => c.query(`UPDATE schema_migrations SET compat = 'breaking' WHERE version = $1`, [newer]));
+    const refused = await api().get('/api/v1/ready').expect(503);
+    expect(refused.body.error.details).toEqual([{ field: 'migrations', message: 'unavailable' }]);
+    expect(refused.text).not.toMatch(/t_newer_expand|unknown-to-this-code|schema_migrations|breaking|expand/);
+    await withAdmin(db.adminUrl, c => c.query('DELETE FROM schema_migrations WHERE version = $1', [newer]));
+    await api().get('/api/v1/ready').expect(200);
+  });
+
   it.each(['pending suffix', 'history gap'] as const)('refuses a %s and becomes ready after repair', async fault => {
     const db = await createEphemeralDatabase();
     dbs.push(db);
