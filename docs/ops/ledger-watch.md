@@ -8,7 +8,7 @@ applied in AWS, and nothing here is connected to a real alarm yet (see "The alar
 
 | When | What | If it finds damage |
 | --- | --- | --- |
-| **At start** | Reads the open incidents, then checks every tenant that is not already contained from its latest checkpoint (a chain of at most 50 000 events is walked in full instead), within one total budget | A **new** failure is contained and recorded, and **production refuses to start** (the replacement start finds it recorded and goes on). Other environments log it and carry on |
+| **At start** | Reads the open incidents, then checks every tenant that is not already contained from its latest checkpoint within one total budget (a tenant with no checkpoint is walked from the start, which that budget must cover). Then, within **half as much time again**, walks in full each chain of at most 50 000 events, as many as fit; the rest are checked from their checkpoint only and left to the walk right after start (the log says how many: `ledger-startup-full-walks-deferred`) | A **new** failure in either step is contained and recorded, and **production refuses to start** (the replacement start finds it recorded and goes on). A check that cannot finish, in the first step, also refuses a production start. A full walk that does not fit never does. Other environments log and carry on |
 | **Right after start** | One tenant at a time, walks the whole chain and records a `full` checkpoint when it is `ok` (a contained tenant too: that checkpoint is the evidence for clearing) | Contains the tenant |
 | **On a timer** (default every 24 h, jittered 10%) | The same full walk | Contains the tenant |
 | **On a shorter timer** (every 60 s) | Reads the open incidents again | Mirrors them (a sibling task's finding, a person's clearance) |
@@ -47,7 +47,7 @@ that reaches a caller.
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `LEDGER_VERIFIER_DATABASE_URL` | none | The verifier's **own** login (a member of `telesphoros_ledger_verifier` and of nothing else, never the application's: `docs/ops/ledger-roles.md`). **Required in production and when `LAB_REPORT_PIPELINE=enabled`**; if it is not set elsewhere the watch is off and `/ready` has no `ledger` entry. Refused if it equals `DATABASE_URL` or the store is not PostgreSQL |
-| `LEDGER_STARTUP_BUDGET_MS` | 20000 | The checks at start may take this long **in total**, across every tenant (1 000 to 300 000) |
+| `LEDGER_STARTUP_BUDGET_MS` | 20000 | The checkpoint checks at start may take this long **in total**, across every tenant (1 000 to 300 000). Full walks of small chains get half of it again, so the whole check at start takes at most one and a half times this |
 | `LEDGER_FULL_VERIFY_INTERVAL_HOURS` | 24 | Time between full walks (0 to 168). 0 turns the timer off; the walk after start still runs |
 
 Validation errors name variables, never values.
@@ -94,8 +94,7 @@ balancer keeps sending traffic to a task that is ready, and the database refuses
    The database refuses with "No full verification that started after the incident has passed" until the evidence exists. For a global hold the same
    call needs only the basis. Every task notices within a minute; none needs a restart. The clearance is a row of its own (who, when, why, and the
    checkpoint that proved it), and nothing is ever deleted.
-8. An incomplete check at start in production (`... : incomplete`) is not damage: the chain is larger than the budget allows on a cold start (no
-   checkpoint yet), or the verifier login or the database could not be reached. Look for `ledger-verification-error` (the class and database code
+8. An incomplete check at start in production (`... : incomplete`) is not damage: a chain with no checkpoint yet is larger than the budget allows on a cold start, or the verifier login or the database could not be reached. (Many small tenants no longer cause this: their full walks are deferred, not required.) Look for `ledger-verification-error` (the class and database code
    only). For size, raise `LEDGER_STARTUP_BUDGET_MS` once (up to 300 000); after the first background walk there is a checkpoint and starts are fast.
 9. A damage that cannot be repaired in place (the ledger and its record tables are append-only, even for the owner) means recovering that tenant's
    data from a verified backup; clearing needs the full walk to pass on whatever is then in the database.
@@ -132,7 +131,7 @@ The cost is linear, about 0.1 ms per event (10 000 events a second). The lightes
 
 What the defaults rest on:
 
-- **Walk in full at start up to 50 000 events** (about 5 s): cheap enough to do on every start, and stronger than trusting a checkpoint.
+- **Walk in full at start up to 50 000 events** (about 5 s each), **within half the start budget**: stronger than trusting a checkpoint, and bounded. Before this limit existed the walks shared the one 20 s budget, so tenants whose small chains summed past roughly 200 000 events made every production start fail with `incomplete`. What does not fit is deferred to the walk that begins right after start, and a failure found there contains the tenant as any other finding does. The trade is a short window in which such a chain has been checked from its checkpoint only, which is the check a start relied on before this slice for every larger chain.
 - **Start budget 20 s**: covers a cold start (no checkpoint yet) of roughly 190 000 events on this machine. A database across a network adds a round
   trip per 200-event batch, so allow a safety factor of three, about 60 000 events; far above a pilot's size. If production refuses to start with
   `incomplete`, raise `LEDGER_STARTUP_BUDGET_MS` once (the limit is 300 000, about 1.5 million events here); the first background walk then records a

@@ -61,6 +61,10 @@ class FakeVerifier implements VerifierPort {
     this.closed = true;
   }
   get tail() { return this.calls.filter((c) => c.options.mode === 'tail'); }
+  /** The checkpoint checks that decide the start: tail mode, no full-walk threshold. */
+  get checkpointChecks() { return this.tail.filter((c) => c.options.fullWalkAtOrBelow === undefined); }
+  /** The strengthening full walks of small chains at start: tail mode WITH the full-walk threshold. */
+  get startFullWalks() { return this.tail.filter((c) => c.options.fullWalkAtOrBelow !== undefined); }
   get full() { return this.calls.filter((c) => c.options.mode === 'full'); }
 }
 
@@ -117,14 +121,17 @@ describe('LedgerMonitor: with no verifier login', () => {
 });
 
 describe('LedgerMonitor: the check at start', () => {
-  it('walks each tenant from its checkpoint, passes the budget and the full-walk threshold on, and then reports ready (verifying, then up)', async () => {
+  it('checks each tenant from its checkpoint within the budget, then walks small chains in full within half of it, and then reports ready (verifying, then up)', async () => {
     const verifier = new FakeVerifier(['a', 'b']);
     const { monitor, status } = build(verifier);
     await monitor.onApplicationBootstrap();
-    expect(verifier.tail.map((c) => c.tenantId)).toEqual(['a', 'b']);
-    expect(verifier.tail[0]!.options).toMatchObject({ mode: 'tail', fullWalkAtOrBelow: 50_000 });
-    expect(verifier.tail[0]!.options.budgetMs).toBeLessThanOrEqual(20_000);
-    expect(verifier.tail[0]!.options.recordCheckpoint).toBeUndefined(); // the start check writes nothing
+    expect(verifier.checkpointChecks.map((c) => c.tenantId)).toEqual(['a', 'b']);
+    expect(verifier.checkpointChecks[0]!.options).toMatchObject({ mode: 'tail' });
+    expect(verifier.checkpointChecks[0]!.options.budgetMs).toBeLessThanOrEqual(20_000);
+    expect(verifier.startFullWalks.map((c) => c.tenantId)).toEqual(['a', 'b']);
+    expect(verifier.startFullWalks[0]!.options).toMatchObject({ mode: 'tail', fullWalkAtOrBelow: 50_000 });
+    expect(verifier.startFullWalks[0]!.options.budgetMs).toBeLessThanOrEqual(10_000); // half the start budget
+    expect(verifier.tail.every((c) => c.options.recordCheckpoint === undefined)).toBe(true); // the start check writes nothing
     expect(status.tailState).toBe('ok');
     await monitor.idle();
     expect(status.readiness()).toBe('up');
@@ -219,6 +226,112 @@ describe('LedgerMonitor: the check at start', () => {
       expect(status.compromised).toBeNull();
       await monitor.onModuleDestroy();
     });
+  });
+});
+
+describe('LedgerMonitor: full walks at start', () => {
+  /** A fake clock the fake verifier advances: a checkpoint check costs `tailMs`, a full walk of a small chain `fullMs`. A walk given less time than it costs is incomplete. */
+  function timed(tenants: string[], tailMs: number, fullMs: number, extra?: (tenantId: string, options: VerifyOptions) => VerifyResult | undefined) {
+    let clock = 1_000_000;
+    jest.spyOn(Date, 'now').mockImplementation(() => clock);
+    return new FakeVerifier(tenants, (tenantId, options) => {
+      const preset = extra?.(tenantId, options);
+      if (preset) return preset;
+      const full = options.fullWalkAtOrBelow !== undefined;
+      const cost = full ? fullMs : tailMs;
+      if (options.budgetMs !== undefined && options.budgetMs < cost) {
+        clock += options.budgetMs;
+        return outcome(tenantId, { status: 'incomplete', mode: full ? 'full' : 'tail' });
+      }
+      clock += cost;
+      return outcome(tenantId, { mode: full ? 'full' : 'tail' });
+    });
+  }
+
+  it('does not refuse a production start when the full walks of many small chains do not fit: it checks them from their checkpoints, says how many are left, and the background pass walks them all', async () => {
+    const tenants = Array.from({ length: 10 }, (_, i) => `t${i}`);
+    const verifier = timed(tenants, 10, 6_000); // ten small chains: 60 s of full walks against a 20 s budget (the old wall)
+    const { monitor, status } = build(verifier, { production: true });
+    await expect(monitor.onApplicationBootstrap()).resolves.toBeUndefined();
+    expect(status.tailState).toBe('ok');
+    const line = warnings.mock.calls.flat().find((c) => c?.event === 'ledger-startup-full-walks-deferred');
+    expect(line).toMatchObject({ fullWalks: 1, deferred: 9 }); // the 10 s allowance: one whole walk, the second cut short, the rest not started
+    expect(JSON.stringify(warnings.mock.calls)).not.toContain('"t0"'); // counts only, no tenant names
+    await monitor.idle();
+    expect(verifier.full.map((c) => c.tenantId)).toEqual(tenants); // the background pass walks every tenant in full
+    await monitor.onModuleDestroy();
+  });
+
+  it('control: when everything fits, no walk is deferred and nothing is logged about it', async () => {
+    const verifier = timed(['a', 'b', 'c'], 10, 2_000);
+    const { monitor, status } = build(verifier, { production: true });
+    await monitor.onApplicationBootstrap();
+    expect(status.tailState).toBe('ok');
+    expect(verifier.startFullWalks).toHaveLength(3);
+    expect(warnings.mock.calls.flat().some((c) => c?.event === 'ledger-startup-full-walks-deferred')).toBe(false);
+    await monitor.idle();
+    await monitor.onModuleDestroy();
+  });
+
+  it('gives the full walks half the start budget from when they begin, whatever the checkpoint checks used of theirs', async () => {
+    const verifier = timed(['a', 'b'], 9_000, 1_000); // checkpoint checks use 18 of the 20 s
+    const { monitor } = build(verifier, { production: true });
+    await monitor.onApplicationBootstrap();
+    expect(verifier.checkpointChecks.map((c) => c.options.budgetMs)).toEqual([20_000, 11_000]);
+    expect(verifier.startFullWalks.map((c) => c.options.budgetMs)).toEqual([10_000, 9_000]); // a separate 10 s, not the 2 s that were left
+    await monitor.idle();
+    await monitor.onModuleDestroy();
+    const halved = timed(['a'], 10, 10);
+    const small = build(halved, { startupBudgetMs: 8_000 });
+    await small.monitor.onApplicationBootstrap();
+    expect(halved.startFullWalks[0]!.options.budgetMs).toBe(4_000);
+    await small.monitor.idle();
+    await small.monitor.onModuleDestroy();
+  });
+
+  it('still refuses a production start when a small chain fails its full walk, records it first, and names no tenant', async () => {
+    const verifier = timed(['tenant-secret-name'], 10, 100, (tenantId, options) => (options.fullWalkAtOrBelow !== undefined ? failed(tenantId) : undefined));
+    const { monitor, status } = build(verifier, { production: true });
+    const error = await monitor.onApplicationBootstrap().catch((e: unknown) => e);
+    expect((error as Error).message).toMatch(/failed.*payload-mismatch at sequence 9/);
+    expect((error as Error).message).not.toContain('tenant-secret-name');
+    expect(status.tailState).toBe('failed');
+    expect(verifier.recorded).toEqual([{ tenantId: 'tenant-secret-name', kind: 'payload-mismatch', seq: '9', source: 'startup' }]);
+    expect(verifier.full).toEqual([]); // nothing runs in the background after a refused start
+  });
+
+  it('does not start the full walks when a checkpoint check already failed (the start is refused or the tenant contained)', async () => {
+    const verifier = timed(['a', 'b'], 10, 100, (tenantId, options) => (tenantId === 'a' && options.fullWalkAtOrBelow === undefined ? failed(tenantId) : undefined));
+    const { monitor } = build(verifier); // not production: it carries on
+    await monitor.onApplicationBootstrap();
+    expect(verifier.startFullWalks).toEqual([]);
+    await monitor.idle();
+    await monitor.onModuleDestroy();
+  });
+
+  it('still refuses a production start when a checkpoint check cannot finish, and a deferred full walk is never mistaken for that', async () => {
+    const verifier = timed(['a'], 25_000, 100); // the checkpoint check itself is longer than the whole budget
+    await expect(build(verifier, { production: true }).monitor.onApplicationBootstrap()).rejects.toThrow(/incomplete/);
+    expect(verifier.startFullWalks).toEqual([]);
+  });
+
+  it('does not walk again, in full, a chain that the checkpoint check already walked in full (no checkpoint yet)', async () => {
+    const verifier = timed(['a', 'b'], 10, 100, (tenantId, options) => (tenantId === 'a' && options.fullWalkAtOrBelow === undefined ? outcome(tenantId, { mode: 'full' }) : undefined));
+    const { monitor } = build(verifier);
+    await monitor.onApplicationBootstrap();
+    expect(verifier.startFullWalks.map((c) => c.tenantId)).toEqual(['b']);
+    await monitor.idle();
+    await monitor.onModuleDestroy();
+  });
+
+  it('does not walk a contained tenant at start (its full walk goes on in the background)', async () => {
+    const verifier = timed(['a', 'b', 'c'], 10, 6_000);
+    verifier.incidents = [{ id: 'i-a', scope: 'tenant', tenantId: 'a', kind: 'payload-mismatch', seq: '9', source: 'background', detectedAt: new Date(0) }];
+    const { monitor } = build(verifier, { production: true });
+    await monitor.onApplicationBootstrap();
+    expect(verifier.startFullWalks.map((c) => c.tenantId)).not.toContain('a');
+    await monitor.idle();
+    await monitor.onModuleDestroy();
   });
 });
 
@@ -482,7 +595,7 @@ describe('LedgerMonitor: containment shared through the database', () => {
     verifier.incidents = [open('a')];
     const { monitor, status } = build(verifier, { production: true });
     await expect(monitor.onApplicationBootstrap()).resolves.toBeUndefined();
-    expect(verifier.tail.map((c) => c.tenantId)).toEqual(['b']); // 'a' is already known and recorded: no second verdict, no restart loop
+    expect(verifier.tail.map((c) => c.tenantId)).toEqual(['b', 'b']); // 'a' is already known and recorded (no second verdict, no restart loop); 'b' is checked in both phases
     expect(status.tailState).toBe('ok');
     expect(status.readiness()).toBe('contained');
     expect(() => status.assertOpen('a')).toThrow();
@@ -509,7 +622,7 @@ describe('LedgerMonitor: containment shared through the database', () => {
     verifier.incidents = [open(null)];
     const { monitor, status } = build(verifier, { production: true });
     await expect(monitor.onApplicationBootstrap()).resolves.toBeUndefined();
-    expect(verifier.tail.map((c) => c.tenantId)).toEqual(['a', 'b']); // still judged: a hold says nothing about the chains
+    expect(verifier.checkpointChecks.map((c) => c.tenantId)).toEqual(['a', 'b']); // still judged: a hold says nothing about the chains
     expect(status.readiness()).toBe('down');
     expect(() => status.assertOpen('a')).toThrow();
     expect(() => status.assertOpen('b')).toThrow();

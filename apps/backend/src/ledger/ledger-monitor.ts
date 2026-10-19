@@ -20,7 +20,10 @@ export interface VerifierPort {
 export interface LedgerWatchConfig {
   /** Production refuses to start when the checks at start fail or do not finish in time; other environments warn and continue. */
   production: boolean;
-  /** The checks at start may take this long IN TOTAL, across every tenant. */
+  /**
+   * The checkpoint checks at start (every tenant) may take this long IN TOTAL. Full walks of small chains then get half as much again
+   * (`STARTUP_FULL_WALK_SHARE`), so the whole start check is bounded by one and a half times this.
+   */
   startupBudgetMs: number;
   /** Time between full walks. 0 turns the timer off. Each delay is jittered by up to 10% either way. */
   fullIntervalMs: number;
@@ -28,7 +31,10 @@ export interface LedgerWatchConfig {
   fullBudgetMs: number;
   /** Time one check asked for over HTTP may take. */
   onDemandBudgetMs: number;
-  /** A chain of at most this many events gets a FULL walk at start even when a checkpoint exists (a checkpoint is a shortcut, not a control). */
+  /**
+   * A chain of at most this many events gets a FULL walk at start even when a checkpoint exists (a checkpoint is a shortcut, not a control),
+   * as far as the full-walk allowance at start reaches. The walks that do not fit are left to the background pass, which starts right after.
+   */
   fullWalkAtOrBelowEvents: number;
   /** How often the open incidents are read again, so a sibling task's finding (or a person's clearance) reaches this process's view. 0 turns it off. */
   incidentPollMs: number;
@@ -39,15 +45,21 @@ export const FULL_WALK_AT_OR_BELOW_EVENTS = 50_000;
 export const FULL_BUDGET_MS = 15 * 60_000;
 export const ON_DEMAND_BUDGET_MS = 30_000;
 export const INCIDENT_POLL_MS = 60_000;
+/** The share of `startupBudgetMs` that full walks of small chains may use at start, counted after the checkpoint checks. */
+export const STARTUP_FULL_WALK_SHARE = 0.5;
 
 const BUSY = Symbol('busy');
 
 /**
  * The ledger watch (specification 6.6 and 6.7). It owns the verifier connection and the in-process `LedgerStatus`:
  *
- *   1. At start, each tenant that is not already contained has its chain checked from its latest checkpoint within one total budget.
- *      Production refuses to start when a tenant fails that check and is not yet contained (the finding is recorded first, so the next
- *      start sees it as contained); other environments log and carry on. A tenant already contained is listed in the log, not re-judged.
+ *   1. At start, each tenant that is not already contained has its chain checked from its latest checkpoint within one total budget
+ *      (a tenant with no checkpoint is walked from the start, which that budget must also cover). Production refuses to start when a
+ *      tenant fails that check and is not yet contained (the finding is recorded first, so the next start sees it as contained), or when
+ *      the check cannot finish; other environments log and carry on. A tenant already contained is listed in the log, not re-judged.
+ *      Then, within half as much time again, chains of at most `fullWalkAtOrBelowEvents` are walked in full, because a checkpoint is a
+ *      shortcut and not an independent control. Full walks that do not fit are skipped and logged, never a reason to refuse the start:
+ *      the background full pass (2.) begins right after start and covers them, and a failure it finds contains the tenant as in 3.
  *   2. Right after start, and then on a timer, every tenant's whole chain is walked and a checkpoint is recorded on success.
  *   3. A `failed` walk, from any of these or from the admin endpoint, CONTAINS that tenant: the finding is recorded in the database
  *      (the verifier's `recordIncident`), where `ledger_append` refuses every write for the tenant in every task, and is mirrored in this process's
@@ -131,10 +143,13 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
     await this.syncIncidents(); // what the database already holds (a sibling's findings, a person's global hold)
     const knownBefore = this.status.containedTenants().length;
     if (knownBefore > 0 || this.status.hold) {
-      this.logger.warn({ event: 'ledger-contained-at-start', containedTenants: knownBefore, globalHold: this.status.hold !== null, message: 'Record logs are already contained; this instance starts, and does not write for them.' });
+      this.logger.warn({ event: 'ledger-contained-at-start', containedTenants: knownBefore, globalHold: this.status.hold !== null, message: 'Record logs are already contained; this instance starts, and does not re-judge them. Their full walk goes on in the background.' });
     }
     try {
       const tenants = await verifier.tenants();
+      // Phase A, the check that decides whether to start: every tenant from its latest checkpoint, within the one total budget. Cheap for a
+      // tenant with a checkpoint; a tenant without one is walked from the start (mode `full`), which is why the budget can still run out.
+      const walkedInFull = new Set<string>();
       for (const tenantId of tenants) {
         if (this.status.hasIncident(tenantId)) continue; // already known and recorded: not judged again here, its full walk goes on in the background
         const remaining = deadline - Date.now();
@@ -142,14 +157,17 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
           outcome = outcome === 'failed' ? 'failed' : 'incomplete';
           break;
         }
-        const result = await this.queued(() => verifier.verify(tenantId, {
-          mode: 'tail', budgetMs: remaining, fullWalkAtOrBelow: this.config.fullWalkAtOrBelowEvents, signal: this.abort.signal,
-        }));
+        const result = await this.queued(() => verifier.verify(tenantId, { mode: 'tail', budgetMs: remaining, signal: this.abort.signal }));
         await this.note(result, 'startup');
         checked += 1;
         if (result.status === 'failed') outcome = 'failed';
         else if (result.status === 'incomplete' && outcome !== 'failed') outcome = 'incomplete';
+        else if (result.status === 'ok' && result.mode === 'full') walkedInFull.add(tenantId);
       }
+      // Phase B, strengthening only: full walks of small chains, within their own allowance. It runs only when phase A found nothing wrong
+      // (otherwise the start is already refused or the tenant already contained), and it cannot make the start incomplete: what it does not
+      // reach is left to the background pass.
+      if (outcome === 'ok' && (await this.fullWalksAtStart(verifier, tenants, walkedInFull)) === 'failed') outcome = 'failed';
     } catch (error) {
       // The check could not run at all (login, network, missing tables): nothing is known about the record log, which is not "fine".
       this.logger.error({ event: 'ledger-verification-error', source: 'startup', error: describe(error), message: 'The record log could not be checked at start.' });
@@ -164,6 +182,43 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
       throw new Error(`The record log did not pass its check at start: ${outcome}${summary}. Production does not start until it does (docs/ops/ledger-watch.md).`);
     }
     this.logger.warn({ event: 'ledger-startup-check', outcome, tenantsChecked: checked, message: `The record log did not pass its check at start (${outcome}); continuing because this is not production.` });
+  }
+
+  /**
+   * Walks, in full, each tenant whose chain is at most `fullWalkAtOrBelowEvents` long, in the tenants' order, while the allowance lasts.
+   * A walk that the allowance cuts short, and every tenant after it, is left to the background pass and counted in the log. Only damage
+   * counts here: an unfinished walk is neither damage nor a reason to refuse the start.
+   */
+  private async fullWalksAtStart(verifier: VerifierPort, tenants: readonly string[], alreadyWalked: ReadonlySet<string>): Promise<'ok' | 'failed'> {
+    const deadline = Date.now() + Math.floor(this.config.startupBudgetMs * STARTUP_FULL_WALK_SHARE);
+    let failed = false;
+    let walked = 0;
+    let left = 0;
+    for (const tenantId of tenants) {
+      if (this.status.hasIncident(tenantId) || alreadyWalked.has(tenantId)) continue; // contained, or already walked in full by phase A
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        left += 1;
+        continue;
+      }
+      const result = await this.queued(() => verifier.verify(tenantId, {
+        mode: 'tail', budgetMs: remaining, fullWalkAtOrBelow: this.config.fullWalkAtOrBelowEvents, signal: this.abort.signal,
+      }));
+      if (result.status === 'incomplete') {
+        left += 1; // the allowance ended inside this walk (a checkpoint check of a larger chain was already done in phase A)
+      } else {
+        await this.note(result, 'startup');
+        if (result.status === 'failed') failed = true;
+        else if (result.mode === 'full') walked += 1;
+      }
+    }
+    if (left > 0 && !this.abort.signal.aborted) {
+      this.logger.warn({
+        event: 'ledger-startup-full-walks-deferred', fullWalks: walked, deferred: left,
+        message: 'Some full walks of small record logs did not fit in the time allowed at start. They were checked from their checkpoint, and the background full pass, which starts now, walks them in full.',
+      });
+    }
+    return failed ? 'failed' : 'ok';
   }
 
   // ---- background and scheduled full walks ----
