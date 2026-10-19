@@ -82,10 +82,27 @@ The task's execution role injects the administrator's `username` and `password` 
 ## Releasing (after F4 exists)
 
 1. Set `api_migrate_image` to the new digest and apply. Only the migration task definition changes: the API service and worker keep running `api_image`. Then run the **migration task** once (`api_migrate_task_family`), in the private subnets and the tasks' security group, and check its log for `migrate up` finishing. The service's `/ready` stays 503 while migrations are pending, so a task that starts first is not sent traffic.
-2. Set `api_image` to the new digest and apply. The circuit breaker rolls back a deployment whose tasks never become ready. `api_migrate_image` may stay set to the same digest or be cleared: both run the same image.
+2. Set `api_image` to the new digest and apply. The circuit breaker rolls back a deployment whose tasks never become ready (see the table below for when that rollback can succeed). `api_migrate_image` may stay set to the same digest or be cleared: both run the same image.
 3. Watch the four alarms and `/api/v1/ready`.
 
-**Known limits of this order (open; nothing here changes them).** Once step 1 has migrated, tasks still running the previous image report **not ready**: readiness refuses migrations the running code does not know, so there is no window in which old and new tasks are both ready. A release that changes the schema is therefore an outage window until step 2 completes; plan it as one. `migrate down` is not a rollback path (it needs the newer image and refuses history it does not know): recover by rolling forward with a fix. An expand/contract rule that would let old and new tasks overlap is a design decision for the founder.
+**Classify the release before step 1.** List the migrations the new image adds beyond the image now running; each `.up.sql` declares `-- compat: expand` or `-- compat: breaking` in its leading comment block (see [Migration labels](../database.md#migration-labels)). Readiness tolerates database history newer than the running code **only** when it is contiguous and every newer migration was recorded as `expand`; anything else (a `breaking` or unlabelled migration, or a database not yet touched by a migrator that records labels) makes `/ready` fail.
+
+| What the release adds | After step 1, before the new tasks are ready | Rolling back |
+| --- | --- | --- |
+| No migration, or only `expand` migrations | Tasks running the previous image **stay ready**, so old and new tasks overlap and there is no outage window. | Set `api_image` back to the previous digest and apply. The service's circuit-breaker rollback (`rollback = true`) is expected to work too, because the previous image is still ready against the expanded schema. |
+| Any `breaking` migration | Tasks running the previous image report **not ready** as soon as the migration commits, and new tasks must start and pass `/ready` first (the service allows them 60 s of health-check grace). Plan an **outage window**; its length is estimated at one to three minutes and has not been measured. | **None.** `migrate down` needs the newer image and refuses history it does not know, and the circuit-breaker rollback would start the previous image, which cannot become ready. Recover by rolling forward with a fixed image. |
+
+**Destructive changes take two releases.** Dropping, renaming or retyping something older code uses is never `expand`. Release N adds the new shape (`expand`) and ships code that no longer needs the old one. Only after every task of the old image is gone (the API service and the worker, which run the same image) does release N+1 apply the `breaking` migration that removes it.
+
+**Before a `breaking` release, recommended and manual:** take an RDS snapshot and note the time, so there is a recovery marker if the fix-forward goes wrong.
+
+```
+aws rds create-db-snapshot --db-instance-identifier <name_prefix>-<environment> --db-snapshot-identifier <name_prefix>-<environment>-pre-<version>
+```
+
+The instance identifier is the stack name (`local.name` in Terraform). This is a marker, not a rollback: restoring it creates a **new** instance and loses every write after the snapshot, and no restore has been drilled (see [backup-and-restore.md](backup-and-restore.md)). It is a recommendation, not a gate; nothing enforces it.
+
+**What this does not establish.** Nothing here has been applied or observed in AWS: how the load balancer and ECS behave while old and new tasks overlap, the length of the outage window, and whether the worker (same image) refuses to run against newer history are unverified. The first image that contains this readiness behaviour is strict relative to any older image: an older image still running when a newer migration lands refuses it, as before. The label is a promise the author makes; the migration lint catches the obvious mistakes (it does not look at `ADD CONSTRAINT`, unique indexes, data rewrites or row-level-security policy changes, which are `breaking` by rule), and a stronger check would run the previous release's tests against the new schema.
 
 ## Decisions that shaped it (and what they cost)
 
