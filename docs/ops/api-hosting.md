@@ -81,9 +81,11 @@ The task's execution role injects the administrator's `username` and `password` 
 
 ## Releasing (after F4 exists)
 
-1. Run the **migration task** once with the new image (`api_migrate_task_family`), in the private subnets and the tasks' security group, and check its log for `migrate up` finishing. The service's `/ready` stays 503 while migrations are pending, so a task that starts first is not sent traffic.
-2. Set `api_image` to the new digest and apply. The circuit breaker rolls back a deployment whose tasks never become ready.
+1. Set `api_migrate_image` to the new digest and apply. Only the migration task definition changes: the API service and worker keep running `api_image`. Then run the **migration task** once (`api_migrate_task_family`), in the private subnets and the tasks' security group, and check its log for `migrate up` finishing. The service's `/ready` stays 503 while migrations are pending, so a task that starts first is not sent traffic.
+2. Set `api_image` to the new digest and apply. The circuit breaker rolls back a deployment whose tasks never become ready. `api_migrate_image` may stay set to the same digest or be cleared: both run the same image.
 3. Watch the four alarms and `/api/v1/ready`.
+
+**Known limits of this order (open; nothing here changes them).** Once step 1 has migrated, tasks still running the previous image report **not ready**: readiness refuses migrations the running code does not know, so there is no window in which old and new tasks are both ready. A release that changes the schema is therefore an outage window until step 2 completes; plan it as one. `migrate down` is not a rollback path (it needs the newer image and refuses history it does not know): recover by rolling forward with a fix. An expand/contract rule that would let old and new tasks overlap is a design decision for the founder.
 
 ## Decisions that shaped it (and what they cost)
 

@@ -13,6 +13,16 @@ variable "api_image" {
   }
 }
 
+variable "api_migrate_image" {
+  description = "Optional: the image the one-off migration task runs, pinned by digest like api_image. Empty (the default) runs it with api_image. To migrate before a release, set this to the NEW digest and apply: only the migration task definition changes, and the API service and worker keep running api_image until it is set to match."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.api_migrate_image == "" || can(regex("^[0-9]{12}\\.dkr\\.ecr\\.[a-z0-9-]+\\.amazonaws\\.com/[a-z0-9._/-]+@sha256:[0-9a-f]{64}$", var.api_migrate_image))
+    error_message = "api_migrate_image must be empty or an ECR image pinned by digest: <account>.dkr.ecr.<region>.amazonaws.com/<repository>@sha256:<64 hex>."
+  }
+}
+
 variable "api_cors_origins" {
   description = "Browser origins the API answers, e.g. [\"https://app.telesphoros.app\"] (staging: the Vercel staging address). Every origin must be https."
   type        = list(string)
@@ -464,7 +474,7 @@ resource "aws_ecs_task_definition" "api_migrate" {
   container_definitions = jsonencode([
     {
       name                   = "migrate"
-      image                  = var.api_image
+      image                  = var.api_migrate_image != "" ? var.api_migrate_image : var.api_image
       essential              = true
       user                   = local.api_user
       readonlyRootFilesystem = true
