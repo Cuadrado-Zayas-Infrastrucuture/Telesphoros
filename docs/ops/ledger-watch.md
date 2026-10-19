@@ -96,6 +96,11 @@ balancer keeps sending traffic to a task that is ready, and the database refuses
    checkpoint that proved it), and nothing is ever deleted.
 8. An incomplete check at start in production (`... : incomplete`) is not damage: a chain with no checkpoint yet is larger than the budget allows on a cold start, or the verifier login or the database could not be reached. (Many small tenants no longer cause this: their full walks are deferred, not required.) Look for `ledger-verification-error` (the class and database code
    only). For size, raise `LEDGER_STARTUP_BUDGET_MS` once (up to 300 000); after the first background walk there is a checkpoint and starts are fast.
+   **A chain longer than 1 000 000 events is different**: a full walk stops at that limit and answers `incomplete` however much time it is given, so it never
+   records a checkpoint and raising the budget does not help. The watch says so with an **error** line `ledger-chain-over-size` (tenant, mode, events
+   checked; no values) on every pass, instead of the generic `ledger-verification-incomplete` warning that means "ran out of time". It is not damage:
+   nothing is latched or contained. A tenant that already has a checkpoint is still checked from it; one that does not stays unverified. The remedy is a
+   code change (walking in resumable segments), not configuration.
 9. A damage that cannot be repaired in place (the ledger and its record tables are append-only, even for the owner) means recovering that tenant's
    data from a verified backup; clearing needs the full walk to pass on whatever is then in the database.
 
@@ -105,6 +110,9 @@ The watch writes one structured **error** line per finding (`event: "ledger-comp
 deployment task. The alarm is written ([ops/api-hosting.md](api-hosting.md), `api-compute.tf`: a metric filter on the line and an alarm into the audit topic), but the
 Terraform is **never applied**, so **no alarm exists in AWS yet**. Until it is applied and tested, someone has to be reading the logs, or must treat `/ready` failing on
 `ledger` as the signal. A test pins that the application writes `event` at the top level of its JSON log line (the field the alarm matches).
+
+The over-size line (`ledger-chain-over-size`, above) is also an **error** line but has **no metric filter**: only `ledger-compromised` is wired in Terraform. Someone
+reading the logs would see it; nothing pages for it. Adding a filter is a separate, deliberate change, because an alarm that fires on every pass needs a decision on how often to repeat.
 
 ## Restore
 
@@ -145,6 +153,7 @@ this slice.
 
 ## What this does not do
 
+- It does not verify a chain longer than 1 000 000 events in full: the walk stops at that limit (`incomplete`, reason `size`) and the watch names it with `ledger-chain-over-size`. Resuming a walk across passes is a possible later slice if chains ever approach the limit; nothing in the pilot data is near it.
 - It does not detect removal of the **newest** events, nor a whole chain rewritten consistently by someone with full owner access
   (specification 6.9). Anchoring each tenant's head outside the database is the follow-up that closes both.
 - A checkpoint is a shortcut, not a control: it makes a start fast, and someone who can rewrite the chain can rewrite a checkpoint stored beside it.

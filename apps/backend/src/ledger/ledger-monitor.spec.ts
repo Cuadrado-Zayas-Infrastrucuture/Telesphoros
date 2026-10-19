@@ -383,6 +383,26 @@ describe('LedgerMonitor: the background full walk', () => {
     await monitor.onModuleDestroy();
   });
 
+  it('names a chain that is longer than the verifier will walk, as an error, and still latches nothing', async () => {
+    const verifier = new FakeVerifier(['a'], (tenantId, options) => (options.mode === 'full' ? outcome(tenantId, { status: 'incomplete', mode: 'full', eventsChecked: 1_000_000, incompleteReason: 'size' }) : outcome(tenantId)));
+    const { monitor, status } = await started(verifier);
+    expect(status.readiness()).toBe('verifying');
+    expect(status.compromised).toBeNull();
+    const logged = errors.mock.calls.flat().find((c) => c?.event === 'ledger-chain-over-size');
+    expect(logged).toMatchObject({ event: 'ledger-chain-over-size', tenantId: 'a', mode: 'full', eventsChecked: 1_000_000 });
+    expect(errors.mock.calls.flat().some((c) => c?.event === 'ledger-compromised')).toBe(false); // size is not damage: the damage alarm must stay quiet
+    expect(warnings.mock.calls.flat().some((c) => c?.event === 'ledger-verification-incomplete')).toBe(false); // and it is not the generic "ran out of time" line
+    await monitor.onModuleDestroy();
+  });
+
+  it('keeps running out of time as a warning, not the over-size error', async () => {
+    const verifier = new FakeVerifier(['a'], (tenantId, options) => (options.mode === 'full' ? outcome(tenantId, { status: 'incomplete', mode: 'full', incompleteReason: 'time' }) : outcome(tenantId)));
+    const { monitor } = await started(verifier);
+    expect(warnings.mock.calls.flat().some((c) => c?.event === 'ledger-verification-incomplete')).toBe(true);
+    expect(errors.mock.calls.flat().some((c) => c?.event === 'ledger-chain-over-size')).toBe(false);
+    await monitor.onModuleDestroy();
+  });
+
   it('does not latch, and does not report up, when the walk could not run (a database problem is not damage)', async () => {
     const verifier = new FakeVerifier(['a'], (tenantId, options) => {
       if (options.mode === 'full') throw Object.assign(new Error('terminating connection'), { code: '57P01' });

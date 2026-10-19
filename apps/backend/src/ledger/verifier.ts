@@ -23,6 +23,8 @@ import { pgClientConfig } from '../db/tls';
  */
 export type VerifyMode = 'full' | 'tail';
 export type VerifyStatus = 'ok' | 'failed' | 'incomplete';
+/** Why a walk was `incomplete`: the clock ran out, the event limit was reached, or the application was shutting down. */
+export type IncompleteReason = 'time' | 'size' | 'shutdown';
 
 export type FailureKind =
   | 'seq-gap' | 'prev-hash-mismatch' | 'record-hash-mismatch' | 'unsupported-hash-version' | 'unsupported-projection-version'
@@ -62,6 +64,8 @@ export interface VerifyResult {
   eventsChecked: number;
   failures: Failure[];
   checkpointId: string | null;
+  /** Present only when `status` is `incomplete`. `size` does not go away by waiting or retrying: the chain is longer than `maxEvents`. */
+  incompleteReason?: IncompleteReason;
 }
 
 const BATCH = 200;
@@ -183,13 +187,13 @@ export class LedgerVerifier {
       }
 
       let checked = 0;
-      let incomplete = false;
+      let incomplete: IncompleteReason | null = null;
       let expected = position.seq + 1n;
       let running = position.hash;
       let cursor = position.seq.toString();
       for (;;) {
         if (Date.now() - started > budgetMs || options.signal?.aborted) {
-          incomplete = true;
+          incomplete = options.signal?.aborted ? 'shutdown' : 'time';
           break;
         }
         const batch = await client.query<EventRow>(
@@ -200,7 +204,7 @@ export class LedgerVerifier {
         );
         if (batch.rows.length === 0) break;
         if (checked >= maxEvents) {
-          incomplete = true; // there is more chain than the budget allows: never report `ok` for a partial walk
+          incomplete = 'size'; // there is more chain than the budget allows: never report `ok` for a partial walk
           break;
         }
         for (const e of batch.rows) {
@@ -235,7 +239,8 @@ export class LedgerVerifier {
 
       await client.query('COMMIT');
       const status: VerifyStatus = failures.length > 0 ? 'failed' : incomplete ? 'incomplete' : 'ok';
-      return { result: { tenantId, status, mode, headSeq: head.seq, headHash: head.record_hash, eventsChecked: checked, failures, checkpointId: null }, startedAt };
+      const reason = status === 'incomplete' && incomplete ? { incompleteReason: incomplete } : {};
+      return { result: { tenantId, status, mode, headSeq: head.seq, headHash: head.record_hash, eventsChecked: checked, failures, checkpointId: null, ...reason }, startedAt };
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined); // intentional: a broken connection is released below either way
       throw error;
