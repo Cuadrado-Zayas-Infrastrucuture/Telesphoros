@@ -1,7 +1,12 @@
 # Staged rehearsal: the one-off database tasks (FD-7 slice 3)
 
-**Status: the runner and its tests exist. It has never started a task in AWS, and nothing in AWS exists yet.** Synthetic data only. This page is the order of the first staged bring-up from the point where
+**Status: the runner and its tests exist; live AWS execution remains unverified.** Synthetic data only. This page is the order of the first staged bring-up from the point where
 the stack and the image exist; the plan is [fd7-staged-synthetic-deploy.md](../design/plans/fd7-staged-synthetic-deploy.md), and nothing here approves an apply (the gates in `infrastructure/terraform/README.md` still hold).
+
+[Foundations readiness](foundations-readiness.md) is the entry gate: account,
+budget, state and BAA/manual-session decisions remain pending. Historical absence
+claims do not establish an empty target. The commands below are for a later
+authorized session, not instructions to access AWS during offline preparation.
 
 ## The runner
 
@@ -43,18 +48,21 @@ The script prints the AWS account and identity before it starts anything: check 
 
 ## The order
 
-1. **Apply the foundations** with `enable_api_hosting = true` and no `api_image` (this creates the registry, the secret containers, the database, the cluster, the log group). Plan first, read it, then apply: see the plan's first-apply gates.
+1. After approved backend activation, **review and apply A, then B** as separate saved plans ([plan review](staging-plan-review.md)): A has `enable_api_hosting = true`, web off and no `api_image`; B adds web hosting. A creates the registry, secret containers, database, cluster and log groups. Both certificate waits need Jan's validation CNAMEs; no services exist yet.
 2. **Build and push the image**, resolve its digest ([image-push.md](image-push.md)).
 3. **Set the two keys that are not database logins**, by hand, once (`aws secretsmanager put-secret-value`, 64 hex characters from `openssl rand -hex 32` each): `.../api/invitation-digest-key` and `.../api/identifier-digest-key` ([api-hosting.md](api-hosting.md#the-database-logins-db-provision-logins)). The service refuses to start without them. Do not rotate the identifier key casually.
-4. **Set `api_image` to the digest and apply again.** This creates the task definitions **and also the API and worker services**, which start at once. Until steps 5 to 8 are done their tasks cannot start (their database-login secrets are empty) and ECS will report failed tasks; the deployment circuit breaker is expected to stop retrying. That is expected, and **not yet observed in AWS**. (`api_desired_count` cannot be set to 0, so there is no way to hold the services back; see Follow-ups.)
+4. **Review/check plan C, set `api_image` to the digest and apply only the approved saved plan.** This creates the task definitions **and also the API and worker services**, which start at once. Until steps 5 to 8 are done their tasks cannot start (their database-login secrets are empty) and ECS will report failed tasks; the deployment circuit breaker is expected to stop retrying. That is expected, and **not yet observed in AWS**. Both desired counts require at least one; accept this bounded first-start test explicitly or request a separate service-hold change. Stop and preserve errors if behavior differs; do not disable guards to proceed.
 5. `scripts/staging/run-task.sh provision-logins --yes`. Expect `created` for the four logins, `SKIP` for the group-privilege check (nothing is migrated yet), and `LOGINS READY`.
 6. `scripts/staging/run-task.sh migrate-up --yes`. Expect `applied: ...` listing the migrations. Then `migrate-status` should show `pending: (none)`.
 7. `scripts/staging/run-task.sh provision-logins --require-migrated --yes`. Expect `unchanged` for each login, `PASS` for every group-privilege check, and `LOGINS READY`. A `FAIL` means the privileges are wrong: stop and read the line.
 8. `scripts/staging/run-task.sh tenant-create --id <id> --name "<name>" --by "<you>" --yes`, expect `registered: id=<id> ... status=active`. Create the person's account in Cognito by hand (a `tenant:<id>` group and the person in it; [auth.md](../auth.md#inviting-and-removing-people-runbook)), then
    `scripts/staging/run-task.sh membership-grant --tenant <id> --sub <cognito sub> --roles admin --by "<you>" --reason "..." --yes`, expect `granted: tenant=<id> sub=... status=active roles=admin`. `membership-show` and `tenant-list` read the result back.
-9. **Restart the services** now that the logins and the schema exist: `aws ecs update-service --cluster "$ECS_CLUSTER" --service "$(terraform output -raw api_service_name)" --force-new-deployment` and the same for `worker_service_name`. Then watch the four alarms and `/api/v1/ready` ([api-hosting.md](api-hosting.md#releasing-after-f4-exists)).
+9. **Restart the services** now that the logins and the schema exist: from the repository root, `aws ecs update-service --cluster "$ECS_CLUSTER" --service "$(terraform -chdir=infrastructure/terraform output -raw api_service_name)" --force-new-deployment` and the same for `worker_service_name`. Then watch the API and worker alarms and `/api/v1/ready` ([API runbook](api-hosting.md), [worker checks](jobs.md#deployment-m23c-written-never-applied)).
+10. Seed existing synthetic patients through authorized APIs, dry-run the normal frontend publisher, then separately approve publishing and staging traffic records. Verify the [current hosted intake and cleanup boundaries](foundations-readiness.md#hosted-acceptance-follows-current-application-behavior); normal hosting has no Reports dashboard.
 
-A later release runs `migrate-up` before the new `api_image` is applied, as before.
+A later release is a separate FD-5 upgrade/rollback contract; first-bring-up success
+does not establish compatibility between old images and newer migrations. Do not
+reuse this initial-setup sequence as an approved rolling-release procedure.
 
 ## Where the output is
 

@@ -2,7 +2,10 @@
 
 This root prepares a private state bucket and its KMS key independently of the
 synthetic application root. It is built and verified locally; nothing was applied.
-The main backend remains unconfigured. There are no modules, live data lookups,
+The main root has partial S3 source wiring; live backend activation remains unverified.
+Start with [foundations readiness](../../docs/ops/foundations-readiness.md) for
+pending founder decisions and separate inventory/bootstrap/activation approvals.
+This standalone root has no modules, live data lookups,
 credentials, application resources or deployment commands here.
 
 Required inputs have no defaults:

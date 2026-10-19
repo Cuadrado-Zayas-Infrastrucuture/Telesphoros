@@ -4,6 +4,13 @@
 Terraform has never been applied, no AWS account is wired to GitHub, the AWS BAA is not executed, and the hosting
 choice below is settled but not deployed. This page records the intended flow so the workflow can be written once the remaining prerequisites are settled.
 
+For offline preparation of FD-7, start with [foundations readiness](foundations-readiness.md).
+The OIDC/protected-environment flow below is future FD-6 automation. FD-7 proposes
+a founder-run manual rehearsal, whose authorization and BAA gate remain unresolved;
+this documentation grants neither an exception nor AWS access. Real account/state
+inventory must be separately authorized; historical absence claims are not evidence
+that a target is empty today.
+
 ## Intended flow (to be built after the decisions below)
 
 1. **No long-lived cloud keys.** GitHub Actions assumes an AWS IAM role through OpenID Connect. The role's trust policy

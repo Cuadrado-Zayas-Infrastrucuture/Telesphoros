@@ -8,6 +8,10 @@ activation, identity provisioning or AWS operation performed by this change.
 The bootstrap root keeps separate local state;
 the synthetic environment cannot destroy it as part of its own teardown.
 
+Start with [foundations readiness](foundations-readiness.md) for the pending
+founder decisions and separate inventory/bootstrap/activation approvals. No live
+account or state target was inspected by the offline runbook update.
+
 ## Trust boundary
 
 State, historical versions and local bootstrap records are confidential. No keys,
@@ -149,6 +153,14 @@ establish live permissions, locking, custody or recovery.
    delete state, rejection of a second concurrent lock holder, lock release, wrong
    identity/path/key/header refusals and preservation through synthetic teardown.
    Use disposable canaries; do not fault required state or retained evidence.
+
+The [isolated probe procedure](foundations-readiness.md#state-probe-preparation-still-required)
+must be prepared and reviewed before live testing, including its resources, costs
+and retirement. Do not issue destructive refusal tests or bad writes against
+authoritative state, add extra allowed object paths, or reuse real state lineage
+for a fixture. A successful mocked policy suite does not supply that procedure or
+prove AWS enforcement. Keep the bootstrap bucket/key/history and protected local
+records outside application teardown.
 
 ## Recovery boundary
 

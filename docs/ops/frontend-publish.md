@@ -1,7 +1,11 @@
 # Publishing the frontend (FD-7 slice 2)
 
-**Status: the script and its tests exist. It has never uploaded to a real bucket, and nothing in AWS exists yet.** It is for the synthetic staged environment and runs from a person's shell:
+**Status: the script and its tests exist; real AWS publication remains unverified.** It is for the synthetic staged environment and runs from a person's shell:
 CI holds no cloud credentials and publishes nothing. Plan: [fd7-staged-synthetic-deploy.md](../design/plans/fd7-staged-synthetic-deploy.md). The hosting itself is described in [domains-and-hosting.md](domains-and-hosting.md).
+
+Complete the pending [readiness decisions and live authorization](foundations-readiness.md)
+before following the later AWS instructions. No account/bucket was inspected by
+this offline update. Publication and staging traffic changes need explicit approval.
 
 ## What it does
 
@@ -45,7 +49,7 @@ may ask for a map and get an error: that is expected and harmless.
 4. The optional invalidation.
 5. A listing of the bucket; the script fails if any `*.map` is in it.
 
-**Nothing is deleted**: the bucket is versioned and open tabs may still need the previous hashed assets, so old files stay. Remove one by hand if you must.
+**Nothing is deleted**: the bucket is versioned and open tabs may still need the previous hashed assets, so old files stay. The web bucket keeps `force_destroy = false`; later application teardown requires separately approved inventory/emptying of all versions and delete markers, not just current keys ([cleanup boundary](foundations-readiness.md#cleanup-boundary)). Do not weaken that resource protection or touch the state bucket to make cleanup pass.
 The distribution uses the managed `CachingDisabled` policy, so CloudFront keeps no copy and the invalidation changes nothing today; it is there so the script stays correct if caching is ever turned on.
 The script does not pause for confirmation, so check the account first (`aws sts get-caller-identity`); it prints the account and identity again as the upload starts.
 
