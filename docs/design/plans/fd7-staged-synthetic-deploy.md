@@ -1,6 +1,6 @@
 # Plan FD-7: a staged synthetic deployment in AWS
 
-Status: **founder approved the direction and D1 to D3 on 2026-10-15 and asked to start Phase 1 (see "Decisions recorded"); the per-slice plans are below and each slice still needs its own go before code. Draft otherwise for founder approval. Nothing is applied, published or changed by this document.** Requested 2026-10-15 ("wire Telesphoros app to go live"); narrowed with the founder to a **staged environment with synthetic data only**. A real production launch with patient data is a separate plan and is blocked (see "What this is not").
+Status (offline readiness, 2026-10-18): **Phase 1 source preparation and remote-state source wiring are merged; live execution is not approved.** The founder approved the original direction/D1–D3 in principle on 2026-10-15, but account, budget and state decisions remain pending. Start at [foundations readiness](../../ops/foundations-readiness.md) for those decisions, the unresolved BAA/manual-session gate and separate live approvals. This update uses repository evidence only and does not establish that an AWS account or state target is empty. A production launch with patient data remains separate and blocked.
 
 ## Why
 
@@ -15,54 +15,64 @@ Everything needed to describe a running system is written and tested offline: Te
 
 ## The environment
 
-One Region; `deployment_profile = "synthetic"`, `environment = "staging"` (the profile refuses any other combination). It creates its own small VPC (two public subnets, no NAT gateway), single-AZ `db.t4g.micro` RDS, the reports bucket, Cognito (invite-only, MFA), the audit trail (single Region), API edge and Fargate compute, the worker, and the web bucket with CloudFront. Production protections are deliberately relaxed so it can be destroyed (`force_destroy`, short key windows, no deletion protection), and the profile check refuses the same relaxations on production.
+One primary data Region; `deployment_profile = "synthetic"`, `environment = "staging"` (the profile refuses any other combination). Web hosting additionally uses global CloudFront and an ACM certificate in `us-east-1` (`web.tf`); no off-site backup replication is enabled. The profile creates its own small VPC (two public subnets, no NAT gateway), single-AZ `db.t4g.micro` RDS, the reports bucket, Cognito (invite-only, MFA), a single-Region audit trail, API edge/Fargate, worker and web hosting. Synthetic relaxations permit application teardown where configured; the versioned web bucket retains `force_destroy = false` and needs explicit emptying. The independent state bucket/key and their protections stay outside application teardown.
 
 ## Phase 0: prerequisites (people, not code)
 
-1. **Account and window.** The AWS account is on a free plan with a closing date (about 9 April 2027, per the FD-3 plan). Confirm the account, the Region and that the window is enough to apply, test and destroy.
-2. **Budget alert and a ceiling** set in the account before any apply.
-3. **Remote state:** an encrypted, locked S3 backend for Terraform state, created as its own small, separately approved change (the Terraform README's second gate; it does not exist yet).
+1. **Account and window.** Supply the account and Region, confirm current billing/credit terms after separately approved read-only access, and select a staffed apply/test/cleanup window. The April 2027 date in the earlier FD-3 record is historical, not current eligibility evidence.
+2. **Budget alert, total ceiling and maximum runtime:** obtain explicit numbers/recipients before apply, including retained backend/drill/cleanup costs. An alert is not a hard spending cap.
+3. **Remote state:** the standalone root and partial main-backend wiring exist in source. Bootstrap, custody/permission/locking/recovery acceptance and backend initialization are separate approved operations ([runbook](../../ops/terraform-state.md)); inventory existing local/remote state first. No empty-target or migration assumption.
 4. **Who applies:** a founder-run session on an MFA-protected identity with the permissions the plan needs, including `s3:BypassGovernanceRetention` and `s3:DeleteObjectVersion` for the destroy.
 5. **DNS access:** Jan adds Cloudflare records as the apply waits (certificate validation CNAMEs, then DNS-only CNAMEs for the app and API names). Existing Google mail records stay untouched.
 6. **SES sandbox:** verified sender and tester addresses (invitations and password-reset mail will not reach anyone else while SES is in the sandbox).
 7. **Hostnames** (decision D3).
+8. **Deployment gate:** satisfy the existing BAA first-apply requirement or obtain a separately reviewed, explicit synthetic-only founder exception. This plan grants none. FD-6 OIDC automation remains separate from authorization of a manual rehearsal.
 
-## Phase 1: build what is missing (each its own slice and draft PR, plan first)
+## Phase 1: source preparation completed
 
-Found by reading the existing docs; confirm each against the code before building.
+The registry/image runbook, frontend publisher, one-off runner and staged variables/
+saved-plan checker are merged source. Use their current runbooks; the original
+slice plans below are retained as historical design, not unfinished work to rebuild.
 
-1. **Image registry and push runbook.** The Terraform README says it does not create the registry or the image. Add a registry under the synthetic profile (guard-tested like the rest), and a runbook to build, scan and push the FD-4b image **by digest**.
-2. **Frontend publish runbook.** Build with the real Cognito values and `VITE_API_BASE_URL=https://<api host>`, exclude `*.map` from the public upload, upload to the web bucket, invalidate CloudFront. The H1 doc says no upload script, release workflow or artifact is supplied. Runs from a person's shell, not a pipeline.
-3. **Operator one-off tasks.** Provisioning logins and migrations have task definitions. Seeding organizations and invited members (`tenant create`, `membership grant`, per `docs/ops/membership.md`) must also run as a one-off task with the migration login because RDS is private; confirm a task definition or runbook exists and add the missing piece.
-4. **A staged `synthetic.tfvars` example** and a line-by-line plan-review checklist for this specific root.
+1. [Image registry and digest push](../../ops/image-push.md), immutable tags, AES-256 and last-ten-image lifecycle.
+2. [Frontend publishing](../../ops/frontend-publish.md), with staging, source-map exclusion and dry-run default.
+3. [One-off task runner](../../ops/staging-rehearsal.md), reusing provisioning/migration definitions and scoped CLI overrides.
+4. `synthetic-staging.tfvars.example` and [actual saved-plan review](../../ops/staging-plan-review.md), with `check-plan.mjs` for stages A/B/C.
 
 None of this changes application behavior, production values or any existing guard.
 
 ## Phase 2: apply, in the documented order (founder-run; stop and look after each step)
 
-Order follows `api-hosting.md` ("Before the first apply") and `domains-and-hosting.md`, adapted for the synthetic profile (own VPC, no NAT).
+Only after Phase 0 and separate state activation approval. This sequence follows
+the current [saved-plan checklist](../../ops/staging-plan-review.md) and
+[runner order](../../ops/staging-rehearsal.md#the-order); review/approve each actual
+saved plan and cost. Earlier hosting-off/provision-before-image ordering is superseded.
 
-1. `terraform init` against the remote state; `plan` with hosting switches off; **review the plan line by line**; apply the foundations (network, keys, database, buckets, Cognito, audit trail).
-   **Correction found while building slice 4:** there is no plan with both hosting switches off. With the profile's own network the database can only name the API tasks' security group, which exists only when API hosting is on (`database.tf` precondition), so the first plan already includes the API edge, and its apply waits for the API certificate's validation CNAME. The stages are: A (API edge and foundations, web off), B (plus web hosting), C (with the image); see [staging-plan-review.md](../../ops/staging-plan-review.md).
-2. Enable web and API hosting; apply; Jan adds the certificate validation CNAMEs while the apply waits.
-3. Set the two hand-made secrets (`INVITATION_DIGEST_KEY`, `IDENTIFIER_DIGEST_KEY`, each from `openssl rand -hex 32`); run the **provision-logins** task; run the **migration** task; seed one or two synthetic organizations and the synthetic testers' memberships.
-4. Build, scan and push the image by digest; set `api_image`, `api_cors_origins` and `api_desired_count`; apply again; the worker comes up from the same image.
-5. Publish the frontend. Only after a healthy API is behind it: Jan adds the DNS-only CNAMEs for the app and API names.
+1. **A: foundations plus API edge**, API hosting on, web off, no image. Both-hosting-off is refused by the synthetic database/network precondition. Jan adds the API validation CNAME while apply waits.
+2. **B: web additions**, planned against A's actual state. Jan adds the web certificate validation CNAMEs, obtained from ACM while apply waits; do not wait for final Terraform outputs to find them.
+3. Build/rehearse/push the linux/amd64 image on the clean reviewed commit with green image CI; resolve its registry digest. Populate the invitation and identifier digest keys directly in Secrets Manager, never Terraform or shared logs.
+4. **C: image and compute**, planned against B's actual state. Review the four exact ECR policy transitions plus expected creations. Setting `api_image` creates the one-off definitions **and API/worker services together**; initial failures before logins/schema exist need explicit acceptance and bounded observation. A zero-task hold is not supported by current guards.
+5. Run `provision-logins`, `migrate-up`, `migrate-status`, then `provision-logins --require-migrated`; require native success, no pending migrations and passing grants. Seed synthetic tenants/tester memberships and patients through authorized APIs; restart API and worker.
+6. Once API/worker acceptance allows it, dry-run then approve frontend publication and staging-only traffic CNAMEs. Production apex/www, company site, certificate validation and mail records stay outside that traffic change.
 
 ## Phase 3: acceptance, synthetic data only
 
 Everything below is already written in the repo as unchecked lists; this plan makes them the exit criteria and records what actually happened, including failures.
 
-- **Edge and web** (`domains-and-hosting.md` step 6): TLS, headers and the live CSP, BrowserRouter deep links, callback and logout, API CORS, upload through the API, denied direct S3 access, missing-asset errors, apex/www behavior where configured.
-- **API** (`api-hosting.md` items 6 and 7): TLS 1.2 accepted and 1.1 refused, port 80 refused, `/` 404, `/api/v1/health` and `/ready`, a firewall block, the unhealthy-target path, **every alarm** fired with `set-alarm-state`, and the `ledger-compromised` line produced for real in a throwaway tenant.
+- **Edge and web:** TLS, headers/live CSP, deep links, callback/logout, API CORS, validated API intake and interruption/reload recovery, tenant/member denials, denied anonymous S3 access and missing assets. Test staging-base redirects only; normal hosting exposes upload but no Reports dashboard ([capability boundary](../../ops/foundations-readiness.md#hosted-acceptance-follows-current-application-behavior)).
+- **API** (`api-hosting.md` items 6 and 7): TLS 1.2 accepted and 1.1 refused, port 80 refused, `/` 404, `/api/v1/health` and `/api/v1/ready`, a firewall block and unhealthy-target path. Force every actual deployed alarm and confirm delivery; separately prove representative real-event/filter paths, including a reviewed isolated synthetic `ledger-compromised` test. A forced state does not test the metric filter.
 - **Auth** (`auth.md` first-apply checklist): token claims, ID token refused, a member with no row gets 403, MFA forced, invitation and reset mail arrive, sign-out, CORS origin.
 - **Worker:** heartbeat and `queue-stats` lines, the four worker alarms, a stored-file check against a real uploaded synthetic file.
-- **Destroy test:** `terraform destroy`, including whether the provider removes locked object versions (unverified today); list anything left behind (for example RDS log groups).
+- **Destroy test:** after exact-plan/blast-radius approval, exercise the [cleanup boundary](../../ops/foundations-readiness.md#cleanup-boundary), including explicit versioned web-bucket emptying and live GOVERNANCE-lock removal. Inventory leftovers and costs; preserve the separate backend/key/history and bootstrap backups.
 - **Optional:** a point-in-time recovery drill (the recovery objectives are unproven until one is run).
 
 ## Phase 4: teardown or keep (decision D8)
 
-Default is destroy after the evidence is recorded, restoring the saved DNS state; certificate validation and mail records are not removed as part of a rollback.
+Proposed default is application destroy after evidence is retained, subject to D8
+and concrete destroy-plan/loss/rebuild approval. A keep decision needs an owner,
+expiry and budget. Restore only approved staging traffic records from the saved
+baseline; retain certificate validation and mail records. Never destroy the state
+backend as part of application cleanup or call traffic rollback a state recovery.
 
 ## Decisions only the founder can make
 
@@ -70,9 +80,9 @@ Default is destroy after the evidence is recorded, restoring the saved DNS state
 - **D2. Budget ceiling and alert.** A number you are comfortable with. I will not guess a cost; the first reviewed `plan` plus the account's own pricing gives the estimate, and the apply waits on your yes to it.
 - **D3. Hostnames.** Use the real names or separate staging names. Recommended and approved: **separate staging names**, under the module's base-domain rule: `web_domain = staging.telesphoros.app` (see "Decisions recorded").
 - **D4. Who applies, and how.** Recommended: **a founder-run session** with scripts from Phase 1, not a GitHub OIDC pipeline. A pipeline is built after the rehearsal has shown what the steps really are.
-- **D5. Image registry.** Recommended: add it to Terraform under the synthetic profile and push by digest.
+- **D5. Image registry.** Source implementation is merged: AES-256, immutable tags and last ten images; push/deploy by digest after live approval.
 - **D6. Testers.** Which named people get invitations, and the addresses verified in the SES sandbox. They are told synthetic data only.
-- **D7. Remote state.** Confirm creating the encrypted, locked state bucket as a separate approved change first.
+- **D7. Remote state.** Bootstrap/wiring source is merged. Supply owner, bucket/key, historical retention and encrypted custody decisions, then separately approve live bootstrap and backend activation; inventory existing state first.
 - **D8. After the rehearsal.** Destroy (recommended) or keep the environment for demos.
 
 ## Decisions recorded (founder, 2026-10-15: "approve D1 through D3 and start Phase 1")
@@ -83,7 +93,11 @@ Default is destroy after the evidence is recorded, restoring the saved DNS state
 
 ## Phase 1 slice plans
 
-Order: 1, 2, 3, 4. Each is its own pull request, branched off `main`, never stacked, opened as a draft, and the work stops after each for review (STATUS working agreements 1 to 3). Findings below come from reading the code on `main`; every Terraform change keeps the offline `terraform test`, the guard tests and `pnpm test:infra` green. **No slice uses an AWS credential, applies anything, or costs anything.**
+The following original gap descriptions and proposed order are retained as design
+history. All four slices are now source implementations; their live acceptance is
+still open. They are not current instructions to recreate missing code or bypass
+the current readiness gates. Each original slice was planned as its own PR from
+`main` with offline tests and no AWS operation.
 
 ### Slice 1: image registry and push runbook
 

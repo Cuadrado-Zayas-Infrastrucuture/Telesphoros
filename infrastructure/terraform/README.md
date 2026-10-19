@@ -8,6 +8,12 @@
 >
 > Until then the product runs on synthetic data only. This wiring change creates no AWS resources.
 
+The synthetic rehearsal proposal does **not** waive gate 1. The
+[offline readiness record](../../docs/ops/foundations-readiness.md#unresolved-deployment-gate)
+tracks the unresolved BAA/manual-session decision; account, budget and state inputs
+also remain pending. Source or documentation approval is not permission to access
+AWS, initialize a real backend, apply, migrate state or destroy resources.
+
 ## What it would create
 
 | Piece | Detail |

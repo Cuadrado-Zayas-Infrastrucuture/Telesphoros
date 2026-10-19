@@ -1,9 +1,13 @@
 # Reviewing the staged synthetic plans (FD-7 slice 4)
 
-**Status: the example variables and this checklist exist. Nothing has been planned or applied against AWS.** Synthetic data only. Plan: [fd7-staged-synthetic-deploy.md](../design/plans/fd7-staged-synthetic-deploy.md).
+**Status: the example variables and this checklist exist; live AWS planning and acceptance remain unverified.** Synthetic data only. Plan: [fd7-staged-synthetic-deploy.md](../design/plans/fd7-staged-synthetic-deploy.md).
 This page is what the first real `terraform plan` of the staged environment must and must not contain, drawn from the offline plans in `infrastructure/terraform/staging.tftest.hcl`
 (the same values as `synthetic-staging.tfvars.example`; a guard keeps the two equal). **Reading a plan is not approval to apply:** the first-apply gates in `infrastructure/terraform/README.md`
 (BAA position, remote state, this review) and the founder's yes to the plan and its cost still stand, and decisions D1 (account and Region) and D2 (budget ceiling) must be settled first.
+
+The [readiness record](foundations-readiness.md) makes the BAA/manual-session issue
+an explicit unresolved gate; no exception or AWS access is granted here. Establish
+existing resource/state ownership privately after separately approved inventory.
 
 ## What the offline plans cannot show
 
@@ -18,7 +22,7 @@ and AWS refuses; each such failure is recorded, not hidden.
 2. Check the hostnames. `web_domain` is a **base domain**: the app is `app.<web_domain>`. `api_domain` is **not** derived from it, and the web page's policy allows exactly `api.<web_domain>`: if they disagree the browser blocks every API call.
    The example sets `api.staging.telesphoros.app`; a guard fails the build if the example drifts.
 3. Complete the separately authorized [backend activation and state-inventory gates](terraform-state.md#main-backend-configuration-source-only), then initialize with `terraform -chdir=infrastructure/terraform init -input=false -backend-config=backend.s3.tfbackend`. Main's partial S3 source wiring does not establish a live backend. Confirm the existing owner with `aws sts get-caller-identity`: the account and the Region are the ones decided in D1. Use only the approved synthetic state key and default workspace; no extra backend overrides.
-4. Leave `region` at its default until D1 confirms it. Do not add `vpc_id`, subnets or `app_security_group_ids` (the synthetic profile creates the network), and do not set `api_image` until the image exists ([image-push.md](image-push.md)).
+4. Set `region` explicitly from the approved D1 value, even if it matches the default; do not run a live plan while D1 is pending. Do not add `vpc_id`, subnets or `app_security_group_ids` (the synthetic profile creates the network), and do not set `api_image` until the image exists ([image-push.md](image-push.md)).
 
 ## The three plans
 
@@ -92,7 +96,7 @@ Check: aliases are `app.<web_domain>`, `<web_domain>` and `www.<web_domain>`; th
 
 ## What plan C adds (9)
 
-2 services (API and worker, `desired_count = 1` each), 4 task definitions (API, migration, provisioning, worker), 3 alarms (running tasks, unhealthy targets, 5xx), **plus the four repository-only policy updates above**.
+2 services (API and worker, `desired_count = 1` each), 4 task definitions (API, migration, provisioning, worker), the image-gated API alarms (running tasks, unhealthy targets, 5xx), **plus the four repository-only policy updates above**. The worker's four alarms and other API/worker foundations are already gated by API hosting; inventory all actual alarms rather than using the earlier resource totals as a current bill of materials.
 Check in every task definition: the image is `...@sha256:<64 hex>` (never a tag), `readonlyRootFilesystem = true`, user `10001`, `DATABASE_SSL = require`, no secret in `environment` (secrets come from `secrets` with ARNs), and the migration task has **no task role**.
 Tasks and services get a **public address** here (`assign_public_ip = true`) because the synthetic network has no NAT; that is expected in the synthetic profile only.
 **Setting `api_image` starts the services at once**, before the logins and the schema exist, so they will fail until the one-off steps are done: that is expected and described in [staging-rehearsal.md](staging-rehearsal.md).
@@ -101,15 +105,20 @@ Tasks and services get a **public address** here (`assign_public_ip = true`) bec
 
 - anything is destroyed or replaced; any update appears in A/B; C updates anything beyond the four specified repository-only policy changes, or any one of those changes is missing;
 - a relaxation (`force_destroy`, no deletion protection, a 7-day key window, `recovery_window_in_days = 0`, a public task address) appears for a resource that is not in the tables above, or `deployment_profile` is not `synthetic`;
-- a resource named in the quick checks appears; a second Region, a backups bucket or a CloudTrail trail that is multi-Region appears;
+- a resource named in the quick checks appears; an unapproved Region, a backups bucket or a CloudTrail trail that is multi-Region appears. The web certificate in `us-east-1` and global CloudFront are expected by `web.tf`, even when the primary data Region differs; they are not off-site backups;
 - a value that should be known is `(known after apply)` and the table says it is a literal (bucket names contain the account id, which the offline plan replaces with a random string, so read the real plan's names for the account you decided in D1);
 - a quota, a free-plan restriction or a missing service is reported: record it in the plan's risks and do not work around it silently.
 
 ## Billable items to price before D2
 
 RDS instance and storage; the load balancer; the firewall (web ACL and rules, plus per-request charges); CloudFront; Fargate tasks (two services, plus the one-off tasks) and **public IPv4 addresses** on them and on the load balancer
-(check the account's current rate: it applies per address per hour); 4 KMS keys; 6 secrets; CloudTrail, CloudWatch logs and 14 alarms; ECR storage; the S3 gateway endpoint has no hourly charge. Nothing here has been priced.
+(check the account's current rate: it applies per address per hour); application and retained-state KMS keys; secrets; CloudTrail, CloudWatch logs and every actual audit/API/worker alarm; ECR storage; S3 storage/requests and retained state versions. Include any approved probe/restore resources, cleanup time and residual charges. The S3 gateway endpoint has no hourly charge. Nothing here has been priced. Require the founder's ceiling, staffed runtime and alert recipient; [budget notifications lag](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-managing-costs.html) and are not a hard cap.
 
 ## After the review
 
 Record who reviewed which plan file (`sha256sum a.tfplan`), the commit, and the answer to D2. Apply only the plan that was reviewed (`terraform apply a.tfplan`), one stage at a time, in a founder-run session, and stop and look after each.
+
+Bring-up action checks A/B/C do not approve destruction. Teardown needs a separate
+reviewed destroy plan and loss/rebuild scope, including the versioned web bucket's
+explicit emptying step and preservation of the independent backend; see
+[cleanup boundary](foundations-readiness.md#cleanup-boundary).

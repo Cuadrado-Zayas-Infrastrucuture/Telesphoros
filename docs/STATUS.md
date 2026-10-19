@@ -3,6 +3,20 @@
 Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Foundations runbook readiness (offline, 2026-10-18)
+
+The [readiness gate and decision record](ops/foundations-readiness.md) reconciles
+the proposed synthetic rehearsal with current source: bootstrap and backend
+activation are separate approvals; main-root stages are A/B/C; task definitions
+precede provisioning; hosted uploads use validated API intake; and web-bucket
+version cleanup is explicit. CloudFront's `us-east-1` certificate is distinguished
+from primary-Region data resources. Account, budget, owner/state custody and the
+BAA/manual-session decision remain pending; no exception or live operation is
+approved. Terraform definitions/policies, application behavior, CI and production
+gates are unchanged. Earlier local-build and plan records below retain their
+dated scope. This documentation change performs no AWS access, init, apply,
+deployment or teardown and supplies no live-provider acceptance.
+
 ## Worker consumer settlement observation (local, 2026-10-18)
 
 The separate `fix/worker-consumer-completion-race` branch repairs the process-test
