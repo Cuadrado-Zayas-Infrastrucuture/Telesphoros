@@ -87,6 +87,74 @@ A compromised backend process can relay real users' in-flight tokens to the issu
 | D3 | Issue rate limit per subject | 30 per minute, refusing beyond that |
 | D4 | Where the token verifier lives once two processes need it | Move `CognitoTokenVerifier` to a shared package in slice 2, with no behavior change |
 
+## 3a. Evidence for the decisions (researched 2026-10-19)
+
+The founder asked for evidence before following any recommendation. Every source below was opened, and each quote was checked against the page text: by grep on raw text for the RFCs, ASVS, NIST 63C and the OWASP cheat sheet, and by reading the fetched page for the AWS documentation. Anything without a source is labelled **judgment**. Section 3 is left as written; where the evidence changes a recommendation, the change is stated here and waits for the founder.
+
+**A correction to section 2.** The residual risk says relayed tokens live "at most 1 h". In this repo, access tokens live **15 minutes** and revocation is on (`infrastructure/terraform/cognito.tf:103-112`, pinned by `guard.test.mjs:48-50`). The relay window is therefore 15 minutes. Cognito notes that revoked tokens *"will still be valid if they are verified using any JWT library"* ([token revocation](https://docs.aws.amazon.com/cognito/latest/developerguide/token-revocation.html)). The issuer's own `membership_assert_current` check is what stops a removed person, not Cognito revocation.
+
+### D1. Issuer runtime: evidence modestly favours ECS, with two conditions (confidence: medium)
+
+| Evidence | Source | Direction |
+|---|---|---|
+| "proxies are recommended for production" for Lambda with RDS, and the proxy is billed hourly | [Lambda with RDS](https://docs.aws.amazon.com/lambda/latest/dg/configuration-database.html) | ECS: Lambda adds RDS Proxy, which itself reads the login's secret |
+| A Fargate task "is always ready to handle requests"; cold starts "can impact performance of applications that require low-latency responses" | [Fargate or Lambda guide](https://docs.aws.amazon.com/decision-guides/latest/decision-guides/fargate-or-lambda.html) | ECS: the issuer sits on the synchronous request path |
+| Cold starts are more common for rarely called functions; environments are recycled "every few hours" | [Lambda execution environment](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtime-environment.html) | ECS: pilot volume is low |
+| "you typically pay less with Lambda at lower traffic volumes" | Fargate or Lambda guide | **Lambda** |
+| Lambda invocation is authenticated by IAM (a resource policy names the caller), with no network listener | [Lambda resource policies](https://docs.aws.amazon.com/lambda/latest/dg/access-control-resource-based.html) | **Lambda** |
+| The repo has **no** internal service-to-service networking (no Service Connect, Cloud Map or internal load balancer); the worker accepts no inbound traffic (`worker.tf:111`) | repo, `main` `8316121` | **Lambda**: an ECS issuer needs new ingress *and* an application-level check of its caller |
+| The only Lambda in the repo has no VPC and no database (`lambda.tf`) | repo | neutral: it is no precedent for a database-connected Lambda |
+| The worker already has a dedicated execution role that reads only its own secret (`worker.tf:183-187`, `200-211`) | repo | ECS: the isolation pattern exists and is tested |
+| A secret injected through `secrets` is not refreshed after rotation; it needs a new task or a forced deployment | [ECS secrets as environment variables](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/secrets-envvar-secrets-manager.html) | condition for ECS |
+
+**Revised recommendation:** keep **ECS, same image**, on two written conditions. First, the issuer gets its own execution role and task role, as the worker does, because a shared execution role would let the API read the issuer's secret. Second, slice 2 must design and price two things it was silent about: the internal ingress path and authentication of the caller. The choice between those costs and Lambda's (RDS Proxy, a VPC attachment, cold starts) is a **judgment**. No AWS document gives a verdict for this case.
+
+### D2. Capability lifetime 60 s: supported as a ceiling (confidence: high for the ceiling; the exact value is judgment)
+
+| Evidence | Source |
+|---|---|
+| Authorization code lifetime "up to 1 minute for L3 applications" (L1/L2: 10 minutes) | OWASP ASVS 5.0.0, requirement 10.4.3 |
+| "A maximum authorization code lifetime of 10 minutes is RECOMMENDED" | RFC 6749 §4.1.2 |
+| A single-use back-channel assertion reference "SHOULD have a validity time window of no more than five minutes" | NIST SP 800-63C-4, back-channel presentation |
+| Proof acceptance "on the order of seconds or minutes" (no number) | RFC 9449 (DPoP) §11.1 |
+| Against: a 30 s TOTP lifetime | ASVS 5.0 6.5.5. This is a weak analogy: a human-typed six-digit code is guessable, and a 256-bit capability is not |
+
+**Revised recommendation:** keep **60 s, single use**, as the ceiling ASVS L3 sets. The database must stamp both `issued_at` and `expires_at` (already in section 2), so clock skew between servers cannot widen the window. RFC 7519 allows "a few minutes" of leeway when two clocks are involved. Shortening below 60 s does little: the relay risk is bounded by the 15-minute access token, not by this number.
+
+### D3. Rate limit 30 per person per minute: no source gives a number (confidence: the number is **judgment**)
+
+| Evidence | Source |
+|---|---|
+| Limits must be "documented, including both per-user and globally" | ASVS 5.0.0, requirement 2.1.3 (L2) |
+| Anti-automation controls must exist against "excessive calls to application functions" (no number) | ASVS 5.0.0, requirement 2.4.1 |
+| "not rely on a single predictable volume limit"; consider short (burst) and long windows | OWASP Credential Stuffing Prevention Cheat Sheet |
+| Rate limiting should be "fine tuned based on the business needs", per user and per operation | OWASP API Security Top 10 2023, API4 |
+| AWS WAF rate rules are "not intended for precise request-rate limiting", and key only on raw header values | [WAF rate-based caveats](https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-statement-type-rate-based-caveats.html) |
+| NIST's 100 and ASVS 4.0.3's 100 per hour count **failed** authentications, not successful issues | NIST SP 800-63B-4 §3.2.2; ASVS 4.0.3 2.2.1. Not applicable |
+
+**Revised recommendation:** replace the single fixed 30/min with **separate limits per purpose** (admit, read, cancel), each with a burst tier and a sustained tier, plus a global limit. Enforce them atomically in PostgreSQL next to the capability insert, and keep WAF as an outer per-IP layer only. Choose the values by counting issues per person, per purpose, per minute in count-only mode on synthetic staging, then set each limit at a stated multiple of the observed maximum, reported with its sample size and window. Until that measurement exists, any number is a provisional **judgment**, and the document will say so. Not measured: whether one page fires several `read` issues at once.
+
+### D4. Shared verifier package: evidence says it is not needed (confidence: medium)
+
+| Evidence | Source |
+|---|---|
+| The worker ships as *"one self-contained bundle (its workspace packages are compiled in)"* inside the API image | `infrastructure/docker/api.Dockerfile:12-14`, `:19` |
+| `CognitoTokenVerifier` depends only on `jose`, `zod`, `@telesphoros/shared-types` and Nest's `Logger`, all of which already ship in the image | `apps/backend/src/auth/cognito-token-verifier.ts:1-5` |
+| AWS recommends caching keys by `kid`; the verifier already does (10-minute cache, cooldown on an unknown `kid`) | [Cognito JWT verification](https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-user-pools-using-tokens-verifying-a-jwt.html); `cognito-token-verifier.ts:38-42` |
+
+**Revised recommendation:** do not move the verifier. Build the issuer as a **second bundled entry point** that imports the existing `CognitoTokenVerifier` and its 18 tests unchanged, as the worker does. That removes a refactor from slice 2. A shared package becomes worth having only if a third process needs the verifier (**judgment**).
+
+### P2-02 (P2 branch). Inert `./durable` subpath export: keep it off (confidence: high)
+
+| Evidence | Source |
+|---|---|
+| With `exports` defined, "all subpaths of the package are encapsulated and no longer available to importers" | [Node.js packages](https://nodejs.org/api/packages.html), "exports" |
+| Measured on P2 `0530f36`: the package root resolves; `@telesphoros/ai-service/durable/job` and a deep `dist/` path both fail with `ERR_PACKAGE_PATH_NOT_EXPORTED` | local `import.meta.resolve` check, with the root as positive control |
+| No workspace package depends on `@telesphoros/ai-service`; P2's tests import `durable/` by relative path | repo |
+| Against: the approved P2 scope listed an "isolated ai-service subpath" in its allowlist | vault, `telesphoros-durable-postgres-scope/README.md:9` |
+
+**Revised recommendation:** keep the subpath **unexported** until a real consumer exists, because an unexported subpath cannot be imported at all. It departs from the approved P2 scope, so it needs the founder's sign-off as a recorded deviation.
+
 ## 4. Plan: slices (each its own draft PR off `main`, never stacked, merged in order)
 
 **Ordering:** P2 itself (inactive) merges before slice 3. Slices 1 and 2 do not depend on P2. Synthetic-only staging under option A may proceed before any slice lands. **No agentic run on real or PHI-bearing data before slice 3 is merged and verified.**
