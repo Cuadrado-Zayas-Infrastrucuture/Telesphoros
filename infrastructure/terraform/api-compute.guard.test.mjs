@@ -224,6 +224,10 @@ export function apiComputeProblems(tf, sources = {}) {
   // Variables.
   const image = one('variable "api_image"');
   need(has(image, 'default     = ""') && has(image, '@sha256:[0-9a-f]{64}$'), 'the image must default to empty and be refused unless pinned by digest');
+  const migrateImage = one('variable "api_migrate_image"');
+  need(has(migrateImage, 'default     = ""') && has(migrateImage, '@sha256:[0-9a-f]{64}$') && has(migrateImage, 'var.api_migrate_image == ""'), 'the migration image must default to empty (the service image) and be refused unless pinned by digest');
+  need(has(one('resource "aws_ecs_task_definition" "api_migrate"'), 'image = var.api_migrate_image != "" ? var.api_migrate_image : var.api_image'), 'the migration task must run api_migrate_image when it is set, otherwise api_image (and only the migration task may)');
+  need((text.match(/var\.api_migrate_image != ""/g) ?? []).length === 1, 'api_migrate_image must be used by the migration task alone: the service, worker and provisioning task keep api_image');
   need(has(one('variable "api_cors_origins"'), 'startswith(o, "https://")'), 'CORS origins must be https');
 
   // The alarms.
@@ -327,6 +331,10 @@ test('the API compute guard reports each way the text could be weakened (control
     ['logs unencrypted', 'kms_key_id        = aws_kms_key.api_logs[0].arn', ''],
     ['log retention floor removed', 'condition     = var.api_log_retention_days >= 90', 'condition     = true'],
     ['image tag allowed', '@sha256:[0-9a-f]{64}$", var.api_image))', '", var.api_image))'],
+    ['migration image tag allowed', '@sha256:[0-9a-f]{64}$", var.api_migrate_image))', '", var.api_migrate_image))'],
+    ['migration image has a default', 'type        = string\n  default     = ""\n  validation {\n    condition     = var.api_migrate_image == ""', 'type        = string\n  default     = "x"\n  validation {\n    condition     = var.api_migrate_image == ""'],
+    ['migration task ignores its image variable', 'image                  = var.api_migrate_image != "" ? var.api_migrate_image : var.api_image', 'image                  = var.api_image'],
+    ['service task takes the migration image', 'portMappings           = [{ containerPort = local.api_port, protocol = "tcp" }]\n', 'portMappings           = [{ containerPort = local.api_port, protocol = "tcp" }]\n      migrateImage           = var.api_migrate_image != "" ? 1 : 0\n'],
     ['non-https CORS origin allowed', 'startswith(o, "https://")', 'true'],
     ['ledger filter on a nested field', 'pattern        = "{ $.event = \\"ledger-compromised\\" }"', 'pattern        = "{ $.data.event = \\"ledger-compromised\\" }"'],
     ['ledger filter on the wrong event', 'pattern        = "{ $.event = \\"ledger-compromised\\" }"', 'pattern        = "{ $.event = \\"ledger-verification-incomplete\\" }"'],
