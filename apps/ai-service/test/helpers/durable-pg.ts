@@ -104,5 +104,38 @@ export function durableHarness(fixture: () => EphemeralDatabase, owner: () => Cl
   const expireLease = (jobId: string) => owner().query(
     `UPDATE public.jobs SET lease_until = clock_timestamp() - interval '1 second' WHERE id=$1`, [jobId]);
 
-  return { app, seedTenant, admit, admitAndClaim, row, accounts, expireLease };
+  /** Test-only teardown after evidence: a stuck or unknown run holds its fleet permit by design. */
+  const releasePermit = (runId: string) => owner().query(
+    'UPDATE public.agentic_synthetic_reservations SET in_flight=false WHERE run_id=$1 AND NOT settled', [runId]);
+  /** Isolation between tests: free every unsettled permit a refused or stuck run still holds. */
+  const releaseAllPermits = () => owner().query(
+    'UPDATE public.agentic_synthetic_reservations SET in_flight=false WHERE in_flight AND NOT settled');
+  /** Barrier: resolves once the backend is blocked on a heavyweight lock, never on a sleep. */
+  const lockWaiting = (pid: number) => until(async () =>
+    (await owner().query('SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1', [pid])).rows[0]?.wait_event_type === 'Lock');
+  /** Hold a row lock in a separate owner transaction until release() rolls it back. */
+  async function holdLock(sql: string, params: unknown[]) {
+    const holder = new Client({ connectionString: fixture().adminUrl });
+    await holder.connect();
+    await holder.query('BEGIN');
+    const held = await holder.query(sql, params);
+    if (held.rowCount !== 1) { await holder.end(); throw new Error('LOCK_TARGET'); }
+    return { async release() { try { await holder.query('ROLLBACK'); } finally { await holder.end(); } } };
+  }
+
+  return { app, seedTenant, admit, admitAndClaim, row, accounts, expireLease, releasePermit, releaseAllPermits, lockWaiting, holdLock };
+}
+
+export const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+export const until = async (check: () => Promise<boolean>, ms = 10_000) => {
+  for (const end = Date.now() + ms; Date.now() < end; await sleep(25)) if (await check()) return;
+  throw new Error('UNTIL_TIMEOUT');
+};
+export const backendPid = async (db: Queryable) => (await db.query('SELECT pg_backend_pid() AS pid')).rows[0].pid as number;
+/** Exact draft/director input digests the SQL recomputes from protected rows. */
+export function inputDigest(runId: string, sources: readonly Source[], role: 'draft' | 'director', n: 1 | 2, candidate?: Candidate) {
+  const tuple = sources.map(s => [s.id, s.version, s.digest]);
+  const evidence = digest(JSON.stringify(tuple));
+  return role === 'draft' ? digest(JSON.stringify([`${runId}:draft:${n}`, evidence, tuple]))
+    : digest(JSON.stringify([`${runId}:director:${n}`, candidate!.digest, evidence]));
 }

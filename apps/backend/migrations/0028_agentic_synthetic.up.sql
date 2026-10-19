@@ -614,6 +614,31 @@ BEGIN
   RETURN NULL;
 END $$;
 
+-- Final time check after the last lock of a worker step. Every row it reads is already locked by this
+-- transaction, so it never waits; a wait on a later lock (membership, source, accounts) therefore
+-- cannot let a step commit after its lease, original deadline or grant expiry.
+CREATE FUNCTION public.agentic_synthetic_fresh(p_stamp jsonb) RETURNS text
+LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp AS $$
+DECLARE
+  v_now timestamptz;
+  v_lease timestamptz;
+  v_run public.agentic_synthetic_runs%ROWTYPE;
+  v_expires timestamptz;
+BEGIN
+  SELECT lease_until INTO v_lease FROM public.jobs WHERE id = (p_stamp->>'jobId')::uuid;
+  SELECT * INTO v_run FROM public.agentic_synthetic_runs WHERE run_id = (p_stamp->>'runId')::uuid;
+  SELECT expires_at INTO v_expires FROM public.agentic_synthetic_grants
+   WHERE tenant_id = v_run.tenant_id AND grant_id = v_run.grant_id;
+  v_now := clock_timestamp();
+  IF v_lease IS NULL OR v_lease < v_now THEN RETURN 'STALE_CLAIM'; END IF;
+  IF v_now < v_run.last_guarded_at THEN RETURN 'DEADLINE_EXPIRED'; END IF;
+  IF v_run.state NOT IN ('released','held','failed','cancelled','expired') AND v_now >= v_run.deadline_at THEN
+    RETURN 'DEADLINE_EXPIRED';
+  END IF;
+  IF v_expires IS NULL OR v_expires <= v_now THEN RETURN 'NOT_AUTHORIZED'; END IF;
+  RETURN NULL;
+END $$;
+
 CREATE FUNCTION public.agentic_synthetic_expected_matches(p_tenant text, p_run uuid, p_expected jsonb) RETURNS boolean
 LANGUAGE sql STABLE SET search_path = pg_catalog, pg_temp AS $$
   SELECT EXISTS (SELECT 1 FROM public.agentic_synthetic_runs r WHERE r.tenant_id = p_tenant AND r.run_id = p_run
@@ -872,7 +897,7 @@ DO $$ DECLARE f text; BEGIN
   FOREACH f IN ARRAY ARRAY['agentic_synthetic_keys(jsonb,text[],text[])','agentic_synthetic_ts(timestamptz)','agentic_synthetic_refusal(text)',
     'agentic_synthetic_sha(text)','agentic_synthetic_stamp_ok(jsonb)','agentic_synthetic_expected_ok(jsonb)',
     'agentic_synthetic_caller_ok(jsonb)','agentic_synthetic_member_current(text,text,bigint)',
-    'agentic_synthetic_authority(text,uuid)','agentic_synthetic_claim_guard(jsonb)',
+    'agentic_synthetic_authority(text,uuid)','agentic_synthetic_claim_guard(jsonb)','agentic_synthetic_fresh(jsonb)',
     'agentic_synthetic_expected_matches(text,uuid,jsonb)','agentic_synthetic_view(text,uuid)',
     'agentic_synthetic_candidate_ok(text,uuid,jsonb)','agentic_synthetic_verdict_ok(jsonb,jsonb,text)',
     'agentic_synthetic_input_digest(text,uuid,text,integer)','agentic_synthetic_draft_ok(text,uuid,integer)',
@@ -953,6 +978,8 @@ BEGIN
   END IF;
   v_code := public.agentic_synthetic_authority(v_run.tenant_id, v_run.run_id);
   IF v_code IS NOT NULL THEN RETURN public.agentic_synthetic_refusal(v_code); END IF;
+  v_code := public.agentic_synthetic_fresh(p_stamp);
+  IF v_code IS NOT NULL THEN RETURN public.agentic_synthetic_refusal(v_code); END IF;
   RETURN public.agentic_synthetic_view(v_run.tenant_id, v_run.run_id);
 END $$;
 
@@ -975,6 +1002,8 @@ BEGIN
   END IF;
   IF v_run.state NOT IN ('queued','running') THEN RETURN public.agentic_synthetic_refusal('INVALID_TRANSITION'); END IF;
   v_code := public.agentic_synthetic_authority(v_run.tenant_id, v_run.run_id);
+  IF v_code IS NOT NULL THEN RETURN public.agentic_synthetic_refusal(v_code); END IF;
+  v_code := public.agentic_synthetic_fresh(p_stamp);
   IF v_code IS NOT NULL THEN RETURN public.agentic_synthetic_refusal(v_code); END IF;
   SELECT jsonb_agg(jsonb_build_object('id', s.source_id, 'tenantId', s.tenant_id, 'version', s.source_version,
       'digest', s.digest, 'body', s.body) ORDER BY e.n)
@@ -1010,6 +1039,8 @@ BEGIN
     RETURN public.agentic_synthetic_refusal('STALE_SEQUENCE');
   END IF;
   v_code := public.agentic_synthetic_authority(v_run.tenant_id, v_run.run_id);
+  IF v_code IS NOT NULL THEN RETURN public.agentic_synthetic_refusal(v_code); END IF;
+  v_code := public.agentic_synthetic_fresh(p_stamp);
   IF v_code IS NOT NULL THEN RETURN public.agentic_synthetic_refusal(v_code); END IF;
   SELECT max(ordinal) INTO v_draft FROM public.agentic_synthetic_invocations
    WHERE tenant_id = v_run.tenant_id AND run_id = v_run.run_id AND role = 'draft';
@@ -1075,6 +1106,8 @@ BEGIN
   SELECT * INTO v_res FROM public.agentic_synthetic_reservations
    WHERE tenant_id = v_run.tenant_id AND run_id = v_run.run_id FOR UPDATE;
   v_code := public.agentic_synthetic_authority(v_run.tenant_id, v_run.run_id);
+  IF v_code IS NOT NULL THEN RETURN public.agentic_synthetic_refusal(v_code); END IF;
+  v_code := public.agentic_synthetic_fresh(p_stamp);
   IF v_code IS NOT NULL THEN RETURN public.agentic_synthetic_refusal(v_code); END IF;
   IF v_res.run_id IS NULL OR v_res.settled OR NOT v_res.in_flight THEN RETURN public.agentic_synthetic_refusal('USAGE_UNKNOWN'); END IF;
   IF EXISTS (SELECT 1 FROM public.agentic_synthetic_invocations WHERE tenant_id = v_run.tenant_id
@@ -1179,6 +1212,8 @@ BEGIN
    WHERE tenant_id = v_run.tenant_id AND run_id = v_run.run_id FOR UPDATE;
   v_code := public.agentic_synthetic_authority(v_run.tenant_id, v_run.run_id);
   IF v_code IS NOT NULL THEN RETURN public.agentic_synthetic_refusal(v_code); END IF;
+  v_code := public.agentic_synthetic_fresh(p_stamp);
+  IF v_code IS NOT NULL THEN RETURN public.agentic_synthetic_refusal(v_code); END IF;
   IF v_obs IS NULL THEN RETURN public.agentic_synthetic_refusal('USAGE_UNKNOWN'); END IF;
   IF v_artifact IS NOT NULL THEN
     IF v_inv.role = 'draft' THEN
@@ -1262,6 +1297,8 @@ BEGIN
   END IF;
   PERFORM public.agentic_synthetic_lock_accounts(v_run.tenant_id, v_run.run_id);
   v_code := public.agentic_synthetic_authority(v_run.tenant_id, v_run.run_id);
+  IF v_code IS NOT NULL THEN RETURN public.agentic_synthetic_refusal(v_code); END IF;
+  v_code := public.agentic_synthetic_fresh(p_stamp);
   IF v_code IS NOT NULL THEN RETURN public.agentic_synthetic_refusal(v_code); END IF;
   IF v_state = 'released' THEN
     SELECT max(ordinal) INTO v_n FROM public.agentic_synthetic_invocations

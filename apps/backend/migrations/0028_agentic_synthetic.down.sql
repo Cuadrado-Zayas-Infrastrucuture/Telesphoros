@@ -24,6 +24,7 @@ DROP FUNCTION public.agentic_synthetic_caller_ok(jsonb);
 DROP FUNCTION public.agentic_synthetic_member_current(text,text,bigint);
 DROP FUNCTION public.agentic_synthetic_authority(text,uuid);
 DROP FUNCTION public.agentic_synthetic_claim_guard(jsonb);
+DROP FUNCTION public.agentic_synthetic_fresh(jsonb);
 DROP FUNCTION public.agentic_synthetic_expected_matches(text,uuid,jsonb);
 DROP FUNCTION public.agentic_synthetic_view(text,uuid);
 DROP FUNCTION public.agentic_synthetic_candidate_ok(text,uuid,jsonb);

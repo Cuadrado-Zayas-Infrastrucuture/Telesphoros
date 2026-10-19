@@ -32,4 +32,27 @@ Rebased locally onto P1 `89fd611` (P1 itself rebased onto main `8316121`; both p
 
 Lease-expired jobs with `maxAttempts 1` are made dead by the existing `job_claim`; the claim sweep now holds those runs with the generic reason `QUEUE_DEAD` (renamed from `LEASE_EXPIRED`, since a job also dies when the kernel fails it). Additional mutations: removing `finish` idempotency or the dead-job sweep each fails its target tests. Fixture data is seeded only by tests through `test/helpers/durable-pg.ts`; the migration seeds nothing.
 
-Still required: lock-wait expiry and no-open-transaction inspection (P2-27, P2-28); cross-process capacity races beyond admission; deadline >120 s and backward-clock vectors; membership revocation mid-run (P2-07/P2-11 ordering); the remaining guard mutations (tenant check, full reservation lock, after-lock clock); inert subpath export (P2-02); the full native delivery gate (P2-38); and unforgeable session authority before any activation.
+### 2026-10-19: time, lock waits, membership boundaries and capacity races
+
+Same local candidate plus one SQL fix. Fresh owned fixture `2c7525ff-9144-49f3-b918-f7cdc2048d36`. The explicit PostgreSQL suite passes **48/48** across 7 files; the 23 new tests are:
+
+- **P2-27 (fix):** the deadline, lease and grant-expiry checks used to run before the membership and source locks, so a step that waited on either lock could commit after expiry. Each worker step now calls `agentic_synthetic_fresh` after its last lock. Four held-lock tests: grant row while the grant expires, membership row while the grant expires, source row while the original deadline passes, and queue row while the lease expires. Each blocks the worker (barrier: `pg_stat_activity` reports a lock wait), lets the expiry pass, releases, and gets the refusal with no state, slot or outcome change.
+- **P2-28:** while a scripted actor is paused, no app or worker login has an open transaction and the worker holds no lock. App cancel returns in under 1 s, and the late observation is refused. Positive control in the same test: an open worker transaction is seen by both probes.
+- **P2-16:** the original admission time and deadline survive release, reconnect and reclaim. Past 120 s nothing dispatches. A deadline that passes mid-run stops the director dispatch even though the process signal is still live. A database clock earlier than the last guarded decision fails closed, a reclaim never moves that guard back, and the fenced queue release refuses too.
+- **P2-07:** with the actual worker login and no request context, membership is bumped or removed before each of the 10 protected boundaries of the accept path. Each boundary refuses `NOT_AUTHORIZED`, no actor is dispatched after the revocation, no outcome or settlement occurs, and app readback and cancel refuse. A control run with the valid version releases.
+- **P2-11:** a revocation that commits while `finish` waits on the membership lock denies the finish. A `finish` that holds the lock first commits exactly once; the revocation waits for it, and later readback refuses.
+- **P2-20:** four connections racing for one tenant get one permit with no partial job, run or reservation rows. A dispatch with unknown usage keeps its permit through cancel; three more tenants then race for the one remaining fleet slot (one wins), and a fifth is refused with nothing written.
+
+Guard-removal proof (temporary edits, restored by hash, each run with per-test permit isolation):
+
+| Mutant | Tests that fail |
+|---|---|
+| No fresh recheck | membership-lock and source-lock waits (2) |
+| Grant expiry compared with transaction start | membership-lock wait (1) |
+| Deadline compared with transaction start | source-lock wait (1) |
+| Backward-clock checks removed | backward clock (1) |
+| Claim rewinds the guard | backward clock (1) |
+| Membership not checked | all 10 P2-07 boundaries, both P2-11 orderings, membership-lock wait (13) |
+| Tenant in-flight cap raised to 2 | both P2-20 tests (2) |
+
+Still required: lock order observed under contention (P2-28's third clause; this run only checks it by reading the code); P2-13/14/15/19/21/22/23/26 vectors beyond those already covered; the inert subpath export (P2-02); the full native delivery gate (P2-38); and unforgeable session authority before any activation.
