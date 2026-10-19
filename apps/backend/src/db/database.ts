@@ -3,7 +3,7 @@ import { Pool, type PoolClient } from 'pg';
 import { currentRequestAuthority } from '../auth/authority-context';
 import { assertSessionCurrent } from '../auth/session-admission';
 import { AppException } from '../common/app-exception';
-import { pendingMigrations } from './migrator';
+import { migrationReadiness, pendingMigrations, type MigrationReadiness } from './migrator';
 import { pgClientConfig } from './tls';
 import type { SecurityAuditEvent } from '../auth/security-audit';
 
@@ -137,6 +137,11 @@ export class Database {
   /** Pending versions after strict history validation; invalid or newer recorded history throws. */
   pendingMigrations(): Promise<string[]> {
     return pendingMigrations(this.pool);
+  }
+
+  /** Pending versions, plus newer applied versions this code tolerates because they are all declared `expand`. Used by /ready only. */
+  migrationReadiness(): Promise<MigrationReadiness> {
+    return migrationReadiness(this.pool);
   }
 
   async onModuleDestroy() {

@@ -5,8 +5,10 @@ import { Client } from 'pg';
 import {
   loadMigrations,
   MIGRATIONS_DIR,
+  type Compat,
   migrateDown,
   migrateUp,
+  migrationReadiness,
   migrationStatus,
   MigrationError,
   pendingMigrations,
@@ -41,6 +43,14 @@ const SHIPPED = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008',
 /** The first migration that creates append-only audit tables: reverting it (and everything after it) needs the explicit setting. */
 const FIRST_AUDIT_MIGRATION = '0005';
 const nextVersion = String(SHIPPED.length + 1).padStart(4, '0');
+/** The version `offset` places after the last shipped one (1 = the next migration to be written). */
+const version = (offset: number) => String(SHIPPED.length + offset).padStart(4, '0');
+/** Writes a harmless additive migration into a copy of the migrations directory, with or without a compat label. */
+const addMigration = (dir: string, offset: number, label: Compat | undefined) => {
+  const name = `${version(offset)}_t_compat_${offset}`;
+  writeFileSync(join(dir, `${name}.up.sql`), `${label ? `-- compat: ${label}\n` : ''}CREATE TABLE t_compat_${offset} (id integer);`);
+  writeFileSync(join(dir, `${name}.down.sql`), `DROP TABLE t_compat_${offset};`);
+};
 
 /** Reverts `steps` migrations in one session that has the audit-drop setting on, as an operator would on purpose. */
 const down = (db: EphemeralDatabase, steps: number) =>
@@ -213,6 +223,112 @@ describe('migration runner', () => {
     expect(await run(db, c => migrateUp(c, newer))).toEqual([nextVersion]);
     await expect(withAdmin(db.appUrl, c => pendingMigrations(c))).rejects.toBeInstanceOf(MigrationError); // N / N+1
     await expect(withAdmin(db.appUrl, c => pendingMigrations(c, newer))).resolves.toEqual([]); // N+1 / N+1
+  });
+
+  it('records each migration\'s compat label, and an unlabeled one is stored as breaking', async () => {
+    const db = await emptyDb();
+    const dir = tempMigrations();
+    addMigration(dir, 1, 'expand');
+    addMigration(dir, 2, undefined);
+    await run(db, (c) => migrateUp(c, dir));
+    const rows = (await run(db, (c) => c.query('SELECT version, compat FROM schema_migrations ORDER BY version'))).rows;
+    expect(rows.slice(0, SHIPPED.length).every((r) => r.compat === 'breaking')).toBe(true); // shipped migrations carry no label
+    expect(rows.slice(SHIPPED.length)).toEqual([{ version: version(1), compat: 'expand' }, { version: version(2), compat: 'breaking' }]);
+  });
+
+  it('adds the compat column to a database an older migrator created, without touching its rows', async () => {
+    const db = await emptyDb();
+    await run(db, (c) => migrateUp(c));
+    await run(db, (c) => c.query('ALTER TABLE schema_migrations DROP COLUMN compat'));
+    await expect(run(db, (c) => migrationReadiness(c))).resolves.toEqual({ pending: [], tolerated: [] }); // nothing newer: the column is never read
+    await run(db, (c) => migrateUp(c));
+    const rows = (await run(db, (c) => c.query('SELECT version, compat FROM schema_migrations ORDER BY version'))).rows;
+    expect(rows.map((r) => r.version)).toEqual(SHIPPED);
+    expect(rows.every((r) => r.compat === null)).toBe(true); // legacy rows stay NULL, which reads as breaking
+  });
+
+  describe('readiness across a rolling deploy (the database is ahead of the code)', () => {
+    /** A database migrated by the NEWER code (`newer` has extra migrations), probed by the OLDER code as the restricted runtime login. */
+    const aheadOfCode = async (...labels: (Compat | undefined)[]) => {
+      const db = await createEphemeralDatabase();
+      dbs.push(db);
+      const newer = tempMigrations();
+      labels.forEach((label, index) => addMigration(newer, index + 1, label));
+      expect(await run(db, (c) => migrateUp(c, newer))).toEqual(labels.map((_l, index) => version(index + 1)));
+      return { db, newer };
+    };
+    const asRuntimeLogin = <T>(db: EphemeralDatabase, work: (c: Client) => Promise<T>) =>
+      withAdmin(db.appUrl, async (c) => {
+        await c.query('BEGIN READ ONLY');
+        try {
+          return await work(c);
+        } finally {
+          await c.query('ROLLBACK');
+        }
+      });
+    const readiness = (db: EphemeralDatabase) => asRuntimeLogin(db, (c) => migrationReadiness(c));
+
+    it('tolerates newer migrations that are all expand, using only the read-only runtime login', async () => {
+      const { db, newer } = await aheadOfCode('expand');
+      await expect(readiness(db)).resolves.toEqual({ pending: [], tolerated: [version(1)] }); // N / N+1
+      await expect(asRuntimeLogin(db, (c) => migrationReadiness(c, newer))).resolves.toEqual({ pending: [], tolerated: [] }); // N+1 / N+1
+      const two = await aheadOfCode('expand', 'expand');
+      await expect(readiness(two.db)).resolves.toEqual({ pending: [], tolerated: [version(1), version(2)] });
+    });
+
+    it('leaves the migrator strict: it still refuses history it does not know', async () => {
+      const { db } = await aheadOfCode('expand');
+      await expect(run(db, (c) => migrateUp(c))).rejects.toThrow(/does not know/);
+      await expect(run(db, (c) => migrateDown(c, 1))).rejects.toThrow(/does not know/);
+      await expect(run(db, (c) => migrationStatus(c))).rejects.toBeInstanceOf(MigrationError);
+      await expect(run(db, (c) => pendingMigrations(c))).rejects.toBeInstanceOf(MigrationError);
+    });
+
+    it.each([
+      ['a breaking migration', ['breaking']],
+      ['an unlabeled migration', [undefined]],
+      ['an expand then a breaking migration', ['expand', 'breaking']],
+      ['a breaking then an expand migration', ['breaking', 'expand']],
+    ] as const)('refuses %s', async (_name, labels) => {
+      const { db } = await aheadOfCode(...labels);
+      await expect(readiness(db)).rejects.toThrow(/not declared expand/);
+    });
+
+    it('refuses a newer migration whose stored label is missing or unreadable', async () => {
+      const { db } = await aheadOfCode('expand');
+      await run(db, (c) => c.query('UPDATE schema_migrations SET compat = NULL WHERE version = $1', [version(1)]));
+      await expect(readiness(db)).rejects.toThrow(/not declared expand/);
+      for (const stray of ['Expand', 'additive', 'expand ', '']) { // anything but the exact text 'expand' is not a promise
+        await run(db, (c) => c.query('UPDATE schema_migrations SET compat = $1 WHERE version = $2', [stray, version(1)]));
+        await expect(readiness(db)).rejects.toThrow(/not declared expand/);
+      }
+      await run(db, (c) => c.query(`UPDATE schema_migrations SET compat = 'expand' WHERE version = $1`, [version(1)]));
+      await expect(readiness(db)).resolves.toMatchObject({ tolerated: [version(1)] });
+      await run(db, (c) => c.query('ALTER TABLE schema_migrations DROP COLUMN compat')); // no column at all: nothing can be trusted
+      await expect(readiness(db)).rejects.toThrow(/not declared expand/);
+    });
+
+    it('still refuses drift in the history this code knows, even with only expand migrations ahead', async () => {
+      const { db } = await aheadOfCode('expand');
+      await run(db, (c) => c.query('UPDATE schema_migrations SET checksum = $1 WHERE version = $2', ['t-drift', SHIPPED[0]]));
+      await expect(readiness(db)).rejects.toThrow(/modified after it was applied/);
+      const gap = await aheadOfCode('expand');
+      await run(gap.db, (c) => c.query('DELETE FROM schema_migrations WHERE version = $1', [SHIPPED[1]]));
+      await expect(readiness(gap.db)).rejects.toBeInstanceOf(MigrationError);
+    });
+
+    it('refuses newer history that does not continue the numbering, even if it is labeled expand', async () => {
+      const { db } = await aheadOfCode('expand');
+      await run(db, (c) => c.query(`INSERT INTO schema_migrations (version, name, checksum, compat) VALUES ($1, 't_gap', 'x', 'expand')`, [version(3)]));
+      await expect(readiness(db)).rejects.toThrow(/not contiguous/);
+    });
+
+    it('still reports pending migrations (the database is behind the code), and tolerates nothing then', async () => {
+      const db = await createEphemeralDatabase();
+      dbs.push(db);
+      await run(db, (c) => c.query('DELETE FROM schema_migrations WHERE version = $1', [SHIPPED.at(-1)]));
+      await expect(readiness(db)).resolves.toEqual({ pending: [SHIPPED.at(-1)], tolerated: [] });
+    });
   });
 
   it('rejects incomplete or gapped migration sets', () => {
