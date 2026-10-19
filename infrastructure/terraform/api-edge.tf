@@ -302,11 +302,91 @@ resource "aws_wafv2_web_acl" "api" {
       managed_rule_group_statement {
         vendor_name = "AWS"
         name        = "AWSManagedRulesCommonRuleSet"
+
+        # The one override: SizeRestrictions_BODY counts here, and body-size-limit below blocks oversize bodies everywhere else.
+        rule_action_override {
+          name = "SizeRestrictions_BODY"
+          action_to_use {
+            count {}
+          }
+        }
       }
     }
     visibility_config {
       cloudwatch_metrics_enabled = true
       metric_name                = "${local.name}-api-common"
+      sampled_requests_enabled   = false
+    }
+  }
+
+  # The managed size rule would block every body over 8 KB. The report upload (raw bytes) and the JSON API send larger bodies by design,
+  # and the application caps them (10 MiB and 100 KB). So this rule keeps the 8 KB limit for everything else: a body over 8 KB is
+  # blocked unless it is the upload route or declares application/json. A request with no Content-Type is blocked (fails closed).
+  rule {
+    name     = "body-size-limit"
+    priority = 40
+    action {
+      block {}
+    }
+    statement {
+      and_statement {
+        statement {
+          size_constraint_statement {
+            comparison_operator = "GT"
+            size                = 8192
+            # The load balancer lets the firewall inspect only the first 8 KB, so a larger body is cut at exactly 8192 bytes and a plain
+            # "greater than 8192" would never be true. MATCH treats an oversize body as over the limit; the two exceptions below decide.
+            field_to_match {
+              body {
+                oversize_handling = "MATCH"
+              }
+            }
+            text_transformation {
+              priority = 0
+              type     = "NONE"
+            }
+          }
+        }
+        statement {
+          not_statement {
+            statement {
+              regex_match_statement {
+                regex_string = "^/api/v1/reports/[0-9a-fA-F-]{36}/upload-attempts/[0-9a-fA-F-]{36}/bytes$"
+                field_to_match {
+                  uri_path {}
+                }
+                text_transformation {
+                  priority = 0
+                  type     = "NONE"
+                }
+              }
+            }
+          }
+        }
+        statement {
+          not_statement {
+            statement {
+              byte_match_statement {
+                search_string         = "application/json"
+                positional_constraint = "STARTS_WITH"
+                field_to_match {
+                  single_header {
+                    name = "content-type"
+                  }
+                }
+                text_transformation {
+                  priority = 0
+                  type     = "LOWERCASE"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${local.name}-api-body-size"
       sampled_requests_enabled   = false
     }
   }

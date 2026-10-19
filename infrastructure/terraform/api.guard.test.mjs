@@ -132,12 +132,20 @@ export function apiEdgeProblems(tf, vars = variables, db = database) {
     need(rules.length === 1, `the managed group ${group} must be present`);
     need(rules.length === 1 && has(rules[0], 'override_action {\n      none {}') , `the managed group ${group} must not be overridden to count`);
   }
-  need(!/count\s*\{\s*\}/.test(acl), 'no firewall rule may be switched to count mode');
+  // The one allowed count: SizeRestrictions_BODY, which body-size-limit below takes over. Any other count stays refused.
+  const SIZE_OVERRIDE = /rule_action_override \{\s*name = "SizeRestrictions_BODY"\s*action_to_use \{\s*count \{\}\s*\}\s*\}/;
+  need([...acl.matchAll(/rule_action_override \{/g)].length === 1 && SIZE_OVERRIDE.test(acl), 'the only rule override allowed is SizeRestrictions_BODY counted, with body-size-limit blocking it');
+  need(!/count\s*\{\s*\}/.test(acl.replace(SIZE_OVERRIDE, '')), 'no firewall rule may be switched to count mode, except the SizeRestrictions_BODY override');
+  const sizeRule = blocks(acl, 'rule \\{').find((r) => r.includes('name     = "body-size-limit"')) ?? '';
+  need(sizeRule !== '' && sizeRule.includes('priority = 40') && sizeRule.includes('action {\n      block {}'), 'body-size-limit must exist and block');
+  need(sizeRule.includes('comparison_operator = "GT"') && sizeRule.includes('size                = 8192') && /body \{\s*oversize_handling = "MATCH"\s*\}/.test(sizeRule), 'body-size-limit must block bodies over 8192 bytes, and count an oversize body (the firewall sees only 8 KB of it) as over the limit');
+  need(sizeRule.includes('regex_string = "^/api/v1/reports/[0-9a-fA-F-]{36}/upload-attempts/[0-9a-fA-F-]{36}/bytes$"') && sizeRule.includes('uri_path {}'), 'the upload-route exception must be the exact bytes path, not a prefix');
+  need(sizeRule.includes('search_string         = "application/json"') && sizeRule.includes('positional_constraint = "STARTS_WITH"') && sizeRule.includes('name = "content-type"'), 'the JSON exception must match a Content-Type that starts with application/json');
   const ceiling = blocks(acl, 'rate_based_statement')[0] ?? '';
   need(has(ceiling, 'limit = var.api_rate_limit_per_5min') && has(ceiling, 'aggregate_key_type = "IP"') && has(ceiling, 'evaluation_window_sec = 300'), 'the per-address ceiling must use the variable, per address, over five minutes');
   need(has(acl, 'action {\n      block {}'), 'the per-address ceiling must block');
   const visibilities = blocks(acl, 'visibility_config');
-  need(visibilities.length === 5, 'every rule and the firewall itself must declare visibility (5)');
+  need(visibilities.length === 6, 'every rule and the firewall itself must declare visibility (6)');
   for (const v of visibilities) need(has(v, 'sampled_requests_enabled = false') && has(v, 'cloudwatch_metrics_enabled = true'), 'sampled requests must stay off (they keep request headers) and metrics on');
   need(!text.includes('aws_wafv2_web_acl_logging_configuration'), 'firewall logging must stay off until a redaction plan exists');
   const association = one('resource "aws_wafv2_web_acl_association" "api"');
@@ -214,6 +222,13 @@ test('the API edge guard reports each way the text could be weakened (controls)'
     ['firewall not attached', 'resource_arn = aws_lb.api[0].arn', 'resource_arn = aws_lb_target_group.api[0].arn'],
     ['ceiling minimum unchecked', 'condition     = var.api_rate_limit_per_5min >= 10 &&', 'condition     = var.api_rate_limit_per_5min >= 1 &&'],
     ['output removed', 'output "api_target_group_arn"', 'output "api_other"'],
+    ['size limit raised', 'size                = 8192', 'size                = 65536'],
+    ['oversize body no longer counted as over the limit', 'oversize_handling = "MATCH"', 'oversize_handling = "CONTINUE"'],
+    ['size rule only counted', 'name     = "body-size-limit"\n    priority = 40\n    action {\n      block {}', 'name     = "body-size-limit"\n    priority = 40\n    action {\n      count {}'],
+    ['upload exception widened to any API path', 'regex_string = "^/api/v1/reports/[0-9a-fA-F-]{36}/upload-attempts/[0-9a-fA-F-]{36}/bytes$"', 'regex_string = "^/api/v1/.*$"'],
+    ['JSON exception dropped', 'search_string         = "application/json"', 'search_string         = "text/plain"'],
+    ['size override moved to another rule', 'name = "SizeRestrictions_BODY"', 'name = "CrossSiteScripting_BODY"'],
+    ['a second override added', 'rule_action_override {\n          name = "SizeRestrictions_BODY"', 'rule_action_override {\n          name = "SizeRestrictions_BODY"\n          action_to_use {\n            count {}\n          }\n        }\n        rule_action_override {\n          name = "SizeRestrictions_BODY"'],
   ];
   for (const [name, from, to] of weakened) {
     assert.ok(edge.includes(from), `the control for "${name}" must match the real text (it does not: fix the control)`);
