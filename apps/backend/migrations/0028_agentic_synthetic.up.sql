@@ -347,7 +347,8 @@ BEGIN
       JOIN public.agentic_synthetic_sources s ON (s.tenant_id, s.source_id, s.source_version) =
         (l.tenant_id, l.source_id, l.source_version)
      WHERE l.tenant_id = v_tenant AND l.grant_id = v_grant_id AND l.enabled AND s.eligible
-     ORDER BY s.source_id, s.source_version FOR SHARE OF l, s
+     -- Byte order, never the database collation: the evidence preimage must not change with locale.
+     ORDER BY s.source_id COLLATE "C", s.source_version COLLATE "C" FOR SHARE OF l, s
   LOOP
     v_source_count := v_source_count + 1;
     v_total_bytes := v_total_bytes + octet_length(v_source.body);

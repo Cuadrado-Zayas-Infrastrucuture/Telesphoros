@@ -99,4 +99,23 @@ Guard-removal proof:
 | Exact remaining budget refused (`>=`) | P2-36 edge (1) |
 | Settlement allowed twice | P2-36 edge (1) |
 
-Still required: P2-26 golden digest vectors; the boundary and schema families (P2-01/02/03/29-34); the full native delivery gate (P2-38); and unforgeable session authority before any activation.
+### 2026-10-19: digest parity and the attempt-two matrix
+
+One SQL fix. Admission sorted sources by the database's default collation, and that order is part of the evidence preimage. On a non-C database (most managed PostgreSQL defaults), or after an OS collation update, the same sources could produce a different digest, and an exact repeat request would be refused. The sort is now `COLLATE "C"` (byte order). The owned fixture is initialised `--locale=C`, so the test simulates the risk by switching the source column to ICU `en-US-x-icu`.
+
+The explicit PostgreSQL suite passes **68/68** across 10 files; the new `digests-repair.pg.test.ts` adds 5:
+
+- **Golden vectors:** a Spanish request with quotes, backslash, slash, newline, tab, U+0001, DEL, U+2028, an astral emoji and a combining accent. Sources have escaped ids and versions. The SQL request and evidence preimages, the TypeScript `JSON.stringify` output and a hand-written expected string are byte-identical; digests match. The SQL draft input digest equals the TypeScript one, and the run releases end to end.
+- **NUL and lone surrogates:** refused `INVALID_INPUT` by the adapter. Sent as raw JSON to the SQL function, the parameter cast itself errors (SQLSTATE class 22) and no run is written.
+- **Attempt-two matrix:** a verdict with swapped evidence or candidate digest is refused. `begin(draft,2)` is refused while reviewing and in repair-pending, and with attempt-1, wrong-run or wrong-evidence input digests, a stale fence or a stale sequence. The exact `begin(draft,2)` succeeds once; a duplicate is refused. A NUL in a terminal proposal errors at the cast with no outcome.
+- **Changed source after the persisted repair:** the kernel is refused `SOURCE_UNAVAILABLE` at repair-pending, with exactly two actor calls and no outcome.
+- **Byte order under a locale collation:** with the column on ICU (where `a` sorts before `B`), the evidence preimage still matches the byte-order golden.
+
+Guard-removal proof:
+
+| Mutant | Tests that fail |
+|---|---|
+| `COLLATE "C"` removed | byte order under ICU (1) |
+| `begin` input-digest check removed | attempt-two matrix (1) |
+
+Still required: the boundary and schema families (P2-01/02/03/29-34); the full native delivery gate (P2-38); and unforgeable session authority before any activation.
