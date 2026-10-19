@@ -32,11 +32,15 @@ Old completed jobs cannot satisfy the query because it filters the report IDs an
 tenant. [PostgreSQL's lock view](https://www.postgresql.org/docs/16/view-pg-locks.html)
 defines the lock-wait evidence used by the fixture.
 
-The gate always releases its lock, removes its fixture trigger/function and closes
-its connection in cleanup. Its DDL lock wait is bounded. It is not a migration,
-runtime hook or change to worker/queue SQL, and never runs against AWS or an
-existing database. No arbitrary sleep, CI retry, timeout increase or assertion
-accepting unfinished work was added.
+The gate attempts lock release, both fixture-object drops and connection closure
+even if an earlier cleanup step fails. It reuses `disposeFixtures` and
+`onceFixtureCleanup` from the existing database test helpers. Setup and test errors
+are preserved together with cleanup errors; repeated cleanup callers share one
+disposal. A failed drop remains visible as a test failure, and the enclosing
+fixture still drops its disposable database. Its DDL lock wait is bounded. It is
+not a migration, runtime hook or change to worker/queue SQL, and never runs
+against AWS or an existing database. No arbitrary sleep, CI retry, timeout
+increase or assertion accepting unfinished work was added.
 
 ## Verification (2026-10-18)
 
@@ -60,12 +64,50 @@ local verification.
 
 ## Scope and remaining acceptance
 
-Only the process test, test-only gate and this documentation/status record change.
+Only the process test, test-only gate and its failure-path tests, and this
+documentation/status record change.
 Worker/queue runtime, migrations, permissions, provider configuration, CI coverage
-and deadlines remain unchanged. PR #166 remains a separate documentation draft;
-this fix is branched directly from main rather than stacked onto it.
+and deadlines remain unchanged. This follow-on repair was branched directly
+from main rather than stacked onto PR #166, which has since merged.
 
 Exact-head hosted CI is separate from these local results. No AWS access,
-deployment, production database action, clinical acceptance or merge is authorized
-by this repair. Later application of the reviewed fix to the documentation branch
-and fresh CI acceptance remain separate delivery steps.
+deployment, production database action, clinical acceptance or merge is
+authorized by this repair. The fixture repair requires its own exact-head CI
+acceptance.
+
+## PR #167 review: preserve failures during gate cleanup (2026-10-18)
+
+One confirmed P2 finding affects failure diagnosis in the test fixture. In the
+reviewed head `42dd2eef4285b6aa6f527aebb238ef08bd37a885`, a rejected trigger drop
+skips the function drop, and a cleanup exception replaces an installation or
+assertion error. This is separate from the terminal-state race repaired there.
+
+Real PostgreSQL event triggers in fresh disposable fixture databases reproduce the
+failure paths without modifying worker runtime or migration SQL. Against #167's
+gate, the three lifecycle tests fail: only the cleanup error survives failed
+installation; the function drop is skipped after a trigger-drop failure; concurrent
+cleanup attempts unlock twice. The repair uses the existing helpers, includes
+connection establishment in protected setup, and preserves the original assertion
+through the process test's `finally` block.
+
+The permanent tests require both construction errors, the original assertion plus
+both drop errors, a disconnected gate session with no advisory lock, and one
+successful disposal across repeated callers with both fixture objects removed.
+Complete fault-injection stdout/stderr and native exit 1 are retained privately
+under the originating task's `work/pr167-review/`; repaired results are in its
+`verification/` directory. These tests exercise actual PostgreSQL failures, not
+mocked query results.
+
+| Review repair check | Observed result |
+| --- | --- |
+| Failure/lifecycle suite on reviewed #167 gate | 3/3 failed as expected, native exit 1 |
+| Same suite on repaired gate | 3/3 passed |
+| Complete worker suite including process regression | 14 files / 129 tests passed, no skips or missing-service notices |
+| Worker build, typecheck and lint | Native exit 0 |
+| Both owned-service runs | Moto exit 0, PostgreSQL PID removed, ports closed, only three standard databases remain |
+
+The review branch starts directly at main
+`f3a112fbafb5fc683747a511e11685a4dbe86c63`. It includes the original settlement wait
+and this cleanup correction together, so it can be reviewed and integrated without
+merging #167 first. The original #166 and #167 branches are preserved; none of
+these local checks makes #166's failed historical CI green.

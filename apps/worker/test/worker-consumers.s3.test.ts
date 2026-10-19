@@ -3,6 +3,7 @@ import { Client } from 'pg';
 import { REPORTS_BUCKET, TENANT_A, createFixture, s3Client, seedReport, startWorker, until, type Fixture, type WorkerProcess } from './support';
 import type { S3Client } from '@aws-sdk/client-s3';
 import { holdSettlements } from './settlement-gate';
+import { disposeFixtures } from '../../backend/test/helpers/fixture-cleanup';
 
 // The built worker process on its own: the outbox relay, the scheduler, the claim loop and the two consumers, with nothing but the environment to configure it.
 let f: Fixture;
@@ -78,6 +79,7 @@ describe('the worker process with the consumers', () => {
     const good = await seedReport(f, s3, TENANT_A);
     const bad = await seedReport(f, s3, TENANT_A, { claim: { sha256: 'e'.repeat(64) } });
     const gate = await holdSettlements(f);
+    const errors: unknown[] = [];
     try {
       await commitEvent(TENANT_A, good.reportId);
       await commitEvent(TENANT_A, bad.reportId);
@@ -111,8 +113,11 @@ describe('the worker process with the consumers', () => {
         { report_id: good.reportId, state: 'succeeded', last_error_code: null },
         { report_id: bad.reportId, state: 'dead', last_error_code: 'file-changed' },
       ]);
+    } catch (error) {
+      errors.push(error);
+      throw error;
     } finally {
-      await gate.close();
+      await disposeFixtures([gate.close], errors);
     }
   });
 

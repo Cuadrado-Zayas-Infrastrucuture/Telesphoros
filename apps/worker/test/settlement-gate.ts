@@ -1,10 +1,10 @@
 import { Client } from 'pg';
+import { disposeFixtures, onceFixtureCleanup } from '../../backend/test/helpers/fixture-cleanup';
 import type { Fixture } from './support';
 
 /** TEST ONLY: hold terminal updates in this disposable database after verification commits. */
 export async function holdSettlements(f: Fixture) {
   const client = new Client({ connectionString: f.db.adminUrl });
-  await client.connect();
   let locked = false;
   let createdFunction = false;
   let createdTrigger = false;
@@ -14,16 +14,14 @@ export async function holdSettlements(f: Fixture) {
     if (rows[0].released !== true) throw new Error('Test settlement gate lost its lock');
     locked = false;
   };
-  const close = async () => {
-    try {
-      await release();
-      if (createdTrigger) await client.query('DROP TRIGGER worker_test_hold_settlement ON public.jobs');
-      if (createdFunction) await client.query('DROP FUNCTION public.worker_test_hold_settlement()');
-    } finally {
-      await client.end();
-    }
-  };
+  const close = onceFixtureCleanup(() => disposeFixtures([
+    release,
+    async () => { if (createdTrigger) await client.query('DROP TRIGGER worker_test_hold_settlement ON public.jobs'); },
+    async () => { if (createdFunction) await client.query('DROP FUNCTION public.worker_test_hold_settlement()'); },
+    () => client.end(),
+  ]));
   try {
+    await client.connect();
     await client.query("SELECT set_config('lock_timeout', $1, false)", ['2s']);
     // Static fixture DDL, never a migration or a change to the real worker's SQL.
     await client.query(`CREATE FUNCTION public.worker_test_hold_settlement() RETURNS trigger
@@ -51,7 +49,7 @@ export async function holdSettlements(f: Fixture) {
       },
     };
   } catch (error) {
-    await close();
+    await disposeFixtures([close], [error]);
     throw error;
   }
 }
