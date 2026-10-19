@@ -74,6 +74,27 @@ describe('loadKnowledge: production rules', () => {
     expect(set.containsSynthetic).toBe(false);
   });
 
+  it('refuses a reviewed real file that leaves its license or redistribution "unknown", in every mode', async () => {
+    for (const field of ['license', 'redistribution'] as const) {
+      const dir = await reviewedCopyOf(SYNTHETIC_DIR, (file) => {
+        if (file.id === 'drugx-genea') file.provenance[field] = 'unknown';
+      });
+      for (const mode of ['production', 'non-production'] as const) {
+        const problems = await problemsOf(dir, mode);
+        expect(`${field}/${mode}: ${problems.join('\n')}`).toContain(`drugx-genea.json: provenance.${field}:`);
+        expect(problems.filter((p) => p.includes(`provenance.${field}:`))).toHaveLength(1); // only the edited file
+      }
+    }
+  });
+
+  it('accepts a reviewed real file that states its license, whatever the license is', async () => {
+    const dir = await reviewedCopyOf(SYNTHETIC_DIR, (file) => {
+      file.provenance.license = 'cc-by-sa-4.0';
+      file.provenance.redistribution = 'restricted';
+    });
+    await expect(loadKnowledge({ directory: dir, mode: 'production' })).resolves.toBeDefined();
+  });
+
   it('rejects a reviewed file whose content was edited after the sign-off, in every mode', async () => {
     const dir = await reviewedCopyOf(SYNTHETIC_DIR);
     const path = join(dir, 'guidelines/drugx-genea.json');

@@ -23,17 +23,17 @@ error, never skipped**, because skipped knowledge looks exactly like "no guideli
 Test content lives elsewhere (`data/fixtures/knowledge/synthetic/`, invented genes `GENEA`–`GENED`). Every file
 there is `synthetic: true`.
 
-## File format (schema version `1.1`)
+## File format (schema version `1.2`)
 
 Every file starts with the same envelope:
 
 | Field | Meaning |
 | --- | --- |
-| `schemaVersion` | `"1.1"` |
+| `schemaVersion` | `"1.2"` |
 | `id` | lower-case letters, digits, dashes; equals the file name |
 | `kind` | `gene-phenotype-map` or `guideline` |
 | `synthetic` | `true` for invented test content. Refused in production; can never be signed off |
-| `provenance` | `source`, `sourceUrl` (https), `retrievedAt` (date), `sourceVersion` |
+| `provenance` | `source`, `sourceUrl` (https), `retrievedAt` (date), `sourceVersion`, `license` (`cc0-1.0`, `cc-by-4.0`, `cc-by-sa-4.0`, `proprietary` or `unknown`) and `redistribution` (`allowed`, `restricted` or `unknown`). A **reviewed, non-synthetic** file may not say `unknown` for either: the reviewer states what the source's license allows before signing (`knowledge:hash` refuses to print a hash until then). Drafts and synthetic files may. The fields record what the reviewer read; they do not grant a right. |
 | `review` | `{status: "unreviewed"}` or `{status: "reviewed", reviewedBy, reviewedAt, contentSha256}` |
 
 **Gene map** (`kind: gene-phenotype-map`): `gene` and `phenotypes` (every canonical term the gene can have;
@@ -66,7 +66,7 @@ Schema 1.1 limits (stated so nobody assumes more): **at most four genes per guid
 ## Review and sign-off
 
 1. Fetch or edit a file. Leave `review` as `{"status": "unreviewed"}`.
-2. A pharmacist checks it against the source.
+2. A pharmacist checks it against the source, including the source's license: set `provenance.license` and `provenance.redistribution` to what the source states (not `unknown`).
 3. Run `pnpm --filter @telesphoros/backend knowledge:hash <file>` (after `pnpm build`; the path is relative to `apps/backend`). It prints the file's
    content hash: the whole file **except** the `review` block, with keys sorted, so formatting does not matter.
 4. Replace `review` with `{"status": "reviewed", "reviewedBy": "...", "reviewedAt": "YYYY-MM-DD", "contentSha256": "<hash>"}`.

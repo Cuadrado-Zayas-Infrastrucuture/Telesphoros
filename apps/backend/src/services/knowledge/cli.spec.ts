@@ -34,6 +34,31 @@ describe('knowledge CLI', () => {
     expect(result).toEqual({ code: 0, text: contentSha256(await readJson(path)) });
   });
 
+  it('hash refuses to prepare a signature for real content whose license or redistribution is "unknown"', async () => {
+    const dir = await tempDir();
+    const source = (await readJson(join(SYNTHETIC_DIR, 'guidelines/drugx-genea.json'))) as unknown as { synthetic: boolean; provenance: Record<string, string> };
+    for (const [field, value] of [['license', 'cc0-1.0'], ['redistribution', 'allowed']] as const) {
+      const real = { ...source, synthetic: false, provenance: { ...source.provenance, license: 'cc0-1.0', redistribution: 'allowed', [field]: 'unknown' } };
+      const path = join(dir, `${field}.json`);
+      await writeFile(path, JSON.stringify(real));
+      const refused = await run(['hash', path]);
+      expect([field, refused.code]).toEqual([field, 1]);
+      expect(refused.text).toContain('Not ready to sign');
+      expect(refused.text).not.toMatch(/^[0-9a-f]{64}$/);
+      // control: stating the value makes the same file hashable
+      await writeFile(path, JSON.stringify({ ...real, provenance: { ...real.provenance, [field]: value } }));
+      expect([`${field} stated`, (await run(['hash', path])).code]).toEqual([`${field} stated`, 0]);
+    }
+  });
+
+  it('hash still prints a hash for synthetic content with "unknown" fields (it can never be signed)', async () => {
+    const dir = await tempDir();
+    const source = (await readJson(join(SYNTHETIC_DIR, 'guidelines/drugx-genea.json'))) as unknown as { provenance: Record<string, string> };
+    const path = join(dir, 'synthetic.json');
+    await writeFile(path, JSON.stringify({ ...source, provenance: { ...source.provenance, license: 'unknown', redistribution: 'unknown' } }));
+    expect((await run(['hash', path])).code).toBe(0);
+  });
+
   it('hash refuses a file that is not a knowledge file, and reports a bad path without a stack trace', async () => {
     const dir = await tempDir();
     await writeFile(join(dir, 'x.json'), '{"nope":true}');

@@ -3,7 +3,12 @@ import { canonicalDiplotype, hasAtMostTwoDecimals, toHundredths } from './diplot
 import { cpicStrengthSchema } from './vocabulary';
 
 /** Bump when a file's shape changes. Files declare the version they were written for. */
-export const KNOWLEDGE_SCHEMA_VERSION = '1.1';
+export const KNOWLEDGE_SCHEMA_VERSION = '1.2';
+
+/** The license a source states for its content. "unknown" is a draft state: a reviewed, non-synthetic file may not use it. */
+export const KNOWLEDGE_LICENSES = ['cc0-1.0', 'cc-by-4.0', 'cc-by-sa-4.0', 'proprietary', 'unknown'] as const;
+/** Whether the content may be redistributed or built into another product. "unknown" has the same limit as the license. */
+export const REDISTRIBUTION_STATES = ['allowed', 'restricted', 'unknown'] as const;
 
 const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f]/; // everything except tab and newline
 const SINGLE_LINE_CONTROL = /[\u0000-\u001f\u007f]/;
@@ -40,6 +45,10 @@ const provenanceSchema = z.strictObject({
   retrievedAt: z.iso.date(),
   /** The upstream release or version label, as the source states it. */
   sourceVersion: label(100),
+  /** The license the source states for this content, as the reviewer read it. */
+  license: z.enum(KNOWLEDGE_LICENSES),
+  /** Whether this content may be redistributed or sold on inside another product. */
+  redistribution: z.enum(REDISTRIBUTION_STATES),
 });
 export type Provenance = z.infer<typeof provenanceSchema>;
 
@@ -70,6 +79,21 @@ const envelope = {
 
 function addIssue(ctx: z.RefinementCtx, path: (string | number)[], message: string): void {
   ctx.addIssue({ code: 'custom', message, path });
+}
+
+/**
+ * Real content that carries a reviewer's signature must say what its license allows. Drafts and synthetic
+ * files may leave either "unknown", because nothing downstream redistributes them.
+ */
+function requireStatedLicense(
+  file: { synthetic: boolean; provenance: { license: string; redistribution: string }; review: { status: string } },
+  ctx: z.RefinementCtx,
+): void {
+  if (file.synthetic || file.review.status !== 'reviewed') return;
+  if (file.provenance.license === 'unknown') addIssue(ctx, ['provenance', 'license'], 'A reviewed file must state its license (not "unknown").');
+  if (file.provenance.redistribution === 'unknown') {
+    addIssue(ctx, ['provenance', 'redistribution'], 'A reviewed file must state whether it may be redistributed (not "unknown").');
+  }
 }
 
 /** Ranges of an activity score. Bounds are explicit about being inclusive so no edge is ambiguous. */
@@ -125,6 +149,7 @@ export const geneMapFileSchema = z
     method: methodSchema.optional(),
   })
   .superRefine((file, ctx) => {
+    requireStatedLicense(file, ctx);
     if ((file.alleles === undefined) !== (file.method === undefined)) {
       addIssue(ctx, ['method'], 'Give both alleles and method (to map diplotypes) or neither (phenotype-only gene).');
       return;
@@ -246,6 +271,7 @@ export const guidelineFileSchema = z
     recommendations: z.array(recommendationRowSchema).min(1).max(500),
   })
   .superRefine((file, ctx) => {
+    requireStatedLicense(file, ctx);
     if (new Set(file.genes).size !== file.genes.length) addIssue(ctx, ['genes'], 'Genes must be unique.');
     if (new Set(file.supersedes).size !== file.supersedes.length) addIssue(ctx, ['supersedes'], 'Ids must be unique.');
     if (file.supersedes.includes(file.id)) addIssue(ctx, ['supersedes'], 'A guideline cannot supersede itself.');

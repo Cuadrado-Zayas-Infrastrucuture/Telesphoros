@@ -21,9 +21,9 @@ import {
 } from './index';
 
 const base = {
-  schemaVersion: '1.1',
+  schemaVersion: '1.2',
   synthetic: true,
-  provenance: { source: 'SYNTHETIC TEST FIXTURE', sourceUrl: 'https://example.invalid/synthetic', retrievedAt: '2026-01-01', sourceVersion: 'test' },
+  provenance: { source: 'SYNTHETIC TEST FIXTURE', sourceUrl: 'https://example.invalid/synthetic', retrievedAt: '2026-01-01', sourceVersion: 'test', license: 'proprietary', redistribution: 'restricted' },
   review: { status: 'unreviewed' },
 } as const;
 
@@ -417,6 +417,64 @@ describe('guideline file', () => {
     const withEscape = guideline();
     withEscape.recommendations = [cell({ GENEA: 'Normal' }, { recommendationText: 'Bad \u001b[31m text' })];
     expect(guidelineFileSchema.safeParse(withEscape).success).toBe(false);
+  });
+});
+
+describe('license and redistribution', () => {
+  const signed = { status: 'reviewed', reviewedBy: 'A. Reviewer', reviewedAt: '2026-02-01', contentSha256: 'a'.repeat(64) } as const;
+  const real = <T extends object>(file: T, provenance: Record<string, string> = {}) => ({
+    ...file,
+    synthetic: false,
+    provenance: { ...base.provenance, ...provenance },
+    review: signed,
+  });
+  const files = [
+    ['guideline', guidelineFileSchema, guideline],
+    ['gene map', geneMapFileSchema, functionPairMap],
+  ] as const;
+
+  it.each(files)('requires both fields on a %s, with no default', (_name, schema, make) => {
+    for (const key of ['license', 'redistribution']) {
+      // structuredClone: `make()` shares the `base.provenance` object, and deleting from it would leak into every later test
+      const file = structuredClone(make()) as { provenance: Record<string, unknown> };
+      delete file.provenance[key];
+      expect(schema.safeParse(file).success, key).toBe(false);
+    }
+  });
+
+  it.each(files)('accepts only the listed values on a %s', (_name, schema, make) => {
+    expect(schema.safeParse({ ...make(), provenance: { ...base.provenance, license: 'MIT' } }).success).toBe(false);
+    expect(schema.safeParse({ ...make(), provenance: { ...base.provenance, license: 'CC0-1.0' } }).success).toBe(false);
+    expect(schema.safeParse({ ...make(), provenance: { ...base.provenance, redistribution: 'yes' } }).success).toBe(false);
+    for (const license of ['cc0-1.0', 'cc-by-4.0', 'cc-by-sa-4.0', 'proprietary', 'unknown']) {
+      expect(schema.safeParse({ ...make(), provenance: { ...base.provenance, license } }).success, license).toBe(true);
+    }
+  });
+
+  it.each(files)('refuses a reviewed, non-synthetic %s whose license or redistribution is "unknown"', (_name, schema, make) => {
+    // control: the same file with both stated is accepted
+    expect(schema.safeParse(real(make(), { license: 'cc0-1.0', redistribution: 'allowed' })).success).toBe(true);
+    for (const [field, message] of [
+      ['license', 'must state its license'],
+      ['redistribution', 'may be redistributed'],
+    ] as const) {
+      const result = schema.safeParse(real(make(), { license: 'cc0-1.0', redistribution: 'allowed', [field]: 'unknown' }));
+      expect(result.success, field).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('\n')).toContain(message);
+        expect(result.error.issues.some((issue) => issue.path.join('.') === `provenance.${field}`)).toBe(true);
+      }
+    }
+  });
+
+  it.each(files)('still allows "unknown" on a draft or a synthetic %s', (_name, schema, make) => {
+    const unknown = { license: 'unknown', redistribution: 'unknown' };
+    expect(schema.safeParse({ ...make(), synthetic: false, provenance: { ...base.provenance, ...unknown } }).success).toBe(true); // unreviewed draft
+    expect(schema.safeParse({ ...make(), provenance: { ...base.provenance, ...unknown }, review: signed }).success).toBe(true); // synthetic
+  });
+
+  it.each(files)('refuses the previous schema version on a %s', (_name, schema, make) => {
+    expect(schema.safeParse({ ...make(), schemaVersion: '1.1' }).success).toBe(false);
   });
 });
 
