@@ -1,101 +1,22 @@
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { Client } from 'pg';
-import type { Queryable } from '@telesphoros/jobs';
-import { PostgresSyntheticStore, type TenantTransactions } from '../../durable/postgres';
+import { PostgresSyntheticStore } from '../../durable/postgres';
 import { SyntheticJobQueue } from '../../durable/queue';
 import { runDurableSynthetic, type ScriptedActors } from '../../durable/kernel';
 import { SYNTHETIC_JOB_TYPE, type FixtureCaller, type Stamp } from '../../durable/contracts';
-import type { Candidate, Source } from '../../src/contracts';
+import type { Candidate } from '../../src/contracts';
 import { ownedPostgresFixture } from '../helpers/postgres-fixture';
+import { claimOptions, digest, durableHarness, scriptedActors } from '../helpers/durable-pg';
 import type { EphemeralDatabase } from '../../../backend/test/helpers/database';
 
-const digest = (value: string) => `sha256:${createHash('sha256').update(value).digest('hex')}`;
-const body = 'Step one: wash both hands.\nStep two: dry them fully.';
-const claimOptions = { types: [SYNTHETIC_JOB_TYPE], batch: 1, tenantCap: 1, leaseSeconds: 15 };
 let fixture: EphemeralDatabase;
 let owner: Client;
 let worker: Client;
-
-const app: TenantTransactions = { async withTenant<T>(tenantId: string, work: (db: Queryable) => Promise<T>,
-  options: { actor: string }): Promise<T> {
-  const client = new Client({ connectionString: fixture.appUrl });
-  await client.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query(`SELECT set_config('app.current_tenant_id',$1,true)`, [tenantId]);
-    await client.query(`SELECT set_config('app.current_actor',$1,true)`, [options.actor]);
-    const value = await work(client);
-    await client.query('COMMIT');
-    return value;
-  } catch (error) { await client.query('ROLLBACK'); throw error; }
-  finally { await client.end(); }
-} };
-
-/** One isolated synthetic tenant per test: its own member, grant, source and capacity slot. */
-async function seedTenant(): Promise<{ caller: FixtureCaller; tenant: string; grantId: string }> {
-  const tenant = `p2-${randomUUID().slice(0, 8)}`;
-  const actor = `requester-${randomUUID().slice(0, 8)}`;
-  const grantId = randomUUID();
-  await owner.query(`INSERT INTO public.tenants(id,display_name,created_by,changed_by) VALUES ($1,'P2 Lifecycle','p2','p2')`, [tenant]);
-  await owner.query(`INSERT INTO public.tenant_memberships(tenant_id,sub,status,roles,changed_by)
-    VALUES ($1,$2,'active',ARRAY['reader']::text[],'p2')`, [tenant, actor]);
-  await owner.query(`INSERT INTO public.agentic_synthetic_grants(tenant_id,grant_id,requester_ref,generation,purpose,
-    capabilities,enabled,expires_at) VALUES ($1,$2,$3,1,'business-assistance',
-    ARRAY['business.sop.read','business.sop.draft']::text[],true,clock_timestamp()+interval '1 hour')`, [tenant, grantId, actor]);
-  await owner.query(`INSERT INTO public.agentic_synthetic_sources(tenant_id,source_id,source_version,digest,body,eligible)
-    VALUES ($1,'sop-handwash','v1',$2,$3,true)`, [tenant, digest(body), body]);
-  await owner.query(`INSERT INTO public.agentic_synthetic_grant_sources(tenant_id,grant_id,source_id,source_version,enabled)
-    VALUES ($1,$2,'sop-handwash','v1',true)`, [tenant, grantId]);
-  return { tenant, grantId, caller: { tenantId: tenant, requesterRef: actor, membershipVersion: '1', grantId, grantGeneration: '1' } };
-}
-
-function candidateFrom(source: Source, spans: [number, number][]): Candidate {
-  const bytes = Buffer.from(source.body, 'utf8');
-  const claims = spans.map(([startByte, endByte], i) => ({ id: `claim-${i + 1}`, sourceId: source.id,
-    startByte, endByte, text: bytes.subarray(startByte, endByte).toString('utf8') }));
-  const text = claims.map(c => c.text).join('\n');
-  return { text, digest: digest(text), claims };
-}
-
-type Decision = 'accept' | 'repair' | 'hold';
-function actors(decisions: Decision[], trace: string[] = []): ScriptedActors {
-  let director = 0;
-  return {
-    async draft(sources, attemptId) {
-      trace.push(attemptId);
-      return { artifact: candidateFrom(sources[0]!, [[0, 26]]), observation: { inputUnits: 120, generatedUnits: 40 } };
-    },
-    async director(candidate, evidenceDigest, attemptId) {
-      trace.push(attemptId);
-      const decision = decisions[director++] ?? 'hold';
-      return { artifact: { decision, candidateDigest: candidate.digest, evidenceDigest,
-        claimVerdicts: candidate.claims.map(c => ({ claimId: c.id, supported: true })) },
-      observation: { inputUnits: 300, generatedUnits: 60 } };
-    },
-  };
-}
-
-async function admitAndClaim(caller: FixtureCaller, workerId = 'worker-a') {
-  const store = new PostgresSyntheticStore(worker, app);
-  const queue = new SyntheticJobQueue(worker);
-  const admitted = await store.admit({ schemaVersion: 'agentic.request.v1', taskKey: 'business.sop-draft.v1',
-    locale: 'en', question: 'How do I write the hand-washing SOP?', idempotencyKey: `life/${randomUUID()}` }, caller);
-  if (admitted.kind !== 'ok') throw new Error(`admit ${admitted.code}`);
-  const jobs = await queue.claim(workerId, claimOptions);
-  const claim = queue.claimFor(admitted.value.jobId, workerId);
-  if (jobs.length !== 1 || !claim) throw new Error('claim');
-  return { store, queue, runId: admitted.value.runId, jobId: admitted.value.jobId, ...claim };
-}
-
-const row = async (sql: string, params: unknown[]) => (await owner.query(sql, params)).rows[0];
-const accounts = (tenant: string, runId: string) => row(`SELECT v.settled, v.in_flight, v.usage_state,
-  v.observed_input + v.observed_generated AS observed,
-  (SELECT reserved_units FROM public.agentic_synthetic_buckets WHERE scope='tenant' AND scope_key=$1) AS tenant_reserved,
-  (SELECT consumed_units FROM public.agentic_synthetic_buckets WHERE scope='tenant' AND scope_key=$1) AS tenant_consumed,
-  (SELECT count(*)::int FROM public.agentic_synthetic_invocations i WHERE i.run_id=$2) AS slots,
-  (SELECT count(*)::int FROM public.agentic_synthetic_outcomes o WHERE o.run_id=$2) AS outcomes
-  FROM public.agentic_synthetic_reservations v WHERE v.run_id=$2`, [tenant, runId]);
+const h = durableHarness(() => fixture, () => owner);
+const { app, seedTenant, row, accounts } = h;
+const actors = scriptedActors;
+const admitAndClaim = (caller: FixtureCaller, workerId = 'worker-a') => h.admitAndClaim(worker, caller, workerId);
 
 describe('owned PostgreSQL synthetic lifecycle: claim through settlement', () => {
   beforeAll(async () => {
@@ -260,7 +181,7 @@ describe('owned PostgreSQL synthetic lifecycle: claim through settlement', () =>
     expect(await new SyntheticJobQueue(worker).claim('worker-b', claimOptions)).toEqual([]);
     expect(await row('SELECT state FROM public.jobs WHERE id=$1', [run.jobId])).toEqual({ state: 'dead' });
     expect(await row('SELECT outcome->>$2 AS reason, state FROM public.agentic_synthetic_outcomes o JOIN public.agentic_synthetic_runs r USING (tenant_id, run_id) WHERE run_id=$1',
-      [run.runId, 'reasonCode'])).toEqual({ reason: 'LEASE_EXPIRED', state: 'held' });
+      [run.runId, 'reasonCode'])).toEqual({ reason: 'QUEUE_DEAD', state: 'held' });
     expect(await accounts(tenant, run.runId)).toMatchObject({ settled: true, in_flight: false });
     expect(await run.store.load(run.stamp, run.expected)).toEqual({ kind: 'refused', code: 'STALE_CLAIM' });
   });

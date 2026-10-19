@@ -931,7 +931,7 @@ BEGIN
        AND r.state NOT IN ('released','held','failed','cancelled','expired')
      ORDER BY r.tenant_id, r.run_id FOR UPDATE OF r LOOP
     PERFORM public.agentic_synthetic_lock_accounts(v_run.tenant_id, v_run.run_id);
-    PERFORM public.agentic_synthetic_commit_terminal(v_run.tenant_id, v_run.run_id, 'held', 'LEASE_EXPIRED', NULL, false);
+    PERFORM public.agentic_synthetic_commit_terminal(v_run.tenant_id, v_run.run_id, 'held', 'QUEUE_DEAD', NULL, false);
   END LOOP;
 END $$;
 
