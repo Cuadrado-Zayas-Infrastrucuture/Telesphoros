@@ -67,7 +67,7 @@ describe('owned PostgreSQL synthetic cross-connection capacity', () => {
       value: { terminalState: 'cancelled', counters: { usageState: 'unknown' } } });
     expect(await store.admit(request(), held.caller)).toEqual({ kind: 'refused', code: 'CAPACITY_REFUSED' });
 
-    const others = await Promise.all([h.seedTenant(), h.seedTenant(), h.seedTenant()]);
+    const others = [await h.seedTenant(), await h.seedTenant(), await h.seedTenant()]; // one owner connection
     const results = await raceAdmit(store, others.map(o => o.caller));
     expect(results.filter(r => r.kind === 'ok')).toHaveLength(1);
     expect(results.filter(r => r.kind === 'refused' && r.code === 'CAPACITY_REFUSED')).toHaveLength(2);

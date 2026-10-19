@@ -55,4 +55,30 @@ Guard-removal proof (temporary edits, restored by hash, each run with per-test p
 | Membership not checked | all 10 P2-07 boundaries, both P2-11 orderings, membership-lock wait (13) |
 | Tenant in-flight cap raised to 2 | both P2-20 tests (2) |
 
-Still required: lock order observed under contention (P2-28's third clause; this run only checks it by reading the code); P2-13/14/15/19/21/22/23/26 vectors beyond those already covered; the inert subpath export (P2-02); the full native delivery gate (P2-38); and unforgeable session authority before any activation.
+### 2026-10-19: leases, fencing and recovery races
+
+Two SQL fixes, found by these tests. The worker login still holds EXECUTE on the shared legacy queue functions, and P2 must not change those shared objects, so both fixes live in the synthetic layer:
+
+- **Stale stamp revival (fixed).** A legacy `job_release` followed by a legacy `job_claim` left the worker ID, queue attempt, `claim_id` and fence all unchanged, so an old stamp's callbacks would have been accepted again. Each run now records the exact existing-queue claim instance (`claim_started_at` = `jobs.started_at`), and `claim_guard` requires it. Known limit: a single transaction that runs the synthetic claim, a legacy release and a legacy claim reuses `now()`; that stays the same worker in the same transaction, not a stale one.
+- **Permit leak (fixed).** A legacy `job_succeed` could finish the queue job while the run was still live, and the sweep only handled `dead` jobs. The claim sweep now holds any non-terminal run whose job is `dead`, `succeeded` or `cancelled` (`QUEUE_DEAD`).
+
+Fresh owned fixture `0eebccb4-df4c-4ccc-ae15-49cedd7fedcd`. The explicit PostgreSQL suite passes **57/57** across 8 files; the new `leases.pg.test.ts` adds 9:
+
+- **P2-13:** the legacy release + claim case above. A stamp from an uncommitted claim makes the waiting load see the rollback (`STALE_CLAIM`); the committed claim then runs to one released outcome.
+- **P2-14:** after release and reclaim on another connection with the same worker ID and attempt, the old stamp's load, sources, advance, begin, observe, finish, heartbeat, succeed, fail and release all fail. The new claim sees the unknown marker and refuses without calling an actor.
+- **P2-15:** an actor reply after lease loss (heartbeat refused) records nothing. An actor that ignores the AbortSignal is not retried. After the jobs die, the sweep holds both runs with the full reservation and permit kept.
+- **P2-19:** with real lock ordering in both directions. Finish first: the waiting cancel finds the released outcome and adds nothing. Cancel first: the waiting finish is fenced out. Exactly one outcome and one settlement either way.
+- **P2-35:** current and stale `succeed` race on separate connections, and only the current stamp acknowledges. No unfenced fallback for another queue instance or worker ID. A caller-requested retryable failure stays nonretryable (`dead`).
+- **Legacy `job_succeed` under a live run:** the next claim holds the run and frees the permit.
+- **P2-28 lock order:** five rounds, each racing two finishes, two app cancels and a claim sweep, in alternating issue order, produce no deadlock, lock-timeout or other error, and exactly one outcome per run.
+
+Guard-removal proof (temporary edits, restored by hash):
+
+| Mutant | Tests that fail |
+|---|---|
+| Claim-instance binding removed | P2-13 legacy release + claim (1) |
+| Sweep handles only `dead` | legacy `job_succeed` leak (1) |
+| Cancel keeps fence and claim | P2-19 cancel-first, P2-28 paused-actor cancel, existing cancel test (3) |
+| Queue control unfenced | 7 tests that use stale queue control (P2-13, P2-14, P2-16 backward clock, P2-19 cancel-first, P2-35, two lifecycle tests) |
+
+Still required: the budget families (P2-21/22/23/36); P2-26 golden digest vectors; the boundary and schema families (P2-01/02/03/29-34); the full native delivery gate (P2-38); and unforgeable session authority before any activation.

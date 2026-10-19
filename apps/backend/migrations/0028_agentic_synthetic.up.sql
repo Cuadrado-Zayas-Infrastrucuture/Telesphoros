@@ -65,6 +65,8 @@ CREATE TABLE public.agentic_synthetic_runs (
   sequence bigint NOT NULL DEFAULT 0 CHECK (sequence >= 0),
   fence bigint NOT NULL DEFAULT 0 CHECK (fence >= 0),
   claim_id uuid,
+  -- The exact existing-queue claim instance the stamp was minted for (jobs.started_at).
+  claim_started_at timestamptz,
   job_id uuid UNIQUE REFERENCES public.jobs(id) ON DELETE RESTRICT,
   admitted_at timestamptz NOT NULL,
   deadline_at timestamptz NOT NULL,
@@ -588,7 +590,7 @@ DECLARE
   v_now timestamptz;
   v_terminal boolean;
 BEGIN
-  SELECT j.id, j.tenant_id, j.type, j.payload, j.state, j.attempts, j.locked_by, j.lease_until, j.requested_by
+  SELECT j.id, j.tenant_id, j.type, j.payload, j.state, j.attempts, j.locked_by, j.lease_until, j.requested_by, j.started_at
     INTO v_job FROM public.jobs j WHERE j.id = (p_stamp->>'jobId')::uuid FOR UPDATE;
   IF NOT FOUND OR v_job.type <> 'test.agentic-synthetic' OR v_job.state <> 'running'
     OR v_job.locked_by IS DISTINCT FROM p_stamp->>'workerId'
@@ -599,8 +601,9 @@ BEGIN
   SELECT * INTO v_run FROM public.agentic_synthetic_runs
    WHERE run_id = (p_stamp->>'runId')::uuid AND job_id = v_job.id
      AND tenant_id = v_job.tenant_id AND requester_ref = v_job.requested_by FOR UPDATE;
+  -- A legacy job_release + job_claim keeps worker, attempt, claim_id and fence but not started_at.
   IF NOT FOUND OR v_run.claim_id IS DISTINCT FROM (p_stamp->>'claimId')::uuid
-    OR v_run.fence <> (p_stamp->>'fence')::bigint THEN
+    OR v_run.fence <> (p_stamp->>'fence')::bigint OR v_run.claim_started_at IS DISTINCT FROM v_job.started_at THEN
     RETURN 'STALE_CLAIM';
   END IF;
   v_now := clock_timestamp();
@@ -922,6 +925,7 @@ DECLARE
   v_job record;
   v_run public.agentic_synthetic_runs%ROWTYPE;
   v_claim uuid;
+  v_started timestamptz;
 BEGIN
   IF p_worker IS NULL OR length(p_worker) NOT BETWEEN 1 AND 128 OR p_batch IS NULL OR p_batch NOT BETWEEN 1 AND 2 THEN
     RAISE EXCEPTION 'Synthetic claim limits out of range.' USING ERRCODE = 'invalid_parameter_value';
@@ -937,7 +941,9 @@ BEGIN
       CONTINUE;
     END IF;
     v_claim := gen_random_uuid();
-    UPDATE public.agentic_synthetic_runs r SET fence = r.fence + 1, claim_id = v_claim, sequence = r.sequence + 1,
+    SELECT q.started_at INTO v_started FROM public.jobs q WHERE q.id = v_job.id;
+    UPDATE public.agentic_synthetic_runs r SET fence = r.fence + 1, claim_id = v_claim, claim_started_at = v_started,
+      sequence = r.sequence + 1,
       last_guarded_at = greatest(r.last_guarded_at, clock_timestamp())
      WHERE r.tenant_id = v_run.tenant_id AND r.run_id = v_run.run_id
     RETURNING * INTO v_run;
@@ -949,10 +955,10 @@ BEGIN
     RETURN NEXT;
   END LOOP;
   -- With maxAttempts 1 the existing claim marks a lease-expired job dead instead of reclaiming
-  -- it. Finish such a run as held so a known-usage run cannot keep its permit forever; any
+  -- it, and a legacy job_succeed can finish the job under a live run. Finish such a run as held so a known-usage run cannot keep its permit forever; any
   -- begun-but-unobserved invocation keeps the full reservation and permit (no settlement).
   FOR v_run IN SELECT r.* FROM public.agentic_synthetic_runs r JOIN public.jobs j ON j.id = r.job_id
-     WHERE j.type = 'test.agentic-synthetic' AND j.state = 'dead'
+     WHERE j.type = 'test.agentic-synthetic' AND j.state IN ('dead','succeeded','cancelled')
        AND r.state NOT IN ('released','held','failed','cancelled','expired')
      ORDER BY r.tenant_id, r.run_id FOR UPDATE OF r LOOP
     PERFORM public.agentic_synthetic_lock_accounts(v_run.tenant_id, v_run.run_id);
