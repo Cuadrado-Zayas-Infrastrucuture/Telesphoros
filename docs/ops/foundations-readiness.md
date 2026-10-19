@@ -71,14 +71,15 @@ The data plane uses one primary Region without off-site replication under
 Do not mistake that certificate for unexpected backup infrastructure. Other
 unapproved Regions/resources remain a stop.
 
-## State probe preparation still required
+## State probe procedure prepared offline
 
 The root's mocked policy tests do not establish live IAM, SCP/boundary, KMS,
-concurrent-lock or recovery behavior. Before authorizing probes, prepare a reviewed
-procedure using disposable, isolated state with the same exact-path policy contract.
-Name its resources/owners, expected allow/deny outcomes, two-client lock/release
-sequence, historical-version recovery, native exit capture, costs and retirement.
-That procedure is not supplied or executed by this documentation change.
+concurrent-lock or recovery behavior. The [isolated probe procedure](terraform-state-probe.md)
+now names a separate scratch state root, expected allow/deny outcomes, a two-client
+lock/release sequence, known-version recovery, native exit capture, costs and
+retirement. It is an offline review candidate, not an approved or executed AWS
+operation. The founder must approve its concrete account, resource, cost and
+retention worksheet before any live probe.
 
 Do not test destructive refusal requests or bad writes against authoritative
 state, add arbitrary canary paths to the protected backend, reuse its state lineage
