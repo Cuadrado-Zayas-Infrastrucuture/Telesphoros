@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { Client } from 'pg';
 import { REPORTS_BUCKET, TENANT_A, createFixture, s3Client, seedReport, startWorker, until, type Fixture, type WorkerProcess } from './support';
@@ -74,6 +77,28 @@ describe('the worker process with the consumers', () => {
     expect(w.output()).not.toContain(good.key);
     expect(w.output()).not.toContain(bad.reportId);
   });
+
+  it('does its work with nowhere to write: TMPDIR and HOME point at nothing, as on a task with a read-only root and no volume', async () => {
+    const nowhere = join(tmpdir(), `worker-no-such-directory-${process.pid}`); // never created
+    expect(existsSync(nowhere)).toBe(false);
+    await f.admin.query(`INSERT INTO job_schedules (type, interval_seconds) VALUES ('uploads.sweep', 3600) ON CONFLICT DO NOTHING`);
+    const good = await seedReport(f, s3, TENANT_A);
+    const bad = await seedReport(f, s3, TENANT_A, { claim: { sha256: 'f'.repeat(64) } });
+    await commitEvent(TENANT_A, good.reportId);
+    await commitEvent(TENANT_A, bad.reportId);
+    const w = worker({ WORKER_ID: 'consumers-nowhere', TMPDIR: nowhere, HOME: nowhere });
+    const rows = (id: string) => f.admin.query('SELECT outcome, reason FROM file_verifications WHERE tenant_id = $1 AND report_id = $2', [TENANT_A, id]).then((r) => r.rows);
+    await until('both files to be checked', async () => (await rows(good.reportId)).length > 0 && (await rows(bad.reportId)).length > 0);
+    expect(await rows(good.reportId)).toEqual([{ outcome: 'ok', reason: null }]);
+    expect(await rows(bad.reportId)).toEqual([{ outcome: 'changed', reason: 'hash-mismatch' }]);
+    await finishedJobs(() => jobsFor([good.reportId, bad.reportId]));
+    // The scheduled sweep ran on this worker too (the same jobs as above, but this worker's own attempts).
+    await until('this worker to complete a sweep', async () => (await f.admin.query(
+      `SELECT count(*)::int AS n FROM job_attempts a JOIN jobs j ON j.id = a.job_id WHERE a.worker_id = 'consumers-nowhere' AND j.type = 'uploads.sweep' AND a.outcome = 'succeeded'`,
+    )).rows[0].n >= 1);
+    expect(w.output()).not.toMatch(/ENOENT|EROFS|EACCES|EPERM|ENOSPC/);
+    expect(existsSync(nowhere)).toBe(false); // nothing created it either
+  }, 40_000);
 
   it('waits for terminal jobs when verification has committed but settlement is held', async () => {
     const good = await seedReport(f, s3, TENANT_A);
