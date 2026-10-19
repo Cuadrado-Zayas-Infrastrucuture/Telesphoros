@@ -118,4 +118,18 @@ Guard-removal proof:
 | `COLLATE "C"` removed | byte order under ICU (1) |
 | `begin` input-digest check removed | attempt-two matrix (1) |
 
-Still required: the boundary and schema families (P2-01/02/03/29-34); the full native delivery gate (P2-38); and unforgeable session authority before any activation.
+### 2026-10-19: boundaries, schema and roles
+
+No product code changed. **75 → 76** unit tests and **72/72** PostgreSQL tests across 11 files.
+
+- **P2-01:** the root entry's full import graph (subdirectories included; the P1 check scans only top-level `src/*.ts`) reaches only `src/`, `zod` and `node:crypto`. P2 changed two P1 files: `package.json` (the jobs dependency, `pg` dev dependencies and test scripts) and the P1 boundary test's allowlist that pins them. `src/` is unchanged from P1.
+- **P2-02:** durable modules import only an allowlist (`zod`, `node:crypto`, `@telesphoros/jobs`, two P1 modules and each other) and use no `process`, network, timer, `globalThis` or dynamic import. Importing all five and building the job starts no timer, request or environment read. **Open decision:** the spec's inert *subpath export* is not added. The package still exports only `.`, which is stricter, and adding one is an owner choice.
+- **P2-03:** every `JobQueue` method is fenced by `SyntheticJobQueue` except `stats` and `workerSeen` (read-only bookkeeping). A new shared queue method fails the test until it is reviewed.
+- **P2-29:** none of the app, worker, verifier, operator or auditor logins is superuser, bypasses RLS or can create roles or databases. Each gets `42501` on SELECT and DELETE of all ten synthetic tables. Only app (3) and worker (8) hold synthetic EXECUTE. The tables are owned by NOLOGIN `telesphoros_jobs`.
+- **P2-30:** temp shadow tables named `jobs`, `tenants`, `tenant_memberships`, `agentic_synthetic_runs` and `agentic_synthetic_grants` (proven live for unqualified names), plus a spoofed worker tenant setting, change nothing `load` returns. The spoofed setting is restored afterwards. An app tenant or actor setting that disagrees with the caller is refused. Every synthetic function body schema-qualifies its calls and tables (scanner with positive control).
+- **P2-32/P2-34:** a full catalog snapshot (relations, columns and collations, functions with ACL, config and source hash, triggers, policies, constraints, schema ACL) taken after down shows 0028 changes only its own objects. The one exception is documented: `EXECUTE` on the shared `membership_assert_current` for `telesphoros_jobs`, which down revokes. Up after down restores the catalog exactly. The whole attempt, rolled back, leaves nothing. No synthetic schedule or job exists after migration.
+- **P2-33:** the durable suite refuses (`OWNED_PG_CONFIG_REQUIRED`) with no manifest, and with a manifest outside the owned control directory plus an ambient URL. The controller's own refusal tests run in the gate.
+
+Guard-removal proof: a timer in `durable/job.ts` (both P2-02 tests), a root export of a durable module (P2-01), the queue's `release` override removed (P2-03), the fixture's manifest check removed (P2-33), down keeping the shared grant (P2-32/34), one unqualified helper call (the qualification scan and 34 runtime tests), and direct worker SELECT on runs (P2-29). Each failed its target.
+
+**Dependency-tree finding:** `p2-local`'s root, backend and jobs `node_modules` were symlinks (created 09:11) into the P1 worktree, so earlier "fresh" P2 installs wrote into P1's tree. P2's lockfile only adds packages, and P1's store still holds the same 838 entries, but the two worktrees were not independent. `p2-local` now has its own real install; P1's tree was not modified by the fix.
