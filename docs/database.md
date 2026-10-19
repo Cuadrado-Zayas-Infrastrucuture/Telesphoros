@@ -89,8 +89,24 @@ pnpm --filter @telesphoros/backend db:migrate:down          # revert the last on
 - An **advisory lock** makes two simultaneous deploys safe (the second waits, then finds nothing to do).
 - A **checksum** is stored; **editing an applied migration is refused**. Add a new migration instead.
 - Versions must be contiguous and every migration needs a `down`.
-- `/api/v1/ready` returns **503 while migrations are pending, history disagrees with the shipped versions/checksums, or metadata cannot be read**. It reuses the migration runner's strict history validator with the existing read-only application grant; it never applies migrations or repairs history. `/api/v1/health` stays 200. Failures keep the generic readiness envelope and existing two-second deadline.
-- **Strict artifact compatibility:** an older binary refuses an unknown newer migration, including an additive one. Checksums cover both the `up` and `down` SQL. Preserve applied files and investigate mismatches; do not normalize history to silence readiness. This does not establish rolling-upgrade compatibility, inspect the physical schema, verify migration timestamps, or change startup/request admission. The separate compatibility contract remains open; see [T02 verification](verification/t02-readiness.md).
+- `/api/v1/ready` returns **503 while migrations are pending, history disagrees with the shipped versions/checksums, the database holds newer migrations that are not all declared `expand`, or metadata cannot be read**. It reuses the migration runner's strict history validator with the existing read-only application grant; it never applies migrations or repairs history. `/api/v1/health` stays 200. Failures keep the generic readiness envelope and existing two-second deadline.
+- **Compatibility labels:** an older binary accepts newer history only when it is contiguous and every newer migration was recorded as `expand` (see [Migration labels](#migration-labels)); an unlabelled or `breaking` one is refused. Checksums cover both the `up` and `down` SQL. Preserve applied files and investigate mismatches; do not normalize history to silence readiness. This does not inspect the physical schema, verify migration timestamps, or change startup/request admission. The separate compatibility contract remains open; see [T02 verification](verification/t02-readiness.md).
+
+## Migration labels
+
+From migration 0028 every `.up.sql` must start with a label in its leading comment block (blank lines and `--` comments before the first statement):
+
+```
+-- compat: expand
+```
+
+- **`expand`**: tasks running an older image keep working once this is applied. Additive only: new tables, new nullable columns (or `NOT NULL` with a default), new indexes, new grants.
+- **`breaking`**: anything else. Use it when unsure; over-labelling only costs an outage window.
+- **An `expand` migration may not contain** `DROP`, `RENAME`, `ALTER COLUMN ... TYPE`, `SET NOT NULL`, `ADD COLUMN ... NOT NULL` without a default, `REVOKE`, `TRUNCATE` or `CREATE OR REPLACE`. So redefining a function, or dropping and re-adding a constraint, is `breaking`. `ADD CONSTRAINT`, unique indexes, data rewrites and row-level-security policy changes are not checked automatically and can still break older code: label them `breaking`.
+- The migration lint (`apps/backend/src/db/migration-lint.ts`, run by a unit spec in every test tier) enforces the above and refuses a file that ends inside a quote or comment. Migrations 0001 to 0027 predate the label, are unlabelled and count as `breaking`.
+- The label is part of the file's checksum, so it cannot change after the migration is applied, and the migrator records it in `schema_migrations.compat`. Readiness reads that column for migrations it does not know. A label placed after the first statement is ignored, and the lint says so.
+
+How this changes a release (outage window or not, rollback, and the two-release rule for destructive changes) is in [api-hosting.md](ops/api-hosting.md#releasing-after-f4-exists).
 
 ## Database TLS
 

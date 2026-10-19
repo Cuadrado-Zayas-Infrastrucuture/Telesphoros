@@ -60,6 +60,11 @@ gates are unchanged. Earlier local-build and plan records below retain their
 dated scope. This documentation change performs no AWS access, init, apply,
 deployment or teardown and supplies no live-provider acceptance.
 
+## Migration labels and release runbook (docs, 2026-10-19)
+
+PR 3 of the expand/contract plan (readiness tolerance merged in #178). The release runbook now classifies a release by its migrations: with none or only `expand` migrations, old and new tasks overlap and rolling back means setting the previous image; with any `breaking` migration the release is an outage window with no rollback, and a destructive change takes two releases. A manual RDS snapshot before a `breaking` release is recommended, not required. `docs/database.md` gains a "Migration labels" section and loses a sentence that said an older binary refuses even an additive newer migration, which #178 changed. `rollback = true` on the API and worker services is unchanged. Docs only: no code, Terraform, workflow or migration change, and nothing observed in AWS (overlap behaviour, the outage length and the worker's behaviour are unverified).
+
+
 ## Worker consumer settlement observation (local, 2026-10-18)
 
 The separate `fix/worker-consumer-completion-race` branch repairs the process-test
