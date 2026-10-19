@@ -86,7 +86,7 @@ export function evaluationFor(r: SeededReport, captureId: string, acceptanceId: 
     patientId: r.patientId, reportId: r.reportId, captureId, captureAcceptanceId: acceptanceId, disposition: 'evaluated', holdCode: null,
     binding: { textSha256: sha('synthetic text'), popplerVersion: '26.03.0', packetHash: sha('packet'), generatorCodeHash: sha('generator'), captureAcceptanceId: acceptanceId },
     knowledgeSetId: sha('knowledge'), engineVersion: 'syn-1',
-    geneInputs: [{ gene: 'CYP2C19', state: 'diplotype', diplotype: '*2/*2' }], occurrences: [{ gene: 'CYP2C19', offset: 10 }],
+    geneInputs: [{ gene: 'CYP2C19', state: 'diplotype', diplotype: '*2/*2', callSource: 'lab-report' }], occurrences: [{ gene: 'CYP2C19', offset: 10 }],
     results: [shownResult, heldResult, noGuidelineResult], geneStates: [canonicalState, absentState], ...over,
   };
 }

@@ -75,7 +75,10 @@ const golden = (JSON.parse(readFileSync(join(REPO_ROOT, 'tests/report_adapter/go
         return;
       }
       expect(stored.hold_code).toBeNull();
-      expect(stored.gene_inputs).toEqual(expected.geneInputs);
+      // The hand-written expectation names genes and states; the source is checked beside it: stored, and shown in the detail.
+      expect(stored.gene_inputs.map((input) => { const copy: Record<string, unknown> = { ...input }; delete copy.callSource; return copy; })).toEqual(expected.geneInputs);
+      expect([...new Set(stored.gene_inputs.map((input) => input.callSource))]).toEqual(['lab-report']);
+      expect(response.body.geneInputs).toEqual(stored.gene_inputs);
       expect(stored.occurrences.map((o) => o.note)).toEqual(expected.notes);
     });
 

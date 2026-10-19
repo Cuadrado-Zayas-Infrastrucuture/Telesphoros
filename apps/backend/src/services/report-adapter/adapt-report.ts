@@ -72,7 +72,10 @@ export async function adaptReport(input: AdaptReportInput, deps: AdaptReportDeps
   // 7. The reader's own verdict.
   if (inspection.kind === 'reader-held') return hold(holdCodeForReaderReason(inspection.reason) ?? 'packet-invalid');
 
-  const finish = (geneInputs: GeneInput[], occurrences: AdapterOccurrence[]): AdapterResult => {
+  const finish = (emitted: GeneInput[], occurrences: AdapterOccurrence[]): AdapterResult => {
+    // Every input this adapter emits says where it came from, here and nowhere else, so no path (abstained, duplicate, mapped) can forget it.
+    // The occurrences were summarised from the unlabelled inputs and carry no source.
+    const geneInputs = emitted.map((input): GeneInput => ({ ...input, callSource: 'lab-report' }));
     // The engine's own contract is the last check: an input it would refuse is a defect here, never passed on.
     if (!geneInputsSchema.safeParse(geneInputs).success) return hold('packet-invalid');
     return { disposition: 'evaluated', geneInputs, occurrences, binding };

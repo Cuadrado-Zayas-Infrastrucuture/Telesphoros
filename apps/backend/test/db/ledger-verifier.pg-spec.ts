@@ -124,6 +124,8 @@ describe('ledger verifier: tampering by someone who can bypass every trigger', (
   const cases: Array<[string, FailureKind, (c: Client, t: { tenantId: string; ids: Record<string, string> }) => Promise<unknown>]> = [
     ['an edited record field', 'payload-mismatch', (c, t) => c.query(`UPDATE report_captures SET text_scalars = text_scalars + 1 WHERE id = $1`, [t.ids.capture])],
     ['an edited evaluation result', 'payload-mismatch', (c, t) => c.query(`UPDATE evaluation_results SET drug = 'other' WHERE evaluation_id = $1 AND ordinal = 0`, [t.ids.evaluation])],
+    ['an edited call source on a stored gene input', 'payload-mismatch', (c, t) => c.query(`UPDATE evaluations SET gene_inputs = jsonb_set(gene_inputs, '{0,callSource}', '"edited"') WHERE id = $1`, [t.ids.evaluation])],
+    ['a call source removed from a stored gene input', 'payload-mismatch', (c, t) => c.query(`UPDATE evaluations SET gene_inputs = gene_inputs #- '{0,callSource}' WHERE id = $1`, [t.ids.evaluation])],
     ['an edited gene state', 'payload-mismatch', (c, t) => c.query(`UPDATE evaluation_gene_states SET phenotype = 'Normal Metabolizer' WHERE evaluation_id = $1 AND gene = 'CYP2C19'`, [t.ids.evaluation])],
     ['an extra result row added to an evaluation', 'payload-mismatch', (c, t) => c.query(
       `INSERT INTO evaluation_results (tenant_id, evaluation_id, ordinal, drug, genes, outcome, reason_code, gene_evidence)

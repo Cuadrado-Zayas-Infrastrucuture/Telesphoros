@@ -224,7 +224,7 @@ type AdapterResult =
   | { disposition: 'held'; code: ReportHoldCode; message: string; reviewerAction: string; binding: SourceBinding }
   | {
       disposition: 'evaluated';
-      geneInputs: GeneInput[];            // exactly what is passed to evaluate(); the only place values from the report appear
+      geneInputs: GeneInput[];            // exactly what is passed to evaluate(); the only place values from the report appear; each says callSource: 'lab-report'
       occurrences: AdapterOccurrence[];   // the audit trail below
       binding: SourceBinding;
     };
