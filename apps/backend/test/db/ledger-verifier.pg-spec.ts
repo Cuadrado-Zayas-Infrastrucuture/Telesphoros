@@ -78,11 +78,16 @@ describe('ledger verifier: an intact chain', () => {
   it('is incomplete, never ok, when the budget runs out, and writes no checkpoint', async () => {
     const { tenantId } = await chain();
     const byEvents = await verifier.verify(tenantId, { maxEvents: 2, recordCheckpoint: true });
-    expect(byEvents).toMatchObject({ status: 'incomplete', eventsChecked: 2, checkpointId: null });
+    expect(byEvents).toMatchObject({ status: 'incomplete', incompleteReason: 'size', eventsChecked: 2, checkpointId: null });
     const byTime = await verifier.verify(tenantId, { budgetMs: -1, recordCheckpoint: true });
-    expect(byTime).toMatchObject({ status: 'incomplete', eventsChecked: 0, checkpointId: null });
+    expect(byTime).toMatchObject({ status: 'incomplete', incompleteReason: 'time', eventsChecked: 0, checkpointId: null });
+    const aborted = new AbortController();
+    aborted.abort();
+    expect(await verifier.verify(tenantId, { signal: aborted.signal })).toMatchObject({ status: 'incomplete', incompleteReason: 'shutdown', eventsChecked: 0 });
     // The budget is exactly the chain length: complete, not incomplete.
-    expect(await verifier.verify(tenantId, { maxEvents: 5 })).toMatchObject({ status: 'ok' });
+    const exact = await verifier.verify(tenantId, { maxEvents: 5 });
+    expect(exact).toMatchObject({ status: 'ok' });
+    expect(exact.incompleteReason).toBeUndefined();
     const count = await withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT count(*)::int AS n FROM ledger_checkpoints WHERE tenant_id = $1`, [tenantId])).rows[0].n);
     expect(count).toBe(0);
   });
@@ -148,6 +153,15 @@ describe('ledger verifier: tampering by someone who can bypass every trigger', (
     expect(result.status).toBe('failed');
     expect(kinds(result)).toContain(kind);
     expect(JSON.stringify(result)).not.toMatch(/someone-else|rewritten|cell looks wrong|misread/); // failures name kinds and sequence numbers, never values
+  });
+
+  it('reports damage as failed, with no incomplete reason, even when the walk also hit its event limit', async () => {
+    const t = await chain(); // 5 events
+    await tamper((c) => c.query(`UPDATE ledger_events SET payload_sha256 = repeat('b', 64) WHERE tenant_id = $1 AND seq = 2`, [t.tenantId]));
+    const cut = await verifier.verify(t.tenantId, { maxEvents: 3 }); // damage inside the first three events; more chain remains
+    expect(cut.status).toBe('failed');
+    expect(cut.incompleteReason).toBeUndefined();
+    expect(kinds(cut)).toContain('record-hash-mismatch');
   });
 
   it('does not report the tenant next door (control: tampering one tenant leaves another ok)', async () => {

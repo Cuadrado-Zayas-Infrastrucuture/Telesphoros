@@ -353,6 +353,12 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
           failures: result.failures.slice(0, 10).map(({ kind, seq }) => ({ kind, seq })), message: 'A contained tenant still fails verification.',
         });
       }
+    } else if (result.status === 'incomplete' && result.incompleteReason === 'size' && !this.abort.signal.aborted) {
+      // Not damage and not a wait: this chain is longer than one verification will walk, so it repeats every pass until the limit or the chain is dealt with.
+      this.logger.error({
+        event: 'ledger-chain-over-size', source, tenantId: result.tenantId, mode: result.mode, eventsChecked: result.eventsChecked,
+        message: 'The record log of this tenant is longer than one verification walks, so it cannot be fully verified. Nothing was recorded as verified and nothing is contained.',
+      });
     } else if (result.status === 'incomplete' && !this.abort.signal.aborted) {
       // (A walk stopped because the application is shutting down is not worth a line: the next start walks again.)
       this.logger.warn({
