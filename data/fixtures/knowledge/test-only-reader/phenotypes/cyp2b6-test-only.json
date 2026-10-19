@@ -1,11 +1,13 @@
 {
-  "schemaVersion": "1.1",
+  "schemaVersion": "1.2",
   "synthetic": true,
   "provenance": {
     "source": "SYNTHETIC TEST FIXTURE - TEST ONLY - not CPIC content, not clinical advice",
     "sourceUrl": "https://example.invalid/synthetic",
     "retrievedAt": "2026-01-01",
-    "sourceVersion": "synthetic-1"
+    "sourceVersion": "synthetic-1",
+    "license": "proprietary",
+    "redistribution": "restricted"
   },
   "review": {
     "status": "unreviewed"

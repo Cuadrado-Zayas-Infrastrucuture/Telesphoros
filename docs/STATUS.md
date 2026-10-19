@@ -27,6 +27,11 @@ PR #161 Terraform candidate remain intact. [Cause and verification scope](verifi
 Fresh full-check evidence belongs to the external delivery report; hosted
 acceptance, publication and deployment are not granted by this local repair.
 
+## Knowledge license metadata (schema 1.2, 2026-10-19)
+
+Knowledge files now carry `provenance.license` and `provenance.redistribution` (schema version 1.1 becomes 1.2, a deliberate break: every fixture and test file was updated). A reviewed, non-synthetic file may not say `unknown` for either, enforced by the schema, so the loader refuses it in every mode, and `knowledge:hash` refuses to print a signing hash until both are stated. Fixtures are labelled `proprietary` / `restricted`. This records what a reviewer read from the source; it grants no right, and nothing reads the fields yet (a future knowledge feed would). `knowledge/cpic/` is still empty, so no real file is affected. The reasons are in the data-model plan (draft PR #179, `docs/design/plans/pgx-data-model-and-data-products.md` once it merges). No runtime, database, CI or clinical-content change.
+
+
 ## Worker settlement fixture review (local, 2026-10-18)
 
 Review of draft PR #167 confirmed a fixture failure-path issue: a cleanup error

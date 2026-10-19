@@ -9,7 +9,8 @@ const USAGE = `Usage: node dist/services/knowledge/cli.js <command>
   verify [--dir DIR] [--production]   load the knowledge directory and report every problem
                                        (default DIR: KNOWLEDGE_DIR, else ../../knowledge/cpic)
   hash FILE                           print the content hash a reviewer signs for one knowledge file
-                                       (put it in review.contentSha256 after reviewing the file)
+                                       (put it in review.contentSha256 after reviewing the file);
+                                       refuses real content whose license or redistribution is "unknown"
 `;
 
 /** Runs a command and returns the process exit code. Output goes through \`write\` so tests can read it. */
@@ -29,6 +30,12 @@ export async function runKnowledgeCli(args: readonly string[], write: (line: str
       const parsed = knowledgeFileSchema.safeParse(JSON.parse(await readFile(rest[0], 'utf8')));
       if (!parsed.success) {
         write('The file is not a valid knowledge file. Run "verify" to see why.');
+        return 1;
+      }
+      const { synthetic, provenance } = parsed.data;
+      if (!synthetic && (provenance.license === 'unknown' || provenance.redistribution === 'unknown')) {
+        // A signature binds a reviewer to the content, and real content must say what its license allows first.
+        write('Not ready to sign: provenance.license and provenance.redistribution must both be stated (not "unknown") for real content.');
         return 1;
       }
       write(contentSha256(parsed.data));

@@ -15,20 +15,20 @@ import { selectorOf } from '../../src/services/report-lookup/routing';
 
 export const ROOT = resolve(__dirname, '../../../..');
 export const SCOPE: TrustedProcessingScope = { tenantId: 'test-tenant', reportId: 'test-report', captureId: 'test-capture', actorId: 'test-actor' };
-const provenance = { source: 'FICTIONAL OFFLINE TEST ONLY', sourceUrl: 'https://example.invalid/test', retrievedAt: '2026-10-08', sourceVersion: 'test-1' };
+const provenance = { source: 'FICTIONAL OFFLINE TEST ONLY', sourceUrl: 'https://example.invalid/test', retrievedAt: '2026-10-08', sourceVersion: 'test-1', license: 'proprietary', redistribution: 'restricted' } as const;
 const markReviewed = <T extends KnowledgeFile>(file: T): T => {
   file.review = { status: 'reviewed', reviewedBy: 'FICTIONAL-TEST-REVIEWER', reviewedAt: '2026-10-08', contentSha256: contentSha256(file) };
   return file;
 };
 export function testKnowledge(): KnowledgeSet {
   const maps: GeneMapFile[] = GENES.map((gene) => markReviewed({
-    schemaVersion: '1.1', id: `test-${gene.toLowerCase()}`, synthetic: true, kind: 'gene-phenotype-map', gene,
+    schemaVersion: '1.2', id: `test-${gene.toLowerCase()}`, synthetic: true, kind: 'gene-phenotype-map', gene,
     provenance, review: { status: 'unreviewed' }, phenotypes: ['Normal Metabolizer', 'Indeterminate'],
     alleles: [{ name: '*1', function: 'Normal function' }],
     method: { type: 'diplotype-table', rows: [{ diplotype: '*1/*1', phenotype: 'Normal Metabolizer' }] },
   }));
   const guidelines: GuidelineFile[] = [[...GENES], [GENES[0]], [GENES[1]]].map((genes, i) => markReviewed({
-    schemaVersion: '1.1', id: ['test-combined', 'test-single-c19', 'test-single-b6'][i]!, synthetic: true,
+    schemaVersion: '1.2', id: ['test-combined', 'test-single-c19', 'test-single-b6'][i]!, synthetic: true,
     kind: 'guideline', provenance, review: { status: 'unreviewed' }, guidelineVersion: 'test-1',
     title: 'FICTIONAL TEST ONLY', drug: 'sertraline', genes, supersedes: [],
     recommendations: [{
