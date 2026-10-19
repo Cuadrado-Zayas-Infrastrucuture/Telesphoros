@@ -18,6 +18,8 @@ Open Codex in this repository and start a new session to discover `.agents/skill
 
 The [shared repository context](../../.agents/references/telesphoros.md) links commands and sensitive invariants to their existing sources. Read only the relevant skill and domain references. Keep the pack with the repository: individual skill-folder copies omit the shared context. Do not paste all skills into `AGENTS.md` or load an additional always-on router. Existing approved scope carries forward; invoking another skill does not require another approval of the same reversible work.
 
+Multi-step features are specified in `specs/NNN-slug/` with GitHub Spec Kit's Claude skills; see [Spec-driven workflow](spec-driven-workflow.md). It does not change this pack.
+
 ## Evaluate changes to the workflows
 
 From the repository root, using the workflow's pinned Node release:
