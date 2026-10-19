@@ -13,12 +13,15 @@ interface Verdict {
 
 const sameType = (a: string | undefined, b: string) => (a ?? '').split(';')[0]!.trim().toLowerCase() === b.split(';')[0]!.trim().toLowerCase();
 
-/** Compares the stored version with the facts the report is pinned to. A failure is a finding, recorded as such; nothing is repaired or deleted here. */
+/** Compares the stored version with the facts the report is pinned to. A failure is a finding, recorded as such; nothing is repaired or deleted here. An abort is not a finding. */
 async function check(deps: HandlerDeps, target: VerifyTarget, signal: AbortSignal): Promise<Verdict> {
   let found;
   try {
     found = await deps.inspector.inspect(target.storageKey, target.objectVersion, { maxBytes: target.sizeBytes, signal });
   } catch {
+    // A read cut short because the job was told to stop (timeout, shutdown, lost lease) says nothing about the store. Recording it would leave an
+    // append-only `unreadable` finding, and an alarm, for a file nobody could read; the job is retried instead.
+    if (signal.aborted) throw retryable('handler-aborted');
     return { outcome: 'unreadable', reason: 'storage-error' };
   }
   if (found === 'missing') return { outcome: 'missing', reason: 'version-missing' };
