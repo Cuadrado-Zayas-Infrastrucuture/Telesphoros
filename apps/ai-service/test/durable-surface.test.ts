@@ -89,6 +89,18 @@ describe('durable surface: reachability, imports and inherited queue methods', (
       .toEqual({ timers: [0, 0, 0], fetch: 0, envReads: [] });
   });
 
+  test('P2-33 the durable PG suite refuses before creating anything without an owned, sealed fixture', async () => {
+    const { ownedPostgresFixture } = await import('./helpers/postgres-fixture');
+    vi.stubEnv('P2_PG_MANIFEST', '');
+    vi.stubEnv('TEST_DATABASE_URL', '');
+    await expect(ownedPostgresFixture()).rejects.toThrow('OWNED_PG_CONFIG_REQUIRED');
+    // A manifest outside the owned control directory, or an ambient URL alone, is refused the same way.
+    vi.stubEnv('P2_PG_MANIFEST', '/tmp/11111111-1111-4111-8111-111111111111.json');
+    vi.stubEnv('TEST_DATABASE_URL', 'postgresql://user@localhost:5432/postgres');
+    await expect(ownedPostgresFixture()).rejects.toThrow('OWNED_PG_CONFIG_REQUIRED');
+    vi.unstubAllEnvs();
+  });
+
   test('P2-03 every JobQueue method is either fenced by the synthetic queue or an explicit read-only exception', () => {
     const methods = (proto: object) => Object.getOwnPropertyNames(proto).filter(m => m !== 'constructor').sort();
     const inherited = methods(JobQueue.prototype);
