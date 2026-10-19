@@ -81,4 +81,22 @@ Guard-removal proof (temporary edits, restored by hash):
 | Cancel keeps fence and claim | P2-19 cancel-first, P2-28 paused-actor cancel, existing cancel test (3) |
 | Queue control unfenced | 7 tests that use stale queue control (P2-13, P2-14, P2-16 backward clock, P2-19 cancel-first, P2-35, two lifecycle tests) |
 
-Still required: the budget families (P2-21/22/23/36); P2-26 golden digest vectors; the boundary and schema families (P2-01/02/03/29-34); the full native delivery gate (P2-38); and unforgeable session authority before any activation.
+### 2026-10-19: budget accounting
+
+Fresh owned fixture `1d8d0531-31cb-46e7-a5b7-1ccb592e212e`. The explicit PostgreSQL suite passes **63/63** across 9 files; the new `budgets-accounting.pg.test.ts` adds 6. One kernel change: with no observation, the kernel now records no artifact, so the refusal is `USAGE_UNKNOWN` instead of `INVALID_INPUT`. The accounting was already conservative; only the reported reason was wrong.
+
+- **P2-21:** these direct SQL observations are refused `INVALID_INPUT` with nothing charged: over the per-role maximum (draft 4097 input, 769 generated), negative, fractional, 10-digit, string-typed, missing or extra keys, 2^53+1 and `0.0` sent as exact JSON text, array, string and number. The exact draft maximum is accepted; an exact repeat is idempotent; any change is `INVALID_EVIDENCE`. Four maximal slots observe exactly 28160 and settle the full 250000 once.
+- **P2-22:** a missing observation keeps the full reservation and the permit across reconnect, lease expiry and the dead sweep (held, unsettled, one permit in flight).
+- **P2-23:** a run re-dated to the last day of the previous month settles its full cost to those original day and month buckets. The current period stays empty, and the same tenant's next run reserves only in the current period.
+- **P2-36:** reserved + consumed + 250000 equal to the limit is admitted; one unit more is refused with no run written. A second settlement of the same run raises the invariant error and charges nothing. A missing capacity row refuses admission (`CAPACITY_REFUSED`), and the fixed limits cannot be changed or made NULL.
+
+Guard-removal proof:
+
+| Mutant | Tests that fail |
+|---|---|
+| Draft per-role bound removed | P2-21 malformed and over-bound (1) |
+| Settlement charged to today's buckets | P2-23 (1) |
+| Exact remaining budget refused (`>=`) | P2-36 edge (1) |
+| Settlement allowed twice | P2-36 edge (1) |
+
+Still required: P2-26 golden digest vectors; the boundary and schema families (P2-01/02/03/29-34); the full native delivery gate (P2-38); and unforgeable session authority before any activation.

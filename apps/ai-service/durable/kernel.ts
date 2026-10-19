@@ -66,7 +66,7 @@ export async function runDurableSynthetic(stamp: Stamp, initial: Expected, store
     catch { /* The bounded observation is still recorded before a failed, nonrelease finish. */ }
     const observedDraft = await store.observe(stamp, expectedOf(run), { invocationId: draftInvocation.invocationId,
       role: 'draft', inputDigest: draftInvocation.inputDigest, observation: draft.observation,
-      artifact: candidate });
+      artifact: draft.observation ? candidate : null }); // no observation: record nothing, usage stays unknown
     if (observedDraft.kind === 'refused') return observedDraft;
     run = observedDraft.value;
     if (!draft.observation) return refused('USAGE_UNKNOWN');
@@ -90,7 +90,7 @@ export async function runDurableSynthetic(stamp: Stamp, initial: Expected, store
     catch { /* A malformed verdict is recorded as absent, never interpreted as repair. */ }
     const observedDirector = await store.observe(stamp, expectedOf(run), { invocationId: directorInvocation.invocationId,
       role: 'director', inputDigest: directorInvocation.inputDigest, observation: review.observation,
-      artifact: verdict });
+      artifact: review.observation ? verdict : null });
     if (observedDirector.kind === 'refused') return observedDirector;
     run = observedDirector.value;
     if (!review.observation) return refused('USAGE_UNKNOWN');
