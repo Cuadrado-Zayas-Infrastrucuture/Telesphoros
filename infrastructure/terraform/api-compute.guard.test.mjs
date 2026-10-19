@@ -144,6 +144,8 @@ export function apiComputeProblems(tf, sources = {}) {
   need(has(task, 'task_role_arn = aws_iam_role.api_task[0].arn') && has(task, 'execution_role_arn = aws_iam_role.api_execution_service[0].arn'), 'the task must use the task role and the service execution role');
   need(has(task, 'image = var.api_image'), 'the task must run the digest-pinned image variable');
   need(has(task, 'readonlyRootFilesystem = true'), 'the root filesystem must be read-only');
+  need(/volume \{\s*name = "scratch"\s*\}/.test(task), 'the scratch volume must be ephemeral: its block names nothing but the volume (no host path, no host block)');
+  need(has(task, 'mountPoints = [{ sourceVolume = "scratch", containerPath = "/tmp", readOnly = false }]'), 'the only writable path must be /tmp, from that volume');
   need(has(task, 'user = local.api_user') && /api_user\s*=\s*"[1-9][0-9]+"/.test(text), 'the container must run as a non-root numeric user');
   need(has(task, 'stopTimeout = 30'), 'the stop timeout must give the application time to drain');
   need(has(task, 'environment = [for name, value in local.api_environment : { name = name, value = value }]'), 'the environment must come from local.api_environment');
@@ -292,6 +294,9 @@ test('the API compute guard reports each way the text could be weakened (control
     ['logs written anywhere', 'resources = ["arn:aws:logs:${var.region}:${local.audit_account_id}:log-group:${local.api_log_group}:*"]', 'resources = ["*"]'],
     ['task not on Fargate networking', 'network_mode             = "awsvpc"\n  cpu                      = var.api_cpu', 'network_mode             = "bridge"\n  cpu                      = var.api_cpu'],
     ['root filesystem writable', 'readonlyRootFilesystem = true\n      stopTimeout            = 30', 'readonlyRootFilesystem = false\n      stopTimeout            = 30'],
+    ['scratch volume bound to a host path', 'volume {\n    name = "scratch"\n  }', 'volume {\n    name = "scratch"\n    host = {\n      source_path = "/data"\n    }\n  }'],
+    ['scratch mount read-only', 'containerPath = "/tmp", readOnly = false }]', 'containerPath = "/tmp", readOnly = true }]'],
+    ['scratch mounted over another path', 'containerPath = "/tmp", readOnly = false }]', 'containerPath = "/var/lib", readOnly = false }]'],
     ['container runs as root', 'api_user          = "10001"', 'api_user          = "0"'],
     ['stop timeout dropped', 'stopTimeout            = 30', 'stopTimeout            = 2'],
     ['image is a free variable', 'image                  = var.api_image\n      essential              = true\n      user                   = local.api_user\n      readonlyRootFilesystem = true\n      stopTimeout', 'image                  = "x:latest"\n      essential              = true\n      user                   = local.api_user\n      readonlyRootFilesystem = true\n      stopTimeout'],
