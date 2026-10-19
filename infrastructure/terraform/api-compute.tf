@@ -405,6 +405,12 @@ resource "aws_ecs_task_definition" "api" {
   execution_role_arn       = aws_iam_role.api_execution_service[0].arn
   task_role_arn            = aws_iam_role.api_task[0].arn
 
+  # Fargate has no tmpfs, and the root filesystem stays read-only. Report intake stages uploads in os.tmpdir() (/tmp), so that one
+  # path is an ephemeral volume: it lives and dies with the task, holds no database or report state, and no host path is bound.
+  volume {
+    name = "scratch"
+  }
+
   runtime_platform {
     operating_system_family = "LINUX"
     cpu_architecture        = "X86_64"
@@ -419,6 +425,7 @@ resource "aws_ecs_task_definition" "api" {
       readonlyRootFilesystem = true
       stopTimeout            = 30
       portMappings           = [{ containerPort = local.api_port, protocol = "tcp" }]
+      mountPoints            = [{ sourceVolume = "scratch", containerPath = "/tmp", readOnly = false }]
       environment            = [for name, value in local.api_environment : { name = name, value = value }]
       secrets = [
         { name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.api_database_url[0].arn },
