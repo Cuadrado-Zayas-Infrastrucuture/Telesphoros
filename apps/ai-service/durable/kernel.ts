@@ -20,7 +20,9 @@ export async function runDurableSynthetic(stamp: Stamp, initial: Expected, store
   if (loaded.kind === 'refused') return loaded;
   let run = loaded.value;
   if (run.outcomeCommitted) return { kind: 'ok', value: null }; // queue ack only; never redispatch
-  if (run.dispatchUnknown || run.state !== 'queued') return refused('USAGE_UNKNOWN');
+  if (run.dispatchUnknown) return refused('USAGE_UNKNOWN');
+  // A reclaimed run with nothing in flight is held without replaying any actor.
+  if (run.state !== 'queued') return store.finish(stamp, expectedOf(run), { terminalState: 'held', reasonCode: 'RECLAIM_HELD' });
   const sourceResult = await store.sources(stamp, expectedOf(run));
   if (sourceResult.kind === 'refused') return sourceResult;
   const sources = sourceResult.value;
@@ -35,7 +37,7 @@ export async function runDurableSynthetic(stamp: Stamp, initial: Expected, store
     run = response.value;
     return null;
   };
-  const finish = async (reasonCode: string, terminalState: 'held' | 'failed' | 'released', candidate?: Candidate,
+  const finish = async (reasonCode: string, terminalState: 'held' | 'failed' | 'released' | 'expired', candidate?: Candidate,
     verdict?: ReturnType<typeof checkVerdict>): Promise<Decision<Outcome | null>> => {
     const result = await store.finish(stamp, expectedOf(run), { terminalState, reasonCode,
       ...(candidate ? { candidate } : {}), ...(verdict ? { verdict } : {}),
@@ -43,6 +45,8 @@ export async function runDurableSynthetic(stamp: Stamp, initial: Expected, store
     return result;
   };
   const moved = await move('running');
+  // A first claim later than the queue-wait bound records expiry with no dispatch.
+  if (moved === 'DEADLINE_EXPIRED') return finish('QUEUE_WAIT_EXPIRED', 'expired');
   if (moved) return refused(moved);
 
   for (const ordinal of [1, 2] as const) {
