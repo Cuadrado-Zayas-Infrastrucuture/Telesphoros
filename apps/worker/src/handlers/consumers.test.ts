@@ -21,12 +21,38 @@ class FakeData implements JobData {
   async sweepUploads(jobId: string) { this.swept.push(jobId); return { released: 2, releasedBytes: 300, objectsKept: 1 }; }
 }
 const inspector = (result: InspectedFile | 'missing' | 'too-large' | Error): ObjectInspector => ({ inspect: async () => { if (result instanceof Error) throw result; return result; } });
+/** A read that dies because the job was told to stop: the signal is aborted and the read then fails, as a timeout, a shutdown or a lost lease does. */
+const abortingInspector = (controller: AbortController, after: 'fail' | 'finish' = 'fail'): ObjectInspector => ({
+  inspect: async () => {
+    controller.abort();
+    if (after === 'fail') throw Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+    return ok;
+  },
+});
+const logged: { level: string; event: string; fields?: unknown }[] = [];
+const capture: HandlerDeps['log'] = (level, event, fields) => { logged.push({ level, event, fields }); };
 const ok: InspectedFile = { sizeBytes: 100, sha256: SHA, contentType: 'text/x-vcf' };
 const run = (jobs: RegisteredJob[], type: string, signal = new AbortController().signal) => jobs.find((j) => j.definition.type === type)!.handler({ job: job(type), actor: `system:${type}`, workerId: 'w1', signal } as HandlerContext);
 const make = (data: FakeData, found: Parameters<typeof inspector>[0]) => { const deps: HandlerDeps = { data, inspector: inspector(found), log: silentLogger }; return filesVerifyJobs(deps); };
 const rejection = async (p: Promise<void>) => p.then(() => undefined, (e: unknown) => e as JobError);
 
 describe('files.verify-stored', () => {
+  it('does not record a finding, and does not raise the alarm line, when the read was cut short by an abort (the job is retried)', async () => {
+    logged.length = 0;
+    const data = new FakeData(); data.single = target();
+    const controller = new AbortController();
+    const jobs = filesVerifyJobs({ data, inspector: abortingInspector(controller), log: capture });
+    const error = await rejection(run(jobs, 'files.verify-stored', controller.signal));
+    expect(error).toMatchObject({ code: 'handler-aborted', retryable: true });
+    expect(data.recorded).toEqual([]); // the record is append-only: an abort must not leave an `unreadable` row behind
+    expect(logged.some((l) => l.event === 'file-verified')).toBe(false);
+  });
+  it('still records a read that completed, even if the job is told to stop right after (control: the guard looks at the failure, not at the signal alone)', async () => {
+    const data = new FakeData(); data.single = target();
+    const controller = new AbortController();
+    await run(filesVerifyJobs({ data, inspector: abortingInspector(controller, 'finish'), log: silentLogger }), 'files.verify-stored', controller.signal);
+    expect(data.recorded).toMatchObject([{ outcome: 'ok' }]);
+  });
   it('records ok and succeeds for a file that matches what the report is pinned to', async () => {
     const data = new FakeData(); data.single = target();
     await run(make(data, ok), 'files.verify-stored');
@@ -66,6 +92,13 @@ describe('files.verify-stored', () => {
 });
 
 describe('files.verify-stale', () => {
+  it('records nothing for a report whose read was cut short by an abort, and stops with a retryable error', async () => {
+    const data = new FakeData(); data.targets = [target(), target({ reportId: '66666666-6666-4666-8666-666666666666' })];
+    const controller = new AbortController();
+    const error = await rejection(run(filesVerifyJobs({ data, inspector: abortingInspector(controller), log: silentLogger }), 'files.verify-stale', controller.signal));
+    expect(error).toMatchObject({ code: 'handler-aborted', retryable: true });
+    expect(data.recorded).toEqual([]);
+  });
   it('checks each report it is given and succeeds when all are clean', async () => {
     const data = new FakeData(); data.targets = [target({ reportId: '33333333-3333-4333-8333-333333333333' }), target({ reportId: '44444444-4444-4444-8444-444444444444' })];
     await run(make(data, ok), 'files.verify-stale');

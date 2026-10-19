@@ -98,6 +98,14 @@ describe('a committed upload is re-checked end to end (event, relay, claim, hand
     if (!('pinVersion' in options)) expect(await new S3ObjectInspector(s3, REPORTS_BUCKET).inspect(r.key, r.version, { maxBytes: 1_000_000 })).toMatchObject({ sizeBytes: r.bytes.length });
   });
 
+  it('surfaces an abort from the real store as a thrown error, never as a verdict (the handler treats a throw with an aborted signal as a retry, not a finding)', async () => {
+    const r = await seedReport(f, s3, TENANT_A);
+    const controller = new AbortController();
+    controller.abort();
+    await expect(new S3ObjectInspector(s3, REPORTS_BUCKET).inspect(r.key, r.version, { maxBytes: 1_000_000, signal: controller.signal })).rejects.toBeDefined();
+    expect(await verifications(r.reportId)).toEqual([]); // and nothing was recorded by reading
+  });
+
   it('succeeds without a record when the report is gone', async () => {
     const ghost = randomUUID();
     await commitEvent(TENANT_A, ghost);
