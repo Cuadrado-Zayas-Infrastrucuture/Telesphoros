@@ -3,6 +3,18 @@
 Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Isolated state-probe procedure (offline, 2026-10-18)
+
+The [remote-state probe procedure](ops/terraform-state-probe.md) now specifies
+an independent scratch bucket/key with the existing exact-path policy, a
+two-client native-lock check, controlled known-version recovery, negative
+permission cases, private producer evidence and a protected-resource retirement
+decision. It records that the current policy does not grant version listing, so
+unknown historical versions are not claimed recoverable. No AWS operation,
+backend activation, resource creation, policy change, approval or spend is
+included; the founder's account, cost, owner, state and retention decisions
+remain gates.
+
 ## Test application loopback listener repair (local, 2026-10-18)
 
 The real test helper now binds its persistent listener to `127.0.0.1`, matching
