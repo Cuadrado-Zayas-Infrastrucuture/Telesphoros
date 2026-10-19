@@ -51,6 +51,11 @@ At the time of this local review, PRs #166 and #167 were separate drafts.
 Both later merged into main. This follow-on fixture repair remains subject to its
 own exact-head CI; no AWS action is included.
 
+## Migration compat lint (2026-10-19)
+
+PR 2 of the expand/contract plan. From migration 0028 on, every migration must carry `-- compat: expand` or `-- compat: breaking` in its leading comment block, and an `expand` migration may not contain `DROP`, `RENAME`, `ALTER COLUMN ... TYPE`, `SET NOT NULL`, `ADD COLUMN ... NOT NULL` without a default, `REVOKE`, `TRUNCATE` or `CREATE OR REPLACE` (so redefining a function, or dropping and re-adding a constraint, is `breaking` and is an outage window). The check is `apps/backend/src/db/migration-lint.ts`, run by a backend unit spec in every test tier and in CI, with no workflow change. It does not look at `ADD CONSTRAINT`, unique indexes, data rewrites or row-level-security policy changes, which can still break older code: label those `breaking`. Migrations 0001 to 0027 predate the label and are not checked. The runbook wording and rollback rule are the next slice (PR 3). No runtime, database or Terraform change.
+
+
 ## Foundations runbook readiness (offline, 2026-10-18)
 
 The [readiness gate and decision record](ops/foundations-readiness.md) reconciles
