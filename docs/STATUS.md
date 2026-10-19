@@ -27,6 +27,19 @@ The complete local worker suite passes 129/129 across 14 files with no skips;
 build, typecheck, lint and owned-service cleanup pass.
 PRs #166 and #167 remain unchanged drafts; no merge or AWS action is included.
 Exact-head CI and later integration into #166 remain delivery gates.
+## Foundations runbook readiness (offline, 2026-10-18)
+
+The [readiness gate and decision record](ops/foundations-readiness.md) reconciles
+the proposed synthetic rehearsal with current source: bootstrap and backend
+activation are separate approvals; main-root stages are A/B/C; task definitions
+precede provisioning; hosted uploads use validated API intake; and web-bucket
+version cleanup is explicit. CloudFront's `us-east-1` certificate is distinguished
+from primary-Region data resources. Account, budget, owner/state custody and the
+BAA/manual-session decision remain pending; no exception or live operation is
+approved. Terraform definitions/policies, application behavior, CI and production
+gates are unchanged. Earlier local-build and plan records below retain their
+dated scope. This documentation change performs no AWS access, init, apply,
+deployment or teardown and supplies no live-provider acceptance.
 
 ## Worker consumer settlement observation (local, 2026-10-18)
 

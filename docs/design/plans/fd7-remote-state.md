@@ -1,6 +1,6 @@
 # Plan FD-7a: the remote Terraform state backend
 
-Status: **standalone bootstrap and mandatory CI coverage are on main; main-backend source wiring is implemented locally after founder approval on 2026-10-17.** See [the runbook](../../ops/terraform-state.md). The wiring candidate's offline verification is recorded below; publication, backend activation and live acceptance remain separate. No AWS operation is included. Offline tests establish configuration/policy contracts, not AWS enforcement. Applying it is the founder's separate Phase 0 step in [FD-7](fd7-staged-synthetic-deploy.md).
+Status (2026-10-18): **standalone bootstrap, mandatory CI and main-backend source wiring are merged** (#153/#161). See [the runbook](../../ops/terraform-state.md) and [readiness gates](../../ops/foundations-readiness.md). Account, budget, owner/state inputs, bootstrap creation, backend activation and live acceptance remain separately authorized work. No AWS operation or synthetic BAA exception is included. Offline tests establish configuration/policy contracts, not AWS enforcement. Earlier dated local-build/proposal records below retain their historical scope.
 
 ## Main-backend source wiring — approved 2026-10-17
 

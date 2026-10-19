@@ -72,12 +72,18 @@ Any H2 WAF/CloudTrail/observability plan needs its own redaction and retention r
 
 ## Later deployment and DNS checklist (not executed)
 
+For the synthetic FD-7 rehearsal, use [foundations readiness](foundations-readiness.md)
+and the staging base domain/URLs, not the production cutover examples below.
+No DNS/AWS access or BAA/manual-session exception is approved by this checklist.
+
 1. Export both Cloudflare zones and record the old web A/AAAA/CNAME targets and proxy
    settings for rollback. Confirm no existing wildcard or duplicate web record conflicts.
    Preserve all Google/email verification records. Nameservers do not change.
 2. Review the AWS BAA, encrypted/locked remote state, OIDC deployment roles, the full-root
-   Terraform plan and costs before any apply. These existing first-apply requirements remain.
-   H2 API hosting, WAF and the application's own alarms remain separate work (the CloudTrail audit trail is written separately: [audit-trail.md](audit-trail.md)).
+   Terraform plan and costs before any apply. These existing first-apply requirements remain;
+   OIDC is the future automated flow, while any manual synthetic session needs the
+   separately resolved [deployment gate](foundations-readiness.md#unresolved-deployment-gate).
+   API hosting, WAF and API/worker alarms are source definitions, not live acceptance.
    Do not create the break-glass role ahead of its audit prerequisites.
 3. Choose the environment and confirm `web_domain`. To enable H1, supply the exact
    `https://app.telesphoros.app/auth/callback` callback, `/signed-out` logout and
@@ -90,14 +96,17 @@ Any H2 WAF/CloudTrail/observability plan needs its own redaction and retention r
    `web_validation_cnames` records the same certificate information.
 5. Build with the real Cognito settings and `VITE_API_BASE_URL=https://api.telesphoros.app`.
    `AuthProvider` already appends `/api/v1/me`; adding that prefix to the base would double it.
-   The upload form still uses a synthetic browser-only stub; hosting does not integrate it
-   with the existing upload API. Vite settings are public; no secret may
+   The current upload form sends bytes through validated API intake; it is not a
+   browser-only stub or a presigned S3 upload. Vite settings are public; no secret may
    be bundled. Exclude generated `*.map` source maps from the public upload. The synthetic
    staging upload script and its runbook are [frontend-publish.md](frontend-publish.md); there
    is still no release workflow, account role or artifact.
 6. Test a staged deployment with synthetic data: TLS, headers, BrowserRouter deep links,
-   callback/logout, API CORS, presigned uploads, denied direct S3 access, missing-asset errors
-   and apex/www redirects. The app is not usable until the H2 API and auth dependencies exist.
+   callback/logout, API CORS, validated API upload and reload recovery, tenant/member
+   denials, stored-version/worker verification, denied anonymous S3 access,
+   missing-asset errors and staging-base redirects. The normal hosted build has no
+   Reports dashboard; use authorized APIs for retrieval acceptance. The API and
+   auth dependencies must be healthy before accepting the staged app.
 7. Only after separate cutover approval, set Cloudflare DNS-only CNAMEs for `app` and `www`
    to `web_cloudfront_domain`, and a flattened apex CNAME to that same target. Certificate
    validation records are separate from traffic records. Do not publish an API record until
