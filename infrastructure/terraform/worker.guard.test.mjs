@@ -117,6 +117,8 @@ export function workerProblems(tf, iamTf = iam, sources = {}) {
   need(has(task, 'network_mode = "awsvpc"') && has(task, 'requires_compatibilities = ["FARGATE"]'), 'the worker must be Fargate with awsvpc networking');
   need(has(task, 'image = var.api_image') && has(task, 'command = ["node", "worker/main.js"]'), 'the worker must run the pinned image, started as the worker bundle');
   need(has(task, 'readonlyRootFilesystem = true') && has(task, 'user = local.api_user'), 'the worker must have a read-only filesystem and run as the non-root user');
+  // The worker writes no files (apps/worker/src/boundaries.test.ts), so it gets no volume and no mount: a writable path would be unused attack surface and would hide a fault.
+  need(!/\bvolume\s*\{/.test(code(task)) && !/\bmountPoints\b/.test(code(task)), 'the worker task must declare no volume and mount nothing (it writes no files)');
   need(!/privileged|linuxParameters|"0"/.test(code(task)), 'the worker must hold no privileged mode, extra Linux parameters or root user');
   need(has(task, 'stopTimeout = 60'), 'the worker must be given time to drain (longer than WORKER_DRAIN_SECONDS)');
   need(has(task, 'secrets = [{ name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.worker_database_url[0].arn }]'), 'the worker login must be injected as DATABASE_URL from the worker secret, and be the only secret');
@@ -198,6 +200,9 @@ test('the worker compute guard reports each way the text could be weakened (cont
     ['container runs as root', 'user                   = local.api_user\n      readonlyRootFilesystem = true\n      command', 'user                   = "0"\n      readonlyRootFilesystem = true\n      command'],
     ['the worker started as the API', 'command                = ["node", "worker/main.js"]', 'command                = ["node", "dist/main.js"]'],
     ['stop timeout dropped', 'stopTimeout            = 60', 'stopTimeout            = 2'],
+    ['an ephemeral volume is declared', '  runtime_platform {\n    operating_system_family = "LINUX"', '  volume {\n    name = "scratch"\n  }\n\n  runtime_platform {\n    operating_system_family = "LINUX"'],
+    ['a host path is bound as a volume', '  runtime_platform {\n    operating_system_family = "LINUX"', '  volume {\n    name      = "host"\n    host_path = "/var"\n  }\n\n  runtime_platform {\n    operating_system_family = "LINUX"'],
+    ['a writable mount at /tmp', 'readonlyRootFilesystem = true\n      command', 'readonlyRootFilesystem = true\n      mountPoints            = [{ sourceVolume = "scratch", containerPath = "/tmp", readOnly = false }]\n      command'],
     ['image is a free variable', 'image                  = var.api_image\n      essential              = true\n      user                   = local.api_user\n      readonlyRootFilesystem = true\n      command', 'image                  = "x:latest"\n      essential              = true\n      user                   = local.api_user\n      readonlyRootFilesystem = true\n      command'],
     ['the worker holds the migrator login', 'secrets                = [{ name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.worker_database_url[0].arn }]', 'secrets                = [{ name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.worker_database_url[0].arn }, { name = "DATABASE_MIGRATOR_URL", valueFrom = aws_secretsmanager_secret.api_migrator_url[0].arn }]'],
     ['the worker login not injected', 'secrets                = [{ name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.worker_database_url[0].arn }]', 'secrets                = []'],

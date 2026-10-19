@@ -103,6 +103,11 @@ From the foundation-layers audit (P1). A full walk stops at 1 000 000 events and
 
 This local candidate retains the published Terraform backend source wiring from `515e249` on main `c49f9d8`, including the existing fixture cleanup and diagnostic support. All six main health cases remain, with the reviewed generated/captured request-ID pair added for eight cases. The captured UUID containing `5432` reproduces the original assertion false positive; correlation data and sanitized diagnostics have separate strict checks. Existing deadlines, response schemas, exact error envelopes and cleanup controls remain. Fresh offline and synthetic PostgreSQL/Moto evidence belongs to the external candidate report. Earlier records are preserved as history, including the separately unresolved patient-link HTTP500 acceptance failure at local `bd9c32c`. No hosted CI acceptance, publication, backend activation, cloud operation or deployment is granted.
 
+## Worker writes no files: pinned (2026-10-19)
+
+A follow-up written into the `/tmp` volume change for the API (#175) said the worker's capture path writes to `/tmp` and might need the same volume. A read of the code found no such writer: the worker's two production handlers import no file, operating-system or child-process module, the only file-writing handler is the queue's test-only one (a production worker refuses to register it), and lab-report capture runs in the API, not the worker. So the worker gets **no** volume (a writable path would be unused surface that hides a fault). Instead the fact is pinned in three places: a source test (`apps/worker/src/boundaries.test.ts`), a real-process test that runs the worker with `TMPDIR` and `HOME` pointing at nothing and completes the file re-check and the scheduled sweep, and a Terraform guard that fails if the worker task declares a volume or a mount. Tests only; no worker, API, Terraform or workflow change. Not proved: how Fargate's read-only root behaves for the worker image (that needs a container engine; the read-only rehearsal slice would cover it).
+
+
 ## FD-7a main-backend source wiring (local, 2026-10-17)
 
 `feat/terraform-backend-wiring`, in a separate clone from main `6371f83`, adds the

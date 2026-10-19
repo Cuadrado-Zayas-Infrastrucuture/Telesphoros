@@ -56,6 +56,35 @@ describe('what the worker as a whole may import from the API', () => {
   });
 });
 
+describe('the worker writes no files', () => {
+  // The task runs with a read-only root filesystem and no volume (infrastructure/terraform/worker.guard.test.mjs), so a file write would fail on Fargate
+  // and pass in every test on a writable disk. The test-only handler writes marker files by design; a production worker refuses to register it.
+  const TEST_ONLY = 'handlers/test-jobs.ts';
+  const FILE_MODULES = new Set(['node:fs', 'node:fs/promises', 'fs', 'fs/promises', 'node:os', 'os', 'node:child_process', 'child_process']);
+  const all = sourceFiles(here);
+  const production = all.filter((f) => f.slice(here.length + 1) !== TEST_ONLY);
+  const code = (file: string) => readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/ .*$/gm, '');
+
+  it('has files to check, and the test-only handler is the one exception', () => {
+    expect(production.length).toBeGreaterThan(5);
+    expect(all.length - production.length).toBe(1);
+  });
+  it.each(production.map((f) => [f.slice(here.length + 1), f]))('%s imports no file, operating-system or child-process module', (_name, file) => {
+    for (const spec of importsOf(file as string)) expect(FILE_MODULES.has(spec), `${spec} is not allowed in production worker code`).toBe(false);
+  });
+  it.each(production.map((f) => [f.slice(here.length + 1), f]))('%s has no bare `import \'node:fs\'` either (a side-effect import has no `from`, which importsOf does not see)', (_name, file) => {
+    expect(code(file as string)).not.toMatch(/(^|\n)\s*import\s+['"](node:)?(fs|os|child_process)(\/promises)?['"]/);
+  });
+  it.each(production.map((f) => [f.slice(here.length + 1), f]))('%s calls no temporary-file or file-write function', (_name, file) => {
+    expect(code(file as string)).not.toMatch(/\b(tmpdir|mkdtemp\w*|writeFile\w*|appendFile\w*|createWriteStream|mkdir\w*)\s*\(/);
+  });
+  it('reaches the test-only handler from main.ts only, and only behind the test-jobs switch', () => {
+    const importers = all.filter((f) => importsOf(f).some((s) => /(^|\/)handlers\/test-jobs$/.test(s))).map((f) => f.slice(here.length + 1));
+    expect(importers).toEqual(['main.ts']);
+    expect(code(join(here, 'main.ts'))).toMatch(/if \(config\.testJobs\) jobs\.push\(\.\.\.testJobs\(/);
+  });
+});
+
 describe('the API side', () => {
   const backend = resolve(here, '../../backend/src');
   it('never imports the worker (the dependency runs one way)', () => {
