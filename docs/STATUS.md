@@ -92,6 +92,11 @@ permissions, CI and deadlines are unchanged. PR #166 stays a separate draft;
 exact-head hosted CI for this fix remains a delivery gate. No AWS access,
 deployment or merge is included.
 
+## Ledger start check: full walks no longer block a start (2026-10-19)
+
+From the foundation-layers audit (P1). Every tenant of at most 50 000 events used to get a full walk at start under one shared 20 s budget, so tenants whose chains summed past about 200 000 events made every production start fail with `incomplete` (every deploy and scale-out). The start check now has two steps: the checkpoint check of every tenant (unchanged, still fail-closed, still within `LEDGER_STARTUP_BUDGET_MS`), then full walks of small chains within **half as much time again**, skipping a chain already walked in full. A full walk that does not fit is logged (`ledger-startup-full-walks-deferred`, counts only) and left to the background pass that starts right after; damage found in either step still contains the tenant and refuses a production start. This weakens one guarantee on purpose (a small chain may be checked from its checkpoint only until that pass reaches it), as the founder approved. Unchanged: the verifier, the incident handling, the 1M event cap on a full walk (a separate slice) and Terraform. Proved with a fake-verifier suite and the PostgreSQL tier; nothing observed in AWS. See [ledger-watch.md](ops/ledger-watch.md).
+
+
 ## PR #161 current-main repair (local, 2026-10-18)
 
 This local candidate retains the published Terraform backend source wiring from `515e249` on main `c49f9d8`, including the existing fixture cleanup and diagnostic support. All six main health cases remain, with the reviewed generated/captured request-ID pair added for eight cases. The captured UUID containing `5432` reproduces the original assertion false positive; correlation data and sanitized diagnostics have separate strict checks. Existing deadlines, response schemas, exact error envelopes and cleanup controls remain. Fresh offline and synthetic PostgreSQL/Moto evidence belongs to the external candidate report. Earlier records are preserved as history, including the separately unresolved patient-link HTTP500 acceptance failure at local `bd9c32c`. No hosted CI acceptance, publication, backend activation, cloud operation or deployment is granted.

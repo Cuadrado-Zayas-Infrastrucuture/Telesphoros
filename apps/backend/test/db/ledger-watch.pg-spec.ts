@@ -146,21 +146,26 @@ describe('ledger watch: an intact log', () => {
     await monitor.onModuleDestroy();
   });
 
-  it('starts again after those checkpoints: a small chain is walked in FULL anyway, and a large one from the checkpoint', async () => {
+  it('starts again after those checkpoints: every chain is checked from its checkpoint, a small one is then walked in FULL as well, and a large one is not', async () => {
+    const checkpointChecks = (v: ReturnType<typeof watch>['verifier']) => v.results.filter((r) => r.options.mode === 'tail' && r.options.fullWalkAtOrBelow === undefined);
+    const startWalks = (v: ReturnType<typeof watch>['verifier']) => v.results.filter((r) => r.options.mode === 'tail' && r.options.fullWalkAtOrBelow !== undefined);
+
     const small = watch({ production: true });
     await small.monitor.onApplicationBootstrap();
     await small.monitor.idle();
-    const smallTails = small.verifier.results.filter((r) => r.options.mode === 'tail');
-    expect(smallTails.length).toBeGreaterThan(0);
-    for (const { result } of smallTails) expect(result).toMatchObject({ status: 'ok', mode: 'full' });
+    expect(checkpointChecks(small.verifier).length).toBeGreaterThan(0);
+    for (const { result } of checkpointChecks(small.verifier)) expect(result).toMatchObject({ status: 'ok', mode: 'tail' }); // the check that decides the start
+    expect(Math.max(...checkpointChecks(small.verifier).map((t) => t.result.eventsChecked))).toBeLessThanOrEqual(2); // only what came after the checkpoint
+    expect(startWalks(small.verifier).length).toBeGreaterThan(0);
+    for (const { result } of startWalks(small.verifier)) expect(result).toMatchObject({ status: 'ok', mode: 'full' }); // then the strengthening walk
     await small.monitor.onModuleDestroy();
 
     const large = watch({ production: true, fullWalkAtOrBelowEvents: 0 });
     await large.monitor.onApplicationBootstrap();
     await large.monitor.idle();
     const largeTails = large.verifier.results.filter((r) => r.options.mode === 'tail');
-    for (const { result } of largeTails) expect(result).toMatchObject({ status: 'ok', mode: 'tail' });
-    expect(Math.max(...largeTails.map((t) => t.result.eventsChecked))).toBeLessThanOrEqual(2); // only what came after the checkpoint
+    for (const { result } of largeTails) expect(result).toMatchObject({ status: 'ok', mode: 'tail' }); // no full walk at start for a chain over the threshold
+    expect(Math.max(...largeTails.map((t) => t.result.eventsChecked))).toBeLessThanOrEqual(2);
     await large.monitor.onModuleDestroy();
   });
 
