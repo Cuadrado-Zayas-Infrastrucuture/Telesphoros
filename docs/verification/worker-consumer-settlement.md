@@ -37,10 +37,10 @@ even if an earlier cleanup step fails. It reuses `disposeFixtures` and
 `onceFixtureCleanup` from the existing database test helpers. Setup and test errors
 are preserved together with cleanup errors; repeated cleanup callers share one
 disposal. A failed drop remains visible as a test failure, and the enclosing
-fixture still drops its disposable database. Its DDL lock wait is bounded. It is not a migration,
-runtime hook or change to worker/queue SQL, and never runs against AWS or an
-existing database. No arbitrary sleep, CI retry, timeout increase or assertion
-accepting unfinished work was added.
+fixture still drops its disposable database. Its DDL lock wait is bounded. It is
+not a migration, runtime hook or change to worker/queue SQL, and never runs
+against AWS or an existing database. No arbitrary sleep, CI retry, timeout
+increase or assertion accepting unfinished work was added.
 
 ## Verification (2026-10-18)
 
@@ -67,13 +67,13 @@ local verification.
 Only the process test, test-only gate and its failure-path tests, and this
 documentation/status record change.
 Worker/queue runtime, migrations, permissions, provider configuration, CI coverage
-and deadlines remain unchanged. PR #166 remains a separate documentation draft;
-this fix is branched directly from main rather than stacked onto it.
+and deadlines remain unchanged. This follow-on repair was branched directly
+from main rather than stacked onto PR #166, which has since merged.
 
 Exact-head hosted CI is separate from these local results. No AWS access,
-deployment, production database action, clinical acceptance or merge is authorized
-by this repair. Later application of the reviewed fix to the documentation branch
-and fresh CI acceptance remain separate delivery steps.
+deployment, production database action, clinical acceptance or merge is
+authorized by this repair. The fixture repair requires its own exact-head CI
+acceptance.
 
 ## PR #167 review: preserve failures during gate cleanup (2026-10-18)
 

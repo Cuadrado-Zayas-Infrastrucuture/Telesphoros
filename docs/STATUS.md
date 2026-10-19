@@ -25,8 +25,10 @@ step. Three real PostgreSQL fault/lifecycle tests fail on #167's gate and pass w
 the repair. [Finding and verification](verification/worker-consumer-settlement.md#pr-167-review-preserve-failures-during-gate-cleanup-2026-10-18).
 The complete local worker suite passes 129/129 across 14 files with no skips;
 build, typecheck, lint and owned-service cleanup pass.
-PRs #166 and #167 remain unchanged drafts; no merge or AWS action is included.
-Exact-head CI and later integration into #166 remain delivery gates.
+At the time of this local review, PRs #166 and #167 were separate drafts.
+Both later merged into main. This follow-on fixture repair remains subject to its
+own exact-head CI; no AWS action is included.
+
 ## Foundations runbook readiness (offline, 2026-10-18)
 
 The [readiness gate and decision record](ops/foundations-readiness.md) reconciles
