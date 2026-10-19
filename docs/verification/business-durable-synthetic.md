@@ -133,3 +133,27 @@ No product code changed. **75 → 76** unit tests and **72/72** PostgreSQL tests
 Guard-removal proof: a timer in `durable/job.ts` (both P2-02 tests), a root export of a durable module (P2-01), the queue's `release` override removed (P2-03), the fixture's manifest check removed (P2-33), down keeping the shared grant (P2-32/34), one unqualified helper call (the qualification scan and 34 runtime tests), and direct worker SELECT on runs (P2-29). Each failed its target.
 
 **Dependency-tree finding:** `p2-local`'s root, backend and jobs `node_modules` were symlinks (created 09:11) into the P1 worktree, so earlier "fresh" P2 installs wrote into P1's tree. P2's lockfile only adds packages, and P1's store still holds the same 838 entries, but the two worktrees were not independent. `p2-local` now has its own real install; P1's tree was not modified by the fix.
+
+### 2026-10-19: P2-38 local delivery gate
+
+**Verdict: PASS** on candidate `4113a95` (base P1 `89fd611`), fixture `1d8d0531-31cb-46e7-a5b7-1ccb592e212e`, with `p2-local`'s own dependency install. Native outputs stay in the owned evidence directory (`gate-e9afa89e….json`, mode 0600). Every producer exited 0:
+
+| Producer | Result |
+|---|---|
+| Candidate clean | `git status` empty |
+| Diff allowlist | 33 files, all under ai-service `durable/`, `test/`, package/tsconfig/durable config, 0028 up/down, the two P2 docs, lockfile |
+| Lockfile allowlist | +9/−0 lines, the ai-service importer only (`@telesphoros/jobs`, `pg`, `@types/pg`) |
+| Runner = lockfile | vitest 5.0.3 = 5.0.3; no shared `node_modules` |
+| ai-service test, typecheck, lint, build | 76/76; 0; 0; 0 |
+| Root bundle isolated | no synthetic, jobs, `pg` or durable reference in `dist/index.{js,cjs}` |
+| jobs, worker, workspace orchestration | 13/13, 49/49, pass |
+| Fixture controller self-test | 6/6 |
+| Durable PostgreSQL suite | 72/72 across 11 files |
+| Migrate smoke | exit 0 |
+| Migration seeds nothing | 0 INSERT/COPY outside function bodies; planted control detected |
+
+The gate can go red: with one stray untracked file it reported FAIL (candidate-clean, plus the durable file allowlist test).
+
+**P2-37 guard sweep on this exact candidate:** 26 one-at-a-time mutants, each restored by hash. 25 fail their target tests. Mutants: claim fence; claim-instance binding; queue-control fencing; cancel fence; repair predicate; settlement; grant-enabled; membership; fresh recheck and its two transaction-start variants; backward clock; guard rewind; dead-only sweep; draft bound; settle-to-today; exact budget edge; settle twice; tenant cap; byte order; begin input digest; down keeping the shared grant; unqualified call; worker SELECT. **Not red: removing the reservation/bucket row locks in `lock_accounts`.** Every reserving or settling writer already holds the capacity singleton lock, and `begin`/`observe` serialize on the run row, so that lock is redundant defense in depth and no test can fail on its removal alone.
+
+Not covered by this gate: the hosted CI and preview workflows (local-only by approval); the inert subpath export (open owner decision); and unforgeable session authority, which is the activation blocker and needs its own design.
