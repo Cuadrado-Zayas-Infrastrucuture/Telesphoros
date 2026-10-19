@@ -30,7 +30,8 @@ test('P1-26 refuses live models and harness disabled', () => {
 });
 test('P1-26 permits live models and harness disabled control', async () => {
   const pkg=JSON.parse(readFileSync(resolve(root,'package.json'),'utf8'));
-  expect(Object.keys(pkg.dependencies)).toEqual(['zod']);expect(Object.keys(pkg.scripts).sort()).toEqual(['build','lint','test','typecheck']);
+  expect(Object.keys(pkg.dependencies).sort()).toEqual(['@telesphoros/jobs','zod']);
+  expect(Object.keys(pkg.scripts).sort()).toEqual(['build','lint','prebuild','pretest','pretypecheck','test','test:durable:pg','typecheck']);
   for(const file of readdirSync(resolve(root,'src')).filter(p=>p.endsWith('.ts'))) expect(sourceAllowed(readFileSync(resolve(root,'src',file),'utf8')),file).toBe(true);
   const s=scenario();const r=await runSynthetic(s.request,s.context,s.ports);expect(r.counters.actualModelCalls).toBe(0);expect(r.counters.actualInferenceCharges).toBe(0);expect(liveReadiness().ready).toBe(false);
 });
