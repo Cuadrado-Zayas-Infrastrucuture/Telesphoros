@@ -3,6 +3,9 @@
 Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## P2 session capability plan published (docs, 2026-10-19)
+
+The [option B plan for P2](design/plans/agentic-session-capability.md), written and evidenced on 2026-10-19 on a local branch, is published unchanged so the DATA-01 spec (`specs/001-tenant-capability/`) can cite it. The DATA-01 decisions the founder accepted on 2026-10-19 adopt this plan's revised D1, D2 and D4 recommendations and its D3 rate-limit approach (P2-02 is not covered); the document is published as written, so its section 3 still reads as proposed. Its non-goal "row-level security reads stay GUC-based" is superseded by that spec, and its closing note that Spec Kit is not bootstrapped predates #173. No code, migration, Terraform or AWS change.
 ## DATA-01 tenant capability spec (spec only, 2026-10-19)
 
 [Spec, plan and tasks](../specs/001-tenant-capability/spec.md) for replacing the forgeable `app.current_tenant_id`/`app.current_actor` binding with an issuer-minted, hashed capability that every RLS policy and definer function reads through `app_tenant()`, rolled out guc → dual → capability; founder decisions D1–D9 decided 2026-10-19 (the recommendations), plan not yet approved for implementation; no code, migration, Terraform or AWS change.
