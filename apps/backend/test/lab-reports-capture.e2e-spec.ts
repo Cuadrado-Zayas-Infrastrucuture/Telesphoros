@@ -1,5 +1,6 @@
+import { spawn } from 'node:child_process';
 import { cp, mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cpus, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { acceptanceDtoSchema, captureDtoSchema, fileLinkDtoSchema } from '@telesphoros/shared-types';
@@ -11,6 +12,11 @@ import { DOCUMENT_IDS, FIXTURES, fixtureManifest, fixturePdf, fixtureText, LabPi
 
 // Capture, decision and file links over HTTP (slice 5B-3.2b-1), on the real database and, in the S3 tier, the S3 protocol.
 // Synthetic data only. The text runner is a recorded-text substitute (see fake-text-capture-runner.ts).
+/** The loaded-host test below: this many batches of this many reports, each report raced by this many identical requests. */
+const RACE_BATCHES = 16;
+const RACES_PER_BATCH = 10;
+const CONTENDERS = 12;
+
 (usingPostgres() ? describe : describe.skip)('lab-report capture and review', () => {
   let db: EphemeralDatabase;
   let app: NestExpressApplication;
@@ -48,11 +54,37 @@ import { DOCUMENT_IDS, FIXTURES, fixtureManifest, fixturePdf, fixtureText, LabPi
       const clinician = await lab.person('clin', ['clinician']);
       const { reportId } = await lab.uploadedLabPdf(clinician, fixturePdf('D01'));
       const responses = await Promise.all(Array.from({ length: 6 }, () => lab.capture(clinician, reportId)));
-      expect(new Set(responses.map((r) => r.body.id)).size).toBe(1);
+      // Statuses first: a refused request has no `id`, and counting ids alone would call that "two captures".
       expect(responses.map((r) => r.status).sort()).toEqual([200, 200, 200, 200, 200, 201]);
+      expect(new Set(responses.map((r) => r.body.id)).size).toBe(1);
       expect(await lab.count('report_captures', 'report_id = $1', [reportId])).toBe(1);
       expect(await lab.count('ledger_events', `subject_table = 'report_captures' AND subject_id = $1`, [responses[0]!.body.id])).toBe(1);
     });
+
+    // The race above rarely loses on an idle host: the loser has to land inside a window of microseconds. Busy processes plus many
+    // reports raced at once make that happen. This is a probabilistic guard: on the broken insert (it named only the identity key) it failed
+    // in 10 of 15 runs; on the fixed insert it passed 13 of 13. A regression therefore shows up as a flaky test, not as a missing one.
+    it('concurrent identical requests, for many reports at once, still give one 201 and the rest 200s while the CPUs are busy', async () => {
+      const burners = Array.from({ length: cpus().length * 4 }, () => spawn(process.execPath, ['-e', 'const end = Date.now() + 90_000; while (Date.now() < end) {}'], { stdio: 'ignore' })); // each stops itself after 90 s if the test run dies
+      try {
+        const clinician = await lab.person('clin', ['clinician']);
+        const patientId = await lab.patient(clinician);
+        for (let batch = 0; batch < RACE_BATCHES; batch++) {
+          const reports: Awaited<ReturnType<LabPipeline['uploadedLabPdf']>>[] = [];
+          // One at a time (the upload route sheds load), seeded straight to "uploaded": the upload path is not what is under test here.
+          for (let i = 0; i < RACES_PER_BATCH; i++) reports.push(await lab.uploadedLabPdf(clinician, fixturePdf('D01'), { requester: clinician, patientId }));
+          const raced = await Promise.all(reports.map(async ({ reportId }) => ({ reportId, responses: await Promise.all(Array.from({ length: CONTENDERS }, () => lab.capture(clinician, reportId))) })));
+          for (const { reportId, responses } of raced) {
+            const seen = responses.map((r) => `${r.status}${r.body.error ? ` ${r.body.error.code}` : ''}`).sort();
+            expect({ batch, seen }).toEqual({ batch, seen: [...Array<string>(CONTENDERS - 1).fill('200'), '201'].sort() });
+            expect(new Set(responses.map((r) => r.body.id)).size).toBe(1);
+            expect(await lab.count('report_captures', 'report_id = $1', [reportId])).toBe(1);
+          }
+        }
+      } finally {
+        for (const burner of burners) burner.kill('SIGKILL');
+      }
+    }, 120_000);
 
     it('the same recorded PDF in two reports, or two tenants, never shares a capture, text object or event', async () => {
       const a = await lab.person('a', ['clinician']);
