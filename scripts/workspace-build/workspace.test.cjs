@@ -4,6 +4,20 @@ const { readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 const { run, libraries, prepared } = require('./workspace.cjs');
 
+function validSyntheticPackage(pkg, workspace) {
+  const expected = { build: 'tsup', typecheck: 'tsc --noEmit', lint: 'eslint .', test: 'vitest run' };
+  return pkg.name === '@telesphoros/ai-service' && pkg.private === true && workspace.includes('"apps/*"') &&
+    Object.entries(expected).every(([key,value]) => pkg.scripts?.[key] === value);
+}
+test('P1-28 refuses workspace omission', () => {
+  const pkg=JSON.parse(readFileSync(resolve(__dirname,'../../apps/ai-service/package.json'),'utf8'));
+  delete pkg.scripts.test;
+  assert.equal(validSyntheticPackage(pkg,readFileSync(resolve(__dirname,'../../pnpm-workspace.yaml'),'utf8')),false);
+});
+test('P1-28 permits workspace omission control', () => {
+  assert.equal(validSyntheticPackage(JSON.parse(readFileSync(resolve(__dirname,'../../apps/ai-service/package.json'),'utf8')),readFileSync(resolve(__dirname,'../../pnpm-workspace.yaml'),'utf8')),true);
+});
+
 for (const command of ['typecheck', 'test']) {
   test(`${command}: one library producer finishes before consumer hooks and checks`, () => {
     const events = [];
