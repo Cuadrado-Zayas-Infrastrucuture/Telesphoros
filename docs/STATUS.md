@@ -5,7 +5,7 @@ Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and
 
 ## DATA-01 tenant capability spec (spec only, 2026-10-19)
 
-[Spec, plan and tasks](../specs/001-tenant-capability/spec.md) for replacing the forgeable `app.current_tenant_id`/`app.current_actor` binding with an issuer-minted, hashed capability that every RLS policy and definer function reads through `app_tenant()`, rolled out guc → dual → capability; proposed, not approved, with founder decisions D1–D9 open; no code, migration, Terraform or AWS change.
+[Spec, plan and tasks](../specs/001-tenant-capability/spec.md) for replacing the forgeable `app.current_tenant_id`/`app.current_actor` binding with an issuer-minted, hashed capability that every RLS policy and definer function reads through `app_tenant()`, rolled out guc → dual → capability; founder decisions D1–D9 decided 2026-10-19 (the recommendations), plan not yet approved for implementation; no code, migration, Terraform or AWS change.
 
 ## PGx build prompt gap analysis (plan only, 2026-10-19)
 

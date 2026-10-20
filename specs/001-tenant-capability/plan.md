@@ -4,7 +4,7 @@
 
 **Input**: Feature specification from `specs/001-tenant-capability/spec.md`
 
-**Status**: Proposed. **Not approved.** No slice may start until the founder approves this plan and answers the decisions below that the slice depends on.
+**Status**: Decisions D0–D9 decided 2026-10-19 (see "Founder decisions"). The plan itself is **not yet approved for implementation**: no slice may start until the founder approves it.
 
 ## Summary
 
@@ -159,7 +159,9 @@ Policies become `USING (tenant_id = (SELECT app_tenant()))`. `statement_timestam
 
 ## Founder decisions (only the founder can make these)
 
-| # | Decision | Recommendation | Blocks |
+**Decided 2026-10-19.** The founder, replying to the D1–D9 recommendations: *"ill follow your recommendations"*. Every recommendation below is therefore the decision. That includes D8: the residual risks are accepted in writing with the stated mitigations. Two items still need a number later, and the decision fixes only how each is chosen: D4's p95 budget is set from slice 2's staging measurement, and D7's 7-day window is checked against real counts before slice 5. This approves the decisions; it does **not** approve `plan.md` for implementation (Principle I). That approval is still needed before slice 1.
+
+| # | Decision | Decided (recommendation accepted) | Blocks |
 |---|---|---|---|
 | D0 | Extend option B from P2 to every RLS read and definer function, superseding the P2 plan's "reads stay GUC" non-goal | **Decided 2026-10-19: yes** (founder "ok" to the session plan) | — |
 | D1 | Capability lifetime and granularity: one per request (≤ 60 s) or one per access token (cached up to the token's 15 min) | **Per request, 60 s.** Every use is then an issuer event; caching per token lets a compromised process use it for 15 min with no further trace | slice 1 |
@@ -170,13 +172,13 @@ Policies become `USING (tenant_id = (SELECT app_tenant()))`. `statement_timestam
 | D6 | Audit rows for refused or pre-authentication requests | **Verified tenant/actor NULL plus explicitly unverified claimed columns**, so refusals stay recorded without being trusted | slice 4 |
 | D7 | Dual-mode window before enforcing | **7 consecutive days of 0 capability-less requests on synthetic staging**, reported with the total request count | slice 5 |
 | D8 | Accept the residual risks (relay of in-flight tokens ≤ 15 min; stolen issuer credential; superuser) | Accept in writing, with the stated mitigations | slice 5 |
-| D9 | The P2 plan lives only on the local, unpushed branch `chore/agentic-session-capability-plan` (`57e1b3f`). Publish it, so this spec's citation resolves for reviewers? | **Push it as its own docs PR**; this spec does not copy it | review of this PR |
+| D9 | The P2 plan lives only on the local, unpushed branch `chore/agentic-session-capability-plan` (`57e1b3f`). Publish it, so this spec's citation resolves for reviewers? | **Push it as its own docs PR**; this spec does not copy it. Done: PR #192, cherry-picked unchanged onto `main` | review of this PR |
 
 ## Not touched by this plan or PR
 
 - No migration, backend, worker, frontend or test code; no CI workflow; no dependency.
 - `infrastructure/terraform/`: PR 189 (evidence immutability) has it open. Slice 2b waits for 189 to merge.
-- The founder's checkout at `…/2026-10-15/che/work/telesphoros-remastered` (its branch, stash and working tree), and the local branches `chore/agentic-session-capability-plan` and `feat/durable-synthetic-local`.
+- The founder's checkout at `…/2026-10-15/che/work/telesphoros-remastered` (its branch, stash and working tree), and the local branches `chore/agentic-session-capability-plan` (its commits were published in #192 by cherry-pick onto a new branch; the local branch itself is untouched) and `feat/durable-synthetic-local`.
 - No AWS action, secret or deployment.
 
 ## Complexity Tracking

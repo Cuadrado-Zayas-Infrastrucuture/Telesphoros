@@ -4,11 +4,11 @@
 
 **Created**: 2026-10-19
 
-**Status**: Draft. Spec, plan and tasks are proposed. **No slice is approved.**
+**Status**: Draft. The founder decided D1–D9 on 2026-10-19 by accepting the recommendations (plan.md, "Founder decisions"). **No slice is approved for implementation yet.**
 
 **Input**: Security audit 2026-10-19, finding DATA-01 (High, CVSS 4.0 7.4, CWE-653). The founder decided on 2026-10-19: *"Accept option A for synthetic-only staging (I accept the stated risk), and plan option B before any real data."* On the same day the founder approved extending option B from P2 to every row-level-security read and every definer function (this spec).
 
-**Builds on**: `docs/design/plans/agentic-session-capability.md` (option B for P2 only). It is on the founder's local branch `chore/agentic-session-capability-plan` at `57e1b3f` and has **not been pushed**. That plan's mechanism (a hashed, issuer-minted capability row) and its evidence for decisions D1–D4 are reused here. Its non-goal "Row-level security reads stay GUC-based" is **superseded** by this spec. Line numbers below cite `main` `ac7bc72`.
+**Builds on**: `docs/design/plans/agentic-session-capability.md` (option B for P2 only). It was written on the founder's local branch `chore/agentic-session-capability-plan` (`57e1b3f`) and is published unchanged in PR #192 (decision D9). That plan's mechanism (a hashed, issuer-minted capability row) and its evidence for decisions D1–D4 are reused here. Its non-goal "Row-level security reads stay GUC-based" is **superseded** by this spec. Line numbers below cite `main` `ac7bc72`.
 
 ## The problem
 
