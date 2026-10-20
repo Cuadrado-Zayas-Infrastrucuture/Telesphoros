@@ -148,7 +148,17 @@ Drafts [#146](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Rema
   if `NODE_VERSION` becomes a floating major.
 - **Permissions default to `contents: read`.** Only the four service jobs add `actions: read`, to read the current run attempt’s start time from GitHub’s REST API. The token is scoped to the first-step bootstrap; it is never passed to the watchdog child. No job requests writes; checks are reported by the runner itself.
 - **gitleaks is built from source** (`go install`, verified by the Go checksum database) rather than using the maintainers'
-  GitHub Action, which requires a paid licence for organization repositories.
+  GitHub Action, which requires a paid licence for organization repositories. The Go toolchain that builds it is an exact
+  release (`go-version`), not `stable`.
+- **Every other build input is pinned too** (audit finding INF-11; `.github/ci/supply-chain.test.mjs` checks every workflow file):
+  the PostgreSQL service image by its multi-arch **digest** (one digest for every tier); Trivy's own binary (`version:` on
+  `trivy-action`, so an action bump cannot change the scanner silently); and the Python test emulator by **hash**. Edit
+  `.github/ci/requirements.in`, then regenerate `requirements.txt` with the `uv pip compile … --generate-hashes` command in
+  its header; CI installs it with `pip install --require-hashes`. The local launcher reads its Moto pin from `requirements.in`.
+  Nobody updates the service-image digest automatically (no Dependabot ecosystem covers workflow service containers): bump it
+  by hand when the weekly rescan reports something worth it.
+- **Only reviewed workflow files exist** (audit finding INF-17): `ci.yml` and `rescan.yml`. Adding one means changing
+  `WORKFLOWS` in `supply-chain.test.mjs`, in review. A diagnostic workflow belongs on its own branch, never on `main`.
 - **Playwright's browser is cached** by OS, architecture and installed Playwright version; unrelated lockfile changes do not invalidate the browser download. System libraries and all browser tests still run. The pnpm store and pip downloads are cached by the setup actions.
 - **gitleaks compilation inputs are cached** by setup-go (OS, architecture, resolved Go release and the hash of `ci.yml`, which contains the exact gitleaks pin). There is no repository `go.sum`, so the workflow is the explicit dependency input. Source installation and the full-history scan run on both cold and warm caches.
 - **Docker uses a scoped GitHub Actions layer cache** (`api-amd64-v1`), with bounded import/export waits and non-blocking export failures. Lock/workspace inputs are fetched before source is copied; the subsequent frozen install is offline. Both image exports, attestations, vulnerability scanning, and the runtime rehearsal remain mandatory. Cache restore misses rebuild normally; no test/scan result is cached. GitHub's branch/ref cache isolation applies, so a PR cache is not reusable by main. The existing cache storage limit is not raised.
@@ -229,7 +239,14 @@ file (then re-import or edit the ruleset in the UI).
 ## Other automation
 
 - **Dependabot** (`.github/dependabot.yml`): weekly; npm, GitHub Actions and Terraform minor/patch updates are grouped,
-  major updates arrive one at a time; also the CI emulator pin and the local compose file.
+  major updates arrive one at a time; also the CI emulator pin, the local compose file and the API image's base layers
+  (`docker`, for `infrastructure/docker`).
+- **Weekly rescan** (`.github/workflows/rescan.yml`, founder decision 2026-10-20: weekly, advisory): every Monday it builds the
+  API image fresh and fails on a fixed CRITICAL or HIGH finding (the same gate as the `image` job), and fails on a high or
+  critical advisory in the production dependencies (`pnpm audit --prod`). It also prints, without failing, the findings in the
+  CI PostgreSQL service image (test-only, never deployed; it carried 25 fixed HIGH/CRITICAL findings on 2026-10-20). It never
+  runs on push or pull request, so it cannot block a merge. A failed scheduled run makes GitHub email whoever last edited the
+  schedule; run it by hand from the Actions tab (`workflow_dispatch`).
 - **CODEOWNERS** (`.github/CODEOWNERS`): requests review for migrations, auth and tenancy, clinical content and logic,
   infrastructure, and CI itself.
 - **Pull request template** (`.github/pull_request_template.md`): carries the safety invariants onto every PR

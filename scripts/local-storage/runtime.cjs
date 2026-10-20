@@ -9,10 +9,10 @@ function environment(m) {
   return { PATH: process.env.PATH, LC_ALL: 'C', TMPDIR: path.join(m.root, 'tmp'), PYTHONUNBUFFERED: '1', NODE_ENV: 'development', LAB_REPORT_PIPELINE: 'disabled', AWS_EC2_METADATA_DISABLED: 'true', AWS_ACCESS_KEY_ID: 'synthetic-local', AWS_SECRET_ACCESS_KEY: 'synthetic-local', AWS_DEFAULT_REGION: 'us-east-2', MOTO_ALLOW_NONEXISTENT_REGION: 'false', MOTO_DISABLE_GLOBAL_CORS: 'true' };
 }
 function motoVersion() {
-  const requirements = fs.readFileSync(path.join(o.root, '.github/ci/requirements.txt'), 'utf8');
+  const requirements = fs.readFileSync(path.join(o.root, '.github/ci/requirements.in'), 'utf8');
   const entries = requirements.split(/\r?\n/).map(line => line.trim()).filter(line => /^moto(?:\W|$)/i.test(line));
   const pin = entries.length === 1 && /^moto\[server\]==(\d+\.\d+\.\d+)(?:\s+#.*)?$/.exec(entries[0]);
-  if (!pin) throw new Error('Exactly one pinned Moto requirement required in .github/ci/requirements.txt.');
+  if (!pin) throw new Error('Exactly one pinned Moto requirement required in .github/ci/requirements.in.');
   return pin[1];
 }
 function configuration() {
