@@ -3,6 +3,10 @@
 Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## DATA-01 tenant capability spec (spec only, 2026-10-19)
+
+[Spec, plan and tasks](../specs/001-tenant-capability/spec.md) for replacing the forgeable `app.current_tenant_id`/`app.current_actor` binding with an issuer-minted, hashed capability that every RLS policy and definer function reads through `app_tenant()`, rolled out guc → dual → capability; proposed, not approved, with founder decisions D1–D9 open; no code, migration, Terraform or AWS change.
+
 ## PGx build prompt gap analysis (plan only, 2026-10-19)
 
 A [draft plan](design/plans/pgx-build-prompt-gap-analysis.md) maps the founder-supplied PGx build prompt (Phases 3 to 5) onto this repository's existing slices and the audit roadmap. It finds the prompt's stack assumptions (Express, BullMQ, PharmCAT as the core, pgvector memory) do not match the repository, that tenancy, auth, queue and audit chain are already built, and that VCF is accepted at intake but only header-checked. It lists three founder decisions (PharmCAT or the in-house engine, an LLM narrative in the clinical path, billing scope) and proposes gap slices, none started. No code, schema, dependency, CI, infrastructure or clinical-content change, and no decision is recorded; the prompt's external claims are unverified.
