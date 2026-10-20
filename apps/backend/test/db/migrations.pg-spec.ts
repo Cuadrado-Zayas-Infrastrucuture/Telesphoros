@@ -39,9 +39,9 @@ const run = <T>(db: EphemeralDatabase, work: (c: Client) => Promise<T>) => withA
  * migration. (Every other test derives from it rather than repeating it, and a separate test proves the loader finds exactly these,
  * so a discovery bug cannot hide itself by supplying both the actual and the expected value.)
  */
-const SHIPPED = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010', '0011', '0012', '0013', '0014', '0015', '0016', '0017', '0018', '0019', '0020', '0021', '0022', '0023', '0024', '0025', '0026', '0027', '0028'];
+const SHIPPED = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010', '0011', '0012', '0013', '0014', '0015', '0016', '0017', '0018', '0019', '0020', '0021', '0022', '0023', '0024', '0025', '0026', '0027', '0028', '0029'];
 /** The compat label each shipped migration from 0028 on carries, written by hand. */
-const SHIPPED_LABELS: Record<string, Compat> = { '0028': 'expand' };
+const SHIPPED_LABELS: Record<string, Compat> = { '0028': 'expand', '0029': 'breaking' };
 /** The first migration that creates append-only audit tables: reverting it (and everything after it) needs the explicit setting. */
 const FIRST_AUDIT_MIGRATION = '0005';
 const nextVersion = String(SHIPPED.length + 1).padStart(4, '0');
@@ -101,7 +101,8 @@ describe('migration runner', () => {
     // 0021 (merge records and duplicate flags) and 0020 (patient-link decisions) hold audit records: both are guarded like the other audit migrations.
     // 0023 (the job queue) reverts freely while no attempt is recorded, and so does 0022 (intake rejections) while no rejection is recorded; the guards on populated ones are tested in jobs and security-events.
     // 0028 (the tenant capability) reverts freely while its issuance log is empty; the guard on a populated one is tested in tenant-capability.
-    expect(await down(db, 7)).toEqual(['0028', '0027', '0026', '0025', '0024', '0023', '0022']);
+    // 0029 (the synthetic agentic fixtures) reverts freely while none of its tables holds a row; the guard on a populated one is tested in the ai-service durable schema-roles suite.
+    expect(await down(db, 8)).toEqual(['0029', '0028', '0027', '0026', '0025', '0024', '0023', '0022']);
     await expect(run(db, (c) => migrateDown(c, 1))).rejects.toThrow(/Refusing to drop patient merge records/);
     expect(await down(db, 1)).toEqual(['0021']);
     await expect(run(db, (c) => migrateDown(c, 1))).rejects.toThrow(/Refusing to drop patient-link decisions/);

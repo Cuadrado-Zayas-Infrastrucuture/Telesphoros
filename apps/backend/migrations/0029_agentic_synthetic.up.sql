@@ -1,3 +1,4 @@
+-- compat: breaking
 -- Inactive synthetic fixture schema. No grants, sources, jobs, schedules or routes are seeded.
 SET LOCAL lock_timeout = '2s';
 SET LOCAL statement_timeout = '60s';
