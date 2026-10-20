@@ -6,6 +6,9 @@ Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and
 ## P2 session capability plan published (docs, 2026-10-19)
 
 The [option B plan for P2](design/plans/agentic-session-capability.md), written and evidenced on 2026-10-19 on a local branch, is published unchanged so the DATA-01 spec (`specs/001-tenant-capability/`) can cite it. The DATA-01 decisions the founder accepted on 2026-10-19 adopt this plan's revised D1, D2 and D4 recommendations and its D3 rate-limit approach (P2-02 is not covered); the document is published as written, so its section 3 still reads as proposed. Its non-goal "row-level security reads stay GUC-based" is superseded by that spec, and its closing note that Spec Kit is not bootstrapped predates #173. No code, migration, Terraform or AWS change.
+## DATA-01 tenant capability spec (spec only, 2026-10-19)
+
+[Spec, plan and tasks](../specs/001-tenant-capability/spec.md) for replacing the forgeable `app.current_tenant_id`/`app.current_actor` binding with an issuer-minted, hashed capability that every RLS policy and definer function reads through `app_tenant()`, rolled out guc → dual → capability; founder decisions D1–D9 decided 2026-10-19 (the recommendations), plan not yet approved for implementation; no code, migration, Terraform or AWS change.
 
 ## Capture insert: a concurrent duplicate is no longer refused (2026-10-19)
 
@@ -28,6 +31,17 @@ backend activation, resource creation, policy change, approval or spend is
 included; the founder's account, cost, owner, state and retention decisions
 remain gates.
 
+
+## Evidence cannot be erased (written, not applied, 2026-10-19)
+
+From the 2026-10-19 security audit (findings INF-01, INF-02). Founder decisions, same day: production audit logs are locked in
+**COMPLIANCE** mode (a precondition refuses `environment = "production"` with anything else), and every report-file version is locked
+for **six years in GOVERNANCE** mode (`reports_lock_days`, floor 2190; one day in the synthetic rehearsal). The reports bucket policy now
+refuses an upload that names another encryption, another key or a customer key, and lets the application's header-less uploads through.
+The trail moves to advanced event selectors and also records deletes and lock changes in the audit and backup buckets, with two new
+alarms (`EvidenceLogDeleted`, `ObjectLockOverridden`). A locked bucket refuses a `PutObject` without a checksum, so a new spec pins that
+both application write paths send one. [Audit trail](ops/audit-trail.md), [break-glass](ops/break-glass.md). Nothing applied in AWS;
+that S3 accepts the trailing-checksum intake upload on a locked bucket is verified only against the SDK's request, not against AWS.
 ## Test application loopback listener repair (local, 2026-10-18)
 
 The real test helper now binds its persistent listener to `127.0.0.1`, matching

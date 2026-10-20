@@ -44,6 +44,7 @@ locals {
   secret_recovery_days    = local.synthetic ? 0 : 30
   cognito_protection      = local.synthetic ? "INACTIVE" : var.cognito_deletion_protection
   audit_lock_days         = local.synthetic ? 1 : var.audit_lock_days
+  reports_lock_days       = local.synthetic ? 1 : var.reports_lock_days
 }
 
 # The refusals. A check that only warns would let a mistake through, so these are preconditions on a resource that holds nothing.
@@ -70,6 +71,11 @@ resource "terraform_data" "profile" {
     precondition {
       condition     = !local.synthetic || (var.audit_lock_mode == "GOVERNANCE" && var.backup_lock_mode == "GOVERNANCE")
       error_message = "The synthetic profile must use GOVERNANCE locks: a COMPLIANCE lock cannot be removed by anyone, so the rehearsal could never be destroyed."
+    }
+    # Founder decision 2026-10-19: in production nobody, not even an administrator, may delete an audit log before its lock ends.
+    precondition {
+      condition     = var.environment != "production" || var.audit_lock_mode == "COMPLIANCE"
+      error_message = "environment = \"production\" requires audit_lock_mode = \"COMPLIANCE\": a GOVERNANCE lock lets an administrator erase the audit trail (docs/ops/audit-trail.md)."
     }
   }
 }
