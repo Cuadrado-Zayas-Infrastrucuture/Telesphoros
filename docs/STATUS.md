@@ -3,6 +3,9 @@
 Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## DATA-01 slice 1: catalog inventory (in progress, 2026-10-19)
+
+The read-only inventory for the tenant capability ([verification record](verification/tenant-capability.md)) counts, from the catalog of a freshly migrated PostgreSQL 16: 48 policies that read `app.current_tenant_id` (30 for the app, 12 for the ledger role, 2 each for redactor, jobs and PUBLIC, plus 2 worker uses), 10 app-callable definer functions plus `security_audit_record` and two actor-reading triggers, and 46 `withTenant` call sites (5 bind an actor). It finds the spec's FR-006 too narrow and the post-restore isolation check dependent on the setting. The capability migration is not written yet: it waits for the founder's review of this inventory. No code, migration, Terraform or AWS change.
 ## P2 session capability plan published (docs, 2026-10-19)
 
 The [option B plan for P2](design/plans/agentic-session-capability.md), written and evidenced on 2026-10-19 on a local branch, is published unchanged so the DATA-01 spec (`specs/001-tenant-capability/`) can cite it. The DATA-01 decisions the founder accepted on 2026-10-19 adopt this plan's revised D1, D2 and D4 recommendations and its D3 rate-limit approach (P2-02 is not covered); the document is published as written, so its section 3 still reads as proposed. Its non-goal "row-level security reads stay GUC-based" is superseded by that spec, and its closing note that Spec Kit is not bootstrapped predates #173. No code, migration, Terraform or AWS change.
