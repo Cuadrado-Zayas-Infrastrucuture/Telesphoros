@@ -13,11 +13,27 @@ import { callerReasonCodeSchema, cpicStrengthSchema, reasonCodeSchema, verificat
  *
  * A gene that is simply not mentioned is not an input at all: it is `absent`.
  */
+/**
+ * Where a gene's value came from. Today there is one source: the diplotype or phenotype the lab printed on the report, read by the adapter.
+ * A value from any other caller (an external genotype caller, for example) is added here on purpose, in its own change, and never for
+ * CYP2D6 without a decision: the engine never infers a source, and the knowledge files never depend on it.
+ */
+export const CALL_SOURCES = ['lab-report'] as const;
+export const callSourceSchema = z.enum(CALL_SOURCES);
+export type CallSource = z.infer<typeof callSourceSchema>;
+
+/**
+ * Optional on purpose: evaluations stored before the field existed carry none, and their ledger hashes were taken without it, so a stored
+ * input must keep parsing. Everything that produces inputs today (the report adapter) always sets it; absence means `lab-report`, the only
+ * source there was.
+ */
+const source = { callSource: callSourceSchema.optional() };
+
 export const geneInputSchema = z.discriminatedUnion('state', [
-  z.strictObject({ gene: geneSymbolSchema, state: z.literal('canonical'), phenotype: z.string().max(100) }),
-  z.strictObject({ gene: geneSymbolSchema, state: z.literal('diplotype'), diplotype: z.string().max(100) }),
-  z.strictObject({ gene: geneSymbolSchema, state: z.literal('null') }),
-  z.strictObject({ gene: geneSymbolSchema, state: z.literal('unresolved'), reasonCode: callerReasonCodeSchema }),
+  z.strictObject({ gene: geneSymbolSchema, state: z.literal('canonical'), phenotype: z.string().max(100), ...source }),
+  z.strictObject({ gene: geneSymbolSchema, state: z.literal('diplotype'), diplotype: z.string().max(100), ...source }),
+  z.strictObject({ gene: geneSymbolSchema, state: z.literal('null'), ...source }),
+  z.strictObject({ gene: geneSymbolSchema, state: z.literal('unresolved'), reasonCode: callerReasonCodeSchema, ...source }),
 ]);
 export type GeneInput = z.infer<typeof geneInputSchema>;
 

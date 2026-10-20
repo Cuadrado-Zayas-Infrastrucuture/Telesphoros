@@ -68,6 +68,10 @@ async function readFixture(text: string, source: ReportReader = reader): Promise
   return source.read(text);
 }
 
+
+/** The hand-written expectations name genes and states only; the source is asserted separately (every emitted input says where it came from). */
+const bare = (inputs: object[]) => inputs.map((i) => { const copy: Record<string, unknown> = { ...i }; delete copy.callSource; return copy; });
+
 describe('adapter fixture reader timeouts', () => {
   const directories: string[] = [];
   afterEach(() => {
@@ -107,7 +111,7 @@ describe('adapter fixture reader timeouts', () => {
     expect(attempts[0]!.projection).toMatchObject({ status: 'held', reason: 'source-time-budget' });
     const result = await adaptReport({ tenantId: TENANT, captureAcceptanceId: acceptance.id, text, reader: raw }, { captures: store, knowledge: adapterKnowledge });
     expect(result.disposition).toBe('evaluated');
-    expect(evaluated(result).geneInputs).toEqual(golden.find((c) => c.id === 'D01')!.geneInputs);
+    expect(bare(evaluated(result).geneInputs)).toEqual(golden.find((c) => c.id === 'D01')!.geneInputs);
   });
 
   it('stops after a second real timeout and preserves the operational hold', async () => {
@@ -148,6 +152,16 @@ describe('the twelve development reports, end to end', () => {
     for (const c of golden) results.set(c.id, await full(captureText(c.id)));
   }, 60_000);
 
+  it('says where every gene input came from: the lab report, today the only source (and a held report has no inputs to label)', () => {
+    const sources: Array<string | undefined> = [];
+    for (const [, result] of results) {
+      if (result.disposition !== 'evaluated') continue;
+      for (const input of evaluated(result).geneInputs) sources.push(input.callSource);
+    }
+    expect(sources.length).toBeGreaterThan(0); // the loop must have looked at something
+    expect([...new Set(sources)]).toEqual(['lab-report']); // and every one says so
+  });
+
   it('has an expectation for exactly D01 to D12', () => {
     expect(golden.map((c) => c.id)).toEqual(Array.from({ length: 12 }, (_, i) => `D${String(i + 1).padStart(2, '0')}`));
   });
@@ -161,7 +175,7 @@ describe('the twelve development reports, end to end', () => {
       return;
     }
     const ok = evaluated(result);
-    expect(ok.geneInputs).toEqual(expected.geneInputs);
+    expect(bare(ok.geneInputs)).toEqual(expected.geneInputs);
     expect(ok.occurrences.map((o) => o.note)).toEqual(expected.notes);
   });
 
@@ -194,7 +208,8 @@ describe('the twelve development reports, end to end', () => {
   it('repeats keep every occurrence in the audit trail even though the gene has one input', () => {
     const d06 = evaluated(results.get('D06')!);
     expect(d06.occurrences.map((o) => [o.gene, o.occurrenceIndex, o.emitted.length])).toEqual([['CYP2C19', 0, 0], ['CYP2C19', 1, 0]]);
-    expect(d06.geneInputs).toEqual([{ gene: 'CYP2C19', state: 'unresolved', reasonCode: 'duplicate-identical' }]);
+    expect(bare(d06.geneInputs)).toEqual([{ gene: 'CYP2C19', state: 'unresolved', reasonCode: 'duplicate-identical' }]);
+    expect(d06.geneInputs[0]!.callSource).toBe('lab-report'); // the duplicate path too
     expect(d06.geneInputs).toHaveLength(1);
   });
 
@@ -220,10 +235,11 @@ describe('the twelve development reports, end to end', () => {
 describe('an ambiguous report (values listed with nothing tying them to genes)', () => {
   it('abstains each listed gene once, even if the list names a gene twice, and drops the values', async () => {
     const result = evaluated(await full('Genes: CYP2C19 CYP2C19 CYP2B6\nResults: Poor Metabolizer Normal Metabolizer\n'));
-    expect(result.geneInputs).toEqual([
+    expect(bare(result.geneInputs)).toEqual([
       { gene: 'CYP2C19', state: 'unresolved', reasonCode: 'association-abstained' },
       { gene: 'CYP2B6', state: 'unresolved', reasonCode: 'association-abstained' },
     ]);
+    expect(result.geneInputs.map((i) => i.callSource)).toEqual(['lab-report', 'lab-report']); // the abstained path says where its inputs came from too
     expect(result.occurrences.map((o) => o.note)).toEqual(['abstained', 'abstained']);
     expect(JSON.stringify(result)).not.toContain('Poor Metabolizer');
   });
@@ -288,7 +304,8 @@ describe('every combination of the states the specification names (full chain)',
 
   it.each(combos.map(([d, r]) => [`${d}|${r}`] as const))('%s', (key) => {
     const result = evaluated(outcomes.get(key)!);
-    expect(result.geneInputs).toEqual(expected[key]!.inputs);
+    expect(bare(result.geneInputs)).toEqual(expected[key]!.inputs);
+    expect(result.geneInputs.every((i) => i.callSource === 'lab-report')).toBe(true);
     expect(result.occurrences).toHaveLength(1);
     expect(result.occurrences[0]!.note).toBe(expected[key]!.note);
   });

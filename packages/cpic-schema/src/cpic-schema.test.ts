@@ -208,6 +208,24 @@ describe('gene input', () => {
     ]) expect(geneInputSchema.safeParse(input).success, JSON.stringify(input)).toBe(false);
   });
 
+  it('accepts a call source on every state, and still accepts the same inputs without one (evaluations stored before the field existed)', () => {
+    for (const input of [
+      { gene: 'GENEA', state: 'canonical', phenotype: 'Normal' },
+      { gene: 'GENEA', state: 'diplotype', diplotype: '*1/*2' },
+      { gene: 'GENEA', state: 'null' },
+      { gene: 'GENEA', state: 'unresolved', reasonCode: 'other-gene-unresolved' },
+    ]) {
+      expect(geneInputSchema.safeParse({ ...input, callSource: 'lab-report' }).success, JSON.stringify(input)).toBe(true);
+      expect(geneInputSchema.safeParse(input).success, JSON.stringify(input)).toBe(true);
+    }
+  });
+
+  it('refuses a call source it does not know (an external caller is added deliberately, with its own slice), whatever the case or spelling', () => {
+    for (const callSource of ['pharmcat', 'LAB-REPORT', 'lab_report', '', 'lab-report ', null, 1, ['lab-report']]) {
+      expect(geneInputSchema.safeParse({ gene: 'GENEA', state: 'null', callSource }).success, JSON.stringify(callSource)).toBe(false);
+    }
+  });
+
   it('accepts any diplotype text up to 100 characters (including empty) so one bad value is reported per gene instead of aborting the whole report', () => {
     expect(geneInputSchema.safeParse({ gene: 'GENEA', state: 'diplotype', diplotype: '' }).success).toBe(true);
     expect(geneInputSchema.safeParse({ gene: 'GENEA', state: 'diplotype', diplotype: 'x'.repeat(100) }).success).toBe(true);

@@ -97,6 +97,8 @@ result per drug and guideline, each one of the five outcomes with its reason cod
 guideline id and version, source URL) and, where a cell applies, its citation. Details, precedence and the choices
 awaiting confirmation: [design/outcomes-and-reason-codes.md](design/outcomes-and-reason-codes.md).
 
+**Where an input came from (`callSource`).** Each input the report adapter emits carries `callSource: 'lab-report'`: the value is what the lab printed, read by the adapter. It is stored with the input (so it is inside the ledger-hashed evaluation record) and shown in the evaluation detail's `geneInputs`; it is **not** on the resolved gene state the engine returns, and the engine and the knowledge files never read it. The field is optional in the schema because evaluations stored before it existed carry none and their hashes were taken without it; absence means `lab-report`, the only source there was. Any other value (an external genotype caller, for example) is refused until it is added deliberately, in its own change.
+
 ## Not done yet
 
 - Real CPIC content: needs `api.cpicpgx.org` reachable, then a pharmacist's review. Do not write guideline
