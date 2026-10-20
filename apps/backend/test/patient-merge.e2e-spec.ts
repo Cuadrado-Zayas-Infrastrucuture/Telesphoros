@@ -207,6 +207,35 @@ describe('who may propose and decide a merge', () => {
     await lab.api().post(`/api/v1/patients/${b}/identifiers`).set(bearer(c1.token)).send({ system: 'hospital-a-mrn', value: secretNumber() }).expect(201);
   });
 
+  it('refuses to delete a patient other records were merged into, until they are unmerged, so the merged-away record is never stranded', async () => {
+    const { c1, c2 } = await organization();
+    const [a, b] = [await lab.patient(c1), await lab.patient(c1)];
+    const merge = await propose(c1, 'merge', a, b).expect(201);
+    await decide(c2, merge.body.id, 'approved').expect(201);
+
+    const refused = await lab.api().delete(`/api/v1/patients/${b}`).set(bearer(c1.token)).expect(409);
+    expect(refused.body.error.details[0]).toMatchObject({ reason: 'patient-has-merged-records' });
+    // Nothing happened: the target is still there and still readable, and the pair still reads as one.
+    await lab.api().get(`/api/v1/patients/${b}`).set(bearer(c1.token)).expect(200);
+    expect((await patients(c1).expect(200)).body.data.map((p: { id: string }) => p.id)).toContain(b);
+    expect((await patients(c1, '?includeMerged=true').expect(200)).body.data.find((p: { id: string }) => p.id === a)).toMatchObject({ mergedInto: b });
+
+    // Control: once the merge is undone nothing points at the patient, and the delete goes through.
+    const undo = await propose(c1, 'unmerge', a, b).expect(201);
+    await decide(c2, undo.body.id, 'approved').expect(201);
+    await lab.api().delete(`/api/v1/patients/${b}`).set(bearer(c1.token)).expect(204);
+    // And the other record is back in the list on its own.
+    expect((await patients(c1).expect(200)).body.data.map((p: { id: string }) => p.id)).toContain(a);
+  });
+
+  it('still deletes a patient nothing was merged into, including one with only a pending proposal', async () => {
+    const { c1 } = await organization();
+    const [a, b, c] = [await lab.patient(c1), await lab.patient(c1), await lab.patient(c1)];
+    await lab.api().delete(`/api/v1/patients/${c}`).set(bearer(c1.token)).expect(204); // never involved in a merge
+    await propose(c1, 'merge', a, b).expect(201); // proposed, not decided: no edge in force
+    await lab.api().delete(`/api/v1/patients/${b}`).set(bearer(c1.token)).expect(204);
+  });
+
   it('makes a patient filter mean the whole group on reports, and an unmerge restores them exactly', async () => {
     const { c1, c2 } = await organization();
     const [a, b] = [await lab.patient(c1), await lab.patient(c1)];

@@ -103,6 +103,20 @@ export class PostgresPatientsRepository extends PatientsRepository {
     }
   }
 
+  async hasMergedRecords(tenantId: string, id: string): Promise<boolean> {
+    try {
+      return await this.db.withTenant(tenantId, async (client) => {
+        const { rows } = await client.query<{ merged: boolean }>(
+          'SELECT EXISTS (SELECT 1 FROM patient_alias_edges($1) WHERE target_patient_id = $2) AS merged',
+          [tenantId, id],
+        );
+        return rows[0]!.merged === true;
+      });
+    } catch (error) {
+      throw toStorageError(error);
+    }
+  }
+
   async delete(tenantId: string, id: string): Promise<boolean> {
     try {
       return await this.db.withTenant(tenantId, async (client) => {

@@ -54,6 +54,10 @@ export class PatientsService {
     if ((await this.reports.countByPatient(principal.tenantId, id)) > 0) {
       throw AppException.conflict('This patient still has reports. Delete them first.');
     }
+    // Deleting the patient another record was merged into would leave that record hidden behind a patient that is gone, and the merge could not be undone.
+    if (await this.patients.hasMergedRecords(principal.tenantId, id)) {
+      throw AppException.conflictBecause('patient-has-merged-records', 'Other patient records were merged into this one. Unmerge them first.');
+    }
     await this.patients.delete(principal.tenantId, id);
   }
 
