@@ -5,6 +5,8 @@
 resource "aws_s3_bucket" "reports" {
   bucket        = "${local.name}-reports-${data.aws_caller_identity.current.account_id}"
   force_destroy = local.synthetic
+  # Object Lock can be switched on only when the bucket is created, so it is here from the first apply.
+  object_lock_enabled = true
 }
 
 resource "aws_s3_bucket_ownership_controls" "reports" {
@@ -27,6 +29,20 @@ resource "aws_s3_bucket_versioning" "reports" {
   versioning_configuration {
     status = "Enabled"
   }
+}
+
+# Founder decision 2026-10-19: every version of a report file is locked for six years. GOVERNANCE, not COMPLIANCE: a documented
+# break-glass role (docs/ops/break-glass.md) can still remove one deliberately, and that attempt raises ReportObjectDeleted.
+# A PutObject to a locked bucket must carry a checksum; s3-object-storage.checksum.spec.ts pins that the application sends one.
+resource "aws_s3_bucket_object_lock_configuration" "reports" {
+  bucket = aws_s3_bucket.reports.id
+  rule {
+    default_retention {
+      mode = "GOVERNANCE"
+      days = local.reports_lock_days
+    }
+  }
+  depends_on = [aws_s3_bucket_versioning.reports]
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "reports" {
@@ -110,6 +126,64 @@ data "aws_iam_policy_document" "reports_bucket" {
       test     = "NumericLessThan"
       variable = "s3:TlsVersion"
       values   = ["1.2"]
+    }
+  }
+  # The application sends NO encryption header and relies on the bucket default (the data key). So these refuse a request only
+  # when it NAMES something else: each pairs "the header is present" (Null = false) with "and it is wrong". A bare StringNotEquals
+  # would also refuse every header-less upload, which is every upload the application makes.
+  statement {
+    sid       = "DenyOtherEncryption"
+    effect    = "Deny"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.reports.arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Null"
+      variable = "s3:x-amz-server-side-encryption"
+      values   = ["false"]
+    }
+    condition {
+      test     = "StringNotEquals"
+      variable = "s3:x-amz-server-side-encryption"
+      values   = ["aws:kms"]
+    }
+  }
+  statement {
+    sid       = "DenyOtherKey"
+    effect    = "Deny"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.reports.arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Null"
+      variable = "s3:x-amz-server-side-encryption-aws-kms-key-id"
+      values   = ["false"]
+    }
+    condition {
+      test     = "StringNotEquals"
+      variable = "s3:x-amz-server-side-encryption-aws-kms-key-id"
+      values   = [aws_kms_key.data.arn]
+    }
+  }
+  statement {
+    sid       = "DenyCustomerKeys"
+    effect    = "Deny"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.reports.arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Null"
+      variable = "s3:x-amz-server-side-encryption-customer-algorithm"
+      values   = ["false"]
     }
   }
 }

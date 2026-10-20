@@ -1,7 +1,8 @@
 # F1: the audit trail. NOT APPLIED.
 #
 # CloudTrail records who did what in the AWS account, including every read and delete of a report file
-# (S3 data events on the reports bucket). The logs go to a bucket nobody can quietly rewrite (Object Lock, its own
+# (S3 data events on the reports bucket) and every delete or lock change of an audit log or off-site backup.
+# The logs go to a bucket nobody can quietly rewrite (Object Lock, COMPLIANCE in production, its own
 # KMS key, signed digest files), and a few events raise an alarm by email. docs/ops/audit-trail.md says what is recorded,
 # what each alarm means, and what is not covered.
 
@@ -63,12 +64,22 @@ locals {
   audit_metrics   = "${local.name}/Audit"
   # The off-site backups bucket exists only in the production profile (profile.tf), so it is listed only then.
   audit_buckets = concat([aws_s3_bucket.reports.bucket, aws_s3_bucket.audit.bucket], aws_s3_bucket.backups[*].bucket)
+  # The buckets that hold the record of what happened (the trail's own logs and the off-site backups). Their deletes are recorded and alarmed.
+  evidence_log_buckets = concat([aws_s3_bucket.audit.bucket], aws_s3_bucket.backups[*].bucket)
 
   # One alarm per entry: a CloudWatch Logs metric filter over the trail, and an alarm on its metric.
   audit_alarms = {
     ReportObjectDeleted = {
       description = "A report file or one of its versions was deleted (or someone tried). The application cannot delete report files, so this is a person: check docs/ops/break-glass.md."
       pattern     = "{ ($.eventSource = \"s3.amazonaws.com\") && (($.eventName = \"DeleteObjectVersion\") || ($.eventName = \"DeleteObject\") || ($.eventName = \"DeleteObjects\")) && ($.requestParameters.bucketName = \"${aws_s3_bucket.reports.bucket}\") }"
+    }
+    EvidenceLogDeleted = {
+      description = "An audit log or an off-site backup was deleted (or someone tried). CloudTrail and the backup job never delete, so this is a person erasing the record: treat as an incident."
+      pattern     = "{ ($.eventSource = \"s3.amazonaws.com\") && (($.eventName = \"DeleteObject\") || ($.eventName = \"DeleteObjects\") || ($.eventName = \"DeleteObjectVersion\")) && (${join(" || ", [for b in local.evidence_log_buckets : "($.requestParameters.bucketName = \"${b}\")"])}) }"
+    }
+    ObjectLockOverridden = {
+      description = "The lock on one object (its retention or legal hold) was changed in the reports, audit or backup bucket. Shortening a GOVERNANCE lock needs the bypass right: expected only with a written break-glass decision."
+      pattern     = "{ ($.eventSource = \"s3.amazonaws.com\") && (($.eventName = \"PutObjectRetention\") || ($.eventName = \"PutObjectLegalHold\")) && (${join(" || ", [for b in local.audit_buckets : "($.requestParameters.bucketName = \"${b}\")"])}) }"
     }
     BreakGlassRoleAssumed = {
       description = "The break-glass role was assumed (or someone tried). Expected only with a written decision record: docs/ops/break-glass.md."
@@ -367,13 +378,51 @@ resource "aws_cloudtrail" "audit" {
   cloud_watch_logs_group_arn    = "${aws_cloudwatch_log_group.audit.arn}:*"
   cloud_watch_logs_role_arn     = aws_iam_role.audit_trail_logs.arn
 
-  # Every management event, plus every read and write of an object in the reports bucket (the trailing slash means "all objects").
-  event_selector {
-    read_write_type           = "All"
-    include_management_events = true
-    data_resource {
-      type   = "AWS::S3::Object"
-      values = ["${aws_s3_bucket.reports.arn}/"]
+  # Advanced selectors (a trail cannot mix them with the basic event_selector). Every management event; every read and write of an
+  # object in the reports bucket (the trailing slash means "all objects"); and, in the audit and backup buckets, only the calls that
+  # remove an object or change its lock. Recording EVERY event in the audit bucket would record the trail's own log writes, a loop
+  # AWS warns against; CloudTrail itself only ever calls PutObject there, so the filtered selector cannot loop.
+  advanced_event_selector {
+    name = "Every management event"
+    field_selector {
+      field  = "eventCategory"
+      equals = ["Management"]
+    }
+  }
+
+  advanced_event_selector {
+    name = "Every object read and write in the reports bucket"
+    field_selector {
+      field  = "eventCategory"
+      equals = ["Data"]
+    }
+    field_selector {
+      field  = "resources.type"
+      equals = ["AWS::S3::Object"]
+    }
+    field_selector {
+      field       = "resources.ARN"
+      starts_with = ["${aws_s3_bucket.reports.arn}/"]
+    }
+  }
+
+  advanced_event_selector {
+    name = "Deletes and lock changes in the audit and backup buckets"
+    field_selector {
+      field  = "eventCategory"
+      equals = ["Data"]
+    }
+    field_selector {
+      field  = "resources.type"
+      equals = ["AWS::S3::Object"]
+    }
+    field_selector {
+      field  = "eventName"
+      equals = ["DeleteObject", "DeleteObjects", "PutObjectRetention", "PutObjectLegalHold"]
+    }
+    field_selector {
+      field       = "resources.ARN"
+      starts_with = concat(["${aws_s3_bucket.audit.arn}/"], [for b in aws_s3_bucket.backups : "${b.arn}/"])
     }
   }
 
