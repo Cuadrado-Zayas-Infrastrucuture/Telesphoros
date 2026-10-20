@@ -1,6 +1,8 @@
 import { Logger, Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ENV, type Env } from '../config/env';
+import { CapabilityIssuerPort, NullCapabilityIssuer } from '../issuer/capability-issuer.port';
+import { RequestCapabilities } from '../issuer/request-capabilities';
 import { IpRateLimitGuard, PersonRateLimitGuard } from '../rate-limit/rate-limit.guard';
 import { RateLimitModule } from '../rate-limit/rate-limit.module';
 import { InMemoryMembershipRepository, MembershipRepository } from '../storage/membership.repository';
@@ -40,6 +42,9 @@ export function createApplicationVerifier(env: Env, memberships: MembershipRepos
   providers: [
     { provide: TokenVerifier, useFactory: createApplicationVerifier, inject: [ENV, MembershipRepository] },
     MembershipService,
+    // No issuer is configured by default, so no capability is requested: behaviour in `guc` mode is unchanged. The transport to a real issuer is a later decision.
+    { provide: CapabilityIssuerPort, useClass: NullCapabilityIssuer },
+    RequestCapabilities,
     // Order matters. The address limit comes FIRST (a flood of bad tokens must be stopped before token verification), then authenticate,
     // then check roles, then the per-person limit (so a request that is refused or not signed in never spends a person's tokens).
     { provide: APP_GUARD, useClass: IpRateLimitGuard },
