@@ -40,7 +40,7 @@ remain gates.
 From the 2026-10-19 security audit (INF-05). Founder decision, same day: `.github/rulesets/main.json` has no bypass actor, and a pull
 request must be up to date with `main` before it merges. `pnpm test:ci-config` now fails if either comes back. The file is the
 specification; the live ruleset is updated from it after this merges, and read back. Break-glass is an explicit, audit-logged ruleset
-edit ([CI/CD](ops/ci-cd.md#break-glass-no-standing-bypass)). Approvals stay at 0 while there is one maintainer.
+edit ([CI/CD](ops/ci-cd.md#break-glass-no-standing-bypass)). Approvals stay at 0 while there is one maintainer. Applied 2026-10-20 and read back; the API sync also turned on `require_extra_approval_for_unattributed_changes` (a GitHub default for a field the file did not name), which was reverted at once and is now pinned `false` in the file.
 
 ## Production refuses unsafe settings (written, not applied, 2026-10-19)
 
