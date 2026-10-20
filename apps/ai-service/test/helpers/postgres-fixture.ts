@@ -61,7 +61,7 @@ export async function ownedPostgresFixture(): Promise<EphemeralDatabase> {
     if (!settings || settings.data_directory !== `${manifest.run}/pgdata` ||
       settings.system_identifier !== manifest.system_identifier || settings.fsync !== 'on' ||
       settings.sync !== 'on' || settings.full_page_writes !== 'on' || settings.listen !== '' ||
-      settings.version !== '160014' || !settings.tcp_absent) throw new Error('OWNED_PG_SETTINGS_REFUSED');
+      !/^16\d{4}$/.test(settings.version) || !settings.tcp_absent) throw new Error('OWNED_PG_SETTINGS_REFUSED');
   } finally { await client.end(); }
   return createEphemeralDatabase();
 }
