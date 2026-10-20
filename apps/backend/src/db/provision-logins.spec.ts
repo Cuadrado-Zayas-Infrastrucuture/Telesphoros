@@ -60,9 +60,9 @@ describe('the groups this command creates agree with the migrations', () => {
     for (const s of statements) expect({ role: s.role, attributes: s.attributes }).toEqual({ role: s.role, attributes: GROUP_ATTRIBUTES });
   });
 
-  it('has four different default login names, none of them a group', () => {
+  it('has five different default login names, none of them a group', () => {
     const names = Object.values(DEFAULT_LOGINS);
-    expect(new Set(names).size).toBe(4);
+    expect(new Set(names).size).toBe(5);
     for (const name of names) expect((PRIVILEGE_GROUPS as readonly string[]).includes(name)).toBe(false);
   });
 });

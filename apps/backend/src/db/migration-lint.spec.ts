@@ -166,3 +166,55 @@ describe('migration lint: over a migrations directory', () => {
     expect(lintMigrations(directoryWith(expand('CREATE TABLE t (id int);\n')))).toEqual([]);
   });
 });
+
+describe('migration lint: a REVOKE that only undoes what the same migration created', () => {
+  // `earlier` is the SQL of the migrations before this one. Without it the lint cannot know an object is new, so it exempts nothing.
+  const newFunction = 'CREATE FUNCTION f_new(p text) RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;\n';
+  const newRole = "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'telesphoros_newrole') THEN\n  CREATE ROLE telesphoros_newrole NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;\nEND IF; END $$;\n";
+  const lint = (sql: string, earlier = 'CREATE TABLE t (id int);\n') => lintMigration(V, expand(sql), { earlier });
+
+  it('accepts revoking the default PUBLIC privilege on a function this migration creates', () => {
+    expect(lint(`${newFunction}REVOKE ALL ON FUNCTION f_new(text) FROM PUBLIC;\n`)).toEqual([]);
+    expect(lint(`${newFunction}REVOKE EXECUTE ON FUNCTION public.f_new(text) FROM PUBLIC;\n`)).toEqual([]);
+  });
+
+  it('accepts revoking a privilege this migration granted to a role this migration introduces', () => {
+    const sql = `${newRole}GRANT CREATE ON SCHEMA public TO telesphoros_newrole;\nCREATE TABLE x (id int);\nREVOKE CREATE ON SCHEMA public FROM telesphoros_newrole;\n`;
+    expect(lint(sql)).toEqual([]);
+  });
+
+  // Positive controls: the same shapes, each with the one fact that makes the REVOKE remove something older code may rely on.
+  it.each([
+    ['the function already existed before this migration', `${newFunction}REVOKE ALL ON FUNCTION f_new(text) FROM PUBLIC;\n`, 'CREATE FUNCTION f_new(p text) RETURNS int LANGUAGE sql AS $$ SELECT 2 $$;\n'],
+    ['the function is not created in this migration', 'REVOKE ALL ON FUNCTION f_old(text) FROM PUBLIC;\n', undefined],
+    ['the revoke is from a role, not PUBLIC', `${newFunction}REVOKE ALL ON FUNCTION f_new(text) FROM telesphoros_app;\n`, undefined],
+    ['one object in the list is older', `${newFunction}REVOKE ALL ON FUNCTION f_new(text), f_old() FROM PUBLIC;\n`, undefined],
+    ['a table that already existed', 'REVOKE SELECT ON t FROM PUBLIC;\n', undefined],
+    ['the grant comes after the revoke', `${newRole}REVOKE CREATE ON SCHEMA public FROM telesphoros_newrole;\nGRANT CREATE ON SCHEMA public TO telesphoros_newrole;\n`, undefined],
+    ['a different privilege was granted', `${newRole}GRANT USAGE ON SCHEMA public TO telesphoros_newrole;\nREVOKE CREATE ON SCHEMA public FROM telesphoros_newrole;\n`, undefined],
+    ['the role is not introduced by this migration', 'GRANT CREATE ON SCHEMA public TO telesphoros_app;\nREVOKE CREATE ON SCHEMA public FROM telesphoros_app;\n', undefined],
+    ['the role already appears in an earlier migration', `${newRole}GRANT CREATE ON SCHEMA public TO telesphoros_newrole;\nREVOKE CREATE ON SCHEMA public FROM telesphoros_newrole;\n`, 'GRANT SELECT ON t TO telesphoros_newrole;\n'],
+    ['a role membership', `${newRole}GRANT telesphoros_newrole TO telesphoros_app;\nREVOKE telesphoros_newrole FROM telesphoros_app;\n`, undefined],
+  ])('still refuses it when %s', (_why, sql, earlier) => {
+    const problems = lint(sql, earlier);
+    expect(problems.join('\n')).toContain('REVOKE');
+    expect(problems.join('\n')).toContain('Label it breaking');
+  });
+
+  it('exempts nothing when it is not told what came before (the safe default)', () => {
+    const sql = expand(`${newFunction}REVOKE ALL ON FUNCTION f_new(text) FROM PUBLIC;\n`);
+    expect(lintMigration(V, sql).join('\n')).toContain('REVOKE');
+    expect(lintMigration(V, sql, { earlier: '' })).toEqual([]); // control: told that nothing came before, it is exempt
+  });
+
+  it('reports a later REVOKE that is not exempt even after an exempt one', () => {
+    const problems = lint(`${newFunction}REVOKE ALL ON FUNCTION f_new(text) FROM PUBLIC;\nREVOKE SELECT ON t FROM telesphoros_app;\n`);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('line 4');
+  });
+
+  it('over a directory, knows what the earlier migrations created', () => {
+    expect(lintMigrations(directoryWith(expand(`${newFunction}REVOKE ALL ON FUNCTION f_new(text) FROM PUBLIC;\n`)))).toEqual([]);
+    expect(lintMigrations(directoryWith(expand('REVOKE ALL ON FUNCTION f_filler() FROM PUBLIC;\n'))).join('\n')).toContain('REVOKE');
+  });
+});
