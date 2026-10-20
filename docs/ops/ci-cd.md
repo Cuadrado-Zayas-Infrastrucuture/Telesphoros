@@ -188,9 +188,9 @@ The file is a GitHub **ruleset** for the default branch. It is not active until 
 | Required status checks | `verify`, `database-and-storage`, `browser`, `terraform`, `secret-scan`, `image`, each bound to the GitHub Actions app | Another app cannot report a check by the same name |
 | Block force pushes | on | History on `main` is never rewritten |
 | Block deletion | on | |
-| "Require branch to be up to date" | **off** | Safer, but forces a re-run after each merge; revisit when `main` becomes contested |
+| "Require branch to be up to date" | **on** (founder decision 2026-10-19, security audit INF-05) | The checks must have run against the `main` the PR merges into. `main` is now contested (several sessions merge the same day), so a PR that was green against an older `main` is not evidence. Cost: after another PR merges, update the branch and wait for CI again before merging |
 | Code-owner review | **off** | `.github/CODEOWNERS` still requests review automatically. A required code-owner approval cannot be given by the author, so enabling it now would block every PR |
-| Bypass | repository admins, **only through a pull request** | Break-glass if Actions is down or out of minutes. Without it, nothing could merge. Use it rarely, and say so in the PR |
+| Bypass | **none** (founder decision 2026-10-19, security audit INF-05) | A standing bypass let one account merge past failing checks. Break-glass is now an explicit, visible ruleset edit (below) |
 
 **When a second maintainer joins:** change `required_approving_review_count` to `1`, set `require_code_owner_review` to
 `true`, and add the second person to `CODEOWNERS` for the sensitive paths. Update this table in the same PR.
@@ -199,6 +199,12 @@ The file is a GitHub **ruleset** for the default branch. It is not active until 
 the table above (the file was used as the specification, not imported).
 
 On 2026-10-10 the founder approved adding the missing live `image` check. Ruleset `24691287` was updated narrowly; a full before/after comparison preserved every other existing rule/condition/bypass field, and effective main protection returned all six check names. This does not claim every setting in the versioned ruleset was imported (the live rules returned no explicit deletion rule).
+
+### Break-glass (no standing bypass)
+
+If Actions is down or out of minutes and a merge cannot wait: as a repository admin, edit ruleset `24691287` to add the bypass, merge
+the one pull request, and **remove the bypass again at once**. Say so in that PR, with the reason. GitHub records ruleset edits in
+the repository's audit log, so the exception is visible afterwards instead of being a standing permission.
 
 ### Turning it on
 
