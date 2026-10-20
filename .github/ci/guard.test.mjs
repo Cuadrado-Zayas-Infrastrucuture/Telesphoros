@@ -282,6 +282,15 @@ test('nobody can bypass the ruleset, and a pull request must be up to date with 
   assert.equal(checks.strict_required_status_checks_policy, true, 'checks must have run against the current main');
 });
 
+// Applying this file through the API on 2026-10-20 silently turned require_extra_approval_for_unattributed_changes on: a field the
+// file does not name takes GitHub's default, not the live value. With one maintainer and 0 approvals, an extra required approval
+// could block merges. The file therefore names it explicitly; the live value before the sync was false.
+test('the pull-request rule pins the extra-approval-for-unattributed-changes setting off', () => {
+  const pr = ruleset.rules.find((r) => r.type === 'pull_request').parameters;
+  assert.ok(Object.hasOwn(pr, 'require_extra_approval_for_unattributed_changes'), 'name it explicitly, or an API sync applies GitHub\'s default (true)');
+  assert.equal(pr.require_extra_approval_for_unattributed_changes, false);
+});
+
 test('required checks come from GitHub Actions only (so another app cannot report them)', () => {
   const checks = ruleset.rules.find((r) => r.type === 'required_status_checks').parameters.required_status_checks;
   for (const c of checks) assert.equal(c.integration_id, 15368, `${c.context} must be bound to the GitHub Actions app`);
