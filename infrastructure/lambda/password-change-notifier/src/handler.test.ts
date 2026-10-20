@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHandler, type Mailer, noticeText, PASSWORD_RESET, type PostConfirmationEvent } from './handler';
@@ -57,6 +58,26 @@ describe('password change notifier', () => {
     expect(line).toContain('MessageRejected');
     expect(line).not.toContain('owner@example.test'); // no address, no identifier in the log
     expect(line).not.toContain('a-user-id');
+  });
+
+  // A lost notice is silent for the user, so its log line is what raises the alarm (lambda.tf, password_notice_lost). This keeps the
+  // filter's terms and the lines this handler really writes in agreement: rename either one and this fails.
+  it('every line it writes when a notice is lost matches the alarm filter in lambda.tf', async () => {
+    const tf = readFileSync(new URL('../../../terraform/lambda.tf', import.meta.url), 'utf8');
+    const filter = /resource "aws_cloudwatch_log_metric_filter" "password_notice_lost" \{[\s\S]*?\n\}/.exec(tf)?.[0] ?? '';
+    const pattern = (/pattern\s*=\s*"(.*)"\s*$/m.exec(filter)?.[1] ?? '').replace(/\\"/g, '"');
+    const terms = [...pattern.matchAll(/\?"([^"]+)"/g)].map((m) => m[1]);
+    expect(terms.length).toBeGreaterThan(0);
+
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const failing: Mailer = { send: async () => { throw new Error('down'); } };
+    await createHandler(failing)(event(PASSWORD_RESET));
+    await createHandler(recorder().mailer)(event(PASSWORD_RESET, null));
+    const lines = log.mock.calls.map((call) => String(call[0]));
+    expect(lines).toHaveLength(2);
+    for (const line of lines) expect(terms.some((term) => line.includes(`"${term}"`)), line).toBe(true);
+    // And no term is dead: each one is a line this handler can write.
+    for (const term of terms) expect(lines.some((line) => line.includes(`"${term}"`)), term).toBe(true);
   });
 
   it('writes a notice with no links, no codes and no secrets', () => {

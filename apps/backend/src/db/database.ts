@@ -63,7 +63,8 @@ export class Database {
       application_name: options.applicationName ?? 'telesphoros-backend',
     });
     // An idle client can die (failover, restart). Without a listener that becomes a process crash.
-    this.pool.on('error', (error) => this.logger.error(`Idle database client error: ${error.message}`));
+    // The class and code only: a driver message can carry the host or the user name (audit finding INF-10).
+    this.pool.on('error', (error) => this.logger.error({ event: 'database-idle-client-error', error }, 'Idle database client error'));
   }
 
   async withTenant<T>(tenantId: string, work: (client: PoolClient) => Promise<T>, options: TenantWorkOptions = {}): Promise<T> {
