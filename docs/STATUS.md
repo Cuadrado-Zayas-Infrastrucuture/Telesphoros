@@ -6,6 +6,9 @@ Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and
 ## DATA-01 slice 1: catalog inventory (in progress, 2026-10-19)
 
 The read-only inventory for the tenant capability ([verification record](verification/tenant-capability.md)) counts, from the catalog of a freshly migrated PostgreSQL 16: 48 policies that read `app.current_tenant_id` (30 for the app, 12 for the ledger role, 2 each for redactor, jobs and PUBLIC, plus 2 worker uses), 10 app-callable definer functions plus `security_audit_record` and two actor-reading triggers, and 46 `withTenant` call sites (5 bind an actor). It finds the spec's FR-006 too narrow and the post-restore isolation check dependent on the setting. The capability migration is not written yet: it waits for the founder's review of this inventory. No code, migration, Terraform or AWS change.
+## DATA-01 tenant capability spec (spec only, 2026-10-19)
+
+[Spec, plan and tasks](../specs/001-tenant-capability/spec.md) for replacing the forgeable `app.current_tenant_id`/`app.current_actor` binding with an issuer-minted, hashed capability that every RLS policy and definer function reads through `app_tenant()`, rolled out guc → dual → capability; founder decisions D1–D9 decided 2026-10-19 (the recommendations), plan not yet approved for implementation; no code, migration, Terraform or AWS change.
 
 ## Capture insert: a concurrent duplicate is no longer refused (2026-10-19)
 
@@ -28,6 +31,17 @@ backend activation, resource creation, policy change, approval or spend is
 included; the founder's account, cost, owner, state and retention decisions
 remain gates.
 
+
+## Evidence cannot be erased (written, not applied, 2026-10-19)
+
+From the 2026-10-19 security audit (findings INF-01, INF-02). Founder decisions, same day: production audit logs are locked in
+**COMPLIANCE** mode (a precondition refuses `environment = "production"` with anything else), and every report-file version is locked
+for **six years in GOVERNANCE** mode (`reports_lock_days`, floor 2190; one day in the synthetic rehearsal). The reports bucket policy now
+refuses an upload that names another encryption, another key or a customer key, and lets the application's header-less uploads through.
+The trail moves to advanced event selectors and also records deletes and lock changes in the audit and backup buckets, with two new
+alarms (`EvidenceLogDeleted`, `ObjectLockOverridden`). A locked bucket refuses a `PutObject` without a checksum, so a new spec pins that
+both application write paths send one. [Audit trail](ops/audit-trail.md), [break-glass](ops/break-glass.md). Nothing applied in AWS;
+that S3 accepts the trailing-checksum intake upload on a locked bucket is verified only against the SDK's request, not against AWS.
 ## Test application loopback listener repair (local, 2026-10-18)
 
 The real test helper now binds its persistent listener to `127.0.0.1`, matching
