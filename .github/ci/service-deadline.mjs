@@ -5,7 +5,13 @@ import { basename, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const budgetMs = 30 * 60_000;
-const refuse = () => { throw new Error('Service budget validation failed.'); };
+// Closed list of reason codes. A refusal may name the clause that failed, never a value, path or file content.
+export const reasons = Object.freeze(['watchdog-receipt-invalid', 'watchdog-not-armed', 'watchdog-process-changed', 'watchdog-owner-changed',
+  'watchdog-uid-mismatch', 'watchdog-budget-mismatch', 'watchdog-source-mismatch', 'watchdog-heartbeat-invalid',
+  'watchdog-heartbeat-future', 'watchdog-heartbeat-stale']);
+const refuse = reason => { throw Object.assign(new Error('Service budget validation failed.'), reasons.includes(reason) ? { reason } : {}); };
+// The watchdog publishes a new heartbeat about every 250 ms; one stamped after the caller sampled `now` is not forged.
+export const heartbeatSkewMs = 1000;
 export function exactKeys(value, names) {
   if (!value || typeof value !== 'object' || Array.isArray(value)
     || JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...names].sort())) refuse();
@@ -46,12 +52,18 @@ export function readJson(file) {
   return JSON.parse(readFileSync(file, 'utf8'));
 }
 export function loadBudget(env = process.env, now = Date.now()) {
-  const budget = readJson(join(temporary(env), 'service-budget.json'));
-  const identity = identityFromEnv(env);
-  if (Object.entries(identity).some(([key, value]) => budget[key] !== value)) refuse();
-  remainingMs(budget, now);
-  if (env.SERVICE_WATCHDOG_REQUIRED === '1') validateWatchdog(env, budget, now);
-  return budget;
+  try {
+    const budget = readJson(join(temporary(env), 'service-budget.json'));
+    const identity = identityFromEnv(env);
+    if (Object.entries(identity).some(([key, value]) => budget[key] !== value)) refuse();
+    remainingMs(budget, now);
+    if (env.SERVICE_WATCHDOG_REQUIRED === '1') validateWatchdog(env, budget, now);
+    return budget;
+  } catch (error) {
+    // The CLI prints one generic line; this names the failed clause from the closed list above and nothing else.
+    if (error?.reason) process.stderr.write(`Service budget refused: ${error.reason}.\n`);
+    throw error;
+  }
 }
 
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -156,15 +168,22 @@ function atomicJson(file, value) {
   writeFileSync(temporaryFile, JSON.stringify(value) + '\n', { mode: 0o600, flag: 'wx' }); renameSync(temporaryFile, file);
 }
 export function validateWatchdog(env, budget, now = Date.now(), read = readProcess) {
-  const receipt = readJson(join(temporary(env), 'service-watchdog.json'));
-  exactKeys(receipt, ['format', 'state', 'pid', 'start', 'owner', 'budgetHash', 'sourceHash', 'heartbeatMs']);
-  exactKeys(receipt.owner, ['pid', 'ppid', 'uid', 'start', 'command']);
+  let receipt;
+  try {
+    receipt = readJson(join(temporary(env), 'service-watchdog.json'));
+    exactKeys(receipt, ['format', 'state', 'pid', 'start', 'owner', 'budgetHash', 'sourceHash', 'heartbeatMs']);
+    exactKeys(receipt.owner, ['pid', 'ppid', 'uid', 'start', 'command']);
+  } catch { refuse('watchdog-receipt-invalid'); }
   const current = read(receipt.pid), owner = read(receipt.owner.pid);
-  if (receipt.format !== 1 || receipt.state !== 'armed' || !current || current.start !== receipt.start || !owner
-    || processKey(owner) !== processKey(receipt.owner) || owner.command !== 'Runner.Worker'
-    || current.uid !== process.getuid() || owner.uid !== current.uid || receipt.budgetHash !== digest(JSON.stringify(budget))
-    || receipt.sourceHash !== digest(readFileSync(fileURLToPath(import.meta.url)))
-    || !Number.isSafeInteger(receipt.heartbeatMs) || receipt.heartbeatMs > now || now - receipt.heartbeatMs > 5000) refuse();
+  if (receipt.format !== 1 || receipt.state !== 'armed') refuse('watchdog-not-armed');
+  if (!current || current.start !== receipt.start) refuse('watchdog-process-changed');
+  if (!owner || processKey(owner) !== processKey(receipt.owner) || owner.command !== 'Runner.Worker') refuse('watchdog-owner-changed');
+  if (current.uid !== process.getuid() || owner.uid !== current.uid) refuse('watchdog-uid-mismatch');
+  if (receipt.budgetHash !== digest(JSON.stringify(budget))) refuse('watchdog-budget-mismatch');
+  if (receipt.sourceHash !== digest(readFileSync(fileURLToPath(import.meta.url)))) refuse('watchdog-source-mismatch');
+  if (!Number.isSafeInteger(receipt.heartbeatMs)) refuse('watchdog-heartbeat-invalid');
+  if (receipt.heartbeatMs > now + heartbeatSkewMs) refuse('watchdog-heartbeat-future');
+  if (now - receipt.heartbeatMs > 5000) refuse('watchdog-heartbeat-stale');
   return receipt;
 }
 /** A dedicated hosted VM makes new same-UID processes attributable even after reparenting/setsid. */
