@@ -55,10 +55,10 @@ describe('owned PostgreSQL synthetic schema, roles and reversibility', () => {
     const migrated = await catalog(owner);
     await owner.query('BEGIN');
     try {
-      await owner.query(readFileSync(resolve(migrations, '0028_agentic_synthetic.down.sql'), 'utf8'));
-      const before = await catalog(owner); // the schema as migration 0027 left it
+      await owner.query(readFileSync(resolve(migrations, '0029_agentic_synthetic.down.sql'), 'utf8'));
+      const before = await catalog(owner); // the schema as migration 0028 left it
       expect(before.filter(synthetic)).toEqual([]);
-      // Every shared fact is byte-identical with and without 0028, except one documented grant: the synthetic
+      // Every shared fact is byte-identical with and without 0029, except one documented grant: the synthetic
       // definer functions run as telesphoros_jobs and call the shared membership check.
       const shared = migrated.filter(f => !synthetic(f));
       const added = shared.filter(f => !before.includes(f));
@@ -66,7 +66,7 @@ describe('owned PostgreSQL synthetic schema, roles and reversibility', () => {
       expect(added.map(f => f.replace(/ src=.*/, ''))).toEqual([expect.stringMatching(
         /^fn membership_assert_current\(p_sub text, p_version bigint\) .*telesphoros_jobs=X\//)]);
       expect(removed.map(f => f.replace(/,?telesphoros_jobs=X\/[a-z0-9_]+/, ''))).toEqual(added.map(f => f.replace(/,?telesphoros_jobs=X\/[a-z0-9_]+/, '')));
-      await owner.query(readFileSync(resolve(migrations, '0028_agentic_synthetic.up.sql'), 'utf8'));
+      await owner.query(readFileSync(resolve(migrations, '0029_agentic_synthetic.up.sql'), 'utf8'));
       expect(await catalog(owner)).toEqual(migrated);
     } finally { await owner.query('ROLLBACK'); }
     expect(await catalog(owner)).toEqual(migrated); // the rolled-back transaction left nothing behind

@@ -147,7 +147,7 @@ describe('owned PostgreSQL synthetic admission', () => {
         VALUES ($1,'race-source','v1',$2,$3,true)`, [raceTenant,digest(raceBody),raceBody]);
       await owner.query(`INSERT INTO public.agentic_synthetic_grant_sources(tenant_id,grant_id,source_id,source_version,enabled)
         VALUES ($1,$2,'race-source','v1',true)`, [raceTenant,raceGrant]);
-      // Test-client-only injection: no failpoint or trigger ships in migration 0028.
+      // Test-client-only injection: no failpoint or trigger ships in migration 0029.
       await owner.query(`CREATE FUNCTION public.p2_test_refuse_reservation() RETURNS trigger LANGUAGE plpgsql AS
         $$ BEGIN RAISE EXCEPTION 'fixture rollback' USING ERRCODE = 'check_violation'; END $$`);
       await owner.query(`CREATE TRIGGER p2_test_refuse_reservation BEFORE INSERT ON public.agentic_synthetic_reservations

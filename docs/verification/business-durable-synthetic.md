@@ -1,10 +1,12 @@
 # P2 local verification ledger
 
+> **Reconciled onto main (2026-10-20).** The entries below were recorded on the earlier local candidate (base `89fd611`, migration then numbered `0028`). That candidate was replayed onto `origin/main` `3c7f1f4`, where `0028_tenant_capability` already exists, so the synthetic migration is now `0029_agentic_synthetic`. Every count and PASS below is historical and void for the reconciled candidate; the final section of this file holds the re-run.
+
 Candidate base: P1 PR #169 head `827e7a6`; branch `feat/durable-synthetic-local`; local-only and uncommitted. P1 is not on `origin/main`. This is an interim record, **not** the P2 acceptance receipt.
 
 Verified on 2026-10-18 against a newly owned PostgreSQL 16.14 Unix-socket fixture, with TCP disabled and `fsync`, `synchronous_commit`, and `full_page_writes` all on:
 
-- Existing repository migrator applied all 28 migrations in a fresh disposable database. Migration 0028 made ten tables, eight forced-RLS tenant tables and ten synthetic triggers. Empty down/up passed; nonempty down refused and left its row intact.
+- Existing repository migrator applied all 28 migrations in a fresh disposable database. Migration 0029 (numbered 0028 at the time) made ten tables, eight forced-RLS tenant tables and ten synthetic triggers. Empty down/up passed; nonempty down refused and left its row intact.
 - Actual restricted app and worker login connections had no direct SELECT/INSERT/UPDATE/DELETE/TRUNCATE rights on any new table and neither had SUPERUSER or BYPASSRLS.
 - Wrong source digests and later body/version/digest mutation, DELETE and TRUNCATE CASCADE were rejected. One-way eligibility revocation passed. Begun invocation evidence could be filled once and not rewritten, deleted or truncated. Synthetic outcome and audit rows also rejected update, delete and truncate.
 - The owned postmaster was stopped in immediate mode with a synthetic transaction open and restarted. Committed capacity/source rows survived; the uncommitted bucket row was absent. This proves this fixture's software crash recovery, not power-loss durability or business-run recovery.
@@ -127,7 +129,7 @@ No product code changed. **75 → 76** unit tests and **72/72** PostgreSQL tests
 - **P2-03:** every `JobQueue` method is fenced by `SyntheticJobQueue` except `stats` and `workerSeen` (read-only bookkeeping). A new shared queue method fails the test until it is reviewed.
 - **P2-29:** none of the app, worker, verifier, operator or auditor logins is superuser, bypasses RLS or can create roles or databases. Each gets `42501` on SELECT and DELETE of all ten synthetic tables. Only app (3) and worker (8) hold synthetic EXECUTE. The tables are owned by NOLOGIN `telesphoros_jobs`.
 - **P2-30:** temp shadow tables named `jobs`, `tenants`, `tenant_memberships`, `agentic_synthetic_runs` and `agentic_synthetic_grants` (proven live for unqualified names), plus a spoofed worker tenant setting, change nothing `load` returns. The spoofed setting is restored afterwards. An app tenant or actor setting that disagrees with the caller is refused. Every synthetic function body schema-qualifies its calls and tables (scanner with positive control).
-- **P2-32/P2-34:** a full catalog snapshot (relations, columns and collations, functions with ACL, config and source hash, triggers, policies, constraints, schema ACL) taken after down shows 0028 changes only its own objects. The one exception is documented: `EXECUTE` on the shared `membership_assert_current` for `telesphoros_jobs`, which down revokes. Up after down restores the catalog exactly. The whole attempt, rolled back, leaves nothing. No synthetic schedule or job exists after migration.
+- **P2-32/P2-34:** a full catalog snapshot (relations, columns and collations, functions with ACL, config and source hash, triggers, policies, constraints, schema ACL) taken after down shows 0029 changes only its own objects. The one exception is documented: `EXECUTE` on the shared `membership_assert_current` for `telesphoros_jobs`, which down revokes. Up after down restores the catalog exactly. The whole attempt, rolled back, leaves nothing. No synthetic schedule or job exists after migration.
 - **P2-33:** the durable suite refuses (`OWNED_PG_CONFIG_REQUIRED`) with no manifest, and with a manifest outside the owned control directory plus an ambient URL. The controller's own refusal tests run in the gate.
 
 Guard-removal proof: a timer in `durable/job.ts` (both P2-02 tests), a root export of a durable module (P2-01), the queue's `release` override removed (P2-03), the fixture's manifest check removed (P2-33), down keeping the shared grant (P2-32/34), one unqualified helper call (the qualification scan and 34 runtime tests), and direct worker SELECT on runs (P2-29). Each failed its target.
@@ -141,7 +143,7 @@ Guard-removal proof: a timer in `durable/job.ts` (both P2-02 tests), a root expo
 | Producer | Result |
 |---|---|
 | Candidate clean | `git status` empty |
-| Diff allowlist | 33 files, all under ai-service `durable/`, `test/`, package/tsconfig/durable config, 0028 up/down, the two P2 docs, lockfile |
+| Diff allowlist | 33 files, all under ai-service `durable/`, `test/`, package/tsconfig/durable config, 0029 up/down, the two P2 docs, lockfile |
 | Lockfile allowlist | +9/−0 lines, the ai-service importer only (`@telesphoros/jobs`, `pg`, `@types/pg`) |
 | Runner = lockfile | vitest 5.0.3 = 5.0.3; no shared `node_modules` |
 | ai-service test, typecheck, lint, build | 76/76; 0; 0; 0 |
