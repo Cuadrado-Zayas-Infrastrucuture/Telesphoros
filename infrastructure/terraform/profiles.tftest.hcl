@@ -53,6 +53,20 @@ variables {
 run "default_variables_plan" {
   command = plan
 
+  # INF-12: every exported database log has a declared group (expiring, at the name RDS writes to), and a lost password-change notice alarms.
+  assert {
+    condition     = toset(keys(aws_cloudwatch_log_group.rds)) == toset(aws_db_instance.main.enabled_cloudwatch_logs_exports) && toset(keys(aws_cloudwatch_log_group.rds)) == toset(["postgresql", "upgrade"])
+    error_message = "each exported database log needs exactly one declared log group"
+  }
+  assert {
+    condition     = alltrue([for k, g in aws_cloudwatch_log_group.rds : g.retention_in_days == 365 && g.name == "/aws/rds/instance/${aws_db_instance.main.identifier}/${k}"])
+    error_message = "the database log groups must expire after 365 days and sit at the name RDS writes to"
+  }
+  assert {
+    condition     = aws_cloudwatch_log_group.password_notifier.retention_in_days == 90 && aws_cloudwatch_log_metric_filter.password_notice_lost.log_group_name == aws_cloudwatch_log_group.password_notifier.name && aws_cloudwatch_metric_alarm.password_notice_lost.threshold == 1
+    error_message = "the notifier keeps 90 days of logs and one lost notice raises the alarm"
+  }
+
   assert {
     condition     = toset(one(aws_s3_bucket_cors_configuration.reports.cors_rule).allowed_methods) == toset(["GET"])
     error_message = "reports CORS must permit signed GET downloads only; uploads use the API"
@@ -243,6 +257,20 @@ run "synthetic_shape" {
     deployment_profile = "synthetic"
     vpc_id             = ""
     private_subnet_ids = []
+  }
+
+  # INF-12: every exported database log has a declared group (expiring, at the name RDS writes to), and a lost password-change notice alarms.
+  assert {
+    condition     = toset(keys(aws_cloudwatch_log_group.rds)) == toset(aws_db_instance.main.enabled_cloudwatch_logs_exports) && toset(keys(aws_cloudwatch_log_group.rds)) == toset(["postgresql", "upgrade"])
+    error_message = "each exported database log needs exactly one declared log group"
+  }
+  assert {
+    condition     = alltrue([for k, g in aws_cloudwatch_log_group.rds : g.retention_in_days == 365 && g.name == "/aws/rds/instance/${aws_db_instance.main.identifier}/${k}"])
+    error_message = "the database log groups must expire after 365 days and sit at the name RDS writes to"
+  }
+  assert {
+    condition     = aws_cloudwatch_log_group.password_notifier.retention_in_days == 90 && aws_cloudwatch_log_metric_filter.password_notice_lost.log_group_name == aws_cloudwatch_log_group.password_notifier.name && aws_cloudwatch_metric_alarm.password_notice_lost.threshold == 1
+    error_message = "the notifier keeps 90 days of logs and one lost notice raises the alarm"
   }
 
   assert {

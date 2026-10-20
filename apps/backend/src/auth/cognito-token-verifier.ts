@@ -64,7 +64,7 @@ export class CognitoTokenVerifier extends TokenVerifier {
       if (error instanceof NoTenantError) throw error;
       // Operators need to know when the key set is the problem; callers never learn why they were refused.
       if (!(error instanceof InvalidTokenError) && !this.isTokenProblem(error)) {
-        this.logger.warn(`Could not verify a token because the key set was unavailable: ${(error as Error).message}`);
+        this.logger.warn({ event: 'token-key-set-unavailable', error }, 'Could not verify a token because the key set was unavailable');
       }
       throw new InvalidTokenError('Invalid token');
     }

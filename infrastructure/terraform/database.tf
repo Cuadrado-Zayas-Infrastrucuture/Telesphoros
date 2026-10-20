@@ -43,6 +43,19 @@ resource "aws_db_parameter_group" "main" {
   }
 }
 
+# The exported logs land in groups RDS would otherwise create itself on first write: no expiry, no customer key, and invisible to Terraform. So each
+# one is declared here, from the same list the instance exports, and the instance waits for them (audit finding INF-12).
+locals {
+  rds_log_exports = ["postgresql", "upgrade"]
+}
+
+resource "aws_cloudwatch_log_group" "rds" {
+  for_each          = toset(local.rds_log_exports)
+  name              = "/aws/rds/instance/${local.name}/${each.value}"
+  retention_in_days = 365
+  kms_key_id        = aws_kms_key.service_logs.arn
+}
+
 resource "aws_db_instance" "main" {
   identifier     = local.name
   engine         = "postgres"
@@ -76,7 +89,7 @@ resource "aws_db_instance" "main" {
   final_snapshot_identifier = local.synthetic ? null : "${local.name}-final"
 
   auto_minor_version_upgrade            = true
-  enabled_cloudwatch_logs_exports       = ["postgresql", "upgrade"]
+  enabled_cloudwatch_logs_exports       = local.rds_log_exports
   performance_insights_enabled          = local.db_performance_insights
   performance_insights_kms_key_id       = local.db_performance_insights ? aws_kms_key.data.arn : null
   performance_insights_retention_period = local.db_performance_insights ? 7 : null
@@ -99,6 +112,8 @@ resource "aws_db_instance" "main" {
       error_message = "Production requires db_backup_retention_days >= 7: a shorter point-in-time window can be outlived by a problem nobody has noticed yet."
     }
   }
+
+  depends_on = [aws_cloudwatch_log_group.rds]
 }
 
 # Automated backups (point-in-time recovery) are copied to the separate region as well, so losing

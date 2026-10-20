@@ -183,7 +183,10 @@ tenant group, then `membership grant` in the new one; they are refused between t
   lifetime are Cognito's; it is not configurable here. Verify the behaviour at first apply.
 - When a password is **reset**, a small Lambda (`infrastructure/lambda/password-change-notifier`) emails the account
   owner: no links, no codes, only "your password was changed, contact your administrator if this was not you". It
-  can never fail the reset: on any error it logs and lets the reset complete.
+  can never fail the reset: on any error it logs and lets the reset complete. Either "notice lost" line (no email on the
+  account, or the send failed) raises the `password-notice-lost` alarm on the audit topic, because the user does not know
+  ([lambda.tf](../infrastructure/terraform/lambda.tf); its tests keep the filter and the handler's lines in agreement).
+  Its log group keeps 90 days, encrypted with the service-logs key.
 - **Gap:** a password changed while signed in (Cognito's `ChangePassword`) does **not** trigger that email, and this
   app offers no such screen. Closing it needs a CloudTrail/EventBridge rule; it is a follow-up.
 - Mail goes through **SES**. A new SES account is in the **sandbox** and only delivers to verified addresses: request
