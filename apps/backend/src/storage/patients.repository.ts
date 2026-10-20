@@ -14,6 +14,8 @@ export abstract class PatientsRepository {
   abstract insert(record: PatientRecord): Promise<void>;
   abstract update(record: PatientRecord): Promise<void>;
   abstract delete(tenantId: string, id: string): Promise<boolean>;
+  /** True while another patient's record is merged into this one (an approved merge in force). Merges exist only on PostgreSQL; elsewhere this is false. */
+  abstract hasMergedRecords(tenantId: string, id: string): Promise<boolean>;
 }
 
 /** Development/test store. Data lives in process memory and is lost on restart. */
@@ -46,5 +48,8 @@ export class InMemoryPatientsRepository extends PatientsRepository {
     const row = this.rows.get(id);
     if (!row || row.tenantId !== tenantId) return false;
     return this.rows.delete(id);
+  }
+  async hasMergedRecords() {
+    return false; // a merge is a ledger record, and the ledger exists only on PostgreSQL
   }
 }
