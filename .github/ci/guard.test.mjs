@@ -274,6 +274,23 @@ test('the ruleset protects the default branch and blocks force-push and deletion
   for (const t of ['deletion', 'non_fast_forward', 'pull_request', 'required_status_checks']) assert.ok(types.includes(t), `missing rule ${t}`);
 });
 
+// Founder decision 2026-10-19 (security audit INF-05): nobody bypasses the checks, and a pull request must be current with main
+// when it merges. Break-glass is now a visible ruleset edit (docs/ops/ci-cd.md), not a standing bypass.
+test('nobody can bypass the ruleset, and a pull request must be up to date with main to merge', () => {
+  assert.deepEqual(ruleset.bypass_actors, [], 'no bypass actors: a standing bypass lets one account merge past failing checks');
+  const checks = ruleset.rules.find((r) => r.type === 'required_status_checks').parameters;
+  assert.equal(checks.strict_required_status_checks_policy, true, 'checks must have run against the current main');
+});
+
+// Applying this file through the API on 2026-10-20 silently turned require_extra_approval_for_unattributed_changes on: a field the
+// file does not name takes GitHub's default, not the live value. With one maintainer and 0 approvals, an extra required approval
+// could block merges. The file therefore names it explicitly; the live value before the sync was false.
+test('the pull-request rule pins the extra-approval-for-unattributed-changes setting off', () => {
+  const pr = ruleset.rules.find((r) => r.type === 'pull_request').parameters;
+  assert.ok(Object.hasOwn(pr, 'require_extra_approval_for_unattributed_changes'), 'name it explicitly, or an API sync applies GitHub\'s default (true)');
+  assert.equal(pr.require_extra_approval_for_unattributed_changes, false);
+});
+
 test('required checks come from GitHub Actions only (so another app cannot report them)', () => {
   const checks = ruleset.rules.find((r) => r.type === 'required_status_checks').parameters.required_status_checks;
   for (const c of checks) assert.equal(c.integration_id, 15368, `${c.context} must be bound to the GitHub Actions app`);
