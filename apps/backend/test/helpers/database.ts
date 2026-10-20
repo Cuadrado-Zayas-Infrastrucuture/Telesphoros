@@ -19,7 +19,9 @@ const VERIFIER_LOGIN = 'telesphoros_test_verifier';
 const OPERATOR_LOGIN = 'telesphoros_test_operator';
 const AUDITOR_LOGIN = 'telesphoros_test_auditor';
 const WORKER_LOGIN = 'telesphoros_test_worker';
-const PRIVILEGE_ROLES = ['telesphoros_ledger', 'telesphoros_redactor', 'telesphoros_ledger_verifier', 'telesphoros_ledger_operator', 'telesphoros_security_auditor', 'telesphoros_jobs', 'telesphoros_worker'];
+// The session issuer (migration 0028): mints tenant capabilities and nothing else.
+const ISSUER_LOGIN = 'telesphoros_test_issuer';
+const PRIVILEGE_ROLES = ['telesphoros_ledger', 'telesphoros_redactor', 'telesphoros_ledger_verifier', 'telesphoros_ledger_operator', 'telesphoros_security_auditor', 'telesphoros_jobs', 'telesphoros_worker', 'telesphoros_capability', 'telesphoros_issuer'];
 const ROLE_LOCK = 4242;
 
 function withDatabase(url: string, database: string, credentials?: { user: string; password: string }): string {
@@ -59,6 +61,8 @@ export interface EphemeralDatabase {
   auditorUrl: string;
   /** The job worker's login: a member of `telesphoros_worker` only (it can claim jobs and nothing else; it is not a member of the application role). */
   workerUrl: string;
+  /** The session issuer's login: a member of `telesphoros_issuer` only (it can mint a tenant capability and nothing else). */
+  issuerUrl: string;
   drop(): Promise<void>;
 }
 
@@ -91,7 +95,7 @@ export async function createEphemeralDatabase(options: { migrate?: boolean; sign
       for (const role of PRIVILEGE_ROLES) {
         await admin.query(`DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${role}') THEN CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS; END IF; END $$`);
       }
-      for (const [login, group] of [[VERIFIER_LOGIN, 'telesphoros_ledger_verifier'], [OPERATOR_LOGIN, 'telesphoros_ledger_operator'], [AUDITOR_LOGIN, 'telesphoros_security_auditor'], [WORKER_LOGIN, 'telesphoros_worker']] as const) {
+      for (const [login, group] of [[VERIFIER_LOGIN, 'telesphoros_ledger_verifier'], [OPERATOR_LOGIN, 'telesphoros_ledger_operator'], [AUDITOR_LOGIN, 'telesphoros_security_auditor'], [WORKER_LOGIN, 'telesphoros_worker'], [ISSUER_LOGIN, 'telesphoros_issuer']] as const) {
         await admin.query(`DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${login}') THEN
           CREATE ROLE ${login} LOGIN PASSWORD '${APP_LOGIN_PASSWORD}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS IN ROLE ${group}; END IF; END $$`);
       }
@@ -117,6 +121,7 @@ export async function createEphemeralDatabase(options: { migrate?: boolean; sign
       operatorUrl: withDatabase(base, name, { user: OPERATOR_LOGIN, password: APP_LOGIN_PASSWORD }),
       auditorUrl: withDatabase(base, name, { user: AUDITOR_LOGIN, password: APP_LOGIN_PASSWORD }),
       workerUrl: withDatabase(base, name, { user: WORKER_LOGIN, password: APP_LOGIN_PASSWORD }),
+      issuerUrl: withDatabase(base, name, { user: ISSUER_LOGIN, password: APP_LOGIN_PASSWORD }),
       drop,
     };
   } catch (error) {

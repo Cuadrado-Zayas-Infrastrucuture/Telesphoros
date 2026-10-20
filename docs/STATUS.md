@@ -3,6 +3,10 @@
 Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## DATA-01 slice 1: the tenant capability exists, inert (draft PR, 2026-10-20)
+
+Migration 0028 (`expand`) adds the issuer-minted, hash-stored tenant capability ([spec](../specs/001-tenant-capability/spec.md), [verification](verification/tenant-capability.md#slice-1-capability-schema-inert-t006t012-2026-10-20)): only the new issuer login can mint, through `tenant_capability_issue`, which re-checks the organization and the membership version and logs every attempt; `app_tenant()` / `app_actor()` resolve a token, and the binding mode is `guc`. No existing policy or function reads it yet, so DATA-01 is still open and the new hostile-login spec says so on purpose. `provision-logins` creates the issuer login only when its secret is configured. The compat lint now accepts a `REVOKE` that only undoes what the same migration created (founder decision). All three backend tiers, the worker, infra and CI-config checks pass locally on Node 22.22.0 with PostgreSQL 16 tools; 8 migration mutants and 4 lint mutants each turn their suite red. No Terraform, AWS or request-path change.
+
 ## DATA-01 slice 1: catalog inventory (in progress, 2026-10-19)
 
 The read-only inventory for the tenant capability ([verification record](verification/tenant-capability.md)) counts, from the catalog of a freshly migrated PostgreSQL 16: 48 policies that read `app.current_tenant_id` (30 for the app, 12 for the ledger role, 2 each for redactor, jobs and PUBLIC, plus 2 worker uses), 10 app-callable definer functions plus `security_audit_record` and two actor-reading triggers, and 46 `withTenant` call sites (5 bind an actor). It finds the spec's FR-006 too narrow and the post-restore isolation check dependent on the setting. The capability migration is not written yet: it waits for the founder's review of this inventory. No code, migration, Terraform or AWS change.

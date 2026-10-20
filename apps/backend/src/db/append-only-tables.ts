@@ -68,4 +68,11 @@ export const JOB_TABLES = ['jobs', 'job_attempts', 'job_schedules', 'job_workers
 export const OUTBOX_TABLES = ['outbox_events', 'outbox_routes'] as const;
 export const VERIFICATION_TABLES = ['file_verifications'] as const;
 
-export const ALL_CLASSIFIED_TABLES: readonly string[] = [...Object.values(APPEND_ONLY_CLASSES).flat(), ...LEGACY_TABLES, ...MUTABLE_OPERATIONAL_TABLES, ...AUTHORITY_TABLES, ...BROWSER_SESSION_TABLES, ...PATIENT_IDENTITY_TABLES, ...PATIENT_DUPLICATE_TABLES, ...SECURITY_AUDIT_TABLES, ...JOB_TABLES, ...OUTBOX_TABLES, ...VERIFICATION_TABLES];
+/**
+ * The tenant capability (migration 0028, DATA-01), owned by the NOLOGIN role `telesphoros_capability`. No login holds any privilege on these tables: the session
+ * issuer writes only through `tenant_capability_issue`, and a request's binding is read only through `app_tenant()` / `app_actor()`. `capability_issuance_log` is
+ * append-only (refuse_mutation); `tenant_capabilities` rows expire and are swept; `capability_purposes` and `tenant_binding_mode` are reviewed configuration.
+ */
+export const CAPABILITY_TABLES = ['tenant_capabilities', 'capability_issuance_log', 'capability_purposes', 'tenant_binding_mode'] as const;
+
+export const ALL_CLASSIFIED_TABLES: readonly string[] = [...Object.values(APPEND_ONLY_CLASSES).flat(), ...LEGACY_TABLES, ...MUTABLE_OPERATIONAL_TABLES, ...AUTHORITY_TABLES, ...BROWSER_SESSION_TABLES, ...PATIENT_IDENTITY_TABLES, ...PATIENT_DUPLICATE_TABLES, ...SECURITY_AUDIT_TABLES, ...JOB_TABLES, ...OUTBOX_TABLES, ...VERIFICATION_TABLES, ...CAPABILITY_TABLES];

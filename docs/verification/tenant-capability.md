@@ -131,3 +131,74 @@ SELECT p.proname, pg_get_function_identity_arguments(p.oid), pg_get_userbyid(p.p
 ```
 
 **Not verified here:** anything on RDS or staging; the role memberships of deployed logins; whether the PUBLIC policies were meant to be PUBLIC (they behave correctly today because only the app and jobs roles hold grants).
+
+## Slice 1: capability schema, inert (T006–T012), 2026-10-20
+
+**What changed.**
+- **Migration `0028_tenant_capability`** (`-- compat: expand`):
+  - The NOLOGIN owner `telesphoros_capability` and the NOLOGIN group `telesphoros_issuer`.
+  - Tables `tenant_capabilities` (only `sha256(token)`), `capability_issuance_log` (every attempt, append-only), `capability_purposes` (`request`: 60 s; limits counted, not enforced) and `tenant_binding_mode` (`guc`).
+  - Functions `tenant_capability_issue` (EXECUTE: `telesphoros_issuer` only), `app_tenant()` / `app_actor()` (EXECUTE: the app, worker, ledger, redactor and jobs roles) and `tenant_capabilities_sweep` (EXECUTE: `telesphoros_jobs`).
+  - Read-everything `SELECT` policies on `tenants` and `tenant_memberships` for `telesphoros_capability` only.
+  - No existing policy or function is changed, so DATA-01 is still open, and the new spec asserts that on purpose.
+- **`provision-logins`**: a fifth login, `telesphoros_session_issuer`, created only when `PROVISION_SECRET_ISSUER` is set. It is checked as a member of exactly `telesphoros_issuer`, able to mint, and unable to read any table. The migrator also gets `SET` on `telesphoros_capability`, as it has on the other definer roles.
+- **`migration-lint`** (founder decision D, 2026-10-20): an `expand` migration may use a `REVOKE` that only undoes what the same file created. That means the default PUBLIC privilege on a function or table the file creates and no earlier migration names, or the exact reverse of an earlier `GRANT` in the file, to a role the file creates. Without the earlier migrations' SQL, nothing is exempt.
+- **`append-only-tables.ts`**: the four tables classified as `CAPABILITY_TABLES`.
+
+**Tests written first, and what they showed before the code existed:**
+
+| Suite | Before | After |
+|---|---|---|
+| `migration-lint.spec.ts`, new REVOKE block (15) | the 4 "accept" cases failed; every refusal case already passed (positive controls) | 51/51 |
+| `tenant-capability.pg-spec.ts` (33) | 30 of 32 failed; the 2 that passed state today's facts (app login is not a superuser; a forged tenant setting reads org-beta) | 33/33 |
+| `provision-logins.pg-spec.ts`, issuer block (4) | failed (fifth login unknown) | pass |
+
+**Mutants** (each must turn its suite red):
+
+| Mutant | Result |
+|---|---|
+| Lint L1: ignore earlier migrations | red (1 failed) |
+| Lint L2: any role may be un-granted | red (2 failed) |
+| Lint L3: permissive default when the earlier SQL is not given | red (1 failed) |
+| Lint L4: the GRANT may come after the REVOKE | red (1 failed) |
+| M1 `tenant_capabilities` readable by the app | red: 1 of 33 (`every other login is refused: SELECT * FROM tenant_capabilities`) |
+| M2 issue skips the membership version | red: 1 of 33 (`refuses a stale membership version`) |
+| M3 `app_tenant()` ignores expiry | red: 1 of 33 (`a forged, oversized, expired or revoked token resolves to nothing`) |
+| M4 `app_tenant()` lets the setting disagree | red: 1 of 33 (`… resolve to nothing (fail closed, no winner)`) |
+| M5 fallback left on in `capability` mode | red: 1 of 33 (`only the guc and dual modes fall back`) |
+| M6 the app may mint | red: 1 of 33 (`every other login is refused: … tenant_capability_issue …`) |
+| M7 `app_actor()` trusts the actor setting | red: 1 of 33 (`the person comes from the capability`) |
+| M8 issue ignores a suspended organization | red: 1 of 33 (`refuses a suspended organization`) |
+
+Each mutant was applied to `0028_tenant_capability.up.sql` alone and the spec run. The file was then restored, and its SHA-256 matched the original after all eight.
+
+**Existing tests updated because a migration was added** (hand-written expectations, not behaviour):
+- The down-step counts, up lists, migration count and seeded-row count that assumed 0027 was the newest: `migrations`, `security-events`, `browser-session`, `browser-session-clock` (now runs its 0027 owner test against a copy of the migrations up to 0027, `test/helpers/migrations-through.ts`), `report-evidence`, `report-registration`, `recommendation-integrity`, `ledger-migration`, `security-audit`, `recovery-cli` and `backup-restore`.
+- The non-superuser migrator in `ledger-migration` now gets `SET` on `telesphoros_capability`, which mirrors `provision-logins`. **Without it, 0028 failed for a non-superuser migrator** (`permission denied to grant role`); the test caught this.
+- `schema-acceptance` reviews the new keys, checks, foreign keys and query indexes.
+- `ledger-catalog` names the two new read-everything policies.
+
+**Local runs** (macOS; Node 22.22.0 and Unicode 16.0, as CI pins; PostgreSQL 16.14 with scram-sha-256 password auth, as CI; moto for S3):
+
+| Step | Result |
+|---|---|
+| `pnpm install --frozen-lockfile`, `build`, `typecheck`, `lint` | pass |
+| Tier 1, `pnpm --filter @telesphoros/backend test` with the database and S3 | 163 suites passed, 11 skipped (tier 2 and 3 only), 0 failed; 2366 tests passed, 256 skipped; no skip notice printed |
+| Tier 2, `TEST_STORAGE=postgres` | 172 passed, 2 skipped (S3 only), 0 failed; 2601 tests passed |
+| Tier 3, `TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3` | 174 of 174 passed; 2621 tests passed, 1 skipped |
+| Worker, `pnpm --filter @telesphoros/worker test` | 14 files, 169 of 169 tests |
+| Root `pnpm test` (no database variables, as `verify` runs it) | pass |
+| `pnpm test:infra`, `pnpm test:ci-config` | 122 of 122, 144 of 144 |
+
+Run on `feat/tenant-capability-slice1` over `main` `5a3ba8f`. Two earlier runs on the older base found the stale expectations listed above, and the run on this base found two more: `backup-restore` (the 2 seeded rows) and `recovery-cli` (28 migrations).
+
+**Local environment notes:** the backup and restore suites need PostgreSQL 16 client and server tools, and on macOS `LC_ALL` set. Without `LC_ALL`, the recovery target's server stops with "postmaster became multithreaded". This run put `/opt/homebrew/opt/postgresql@16/bin` first on `PATH` and set `LC_ALL=en_US.UTF-8`. Without them, the same eight suites fail on unmodified `main` too.
+
+**Not verified anywhere:** an AWS environment or RDS; the issuer process itself, which arrives in slice 2; and hosted CI on this branch (pending when this was written).
+
+**Deviations from the plan, for review:**
+1. Issuance is audited in `capability_issuance_log`, not `security_events`. A new event type there needs a breaking constraint change, and one event per request would flood the table.
+2. The membership is read without a row lock. `FOR SHARE` needs `UPDATE` on `tenant_memberships`. A removal that commits during an issue can leave one capability usable for reads until it expires (60 s); writes are still refused at commit.
+3. There is no `BEFORE TRUNCATE` trigger on the log, because the compat lint reads that trigger as the statement. Only the NOLOGIN owner can truncate it.
+4. The sweep's scheduled job is wired in slice 2. The function exists and is tested.
+5. A second definer role now reads every organization: `telesphoros_capability` has `USING (true)` `SELECT` policies on `tenants` and `tenant_memberships`, as `telesphoros_jobs` already has on `tenants`. It needs them to check a membership before it mints. No login is a member of it. The `ledger-catalog` guard names both policies.

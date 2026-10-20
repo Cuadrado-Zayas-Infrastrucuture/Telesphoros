@@ -116,14 +116,20 @@ describe('catalog guard: the audit tables are classified and protected as their 
     const grants = await q<{ table_name: string; privilege_type: string }>(`SELECT table_name, privilege_type FROM information_schema.role_table_grants WHERE table_schema = 'public' AND grantee = 'telesphoros_app' AND table_name = ANY($1)`, [[...AUTHORITY_TABLES]]);
     for (const table of AUTHORITY_TABLES) expect(grants.filter((g) => g.table_name === table).map((g) => g.privilege_type)).toEqual(['SELECT']);
     const policies = await q<{ tablename: string; cmd: string; roles: string; qual: string }>(`SELECT tablename, cmd, roles::text, qual FROM pg_policies WHERE schemaname = 'public' AND tablename = ANY($1)`, [[...AUTHORITY_TABLES]]);
-    // One policy per table for the application, plus the single read-everything policy the queue's definer role needs to know which organizations are active.
+    // One policy per table for the application, plus the read-everything policies two definer roles need: the queue's, to know which organizations are
+    // active, and the tenant capability's (migration 0028), to check an organization and a membership before it mints. Nobody else reads across organizations.
     const forApplication = policies.filter((p) => p.roles.includes('telesphoros_app'));
     expect(forApplication).toHaveLength(AUTHORITY_TABLES.length);
     for (const p of forApplication) {
       expect(p.cmd).toBe('SELECT');
       expect(p.qual).toContain('app.current_tenant_id');
     }
-    expect(policies.filter((p) => !p.roles.includes('telesphoros_app'))).toEqual([{ tablename: 'tenants', cmd: 'SELECT', roles: '{telesphoros_jobs}', qual: 'true' }]);
+    const byKey = (a: { tablename: string; roles: string }, b: { tablename: string; roles: string }) => `${a.tablename}|${a.roles}`.localeCompare(`${b.tablename}|${b.roles}`);
+    expect(policies.filter((p) => !p.roles.includes('telesphoros_app')).sort(byKey)).toEqual([
+      { tablename: 'tenant_memberships', cmd: 'SELECT', roles: '{telesphoros_capability}', qual: 'true' },
+      { tablename: 'tenants', cmd: 'SELECT', roles: '{telesphoros_capability}', qual: 'true' },
+      { tablename: 'tenants', cmd: 'SELECT', roles: '{telesphoros_jobs}', qual: 'true' },
+    ]);
     const triggers = await q<{ table: string; ev: number }>(`SELECT c.relname AS "table", t.tgtype::int AS ev FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid WHERE c.relnamespace = 'public'::regnamespace AND NOT t.tgisinternal AND c.relname = ANY($1)`, [[...AUTHORITY_TABLES]]);
     for (const table of AUTHORITY_TABLES) {
       const own = triggers.filter((r) => r.table === table);
