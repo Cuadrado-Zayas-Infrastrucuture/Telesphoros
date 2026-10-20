@@ -274,6 +274,14 @@ test('the ruleset protects the default branch and blocks force-push and deletion
   for (const t of ['deletion', 'non_fast_forward', 'pull_request', 'required_status_checks']) assert.ok(types.includes(t), `missing rule ${t}`);
 });
 
+// Founder decision 2026-10-19 (security audit INF-05): nobody bypasses the checks, and a pull request must be current with main
+// when it merges. Break-glass is now a visible ruleset edit (docs/ops/ci-cd.md), not a standing bypass.
+test('nobody can bypass the ruleset, and a pull request must be up to date with main to merge', () => {
+  assert.deepEqual(ruleset.bypass_actors, [], 'no bypass actors: a standing bypass lets one account merge past failing checks');
+  const checks = ruleset.rules.find((r) => r.type === 'required_status_checks').parameters;
+  assert.equal(checks.strict_required_status_checks_policy, true, 'checks must have run against the current main');
+});
+
 test('required checks come from GitHub Actions only (so another app cannot report them)', () => {
   const checks = ruleset.rules.find((r) => r.type === 'required_status_checks').parameters.required_status_checks;
   for (const c of checks) assert.equal(c.integration_id, 15368, `${c.context} must be bound to the GitHub Actions app`);

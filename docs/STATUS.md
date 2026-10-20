@@ -39,6 +39,13 @@ included; the founder's account, cost, owner, state and retention decisions
 remain gates.
 
 
+## Nobody merges past the checks (ruleset, 2026-10-19)
+
+From the 2026-10-19 security audit (INF-05). Founder decision, same day: `.github/rulesets/main.json` has no bypass actor, and a pull
+request must be up to date with `main` before it merges. `pnpm test:ci-config` now fails if either comes back. The file is the
+specification; the live ruleset is updated from it after this merges, and read back. Break-glass is an explicit, audit-logged ruleset
+edit ([CI/CD](ops/ci-cd.md#break-glass-no-standing-bypass)). Approvals stay at 0 while there is one maintainer.
+
 ## Production refuses unsafe settings (written, not applied, 2026-10-19)
 
 From the 2026-10-19 security audit (AUTH-04, DATA-06, INF-14, FE-04, FE-07). `environment = "production"` now refuses to plan
