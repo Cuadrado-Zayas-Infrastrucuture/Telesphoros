@@ -59,3 +59,24 @@ Inference calls,tokens and charges are0because no model adapter exists. Scripted
 The founder authorized reconciliation and a draft PR on 18 October 2026. Main advanced only through PR #167, adding worker settlement tests and documentation. Those changes are preserved. The approved 22-file P1 delta, runtime sources, inactive vectors and acceptance cases are unchanged; the overlapping STATUS document retains both entries. The complete 12-command local verification matrix is rerun against this reconciled tree, with full producer receipts in the separate reconciliation report.
 
 The first attempt's draft head used `[skip ci]` to preserve a no-spend instruction. That attempt (PR #169) was closed unmerged on 2026-10-20. The restart drops the skip instruction because the founder authorized hosted CI for this draft PR on 2026-10-20. No workflow, ruleset or required gate is changed. Merge readiness is not claimed. Models, Harness², deployment and spending remain disabled.
+
+## Restart verification (2026-10-20)
+
+Branch `feat/synthetic-business-kernel-p1` off `main` `0f0aff4`, local run on Node 22.22.0 with an owned PostgreSQL 16 and a moto S3 emulator. The counts above are from the first attempt and are not reused.
+
+| Check | Result |
+| --- | --- |
+| Install (frozen lockfile), typecheck, lint | Passed |
+| Workspace tests | Passed; `apps/ai-service` 61 passed (56 from the first attempt plus 5 added below) |
+| `test:infra`, `test:ci-config` | Passed |
+| Backend memory tier | 2314 passed |
+| Backend PostgreSQL tier | 2549 passed on the final tree. An earlier run on the commit before the added tests had 1 failure, `offsite-restore.pg-spec.ts`, which counts `restore-*` directories in the shared OS temp directory before and after and so depends on no other process touching it. This branch changes no backend file; the rerun on a quiet machine passed |
+| Backend PostgreSQL + S3 tier | 2569 passed |
+| Worker | 169 passed |
+| `tofu test` | Fails locally (OpenTofu 1.12.6 against CI's Terraform 1.16.5), as on every branch; this branch changes no `infrastructure/` file |
+
+The memory tier, S3 tier and worker ran on the kernel commit before the five tests below were added; those tests touch only `apps/ai-service`.
+
+**Injected-defect checks (10 planted defects, kernel budget and fence code):** 8 caught by a named assertion, 2 survived and are equivalent. Five were caught on the first pass (slot cap, duplicate-usage guard, unknown-usage guard, fleet cap, commit-time authority recheck). Three survived because no test exercised the guard (reserving a completed run again, a changed authority generation alone, a fence change alone), so five tests were added and those three are now caught. The two survivors are redundant by construction: the total-token ceiling is already implied by the four-slot cap and the per-role caps (2 x 4864 + 2 x 9216 = 28160), and the repair-cap check is already implied by the two-pass loop bound with the same reason code.
+
+**Not verified:** hosted CI; browser end-to-end tests; any model, database adapter, API, UI or job integration (none exists); production readiness; the first attempt's strict-$2 hosted-cost and app-event gate (see STATUS).
