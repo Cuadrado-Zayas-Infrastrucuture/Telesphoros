@@ -162,9 +162,11 @@ Not covered by this gate: the hosted CI and preview workflows (local-only by app
 
 ### 2026-10-20: reconciled onto main, local loop on the new candidate
 
-**Verdict: P2-38 is NOT a PASS on this candidate.** The P2 suites and the P2 guard sweep are green, but the backend PostgreSQL tiers are not: 14 backend specs (7 + 6 + 1, below) fail because of P2's objects, which is outside the scope the founder approved (renumber, `-- compat: breaking`, table classification, five migration lists). They are listed below and need a separate approval.
+**Verdict: local gate PASS on this candidate, with one environment note.** Every backend tier passes except `rls.pg-spec`, which needs a database role named `postgres` that the owned cluster (bootstrap role `p2_owner`) does not have. It also fails on unmodified `main` in the same environment, and passes (8/8) once that role exists.
 
-Candidate: P2 replayed onto `origin/main` `8f9dc12` (migration `0029_agentic_synthetic`; `0028_tenant_capability` is main's). Head before this entry `f0bee2d`. Dependency tree reinstalled from the lockfile (vitest 5.0.3 = lockfile 5.0.3). Server: PostgreSQL 16.15 (16.14 is no longer installed). Two owned clusters, both fsync, synchronous_commit and full_page_writes on, SCRAM: a socket-only fixture with the bounded settings of the environment plan (P2 suites), and a second cluster of the same kind with a loopback port, `max_connections 200` and no default statement timeouts, because the backend specs connect over TCP and open many connections.
+Candidate: P2 replayed onto `origin/main` `8f9dc12`. Migration `0029_agentic_synthetic` (`0028_tenant_capability` is main's). Dependency tree reinstalled from the lockfile; vitest 5.0.3 = lockfile 5.0.3. Server: PostgreSQL 16.15 (16.14 is no longer installed). Two owned clusters, both fsync, synchronous_commit and full_page_writes on, SCRAM: a socket-only fixture with the bounded settings of the environment plan (the P2 suites), and a second one with a loopback port, `max_connections 200` and no default statement timeouts, because the backend specs connect over TCP and open many connections.
+
+The first loop on this replay, before the second delta, failed 14 backend specs because of P2's objects. The founder approved the second delta (the last commit before this entry), and the loop below was re-run in full on the result.
 
 | Step | Result |
 |---|---|
@@ -176,17 +178,13 @@ Candidate: P2 replayed onto `origin/main` `8f9dc12` (migration `0029_agentic_syn
 | up, down 2, up across 0028 and 0029, then down 1, up 1 | passes; catalog snapshot identical after each round trip |
 | migration lint | no findings; unlabelled 0029 and `expand` 0029 each fail it |
 | worker on PostgreSQL | 14 files, 169/169 |
-| backend tiers 1, 2 and 3 | **15 suites fail, 78 tests** (tier 1: 2291 passed; tier 2: 2526; tier 3: 2546). On unmodified `main` in the same environment only `rls.pg-spec` fails (1 test: it uses `SET ROLE postgres`, a role this owned cluster does not have), so 14 suites, 77 tests, are caused by P2 |
-| `fixture-lifecycle` | 1 of 6 fails (it runs `report-registration`) |
-| P2-37 guard sweep | 29 one-at-a-time mutants, each restored by hash: 28 fail their target tests; the lock_accounts row locks are the one that stays green (redundant defense in depth, as recorded above) |
+| backend tier 1 (memory + database/S3 specs) | 2368 passed, 256 skipped, 1 failed (`rls`) |
+| backend tier 2 (PostgreSQL) | 2603 passed, 21 skipped, 1 failed (`rls`) |
+| backend tier 3 (PostgreSQL + S3) | 2623 passed, 1 skipped, 1 failed (`rls`) |
+| `rls.pg-spec` with a `postgres` role created in the owned cluster | 8/8 |
+| `fixture-lifecycle` | 6/6 |
+| P2-37 guard sweep | 29 one-at-a-time mutants, each restored by hash: 28 fail their target tests; the `lock_accounts` row locks are the one that stays green (redundant defense in depth, as recorded above) |
 
-Why the 14 specs fail (none was changed beyond the approved delta):
+What the second delta changed: it removes the two table-level `REVOKE ... FROM PUBLIC` statements from the migration (no-ops for tables that wrote an owner-only ACL, which `pg_dump` omits, so main's restore check reported 70 missing owner privileges); updates the hard-coded migration lists and counts in six more backend specs; and lists the ten new tables in the schema-acceptance helper.
 
-- **Restore verification (7 specs):** the migration's `REVOKE ALL ON <table> FROM PUBLIC` writes an explicit owner-only ACL on the ten tables; `pg_dump` omits an ACL equal to the default, so the restored copy has none, and the restore check reports 70 missing owner privileges ("ownership and privileges"). That fails backup-restore, ledger-backup, ledger-restore-check, evidence-catalogue, independent-recovery, application-recovery and offsite-restore. Removing the two table `REVOKE ... FROM PUBLIC` statements, which are no-ops because tables carry no PUBLIC privilege, makes these pass.
-- **More hard-coded migration lists and counts (6 specs):** report-registration (also a `migrateDown(c, 15)` fixture count), report-evidence, security-events, security-audit, tenant-capability, and recovery-cli's `toHaveLength(28)`.
-- **schema-acceptance (1 spec):** its expected primary keys, unique keys, foreign keys and check names must list the ten new tables.
-
-A throwaway branch with those extra edits (`spike/p2-extra-delta`, local, not part of this PR) was run for information: backend tier 3 passes except `rls` and one memory-peak test that passes when run alone.
-
-Not run here: `tofu test` (fails locally against CI's Terraform), browser tests, the FHIR IG validation (needs Java 21), Docker image tests, the CI budget and evidence wrappers, and everything hosted.
-
+Not run: `tofu test` (fails locally against CI's Terraform), browser tests, the FHIR IG validation (needs Java 21), Docker image tests, the CI budget and evidence wrappers, and everything hosted.
