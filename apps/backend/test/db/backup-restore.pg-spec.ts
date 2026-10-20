@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { Client } from 'pg';
 import { createBackup } from '../../src/db/backup';
 import { generateKeyFile, manifestMac, readKeyFile } from '../../src/db/backup-crypto';
@@ -13,6 +13,22 @@ jest.setTimeout(30_000);
 
 // Counts shared state (throwaway databases, temp dirs): must not overlap another restoring suite.
 serializeRestoreSuites();
+
+// This file counts `restore-*` folders in os.tmpdir() before and after a restore, and the restore deletes stale ones there. Another
+// process using the same temp dir (a neighbouring loop's restore specs, test/cleanup.spec.ts) would change the count or lose its own
+// folders, so the file gets a private temp root. Setting process.env.TMPDIR does not work: jest gives each test file a copy of
+// process.env, and os.tmpdir() reads the real one.
+jest.mock('node:os', () => {
+  const actual = jest.requireActual<typeof import('node:os')>('node:os');
+  const { mkdtempSync } = jest.requireActual<typeof import('node:fs')>('node:fs');
+  const { join } = jest.requireActual<typeof import('node:path')>('node:path');
+  let root: string | undefined; // made on first use, so a skipped file leaves nothing behind
+  return { ...actual, tmpdir: () => (root ??= mkdtempSync(join(actual.tmpdir(), 'backup-restore-spec-'))) };
+});
+const PRIVATE_TMP = 'backup-restore-spec-';
+const removePrivateTmp = () => {
+  if (basename(tmpdir()).startsWith(PRIVATE_TMP)) rmSync(tmpdir(), { recursive: true, force: true }); // never the shared one
+};
 
 const dbs: EphemeralDatabase[] = [];
 const scratch: string[] = [];
@@ -28,7 +44,10 @@ async function cleanupFixtures() {
   scratch.length = 0;
 }
 afterEach(cleanupFixtures);
-afterAll(cleanupFixtures); // retry cleanup if a test or its teardown failed
+afterAll(async () => {
+  await cleanupFixtures(); // retry cleanup if a test or its teardown failed
+  removePrivateTmp();
+});
 beforeEach(() => {
   // Regression guard: no test may inherit another test's expensive live fixtures.
   expect(dbs.length).toBe(0);
@@ -73,6 +92,10 @@ async function seededDatabase(): Promise<EphemeralDatabase> {
 const throwawayDatabases = async () =>
   (await withAdmin(clusterAdmin(), (c) => c.query(`SELECT datname FROM pg_database WHERE datname LIKE 'restore_check_%'`))).rows.length;
 const byName = <T extends { name: string }>(checks: T[], name: string) => checks.find((c) => c.name === name);
+
+it('runs in its own temp root, not the one shared with other processes', () => {
+  expect(basename(tmpdir())).toMatch(/^backup-restore-spec-/);
+});
 
 describe('backup', () => {
   it('writes a private, checksummed backup whose manifest describes the data (soft-deleted rows included)', async () => {

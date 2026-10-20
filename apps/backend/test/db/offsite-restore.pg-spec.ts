@@ -1,6 +1,6 @@
-import { readdirSync } from 'node:fs';
+import { readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { createBackup } from '../../src/db/backup';
 import { generateKeyFile, readKeyFile } from '../../src/db/backup-crypto';
@@ -12,6 +12,22 @@ import { type Gateway, type Op, startGateway } from '../helpers/provider-gateway
 
 // Counts shared state (throwaway databases, temp dirs): must not overlap another restoring suite.
 serializeRestoreSuites();
+
+// This file counts `restore-*` folders in os.tmpdir() before and after a restore, and the restore deletes stale ones there. Another
+// process using the same temp dir (a neighbouring loop's restore specs, test/cleanup.spec.ts) would change the count or lose its own
+// folders, so the file gets a private temp root. Setting process.env.TMPDIR does not work: jest gives each test file a copy of
+// process.env, and os.tmpdir() reads the real one.
+jest.mock('node:os', () => {
+  const actual = jest.requireActual<typeof import('node:os')>('node:os');
+  const { mkdtempSync } = jest.requireActual<typeof import('node:fs')>('node:fs');
+  const { join } = jest.requireActual<typeof import('node:path')>('node:path');
+  let root: string | undefined; // made on first use, so a skipped file leaves nothing behind
+  return { ...actual, tmpdir: () => (root ??= mkdtempSync(join(actual.tmpdir(), 'offsite-restore-spec-'))) };
+});
+const PRIVATE_TMP = 'offsite-restore-spec-';
+const removePrivateTmp = () => {
+  if (basename(tmpdir()).startsWith(PRIVATE_TMP)) rmSync(tmpdir(), { recursive: true, force: true }); // never the shared one
+};
 
 /**
  * The whole chain: a real database backed up with the real code, copied to a "second provider", then restored FROM that
@@ -31,6 +47,7 @@ afterAll(async () => {
   await Promise.all(dbs.map((d) => d.drop()));
   await Promise.all(gateways.map((g) => g.close()));
   cleanupScratch();
+  removePrivateTmp();
 });
 
 async function seeded(): Promise<EphemeralDatabase> {
@@ -57,6 +74,10 @@ const throwaways = async () => (await withAdmin(adminUrl(), (c) => c.query(`SELE
 const names = (checks: { name: string; ok: boolean }[]) => checks.map((c) => `${c.ok ? 'PASS' : 'FAIL'} ${c.name}`);
 
 suite('restore from the second provider', () => {
+  it('runs in its own temp root, not the one shared with other processes', () => {
+    expect(basename(tmpdir())).toMatch(/^offsite-restore-spec-/);
+  });
+
   it('backs up, uploads with the upload-only key, and restores from the remote with the read-only key, verified completely', async () => {
     const db = await seeded();
     const { g, bucket, keyFile, upload, read } = await setup();
