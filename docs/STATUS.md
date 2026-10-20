@@ -3,6 +3,10 @@
 Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## DATA-01 slice 1: catalog inventory (in progress, 2026-10-19)
+
+The read-only inventory for the tenant capability ([verification record](verification/tenant-capability.md)) counts, from the catalog of a freshly migrated PostgreSQL 16: 48 policies that read `app.current_tenant_id` (30 for the app, 12 for the ledger role, 2 each for redactor, jobs and PUBLIC, plus 2 worker uses), 10 app-callable definer functions plus `security_audit_record` and two actor-reading triggers, and 46 `withTenant` call sites (5 bind an actor). It finds the spec's FR-006 too narrow and the post-restore isolation check dependent on the setting. The capability migration is not written yet: it waits for the founder's review of this inventory. No code, migration, Terraform or AWS change.
+
 ## PGx build prompt gap analysis (plan only, 2026-10-19)
 
 A [draft plan](design/plans/pgx-build-prompt-gap-analysis.md) maps the founder-supplied PGx build prompt (Phases 3 to 5) onto this repository's existing slices and the audit roadmap. It finds the prompt's stack assumptions (Express, BullMQ, PharmCAT as the core, pgvector memory) do not match the repository, that tenancy, auth, queue and audit chain are already built, and that VCF is accepted at intake but only header-checked. It lists three founder decisions (PharmCAT or the in-house engine, an LLM narrative in the clinical path, billing scope) and proposes gap slices, none started. No code, schema, dependency, CI, infrastructure or clinical-content change, and no decision is recorded; the prompt's external claims are unverified.
