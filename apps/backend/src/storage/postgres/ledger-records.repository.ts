@@ -51,10 +51,14 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
       );
       if (existing.rows[0]) return this.existing(client, tenantId, 'report_captures', existing.rows[0].id);
       const id = newId();
+      // No constraint is named on purpose. The table has a second unique key, the text object's key, which comes from the same
+      // report, text and Poppler version. Naming only the identity key let a concurrent identical request fail on the second one (409 for
+      // one caller). With none named, either conflict means "someone else just stored this"; `raced` then returns their record, or
+      // fails if no record with this identity exists, so a conflict that is not a lost race is still an error, never a silent skip.
       const inserted = await client.query(
         `INSERT INTO report_captures (id, tenant_id, created_by, ledger_event_id, report_id, pdf_sha256, text_storage_key, text_sha256, text_scalars, poppler_version, runner)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-         ON CONFLICT ON CONSTRAINT report_captures_identity_uq DO NOTHING RETURNING id`,
+         ON CONFLICT DO NOTHING RETURNING id`,
         [id, tenantId, actor, newId(), input.reportId, input.pdfSha256, input.textStorageKey, input.textSha256, input.textScalars, input.popplerVersion, input.runner],
       );
       if (inserted.rowCount === 0) return this.raced(client, tenantId, 'report_captures', 'report_captures_identity_uq', [input.reportId, input.textSha256, input.popplerVersion]);
