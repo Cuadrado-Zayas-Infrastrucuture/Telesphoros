@@ -1,6 +1,6 @@
 # Plan: M0.1, intended use and regulatory assessment (draft for the founder and counsel)
 
-Status: **draft. The founder decided I1 to I3 on 2026-10-19 as working positions; I4 was rewritten on 2026-10-20 around the existing agentic design and awaits confirmation; I5 is open.** Snapshot 2026-10-19 against main `ac7bc72`. **This is a plan only: no code, migration, infrastructure or clinical content changes.** It is a working document for the founder and counsel, **not legal advice and not a regulatory determination.** A decision recorded here is the founder's business position; it does not make the product a non-device, and counsel's answers in section 6 can change it. Every FDA statement below was read in the guidance itself; what was not read is listed in section 7.
+Status: **draft. The founder decided I1 to I3 on 2026-10-19 as working positions; I4 (rewritten around the existing agentic design) and I5 were confirmed on 2026-10-20, I5 part b with a longest-period rule; counsel's answers are still open.** Snapshot 2026-10-19 against main `ac7bc72`. **This is a plan only: no code, migration, infrastructure or clinical content changes.** It is a working document for the founder and counsel, **not legal advice and not a regulatory determination.** A decision recorded here is the founder's business position; it does not make the product a non-device, and counsel's answers in section 6 can change it. Every FDA statement below was read in the guidance itself; what was not read is listed in section 7.
 
 Decision names from other documents are prefixed here to avoid clashes: **AG-D1 to AG-D8** are the agentic design packet's decisions, **GAP-D1 to GAP-D4** the gap analysis's, and **TIER-D-A1 to TIER-D-A7** the approval-tier draft's.
 
@@ -98,11 +98,31 @@ The product is agentic by design, and agents are meant for business work (suppor
 3. A hosting decision with data flow settled: either a self-hosted model, so no patient data leaves the platform, or a third-party provider with an executed BAA (none exists; synthetic data only until then).
 4. Shadow mode first, an eval suite with before and after scores, and the plain-language basis Criterion 4 asks for. The verbatim engine output stays the authority, and the narrative never replaces it (GAP-D2 option C is not an option).
 
-**Recommendation:** keep building the business lane under the existing design; open the clinical narrative as its own scope only after gates 1 and 2; keep the product's clinical authority in the verbatim engine. **Founder confirmation pending.**
+**Recommendation:** keep building the business lane under the existing design; open the clinical narrative as its own scope only after gates 1 and 2; keep the product's clinical authority in the verbatim engine. **Confirmed 2026-10-20 (founder), as written.**
 
 ### I5. Retention classes, roles and owners
 
-**Open, with counsel.** Retention periods depend on state law and on the records' status; I do not propose numbers. For each record class (patient, report, evaluation, ledger, audit) the decision needs an owner and a period. Role questions: who is the clinician user, who signs off, who owns the clinical content and its release.
+**What the repository already holds (not re-decided here):**
+
+| Class | What exists today | Where |
+| --- | --- | --- |
+| Patient and clinical records | Kept indefinitely; the application has no delete path | [records-and-corrections.md](../records-and-corrections.md), section 10 |
+| Evaluations (structured results) | Part of the clinical record: they follow retention policy and legal holds, never erasure | same, redaction scope |
+| Free-text notes | The only redactable class; a redaction is ledgered (who, when, basis) | same |
+| Report and source files | Noncurrent versions kept at least six years (a Terraform validation enforces the floor); the 2026-10-19 decision adds a six-year (2,190 days) GOVERNANCE Object Lock in production | same, item 5; hardening decisions |
+| Audit bucket | COMPLIANCE Object Lock in production, as a precondition; synthetic stays GOVERNANCE | hardening decisions |
+| Roles | `clinician`, `admin` (administration only, no clinical data), `reviewer` (additive, never implied); a member with no role can only call `/me` | [auth.md](../../auth.md) |
+
+[genomic-storage.md](../../genomic-storage.md) asks for one row per record category (authority, responsible party, trigger date, period, hold, approved disposal process) before any operational change. HIPAA's six years covers compliance documents, not clinical records; CLIA sets a two-year minimum for specified laboratory records; ACMG recommends considering five years for VCF files and final reports. Which of these applies, including Puerto Rico and federal law, is unresolved.
+
+**Decided 2026-10-20 (founder):**
+
+- **a. Retain everything.** No deletion, disposal path or retention job is built until each class has a complete row.
+- **b. Longest period.** For each class the period is the **longest** that any applicable authority or contract requires ("most strict" means longest). The working floor stays six years (2,190 days). Counsel decides any privacy-law cap; a cap or a deletion-on-request right can conflict with a long period, and that conflict goes to counsel question 6, not to a default.
+- **c. Roles.** Keep the three roles and add none until a feature needs one. Customer-message and billing roles are undefined (TIER-D-A1) and sign-off semantics are open (G5.1).
+- **d. Owners.** The founder owns every seat until named: the clinical content and release owner (M2.4), the privacy and security reviewer and corpus publisher (AG-D6), and the second approver (TIER-D-A7). **Consequence:** with one named person, four-eyes approvals and tier downgrades stay blocked, by design.
+
+**Still open:** a retention period for backup copies (none found in the documents read), whether a merged patient's records must stay individually retrievable, legal holds, and the periods themselves (counsel).
 
 ## 5. What each decision unlocks
 
@@ -131,4 +151,5 @@ The product is agentic by design, and agents are meant for business work (suppor
 - **Read:** FDA's guidance PDF, pages 1 to 3 and 7 to 20 (title and contents, sections IV and V.A to V.B); the statute text of section 520(o)(1)(E) (three conditions plus the lead-in, which the guidance numbers as four criteria).
 - **Not read:** the guidance's device examples (section V.C, pages 21 onward), the guidance's background and scope sections (pages 4 to 6), any FDA policy on lab-developed tests, the other FDA digital health policies the guidance links, and any state law. Nothing here was run, and no counsel or FDA was consulted.
 - **Also read (2026-10-20):** the vault's agentic design README, status map and durable-execution note, and the gap analysis and approval-tier draft in this repository. **Not read:** the packet's `design.md`, contracts, budgets, Harness² pilot and report review, and the P2 packets.
-- **Decided, as working positions only:** I1, I2 and I3 (founder, 2026-10-19). **Rewritten, awaiting confirmation:** I4. **Open:** I5 and every counsel question.
+- **Decided, as working positions only:** I1, I2 and I3 (founder, 2026-10-19); I4 and I5 (founder, 2026-10-20). **Open:** every counsel question, the retention periods themselves, and the named owners.
+- **Also read for I5 (2026-10-20):** `genomic-storage.md` (retention authorities), `records-and-corrections.md` section 10 and item 5, and the roles table in `auth.md`. **Not read:** `ops/report-evidence.md`, the backup decision sheet for any backup-copy retention, and any state law.
