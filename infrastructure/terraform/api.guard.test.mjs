@@ -93,6 +93,8 @@ export function apiEdgeProblems(tf, vars = variables, db = database) {
   need(has(listener, 'port = 443') && has(listener, 'protocol = "HTTPS"'), 'the listener must be HTTPS on 443');
   need(!/port\s*=\s*80\b/.test(text) && !has(listener, 'protocol = "HTTP"'), 'there must be no plain-text listener');
   need(/ssl_policy\s*=\s*"ELBSecurityPolicy-TLS13-1-[23]-/.test(listener), 'the TLS policy must be a TLS 1.3 policy that allows 1.2 at the oldest');
+  // A TLS 1.2 floor must be the restricted (-Res-) family: the plain TLS13-1-2 policies also offer CBC-mode suites (AWS ALB policy table, 2026-10-19).
+  need(!/ssl_policy\s*=\s*"ELBSecurityPolicy-TLS13-1-2-/.test(listener) || /ssl_policy\s*=\s*"ELBSecurityPolicy-TLS13-1-2-Res-/.test(listener), 'a TLS 1.2 floor must use a -Res- policy (AEAD suites only, no CBC)');
   need(has(listener, 'type = "fixed-response"') && has(listener, 'status_code = "404"'), 'anything but the API must get a fixed 404');
   const rule = one('resource "aws_lb_listener_rule" "api_forward"');
   need(has(rule, 'values = ["/api/*"]') && has(rule, 'target_group_arn = aws_lb_target_group.api[0].arn'), 'only /api/* may be forwarded, to the API target group');
@@ -196,7 +198,8 @@ test('the API edge guard reports each way the text could be weakened (controls)'
     ['one public subnet allowed', 'condition     = length(local.alb_subnet_ids) >= 2', 'condition     = length(local.alb_subnet_ids) >= 1'],
     ['access logs on', '  idle_timeout               = 60\n', '  idle_timeout               = 60\n  access_logs {\n    bucket  = "x"\n    enabled = true\n  }\n'],
     ['plain listener added', 'resource "aws_lb_listener_rule" "api_forward" {', 'resource "aws_lb_listener" "plain" {\n  count             = local.api_count\n  load_balancer_arn = aws_lb.api[0].arn\n  port              = 80\n  protocol          = "HTTP"\n  default_action {\n    type = "forward"\n  }\n}\n\nresource "aws_lb_listener_rule" "api_forward" {'],
-    ['old TLS policy', 'ELBSecurityPolicy-TLS13-1-2-2021-06', 'ELBSecurityPolicy-2016-08'],
+    ['old TLS policy', 'ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09', 'ELBSecurityPolicy-2016-08'],
+    ['TLS 1.2 policy that still offers CBC suites', 'ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09', 'ELBSecurityPolicy-TLS13-1-2-2021-06'],
     ['default action forwards', 'type = "fixed-response"', 'type = "forward"'],
     ['everything forwarded', 'values = ["/api/*"]', 'values = ["/*"]'],
     ['wrong task port', 'api_port       = 3000', 'api_port       = 8080'],

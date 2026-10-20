@@ -32,7 +32,7 @@ scripts/staging/publish-frontend.sh --yes    # upload (AWS CLI v2 and credential
 ## What it refuses
 
 Before building, it stops on: a missing setting; whitespace; a placeholder (the `.env.example` values, `example`, `<...>`); anything that is not `https://`; `localhost` or a loopback address;
-a path on `VITE_API_BASE_URL`; a bucket given as `s3://...`; a malformed distribution id; and any of `VITE_LOCAL_STORAGE_INTAKE`, `VITE_LOCAL_REVIEW_S`, `VITE_REPORT_STORAGE_ORIGINS` being set
+a path on `VITE_API_BASE_URL`; a bucket given as `s3://...`; a malformed distribution id; and any of `VITE_LOCAL_STORAGE_INTAKE`, `VITE_LOCAL_REVIEW_S3_ORIGIN`, `VITE_REPORT_STORAGE_ORIGINS` being set
 (they belong to local and end-to-end builds). The accepted values are also accepted by the application's own `loadAuthConfig` in production mode (a test hands them to it).
 
 After building, it copies the build into a directory of its own **without source maps and without Vite's build manifest (`.vite/`)**, then stops if a source map is still there, if any other hidden file is there,

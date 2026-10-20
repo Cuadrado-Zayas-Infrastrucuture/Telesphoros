@@ -48,8 +48,17 @@ if [[ -n "${WEB_DISTRIBUTION_ID:-}" ]]; then
   [[ "$WEB_DISTRIBUTION_ID" =~ ^E[A-Z0-9]{8,20}$ ]] || die "WEB_DISTRIBUTION_ID is not a CloudFront distribution id: $WEB_DISTRIBUTION_ID"
 fi
 # The local owned-storage build is for a loopback address only and must never be published.
-for name in VITE_LOCAL_STORAGE_INTAKE VITE_LOCAL_REVIEW_S VITE_REPORT_STORAGE_ORIGINS; do
+for name in VITE_LOCAL_STORAGE_INTAKE VITE_LOCAL_REVIEW_S3_ORIGIN VITE_REPORT_STORAGE_ORIGINS; do
   [[ -z "${!name:-}" ]] || die "$name is set: it belongs to a local or end-to-end build and must not reach the published bundle"
+done
+# The same settings can arrive through a file: Vite reads apps/frontend/.env, .env.local, .env.production and .env.production.local at
+# build time. Only the two tracked examples may sit there.
+for env_file in "$repo_root"/apps/frontend/.env*; do
+  [[ -e "$env_file" ]] || continue
+  case "${env_file##*/}" in
+    .env.example|.env.e2e) ;;
+    *) die "apps/frontend/${env_file##*/} exists: Vite would read it into the published build. Remove it (or move it away) first" ;;
+  esac
 done
 
 # ---- 2. The build (or the build the caller names) ----------------------------------------------------------------------

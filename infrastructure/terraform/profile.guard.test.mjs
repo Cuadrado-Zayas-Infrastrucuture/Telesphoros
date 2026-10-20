@@ -99,6 +99,8 @@ const REFUSALS = [
   'condition = length(local.data_subnet_ids) >= 2',
   'condition = !local.synthetic || (var.audit_lock_mode == "GOVERNANCE" && var.backup_lock_mode == "GOVERNANCE")',
   'condition = var.environment != "production" || var.audit_lock_mode == "COMPLIANCE"',
+  'condition = var.environment != "production" || var.aws_baa_executed',
+  'condition = var.environment != "production" || alltrue([for u in concat(var.app_callback_urls, var.app_logout_urls) : startswith(u, "https://")])',
 ];
 
 /** Written in place, these make the profile irrelevant: a relaxation that does not go through the profile locals. */

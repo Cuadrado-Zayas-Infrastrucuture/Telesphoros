@@ -77,5 +77,13 @@ resource "terraform_data" "profile" {
       condition     = var.environment != "production" || var.audit_lock_mode == "COMPLIANCE"
       error_message = "environment = \"production\" requires audit_lock_mode = \"COMPLIANCE\": a GOVERNANCE lock lets an administrator erase the audit trail (docs/ops/audit-trail.md)."
     }
+    precondition {
+      condition     = var.environment != "production" || var.aws_baa_executed
+      error_message = "environment = \"production\" requires aws_baa_executed = true: the AWS BAA must be executed for this account before it can hold PHI (infrastructure/terraform/README.md)."
+    }
+    precondition {
+      condition     = var.environment != "production" || alltrue([for u in concat(var.app_callback_urls, var.app_logout_urls) : startswith(u, "https://")])
+      error_message = "environment = \"production\" refuses http://localhost callback or logout URLs: production sign-in returns only to https:// addresses."
+    }
   }
 }

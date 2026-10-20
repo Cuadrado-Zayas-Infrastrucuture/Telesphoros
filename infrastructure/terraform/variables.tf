@@ -97,6 +97,12 @@ variable "db_backup_retention_days" {
   }
 }
 
+variable "aws_baa_executed" {
+  description = "Set to true only when the AWS Business Associate Addendum is executed for the target account and you hold the signed copy (AWS Artifact). Production refuses even to plan without it (profile.tf). This does NOT exempt staging: README gate 1 (an executed BAA before ANY apply) still binds every environment as a human gate, unless a separately recorded founder decision defines a synthetic-only exception (docs/ops/foundations-readiness.md). It is not enforced for staging here because a precondition fires at plan time and would also block the saved-plan review that must precede an apply."
+  type        = bool
+  default     = false
+}
+
 variable "db_deletion_protection" {
   type    = bool
   default = true
@@ -151,8 +157,9 @@ variable "app_callback_urls" {
   description = "Where Cognito may send the browser after sign-in, e.g. [\"https://app.telesphoros.app/auth/callback\"]. Exact match is required."
   type        = list(string)
   validation {
-    condition     = length(var.app_callback_urls) >= 1 && alltrue([for u in var.app_callback_urls : startswith(u, "https://") || startswith(u, "http://localhost")])
-    error_message = "Callback URLs must be https:// (http://localhost is allowed for development only)."
+    # The host must be a host (no "user@", no "localhost.attacker.example"), followed by a path. Production also refuses localhost (profile.tf).
+    condition     = length(var.app_callback_urls) >= 1 && alltrue([for u in var.app_callback_urls : can(regex("^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/", u)) || can(regex("^http://localhost(:[0-9]{1,5})?/", u))])
+    error_message = "Callback URLs must be https://<host>[:port]/<path> (http://localhost[:port]/<path> is allowed outside production only)."
   }
 }
 
@@ -160,8 +167,8 @@ variable "app_logout_urls" {
   description = "Where Cognito may send the browser after sign-out, e.g. [\"https://app.telesphoros.app/signed-out\"]."
   type        = list(string)
   validation {
-    condition     = length(var.app_logout_urls) >= 1 && alltrue([for u in var.app_logout_urls : startswith(u, "https://") || startswith(u, "http://localhost")])
-    error_message = "Logout URLs must be https:// (http://localhost is allowed for development only)."
+    condition     = length(var.app_logout_urls) >= 1 && alltrue([for u in var.app_logout_urls : can(regex("^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/", u)) || can(regex("^http://localhost(:[0-9]{1,5})?/", u))])
+    error_message = "Logout URLs must be https://<host>[:port]/<path> (http://localhost[:port]/<path> is allowed outside production only)."
   }
 }
 

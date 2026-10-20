@@ -3,7 +3,7 @@
 // What this cannot prove: that the real AWS CLI accepts these arguments, that the bucket policy lets the person upload, or that the published site works.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
@@ -151,6 +151,8 @@ test('unsafe or placeholder settings are refused, each for its own reason', () =
     ['a bad distribution id', { WEB_DISTRIBUTION_ID: 'd111111abcdef8.cloudfront.net' }, /not a CloudFront distribution id/],
     ['the local owned-storage build flag', { VITE_LOCAL_STORAGE_INTAKE: 'true' }, /must not reach the published bundle/],
     ['the end-to-end storage origins', { VITE_REPORT_STORAGE_ORIGINS: 'http://127.0.0.1:5557' }, /must not reach the published bundle/],
+    // The variable the local review build actually reads (apps/frontend/src/lib/localReportApi.ts). Misspelled in this list before 2026-10-19.
+    ['the local review emulator origin', { VITE_LOCAL_REVIEW_S3_ORIGIN: 'http://127.0.0.1:5555' }, /must not reach the published bundle/],
   ];
   for (const [name, env, pattern] of bad) {
     const { status, out, calls } = run({ env, args: ['--yes'] });
@@ -226,4 +228,26 @@ test('the build really does write source maps (so the exclusion is needed), and 
 test('web.tf exposes the distribution id, null while web hosting is off', () => {
   const web = readFileSync(join(root, 'infrastructure/terraform/web.tf'), 'utf8');
   assert.match(web, /output "web_distribution_id" \{[^}]*value\s*=\s*var\.enable_web_hosting \? aws_cloudfront_distribution\.web\[0\]\.id : null/s);
+});
+
+/** A copy of the script inside a throwaway repository layout, so a test can put files next to it that the real tree must not hold. */
+function scriptInLayout(frontendFiles) {
+  const root = mkdtempSync(join(sandbox, 'layout-'));
+  mkdirSync(join(root, 'scripts/staging'), { recursive: true });
+  mkdirSync(join(root, 'apps/frontend'), { recursive: true });
+  copyFileSync(script, join(root, 'scripts/staging/publish-frontend.sh'));
+  for (const [name, text] of Object.entries(frontendFiles)) writeFileSync(join(root, 'apps/frontend', name), text);
+  return join(root, 'scripts/staging/publish-frontend.sh');
+}
+
+test('a local Vite env file next to the frontend is refused: Vite would read it into the published build', () => {
+  for (const name of ['.env', '.env.local', '.env.production', '.env.production.local']) {
+    const { status, out, calls } = run({ scriptPath: scriptInLayout({ [name]: 'VITE_LOCAL_STORAGE_INTAKE=true\n' }), args: ['--yes'] });
+    assert.notEqual(status, 0, `must refuse apps/frontend/${name}`);
+    assert.match(out, /Vite would read it/, `wrong reason for ${name}`);
+    assert.equal(calls, '', `nothing may be called for ${name}`);
+  }
+  // Control: the two tracked examples are allowed, and the same layout otherwise publishes.
+  const { status, out } = run({ scriptPath: scriptInLayout({ '.env.example': 'VITE_API_BASE_URL=\n', '.env.e2e': 'VITE_API_BASE_URL=http://127.0.0.1:3010\n' }) });
+  assert.equal(status, 0, out);
 });

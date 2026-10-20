@@ -94,6 +94,10 @@ resource "aws_db_instance" "main" {
       condition     = var.environment != "production" || var.db_deletion_protection
       error_message = "Production requires db_deletion_protection = true."
     }
+    precondition {
+      condition     = var.environment != "production" || var.db_backup_retention_days >= 7
+      error_message = "Production requires db_backup_retention_days >= 7: a shorter point-in-time window can be outlived by a problem nobody has noticed yet."
+    }
   }
 }
 
