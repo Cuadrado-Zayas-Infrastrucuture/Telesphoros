@@ -1,12 +1,33 @@
 import { spawn } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { transformFileSync } from '@swc/core';
 import { makeTempDir, sweepStaleTempDirs } from '../src/db/cleanup';
 
+// Two things here must not touch the temp dir other processes use: the folders this file plants and sweeps in-process, and the ones the
+// child processes make. A neighbour's `restore-*` count (offsite-restore and backup-restore specs) would change, or a stale-folder sweep
+// there would delete them. The mock covers this process; the children get the same root through TMPDIR, which they read directly.
+jest.mock('node:os', () => {
+  const actual = jest.requireActual<typeof import('node:os')>('node:os');
+  const { mkdtempSync } = jest.requireActual<typeof import('node:fs')>('node:fs');
+  const { join } = jest.requireActual<typeof import('node:path')>('node:path');
+  let root: string | undefined; // made on first use
+  return { ...actual, tmpdir: () => (root ??= mkdtempSync(join(actual.tmpdir(), 'cleanup-spec-private-'))) };
+});
+const PRIVATE_TMP = 'cleanup-spec-private-';
+const childEnv = () => ({ ...process.env, TMPDIR: tmpdir() });
+
 const scratch = mkdtempSync(join(tmpdir(), 'cleanup-spec-'));
-afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+afterAll(() => {
+  rmSync(scratch, { recursive: true, force: true });
+  if (basename(tmpdir()).startsWith(PRIVATE_TMP)) rmSync(tmpdir(), { recursive: true, force: true }); // never the shared one
+});
+
+it('runs in its own temp root, not the one shared with other processes', () => {
+  expect(basename(tmpdir())).toMatch(/^cleanup-spec-private-/);
+  expect(childEnv().TMPDIR).toBe(tmpdir());
+});
 
 /** The module under test, compiled to plain CommonJS so a separate process can load it. */
 const compiled = join(scratch, 'cleanup.cjs');
@@ -29,7 +50,7 @@ function runChild(ending: string, signal?: NodeJS.Signals): Promise<{ dir: strin
     ${ending}
   `;
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['-e', script], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const child = spawn(process.execPath, ['-e', script], { stdio: ['ignore', 'pipe', 'ignore'], env: childEnv() });
     let dir = '';
     child.stdout.on('data', (chunk: Buffer) => {
       dir += chunk.toString();
@@ -45,6 +66,7 @@ describe('temporary folders that hold decrypted data', () => {
     for (const ending of ['process.exit(0)', 'process.exitCode = 3', 'throw new Error("boom")']) {
       const result = await runChild(ending);
       expect(result.dir).toMatch(/restore-[A-Za-z0-9]{6}$/);
+      expect(dirname(result.dir)).toBe(tmpdir()); // made in the private root, not the shared one
       expect(result.stillThere).toBe(false);
     }
   });
@@ -52,6 +74,7 @@ describe('temporary folders that hold decrypted data', () => {
   it.each([['SIGTERM', 143], ['SIGINT', 130], ['SIGHUP', 129]] as const)('are removed when the process receives %s, and it exits with the conventional code', async (signal, code) => {
     const result = await runChild('setInterval(() => {}, 1000)', signal);
     expect(result.dir).toMatch(/restore-/);
+    expect(dirname(result.dir)).toBe(tmpdir());
     expect(result.signalled).toBeNull(); // it handled the signal itself rather than dying from it
     expect(result.code).toBe(code);
     expect(result.stillThere).toBe(false);
@@ -60,7 +83,7 @@ describe('temporary folders that hold decrypted data', () => {
   it('control: without the cleanup, a signalled process leaves the folder behind (so the tests above prove something)', async () => {
     const script = `const { mkdtempSync, writeFileSync } = require('node:fs'); const { tmpdir } = require('node:os'); const d = mkdtempSync(tmpdir() + '/restore-'); writeFileSync(d + '/db.dump', 'x'); process.stdout.write(d + '\\n'); setInterval(() => {}, 1000);`;
     const dir = await new Promise<string>((resolve) => {
-      const child = spawn(process.execPath, ['-e', script], { stdio: ['ignore', 'pipe', 'ignore'] });
+      const child = spawn(process.execPath, ['-e', script], { stdio: ['ignore', 'pipe', 'ignore'], env: childEnv() });
       let out = '';
       child.stdout.on('data', (chunk: Buffer) => {
         out += chunk.toString();
@@ -68,6 +91,7 @@ describe('temporary folders that hold decrypted data', () => {
       });
       child.on('exit', () => resolve(out.trim()));
     });
+    expect(dirname(dir)).toBe(tmpdir());
     expect(existsSync(dir)).toBe(true);
     rmSync(dir, { recursive: true, force: true });
   });
