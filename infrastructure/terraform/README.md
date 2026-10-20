@@ -2,7 +2,9 @@
 
 > **Status: source wiring only; backend activation and live acceptance remain unverified.**
 > Do **not** run `terraform apply` until **all** of these are true:
-> 1. The AWS **BAA is executed** for the target account (AWS Artifact), and you hold the signed copy.
+> 1. The AWS **BAA is executed** for the target account (AWS Artifact), and you hold the signed copy. For `environment = "production"`
+>    Terraform enforces it: the plan is refused unless `aws_baa_executed = true`. For staging it remains this human gate (a
+>    precondition would also block the saved-plan review that precedes an apply).
 > 2. A **remote state backend** is configured (encrypted S3 bucket with locking, restricted access).
 > 3. A human has reviewed `terraform plan` output line by line.
 >

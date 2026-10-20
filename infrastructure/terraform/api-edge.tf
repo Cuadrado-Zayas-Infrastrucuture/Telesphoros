@@ -189,7 +189,7 @@ resource "aws_lb_listener" "api_https" {
   load_balancer_arn = aws_lb.api[0].arn
   port              = 443
   protocol          = "HTTPS"
-  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09"
   certificate_arn   = aws_acm_certificate_validation.api[0].certificate_arn
 
   # Anything that is not the API gets a plain 404 and reaches nothing.

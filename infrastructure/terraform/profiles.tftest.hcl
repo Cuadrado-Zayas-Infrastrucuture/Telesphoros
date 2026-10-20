@@ -95,9 +95,10 @@ run "production_shape" {
   command = plan
 
   variables {
-    environment     = "production"
-    db_multi_az     = true
-    audit_lock_mode = "COMPLIANCE"
+    environment      = "production"
+    db_multi_az      = true
+    audit_lock_mode  = "COMPLIANCE"
+    aws_baa_executed = true
   }
 
   assert {
@@ -177,6 +178,7 @@ run "production_hosting_on" {
     environment        = "production"
     db_multi_az        = true
     audit_lock_mode    = "COMPLIANCE"
+    aws_baa_executed   = true
     enable_api_hosting = true
     api_domain         = "api.example.test"
     public_subnet_ids  = ["subnet-pub1111", "subnet-pub2222"]
@@ -429,9 +431,10 @@ run "refuses_production_without_multi_az" {
   command = plan
 
   variables {
-    environment     = "production"
-    db_multi_az     = false
-    audit_lock_mode = "COMPLIANCE"
+    environment      = "production"
+    db_multi_az      = false
+    audit_lock_mode  = "COMPLIANCE"
+    aws_baa_executed = true
   }
 
   expect_failures = [aws_db_instance.main]
@@ -444,6 +447,7 @@ run "refuses_production_without_deletion_protection" {
     environment            = "production"
     db_multi_az            = true
     audit_lock_mode        = "COMPLIANCE"
+    aws_baa_executed       = true
     db_deletion_protection = false
   }
 
@@ -454,11 +458,97 @@ run "refuses_production_with_a_governance_audit_lock" {
   command = plan
 
   variables {
-    environment = "production"
-    db_multi_az = true
+    environment      = "production"
+    db_multi_az      = true
+    aws_baa_executed = true
   }
 
   expect_failures = [terraform_data.profile]
+}
+
+run "refuses_production_without_an_executed_baa" {
+  command = plan
+
+  variables {
+    environment     = "production"
+    db_multi_az     = true
+    audit_lock_mode = "COMPLIANCE"
+  }
+
+  expect_failures = [terraform_data.profile]
+}
+
+run "refuses_production_with_a_backup_window_under_a_week" {
+  command = plan
+
+  variables {
+    environment              = "production"
+    db_multi_az              = true
+    audit_lock_mode          = "COMPLIANCE"
+    aws_baa_executed         = true
+    db_backup_retention_days = 6
+  }
+
+  expect_failures = [aws_db_instance.main]
+}
+
+run "refuses_a_localhost_callback_in_production" {
+  command = plan
+
+  variables {
+    environment       = "production"
+    db_multi_az       = true
+    audit_lock_mode   = "COMPLIANCE"
+    aws_baa_executed  = true
+    app_callback_urls = ["http://localhost:5173/auth/callback"]
+  }
+
+  expect_failures = [terraform_data.profile]
+}
+
+run "refuses_a_lookalike_localhost_callback" {
+  command = plan
+
+  variables {
+    app_callback_urls = ["http://localhost.attacker.example/auth/callback"]
+  }
+
+  expect_failures = [var.app_callback_urls]
+}
+
+run "refuses_a_callback_with_userinfo" {
+  command = plan
+
+  variables {
+    app_callback_urls = ["https://staging.example.test@attacker.example/auth/callback"]
+  }
+
+  expect_failures = [var.app_callback_urls]
+}
+
+run "refuses_a_lookalike_localhost_logout" {
+  command = plan
+
+  variables {
+    app_logout_urls = ["http://localhost.attacker.example/signed-out"]
+  }
+
+  expect_failures = [var.app_logout_urls]
+}
+
+# Control: outside production a developer may still sign in through the local frontend.
+run "allows_a_localhost_callback_outside_production" {
+  command = plan
+
+  variables {
+    app_callback_urls = ["http://localhost:5173/auth/callback"]
+    app_logout_urls   = ["http://localhost:5173/signed-out"]
+  }
+
+  assert {
+    condition     = contains(aws_cognito_user_pool_client.spa.callback_urls, "http://localhost:5173/auth/callback")
+    error_message = "staging accepts an exact localhost callback"
+  }
 }
 
 run "refuses_a_report_lock_below_six_years" {

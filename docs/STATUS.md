@@ -35,6 +35,16 @@ included; the founder's account, cost, owner, state and retention decisions
 remain gates.
 
 
+## Production refuses unsafe settings (written, not applied, 2026-10-19)
+
+From the 2026-10-19 security audit (AUTH-04, DATA-06, INF-14, FE-04, FE-07). `environment = "production"` now refuses to plan
+without `aws_baa_executed = true`, with a database backup window under seven days, or with an `http://localhost` callback or logout
+URL. Outside production a callback must still be `https://<host>/<path>` or exactly `http://localhost[:port]/<path>`, so
+`localhost.attacker.example` and `user@host` forms are refused everywhere. The ALB uses `ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09`
+(no CBC suites). The frontend publish guard checks the variable the local review build really reads (`VITE_LOCAL_REVIEW_S3_ORIGIN`;
+it was misspelled) and refuses local Vite `.env` files. Staging is not exempted from the BAA gate: it stays a human gate there
+([Terraform README](../infrastructure/terraform/README.md)). Nothing applied in AWS.
+
 ## Evidence cannot be erased (written, not applied, 2026-10-19)
 
 From the 2026-10-19 security audit (findings INF-01, INF-02). Founder decisions, same day: production audit logs are locked in
