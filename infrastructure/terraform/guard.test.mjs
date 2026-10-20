@@ -109,6 +109,66 @@ test('the reports bucket keeps versions, and the application may read an exact v
   lacks(code(iam), /s3:Delete|s3:\*/, 'the application policy must not be able to delete or administer objects');
 });
 
+/**
+ * What is wrong with the evidence lock on the reports bucket (founder decision 2026-10-19: six years, GOVERNANCE), as a list of sentences.
+ * The deny statements must be guarded by "the header is present": the application uploads WITHOUT an encryption header (it relies on the
+ * bucket default), so an unguarded StringNotEquals would refuse every upload it makes.
+ */
+export function reportsLockProblems(storageText, variablesText) {
+  const problems = [];
+  const need = (condition, why) => {
+    if (!condition) problems.push(why);
+  };
+  const s = code(storageText);
+  const contains = (text, fragment) => squash(text).includes(squash(fragment));
+  const [bucket = ''] = blocks(s, 'resource "aws_s3_bucket" "reports"');
+  need(contains(bucket, 'object_lock_enabled = true'), 'the reports bucket must be created with Object Lock (it cannot be added later)');
+  const [lock = ''] = blocks(s, 'resource "aws_s3_bucket_object_lock_configuration" "reports"');
+  need(contains(lock, 'mode = "GOVERNANCE"'), 'report versions must be locked in GOVERNANCE mode (founder decision 2026-10-19)');
+  need(contains(lock, 'days = local.reports_lock_days'), 'the lock must use the profile days (the variable in production), not a literal that can drift');
+  const [variable = ''] = blocks(code(variablesText), 'variable "reports_lock_days"');
+  need(Number(/default\s*=\s*(\d+)/.exec(variable)?.[1]) >= 2190, 'the default report lock is below the six-year floor (2190 days)');
+  need(contains(variable, 'condition = var.reports_lock_days >= 2190'), 'the report lock variable must refuse values below 2190');
+  const [policy = ''] = blocks(s, 'data "aws_iam_policy_document" "reports_bucket"');
+  const statement = (sid) => blocks(policy, 'statement ').find((st) => contains(st, `sid = "${sid}"`)) ?? '';
+  const guarded = (st, variableName) => blocks(st, 'condition').some((c) => contains(c, 'test = "Null"') && contains(c, `variable = "${variableName}"`) && contains(c, 'values = ["false"]'));
+  for (const [sid, variableName, wrong] of [
+    ['DenyOtherEncryption', 's3:x-amz-server-side-encryption', 'values = ["aws:kms"]'],
+    ['DenyOtherKey', 's3:x-amz-server-side-encryption-aws-kms-key-id', 'values = [aws_kms_key.data.arn]'],
+  ]) {
+    const st = statement(sid);
+    need(contains(st, 'effect = "Deny"') && contains(st, 'actions = ["s3:PutObject"]'), `${sid} must deny PutObject`);
+    need(guarded(st, variableName), `${sid} must apply only when the header is present (Null = false), or it refuses every application upload`);
+    need(contains(st, 'test = "StringNotEquals"') && contains(st, wrong), `${sid} must refuse anything but the data key's encryption`);
+  }
+  const ssec = statement('DenyCustomerKeys');
+  need(contains(ssec, 'effect = "Deny"') && guarded(ssec, 's3:x-amz-server-side-encryption-customer-algorithm'), 'customer-supplied keys (SSE-C) must be refused');
+  return problems;
+}
+
+test('every report version is locked for six years and only the data key may encrypt it', () => {
+  assert.deepEqual(reportsLockProblems(storage, variables), []);
+});
+
+test('the report-lock guard reports each way the text could be weakened (controls)', () => {
+  const weakened = [
+    ['Object Lock not enabled', ['storage', '  object_lock_enabled = true\n}', '}']],
+    ['COMPLIANCE instead of the decided GOVERNANCE', ['storage', 'mode = "GOVERNANCE"\n      days = local.reports_lock_days', 'mode = "COMPLIANCE"\n      days = local.reports_lock_days']],
+    ['lock days a literal', ['storage', 'days = local.reports_lock_days', 'days = 30']],
+    ['floor lowered', ['variables', 'condition     = var.reports_lock_days >= 2190', 'condition     = var.reports_lock_days >= 1']],
+    ['wrong-encryption deny unguarded (would refuse every upload)', ['storage', 'test     = "Null"\n      variable = "s3:x-amz-server-side-encryption"\n', 'test     = "Bool"\n      variable = "s3:x-amz-server-side-encryption"\n']],
+    ['wrong-key deny accepts any key', ['storage', 'values   = [aws_kms_key.data.arn]', 'values   = ["*"]']],
+    ['customer keys allowed', ['storage', 'sid       = "DenyCustomerKeys"\n    effect    = "Deny"', 'sid       = "DenyCustomerKeys"\n    effect    = "Allow"']],
+  ];
+  for (const [name, [which, from, to]] of weakened) {
+    const source = which === 'storage' ? storage : variables;
+    assert.ok(source.includes(from), `the control for "${name}" must match the real text (it does not: fix the control)`);
+    const [s, v] = which === 'storage' ? [storage.replace(from, to), variables] : [storage, variables.replace(from, to)];
+    assert.ok(reportsLockProblems(s, v).length > 0, `a weakened text must be reported: ${name}`);
+  }
+  assert.deepEqual(reportsLockProblems(storage, variables), []); // control: the unchanged text is clean
+});
+
 test('the application may list a report\'s intake prefix (versions and multipart uploads) and only under reports/', () => {
   const [inventory] = blocks(code(iam), 'statement').filter((s) => /sid\s*=\s*"ReportIntakeInventory"/.test(s));
   assert.ok(inventory, 'the validated intake needs a listing statement');
@@ -132,7 +192,8 @@ test('no policy in this module grants deletion of object versions (a break-glass
 // ---- The break-glass runbook's policy text (docs/ops/break-glass.md) ----
 // The role is described, not created. The text still must not drift into something dangerous, because it is what a person will paste.
 
-const ALLOWED_BREAK_GLASS_ACTIONS = new Set(['s3:ListBucketVersions', 's3:GetObjectVersion', 's3:DeleteObjectVersion']);
+// s3:BypassGovernanceRetention: every report version is under a GOVERNANCE lock (storage.tf), so deleting one needs the bypass right too.
+const ALLOWED_BREAK_GLASS_ACTIONS = new Set(['s3:ListBucketVersions', 's3:GetObjectVersion', 's3:DeleteObjectVersion', 's3:BypassGovernanceRetention']);
 
 /** What is wrong with a break-glass trust policy and permission policy (empty when nothing is). */
 export function breakGlassProblems(trust, permissions) {
@@ -151,25 +212,29 @@ export function breakGlassProblems(trust, permissions) {
   const permissionStatements = statements(permissions);
   if (permissionStatements.length === 0) problems.push('the permission policy has no statements');
   let deletes = 0;
+  let bypasses = 0;
   for (const s of permissionStatements) {
     const actions = Array.isArray(s.Action) ? s.Action : [s.Action];
     if (s.Effect !== 'Allow') problems.push('permission statements must be Allow');
     for (const action of actions) {
       if (!ALLOWED_BREAK_GLASS_ACTIONS.has(action)) problems.push(`unexpected action ${action}`);
       if (action === 's3:DeleteObjectVersion') deletes += 1;
+      if (action === 's3:BypassGovernanceRetention') bypasses += 1;
     }
+    if (actions.includes('s3:BypassGovernanceRetention') && !actions.includes('s3:DeleteObjectVersion')) problems.push('the lock bypass must sit in the same statement as the version delete, never on its own');
     const resources = Array.isArray(s.Resource) ? s.Resource : [s.Resource];
     for (const resource of resources) {
       if (typeof resource !== 'string' || !resource.startsWith('arn:aws:s3:::<REPORTS_BUCKET>')) problems.push(`resource ${resource} is not the reports bucket`);
     }
   }
   if (deletes !== 1) problems.push('s3:DeleteObjectVersion must be granted exactly once');
+  if (bypasses !== 1) problems.push('s3:BypassGovernanceRetention must be granted exactly once (the role cannot remove a locked version without it)');
   return problems;
 }
 
 const runbookBlocks = [...readFileSync(new URL('../../docs/ops/break-glass.md', import.meta.url), 'utf8').matchAll(/```json\n([\s\S]*?)```/g)].map((m) => JSON.parse(m[1]));
 
-test('the break-glass runbook text: one named principal with fresh MFA, and only list/inspect/delete on the reports bucket', () => {
+test('the break-glass runbook text: one named principal with fresh MFA, and only list/inspect/delete (with the lock bypass) on the reports bucket', () => {
   assert.equal(runbookBlocks.length, 2, 'expected the trust policy and the permission policy: a scan that finds none proves nothing');
   assert.deepEqual(breakGlassProblems(runbookBlocks[0], runbookBlocks[1]), []);
 });
@@ -188,6 +253,8 @@ test('the break-glass check catches each way the text could be weakened (control
     ['every bucket', (_t, p) => { p.Statement[1].Resource = '*'; }],
     ['a deny statement in place of an allow', (_t, p) => { p.Statement[0].Effect = 'Deny'; }],
     ['deletion granted twice', (_t, p) => { p.Statement[0].Action.push('s3:DeleteObjectVersion'); }],
+    ['lock bypass granted twice', (_t, p) => { p.Statement[0].Action.push('s3:BypassGovernanceRetention'); }],
+    ['lock bypass missing (the role could not do its job)', (_t, p) => { p.Statement[1].Action = p.Statement[1].Action.filter((a) => a !== 's3:BypassGovernanceRetention'); }],
   ];
   for (const [name, change] of weakened) {
     const t = copy(trust);

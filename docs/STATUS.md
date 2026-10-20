@@ -20,6 +20,17 @@ backend activation, resource creation, policy change, approval or spend is
 included; the founder's account, cost, owner, state and retention decisions
 remain gates.
 
+
+## Evidence cannot be erased (written, not applied, 2026-10-19)
+
+From the 2026-10-19 security audit (findings INF-01, INF-02). Founder decisions, same day: production audit logs are locked in
+**COMPLIANCE** mode (a precondition refuses `environment = "production"` with anything else), and every report-file version is locked
+for **six years in GOVERNANCE** mode (`reports_lock_days`, floor 2190; one day in the synthetic rehearsal). The reports bucket policy now
+refuses an upload that names another encryption, another key or a customer key, and lets the application's header-less uploads through.
+The trail moves to advanced event selectors and also records deletes and lock changes in the audit and backup buckets, with two new
+alarms (`EvidenceLogDeleted`, `ObjectLockOverridden`). A locked bucket refuses a `PutObject` without a checksum, so a new spec pins that
+both application write paths send one. [Audit trail](ops/audit-trail.md), [break-glass](ops/break-glass.md). Nothing applied in AWS;
+that S3 accepts the trailing-checksum intake upload on a locked bucket is verified only against the SDK's request, not against AWS.
 ## Test application loopback listener repair (local, 2026-10-18)
 
 The real test helper now binds its persistent listener to `127.0.0.1`, matching

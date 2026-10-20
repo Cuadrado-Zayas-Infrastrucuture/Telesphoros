@@ -95,8 +95,9 @@ run "production_shape" {
   command = plan
 
   variables {
-    environment = "production"
-    db_multi_az = true
+    environment     = "production"
+    db_multi_az     = true
+    audit_lock_mode = "COMPLIANCE"
   }
 
   assert {
@@ -155,6 +156,18 @@ run "production_shape" {
     condition     = output.deployment_profile == "production"
     error_message = "the profile is reported as an output"
   }
+  assert {
+    condition     = aws_s3_bucket.reports.object_lock_enabled == true && one(aws_s3_bucket_object_lock_configuration.reports.rule).default_retention[0].mode == "GOVERNANCE" && one(aws_s3_bucket_object_lock_configuration.reports.rule).default_retention[0].days == 2190
+    error_message = "production locks every report version for six years in GOVERNANCE mode (founder decision 2026-10-19)"
+  }
+  assert {
+    condition     = one(aws_s3_bucket_object_lock_configuration.audit.rule).default_retention[0].mode == "COMPLIANCE"
+    error_message = "production audit logs are locked in COMPLIANCE mode"
+  }
+  assert {
+    condition     = length(aws_cloudtrail.audit.advanced_event_selector) == 3 && length(aws_cloudtrail.audit.event_selector) == 0
+    error_message = "the trail uses the three advanced selectors (management, reports objects, evidence-log deletes) and no basic selector"
+  }
 }
 
 run "production_hosting_on" {
@@ -163,6 +176,7 @@ run "production_hosting_on" {
   variables {
     environment        = "production"
     db_multi_az        = true
+    audit_lock_mode    = "COMPLIANCE"
     enable_api_hosting = true
     api_domain         = "api.example.test"
     public_subnet_ids  = ["subnet-pub1111", "subnet-pub2222"]
@@ -280,6 +294,10 @@ run "synthetic_shape" {
   assert {
     condition     = aws_subnet.synthetic[0].availability_zone != aws_subnet.synthetic[1].availability_zone
     error_message = "the two subnets must be in different zones: RDS refuses a subnet group inside one"
+  }
+  assert {
+    condition     = one(aws_s3_bucket_object_lock_configuration.reports.rule).default_retention[0].days == 1 && one(aws_s3_bucket_object_lock_configuration.reports.rule).default_retention[0].mode == "GOVERNANCE"
+    error_message = "the rehearsal locks report versions for one day only (GOVERNANCE), so it can still be destroyed"
   }
 }
 
@@ -411,8 +429,9 @@ run "refuses_production_without_multi_az" {
   command = plan
 
   variables {
-    environment = "production"
-    db_multi_az = false
+    environment     = "production"
+    db_multi_az     = false
+    audit_lock_mode = "COMPLIANCE"
   }
 
   expect_failures = [aws_db_instance.main]
@@ -424,10 +443,32 @@ run "refuses_production_without_deletion_protection" {
   variables {
     environment            = "production"
     db_multi_az            = true
+    audit_lock_mode        = "COMPLIANCE"
     db_deletion_protection = false
   }
 
   expect_failures = [aws_db_instance.main]
+}
+
+run "refuses_production_with_a_governance_audit_lock" {
+  command = plan
+
+  variables {
+    environment = "production"
+    db_multi_az = true
+  }
+
+  expect_failures = [terraform_data.profile]
+}
+
+run "refuses_a_report_lock_below_six_years" {
+  command = plan
+
+  variables {
+    reports_lock_days = 2189
+  }
+
+  expect_failures = [var.reports_lock_days]
 }
 
 run "refuse_reports_cors_wildcard" {

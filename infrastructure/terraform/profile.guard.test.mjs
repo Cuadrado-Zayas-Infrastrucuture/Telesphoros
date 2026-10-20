@@ -38,7 +38,7 @@ const DEFINING = new Set(['profile.tf', 'network-synthetic.tf']);
 const REPORTS_PROFILE = new Set(['outputs.tf', 'versions.tf']);
 
 /** Names a use of which relaxes (or removes) something in the synthetic profile. */
-const RELAXING = /local\.(synthetic|synthetic_network|network_count|offsite_count|tasks_public_ip|db_[a-z_]+|kms_deletion_days|secret_recovery_days|cognito_protection|audit_lock_days)\b/;
+const RELAXING = /local\.(synthetic|synthetic_network|network_count|offsite_count|tasks_public_ip|db_[a-z_]+|kms_deletion_days|secret_recovery_days|cognito_protection|audit_lock_days|reports_lock_days)\b/;
 
 /**
  * Every place the rest of the root consults the profile: file -> { whitespace-normalised line: how many times it appears }. The ratchet.
@@ -65,7 +65,7 @@ export const EXPECTED_USES = {
   'kms.tf': { 'count = local.offsite_count': 2, 'deletion_window_in_days = local.kms_deletion_days': 2 },
   'outputs.tf': { 'value = local.synthetic ? null : aws_iam_policy.backup_job[0].arn': 1, 'value = local.synthetic ? null : aws_kms_key.backup[0].arn': 1, 'value = local.synthetic ? null : aws_s3_bucket.backups[0].bucket': 1 },
   'registry.tf': { 'force_delete = local.synthetic': 1 },
-  'storage.tf': { 'count = local.offsite_count': 9, 'force_destroy = local.synthetic': 2 },
+  'storage.tf': { 'count = local.offsite_count': 9, 'days = local.reports_lock_days': 1, 'force_destroy = local.synthetic': 2 },
   'worker.tf': { 'assign_public_ip = local.tasks_public_ip': 1, 'deletion_window_in_days = local.kms_deletion_days': 1, 'recovery_window_in_days = local.secret_recovery_days': 1 },
 };
 
@@ -88,6 +88,7 @@ const PROFILE_LINES = [
   'secret_recovery_days = local.synthetic ? 0 : 30',
   'cognito_protection = local.synthetic ? "INACTIVE" : var.cognito_deletion_protection',
   'audit_lock_days = local.synthetic ? 1 : var.audit_lock_days',
+  'reports_lock_days = local.synthetic ? 1 : var.reports_lock_days',
 ];
 
 /** The refusals, as they must read in the check resource. */
@@ -97,6 +98,7 @@ const REFUSALS = [
   'condition = local.vpc_id != ""',
   'condition = length(local.data_subnet_ids) >= 2',
   'condition = !local.synthetic || (var.audit_lock_mode == "GOVERNANCE" && var.backup_lock_mode == "GOVERNANCE")',
+  'condition = var.environment != "production" || var.audit_lock_mode == "COMPLIANCE"',
 ];
 
 /** Written in place, these make the profile irrelevant: a relaxation that does not go through the profile locals. */

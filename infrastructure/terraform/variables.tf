@@ -112,6 +112,16 @@ variable "reports_noncurrent_retention_days" {
   }
 }
 
+variable "reports_lock_days" {
+  description = "Object Lock (GOVERNANCE) on every version of a report file: nobody without the bypass right can delete or overwrite it for this many days. Never below the six-year record-retention floor (2190 days). The synthetic profile always uses 1."
+  type        = number
+  default     = 2190
+  validation {
+    condition     = var.reports_lock_days >= 2190
+    error_message = "reports_lock_days must be at least 2190 (six years): evidence must outlive the records that cite it."
+  }
+}
+
 variable "backup_lock_days" {
   description = "Object Lock retention on logical backups: nobody can delete or overwrite them for this long."
   type        = number

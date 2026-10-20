@@ -31,6 +31,8 @@ function blocks(text, header) {
 
 const ALARMS = {
   ReportObjectDeleted: ['DeleteObjectVersion', 'DeleteObjects', 'aws_s3_bucket.reports.bucket'],
+  EvidenceLogDeleted: ['DeleteObject', 'DeleteObjects', 'for b in local.evidence_log_buckets'],
+  ObjectLockOverridden: ['PutObjectRetention', 'PutObjectLegalHold', 'for b in local.audit_buckets'],
   BreakGlassRoleAssumed: ['AssumeRole', 'var.break_glass_role_name'],
   RootAccountUsed: ['$.userIdentity.type = \\"Root\\"'],
   AuditTrailChanged: ['StopLogging', 'DeleteTrail', 'UpdateTrail', 'PutEventSelectors'],
@@ -100,10 +102,23 @@ export function auditProblems(tf, appIam = iam) {
   need(has(trail, 'include_global_service_events = true'), 'the trail must include global service events');
   need(has(trail, 'enable_log_file_validation = true'), 'log file validation (signed digests) must be on');
   need(has(trail, 'kms_key_id = aws_kms_key.audit.arn'), 'the trail must encrypt with the audit key');
-  const selector = blocks(trail, 'event_selector')[0] ?? '';
-  need(has(selector, 'read_write_type = "All"'), 'data events must cover both reads and writes');
-  need(has(selector, 'include_management_events = true'), 'management events must be recorded');
-  need(has(selector, 'type = "AWS::S3::Object"') && has(selector, 'values = ["${aws_s3_bucket.reports.arn}/"]'), 'S3 data events must cover every object in the reports bucket');
+  // Advanced selectors only: a basic event_selector cannot sit beside them, and its return would mean the advanced ones were dropped.
+  need(blocks(trail, '(?<![a-z_])event_selector\\s*\\{').length === 0, 'the trail must use advanced selectors only (no basic event_selector)');
+  const selectors = blocks(trail, 'advanced_event_selector');
+  /** A selector's field selectors, as field name -> the rest of its text. */
+  const fieldsOf = (selector) => new Map(blocks(selector, 'field_selector').map((f) => [/field\s*=\s*"([^"]+)"/.exec(f)?.[1] ?? '', squash(f)]));
+  const named = (name) => selectors.find((s) => squash(s).includes(`name = "${name}"`)) ?? '';
+  const management = fieldsOf(named('Every management event'));
+  need(management.size === 1 && (management.get('eventCategory') ?? '').includes('equals = ["Management"]'), 'every management event must be recorded (one selector, eventCategory = Management, no narrowing)');
+  const reports = fieldsOf(named('Every object read and write in the reports bucket'));
+  need((reports.get('eventCategory') ?? '').includes('equals = ["Data"]') && (reports.get('resources.type') ?? '').includes('equals = ["AWS::S3::Object"]'), 'the reports selector must record S3 object data events');
+  need((reports.get('resources.ARN') ?? '').includes('starts_with = ["${aws_s3_bucket.reports.arn}/"]'), 'S3 data events must cover every object in the reports bucket');
+  need(reports.size === 3, 'the reports selector must not be narrowed (no readOnly or eventName filter): every read and write is recorded');
+  const evidence = fieldsOf(named('Deletes and lock changes in the audit and backup buckets'));
+  need((evidence.get('eventCategory') ?? '').includes('equals = ["Data"]') && (evidence.get('resources.type') ?? '').includes('equals = ["AWS::S3::Object"]'), 'the evidence-log selector must record S3 object data events');
+  for (const name of ['DeleteObject', 'DeleteObjects', 'PutObjectRetention', 'PutObjectLegalHold']) need((evidence.get('eventName') ?? '').includes(`"${name}"`), `the evidence-log selector must record ${name}`);
+  need((evidence.get('resources.ARN') ?? '').includes('concat(["${aws_s3_bucket.audit.arn}/"], [for b in aws_s3_bucket.backups : "${b.arn}/"])'), 'the evidence-log selector must cover the audit bucket and (when it exists) the backups bucket');
+  need(has(text, 'evidence_log_buckets = concat([aws_s3_bucket.audit.bucket], aws_s3_bucket.backups[*].bucket)'), 'the evidence-log alarm must watch the audit and (when it exists) backup buckets');
 
   // The alarms.
   const topic = one('resource "aws_sns_topic" "audit_alarms"');
@@ -150,8 +165,14 @@ test('the audit guard reports each way the text could be weakened (controls)', (
     ['key rotation off', 'enable_key_rotation     = true\n  deletion_window_in_days = local.kms_deletion_days\n  policy', 'enable_key_rotation     = false\n  deletion_window_in_days = local.kms_deletion_days\n  policy'],
     ['not multi-region', 'is_multi_region_trail         = !local.synthetic', 'is_multi_region_trail         = false'],
     ['log validation off', 'enable_log_file_validation    = true', 'enable_log_file_validation    = false'],
-    ['reads not recorded', 'read_write_type           = "All"', 'read_write_type           = "WriteOnly"'],
-    ['data events dropped', 'values = ["${aws_s3_bucket.reports.arn}/"]', 'values = ["arn:aws:s3"]'],
+    ['reads not recorded', 'name = "Every object read and write in the reports bucket"', 'name = "Every object read and write in the reports bucket"\n    field_selector {\n      field  = "readOnly"\n      equals = ["false"]\n    }'],
+    ['data events dropped', 'starts_with = ["${aws_s3_bucket.reports.arn}/"]', 'starts_with = ["arn:aws:s3"]'],
+    ['management events dropped', 'equals = ["Management"]', 'equals = ["Nothing"]'],
+    ['basic selector reintroduced', '  advanced_event_selector {\n    name = "Every management event"', '  event_selector {\n    read_write_type = "All"\n  }\n\n  advanced_event_selector {\n    name = "Every management event"'],
+    ['evidence-log deletes not recorded', 'equals = ["DeleteObject", "DeleteObjects", "PutObjectRetention", "PutObjectLegalHold"]', 'equals = ["PutObjectRetention", "PutObjectLegalHold"]'],
+    ['backups left out of the evidence-log selector', '[for b in aws_s3_bucket.backups : "${b.arn}/"])', '[])'],
+    ['evidence-log alarm watches nothing', 'for b in local.evidence_log_buckets', 'for b in []'],
+    ['lock override not watched', '$.eventName = \\"PutObjectRetention\\"', '$.eventName = \\"Nothing\\"'],
     ['topic not encrypted', 'kms_master_key_id = aws_kms_key.audit.arn\n}\n\nresource "aws_sns_topic_subscription"', 'kms_master_key_id = "alias/aws/sns"\n}\n\nresource "aws_sns_topic_subscription"'],
     ['alarms notify nobody', 'alarm_actions       = [aws_sns_topic.audit_alarms.arn]', 'alarm_actions       = []'],
     ['missing data alarms', 'treat_missing_data  = "notBreaching"', 'treat_missing_data  = "breaching"'],

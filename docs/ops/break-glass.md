@@ -67,7 +67,7 @@ Permissions: list versions, and inspect or delete named versions of objects in t
     {
       "Sid": "InspectAndDeleteNamedVersions",
       "Effect": "Allow",
-      "Action": ["s3:GetObjectVersion", "s3:DeleteObjectVersion"],
+      "Action": ["s3:GetObjectVersion", "s3:DeleteObjectVersion", "s3:BypassGovernanceRetention"],
       "Resource": "arn:aws:s3:::<REPORTS_BUCKET>/*"
     }
   ]
@@ -84,7 +84,9 @@ cannot read the file's contents: removing a file does not require seeing it.
 2. Sign in with MFA and assume the role. Do the work in that one session.
 3. List the versions of the one key (`ListBucketVersions` with the key as the prefix) and confirm the version id and size match the record. Do not
    use a wildcard or delete by prefix.
-4. Delete **only** the version(s) named in the record.
+4. Delete **only** the version(s) named in the record. Every report version is under a six-year GOVERNANCE lock, so the delete must say so
+   explicitly: `aws s3api delete-object --bucket <REPORTS_BUCKET> --key <key> --version-id <id> --bypass-governance-retention`. Without the flag
+   S3 refuses, which is the lock doing its job.
 5. List again and confirm they are gone and the other versions are untouched.
 6. Close the decision record with the time, the version ids removed, and what you checked.
 7. Check that the audit event exists in the trail and that the alarm emailed. If it did not, say so in the record.
@@ -102,19 +104,22 @@ Do not create the role until the audit trail has been applied, is logging, and b
 
 - This is a **written control backed by IAM discipline**, not a technical lock. Anyone with IAM administrator rights in the account can grant
   themselves the same permission. Keep the number of such people at one, and review it (below).
-- The reports bucket does not use Object Lock. A stronger arrangement (Object Lock in governance mode, so deletion needs a separate bypass right,
-  or an organization policy that denies the action to everyone but this role) is a separate decision with costs; it is not built.
+- The reports bucket uses Object Lock in **GOVERNANCE** mode, six years per version (founder decision 2026-10-19, `infrastructure/terraform/storage.tf`).
+  Deleting a locked version therefore needs a second, separate right (`s3:BypassGovernanceRetention`) and an explicit flag, and the attempt raises
+  `ReportObjectDeleted` and, for a retention change, `ObjectLockOverridden`. GOVERNANCE (not COMPLIANCE) is deliberate: a legitimate correction
+  or patient request must remain possible. An organization policy that denies the bypass to everyone but this role is not built.
 - Lifecycle rules, not people, remove noncurrent versions after the retention period. Do not shorten it ([report-evidence.md](report-evidence.md)).
 
 ## Reviewing that nobody else can do it
 
 Quarterly, and after any change to IAM: for every role and user that can reach the reports bucket, ask the IAM policy simulator whether
-`s3:DeleteObjectVersion` on an object in the reports bucket is allowed. The answer must be "implicitDeny" for every principal except this role.
+`s3:DeleteObjectVersion` or `s3:BypassGovernanceRetention` on an object in the reports bucket is allowed. The answer must be "implicitDeny" for every
+principal except this role.
 Fill in the principal and bucket names yourself; the command does not guess them:
 
 ```
 aws iam simulate-principal-policy --policy-source-arn <PRINCIPAL_ARN> \
-  --action-names s3:DeleteObjectVersion --resource-arns arn:aws:s3:::<REPORTS_BUCKET>/any-key
+  --action-names s3:DeleteObjectVersion s3:BypassGovernanceRetention --resource-arns arn:aws:s3:::<REPORTS_BUCKET>/any-key
 ```
 
 Record the date and the result. A principal with "allowed" is a finding to fix the same day.
