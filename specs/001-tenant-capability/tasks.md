@@ -14,13 +14,13 @@
 
 **Purpose**: Replace counts from grep with counts from the catalog before anything is changed.
 
-- [ ] T001 [P] Query `pg_policies` on a migrated test database and list every policy, with its roles, that reads `app.current_tenant_id`, `app.current_actor` or `app.current_owner_id`. Record it in `docs/verification/tenant-capability.md`
-- [ ] T002 [P] Query `pg_proc` for every `prosecdef` function and every trigger function, recording for each: owner, the grantees with `has_function_privilege`, and whether `prosrc` reads or sets those settings. Classify each: (a) identity from the caller, which must change; (b) sets the tenant itself from a row or argument, which must set before reading; (c) does not care. Same record
-- [ ] T003 [P] List every `withTenant` call site in `apps/backend/src` with the request authority it runs under; the nine repositories are listed in plan.md
-- [ ] T004 [P] Find API work that runs with `currentRequestAuthority()` undefined (decision D5), and the operator and recovery tools that set the tenant themselves (`apps/backend/src/db/restore.ts:292`, jobs CLI, operator commands). Name each one's owner and planned fate
-- [ ] T005 Spot-check two items from each list by reading the source by hand, so the inventory itself is tested
+- [x] T001 [P] Query `pg_policies` on a migrated test database and list every policy, with its roles, that reads `app.current_tenant_id`, `app.current_actor` or `app.current_owner_id`. Record it in `docs/verification/tenant-capability.md`
+- [x] T002 [P] Query `pg_proc` for every `prosecdef` function and every trigger function, recording for each: owner, the grantees with `has_function_privilege`, and whether `prosrc` reads or sets those settings. Classify each: (a) identity from the caller, which must change; (b) sets the tenant itself from a row or argument, which must set before reading; (c) does not care. Same record
+- [x] T003 [P] List every `withTenant` call site in `apps/backend/src` with the request authority it runs under; the nine repositories are listed in plan.md
+- [x] T004 [P] Find API work that runs with `currentRequestAuthority()` undefined (decision D5), and the operator and recovery tools that set the tenant themselves (`apps/backend/src/db/restore.ts:292`, jobs CLI, operator commands). Name each one's owner and planned fate
+- [x] T005 Spot-check two items from each list by reading the source by hand, so the inventory itself is tested
 
-**Checkpoint**: The inventory is reviewed by the founder before slice 1's migration is written.
+**Checkpoint**: The inventory is reviewed by the founder before slice 1's migration is written. **Done 2026-10-19 in PR #193** (`docs/verification/tenant-capability.md`). Its four findings are applied to spec, plan and these tasks: every tenant-setting policy for every role (FR-006, FR-010), the two actor-reading triggers (FR-007), one capability per request (FR-011), and `restore.ts` `verifyIsolation` (FR-016). Finding 1 also adds the internal binding for the class (b) functions (FR-015).
 
 ## Phase 2: Slice 1, capability schema, inert (US3) — needs D1, D2
 
@@ -48,7 +48,7 @@
 ### Implementation
 
 - [ ] T016 [US3] `apps/backend/src/issuer/` as a second bundled entry point in the API image (plan, "Structure Decision"), importing `CognitoTokenVerifier` unchanged
-- [ ] T017 [US4] `apps/backend/src/db/database.ts`: obtain the capability before `pool.connect()`, set it after `BEGIN`, and emit the capability-less count. `authorityStillCurrent` stays unchanged
+- [ ] T017 [US4] Obtain the capability **once per request** and keep it in the request's `AsyncLocalStorage` slot (`apps/backend/src/auth/authority-context.ts`). `asOrganizationWork` keeps the capability while dropping the authority. `apps/backend/src/db/database.ts` sets it after `BEGIN` on every `withTenant` call and emits the capability-less count. `authorityStillCurrent` stays unchanged
 - [ ] T018 The internal transport and caller authentication between the API and the issuer, per P2 plan D1's second condition. Document the cost before writing it
 
 ## Phase 3b: Slice 2b, issuer Terraform, written and never applied — **starts only after PR 189 merges**
@@ -59,16 +59,16 @@
 
 ### Tests first
 
-- [ ] T020 [US1] Enumerate every RLS table from `pg_policies`. In `dual` mode with a valid capability: own counts are correct and a foreign setting reads 0 rows (the mismatch fails closed). With no capability: today's behaviour
-- [ ] T021 [US2] Enumerate every app-callable `prosecdef` function from the catalog. The spec fails if one exists that its expectation table does not name. With a capability, `job_enqueue` stores `requested_by` from the capability even when `app.current_actor` says otherwise
+- [ ] T020 [US1] Enumerate every RLS table and **every tenant-setting policy, for every role** (48 in the inventory) from `pg_policies`. Include a forged setting plus an app write that fires a ledger trigger or calls `ledger_append`, so a `telesphoros_ledger` policy is exercised. In `dual` mode with a valid capability: own counts are correct and a foreign setting reads 0 rows (the mismatch fails closed). With no capability: today's behaviour
+- [ ] T021 [US2] Enumerate every app-callable `prosecdef` function from the catalog. The spec fails if one exists that its expectation table does not name. With a capability, `job_enqueue` stores `requested_by` from the capability even when `app.current_actor` says otherwise, and so do the `patient_identifiers_guard` and `tenant_memberships_audit` triggers
 - [ ] T022 [US4] `membership.pg-spec.ts` and `session-admission.pg-spec.ts` pass unchanged; a membership removed mid-request is still refused at COMMIT
 - [ ] T023 `query-plans.pg-spec.ts`: `app_tenant()` appears in an InitPlan, not per row, for the patients, reports and recommendations queries
 
 ### Implementation
 
-- [ ] T024 [US1] Migration `00NN_tenant_binding_policies.{up,down}.sql` (`-- compat: breaking`): recreate each policy from T001 with `(SELECT app_tenant())`. Recreate each class-(a) function from T002 to read `app_tenant()`/`app_actor()` and raise `42501` on NULL. `membership_assert_current` also checks `p_sub` and `p_version` against the capability. Set the mode to `dual`
-- [ ] T025 Add the FR-010 catalog lint in warn-only form, listing the remaining class-(b) functions by name
-- [ ] T026 Move or retire the actorless API work found in T004 (D5)
+- [ ] T024 [US1] Migration `00NN_tenant_binding_policies.{up,down}.sql` (`-- compat: breaking`): recreate **all 48** policies from T001, every role and PUBLIC included, with `(SELECT app_tenant())`. Recreate each class (a) function from T002, together with `ledger_append_internal`, `member_admin_context` and the two triggers, to read `app_tenant()`/`app_actor()` and raise `42501` on NULL. Add `tenant_capability_bind_internal` (FR-015) and switch `ledger_record_checkpoint`, `job_held` and `uploads_sweep` to it, restoring `app.capability` before they return. `membership_assert_current` also checks `p_sub` and `p_version` against the capability. Set the mode to `dual`
+- [ ] T025 Add the FR-010 catalog lint in warn-only form. It covers every policy for any role, every function body in `public`, and the callers of the internal binding, which may be only the three named class (b) functions
+- [ ] T026 Confirm that nothing reaches tenant data through the application login outside a request (T004 found none), and that the three `asOrganizationWork` sites succeed with the request's capability after the person is removed mid-request (D5)
 
 ## Phase 5: Slice 4, the audit writer stores verified identity (US2) — needs D6
 
@@ -77,9 +77,9 @@
 
 ## Phase 6: Slice 5, enforce (US1, US2) — needs D4, D7, D8
 
-- [ ] T029 [US1] Invert T007: in `capability` mode, a foreign setting with no capability reads 0 rows from every RLS table, and every app-callable definer function refuses (`42501`, or `false` for `membership_assert_current`). The positive controls are unchanged
+- [ ] T029 [US1] Invert T007: in `capability` mode, a foreign setting with no capability reads 0 rows from every RLS table, and every app-callable definer function refuses (`42501`, or `false` for `membership_assert_current`). The positive controls are unchanged. Add a `restore.ts` `verifyIsolation` case: the setting alone sees 0 rows and a capability sees the expected count (FR-016)
 - [ ] T030 Run each mutant from plan.md, "Verification". Record each red result, then the green result after reverting it, in `docs/verification/tenant-capability.md`
-- [ ] T031 Migration `00NN_tenant_binding_enforce.{up,down}.sql` (`-- compat: breaking`): set the mode to `capability`; the down migration sets it back to `dual`. The FR-010 lint becomes failing
+- [ ] T031 Migration `00NN_tenant_binding_enforce.{up,down}.sql` (`-- compat: breaking`): set the mode to `capability`; the down migration sets it back to `dual`. The FR-010 lint becomes failing. In the same PR, change `apps/backend/src/db/restore.ts:288-296` (`verifyIsolation`) to prove isolation with a capability (FR-016), because in `capability` mode it would otherwise report a healthy restore as broken
 - [ ] T032 Report the D7 evidence before the PR is marked ready: the capability-less count, total requests and window, and the issuer's p50/p95 with sample size
 
 ## Phase 7: Slice 6, contract — separately approved

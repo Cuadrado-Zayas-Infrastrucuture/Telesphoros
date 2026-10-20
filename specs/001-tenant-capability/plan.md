@@ -28,7 +28,7 @@ A separate issuer login verifies the person's Cognito access token and mints a s
 
 **Constraints**: fail closed everywhere; `statement_timeout` 5 s and `idle_in_transaction_session_timeout` 10 s are unchanged (`apps/backend/src/db/database.ts:61-62`); the migration compat lint applies from 0028
 
-**Scale/Scope**: 74 tenant-setting reads and 7 actor-setting reads in the up migrations 0002–0026 (grep counts, including definitions later replaced; T001 takes the catalog count); 9 repositories that call `withTenant`; 10 SECURITY DEFINER functions the application role can EXECUTE (`job_enqueue`, `ledger_append`, `outbox_append`, `membership_assert_current`, `security_audit_record`, `security_event_append`, and the four member-administration functions), plus the triggers that read the actor
+**Scale/Scope**: from the slice 1 catalog inventory (PR #193): 48 policies that read the tenant setting (30 app, 2 worker uses, 12 ledger, 2 redactor, 2 jobs, 2 PUBLIC); 10 SECURITY DEFINER functions the application role can EXECUTE that take identity from the settings, plus `security_audit_record`, `ledger_append_internal`, `member_admin_context` and two actor-reading triggers; 3 class (b) functions; 46 `withTenant` call sites (5 bind an actor)
 
 ## Constitution Check
 
@@ -81,11 +81,12 @@ infrastructure/terraform/issuer.tf              # slice 2b, written never applie
 | Issuer (`telesphoros_session_issuer` ∈ NOLOGIN `telesphoros_issuer`) | its own secret | call the issue function | read any tenant table, call any app function |
 | Capability owner (NOLOGIN `telesphoros_capability`) | owns the capability table, the mode table, `app_tenant()`, `app_actor()`, the issue function | everything on those objects | log in |
 | Worker (`telesphoros_job_worker` ∈ `telesphoros_worker`) | unchanged until US5 | unchanged | mint person capabilities |
+| Definer owner roles (`telesphoros_ledger`, `telesphoros_jobs`, NOLOGIN) | the bodies of their definer functions and triggers | read under their policies, which now read `app_tenant()` (FR-006); the class (b) functions call the internal binding (FR-015) | be entered by the application, which is not a member |
 
 ### Minting
 
 1. The API verifies the bearer token and resolves membership exactly as today (`AuthGuard` → `bindRequestAuthority`).
-2. Before `withTenant` opens its transaction, the API sends the issuer the access token, the purpose (`request`, or a P2 purpose) and the request id. The internal transport and its caller authentication are a P2 plan D1 condition, priced in slice 2.
+2. Once per request, before the request's first `withTenant` opens a transaction, the API sends the issuer the access token, the purpose (`request`, or a P2 purpose) and the request id. The internal transport and its caller authentication are a P2 plan D1 condition, priced in slice 2.
 3. The issuer verifies the token with `CognitoTokenVerifier`, generates 32 random bytes, and calls `tenant_capability_issue(tenant, sub, membership_version, purpose, sha256(token))`. That function runs as the owner, re-checks the membership and organization under lock, enforces the per-person/per-purpose rate limits (P2 plan D3), stamps `issued_at = clock_timestamp()` and `expires_at = issued_at + lifetime` (D1), inserts the row and writes the security event. It returns nothing secret.
 4. The issuer returns the raw token to the API once.
 
@@ -114,7 +115,7 @@ Policies become `USING (tenant_id = (SELECT app_tenant()))`. `statement_timestam
 
 ### What `withTenant` changes (slice 2)
 
-`withTenant(tenantId, work, { actor })` keeps its signature. Before `pool.connect()`, it obtains a capability for the current request authority. After `BEGIN`, it runs `set_config('app.capability', $1, true)` beside the two existing calls. `authorityStillCurrent` (`database.ts:105-123`) is unchanged; the stricter checks live in SQL. In `dual` mode, a missing capability is counted and the request proceeds. In `capability` mode it is a 503.
+`withTenant(tenantId, work, { actor })` keeps its signature. The capability is obtained **once per request** (FR-011; slice 1 inventory: 46 call sites, and the three organization-work calls run after a possible removal), held in the request's `AsyncLocalStorage` slot beside its authority (`apps/backend/src/auth/authority-context.ts`) and reused by every `withTenant` call in that request, including the ones inside `asOrganizationWork`, which keeps the capability while dropping the authority. After `BEGIN`, it runs `set_config('app.capability', $1, true)` beside the two existing calls. `authorityStillCurrent` (`database.ts:105-123`) is unchanged; the stricter checks live in SQL. In `dual` mode, a missing capability is counted and the request proceeds. In `capability` mode it is a 503.
 
 ### Rollout: slices (each its own draft PR off `main`, never stacked, merged in order)
 
@@ -124,9 +125,9 @@ Policies become `USING (tenant_id = (SELECT app_tenant()))`. `statement_timestam
 | 1 | Capability schema, inert | `expand` | `guc` | Migration: owner role, capability and mode tables, `app_tenant()`/`app_actor()`, issue function, sweep job type; `provision-logins` fifth login; hostile-login spec written **asserting the open state** ("in `guc` mode a foreign tenant still reads 1 row: DATA-01 open"), so a later green is earned | policies, definer functions, backend request path, Terraform |
 | 2 | Issuer process + API presents capabilities | none (code only) | `guc` | `apps/backend/src/issuer/`, `database.ts`, metrics for capability-less requests | SQL policies, Terraform |
 | 2b | Issuer Terraform, **written, never applied** | n/a | `guc` | task, own execution and task roles, own secret, alarms; guard tests in `pnpm test:infra` | **starts only after PR 189 merges**, because 189 has the same Terraform root open |
-| 3 | Policies and definer functions read `app_tenant()` | `breaking` | `dual` | One migration that recreates every policy for app/worker roles and every app-callable definer function. Catalog lint FR-010 in warn-only form | audit writer, worker claim |
+| 3 | Policies and definer functions read `app_tenant()` | `breaking` | `dual` | One migration that recreates **all 48** tenant-setting policies (every role, PUBLIC included), every class (a) function and the two actor-reading triggers; adds the internal binding (FR-015) and switches the three class (b) functions to it. Catalog lint FR-010 in warn-only form | audit writer, worker claim |
 | 4 | Audit writer stores verified identity | `expand` (columns) then code | `dual` | `security_audit_events` gains verified/claimed columns; `security_audit_record` derives identity from the capability; `recordSecurityEvent` unchanged at its call sites | other audit findings (API-01, INF-06 are their own slices) |
-| 5 | Enforce | `breaking` | `capability` | Mode row flips; hostile-login spec flips to the closed assertions; FR-010 lint becomes failing; down migration flips back to `dual` as the rollback | anything else |
+| 5 | Enforce | `breaking` | `capability` | Mode row flips; hostile-login spec flips to the closed assertions; FR-010 lint becomes failing; `restore.ts` `verifyIsolation` proves isolation with a capability (FR-016); down migration flips back to `dual` as the rollback | anything else |
 | 6 | Contract | `breaking` | `capability` | Remove the `guc`/`dual` fallback from `app_tenant()`, old function overloads and the `app.current_tenant_id` write in `withTenant` (if D-decisions allow) | — |
 | 7 | Worker lease capability (US5) | `breaking` | `capability` | `job_claim` mints a lease-bound capability; worker sets it | only if D3 makes it a gate |
 
@@ -142,6 +143,10 @@ Policies become `USING (tenant_id = (SELECT app_tenant()))`. `statement_timestam
 |---|---|---|
 | Foreign `app.current_tenant_id`, no capability, every RLS table (from `pg_policies`) | 0 rows each | own capability → hand-written counts |
 | Every `prosecdef` function the app login can EXECUTE (from `pg_proc` + `has_function_privilege`) | `42501`; `membership_assert_current` → `false` | own capability → succeeds, stores capability identity |
+| Forged setting, then an app write that fires a ledger trigger or calls `ledger_append` (runs as `telesphoros_ledger`) | reads only the capability's tenant; the forged tenant's rows are invisible to the trigger | same write, own capability, no forged setting |
+| App write to `patient_identifiers` / member change with `app.current_actor = mallory` under alice's capability | trigger records alice | — |
+| App login calls `tenant_capability_bind_internal` | `42501` | `uploads_sweep`, `job_held` and `ledger_record_checkpoint` still work through it, and `app.capability` is back to its previous value afterwards |
+| `restore.ts` `verifyIsolation` in `capability` mode | setting alone → 0 rows; capability → expected count | — |
 | A new app-callable definer function not in the spec's expectation table | spec fails | — |
 | Forged token (32 random bytes), expired, revoked | 0 rows | valid token |
 | Valid org-alpha capability + `app.current_tenant_id = org-beta` | 0 rows (mismatch) | same capability, no setting → 4 rows |
@@ -153,7 +158,7 @@ Policies become `USING (tenant_id = (SELECT app_tenant()))`. `statement_timestam
 | Capability set in transaction 1 on a pooled connection | absent in transaction 2 | — |
 | `EXPLAIN` of a tenant query | `app_tenant()` in an InitPlan, not per row | — |
 
-**Mutants (each must turn the spec red; output recorded in `docs/verification/tenant-capability.md`):** one policy reverted to `current_setting(...)`; `app_tenant()` ignoring `expires_at`; `app_tenant()` ignoring the mismatch rule; the fallback left on in `capability` mode; a `SELECT` grant on the capability table to `telesphoros_app`; one definer function reading `app.current_actor`; the issue function skipping the membership version check; the issue function granted to `telesphoros_app`.
+**Mutants (each must turn the spec red; output recorded in `docs/verification/tenant-capability.md`):** one policy reverted to `current_setting(...)` (once for an app policy, once for a `telesphoros_ledger` policy); the internal binding granted to `telesphoros_app`; a class (b) function that does not restore `app.capability`; `app_tenant()` ignoring `expires_at`; `app_tenant()` ignoring the mismatch rule; the fallback left on in `capability` mode; a `SELECT` grant on the capability table to `telesphoros_app`; one definer function reading `app.current_actor`; the issue function skipping the membership version check; the issue function granted to `telesphoros_app`.
 
 **Measured on synthetic staging (slice 2 onwards), not asserted:** issuer p50/p95 latency and error rate; capability-less requests in `dual` mode with total requests as denominator; capability table size and sweep lag.
 
@@ -168,7 +173,7 @@ Policies become `USING (tenant_id = (SELECT app_tenant()))`. `statement_timestam
 | D2 | One issuer shared with P2, and its runtime | **Shared**, one login, purposes distinguish uses. Runtime per P2 plan D1: ECS, same image, own execution and task roles | slices 1, 2 |
 | D3 | Is the worker (US5) a hard gate before real data? | **Yes, as slice 7**: lower exposure (identifiers, not clinical content), same flaw | slice 7, the real-data gate |
 | D4 | Issuer outage behaviour and latency budget | **Fail closed (503)**; set the p95 budget after slice 2's staging measurement | slice 5 |
-| D5 | Actorless API work (no request authority) | **Inventory first (task T004)**; move it to the worker or to row-sourced definer functions; never mint from an unauthenticated claim | slice 3 |
+| D5 | Actorless API work (no request authority) | **Inventory first (task T004)**; move it to the worker or to row-sourced definer functions; never mint from an unauthenticated claim. **Inventory result (PR #193):** the three sites run inside a request and reuse its capability (FR-011); nothing to move | slice 3 |
 | D6 | Audit rows for refused or pre-authentication requests | **Verified tenant/actor NULL plus explicitly unverified claimed columns**, so refusals stay recorded without being trusted | slice 4 |
 | D7 | Dual-mode window before enforcing | **7 consecutive days of 0 capability-less requests on synthetic staging**, reported with the total request count | slice 5 |
 | D8 | Accept the residual risks (relay of in-flight tokens ≤ 15 min; stolen issuer credential; superuser) | Accept in writing, with the stated mitigations | slice 5 |
