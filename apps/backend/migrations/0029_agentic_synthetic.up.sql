@@ -233,10 +233,8 @@ DO $$ DECLARE table_name text; BEGIN
     EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY', table_name);
     EXECUTE format('CREATE POLICY %I ON public.%I FOR ALL TO telesphoros_jobs USING (true) WITH CHECK (true)',
       table_name || '_owner', table_name);
-    EXECUTE format('REVOKE ALL ON public.%I FROM PUBLIC', table_name);
   END LOOP;
 END $$;
-REVOKE ALL ON public.agentic_synthetic_capacity, public.agentic_synthetic_buckets FROM PUBLIC;
 
 -- Test-fixture admission only. The application transaction supplies the existing
 -- trusted tenant/actor binding; custom GUCs are not an unforgeable SQL identity.
