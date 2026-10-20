@@ -50,7 +50,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, w
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
-import { budgetMs, hostedOwner, parseLinuxProcess, processKey, readProcess, readProcesses, signalIdentity, watchJob, validateWatchdog } from './service-deadline.mjs';
+import { budgetMs, hostedOwner, parseLinuxProcess, processKey, readProcess, readProcesses, reasons, signalIdentity, watchJob, validateWatchdog } from './service-deadline.mjs';
 import { runScript } from './service-budget.mjs';
 const quote = v => "'" + v.replaceAll("'", "'\\''") + "'";
 const budget = deadlineMs => ({ format: 1, repository: 'owner/repo', runId: '100', attempt: '1', headSha: 'a'.repeat(40), checkout: 'b'.repeat(40), startedMs: deadlineMs - budgetMs, deadlineMs });
@@ -156,20 +156,82 @@ test('a required watchdog cannot be bypassed by absent, stale, failed or tampere
   const env = { RUNNER_TEMP: tmpdir() }; assert.throws(() => validateWatchdog(env, budget(Date.now() + 1000)));
 });
 
-test('watchdog receipts bind the live owner, process identity, source, clock and heartbeat', t => {
+function watchdogFixture(t) {
   const dir = temporaryFixture(t), now = Date.now(), b = budget(now + 10000), uid = process.getuid();
   const owner = { pid: 111111, ppid: 1, uid, start: 'owner-start', command: 'Runner.Worker' };
   const monitor = { pid: 222222, ppid: 1, uid, start: 'monitor-start', command: 'node' };
   const receipt = { format: 1, state: 'armed', pid: monitor.pid, start: monitor.start, owner, budgetHash: hash(JSON.stringify(b)), sourceHash: hash(readFileSync(new URL('./service-deadline.mjs', import.meta.url))), heartbeatMs: now };
   const file = join(dir, 'service-watchdog.json'), env = { RUNNER_TEMP: dir };
   const read = pid => pid === owner.pid ? owner : pid === monitor.pid ? monitor : null;
+  return { dir, now, b, uid, owner, monitor, receipt, file, env, read };
+}
+function refusal(fn) {
+  try { fn(); } catch (error) { return error; }
+  return assert.fail('Expected a refusal.');
+}
+test('watchdog receipts bind the live owner, process identity, source, clock and heartbeat, each with its own reason code', t => {
+  const { now, b, uid, receipt, file, env, read } = watchdogFixture(t);
   writeFileSync(file, JSON.stringify(receipt)); assert.deepEqual(validateWatchdog(env, b, now, read), receipt);
-  for (const mutate of [r => { r.state = 'expired'; }, r => { r.state = 'failed'; }, r => { r.heartbeatMs = now - 5001; }, r => { r.heartbeatMs = now + 1; },
-    r => { r.budgetHash = '0'.repeat(64); }, r => { r.sourceHash = '0'.repeat(64); }, r => { r.start = 'reused'; }, r => { r.owner.start = 'reused'; }, r => { r.extra = 'forbidden'; }]) {
-    const value = structuredClone(receipt); mutate(value); writeFileSync(file, JSON.stringify(value)); assert.throws(() => validateWatchdog(env, b, now, read));
+  for (const [mutate, reason] of [
+    [r => { r.state = 'expired'; }, 'watchdog-not-armed'], [r => { r.state = 'failed'; }, 'watchdog-not-armed'], [r => { r.format = 2; }, 'watchdog-not-armed'],
+    [r => { r.heartbeatMs = now - 5001; }, 'watchdog-heartbeat-stale'], [r => { r.heartbeatMs = now + 1001; }, 'watchdog-heartbeat-future'],
+    [r => { r.heartbeatMs = 'later'; }, 'watchdog-heartbeat-invalid'], [r => { r.heartbeatMs = now + 0.5; }, 'watchdog-heartbeat-invalid'],
+    [r => { r.budgetHash = '0'.repeat(64); }, 'watchdog-budget-mismatch'], [r => { r.sourceHash = '0'.repeat(64); }, 'watchdog-source-mismatch'],
+    [r => { r.start = 'reused'; }, 'watchdog-process-changed'], [r => { r.owner.start = 'reused'; }, 'watchdog-owner-changed'],
+    [r => { r.extra = 'forbidden'; }, 'watchdog-receipt-invalid'], [r => { delete r.owner; }, 'watchdog-receipt-invalid']]) {
+    const value = structuredClone(receipt); mutate(value); writeFileSync(file, JSON.stringify(value));
+    const error = refusal(() => validateWatchdog(env, b, now, read));
+    assert.equal(error.reason, reason, JSON.stringify(value)); assert.ok(reasons.includes(error.reason));
+    assert.equal(error.message, 'Service budget validation failed.');
   }
-  writeFileSync(file, JSON.stringify(receipt)); assert.throws(() => validateWatchdog(env, b, now, () => null));
-  assert.throws(() => validateWatchdog(env, b, now, pid => { const p = read(pid); return p ? { ...p, uid: uid + 1 } : null; }));
+  writeFileSync(file, JSON.stringify(receipt));
+  assert.equal(refusal(() => validateWatchdog(env, b, now, () => null)).reason, 'watchdog-process-changed');
+  assert.equal(refusal(() => validateWatchdog(env, b, now, pid => pid === receipt.owner.pid ? null : read(pid))).reason, 'watchdog-owner-changed');
+  assert.equal(refusal(() => validateWatchdog(env, b, now, pid => pid === receipt.owner.pid ? { ...read(pid), command: 'bash' } : read(pid))).reason, 'watchdog-owner-changed');
+  assert.equal(refusal(() => validateWatchdog(env, b, now, pid => { const p = read(pid); return p ? { ...p, uid: uid + 1 } : null; })).reason, 'watchdog-uid-mismatch');
+  assert.equal(refusal(() => validateWatchdog(env, { ...b, runId: '101' }, now, read)).reason, 'watchdog-budget-mismatch');
+  rmSync(file); assert.equal(refusal(() => validateWatchdog(env, b, now, read)).reason, 'watchdog-receipt-invalid');
+  writeFileSync(file, '{not json'); assert.equal(refusal(() => validateWatchdog(env, b, now, read)).reason, 'watchdog-receipt-invalid');
+});
+test('a heartbeat stamped after the caller sampled now is accepted within 1 s, a forged future one is not, and staleness is unchanged', t => {
+  const { now, b, receipt, file, env, read } = watchdogFixture(t);
+  for (const [heartbeatMs, reason] of [[now + 1, null], [now + 1000, null], [now + 1001, 'watchdog-heartbeat-future'], [now - 5000, null], [now - 5001, 'watchdog-heartbeat-stale']]) {
+    writeFileSync(file, JSON.stringify({ ...receipt, heartbeatMs }));
+    if (reason) assert.equal(refusal(() => validateWatchdog(env, b, now, read)).reason, reason, String(heartbeatMs - now));
+    else assert.equal(validateWatchdog(env, b, now, read).heartbeatMs, heartbeatMs);
+  }
+});
+test('a live publisher racing the checker never trips the future-heartbeat clause', async t => {
+  // loadBudget samples now, then reads files; a heartbeat published in that gap is newer than the sampled now.
+  const { now, b, receipt, file, env, read } = watchdogFixture(t);
+  writeFileSync(file, JSON.stringify(receipt));
+  const publisher = child(t, `const fs = require('node:fs'); const r = ${JSON.stringify(receipt)}; const f = ${JSON.stringify(file)}; let n = 0;
+    setInterval(() => { r.heartbeatMs = Date.now(); const t = f + '.tmp' + (n++ % 2); fs.writeFileSync(t, JSON.stringify(r)); fs.renameSync(t, f); }, 2);`);
+  await waitFor(() => JSON.parse(readFileSync(file)).heartbeatMs > now + 20);
+  let sawNewer = 0;
+  for (let i = 0; i < 100; i++) {
+    const sampled = Date.now(); while (Date.now() < sampled + 5) { /* the gap a slow read or a loaded runner opens */ }
+    const seen = validateWatchdog(env, b, sampled, read); if (seen.heartbeatMs > sampled) sawNewer++;
+  }
+  assert.ok(sawNewer > 0, 'the publisher must have raced the sampled clock for this test to mean anything');
+  publisher.process.kill('SIGKILL'); await publisher.exited;
+});
+test('a refusal prints only a closed-list reason code, never receipt, budget or environment values', t => {
+  const { dir, now, b, receipt, file } = watchdogFixture(t);
+  writeFileSync(join(dir, 'service-budget.json'), JSON.stringify(b));
+  const run = () => spawnSync(process.execPath, ['--input-type=module', '-e',
+    `import { loadBudget } from ${JSON.stringify(new URL('./service-deadline.mjs', import.meta.url).href)}; try { loadBudget(); } catch { process.exitCode = 1; }`],
+  { env: { PATH: process.env.PATH, RUNNER_TEMP: dir, SERVICE_WATCHDOG_REQUIRED: '1', GITHUB_REPOSITORY: b.repository, GITHUB_RUN_ID: b.runId, GITHUB_RUN_ATTEMPT: b.attempt,
+    SERVICE_HEAD_SHA: b.headSha, GITHUB_SHA: b.checkout, PRIVATE: 'PRIVATE_DO_NOT_SERIALIZE' }, encoding: 'utf8' });
+  let result = run(); assert.equal(result.status, 1); assert.equal(result.stdout, '');
+  assert.equal(result.stderr, 'Service budget refused: watchdog-receipt-invalid.\n');
+  writeFileSync(file, JSON.stringify({ ...receipt, extra: 'PRIVATE_DO_NOT_SERIALIZE', heartbeatMs: now + 5000 }));
+  result = run(); assert.equal(result.status, 1); assert.equal(result.stderr, 'Service budget refused: watchdog-receipt-invalid.\n');
+  writeFileSync(file, JSON.stringify({ ...receipt, state: 'PRIVATE_DO_NOT_SERIALIZE' }));
+  result = run(); assert.equal(result.stderr, 'Service budget refused: watchdog-not-armed.\n'); assert.doesNotMatch(result.stderr, /PRIVATE/);
+  // A guard without a reason code stays silent, so the closed list is the only thing that can reach the log.
+  writeFileSync(join(dir, 'service-budget.json'), JSON.stringify({ ...b, deadlineMs: now - 1, startedMs: now - 1 - budgetMs }));
+  result = run(); assert.equal(result.status, 1); assert.equal(result.stderr, '');
 });
 test('losing a required watchdog cannot fall back to fetching a fresh clock', async t => {
   const { initialize, root } = await import('./service-budget.mjs');
