@@ -83,7 +83,7 @@ afterAll(async () => {
 async function fixture(): Promise<Fixture> {
   const tag = randomBytes(4).toString('hex');
   const database = `test_prov_${tag}`;
-  const names: LoginNames = { app: `prov_app_${tag}`, verifier: `prov_ver_${tag}`, migrator: `prov_mig_${tag}`, worker: `prov_wrk_${tag}` };
+  const names: LoginNames = { app: `prov_app_${tag}`, verifier: `prov_ver_${tag}`, migrator: `prov_mig_${tag}`, worker: `prov_wrk_${tag}`, issuer: `prov_iss_${tag}` };
   databases.push(database);
   logins.push(...Object.values(names));
   await withAdmin(adminUrl(), (c) => c.query(`CREATE DATABASE ${database}`));
@@ -316,6 +316,71 @@ describe('what it refuses to call ready', () => {
     const f = await fixture();
     await expect(provisionLogins({ ...f.options, names: { ...f.names, app: 'Bad Name; DROP' } })).rejects.toThrow(/login name/);
     await expect(provisionLogins({ ...f.options, names: { ...f.names, verifier: f.names.app } })).rejects.toThrow(/differ/);
+  });
+});
+
+describe('the session issuer login (DATA-01 slice 1, migration 0028)', () => {
+  const withIssuer = (f: Fixture): ProvisionOptions => ({ ...f.options, secrets: { ...f.options.secrets, issuer: 'secret-issuer' } });
+
+  it('is not created without its secret, and the report says the check was skipped', async () => {
+    const f = await fixture();
+    const report = await provisionLogins(f.options);
+    expect(report.ok).toBe(true);
+    expect(report.logins.map((l) => l.kind)).not.toContain('issuer');
+    expect(report.checks.find((c) => c.name === 'issuer login')).toMatchObject({ ok: true, skipped: true });
+    expect(await withAdmin(f.options.adminUrl, async (c) => (await c.query('SELECT count(*)::int AS n FROM pg_roles WHERE rolname = $1', [f.names.issuer])).rows[0].n)).toBe(0);
+  });
+
+  it('with its secret, is a member of exactly telesphoros_issuer, and after the migrations can mint and read nothing (live attempts)', async () => {
+    const f = await fixture();
+    const first = await provisionLogins(withIssuer(f));
+    expect(failing(first)).toEqual([]);
+    expect(first.logins.find((l) => l.kind === 'issuer')).toMatchObject({ name: f.names.issuer, action: 'created' });
+    await asLogin(f.store.values.get('secret-migrator')!, (c) => migrateUp(c));
+    const after = await provisionLogins({ ...withIssuer(f), requireMigrated: true });
+    expect(failing(after)).toEqual([]);
+    expect(after.checks.find((c) => c.name === 'issuer login privileges')).toMatchObject({ ok: true });
+    await asLogin(f.store.values.get('secret-issuer')!, async (c) => {
+      expect((await c.query(`SELECT has_function_privilege(current_user, 'tenant_capability_issue(text,text,bigint,text,bytea,text)', 'EXECUTE') AS ok`)).rows[0].ok).toBe(true);
+      for (const sql of ['SELECT * FROM patients', 'SELECT * FROM tenant_capabilities', 'SELECT * FROM tenant_memberships', 'SELECT ledger_append(NULL, NULL, NULL, NULL, NULL, NULL)']) {
+        expect([sql, await c.query(sql).then(() => 'ok', (e: { code?: string }) => e.code)]).toEqual([sql, '42501']);
+      }
+    });
+    // The application, verifier and worker logins cannot mint (live attempt, not only the catalog).
+    for (const kind of ['app', 'verifier', 'worker'] as const) {
+      const outcome = await asLogin(f.store.values.get(f.options.secrets[kind])!, (c) =>
+        c.query(`SELECT * FROM tenant_capability_issue('t', 's', 1, 'request', sha256('x'), NULL)`).then(() => 'ok', (e: { code?: string }) => e.code));
+      expect([kind, outcome]).toEqual([kind, '42501']);
+    }
+  });
+
+  it('an issuer that is also a member of the application role fails the check, and passes again once removed', async () => {
+    const f = await fixture();
+    await provisionLogins(withIssuer(f));
+    await withAdmin(f.options.adminUrl, (c) => c.query(`GRANT telesphoros_app TO ${f.names.issuer}`));
+    const bad = await provisionLogins(withIssuer(f));
+    expect(bad.ok).toBe(false);
+    expect(failing(bad).join('\n')).toMatch(/issuer login memberships/);
+    await withAdmin(f.options.adminUrl, (c) => c.query(`REVOKE telesphoros_app FROM ${f.names.issuer}`));
+    expect((await provisionLogins(withIssuer(f))).ok).toBe(true); // control
+  });
+
+  it('an application login that can mint, or an issuer that can read the capability table, fails the check', async () => {
+    const f = await fixture();
+    await provisionLogins(withIssuer(f));
+    await asLogin(f.store.values.get('secret-migrator')!, (c) => migrateUp(c));
+    expect((await provisionLogins({ ...withIssuer(f), requireMigrated: true })).ok).toBe(true); // control
+    for (const [grant, revoke, expected] of [
+      [`GRANT EXECUTE ON FUNCTION tenant_capability_issue(text,text,bigint,text,bytea,text) TO ${f.names.app}`, `REVOKE EXECUTE ON FUNCTION tenant_capability_issue(text,text,bigint,text,bytea,text) FROM ${f.names.app}`, /app login privileges: .*tenant_capability_issue \(CAN execute\)/],
+      [`GRANT SELECT ON tenant_capabilities TO ${f.names.issuer}`, `REVOKE SELECT ON tenant_capabilities FROM ${f.names.issuer}`, /issuer login privileges: .*tenant_capabilities \(CAN read\)/],
+    ] as const) {
+      await withAdmin(f.options.adminUrl, (c) => c.query(grant));
+      const bad = await provisionLogins({ ...withIssuer(f), requireMigrated: true });
+      expect(bad.ok).toBe(false);
+      expect(failing(bad).join('\n')).toMatch(expected);
+      await withAdmin(f.options.adminUrl, (c) => c.query(revoke));
+      expect((await provisionLogins({ ...withIssuer(f), requireMigrated: true })).ok).toBe(true); // and it recovers
+    }
   });
 });
 

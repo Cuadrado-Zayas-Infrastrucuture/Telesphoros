@@ -43,7 +43,8 @@ const USAGE = `Usage: node dist/db/cli.js <command>
                                 connection strings in Secrets Manager (a one-off task; no password is ever printed or logged).
                                 Run it before "migrate up", and again after it with --require-migrated to check the group privileges.
                                 Env: PROVISION_ADMIN_USER, PROVISION_ADMIN_PASSWORD (the RDS-managed administrator), DATABASE_HOST,
-                                [DATABASE_PORT=5432] [DATABASE_NAME=telesphoros], PROVISION_SECRET_APP / _VERIFIER / _MIGRATOR / _WORKER (secret ids).
+                                [DATABASE_PORT=5432] [DATABASE_NAME=telesphoros], PROVISION_SECRET_APP / _VERIFIER / _MIGRATOR / _WORKER (secret ids),
+                                [PROVISION_SECRET_ISSUER] (the session issuer's secret id; without it no issuer login is created).
 
 ${MEMBERSHIP_USAGE}
 ${TENANT_USAGE}
@@ -246,7 +247,7 @@ async function main(argv: string[]) {
       adminUrl: admin.toString(),
       tls: tlsFromEnv(),
       target: { host, port },
-      secrets: { app: required('PROVISION_SECRET_APP'), verifier: required('PROVISION_SECRET_VERIFIER'), migrator: required('PROVISION_SECRET_MIGRATOR'), worker: required('PROVISION_SECRET_WORKER') },
+      secrets: { app: required('PROVISION_SECRET_APP'), verifier: required('PROVISION_SECRET_VERIFIER'), migrator: required('PROVISION_SECRET_MIGRATOR'), worker: required('PROVISION_SECRET_WORKER'), ...(process.env.PROVISION_SECRET_ISSUER ? { issuer: process.env.PROVISION_SECRET_ISSUER } : {}) },
       store: secretsManagerStore(),
       rotate: f.bool('rotate'),
       requireMigrated: f.bool('require-migrated'),

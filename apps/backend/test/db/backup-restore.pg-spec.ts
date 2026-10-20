@@ -167,8 +167,9 @@ describe('restore (the one-command procedure, actually executed)', () => {
     ]);
     expect(report.ok).toBe(true);
     // 6 patients (3 live + 3 soft-deleted) + 3 reports + 3 recommendations + one row per applied migration
-    // 12 seeded rows, one history row per migration, and the 3 rows migration 0024 seeds (one outbox route, two schedules)
-    const manifestRows = 12 + 3 + readdirSync(join(__dirname, '..', '..', 'migrations')).filter((f) => f.endsWith('.up.sql')).length;
+    // 12 seeded rows, one history row per migration, the 3 rows migration 0024 seeds (one outbox route, two schedules) and the 2 rows 0028 seeds
+    // (the 'request' capability purpose and the binding mode)
+    const manifestRows = 12 + 3 + 2 + readdirSync(join(__dirname, '..', '..', 'migrations')).filter((f) => f.endsWith('.up.sql')).length;
     expect(byName(report.checks, 'row counts')!.detail).toMatch(new RegExp(`^all \\d+ tables match \\(${manifestRows} rows\\)$`));
     expect(await throwawayDatabases()).toBe(before); // the throwaway was dropped
   });

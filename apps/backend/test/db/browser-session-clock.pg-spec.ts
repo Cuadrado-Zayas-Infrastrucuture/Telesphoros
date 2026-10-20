@@ -8,6 +8,7 @@ import { Database } from '../../src/db/database';
 import { migrateDown, migrateUp } from '../../src/db/migrator';
 import { PostgresBrowserSessionRepository } from '../../src/storage/postgres/browser-session.repository';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
+import { migrationsThrough } from '../helpers/migrations-through';
 import { registeringAdmin } from '../helpers/membership';
 
 const A='tenant-clock-review-a', B='tenant-clock-review-b';
@@ -89,10 +90,12 @@ it('cleanup skips a locked expiring session, and removes it after its waiting re
  }finally{await end(c);await read;}
 });
 it('a non-superuser owner upgrades populated custody and refuses incompatible downgrade without losing it',async()=>{
+ const through0027=migrationsThrough('0027');
  const isolated=await createEphemeralDatabase();const isolatedDb=new Database({url:isolated.appUrl,ssl:'disable'});const isolatedRepo=new PostgresBrowserSessionRepository(isolatedDb);const fast=custody(29_000,isolatedRepo),slow=custody(-20_000,isolatedRepo);
  try{
   await withAdmin(isolated.adminUrl,async c=>{
    await registeringAdmin(c).grant({tenantId:A,sub:A+'-person',roles:['reader'],by:'review-fixture',reason:'synthetic populated migration review'});
+   expect(await migrateDown(c)).toEqual(['0028']); // this test is about 0027 as its own owner: the capability migration is out of the way
    await c.query("DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='m51_clock_review_owner') THEN CREATE ROLE m51_clock_review_owner NOLOGIN NOSUPERUSER NOBYPASSRLS; END IF; END $$");
    await c.query('GRANT USAGE,CREATE ON SCHEMA public TO m51_clock_review_owner');
    await c.query('ALTER TABLE browser_sessions OWNER TO m51_clock_review_owner');await c.query('ALTER TABLE schema_migrations OWNER TO m51_clock_review_owner');
@@ -102,14 +105,14 @@ it('a non-superuser owner upgrades populated custody and refuses incompatible do
    await c.query('SET ROLE m51_clock_review_owner');
    try{
     expect((await c.query('SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user')).rows[0]).toEqual({rolsuper:false,rolbypassrls:false});
-    expect(await migrateDown(c)).toEqual(['0027']);expect(await migrateUp(c)).toEqual(['0027']);
+    expect(await migrateDown(c, 1, through0027)).toEqual(['0027']);expect(await migrateUp(c, through0027)).toEqual(['0027']);
    }finally{await c.query('RESET ROLE');}
   });
   expect(Boolean(await fast.read(made.cookie))).toBe(true);expect(Boolean(await slow.read(otherMade.cookie))).toBe(true);
   expect(await fast.revoke(made.cookie)).toBe(true);
   await withAdmin(isolated.adminUrl,async c=>{
    await c.query('SET ROLE m51_clock_review_owner');
-   try{await expect(migrateDown(c)).rejects.toThrow(/Migration 0027 failed and was rolled back/);}finally{await c.query('RESET ROLE');}
+   try{await expect(migrateDown(c, 1, through0027)).rejects.toThrow(/Migration 0027 failed and was rolled back/);}finally{await c.query('RESET ROLE');}
    expect((await c.query('SELECT count(*)::int AS n FROM browser_sessions WHERE tenant_id=$1',[A])).rows[0].n).toBe(2);
    expect((await c.query("SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conrelid='browser_sessions'::regclass AND conname='browser_sessions_revoked_at_bound'")).rows[0].def).toContain('isfinite');
    expect((await c.query("SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1")).rows[0].version).toBe('0027');

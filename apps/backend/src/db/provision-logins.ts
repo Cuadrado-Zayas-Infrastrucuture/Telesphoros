@@ -3,7 +3,8 @@ import { Client } from 'pg';
 import { type DatabaseTls, pgClientConfig } from './tls';
 
 /**
- * Creates the three database logins the API needs and hands their connection strings to a secret store (FD-4).
+ * Creates the database logins the API needs and hands their connection strings to a secret store (FD-4). The session issuer's login (migration 0028,
+ * DATA-01) is created only when its secret is given, so a deployment that has not configured the issuer yet provisions exactly what it did before.
  *
  * Why it exists: the migrations create the privilege ROLES (`NOLOGIN`) but no login, and RDS creates only its administrator. The repository's runbooks said
  * "an administrator must, from inside the VPC, create three logins and paste their connection strings into three secrets", and there was no tool to do it and no way in
@@ -18,7 +19,7 @@ import { type DatabaseTls, pgClientConfig } from './tls';
  * it would inherit the right to append), and the group privileges that matter are read back with `has_function_privilege`.
  */
 
-export const PRIVILEGE_GROUPS = ['telesphoros_app', 'telesphoros_ledger', 'telesphoros_redactor', 'telesphoros_ledger_verifier', 'telesphoros_ledger_operator', 'telesphoros_security_auditor', 'telesphoros_jobs', 'telesphoros_worker'] as const;
+export const PRIVILEGE_GROUPS = ['telesphoros_app', 'telesphoros_ledger', 'telesphoros_redactor', 'telesphoros_ledger_verifier', 'telesphoros_ledger_operator', 'telesphoros_security_auditor', 'telesphoros_jobs', 'telesphoros_worker', 'telesphoros_capability', 'telesphoros_issuer'] as const;
 
 /** The attributes the migrations give every group role (0002, 0005, 0006). A static test keeps this and those statements in agreement. */
 export const GROUP_ATTRIBUTES = 'NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS';
@@ -33,11 +34,15 @@ export interface LoginNames {
   migrator: string;
   /** Member of `telesphoros_worker` only: the background worker. It can claim and report jobs through functions and read its organization's job rows, nothing else. */
   worker: string;
+  /** Member of `telesphoros_issuer` only: the session issuer. It can mint a tenant capability (tenant_capability_issue) and read nothing. */
+  issuer: string;
 }
 
-export const DEFAULT_LOGINS: LoginNames = { app: 'telesphoros_api', verifier: 'telesphoros_ledger_watch', migrator: 'telesphoros_migrator', worker: 'telesphoros_job_worker' };
+export const DEFAULT_LOGINS: LoginNames = { app: 'telesphoros_api', verifier: 'telesphoros_ledger_watch', migrator: 'telesphoros_migrator', worker: 'telesphoros_job_worker', issuer: 'telesphoros_session_issuer' };
 
 export type LoginKind = keyof LoginNames;
+/** The logins every deployment has; the issuer is added when its secret is configured. */
+type CoreLoginKind = Exclude<LoginKind, 'issuer'>;
 
 /** Where a connection string goes. The AWS implementation is in provision-secrets.ts; tests use an in-memory one. */
 export interface SecretStore {
@@ -52,7 +57,7 @@ export interface ProvisionOptions {
   tls: DatabaseTls;
   /** Where the API reaches the database; the generated connection strings point here (they carry no TLS parameters). */
   target: { host: string; port: number };
-  secrets: Record<LoginKind, string>;
+  secrets: Record<CoreLoginKind, string> & { issuer?: string };
   store: SecretStore;
   names?: LoginNames;
   /** Replace every password even when the current one works. */
@@ -106,8 +111,9 @@ export function loginUrl(name: string, password: string, target: { host: string;
 const EXPECTED_GROUPS: Record<LoginKind, string[]> = {
   app: ['telesphoros_app'],
   verifier: ['telesphoros_ledger_verifier'],
-  migrator: ['telesphoros_jobs', 'telesphoros_ledger', 'telesphoros_redactor'],
+  migrator: ['telesphoros_capability', 'telesphoros_jobs', 'telesphoros_ledger', 'telesphoros_redactor'],
   worker: ['telesphoros_worker'],
+  issuer: ['telesphoros_issuer'],
 };
 
 /**
@@ -156,10 +162,19 @@ const WORKER_UNREADABLE = ['patients', 'reports', 'report_captures', 'report_upl
 
 const LEDGER_TABLES = ['ledger_events', 'ledger_heads', 'ledger_checkpoints'];
 
+/** The tenant capability (migration 0028). Only the issuer mints; no login reads or writes its tables; the sweep is the jobs role's alone. */
+const CAPABILITY_TABLES = ['tenant_capabilities', 'capability_issuance_log', 'capability_purposes', 'tenant_binding_mode'];
+const CAPABILITY_RIGHTS: Record<'app' | 'verifier' | 'worker' | 'issuer', Record<string, boolean>> = {
+  app: { tenant_capability_issue: false, tenant_capabilities_sweep: false, app_tenant: true },
+  verifier: { tenant_capability_issue: false, tenant_capabilities_sweep: false, app_tenant: false },
+  worker: { tenant_capability_issue: false, tenant_capabilities_sweep: false, app_tenant: true },
+  issuer: { tenant_capability_issue: true, tenant_capabilities_sweep: false, app_tenant: false, ledger_append: false, job_enqueue: false },
+};
+
 export async function provisionLogins(options: ProvisionOptions): Promise<ProvisionReport> {
   const names = options.names ?? DEFAULT_LOGINS;
   for (const name of Object.values(names)) if (!IDENTIFIER.test(name)) throw new Error('A login name must be lowercase letters, digits and underscores.');
-  if (new Set(Object.values(names)).size !== 4) throw new Error('The four login names must differ.');
+  if (new Set(Object.values(names)).size !== Object.keys(DEFAULT_LOGINS).length) throw new Error('The login names must all differ.');
 
   const admin = new Client(pgClientConfig(options.adminUrl, options.tls));
   await admin.connect();
@@ -173,7 +188,7 @@ export async function provisionLogins(options: ProvisionOptions): Promise<Provis
 
     const ensureLogin = async (kind: LoginKind): Promise<void> => {
       const name = names[kind];
-      const secretId = options.secrets[kind];
+      const secretId = options.secrets[kind]!;
       const exists = (await admin.query('SELECT 1 FROM pg_roles WHERE rolname = $1', [name])).rowCount === 1;
       const current = await options.store.get(secretId);
       const works = !options.rotate && exists && current !== undefined && (await loginWorks(current, name, options.tls));
@@ -194,11 +209,12 @@ export async function provisionLogins(options: ProvisionOptions): Promise<Provis
     // The migrator first: it owns the database, so the others' grants (made by the migrations) are made by an owner.
     await ensureLogin('migrator');
     await makeOwner(admin, names.migrator, database);
-    for (const group of ['telesphoros_ledger', 'telesphoros_redactor', 'telesphoros_jobs']) {
+    for (const group of ['telesphoros_ledger', 'telesphoros_redactor', 'telesphoros_jobs', 'telesphoros_capability']) {
       const has = (await admin.query('SELECT pg_has_role($1, $2, \'SET\') AS ok', [names.migrator, group])).rows[0].ok as boolean;
       if (!has) await admin.query(`GRANT ${q(group)} TO ${q(names.migrator)} WITH SET TRUE, INHERIT FALSE`);
     }
-    for (const kind of ['app', 'verifier', 'worker'] as const) {
+    const members: Array<Exclude<LoginKind, 'migrator'>> = ['app', 'verifier', 'worker', ...(options.secrets.issuer ? ['issuer' as const] : [])];
+    for (const kind of members) {
       await ensureLogin(kind);
       const group = EXPECTED_GROUPS[kind][0]!;
       const member = (await admin.query('SELECT pg_has_role($1, $2, \'MEMBER\') AS ok', [names[kind], group])).rows[0].ok as boolean;
@@ -273,7 +289,12 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
   const checks: Check[] = [];
   const add = (name: string, ok: boolean, detail: string, skipped = false) => checks.push({ name, ok, detail, ...(skipped ? { skipped } : {}) });
 
-  for (const kind of ['app', 'verifier', 'migrator', 'worker'] as const) {
+  // The issuer is checked when it is configured or already exists (an issuer left behind is still judged); otherwise the check says it was skipped.
+  const issuerExists = (await admin.query('SELECT 1 FROM pg_roles WHERE rolname = $1', [names.issuer])).rowCount === 1;
+  const withIssuer = Boolean(options.secrets.issuer) || issuerExists;
+  if (!withIssuer) add('issuer login', true, 'no issuer secret is configured, so no session issuer login was created (DATA-01 slice 2b configures it)', true);
+  const judged: LoginKind[] = ['app', 'verifier', 'migrator', 'worker', ...(withIssuer ? ['issuer' as const] : [])];
+  for (const kind of judged) {
     const name = names[kind];
     const row = (await admin.query('SELECT rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolbypassrls, rolreplication FROM pg_roles WHERE rolname = $1', [name])).rows[0];
     const plain = row && row.rolcanlogin && !row.rolsuper && !row.rolcreatedb && !row.rolcreaterole && !row.rolbypassrls && !row.rolreplication;
@@ -302,12 +323,28 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
     return checks;
   }
   const hasQueue = (await admin.query("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'job_claim' AND pronamespace = 'public'::regnamespace) AS ok")).rows[0].ok as boolean;
+  const hasCapability = (await admin.query("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'tenant_capability_issue' AND pronamespace = 'public'::regnamespace) AS ok")).rows[0].ok as boolean;
   const canExecute = async (login: string, fn: string): Promise<boolean | undefined> => {
     const rows = (await admin.query<{ ok: boolean }>(`SELECT has_function_privilege($1, p.oid, 'EXECUTE') AS ok FROM pg_proc p WHERE p.proname = $2 AND p.pronamespace = 'public'::regnamespace`, [login, fn])).rows;
     return rows.length === 0 ? undefined : rows.some((r) => r.ok);
   };
   const canWrite = async (login: string, table: string) =>
     (await admin.query<{ ok: boolean }>(`SELECT (has_table_privilege($1, $2, 'INSERT') OR has_table_privilege($1, $2, 'UPDATE') OR has_table_privilege($1, $2, 'DELETE') OR has_table_privilege($1, $2, 'TRUNCATE')) AS ok`, [login, `public.${table}`])).rows[0].ok as boolean;
+  /** What a login must and must not be able to do with the tenant capability (migration 0028). */
+  const capabilityProblems = async (login: string, kind: keyof typeof CAPABILITY_RIGHTS): Promise<string[]> => {
+    const wrong: string[] = [];
+    for (const [fn, allowed] of Object.entries(CAPABILITY_RIGHTS[kind])) {
+      const can = await canExecute(login, fn);
+      if (can === undefined) wrong.push(`${fn} (missing)`);
+      else if (can !== allowed) wrong.push(`${fn} (${allowed ? 'cannot' : 'CAN'} execute)`);
+    }
+    for (const table of CAPABILITY_TABLES) {
+      const readable = (await admin.query<{ ok: boolean }>(`SELECT has_table_privilege($1, $2, 'SELECT') AS ok`, [login, `public.${table}`])).rows[0].ok;
+      if (readable) wrong.push(`${table} (CAN read)`);
+      if (await canWrite(login, table)) wrong.push(`${table} (CAN write)`);
+    }
+    return wrong;
+  };
   for (const kind of ['app', 'verifier', 'worker'] as const) {
     const wrong: string[] = [];
     for (const [fn, allowed] of Object.entries(FUNCTION_RIGHTS[kind])) {
@@ -325,6 +362,7 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
       }
       for (const table of JOB_TABLES) if (await canWrite(names[kind], table)) wrong.push(`${table} (CAN write)`);
     }
+    if (hasCapability) wrong.push(...(await capabilityProblems(names[kind], kind)));
     if (kind === 'worker') {
       for (const table of WORKER_UNREADABLE) {
         const readable = (await admin.query<{ ok: boolean }>(`SELECT has_table_privilege($1, $2, 'SELECT') AS ok`, [names.worker, `public.${table}`])).rows[0].ok;
@@ -332,6 +370,18 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
       }
     }
     add(`${kind} login privileges`, wrong.length === 0, wrong.length ? wrong.join('; ') : kind === 'worker' ? 'only the queue\'s functions; it writes no table and reads no clinical table' : 'only the functions it needs, and it writes no ledger table');
+  }
+  if (withIssuer) {
+    if (hasCapability) {
+      const wrong = await capabilityProblems(names.issuer, 'issuer');
+      for (const table of WORKER_UNREADABLE) {
+        const readable = (await admin.query<{ ok: boolean }>(`SELECT has_table_privilege($1, $2, 'SELECT') AS ok`, [names.issuer, `public.${table}`])).rows[0].ok;
+        if (readable) wrong.push(`${table} (CAN read)`);
+      }
+      add('issuer login privileges', wrong.length === 0, wrong.length ? wrong.join('; ') : 'only tenant_capability_issue; it reads no table');
+    } else {
+      add('issuer login privileges', !options.requireMigrated, 'the tenant capability (migration 0028) is not applied yet; run this command again after `migrate up`', !options.requireMigrated);
+    }
   }
   if (!hasQueue) add('queue privileges', !options.requireMigrated, 'the job queue (migrations 0023 and 0024) is not applied yet; run this command again after `migrate up`', !options.requireMigrated);
   return checks;
