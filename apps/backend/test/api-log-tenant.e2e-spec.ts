@@ -10,6 +10,8 @@ import { AppException } from '../src/common/app-exception';
 import { AllExceptionsFilter } from '../src/common/all-exceptions.filter';
 import { InputBoundaryInterceptor } from '../src/common/input-boundary.interceptor';
 import { AuthGuard } from '../src/auth/auth.guard';
+import { CapabilityIssuerPort, NullCapabilityIssuer } from '../src/issuer/capability-issuer.port';
+import { RequestCapabilities } from '../src/issuer/request-capabilities';
 import { Public } from '../src/auth/decorators';
 import { InMemorySecurityAuditStore, SecurityAuditStore } from '../src/auth/security-audit';
 import { MembershipService } from '../src/auth/membership.service';
@@ -73,6 +75,8 @@ beforeAll(async () => {
       { provide: MembershipRepository, useValue: memberships },
       { provide: SecurityEvents, useClass: InMemorySecurityEvents },
       MembershipService,
+      { provide: CapabilityIssuerPort, useClass: NullCapabilityIssuer },
+      RequestCapabilities,
       { provide: SecurityAuditStore, useClass: InMemorySecurityAuditStore },
       { provide: APP_GUARD, useClass: AuthGuard },
       { provide: APP_FILTER, useClass: AllExceptionsFilter },

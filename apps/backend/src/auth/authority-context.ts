@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { NextFunction, Request, Response } from 'express';
+import { CAPABILITY_TOKEN_PATTERN } from '../issuer/capability-issuer.port';
 import { assertSessionAuthority, type BrowserSessionAuthority } from './session-admission';
 
 /** The membership a request was admitted under: who, and which version of their membership row the guard read. */
@@ -10,8 +11,20 @@ export interface RequestAuthority {
   readonly session?: BrowserSessionAuthority;
 }
 
+/** The proof of identity the issuer minted for this request (DATA-01): a bearer secret for at most its lifetime, so it is never logged or serialised. */
+export interface RequestCapability {
+  readonly token: string;
+  readonly expiresAt: Date;
+}
+
 interface RequestStore {
   authority?: RequestAuthority;
+  /** The request's ONE capability, set by the guard after the membership is resolved and read by every `withTenant` call in the request. */
+  capability?: RequestCapability;
+  /** Why the request has no capability, once the guard has tried (`not-configured`, `issuer-unavailable`, ...). Only a label for the count. */
+  capabilityAbsent?: string;
+  /** True while the guard resolves the caller's membership: that lookup precedes the capability (which needs the membership's version) by construction. */
+  admitting?: boolean;
   /** The request's correlation id, so a security event can be matched to the diagnostic log line for the same request. */
   requestId?: string;
 }
@@ -51,10 +64,55 @@ export function currentRequestAuthority(): RequestAuthority | undefined {
   return storage.getStore()?.authority;
 }
 
+/** Called by the guard (through RequestCapabilities) once per request. The slot holds its own frozen copy and is written once. */
+export function bindRequestCapability(capability: RequestCapability): void {
+  const store = storage.getStore();
+  if (!store) throw new Error('No request authority context: configureApp() must register authorityContextMiddleware before routing');
+  if (store.capability) throw new Error('This request already has a capability');
+  // Never echo the value: it is a bearer secret.
+  if (typeof capability.token !== 'string' || !CAPABILITY_TOKEN_PATTERN.test(capability.token)) throw new Error('Malformed capability');
+  store.capability = Object.freeze({ token: capability.token, expiresAt: new Date(capability.expiresAt.getTime()) });
+}
+
+/** The capability of the request this code is running for (or the request that started this organization work), if it has one. */
+export function currentRequestCapability(): RequestCapability | undefined {
+  return storage.getStore()?.capability;
+}
+
+/** Records why this request has no capability. */
+export function noteCapabilityAbsent(reason: string): void {
+  const store = storage.getStore();
+  if (store) store.capabilityAbsent = reason;
+}
+
+export function capabilityAbsentReason(): string | undefined {
+  return storage.getStore()?.capabilityAbsent;
+}
+
+/** Runs the guard's own membership lookup. `withTenant` does not count it as capability-less. */
+export async function duringAdmission<T>(work: () => Promise<T>): Promise<T> {
+  const store = storage.getStore();
+  if (!store) return work();
+  store.admitting = true;
+  try {
+    return await work();
+  } finally {
+    store.admitting = false;
+  }
+}
+
+export function isAdmitting(): boolean {
+  return storage.getStore()?.admitting === true;
+}
+
 /**
  * Runs `work` as organization-owned processing: not tied to the person whose request started it. A removed person's request must not abort
  * cleanup the organization still needs, so work that outlives its request (reconciling or sweeping stored files) runs through this.
  */
 export function asOrganizationWork<T>(work: () => T): T {
-  return storage.exit(work);
+  // The work is not the person's, so the authority goes. The capability stays: it is the request's proof that the organization may be acted for, a fresh
+  // issuance for a removed person would be refused, and a request that has none keeps the reason so its count stays labelled.
+  const store = storage.getStore();
+  const kept = store?.capability || store?.capabilityAbsent ? { capability: store.capability, capabilityAbsent: store.capabilityAbsent } : undefined;
+  return storage.exit(() => (kept ? storage.run(kept, work) : work()));
 }
