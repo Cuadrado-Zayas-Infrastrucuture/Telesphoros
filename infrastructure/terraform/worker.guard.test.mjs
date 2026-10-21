@@ -115,7 +115,7 @@ export function workerProblems(tf, iamTf = iam, sources = {}) {
   const task = one('resource "aws_ecs_task_definition" "worker"');
   need(has(task, 'task_role_arn = aws_iam_role.worker_task[0].arn') && has(task, 'execution_role_arn = aws_iam_role.worker_execution[0].arn'), 'the worker must use its own two roles');
   need(has(task, 'network_mode = "awsvpc"') && has(task, 'requires_compatibilities = ["FARGATE"]'), 'the worker must be Fargate with awsvpc networking');
-  need(has(task, 'image = var.api_image') && has(task, 'command = ["node", "worker/main.js"]'), 'the worker must run the pinned image, started as the worker bundle');
+  need(has(task, 'image = var.api_image') && has(task, 'command = ["worker/main.js"]'), 'the worker must run the pinned image, started as the worker bundle');
   need(has(task, 'readonlyRootFilesystem = true') && has(task, 'user = local.api_user'), 'the worker must have a read-only filesystem and run as the non-root user');
   // The worker writes no files (apps/worker/src/boundaries.test.ts), so it gets no volume and no mount: a writable path would be unused attack surface and would hide a fault.
   need(!/\bvolume\s*\{/.test(code(task)) && !/\bmountPoints\b/.test(code(task)), 'the worker task must declare no volume and mount nothing (it writes no files)');
@@ -198,7 +198,7 @@ test('the worker compute guard reports each way the text could be weakened (cont
     ['the worker uses the API roles', 'task_role_arn            = aws_iam_role.worker_task[0].arn', 'task_role_arn            = aws_iam_role.api_task[0].arn'],
     ['root filesystem writable', 'readonlyRootFilesystem = true\n      command', 'readonlyRootFilesystem = false\n      command'],
     ['container runs as root', 'user                   = local.api_user\n      readonlyRootFilesystem = true\n      command', 'user                   = "0"\n      readonlyRootFilesystem = true\n      command'],
-    ['the worker started as the API', 'command                = ["node", "worker/main.js"]', 'command                = ["node", "dist/main.js"]'],
+    ['the worker started as the API', 'command                = ["worker/main.js"]', 'command                = ["dist/main.js"]'],
     ['stop timeout dropped', 'stopTimeout            = 60', 'stopTimeout            = 2'],
     ['an ephemeral volume is declared', '  runtime_platform {\n    operating_system_family = "LINUX"', '  volume {\n    name = "scratch"\n  }\n\n  runtime_platform {\n    operating_system_family = "LINUX"'],
     ['a host path is bound as a volume', '  runtime_platform {\n    operating_system_family = "LINUX"', '  volume {\n    name      = "host"\n    host_path = "/var"\n  }\n\n  runtime_platform {\n    operating_system_family = "LINUX"'],

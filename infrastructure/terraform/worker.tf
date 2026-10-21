@@ -1,5 +1,5 @@
 # M2.3c: the background worker's compute (service, roles, secret container, log group, alarms). NOT APPLIED. Off by default: it follows the API's switch
-# (enable_api_hosting) and, like the API's service, also needs `api_image` (the worker is the SAME image, started as `node worker/main.js`).
+# (enable_api_hosting) and, like the API's service, also needs `api_image` (the worker is the SAME image; its `command` is `worker/main.js` because the image ENTRYPOINT is `node`).
 # Plan: docs/design/plans/m2-3-jobs-outbox-worker.md. Design and runbook: docs/ops/jobs.md. It uses the API's cluster, subnets and execution-role pattern (api-compute.tf).
 
 variable "worker_desired_count" {
@@ -235,7 +235,7 @@ resource "aws_ecs_task_definition" "worker" {
       essential              = true
       user                   = local.api_user
       readonlyRootFilesystem = true
-      command                = ["node", "worker/main.js"]
+      command                = ["worker/main.js"]
       stopTimeout            = 60
       environment            = [for name, value in local.worker_environment : { name = name, value = value }]
       secrets                = [{ name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.worker_database_url[0].arn }]

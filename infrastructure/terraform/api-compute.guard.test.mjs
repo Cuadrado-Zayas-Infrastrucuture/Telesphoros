@@ -162,7 +162,7 @@ export function apiComputeProblems(tf, sources = {}) {
   const migrate = one('resource "aws_ecs_task_definition" "api_migrate"');
   need(!has(migrate, 'task_role_arn'), 'the migration task must have no task role (it reaches the database only)');
   need(has(migrate, 'execution_role_arn = aws_iam_role.api_execution_migrate[0].arn'), 'the migration task must use its own execution role');
-  need(has(migrate, 'command = ["node", "dist/db/cli.js", "migrate", "up"]'), 'the migration task must run the migrate command');
+  need(has(migrate, 'command = ["dist/db/cli.js", "migrate", "up"]'), 'the migration task must run the migrate command');
   need(has(migrate, 'name = "DATABASE_MIGRATOR_URL", valueFrom = aws_secretsmanager_secret.api_migrator_url[0].arn'), 'the migration task must get the migrator login from its secret');
   need(has(migrate, 'readonlyRootFilesystem = true') && has(migrate, 'user = local.api_user'), 'the migration task must be read-only and non-root too');
   need(has(migrate, 'environment = [{ name = "DATABASE_SSL", value = "require" }]'), 'the migration task must set DATABASE_SSL=require: TLS comes only from that setting, never from the connection string');
@@ -172,7 +172,7 @@ export function apiComputeProblems(tf, sources = {}) {
   // administrator's credentials; its task role can touch ONLY the five connection-string secrets and can NOT read the administrator secret.
   const provision = one('resource "aws_ecs_task_definition" "api_provision"');
   need(has(provision, 'task_role_arn = aws_iam_role.api_provision_task[0].arn') && has(provision, 'execution_role_arn = aws_iam_role.api_execution_provision[0].arn'), 'the provisioning task must use its own two roles');
-  need(has(provision, 'command = ["node", "dist/db/cli.js", "provision-logins"]'), 'the provisioning task must run the provision-logins command');
+  need(has(provision, 'command = ["dist/db/cli.js", "provision-logins"]'), 'the provisioning task must run the provision-logins command');
   need(has(provision, 'readonlyRootFilesystem = true') && has(provision, 'user = local.api_user') && has(provision, 'image = var.api_image'), 'the provisioning task must be read-only, non-root and run the pinned image');
   need(has(provision, '{ name = "DATABASE_SSL", value = "require" }'), 'the provisioning task must set DATABASE_SSL=require');
   const SECRET_FOR_LOGIN = { APP: 'api_database_url', VERIFIER: 'api_ledger_verifier_url', MIGRATOR: 'api_migrator_url', WORKER: 'worker_database_url', ISSUER: 'issuer_database_url' };
@@ -320,7 +320,7 @@ test('the API compute guard reports each way the text could be weakened (control
     ['migration gets a task role', '# No task role: the migration reaches the database only, not S3 or anything else in the account.', 'task_role_arn = aws_iam_role.api_task[0].arn'],
     ['migration uses the service execution role', 'execution_role_arn       = aws_iam_role.api_execution_migrate[0].arn', 'execution_role_arn       = aws_iam_role.api_execution_service[0].arn'],
     ['migration task without TLS', 'environment = [{ name = "DATABASE_SSL", value = "require" }]', 'environment = [{ name = "DATABASE_SSL", value = "disable" }]'],
-    ['migration command changed', 'command                = ["node", "dist/db/cli.js", "migrate", "up"]', 'command                = ["node", "dist/main.js"]'],
+    ['migration command changed', 'command                = ["dist/db/cli.js", "migrate", "up"]', 'command                = ["dist/main.js"]'],
     ['proxy hops wrong', envLine('TRUST_PROXY_HOPS', '"1"'), envLine('TRUST_PROXY_HOPS', '"2"')],
     ['proxy hops missing', `${envLine('TRUST_PROXY_HOPS', '"1"')}\n`, ''],
     ['shared-secret sign-in', envLine('AUTH_VERIFIER', '"cognito"'), envLine('AUTH_VERIFIER', '"hmac"')],
@@ -367,11 +367,11 @@ test('the API compute guard reports each way the text could be weakened (control
     ['provisioning task role may do anything with secrets', 'actions   = ["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue"]', 'actions   = ["secretsmanager:*"]'],
     ['provisioning task role gains iam', 'sid       = "ReadAndWriteTheFiveConnectionStrings"', 'sid       = "ReadAndWriteTheFiveConnectionStrings"\n    # x\n    actions2  = ["iam:PassRole"]'],
     ['provisioning execution role reads more than the administrator secret', 'resources = [aws_db_instance.main.master_user_secret[0].secret_arn]', 'resources = [aws_db_instance.main.master_user_secret[0].secret_arn, aws_secretsmanager_secret.api_database_url[0].arn]'],
-    ['provisioning runs the wrong command', 'command                = ["node", "dist/db/cli.js", "provision-logins"]', 'command                = ["node", "dist/db/cli.js", "migrate", "up"]'],
+    ['provisioning runs the wrong command', 'command                = ["dist/db/cli.js", "provision-logins"]', 'command                = ["dist/db/cli.js", "migrate", "up"]'],
     ['provisioning gets the whole administrator secret', ':password::"', '"'],
     ['provisioning without TLS', '{ name = "DATABASE_SSL", value = "require" },\n        { name = "DATABASE_HOST"', '{ name = "DATABASE_SSL", value = "disable" },\n        { name = "DATABASE_HOST"'],
     ['provisioning task given a connection string', '{ name = "AWS_REGION", value = var.region },\n        { name = "PROVISION_SECRET_APP"', '{ name = "DATABASE_URL", value = "postgres://x" },\n        { name = "PROVISION_SECRET_APP"'],
-    ['provisioning task writable filesystem', 'readonlyRootFilesystem = true\n      command                = ["node", "dist/db/cli.js", "provision-logins"]', 'readonlyRootFilesystem = false\n      command                = ["node", "dist/db/cli.js", "provision-logins"]'],
+    ['provisioning task writable filesystem', 'readonlyRootFilesystem = true\n      command                = ["dist/db/cli.js", "provision-logins"]', 'readonlyRootFilesystem = false\n      command                = ["dist/db/cli.js", "provision-logins"]'],
     // The issuer's login (PR C): the same controls as for the other four, for the fifth.
     ['provisioning task role cannot write the issuer secret', ', aws_secretsmanager_secret.worker_database_url[0].arn, aws_secretsmanager_secret.issuer_database_url[0].arn]\n  }', ', aws_secretsmanager_secret.worker_database_url[0].arn]\n  }'],
     ['provisioning does not pass the issuer secret', '        { name = "PROVISION_SECRET_ISSUER", value = aws_secretsmanager_secret.issuer_database_url[0].arn },\n', ''],

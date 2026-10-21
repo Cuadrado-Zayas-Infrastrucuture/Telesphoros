@@ -76,7 +76,7 @@ jobs cancel --id JOB_ID --by NAME             stop a job that has not started (q
 
 ## Deployment (M2.3c; written, never applied)
 
-The worker is the **same image as the API**, started with the command `node worker/main.js` (the image holds `dist/main.js` for the API and `worker/main.js`, a single bundle, for the worker). Terraform is `infrastructure/terraform/worker.tf` and follows the API's switch: it exists only when `enable_api_hosting` is on, and its task definition and service also need `api_image`. Nothing here has been applied; the first real apply is the FD-7 rehearsal.
+The worker is the **same image as the API**, started with the command `worker/main.js` (the image's ENTRYPOINT is `node`, and an ECS `command` replaces only its CMD, so the command must not repeat `node`; the image holds `dist/main.js` for the API and `worker/main.js`, a single bundle, for the worker). Terraform is `infrastructure/terraform/worker.tf` and follows the API's switch: it exists only when `enable_api_hosting` is on, and its task definition and service also need `api_image`. Nothing here has been applied; the first real apply is the FD-7 rehearsal.
 
 | Piece | What it is |
 | --- | --- |

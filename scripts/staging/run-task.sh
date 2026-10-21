@@ -137,7 +137,7 @@ esac
 
 overrides="$(node -e '
   const [container, ...command] = process.argv.slice(1);
-  process.stdout.write(JSON.stringify({ containerOverrides: [{ name: container, command: ["node", "dist/db/cli.js", ...command] }] }));
+  process.stdout.write(JSON.stringify({ containerOverrides: [{ name: container, command: ["dist/db/cli.js", ...command] }] }));
 ' "$container" "${cli[@]}")"
 network="awsvpcConfiguration={subnets=[$TASK_SUBNETS],securityGroups=[$TASK_SECURITY_GROUP],assignPublicIp=$public_ip}"
 
