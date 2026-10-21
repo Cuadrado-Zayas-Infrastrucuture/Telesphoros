@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { Client } from 'pg';
 import { migrateDown, migrateUp } from '../../src/db/migrator';
 import { adminUrl, withAdmin } from '../helpers/database';
+import { revertAbove } from '../helpers/migration-history';
 
 /**
  * D6: migrations must work for a migrator that is NOT a superuser. Production migrators are ordinary roles with CREATEROLE; the
@@ -92,7 +93,8 @@ describe('migrations run for a migrator that is not a superuser', () => {
       await migrateUp(c);
       // 0021 and 0020 hold audit records (merge and patient-link decisions), so reverting them needs the same deliberate setting as the other audit migrations.
       await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
-      expect(await migrateDown(c, 18)).toEqual(['0029', '0028', '0027', '0026', '0025', '0024', '0023', '0022', '0021', '0020', '0019', '0018', '0017', '0016', '0015', '0014', '0013', '0012']);
+      const aboveIncidents = revertAbove('ledger_incidents');
+      expect(await migrateDown(c, aboveIncidents.steps)).toEqual(aboveIncidents.reverted);
       await c.query(`RESET telesphoros.allow_audit_drop`);
       await expect(migrateDown(c, 1)).rejects.toThrow(/Refusing to drop ledger incidents/); // 0011 removes audit data, so it is guarded too
       await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);

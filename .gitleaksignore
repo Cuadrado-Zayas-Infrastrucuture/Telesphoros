@@ -1,3 +1,6 @@
 # Exact historical false positive: dummy Moto secret-container NAME synthetic/migrator.
 # No credential value; scoped to one commit, file, rule and line, not future findings.
 e7d3914308258e77a417ca17981773ddb5228e17:infrastructure/docker/rehearsal.cjs:generic-api-key:31
+# Exact historical false positive: a migration name and the SHA-256 of its files in the pinned list of migration-history.spec.ts (the value the migrator stores in schema_migrations).
+# No credential; scoped to one commit, file, rule and line, not future findings.
+ecbe80437e2f061c7655592af4575cfe808e9530:apps/backend/test/migration-history.spec.ts:generic-api-key:36
