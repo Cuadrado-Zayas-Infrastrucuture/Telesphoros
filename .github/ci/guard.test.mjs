@@ -167,7 +167,7 @@ export function launcherCorsJobProblems(text) {
   const step = job.split(/^ {6}(?=- )/m).find(b => b.startsWith('- run: ' + command)) ?? '';
   if (step.trim() !== '- run: ' + command) problems.push('the launcher step must run unconditionally and propagate failure');
   const at = job.indexOf(command);
-  for (const dependency of ['pip install -r .github/ci/requirements.txt', 'pnpm exec playwright install-deps chromium', 'pnpm exec playwright install --with-deps chromium']) {
+  for (const dependency of ['pip install --require-hashes -r .github/ci/requirements.txt', 'pnpm exec playwright install-deps chromium', 'pnpm exec playwright install --with-deps chromium']) {
     if (job.indexOf(dependency) < 0 || job.indexOf(dependency) > at) problems.push('launcher dependencies must precede the native check');
   }
   return problems;

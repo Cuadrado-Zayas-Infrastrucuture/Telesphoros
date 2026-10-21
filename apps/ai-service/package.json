@@ -22,15 +22,22 @@
     "dist"
   ],
   "scripts": {
+    "prebuild": "node ../../scripts/workspace-build/workspace.cjs prepare jobs",
     "build": "tsup",
+    "pretypecheck": "node ../../scripts/workspace-build/workspace.cjs prepare jobs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "vitest run"
+    "pretest": "node ../../scripts/workspace-build/workspace.cjs prepare jobs",
+    "test": "vitest run",
+    "test:durable:pg": "node ../../scripts/workspace-build/workspace.cjs prepare jobs && vitest run --config vitest.durable.config.mts"
   },
   "dependencies": {
+    "@telesphoros/jobs": "workspace:*",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.1",
     "@types/node": "^26.6.4",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",

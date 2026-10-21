@@ -95,7 +95,7 @@ it('a non-superuser owner upgrades populated custody and refuses incompatible do
  try{
   await withAdmin(isolated.adminUrl,async c=>{
    await registeringAdmin(c).grant({tenantId:A,sub:A+'-person',roles:['reader'],by:'review-fixture',reason:'synthetic populated migration review'});
-   expect(await migrateDown(c)).toEqual(['0028']); // this test is about 0027 as its own owner: the capability migration is out of the way
+   expect(await migrateDown(c, 2)).toEqual(['0029', '0028']); // this test is about 0027 as its own owner: the later (empty) migrations are out of the way
    await c.query("DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='m51_clock_review_owner') THEN CREATE ROLE m51_clock_review_owner NOLOGIN NOSUPERUSER NOBYPASSRLS; END IF; END $$");
    await c.query('GRANT USAGE,CREATE ON SCHEMA public TO m51_clock_review_owner');
    await c.query('ALTER TABLE browser_sessions OWNER TO m51_clock_review_owner');await c.query('ALTER TABLE schema_migrations OWNER TO m51_clock_review_owner');

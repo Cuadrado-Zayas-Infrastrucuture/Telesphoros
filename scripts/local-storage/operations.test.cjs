@@ -24,7 +24,7 @@ function versionFixture(requirements, installed) {
       if (name === './ownership.cjs') return ownership;
       if (name === './services.cjs') return {};
       if (name === 'node:fs') return {
-        readFileSync(target) { assert.equal(target, path.join(root, '.github/ci/requirements.txt')); return requirements; },
+        readFileSync(target) { assert.equal(target, path.join(root, '.github/ci/requirements.in')); return requirements; },
         mkdirSync() { state.effects++; },
       };
       if (name === 'node:child_process') return { execFileSync(bin, args) {
@@ -39,7 +39,7 @@ function versionFixture(requirements, installed) {
 }
 
 test('requirements pin changes propagate to launcher validation and its manifest without code changes', async () => {
-  const requirements = fs.readFileSync(path.resolve(__dirname, '../../.github/ci/requirements.txt'), 'utf8');
+  const requirements = fs.readFileSync(path.resolve(__dirname, '../../.github/ci/requirements.in'), 'utf8');
   const current = /^moto\[server\]==(\d+\.\d+\.\d+)/m.exec(requirements)[1];
   for (const pin of [current, '9.8.7']) {
     const changed = requirements.replace(/^moto\[server\]==[^\r\n]+/m, 'moto[server]==' + pin);

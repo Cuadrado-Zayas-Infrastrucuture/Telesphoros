@@ -44,6 +44,18 @@ const relationships: [string, string, string, string][] = [
   ['cell_dispute_decisions_note_fk', 'cell_dispute_decisions', 'evidence_note_id,tenant_id', 'event_notes:id,tenant_id'],
   ['ledger_clearances_incident_fk', 'ledger_incident_clearances', 'incident_id', 'ledger_incidents:id'],
   ['ledger_clearances_checkpoint_fk', 'ledger_incident_clearances', 'verified_checkpoint_id', 'ledger_checkpoints:id'],
+  // P2 (migration 0029): the inactive synthetic agentic fixtures.
+  ['agentic_synthetic_runs_tenant_id_fkey', 'agentic_synthetic_runs', 'tenant_id', 'tenants:id'],
+  ['agentic_synthetic_runs_job_id_fkey', 'agentic_synthetic_runs', 'job_id', 'jobs:id'],
+  ['agentic_synthetic_runs_tenant_id_grant_id_fkey', 'agentic_synthetic_runs', 'tenant_id,grant_id', 'agentic_synthetic_grants:tenant_id,grant_id'],
+  ['agentic_synthetic_grants_tenant_id_fkey', 'agentic_synthetic_grants', 'tenant_id', 'tenants:id'],
+  ['agentic_synthetic_sources_tenant_id_fkey', 'agentic_synthetic_sources', 'tenant_id', 'tenants:id'],
+  ['agentic_synthetic_grant_sources_tenant_id_grant_id_fkey', 'agentic_synthetic_grant_sources', 'tenant_id,grant_id', 'agentic_synthetic_grants:tenant_id,grant_id'],
+  ['agentic_synthetic_grant_sourc_tenant_id_source_id_source_v_fkey', 'agentic_synthetic_grant_sources', 'tenant_id,source_id,source_version', 'agentic_synthetic_sources:tenant_id,source_id,source_version'],
+  ['agentic_synthetic_reservations_tenant_id_run_id_fkey', 'agentic_synthetic_reservations', 'tenant_id,run_id', 'agentic_synthetic_runs:tenant_id,run_id'],
+  ['agentic_synthetic_invocations_tenant_id_run_id_fkey', 'agentic_synthetic_invocations', 'tenant_id,run_id', 'agentic_synthetic_runs:tenant_id,run_id'],
+  ['agentic_synthetic_outcomes_tenant_id_run_id_fkey', 'agentic_synthetic_outcomes', 'tenant_id,run_id', 'agentic_synthetic_runs:tenant_id,run_id'],
+  ['agentic_synthetic_audit_tenant_id_run_id_fkey', 'agentic_synthetic_audit', 'tenant_id,run_id', 'agentic_synthetic_runs:tenant_id,run_id'],
 ];
 const primaryKeys: Record<string, string> = {
   browser_sessions: 'tenant_id, handle_hash',
@@ -58,6 +70,16 @@ const primaryKeys: Record<string, string> = {
   jobs: 'id', job_attempts: 'id', job_schedules: 'type', job_workers: 'worker_id', outbox_routes: 'event_type', outbox_events: 'id', file_verifications: 'id',
   patient_duplicate_flags: 'id', patient_merge_proposals: 'id', patient_merge_decisions: 'id',
   tenant_capabilities: 'token_hash', capability_issuance_log: 'seq', capability_purposes: 'purpose', tenant_binding_mode: 'singleton',
+  agentic_synthetic_audit: 'tenant_id, run_id, event_sequence',
+  agentic_synthetic_buckets: 'scope, scope_key, period_kind, period_start',
+  agentic_synthetic_capacity: 'singleton',
+  agentic_synthetic_grant_sources: 'tenant_id, grant_id, source_id, source_version',
+  agentic_synthetic_grants: 'tenant_id, grant_id',
+  agentic_synthetic_invocations: 'tenant_id, run_id, role, ordinal',
+  agentic_synthetic_outcomes: 'tenant_id, run_id',
+  agentic_synthetic_reservations: 'tenant_id, run_id',
+  agentic_synthetic_runs: 'tenant_id, run_id',
+  agentic_synthetic_sources: 'tenant_id, source_id, source_version',
 };
 const uniqueKeys: Record<string, string> = {
   report_upload_runs_tenant_id_run_id_key: 'tenant_id, run_id', upload_attempt_request_uq: 'tenant_id, report_id, principal, request_id', upload_attempt_key_uq: 'storage_key',
@@ -80,6 +102,11 @@ const uniqueKeys: Record<string, string> = {
   patient_merge_proposals_id_tenant_uq: 'id, tenant_id', patient_merge_decisions_proposal_uq: 'tenant_id, proposal_id', patient_merge_decisions_id_tenant_uq: 'id, tenant_id',
   jobs_seq_uq: 'seq', jobs_idempotency_uq: 'tenant_id, type, idempotency_key', job_attempts_seq_uq: 'seq',
   outbox_events_seq_uq: 'seq', outbox_events_subject_uq: 'tenant_id, event_type, subject_id', file_verifications_seq_uq: 'seq',
+  agentic_synthetic_invocations_invocation_id_key: 'invocation_id',
+  agentic_synthetic_outcomes_simulation_receipt_ref_key: 'simulation_receipt_ref',
+  agentic_synthetic_runs_job_id_key: 'job_id',
+  agentic_synthetic_runs_run_id_key: 'run_id',
+  agentic_synthetic_runs_tenant_id_requester_ref_task_key_ide_key: 'tenant_id, requester_ref, task_key, idempotency_key',
 };
 // Complete CHECK inventory; semantic refusal/control tests remain in the existing behavior suites.
 const checkNames: Record<string, string> = {
@@ -125,6 +152,15 @@ const checkNames: Record<string, string> = {
   capability_purposes: 'name lifetime limits',
   capability_issuance: 'outcome reason lengths', // constraint prefix differs from table capability_issuance_log
   tenant_binding_mode: 'one_row value',
+  agentic_synthetic_audit: 'artifact_digest_check code_check event_sequence_check fence_check observed_units_check reason_code_check reserved_units_check',
+  agentic_synthetic_buckets: 'check check1 consumed_units_check limit_units_check period_kind_check reserved_units_check scope_check scope_key_check',
+  agentic_synthetic_capacity: 'fleet_month_units_check singleton_check tenant_day_units_check',
+  agentic_synthetic_grants: 'capabilities_check generation_check purpose_check requester_ref_check',
+  agentic_synthetic_invocations: 'artifact_check candidate_digest_check evidence_digest_check input_digest_check observation_check ordinal_check role_check usage_state_check',
+  agentic_synthetic_outcomes: 'outcome_check outcome_digest_check',
+  agentic_synthetic_reservations: 'check observed_generated_check observed_input_check reserved_cost_check reserved_tokens_check usage_state_check',
+  agentic_synthetic_runs: 'check evidence_digest_check evidence_tuple_preimage_check fence_check grant_generation_check idempotency_key_check membership_version_check profile_digest_check request_digest_check request_json_check request_tuple_preimage_check requester_ref_check sequence_check source_snapshot_check state_check task_key_check',
+  agentic_synthetic_sources: 'body_check digest_check source_id_check source_version_check',
 };
 for (const table of ['report_captures', 'capture_acceptances', 'evaluations', 'corrections', 'cell_disputes', 'cell_dispute_decisions', 'report_patient_decisions', 'patient_merge_proposals', 'patient_merge_decisions', 'ledger_checkpoints']) {
   relationships.push([`${table}_event_fk`, table, 'ledger_event_id,tenant_id', 'ledger_events:id,tenant_id']);

@@ -1,0 +1,4 @@
+# Test-only: the S3 emulator the storage and browser tiers run against (see .github/workflows/ci.yml). Never installed in an application image.
+# Edit THIS file, then regenerate requirements.txt with every transitive package pinned and hashed (pip installs it with --require-hashes):
+#   uv pip compile requirements.in --generate-hashes --python-version 3.12 --python-platform x86_64-unknown-linux-gnu --output-file requirements.txt
+moto[server]==5.2.4
