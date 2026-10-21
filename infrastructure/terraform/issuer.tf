@@ -4,13 +4,13 @@
 # Spec: specs/001-tenant-capability/. Task T019. Transport and its prices: docs/design/plans/tenant-capability-issuer-transport.md (and its addendum).
 # The pattern is the worker's (worker.tf): same image, same cluster, same subnets, an execution role that reads only its own secret.
 #
-# TWO THINGS THE REPOSITORY DOES NOT HAVE YET, so the service is behind its own switch (enable_issuer, default false):
-#  - the entry point. The issuer core (apps/backend/src/issuer/issuer-core.ts) opens no port and listens for nothing, and the image builds no `issuer/main.js`.
-#    The task below is written for the entry it will need (`node issuer/main.js`, reading PORT and DATABASE_URL); an application PR provides it.
+# THE SERVICE IS BEHIND ITS OWN SWITCH (enable_issuer, default false), because one thing the repository does not have yet:
 #  - the client. The API still runs with NullCapabilityIssuer. Joining the Service Connect namespace below and calling the issuer is the client PR's job.
+# The entry exists: apps/backend/src/issuer/main.ts, compiled by the existing backend build to dist/issuer/main.js in the same image. The task's `command` is that
+# path WITHOUT a leading `node`: the image's ENTRYPOINT is node, and an ECS command only replaces the image's CMD (issuer.guard.test.mjs ties the line to the build).
 
 variable "enable_issuer" {
-  description = "Run the session issuer service. Leave false until the image contains the issuer entry point (issuer/main.js) and the API has a client for it: with neither, the service could not start."
+  description = "Run the session issuer service. Leave false until the API has a client for it: the image already contains the issuer entry (dist/issuer/main.js), but nothing would call the service."
   type        = bool
   default     = false
 }
@@ -380,7 +380,7 @@ resource "aws_ecs_task_definition" "issuer" {
       essential              = true
       user                   = local.api_user
       readonlyRootFilesystem = true
-      command                = ["node", "issuer/main.js"]
+      command                = ["dist/issuer/main.js"]
       stopTimeout            = 30
       portMappings           = [{ name = "issuer", containerPort = local.issuer_port, protocol = "tcp", appProtocol = "http" }]
       environment            = [for name, value in local.issuer_environment : { name = name, value = value }]
