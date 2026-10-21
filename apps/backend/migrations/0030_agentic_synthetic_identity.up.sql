@@ -30,6 +30,11 @@ BEGIN
       RAISE EXCEPTION 'Migration 0030 expects the 0029 body of % and found another.', v_expected[v_i][1];
     END IF;
   END LOOP;
+  -- Owner and privileges of the three entry points as they are now: CREATE OR REPLACE must keep them, and the post-condition below checks that it did.
+  PERFORM set_config('tp2.entry_acl_0030', (SELECT string_agg(p.oid::regprocedure::text || ' owner=' || p.proowner::regrole::text || ' acl=' || coalesce(p.proacl::text, 'null'),
+      '; ' ORDER BY p.oid::regprocedure::text)
+    FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
+      AND p.proname IN ('agentic_synthetic_admit', 'agentic_synthetic_read', 'agentic_synthetic_cancel')), true);
 END $$;
 
 CREATE FUNCTION public.agentic_synthetic_identity() RETURNS TABLE (tenant_id text, actor text)
@@ -339,5 +344,12 @@ BEGIN
                AND has_function_privilege('telesphoros_app', p.oid, 'EXECUTE')
                AND (p.prosrc ~ 'app\.current_(tenant_id|actor)' OR p.prosrc !~ 'public\.agentic_synthetic_identity\(\)')) THEN
     RAISE EXCEPTION 'An application entry point of the synthetic workflow still reads a session setting for identity.';
+  END IF;
+  IF (SELECT string_agg(p.oid::regprocedure::text || ' owner=' || p.proowner::regrole::text || ' acl=' || coalesce(p.proacl::text, 'null'),
+        '; ' ORDER BY p.oid::regprocedure::text)
+      FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
+        AND p.proname IN ('agentic_synthetic_admit', 'agentic_synthetic_read', 'agentic_synthetic_cancel'))
+     IS DISTINCT FROM current_setting('tp2.entry_acl_0030', true) THEN
+    RAISE EXCEPTION 'Migration 0030 changed the owner or privileges of an entry point.';
   END IF;
 END $$;
