@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { createHash, randomUUID } from 'node:crypto';
 import { Client } from 'pg';
 import { ownedPostgresFixture } from '../helpers/postgres-fixture';
+import { bindCapability } from '../helpers/durable-pg';
 import type { EphemeralDatabase } from '../../../backend/test/helpers/database';
 
 let fixture: EphemeralDatabase;
@@ -17,6 +18,7 @@ async function admit(tenant: string, key: string) {
     await app.query('BEGIN');
     await app.query(`SELECT set_config('app.current_tenant_id',$1,true)`, [tenant]);
     await app.query(`SELECT set_config('app.current_actor',$1,true)`, [`${tenant}-actor`]);
+    await bindCapability(fixture.adminUrl, app, tenant, `${tenant}-actor`);
     const input = { schemaVersion: 'agentic.request.v1', taskKey: 'business.sop-draft.v1',
       locale: 'en', question: 'Draft a synthetic SOP', idempotencyKey: key };
     const caller = { tenantId: tenant, requesterRef: `${tenant}-actor`, membershipVersion: '1',

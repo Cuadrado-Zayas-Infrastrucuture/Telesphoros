@@ -188,3 +188,34 @@ The first loop on this replay, before the second delta, failed 14 backend specs 
 What the second delta changed: it removes the two table-level `REVOKE ... FROM PUBLIC` statements from the migration (no-ops for tables that wrote an owner-only ACL, which `pg_dump` omits, so main's restore check reported 70 missing owner privileges); updates the hard-coded migration lists and counts in six more backend specs; and lists the ten new tables in the schema-acceptance helper.
 
 Not run: `tofu test` (fails locally against CI's Terraform), browser tests, the FHIR IG validation (needs Java 21), Docker image tests, the CI budget and evidence wrappers, and everything hosted.
+
+### 2026-10-21: the three app entry points read their caller from the capability (migration 0030)
+
+Candidate: `feat/p2-identity-from-capability` on `origin/main` `e6bace2` (migration `0030_agentic_synthetic_identity`, `-- compat: breaking`). Dependency tree reinstalled with `pnpm install --frozen-lockfile`; jest 30.5.2 and vitest 5.0.3 equal the lockfile. Node 22.22.0, PostgreSQL 16.15, moto 5.2.4, gitleaks 8.30.1. Backend tiers ran on an owned, password-authenticated cluster whose bootstrap role is `postgres`; the durable suite ran on the owned socket cluster.
+
+What it proves: a login with the application's privileges, with the session settings forged to a victim and no capability, is refused by `agentic_synthetic_admit`, `_read` and `_cancel` in binding modes `guc`, `dual` and `capability`, with no row written; the same calls with a capability minted through the issuer login succeed in the same mode. `agentic_synthetic_identity()` requires `app.capability` itself because `app_tenant()` and `app_actor()` fall back to the settings in `guc` and `dual`.
+
+| Step | Result |
+|---|---|
+| new `agentic-identity.pg-spec.ts` on unmodified `e6bace2` (0030 absent) | **red**: 16 of 27 fail, each for the stated reason (a forged setting is accepted; `read`/`cancel` fail with the capability alone; the catalog still shows settings readers) |
+| same spec plus `agentic-identity-migration.spec.ts` on this tree | **green**: 34/34 |
+| install, typecheck, lint, build, `test:infra`, `test:ci-config` | exit 0 each |
+| `pnpm test` without a database | node tests 26/26; jobs 13; lambda 10; cpic-schema 48; fake-idp 7; shared-types 32; worker 87; ai-service 81; smart-pilot 188; frontend 364; backend 1754 passed, 256 skipped. First run failed one worker health test (`/livez` 503) while another job loaded the machine; rerun on a quiet machine passed |
+| durable PostgreSQL suite (socket cluster) | **72/72** across 11 files |
+| migrate smoke through the built migrator, 30 migrations | exit 0; catalog hash of the `agentic_synthetic_*` functions identical after up, down 1, up (`77461030f5c30142`); after down the helper is gone and the three entry points read the settings again |
+| cluster crash and restart probe | committed rows kept, the open transaction rolled back |
+| backend tier 1 | 2601 passed, 256 skipped |
+| backend tier 2 (PostgreSQL) | 2836 passed, 21 skipped |
+| backend tier 3 (PostgreSQL + S3) | first run 2855 passed, 1 failed (`offsite-restore` `--latest`, the 5 s test timeout, under load); that spec alone passes 9/9 twice on this tree and twice on unmodified `e6bace2`; full rerun **2856 passed, 1 skipped** |
+| `rls.pg-spec` | 8/8 on this tree and on unmodified `e6bace2` (the cluster's bootstrap role is `postgres`) |
+| worker on PostgreSQL | 169/169; `fixture-lifecycle` 6/6 |
+| non-superuser migrator (`provision-logins.pg-spec`, which applies every migration as a login that is neither superuser nor CREATEROLE) | 24/24; with the `SET LOCAL ROLE telesphoros_jobs` line removed from 0030 it goes red (5 fail), so the rehearsal can fail |
+| migration lint | `0030` passes labelled `breaking`; relabelled `expand` it is rejected |
+| gitleaks 8.30.1, `--log-opts=HEAD` | 342 commits, no leaks |
+| guard-removal sweep | 24 one-at-a-time defects applied to a scratch copy of the tree, each restored by hash: all 24 turn a test red (list in the hand-over note) |
+
+Review fixes made on top of the first build, each its own commit: the migration now checks that the three entry points keep owner and privileges (plan step 6, missing from the first build), and the caller-document comparison is tested on `admit` and `cancel`, not only `read` (a mutant that dropped it from either was red only through the no-database text comparison).
+
+Pinned limit, not a pass: `admit` still needs the settings (`membership_assert_current` and `job_enqueue` read them) until DATA-01 slice 3; the spec records that. `agentic_synthetic_member_current` (worker side) still writes the tenant setting, so DATA-01 slice 5 must not flip the mode to `capability` before it moves.
+
+Not run: `tofu test`, browser tests, the FHIR IG validation, Docker image tests, the CI budget and evidence wrappers, hosted CI, a real RDS or non-local migrator.
