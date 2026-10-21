@@ -1,8 +1,15 @@
 # Status, history and working agreements
 
-Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
+Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. A pull request that changes what is described here adds a fragment under `docs/status/` (next section).
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Where new entries go: docs/status/ (from 2026-10-20)
+
+New entries are not added to this file. Each pull request adds one file, `docs/status/YYYY-MM-DD-slug.md`, whose first line is `# Title` and whose first line after it is `Date: YYYY-MM-DD` (the file name's date); two pull requests never edit the same file, so they cannot conflict. Print the index, newest first, with `pnpm status:index` (it is not committed, so it cannot conflict either); `pnpm test:ci-config` checks every fragment. The sections below are the history up to 2026-10-20: they stay where they are because other documents link to their anchors, and a correction to one of them still edits this file.
+
+## Audit follow-ups: diagnostic tooling removed, INF-18 recorded as accepted (draft PR, 2026-10-20)
+
+`diagnostics/fixture-phase-capture/` (12 files) is deleted: the scripts of the one-off diagnostic whose workflow the CI supply-chain PR removes (INF-17); nothing else ran them, and they stay in history at `2307242`. INF-18 (GitHub's native secret and code scanning) is recorded in `docs/ops/ci-cd.md` as an accepted gap by founder decision: on the Team plan they are paid add-ons, and the required gitleaks scan and Dependabot security updates stand in for now. No code, CI, Terraform or AWS change.
 ## CI supply chain: pinned inputs, one reviewed workflow list, a weekly rescan (draft PR, 2026-10-20)
 
 Audit findings INF-11 and INF-17 (founder decision 2026-10-20; INF-03, image signing, waits for its own decision). The diagnostic `fixture-phase-capture.yml`, merged despite its own "never merge" header, is deleted, and a CI-config test now allows only `ci.yml` and `rescan.yml`. The four PostgreSQL service images use one multi-arch digest; Go and Trivy are exact releases; the S3 emulator's whole dependency tree (60 packages) is installed with `pip install --require-hashes` from `requirements.txt`, generated from a new `requirements.in` that the local launcher now reads its pin from. Dependabot also watches the API Dockerfile. A new weekly, advisory `rescan.yml` rebuilds and scans the API image and audits production dependencies; it never runs on a pull request. `supply-chain.test.mjs` applies the action-pinning, read-only and no-secrets rules to every workflow file, not only `ci.yml`. No application, Terraform or AWS change.

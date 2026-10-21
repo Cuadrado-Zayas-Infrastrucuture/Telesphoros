@@ -59,7 +59,7 @@ describe('worker.tf and the worker agree', () => {
   });
 
   it('the worker bundle is where the task definition starts it', () => {
-    expect(code).toContain('command                = ["node", "worker/main.js"]');
+    expect(code).toContain('command                = ["worker/main.js"]');
     const docker = readFileSync(new URL('../../../infrastructure/docker/api.Dockerfile', import.meta.url), 'utf8');
     expect(docker).toContain('/output/worker/main.js');
   });

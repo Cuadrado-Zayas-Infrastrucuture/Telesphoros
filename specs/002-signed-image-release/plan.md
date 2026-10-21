@@ -115,7 +115,7 @@ token.actions.githubusercontent.com:job_workflow_ref    = <owner>/<repo>/.github
    3. Log in to ECR.
    4. Push the archive with digest preservation, under the tag `git-<12-char sha>`.
    5. Read the digest back with `aws ecr describe-images`, and fail if it differs from the recorded one.
-   6. `cosign sign --key awskms:///alias/<name>-image-signing --tlog-upload=false <repo>@<digest>`.
+   6. `cosign sign --key awskms:///alias/<name>-image-signing --use-signing-config=false --tlog-upload=false <repo>@<digest>`.
    7. Write the digest and tag to the job summary.
 
 ### Verification (FR-007)
@@ -153,3 +153,13 @@ token.actions.githubusercontent.com:job_workflow_ref    = <owner>/<repo>/.github
 |---|---|---|
 | `id-token: write` on one CI job (the guard says no job may request a write permission) | OIDC is how CI proves it is CI without a stored secret | A stored key or access key is a long-lived secret in GitHub. Keyless Sigstore publishes the repository's identity. Manual signing re-creates INF-03 |
 | An asymmetric KMS key without automatic rotation (every other key's guard demands rotation) | KMS supports automatic rotation only for symmetric keys | Symmetric keys cannot produce a signature anyone can verify with a public key |
+
+## Changes during slice 2 (2026-10-21)
+
+Found by running the tools, not assumed. Recorded in `docs/verification/signed-image-release.md`:
+
+- **cosign 3 needs two flags.** `--tlog-upload=false` alone is refused ("not supported with signing config"). Without it, cosign `POST`s to the public Rekor log. The release signs with `--use-signing-config=false --tlog-upload=false`.
+- **Pushing the archive needs `crane push <layout>` without `--index`.** `--index` wraps the layout's `index.json` in a new index, so the registry would hold a different digest from the one scanned.
+- **The `image` job already uploaded the archive on every run** (`api-image-with-attestations`, one day). No new upload step was needed.
+- **Trivy and the rehearsal were scanning a second build, and it was not the same image.** In a config diff, layers 7–10 (`COPY /output/ ./` onward) of the loaded build differed from the archive's. The image job now builds once and loads the archive's own linux/amd64 image (`load-archive-image.sh`: local registry, `crane pull` to a Docker tarball, `docker load`, then a config-digest check). A rebuilt control image is refused.
+- **The release commands are rehearsed on every pull request** (`release-rehearsal.sh`, local registry, throwaway key, every outbound proxy closed). Originally this was only a local proof.

@@ -80,7 +80,7 @@ test('the default is a dry run: it validates, prints the command and the overrid
   const { status, out, calls } = run(['tenant-create', '--id', 'pilot-clinic', '--name', 'Pilot Clinic', '--by', 'jan']);
   assert.equal(status, 0, out);
   assert.match(out, /dry run: nothing started/);
-  assert.match(out, /command override: \{"containerOverrides":\[\{"name":"migrate","command":\["node","dist\/db\/cli\.js","tenant","create"/);
+  assert.match(out, /command override: \{"containerOverrides":\[\{"name":"migrate","command":\["dist\/db\/cli\.js","tenant","create"/);
   assert.deepEqual(calls, [], 'a dry run must not call aws');
 });
 
@@ -103,7 +103,7 @@ test('each step runs the right task, container and command', () => {
     assert.equal(after_(call, '--cluster'), ENV.ECS_CLUSTER);
     assert.equal(after_(call, '--launch-type'), 'FARGATE');
     assert.equal(after_(call, '--count'), '1');
-    assert.deepEqual(overrides, { containerOverrides: [{ name: container, command: ['node', 'dist/db/cli.js', ...command] }] }, argv.join(' '));
+    assert.deepEqual(overrides, { containerOverrides: [{ name: container, command: ['dist/db/cli.js', ...command] }] }, argv.join(' '));
   }
 });
 
@@ -270,7 +270,7 @@ test('the script agrees with the application, the Terraform and the runbook (so 
     const body = block(header).slice(0, block(header).indexOf('\nresource "', 10));
     assert.match(body, new RegExp(`name\\s+= "${container}"`), `${header} names its container ${container}`);
     assert.match(body, new RegExp(`"awslogs-stream-prefix" = "${prefix}"`), `${header} uses the stream prefix ${prefix}`);
-    assert.match(body, /node", "dist\/db\/cli\.js"/, `${header} runs the CLI the override replaces`);
+    assert.match(body, /command\s+= \["dist\/db\/cli\.js"/, `${header} runs the CLI the override replaces (no leading node: the image ENTRYPOINT is node)`);
   }
   assert.match(block('resource "aws_ecs_task_definition" "api_migrate"'), /DATABASE_MIGRATOR_URL/, 'the migration task holds the table owner login the tenant and membership commands need');
   for (const output of ['api_cluster_name', 'api_migrate_task_family', 'api_provision_task_family', 'api_log_group', 'api_task_subnet_ids', 'api_task_assign_public_ip', 'api_service_name']) {

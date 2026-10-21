@@ -6,6 +6,7 @@
 - Changes to clinical logic need tests and a validation note in `docs/clinical-validation/`.
 - Commits by agents carry a `Co-Authored-By` trailer.
 - Database changes are **new numbered migrations** with a matching down file (never edit an applied one). Run the database tier before opening a PR: see docs/database.md. From migration 0028 each `.up.sql` starts with `-- compat: expand` or `-- compat: breaking` (use `breaking` when unsure); see "Migration labels" in docs/database.md.
+- **Status entries are fragments.** A change that `docs/STATUS.md` would have described adds one file, `docs/status/YYYY-MM-DD-slug.md` (a `# Title` line, then `Date: YYYY-MM-DD`), so two pull requests never edit the same lines. Do not add sections to `docs/STATUS.md`. `pnpm status:index` prints the index, newest first; `pnpm test:ci-config` checks every fragment.
 - Never put real patient data anywhere: not in the repository, not in tests, not in the dev database.
 - **A green run without the database and S3 tiers proves nothing about the schema.** Those tiers are skipped (with a printed notice) unless TEST_DATABASE_URL / TEST_S3_ENDPOINT are set. CI sets them and fails the job if a tier prints that notice. See docs/database.md.
 - The fake identity provider (packages/fake-idp) is TEST ONLY. Never deploy it, and never point production at it.

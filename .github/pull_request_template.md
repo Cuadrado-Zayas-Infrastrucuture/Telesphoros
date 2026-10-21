@@ -18,6 +18,7 @@
 - [ ] **Clinical hold unchanged:** nothing in this PR lifts or weakens a clinical hold. (If it does, it must name the sign-off.)
 - [ ] Clinical logic changes carry tests and a validation note in `docs/clinical-validation/`.
 - [ ] Database changes are a new numbered migration with a down file, and the database tier was run.
+- [ ] This PR adds one `docs/status/YYYY-MM-DD-slug.md` fragment (not a section in `docs/STATUS.md`), or changes nothing `docs/STATUS.md` would describe.
 
 ## Follow-ups
 
