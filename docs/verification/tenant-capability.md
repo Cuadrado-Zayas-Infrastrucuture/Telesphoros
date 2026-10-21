@@ -286,3 +286,7 @@ Each mutant was applied to `apps/backend/migrations/0032_tenant_binding_policies
 **Not a test failure, but noted:** M1 is caught by the migration's postcondition, not by T020. T020 has no independent control for a single policy left on the setting while the postcondition is present.
 
 **Not run:** M2 (ledger policy reverted), M17 (down migration omits a policy), and the M-A mutants for migration 0031.
+
+**Follow-up runs (same method):**
+- M2: a ledger policy left out of the up loop. The loop's own count assertion refuses the migration ("changed 47 policies, expected 48") before any policy is altered, so T020 is not the control that fires.
+- M17: the down loop omits the `patients` policy. The tenant-capability revert tests fail (2 of 56: the 0031 revert snapshot and the 0028 revert with the issuance log). The up path is unaffected.
