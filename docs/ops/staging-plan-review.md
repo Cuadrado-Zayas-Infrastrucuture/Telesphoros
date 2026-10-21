@@ -58,6 +58,11 @@ node scripts/staging/check-plan.mjs A infrastructure/terraform/.terraform/a.plan
 # Repeat with B/b.tfplan/b.plan.json and C/c.tfplan/c.plan.json at their respective stages.
 ```
 
+Stage C also reads `infrastructure/terraform/.terraform/verified-image.json`, the record `scripts/staging/verify-image.mjs` writes next to the saved
+plans ([image-push.md](image-push.md#before-setting-api_image-verify-the-signature)). It refuses the plan unless that record covers `api_image`, and
+`api_migrate_image` when set. The signature must come from this stack's key, `alias/<name_prefix>-<environment>-image-signing`, or the record must be a
+break-glass entry for synthetic staging. A break-glass entry is printed with its reason; production has none (INF-03, decision D3).
+
 The check rejects unrelated updates, deletions, replacements, drift, incomplete plans and changes beyond the four exact repository transitions. It does not apply anything, approve the plan, validate every created resource or estimate cost; the tables and human line-by-line review still apply. Do not print or commit saved plan JSON.
 
 Offline verification: `pnpm test:infra` checks the saved-plan action rules with synthetic before/after fixtures, including attempted permission expansion on every permitted policy address. `terraform test` checks the actual configured pull repositories before and after setting the image and that the four policies exist before C. Its independent empty-state plans and constant mocked policy JSON do **not** prove the A→B→C state transition or AWS's resulting plan; the saved-plan review remains required.

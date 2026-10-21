@@ -222,6 +222,15 @@ If Actions is down or out of minutes and a merge cannot wait: as a repository ad
 the one pull request, and **remove the bypass again at once**. Say so in that PR, with the reason. GitHub records ruleset edits in
 the repository's audit log, so the exception is visible afterwards instead of being a standing permission.
 
+**An unsigned image (INF-03, synthetic staging only).** If `release-image` cannot release and a synthetic staging change cannot wait, a person may
+push by hand and record `verify-image.mjs --unsigned-break-glass "<reason>"` ([image-push.md](image-push.md#break-glass-a-manual-push-synthetic-staging-only)).
+`check-plan.mjs` stage C then accepts the unsigned digest and prints the reason. Both scripts refuse it for production (decision D3). List each use here,
+as a line with the date, the digest and the reason, and release the same commit through CI once it is back:
+
+| Date | Digest | Reason |
+|---|---|---|
+| (none yet) | | |
+
 ### Turning it on
 
 1. Merge the PR that adds these files, and let CI run on `main` once. A check name can only be required after it has reported.

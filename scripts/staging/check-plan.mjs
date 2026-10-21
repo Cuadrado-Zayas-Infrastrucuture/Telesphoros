@@ -1,7 +1,10 @@
 // Read-only action check for saved FD-7 A/B/C plans. This does not approve a plan or inspect every resource setting.
+// Stage C also needs verified-image.json next to the plan, written by verify-image.mjs (INF-03 slice 3): every image the plan deploys was verified
+// against this stack's signing key, or recorded as break-glass for synthetic staging.
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { RECORD_FILE, RECORD_FORMAT, signingKeyAlias, validReason } from './verify-image.mjs';
 
 export const IMAGE_POLICY_UPDATES = [
   'aws_iam_role_policy.api_execution_service[0]',
@@ -37,7 +40,36 @@ function repositoryOnly(change, repository) {
   }
 }
 
-export function planProblems(plan, stage) {
+/** Why the verification record does not cover this plan's images (stage C). Never echoes record contents: only the plan's own values. */
+function recordProblems(record, variable, parts) {
+  const where = `${RECORD_FILE} (scripts/staging/verify-image.mjs)`;
+  if (!record || typeof record !== 'object' || Array.isArray(record)) return [`C needs ${where} next to the saved plan`];
+  if (record.format !== RECORD_FORMAT) return [`${RECORD_FILE} is not format ${RECORD_FORMAT}: run verify-image.mjs again`];
+  const problems = [];
+  const need = (ok, reason) => { if (!ok) problems.push(reason); };
+  need(record.environment === variable('environment'), `${RECORD_FILE} is for another environment`);
+  const images = Array.isArray(record.images) && record.images.every((image) => typeof image === 'string') ? record.images : null;
+  need(images, `${RECORD_FILE} images must be a list of image references`);
+  need(images?.includes(variable('api_image')), `api_image ${variable('api_image')} has no verification in ${RECORD_FILE}`);
+  const migrate = variable('api_migrate_image');
+  if (migrate) need(images?.includes(migrate), `api_migrate_image ${migrate} has no verification in ${RECORD_FILE}`);
+  if (record.method === 'signature') {
+    const alias = signingKeyAlias(variable('name_prefix'), variable('environment'));
+    need(record.keyAlias === alias, `${RECORD_FILE} was not verified with this stack's key ${alias}`);
+    const keyArn = parts ? new RegExp(`^arn:aws:kms:${variable('region')}:${parts[1]}:key/[a-z0-9-]+$`) : null;
+    need(keyArn?.test(record.keyArn ?? ''), `${RECORD_FILE} key ARN is not a KMS key in this stack's account and Region`);
+    need(/^v3\.\d+\.\d+$/.test(record.cosignVersion ?? ''), `${RECORD_FILE} was not made with cosign 3`);
+  } else if (record.method === 'break-glass') {
+    const production = [variable('environment'), variable('deployment_profile'), record.environment].includes('production');
+    need(!production, 'break-glass is never allowed for production (decision D3)');
+    need(validReason(record.reason), 'break-glass needs a reason: one line, 10 to 300 characters');
+  } else {
+    problems.push(`${RECORD_FILE} has an unknown method`);
+  }
+  return problems;
+}
+
+export function planProblems(plan, stage, record) {
   const problems = [];
   const need = (ok, reason) => { if (!ok) problems.push(reason); };
   if (!['A', 'B', 'C'].includes(stage)) return ['stage must be A, B or C'];
@@ -52,8 +84,10 @@ export function planProblems(plan, stage) {
   const image = variable('api_image');
   const parts = typeof image === 'string' && /^([0-9]{12})\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com\/([a-z0-9._/-]+)@sha256:[0-9a-f]{64}$/.exec(image);
   const repository = parts ? `arn:aws:ecr:${parts[2]}:${parts[1]}:repository/${parts[3]}` : null;
-  if (stage === 'C') need(parts && parts[2] === variable('region') && parts[3] !== 'none', 'C needs a digest-pinned image in the stack Region');
-  else need(image === '', 'A and B must have no api_image');
+  if (stage === 'C') {
+    need(parts && parts[2] === variable('region') && parts[3] !== 'none', 'C needs a digest-pinned image in the stack Region');
+    problems.push(...recordProblems(record, variable, parts));
+  } else need(image === '', 'A and B must have no api_image');
   need(!(plan.resource_drift ?? []).some((entry) => canonical(entry.change?.actions) !== canonical(['no-op'])), 'resource drift requires separate review');
   const seen = new Set();
   const updated = new Set();
@@ -82,10 +116,20 @@ export function planProblems(plan, stage) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     if (process.argv.length !== 4) throw new Error('usage: node scripts/staging/check-plan.mjs A|B|C plan.json');
-    const problems = planProblems(JSON.parse(readFileSync(process.argv[3], 'utf8')), process.argv[2]);
+    const plan = JSON.parse(readFileSync(process.argv[3], 'utf8'));
+    let record;
+    if (process.argv[2] === 'C') {
+      // Missing or unreadable is the same answer: no record. Its contents are never printed.
+      try { record = JSON.parse(readFileSync(join(dirname(resolve(process.argv[3])), RECORD_FILE), 'utf8')); } catch { record = undefined; }
+    }
+    const problems = planProblems(plan, process.argv[2], record);
     for (const problem of problems) console.error(problem);
     if (problems.length) process.exitCode = 1;
-    else console.log(`Stage ${process.argv[2]} action checks passed; line-by-line resource and cost review is still required.`);
+    else {
+      if (record?.method === 'break-glass') console.error(`BREAK-GLASS: UNSIGNED IMAGE accepted for stage C (synthetic staging). Reason: ${record.reason}`);
+      else if (record) console.log(`Stage C image check: signature verified for ${record.images.length} image(s) with ${record.keyAlias}.`);
+      console.log(`Stage ${process.argv[2]} action checks passed; line-by-line resource and cost review is still required.`);
+    }
   } catch {
     console.error('Cannot check plan: use A|B|C and a readable terraform show -json plan file.');
     process.exitCode = 1;

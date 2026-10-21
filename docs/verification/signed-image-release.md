@@ -82,3 +82,51 @@ A first attempt replaced the preconditions with `condition = true`. Terraform re
 One full-suite run hung for 14 minutes in `service-lifecycle.test.mjs` (watchdog timers) while the Mac slept: `uptime` advanced about 4 hours across it. Run alone at load 18: 8/8 in 11 s. Full suite again: 172/172.
 
 **Not verified (first apply, T019–T021):** the release job against real ECR and KMS (assumption A1 on `job_workflow_ref`, A2 the KMS signer, A3 referrers on ECR), and that the job is shown **skipped** on `main` with the variable unset (SC-004, after merge).
+
+## Slice 3: verify before apply (T014–T018), 2026-10-21
+
+**Scope.**
+
+- `scripts/staging/verify-image.mjs` (new), with its test;
+- `scripts/staging/check-plan.mjs` stage C, with its test;
+- docs: `image-push.md` (rewritten), `staging-plan-review.md`, `staging-rehearsal.md`, and the image break-glass log in `ci-cd.md`.
+
+**Nothing reached AWS.** No Terraform or workflow changed. The founder chose option (a): a record file bound to the stack's key alias, not a re-verification inside `check-plan`.
+
+**What it does.**
+
+| Piece | Behaviour |
+|---|---|
+| `verify-image.mjs` | Refuses malformed images before running any tool: a tag, a tag plus digest, a non-ECR image, images from two Regions. Requires cosign 3. Resolves `alias/<name_prefix>-<environment>-image-signing` to its ARN (`kms describe-key`), which must be an enabled `ECC_NIST_P256` / `SIGN_VERIFY` key in the image's account and Region. Runs `cosign verify --key awskms:///<ARN> --insecure-ignore-tlog` on each image. Requires exit 0 **and** every signed payload's `docker-manifest-digest` equal to the digest. Writes the record only if every image passes, atomically; a failure leaves an earlier record untouched. Rejects unknown, repeated or empty options |
+| Break-glass | `--unsigned-break-glass "<reason>"`: refused for `--environment production`. The reason must be one line of 10–300 characters. The record says `break-glass`. Neither cosign nor AWS runs; the reason is printed |
+| `check-plan.mjs` C | Reads `verified-image.json` next to the saved plan. Refuses it when it is missing, unreadable, of another format, or for another environment. Refuses it when it lacks `api_image`, or `api_migrate_image` when set. Refuses a key alias that is not the plan's `alias/<name_prefix>-<environment>-image-signing`, a key ARN outside the image's account or the plan's Region, and cosign other than 3. A break-glass record is refused for a production environment or profile, and needs a reason. Record contents are never printed, except an accepted break-glass reason |
+
+**Real cosign, not only stubs.** cosign v3.1.3 (darwin/arm64, the release checksum) ran against a local `registry:3` (the pinned digest), on the slice 2 OCI archive, with a file key:
+
+- right key: exit 0, and `signedDigests` returned the one payload, naming the digest;
+- another key: exit 1;
+- an unsigned digest (the amd64 manifest inside the index): exit 10;
+- the signed payload checked against that other digest: rejected.
+
+The stubs' exit codes and output shape match these results. The KMS path (`awskms:///`) has **not** run (A2, first apply).
+
+**Tests.**
+
+| Check | Result |
+|---|---|
+| `scripts/staging/verify-image.test.mjs` (new; imported by `test:infra`) | 4 tests. Stand-in `cosign`/`aws` record every argument: the exact `describe-key` and `verify` commands, the key **ARN** (not the alias), the Region. 19 refusal cases: an unsigned image; another key; one of two images unsigned; a payload for another digest; cosign exit 0 with empty, `[]` or text output; cosign 2; a missing, non-P-256, encryption or disabled key, or a key in another Region; a tag; a tag plus digest; a non-ECR image; two Regions; no image. Each writes no record and leaves an earlier one byte-identical. 6 argument cases; 7 break-glass refusals |
+| `scripts/staging/check-plan.test.mjs` | 7 tests (5 before). The existing stage C cases now pass a **valid** record, so each still fails for its own reason. 15 record refusals (SC-001), `api_migrate_image` refused when unverified and accepted when verified, break-glass refused for a production environment or profile. The CLI refuses a missing record, accepts a matching one, prints a break-glass reason, and never prints an unreadable record |
+| Broken copies | 12 of 12 turned the suite red: the payload digest not checked; cosign's exit ignored; verify by alias; break-glass allowed in production in either script; a disabled key; any cosign version; `api_migrate_image` unchecked; the key alias unchecked; a missing record accepted; any format; the key ARN unchecked. The restored suite is green |
+| The `verify` job, locally (Node 22.22.0) | install, typecheck, lint, test (backend 1747 passed, 256 skipped), build, `check:chunks`, `knowledge:verify --production`: all exit 0. `test:infra` **136/136**, `test:ci-config` **172/172** |
+| gitleaks 8.30.1 | No leaks, in the changed directories and on the commit |
+
+**Not run here:**
+
+- `test:ig`: Java 21 is not installed on this Mac;
+- the `terraform`, `terraform-lint`, service, image and browser jobs: no `.tf` file, workflow, image or application file changed.
+
+**Not verified (first apply, T019–T021):**
+
+- `verify-image.mjs` against real KMS and ECR;
+- that an operator's IAM identity has `kms:DescribeKey`/`kms:GetPublicKey` through the key policy's account delegation;
+- A1–A3.
