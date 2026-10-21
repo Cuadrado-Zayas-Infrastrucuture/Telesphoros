@@ -53,7 +53,7 @@
 
 ## Phase 3b: Slice 2b, issuer Terraform, written and never applied — **starts only after PR 189 merges**
 
-- [ ] T019 `infrastructure/terraform/issuer.tf`: the task, its own execution role and task role, its own secret readable only by those roles, and alarms. Guard tests with weakened-copy controls in `pnpm test:infra`
+- [x] T019 `infrastructure/terraform/issuer.tf`: the task, its own execution role and task role, its own secret readable only by those roles, and alarms. Guard tests with weakened-copy controls in `pnpm test:infra`. **Written, never applied.** Entry point and caller check settled in the addendum to `docs/design/plans/tenant-capability-issuer-transport.md`. Left for follow-ups: the issuer entry (`issuer/main.js`) and image line, the API client, and the provisioning task's `PROVISION_SECRET_ISSUER` wiring
 
 ## Phase 4: Slice 3, policies and definer functions read `app_tenant()` (US1, US2, US4) — needs D5
 
