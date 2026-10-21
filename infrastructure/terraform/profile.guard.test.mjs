@@ -62,6 +62,7 @@ export const EXPECTED_USES = {
     'skip_final_snapshot = local.synthetic': 1,
   },
   'iam.tf': { 'count = local.offsite_count': 2 },
+  'issuer.tf': { 'assign_public_ip = local.tasks_public_ip': 1, 'deletion_window_in_days = local.kms_deletion_days': 1, 'recovery_window_in_days = local.secret_recovery_days': 1 },
   'kms.tf': { 'count = local.offsite_count': 2, 'deletion_window_in_days = local.kms_deletion_days': 3 },
   'outputs.tf': { 'value = local.synthetic ? null : aws_iam_policy.backup_job[0].arn': 1, 'value = local.synthetic ? null : aws_kms_key.backup[0].arn': 1, 'value = local.synthetic ? null : aws_s3_bucket.backups[0].bucket': 1 },
   'registry.tf': { 'force_delete = local.synthetic': 1 },
