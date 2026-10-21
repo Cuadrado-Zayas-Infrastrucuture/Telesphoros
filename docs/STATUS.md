@@ -3,9 +3,9 @@
 Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
-## INF-03 spec: only the image CI built and scanned can be deployed (spec only, draft PR, 2026-10-20)
+## INF-03 spec: only the image CI built and scanned can be deployed (spec only, plan approved, draft PR, 2026-10-20)
 
-[Spec, plan and tasks](../specs/002-signed-image-release/spec.md) for closing INF-03 (High): CI pushes the exact archive its `image` job built, scanned and rehearsed, checks the digest, and signs it with an asymmetric AWS KMS key through cosign with **no** transparency-log upload (founder decision 2026-10-20); stage C refuses an `api_image` without a verified signature. Three slices (Terraform key and OIDC role, the CI job, verify-before-apply), all dormant or unapplied until the founder acts. Decisions D1–D5 open; plan not yet approved. No code, CI, Terraform or AWS change.
+[Spec, plan and tasks](../specs/002-signed-image-release/spec.md) for closing INF-03 (High): CI pushes the exact archive its `image` job built, scanned and rehearsed, checks the digest, and signs it with an asymmetric AWS KMS key through cosign with **no** transparency-log upload (founder decision 2026-10-20); stage C refuses an `api_image` without a verified signature. Three slices (Terraform key and OIDC role, the CI job, verify-before-apply), all dormant or unapplied until the founder acts. Plan approved by the founder 2026-10-20 with the recommended D1–D5; slices follow as their own draft PRs. No code, CI, Terraform or AWS change in this PR.
 
 ## Logging: declared service log groups and an allowlisted API log (draft PR, 2026-10-20)
 
