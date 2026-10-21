@@ -96,18 +96,18 @@ it('upgrades legacy rows unchanged and guards populated rollback before explicit
     await withAdmin(disposable.adminUrl, async c => {
       // 0021 and 0020 hold audit records (merge and patient-link decisions), so reverting them needs the same deliberate setting as the other audit migrations.
       await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
-      expect(await migrateDown(c, 15)).toEqual(['0028', '0027', '0026', '0025', '0024', '0023', '0022', '0021', '0020', '0019', '0018', '0017', '0016', '0015', '0014']);
+      expect(await migrateDown(c, 16)).toEqual(['0029', '0028', '0027', '0026', '0025', '0024', '0023', '0022', '0021', '0020', '0019', '0018', '0017', '0016', '0015', '0014']);
       await c.query(`RESET telesphoros.allow_audit_drop`);
       const p = (await c.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ($1,$2,'SYN-LEGACY') RETURNING id`, [tenant, actor])).rows[0].id;
       const row = (await c.query(`INSERT INTO reports (tenant_id,created_by,patient_id,type,original_filename,size_bytes)
         VALUES ($1,$2,$3,'vcf','legacy.vcf',100) RETURNING *`, [tenant, actor, p])).rows[0];
-      expect(await migrateUp(c)).toEqual(['0014', '0015', '0016', '0017', '0018', '0019', '0020', '0021', '0022', '0023', '0024', '0025', '0026', '0027', '0028']);
+      expect(await migrateUp(c)).toEqual(['0014', '0015', '0016', '0017', '0018', '0019', '0020', '0021', '0022', '0023', '0024', '0025', '0026', '0027', '0028', '0029']);
       const upgraded = (await c.query('SELECT * FROM reports WHERE id=$1 AND tenant_id=$2', [row.id, tenant])).rows[0];
       expect(upgraded).toEqual({ ...row, creation_request_id: null, creation_request_hash: null, upload_revision: expect.any(String) });
       // Keep the 0014 rollback guard under test at its own version boundary.
       // 0021 and 0020 hold audit records (merge and patient-link decisions), so reverting them needs the same deliberate setting as the other audit migrations.
       await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
-      expect(await migrateDown(c, 14)).toEqual(['0028', '0027', '0026', '0025', '0024', '0023', '0022', '0021', '0020', '0019', '0018', '0017', '0016', '0015']);
+      expect(await migrateDown(c, 15)).toEqual(['0029', '0028', '0027', '0026', '0025', '0024', '0023', '0022', '0021', '0020', '0019', '0018', '0017', '0016', '0015']);
       await c.query(`RESET telesphoros.allow_audit_drop`);
       // The only data loss here is retry metadata in this helper-owned disposable database.
       const key = randomUUID();
@@ -121,7 +121,7 @@ it('upgrades legacy rows unchanged and guards populated rollback before explicit
       await c.query("SELECT set_config('telesphoros.allow_report_retry_drop','yes',false)");
       expect(await migrateDown(c, 1)).toEqual(['0014']);
       expect((await c.query('SELECT count(*)::int AS n FROM reports WHERE tenant_id=$1', [tenant])).rows).toEqual([{ n: 2 }]);
-      expect(await migrateUp(c)).toEqual(['0014', '0015', '0016', '0017', '0018', '0019', '0020', '0021', '0022', '0023', '0024', '0025', '0026', '0027', '0028']);
+      expect(await migrateUp(c)).toEqual(['0014', '0015', '0016', '0017', '0018', '0019', '0020', '0021', '0022', '0023', '0024', '0025', '0026', '0027', '0028', '0029']);
       await assertSchemaAcceptance(c);
     });
   } finally { await disposable.drop(); }
@@ -141,7 +141,7 @@ describe('bounded migration lock contention', () => {
       cancellation.signal.throwIfAborted();
       await withAdmin(pg.adminUrl, async c => {
         await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
-        await migrateDown(c, 15); // 0021 and 0020 are audit migrations
+        await migrateDown(c, 16); // 0021 and 0020 are audit migrations
       });
     })();
     return preparing;
@@ -165,7 +165,7 @@ describe('bounded migration lock contention', () => {
         await blocker.query('ROLLBACK');
         await withAdmin(pg.adminUrl, async c => {
           expect((await c.query("SELECT 1 FROM information_schema.columns WHERE table_name='reports' AND column_name='creation_request_id'")).rows).toEqual([]);
-          expect(await migrateUp(c)).toEqual(['0014', '0015', '0016', '0017', '0018', '0019', '0020', '0021', '0022', '0023', '0024', '0025', '0026', '0027', '0028']);
+          expect(await migrateUp(c)).toEqual(['0014', '0015', '0016', '0017', '0018', '0019', '0020', '0021', '0022', '0023', '0024', '0025', '0026', '0027', '0028', '0029']);
           await assertSchemaAcceptance(c);
         });
       } finally { await blocker.end(); }

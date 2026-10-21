@@ -18,8 +18,10 @@
   },
   "include": [
     "src",
+    "durable",
     "test",
     "tsup.config.ts",
-    "vitest.config.mts"
+    "vitest.config.mts",
+    "vitest.durable.config.mts"
   ]
 }
