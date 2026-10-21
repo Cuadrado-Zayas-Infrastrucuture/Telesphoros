@@ -301,7 +301,7 @@ data "aws_iam_policy_document" "api_execution_migrate" {
 
 # The one-off provisioning task (db provision-logins). Two identities, as for every task here, and neither is the application's:
 #  - the EXECUTION role starts the task and injects the database administrator's credentials from the RDS-managed secret (username and password only);
-#  - the TASK role is what the command runs as: it can read and write exactly the four connection-string secrets, and it can NOT read the administrator secret.
+#  - the TASK role is what the command runs as: it can read and write exactly the five connection-string secrets (the session issuer's is the fifth), and it can NOT read the administrator secret.
 data "aws_iam_policy_document" "api_execution_provision" {
   count                   = local.api_count
   source_policy_documents = [data.aws_iam_policy_document.api_execution_common.json]
@@ -325,9 +325,9 @@ data "aws_iam_policy_document" "api_execution_provision" {
 data "aws_iam_policy_document" "api_provision_task" {
   count = local.api_count
   statement {
-    sid       = "ReadAndWriteTheFourConnectionStrings"
+    sid       = "ReadAndWriteTheFiveConnectionStrings"
     actions   = ["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue"]
-    resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn, aws_secretsmanager_secret.worker_database_url[0].arn]
+    resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn, aws_secretsmanager_secret.worker_database_url[0].arn, aws_secretsmanager_secret.issuer_database_url[0].arn]
   }
   statement {
     sid       = "UseTheDataKeyThroughSecretsManager"
@@ -501,8 +501,8 @@ resource "aws_ecs_task_definition" "api_migrate" {
   ])
 }
 
-# One-off, run by a person before the first migration and again after it (docs/ops/api-hosting.md): creates the four database logins with generated passwords and
-# writes their connection strings into the four secrets. The administrator's credentials come from the RDS-managed secret through the execution role; no password
+# One-off, run by a person before the first migration and again after it (docs/ops/api-hosting.md): creates the five database logins with generated passwords and
+# writes their connection strings into the five secrets (the session issuer's, PROVISION_SECRET_ISSUER, is the fifth: the command creates that login only when this names its secret). The administrator's credentials come from the RDS-managed secret through the execution role; no password
 # is typed, shown or kept in Terraform state. The connection strings it writes carry no TLS parameters (apps/backend/src/db/tls.ts).
 resource "aws_ecs_task_definition" "api_provision" {
   count                    = local.api_service_count
@@ -537,6 +537,7 @@ resource "aws_ecs_task_definition" "api_provision" {
         { name = "PROVISION_SECRET_VERIFIER", value = aws_secretsmanager_secret.api_ledger_verifier_url[0].arn },
         { name = "PROVISION_SECRET_MIGRATOR", value = aws_secretsmanager_secret.api_migrator_url[0].arn },
         { name = "PROVISION_SECRET_WORKER", value = aws_secretsmanager_secret.worker_database_url[0].arn },
+        { name = "PROVISION_SECRET_ISSUER", value = aws_secretsmanager_secret.issuer_database_url[0].arn },
       ]
       secrets = [
         { name = "PROVISION_ADMIN_USER", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:username::" },
