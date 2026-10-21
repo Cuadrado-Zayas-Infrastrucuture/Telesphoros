@@ -24,13 +24,17 @@ export interface IssuedCapability {
 
 export type CapabilityIssueFailure = 'invalid-token' | 'no-tenant' | 'invalid-request' | 'refused' | 'unavailable';
 
-/** Why a capability was not issued. The message never carries a token, a database message or an address; `detail` is the database's closed refusal code. */
+/**
+ * Why a capability was not issued. The message never carries a token, a database message or an address; `detail` is the database's closed refusal code.
+ * Nor does it carry the issuer's alarm phrase (alarm-phrase.spec.ts): `IssuerCore` alone writes the log lines issuer.tf's metric filters count, so a failure
+ * is counted once even if someone later logs `error.message`.
+ */
 export class CapabilityIssueError extends Error {
   constructor(
     readonly reason: CapabilityIssueFailure,
     readonly detail?: string,
   ) {
-    super(reason === 'invalid-token' ? 'Invalid token' : `Capability not issued: ${reason}`);
+    super(reason === 'invalid-token' ? 'Invalid token' : `Capability issuance failed: ${reason}`);
   }
 }
 
