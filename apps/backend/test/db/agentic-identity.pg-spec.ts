@@ -217,7 +217,14 @@ describe('the capability decides who is asking, not the settings or the caller d
     const binding = { tenant: w.tenant, actor: w.actor, capability };
     expect(await app(binding, (c) => read(c, runId, { ...w.caller, tenantId: other.tenant }))).toEqual(REFUSED);
     expect(await app(binding, (c) => read(c, runId, { ...w.caller, requesterRef: other.actor }))).toEqual(REFUSED);
+    // The same on cancel and admit: the document is compared on every entry point, not only on read. Without this, a mutant that drops the
+    // comparison from cancel or admit leaves the database refusing nothing here, because the capability already says who is asking.
+    expect(await app(binding, (c) => cancel(c, runId, { ...w.caller, tenantId: other.tenant }))).toEqual(REFUSED);
+    expect(await app(binding, (c) => cancel(c, runId, { ...w.caller, requesterRef: other.actor }))).toEqual(REFUSED);
+    expect(await app(binding, (c) => admit(c, 'p2b/doc', { ...w.caller, tenantId: other.tenant }))).toEqual(REFUSED);
+    expect(await app(binding, (c) => admit(c, 'p2b/doc', { ...w.caller, requesterRef: other.actor }))).toEqual(REFUSED);
     expect(await app(binding, (c) => read(c, runId, w.caller))).toEqual({ kind: 'ok', value: null });
+    expect(await counts(w.tenant)).toMatchObject({ runs: 1, outcomes: 0 }); // the refused cancels settled nothing, the refused admits wrote nothing
     await settle(w, runId);
   });
 
