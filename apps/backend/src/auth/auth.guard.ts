@@ -2,7 +2,8 @@ import { type CanActivate, type ExecutionContext, Injectable } from '@nestjs/com
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import { AppException } from '../common/app-exception';
-import { bindRequestAuthority } from './authority-context';
+import { RequestCapabilities } from '../issuer/request-capabilities';
+import { bindRequestAuthority, duringAdmission } from './authority-context';
 import { IS_PUBLIC_KEY } from './decorators';
 import { MembershipService } from './membership.service';
 import { NoTenantError, TokenVerifier } from './token-verifier';
@@ -16,6 +17,7 @@ export class AuthGuard implements CanActivate {
     private readonly verifier: TokenVerifier,
     private readonly membership: MembershipService,
     private readonly audit: SecurityAuditStore,
+    private readonly capabilities: RequestCapabilities,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -48,9 +50,12 @@ export class AuthGuard implements CanActivate {
     // The token was verified (this does not yet say the membership allows anything: that is the next step).
     await this.audit.record({ type: 'api-auth', outcome: 'accepted', tenantId: identity.tenantId, actorSub: identity.sub, routeKey, subjectId: null, requestId: String(req.id) });
     // The token proved who this is. What they may do now comes from the membership row, read fresh (a throw here is a refusal, never a guess).
-    const { principal, version } = await this.membership.resolve(identity);
+    // This lookup is the request's first transaction and cannot carry a capability: the issuer needs the membership version it reads.
+    const { principal, version } = await duringAdmission(() => this.membership.resolve(identity));
     req.principal = principal;
     bindRequestAuthority({ sub: principal.sub, version });
+    // One capability for the whole request (DATA-01 FR-011), from here on. Never fails the request while the binding mode is `guc`.
+    await this.capabilities.obtain({ accessToken: token, membershipVersion: version, requestId: String(req.id) });
     return true;
   }
 }

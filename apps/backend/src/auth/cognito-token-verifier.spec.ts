@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:net';
 import { DEFAULT_USERS, type FakeIdp, startFakeIdp } from '@telesphoros/fake-idp';
-import { SignJWT } from 'jose';
+import { invalidTokenCases, noTenantCases } from '../../test/helpers/token-rejections';
 import { CognitoTokenVerifier } from './cognito-token-verifier';
 import { InvalidTokenError, NoTenantError } from './token-verifier';
 
@@ -86,43 +86,13 @@ describe('CognitoTokenVerifier: the tenant (exactly one "tenant:<id>" group)', (
 });
 
 describe('CognitoTokenVerifier: rejects', () => {
-  it.each([
-    ['an ID token (the API takes access tokens only)', () => idp.mintIdToken()],
-    ['an otherwise-valid token whose token_use is "id" (isolates the token_use check from the missing client_id)', () => idp.mintAccessToken({ claims: { token_use: 'id' } })],
-    ['a token with no token_use', () => idp.mintAccessToken({ omit: ['token_use'] })],
-    ['a token for a different app client', () => idp.mintAccessToken({ claims: { client_id: 'someone-elses-client' } })],
-    ['a token with no client_id', () => idp.mintAccessToken({ omit: ['client_id'] })],
-    ['a token from a different issuer', () => idp.mintAccessToken({ claims: { iss: 'https://cognito-idp.us-east-1.amazonaws.com/us-east-1_Other' } })],
-    ['an expired token', () => idp.mintAccessToken({ issuedAtOffsetSeconds: -7200, expiresInSeconds: 60 })],
-    ['a token issued more than an hour ago', () => idp.mintAccessToken({ issuedAtOffsetSeconds: -4000, expiresInSeconds: 7200 })],
-    ['a token with no subject', () => idp.mintAccessToken({ omit: ['sub'] })],
-    ['a token with an empty subject', () => idp.mintAccessToken({ claims: { sub: '' } })],
-    ['a token with no expiry', () => idp.mintAccessToken({ omit: ['exp'] })],
-    ['a token with no issued-at', () => idp.mintAccessToken({ omit: ['iat'] })],
-    ['a forgery signed by a key we do not publish (same key id)', () => idp.mintAccessToken({ signWith: 'foreign' })],
-    ['a token naming a key id the pool never published', () => idp.mintAccessToken({ kid: 'not-a-real-key' })],
-  ])('%s', async (_name, make) => {
+  // The table is shared with the session issuer's spec (DATA-01 T013), which must refuse exactly the same tokens.
+  it.each(invalidTokenCases(() => idp, 'app-client'))('%s', async (_name, make) => {
     await rejects(await make());
   });
 
-  it('the algorithm-confusion attack: HS256 signed with the PUBLIC key as the secret', async () => {
-    const jwk = idp.publicJwks().keys[0]!;
-    const forged = await new SignJWT({ sub: alice!.sub, iss: idp.issuer, client_id: 'app-client', token_use: 'access', 'cognito:groups': ['admin'] })
-      .setProtectedHeader({ alg: 'HS256', kid: jwk.kid })
-      .setIssuedAt()
-      .setExpirationTime('10m')
-      .sign(new TextEncoder().encode(JSON.stringify(jwk)));
-    await rejects(forged);
-  });
-
-  it('an unsigned (alg "none") token claiming to be an admin', async () => {
-    const part = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
-    const now = Math.floor(Date.now() / 1000);
-    await rejects(`${part({ alg: 'none', typ: 'JWT' })}.${part({ sub: alice!.sub, iss: idp.issuer, client_id: 'app-client', token_use: 'access', iat: now, exp: now + 600, 'cognito:groups': ['admin'] })}.`);
-  });
-
-  it.each(['', 'abc', 'a.b.c', 'a.b', '....'])('garbage input (%j)', async (garbage) => {
-    await rejects(garbage);
+  it.each(noTenantCases(() => idp))('a genuine token is refused with NoTenantError, not "Invalid token": %s', async (_name, make) => {
+    await expect(verifier().verify(await make())).rejects.toBeInstanceOf(NoTenantError);
   });
 });
 

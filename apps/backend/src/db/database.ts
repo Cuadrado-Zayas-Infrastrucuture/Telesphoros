@@ -1,8 +1,9 @@
 import { Logger } from '@nestjs/common';
 import { Pool, type PoolClient } from 'pg';
-import { currentRequestAuthority } from '../auth/authority-context';
+import { capabilityAbsentReason, currentRequestAuthority, currentRequestCapability, isAdmitting } from '../auth/authority-context';
 import { assertSessionCurrent } from '../auth/session-admission';
 import { AppException } from '../common/app-exception';
+import { CapabilityCounter, type CapabilityStats } from './capability-counter';
 import { migrationReadiness, pendingMigrations, type MigrationReadiness } from './migrator';
 import { pgClientConfig } from './tls';
 import type { SecurityAuditEvent } from '../auth/security-audit';
@@ -36,6 +37,9 @@ export interface TenantWorkOptions {
  * (transaction-local, so it cannot leak to the next request on a pooled connection). The row-level
  * security policies read that setting: if it is missing, the application role sees no rows.
  *
+ * It also sets `app.capability` (DATA-01), the request's issuer-minted proof, on every call and likewise transaction-locally. Nothing reads it yet: the
+ * binding mode is `guc`, so a transaction without one runs exactly as before and is counted (`capabilityStats`).
+ *
  * Commit boundary for people (docs/auth.md): when the work runs for a request, and the transaction WROTE anything, the caller's membership
  * row is locked SHARED and compared with the version the request was admitted under just before COMMIT. A removal or role change waits for
  * that lock, so a write either commits before the change commits or is rolled back; none commits after it. Read-only transactions skip
@@ -51,6 +55,7 @@ export class Database {
    */
   onAuthorityRefused?: (tenantId: string, sub: string) => Promise<void>;
   private readonly pool: Pool;
+  private readonly capabilities = new CapabilityCounter();
 
   constructor(options: DatabaseOptions) {
     this.pool = new Pool({
@@ -81,6 +86,7 @@ export class Database {
       await client.query('BEGIN');
       await client.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
       if (actor !== undefined) await client.query(`SELECT set_config('app.current_actor', $1, true)`, [actor]);
+      await this.bindCapability(client);
       const result = await work(client);
       if (!(await this.authorityStillCurrent(client, tenantId))) {
         refused = currentRequestAuthority();
@@ -100,6 +106,24 @@ export class Database {
     } finally {
       client.release(discard);
     }
+  }
+
+  /**
+   * The request's capability, if it has one, goes in after BEGIN with is_local = true, so the next transaction on this pooled connection cannot see it.
+   * An expired one is still set (the database decides, and from slice 3 fails closed) but counted as missing. The guard's own membership lookup runs
+   * before a capability can exist, so it is not counted at all.
+   */
+  private async bindCapability(client: PoolClient): Promise<void> {
+    const capability = currentRequestCapability();
+    if (capability) await client.query(`SELECT set_config('app.capability', $1, true)`, [capability.token]);
+    if (isAdmitting()) return;
+    if (capability && capability.expiresAt.getTime() > Date.now()) this.capabilities.recordBound();
+    else this.capabilities.recordMissing(capability ? 'expired' : (capabilityAbsentReason() ?? 'absent'));
+  }
+
+  /** Transactions with and without a capability since this process started, with the reason for each miss. */
+  capabilityStats(): CapabilityStats {
+    return this.capabilities.snapshot();
   }
 
   /** False for changed membership; throws 401/503 for refused/unavailable session admission. Reads keep admission-time semantics. */
