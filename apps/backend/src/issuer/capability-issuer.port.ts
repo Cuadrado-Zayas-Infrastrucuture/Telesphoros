@@ -7,8 +7,6 @@ export const REQUEST_PURPOSE = 'request';
 export interface CapabilityIssueRequest {
   /** The caller's Cognito access token, which the issuer verifies for itself. Never logged, never stored. */
   accessToken: string;
-  /** The version of the membership row the API read when it admitted the request. The database refuses the issuance if the row has moved on since. */
-  membershipVersion: number;
   /** The request's correlation id, written to the issuance log so an issuance can be matched to the request. */
   requestId: string;
 }
@@ -17,6 +15,11 @@ export interface IssuedCapability {
   /** The raw token. It exists here and in the request's memory only; the database keeps its sha256. */
   token: string;
   expiresAt: Date;
+  /**
+   * The version of the person's membership the DATABASE read when it issued (migration 0031), stamped on the capability. The caller does not supply one:
+   * it asks for the capability first and learns the version from the answer, so no lookup has to run before the capability exists.
+   */
+  membershipVersion: number;
 }
 
 export type CapabilityIssueFailure = 'invalid-token' | 'no-tenant' | 'invalid-request' | 'refused' | 'unavailable';

@@ -55,9 +55,9 @@ async function present(who: string, options: { signWith?: 'foreign' } = {}) {
   presented.push(token);
   return token;
 }
-async function ask(running: RunningIssuer, requestId: string, over: { who?: string; version?: number; accessToken?: string } = {}) {
+async function ask(running: RunningIssuer, requestId: string, over: { who?: string; accessToken?: string } = {}) {
   const who = over.who ?? 'alice';
-  const reply = await call(running, { accessToken: over.accessToken ?? (await present(who)), membershipVersion: over.version ?? (await versionOf(user(who).sub)), requestId });
+  const reply = await call(running, { accessToken: over.accessToken ?? (await present(who)), requestId });
   const parsed = JSON.parse(reply.text) as Record<string, string>;
   if (typeof parsed.token === 'string') minted.push(parsed.token);
   return { status: reply.status, body: parsed, text: reply.text };
@@ -76,8 +76,8 @@ beforeAll(async () => {
   idp = await startFakeIdp({ clientId: 'app-client' });
   await owner(async (c) => {
     for (const tenant of ['alpha', 'beta']) await registerTenantRow(c, tenant);
-    for (const [tenant, name] of [['alpha', 'alice'], ['beta', 'bob']] as const) {
-      await c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ($1, $2, 'active', ARRAY['clinician'], 'test')`, [tenant, user(name).sub]);
+    for (const [tenant, name, status] of [['alpha', 'alice', 'active'], ['beta', 'bob', 'active'], ['alpha', 'carol', 'removed']] as const) {
+      await c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ($1, $2, $3, ARRAY['clinician'], 'test')`, [tenant, user(name).sub, status]);
     }
   });
   issuer = await startIssuer(loadIssuerEnv(envFor(db.issuerUrl)), { host: '127.0.0.1', port: 0 });
@@ -98,7 +98,8 @@ describe('the positive control', () => {
     expect(live.status).toBe(200);
     const reply = await ask(issuer!, 'req-srv-ok-01');
     expect(reply.status).toBe(200);
-    expect(Object.keys(reply.body).sort()).toEqual(['expiresAt', 'token']);
+    expect(Object.keys(reply.body).sort()).toEqual(['expiresAt', 'membershipVersion', 'token']);
+    expect(reply.body.membershipVersion).toBe(await versionOf(user('alice').sub)); // the version the database read, not one the caller named
     expect(reply.body.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(new Date(reply.body.expiresAt!).getTime()).toBeGreaterThan(Date.now());
     expect(await logRows('req-srv-ok-01')).toEqual([{ outcome: 'issued', reason: null, tenant_id: 'alpha' }]);
@@ -117,16 +118,15 @@ describe('the positive control', () => {
 });
 
 describe('refusals through the real server, each followed by the control', () => {
-  it('a membership that moved since the API read it: 403 refused, with the database\'s code, one log row, no capability, and the alarm phrase once', async () => {
-    const stale = (await versionOf(user('alice').sub)) + 5;
+  it('a removed member: 403 refused, with the database\'s code, one log row, no capability, and the alarm phrase once', async () => {
     const before = lines.filter((l) => l.includes('Capability not issued: refused (membership-not-current)')).length;
-    const reply = await ask(issuer!, 'req-srv-refused-01', { version: stale });
+    const reply = await ask(issuer!, 'req-srv-refused-01', { who: 'carol' });
     expect(reply.status).toBe(403);
     expect(reply.body).toEqual({ error: 'refused', detail: 'membership-not-current' });
     expect(await logRows('req-srv-refused-01')).toEqual([{ outcome: 'refused', reason: 'membership-not-current', tenant_id: 'alpha' }]);
     expect(await capabilityRows('req-srv-refused-01')).toBe(0);
     expect(lines.filter((l) => l.includes('Capability not issued: refused (membership-not-current)')).length).toBe(before + 1);
-    expect((await ask(issuer!, 'req-srv-refused-02')).status).toBe(200);
+    expect((await ask(issuer!, 'req-srv-refused-02')).status).toBe(200); // control
   });
 
   it('a token signed by a key the pool never published: 401, and the database is not touched', async () => {
@@ -139,7 +139,7 @@ describe('refusals through the real server, each followed by the control', () =>
   });
 
   it('a genuine token for a user who belongs to no tenant: 403 no-tenant, and the database is not touched', async () => {
-    const reply = await ask(issuer!, 'req-srv-notenant-01', { who: 'erin', version: 1 });
+    const reply = await ask(issuer!, 'req-srv-notenant-01', { who: 'erin' });
     expect(reply.status).toBe(403);
     expect(reply.body).toEqual({ error: 'no-tenant' });
     expect(await logRows('req-srv-notenant-01')).toEqual([]);
@@ -148,8 +148,9 @@ describe('refusals through the real server, each followed by the control', () =>
 
   it('a request the server refuses on its shape never reaches the verifier or the database', async () => {
     const before = await owner(async (c) => Number((await c.query('SELECT count(*) AS n FROM capability_issuance_log')).rows[0].n));
-    expect((await call(issuer!, { accessToken: await present('alice'), membershipVersion: 1, requestId: 'req-srv-shape-01', tenant: 'beta' })).status).toBe(400);
-    expect((await call(issuer!, { accessToken: await present('alice'), membershipVersion: 1, requestId: 'req-srv-shape-02' }, { 'content-type': 'text/plain' })).status).toBe(415);
+    expect((await call(issuer!, { accessToken: await present('alice'), requestId: 'req-srv-shape-01', tenant: 'beta' })).status).toBe(400);
+    expect((await call(issuer!, { accessToken: await present('alice'), requestId: 'req-srv-shape-02' }, { 'content-type': 'text/plain' })).status).toBe(415);
+    expect((await call(issuer!, { accessToken: await present('alice'), requestId: 'req-srv-shape-04', membershipVersion: 1 })).status).toBe(400); // a caller cannot name a version
     expect(await owner(async (c) => Number((await c.query('SELECT count(*) AS n FROM capability_issuance_log')).rows[0].n))).toBe(before);
     expect((await ask(issuer!, 'req-srv-shape-03')).status).toBe(200);
   });
@@ -159,7 +160,7 @@ describe('the issuer fails closed when its database does', () => {
   it('answers 503 for a login the database refuses, once in the log under the alarm phrase, with no password, token or address in the answer or the log', async () => {
     const before = lines.filter((l) => l.includes('Capability not issued: unavailable')).length;
     const access = await present('alice');
-    const reply = await call(broken!, { accessToken: access, membershipVersion: 1, requestId: 'req-srv-down-01' });
+    const reply = await call(broken!, { accessToken: access, requestId: 'req-srv-down-01' });
     expect(reply.status).toBe(503);
     expect(JSON.parse(reply.text)).toEqual({ error: 'unavailable' });
     expect(lines.filter((l) => l.includes('Capability not issued: unavailable')).length).toBe(before + 1);

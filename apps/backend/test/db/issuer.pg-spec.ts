@@ -38,13 +38,9 @@ const logRows = (requestId: string) => owner(async (c) => (await c.query(`SELECT
 const versionOf = (sub: string) => owner(async (c) => Number((await c.query('SELECT version FROM tenant_memberships WHERE sub = $1', [sub])).rows[0].version));
 const everything = () => captured.join('');
 
-async function issue(over: { who?: string; version?: number; requestId: string; accessToken?: string }) {
+async function issue(over: { who?: string; requestId: string; accessToken?: string }) {
   const who = user(over.who ?? 'alice');
-  const issued = await core.issue({
-    accessToken: over.accessToken ?? (await present(who)),
-    membershipVersion: over.version ?? (await versionOf(who.sub)),
-    requestId: over.requestId,
-  });
+  const issued = await core.issue({ accessToken: over.accessToken ?? (await present(who)), requestId: over.requestId });
   minted.push(issued!.token);
   return issued!;
 }
@@ -76,8 +72,8 @@ beforeAll(async () => {
   idp = await startFakeIdp({ clientId: 'app-client' });
   await owner(async (c) => {
     for (const tenant of ['alpha', 'beta']) await registerTenantRow(c, tenant);
-    for (const [tenant, name] of [['alpha', 'alice'], ['beta', 'bob']] as const) {
-      await c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ($1, $2, 'active', ARRAY['clinician'], 'test')`, [tenant, user(name).sub]);
+    for (const [tenant, name, status] of [['alpha', 'alice', 'active'], ['beta', 'bob', 'active'], ['alpha', 'carol', 'removed']] as const) {
+      await c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ($1, $2, $3, ARRAY['clinician'], 'test')`, [tenant, user(name).sub, status]);
     }
   });
   store = new PgCapabilityIssueStore({ url: db.issuerUrl, ssl: 'disable' });
@@ -124,10 +120,19 @@ describe('one issuance, one row, no token (SC-006)', () => {
     expect(await appTenantFor(other.token)).toBe('beta');
   });
 
-  it('a refused issuance (the membership moved since the API read it) is also exactly one row, with a closed reason and no capability', async () => {
-    const stale = (await versionOf(user('alice').sub)) + 5;
+  it('returns the version the database read, and it moves with the membership (the caller never names one)', async () => {
+    const first = await issue({ requestId: 'req-issuer-version-01' });
+    expect(first.membershipVersion).toBe(await versionOf(user('alice').sub));
+    await owner((c) => c.query(`UPDATE tenant_memberships SET roles = ARRAY['reader'], changed_by = 'test' WHERE sub = $1`, [user('alice').sub]));
+    const second = await issue({ requestId: 'req-issuer-version-02' });
+    expect(second.membershipVersion).toBe(first.membershipVersion + 1);
+    expect(second.membershipVersion).toBe(await versionOf(user('alice').sub));
+    expect((await logRows('req-issuer-version-02'))[0]).toMatchObject({ membership_version: String(second.membershipVersion) });
+  });
+
+  it('a removed member is refused as one row with a closed reason and no capability, and an active member is issued in the same run (control)', async () => {
     const error = await core
-      .issue({ accessToken: await present(user('alice')), membershipVersion: stale, requestId: 'req-issuer-refused-01' })
+      .issue({ accessToken: await present(user('carol')), requestId: 'req-issuer-refused-01' })
       .then(() => undefined, (e: unknown) => e);
     expect(error).toBeInstanceOf(CapabilityIssueError);
     expect(error).toMatchObject({ reason: 'refused', detail: 'membership-not-current' });
@@ -136,12 +141,13 @@ describe('one issuance, one row, no token (SC-006)', () => {
     expect(rows[0]).toMatchObject({ outcome: 'refused', reason: 'membership-not-current', tenant_id: 'alpha' });
     expect(await owner(async (c) => (await c.query(`SELECT count(*)::int AS n FROM tenant_capabilities WHERE request_id = $1`, ['req-issuer-refused-01'])).rows[0].n)).toBe(0);
     expect(everything()).toContain('membership-not-current'); // the issuer does say why it refused, and the capture sees it
+    expect((await issue({ requestId: 'req-issuer-refused-02' })).token).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 
   it('a token the verifier refuses reaches the database as nothing at all: no row', async () => {
     const before = await owner(async (c) => (await c.query('SELECT count(*)::int AS n FROM capability_issuance_log')).rows[0].n);
     const forged = await present(user('alice'), { signWith: 'foreign' });
-    await expect(core.issue({ accessToken: forged, membershipVersion: 1, requestId: 'req-issuer-forged-1' })).rejects.toMatchObject({ reason: 'invalid-token' });
+    await expect(core.issue({ accessToken: forged, requestId: 'req-issuer-forged-1' })).rejects.toMatchObject({ reason: 'invalid-token' });
     expect(await logRows('req-issuer-forged-1')).toHaveLength(0);
     expect(await owner(async (c) => (await c.query('SELECT count(*)::int AS n FROM capability_issuance_log')).rows[0].n)).toBe(before);
     await issue({ requestId: 'req-issuer-forged-2' }); // control: a valid one adds exactly one
@@ -166,7 +172,7 @@ describe('the issuer fails closed when its database does', () => {
     try {
       const failing = new IssuerCore(new CognitoTokenVerifier({ issuer: idp.issuer, clientId: 'app-client', cooldownMs: 0 }), broken);
       const access = await present(user('alice'));
-      await expect(failing.issue({ accessToken: access, membershipVersion: 1, requestId: 'req-issuer-down-01' })).rejects.toMatchObject({ reason: 'unavailable' });
+      await expect(failing.issue({ accessToken: access, requestId: 'req-issuer-down-01' })).rejects.toMatchObject({ reason: 'unavailable' });
       expect(everything()).not.toContain('wrong-password-9d41');
       expect(everything()).not.toContain(access);
     } finally {

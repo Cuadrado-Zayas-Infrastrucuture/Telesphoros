@@ -3,7 +3,7 @@ import { Client } from 'pg';
 import { migrateDown, migrateUp } from '../../src/db/migrator';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { registerTenantRow } from '../helpers/membership';
-import { revertAbove, versionsFrom } from '../helpers/migration-history';
+import { revertAbove, revertThrough, versionsFrom } from '../helpers/migration-history';
 
 /**
  * DATA-01 slice 1 (specs/001-tenant-capability, migration 0028): the tenant capability exists, only the issuer can mint one, and the database resolves
@@ -47,6 +47,23 @@ async function issue(input: { tenant?: string; sub?: string; version?: number; p
     const { rows } = await c.query<{ expires_at: Date | null; refusal: string | null }>('SELECT * FROM tenant_capability_issue($1, $2, $3, $4, $5, $6)', [
       input.tenant ?? 'org-alpha', input.sub ?? 'alice', input.version ?? 1, input.purpose ?? 'request', input.hash ?? hashOf(value), input.request === undefined ? 'req-00000001' : input.request,
     ]);
+    return { token: value, ...rows[0]! };
+  } finally {
+    await c.end();
+  }
+}
+
+/** Mints through the issuer login with the CURRENT-version function (migration 0031): the caller no longer names a version. */
+async function issueCurrent(input: { tenant?: string | null; sub?: string | null; purpose?: string; hash?: Buffer | null; request?: string | null } = {}) {
+  const value = token();
+  const c = new Client({ connectionString: db.issuerUrl });
+  await c.connect();
+  try {
+    const { rows } = await c.query<{ expires_at: Date | null; refusal: string | null; membership_version: string | null }>(
+      'SELECT * FROM tenant_capability_issue_current($1, $2, $3, $4, $5)',
+      [input.tenant === undefined ? 'org-alpha' : input.tenant, input.sub === undefined ? 'alice' : input.sub, input.purpose ?? 'request',
+        input.hash === undefined ? hashOf(value) : input.hash, input.request === undefined ? 'req-00000002' : input.request],
+    );
     return { token: value, ...rows[0]! };
   } finally {
     await c.end();
@@ -261,8 +278,231 @@ describe('sweeping expired capabilities', () => {
   });
 });
 
-describe('reverting 0028', () => {
-  it('refuses while the issuance log holds a record, reverts with the explicit setting, and re-applies', async () => {
+describe('issuing at the CURRENT membership version (migration 0031, DATA-01 slice 3 PR A)', () => {
+  const sub = 'dora';
+  const request = () => `req-${randomBytes(6).toString('hex')}`;
+  const versionOf = (who: string, tenant = 'org-alpha') => owner(async (c) => (await c.query<{ version: string }>('SELECT version FROM tenant_memberships WHERE tenant_id = $1 AND sub = $2', [tenant, who])).rows[0]!.version);
+  const logFor = (id: string) => owner(async (c) => (await c.query('SELECT outcome, reason, membership_version, tenant_id, sub FROM capability_issuance_log WHERE request_id = $1', [id])).rows);
+  const mintedFor = (id: string) => owner(async (c) => (await c.query('SELECT count(*)::int AS n FROM tenant_capabilities WHERE request_id = $1', [id])).rows[0].n as number);
+
+  beforeAll(async () => {
+    await owner(async (c) => {
+      await c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ('org-alpha', $1, 'active', ARRAY['reader'], 'test')`, [sub]);
+      // two changes, so the current version is not the first one (a function that always answered 1 would pass otherwise)
+      await c.query(`UPDATE tenant_memberships SET roles = ARRAY['clinician'], changed_by = 'test' WHERE tenant_id = 'org-alpha' AND sub = $1`, [sub]);
+      await c.query(`UPDATE tenant_memberships SET roles = ARRAY['reader', 'clinician'], changed_by = 'test' WHERE tenant_id = 'org-alpha' AND sub = $1`, [sub]);
+    });
+  });
+
+  it('positive control: mints for an active member, stamps the version it read, and returns it', async () => {
+    const current = await versionOf(sub);
+    expect(Number(current)).toBeGreaterThanOrEqual(3);
+    const id = request();
+    const result = await issueCurrent({ sub, request: id });
+    expect(result.refusal).toBeNull();
+    expect(result.expires_at).toBeInstanceOf(Date);
+    expect(result.membership_version).toBe(current);
+    const row = await owner(async (c) => (await c.query('SELECT membership_version, tenant_id, sub, purpose FROM tenant_capabilities WHERE token_hash = $1', [hashOf(result.token)])).rows[0]);
+    expect(row).toEqual({ membership_version: current, tenant_id: 'org-alpha', sub, purpose: 'request' });
+    expect(await logFor(id)).toEqual([{ outcome: 'issued', reason: null, membership_version: current, tenant_id: 'org-alpha', sub }]);
+  });
+
+  it('follows the membership: after a change the next capability carries the new version, and the old one keeps the version it was issued at', async () => {
+    const before = await issueCurrent({ sub });
+    await owner((c) => c.query(`UPDATE tenant_memberships SET roles = ARRAY['reader'], changed_by = 'test' WHERE tenant_id = 'org-alpha' AND sub = $1`, [sub]));
+    const after = await issueCurrent({ sub });
+    expect(Number(after.membership_version)).toBe(Number(before.membership_version) + 1);
+    expect(after.membership_version).toBe(await versionOf(sub));
+    const stored = await owner(async (c) => (await c.query('SELECT token_hash, membership_version FROM tenant_capabilities WHERE token_hash = ANY($1) ORDER BY issued_at', [[hashOf(before.token), hashOf(after.token)]])).rows);
+    expect(stored.map((r) => r.membership_version)).toEqual([before.membership_version, after.membership_version]);
+  });
+
+  it.each([
+    ['a removed person', { sub: 'carol' }, 'membership-not-current'],
+    ['a person of another organization', { tenant: 'org-beta' }, 'membership-not-current'],
+    ['a person who never existed', { sub: 'nobody-at-all' }, 'membership-not-current'],
+    ['a suspended organization', { tenant: 'org-gamma', sub: 'gina' }, 'tenant-inactive'],
+    ['an unknown organization', { tenant: 'org-nowhere' }, 'tenant-inactive'],
+    ['an unknown purpose', { purpose: 'anything' }, 'unknown-purpose'],
+    ['a hash that is not 32 bytes', { hash: randomBytes(31) }, 'malformed'],
+    ['no hash', { hash: null }, 'malformed'],
+    ['no organization', { tenant: null }, 'malformed'],
+    ['no person', { sub: null }, 'malformed'],
+  ] as const)('refuses %s, mints nothing and logs one closed reason (then, as a control, the same login mints for an active member)', async (_why, input, reason) => {
+    const id = request();
+    const result = await issueCurrent({ ...input, request: id });
+    expect(result).toMatchObject({ expires_at: null, refusal: reason, membership_version: null });
+    expect(await mintedFor(id)).toBe(0);
+    const logged = await logFor(id);
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toMatchObject({ outcome: 'refused', reason });
+    // positive control in the same run: the refusal is about the input, not a dead function
+    const control = request();
+    expect((await issueCurrent({ sub, request: control })).refusal).toBeNull();
+    expect(await mintedFor(control)).toBe(1);
+  });
+
+  it('logs a person with no active membership at version 0 (no membership has one), and an active member of an inactive organization at their real version', async () => {
+    for (const input of [{ sub: 'carol' }, { sub: 'nobody-at-all' }, { tenant: 'org-beta' }] as const) {
+      const id = request();
+      expect((await issueCurrent({ ...input, request: id })).refusal).toBe('membership-not-current');
+      expect((await logFor(id))[0]).toMatchObject({ membership_version: '0' });
+    }
+    const id = request();
+    expect((await issueCurrent({ tenant: 'org-gamma', sub: 'gina', request: id })).refusal).toBe('tenant-inactive');
+    expect((await logFor(id))[0]).toMatchObject({ membership_version: await versionOf('gina', 'org-gamma') }); // control: the log does hold real versions
+  });
+
+  it('a removed person is refused for the reason of the removal, not for a missing version (and is reinstated at a newer version)', async () => {
+    await owner(async (c) => {
+      await c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ('org-alpha', 'erin', 'active', ARRAY['reader'], 'test')`);
+    });
+    expect((await issueCurrent({ sub: 'erin' })).refusal).toBeNull(); // control: active
+    await owner((c) => c.query(`UPDATE tenant_memberships SET status = 'removed', changed_by = 'test' WHERE tenant_id = 'org-alpha' AND sub = 'erin'`));
+    expect((await issueCurrent({ sub: 'erin' })).refusal).toBe('membership-not-current');
+    await owner((c) => c.query(`UPDATE tenant_memberships SET status = 'active', changed_by = 'test' WHERE tenant_id = 'org-alpha' AND sub = 'erin'`));
+    const back = await issueCurrent({ sub: 'erin' });
+    expect(back.refusal).toBeNull();
+    expect(back.membership_version).toBe(await versionOf('erin'));
+  });
+
+  it('rate limits still count for it (it goes through the same issue function), and a refusal by limit is logged', async () => {
+    await owner((c) => c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ('org-beta', 'sam', 'active', ARRAY['reader'], 'test')`));
+    await owner((c) => c.query(`UPDATE capability_purposes SET burst_limit = 2, enforce_limits = true WHERE purpose = 'request'`));
+    try {
+      const results = [await issueCurrent({ tenant: 'org-beta', sub: 'sam' }), await issueCurrent({ tenant: 'org-beta', sub: 'sam' }), await issueCurrent({ tenant: 'org-beta', sub: 'sam' })];
+      expect(results.map((r) => r.refusal)).toEqual([null, null, 'rate-limited']);
+    } finally {
+      await owner((c) => c.query(`UPDATE capability_purposes SET burst_limit = 120, enforce_limits = false WHERE purpose = 'request'`));
+    }
+  });
+
+  it('only the issuer login may call it: every other login is refused, and the issuer succeeds in the same run', async () => {
+    const sql = `SELECT * FROM tenant_capability_issue_current('org-beta', 'bob', 'request', sha256('x'), NULL)`;
+    expect(await code(as(db.issuerUrl, {}, (c) => c.query(sql)))).toBe('ok'); // control
+    for (const [name, url] of [['app', db.appUrl], ['worker', db.workerUrl], ['verifier', db.verifierUrl], ['operator', db.operatorUrl], ['auditor', db.auditorUrl]] as const) {
+      expect([name, await code(as(url, {}, (c) => c.query(sql)))]).toEqual([name, '42501']);
+    }
+  });
+
+  it('is a definer owned by the capability owner, with a fixed search path, and EXECUTE for the issuer group only (not PUBLIC)', async () => {
+    const facts = await owner(async (c) => (await c.query(`
+      SELECT pg_get_userbyid(p.proowner) AS owner, p.prosecdef AS definer, p.proconfig AS config,
+             (SELECT array_agg((CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(a.grantee)::text END) ORDER BY a.grantee) FROM aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a WHERE a.privilege_type = 'EXECUTE' AND a.grantee <> p.proowner) AS grantees
+        FROM pg_proc p WHERE p.proname = 'tenant_capability_issue_current' AND p.pronamespace = 'public'::regnamespace`)).rows);
+    expect(facts).toEqual([{ owner: 'telesphoros_capability', definer: true, config: ['search_path=pg_catalog, pg_temp'], grantees: ['telesphoros_issuer'] }]);
+  });
+});
+
+describe('app_capability_version() (migration 0031): the version a presented capability was issued at', () => {
+  const versionFor = (settings: Settings) => as(db.appUrl, settings, async (c) => (await c.query<{ v: string | null }>('SELECT app_capability_version() AS v')).rows[0]!.v);
+  const setting = { 'app.current_tenant_id': 'org-alpha' };
+
+  beforeAll(async () => {
+    await owner((c) => c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ('org-alpha', 'frank', 'active', ARRAY['reader'], 'test')`));
+  });
+
+  it('positive control: a valid capability answers the version it was issued at, not the membership\'s current one', async () => {
+    const issued = await issueCurrent({ sub: 'frank' });
+    await owner((c) => c.query(`UPDATE tenant_memberships SET roles = ARRAY['reader', 'clinician'], changed_by = 'test' WHERE tenant_id = 'org-alpha' AND sub = 'frank'`));
+    const now = await owner(async (c) => (await c.query<{ version: string }>(`SELECT version FROM tenant_memberships WHERE tenant_id = 'org-alpha' AND sub = 'frank'`)).rows[0]!.version);
+    expect(Number(now)).toBeGreaterThan(Number(issued.membership_version));
+    expect(await versionFor({ 'app.capability': issued.token })).toBe(issued.membership_version);
+    expect(await versionFor({ 'app.capability': issued.token, ...setting })).toBe(issued.membership_version);
+  });
+
+  it('answers nothing for a forged, oversized, expired or revoked token, a mismatching tenant setting, or no token (each beside the valid one)', async () => {
+    const valid = await issueCurrent();
+    expect(await versionFor({ 'app.capability': valid.token })).toBe(valid.membership_version); // control
+    expect(await versionFor({ 'app.capability': token(), ...setting })).toBeNull();
+    expect(await versionFor({ 'app.capability': 'x'.repeat(200), ...setting })).toBeNull();
+    expect(await versionFor({ 'app.capability': valid.token, 'app.current_tenant_id': 'org-beta' })).toBeNull(); // another organization named: no winner
+    expect(await versionFor(setting)).toBeNull(); // the old setting alone carries no version
+    expect(await versionFor({})).toBeNull();
+    const expired = await issueCurrent();
+    await owner((c) => c.query(`UPDATE tenant_capabilities SET issued_at = issued_at - interval '2 minutes', expires_at = expires_at - interval '2 minutes' WHERE token_hash = $1`, [hashOf(expired.token)]));
+    expect(await versionFor({ 'app.capability': expired.token })).toBeNull();
+    const revoked = await issueCurrent();
+    expect(await versionFor({ 'app.capability': revoked.token })).toBe(revoked.membership_version); // control just before revoking
+    await owner((c) => c.query('UPDATE tenant_capabilities SET revoked_at = clock_timestamp() WHERE token_hash = $1', [hashOf(revoked.token)]));
+    expect(await versionFor({ 'app.capability': revoked.token })).toBeNull();
+  });
+
+  it('answers nothing without a token in every binding mode (there is no setting to fall back to), and a token still works in capability mode', async () => {
+    const valid = await issueCurrent();
+    try {
+      for (const mode of ['guc', 'dual', 'capability']) {
+        await owner((c) => c.query(`UPDATE tenant_binding_mode SET mode = $1`, [mode]));
+        expect([mode, await versionFor({ ...setting })]).toEqual([mode, null]);
+        expect([mode, await versionFor({ 'app.capability': valid.token })]).toEqual([mode, valid.membership_version]);
+      }
+    } finally {
+      await owner((c) => c.query(`UPDATE tenant_binding_mode SET mode = 'guc'`));
+    }
+  });
+
+  it('the expiry is the database\'s statement clock, the same rule app_tenant() applies (they agree on every state above)', async () => {
+    const live = await issueCurrent();
+    const old = await issueCurrent();
+    await owner((c) => c.query(`UPDATE tenant_capabilities SET issued_at = issued_at - interval '2 minutes', expires_at = expires_at - interval '2 minutes' WHERE token_hash = $1`, [hashOf(old.token)]));
+    for (const [who, expected] of [[live, 'org-alpha'], [old, null]] as const) {
+      const both = await as(db.appUrl, { 'app.capability': who.token }, async (c) => (await c.query('SELECT app_tenant() AS t, app_capability_version() AS v')).rows[0]);
+      expect([both.t, both.v === null]).toEqual([expected, expected === null]);
+    }
+  });
+
+  it('EXECUTE goes to the roles that already bind through app_tenant(), and never to PUBLIC: the verifier, operator, auditor and issuer logins are refused', async () => {
+    const sql = 'SELECT app_capability_version()';
+    for (const [name, url] of [['app', db.appUrl], ['worker', db.workerUrl]] as const) expect([name, await code(as(url, {}, (c) => c.query(sql)))]).toEqual([name, 'ok']); // controls
+    for (const [name, url] of [['verifier', db.verifierUrl], ['operator', db.operatorUrl], ['auditor', db.auditorUrl], ['issuer', db.issuerUrl]] as const) {
+      expect([name, await code(as(url, {}, (c) => c.query(sql)))]).toEqual([name, '42501']);
+    }
+    const grantees = (fn: string) => owner(async (c) => (await c.query<{ who: string }>(`
+      SELECT (CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(a.grantee) END) AS who FROM pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+       WHERE p.proname = $1 AND p.pronamespace = 'public'::regnamespace AND a.privilege_type = 'EXECUTE' AND a.grantee <> p.proowner ORDER BY 1`, [fn])).rows.map((r) => r.who));
+    expect(await grantees('app_capability_version')).toEqual(await grantees('app_tenant'));
+    expect(await grantees('app_capability_version')).not.toContain('PUBLIC');
+    // the detector can see a PUBLIC grant: a function created without a REVOKE reports it
+    await owner((c) => c.query('CREATE FUNCTION zz_public_control() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$'));
+    expect(await grantees('zz_public_control')).toContain('PUBLIC');
+    await owner((c) => c.query('DROP FUNCTION zz_public_control()'));
+  });
+});
+
+/** Everything the capability migrations leave in the catalog that a hand-written list could forget: functions with owner, flags, settings and ACL; table ACLs; policies. */
+async function catalogSnapshot(c: Client): Promise<string[]> {
+  const rows = await c.query<{ line: string }>(`
+    SELECT 'fn ' || p.oid::regprocedure::text || ' owner=' || pg_get_userbyid(p.proowner) || ' definer=' || p.prosecdef || ' config=' || coalesce(p.proconfig::text, '-')
+           || ' acl=' || coalesce((SELECT string_agg((CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(a.grantee) END) || ':' || a.privilege_type, ',' ORDER BY a.grantee, a.privilege_type) FROM aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a), '-') AS line
+      FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
+    UNION ALL
+    SELECT 'rel ' || c.relname || ' owner=' || pg_get_userbyid(c.relowner) || ' rls=' || c.relrowsecurity || ' acl=' || coalesce(c.relacl::text, '-')
+      FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r'
+    UNION ALL
+    SELECT 'policy ' || tablename || '.' || policyname || ' ' || cmd || ' ' || roles::text FROM pg_policies WHERE schemaname = 'public'
+    ORDER BY 1`);
+  return rows.rows.map((r) => r.line);
+}
+
+describe('reverting 0031 and 0028', () => {
+  it('0031 reverts to exactly the catalog of 0030 (functions, owners, grants, policies), re-applies to exactly the catalog it had, and the snapshot can tell a changed grant', async () => {
+    const full = await owner(catalogSnapshot);
+    expect(full.filter((l) => /^fn .*(tenant_capability_issue_current|app_capability_version)\(/.test(l))).toHaveLength(2);
+    const through = revertThrough('tenant_capability_issue_current'); // this migration and anything above it
+    expect(await owner((c) => migrateDown(c, through.steps))).toEqual(through.reverted);
+    const down = await owner(catalogSnapshot);
+    expect(down.filter((l) => /tenant_capability_issue_current|app_capability_version/.test(l))).toEqual([]);
+    expect(full.filter((l) => !/tenant_capability_issue_current|app_capability_version/.test(l))).toEqual(down); // nothing else moved
+    expect(await owner((c) => migrateUp(c))).toEqual(versionsFrom('tenant_capability_issue_current'));
+    expect(await owner(catalogSnapshot)).toEqual(full);
+    // the snapshot is sensitive to the thing it guards: a grant to PUBLIC changes it
+    await owner((c) => c.query('GRANT EXECUTE ON FUNCTION app_capability_version() TO PUBLIC'));
+    expect(await owner(catalogSnapshot)).not.toEqual(full);
+    await owner((c) => c.query('REVOKE EXECUTE ON FUNCTION app_capability_version() FROM PUBLIC'));
+    expect(await owner(catalogSnapshot)).toEqual(full);
+  });
+
+  it('0028 refuses while the issuance log holds a record, reverts with the explicit setting, and re-applies', async () => {
     await issue();
     const aboveCapability = revertAbove('tenant_capability'); // whatever sits above 0028 (today the synthetic agentic migration) reverts freely while it is empty
     expect(await owner((c) => migrateDown(c, aboveCapability.steps))).toEqual(aboveCapability.reverted);
@@ -272,7 +512,7 @@ describe('reverting 0028', () => {
       await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
       return migrateDown(c, 1);
     })).toEqual(['0028']);
-    expect(await owner(async (c) => (await c.query(`SELECT count(*)::int AS n FROM pg_proc WHERE proname IN ('app_tenant', 'app_actor', 'tenant_capability_issue', 'tenant_capabilities_sweep')`)).rows[0].n)).toBe(0);
+    expect(await owner(async (c) => (await c.query(`SELECT count(*)::int AS n FROM pg_proc WHERE proname IN ('app_tenant', 'app_actor', 'app_capability_version', 'tenant_capability_issue', 'tenant_capability_issue_current', 'tenant_capabilities_sweep')`)).rows[0].n)).toBe(0);
     expect(await owner((c) => migrateUp(c))).toEqual(versionsFrom('tenant_capability')); // control: they apply again
   });
 });

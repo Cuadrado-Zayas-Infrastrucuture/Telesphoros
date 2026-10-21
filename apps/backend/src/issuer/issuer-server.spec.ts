@@ -13,13 +13,13 @@ import { createIssuerServer, drainServer, MAX_BODY_BYTES } from './issuer-server
  * (GET /livez), and a closed table from the core's failure reasons to status codes. Every rejection test also asserts the port was never called, and is paired
  * with a positive control in the same run, so "never called" means the request was refused and not that the port is dead.
  */
-const validBody = { accessToken: 'opaque-access-token-sentinel', membershipVersion: 7, requestId: 'req-http-0001' };
+const validBody = { accessToken: 'opaque-access-token-sentinel', requestId: 'req-http-0001' };
 const EXPIRES = new Date('2030-01-01T00:00:00.000Z');
 const TOKEN = 'T'.repeat(43);
 
 class StubPort extends CapabilityIssuerPort {
   readonly calls: CapabilityIssueRequest[] = [];
-  behave: () => Promise<IssuedCapability | undefined> = async () => ({ token: TOKEN, expiresAt: EXPIRES });
+  behave: () => Promise<IssuedCapability | undefined> = async () => ({ token: TOKEN, expiresAt: EXPIRES, membershipVersion: 7 });
   async issue(request: CapabilityIssueRequest) {
     this.calls.push(request);
     return this.behave();
@@ -65,12 +65,12 @@ afterEach(async () => {
 afterAll(() => Logger.overrideLogger(['log', 'error', 'warn']));
 
 describe('POST /v1/capabilities: the positive control', () => {
-  it('passes exactly the three fields to the port and answers 200 with token and expiry only', async () => {
+  it('passes exactly the two fields to the port and answers 200 with token, expiry and the version the capability was issued at', async () => {
     const port = new StubPort();
     const { port: p } = await start(port);
     const reply = await post(p, validBody);
     expect(reply.status).toBe(200);
-    expect(json(reply)).toEqual({ token: TOKEN, expiresAt: '2030-01-01T00:00:00.000Z' });
+    expect(json(reply)).toEqual({ token: TOKEN, expiresAt: '2030-01-01T00:00:00.000Z', membershipVersion: 7 });
     expect(port.calls).toEqual([validBody]);
     expect(reply.headers['content-type']).toMatch(/^application\/json/);
     expect(reply.headers['cache-control']).toBe('no-store');
@@ -158,15 +158,12 @@ describe('what is refused before the port is asked', () => {
     ['JSON null', 'null', 400],
     ['a JSON string', '"x"', 400],
     ['an extra key', { ...validBody, tenant: 'beta' }, 400],
-    ['a missing accessToken', { membershipVersion: 7, requestId: 'r' }, 400],
-    ['a missing membershipVersion', { accessToken: 'a', requestId: 'r' }, 400],
-    ['a missing requestId', { accessToken: 'a', membershipVersion: 7 }, 400],
+    ['a missing accessToken', { requestId: 'r' }, 400],
+    ['a missing requestId', { accessToken: 'a' }, 400],
     ['a numeric accessToken', { ...validBody, accessToken: 123 }, 400],
     ['an empty accessToken', { ...validBody, accessToken: '' }, 400],
+    ['a membershipVersion from a caller (the database reads it; a client that still sends one is refused, not trusted)', { ...validBody, membershipVersion: 7 }, 400],
     ['a membershipVersion sent as text', { ...validBody, membershipVersion: '7' }, 400],
-    ['a membershipVersion of 0', { ...validBody, membershipVersion: 0 }, 400],
-    ['a fractional membershipVersion', { ...validBody, membershipVersion: 1.5 }, 400],
-    ['a membershipVersion beyond the safe range', '{"accessToken":"a","membershipVersion":1e30,"requestId":"r"}', 400],
     ['a requestId with a space', { ...validBody, requestId: 'req 1' }, 400],
     ['a requestId with a newline', { ...validBody, requestId: 'req\nforged' }, 400],
     ['a requestId of 129 characters', { ...validBody, requestId: 'r'.repeat(129) }, 400],
@@ -260,7 +257,7 @@ describe('time limits, connection limits and the drain', () => {
   it('drains: a request in flight finishes, new connections are refused, and the drain then ends', async () => {
     const port = new StubPort();
     let release!: () => void;
-    port.behave = () => new Promise((resolve) => { release = () => resolve({ token: TOKEN, expiresAt: EXPIRES }); });
+    port.behave = () => new Promise((resolve) => { release = () => resolve({ token: TOKEN, expiresAt: EXPIRES, membershipVersion: 7 }); });
     const { server, port: p } = await start(port);
     const inFlight = post(p, validBody);
     while (port.calls.length === 0) await new Promise((r) => setTimeout(r, 10));
@@ -293,7 +290,7 @@ describe('time limits, connection limits and the drain', () => {
 describe('with the real core: what reaches the log, and what reaches the caller', () => {
   let idp: FakeIdp;
   class Store implements CapabilityIssueStore {
-    outcome: { expiresAt: Date | null; refusal: string | null } | Error = { expiresAt: EXPIRES, refusal: null };
+    outcome: { expiresAt: Date | null; refusal: string | null; membershipVersion: number | null } | Error = { expiresAt: EXPIRES, refusal: null, membershipVersion: 3 };
     calls: IssueCall[] = [];
     async issue(call: IssueCall) {
       this.calls.push(call);
@@ -311,10 +308,11 @@ describe('with the real core: what reaches the log, and what reaches the caller'
     const store = new Store();
     const { port: p } = await start(real(store));
     const access = await idp.mintAccessToken({ user: alice() });
-    const reply = await post(p, { accessToken: access, membershipVersion: 3, requestId: 'req-real-ok' });
+    const reply = await post(p, { accessToken: access, requestId: 'req-real-ok' });
     expect(reply.status).toBe(200);
-    const { token } = json(reply) as { token: string };
+    const { token, membershipVersion } = json(reply) as { token: string; membershipVersion: number };
     expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(membershipVersion).toBe(3); // the store's (the database's) answer, passed to the caller
     expect(store.calls).toHaveLength(1);
     expect(log()).not.toContain(token);
     expect(log()).not.toContain(access);
@@ -324,7 +322,7 @@ describe('with the real core: what reaches the log, and what reaches the caller'
     const store = new Store();
     const { port: p } = await start(real(store));
     const forged = await idp.mintAccessToken({ user: alice(), signWith: 'foreign' });
-    const reply = await post(p, { accessToken: forged, membershipVersion: 3, requestId: 'req-real-bad' });
+    const reply = await post(p, { accessToken: forged, requestId: 'req-real-bad' });
     expect(reply.status).toBe(401);
     expect(reply.body).not.toContain(forged);
     expect(store.calls).toHaveLength(0);
@@ -336,16 +334,16 @@ describe('with the real core: what reaches the log, and what reaches the caller'
   it('a user with no tenant is 403 no-tenant', async () => {
     const { port: p } = await start(real(new Store()));
     const access = await idp.mintAccessToken({ user: idp.users.find((u) => u.email.startsWith('erin'))! });
-    const reply = await post(p, { accessToken: access, membershipVersion: 3, requestId: 'req-real-nt' });
+    const reply = await post(p, { accessToken: access, requestId: 'req-real-nt' });
     expect(reply.status).toBe(403);
     expect(json(reply)).toEqual({ error: 'no-tenant' });
   });
 
   it('the rate-limited phrase the alarm matches reaches the log exactly once per refusal, and the server adds no second copy', async () => {
     const store = new Store();
-    store.outcome = { expiresAt: null, refusal: 'rate-limited' };
+    store.outcome = { expiresAt: null, refusal: 'rate-limited', membershipVersion: null };
     const { port: p } = await start(real(store));
-    const reply = await post(p, { accessToken: await idp.mintAccessToken({ user: alice() }), membershipVersion: 3, requestId: 'req-real-rl' });
+    const reply = await post(p, { accessToken: await idp.mintAccessToken({ user: alice() }), requestId: 'req-real-rl' });
     expect(reply.status).toBe(403);
     expect(json(reply)).toEqual({ error: 'refused', detail: 'rate-limited' });
     expect(lines.filter((l) => l.includes('Capability not issued: refused (rate-limited)'))).toHaveLength(1);
@@ -357,7 +355,7 @@ describe('with the real core: what reaches the log, and what reaches the caller'
     store.outcome = new Error('password authentication failed for user "telesphoros_session_issuer" at 10.4.4.4 sentinel-pw');
     const { port: p } = await start(real(store));
     const access = await idp.mintAccessToken({ user: alice() });
-    const reply = await post(p, { accessToken: access, membershipVersion: 3, requestId: 'req-real-un' });
+    const reply = await post(p, { accessToken: access, requestId: 'req-real-un' });
     expect(reply.status).toBe(503);
     expect(json(reply)).toEqual({ error: 'unavailable' });
     expect(lines.filter((l) => l.includes('Capability not issued: unavailable'))).toHaveLength(1);

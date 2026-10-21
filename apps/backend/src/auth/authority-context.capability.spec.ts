@@ -1,8 +1,9 @@
 import type { Request, Response } from 'express';
 import {
   asOrganizationWork, authorityContextMiddleware, bindRequestAuthority, bindRequestCapability, currentRequestAuthority, currentRequestCapability,
-  currentRequestId, duringAdmission, isAdmitting, noteCapabilityAbsent, capabilityAbsentReason,
+  currentRequestId, noteCapabilityAbsent, capabilityAbsentReason,
 } from './authority-context';
+import * as authorityContext from './authority-context';
 
 /**
  * DATA-01 T017: the request's capability lives in the request's AsyncLocalStorage slot beside its authority. `asOrganizationWork` keeps the capability
@@ -16,7 +17,7 @@ const inRequest = <T>(work: () => T): T => {
   });
   return result;
 };
-const capability = () => ({ token: TOKEN, expiresAt: new Date('2030-01-01T00:00:00Z') });
+const capability = () => ({ token: TOKEN, expiresAt: new Date('2030-01-01T00:00:00Z'), membershipVersion: 3 });
 
 describe('the request capability slot', () => {
   it('holds the capability beside the authority', () => {
@@ -51,7 +52,7 @@ describe('the request capability slot', () => {
 
   it.each(['', 'short', 'A'.repeat(42), 'A'.repeat(44), `${'A'.repeat(42)}=`, `${'A'.repeat(42)} `, `${'A'.repeat(42)}'`])('refuses a token that is not 43 URL-safe characters: %j', (token) => {
     inRequest(() => {
-      expect(() => bindRequestCapability({ token, expiresAt: new Date() })).toThrow(/capability/i);
+      expect(() => bindRequestCapability({ token, expiresAt: new Date(), membershipVersion: 3 })).toThrow(/capability/i);
       expect(currentRequestCapability()).toBeUndefined();
     });
   });
@@ -59,7 +60,7 @@ describe('the request capability slot', () => {
   it('binds once: a second binding in the same request is refused, so a request cannot swap its proof', () => {
     inRequest(() => {
       bindRequestCapability(capability());
-      expect(() => bindRequestCapability({ token: 'B'.repeat(43), expiresAt: new Date() })).toThrow(/already/i);
+      expect(() => bindRequestCapability({ token: 'B'.repeat(43), expiresAt: new Date(), membershipVersion: 3 })).toThrow(/already/i);
       expect(currentRequestCapability()!.token).toBe(TOKEN);
     });
   });
@@ -100,19 +101,33 @@ describe('asOrganizationWork', () => {
   });
 });
 
-describe('admission and the absent-capability reason', () => {
-  it('marks the guard\'s own lookup, and only while it runs', async () => {
-    await inRequest(async () => {
-      expect(isAdmitting()).toBe(false);
-      await duringAdmission(async () => {
-        expect(isAdmitting()).toBe(true);
-      });
-      expect(isAdmitting()).toBe(false);
-      await duringAdmission(async () => { throw new Error('x'); }).catch(() => undefined);
-      expect(isAdmitting()).toBe(false); // cleared even when the lookup throws
+describe('the version the capability was issued at', () => {
+  it('is kept with the capability, so the guard can bind the authority to the version the database stamped', () => {
+    inRequest(() => {
+      bindRequestCapability({ ...capability(), membershipVersion: 9 });
+      expect(currentRequestCapability()!.membershipVersion).toBe(9);
     });
   });
 
+  it.each([0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])('refuses a membership version of %s, and binds nothing', (membershipVersion) => {
+    inRequest(() => {
+      expect(() => bindRequestCapability({ ...capability(), membershipVersion })).toThrow(/capability/i);
+      expect(currentRequestCapability()).toBeUndefined();
+      bindRequestCapability(capability()); // control: a valid one still binds in the same request
+      expect(currentRequestCapability()).toBeDefined();
+    });
+  });
+});
+
+describe('there is no admission exemption any more', () => {
+  it('no longer exports a way to mark a lookup as admission, so every transaction can be counted', () => {
+    expect(authorityContext).not.toHaveProperty('duringAdmission');
+    expect(authorityContext).not.toHaveProperty('isAdmitting');
+    expect(authorityContext).toHaveProperty('capabilityAbsentReason'); // control: the module is the one we think it is
+  });
+});
+
+describe('the absent-capability reason', () => {
   it('records why a request has no capability, once the guard has tried', () => {
     inRequest(() => {
       expect(capabilityAbsentReason()).toBeUndefined();

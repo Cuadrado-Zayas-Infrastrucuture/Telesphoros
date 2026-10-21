@@ -201,6 +201,35 @@ describe('migration lint: a REVOKE that only undoes what the same migration crea
     expect(problems.join('\n')).toContain('Label it breaking');
   });
 
+  // A migration that gives an EXISTING owner role the schema CREATE privilege for its own duration, and hands it back (0030, like 0028 for its own new role).
+  // The REVOKE only restores what the earlier migrations already left: the role holds no CREATE, which they show by granting it and revoking it again.
+  describe('handing back a CREATE the earlier migrations had already taken away from an existing role', () => {
+    const handedBack = 'GRANT CREATE ON SCHEMA public TO telesphoros_owner;\nCREATE TABLE y (id int);\nREVOKE CREATE ON SCHEMA public FROM telesphoros_owner;\n';
+    const earlierEndedRevoked = 'GRANT CREATE ON SCHEMA public TO telesphoros_owner;\nCREATE TABLE o (id int);\nREVOKE CREATE ON SCHEMA public FROM telesphoros_owner;\n';
+
+    it('accepts it when the last earlier word on that privilege for that role was a REVOKE', () => {
+      expect(lint(handedBack, earlierEndedRevoked)).toEqual([]);
+      expect(lint(handedBack, `${earlierEndedRevoked}GRANT CREATE ON SCHEMA public TO telesphoros_other;\n`)).toEqual([]); // another role's grant is not this role's
+      expect(lint(handedBack, `GRANT CREATE ON SCHEMA public TO telesphoros_owner, telesphoros_other;\nREVOKE CREATE ON SCHEMA public FROM telesphoros_owner, telesphoros_other;\n`)).toEqual([]);
+    });
+
+    it.each([
+      ['the earlier migrations left the role holding it (granted, never revoked)', handedBack, 'GRANT CREATE ON SCHEMA public TO telesphoros_owner;\n'],
+      ['the earlier migrations granted it again after revoking it', handedBack, `${earlierEndedRevoked}GRANT CREATE ON SCHEMA public TO telesphoros_owner;\n`],
+      ['the earlier migrations say nothing about the role', handedBack, 'CREATE TABLE o (id int);\n'],
+      ['the earlier REVOKE was of a different privilege', handedBack, 'GRANT CREATE ON SCHEMA public TO telesphoros_owner;\nREVOKE USAGE ON SCHEMA public FROM telesphoros_owner;\n'],
+      ['the earlier REVOKE was from a different role', handedBack, 'GRANT CREATE ON SCHEMA public TO telesphoros_owner;\nREVOKE CREATE ON SCHEMA public FROM telesphoros_other;\n'],
+      ['the earlier REVOKE was on a different schema', handedBack, 'GRANT CREATE ON SCHEMA public TO telesphoros_owner;\nREVOKE CREATE ON SCHEMA private FROM telesphoros_owner;\n'],
+      ['this file revokes without having granted it first', 'CREATE TABLE y (id int);\nREVOKE CREATE ON SCHEMA public FROM telesphoros_owner;\n', earlierEndedRevoked],
+      ['this file grants a different privilege than it revokes', 'GRANT USAGE ON SCHEMA public TO telesphoros_owner;\nREVOKE CREATE ON SCHEMA public FROM telesphoros_owner;\n', earlierEndedRevoked],
+      ['this file revokes it from a second role it never granted it to', 'GRANT CREATE ON SCHEMA public TO telesphoros_owner;\nREVOKE CREATE ON SCHEMA public FROM telesphoros_owner, telesphoros_other;\n', earlierEndedRevoked],
+    ])('still refuses it when %s', (_why, sql, earlier) => {
+      const problems = lint(sql, earlier);
+      expect(problems.join('\n')).toContain('REVOKE');
+      expect(problems.join('\n')).toContain('Label it breaking');
+    });
+  });
+
   it('exempts nothing when it is not told what came before (the safe default)', () => {
     const sql = expand(`${newFunction}REVOKE ALL ON FUNCTION f_new(text) FROM PUBLIC;\n`);
     expect(lintMigration(V, sql).join('\n')).toContain('REVOKE');
