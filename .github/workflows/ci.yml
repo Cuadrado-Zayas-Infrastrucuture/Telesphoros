@@ -72,7 +72,7 @@ jobs:
       actions: read
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d # postgres:16, multi-arch index; one digest for every tier (supply-chain.test.mjs)
         env:
           # A throwaway service container on the runner, reachable only from this job. Not a secret.
           POSTGRES_PASSWORD: postgres
@@ -427,7 +427,7 @@ jobs:
       - name: Start the S3 emulator
         run: |
           node .github/ci/service-budget.mjs run <<'BUDGET'
-          pip install -r .github/ci/requirements.txt
+          pip install --require-hashes -r .github/ci/requirements.txt
           moto_server -H 127.0.0.1 -p 5555 > moto.log 2>&1 &
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:5555/moto-api/ > /dev/null && exit 0
@@ -483,7 +483,7 @@ jobs:
       actions: read
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d # postgres:16, multi-arch index; one digest for every tier (supply-chain.test.mjs)
         env:
           # A throwaway service container on the runner, reachable only from this job. Not a secret.
           POSTGRES_PASSWORD: postgres
@@ -532,7 +532,7 @@ jobs:
       - name: Start the S3 emulator
         run: |
           node .github/ci/service-budget.mjs run <<'BUDGET'
-          pip install -r .github/ci/requirements.txt
+          pip install --require-hashes -r .github/ci/requirements.txt
           moto_server -H 127.0.0.1 -p 5555 > moto.log 2>&1 &
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:5555/moto-api/ > /dev/null && exit 0
@@ -593,7 +593,7 @@ jobs:
       actions: read
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d # postgres:16, multi-arch index; one digest for every tier (supply-chain.test.mjs)
         env:
           # A throwaway service container on the runner, reachable only from this job. Not a secret.
           POSTGRES_PASSWORD: postgres
@@ -642,7 +642,7 @@ jobs:
       - name: Start the S3 emulator
         run: |
           node .github/ci/service-budget.mjs run <<'BUDGET'
-          pip install -r .github/ci/requirements.txt
+          pip install --require-hashes -r .github/ci/requirements.txt
           moto_server -H 127.0.0.1 -p 5555 > moto.log 2>&1 &
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:5555/moto-api/ > /dev/null && exit 0
@@ -711,7 +711,7 @@ jobs:
       actions: read
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d # postgres:16, multi-arch index; one digest for every tier (supply-chain.test.mjs)
         env:
           # A throwaway service container on the runner, reachable only from this job. Not a secret.
           POSTGRES_PASSWORD: postgres
@@ -763,7 +763,7 @@ jobs:
       - name: Start the S3 emulator
         run: |
           node .github/ci/service-budget.mjs run <<'BUDGET'
-          pip install -r .github/ci/requirements.txt
+          pip install --require-hashes -r .github/ci/requirements.txt
           moto_server -H 127.0.0.1 -p 5555 > moto.log 2>&1 &
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:5555/moto-api/ > /dev/null && exit 0
@@ -898,7 +898,7 @@ jobs:
           cache: pip
           cache-dependency-path: .github/ci/requirements.txt
       - name: Install the pinned browser S3 emulator
-        run: pip install -r .github/ci/requirements.txt
+        run: pip install --require-hashes -r .github/ci/requirements.txt
       - run: pnpm test:launcher-cors
       - name: Browser tests
         run: pnpm --filter @telesphoros/frontend e2e
@@ -983,7 +983,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: stable
+          go-version: '1.27.3' # an exact release, not "stable": the toolchain that builds gitleaks is a build input
           # This repository has no go.sum. Hash the file containing the exact
           # gitleaks install pin; setup-go also keys by OS, architecture and Go version.
           cache: true
@@ -1041,6 +1041,7 @@ jobs:
           ignore-unfixed: true
           severity: CRITICAL,HIGH
           trivyignores: infrastructure/docker/trivy.ignore
+          version: v0.70.0 # the scanner itself, pinned: an action bump must not change it silently
       - run: node --test infrastructure/docker/postgres-readiness.test.cjs
       - run: node infrastructure/docker/rehearsal.cjs telesphoros-fd4b:rehearsal
       # OCI retains SBOM/provenance that the Docker load exporter can discard.

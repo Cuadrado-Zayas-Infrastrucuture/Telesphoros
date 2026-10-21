@@ -1,0 +1,74 @@
+# Weekly rescan (audit finding INF-11, founder decision 2026-10-20: weekly and advisory).
+# A pull request is scanned once, when it merges; a vulnerability published later in something already on main is not. This rescans main every week.
+# ADVISORY: it runs only on its schedule and by hand, never on push or pull_request, so it can never block a merge. A failed scheduled run makes
+# GitHub email the person who last changed the schedule, so a failure reaches a human instead of sitting in the Actions tab.
+# What fails it: a fixed CRITICAL or HIGH finding in a fresh build of the API image (the same gate as ci.yml's image job), or a high or critical
+# advisory in the production dependencies. What it only reports: the PostgreSQL service image the CI tiers run against (test-only, never deployed),
+# which no Dependabot ecosystem watches.
+name: rescan
+on:
+  schedule:
+    - cron: '17 9 * * 1' # Mondays 09:17 UTC (05:17 in Puerto Rico)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22.22.0"
+
+jobs:
+  image:
+    name: rescan-image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: infrastructure/docker/api.Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: telesphoros-rescan:weekly
+          sbom: false
+          provenance: false
+      - name: The API image (fails the run)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: telesphoros-rescan:weekly
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+          trivyignores: infrastructure/docker/trivy.ignore
+          version: v0.70.0
+      - name: The CI PostgreSQL service image (reported only; test-only, never deployed)
+        if: always()
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+          format: table
+          exit-code: '0'
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+          version: v0.70.0
+
+  dependencies:
+    name: rescan-dependencies
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      # Reads the lockfile and asks the registry's advisory database; nothing is installed or run.
+      - run: pnpm audit --prod --audit-level high

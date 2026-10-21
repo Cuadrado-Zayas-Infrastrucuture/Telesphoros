@@ -27,13 +27,20 @@ updates:
       terraform-minor-patch:
         update-types: [minor, patch]
 
-  # The S3 emulator the CI storage tier uses (.github/ci/requirements.txt).
+  # The S3 emulator the CI storage and browser tiers use: edit requirements.in; requirements.txt is generated from it with every package hashed.
   - package-ecosystem: pip
     directory: /.github/ci
     schedule:
       interval: weekly
 
   - package-ecosystem: docker-compose
+    directory: /infrastructure/docker
+    schedule:
+      interval: weekly
+
+  # The API image's base layers (api.Dockerfile). The PostgreSQL service images in the workflows are pinned by digest too, but no
+  # ecosystem watches workflow service containers: the weekly rescan (rescan.yml) reports that image's findings; bump its digest by hand.
+  - package-ecosystem: docker
     directory: /infrastructure/docker
     schedule:
       interval: weekly

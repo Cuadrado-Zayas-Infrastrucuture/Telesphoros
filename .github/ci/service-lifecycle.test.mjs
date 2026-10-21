@@ -46,7 +46,7 @@ function service(t, directory) {
   executable('moto_server', '#!' + process.execPath + '\n' + `const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(pidFile)},String(process.pid));setTimeout(()=>fs.writeFileSync(${JSON.stringify(readyFile)},'ready'),350);setInterval(()=>{},1000);setTimeout(()=>process.exit(0),8000);`);
   executable('curl', '#!/bin/sh\ntest -f ' + quote(readyFile) + '\n');
   const workflow = readFileSync(new URL('../workflows/ci.yml', import.meta.url), 'utf8');
-  const scripts = [...workflow.matchAll(/node \.github\/ci\/service-budget\.mjs run <<'BUDGET'\n(          pip install -r \.github\/ci\/requirements\.txt\n          moto_server[\s\S]*?)^          BUDGET/gm)].map(m => m[1].replace(/^ {10}/gm, ''));
+  const scripts = [...workflow.matchAll(/node \.github\/ci\/service-budget\.mjs run <<'BUDGET'\n(          pip install --require-hashes -r \.github\/ci\/requirements\.txt\n          moto_server[\s\S]*?)^          BUDGET/gm)].map(m => m[1].replace(/^ {10}/gm, ''));
   assert.equal(scripts.length, 4); assert.ok(scripts.every(s => s === scripts[0]));
   let identity;
   const processIdentity = () => {
