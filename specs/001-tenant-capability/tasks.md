@@ -47,13 +47,13 @@
 
 ### Implementation
 
-- [ ] T016 [US3] `apps/backend/src/issuer/` as a second bundled entry point in the API image (plan, "Structure Decision"), importing `CognitoTokenVerifier` unchanged
+- [x] T016 [US3] `apps/backend/src/issuer/` as a second bundled entry point in the API image (plan, "Structure Decision"), importing `CognitoTokenVerifier` unchanged. The core was slice 2; the process entry (`main.ts`, plain `node:http`, compiled by the existing backend build) is PR A
 - [ ] T017 [US4] Obtain the capability **once per request** and keep it in the request's `AsyncLocalStorage` slot (`apps/backend/src/auth/authority-context.ts`). `asOrganizationWork` keeps the capability while dropping the authority. `apps/backend/src/db/database.ts` sets it after `BEGIN` on every `withTenant` call and emits the capability-less count. `authorityStillCurrent` stays unchanged
 - [ ] T018 The internal transport and caller authentication between the API and the issuer, per P2 plan D1's second condition. Document the cost before writing it
 
 ## Phase 3b: Slice 2b, issuer Terraform, written and never applied — **starts only after PR 189 merges**
 
-- [x] T019 `infrastructure/terraform/issuer.tf`: the task, its own execution role and task role, its own secret readable only by those roles, and alarms. Guard tests with weakened-copy controls in `pnpm test:infra`. **Written, never applied.** Entry point and caller check settled in the addendum to `docs/design/plans/tenant-capability-issuer-transport.md`. Left for follow-ups: the issuer entry (`issuer/main.js`) and image line, the API client, and the provisioning task's `PROVISION_SECRET_ISSUER` wiring
+- [x] T019 `infrastructure/terraform/issuer.tf`: the task, its own execution role and task role, its own secret readable only by those roles, and alarms. Guard tests with weakened-copy controls in `pnpm test:infra`. **Written, never applied.** Entry point and caller check settled in the addendum to `docs/design/plans/tenant-capability-issuer-transport.md`. The issuer entry (`dist/issuer/main.js`, no image change) is PR A (second addendum to that document). Left for follow-ups: the API client, and the provisioning task's `PROVISION_SECRET_ISSUER` wiring
 
 ## Phase 4: Slice 3, policies and definer functions read `app_tenant()` (US1, US2, US4) — needs D5
 

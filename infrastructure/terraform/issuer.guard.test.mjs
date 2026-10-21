@@ -7,7 +7,8 @@
 //  - reach: the issuer accepts one connection source (the API tasks, on the issuer port) and sends out only to the database and HTTPS.
 // What cannot be judged from text is stated in the transport addendum: nothing is applied, so latency and the real behaviour of Service Connect are unmeasured.
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { posix } from 'node:path';
 import { test } from 'node:test';
 
 const dir = new URL('./', import.meta.url);
@@ -16,6 +17,8 @@ const issuer = read('./issuer.tf');
 const issuerCoreSource = read('../../apps/backend/src/issuer/issuer-core.ts');
 const migration0028 = read('../../apps/backend/migrations/0028_tenant_capability.up.sql');
 const dockerfile = read('../docker/api.Dockerfile');
+const buildConfig = read('../../apps/backend/tsconfig.build.json');
+const entryExists = existsSync(new URL('../../apps/backend/src/issuer/main.ts', import.meta.url));
 /** Every other Terraform file in the root, by name: the separation rules read all of them. */
 const others = Object.fromEntries(readdirSync(dir).filter((f) => f.endsWith('.tf') && f !== 'issuer.tf').map((f) => [f, read(`./${f}`)]));
 
@@ -50,11 +53,47 @@ function statements(doc) {
 const SECRET_REF = String.raw`(?:aws_secretsmanager_secret\.\w+\[0\]\.arn|aws_db_instance\.main\.master_user_secret\[0\]\.secret_arn)`;
 const SECRET_LIST = new RegExp(String.raw`^\[\s*${SECRET_REF}(?:\s*,\s*${SECRET_REF})*\s*\]$`);
 
+const ENTRY_SOURCE = 'src/issuer/main.ts';
+const globToRegExp = (glob) => new RegExp(`^${glob.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*\//g, '(?:.*/)?').replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*')}$`);
+const covers = (pattern) => pattern.replace(/\/$/, '') === ENTRY_SOURCE || ENTRY_SOURCE.startsWith(`${pattern.replace(/\/$/, '')}/`) || globToRegExp(pattern).test(ENTRY_SOURCE);
+
+/**
+ * Where the issuer entry ends up, worked out from what the repository does rather than written down twice: the file must exist, the backend build must emit it
+ * (apps/backend/tsconfig.build.json), the image must build and keep the backend's `dist`, and the task's `command` is the emitted path, WITHOUT a leading `node`
+ * because the image's ENTRYPOINT is `["node"]` and an ECS `command` only replaces the image's CMD (a task that repeats `node` runs `node node ...` and dies).
+ * Returns the command the task must carry and what stands in the way of it.
+ */
+export function issuerEntry({ exists, tsconfig, docker }) {
+  const problems = [];
+  let config = {};
+  try {
+    config = JSON.parse(tsconfig);
+  } catch {
+    problems.push('apps/backend/tsconfig.build.json must be readable JSON');
+  }
+  const options = config.compilerOptions ?? {};
+  if (!exists) problems.push('apps/backend/src/issuer/main.ts must exist');
+  if (options.noEmit !== false) problems.push('the backend build must emit files (noEmit false)');
+  if (!(config.include ?? []).some(covers)) problems.push('the backend build must include src/issuer/main.ts');
+  if ((config.exclude ?? []).some(covers)) problems.push('the backend build must not exclude src/issuer/main.ts');
+  const emitted = posix.join(options.outDir ?? '.', posix.relative(options.rootDir ?? '.', ENTRY_SOURCE)).replace(/\.ts$/, '.js');
+  const dockerCode = docker.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+  if (!/^RUN pnpm --filter @telesphoros\/backend build$/m.test(dockerCode)) problems.push('the image must build the backend');
+  if (!/^COPY --from=build \/output\/ \.\/$/m.test(dockerCode)) problems.push('the image must copy the backend deploy output into the runtime stage');
+  if (/^RUN rm -rf .*\/output\/dist\b/m.test(dockerCode)) problems.push('the image must keep the backend dist');
+  if (!/^WORKDIR \/app$/m.test(dockerCode)) problems.push('the runtime stage must run from /app, where dist is');
+  if (!/^ENTRYPOINT \["node"\]$/m.test(dockerCode)) problems.push('the image ENTRYPOINT must stay ["node"]: the task command is written for it');
+  return { emitted, command: [emitted], problems };
+}
+
+const hcl = (list) => `[${list.map((x) => `"${x}"`).join(', ')}]`;
+
 /** What is wrong with the issuer Terraform text `tf`, given every OTHER Terraform file by name (`rest`) and the application sources it must agree with, as a list of sentences. */
 export function issuerProblems(tf, rest = others, sources = {}) {
   const core = sources.core ?? issuerCoreSource;
   const migration = sources.migration ?? migration0028;
   const docker = sources.docker ?? dockerfile;
+  const entry = issuerEntry({ exists: sources.entryExists ?? entryExists, tsconfig: sources.tsconfig ?? buildConfig, docker });
   const problems = [];
   const text = code(tf);
   const need = (condition, why) => {
@@ -79,10 +118,11 @@ export function issuerProblems(tf, rest = others, sources = {}) {
   need(has(text, 'issuer_service_count = local.api_service_count == 1 && var.enable_issuer ? 1 : 0'), 'the service must need hosting, an image AND the issuer switch');
   need(has(text, 'issuer_tls_count = local.api_count == 1 && var.issuer_tls_ca_arn != "" ? 1 : 0'), 'the certificate role must need hosting and a named Private CA');
 
-  // The switch is off until the application can start: the image must build the entry the task runs.
+  // The switch is off until the application can start. It may default to on only while the entry exists and the build emits it (the API's client is a later PR).
   const sw = one('variable "enable_issuer"');
   need(has(sw, 'type = bool') && has(sw, 'default = false'), 'enable_issuer must be a bool that defaults to false');
-  need(!/default\s*=\s*true/.test(code(sw)) || /issuer\/main\.js/.test(docker), 'the issuer switch may default to true only once the image builds issuer/main.js');
+  const commandMatchesBuild = has(one('resource "aws_ecs_task_definition" "issuer"'), `command = ${hcl(entry.command)}`);
+  need(!/default\s*=\s*true/.test(code(sw)) || (entry.problems.length === 0 && commandMatchesBuild), `the issuer switch may default to true only while the entry exists, the build emits it and the task runs what it emits (${entry.problems.join('; ') || 'the task command differs'})`);
   const count = one('variable "issuer_desired_count"');
   need(has(count, 'default = 1') && has(count, 'var.issuer_desired_count >= 1 && var.issuer_desired_count <= 10'), 'issuer_desired_count must default to 1 and stay between 1 and 10');
   const tlsVar = one('variable "issuer_tls_ca_arn"');
@@ -169,7 +209,8 @@ export function issuerProblems(tf, rest = others, sources = {}) {
   const task = one('resource "aws_ecs_task_definition" "issuer"');
   need(has(task, 'task_role_arn = aws_iam_role.issuer_task[0].arn') && has(task, 'execution_role_arn = aws_iam_role.issuer_execution[0].arn'), 'the issuer must use its own two roles');
   need(has(task, 'network_mode = "awsvpc"') && has(task, 'requires_compatibilities = ["FARGATE"]'), 'the issuer must be Fargate with awsvpc networking');
-  need(has(task, 'image = var.api_image') && has(task, 'command = ["node", "issuer/main.js"]'), 'the issuer must run the pinned image, started as the issuer bundle');
+  need(has(task, 'image = var.api_image'), 'the issuer must run the pinned image');
+  need(entry.problems.length === 0 && has(task, `command = ${hcl(entry.command)}`), `the issuer must be started as the entry the backend build emits, as ${hcl(entry.command)} (the image's ENTRYPOINT is node): ${entry.problems.join('; ') || 'the command differs'}`);
   need(has(task, 'readonlyRootFilesystem = true') && has(task, 'user = local.api_user'), 'the issuer must have a read-only filesystem and run as the non-root user');
   need(!/\bvolume\s*\{/.test(code(task)) && !/\bmountPoints\b/.test(code(task)), 'the issuer task must declare no volume and mount nothing (it writes no files)');
   need(!/privileged|linuxParameters|"0"/.test(code(task)), 'the issuer must hold no privileged mode, extra Linux parameters or root user');
@@ -278,7 +319,9 @@ test('the issuer compute guard reports each way the issuer text could be weakene
     ['the issuer uses the API execution role', 'execution_role_arn       = aws_iam_role.issuer_execution[0].arn', 'execution_role_arn       = aws_iam_role.api_execution_service[0].arn'],
     ['root filesystem writable', 'readonlyRootFilesystem = true\n      command', 'readonlyRootFilesystem = false\n      command'],
     ['container runs as root', 'user                   = local.api_user\n      readonlyRootFilesystem = true\n      command', 'user                   = "0"\n      readonlyRootFilesystem = true\n      command'],
-    ['the issuer started as the API', 'command                = ["node", "issuer/main.js"]', 'command                = ["node", "dist/main.js"]'],
+    ['the issuer started as the API', 'command                = ["dist/issuer/main.js"]', 'command                = ["dist/main.js"]'],
+    ['the issuer command repeats the image entrypoint (node node ...)', 'command                = ["dist/issuer/main.js"]', 'command                = ["node", "dist/issuer/main.js"]'],
+    ['the issuer command is the old path the build does not emit', 'command                = ["dist/issuer/main.js"]', 'command                = ["issuer/main.js"]'],
     ['an ephemeral volume is declared', '  runtime_platform {\n    operating_system_family = "LINUX"', '  volume {\n    name = "scratch"\n  }\n\n  runtime_platform {\n    operating_system_family = "LINUX"'],
     ['image is a free variable', 'image                  = var.api_image\n      essential              = true\n      user                   = local.api_user\n      readonlyRootFilesystem = true\n      command', 'image                  = "x:latest"\n      essential              = true\n      user                   = local.api_user\n      readonlyRootFilesystem = true\n      command'],
     ['the issuer holds the application login too', 'secrets                = [{ name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.issuer_database_url[0].arn }]', 'secrets                = [{ name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.issuer_database_url[0].arn }, { name = "APP_DATABASE_URL", valueFrom = aws_secretsmanager_secret.api_database_url[0].arn }]'],
@@ -354,10 +397,31 @@ test('the issuer guard reports a changed application side (controls)', () => {
     ['the database stops returning rate-limited', { migration: migration0028.replaceAll("'rate-limited'", "'too-many'") }],
   ];
   for (const [name, sources] of weakened) assert.ok(issuerProblems(issuer, others, sources).length > 0, `a changed application side must be reported: ${name}`);
-  // The tripwire: a text whose switch defaults to on is clean only when the image builds the entry the task runs.
+  // The tripwire: a text whose switch defaults to on is clean only while the entry exists and the backend build emits it.
   const on = issuer.replace('type        = bool\n  default     = false\n}\n\nvariable "issuer_desired_count"', 'type        = bool\n  default     = true\n}\n\nvariable "issuer_desired_count"');
   assert.notEqual(on, issuer);
-  assert.ok(issuerProblems(on, others, { docker: dockerfile }).length > 0, 'the switch may not default to on while the image lacks the issuer entry');
-  assert.equal(issuerProblems(on, others, { docker: `${dockerfile}\nRUN cp apps/backend/dist/issuer/main.js /output/issuer/main.js\n` }).filter((p) => /switch may default/.test(p)).length, 0);
+  // The separate rule that the switch defaults to false is the founder's decision (turning it on is an apply-time choice); the tripwire below is what remains if that rule is ever lifted.
+  assert.deepEqual(issuerProblems(on), ['enable_issuer must be a bool that defaults to false'], 'with the entry in the repository and emitted by the build, nothing but the default-off rule objects to a switch that defaults to on');
+  const tsconfig = JSON.parse(buildConfig);
+  const withTsconfig = (change) => JSON.stringify(change(structuredClone(tsconfig)));
+  const brokenEntry = [
+    ['the entry source is gone', { entryExists: false }],
+    ['the build excludes the issuer directory', { tsconfig: withTsconfig((c) => ({ ...c, exclude: [...c.exclude, 'src/issuer/**']})) }],
+    ['the build excludes the entry by name', { tsconfig: withTsconfig((c) => ({ ...c, exclude: [...c.exclude, 'src/issuer/main.ts']})) }],
+    ['the build includes only the tests', { tsconfig: withTsconfig((c) => ({ ...c, include: ['test'] })) }],
+    ['the build emits nothing', { tsconfig: withTsconfig((c) => ({ ...c, compilerOptions: { ...c.compilerOptions, noEmit: true } })) }],
+    ['the build moves its output', { tsconfig: withTsconfig((c) => ({ ...c, compilerOptions: { ...c.compilerOptions, outDir: 'build' } })) }],
+    ['the build roots the sources one level up', { tsconfig: withTsconfig((c) => ({ ...c, compilerOptions: { ...c.compilerOptions, rootDir: '.' } })) }],
+    ['the image no longer builds the backend', { docker: dockerfile.replace('RUN pnpm --filter @telesphoros/backend build\n', '') }],
+    ['the image deletes the backend dist', { docker: dockerfile.replace('RUN rm -rf /output/src', 'RUN rm -rf /output/dist /output/src') }],
+    ['the image stops copying the deploy output', { docker: dockerfile.replace('COPY --from=build /output/ ./', 'COPY --from=build /output/package.json ./') }],
+    ['the image runs from another directory', { docker: dockerfile.replace('WORKDIR /app', 'WORKDIR /srv') }],
+    ['the image entrypoint is no longer node alone', { docker: dockerfile.replace('ENTRYPOINT ["node"]', 'ENTRYPOINT ["node", "--trace-warnings"]') }],
+  ];
+  for (const [name, sources] of brokenEntry) {
+    assert.ok(issuerProblems(on, others, sources).some((p) => /switch may default/.test(p)), `the switch may not default to on when: ${name}`);
+    assert.ok(issuerProblems(issuer, others, sources).some((p) => /started as the entry/.test(p)), `the task command is reported when: ${name}`);
+  }
+  assert.deepEqual(issuerEntry({ exists: entryExists, tsconfig: buildConfig, docker: dockerfile }).command, ['dist/issuer/main.js']); // control: what the real files give
   assert.deepEqual(issuerProblems(issuer), []);
 });
