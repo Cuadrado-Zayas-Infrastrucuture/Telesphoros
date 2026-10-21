@@ -290,3 +290,7 @@ Each mutant was applied to `apps/backend/migrations/0032_tenant_binding_policies
 **Follow-up runs (same method):**
 - M2: a ledger policy left out of the up loop. The loop's own count assertion refuses the migration ("changed 47 policies, expected 48") before any policy is altered, so T020 is not the control that fires.
 - M17: the down loop omits the `patients` policy. The tenant-capability revert tests fail (2 of 56: the 0031 revert snapshot and the 0028 revert with the issuance log). The up path is unaffected.
+
+**M-A8 (0031, shipped migration, mutated for one run and restored from commit):** `app_capability_version()` granted to PUBLIC. tenant-capability: 2 failed (the "EXECUTE goes to the roles that bind through app_tenant(), never PUBLIC" test and the 0031 revert snapshot).
+
+**Vacuity guard (T020):** added to tenant-binding. The catalog's 29 tenant-policy tables must equal the three seeded tables plus the 26 listed as unseeded on purpose; each unseeded table is covered by its domain spec. This is an explicit list, not a proof that those 26 tables are exercised by this spec.

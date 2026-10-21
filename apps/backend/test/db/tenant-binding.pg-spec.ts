@@ -183,3 +183,32 @@ describe('T021: definer functions bind the actor from the capability, not from t
     expect(await reads('org-beta')).toEqual({ t: null });
   });
 });
+
+/**
+ * Vacuity guard for T020. A "0 rows under a forged setting" result proves nothing about a table that is empty. This spec seeds three tables
+ * (beforeAll). Every other tenant-policy table is listed below as unseeded on purpose: its own domain spec (ledger, uploads, patients,
+ * reports, membership, browser sessions) seeds it and asserts its isolation. A table that appears in neither list fails here, so a new
+ * policy table cannot pass T020 silently.
+ */
+describe('T020 vacuity guard: every tenant-policy table is seeded here or listed as unseeded on purpose', () => {
+  const SEEDED = ['patients', 'tenant_memberships', 'tenants'];
+  const UNSEEDED = [
+    'browser_sessions', 'capture_acceptances', 'cell_dispute_decisions', 'cell_disputes', 'corrections', 'evaluation_gene_states',
+    'evaluation_results', 'evaluations', 'event_notes', 'file_verifications', 'invitations', 'job_attempts', 'jobs', 'ledger_checkpoints',
+    'ledger_events', 'ledger_heads', 'patient_duplicate_flags', 'patient_identifiers', 'patient_merge_decisions', 'patient_merge_proposals',
+    'recommendations', 'report_captures', 'report_patient_decisions', 'report_upload_attempts', 'report_upload_runs', 'reports',
+  ];
+
+  it('the catalog and the two lists agree, and every seeded table holds rows', async () => {
+    const tables = (await owner((c) => c.query<{ tablename: string }>(
+      `SELECT DISTINCT tablename FROM pg_policies WHERE schemaname = 'public' AND (qual LIKE '%app_tenant()%' OR with_check LIKE '%app_tenant()%') ORDER BY tablename`,
+    ))).rows.map((r) => r.tablename);
+    const listed = [...SEEDED, ...UNSEEDED];
+    expect(tables.filter((t) => !listed.includes(t))).toEqual([]); // a new table must be listed here
+    expect(listed.filter((t) => !tables.includes(t))).toEqual([]); // a listed table must still exist as a policy table
+    for (const t of SEEDED) {
+      const { rows } = await owner((c) => c.query<{ n: number }>(`SELECT count(*)::int AS n FROM public."${t}"`));
+      expect([t, rows[0]!.n > 0]).toEqual([t, true]);
+    }
+  });
+});
