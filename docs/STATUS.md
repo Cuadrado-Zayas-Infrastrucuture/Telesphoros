@@ -3,6 +3,10 @@
 Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## Audit follow-ups: diagnostic tooling removed, INF-18 recorded as accepted (draft PR, 2026-10-20)
+
+`diagnostics/fixture-phase-capture/` (12 files) is deleted: the scripts of the one-off diagnostic whose workflow the CI supply-chain PR removes (INF-17); nothing else ran them, and they stay in history at `2307242`. INF-18 (GitHub's native secret and code scanning) is recorded in `docs/ops/ci-cd.md` as an accepted gap by founder decision: on the Team plan they are paid add-ons, and the required gitleaks scan and Dependabot security updates stand in for now. No code, CI, Terraform or AWS change.
+
 ## Logging: declared service log groups and an allowlisted API log (draft PR, 2026-10-20)
 
 Two audit findings from 2026-10-19, in one PR (founder decision 2026-10-20; INF-06 follows DATA-01 slice 2, because it needs a migration).
