@@ -313,7 +313,7 @@ describe('migration 0030 on its own database', () => {
       await withAdmin(own.adminUrl, async (c) => {
         expect(await migrateUp(c, migrationsThrough('0029'))).toContain('0029');
         const at0029 = await snapshot(c);
-        expect(await migrateUp(c)).toEqual(['0030']);
+        expect(await migrateUp(c, migrationsThrough('0030'))).toEqual(['0030']); // through 0030 only: a later migration is not what this test is about
         const at0030 = await snapshot(c);
         expect(at0030).not.toEqual(at0029);
         const [a, b] = sameSchemaExceptP2(at0029, at0030);
@@ -325,7 +325,7 @@ describe('migration 0030 on its own database', () => {
         }
         expect(await migrateDown(c, 1)).toEqual(['0030']);
         expect(await snapshot(c)).toEqual(at0029);
-        expect(await migrateUp(c)).toEqual(['0030']);
+        expect(await migrateUp(c, migrationsThrough('0030'))).toEqual(['0030']); // through 0030 only: a later migration is not what this test is about
         expect(await snapshot(c)).toEqual(at0030);
       });
     } finally {

@@ -404,7 +404,7 @@ describe('a database that has the capability but not yet migration 0031', () => 
     const withIssuer: ProvisionOptions = { ...f.options, secrets: { ...f.options.secrets, issuer: 'secret-issuer' }, requireMigrated: true };
     await provisionLogins({ ...withIssuer, requireMigrated: false });
     await asLogin(f.store.values.get('secret-migrator')!, (c) => migrateUp(c));
-    expect(await withAdmin(f.options.adminUrl, (c) => migrateDown(c, 2))).toEqual(['0031', '0029']); // both revert freely while empty; 0028 stays
+    expect(await withAdmin(f.options.adminUrl, (c) => migrateDown(c, 1))).toEqual(['0031']); // reverts freely (functions only); 0028 stays
     expect(await withAdmin(f.options.adminUrl, async (c) => (await c.query(`SELECT count(*)::int AS n FROM pg_proc WHERE proname IN ('tenant_capability_issue_current', 'app_capability_version')`)).rows[0].n)).toBe(0);
     expect(failing(await provisionLogins(withIssuer))).toEqual([]); // no "missing" complaint about functions that do not exist yet
     await asLogin(f.store.values.get('secret-migrator')!, (c) => migrateUp(c));
