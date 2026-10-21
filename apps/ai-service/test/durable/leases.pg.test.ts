@@ -6,7 +6,7 @@ import { SyntheticJobQueue } from '../../durable/queue';
 import { runDurableSynthetic, type ScriptedActors } from '../../durable/kernel';
 import { SYNTHETIC_JOB_TYPE, type DurableSyntheticStore, type Expected, type FixtureCaller, type Stamp } from '../../durable/contracts';
 import { ownedPostgresFixture } from '../helpers/postgres-fixture';
-import { backendPid, claimOptions, durableHarness, inputDigest, scriptedActors } from '../helpers/durable-pg';
+import { backendPid, bindCapability, claimOptions, durableHarness, inputDigest, scriptedActors } from '../helpers/durable-pg';
 import type { EphemeralDatabase } from '../../../backend/test/helpers/database';
 
 let fixture: EphemeralDatabase;
@@ -35,6 +35,7 @@ async function appTransaction(caller: FixtureCaller) {
   await c.query('BEGIN');
   await c.query(`SELECT set_config('app.current_tenant_id',$1,true)`, [caller.tenantId]);
   await c.query(`SELECT set_config('app.current_actor',$1,true)`, [caller.requesterRef]);
+  await bindCapability(fixture.adminUrl, c, caller.tenantId, caller.requesterRef);
   return { c, pid };
 }
 /** Lets the kernel reach its final decision but withholds the commit, so the test owns that transaction. */

@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Client } from 'pg';
 import type { Queryable } from '@telesphoros/jobs';
 import { PostgresSyntheticStore, type TenantTransactions } from '../../durable/postgres';
@@ -7,6 +7,26 @@ import type { ScriptedActors } from '../../durable/kernel';
 import { SYNTHETIC_JOB_TYPE, type FixtureCaller } from '../../durable/contracts';
 import type { Candidate, Source } from '../../src/contracts';
 import type { EphemeralDatabase } from '../../../backend/test/helpers/database';
+
+/**
+ * Binds the caller to the transaction the way the API does after migration 0030: the settings (still set by `Database.withTenant`) and a tenant
+ * capability in `app.capability`. The row is written by the owner, standing in for the issuer, because these suites test the P2 functions and not the
+ * issuer (apps/backend/test/db/agentic-identity.pg-spec.ts mints through the real issuer login). An organization that does not exist gets no capability,
+ * as the issuer would refuse it, and the call is then refused by the database.
+ */
+export async function bindCapability(adminUrl: string, client: Queryable, tenant: string, actor: string): Promise<void> {
+  const value = randomBytes(32).toString('base64url');
+  const owner = new Client({ connectionString: adminUrl });
+  await owner.connect();
+  try {
+    await owner.query(`INSERT INTO public.tenant_capabilities (token_hash, tenant_id, sub, membership_version, purpose, request_id, issued_at, expires_at)
+      VALUES ($1, $2, $3, 1, 'request', 'durable-harness', clock_timestamp(), clock_timestamp() + interval '60 seconds')`, [createHash('sha256').update(value, 'utf8').digest(), tenant, actor]);
+  } catch (error) {
+    if ((error as { code?: string }).code === '23503') return; // unknown organization: no capability
+    throw error;
+  } finally { await owner.end(); }
+  await client.query(`SELECT set_config('app.capability',$1,true)`, [value]);
+}
 
 export const digest = (value: string) => `sha256:${createHash('sha256').update(value).digest('hex')}`;
 export const sopBody = 'Step one: wash both hands.\nStep two: dry them fully.';
@@ -48,6 +68,7 @@ export function durableHarness(fixture: () => EphemeralDatabase, owner: () => Cl
       await client.query('BEGIN');
       await client.query(`SELECT set_config('app.current_tenant_id',$1,true)`, [tenantId]);
       await client.query(`SELECT set_config('app.current_actor',$1,true)`, [options.actor]);
+      await bindCapability(fixture().adminUrl, client, tenantId, options.actor);
       const value = await work(client);
       await client.query('COMMIT');
       return value;
