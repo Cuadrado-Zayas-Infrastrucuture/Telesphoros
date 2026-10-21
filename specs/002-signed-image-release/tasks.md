@@ -14,48 +14,48 @@
 
 ### Tests first
 
-- [ ] T001 [P] [US1] `signing.guard.test.mjs`. It requires:
+- [x] T001 [P] [US1] `signing.guard.test.mjs`. It requires:
   - the key: `key_spec = "ECC_NIST_P256"`, `key_usage = "SIGN_VERIFY"`, no rotation flag, the profile's deletion window, and a policy that grants `kms:Sign` to the release role only and no encrypt or decrypt action;
   - the role's trust conditions of FR-002, every one present, `StringEquals` (no wildcard on `ref`, the environment or `job_workflow_ref`);
   - the role's permissions of FR-003, resource-scoped.
 
   Each rule has a broken copy. Run it against `main`: red.
-- [ ] T002 [P] [US4] `profiles.tftest.hcl` runs:
+- [x] T002 [P] [US4] `profiles.tftest.hcl` runs:
   - API hosting off: no key, no role.
   - API hosting on: one key, one role.
   - The OIDC provider variable set: reused, not created.
   - Production and synthetic plan.
-- [ ] T003 [P] The rotation exception: `api-compute`/`audit`/`worker`/`logs` guards stay as they are. The signing guard asserts the key has **no** `enable_key_rotation = true` (KMS refuses it for asymmetric keys) and that this is the only such key.
+- [x] T003 [P] The rotation exception: `api-compute`/`audit`/`worker`/`logs` guards stay as they are. The signing guard asserts the key has **no** `enable_key_rotation = true` (KMS refuses it for asymmetric keys) and that this is the only such key.
 
 ### Implementation
 
-- [ ] T004 [US1] `infrastructure/terraform/signing.tf`: key and alias, the OIDC provider (`count` from the reuse variable), the role, its policy; outputs: role ARN, key alias, public-key fetch command
-- [ ] T005 [US4] Gate everything on `local.api_count`, the same switch as the registry. Variables: `github_repository_id`, `github_repository_owner_id`, `github_oidc_provider_arn` (empty means create), `image_release_environment`.
-- [ ] T006 [D5] `registry.tf`: the lifecycle rule keeps an image's signature with it. Record in `docs/verification/signed-image-release.md` how ECR counts referrers. If that cannot be shown offline, record it as a first-apply check and choose the conservative rule.
-- [ ] T007 `pnpm test:infra`, `terraform fmt`/`validate`/`test` on both roots, tflint; defect injection on each new rule; `docs/verification/signed-image-release.md` started.
+- [x] T004 [US1] `infrastructure/terraform/signing.tf`: key and alias, the OIDC provider (`count` from the reuse variable), the role, its policy; outputs: role ARN, key alias, public-key fetch command
+- [x] T005 [US4] Gate everything on `local.api_count`, the same switch as the registry. Variables: `github_repository_id`, `github_repository_owner_id`, `github_oidc_provider_arn` (empty means create), `image_release_environment`.
+- [x] T006 [D5] `registry.tf`: the lifecycle rule keeps an image's signature with it. Record in `docs/verification/signed-image-release.md` how ECR counts referrers. If that cannot be shown offline, record it as a first-apply check and choose the conservative rule.
+- [x] T007 `pnpm test:infra`, `terraform fmt`/`validate`/`test` on both roots, tflint; defect injection on each new rule; `docs/verification/signed-image-release.md` started.
 
-**Checkpoint**: the founder reviews the trust policy before any CI change.
+**Checkpoint**: the founder reviews the trust policy before any CI change. **Done in #210 (merged 2026-10-21).**
 
 ## Phase 2: Slice 2, CI pushes the scanned archive and signs it (US2, US3, US4) — needs D1; starts after #207 merges
 
 ### Tests first
 
-- [ ] T008 [P] [US3] `.github/ci/release.test.mjs`:
+- [x] T008 [P] [US3] `.github/ci/release.test.mjs`:
   - `id-token: write` appears exactly once, on `release-image`;
   - its `if` requires push, `refs/heads/main` and the role variable;
   - `needs: image`; `environment` is the release environment;
-  - `--tlog-upload=false` is on the sign command;
+  - `--use-signing-config=false` **and** `--tlog-upload=false` are on the sign command (cosign 3 refuses the second alone and uploads to the public log without it; found 2026-10-21);
   - no `secrets.`; every action is SHA-pinned; cosign and the copy tool are pinned by version and checksum;
   - the digest comparison step exists and precedes signing.
 
   Each rule has a broken copy.
-- [ ] T009 [P] [US2] A local proof script (`infrastructure/docker/release-rehearsal.cjs` or a `node:test`). It builds the archive as CI does, pushes it to a digest-pinned local `registry:2` with the chosen copy tool, and asserts the digest is unchanged. Control: rebuild instead; the digests differ, and the comparison refuses.
-- [ ] T010 [P] [US3] Transparency-log control: with a **file** key and the transparency-log URL set to a closed local port, signing with `--tlog-upload=false` succeeds. The same command without the flag fails.
+- [x] T009 [P] [US2] A local proof script (`infrastructure/docker/release-rehearsal.cjs` or a `node:test`). It builds the archive as CI does, pushes it to a digest-pinned local `registry:2` with the chosen copy tool, and asserts the digest is unchanged. Control: rebuild instead; the digests differ, and the comparison refuses.
+- [x] T010 [P] [US3] Transparency-log control: with a **file** key and the transparency-log URL set to a closed local port, signing with `--tlog-upload=false` succeeds. The same command without the flag fails.
 
 ### Implementation
 
-- [ ] T011 [US2] `image` job: compute the index digest from `index.json` and expose it as an output; on push to `main`, upload `api.oci.tar` (one day).
-- [ ] T012 [US2, US3, US4] `release-image` job per plan.md "The release job"; the job summary names the digest and tag.
+- [x] T011 [US2] `image` job: compute the index digest from `index.json` and expose it as an output; on push to `main`, upload `api.oci.tar` (one day).
+- [x] T012 [US2, US3, US4] `release-image` job per plan.md "The release job"; the job summary names the digest and tag.
 - [ ] T013 `pnpm test:ci-config`, actionlint, the full local loop; after merge, confirm on GitHub that `release-image` is skipped on `main` and every required check is green (SC-004).
 
 ## Phase 3: Slice 3, verify before apply (US1, US5) — needs D3

@@ -67,4 +67,4 @@ The scan is basic registry scanning and is a second look, not the gate. Do not s
 
 Not verified until a real account exists: that the push works from a person's shell, that the execution roles can pull the pushed digest, that the lifecycle rule expires as intended,
 and the registry's cost (storage of up to ten images; no estimate has been made). Keyless signing, a CI push identity and an automated deployment are not part of this slice: the push is manual,
-by a person, and CI still never holds cloud credentials.
+by a person, and CI still never holds cloud credentials. (INF-03 adds a CI release job that pushes and signs through a short-lived OIDC role; it is dormant until the founder turns it on, see [ci-cd.md](ci-cd.md). This runbook is rewritten in slice 3 of `specs/002-signed-image-release`.)
