@@ -114,7 +114,7 @@ If CI is down, a person can still push by hand (today's runbook). The image is u
   - skips itself when the role variable is unset;
   - pushes the archive without rebuilding, preserving its digest;
   - compares the registry's digest with FR-004's, and stops on a difference;
-  - signs the digest with `cosign sign --key awskms:///alias/… --tlog-upload=false`;
+  - signs the digest with `cosign sign --key awskms:///alias/… --use-signing-config=false --tlog-upload=false` (cosign 3: the first flag is required for the second, and without the second it uploads to the public Rekor log; shown 2026-10-21);
   - holds no repository secret.
 - **FR-006** Every tool the job runs is pinned: the actions by commit SHA, the cosign binary by version and checksum, the push tool by version and checksum.
 - **FR-007** A pre-apply verification step (`scripts/staging/verify-image.mjs` or an equivalent runbook command) runs `cosign verify --key awskms:///… --insecure-ignore-tlog` on the exact `api_image` digest. It writes a verification record: the digest, the key ID, the time and the cosign version. `check-plan` stage C refuses a plan whose `api_image` has no matching record. `api_migrate_image` gets the same treatment.

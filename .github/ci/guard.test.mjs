@@ -87,6 +87,8 @@ test('application recovery requires three artifacts at the expected checkout', (
 
 /** Jobs that deliberately are NOT required checks. Anything else in ci.yml must be required. */
 const ADVISORY = new Set(['terraform-lint']);
+/** Jobs that run only after a merge to main (so a pull request cannot wait on them), yet must fail visibly: not required, never continue-on-error. */
+const AFTER_MERGE = new Set(['release-image']);
 
 /** { key, name } for each job under `jobs:`; a job with `continue-on-error: true` cannot be a gate. */
 function jobsOf(text) {
@@ -113,9 +115,13 @@ test('every action is pinned to a full commit SHA with a version comment', () =>
   }
 });
 
-test('permissions are read-only at the top and nothing widens them', () => {
+test('permissions are read-only at the top and nothing widens them, except the one id-token of the release job', () => {
   assert.match(workflow, /^permissions:\n {2}contents: read\n/m);
-  assert.doesNotMatch(workflow, /:\s*write\b/, 'no job may request a write permission');
+  // INF-03 (specs/002-signed-image-release): release-image needs an OIDC token to reach AWS without a stored secret. That is the only write anywhere.
+  const writes = workflow.split('\n').filter((line) => !/^\s*#/.test(line) && /:\s*write\b/.test(line));
+  assert.deepEqual(writes, ['      id-token: write'], 'no job may request a write permission, except id-token on release-image');
+  const release = (workflow.split(/^jobs:\s*$/m)[1] ?? '').split(/^  (?=[a-z][a-z0-9-]*:\s*$)/m).find((b) => b.startsWith('release-image:')) ?? '';
+  assert.ok(release.includes('      id-token: write'), 'the one id-token write must belong to release-image');
 });
 
 test('untrusted code never runs with secrets: no pull_request_target, no repository secrets', () => {
@@ -139,7 +145,7 @@ test('each job is named like its key, so the check name is predictable', () => {
 });
 
 test('the ruleset requires exactly the non-advisory jobs of the workflow', () => {
-  const gates = jobsOf(workflow).filter((j) => !ADVISORY.has(j.key) && !internalJobs.includes(j.key)).map((j) => j.name).sort();
+  const gates = jobsOf(workflow).filter((j) => !ADVISORY.has(j.key) && !AFTER_MERGE.has(j.key) && !internalJobs.includes(j.key)).map((j) => j.name).sort();
   const required = ruleset.rules
     .find((r) => r.type === 'required_status_checks')
     .parameters.required_status_checks.map((c) => c.context)
@@ -147,7 +153,8 @@ test('the ruleset requires exactly the non-advisory jobs of the workflow', () =>
   assert.deepEqual(required, gates);
   assert.deepEqual(serviceLayoutProblems(workflow), [], 'internal producers must all feed the required joining gate');
   for (const j of jobsOf(workflow)) if (ADVISORY.has(j.key)) assert.ok(j.continueOnError, `${j.key} is advisory, so it must be continue-on-error`);
-  for (const j of jobsOf(workflow)) if (!ADVISORY.has(j.key)) assert.ok(!j.continueOnError, `${j.key} is a gate, so it must not be continue-on-error`);
+  for (const j of jobsOf(workflow)) if (!ADVISORY.has(j.key)) assert.ok(!j.continueOnError, `${j.key} is a gate or runs after merge, so it must not be continue-on-error`);
+  for (const key of AFTER_MERGE) assert.ok(jobsOf(workflow).some((j) => j.key === key), `${key} is listed as after-merge but is not in the workflow`);
 });
 
 /** The steps (`run:` lines, in order) of one job of ci.yml. */
@@ -329,17 +336,19 @@ export function imageJobProblems(text) {
   const block=text.split(/^jobs:\s*$/m)[1]?.split(/^ {2}(?=[a-z][a-z0-9-]*:\s*$)/m).find(b=>b.startsWith('image:')) || '';
   const rules=[
     ['no push', /push: false/], ['SBOM', /sbom: true/], ['provenance', /provenance: mode=max/],
-    ['runtime load', /load: true/], ['OCI evidence', /type=oci,dest=/], ['scan blocks', /exit-code: '1'/], ['fixed high critical', /severity: CRITICAL,HIGH/],
+    ['archive image loaded', /infrastructure\/docker\/load-archive-image\.sh "\$RUNNER_TEMP\/api\.oci\.tar" telesphoros-fd4b:rehearsal/], ['OCI evidence', /type=oci,dest=/], ['scan blocks', /exit-code: '1'/], ['fixed high critical', /severity: CRITICAL,HIGH/],
     ['fixed only', /ignore-unfixed: true/], ['reviewed exceptions', /trivyignores: infrastructure\/docker\/trivy.ignore/],
     ['rehearsal', /node infrastructure\/docker\/rehearsal.cjs/], ['guards', /node --test infrastructure\/docker\/guard.test.mjs/],
   ];
   const failures=rules.filter(([,pattern])=>!pattern.test(block)).map(([name])=>name);
-  if((block.match(/push: false/g) || []).length!==2 || /push: true/.test(block))failures.push('no push');
+  if((block.match(/push: false/g) || []).length!==1 || /push: true/.test(block))failures.push('no push');
+  // INF-03: what is scanned must be the archive that is released, never a second build (a second `--load` build differed, 2026-10-21).
+  if(/load: true/.test(block))failures.push('archive image loaded');
   if(/AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|PROFILE|ROLE_ARN)|configure-aws-credentials|role-to-assume/.test(block))failures.push('cloud credentials');
   return failures;
 }
 test('image job builds with retained attestations, blocks vulnerabilities and rehearses without cloud credentials',()=>assert.deepEqual(imageJobProblems(workflow),[]));
-for(const [token,rule] of [['load: true','runtime load'],['push: false','no push'],['sbom: true','SBOM'],['provenance: mode=max','provenance'],['type=oci,dest=','OCI evidence'],["exit-code: '1'",'scan blocks'],['severity: CRITICAL,HIGH','fixed high critical'],['ignore-unfixed: true','fixed only'],['trivyignores: infrastructure/docker/trivy.ignore','reviewed exceptions'],['node infrastructure/docker/rehearsal.cjs','rehearsal'],['node --test infrastructure/docker/guard.test.mjs','guards']]) {
+for(const [token,rule] of [['infrastructure/docker/load-archive-image.sh','archive image loaded'],['push: false','no push'],['sbom: true','SBOM'],['provenance: mode=max','provenance'],['type=oci,dest=','OCI evidence'],["exit-code: '1'",'scan blocks'],['severity: CRITICAL,HIGH','fixed high critical'],['ignore-unfixed: true','fixed only'],['trivyignores: infrastructure/docker/trivy.ignore','reviewed exceptions'],['node infrastructure/docker/rehearsal.cjs','rehearsal'],['node --test infrastructure/docker/guard.test.mjs','guards']]) {
   test(`image job detects missing ${rule} (control)`,()=>assert.ok(imageJobProblems(workflow.replace(token,'removed')).includes(rule)));
 }
 
