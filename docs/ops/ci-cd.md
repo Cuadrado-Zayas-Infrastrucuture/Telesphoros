@@ -163,8 +163,11 @@ Drafts [#146](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Rema
 - **gitleaks compilation inputs are cached** by setup-go (OS, architecture, resolved Go release and the hash of `ci.yml`, which contains the exact gitleaks pin). There is no repository `go.sum`, so the workflow is the explicit dependency input. Source installation and the full-history scan run on both cold and warm caches.
 - **Docker uses a scoped GitHub Actions layer cache** (`api-amd64-v1`), with bounded import/export waits and non-blocking export failures. Lock/workspace inputs are fetched before source is copied; the subsequent frozen install is offline. Both image exports, attestations, vulnerability scanning, and the runtime rehearsal remain mandatory. Cache restore misses rebuild normally; no test/scan result is cached. GitHub's branch/ref cache isolation applies, so a PR cache is not reusable by main. The existing cache storage limit is not raised.
 - **The Terraform provider lock file is committed.** `versions.tf` constrains AWS to `~> 6.67`; the current lock selects AWS 6.68.0 and archive 2.8.1. Provider updates must preserve the reviewed lock/checksums and supported platforms; CI does not resolve an unreviewed newest 5.x provider.
-- **Native GitHub secret scanning / code scanning** are not configured here. On a private repository they need GitHub
-  Advanced Security. If the plan includes it, turn secret scanning on (Settings → Code security) as a second layer.
+- **Native GitHub secret scanning / code scanning** are not configured here. On a private repository on the Team plan they are
+  paid add-ons (Secret Protection, Code Security, per active committer). **Accepted gap, founder decision 2026-10-20 (audit
+  finding INF-18):** not bought for now; the compensating controls are the required gitleaks full-history scan (`secret-scan`)
+  and Dependabot security updates. Revisit before the first real user. If bought, turn them on in Settings → Code security and
+  add CodeQL to CI in its own pull request.
 
 ### Isolated service profiles and the joining gate
 
