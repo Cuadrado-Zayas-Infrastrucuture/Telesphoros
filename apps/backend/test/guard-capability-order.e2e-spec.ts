@@ -1,9 +1,10 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { Client } from 'pg';
 import request from 'supertest';
 import { CapabilityIssueError, type CapabilityIssueRequest, CapabilityIssuerPort, type IssuedCapability } from '../src/issuer/capability-issuer.port';
 import { MembershipRepository } from '../src/storage/membership.repository';
-import { createTestApp, membershipOf, securityEventsOf } from './helpers/app';
+import { createTestApp, issuerUrlOf, membershipOf, securityEventsOf } from './helpers/app';
 import { bearer, signToken } from './helpers/tokens';
 
 /**
@@ -20,16 +21,42 @@ const CAPABILITY = 'C'.repeat(43);
 class ScriptedIssuer extends CapabilityIssuerPort {
   readonly asked: CapabilityIssueRequest[] = [];
   trace: string[] = [];
-  behave: (request: CapabilityIssueRequest) => Promise<IssuedCapability | undefined> = async () => ({ token: CAPABILITY, expiresAt: new Date(Date.now() + 60_000), membershipVersion: 1 });
+  /** The issuer login's URL when the app runs on PostgreSQL. Then the default answer is a real row minted through the database's own function. */
+  issuerUrl?: string;
+  behave: (request: CapabilityIssueRequest) => Promise<IssuedCapability | undefined> = async (request) =>
+    (this.issuerUrl ? this.mint(request, this.issuerUrl) : { token: CAPABILITY, expiresAt: new Date(Date.now() + 60_000), membershipVersion: 1 });
   async issue(r: CapabilityIssueRequest): Promise<IssuedCapability | undefined> {
     this.asked.push(r);
     this.trace.push('issue');
     return this.behave(r);
   }
+  /**
+   * A capability the database knows: the database's membership check (FR-007) refuses any capability it has no row for, so a stand-in string is
+   * only valid without PostgreSQL. The tenant and person come from the access token's own claims.
+   */
+  private async mint(r: CapabilityIssueRequest, url: string): Promise<IssuedCapability> {
+    const claims = JSON.parse(Buffer.from(r.accessToken.split('.')[1]!, 'base64url').toString()) as { sub: string; tenant: string };
+    const value = randomBytes(32).toString('base64url');
+    const client = new Client({ connectionString: url });
+    await client.connect();
+    try {
+      const { rows } = await client.query<{ expires_at: Date; refusal: string | null; membership_version: string | null }>(
+        'SELECT * FROM tenant_capability_issue_current($1, $2, $3, $4, $5)',
+        [claims.tenant, claims.sub, 'request', createHash('sha256').update(value, 'utf8').digest(), r.requestId],
+      );
+      const row = rows[0]!;
+      if (row.refusal) throw new CapabilityIssueError('refused', row.refusal);
+      return { token: value, expiresAt: row.expires_at, membershipVersion: Number(row.membership_version) };
+    } finally {
+      await client.end();
+    }
+  }
 }
 
 let app: NestExpressApplication;
 const issuer = new ScriptedIssuer();
+/** The answer the issuer gives when no test is overriding it (set once the database is known). */
+let defaultBehave: ScriptedIssuer['behave'];
 const api = () => request(app.getHttpServer());
 const reasons = async (sub: string) => (await securityEventsOf(app)).filter((e) => e.eventType === 'access.refused' && e.subjectRef === sub).map((e) => e.details.reason);
 const me = async (sub: string, options: Parameters<typeof signToken>[0] = {}) => api().get('/api/v1/me').set(bearer(await token(sub, options)));
@@ -39,6 +66,8 @@ const refuse = (detail: string) => async () => {
 
 beforeAll(async () => {
   app = await createTestApp({ membershipFromTokens: false, overrides: [{ provide: CapabilityIssuerPort, useValue: issuer }] });
+  issuer.issuerUrl = issuerUrlOf(app);
+  defaultBehave = issuer.behave;
   const memberships = app.get(MembershipRepository);
   const find = memberships.find.bind(memberships);
   jest.spyOn(memberships, 'find').mockImplementation(async (tenantId, sub) => {
@@ -76,7 +105,7 @@ describe('the order', () => {
       expect((await me(sub)).status).toBe(200);
       expect(issuer.trace).toEqual(['issue', 'find']);
     } finally {
-      issuer.behave = new ScriptedIssuer().behave;
+      issuer.behave = defaultBehave;
     }
   });
 });
@@ -87,7 +116,7 @@ describe('refusal records (decision D1=(i)): the issuer\'s log row stands in onl
     try {
       await run();
     } finally {
-      issuer.behave = new ScriptedIssuer().behave;
+      issuer.behave = defaultBehave;
     }
   };
 
