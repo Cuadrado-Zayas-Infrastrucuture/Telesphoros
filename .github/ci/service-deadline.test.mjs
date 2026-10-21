@@ -50,7 +50,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, w
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
-import { budgetMs, hostedOwner, parseLinuxProcess, processKey, readProcess, readProcesses, reasons, signalIdentity, watchJob, validateWatchdog } from './service-deadline.mjs';
+import { bootstrap, budgetFromRun, budgetMs, hostedOwner, identityFromEnv, parseLinuxProcess, processKey, readProcess, readProcesses, reasons, remainingMs, requestBudget, signalIdentity, watchJob, validateWatchdog } from './service-deadline.mjs';
 import { runScript } from './service-budget.mjs';
 const quote = v => "'" + v.replaceAll("'", "'\\''") + "'";
 const budget = deadlineMs => ({ format: 1, repository: 'owner/repo', runId: '100', attempt: '1', headSha: 'a'.repeat(40), checkout: 'b'.repeat(40), startedMs: deadlineMs - budgetMs, deadlineMs });
@@ -229,8 +229,11 @@ test('a refusal prints only a closed-list reason code, never receipt, budget or 
   result = run(); assert.equal(result.status, 1); assert.equal(result.stderr, 'Service budget refused: watchdog-receipt-invalid.\n');
   writeFileSync(file, JSON.stringify({ ...receipt, state: 'PRIVATE_DO_NOT_SERIALIZE' }));
   result = run(); assert.equal(result.stderr, 'Service budget refused: watchdog-not-armed.\n'); assert.doesNotMatch(result.stderr, /PRIVATE/);
-  // A guard without a reason code stays silent, so the closed list is the only thing that can reach the log.
+  // A spent budget is named too; it is a fixed word, not the budget values.
   writeFileSync(join(dir, 'service-budget.json'), JSON.stringify({ ...b, deadlineMs: now - 1, startedMs: now - 1 - budgetMs }));
+  result = run(); assert.equal(result.status, 1); assert.equal(result.stderr, 'Service budget refused: budget-expired.\n');
+  // A guard without a reason code stays silent, so the closed list is the only thing that can reach the log.
+  writeFileSync(join(dir, 'service-budget.json'), JSON.stringify({ ...b, runId: '999' }));
   result = run(); assert.equal(result.status, 1); assert.equal(result.stderr, '');
 });
 test('losing a required watchdog cannot fall back to fetching a fresh clock', async t => {
@@ -247,6 +250,85 @@ test('the first-step CLI refuses a workstation without credentials, source value
   const dir = temporaryFixture(t);
   const script = new URL('./service-deadline.mjs', import.meta.url).pathname;
   const result = spawnSync(process.execPath, [script, 'bootstrap'], { env: { PATH: process.env.PATH, RUNNER_TEMP: dir, GITHUB_OUTPUT: join(dir, 'outputs'), RUNNER_ENVIRONMENT: 'self-hosted', PRIVATE: 'PRIVATE_DO_NOT_SERIALIZE' }, encoding: 'utf8' });
-  assert.equal(result.status, 1); assert.equal(result.stdout, ''); assert.equal(result.stderr, 'Service deadline supervision failed.\n');
+  assert.equal(result.status, 1); assert.equal(result.stdout, '');
+  assert.equal(result.stderr, 'Service deadline refused: hosted-environment-unsupported.\nService deadline supervision failed.\n');
+  assert.doesNotMatch(result.stderr, /PRIVATE/); assert.deepEqual(readdirSync(dir), []);
+});
+
+// The arming step used to print one generic line for every refusal, so a run past its budget looked like a flake (2026-10-21).
+const sha = 'a'.repeat(40), startedAt = '2026-10-20T04:37:18Z', startedAtMs = Date.parse(startedAt);
+const armEnv = { GITHUB_REPOSITORY: 'owner/repo', GITHUB_RUN_ID: '100', GITHUB_RUN_ATTEMPT: '1', SERVICE_HEAD_SHA: sha, GITHUB_SHA: sha,
+  GH_TOKEN: 'token', GITHUB_API_URL: 'https://api.github.com' };
+const armRun = (changes = {}) => ({ id: 100, run_attempt: 1, head_sha: sha, repository: { full_name: 'owner/repo' }, run_started_at: startedAt, ...changes });
+const answer = (run, ok = true) => async () => ({ ok, json: async () => run });
+const reasonOf = fn => { try { fn(); } catch (error) { return error.reason ?? null; } return assert.fail('Expected a refusal.'); };
+const reasonOfAsync = async fn => { try { await fn(); } catch (error) { return error.reason ?? null; } return assert.fail('Expected a refusal.'); };
+test('the budget clauses each name their own reason, and a spent budget is told apart from an early clock', () => {
+  const identity = identityFromEnv(armEnv), at = startedAtMs + 60_000;
+  assert.equal(budgetFromRun(armRun(), identity, at).deadlineMs, startedAtMs + budgetMs);
+  for (const [changes, reason] of [[{ id: 101 }, 'budget-run-mismatch'], [{ run_attempt: 2 }, 'budget-run-mismatch'], [{ head_sha: 'b'.repeat(40) }, 'budget-run-mismatch'],
+    [{ repository: { full_name: 'other/repo' } }, 'budget-run-mismatch'], [{ run_started_at: '2026-10-20T04:37:18.000Z' }, 'budget-run-started-invalid'],
+    [{ run_started_at: undefined }, 'budget-run-started-invalid']]) assert.equal(reasonOf(() => budgetFromRun(armRun(changes), identity, at)), reason, JSON.stringify(changes));
+  assert.equal(reasonOf(() => identityFromEnv({ ...armEnv, GITHUB_RUN_ID: '0' })), 'budget-identity-invalid');
+  // The boundary seen in the 2026-10-17 and 2026-10-20 runs: a job that starts after run start + 30 min cannot arm.
+  assert.equal(reasonOf(() => budgetFromRun(armRun(), identity, startedAtMs + budgetMs)), 'budget-expired');
+  assert.equal(reasonOf(() => budgetFromRun(armRun(), identity, startedAtMs + budgetMs + 33_000)), 'budget-expired');
+  assert.equal(budgetFromRun(armRun(), identity, startedAtMs + budgetMs - 1).deadlineMs - (startedAtMs + budgetMs - 1), 1);
+  assert.equal(reasonOf(() => budgetFromRun(armRun(), identity, startedAtMs - 1)), 'budget-not-started');
+  const budget = { format: 1, ...identity, startedMs: startedAtMs, deadlineMs: startedAtMs + budgetMs };
+  assert.equal(reasonOf(() => remainingMs({ ...budget, format: 2 }, at)), 'budget-invalid');
+  assert.equal(reasonOf(() => remainingMs({ ...budget, deadlineMs: budget.deadlineMs + 1 }, at)), 'budget-invalid');
+  assert.equal(reasonOf(() => remainingMs(budget, Number.NaN)), 'budget-invalid');
+});
+test('the budget request names whether it was refused before sending, unreachable, rejected or unreadable', async () => {
+  const at = () => startedAtMs + 60_000;
+  assert.equal((await requestBudget(armEnv, answer(armRun()), at)).startedMs, startedAtMs);
+  for (const [env, request, reason] of [
+    [{ ...armEnv, GH_TOKEN: undefined }, answer(armRun()), 'budget-request-invalid'],
+    [{ ...armEnv, GITHUB_API_URL: 'https://example.invalid' }, answer(armRun()), 'budget-request-invalid'],
+    [armEnv, async () => { throw new TypeError('PRIVATE_DO_NOT_SERIALIZE'); }, 'budget-api-unreachable'],
+    [armEnv, async () => { throw new DOMException('PRIVATE_DO_NOT_SERIALIZE', 'TimeoutError'); }, 'budget-api-unreachable'],
+    [armEnv, answer(armRun(), false), 'budget-api-refused'],
+    [armEnv, async () => ({ ok: true, json: async () => { throw new SyntaxError('PRIVATE_DO_NOT_SERIALIZE'); } }), 'budget-api-response-invalid'],
+    [armEnv, answer(armRun({ id: 7 })), 'budget-run-mismatch'],
+  ]) {
+    try { await requestBudget(env, request, at); assert.fail('Expected a refusal.'); }
+    catch (error) { assert.equal(error.reason, reason); assert.ok(reasons.includes(error.reason)); assert.doesNotMatch(error.message, /PRIVATE/); }
+  }
+});
+test('the hosted-owner check names an unsupported environment apart from a missing Runner.Worker', () => {
+  const uid = 1000, hosted = { RUNNER_ENVIRONMENT: 'github-hosted', RUNNER_OS: 'Linux', RUNNER_ARCH: 'X64' };
+  const worker = { pid: 50, ppid: 1, uid, start: '50', command: 'Runner.Worker' };
+  const me = { pid: process.pid, ppid: 50, uid, start: '60', command: 'node' };
+  assert.equal(hostedOwner(hosted, new Map([[50, worker], [process.pid, me]]), 'linux', uid), worker);
+  assert.equal(reasonOf(() => hostedOwner(hosted, new Map(), 'darwin', uid)), 'hosted-environment-unsupported');
+  assert.equal(reasonOf(() => hostedOwner({ ...hosted, RUNNER_ENVIRONMENT: 'self-hosted' }, new Map(), 'linux', uid)), 'hosted-environment-unsupported');
+  assert.equal(reasonOf(() => hostedOwner(hosted, new Map([[process.pid, { ...me, ppid: 1 }]]), 'linux', uid)), 'hosted-owner-missing');
+  assert.equal(reasonOf(() => hostedOwner(hosted, new Map([[50, { ...worker, uid: uid + 1 }], [process.pid, me]]), 'linux', uid)), 'hosted-owner-missing');
+});
+test('bootstrap names what stopped it: a relative output path, a spent budget, or a watchdog that never armed', async t => {
+  const dir = temporaryFixture(t), uid = process.getuid(), owner = () => ({ pid: 999999, ppid: 1, uid, start: 'owner', command: 'Runner.Worker' });
+  const env = { ...armEnv, PATH: process.env.PATH, RUNNER_TEMP: dir, GITHUB_OUTPUT: join(dir, 'outputs') };
+  assert.equal(await reasonOfAsync(() => bootstrap({ ...env, GITHUB_OUTPUT: 'outputs' }, answer(armRun()), () => startedAtMs, owner)), 'output-path-invalid');
+  assert.equal(await reasonOfAsync(() => bootstrap(env, answer(armRun()), () => startedAtMs + budgetMs + 5_000, owner)), 'budget-expired');
   assert.deepEqual(readdirSync(dir), []);
+  // The child refuses on this machine (not a hosted Linux runner), so no receipt ever appears: the loop's own last clause is what is reported.
+  // A fake clock that jumps keeps the 5 s wait short; nothing here sleeps for it.
+  let ticks = 0; const clock = () => startedAtMs + 10_000 + 400 * ticks++;
+  assert.equal(await reasonOfAsync(() => bootstrap(env, answer(armRun()), clock, owner)), 'watchdog-receipt-invalid');
+  assert.equal(existsSync(env.GITHUB_OUTPUT), false);
+  // No checker clause was ever seen (the window closes at the deadline before the first look): the generic name.
+  // (The budget and ticket files are created once per directory, so this case gets its own.)
+  const again = temporaryFixture(t), edgeEnv = { ...env, RUNNER_TEMP: again, GITHUB_OUTPUT: join(again, 'outputs') };
+  const times = [startedAtMs + 10_000, startedAtMs + budgetMs - 1]; const edge = () => times.shift() ?? startedAtMs + budgetMs;
+  assert.equal(await reasonOfAsync(() => bootstrap(edgeEnv, answer(armRun()), edge, owner)), 'watchdog-did-not-arm');
+  assert.equal(existsSync(edgeEnv.GITHUB_OUTPUT), false);
+});
+test('every reason in the closed list is a fixed lowercase word and is asserted by name in this file', () => {
+  const source = readFileSync(new URL('./service-deadline.test.mjs', import.meta.url), 'utf8');
+  for (const reason of reasons) {
+    assert.match(reason, /^[a-z]+(-[a-z]+)+$/);
+    assert.ok(source.split(`'${reason}'`).length > 1, `${reason} needs a test that asserts it`);
+  }
+  assert.equal(new Set(reasons).size, reasons.length);
 });

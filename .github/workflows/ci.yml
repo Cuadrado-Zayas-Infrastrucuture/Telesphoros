@@ -109,7 +109,10 @@ jobs:
           // Closed list of reason codes. A refusal may name the clause that failed, never a value, path or file content.
           export const reasons = Object.freeze(['watchdog-receipt-invalid', 'watchdog-not-armed', 'watchdog-process-changed', 'watchdog-owner-changed',
             'watchdog-uid-mismatch', 'watchdog-budget-mismatch', 'watchdog-source-mismatch', 'watchdog-heartbeat-invalid',
-            'watchdog-heartbeat-future', 'watchdog-heartbeat-stale']);
+            'watchdog-heartbeat-future', 'watchdog-heartbeat-stale', 'watchdog-did-not-arm',
+            'budget-identity-invalid', 'budget-run-mismatch', 'budget-run-started-invalid', 'budget-invalid', 'budget-not-started', 'budget-expired',
+            'budget-request-invalid', 'budget-api-unreachable', 'budget-api-refused', 'budget-api-response-invalid',
+            'hosted-environment-unsupported', 'hosted-owner-missing', 'output-path-invalid']);
           const refuse = reason => { throw Object.assign(new Error('Service budget validation failed.'), reasons.includes(reason) ? { reason } : {}); };
           // The watchdog publishes a new heartbeat about every 250 ms; one stamped after the caller sampled `now` is not forged.
           export const heartbeatSkewMs = 1000;
@@ -122,13 +125,13 @@ jobs:
               headSha: env.SERVICE_HEAD_SHA, checkout: env.GITHUB_SHA };
             if (!/^[\w.-]+\/[\w.-]+$/.test(value.repository ?? '')
               || ![value.runId, value.attempt].every(v => /^[1-9]\d*$/.test(v ?? '') && Number.isSafeInteger(Number(v)))
-              || ![value.headSha, value.checkout].every(v => /^[a-f0-9]{40}$/.test(v ?? ''))) refuse();
+              || ![value.headSha, value.checkout].every(v => /^[a-f0-9]{40}$/.test(v ?? ''))) refuse('budget-identity-invalid');
             return value;
           }
           export function budgetFromRun(run, identity, now = Date.now()) {
             if (String(run.id) !== identity.runId || String(run.run_attempt) !== identity.attempt
-              || run.head_sha !== identity.headSha || run.repository?.full_name !== identity.repository
-              || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(run.run_started_at ?? '')) refuse();
+              || run.head_sha !== identity.headSha || run.repository?.full_name !== identity.repository) refuse('budget-run-mismatch');
+            if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(run.run_started_at ?? '')) refuse('budget-run-started-invalid');
             const startedMs = Date.parse(run.run_started_at);
             const budget = { format: 1, ...identity, startedMs, deadlineMs: startedMs + budgetMs };
             remainingMs(budget, now);
@@ -139,7 +142,10 @@ jobs:
             identityFromEnv({ GITHUB_REPOSITORY: budget.repository, GITHUB_RUN_ID: budget.runId, GITHUB_RUN_ATTEMPT: budget.attempt,
               SERVICE_HEAD_SHA: budget.headSha, GITHUB_SHA: budget.checkout });
             if (budget.format !== 1 || ![budget.startedMs, budget.deadlineMs, now].every(Number.isSafeInteger)
-              || budget.deadlineMs - budget.startedMs !== budgetMs || now < budget.startedMs || now >= budget.deadlineMs) refuse();
+              || budget.deadlineMs - budget.startedMs !== budgetMs) refuse('budget-invalid');
+            // An `if: always()` job that starts after the run's budget is spent lands here, 30 minutes after a hung upstream job.
+            if (now < budget.startedMs) refuse('budget-not-started');
+            if (now >= budget.deadlineMs) refuse('budget-expired');
             return budget.deadlineMs - now;
           }
           export function temporary(env) {
@@ -255,14 +261,14 @@ jobs:
             for (const p of capture()) signal(p, 'SIGKILL');
           }
           export function hostedOwner(env, table = readProcesses(), platform = process.platform, uid = process.getuid?.()) {
-            if (platform !== 'linux' || env.RUNNER_ENVIRONMENT !== 'github-hosted' || env.RUNNER_OS !== 'Linux' || env.RUNNER_ARCH !== 'X64' || !uid) refuse();
+            if (platform !== 'linux' || env.RUNNER_ENVIRONMENT !== 'github-hosted' || env.RUNNER_OS !== 'Linux' || env.RUNNER_ARCH !== 'X64' || !uid) refuse('hosted-environment-unsupported');
             let p = table.get(process.pid); const seen = new Set();
             while (p && !seen.has(p.pid)) {
               seen.add(p.pid);
               if (p.command === 'Runner.Worker' && p.uid === uid && p.pid !== process.pid) return p;
               p = table.get(p.ppid);
             }
-            refuse();
+            refuse('hosted-owner-missing');
           }
           function atomicJson(file, value) {
             const temporaryFile = file + '.' + process.pid;
@@ -344,18 +350,23 @@ jobs:
           }
           export async function requestBudget(env = process.env, request = fetch, now = Date.now) {
             const identity = identityFromEnv(env);
-            if (!env.GH_TOKEN || env.GITHUB_API_URL !== 'https://api.github.com') refuse();
-            const response = await request(`${env.GITHUB_API_URL}/repos/${identity.repository}/actions/runs/${identity.runId}/attempts/${identity.attempt}`, {
-              headers: { Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2026-03-10' },
-              redirect: 'error', signal: AbortSignal.timeout(10_000),
-            });
-            if (!response.ok) refuse();
-            return budgetFromRun(await response.json(), identity, now());
+            if (!env.GH_TOKEN || env.GITHUB_API_URL !== 'https://api.github.com') refuse('budget-request-invalid');
+            let response;
+            try {
+              response = await request(`${env.GITHUB_API_URL}/repos/${identity.repository}/actions/runs/${identity.runId}/attempts/${identity.attempt}`, {
+                headers: { Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2026-03-10' },
+                redirect: 'error', signal: AbortSignal.timeout(10_000),
+              });
+            } catch { refuse('budget-api-unreachable'); }
+            if (!response.ok) refuse('budget-api-refused');
+            let run;
+            try { run = await response.json(); } catch { refuse('budget-api-response-invalid'); }
+            return budgetFromRun(run, identity, now());
           }
-          export async function bootstrap(env = process.env, request = fetch, now = Date.now) {
+          export async function bootstrap(env = process.env, request = fetch, now = Date.now, findOwner = hostedOwner) {
             // Never run machine-wide cleanup on a workstation, self-hosted runner or shared container runner.
-            if (!isAbsolute(env.GITHUB_OUTPUT ?? '')) refuse();
-            const baseline = readProcesses(); const owner = hostedOwner(env, baseline);
+            if (!isAbsolute(env.GITHUB_OUTPUT ?? '')) refuse('output-path-invalid');
+            const baseline = readProcesses(); const owner = findOwner(env, baseline);
             const budget = await requestBudget(env, request, now);
             const directory = temporary(env);
             writeFileSync(join(directory, 'service-budget.json'), JSON.stringify(budget) + '\n', { mode: 0o600, flag: 'wx' });
@@ -369,14 +380,16 @@ jobs:
             let childFailed = false; child.once('error', () => { childFailed = true; });
             child.unref();
             const until = Math.min(now() + 5000, budget.deadlineMs);
+            let last = 'watchdog-did-not-arm';
             while (!childFailed && now() < until) {
               try { validateWatchdog(env, budget, now());
-                if (!isAbsolute(env.GITHUB_OUTPUT ?? '')) refuse();
+                if (!isAbsolute(env.GITHUB_OUTPUT ?? '')) refuse('output-path-invalid');
                 appendFileSync(env.GITHUB_OUTPUT, 'armed=true\n'); return budget;
-              } catch { await delay(20); }
+              } catch (error) { if (error?.reason) last = error.reason; await delay(20); }
             }
             if (child.pid) { const p = readProcess(child.pid); if (p) signalIdentity(p, 'SIGTERM'); }
-            throw new Error('Service watchdog did not arm.');
+            // The last clause the checker saw is the best account of why the child never armed; none seen means it never wrote a receipt.
+            refuse(last);
           }
           if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
             try {
@@ -392,7 +405,11 @@ jobs:
                 if (processKey(owner) !== processKey(ticket.owner) || ticket.uid !== process.getuid()) refuse();
                 process.exitCode = await watchJob({ ...ticket, baseline: new Map(ticket.baseline), directory });
               } else refuse();
-            } catch { process.stderr.write('Service deadline supervision failed.\n'); process.exitCode = 1; }
+            } catch (error) {
+              // The closed list above is the only thing that may reach the log; refuse() drops any other reason.
+              if (error?.reason) process.stderr.write(`Service deadline refused: ${error.reason}.\n`);
+              process.stderr.write('Service deadline supervision failed.\n'); process.exitCode = 1;
+            }
           }
           SERVICE_DEADLINE
           node "$RUNNER_TEMP/service-deadline.mjs" bootstrap
