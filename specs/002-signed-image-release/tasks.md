@@ -56,25 +56,25 @@
 
 - [x] T011 [US2] `image` job: compute the index digest from `index.json` and expose it as an output; on push to `main`, upload `api.oci.tar` (one day).
 - [x] T012 [US2, US3, US4] `release-image` job per plan.md "The release job"; the job summary names the digest and tag.
-- [ ] T013 `pnpm test:ci-config`, actionlint, the full local loop; after merge, confirm on GitHub that `release-image` is skipped on `main` and every required check is green (SC-004).
+- [x] T013 `pnpm test:ci-config`, actionlint, the full local loop; after merge, confirm on GitHub that `release-image` is skipped on `main` and every required check is green (SC-004). Seen 2026-10-21 on the merge of #222 (`e6bace2`, run 39595275791): 11 jobs green, `release-image` skipped.
 
 ## Phase 3: Slice 3, verify before apply (US1, US5) — needs D3
 
 ### Tests first
 
-- [ ] T014 [P] [US1] `verify-image.test.mjs` with a stub `cosign` on `PATH` (the pattern `scripts/staging/run-task.test.mjs` uses for its stubbed `aws`). Cases:
+- [x] T014 [P] [US1] `verify-image.test.mjs` with a stub `cosign` on `PATH` (the pattern `scripts/staging/run-task.test.mjs` uses for its stubbed `aws`). Cases:
   - signed: record written;
   - unsigned: refused;
   - other key: refused;
   - a tag instead of a digest: refused;
   - a cosign error: refused, never "verified".
-- [ ] T015 [P] [US1] `check-plan.test.mjs`: stage C with no record, a record for another digest, a stale record format, or `api_migrate_image` unverified, is refused; a matching record is accepted (SC-001).
-- [ ] T016 [P] [US5] Break-glass: refused for production; for synthetic, recorded with its reason and printed.
+- [x] T015 [P] [US1] `check-plan.test.mjs`: stage C with no record, a record for another digest, a stale record format, or `api_migrate_image` unverified, is refused; a matching record is accepted (SC-001).
+- [x] T016 [P] [US5] Break-glass: refused for production; for synthetic, recorded with its reason and printed.
 
 ### Implementation
 
-- [ ] T017 [US1] `scripts/staging/verify-image.mjs`; `check-plan.mjs` stage C reads `verified-image.json`.
-- [ ] T018 Rewrite `docs/ops/image-push.md`: CI pushes and signs; manual push is break-glass; the exact credential exception; how to fetch the public key. Update `docs/ops/ci-cd.md` (the `release-image` job, the one `id-token` exception), `docs/STATUS.md`, and `docs/verification/signed-image-release.md`.
+- [x] T017 [US1] `scripts/staging/verify-image.mjs`; `check-plan.mjs` stage C reads `verified-image.json`.
+- [x] T018 Rewrite `docs/ops/image-push.md`: CI pushes and signs; manual push is break-glass; the exact credential exception; how to fetch the public key. Update `docs/ops/ci-cd.md` (the `release-image` job, the one `id-token` exception), `docs/STATUS.md` (a fragment in `docs/status/` since #220), and `docs/verification/signed-image-release.md`.
 
 ## Phase 4: Founder, first apply (after the BAA and approval of the apply)
 

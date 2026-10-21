@@ -21,6 +21,7 @@ import './signing.guard.test.mjs';
 import './reports-cors.guard.test.mjs';
 import '../../scripts/staging/publish-frontend.test.mjs';
 import '../../scripts/staging/run-task.test.mjs';
+import '../../scripts/staging/verify-image.test.mjs';
 
 const cognito = readFileSync(new URL('./cognito.tf', import.meta.url), 'utf8');
 const lambda = readFileSync(new URL('./lambda.tf', import.meta.url), 'utf8');
