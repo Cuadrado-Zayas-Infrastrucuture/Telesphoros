@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { Client } from 'pg';
 import { disposeFixtures, onceFixtureCleanup } from './fixture-cleanup';
+import { trackedBuild, trackLive } from './fixture-registry';
 import { migrateUp } from '../../src/db/migrator';
 
 /** Admin (superuser) URL of a disposable PostgreSQL. Start one with scripts/dev-postgres.sh. */
@@ -70,14 +71,27 @@ export interface EphemeralDatabase {
  * A fresh, fully migrated database on the real test cluster. Roles are cluster-wide, so they are
  * created once under an advisory lock (parallel Jest workers would otherwise race to create them).
  */
+/**
+ * The database, or the failure that unwound it. Registered like createTestApp's application: a caller whose hook timed out never receives
+ * it, and the end of the test file cancels the build and drops what it created (see fixture-registry.ts).
+ */
 export async function createEphemeralDatabase(options: { migrate?: boolean; signal?: AbortSignal } = {}): Promise<EphemeralDatabase> {
+  let forget = () => {};
+  const database = await trackedBuild((signal) => buildEphemeralDatabase({ ...options, signal }, () => forget()), options.signal);
+  forget = trackLive(() => database.drop());
+  return database;
+}
+
+async function buildEphemeralDatabase(options: { migrate?: boolean; signal?: AbortSignal }, onDropped: () => void): Promise<EphemeralDatabase> {
   const base = adminUrl();
   const name = `test_${randomBytes(6).toString('hex')}`;
   let created = false;
   const drop = onceFixtureCleanup(async () => {
-    if (created) await withAdmin(base, async client => {
-      await client.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
-    });
+    try {
+      if (created) await withAdmin(base, async client => {
+        await client.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+      });
+    } finally { onDropped(); }
   });
   try {
     options.signal?.throwIfAborted();

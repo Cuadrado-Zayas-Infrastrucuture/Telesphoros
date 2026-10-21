@@ -120,7 +120,7 @@ token.actions.githubusercontent.com:job_workflow_ref    = <owner>/<repo>/.github
 
 ### Verification (FR-007)
 
-`scripts/staging/verify-image.mjs <api_image>` runs `cosign verify --key awskms:///alias/… --insecure-ignore-tlog <api_image>`. It writes `verified-image.json` (digest, key ARN, time, cosign version) next to the saved plan. `check-plan` stage C reads it and requires `digest == api_image` (and `api_migrate_image` when set). Break-glass is `--unsigned-break-glass "<reason>"`: refused for production, recorded in the file and printed loudly.
+`scripts/staging/verify-image.mjs <api_image>` runs `cosign verify --key awskms:///alias/… --insecure-ignore-tlog <api_image>`. It writes `verified-image.json` (digest, key ARN, time, cosign version) next to the saved plan. *As built (slice 3, founder option (a) 2026-10-21):* `verify-image.mjs --name-prefix <p> --environment <e> <api_image> [<api_migrate_image>]` resolves the stack's alias to the key ARN with `kms describe-key` and verifies against the ARN. `check-plan` binds the record to the plan's own alias `alias/<name_prefix>-<environment>-image-signing` and to the image's account and Region. `check-plan` stage C reads it and requires `digest == api_image` (and `api_migrate_image` when set). Break-glass is `--unsigned-break-glass "<reason>"`: refused for production, recorded in the file and printed loudly.
 
 ### Rollout: slices (each its own draft PR off `main`, never stacked, merged in order)
 

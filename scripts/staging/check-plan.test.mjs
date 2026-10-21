@@ -10,6 +10,11 @@ const ACCOUNT = '123456789012';
 const REGION = 'us-east-2';
 const REPOSITORY = `arn:aws:ecr:${REGION}:${ACCOUNT}:repository/telesphoros-staging-api`;
 const IMAGE = `${ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/telesphoros-staging-api@sha256:${'0'.repeat(64)}`;
+const MIGRATE_IMAGE = IMAGE.replace(/0{64}$/, '1'.repeat(64));
+const KEY_ARN = `arn:aws:kms:${REGION}:${ACCOUNT}:key/0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0`;
+// What scripts/staging/verify-image.mjs writes after cosign verified IMAGE against the stack's key.
+const RECORD = Object.freeze({ format: 1, method: 'signature', environment: 'staging', keyAlias: 'alias/telesphoros-staging-image-signing', keyArn: KEY_ARN,
+  cosignVersion: 'v3.1.3', images: Object.freeze([IMAGE]), recordedAt: '2026-10-21T09:00:00.000Z' });
 const policy = (repository) => JSON.stringify({ Version: '2012-10-17', Statement: [
   { Sid: 'EcrLogin', Effect: 'Allow', Action: 'ecr:GetAuthorizationToken', Resource: '*' },
   { Sid: 'PullThisRepositoryOnly', Effect: 'Allow', Action: ['ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer', 'ecr:BatchCheckLayerAvailability'], Resource: repository },
@@ -23,7 +28,7 @@ function fixture(stage) {
   });
   return {
     format_version: '1.2', complete: true, applyable: true, errored: false,
-    variables: Object.fromEntries(Object.entries({ deployment_profile: 'synthetic', environment: 'staging', enable_api_hosting: true, enable_web_hosting: stage !== 'A', api_image: stage === 'C' ? IMAGE : '', region: REGION }).map(([name, value]) => [name, { value }])),
+    variables: Object.fromEntries(Object.entries({ name_prefix: 'telesphoros', deployment_profile: 'synthetic', environment: 'staging', enable_api_hosting: true, enable_web_hosting: stage !== 'A', api_image: stage === 'C' ? IMAGE : '', api_migrate_image: '', region: REGION }).map(([name, value]) => [name, { value }])),
     resource_changes: changes,
   };
 }
@@ -33,7 +38,7 @@ test('staged plans accept create-only A/B and exactly the four repository-only u
     const plan = fixture(stage);
     plan.resource_changes.push({ address: 'data.aws_caller_identity.current', mode: 'data', change: { actions: ['read'] } });
     plan.resource_changes.push({ address: 'aws_s3_bucket.reports', mode: 'managed', change: { actions: ['no-op'] } });
-    assert.deepEqual(planProblems(plan, stage), []);
+    assert.deepEqual(planProblems(plan, stage, RECORD), []);
   }
 });
 
@@ -42,10 +47,10 @@ test('saved -var boolean strings are accepted without treating arbitrary strings
     const plan = fixture(stage);
     plan.variables.enable_api_hosting.value = 'true';
     plan.variables.enable_web_hosting.value = stage === 'A' ? 'false' : 'true';
-    assert.deepEqual(planProblems(plan, stage), []);
+    assert.deepEqual(planProblems(plan, stage, RECORD), []);
     for (const invalid of ['yes', 'FALSE', '', null]) {
       plan.variables.enable_web_hosting.value = invalid;
-      assert.ok(planProblems(plan, stage).some((reason) => reason.includes('hosting switches')));
+      assert.ok(planProblems(plan, stage, RECORD).some((reason) => reason.includes('hosting switches')));
     }
   }
 });
@@ -74,15 +79,15 @@ test('staged plans reject unrelated updates, every deletion/replacement, missing
   ];
   for (const [name, edit] of controls) {
     const plan = fixture('C'); edit(plan);
-    assert.ok(planProblems(plan, 'C').length > 0, name);
+    assert.ok(planProblems(plan, 'C', RECORD).length > 0, name);
   }
   for (const stage of ['A', 'B']) {
     const plan = fixture(stage); plan.resource_changes.push(fixture('C').resource_changes[1]);
-    assert.ok(planProblems(plan, stage).some((reason) => reason.includes('unexpected action')), `${stage} remains create-only`);
+    assert.ok(planProblems(plan, stage, RECORD).some((reason) => reason.includes('unexpected action')), `${stage} remains create-only`);
     plan.variables.api_image.value = IMAGE;
-    assert.ok(planProblems(plan, stage).some((reason) => reason.includes('must have no api_image')));
+    assert.ok(planProblems(plan, stage, RECORD).some((reason) => reason.includes('must have no api_image')));
   }
-  for (const plan of [null, {}, { format_version: '2.0', resource_changes: [] }]) assert.ok(planProblems(plan, 'C').length > 0);
+  for (const plan of [null, {}, { format_version: '2.0', resource_changes: [] }]) assert.ok(planProblems(plan, 'C', RECORD).length > 0);
   assert.ok(planProblems(fixture('C'), 'D').length > 0);
 });
 
@@ -98,12 +103,62 @@ test('an allowed policy address does not permit any other IAM permission or reso
   for (const address of IMAGE_POLICY_UPDATES) for (const [name, edit] of edits) {
     const plan = fixture('C'); const change = plan.resource_changes.find((entry) => entry.address === address).change;
     const parsed = JSON.parse(change.after.policy); edit(parsed); change.after.policy = JSON.stringify(parsed);
-    assert.ok(planProblems(plan, 'C').some((reason) => reason.includes('unexpected action')), `${address}: ${name}`);
+    assert.ok(planProblems(plan, 'C', RECORD).some((reason) => reason.includes('unexpected action')), `${address}: ${name}`);
   }
   const plan = fixture('C'); plan.resource_changes[1].change.before.policy = policy(REPOSITORY);
-  assert.ok(planProblems(plan, 'C').length > 0, 'this is only the first image transition from repository/none');
+  assert.ok(planProblems(plan, 'C', RECORD).length > 0, 'this is only the first image transition from repository/none');
   plan.resource_changes[1].change.after.policy = 'not JSON';
-  assert.ok(planProblems(plan, 'C').length > 0);
+  assert.ok(planProblems(plan, 'C', RECORD).length > 0);
+});
+
+test('stage C needs a verification record for exactly this stack, key and digest (INF-03 SC-001)', () => {
+  assert.deepEqual(planProblems(fixture('C'), 'C', RECORD), []);
+  const record = (edit) => { const r = structuredClone(RECORD); edit(r); return r; };
+  const refused = [
+    ['no record', undefined, /verified-image\.json/],
+    ['an unreadable record', 'not an object', /verified-image\.json/],
+    ['a record for another digest (unsigned, or signed for a different digest)', record((r) => { r.images = [MIGRATE_IMAGE]; }), /api_image .* has no verification/],
+    ['a tag recorded instead of the digest', record((r) => { r.images = [IMAGE.replace(/@sha256:.+/, ':latest')]; }), /api_image .* has no verification/],
+    ['a stale record format', record((r) => { r.format = 0; }), /format/],
+    ['a newer record format', record((r) => { r.format = 2; }), /format/],
+    ['another key (another stack\'s alias)', record((r) => { r.keyAlias = 'alias/telesphoros-production-image-signing'; }), /alias\/telesphoros-staging-image-signing/],
+    ['another name prefix', record((r) => { r.keyAlias = 'alias/other-staging-image-signing'; }), /alias\/telesphoros-staging-image-signing/],
+    ['a key ARN in another Region', record((r) => { r.keyArn = KEY_ARN.replace(REGION, 'us-west-2'); }), /key ARN/],
+    ['a key ARN in another account', record((r) => { r.keyArn = KEY_ARN.replace(ACCOUNT, '210987654321'); }), /key ARN/],
+    ['an alias recorded as the key', record((r) => { r.keyArn = `arn:aws:kms:${REGION}:${ACCOUNT}:alias/telesphoros-staging-image-signing`; }), /key ARN/],
+    ['cosign 2', record((r) => { r.cosignVersion = 'v2.6.1'; }), /cosign 3/],
+    ['another environment', record((r) => { r.environment = 'dev'; }), /environment/],
+    ['an unknown method', record((r) => { r.method = 'trusted'; }), /method/],
+    ['images not a list', record((r) => { r.images = IMAGE; }), /images/],
+  ];
+  for (const [name, value, pattern] of refused) {
+    const problems = planProblems(fixture('C'), 'C', value);
+    assert.ok(problems.some((reason) => pattern.test(reason)), `${name}: ${problems.join('; ')}`);
+  }
+  // api_migrate_image gets the same treatment: set and unverified is refused; set and verified is accepted.
+  const plan = fixture('C'); plan.variables.api_migrate_image.value = MIGRATE_IMAGE;
+  assert.ok(planProblems(plan, 'C', RECORD).some((reason) => /api_migrate_image .* has no verification/.test(reason)));
+  assert.deepEqual(planProblems(plan, 'C', record((r) => { r.images = [IMAGE, MIGRATE_IMAGE]; })), []);
+  // A and B have no image, so they need no record and ignore one.
+  for (const stage of ['A', 'B']) {
+    assert.deepEqual(planProblems(fixture(stage), stage), []);
+    assert.deepEqual(planProblems(fixture(stage), stage, 'not an object'), []);
+  }
+});
+
+test('stage C accepts a break-glass record for synthetic staging only, and says so', () => {
+  const glass = { format: 1, method: 'break-glass', environment: 'staging', reason: 'CI down since 09:00, synthetic hotfix', images: [IMAGE], recordedAt: '2026-10-21T09:00:00.000Z' };
+  assert.deepEqual(planProblems(fixture('C'), 'C', glass), []);
+  for (const [name, edit, pattern] of [
+    ['production', (p, r) => { p.variables.environment.value = 'production'; r.environment = 'production'; }, /break-glass is never allowed for production/],
+    ['production profile', (p) => { p.variables.deployment_profile.value = 'production'; }, /break-glass is never allowed for production/],
+    ['no reason', (_p, r) => { delete r.reason; }, /reason/],
+    ['empty reason', (_p, r) => { r.reason = '   '; }, /reason/],
+  ]) {
+    const plan = fixture('C'); const record = structuredClone(glass); edit(plan, record);
+    const problems = planProblems(plan, 'C', record);
+    assert.ok(problems.some((reason) => pattern.test(reason)), `${name}: ${problems.join('; ')}`);
+  }
 });
 
 test('the plan checker CLI is read-only, fails closed, and does not echo invalid JSON contents', () => {
@@ -112,8 +167,18 @@ test('the plan checker CLI is read-only, fails closed, and does not echo invalid
     const file = join(dir, 'c.json'); const text = JSON.stringify(fixture('C')); writeFileSync(file, text);
     const script = new URL('./check-plan.mjs', import.meta.url).pathname;
     const run = (args) => spawnSync(process.execPath, [script, ...args], { encoding: 'utf8', env: {} });
+    // Stage C reads the record verify-image.mjs wrote next to the saved plan.
+    const missing = run(['C', file]); assert.notEqual(missing.status, 0); assert.match(missing.stderr, /verified-image\.json/);
+    const recordFile = join(dir, 'verified-image.json'); const recordText = JSON.stringify(RECORD); writeFileSync(recordFile, recordText);
     const ok = run(['C', file]); assert.equal(ok.status, 0, ok.stderr); assert.match(ok.stdout, /line-by-line resource and cost review is still required/);
+    assert.match(ok.stdout, /signature verified/);
     assert.equal(readFileSync(file, 'utf8'), text);
+    assert.equal(readFileSync(recordFile, 'utf8'), recordText);
+    writeFileSync(recordFile, JSON.stringify({ ...RECORD, method: 'break-glass', reason: 'CI down since 09:00, synthetic hotfix' }));
+    const glass = run(['C', file]); assert.equal(glass.status, 0, glass.stderr); assert.match(glass.stderr, /BREAK-GLASS: UNSIGNED IMAGE.*CI down since 09:00/);
+    writeFileSync(recordFile, 'SYNTHETIC_RECORD_CANARY'); const badRecord = run(['C', file]); assert.notEqual(badRecord.status, 0);
+    assert.doesNotMatch(badRecord.stdout + badRecord.stderr, /SYNTHETIC_RECORD_CANARY/);
+    writeFileSync(recordFile, recordText);
     assert.notEqual(run(['A', file]).status, 0);
     assert.notEqual(run(['C', file, '--apply']).status, 0);
     writeFileSync(file, 'SYNTHETIC_PRIVATE_CANARY'); const bad = run(['C', file]); assert.notEqual(bad.status, 0); assert.doesNotMatch(bad.stdout + bad.stderr, /SYNTHETIC_PRIVATE_CANARY/);
