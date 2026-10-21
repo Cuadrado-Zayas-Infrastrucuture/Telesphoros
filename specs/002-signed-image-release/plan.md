@@ -4,7 +4,7 @@
 
 **Input**: Feature specification from `specs/002-signed-image-release/spec.md`
 
-**Status**: The signing method was decided 2026-10-20 (KMS, no public transparency log). Decisions D1–D5 below are **open**. The plan is **not yet approved for implementation**: no slice starts until the founder approves it.
+**Status**: **Approved by the founder 2026-10-20**, with the recommended D1–D5 (see "Founder decisions"). Slice 1 may start; each slice is still its own draft PR, merged only on the founder's word.
 
 ## Summary
 
@@ -132,6 +132,8 @@ token.actions.githubusercontent.com:job_workflow_ref    = <owner>/<repo>/.github
 | Founder | Create the release environment (D1); after the first apply, set the role variable; push to `main` once; verify | first signed digest verified; A1–A3 confirmed and recorded |
 
 ## Founder decisions (only the founder can make these)
+
+**Decided 2026-10-20** (founder, verbatim): *"Approve the INF-03 plan with the recommended D1-D5 (image-release env limited to main, no reviewer; create the OIDC provider unless a variable names one; keep non-production break-glass; annual manual rotation; lifecycle decided in slice 1)."*
 
 - **D1 Release environment.** Its name (recommended: `image-release`) and its protection rules. Recommended: deployment branches limited to `main`, with no required reviewer, because the job only pushes and signs and deploying is still a separate, manual apply. A required reviewer would add a human gate per merge at the cost of one click.
 - **D2 OIDC provider.** Create it in this stack, or reuse an existing one if the account has it. Unknown until AWS access returns (A4). Recommended: a variable, empty by default, which creates it.

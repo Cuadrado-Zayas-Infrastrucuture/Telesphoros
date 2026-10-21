@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-20
 
-**Status**: Draft. The founder chose the signing method on 2026-10-20: *"KMS signing, no public transparency log."* **No slice is approved for implementation yet.**
+**Status**: Approved 2026-10-20 (plan.md). The founder chose the signing method the same day: *"KMS signing, no public transparency log."*
 
 **Input**: Security audit 2026-10-19, finding INF-03 (High, CVSS 4.0 7.5, CWE-345 and CWE-494; SSDF PS.2, PW.6). The rest of the release-integrity group is done: INF-05 in #197/#200; INF-11 and INF-17 in #207 (draft). INF-18 was accepted as a gap in #208 (draft).
 

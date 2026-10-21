@@ -2,7 +2,7 @@
 
 **Input**: [spec.md](spec.md), [plan.md](plan.md)
 
-**Prerequisites**: plan.md **approved by the founder**, plus the decisions each phase names. As of 2026-10-20, D1–D5 are open and plan.md is not approved, so `/speckit-implement` must not run against this file.
+**Prerequisites**: plan.md **approved by the founder on 2026-10-20** with the recommended D1–D5. `/speckit-implement` may run against this file, one phase per draft PR.
 
 **Tests**: Required by the spec (SC-001 to SC-005). In each phase the test tasks come first, and they must fail before the implementation lands.
 
