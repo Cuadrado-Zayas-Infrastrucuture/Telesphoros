@@ -1,7 +1,7 @@
 import { expectRecordTablePolicies, type CatalogPolicy } from './helpers/catalog-policy-assertions';
 
 const table = 'report_captures';
-const tenant = "tenant_id = current_setting('app.current_tenant_id', true)";
+const tenant = 'tenant_id = (SELECT public.app_tenant())';
 const policies: CatalogPolicy[] = [
   { tablename: table, policyname: 'report_captures_tenant', roles: ['telesphoros_app'], cmd: 'ALL', qual: tenant, with_check: tenant },
   { tablename: table, policyname: 'report_captures_ledger', roles: ['telesphoros_ledger'], cmd: 'SELECT', qual: tenant, with_check: null },

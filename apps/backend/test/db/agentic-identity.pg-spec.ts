@@ -85,7 +85,6 @@ const request = (key: string) => ({ schemaVersion: 'agentic.request.v1', taskKey
 const admit = async (c: Client, key: string, caller: Json) => (await c.query('SELECT public.agentic_synthetic_admit($1::jsonb, $2::jsonb) AS r', [JSON.stringify(request(key)), JSON.stringify(caller)])).rows[0].r as Json;
 const read = async (c: Client, runId: string, caller: Json) => (await c.query('SELECT public.agentic_synthetic_read($1::uuid, $2::jsonb) AS r', [runId, JSON.stringify(caller)])).rows[0].r as Json;
 const cancel = async (c: Client, runId: string, caller: Json) => (await c.query('SELECT public.agentic_synthetic_cancel($1::uuid, $2::jsonb) AS r', [runId, JSON.stringify(caller)])).rows[0].r as Json;
-const code = (promise: Promise<unknown>) => promise.then(() => 'ok', (e: { code?: string }) => e.code);
 const REFUSED = { kind: 'refused', code: 'NOT_AUTHORIZED' };
 
 /** Rows the owner can see for one organization: the hostile cases must leave all of them exactly as they were. */
@@ -118,10 +117,10 @@ afterAll(async () => {
 });
 
 describe('the login under test is the application, not a superuser', () => {
-  it('has no superuser or BYPASSRLS, and the binding mode starts at guc', async () => {
+  it('has no superuser or BYPASSRLS, and the binding mode starts at dual (0032)', async () => {
     const row = await app({}, async (c) => (await c.query(`SELECT rolsuper, rolbypassrls, pg_has_role(current_user, 'telesphoros_app', 'MEMBER') AS app FROM pg_roles WHERE rolname = current_user`)).rows[0]);
     expect(row).toEqual({ rolsuper: false, rolbypassrls: false, app: true });
-    expect(await owner(async (c) => (await c.query('SELECT mode FROM tenant_binding_mode')).rows)).toEqual([{ mode: 'guc' }]);
+    expect(await owner(async (c) => (await c.query('SELECT mode FROM tenant_binding_mode')).rows)).toEqual([{ mode: 'dual' }]);
   });
 });
 
@@ -189,10 +188,11 @@ describe('the capability decides who is asking, not the settings or the caller d
     const w = await world('actor-forge');
     const capability = await mint(w.tenant, w.actor);
     const before = await counts(w.tenant);
-    expect(await code(app({ tenant: w.tenant, actor: 'mallory', capability }, (c) => admit(c, 'p2b/forge', w.caller), true))).toBe('23000');
-    expect(await counts(w.tenant)).toEqual(before);
-    const ok = await app({ tenant: w.tenant, actor: w.actor, capability }, (c) => admit(c, 'p2b/forge', w.caller), true);
+    // DATA-01 slice 3 (0032): with a capability the actor setting no longer decides who asked. The forged setting is ignored, the admission
+    // records the capability's person, and nothing is stored for the forged one.
+    const ok = await app({ tenant: w.tenant, actor: 'mallory', capability }, (c) => admit(c, 'p2b/forge', w.caller), true);
     expect(ok).toMatchObject({ kind: 'ok', value: { kind: 'new' } });
+    expect(await counts(w.tenant)).not.toEqual(before);
     const stored = await owner(async (c) => (await c.query(`SELECT requested_by FROM public.jobs WHERE tenant_id = $1 AND type = 'test.agentic-synthetic'`, [w.tenant])).rows);
     expect(stored).toEqual([{ requested_by: w.actor }]);
     await settle(w, (ok as { value: { runId: string } }).value.runId);
@@ -250,12 +250,14 @@ describe('read and cancel no longer need the settings at all', () => {
 
   // A pinned limit, not a goal: membership_assert_current (0017) and job_enqueue (0023) still read the settings. DATA-01 slice 3 moves both onto
   // app_tenant() / app_actor(); this assertion then flips on purpose.
-  it('admit still needs the settings until the shared membership check and job_enqueue move onto the capability: without them it is refused and writes nothing', async () => {
+  it('admit needs no settings once the membership check and job_enqueue read the capability (0032): with only the capability it is admitted for its person', async () => {
     const w = await world('admit-no-settings');
     const capability = await mint(w.tenant, w.actor);
     const before = await counts(w.tenant);
-    expect(await app({ capability }, (c) => admit(c, 'p2b/ns', w.caller), true)).toEqual(REFUSED);
-    expect(await counts(w.tenant)).toEqual(before);
+    const ok = await app({ capability }, (c) => admit(c, 'p2b/ns', w.caller), true);
+    expect(ok).toMatchObject({ kind: 'ok', value: { kind: 'new' } });
+    expect(await counts(w.tenant)).not.toEqual(before);
+    await settle(w, (ok as { value: { runId: string } }).value.runId);
   });
 });
 

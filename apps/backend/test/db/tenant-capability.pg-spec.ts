@@ -94,22 +94,26 @@ describe('the login under test is the application, not a superuser', () => {
   });
 });
 
-describe('DATA-01 is still open after slice 1 (no policy changes yet)', () => {
+describe('DATA-01 slice 3 PR B (migration 0032): dual mode, the policies read app_tenant()', () => {
   const patients = (settings: Settings) => one<number>(db.appUrl, settings, 'SELECT count(*)::int FROM patients');
 
-  it('the binding mode is guc', async () => {
-    expect(await owner(async (c) => (await c.query('SELECT mode FROM tenant_binding_mode')).rows)).toEqual([{ mode: 'guc' }]);
+  it('the binding mode is dual (0032 moved it from guc as its last statement)', async () => {
+    expect(await owner(async (c) => (await c.query('SELECT mode FROM tenant_binding_mode')).rows)).toEqual([{ mode: 'dual' }]);
   });
 
-  it('a forged tenant setting still reads the other organization (open on purpose; slice 5 inverts this)', async () => {
+  it('without a capability, dual keeps the setting working, so a forged setting still reads the other organization (the fallback; slice 6 removes it)', async () => {
     expect(await patients({})).toBe(0); // control: no setting, no rows
     expect(await patients({ 'app.current_tenant_id': 'org-alpha' })).toBe(4);
-    expect(await patients({ 'app.current_tenant_id': 'org-beta' })).toBe(1); // DATA-01: nothing proves the login belongs to org-beta
+    expect(await patients({ 'app.current_tenant_id': 'org-beta' })).toBe(1); // dual: nothing proves the login belongs to org-beta
   });
 
-  it('a capability alone binds nothing yet: the policies still read only the setting', async () => {
-    const { token: value } = await issue();
-    expect(await patients({ 'app.capability': value })).toBe(0);
+  it('a capability binds the policies: its own organization reads 4, and a foreign setting beside it reads nothing (fails closed, no winner)', async () => {
+    const { token: value } = await issue(); // org-alpha
+    expect(await patients({ 'app.capability': value })).toBe(4); // the capability alone is enough
+    expect(await patients({ 'app.capability': value, 'app.current_tenant_id': 'org-alpha' })).toBe(4); // control: a matching setting
+    expect(await patients({ 'app.capability': value, 'app.current_tenant_id': 'org-beta' })).toBe(0); // the mismatch fails closed
+    const { token: beta } = await issue({ tenant: 'org-beta', sub: 'bob' });
+    expect(await patients({ 'app.capability': beta })).toBe(1);
   });
 });
 
@@ -245,7 +249,7 @@ describe('resolving a capability: app_tenant() and app_actor()', () => {
       const { token: value } = await issue();
       expect(await resolve({ 'app.capability': value })).toEqual({ tenant: 'org-alpha', actor: 'alice' }); // control: a capability still works
     } finally {
-      await owner((c) => c.query(`UPDATE tenant_binding_mode SET mode = 'guc'`));
+      await owner((c) => c.query(`UPDATE tenant_binding_mode SET mode = 'dual'`));
     }
   });
 
@@ -437,7 +441,7 @@ describe('app_capability_version() (migration 0031): the version a presented cap
         expect([mode, await versionFor({ 'app.capability': valid.token })]).toEqual([mode, valid.membership_version]);
       }
     } finally {
-      await owner((c) => c.query(`UPDATE tenant_binding_mode SET mode = 'guc'`));
+      await owner((c) => c.query(`UPDATE tenant_binding_mode SET mode = 'dual'`));
     }
   });
 
@@ -491,8 +495,9 @@ describe('reverting 0031 and 0028', () => {
     const through = revertThrough('tenant_capability_issue_current'); // this migration and anything above it
     expect(await owner((c) => migrateDown(c, through.steps))).toEqual(through.reverted);
     const down = await owner(catalogSnapshot);
-    expect(down.filter((l) => /tenant_capability_issue_current|app_capability_version/.test(l))).toEqual([]);
-    expect(full.filter((l) => !/tenant_capability_issue_current|app_capability_version/.test(l))).toEqual(down); // nothing else moved
+    // 0032 sits above 0031 and goes with it: its internal binding is the one other function this revert removes
+    expect(down.filter((l) => /tenant_capability_issue_current|app_capability_version|tenant_capability_bind_internal/.test(l))).toEqual([]);
+    expect(full.filter((l) => !/tenant_capability_issue_current|app_capability_version|tenant_capability_bind_internal/.test(l))).toEqual(down); // nothing else moved
     expect(await owner((c) => migrateUp(c))).toEqual(versionsFrom('tenant_capability_issue_current'));
     expect(await owner(catalogSnapshot)).toEqual(full);
     // the snapshot is sensitive to the thing it guards: a grant to PUBLIC changes it
