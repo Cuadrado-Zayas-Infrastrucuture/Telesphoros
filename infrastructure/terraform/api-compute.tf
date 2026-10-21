@@ -485,7 +485,7 @@ resource "aws_ecs_task_definition" "api_migrate" {
       essential              = true
       user                   = local.api_user
       readonlyRootFilesystem = true
-      command                = ["node", "dist/db/cli.js", "migrate", "up"]
+      command                = ["dist/db/cli.js", "migrate", "up"]
       # TLS is chosen only by this setting; the connection string carries no TLS parameters (apps/backend/src/db/tls.ts).
       environment = [{ name = "DATABASE_SSL", value = "require" }]
       secrets     = [{ name = "DATABASE_MIGRATOR_URL", valueFrom = aws_secretsmanager_secret.api_migrator_url[0].arn }]
@@ -526,7 +526,7 @@ resource "aws_ecs_task_definition" "api_provision" {
       essential              = true
       user                   = local.api_user
       readonlyRootFilesystem = true
-      command                = ["node", "dist/db/cli.js", "provision-logins"]
+      command                = ["dist/db/cli.js", "provision-logins"]
       environment = [
         { name = "DATABASE_SSL", value = "require" },
         { name = "DATABASE_HOST", value = aws_db_instance.main.address },
