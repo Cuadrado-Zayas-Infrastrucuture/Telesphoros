@@ -5,7 +5,8 @@
 # The pattern is the worker's (worker.tf): same image, same cluster, same subnets, an execution role that reads only its own secret.
 #
 # THE SERVICE IS BEHIND ITS OWN SWITCH (enable_issuer, default false), because one thing the repository does not have yet:
-#  - the client. The API still runs with NullCapabilityIssuer. Joining the Service Connect namespace below and calling the issuer is the client PR's job.
+#  - the client's reach is untested. The API has its client (apps/backend/src/issuer/issuer-http-client.ts, ISSUER_URL) and api-compute.tf joins the namespace below and
+#    receives ISSUER_URL, both only while this switch is on. Nothing here is applied, so whether the API can resolve and reach the issuer is unverified.
 # The entry exists: apps/backend/src/issuer/main.ts, compiled by the existing backend build to dist/issuer/main.js in the same image. The task's `command` is that
 # path WITHOUT a leading `node`: the image's ENTRYPOINT is node, and an ECS command only replaces the image's CMD (issuer.guard.test.mjs ties the line to the build).
 
@@ -64,8 +65,12 @@ locals {
   issuer_metrics   = "${local.name}/Issuer"
   # The listener the issuer entry must open. Not the API's port and not the worker's health port.
   issuer_port = 8082
-  # The name the API will use inside the namespace: http://session-issuer:8082.
+  # The name the API uses inside the namespace: http://session-issuer:8082.
   issuer_dns_name = "session-issuer"
+  # What the API (a Service Connect client, api-compute.tf) is given: the address built from the two values above, so it is never typed twice, and only while the issuer
+  # service exists. With enable_issuer off the map is empty and the API's environment is exactly what it was before.
+  issuer_client_url         = "http://${local.issuer_dns_name}:${local.issuer_port}"
+  issuer_client_environment = { for name, value in { ISSUER_URL = local.issuer_client_url } : name => value if local.issuer_service_count == 1 }
 
   # What the issuer core needs to verify a token and nothing else: the same three Cognito values the API sets, the port, TLS to the database and production mode.
   # The login arrives as DATABASE_URL from the issuer's own secret. COGNITO_ISSUER and COGNITO_JWKS_URI are development overrides that production refuses (config/env.ts).
@@ -205,7 +210,7 @@ resource "aws_vpc_security_group_ingress_rule" "issuer_db_from_tasks" {
 }
 
 # ------------------------------------------------------------------------------------------------
-# Entry point: Service Connect. A private (HTTP) namespace groups the API and the issuer; the issuer is the one server in it. The API joins as a client in the client PR.
+# Entry point: Service Connect. A private (HTTP) namespace groups the API and the issuer; the issuer is the one server in it. The API joins as a client (api-compute.tf), only while the issuer service exists.
 # Service Connect itself has no charge; the Private CA that encrypts the traffic does (transport addendum). No load balancer, no public name, no certificate to validate by hand.
 # ------------------------------------------------------------------------------------------------
 resource "aws_service_discovery_http_namespace" "internal" {

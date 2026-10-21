@@ -251,6 +251,22 @@ export function issuerProblems(tf, rest = others, sources = {}) {
   need(has(service, 'var.environment != "production" || var.issuer_desired_count >= 2'), 'production must run at least two issuer tasks');
   need(has(service, 'var.environment != "production" || var.issuer_tls_ca_arn != ""'), 'production must encrypt the issuer connection');
 
+  // The API as a Service Connect CLIENT (DATA-01 PR B): it joins the namespace and receives ISSUER_URL, both only while the issuer service exists, and the address is
+  // built from the issuer's own names, never typed twice.
+  need(line(text, 'issuer_client_url = "http://${local.issuer_dns_name}:${local.issuer_port}"'), 'the address the API is given must be built from the issuer\'s own dns name and port');
+  need(line(text, 'issuer_client_environment = { for name, value in { ISSUER_URL = local.issuer_client_url } : name => value if local.issuer_service_count == 1 }'), 'the API\'s ISSUER_URL must exist only while the issuer service does (empty otherwise, so the default plan does not change)');
+  need((code(text).match(/session-issuer/g) ?? []).length === 1 && (code(text).match(/ISSUER_URL/g) ?? []).length === 1, 'the issuer\'s dns name and the ISSUER_URL line must each be written once, in issuer.tf');
+  for (const [file, body] of Object.entries(rest)) need(!/session-issuer|ISSUER_URL\s*=|:\s*8082\b|"http:\/\/[^"]*"/.test(code(body).replace(/"http:\/\/\$\{[^"]*"/g, '')), `${file} must not type the issuer's address or ISSUER_URL (it comes from issuer.tf's locals)`);
+  const apiFile = code(rest['api-compute.tf'] ?? '');
+  need(has(apiFile, 'api_environment = merge({') && has(apiFile, '}, local.issuer_client_environment)'), 'the API environment must be its own literal plus local.issuer_client_environment, and nothing else');
+  const apiService = blocks(apiFile, 'resource "aws_ecs_service" "api"')[0] ?? '';
+  const joins = blocks(apiService, 'dynamic "service_connect_configuration" \\{');
+  need(joins.length === 1 && (apiService.match(/service_connect_configuration/g) ?? []).length === 1, 'the API service must have exactly one Service Connect block, and it must be dynamic');
+  need(has(apiService, 'for_each = local.issuer_service_count == 1 ? [1] : []'), 'the API joins the namespace only while the issuer service exists');
+  need(joins.length === 1 && has(joins[0], 'enabled = true') && has(joins[0], 'namespace = aws_service_discovery_http_namespace.internal[0].arn'), 'the API must join the one internal namespace');
+  need(!/\bservice\s*\{|client_alias|discovery_name|port_name|\btls\b/.test(joins[0] ?? 'service {'), 'the API joins as a client only: it publishes no name and holds no certificate');
+  need(!/service_connect_configuration/.test(Object.entries(rest).filter(([file]) => file !== 'api-compute.tf').map(([, body]) => code(body)).join('\n')), 'no other file may put a service in the Service Connect namespace');
+
   // The environment: what the issuer core needs, and no login, no override and no test setting.
   const env = blocks(text, 'issuer_environment = ')[0] ?? '';
   const keys = [...env.matchAll(/^\s*([A-Z][A-Z0-9_]*)\s*=/gm)].map((m) => m[1]);
@@ -300,6 +316,10 @@ test('the issuer compute text has no problems (and the scan found the files: a f
 
 test('the issuer compute guard reports each way the issuer text could be weakened (controls)', () => {
   const weakened = [
+    ['the API address typed again instead of built', 'issuer_client_url         = "http://${local.issuer_dns_name}:${local.issuer_port}"', 'issuer_client_url         = "http://session-issuer:8082"'],
+    ['the API address uses another port', 'issuer_client_url         = "http://${local.issuer_dns_name}:${local.issuer_port}"', 'issuer_client_url         = "http://${local.issuer_dns_name}:8083"'],
+    ['the API address is given even with the issuer off', ' name => value if local.issuer_service_count == 1 }', ' name => value }'],
+    ['the API address is given on the hosting switch alone', ' name => value if local.issuer_service_count == 1 }', ' name => value if local.api_count == 1 }'],
     ['the secret container not counted', 'resource "aws_secretsmanager_secret" "issuer_database_url" {\n  count       = local.api_count\n', 'resource "aws_secretsmanager_secret" "issuer_database_url" {\n'],
     ['the service counted by the hosting switch alone', 'resource "aws_ecs_service" "issuer" {\n  count                              = local.issuer_service_count', 'resource "aws_ecs_service" "issuer" {\n  count                              = local.api_count'],
     ['the service no longer needs the issuer switch', 'issuer_service_count = local.api_service_count == 1 && var.enable_issuer ? 1 : 0', 'issuer_service_count = local.api_service_count == 1 ? 1 : 0'],
@@ -419,6 +439,18 @@ test('the issuer guard reports every way another file could let the API (or anyt
     ['the worker execution role reads the issuer secret', change('worker.tf', 'resources = [aws_secretsmanager_secret.worker_database_url[0].arn]\n  }\n  statement {\n    sid       = "DecryptSecretsThroughSecretsManager"', 'resources = [aws_secretsmanager_secret.worker_database_url[0].arn, aws_secretsmanager_secret.issuer_database_url[0].arn]\n  }\n  statement {\n    sid       = "DecryptSecretsThroughSecretsManager"')],
     ['the database admits the issuer group from the API file', { ...others, 'api-edge.tf': `${others['api-edge.tf']}\nresource "aws_vpc_security_group_ingress_rule" "x" {\n  security_group_id = aws_security_group.issuer_tasks[0].id\n  cidr_ipv4         = "0.0.0.0/0"\n  ip_protocol       = "-1"\n}\n` }],
     ['the API file adds a second way into the issuer', { ...others, 'api-edge.tf': `${others['api-edge.tf']}\nresource "aws_vpc_security_group_ingress_rule" "y" {\n  security_group_id            = aws_security_group.issuer_tasks[0].id\n  referenced_security_group_id = aws_security_group.api_alb[0].id\n  ip_protocol                  = "tcp"\n  from_port                    = 8082\n  to_port                      = 8082\n}\n` }],
+    // PR B: the API joins the namespace as a client, only while the issuer service exists, and gets an address that is built, not typed.
+    ['the API joins the namespace whether or not the issuer exists', change('api-compute.tf', 'for_each = local.issuer_service_count == 1 ? [1] : []', 'for_each = [1]')],
+    ['the API joins on the hosting switch alone', change('api-compute.tf', 'for_each = local.issuer_service_count == 1 ? [1] : []', 'for_each = local.api_count == 1 ? [1] : []')],
+    ['the API joins as a plain block, not a conditional one', change('api-compute.tf', 'dynamic "service_connect_configuration" {\n    for_each = local.issuer_service_count == 1 ? [1] : []\n    content {\n      enabled   = true\n      namespace = aws_service_discovery_http_namespace.internal[0].arn\n    }\n  }', 'service_connect_configuration {\n    enabled   = true\n    namespace = aws_service_discovery_http_namespace.internal[0].arn\n  }')],
+    ['the API does not join at all', change('api-compute.tf', 'dynamic "service_connect_configuration" {\n    for_each = local.issuer_service_count == 1 ? [1] : []\n    content {\n      enabled   = true\n      namespace = aws_service_discovery_http_namespace.internal[0].arn\n    }\n  }\n', '')],
+    ['the API joins a different namespace', change('api-compute.tf', 'namespace = aws_service_discovery_http_namespace.internal[0].arn', 'namespace = aws_service_discovery_http_namespace.other[0].arn')],
+    ['the API publishes a name in the namespace', change('api-compute.tf', '      enabled   = true\n      namespace = aws_service_discovery_http_namespace.internal[0].arn', '      enabled   = true\n      namespace = aws_service_discovery_http_namespace.internal[0].arn\n      service {\n        port_name = "api"\n      }')],
+    ['the API environment is no longer its literal plus the issuer map', change('api-compute.tf', '}, local.issuer_client_environment)', '})')],
+    ['the API is given ISSUER_URL whether or not the issuer exists', change('api-compute.tf', '}, local.issuer_client_environment)', '}, { ISSUER_URL = local.issuer_client_url })')],
+    ['the API environment types the issuer address', change('api-compute.tf', '}, local.issuer_client_environment)', '  ISSUER_URL = "http://session-issuer:8082"\n  }, local.issuer_client_environment)')],
+    ['the worker is told where the issuer is', change('worker.tf', 'resource "aws_ecs_task_definition" "worker" {', 'locals {\n  worker_extra = { ISSUER_URL = "http://elsewhere:1" }\n}\n\nresource "aws_ecs_task_definition" "worker" {')],
+    ['another file puts a service in the namespace', { ...others, 'worker.tf': `${others['worker.tf']}\nresource "aws_ecs_service" "extra" {\n  service_connect_configuration {\n    enabled = true\n  }\n}\n` }],
     ['a managed read-write secrets policy is attached anywhere', { ...others, 'iam.tf': `${others['iam.tf']}\nresource "aws_iam_role_policy_attachment" "z" {\n  role       = "x"\n  policy_arn = "arn:aws:iam::aws:policy/SecretsManagerReadWrite"\n}\n` }],
   ];
   for (const [name, rest] of weakened) assert.ok(issuerProblems(issuer, rest).length > 0, `a weakened copy of another file must be reported: ${name}`);

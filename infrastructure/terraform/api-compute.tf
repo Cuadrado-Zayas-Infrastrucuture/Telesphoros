@@ -86,7 +86,7 @@ locals {
   api_build       = local.api_image_parts == null ? "none" : "sha256-${substr(local.api_image_parts[3], 0, 12)}"
 
   # Everything the production start-up demands (config/env.ts), and nothing it refuses (no pipeline, no development overrides, no shared secret).
-  api_environment = {
+  api_environment = merge({
     NODE_ENV                          = "production"
     PORT                              = tostring(local.api_port)
     AUTH_VERIFIER                     = "cognito"
@@ -103,7 +103,8 @@ locals {
     TRUST_PROXY_HOPS                  = "1"
     BUILD_VERSION                     = local.api_build
     LEDGER_FULL_VERIFY_INTERVAL_HOURS = "24"
-  }
+    # ISSUER_URL (DATA-01) is not typed here: it is built from the issuer's own names in issuer.tf and exists only while the issuer service does.
+  }, local.issuer_client_environment)
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -586,6 +587,16 @@ resource "aws_ecs_service" "api" {
   }
 
   depends_on = [aws_lb_listener_rule.api_forward]
+
+  # The API is a Service Connect CLIENT of the session issuer (DATA-01): it joins the namespace so `session-issuer` resolves, and publishes nothing. Only while the
+  # issuer service exists, so with enable_issuer off the plan for this service does not change.
+  dynamic "service_connect_configuration" {
+    for_each = local.issuer_service_count == 1 ? [1] : []
+    content {
+      enabled   = true
+      namespace = aws_service_discovery_http_namespace.internal[0].arn
+    }
+  }
 
   lifecycle {
     precondition {

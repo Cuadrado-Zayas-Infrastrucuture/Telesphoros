@@ -10,6 +10,7 @@ import { test } from 'node:test';
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const compute = read('./api-compute.tf');
+const issuerTf = read('./issuer.tf');
 const ledgerSource = read('../../apps/backend/src/ledger/ledger-monitor.ts');
 const logShapeSpec = read('../../apps/backend/src/log-shape.spec.ts');
 const loggerOptions = read('../../apps/backend/src/logger-options.ts');
@@ -282,6 +283,22 @@ test("the application's own configuration loader accepts the task environment, a
   assert.throws(() => loadEnv({ ...env, AUTH_VERIFIER: 'cognito' }), /LEDGER_VERIFIER_DATABASE_URL/);
 });
 
+test("the address the API is given when the issuer is on is one the application's own loader accepts, and a broken one is refused (control)", () => {
+  // Worked out from issuer.tf's own values, the way Terraform builds it, not typed here.
+  const code2 = code(issuerTf);
+  const dns = /^\s*issuer_dns_name\s*=\s*"([^"]+)"/m.exec(code2)?.[1];
+  const port = /^\s*issuer_port\s*=\s*(\d+)/m.exec(code2)?.[1];
+  assert.ok(dns && port, 'issuer.tf must name the issuer\'s dns name and port');
+  const url = `http://${dns}:${port}`;
+  const problems = [];
+  const env = environmentOf(code(compute), problems);
+  assert.deepEqual(problems, []);
+  assert.equal('ISSUER_URL' in env, false, 'with the issuer off the API environment has no ISSUER_URL');
+  assert.equal(loadEnv({ ...env, ...SECRET_PLACEHOLDERS, ISSUER_URL: url }).ISSUER_URL, url);
+  assert.equal(loadEnv({ ...env, ...SECRET_PLACEHOLDERS }).ISSUER_URL, undefined);
+  for (const broken of ['', `${dns}:${port}`, `http://user:pw@${dns}:${port}`, `${url}/v1`, `${url}?x=1`]) assert.throws(() => loadEnv({ ...env, ...SECRET_PLACEHOLDERS, ISSUER_URL: broken }), /ISSUER_URL/);
+});
+
 const envLine = (key, value) => `${key.padEnd(33)} = ${value}`;
 
 test('the API compute guard reports each way the text could be weakened (controls)', () => {
@@ -312,9 +329,9 @@ test('the API compute guard reports each way the text could be weakened (control
     ['image is a free variable', 'image                  = var.api_image\n      essential              = true\n      user                   = local.api_user\n      readonlyRootFilesystem = true\n      stopTimeout', 'image                  = "x:latest"\n      essential              = true\n      user                   = local.api_user\n      readonlyRootFilesystem = true\n      stopTimeout'],
     ['the service holds the migrator login', '{ name = "LEDGER_VERIFIER_DATABASE_URL", valueFrom = aws_secretsmanager_secret.api_ledger_verifier_url[0].arn },', '{ name = "LEDGER_VERIFIER_DATABASE_URL", valueFrom = aws_secretsmanager_secret.api_ledger_verifier_url[0].arn },\n        { name = "DATABASE_MIGRATOR_URL", valueFrom = aws_secretsmanager_secret.api_migrator_url[0].arn },'],
     ['the identifier key not injected', '        { name = "IDENTIFIER_DIGEST_KEY", valueFrom = aws_secretsmanager_secret.api_identifier_digest_key[0].arn },\n', ''],
-    ['the identifier key put in plain environment', '  api_environment = {\n    NODE_ENV                          = "production"', '  api_environment = {\n    IDENTIFIER_DIGEST_KEY             = "0000"\n    NODE_ENV                          = "production"'],
+    ['the identifier key put in plain environment', '  api_environment = merge({\n    NODE_ENV                          = "production"', '  api_environment = {\n    IDENTIFIER_DIGEST_KEY             = "0000"\n    NODE_ENV                          = "production"'],
     ['the digest key not injected', '        { name = "INVITATION_DIGEST_KEY", valueFrom = aws_secretsmanager_secret.api_invitation_digest_key[0].arn },\n', ''],
-    ['the digest key put in plain environment', '  api_environment = {\n    NODE_ENV                          = "production"', '  api_environment = {\n    INVITATION_DIGEST_KEY             = "0000"\n    NODE_ENV                          = "production"'],
+    ['the digest key put in plain environment', '  api_environment = merge({\n    NODE_ENV                          = "production"', '  api_environment = {\n    INVITATION_DIGEST_KEY             = "0000"\n    NODE_ENV                          = "production"'],
     ['the verifier login not injected', '{ name = "LEDGER_VERIFIER_DATABASE_URL", valueFrom = aws_secretsmanager_secret.api_ledger_verifier_url[0].arn },', ''],
     ['no CORS origin required', 'condition     = length(var.api_cors_origins) >= 1', 'condition     = true'],
     ['migration gets a task role', '# No task role: the migration reaches the database only, not S3 or anything else in the account.', 'task_role_arn = aws_iam_role.api_task[0].arn'],
