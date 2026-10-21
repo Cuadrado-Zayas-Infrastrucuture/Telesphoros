@@ -15,11 +15,11 @@ const withBudget = (capabilities: RequestCapabilities, ms: number) => {
   capabilities.timeoutMs = ms;
   return capabilities;
 };
-const ask = (over: Partial<CapabilityIssueRequest> = {}): CapabilityIssueRequest => ({ accessToken: 'opaque', membershipVersion: 2, requestId: 'req-oncer-001', ...over });
+const ask = (over: Partial<CapabilityIssueRequest> = {}): CapabilityIssueRequest => ({ accessToken: 'opaque', requestId: 'req-oncer-001', ...over });
 
 class Recorder extends CapabilityIssuerPort {
   readonly requests: CapabilityIssueRequest[] = [];
-  next: () => Promise<IssuedCapability | undefined> = async () => ({ token: `${this.requests.length}`.padStart(43, 'T'), expiresAt: new Date('2030-01-01T00:00:00Z') });
+  next: () => Promise<IssuedCapability | undefined> = async () => ({ token: `${this.requests.length}`.padStart(43, 'T'), expiresAt: new Date('2030-01-01T00:00:00Z'), membershipVersion: 4 });
   async issue(request: CapabilityIssueRequest) {
     this.requests.push(request);
     return this.next();
@@ -40,6 +40,18 @@ describe('RequestCapabilities.obtain', () => {
     });
     expect(port.requests).toHaveLength(1);
     expect(port.requests[0]).toEqual(ask());
+    expect(port.requests[0]).not.toHaveProperty('membershipVersion'); // the caller no longer names a version; the database reads it
+  });
+
+  it('says what it got: the version the capability was issued at, and the same answer however often it is asked', async () => {
+    const port = new Recorder();
+    const capabilities = new RequestCapabilities(port);
+    await inRequest(async () => {
+      expect(await capabilities.obtain(ask())).toEqual({ status: 'bound', membershipVersion: 4 });
+      expect(currentRequestCapability()!.membershipVersion).toBe(4);
+      expect(await capabilities.obtain(ask())).toEqual({ status: 'bound', membershipVersion: 4 });
+    });
+    expect(port.requests).toHaveLength(1);
   });
 
   it('a second request is a new issuance', async () => {
@@ -52,23 +64,26 @@ describe('RequestCapabilities.obtain', () => {
 
   it('the default issuer mints nothing: the request carries on without a capability, and the reason is "not-configured"', async () => {
     await inRequest(async () => {
-      await new RequestCapabilities(new NullCapabilityIssuer()).obtain(ask());
+      expect(await new RequestCapabilities(new NullCapabilityIssuer()).obtain(ask())).toEqual({ status: 'absent', reason: 'not-configured' });
       expect(currentRequestCapability()).toBeUndefined();
       expect(capabilityAbsentReason()).toBe('not-configured');
     });
   });
 
   it.each([
-    ['invalid-token', undefined, 'issuer-invalid-token'],
-    ['refused', 'membership-not-current', 'issuer-refused'],
-    ['unavailable', undefined, 'issuer-unavailable'],
-  ] as const)('an issuer failure (%s) does not fail the request; the reason is recorded', async (reason, detail, expected) => {
+    ['invalid-token', undefined, 'issuer-invalid-token', undefined],
+    ['no-tenant', undefined, 'issuer-no-tenant', undefined],
+    ['refused', 'membership-not-current', 'issuer-refused', 'membership-not-current'],
+    ['refused', 'tenant-inactive', 'issuer-refused', 'tenant-inactive'],
+    ['refused', 'rate-limited', 'issuer-refused', 'rate-limited'],
+    ['unavailable', undefined, 'issuer-unavailable', undefined],
+  ] as const)('an issuer failure (%s %s) does not fail the request; the reason is recorded, with the database\'s closed code when it refused', async (reason, detail, expected, refusal) => {
     const port = new Recorder();
     port.next = async () => {
       throw new CapabilityIssueError(reason, detail);
     };
     await inRequest(async () => {
-      await expect(new RequestCapabilities(port).obtain(ask())).resolves.toBeUndefined();
+      await expect(new RequestCapabilities(port).obtain(ask())).resolves.toEqual({ status: 'absent', reason: expected, ...(refusal ? { refusal } : {}) });
       expect(currentRequestCapability()).toBeUndefined();
       expect(capabilityAbsentReason()).toBe(expected);
     });
@@ -87,7 +102,7 @@ describe('RequestCapabilities.obtain', () => {
 
   it('an issuer that answers with a malformed token is treated as a failure, and nothing is bound', async () => {
     const port = new Recorder();
-    port.next = async () => ({ token: 'not-a-token', expiresAt: new Date() });
+    port.next = async () => ({ token: 'not-a-token', expiresAt: new Date(), membershipVersion: 4 });
     await inRequest(async () => {
       await new RequestCapabilities(port).obtain(ask());
       expect(currentRequestCapability()).toBeUndefined();
@@ -109,7 +124,7 @@ describe('RequestCapabilities.obtain: a port that does not answer', () => {
       expect(Date.now() - started).toBeLessThan(1000);
       expect(currentRequestCapability()).toBeUndefined();
       expect(capabilityAbsentReason()).toBe('issuer-unavailable');
-      late({ token: 'L'.repeat(43), expiresAt: new Date('2030-01-01T00:00:00Z') });
+      late({ token: 'L'.repeat(43), expiresAt: new Date('2030-01-01T00:00:00Z'), membershipVersion: 4 });
       await new Promise((resolve) => setTimeout(resolve, 20));
       expect(currentRequestCapability()).toBeUndefined(); // too late to be bound
     });

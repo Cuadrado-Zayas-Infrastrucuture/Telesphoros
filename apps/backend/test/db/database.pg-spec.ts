@@ -1,8 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Request, Response } from 'express';
 import { Client, type Pool } from 'pg';
 import {
-  asOrganizationWork, authorityContextMiddleware, bindRequestAuthority, bindRequestCapability, duringAdmission, noteCapabilityAbsent,
+  asOrganizationWork, authorityContextMiddleware, bindRequestAuthority, bindRequestCapability, noteCapabilityAbsent,
 } from '../../src/auth/authority-context';
 import { Database } from '../../src/db/database';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
@@ -116,7 +118,7 @@ describe('Database.withTenant and the request capability', () => {
   const rawCapability = (db: Database) => rawPool(db).query<{ v: string | null }>(`SELECT current_setting('app.capability', true) AS v`).then((r) => r.rows[0]!.v);
 
   /** A real capability, minted through the issuer login as the real issuer does: committed, before the API opens its transaction. */
-  async function mint(): Promise<{ token: string; expiresAt: Date }> {
+  async function mint(): Promise<{ token: string; expiresAt: Date; membershipVersion: number }> {
     const token = randomBytes(32).toString('base64url');
     const c = new Client({ connectionString: ephemeral.issuerUrl });
     await c.connect();
@@ -125,7 +127,7 @@ describe('Database.withTenant and the request capability', () => {
         TENANT, SUB, 'request', createHash('sha256').update(token, 'utf8').digest(), 'req-db-capability',
       ]);
       expect(rows[0]!.refusal).toBeNull();
-      return { token, expiresAt: rows[0]!.expires_at };
+      return { token, expiresAt: rows[0]!.expires_at, membershipVersion: 1 };
     } finally {
       await c.end();
     }
@@ -237,23 +239,12 @@ describe('Database.withTenant and the request capability', () => {
       expect(db.capabilityStats().byReason['not-configured']! - before).toBe(1);
     });
 
-    it('does not count the guard\'s own membership lookup, which runs before any capability can exist', async () => {
-      const db = singleConnection();
-      const before = db.capabilityStats();
-      await asyncRequest(async () => {
-        await duringAdmission(() => db.withTenant(TENANT, (c) => c.query('SELECT 1')));
-        await db.withTenant(TENANT, (c) => c.query('SELECT 1')); // control: the same call outside admission is counted
-      });
-      const after = db.capabilityStats();
-      expect(after.missing - before.missing).toBe(1);
-    });
-
     it('an expired capability is still set (the database decides, and fails closed once slice 3 reads it) but counted as missing', async () => {
       const db = singleConnection();
       const cap = await mint();
       const before = db.capabilityStats();
       const seen = await asyncRequest(async () => {
-        bindRequestCapability({ token: cap.token, expiresAt: new Date(Date.now() - 1000) });
+        bindRequestCapability({ token: cap.token, expiresAt: new Date(Date.now() - 1000), membershipVersion: 1 });
         return db.withTenant(TENANT, (c) => settingOf(c));
       });
       expect(seen).toBe(cap.token);
@@ -262,5 +253,96 @@ describe('Database.withTenant and the request capability', () => {
       expect((after.byReason['expired'] ?? 0) - (before.byReason['expired'] ?? 0)).toBe(1);
       expect(after.bound - before.bound).toBe(0);
     });
+  });
+});
+
+/**
+ * DATA-01 slice 3 PR A (T0xx / A4): the D7 measurement ("0 capability-less requests for 7 days") must see EVERY transaction. Until this change the guard's
+ * membership lookup was exempt (`duringAdmission`), because it ran before a capability could exist; the guard now asks for the capability first, so the
+ * exemption is gone and a spec fails if any `withTenant` call is left out of the count.
+ */
+describe('every withTenant call is counted: nothing is exempt', () => {
+  const TENANT = 'count-org';
+  const SUB = 'count-person';
+  const inRequest = <T>(work: () => Promise<T>): Promise<T> => {
+    let result!: Promise<T>;
+    authorityContextMiddleware({ id: 'req-db-count' } as unknown as Request, {} as Response, () => {
+      result = work();
+    });
+    return result;
+  };
+  async function mintFor(): Promise<{ token: string; expiresAt: Date; membershipVersion: number }> {
+    const token = randomBytes(32).toString('base64url');
+    const c = new Client({ connectionString: ephemeral.issuerUrl });
+    await c.connect();
+    try {
+      const { rows } = await c.query<{ expires_at: Date; refusal: string | null }>('SELECT * FROM tenant_capability_issue($1, $2, 1, $3, $4, $5)', [TENANT, SUB, 'request', createHash('sha256').update(token, 'utf8').digest(), 'req-db-count']);
+      expect(rows[0]!.refusal).toBeNull();
+      return { token, expiresAt: rows[0]!.expires_at, membershipVersion: 1 };
+    } finally {
+      await c.end();
+    }
+  }
+  beforeAll(async () => {
+    await withAdmin(ephemeral.adminUrl, async (c) => {
+      await registerTenantRow(c, TENANT);
+      await c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ($1, $2, 'active', ARRAY['clinician'], 'test')`, [TENANT, SUB]);
+    });
+  });
+
+  type Context = [name: string, run: (calls: () => Promise<unknown>) => Promise<unknown>];
+  const contexts = (): Context[] => [
+    ['outside any request', (calls) => calls()],
+    ['in a request that has no capability and no recorded reason', (calls) => inRequest(calls)],
+    ['in a request whose issuer is not configured', (calls) => inRequest(async () => { noteCapabilityAbsent('not-configured'); return calls(); })],
+    ['in a request whose issuer was unavailable', (calls) => inRequest(async () => { noteCapabilityAbsent('issuer-unavailable'); return calls(); })],
+    ['in a request with a live capability', async (calls) => { const cap = await mintFor(); return inRequest(async () => { bindRequestCapability(cap); return calls(); }); }],
+    ['in a request with an expired capability', async (calls) => { const cap = await mintFor(); return inRequest(async () => { bindRequestCapability({ ...cap, expiresAt: new Date(Date.now() - 1000) }); return calls(); }); }],
+    ['in organization work of a request with a capability', async (calls) => { const cap = await mintFor(); return inRequest(async () => { bindRequestCapability(cap); return asOrganizationWork(calls); }); }],
+    ['in organization work of a request with none', (calls) => inRequest(async () => asOrganizationWork(calls))],
+    ['in a request whose authority is bound but whose capability is not yet (the guard\'s old lookup position)', (calls) => inRequest(async () => { bindRequestAuthority({ sub: SUB, version: 1 }); return calls(); })],
+  ];
+
+  it.each([0, 1, 2, 3, 4, 5, 6, 7, 8])('context %i: N withTenant calls move bound + missing by exactly N, measured against the pool\'s own connection count', async (index) => {
+    const [name, run] = contexts()[index]!;
+    const db = singleConnection();
+    const connects = jest.spyOn(rawPool(db), 'connect');
+    const before = db.capabilityStats();
+    const calls = async () => {
+      await db.withTenant(TENANT, (c) => c.query('SELECT 1'));
+      await db.withTenant(TENANT, (c) => c.query('SELECT 1'), { actor: SUB });
+      await db.withTenant(TENANT, (c) => c.query('SELECT 1')).then(() => undefined);
+    };
+    await run(calls);
+    const after = db.capabilityStats();
+    const transactions = connects.mock.calls.length; // what the pool really handed out: independent of the counter
+    expect([name, transactions]).toEqual([name, 3]); // control: the measurement itself sees all three
+    expect([name, after.bound - before.bound + (after.missing - before.missing)]).toEqual([name, 3]);
+    connects.mockRestore();
+  });
+
+  it('a transaction the work abandons by throwing is counted too (the count is taken before the work, not after it)', async () => {
+    const db = singleConnection();
+    const before = db.capabilityStats();
+    await expect(db.withTenant(TENANT, async () => { throw new Error('boom'); })).rejects.toThrow('boom');
+    const after = db.capabilityStats();
+    expect(after.bound - before.bound + (after.missing - before.missing)).toBe(1);
+  });
+
+  it('the source has no admission exemption left: no file under src mentions it', () => {
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (name.endsWith('.ts')) files.push(path);
+      }
+    };
+    walk(join(__dirname, '../../src'));
+    expect(files.length).toBeGreaterThan(100); // control: the walk found the source tree
+    const mentions = (word: string) => files.filter((f) => !f.endsWith('authority-context.capability.spec.ts') && readFileSync(f, 'utf8').includes(word));
+    expect(mentions('capabilityAbsentReason').length).toBeGreaterThan(0); // control: the scan can find a name that is there
+    expect(mentions('duringAdmission')).toEqual([]);
+    expect(mentions('isAdmitting')).toEqual([]);
   });
 });

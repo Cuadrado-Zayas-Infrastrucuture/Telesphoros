@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { Pool, type PoolClient } from 'pg';
-import { capabilityAbsentReason, currentRequestAuthority, currentRequestCapability, isAdmitting } from '../auth/authority-context';
+import { capabilityAbsentReason, currentRequestAuthority, currentRequestCapability } from '../auth/authority-context';
 import { assertSessionCurrent } from '../auth/session-admission';
 import { AppException } from '../common/app-exception';
 import { CapabilityCounter, type CapabilityStats } from './capability-counter';
@@ -110,13 +110,12 @@ export class Database {
 
   /**
    * The request's capability, if it has one, goes in after BEGIN with is_local = true, so the next transaction on this pooled connection cannot see it.
-   * An expired one is still set (the database decides, and from slice 3 fails closed) but counted as missing. The guard's own membership lookup runs
-   * before a capability can exist, so it is not counted at all.
+   * An expired one is still set (the database decides, and from slice 3 fails closed) but counted as missing. EVERY call is counted, the guard's own
+   * membership lookup included: it runs under the capability, which the guard now asks for first.
    */
   private async bindCapability(client: PoolClient): Promise<void> {
     const capability = currentRequestCapability();
     if (capability) await client.query(`SELECT set_config('app.capability', $1, true)`, [capability.token]);
-    if (isAdmitting()) return;
     if (capability && capability.expiresAt.getTime() > Date.now()) this.capabilities.recordBound();
     else this.capabilities.recordMissing(capability ? 'expired' : (capabilityAbsentReason() ?? 'absent'));
   }

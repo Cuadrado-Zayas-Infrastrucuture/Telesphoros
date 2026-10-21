@@ -7,19 +7,25 @@ import {
   CAPABILITY_TOKEN_PATTERN, CapabilityIssueError, type CapabilityIssueRequest, CapabilityIssuerPort, type IssuedCapability, REQUEST_PURPOSE,
 } from './capability-issuer.port';
 
-/** What the issuer asks of the database: `tenant_capability_issue` (migration 0028), with the token already hashed. */
+/** What the issuer asks of the database: `tenant_capability_issue_current` (migration 0030), with the token already hashed. It names no membership version: the database reads the current one. */
 export interface IssueCall {
   tenant: string;
   sub: string;
-  membershipVersion: number;
   purpose: string;
   tokenHash: Buffer;
   requestId: string;
 }
 
+/** Issued: an expiry and the membership version the database stamped. Refused: a closed refusal code. */
+export interface IssueOutcome {
+  expiresAt: Date | null;
+  refusal: string | null;
+  membershipVersion: number | null;
+}
+
 export interface CapabilityIssueStore {
-  /** Either an expiry (issued) or a closed refusal code (refused). A failure throws. */
-  issue(call: IssueCall): Promise<{ expiresAt: Date | null; refusal: string | null }>;
+  /** Either an expiry and a version (issued) or a closed refusal code (refused). A failure throws. */
+  issue(call: IssueCall): Promise<IssueOutcome>;
 }
 
 const SAFE_REQUEST_ID = /^[A-Za-z0-9._-]{1,128}$/;
@@ -27,7 +33,7 @@ const SAFE_REQUEST_ID = /^[A-Za-z0-9._-]{1,128}$/;
 /**
  * The session issuer's core (DATA-01 FR-004). It verifies the access token with the verifier it is given (production: `CognitoTokenVerifier`, unchanged),
  * generates 32 random bytes, hands the database only their sha256, and returns the raw token once. It reads no tenant data: the issuer login's only
- * privilege is EXECUTE on the issue function, which re-checks the organization and the membership version under its own authority.
+ * privilege is EXECUTE on the issue functions, which read the organization and the person's CURRENT membership version under their own authority.
  *
  * This class opens no port and listens for nothing. How the API reaches it is a separate decision (docs/design/plans/tenant-capability-issuer-transport.md).
  * Putting it IN the API process would hand the API the issuer's database credential and so defeat the point, so the API does not construct it.
@@ -44,7 +50,6 @@ export class IssuerCore extends CapabilityIssuerPort {
   }
 
   async issue(request: CapabilityIssueRequest): Promise<IssuedCapability> {
-    if (!Number.isSafeInteger(request.membershipVersion) || request.membershipVersion < 1) throw this.refuse('invalid-request', request);
     let identity;
     try {
       identity = await this.verifier.verify(request.accessToken);
@@ -58,7 +63,7 @@ export class IssuerCore extends CapabilityIssuerPort {
     let outcome;
     try {
       outcome = await this.store.issue({
-        tenant: identity.tenantId, sub: identity.sub, membershipVersion: request.membershipVersion, purpose: REQUEST_PURPOSE,
+        tenant: identity.tenantId, sub: identity.sub, purpose: REQUEST_PURPOSE,
         // The database hashes the TEXT it is later given in app.capability, so the hash is of the text.
         tokenHash: createHash('sha256').update(token, 'utf8').digest(), requestId: request.requestId,
       });
@@ -67,8 +72,9 @@ export class IssuerCore extends CapabilityIssuerPort {
       throw new CapabilityIssueError('unavailable');
     }
     if (outcome.refusal !== null) throw this.refuse('refused', request, outcome.refusal);
-    if (!outcome.expiresAt) throw this.refuse('unavailable', request);
-    return { token, expiresAt: outcome.expiresAt };
+    // An issuance without an expiry, or without a usable version, is not one: the API binds its commit-time check to this version.
+    if (!outcome.expiresAt || !Number.isSafeInteger(outcome.membershipVersion) || outcome.membershipVersion! < 1) throw this.refuse('unavailable', request);
+    return { token, expiresAt: outcome.expiresAt, membershipVersion: outcome.membershipVersion! };
   }
 
   private refuse(reason: CapabilityIssueError['reason'], request: CapabilityIssueRequest, detail?: string): CapabilityIssueError {
@@ -104,14 +110,15 @@ export class PgCapabilityIssueStore implements CapabilityIssueStore {
     this.pool.on('error', (error) => this.logger.error(`Idle database client error: ${error.name}`));
   }
 
-  async issue(call: IssueCall): Promise<{ expiresAt: Date | null; refusal: string | null }> {
-    const { rows } = await this.pool.query<{ expires_at: Date | null; refusal: string | null }>(
-      'SELECT expires_at, refusal FROM tenant_capability_issue($1, $2, $3, $4, $5, $6)',
-      [call.tenant, call.sub, call.membershipVersion, call.purpose, call.tokenHash, call.requestId],
+  async issue(call: IssueCall): Promise<IssueOutcome> {
+    const { rows } = await this.pool.query<{ expires_at: Date | null; refusal: string | null; membership_version: string | null }>(
+      'SELECT expires_at, refusal, membership_version FROM tenant_capability_issue_current($1, $2, $3, $4, $5)',
+      [call.tenant, call.sub, call.purpose, call.tokenHash, call.requestId],
     );
     const row = rows[0];
     if (!row) throw new Error('The issue function returned no row');
-    return { expiresAt: row.expires_at, refusal: row.refusal };
+    // bigint arrives as text; a version beyond the safe range cannot be a real one and is refused by the core.
+    return { expiresAt: row.expires_at, refusal: row.refusal, membershipVersion: row.membership_version === null ? null : Number(row.membership_version) };
   }
 
   close(): Promise<void> {

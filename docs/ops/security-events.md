@@ -10,7 +10,7 @@ here has been applied in AWS.
 | --- | --- | --- |
 | `membership.granted`, `membership.reinstated`, `membership.roles-changed`, `membership.removed`, `membership.sessions-revoked` | a trigger on `tenant_memberships`, in the same transaction as the change | the operator command ([membership.md](membership.md)) or any other change to a membership row; the `details` hold the roles before and after |
 | `intake.rejected` (reason `structure`, `size`, `checksum`, `timeout`, `slow`) | the application | the validated upload intake refused a file; who tried and a short code, never the file, its name, its hash or the report. A transfer the person cancelled is not recorded. Throttled like refusals (one a minute per person, organization and reason) |
-| `access.refused` (reason `no-membership`, `removed`, `token-revoked`, `authority-changed`) | the application | a valid token is refused by the membership checks ([auth.md](../auth.md#authority-and-revocation)), or a write is refused at commit because the caller's membership changed under it. One event per person, organization and reason per minute |
+| `access.refused` (reason `no-membership`, `removed`, `tenant-suspended`, `token-revoked`, `authority-changed`) | the application | a valid token is refused by the membership checks ([auth.md](../auth.md#authority-and-revocation)), or a write is refused at commit because the caller's membership changed under it. One event per person, organization and reason per minute. **Where a session issuer is configured and it refused the person** (`membership-not-current`, `tenant-inactive`), the refusal is recorded in the issuer's `capability_issuance_log` instead and no `no-membership`, `removed` or `tenant-suspended` event is written for it (decision D1=(i), 2026-10-20); `token-revoked` and `authority-changed` are always written here. With no issuer configured, or one that failed to answer, the application still writes all of them, because nothing else would |
 
 Not recorded here: file links (the [application access audit](application-access-audit.md) already records every one, as `download-link` for a report and `private-read` for a capture text link, and refuses the response if it cannot), sign-ins and sign-outs (the API cannot see them; Cognito's events are in CloudTrail, [audit-trail.md](audit-trail.md)), refusals for a missing
 role (diagnostic logs only), and clinical reads (the clinical audit stream, a separate slice).
@@ -52,7 +52,7 @@ A restore server needs the `telesphoros_security_auditor` role to exist (like th
 | Symptom | Likely cause |
 | --- | --- |
 | A membership change fails with an integrity error | The event insert failed (for example a constraint on the table was altered). The change was rolled back; nothing happened |
-| No `access.refused` for a refusal | Throttled (one a minute per person and reason), or the database could not be reached; refusals never block the response |
+| No `access.refused` for a refusal | Throttled (one a minute per person and reason), or the database could not be reached (refusals never block the response), or a session issuer is configured and refused the person: look for a `refused` row with reason `membership-not-current` or `tenant-inactive` in `capability_issuance_log` (owner-only today: read it as the table owner) |
 
 ## Relationship to the application access audit
 

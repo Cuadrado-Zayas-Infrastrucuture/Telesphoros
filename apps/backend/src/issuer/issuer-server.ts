@@ -7,7 +7,7 @@ import { CapabilityIssueError, type CapabilityIssueFailure, type CapabilityIssue
  * The session issuer's HTTP face (DATA-01 PR A). Plain node:http, no framework, so there is no route table, body parser or error filter to configure
  * wrongly: two routes, one table.
  *
- *   POST /v1/capabilities   {accessToken, membershipVersion, requestId}  ->  200 {token, expiresAt}
+ *   POST /v1/capabilities   {accessToken, requestId}  ->  200 {token, expiresAt, membershipVersion}
  *   GET  /livez                                                          ->  200 (the container's health check)
  *   anything else                                                        ->  404
  *
@@ -33,7 +33,6 @@ const STATUS: Record<CapabilityIssueFailure, number> = {
 
 const body = z.strictObject({
   accessToken: z.string().min(1).max(MAX_ACCESS_TOKEN_CHARS),
-  membershipVersion: z.int().min(1),
   requestId: z.string().regex(SAFE_REQUEST_ID),
 });
 
@@ -110,7 +109,7 @@ export function createIssuerServer(issuer: CapabilityIssuerPort, limits: Partial
     try {
       const issued = await issuer.issue(request);
       if (!issued) throw new CapabilityIssueError('unavailable'); // an issuer that issues nothing is not an issuer
-      reply(res, 200, { token: issued.token, expiresAt: issued.expiresAt.toISOString() });
+      reply(res, 200, { token: issued.token, expiresAt: issued.expiresAt.toISOString(), membershipVersion: issued.membershipVersion });
     } catch (error) {
       if (error instanceof CapabilityIssueError) {
         // IssuerCore has logged the reason. Only a closed code of the database's own is passed on.

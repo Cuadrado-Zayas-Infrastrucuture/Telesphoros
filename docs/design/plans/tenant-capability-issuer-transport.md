@@ -4,7 +4,7 @@
 
 ## What slice 2 built, and what is left open
 
-The API now asks a `CapabilityIssuerPort` for one capability per request (`apps/backend/src/issuer/capability-issuer.port.ts`, `apps/backend/src/issuer/request-capabilities.ts`, called from `AuthGuard`). The issuer core (`apps/backend/src/issuer/issuer-core.ts`) verifies the access token with `CognitoTokenVerifier`, mints 32 random bytes and calls `tenant_capability_issue` as `telesphoros_session_issuer`. The default port is `NullCapabilityIssuer`, so nothing is requested and behaviour in `guc` mode is unchanged.
+The API now asks a `CapabilityIssuerPort` for one capability per request (`apps/backend/src/issuer/capability-issuer.port.ts`, `apps/backend/src/issuer/request-capabilities.ts`, called from `AuthGuard`). The issuer core (`apps/backend/src/issuer/issuer-core.ts`) verifies the access token with `CognitoTokenVerifier`, mints 32 random bytes and calls the database's issue function as `telesphoros_session_issuer` (`tenant_capability_issue_current` since migration 0030: the database reads the membership version, the caller no longer names one). The default port is `NullCapabilityIssuer`, so nothing is requested and behaviour in `guc` mode is unchanged.
 
 **Open:** the wire between the API's port and the issuer core, and how the issuer knows the caller is the API. A client for the chosen wire is one more `CapabilityIssuerPort`; a server around `IssuerCore` is the other end.
 
@@ -148,11 +148,11 @@ Service Connect, the Private CA, the certificate role's trust principal and cond
 
 | Request | Answer |
 |---|---|
-| `POST /v1/capabilities`, `application/json`, body at most 8 KiB, exactly `{accessToken, membershipVersion, requestId}` | `200 {token, expiresAt}` |
+| `POST /v1/capabilities`, `application/json`, body at most 8 KiB, exactly `{accessToken, requestId}` (a `membershipVersion` is refused: the database reads the current one) | `200 {token, expiresAt, membershipVersion}` (the version the database stamped on the capability) |
 | the token does not verify | `401 {error: "invalid-token"}` |
 | a verified person with no single tenant | `403 {error: "no-tenant"}` |
 | the database refuses | `403 {error: "refused", detail: <the database's closed code>}` (detail dropped unless it is lower-case letters, digits and dashes) |
-| a malformed body, an unknown key, a version below 1, a request id that is not 1 to 128 of `A-Za-z0-9._-` | `400 {error: "invalid-request"}` |
+| a malformed body, an unknown key (a `membershipVersion` included), a request id that is not 1 to 128 of `A-Za-z0-9._-` | `400 {error: "invalid-request"}` |
 | not JSON; over 8 KiB | `415`; `413` |
 | the database or anything unexpected failed | `503 {error: "unavailable"}` |
 | `GET /livez` | `200` (the Terraform health check) |
@@ -165,3 +165,11 @@ Header timeout 5 s, request timeout 10 s, at most 128 connections, one request p
 **A finding about the task's command.** The image sets `ENTRYPOINT ["node"]`, and an ECS `command` replaces only the image's `CMD`. A command that starts with `node` therefore runs `node node ...`. On 2026-10-20 a local `docker run` of an image built from this Dockerfile (`telesphoros-fd4b:rehearsal`) with arguments `node worker/main.js` died with a module-not-found error, and with `worker/main.js` it started the worker. `issuer.tf` therefore uses `["dist/issuer/main.js"]`. The worker task (`worker.tf`) and the migrate and provision-logins tasks (`api-compute.tf`) are written with a leading `node` and are not changed here.
 
 **Not verified.** (1) That the Service Connect proxy reaches the application on the task's network interface, which is why the entry binds `0.0.0.0` (the health check uses `127.0.0.1`, which that covers). (2) That `Connection: close` is the right choice behind Service Connect: it was chosen so the proxy never reuses a connection the application is about to time out; the proxy's behaviour is unexercised. (3) Latency under load: the handler has no deadline of its own beyond the verifier's key-set timeout (3 s) and the pool's limits (2 s to connect, 5 s per statement). (4) The Fargate platform: on 2026-10-20 an image was built locally from `api.Dockerfile` (arm64, because the host is) and run with a read-only root filesystem as the image's user (10001), `command` `dist/issuer/main.js` and the production settings. The entry listened on `0.0.0.0:8082`, the Terraform health-check one-liner exited 0, a bad token got a 401, and `docker stop` ended it with exit code 0. Fargate runs `X86_64` (`issuer.tf`), so the x86 image, ECS itself and the awslogs driver are unexercised. The same image refused `node dist/issuer/main.js` with `Cannot find module '/app/node'`.
+
+## Addendum 3 (2026-10-21, DATA-01 slice 3 PR A, local): the wire no longer carries a membership version
+
+The guard asks for the capability BEFORE it reads the membership (it used to read first, to learn the version the issuer needed). The issuer's database call is now `tenant_capability_issue_current(tenant, sub, purpose, hash, request)` (migration 0030, `expand`), which reads the person's current active membership version itself, issues through the unchanged six-argument function, and returns the version. `POST /v1/capabilities` therefore takes `{accessToken, requestId}` and answers `{token, expiresAt, membershipVersion}`; a body that still carries `membershipVersion` is refused with `400` (the server stays strict).
+
+**Deploy order.** Migration 0030 is `expand`: apply it first (images from before it stay ready and keep calling the six-argument function, which stays). Then roll the issuer and the API together: an old API sends a version the new issuer refuses with `400`, and a new API against an old issuer gets an answer with no `membershipVersion`, which the API treats as a failed issuance (the request goes on without a capability and is counted `issuer-unavailable`). Nothing is deployed: `issuer.tf` is written and never applied, so there is no mixed fleet to roll today.
+
+**Cost of the new order.** Every authenticated request now reaches the issuer before the membership check, so a removed person's still-valid token (at most 15 minutes) produces one refused issuance per request. `IpRateLimitGuard` runs before `AuthGuard`, so the per-IP limit applies first; `PersonRateLimitGuard` runs after it and does not. `capability_issuance_log` is append-only and refused rows are not rate limited. Nothing is measured: the volume of refused requests, and the log's growth, are for staging.
