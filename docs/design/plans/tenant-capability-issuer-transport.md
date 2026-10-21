@@ -131,7 +131,7 @@ The first part of this document set the test: the transport is not the security 
 
 ### What slice 2b does not do, and why
 
-- **No entry point.** `IssuerCore` opens no port, and `infrastructure/docker/api.Dockerfile` builds only `dist/main.js` and `worker/main.js`. The task is written for `node issuer/main.js`, reading `PORT` (8082) and `DATABASE_URL`. An application PR provides the entry and the Dockerfile line. Until then `enable_issuer` is false, and a guard test fails if the switch is turned on while the image lacks `issuer/main.js`.
+- **Entry point: provided afterwards, in PR A (second addendum below).** When this addendum was written `IssuerCore` opened no port and the image built no issuer entry. PR A adds `apps/backend/src/issuer/main.ts`, compiled by the existing backend build to `dist/issuer/main.js`; the task's `command` is that path. `enable_issuer` stays false until the API has a client.
 - **No client.** The API still uses `NullCapabilityIssuer`. Joining the namespace (`issuer_namespace_arn`), calling `http://session-issuer:8082` and the `CapabilityIssuerPort` implementation are the client PR.
 - **No provisioning wiring.** `provision-logins` creates the issuer login only when `PROVISION_SECRET_ISSUER` names the secret (`apps/backend/src/db/cli.ts:250`). Passing it from the provisioning task, and letting that task's role write the issuer secret, edit `api-compute.tf` and its guard, which pins that role to exactly four secrets. It is a follow-up PR, not part of T019.
 - **Measurements.** Nothing is applied, so decision D4's p95 budget and D7's seven-day window cannot be measured. The alarm thresholds in `issuer.tf` are provisional.
@@ -139,3 +139,29 @@ The first part of this document set the test: the transport is not the security 
 ### Not verified
 
 Service Connect, the Private CA, the certificate role's trust principal and conditions, and whether ECS-issued certificates fit a short-lived-mode CA are all unexercised; the IAM policy is the AWS-managed one (version 4, read 2026-10-20) narrowed to one CA. The documentation read does not say whether the Service Connect proxy reaches the application on the task's loopback address or its network interface, so the issuer entry's bind address is open (the container health check assumes `127.0.0.1`). `tofu validate` accepts the file; `tofu test` is known to fail locally against CI's Terraform version and was not used as evidence. The RDS Proxy per-vCPU price is still unread, so option (b) is still not priced.
+
+## Addendum 2, 2026-10-20: PR A provides the issuer's entry point
+
+**What was built.** `node dist/issuer/main.js`, from the same image as the API and the worker. It is plain `node:http`, not a Nest application, and it is compiled by the existing backend build, so there is no new bundle and no Dockerfile change. `pnpm --filter @telesphoros/backend build` emits `dist/issuer/main.js`; the image's `pnpm deploy --legacy --prod` step keeps `dist`, and the `rm -rf` line after it removes `src`, `test`, `scripts` and config files only. A guard (`issuer.guard.test.mjs`) derives the emitted path from `tsconfig.build.json` and the Dockerfile and requires the task's `command` to equal it.
+
+**The wire** (`apps/backend/src/issuer/issuer-server.ts`):
+
+| Request | Answer |
+|---|---|
+| `POST /v1/capabilities`, `application/json`, body at most 8 KiB, exactly `{accessToken, membershipVersion, requestId}` | `200 {token, expiresAt}` |
+| the token does not verify | `401 {error: "invalid-token"}` |
+| a verified person with no single tenant | `403 {error: "no-tenant"}` |
+| the database refuses | `403 {error: "refused", detail: <the database's closed code>}` (detail dropped unless it is lower-case letters, digits and dashes) |
+| a malformed body, an unknown key, a version below 1, a request id that is not 1 to 128 of `A-Za-z0-9._-` | `400 {error: "invalid-request"}` |
+| not JSON; over 8 KiB | `415`; `413` |
+| the database or anything unexpected failed | `503 {error: "unavailable"}` |
+| `GET /livez` | `200` (the Terraform health check) |
+| anything else | `404` |
+
+Header timeout 5 s, request timeout 10 s, at most 128 connections, one request per connection (`Connection: close` on every answer). `SIGTERM` stops accepting, lets requests in flight finish for up to 20 s, closes the pool and exits 0; ECS waits 30 s. Production refuses to start on any missing setting, on `DATABASE_SSL` other than `require`, on `COGNITO_ISSUER` or `COGNITO_JWKS_URI`, and if one of the application's own secrets (`JWT_SECRET`, `INVITATION_DIGEST_KEY`, `IDENTIFIER_DIGEST_KEY`, `LEDGER_VERIFIER_DATABASE_URL`) is present. A test pins that the entry's imports exclude the API's pool, its configuration, the ledger login and the worker.
+
+**Logs.** `IssuerCore`'s `Capability not issued: <reason>` lines reach stdout unchanged, because `issuer.tf`'s two metric filters match them. The server writes different phrases for its own refusals so a failure is counted once. No token, claim, database message or address is written; a request id is, after it is checked against the pattern above.
+
+**A finding about the task's command.** The image sets `ENTRYPOINT ["node"]`, and an ECS `command` replaces only the image's `CMD`. A command that starts with `node` therefore runs `node node ...`. On 2026-10-20 a local `docker run` of an image built from this Dockerfile (`telesphoros-fd4b:rehearsal`) with arguments `node worker/main.js` died with a module-not-found error, and with `worker/main.js` it started the worker. `issuer.tf` therefore uses `["dist/issuer/main.js"]`. The worker task (`worker.tf`) and the migrate and provision-logins tasks (`api-compute.tf`) are written with a leading `node` and are not changed here.
+
+**Not verified.** (1) That the Service Connect proxy reaches the application on the task's network interface, which is why the entry binds `0.0.0.0` (the health check uses `127.0.0.1`, which that covers). (2) That `Connection: close` is the right choice behind Service Connect: it was chosen so the proxy never reuses a connection the application is about to time out; the proxy's behaviour is unexercised. (3) Latency under load: the handler has no deadline of its own beyond the verifier's key-set timeout (3 s) and the pool's limits (2 s to connect, 5 s per statement). (4) The Fargate platform: on 2026-10-20 an image was built locally from `api.Dockerfile` (arm64, because the host is) and run with a read-only root filesystem as the image's user (10001), `command` `dist/issuer/main.js` and the production settings. The entry listened on `0.0.0.0:8082`, the Terraform health-check one-liner exited 0, a bad token got a 401, and `docker stop` ended it with exit code 0. Fargate runs `X86_64` (`issuer.tf`), so the x86 image, ECS itself and the awslogs driver are unexercised. The same image refused `node dist/issuer/main.js` with `Cannot find module '/app/node'`.
