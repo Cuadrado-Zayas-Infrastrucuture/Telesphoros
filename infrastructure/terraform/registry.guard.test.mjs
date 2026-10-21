@@ -64,7 +64,9 @@ export function registryProblems(tf) {
   need(policy !== undefined, 'the lifecycle policy must exist');
   need(policyLines.has('count = local.api_count'), 'the lifecycle policy must be counted by local.api_count');
   need(policyLines.has('repository = aws_ecr_repository.api[0].name'), 'the lifecycle policy must belong to the API repository');
-  for (const line of ['tagStatus = "any"', 'countType = "imageCountMoreThan"', 'countNumber = 10', 'action = { type = "expire" }']) {
+  // D5 (specs/002-signed-image-release, 2026-10-20): tagged images only, so image signatures (untagged OCI 1.1 referrers, which ECR expires with their
+  // image) never take one of the ten slots.
+  for (const line of ['tagStatus = "tagged"', 'tagPatternList = ["*"]', 'countType = "imageCountMoreThan"', 'countNumber = 10', 'action = { type = "expire" }']) {
     need(policyLines.has(line), `the lifecycle policy must keep the last 10 images: missing ${line}`);
   }
 
@@ -89,7 +91,8 @@ test('the registry guard reports each way the text could be weakened (controls)'
     ['no scan on push', 'scan_on_push = true', 'scan_on_push = false'],
     ['a customer-managed key without grants', 'encryption_type = "AES256"', 'encryption_type = "KMS"\n    kms_key         = aws_kms_key.data.arn'],
     ['renamed repository', 'name  = "${local.name}-api"', 'name  = "${local.name}-other"'],
-    ['retention raised', 'countNumber = 10', 'countNumber = 1000'],
+    ['retention raised', 'countNumber    = 10', 'countNumber    = 1000'],
+    ['signatures take image slots again (D5)', 'tagStatus      = "tagged"', 'tagStatus      = "any"'],
     ['retention removed', 'imageCountMoreThan', 'sinceImagePushed'],
     ['policy for another repository', 'repository = aws_ecr_repository.api[0].name', 'repository = "elsewhere"'],
     ['a repository policy', 'output "api_repository_url" {', 'resource "aws_ecr_repository_policy" "api" {\n  repository = aws_ecr_repository.api[0].name\n  policy     = "{}"\n}\n\noutput "api_repository_url" {'],

@@ -3,6 +3,10 @@
 Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
 
+## INF-03 slice 1: image-signing key, GitHub OIDC trust, CI release role (draft PR, 2026-10-20)
+
+First slice of `specs/002-signed-image-release` (plan approved 2026-10-20). `signing.tf` declares an ECC P-256 `SIGN_VERIFY` KMS key whose policy denies `kms:Sign` to everyone but the release role; the GitHub OIDC provider (unless an existing one is named); and the release role, trusted only for this repository's `ci.yml` on `main` in the `image-release` environment (six `StringEquals` conditions on immutable IDs) and allowed only to push to the API repository and sign with that key. It exists in a plan only with API hosting on and the repository IDs set; production with API hosting now refuses to plan without it. The ECR lifecycle rule counts tagged images only, so signatures never take a slot (D5). Nothing is applied; no CI change yet (slice 2). [Verification](verification/signed-image-release.md).
+
 ## Logging: declared service log groups and an allowlisted API log (draft PR, 2026-10-20)
 
 Two audit findings from 2026-10-19, in one PR (founder decision 2026-10-20; INF-06 follows DATA-01 slice 2, because it needs a migration).
