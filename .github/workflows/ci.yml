@@ -109,7 +109,10 @@ jobs:
           // Closed list of reason codes. A refusal may name the clause that failed, never a value, path or file content.
           export const reasons = Object.freeze(['watchdog-receipt-invalid', 'watchdog-not-armed', 'watchdog-process-changed', 'watchdog-owner-changed',
             'watchdog-uid-mismatch', 'watchdog-budget-mismatch', 'watchdog-source-mismatch', 'watchdog-heartbeat-invalid',
-            'watchdog-heartbeat-future', 'watchdog-heartbeat-stale']);
+            'watchdog-heartbeat-future', 'watchdog-heartbeat-stale', 'watchdog-did-not-arm',
+            'budget-identity-invalid', 'budget-run-mismatch', 'budget-run-started-invalid', 'budget-invalid', 'budget-not-started', 'budget-expired',
+            'budget-request-invalid', 'budget-api-unreachable', 'budget-api-refused', 'budget-api-response-invalid',
+            'hosted-environment-unsupported', 'hosted-owner-missing', 'output-path-invalid']);
           const refuse = reason => { throw Object.assign(new Error('Service budget validation failed.'), reasons.includes(reason) ? { reason } : {}); };
           // The watchdog publishes a new heartbeat about every 250 ms; one stamped after the caller sampled `now` is not forged.
           export const heartbeatSkewMs = 1000;
@@ -122,13 +125,13 @@ jobs:
               headSha: env.SERVICE_HEAD_SHA, checkout: env.GITHUB_SHA };
             if (!/^[\w.-]+\/[\w.-]+$/.test(value.repository ?? '')
               || ![value.runId, value.attempt].every(v => /^[1-9]\d*$/.test(v ?? '') && Number.isSafeInteger(Number(v)))
-              || ![value.headSha, value.checkout].every(v => /^[a-f0-9]{40}$/.test(v ?? ''))) refuse();
+              || ![value.headSha, value.checkout].every(v => /^[a-f0-9]{40}$/.test(v ?? ''))) refuse('budget-identity-invalid');
             return value;
           }
           export function budgetFromRun(run, identity, now = Date.now()) {
             if (String(run.id) !== identity.runId || String(run.run_attempt) !== identity.attempt
-              || run.head_sha !== identity.headSha || run.repository?.full_name !== identity.repository
-              || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(run.run_started_at ?? '')) refuse();
+              || run.head_sha !== identity.headSha || run.repository?.full_name !== identity.repository) refuse('budget-run-mismatch');
+            if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(run.run_started_at ?? '')) refuse('budget-run-started-invalid');
             const startedMs = Date.parse(run.run_started_at);
             const budget = { format: 1, ...identity, startedMs, deadlineMs: startedMs + budgetMs };
             remainingMs(budget, now);
@@ -139,7 +142,10 @@ jobs:
             identityFromEnv({ GITHUB_REPOSITORY: budget.repository, GITHUB_RUN_ID: budget.runId, GITHUB_RUN_ATTEMPT: budget.attempt,
               SERVICE_HEAD_SHA: budget.headSha, GITHUB_SHA: budget.checkout });
             if (budget.format !== 1 || ![budget.startedMs, budget.deadlineMs, now].every(Number.isSafeInteger)
-              || budget.deadlineMs - budget.startedMs !== budgetMs || now < budget.startedMs || now >= budget.deadlineMs) refuse();
+              || budget.deadlineMs - budget.startedMs !== budgetMs) refuse('budget-invalid');
+            // An `if: always()` job that starts after the run's budget is spent lands here, 30 minutes after a hung upstream job.
+            if (now < budget.startedMs) refuse('budget-not-started');
+            if (now >= budget.deadlineMs) refuse('budget-expired');
             return budget.deadlineMs - now;
           }
           export function temporary(env) {
@@ -255,14 +261,14 @@ jobs:
             for (const p of capture()) signal(p, 'SIGKILL');
           }
           export function hostedOwner(env, table = readProcesses(), platform = process.platform, uid = process.getuid?.()) {
-            if (platform !== 'linux' || env.RUNNER_ENVIRONMENT !== 'github-hosted' || env.RUNNER_OS !== 'Linux' || env.RUNNER_ARCH !== 'X64' || !uid) refuse();
+            if (platform !== 'linux' || env.RUNNER_ENVIRONMENT !== 'github-hosted' || env.RUNNER_OS !== 'Linux' || env.RUNNER_ARCH !== 'X64' || !uid) refuse('hosted-environment-unsupported');
             let p = table.get(process.pid); const seen = new Set();
             while (p && !seen.has(p.pid)) {
               seen.add(p.pid);
               if (p.command === 'Runner.Worker' && p.uid === uid && p.pid !== process.pid) return p;
               p = table.get(p.ppid);
             }
-            refuse();
+            refuse('hosted-owner-missing');
           }
           function atomicJson(file, value) {
             const temporaryFile = file + '.' + process.pid;
@@ -344,18 +350,23 @@ jobs:
           }
           export async function requestBudget(env = process.env, request = fetch, now = Date.now) {
             const identity = identityFromEnv(env);
-            if (!env.GH_TOKEN || env.GITHUB_API_URL !== 'https://api.github.com') refuse();
-            const response = await request(`${env.GITHUB_API_URL}/repos/${identity.repository}/actions/runs/${identity.runId}/attempts/${identity.attempt}`, {
-              headers: { Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2026-03-10' },
-              redirect: 'error', signal: AbortSignal.timeout(10_000),
-            });
-            if (!response.ok) refuse();
-            return budgetFromRun(await response.json(), identity, now());
+            if (!env.GH_TOKEN || env.GITHUB_API_URL !== 'https://api.github.com') refuse('budget-request-invalid');
+            let response;
+            try {
+              response = await request(`${env.GITHUB_API_URL}/repos/${identity.repository}/actions/runs/${identity.runId}/attempts/${identity.attempt}`, {
+                headers: { Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2026-03-10' },
+                redirect: 'error', signal: AbortSignal.timeout(10_000),
+              });
+            } catch { refuse('budget-api-unreachable'); }
+            if (!response.ok) refuse('budget-api-refused');
+            let run;
+            try { run = await response.json(); } catch { refuse('budget-api-response-invalid'); }
+            return budgetFromRun(run, identity, now());
           }
-          export async function bootstrap(env = process.env, request = fetch, now = Date.now) {
+          export async function bootstrap(env = process.env, request = fetch, now = Date.now, findOwner = hostedOwner) {
             // Never run machine-wide cleanup on a workstation, self-hosted runner or shared container runner.
-            if (!isAbsolute(env.GITHUB_OUTPUT ?? '')) refuse();
-            const baseline = readProcesses(); const owner = hostedOwner(env, baseline);
+            if (!isAbsolute(env.GITHUB_OUTPUT ?? '')) refuse('output-path-invalid');
+            const baseline = readProcesses(); const owner = findOwner(env, baseline);
             const budget = await requestBudget(env, request, now);
             const directory = temporary(env);
             writeFileSync(join(directory, 'service-budget.json'), JSON.stringify(budget) + '\n', { mode: 0o600, flag: 'wx' });
@@ -369,14 +380,16 @@ jobs:
             let childFailed = false; child.once('error', () => { childFailed = true; });
             child.unref();
             const until = Math.min(now() + 5000, budget.deadlineMs);
+            let last = 'watchdog-did-not-arm';
             while (!childFailed && now() < until) {
               try { validateWatchdog(env, budget, now());
-                if (!isAbsolute(env.GITHUB_OUTPUT ?? '')) refuse();
+                if (!isAbsolute(env.GITHUB_OUTPUT ?? '')) refuse('output-path-invalid');
                 appendFileSync(env.GITHUB_OUTPUT, 'armed=true\n'); return budget;
-              } catch { await delay(20); }
+              } catch (error) { if (error?.reason) last = error.reason; await delay(20); }
             }
             if (child.pid) { const p = readProcess(child.pid); if (p) signalIdentity(p, 'SIGTERM'); }
-            throw new Error('Service watchdog did not arm.');
+            // The last clause the checker saw is the best account of why the child never armed; none seen means it never wrote a receipt.
+            refuse(last);
           }
           if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
             try {
@@ -392,7 +405,11 @@ jobs:
                 if (processKey(owner) !== processKey(ticket.owner) || ticket.uid !== process.getuid()) refuse();
                 process.exitCode = await watchJob({ ...ticket, baseline: new Map(ticket.baseline), directory });
               } else refuse();
-            } catch { process.stderr.write('Service deadline supervision failed.\n'); process.exitCode = 1; }
+            } catch (error) {
+              // The closed list above is the only thing that may reach the log; refuse() drops any other reason.
+              if (error?.reason) process.stderr.write(`Service deadline refused: ${error.reason}.\n`);
+              process.stderr.write('Service deadline supervision failed.\n'); process.exitCode = 1;
+            }
           }
           SERVICE_DEADLINE
           node "$RUNNER_TEMP/service-deadline.mjs" bootstrap
@@ -1001,6 +1018,9 @@ jobs:
     name: image
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    # INF-03 (specs/002-signed-image-release): the one digest the release-image job may push and sign.
+    outputs:
+      digest: ${{ steps.digest.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1021,18 +1041,19 @@ jobs:
           outputs: type=oci,dest=${{ runner.temp }}/api.oci.tar
           cache-from: type=gha,scope=api-amd64-v1,timeout=2m
           cache-to: type=gha,scope=api-amd64-v1,mode=max,ignore-error=true,timeout=2m
-      # Classic Docker stores cannot load attested manifest lists. Reuse the same
-      # builder/cache for the runtime export; retain evidence in the OCI archive.
-      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: infrastructure/docker/api.Dockerfile
-          platforms: linux/amd64
-          push: false
-          load: true
-          tags: telesphoros-fd4b:rehearsal
-          sbom: false
-          provenance: false
+      - name: Record the image digest
+        id: digest
+        run: node infrastructure/docker/image-digest.mjs digest "$RUNNER_TEMP/api.oci.tar" >> "$GITHUB_OUTPUT"
+      # The release tools (pinned, checksum-verified) load the archive's own image below and rehearse the release later in this job.
+      - name: Install the release tools (pinned, checksum-verified)
+        run: |
+          infrastructure/docker/release-tools.sh "$RUNNER_TEMP/release-tools"
+          echo "$RUNNER_TEMP/release-tools" >> "$GITHUB_PATH"
+      # Trivy, the readiness test and the rehearsal run THE ARCHIVE'S linux/amd64 image, the one that is released (INF-03). Classic Docker stores cannot
+      # load the attested index, and a second `--load` build was not the same image (its last layers were rebuilt with other bytes, found 2026-10-21), so
+      # the image is loaded from the archive itself; the script ends by checking its config digest against the archive.
+      - name: Load the archive's image (the one that is released)
+        run: infrastructure/docker/load-archive-image.sh "$RUNNER_TEMP/api.oci.tar" telesphoros-fd4b:rehearsal
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: telesphoros-fd4b:rehearsal
@@ -1044,6 +1065,9 @@ jobs:
           version: v0.70.0 # the scanner itself, pinned: an action bump must not change it silently
       - run: node --test infrastructure/docker/postgres-readiness.test.cjs
       - run: node infrastructure/docker/rehearsal.cjs telesphoros-fd4b:rehearsal
+      # The release-image job's exact commands, against a throwaway local registry and key, with every public endpoint unreachable (INF-03).
+      - name: Rehearse the release
+        run: infrastructure/docker/release-rehearsal.sh "$RUNNER_TEMP/api.oci.tar" "${{ steps.digest.outputs.digest }}"
       # OCI retains SBOM/provenance that the Docker load exporter can discard.
       # Private repository artifact only; no registry push or transparency log.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -1052,3 +1076,43 @@ jobs:
           path: ${{ runner.temp }}/api.oci.tar
           retention-days: 1
           if-no-files-found: error
+
+  # INF-03 slice 2 (specs/002-signed-image-release). After a merge to main: push the archive the image job built, scanned and rehearsed to ECR without a
+  # rebuild, check that ECR kept its digest, and sign that digest with the KMS image-signing key, writing to no public transparency log. The ONLY job with
+  # `id-token: write`, and not a required check (it runs after the merge). Dormant until the founder applies signing.tf, creates the image-release
+  # environment (limited to main) and sets the repository variables below from the Terraform outputs.
+  release-image:
+    name: release-image
+    needs: image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.IMAGE_RELEASE_ROLE_ARN != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: image-release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.IMAGE_RELEASE_REGION }}
+      IMAGE_REPOSITORY_URL: ${{ vars.IMAGE_REPOSITORY_URL }}
+      IMAGE_SIGNING_KEY_ALIAS: ${{ vars.IMAGE_SIGNING_KEY_ALIAS }}
+      IMAGE_DIGEST: ${{ needs.image.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: api-image-with-attestations
+          path: ${{ runner.temp }}/release
+      - name: The downloaded archive is the one the image job scanned
+        run: test "$(node infrastructure/docker/image-digest.mjs digest "$RUNNER_TEMP/release/api.oci.tar")" = "digest=$IMAGE_DIGEST"
+      - name: Install the release tools (pinned, checksum-verified)
+        run: |
+          infrastructure/docker/release-tools.sh "$RUNNER_TEMP/release-tools"
+          echo "$RUNNER_TEMP/release-tools" >> "$GITHUB_PATH"
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.IMAGE_RELEASE_ROLE_ARN }}
+          aws-region: ${{ vars.IMAGE_RELEASE_REGION }}
+      - name: Push without a rebuild, compare the digest, sign
+        run: infrastructure/docker/release-image.sh "$RUNNER_TEMP/release/api.oci.tar"

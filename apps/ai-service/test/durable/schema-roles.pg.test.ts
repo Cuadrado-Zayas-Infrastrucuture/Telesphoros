@@ -55,6 +55,8 @@ describe('owned PostgreSQL synthetic schema, roles and reversibility', () => {
     const migrated = await catalog(owner);
     await owner.query('BEGIN');
     try {
+      // 0030 only replaces three 0029 function bodies and adds a helper; it comes off first and goes on last, so the catalog it hands back is compared whole.
+      await owner.query(readFileSync(resolve(migrations, '0030_agentic_synthetic_identity.down.sql'), 'utf8'));
       await owner.query(readFileSync(resolve(migrations, '0029_agentic_synthetic.down.sql'), 'utf8'));
       const before = await catalog(owner); // the schema as migration 0028 left it
       expect(before.filter(synthetic)).toEqual([]);
@@ -67,6 +69,7 @@ describe('owned PostgreSQL synthetic schema, roles and reversibility', () => {
         /^fn membership_assert_current\(p_sub text, p_version bigint\) .*telesphoros_jobs=X\//)]);
       expect(removed.map(f => f.replace(/,?telesphoros_jobs=X\/[a-z0-9_]+/, ''))).toEqual(added.map(f => f.replace(/,?telesphoros_jobs=X\/[a-z0-9_]+/, '')));
       await owner.query(readFileSync(resolve(migrations, '0029_agentic_synthetic.up.sql'), 'utf8'));
+      await owner.query(readFileSync(resolve(migrations, '0030_agentic_synthetic_identity.up.sql'), 'utf8'));
       expect(await catalog(owner)).toEqual(migrated);
     } finally { await owner.query('ROLLBACK'); }
     expect(await catalog(owner)).toEqual(migrated); // the rolled-back transaction left nothing behind
@@ -119,7 +122,8 @@ describe('owned PostgreSQL synthetic schema, roles and reversibility', () => {
       // The membership helper restored the caller's own setting afterwards.
       expect((await worker.query(`SELECT current_setting('app.current_tenant_id') AS t`)).rows[0].t).toBe('attacker-tenant');
     } finally { await worker.end(); }
-    // App-side spoofing: a GUC tenant or actor that disagrees with the caller is refused.
+    // App-side spoofing: a GUC tenant or actor that disagrees with the caller is refused. (No capability is bound here, so after 0030 these are refused
+    // for that reason first; the cases that bind a capability and forge the settings are in apps/backend/test/db/agentic-identity.pg-spec.ts, in all modes.)
     for (const [tenant, actor] of [['attacker-tenant', caller.requesterRef], [caller.tenantId, 'someone-else']]) {
       const app = await connect(fixture.appUrl);
       try {

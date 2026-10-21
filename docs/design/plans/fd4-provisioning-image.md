@@ -1,6 +1,6 @@
 # Plan FD-4: database logins, the API image, and a CI rehearsal of the first deployment
 
-Status: **approved 2026-10-09** with the founder's decisions below. **PR 1 (the command, FD-4a) is built; PR 2 (the image and rehearsal, FD-4b) is not started.** Needs no AWS access: everything is proved against a throwaway Postgres.
+Status: **approved 2026-10-09** with the founder's decisions below. **Both PRs are merged: PR 48 (the command, FD-4a, 2026-10-09) and PR 49 (the image and rehearsal, FD-4b, 2026-10-10).** Decision 3 was answered on 2026-10-09: the vendored bundle matches the recorded SHA-256 and certificate count. Needs no AWS access: everything is proved against a throwaway Postgres.
 
 ## Why
 

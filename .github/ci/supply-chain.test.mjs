@@ -37,7 +37,9 @@ export function supplyChainProblems({ workflows, requirementsIn, requirementsTxt
     for (const [, ref, rest] of text.matchAll(/^[ \t]*-?[ \t]*uses:[ \t]*(\S+)(.*)$/gm)) {
       need(/@[0-9a-f]{40}$/.test(ref) && /#\s*v\d/.test(rest), `${name}: ${ref} must be pinned to a commit SHA with a "# vX.Y.Z" comment`);
     }
-    need(/^permissions:\n {2}contents: read\n/m.test(raw) && !/:\s*write\b/.test(text), `${name}: permissions must be read-only`);
+    // The one exception (INF-03, release.test.mjs pins where it lives): ci.yml's release-image job asks for an OIDC token.
+    const writes = text.split('\n').filter((line) => /:\s*write\b/.test(line));
+    need(/^permissions:\n {2}contents: read\n/m.test(raw) && (writes.length === 0 || (name === 'ci.yml' && JSON.stringify(writes) === JSON.stringify(['      id-token: write']))), `${name}: permissions must be read-only (only ci.yml's release-image may ask for id-token: write)`);
     need(!/pull_request_target/.test(text) && !/secrets\./.test(text), `${name}: no pull_request_target and no repository secrets`);
     // Container images by digest only: a tag can be re-pointed under a green check.
     for (const [, image] of text.matchAll(/^[ \t]*image:[ \t]*(\S+)/gm)) need(/@sha256:[0-9a-f]{64}$/.test(image), `${name}: image ${image} must be pinned by digest`);

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { Client } from 'pg';
-import { migrateUp } from '../../src/db/migrator';
+import { migrateDown, migrateUp } from '../../src/db/migrator';
 import { checkGroups, type LoginNames, type ProvisionOptions, type ProvisionReport, provisionLogins, type SecretStore, scramVerifier } from '../../src/db/provision-logins';
 import { pgClientConfig } from '../../src/db/tls';
 import { adminUrl, withAdmin } from '../helpers/database';
@@ -342,15 +342,23 @@ describe('the session issuer login (DATA-01 slice 1, migration 0028)', () => {
     expect(after.checks.find((c) => c.name === 'issuer login privileges')).toMatchObject({ ok: true });
     await asLogin(f.store.values.get('secret-issuer')!, async (c) => {
       expect((await c.query(`SELECT has_function_privilege(current_user, 'tenant_capability_issue(text,text,bigint,text,bytea,text)', 'EXECUTE') AS ok`)).rows[0].ok).toBe(true);
+      expect((await c.query(`SELECT has_function_privilege(current_user, 'tenant_capability_issue_current(text,text,text,bytea,text)', 'EXECUTE') AS ok`)).rows[0].ok).toBe(true);
+      expect((await c.query(`SELECT has_function_privilege(current_user, 'app_capability_version()', 'EXECUTE') AS ok`)).rows[0].ok).toBe(false); // the issuer binds nothing
       for (const sql of ['SELECT * FROM patients', 'SELECT * FROM tenant_capabilities', 'SELECT * FROM tenant_memberships', 'SELECT ledger_append(NULL, NULL, NULL, NULL, NULL, NULL)']) {
         expect([sql, await c.query(sql).then(() => 'ok', (e: { code?: string }) => e.code)]).toEqual([sql, '42501']);
       }
     });
-    // The application, verifier and worker logins cannot mint (live attempt, not only the catalog).
+    // The application, verifier and worker logins cannot mint (live attempt, not only the catalog), with either function.
     for (const kind of ['app', 'verifier', 'worker'] as const) {
-      const outcome = await asLogin(f.store.values.get(f.options.secrets[kind])!, (c) =>
-        c.query(`SELECT * FROM tenant_capability_issue('t', 's', 1, 'request', sha256('x'), NULL)`).then(() => 'ok', (e: { code?: string }) => e.code));
-      expect([kind, outcome]).toEqual([kind, '42501']);
+      for (const sql of [`SELECT * FROM tenant_capability_issue('t', 's', 1, 'request', sha256('x'), NULL)`, `SELECT * FROM tenant_capability_issue_current('t', 's', 'request', sha256('x'), NULL)`]) {
+        const outcome = await asLogin(f.store.values.get(f.options.secrets[kind])!, (c) => c.query(sql).then(() => 'ok', (e: { code?: string }) => e.code));
+        expect([kind, sql, outcome]).toEqual([kind, sql, '42501']);
+      }
+    }
+    // The accessor goes to the roles that bind (app, worker) and not to the verifier or the issuer (positive and negative in the same run).
+    for (const [kind, expected] of [['app', 'ok'], ['worker', 'ok'], ['verifier', '42501']] as const) {
+      const outcome = await asLogin(f.store.values.get(f.options.secrets[kind])!, (c) => c.query('SELECT app_capability_version()').then(() => 'ok', (e: { code?: string }) => e.code));
+      expect([kind, outcome]).toEqual([kind, expected]);
     }
   });
 
@@ -373,6 +381,12 @@ describe('the session issuer login (DATA-01 slice 1, migration 0028)', () => {
     for (const [grant, revoke, expected] of [
       [`GRANT EXECUTE ON FUNCTION tenant_capability_issue(text,text,bigint,text,bytea,text) TO ${f.names.app}`, `REVOKE EXECUTE ON FUNCTION tenant_capability_issue(text,text,bigint,text,bytea,text) FROM ${f.names.app}`, /app login privileges: .*tenant_capability_issue \(CAN execute\)/],
       [`GRANT SELECT ON tenant_capabilities TO ${f.names.issuer}`, `REVOKE SELECT ON tenant_capabilities FROM ${f.names.issuer}`, /issuer login privileges: .*tenant_capabilities \(CAN read\)/],
+      [`GRANT EXECUTE ON FUNCTION tenant_capability_issue_current(text,text,text,bytea,text) TO ${f.names.app}`, `REVOKE EXECUTE ON FUNCTION tenant_capability_issue_current(text,text,text,bytea,text) FROM ${f.names.app}`, /app login privileges: .*tenant_capability_issue_current \(CAN execute\)/],
+      [`GRANT EXECUTE ON FUNCTION tenant_capability_issue_current(text,text,text,bytea,text) TO ${f.names.worker}`, `REVOKE EXECUTE ON FUNCTION tenant_capability_issue_current(text,text,text,bytea,text) FROM ${f.names.worker}`, /worker login privileges: .*tenant_capability_issue_current \(CAN execute\)/],
+      // (the app login holds app_capability_version through its group, so this one is revoked from the group)
+      [`REVOKE EXECUTE ON FUNCTION app_capability_version() FROM telesphoros_app`, `GRANT EXECUTE ON FUNCTION app_capability_version() TO telesphoros_app`, /app login privileges: .*app_capability_version \(cannot execute\)/],
+      [`GRANT EXECUTE ON FUNCTION app_capability_version() TO ${f.names.verifier}`, `REVOKE EXECUTE ON FUNCTION app_capability_version() FROM ${f.names.verifier}`, /verifier login privileges: .*app_capability_version \(CAN execute\)/],
+      [`GRANT EXECUTE ON FUNCTION app_capability_version() TO ${f.names.issuer}`, `REVOKE EXECUTE ON FUNCTION app_capability_version() FROM ${f.names.issuer}`, /issuer login privileges: .*app_capability_version \(CAN execute\)/],
     ] as const) {
       await withAdmin(f.options.adminUrl, (c) => c.query(grant));
       const bad = await provisionLogins({ ...withIssuer(f), requireMigrated: true });
@@ -381,6 +395,22 @@ describe('the session issuer login (DATA-01 slice 1, migration 0028)', () => {
       await withAdmin(f.options.adminUrl, (c) => c.query(revoke));
       expect((await provisionLogins({ ...withIssuer(f), requireMigrated: true })).ok).toBe(true); // and it recovers
     }
+  });
+});
+
+describe('a database that has the capability but not yet migration 0031', () => {
+  it('passes the privilege checks (the 0031 entries are checked only once its functions exist), and is checked for them once they do', async () => {
+    const f = await fixture();
+    const withIssuer: ProvisionOptions = { ...f.options, secrets: { ...f.options.secrets, issuer: 'secret-issuer' }, requireMigrated: true };
+    await provisionLogins({ ...withIssuer, requireMigrated: false });
+    await asLogin(f.store.values.get('secret-migrator')!, (c) => migrateUp(c));
+    expect(await withAdmin(f.options.adminUrl, (c) => migrateDown(c, 1))).toEqual(['0031']); // reverts freely (functions only); 0028 stays
+    expect(await withAdmin(f.options.adminUrl, async (c) => (await c.query(`SELECT count(*)::int AS n FROM pg_proc WHERE proname IN ('tenant_capability_issue_current', 'app_capability_version')`)).rows[0].n)).toBe(0);
+    expect(failing(await provisionLogins(withIssuer))).toEqual([]); // no "missing" complaint about functions that do not exist yet
+    await asLogin(f.store.values.get('secret-migrator')!, (c) => migrateUp(c));
+    expect(failing(await provisionLogins(withIssuer))).toEqual([]);
+    await withAdmin(f.options.adminUrl, (c) => c.query(`GRANT EXECUTE ON FUNCTION app_capability_version() TO ${f.names.verifier}`));
+    expect(failing(await provisionLogins(withIssuer)).join('\n')).toMatch(/verifier login privileges: .*app_capability_version \(CAN execute\)/); // and once they exist they are checked
   });
 });
 

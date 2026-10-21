@@ -24,6 +24,26 @@ const urlTlsParameterNames = (url: string): string[] => {
   }
 };
 
+/**
+ * Why ISSUER_URL is unusable, or undefined if it is fine. The message names the rule and never the value (the value can carry credentials). The same rule is
+ * `checkIssuerBaseUrl` in issuer/issuer-http-client.ts, which this file cannot import (it is loaded on its own) and which cannot import this (it may reach the
+ * issuer port only); a test holds the two to one table of accepted and refused values.
+ */
+export function issuerUrlProblem(value: string): string | undefined {
+  if (value !== value.trim() || /[\s?#]/.test(value)) return 'must be an absolute http(s) URL with no spaces, query or fragment';
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return 'must be an absolute http(s) URL';
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return 'must use http or https';
+  if (!url.hostname) return 'must name a host';
+  if (url.username || url.password) return 'must not carry credentials';
+  if (url.pathname !== '/') return 'must not have a path';
+  return undefined;
+}
+
 export const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -97,6 +117,18 @@ export const envSchema = z
      * Rate limiting (docs/ops/rate-limiting.md). Per PROCESS: two instances each allow the full rate. Production refuses to start with it off.
      * Limits are requests per minute. The per-person limits apply after sign-in, by route class; the address limit applies before.
      */
+    /**
+     * Where the session issuer answers (DATA-01): `http://session-issuer:8082` in the deployed service, a name the ECS Service Connect proxy resolves. Set,
+     * the API asks the issuer for a capability on every request; unset (the default), it asks nobody and behaves as it did before. An unusable value is
+     * refused at start-up rather than ignored, because ignoring it would silently turn the issuer off. Terraform sets it only when enable_issuer is on.
+     */
+    ISSUER_URL: z
+      .string()
+      .superRefine((value, ctx) => {
+        const problem = issuerUrlProblem(value);
+        if (problem) ctx.addIssue({ code: 'custom', message: problem });
+      })
+      .optional(),
     RATE_LIMIT_ENABLED: booleanString.default(true),
     RATE_LIMIT_IP_PER_MINUTE: z.coerce.number().int().min(1).max(100_000).default(300),
     RATE_LIMIT_READ_PER_MINUTE: z.coerce.number().int().min(1).max(100_000).default(120),

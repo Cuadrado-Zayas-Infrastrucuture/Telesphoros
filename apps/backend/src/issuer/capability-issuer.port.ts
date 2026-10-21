@@ -7,8 +7,6 @@ export const REQUEST_PURPOSE = 'request';
 export interface CapabilityIssueRequest {
   /** The caller's Cognito access token, which the issuer verifies for itself. Never logged, never stored. */
   accessToken: string;
-  /** The version of the membership row the API read when it admitted the request. The database refuses the issuance if the row has moved on since. */
-  membershipVersion: number;
   /** The request's correlation id, written to the issuance log so an issuance can be matched to the request. */
   requestId: string;
 }
@@ -17,17 +15,26 @@ export interface IssuedCapability {
   /** The raw token. It exists here and in the request's memory only; the database keeps its sha256. */
   token: string;
   expiresAt: Date;
+  /**
+   * The version of the person's membership the DATABASE read when it issued (migration 0031), stamped on the capability. The caller does not supply one:
+   * it asks for the capability first and learns the version from the answer, so no lookup has to run before the capability exists.
+   */
+  membershipVersion: number;
 }
 
 export type CapabilityIssueFailure = 'invalid-token' | 'no-tenant' | 'invalid-request' | 'refused' | 'unavailable';
 
-/** Why a capability was not issued. The message never carries a token, a database message or an address; `detail` is the database's closed refusal code. */
+/**
+ * Why a capability was not issued. The message never carries a token, a database message or an address; `detail` is the database's closed refusal code.
+ * Nor does it carry the issuer's alarm phrase (alarm-phrase.spec.ts): `IssuerCore` alone writes the log lines issuer.tf's metric filters count, so a failure
+ * is counted once even if someone later logs `error.message`.
+ */
 export class CapabilityIssueError extends Error {
   constructor(
     readonly reason: CapabilityIssueFailure,
     readonly detail?: string,
   ) {
-    super(reason === 'invalid-token' ? 'Invalid token' : `Capability not issued: ${reason}`);
+    super(reason === 'invalid-token' ? 'Invalid token' : `Capability issuance failed: ${reason}`);
   }
 }
 

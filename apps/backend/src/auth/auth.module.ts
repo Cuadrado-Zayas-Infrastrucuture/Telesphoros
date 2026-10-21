@@ -2,6 +2,7 @@ import { Logger, Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ENV, type Env } from '../config/env';
 import { CapabilityIssuerPort, NullCapabilityIssuer } from '../issuer/capability-issuer.port';
+import { HttpCapabilityIssuer } from '../issuer/issuer-http-client';
 import { RequestCapabilities } from '../issuer/request-capabilities';
 import { IpRateLimitGuard, PersonRateLimitGuard } from '../rate-limit/rate-limit.guard';
 import { RateLimitModule } from '../rate-limit/rate-limit.module';
@@ -37,13 +38,22 @@ export function createApplicationVerifier(env: Env, memberships: MembershipRepos
   return new MirrorTokenVerifier(verifier, memberships);
 }
 
+/**
+ * The port the guard asks for a capability. With ISSUER_URL (set by Terraform only when enable_issuer is on) it is the HTTP client for the session issuer; without
+ * it, the null issuer: no capability is requested and behaviour is exactly what it was before the issuer existed. loadEnv() has already refused an unusable address.
+ * What production does when enforcement is on and this is unset is a slice 5 decision (T031): the binding mode lives in the database, not here.
+ */
+export function createCapabilityIssuer(env: Env): CapabilityIssuerPort {
+  return env.ISSUER_URL ? new HttpCapabilityIssuer({ baseUrl: env.ISSUER_URL }) : new NullCapabilityIssuer();
+}
+
 @Module({
   imports: [RateLimitModule],
   providers: [
     { provide: TokenVerifier, useFactory: createApplicationVerifier, inject: [ENV, MembershipRepository] },
     MembershipService,
-    // No issuer is configured by default, so no capability is requested: behaviour in `guc` mode is unchanged. The transport to a real issuer is a later decision.
-    { provide: CapabilityIssuerPort, useClass: NullCapabilityIssuer },
+    // No ISSUER_URL, no capability is requested: behaviour in `guc` mode is unchanged.
+    { provide: CapabilityIssuerPort, useFactory: createCapabilityIssuer, inject: [ENV] },
     RequestCapabilities,
     // Order matters. The address limit comes FIRST (a flood of bad tokens must be stopped before token verification), then authenticate,
     // then check roles, then the per-person limit (so a request that is refused or not signed in never spends a person's tokens).

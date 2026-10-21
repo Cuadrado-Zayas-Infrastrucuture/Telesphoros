@@ -15,16 +15,16 @@ export interface RequestAuthority {
 export interface RequestCapability {
   readonly token: string;
   readonly expiresAt: Date;
+  /** The version of the person's membership the database stamped on the capability when it issued it: the version the request's commit-time check holds to. */
+  readonly membershipVersion: number;
 }
 
 interface RequestStore {
   authority?: RequestAuthority;
-  /** The request's ONE capability, set by the guard after the membership is resolved and read by every `withTenant` call in the request. */
+  /** The request's ONE capability, set by the guard BEFORE it reads the membership and read by every `withTenant` call in the request, the lookup included. */
   capability?: RequestCapability;
   /** Why the request has no capability, once the guard has tried (`not-configured`, `issuer-unavailable`, ...). Only a label for the count. */
   capabilityAbsent?: string;
-  /** True while the guard resolves the caller's membership: that lookup precedes the capability (which needs the membership's version) by construction. */
-  admitting?: boolean;
   /** The request's correlation id, so a security event can be matched to the diagnostic log line for the same request. */
   requestId?: string;
 }
@@ -64,14 +64,15 @@ export function currentRequestAuthority(): RequestAuthority | undefined {
   return storage.getStore()?.authority;
 }
 
-/** Called by the guard (through RequestCapabilities) once per request. The slot holds its own frozen copy and is written once. */
+/** Called by the guard (through RequestCapabilities) once per request, before the membership lookup. The slot holds its own frozen copy and is written once. */
 export function bindRequestCapability(capability: RequestCapability): void {
   const store = storage.getStore();
   if (!store) throw new Error('No request authority context: configureApp() must register authorityContextMiddleware before routing');
   if (store.capability) throw new Error('This request already has a capability');
   // Never echo the value: it is a bearer secret.
   if (typeof capability.token !== 'string' || !CAPABILITY_TOKEN_PATTERN.test(capability.token)) throw new Error('Malformed capability');
-  store.capability = Object.freeze({ token: capability.token, expiresAt: new Date(capability.expiresAt.getTime()) });
+  if (!Number.isSafeInteger(capability.membershipVersion) || capability.membershipVersion < 1) throw new Error('Malformed capability');
+  store.capability = Object.freeze({ token: capability.token, expiresAt: new Date(capability.expiresAt.getTime()), membershipVersion: capability.membershipVersion });
 }
 
 /** The capability of the request this code is running for (or the request that started this organization work), if it has one. */
@@ -87,22 +88,6 @@ export function noteCapabilityAbsent(reason: string): void {
 
 export function capabilityAbsentReason(): string | undefined {
   return storage.getStore()?.capabilityAbsent;
-}
-
-/** Runs the guard's own membership lookup. `withTenant` does not count it as capability-less. */
-export async function duringAdmission<T>(work: () => Promise<T>): Promise<T> {
-  const store = storage.getStore();
-  if (!store) return work();
-  store.admitting = true;
-  try {
-    return await work();
-  } finally {
-    store.admitting = false;
-  }
-}
-
-export function isAdmitting(): boolean {
-  return storage.getStore()?.admitting === true;
 }
 
 /**

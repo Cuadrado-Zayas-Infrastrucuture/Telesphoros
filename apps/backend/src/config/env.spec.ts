@@ -204,4 +204,51 @@ describe('loadEnv', () => {
       for (const bad of ['yes', '1', '', 'ON']) expect(() => loadEnv({ ...base, RATE_LIMIT_ENABLED: bad })).toThrow(/RATE_LIMIT_ENABLED/);
     });
   });
+
+  describe('the session issuer address (ISSUER_URL, DATA-01)', () => {
+    const production = {
+      NODE_ENV: 'production', AUTH_VERIFIER: 'cognito', COGNITO_REGION: 'us-east-2', COGNITO_USER_POOL_ID: 'us-east-2_AbCdEf123',
+      COGNITO_APP_CLIENT_ID: 'client123', STORAGE_DRIVER: 'postgres', DATABASE_URL: 'postgres://app@db/app', DATABASE_SSL: 'require',
+      OBJECT_STORAGE_DRIVER: 's3', REPORTS_BUCKET: 'a-bucket', CORS_ALLOWED_ORIGINS: 'https://app.example.com',
+      LEDGER_VERIFIER_DATABASE_URL: 'postgres://verifier@db/app', TRUST_PROXY_HOPS: '1', INVITATION_DIGEST_KEY: 'ab'.repeat(32), IDENTIFIER_DIGEST_KEY: 'cd'.repeat(32),
+    };
+
+    it('is unset by default, which keeps today\'s behaviour (no issuer is asked), in development and in production', () => {
+      expect(loadEnv({ ...base }).ISSUER_URL).toBeUndefined();
+      expect(loadEnv(production).ISSUER_URL).toBeUndefined();
+    });
+
+    it('accepts the Service Connect name the deployed service uses, and a loopback address for tests', () => {
+      expect(loadEnv({ ...base, ISSUER_URL: 'http://session-issuer:8082' }).ISSUER_URL).toBe('http://session-issuer:8082');
+      expect(loadEnv({ ...production, ISSUER_URL: 'http://session-issuer:8082' }).ISSUER_URL).toBe('http://session-issuer:8082');
+      expect(loadEnv({ ...base, ISSUER_URL: 'http://127.0.0.1:41234' }).ISSUER_URL).toBe('http://127.0.0.1:41234');
+    });
+
+    it.each([
+      ['an empty value (it would silently turn the issuer off)', ''],
+      ['a bare host', 'session-issuer:8082'],
+      ['another scheme', 'ftp://session-issuer'],
+      ['credentials', 'http://caller:secret@session-issuer:8082'],
+      ['a query', 'http://session-issuer:8082/?x=1'],
+      ['a fragment', 'http://session-issuer:8082/#x'],
+      ['a path', 'http://session-issuer:8082/v1'],
+    ])('refuses %s at start-up, in development and in production, naming the setting', (_name, value) => {
+      expect(() => loadEnv({ ...base, ISSUER_URL: value })).toThrow(/ISSUER_URL/);
+      expect(() => loadEnv({ ...production, ISSUER_URL: value })).toThrow(/ISSUER_URL/);
+    });
+
+    it('never repeats the value in the message, so credentials in it are not printed', () => {
+      const marker = `sentinel-${Math.random().toString(16).slice(2, 14)}`;
+      for (const value of [`http://caller:${marker}@host-${marker}:8082`, `http://host-${marker}/?token=${marker}`, `ftp://${marker}`]) {
+        let message = '';
+        try {
+          loadEnv({ ...base, ISSUER_URL: value });
+        } catch (e) {
+          message = (e as Error).message;
+        }
+        expect(message).toMatch(/ISSUER_URL/);
+        expect(message).not.toContain(marker);
+      }
+    });
+  });
 });

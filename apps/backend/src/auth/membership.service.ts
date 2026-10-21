@@ -20,6 +20,16 @@ export interface ResolvedCaller {
  *   token issued at or before the revocation instant   -> 401  (the browser signs in again and gets a newer token)
  *   the lookup itself fails                            -> 503  (nothing is done; not 401, which would send the browser round a sign-in loop)
  */
+export interface ResolveOptions {
+  /**
+   * True when the session issuer REFUSED this person's capability as not current ("membership-not-current" or "tenant-inactive"). The issuer's
+   * `capability_issuance_log` row is then the record of the refusal (founder decision D1=(i), 2026-10-20), so the admission refusals below are not written
+   * to `security_events` again. It is false when no issuer is configured or it failed: nothing else would record them. `token-revoked` is always
+   * written (the issuer does not check it, and that person holds a valid capability), and so is `authority-changed` (written by the database layer).
+   */
+  admissionRefusalRecorded?: boolean;
+}
+
 @Injectable()
 export class MembershipService {
   private readonly logger = new Logger('Membership');
@@ -29,7 +39,9 @@ export class MembershipService {
     private readonly events: SecurityEvents,
   ) {}
 
-  async resolve(identity: TokenIdentity): Promise<ResolvedCaller> {
+  async resolve(identity: TokenIdentity, options: ResolveOptions = {}): Promise<ResolvedCaller> {
+    const recordAdmissionRefusal = (reason: 'removed' | 'no-membership' | 'tenant-suspended') =>
+      options.admissionRefusalRecorded ? Promise.resolve() : this.events.recordRefusal(identity.tenantId, identity.sub, reason);
     let membership;
     try {
       membership = await this.memberships.find(identity.tenantId, identity.sub);
@@ -40,12 +52,12 @@ export class MembershipService {
     }
     if (!membership || membership.status !== 'active') {
       this.logger.warn({ event: 'membership-refused', reason: membership ? 'removed' : 'none', tenantId: identity.tenantId }, 'No active membership');
-      await this.events.recordRefusal(identity.tenantId, identity.sub, membership ? 'removed' : 'no-membership');
+      await recordAdmissionRefusal(membership ? 'removed' : 'no-membership');
       throw AppException.forbidden();
     }
     if (membership.tenantActive === false) {
       this.logger.warn({ event: 'membership-refused', reason: 'tenant-suspended', tenantId: identity.tenantId }, 'The organization is suspended');
-      await this.events.recordRefusal(identity.tenantId, identity.sub, 'tenant-suspended');
+      await recordAdmissionRefusal('tenant-suspended');
       throw AppException.forbidden();
     }
     if (identity.issuedAt <= membership.tokensValidAfter) {

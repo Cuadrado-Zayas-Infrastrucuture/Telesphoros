@@ -170,6 +170,17 @@ const CAPABILITY_RIGHTS: Record<'app' | 'verifier' | 'worker' | 'issuer', Record
   worker: { tenant_capability_issue: false, tenant_capabilities_sweep: false, app_tenant: true },
   issuer: { tenant_capability_issue: true, tenant_capabilities_sweep: false, app_tenant: false, ledger_append: false, job_enqueue: false },
 };
+/**
+ * The two functions migration 0031 added: the issuer's current-version issue function (the issuer alone may call it) and the accessor for the version a
+ * capability was issued at (the roles that already bind through `app_tenant()`, and never the verifier or the issuer). Checked only once the migration is
+ * applied, like the queue's functions, so a database that has 0028 and not yet 0031 still passes.
+ */
+const CAPABILITY_CURRENT_RIGHTS: Record<'app' | 'verifier' | 'worker' | 'issuer', Record<string, boolean>> = {
+  app: { tenant_capability_issue_current: false, app_capability_version: true },
+  verifier: { tenant_capability_issue_current: false, app_capability_version: false },
+  worker: { tenant_capability_issue_current: false, app_capability_version: true },
+  issuer: { tenant_capability_issue_current: true, app_capability_version: false },
+};
 
 export async function provisionLogins(options: ProvisionOptions): Promise<ProvisionReport> {
   const names = options.names ?? DEFAULT_LOGINS;
@@ -324,6 +335,7 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
   }
   const hasQueue = (await admin.query("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'job_claim' AND pronamespace = 'public'::regnamespace) AS ok")).rows[0].ok as boolean;
   const hasCapability = (await admin.query("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'tenant_capability_issue' AND pronamespace = 'public'::regnamespace) AS ok")).rows[0].ok as boolean;
+  const hasCurrent = (await admin.query("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'tenant_capability_issue_current' AND pronamespace = 'public'::regnamespace) AS ok")).rows[0].ok as boolean;
   const canExecute = async (login: string, fn: string): Promise<boolean | undefined> => {
     const rows = (await admin.query<{ ok: boolean }>(`SELECT has_function_privilege($1, p.oid, 'EXECUTE') AS ok FROM pg_proc p WHERE p.proname = $2 AND p.pronamespace = 'public'::regnamespace`, [login, fn])).rows;
     return rows.length === 0 ? undefined : rows.some((r) => r.ok);
@@ -333,7 +345,7 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
   /** What a login must and must not be able to do with the tenant capability (migration 0028). */
   const capabilityProblems = async (login: string, kind: keyof typeof CAPABILITY_RIGHTS): Promise<string[]> => {
     const wrong: string[] = [];
-    for (const [fn, allowed] of Object.entries(CAPABILITY_RIGHTS[kind])) {
+    for (const [fn, allowed] of Object.entries({ ...CAPABILITY_RIGHTS[kind], ...(hasCurrent ? CAPABILITY_CURRENT_RIGHTS[kind] : {}) })) {
       const can = await canExecute(login, fn);
       if (can === undefined) wrong.push(`${fn} (missing)`);
       else if (can !== allowed) wrong.push(`${fn} (${allowed ? 'cannot' : 'CAN'} execute)`);
@@ -378,7 +390,7 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
         const readable = (await admin.query<{ ok: boolean }>(`SELECT has_table_privilege($1, $2, 'SELECT') AS ok`, [names.issuer, `public.${table}`])).rows[0].ok;
         if (readable) wrong.push(`${table} (CAN read)`);
       }
-      add('issuer login privileges', wrong.length === 0, wrong.length ? wrong.join('; ') : 'only tenant_capability_issue; it reads no table');
+      add('issuer login privileges', wrong.length === 0, wrong.length ? wrong.join('; ') : 'only the issue functions; it reads no table');
     } else {
       add('issuer login privileges', !options.requireMigrated, 'the tenant capability (migration 0028) is not applied yet; run this command again after `migrate up`', !options.requireMigrated);
     }

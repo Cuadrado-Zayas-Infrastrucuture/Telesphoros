@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Client } from 'pg';
 import { PostgresSyntheticStore, type TenantTransactions } from '../../durable/postgres';
 import { ownedPostgresFixture } from '../helpers/postgres-fixture';
+import { bindCapability } from '../helpers/durable-pg';
 import type { EphemeralDatabase } from '../../../backend/test/helpers/database';
 import type { Queryable } from '@telesphoros/jobs';
 
@@ -25,6 +26,7 @@ async function appStore(): Promise<PostgresSyntheticStore> {
       await client.query('BEGIN');
       await client.query(`SELECT set_config('app.current_tenant_id',$1,true)`, [tenantId]);
       await client.query(`SELECT set_config('app.current_actor',$1,true)`, [options.actor]);
+      await bindCapability(fixture.adminUrl, client, tenantId, options.actor);
       const value = await work(client);
       await client.query('COMMIT');
       return value;
@@ -104,6 +106,7 @@ describe('owned PostgreSQL synthetic admission', () => {
       await app.query('BEGIN');
       await app.query(`SELECT set_config('app.current_tenant_id',$1,true)`, [tenant]);
       await app.query(`SELECT set_config('app.current_actor',$1,true)`, [actor]);
+      await bindCapability(fixture.adminUrl, app, tenant, actor);
       const invalid: [unknown, unknown][] = [
         [null, caller()], [[], caller()], ['scalar', caller()],
         [{ ...request, locale: null }, caller()],

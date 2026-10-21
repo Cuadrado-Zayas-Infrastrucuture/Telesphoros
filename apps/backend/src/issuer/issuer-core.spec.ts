@@ -18,7 +18,7 @@ afterAll(() => idp.stop());
 
 class RecordingStore implements CapabilityIssueStore {
   readonly calls: IssueCall[] = [];
-  outcome: { expiresAt: Date | null; refusal: string | null } | Error = { expiresAt: new Date('2030-01-01T00:00:00Z'), refusal: null };
+  outcome: { expiresAt: Date | null; refusal: string | null; membershipVersion: number | null } | Error = { expiresAt: new Date('2030-01-01T00:00:00Z'), refusal: null, membershipVersion: 7 };
   async issue(call: IssueCall) {
     this.calls.push(call);
     if (this.outcome instanceof Error) throw this.outcome;
@@ -30,7 +30,6 @@ const verifier = () => new CognitoTokenVerifier({ issuer: idp.issuer, clientId: 
 const alice = () => idp.users.find((u) => u.email.startsWith('alice'))!;
 const request = async (over: Partial<CapabilityIssueRequest> = {}): Promise<CapabilityIssueRequest> => ({
   accessToken: await idp.mintAccessToken({ user: alice() }),
-  membershipVersion: 7,
   requestId: 'req-issuer-0001',
   ...over,
 });
@@ -47,9 +46,11 @@ describe('IssuerCore: the positive control', () => {
     const issued = await new IssuerCore(verifier(), store).issue(await request());
     expect(issued!.token).toMatch(/^[A-Za-z0-9_-]{43}$/); // 32 bytes, base64url, no padding
     expect(issued!.expiresAt).toEqual(new Date('2030-01-01T00:00:00Z'));
+    expect(issued!.membershipVersion).toBe(7); // the version the DATABASE read, handed back; the caller never supplied one
     expect(store.calls).toHaveLength(1);
     const call = store.calls[0]!;
-    expect(call).toMatchObject({ tenant: 'alpha', sub: alice().sub, membershipVersion: 7, purpose: 'request', requestId: 'req-issuer-0001' });
+    expect(call).toMatchObject({ tenant: 'alpha', sub: alice().sub, purpose: 'request', requestId: 'req-issuer-0001' });
+    expect(call).not.toHaveProperty('membershipVersion'); // nothing the caller can assert about the membership reaches the database
     expect(call.tokenHash).toEqual(sha256(issued!.token)); // the database hashes the text it is later given
     expect(JSON.stringify(call)).not.toContain(issued!.token); // the raw token never goes to the store
   });
@@ -84,15 +85,17 @@ describe('IssuerCore: refuses every token the API refuses (T013)', () => {
 });
 
 describe('IssuerCore: the rest of the request', () => {
-  it.each([0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])('refuses a membership version of %s before asking the database', async (membershipVersion) => {
+  it.each([null, 0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])('an issued answer with a membership version of %s is a failure, not a capability', async (membershipVersion) => {
     const store = new RecordingStore();
-    expect((await reasonOf(new IssuerCore(verifier(), store).issue(await request({ membershipVersion })))).reason).toBe('invalid-request');
-    expect(store.calls).toHaveLength(0);
+    store.outcome = { expiresAt: new Date('2030-01-01T00:00:00Z'), refusal: null, membershipVersion };
+    expect((await reasonOf(new IssuerCore(verifier(), store).issue(await request()))).reason).toBe('unavailable');
+    store.outcome = { expiresAt: new Date('2030-01-01T00:00:00Z'), refusal: null, membershipVersion: 7 };
+    await expect(new IssuerCore(verifier(), store).issue(await request())).resolves.toBeDefined(); // control: a valid version issues
   });
 
   it('passes the database refusal on as a closed code, and returns no token', async () => {
     const store = new RecordingStore();
-    store.outcome = { expiresAt: null, refusal: 'membership-not-current' };
+    store.outcome = { expiresAt: null, refusal: 'membership-not-current', membershipVersion: null };
     const error = await reasonOf(new IssuerCore(verifier(), store).issue(await request()));
     expect(error).toMatchObject({ reason: 'refused', detail: 'membership-not-current' });
     expect(store.calls).toHaveLength(1);
@@ -109,7 +112,7 @@ describe('IssuerCore: the rest of the request', () => {
 
   it('a store that answers neither an expiry nor a refusal is a failure, not a token', async () => {
     const store = new RecordingStore();
-    store.outcome = { expiresAt: null, refusal: null };
+    store.outcome = { expiresAt: null, refusal: null, membershipVersion: null };
     expect((await reasonOf(new IssuerCore(verifier(), store).issue(await request()))).reason).toBe('unavailable');
   });
 });

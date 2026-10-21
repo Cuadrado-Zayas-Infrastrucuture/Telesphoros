@@ -3,7 +3,9 @@ import { ConfigModule } from '../config/config.module';
 import { loadEnv } from '../config/env';
 import { StorageModule } from '../storage/storage.module';
 import { InMemoryMembershipRepository, type MembershipRepository } from '../storage/membership.repository';
-import { AuthModule, createApplicationVerifier } from './auth.module';
+import { CapabilityIssuerPort, NullCapabilityIssuer } from '../issuer/capability-issuer.port';
+import { HttpCapabilityIssuer } from '../issuer/issuer-http-client';
+import { AuthModule, createApplicationVerifier, createCapabilityIssuer } from './auth.module';
 import { CognitoTokenVerifier } from './cognito-token-verifier';
 import { MirrorTokenVerifier } from './mirror-token-verifier';
 import { HmacTokenVerifier, TokenVerifier } from './token-verifier';
@@ -59,5 +61,26 @@ describe('AuthModule picks the verifier from the environment', () => {
     expect(createApplicationVerifier(memory, new InMemoryMembershipRepository())).toBeInstanceOf(MirrorTokenVerifier);
     // loadEnv already refuses the in-memory store when NODE_ENV=production; the factory refuses it too, independently.
     expect(() => createApplicationVerifier({ ...memory, NODE_ENV: 'production' }, new InMemoryMembershipRepository())).toThrow(/in-memory development store only/);
+  });
+});
+
+describe('AuthModule picks the capability issuer from the environment', () => {
+  async function wiredIssuer(source: Record<string, string>) {
+    const env = loadEnv(source);
+    const module = await Test.createTestingModule({ imports: [ConfigModule.forRoot(env), StorageModule.register(env), AuthModule] }).compile();
+    return module.get(CapabilityIssuerPort);
+  }
+  const hmac = { JWT_SECRET: 'x'.repeat(40) };
+
+  it('no ISSUER_URL: no issuer is asked, exactly as before this setting existed', async () => {
+    expect(await wiredIssuer(hmac)).toBeInstanceOf(NullCapabilityIssuer);
+    expect(createCapabilityIssuer(loadEnv(hmac))).toBeInstanceOf(NullCapabilityIssuer);
+  });
+
+  it('with ISSUER_URL the application\'s port is the HTTP client, built from that address', async () => {
+    const issuer = await wiredIssuer({ ...hmac, ISSUER_URL: 'http://127.0.0.1:41234' });
+    expect(issuer).toBeInstanceOf(HttpCapabilityIssuer);
+    expect(issuer).not.toBeInstanceOf(NullCapabilityIssuer);
+    expect((issuer as unknown as { endpoint: string }).endpoint).toBe('http://127.0.0.1:41234/v1/capabilities');
   });
 });

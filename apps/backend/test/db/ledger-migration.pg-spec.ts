@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { Client } from 'pg';
 import { migrateDown, migrateUp } from '../../src/db/migrator';
 import { adminUrl, withAdmin } from '../helpers/database';
+import { revertAbove } from '../helpers/migration-history';
 
 /**
  * D6: migrations must work for a migrator that is NOT a superuser. Production migrators are ordinary roles with CREATEROLE; the
@@ -81,8 +82,8 @@ describe('migrations run for a migrator that is not a superuser', () => {
         ledger_events: 'telesphoros_ledger', ledger_heads: 'telesphoros_ledger', ledger_checkpoints: 'telesphoros_ledger', report_captures: WITH_MEMBERSHIP, event_notes: WITH_MEMBERSHIP,
       });
       // CREATE on the schema was only granted to the owners while a migration ran.
-      const create = (await c.query(`SELECT has_schema_privilege('telesphoros_ledger', 'public', 'CREATE') AS ledger, has_schema_privilege('telesphoros_redactor', 'public', 'CREATE') AS redactor, has_schema_privilege('telesphoros_app', 'public', 'CREATE') AS app`)).rows[0];
-      expect(create).toEqual({ ledger: false, redactor: false, app: false });
+      const create = (await c.query(`SELECT has_schema_privilege('telesphoros_ledger', 'public', 'CREATE') AS ledger, has_schema_privilege('telesphoros_redactor', 'public', 'CREATE') AS redactor, has_schema_privilege('telesphoros_app', 'public', 'CREATE') AS app, has_schema_privilege('telesphoros_capability', 'public', 'CREATE') AS capability`)).rows[0];
+      expect(create).toEqual({ ledger: false, redactor: false, app: false, capability: false }); // 0028 and 0031 lend it to the capability owner and take it back, as this non-superuser migrator
     });
   });
 
@@ -92,7 +93,8 @@ describe('migrations run for a migrator that is not a superuser', () => {
       await migrateUp(c);
       // 0021 and 0020 hold audit records (merge and patient-link decisions), so reverting them needs the same deliberate setting as the other audit migrations.
       await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
-      expect(await migrateDown(c, 18)).toEqual(['0029', '0028', '0027', '0026', '0025', '0024', '0023', '0022', '0021', '0020', '0019', '0018', '0017', '0016', '0015', '0014', '0013', '0012']);
+      const aboveIncidents = revertAbove('ledger_incidents');
+      expect(await migrateDown(c, aboveIncidents.steps)).toEqual(aboveIncidents.reverted);
       await c.query(`RESET telesphoros.allow_audit_drop`);
       await expect(migrateDown(c, 1)).rejects.toThrow(/Refusing to drop ledger incidents/); // 0011 removes audit data, so it is guarded too
       await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);

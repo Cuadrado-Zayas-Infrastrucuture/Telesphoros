@@ -7,7 +7,8 @@
 //  - reach: the issuer accepts one connection source (the API tasks, on the issuer port) and sends out only to the database and HTTPS.
 // What cannot be judged from text is stated in the transport addendum: nothing is applied, so latency and the real behaviour of Service Connect are unmeasured.
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { posix } from 'node:path';
 import { test } from 'node:test';
 
 const dir = new URL('./', import.meta.url);
@@ -16,6 +17,8 @@ const issuer = read('./issuer.tf');
 const issuerCoreSource = read('../../apps/backend/src/issuer/issuer-core.ts');
 const migration0028 = read('../../apps/backend/migrations/0028_tenant_capability.up.sql');
 const dockerfile = read('../docker/api.Dockerfile');
+const buildConfig = read('../../apps/backend/tsconfig.build.json');
+const entryExists = existsSync(new URL('../../apps/backend/src/issuer/main.ts', import.meta.url));
 /** Every other Terraform file in the root, by name: the separation rules read all of them. */
 const others = Object.fromEntries(readdirSync(dir).filter((f) => f.endsWith('.tf') && f !== 'issuer.tf').map((f) => [f, read(`./${f}`)]));
 
@@ -50,11 +53,69 @@ function statements(doc) {
 const SECRET_REF = String.raw`(?:aws_secretsmanager_secret\.\w+\[0\]\.arn|aws_db_instance\.main\.master_user_secret\[0\]\.secret_arn)`;
 const SECRET_LIST = new RegExp(String.raw`^\[\s*${SECRET_REF}(?:\s*,\s*${SECRET_REF})*\s*\]$`);
 
+const ENTRY_SOURCE = 'src/issuer/main.ts';
+const globToRegExp = (glob) => new RegExp(`^${glob.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*\//g, '(?:.*/)?').replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*')}$`);
+const covers = (pattern) => pattern.replace(/\/$/, '') === ENTRY_SOURCE || ENTRY_SOURCE.startsWith(`${pattern.replace(/\/$/, '')}/`) || globToRegExp(pattern).test(ENTRY_SOURCE);
+
+/**
+ * Where the issuer entry ends up, worked out from what the repository does rather than written down twice: the file must exist, the backend build must emit it
+ * (apps/backend/tsconfig.build.json), the image must build and keep the backend's `dist`, and the task's `command` is the emitted path, WITHOUT a leading `node`
+ * because the image's ENTRYPOINT is `["node"]` and an ECS `command` only replaces the image's CMD (a task that repeats `node` runs `node node ...` and dies).
+ * Returns the command the task must carry and what stands in the way of it.
+ */
+export function issuerEntry({ exists, tsconfig, docker }) {
+  const problems = [];
+  let config = {};
+  try {
+    config = JSON.parse(tsconfig);
+  } catch {
+    problems.push('apps/backend/tsconfig.build.json must be readable JSON');
+  }
+  const options = config.compilerOptions ?? {};
+  if (!exists) problems.push('apps/backend/src/issuer/main.ts must exist');
+  if (options.noEmit !== false) problems.push('the backend build must emit files (noEmit false)');
+  if (!(config.include ?? []).some(covers)) problems.push('the backend build must include src/issuer/main.ts');
+  if ((config.exclude ?? []).some(covers)) problems.push('the backend build must not exclude src/issuer/main.ts');
+  const emitted = posix.join(options.outDir ?? '.', posix.relative(options.rootDir ?? '.', ENTRY_SOURCE)).replace(/\.ts$/, '.js');
+  const dockerCode = docker.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+  if (!/^RUN pnpm --filter @telesphoros\/backend build$/m.test(dockerCode)) problems.push('the image must build the backend');
+  if (!/^COPY --from=build \/output\/ \.\/$/m.test(dockerCode)) problems.push('the image must copy the backend deploy output into the runtime stage');
+  if (/^RUN rm -rf .*\/output\/dist\b/m.test(dockerCode)) problems.push('the image must keep the backend dist');
+  if (!/^WORKDIR \/app$/m.test(dockerCode)) problems.push('the runtime stage must run from /app, where dist is');
+  if (!/^ENTRYPOINT \["node"\]$/m.test(dockerCode)) problems.push('the image ENTRYPOINT must stay ["node"]: the task command is written for it');
+  return { emitted, command: [emitted], problems };
+}
+
+const hcl = (list) => `[${list.map((x) => `"${x}"`).join(', ')}]`;
+
 /** What is wrong with the issuer Terraform text `tf`, given every OTHER Terraform file by name (`rest`) and the application sources it must agree with, as a list of sentences. */
+/**
+ * PR C: the provisioning task has to write the issuer's login into the issuer's secret, so api-compute.tf may name that secret in EXACTLY two places and nowhere else:
+ * the provisioning task definition's environment (PROVISION_SECRET_ISSUER) and the one resources list of the provisioning TASK role's secrets statement (the fifth entry).
+ * This takes those two out of `t` when, and only when, they have exactly that shape; any other occurrence (an execution role, the service, the migration task, the API task
+ * role, a second statement, a duplicate of either place) stays in the text and is reported by the scan that follows.
+ */
+const PROVISION_ENV_ISSUER = /\{ name = "PROVISION_SECRET_ISSUER", value = aws_secretsmanager_secret\.issuer_database_url\[0\]\.arn \},?/;
+const PROVISION_ROLE_SECRETS = '[aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn, aws_secretsmanager_secret.worker_database_url[0].arn, aws_secretsmanager_secret.issuer_database_url[0].arn]';
+function withoutProvisioningWiring(t, file, need) {
+  let out = t;
+  const task = blocks(out, 'resource "aws_ecs_task_definition" "api_provision"')[0] ?? '';
+  const envMatches = squash(task).match(new RegExp(PROVISION_ENV_ISSUER.source, 'g')) ?? [];
+  need(envMatches.length === 1, `${file}: the provisioning task definition must pass PROVISION_SECRET_ISSUER = the issuer secret exactly once`);
+  if (envMatches.length === 1) out = out.replace(task, task.replace(PROVISION_ENV_ISSUER, ''));
+  const doc = blocks(out, 'data "aws_iam_policy_document" "api_provision_task"')[0] ?? '';
+  const grant = statements(doc).filter((s) => s.sid === 'ReadAndWriteTheFiveConnectionStrings');
+  const exact = grant.length === 1 && grant[0].actions.replace(/\s/g, '') === '["secretsmanager:GetSecretValue","secretsmanager:PutSecretValue"]' && grant[0].resources.trim() === PROVISION_ROLE_SECRETS;
+  need(exact, `${file}: the provisioning task role must name the issuer secret in exactly one statement (ReadAndWriteTheFiveConnectionStrings), Get and Put only, over exactly the five named secrets`);
+  if (exact) out = out.replace(doc, doc.replace(', aws_secretsmanager_secret.issuer_database_url[0].arn', ''));
+  return out;
+}
+
 export function issuerProblems(tf, rest = others, sources = {}) {
   const core = sources.core ?? issuerCoreSource;
   const migration = sources.migration ?? migration0028;
   const docker = sources.docker ?? dockerfile;
+  const entry = issuerEntry({ exists: sources.entryExists ?? entryExists, tsconfig: sources.tsconfig ?? buildConfig, docker });
   const problems = [];
   const text = code(tf);
   const need = (condition, why) => {
@@ -79,10 +140,11 @@ export function issuerProblems(tf, rest = others, sources = {}) {
   need(has(text, 'issuer_service_count = local.api_service_count == 1 && var.enable_issuer ? 1 : 0'), 'the service must need hosting, an image AND the issuer switch');
   need(has(text, 'issuer_tls_count = local.api_count == 1 && var.issuer_tls_ca_arn != "" ? 1 : 0'), 'the certificate role must need hosting and a named Private CA');
 
-  // The switch is off until the application can start: the image must build the entry the task runs.
+  // The switch is off until the application can start. It may default to on only while the entry exists and the build emits it (the API's client is a later PR).
   const sw = one('variable "enable_issuer"');
   need(has(sw, 'type = bool') && has(sw, 'default = false'), 'enable_issuer must be a bool that defaults to false');
-  need(!/default\s*=\s*true/.test(code(sw)) || /issuer\/main\.js/.test(docker), 'the issuer switch may default to true only once the image builds issuer/main.js');
+  const commandMatchesBuild = has(one('resource "aws_ecs_task_definition" "issuer"'), `command = ${hcl(entry.command)}`);
+  need(!/default\s*=\s*true/.test(code(sw)) || (entry.problems.length === 0 && commandMatchesBuild), `the issuer switch may default to true only while the entry exists, the build emits it and the task runs what it emits (${entry.problems.join('; ') || 'the task command differs'})`);
   const count = one('variable "issuer_desired_count"');
   need(has(count, 'default = 1') && has(count, 'var.issuer_desired_count >= 1 && var.issuer_desired_count <= 10'), 'issuer_desired_count must default to 1 and stay between 1 and 10');
   const tlsVar = one('variable "issuer_tls_ca_arn"');
@@ -96,7 +158,7 @@ export function issuerProblems(tf, rest = others, sources = {}) {
 
   // Separation, seen from every other file: nothing outside issuer.tf may name the issuer's secret, roles or security group, and no secrets policy anywhere may be wider than named secrets.
   for (const [file, body] of Object.entries(rest)) {
-    const t = code(body);
+    const t = file === 'api-compute.tf' ? withoutProvisioningWiring(code(body), file, need) : code(body);
     need(!/issuer_database_url|\/issuer\/|aws_iam_role\.issuer_|aws_iam_role_policy[a-z_]*\.issuer_|aws_security_group\.issuer_tasks|data\.aws_iam_policy_document\.issuer_/.test(t), `${file} must not reach the issuer's secret, roles, policies or security group`);
     for (const s of statements(t)) {
       if (!/secretsmanager:/.test(s.actions)) continue;
@@ -169,7 +231,8 @@ export function issuerProblems(tf, rest = others, sources = {}) {
   const task = one('resource "aws_ecs_task_definition" "issuer"');
   need(has(task, 'task_role_arn = aws_iam_role.issuer_task[0].arn') && has(task, 'execution_role_arn = aws_iam_role.issuer_execution[0].arn'), 'the issuer must use its own two roles');
   need(has(task, 'network_mode = "awsvpc"') && has(task, 'requires_compatibilities = ["FARGATE"]'), 'the issuer must be Fargate with awsvpc networking');
-  need(has(task, 'image = var.api_image') && has(task, 'command = ["node", "issuer/main.js"]'), 'the issuer must run the pinned image, started as the issuer bundle');
+  need(has(task, 'image = var.api_image'), 'the issuer must run the pinned image');
+  need(entry.problems.length === 0 && has(task, `command = ${hcl(entry.command)}`), `the issuer must be started as the entry the backend build emits, as ${hcl(entry.command)} (the image's ENTRYPOINT is node): ${entry.problems.join('; ') || 'the command differs'}`);
   need(has(task, 'readonlyRootFilesystem = true') && has(task, 'user = local.api_user'), 'the issuer must have a read-only filesystem and run as the non-root user');
   need(!/\bvolume\s*\{/.test(code(task)) && !/\bmountPoints\b/.test(code(task)), 'the issuer task must declare no volume and mount nothing (it writes no files)');
   need(!/privileged|linuxParameters|"0"/.test(code(task)), 'the issuer must hold no privileged mode, extra Linux parameters or root user');
@@ -187,6 +250,22 @@ export function issuerProblems(tf, rest = others, sources = {}) {
   need(has(service, 'for_each = var.issuer_tls_ca_arn == "" ? [] : [1]') && has(service, 'role_arn = aws_iam_role.issuer_service_connect_tls[0].arn') && has(service, 'aws_pca_authority_arn = var.issuer_tls_ca_arn'), 'a named Private CA must turn Service Connect TLS on, with the certificate role');
   need(has(service, 'var.environment != "production" || var.issuer_desired_count >= 2'), 'production must run at least two issuer tasks');
   need(has(service, 'var.environment != "production" || var.issuer_tls_ca_arn != ""'), 'production must encrypt the issuer connection');
+
+  // The API as a Service Connect CLIENT (DATA-01 PR B): it joins the namespace and receives ISSUER_URL, both only while the issuer service exists, and the address is
+  // built from the issuer's own names, never typed twice.
+  need(line(text, 'issuer_client_url = "http://${local.issuer_dns_name}:${local.issuer_port}"'), 'the address the API is given must be built from the issuer\'s own dns name and port');
+  need(line(text, 'issuer_client_environment = { for name, value in { ISSUER_URL = local.issuer_client_url } : name => value if local.issuer_service_count == 1 }'), 'the API\'s ISSUER_URL must exist only while the issuer service does (empty otherwise, so the default plan does not change)');
+  need((code(text).match(/session-issuer/g) ?? []).length === 1 && (code(text).match(/ISSUER_URL/g) ?? []).length === 1, 'the issuer\'s dns name and the ISSUER_URL line must each be written once, in issuer.tf');
+  for (const [file, body] of Object.entries(rest)) need(!/session-issuer|ISSUER_URL\s*=|:\s*8082\b|"http:\/\/[^"]*"/.test(code(body).replace(/"http:\/\/\$\{[^"]*"/g, '')), `${file} must not type the issuer's address or ISSUER_URL (it comes from issuer.tf's locals)`);
+  const apiFile = code(rest['api-compute.tf'] ?? '');
+  need(has(apiFile, 'api_environment = merge({') && has(apiFile, '}, local.issuer_client_environment)'), 'the API environment must be its own literal plus local.issuer_client_environment, and nothing else');
+  const apiService = blocks(apiFile, 'resource "aws_ecs_service" "api"')[0] ?? '';
+  const joins = blocks(apiService, 'dynamic "service_connect_configuration" \\{');
+  need(joins.length === 1 && (apiService.match(/service_connect_configuration/g) ?? []).length === 1, 'the API service must have exactly one Service Connect block, and it must be dynamic');
+  need(has(apiService, 'for_each = local.issuer_service_count == 1 ? [1] : []'), 'the API joins the namespace only while the issuer service exists');
+  need(joins.length === 1 && has(joins[0], 'enabled = true') && has(joins[0], 'namespace = aws_service_discovery_http_namespace.internal[0].arn'), 'the API must join the one internal namespace');
+  need(!/\bservice\s*\{|client_alias|discovery_name|port_name|\btls\b/.test(joins[0] ?? 'service {'), 'the API joins as a client only: it publishes no name and holds no certificate');
+  need(!/service_connect_configuration/.test(Object.entries(rest).filter(([file]) => file !== 'api-compute.tf').map(([, body]) => code(body)).join('\n')), 'no other file may put a service in the Service Connect namespace');
 
   // The environment: what the issuer core needs, and no login, no override and no test setting.
   const env = blocks(text, 'issuer_environment = ')[0] ?? '';
@@ -237,6 +316,10 @@ test('the issuer compute text has no problems (and the scan found the files: a f
 
 test('the issuer compute guard reports each way the issuer text could be weakened (controls)', () => {
   const weakened = [
+    ['the API address typed again instead of built', 'issuer_client_url         = "http://${local.issuer_dns_name}:${local.issuer_port}"', 'issuer_client_url         = "http://session-issuer:8082"'],
+    ['the API address uses another port', 'issuer_client_url         = "http://${local.issuer_dns_name}:${local.issuer_port}"', 'issuer_client_url         = "http://${local.issuer_dns_name}:8083"'],
+    ['the API address is given even with the issuer off', ' name => value if local.issuer_service_count == 1 }', ' name => value }'],
+    ['the API address is given on the hosting switch alone', ' name => value if local.issuer_service_count == 1 }', ' name => value if local.api_count == 1 }'],
     ['the secret container not counted', 'resource "aws_secretsmanager_secret" "issuer_database_url" {\n  count       = local.api_count\n', 'resource "aws_secretsmanager_secret" "issuer_database_url" {\n'],
     ['the service counted by the hosting switch alone', 'resource "aws_ecs_service" "issuer" {\n  count                              = local.issuer_service_count', 'resource "aws_ecs_service" "issuer" {\n  count                              = local.api_count'],
     ['the service no longer needs the issuer switch', 'issuer_service_count = local.api_service_count == 1 && var.enable_issuer ? 1 : 0', 'issuer_service_count = local.api_service_count == 1 ? 1 : 0'],
@@ -278,7 +361,9 @@ test('the issuer compute guard reports each way the issuer text could be weakene
     ['the issuer uses the API execution role', 'execution_role_arn       = aws_iam_role.issuer_execution[0].arn', 'execution_role_arn       = aws_iam_role.api_execution_service[0].arn'],
     ['root filesystem writable', 'readonlyRootFilesystem = true\n      command', 'readonlyRootFilesystem = false\n      command'],
     ['container runs as root', 'user                   = local.api_user\n      readonlyRootFilesystem = true\n      command', 'user                   = "0"\n      readonlyRootFilesystem = true\n      command'],
-    ['the issuer started as the API', 'command                = ["node", "issuer/main.js"]', 'command                = ["node", "dist/main.js"]'],
+    ['the issuer started as the API', 'command                = ["dist/issuer/main.js"]', 'command                = ["dist/main.js"]'],
+    ['the issuer command repeats the image entrypoint (node node ...)', 'command                = ["dist/issuer/main.js"]', 'command                = ["node", "dist/issuer/main.js"]'],
+    ['the issuer command is the old path the build does not emit', 'command                = ["dist/issuer/main.js"]', 'command                = ["issuer/main.js"]'],
     ['an ephemeral volume is declared', '  runtime_platform {\n    operating_system_family = "LINUX"', '  volume {\n    name = "scratch"\n  }\n\n  runtime_platform {\n    operating_system_family = "LINUX"'],
     ['image is a free variable', 'image                  = var.api_image\n      essential              = true\n      user                   = local.api_user\n      readonlyRootFilesystem = true\n      command', 'image                  = "x:latest"\n      essential              = true\n      user                   = local.api_user\n      readonlyRootFilesystem = true\n      command'],
     ['the issuer holds the application login too', 'secrets                = [{ name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.issuer_database_url[0].arn }]', 'secrets                = [{ name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.issuer_database_url[0].arn }, { name = "APP_DATABASE_URL", valueFrom = aws_secretsmanager_secret.api_database_url[0].arn }]'],
@@ -335,10 +420,37 @@ test('the issuer guard reports every way another file could let the API (or anyt
     ['the API task definition injects the issuer secret', change('api-compute.tf', '{ name = "IDENTIFIER_DIGEST_KEY", valueFrom = aws_secretsmanager_secret.api_identifier_digest_key[0].arn },', '{ name = "IDENTIFIER_DIGEST_KEY", valueFrom = aws_secretsmanager_secret.api_identifier_digest_key[0].arn },\n        { name = "ISSUER_DATABASE_URL", valueFrom = aws_secretsmanager_secret.issuer_database_url[0].arn },')],
     ['the API service runs with the issuer execution role', change('api-compute.tf', 'execution_role_arn       = aws_iam_role.api_execution_service[0].arn', 'execution_role_arn       = aws_iam_role.issuer_execution[0].arn')],
     ['the API task role gets the issuer policy document', change('api-compute.tf', 'resource "aws_iam_role_policy" "api_execution_service" {\n  count  = local.api_count\n  name   = "start-the-service"\n  role   = aws_iam_role.api_execution_service[0].id\n  policy = data.aws_iam_policy_document.api_execution_service[0].json', 'resource "aws_iam_role_policy" "api_execution_service" {\n  count  = local.api_count\n  name   = "start-the-service"\n  role   = aws_iam_role.api_execution_service[0].id\n  policy = data.aws_iam_policy_document.issuer_execution[0].json')],
-    ['the provisioning task role may write the issuer secret by prefix', change('api-compute.tf', 'resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn, aws_secretsmanager_secret.worker_database_url[0].arn]', 'resources = ["arn:aws:secretsmanager:*:*:secret:${local.name}/*"]')],
+    ['the provisioning task role may write the issuer secret by prefix', change('api-compute.tf', 'resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn, aws_secretsmanager_secret.worker_database_url[0].arn, aws_secretsmanager_secret.issuer_database_url[0].arn]', 'resources = ["arn:aws:secretsmanager:*:*:secret:${local.name}/*"]')],
+    // PR C: the two places api-compute.tf may name the issuer secret are allowed; every other way of naming it, and every change to those two, is reported.
+    ['the provisioning task role may use every secret (wildcard)', change('api-compute.tf', 'resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn, aws_secretsmanager_secret.worker_database_url[0].arn, aws_secretsmanager_secret.issuer_database_url[0].arn]', 'resources = ["*"]')],
+    ['the provisioning task role gains a second statement naming the issuer secret', change('api-compute.tf', 'sid       = "UseTheDataKeyThroughSecretsManager"\n    actions   = ["kms:Decrypt", "kms:GenerateDataKey"]', 'sid       = "UseTheDataKeyThroughSecretsManager"\n    actions   = ["kms:Decrypt", "kms:GenerateDataKey"]\n    # x\n  }\n  statement {\n    sid       = "AlsoTheIssuer"\n    actions   = ["secretsmanager:GetSecretValue"]\n    resources = [aws_secretsmanager_secret.issuer_database_url[0].arn]')],
+    ['the provisioning task role statement may use every secrets action', change('api-compute.tf', 'actions   = ["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue"]\n    resources = [aws_secretsmanager_secret.api_database_url', 'actions   = ["secretsmanager:*"]\n    resources = [aws_secretsmanager_secret.api_database_url')],
+    ['the provisioning task role statement may also delete secrets', change('api-compute.tf', 'actions   = ["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue"]\n    resources = [aws_secretsmanager_secret.api_database_url', 'actions   = ["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue", "secretsmanager:DeleteSecret"]\n    resources = [aws_secretsmanager_secret.api_database_url')],
+    ['the provisioning task role statement lists the issuer secret twice', change('api-compute.tf', 'resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn, aws_secretsmanager_secret.worker_database_url[0].arn, aws_secretsmanager_secret.issuer_database_url[0].arn]', 'resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn, aws_secretsmanager_secret.worker_database_url[0].arn, aws_secretsmanager_secret.issuer_database_url[0].arn, aws_secretsmanager_secret.issuer_database_url[0].arn]')],
+    ['the provisioning execution role reads the issuer secret', change('api-compute.tf', 'resources = [aws_db_instance.main.master_user_secret[0].secret_arn]\n  }\n  statement {\n    sid       = "DecryptSecretsThroughSecretsManager"', 'resources = [aws_db_instance.main.master_user_secret[0].secret_arn, aws_secretsmanager_secret.issuer_database_url[0].arn]\n  }\n  statement {\n    sid       = "DecryptSecretsThroughSecretsManager"')],
+    ['the service execution role (api_execution_service) reads the issuer secret', change('api-compute.tf', 'aws_secretsmanager_secret.api_identifier_digest_key[0].arn]\n  }', 'aws_secretsmanager_secret.api_identifier_digest_key[0].arn, aws_secretsmanager_secret.issuer_database_url[0].arn]\n  }')],
+    ['the migration execution role (api_execution_migrate) reads the issuer secret', change('api-compute.tf', 'resources = [aws_secretsmanager_secret.api_migrator_url[0].arn]', 'resources = [aws_secretsmanager_secret.api_migrator_url[0].arn, aws_secretsmanager_secret.issuer_database_url[0].arn]')],
+    ['the API task role (api_task) gets a policy naming the issuer secret', { ...others, 'api-compute.tf': `${others['api-compute.tf']}\ndata "aws_iam_policy_document" "api_task_extra" {\n  statement {\n    sid       = "x"\n    actions   = ["secretsmanager:GetSecretValue"]\n    resources = [aws_secretsmanager_secret.issuer_database_url[0].arn]\n  }\n}\nresource "aws_iam_role_policy" "api_task" {\n  role   = aws_iam_role.api_task[0].id\n  policy = data.aws_iam_policy_document.api_task_extra.json\n}\n` }],
+    ['the API task role is attached a policy in another file that names the issuer secret', { ...others, 'iam.tf': `${others['iam.tf']}\ndata "aws_iam_policy_document" "api_task_leak" {\n  statement {\n    sid       = "x"\n    actions   = ["secretsmanager:GetSecretValue"]\n    resources = [aws_secretsmanager_secret.issuer_database_url[0].arn]\n  }\n}\n` }],
+    ['the provisioning environment line is removed (the allowed shape is required, not only permitted)', change('api-compute.tf', '        { name = "PROVISION_SECRET_ISSUER", value = aws_secretsmanager_secret.issuer_database_url[0].arn },\n', '')],
+    ['the provisioning environment passes the issuer secret twice', change('api-compute.tf', '{ name = "PROVISION_SECRET_ISSUER", value = aws_secretsmanager_secret.issuer_database_url[0].arn },', '{ name = "PROVISION_SECRET_ISSUER", value = aws_secretsmanager_secret.issuer_database_url[0].arn },\n        { name = "PROVISION_SECRET_ISSUER_AGAIN", value = aws_secretsmanager_secret.issuer_database_url[0].arn },')],
+    ['the migration task environment passes the issuer secret', change('api-compute.tf', 'environment = [{ name = "DATABASE_SSL", value = "require" }]', 'environment = [{ name = "DATABASE_SSL", value = "require" }, { name = "X", value = aws_secretsmanager_secret.issuer_database_url[0].arn }]')],
+    ['the service task environment passes the provisioning variable', change('api-compute.tf', '{ name = "IDENTIFIER_DIGEST_KEY", valueFrom = aws_secretsmanager_secret.api_identifier_digest_key[0].arn },', '{ name = "IDENTIFIER_DIGEST_KEY", valueFrom = aws_secretsmanager_secret.api_identifier_digest_key[0].arn },\n        { name = "PROVISION_SECRET_ISSUER", value = aws_secretsmanager_secret.issuer_database_url[0].arn },')],
     ['the worker execution role reads the issuer secret', change('worker.tf', 'resources = [aws_secretsmanager_secret.worker_database_url[0].arn]\n  }\n  statement {\n    sid       = "DecryptSecretsThroughSecretsManager"', 'resources = [aws_secretsmanager_secret.worker_database_url[0].arn, aws_secretsmanager_secret.issuer_database_url[0].arn]\n  }\n  statement {\n    sid       = "DecryptSecretsThroughSecretsManager"')],
     ['the database admits the issuer group from the API file', { ...others, 'api-edge.tf': `${others['api-edge.tf']}\nresource "aws_vpc_security_group_ingress_rule" "x" {\n  security_group_id = aws_security_group.issuer_tasks[0].id\n  cidr_ipv4         = "0.0.0.0/0"\n  ip_protocol       = "-1"\n}\n` }],
     ['the API file adds a second way into the issuer', { ...others, 'api-edge.tf': `${others['api-edge.tf']}\nresource "aws_vpc_security_group_ingress_rule" "y" {\n  security_group_id            = aws_security_group.issuer_tasks[0].id\n  referenced_security_group_id = aws_security_group.api_alb[0].id\n  ip_protocol                  = "tcp"\n  from_port                    = 8082\n  to_port                      = 8082\n}\n` }],
+    // PR B: the API joins the namespace as a client, only while the issuer service exists, and gets an address that is built, not typed.
+    ['the API joins the namespace whether or not the issuer exists', change('api-compute.tf', 'for_each = local.issuer_service_count == 1 ? [1] : []', 'for_each = [1]')],
+    ['the API joins on the hosting switch alone', change('api-compute.tf', 'for_each = local.issuer_service_count == 1 ? [1] : []', 'for_each = local.api_count == 1 ? [1] : []')],
+    ['the API joins as a plain block, not a conditional one', change('api-compute.tf', 'dynamic "service_connect_configuration" {\n    for_each = local.issuer_service_count == 1 ? [1] : []\n    content {\n      enabled   = true\n      namespace = aws_service_discovery_http_namespace.internal[0].arn\n    }\n  }', 'service_connect_configuration {\n    enabled   = true\n    namespace = aws_service_discovery_http_namespace.internal[0].arn\n  }')],
+    ['the API does not join at all', change('api-compute.tf', 'dynamic "service_connect_configuration" {\n    for_each = local.issuer_service_count == 1 ? [1] : []\n    content {\n      enabled   = true\n      namespace = aws_service_discovery_http_namespace.internal[0].arn\n    }\n  }\n', '')],
+    ['the API joins a different namespace', change('api-compute.tf', 'namespace = aws_service_discovery_http_namespace.internal[0].arn', 'namespace = aws_service_discovery_http_namespace.other[0].arn')],
+    ['the API publishes a name in the namespace', change('api-compute.tf', '      enabled   = true\n      namespace = aws_service_discovery_http_namespace.internal[0].arn', '      enabled   = true\n      namespace = aws_service_discovery_http_namespace.internal[0].arn\n      service {\n        port_name = "api"\n      }')],
+    ['the API environment is no longer its literal plus the issuer map', change('api-compute.tf', '}, local.issuer_client_environment)', '})')],
+    ['the API is given ISSUER_URL whether or not the issuer exists', change('api-compute.tf', '}, local.issuer_client_environment)', '}, { ISSUER_URL = local.issuer_client_url })')],
+    ['the API environment types the issuer address', change('api-compute.tf', '}, local.issuer_client_environment)', '  ISSUER_URL = "http://session-issuer:8082"\n  }, local.issuer_client_environment)')],
+    ['the worker is told where the issuer is', change('worker.tf', 'resource "aws_ecs_task_definition" "worker" {', 'locals {\n  worker_extra = { ISSUER_URL = "http://elsewhere:1" }\n}\n\nresource "aws_ecs_task_definition" "worker" {')],
+    ['another file puts a service in the namespace', { ...others, 'worker.tf': `${others['worker.tf']}\nresource "aws_ecs_service" "extra" {\n  service_connect_configuration {\n    enabled = true\n  }\n}\n` }],
     ['a managed read-write secrets policy is attached anywhere', { ...others, 'iam.tf': `${others['iam.tf']}\nresource "aws_iam_role_policy_attachment" "z" {\n  role       = "x"\n  policy_arn = "arn:aws:iam::aws:policy/SecretsManagerReadWrite"\n}\n` }],
   ];
   for (const [name, rest] of weakened) assert.ok(issuerProblems(issuer, rest).length > 0, `a weakened copy of another file must be reported: ${name}`);
@@ -354,10 +466,31 @@ test('the issuer guard reports a changed application side (controls)', () => {
     ['the database stops returning rate-limited', { migration: migration0028.replaceAll("'rate-limited'", "'too-many'") }],
   ];
   for (const [name, sources] of weakened) assert.ok(issuerProblems(issuer, others, sources).length > 0, `a changed application side must be reported: ${name}`);
-  // The tripwire: a text whose switch defaults to on is clean only when the image builds the entry the task runs.
+  // The tripwire: a text whose switch defaults to on is clean only while the entry exists and the backend build emits it.
   const on = issuer.replace('type        = bool\n  default     = false\n}\n\nvariable "issuer_desired_count"', 'type        = bool\n  default     = true\n}\n\nvariable "issuer_desired_count"');
   assert.notEqual(on, issuer);
-  assert.ok(issuerProblems(on, others, { docker: dockerfile }).length > 0, 'the switch may not default to on while the image lacks the issuer entry');
-  assert.equal(issuerProblems(on, others, { docker: `${dockerfile}\nRUN cp apps/backend/dist/issuer/main.js /output/issuer/main.js\n` }).filter((p) => /switch may default/.test(p)).length, 0);
+  // The separate rule that the switch defaults to false is the founder's decision (turning it on is an apply-time choice); the tripwire below is what remains if that rule is ever lifted.
+  assert.deepEqual(issuerProblems(on), ['enable_issuer must be a bool that defaults to false'], 'with the entry in the repository and emitted by the build, nothing but the default-off rule objects to a switch that defaults to on');
+  const tsconfig = JSON.parse(buildConfig);
+  const withTsconfig = (change) => JSON.stringify(change(structuredClone(tsconfig)));
+  const brokenEntry = [
+    ['the entry source is gone', { entryExists: false }],
+    ['the build excludes the issuer directory', { tsconfig: withTsconfig((c) => ({ ...c, exclude: [...c.exclude, 'src/issuer/**']})) }],
+    ['the build excludes the entry by name', { tsconfig: withTsconfig((c) => ({ ...c, exclude: [...c.exclude, 'src/issuer/main.ts']})) }],
+    ['the build includes only the tests', { tsconfig: withTsconfig((c) => ({ ...c, include: ['test'] })) }],
+    ['the build emits nothing', { tsconfig: withTsconfig((c) => ({ ...c, compilerOptions: { ...c.compilerOptions, noEmit: true } })) }],
+    ['the build moves its output', { tsconfig: withTsconfig((c) => ({ ...c, compilerOptions: { ...c.compilerOptions, outDir: 'build' } })) }],
+    ['the build roots the sources one level up', { tsconfig: withTsconfig((c) => ({ ...c, compilerOptions: { ...c.compilerOptions, rootDir: '.' } })) }],
+    ['the image no longer builds the backend', { docker: dockerfile.replace('RUN pnpm --filter @telesphoros/backend build\n', '') }],
+    ['the image deletes the backend dist', { docker: dockerfile.replace('RUN rm -rf /output/src', 'RUN rm -rf /output/dist /output/src') }],
+    ['the image stops copying the deploy output', { docker: dockerfile.replace('COPY --from=build /output/ ./', 'COPY --from=build /output/package.json ./') }],
+    ['the image runs from another directory', { docker: dockerfile.replace('WORKDIR /app', 'WORKDIR /srv') }],
+    ['the image entrypoint is no longer node alone', { docker: dockerfile.replace('ENTRYPOINT ["node"]', 'ENTRYPOINT ["node", "--trace-warnings"]') }],
+  ];
+  for (const [name, sources] of brokenEntry) {
+    assert.ok(issuerProblems(on, others, sources).some((p) => /switch may default/.test(p)), `the switch may not default to on when: ${name}`);
+    assert.ok(issuerProblems(issuer, others, sources).some((p) => /started as the entry/.test(p)), `the task command is reported when: ${name}`);
+  }
+  assert.deepEqual(issuerEntry({ exists: entryExists, tsconfig: buildConfig, docker: dockerfile }).command, ['dist/issuer/main.js']); // control: what the real files give
   assert.deepEqual(issuerProblems(issuer), []);
 });

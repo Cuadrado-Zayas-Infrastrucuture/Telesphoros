@@ -49,3 +49,20 @@ unwind on failure even if the caller never receives a cleanup handle. Cancellati
 fences prevent work starting after a scope ends; pending library operations must
 still settle. The absolute service watchdog remains the final bound for an
 operation that never settles; these controls do not claim a durable expiry receipt.
+
+## Abandoned builds: the end-of-file drain
+
+Jest does not cancel the async work a timed-out hook or test abandons. A fixture still being built then finishes with no owner (an application
+starts listening, pools connect) and the single Jest process of the PostgreSQL tiers never exits (2026-10-17 and 2026-10-20: the step idled
+until the run deadline). `createTestApp` and `createEphemeralDatabase` register each build and each live fixture in
+`test/helpers/fixture-registry.ts`; `test/helpers/fixture-environment.cjs` (the Jest test environment) drains them at the end of every test
+file, after the spec's own hooks and before the module registry is torn down: abort unfinished builds, wait for their own unwinding, close
+what is left. It prints a `[fixture-drain]` line only when it had something to reclaim, so a clean run stays silent.
+
+`test/helpers/fixture-drain.control.ts` holds three deliberately unprotected specs (`app`, `db`, `app-late`); `lifecycle.test.cjs` runs them as
+children. Each fails its own test (status 1) and must exit by itself with its databases dropped. The same children with `--testEnvironment node`
+must go wrong (the `app-late` child never exits, the `app` child leaves a database behind): that is the control that can go red. Breaking the
+drain on purpose (no reclaim, builds not aborted, live fixtures not closed) fails these tests. The closing order (newest first) is not guarded.
+
+`JEST_HANDLE_REPORT=1` prints what still holds the process after the run. `--detectOpenHandles` is no substitute: Jest skips TCP and TLS client
+sockets (every pg and S3 connection). A connection a spec opens itself with `new Client` or `new Pool` is not registered; close it in the spec.

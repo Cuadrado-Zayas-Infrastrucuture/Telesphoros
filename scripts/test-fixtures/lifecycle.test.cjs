@@ -79,3 +79,58 @@ test('construction rejection reclaims real resources and preserves unrelated fix
   process.stdout.write(result.stdout ?? '');process.stderr.write(result.stderr ?? '');
   assert.ifError(result.error);assert.equal(result.signal,null);assert.equal(result.status,0);
 });
+
+// The cause of the 2026-10-17 and 2026-10-20 hangs: Jest abandons, but does not cancel, a fixture build that outlasts its hook or test.
+// Each child fails its own test on purpose (status 1). With the end-of-file drain it must exit by itself, with its databases dropped.
+// The same children with the plain Node environment must go wrong (hang, or leave a database behind): that proves the controls can go red
+// and that the drain is not a forced exit.
+const drainControl = (mode, { drain, boundMs }) => spawnSync(process.execPath, [backendRequire.resolve('jest/bin/jest'), '--runInBand',
+  '--runTestsByPath', 'test/helpers/fixture-drain.control.ts', '--testRegex', 'fixture-drain\\.control\\.ts$', ...(drain ? [] : ['--testEnvironment', 'node'])], {
+  cwd, env: { ...process.env, TEST_STORAGE: 'postgres', TEST_OBJECT_STORAGE: 'memory', FIXTURE_DRAIN_CONTROL: mode },
+  encoding: 'utf8', timeout: boundMs, maxBuffer: 2 * 1024 * 1024,
+});
+async function dropLeaked(before) {
+  const leaked = (await databases()).filter(name => !before.includes(name));
+  const client = new Client({ connectionString: process.env.TEST_DATABASE_URL });
+  try { await client.connect(); for (const name of leaked) await client.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`); } finally { await client.end(); }
+  return leaked;
+}
+for (const [mode, expectedFailure, reclaimed] of [
+  ['app', /Exceeded timeout of 5000 ms for a hook/, /ended with 1 fixture build\(s\) unfinished \(settled\) and 0 fixture\(s\) unclosed/],
+  ['db', /Exceeded timeout of 5000 ms for a test/, /ended with 1 fixture build\(s\) unfinished \(settled\) and 0 fixture\(s\) unclosed/],
+  ['app-late', /Exceeded timeout of 5000 ms for a hook/, /ended with 0 fixture build\(s\) unfinished \(settled\) and [1-9]\d* fixture\(s\) unclosed/],
+]) {
+  test(`drain ${mode}: an abandoned fixture build is reclaimed and Jest exits by itself`, async () => {
+    const before = await databases();
+    const result = drainControl(mode, { drain: true, boundMs: 25000 });
+    process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? '');
+    assert.ifError(result.error);
+    assert.equal(result.signal, null, 'Jest must exit naturally; the outer bound cannot make a hung child pass');
+    assert.equal(result.status, 1, 'the child fails its own test on purpose; a pass would mean the control did not run');
+    const output = (result.stdout ?? '') + (result.stderr ?? '');
+    assert.match(output, expectedFailure);
+    assert.match(output, new RegExp('\\[fixture-drain\\] test/helpers/fixture-drain\\.control\\.ts: ' + reclaimed.source));
+    assert.doesNotMatch(output, /Jest did not exit|environment has been torn down/);
+    assert.deepEqual(await databases(), before, 'the abandoned build must drop the database it created');
+  });
+}
+
+test('drain control without the drain, abandoned build still running at the end: Jest warns and a database is left behind', async () => {
+  const before = await databases();
+  const result = drainControl('app', { drain: false, boundMs: 25000 });
+  process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? '');
+  const output = (result.stdout ?? '') + (result.stderr ?? '');
+  const leaked = await dropLeaked(before);
+  assert.match(output, /Jest did not exit one second after the test run has completed/);
+  assert.ok(leaked.length > 0, 'without the drain the abandoned build leaves its database behind');
+});
+
+test('drain control without the drain, abandoned build finished during the file: the same child never exits', async () => {
+  const before = await databases();
+  const result = drainControl('app-late', { drain: false, boundMs: 20000 });
+  process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? '');
+  const output = (result.stdout ?? '') + (result.stderr ?? '');
+  await dropLeaked(before);
+  assert.equal(result.signal, 'SIGTERM', 'without the drain the unowned, listening application keeps Jest alive until the bound kills it');
+  assert.match(output, /Jest did not exit one second after the test run has completed/);
+});

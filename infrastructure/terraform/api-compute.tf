@@ -86,7 +86,7 @@ locals {
   api_build       = local.api_image_parts == null ? "none" : "sha256-${substr(local.api_image_parts[3], 0, 12)}"
 
   # Everything the production start-up demands (config/env.ts), and nothing it refuses (no pipeline, no development overrides, no shared secret).
-  api_environment = {
+  api_environment = merge({
     NODE_ENV                          = "production"
     PORT                              = tostring(local.api_port)
     AUTH_VERIFIER                     = "cognito"
@@ -103,7 +103,8 @@ locals {
     TRUST_PROXY_HOPS                  = "1"
     BUILD_VERSION                     = local.api_build
     LEDGER_FULL_VERIFY_INTERVAL_HOURS = "24"
-  }
+    # ISSUER_URL (DATA-01) is not typed here: it is built from the issuer's own names in issuer.tf and exists only while the issuer service does.
+  }, local.issuer_client_environment)
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -301,7 +302,7 @@ data "aws_iam_policy_document" "api_execution_migrate" {
 
 # The one-off provisioning task (db provision-logins). Two identities, as for every task here, and neither is the application's:
 #  - the EXECUTION role starts the task and injects the database administrator's credentials from the RDS-managed secret (username and password only);
-#  - the TASK role is what the command runs as: it can read and write exactly the four connection-string secrets, and it can NOT read the administrator secret.
+#  - the TASK role is what the command runs as: it can read and write exactly the five connection-string secrets (the session issuer's is the fifth), and it can NOT read the administrator secret.
 data "aws_iam_policy_document" "api_execution_provision" {
   count                   = local.api_count
   source_policy_documents = [data.aws_iam_policy_document.api_execution_common.json]
@@ -325,9 +326,9 @@ data "aws_iam_policy_document" "api_execution_provision" {
 data "aws_iam_policy_document" "api_provision_task" {
   count = local.api_count
   statement {
-    sid       = "ReadAndWriteTheFourConnectionStrings"
+    sid       = "ReadAndWriteTheFiveConnectionStrings"
     actions   = ["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue"]
-    resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn, aws_secretsmanager_secret.worker_database_url[0].arn]
+    resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_migrator_url[0].arn, aws_secretsmanager_secret.worker_database_url[0].arn, aws_secretsmanager_secret.issuer_database_url[0].arn]
   }
   statement {
     sid       = "UseTheDataKeyThroughSecretsManager"
@@ -485,7 +486,7 @@ resource "aws_ecs_task_definition" "api_migrate" {
       essential              = true
       user                   = local.api_user
       readonlyRootFilesystem = true
-      command                = ["node", "dist/db/cli.js", "migrate", "up"]
+      command                = ["dist/db/cli.js", "migrate", "up"]
       # TLS is chosen only by this setting; the connection string carries no TLS parameters (apps/backend/src/db/tls.ts).
       environment = [{ name = "DATABASE_SSL", value = "require" }]
       secrets     = [{ name = "DATABASE_MIGRATOR_URL", valueFrom = aws_secretsmanager_secret.api_migrator_url[0].arn }]
@@ -501,8 +502,8 @@ resource "aws_ecs_task_definition" "api_migrate" {
   ])
 }
 
-# One-off, run by a person before the first migration and again after it (docs/ops/api-hosting.md): creates the four database logins with generated passwords and
-# writes their connection strings into the four secrets. The administrator's credentials come from the RDS-managed secret through the execution role; no password
+# One-off, run by a person before the first migration and again after it (docs/ops/api-hosting.md): creates the five database logins with generated passwords and
+# writes their connection strings into the five secrets (the session issuer's, PROVISION_SECRET_ISSUER, is the fifth: the command creates that login only when this names its secret). The administrator's credentials come from the RDS-managed secret through the execution role; no password
 # is typed, shown or kept in Terraform state. The connection strings it writes carry no TLS parameters (apps/backend/src/db/tls.ts).
 resource "aws_ecs_task_definition" "api_provision" {
   count                    = local.api_service_count
@@ -526,7 +527,7 @@ resource "aws_ecs_task_definition" "api_provision" {
       essential              = true
       user                   = local.api_user
       readonlyRootFilesystem = true
-      command                = ["node", "dist/db/cli.js", "provision-logins"]
+      command                = ["dist/db/cli.js", "provision-logins"]
       environment = [
         { name = "DATABASE_SSL", value = "require" },
         { name = "DATABASE_HOST", value = aws_db_instance.main.address },
@@ -537,6 +538,7 @@ resource "aws_ecs_task_definition" "api_provision" {
         { name = "PROVISION_SECRET_VERIFIER", value = aws_secretsmanager_secret.api_ledger_verifier_url[0].arn },
         { name = "PROVISION_SECRET_MIGRATOR", value = aws_secretsmanager_secret.api_migrator_url[0].arn },
         { name = "PROVISION_SECRET_WORKER", value = aws_secretsmanager_secret.worker_database_url[0].arn },
+        { name = "PROVISION_SECRET_ISSUER", value = aws_secretsmanager_secret.issuer_database_url[0].arn },
       ]
       secrets = [
         { name = "PROVISION_ADMIN_USER", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:username::" },
@@ -585,6 +587,16 @@ resource "aws_ecs_service" "api" {
   }
 
   depends_on = [aws_lb_listener_rule.api_forward]
+
+  # The API is a Service Connect CLIENT of the session issuer (DATA-01): it joins the namespace so `session-issuer` resolves, and publishes nothing. Only while the
+  # issuer service exists, so with enable_issuer off the plan for this service does not change.
+  dynamic "service_connect_configuration" {
+    for_each = local.issuer_service_count == 1 ? [1] : []
+    content {
+      enabled   = true
+      namespace = aws_service_discovery_http_namespace.internal[0].arn
+    }
+  }
 
   lifecycle {
     precondition {
