@@ -263,6 +263,7 @@ describe('sweeping expired capabilities', () => {
 describe('reverting 0028', () => {
   it('refuses while the issuance log holds a record, reverts with the explicit setting, and re-applies', async () => {
     await issue();
+    expect(await owner((c) => migrateDown(c, 1))).toEqual(['0029']); // the synthetic agentic migration sits above and reverts freely while it is empty
     await expect(owner((c) => migrateDown(c, 1))).rejects.toThrow(/Refusing to drop the capability issuance log/);
     expect(await owner(async (c) => (await c.query(`SELECT to_regclass('public.tenant_capabilities') IS NOT NULL AS ok`)).rows[0].ok)).toBe(true);
     expect(await owner(async (c) => {
@@ -270,6 +271,6 @@ describe('reverting 0028', () => {
       return migrateDown(c, 1);
     })).toEqual(['0028']);
     expect(await owner(async (c) => (await c.query(`SELECT count(*)::int AS n FROM pg_proc WHERE proname IN ('app_tenant', 'app_actor', 'tenant_capability_issue', 'tenant_capabilities_sweep')`)).rows[0].n)).toBe(0);
-    expect(await owner((c) => migrateUp(c))).toEqual(['0028']); // control: it applies again
+    expect(await owner((c) => migrateUp(c))).toEqual(['0028', '0029']); // control: they apply again
   });
 });

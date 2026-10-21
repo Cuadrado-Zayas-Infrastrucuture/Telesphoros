@@ -75,4 +75,11 @@ export const VERIFICATION_TABLES = ['file_verifications'] as const;
  */
 export const CAPABILITY_TABLES = ['tenant_capabilities', 'capability_issuance_log', 'capability_purposes', 'tenant_binding_mode'] as const;
 
-export const ALL_CLASSIFIED_TABLES: readonly string[] = [...Object.values(APPEND_ONLY_CLASSES).flat(), ...LEGACY_TABLES, ...MUTABLE_OPERATIONAL_TABLES, ...AUTHORITY_TABLES, ...BROWSER_SESSION_TABLES, ...PATIENT_IDENTITY_TABLES, ...PATIENT_DUPLICATE_TABLES, ...SECURITY_AUDIT_TABLES, ...JOB_TABLES, ...OUTBOX_TABLES, ...VERIFICATION_TABLES, ...CAPABILITY_TABLES];
+/**
+ * The inactive synthetic agentic fixtures (migration 0029, P2), owned by the NOLOGIN role `telesphoros_jobs`. No login holds a table privilege: the application and the
+ * worker call the narrow `agentic_synthetic_*` functions only. Admission, run, reservation and bucket rows advance under those functions' guards; `agentic_synthetic_outcomes`,
+ * `agentic_synthetic_audit` and the source rows are immutable. Seeded only by test owners; nothing here is clinical data or a ledger record.
+ */
+export const AGENTIC_SYNTHETIC_TABLES = ['agentic_synthetic_capacity', 'agentic_synthetic_grants', 'agentic_synthetic_sources', 'agentic_synthetic_grant_sources', 'agentic_synthetic_runs', 'agentic_synthetic_reservations', 'agentic_synthetic_buckets', 'agentic_synthetic_invocations', 'agentic_synthetic_outcomes', 'agentic_synthetic_audit'] as const;
+
+export const ALL_CLASSIFIED_TABLES: readonly string[] = [...Object.values(APPEND_ONLY_CLASSES).flat(), ...LEGACY_TABLES, ...MUTABLE_OPERATIONAL_TABLES, ...AUTHORITY_TABLES, ...BROWSER_SESSION_TABLES, ...PATIENT_IDENTITY_TABLES, ...PATIENT_DUPLICATE_TABLES, ...SECURITY_AUDIT_TABLES, ...JOB_TABLES, ...OUTBOX_TABLES, ...VERIFICATION_TABLES, ...CAPABILITY_TABLES, ...AGENTIC_SYNTHETIC_TABLES];

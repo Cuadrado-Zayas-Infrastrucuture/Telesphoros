@@ -301,7 +301,7 @@ describe('reverting 0010', () => {
       await withAdmin(db.adminUrl, async (c) => {
         // 0011 (incidents) sits above 0010 and has its own guard: revert it on purpose first, then drop the setting again so 0010's guard is what is tested.
         await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
-        expect(await migrateDown(c, 17)).toEqual(['0028', '0027', '0026', '0025', '0024', '0023', '0022', '0021', '0020', '0019', '0018', '0017', '0016', '0015', '0014', '0013', '0012']); // 0021 and 0020 hold audit records: the setting above covers it too
+        expect(await migrateDown(c, 18)).toEqual(['0029', '0028', '0027', '0026', '0025', '0024', '0023', '0022', '0021', '0020', '0019', '0018', '0017', '0016', '0015', '0014', '0013', '0012']); // 0021 and 0020 hold audit records: the setting above covers it too
         expect(await migrateDown(c, 1)).toEqual(['0011']);
         await c.query(`RESET telesphoros.allow_audit_drop`);
         await expect(migrateDown(c, 1)).rejects.toThrow(/Refusing to drop report evidence/);
