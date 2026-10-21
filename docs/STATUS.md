@@ -6,6 +6,9 @@ Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and
 ## Audit follow-ups: diagnostic tooling removed, INF-18 recorded as accepted (draft PR, 2026-10-20)
 
 `diagnostics/fixture-phase-capture/` (12 files) is deleted: the scripts of the one-off diagnostic whose workflow the CI supply-chain PR removes (INF-17); nothing else ran them, and they stay in history at `2307242`. INF-18 (GitHub's native secret and code scanning) is recorded in `docs/ops/ci-cd.md` as an accepted gap by founder decision: on the Team plan they are paid add-ons, and the required gitleaks scan and Dependabot security updates stand in for now. No code, CI, Terraform or AWS change.
+## INF-03 slice 1: image-signing key, GitHub OIDC trust, CI release role (draft PR, 2026-10-20)
+
+First slice of `specs/002-signed-image-release` (plan approved 2026-10-20). `signing.tf` declares an ECC P-256 `SIGN_VERIFY` KMS key whose policy denies `kms:Sign` to everyone but the release role; the GitHub OIDC provider (unless an existing one is named); and the release role, trusted only for this repository's `ci.yml` on `main` in the `image-release` environment (six `StringEquals` conditions on immutable IDs) and allowed only to push to the API repository and sign with that key. It exists in a plan only with API hosting on and the repository IDs set; production with API hosting now refuses to plan without it. The ECR lifecycle rule counts tagged images only, so signatures never take a slot (D5). Nothing is applied; no CI change yet (slice 2). [Verification](verification/signed-image-release.md).
 
 ## Logging: declared service log groups and an allowlisted API log (draft PR, 2026-10-20)
 

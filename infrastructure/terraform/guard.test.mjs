@@ -15,6 +15,7 @@ import './registry.guard.test.mjs';
 import './web.guard.test.mjs';
 import './worker.guard.test.mjs';
 import './logs.guard.test.mjs';
+import './signing.guard.test.mjs';
 import './reports-cors.guard.test.mjs';
 import '../../scripts/staging/publish-frontend.test.mjs';
 import '../../scripts/staging/run-task.test.mjs';
