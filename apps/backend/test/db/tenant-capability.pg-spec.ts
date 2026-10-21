@@ -53,7 +53,7 @@ async function issue(input: { tenant?: string; sub?: string; version?: number; p
   }
 }
 
-/** Mints through the issuer login with the CURRENT-version function (migration 0030): the caller no longer names a version. */
+/** Mints through the issuer login with the CURRENT-version function (migration 0031): the caller no longer names a version. */
 async function issueCurrent(input: { tenant?: string | null; sub?: string | null; purpose?: string; hash?: Buffer | null; request?: string | null } = {}) {
   const value = token();
   const c = new Client({ connectionString: db.issuerUrl });
@@ -278,7 +278,7 @@ describe('sweeping expired capabilities', () => {
   });
 });
 
-describe('issuing at the CURRENT membership version (migration 0030, DATA-01 slice 3 PR A)', () => {
+describe('issuing at the CURRENT membership version (migration 0031, DATA-01 slice 3 PR A)', () => {
   const sub = 'dora';
   const request = () => `req-${randomBytes(6).toString('hex')}`;
   const versionOf = (who: string, tenant = 'org-alpha') => owner(async (c) => (await c.query<{ version: string }>('SELECT version FROM tenant_memberships WHERE tenant_id = $1 AND sub = $2', [tenant, who])).rows[0]!.version);
@@ -394,7 +394,7 @@ describe('issuing at the CURRENT membership version (migration 0030, DATA-01 sli
   });
 });
 
-describe('app_capability_version() (migration 0030): the version a presented capability was issued at', () => {
+describe('app_capability_version() (migration 0031): the version a presented capability was issued at', () => {
   const versionFor = (settings: Settings) => as(db.appUrl, settings, async (c) => (await c.query<{ v: string | null }>('SELECT app_capability_version() AS v')).rows[0]!.v);
   const setting = { 'app.current_tenant_id': 'org-alpha' };
 
@@ -484,8 +484,8 @@ async function catalogSnapshot(c: Client): Promise<string[]> {
   return rows.rows.map((r) => r.line);
 }
 
-describe('reverting 0030 and 0028', () => {
-  it('0030 reverts to exactly the catalog of 0029 (functions, owners, grants, policies), re-applies to exactly the catalog it had, and the snapshot can tell a changed grant', async () => {
+describe('reverting 0031 and 0028', () => {
+  it('0031 reverts to exactly the catalog of 0030 (functions, owners, grants, policies), re-applies to exactly the catalog it had, and the snapshot can tell a changed grant', async () => {
     const full = await owner(catalogSnapshot);
     expect(full.filter((l) => /^fn .*(tenant_capability_issue_current|app_capability_version)\(/.test(l))).toHaveLength(2);
     const through = revertThrough('tenant_capability_issue_current'); // this migration and anything above it

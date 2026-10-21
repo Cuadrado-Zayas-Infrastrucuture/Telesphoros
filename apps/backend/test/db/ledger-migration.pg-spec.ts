@@ -83,7 +83,7 @@ describe('migrations run for a migrator that is not a superuser', () => {
       });
       // CREATE on the schema was only granted to the owners while a migration ran.
       const create = (await c.query(`SELECT has_schema_privilege('telesphoros_ledger', 'public', 'CREATE') AS ledger, has_schema_privilege('telesphoros_redactor', 'public', 'CREATE') AS redactor, has_schema_privilege('telesphoros_app', 'public', 'CREATE') AS app, has_schema_privilege('telesphoros_capability', 'public', 'CREATE') AS capability`)).rows[0];
-      expect(create).toEqual({ ledger: false, redactor: false, app: false, capability: false }); // 0028 and 0030 lend it to the capability owner and take it back, as this non-superuser migrator
+      expect(create).toEqual({ ledger: false, redactor: false, app: false, capability: false }); // 0028 and 0031 lend it to the capability owner and take it back, as this non-superuser migrator
     });
   });
 

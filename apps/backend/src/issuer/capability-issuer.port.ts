@@ -16,7 +16,7 @@ export interface IssuedCapability {
   token: string;
   expiresAt: Date;
   /**
-   * The version of the person's membership the DATABASE read when it issued (migration 0030), stamped on the capability. The caller does not supply one:
+   * The version of the person's membership the DATABASE read when it issued (migration 0031), stamped on the capability. The caller does not supply one:
    * it asks for the capability first and learns the version from the answer, so no lookup has to run before the capability exists.
    */
   membershipVersion: number;

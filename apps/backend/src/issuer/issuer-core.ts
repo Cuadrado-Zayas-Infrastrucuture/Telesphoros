@@ -7,7 +7,7 @@ import {
   CAPABILITY_TOKEN_PATTERN, CapabilityIssueError, type CapabilityIssueRequest, CapabilityIssuerPort, type IssuedCapability, REQUEST_PURPOSE,
 } from './capability-issuer.port';
 
-/** What the issuer asks of the database: `tenant_capability_issue_current` (migration 0030), with the token already hashed. It names no membership version: the database reads the current one. */
+/** What the issuer asks of the database: `tenant_capability_issue_current` (migration 0031), with the token already hashed. It names no membership version: the database reads the current one. */
 export interface IssueCall {
   tenant: string;
   sub: string;

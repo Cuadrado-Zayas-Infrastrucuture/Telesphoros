@@ -171,9 +171,9 @@ const CAPABILITY_RIGHTS: Record<'app' | 'verifier' | 'worker' | 'issuer', Record
   issuer: { tenant_capability_issue: true, tenant_capabilities_sweep: false, app_tenant: false, ledger_append: false, job_enqueue: false },
 };
 /**
- * The two functions migration 0030 added: the issuer's current-version issue function (the issuer alone may call it) and the accessor for the version a
+ * The two functions migration 0031 added: the issuer's current-version issue function (the issuer alone may call it) and the accessor for the version a
  * capability was issued at (the roles that already bind through `app_tenant()`, and never the verifier or the issuer). Checked only once the migration is
- * applied, like the queue's functions, so a database that has 0028 and not yet 0030 still passes.
+ * applied, like the queue's functions, so a database that has 0028 and not yet 0031 still passes.
  */
 const CAPABILITY_CURRENT_RIGHTS: Record<'app' | 'verifier' | 'worker' | 'issuer', Record<string, boolean>> = {
   app: { tenant_capability_issue_current: false, app_capability_version: true },
