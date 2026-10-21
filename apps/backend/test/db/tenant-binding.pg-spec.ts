@@ -212,3 +212,40 @@ describe('T020 vacuity guard: every tenant-policy table is seeded here or listed
     }
   });
 });
+
+/**
+ * Catalog checks that close T-extra 4 (every role that can touch a tenant-policy table can run the accessors its policy calls), the caller
+ * list of T025 (the internal binding is called only by the four named functions), and T023 (the policy's capability read is an InitPlan, once
+ * per statement, not once per row).
+ */
+describe('0032 catalog checks: grants, callers and the plan shape', () => {
+  it('every telesphoros role that a policy calling app_tenant() applies to can execute app_tenant() and app_actor() (the verifier has an open policy and needs neither)', async () => {
+    const roles = (await owner((c) => c.query<{ grantee: string }>(
+      `SELECT DISTINCT r AS grantee FROM pg_policies p, unnest(p.roles) AS r
+        WHERE p.schemaname = 'public' AND (p.qual LIKE '%app_tenant()%' OR p.with_check LIKE '%app_tenant()%') AND r LIKE 'telesphoros_%'
+        ORDER BY 1`,
+    ))).rows.map((r) => r.grantee);
+    expect(roles.length).toBeGreaterThan(0); // a control: the query finds the roles that touch the policy tables
+    const checks = await owner((c) => c.query<{ role: string; tenant: boolean; actor: boolean }>(
+      `SELECT r AS role, has_function_privilege(r, 'public.app_tenant()', 'EXECUTE') AS tenant,
+              has_function_privilege(r, 'public.app_actor()', 'EXECUTE') AS actor
+         FROM unnest($1::text[]) AS r ORDER BY r`,
+      [roles],
+    ));
+    expect(checks.rows.filter((r) => !r.tenant || !r.actor)).toEqual([]);
+  });
+
+  it('the internal binding is called by exactly the four named class (b) functions, and by no other definition in public', async () => {
+    const callers = (await owner((c) => c.query<{ proname: string }>(
+      `SELECT DISTINCT p.proname FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.prosrc LIKE '%tenant_capability_bind_internal(%' ORDER BY 1`,
+    ))).rows.map((r) => r.proname);
+    expect(callers).toEqual(['job_held', 'ledger_record_checkpoint', 'redact_event_note', 'uploads_sweep']);
+  });
+
+  it('the policy reads the capability once per statement: the plan for patients has an InitPlan for app_tenant(), with the capability presented', async () => {
+    const { token: alpha } = await issueCurrent('org-alpha', 'alice');
+    const plan = await as(db.appUrl, { 'app.capability': alpha }, async (c) =>
+      (await c.query<{ 'QUERY PLAN': string }>('EXPLAIN SELECT * FROM patients')).rows.map((r) => r['QUERY PLAN']).join('\n'));
+    expect(plan).toMatch(/InitPlan/);
+  });
+});

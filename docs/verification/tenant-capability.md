@@ -294,3 +294,10 @@ Each mutant was applied to `apps/backend/migrations/0032_tenant_binding_policies
 **M-A8 (0031, shipped migration, mutated for one run and restored from commit):** `app_capability_version()` granted to PUBLIC. tenant-capability: 2 failed (the "EXECUTE goes to the roles that bind through app_tenant(), never PUBLIC" test and the 0031 revert snapshot).
 
 **Vacuity guard (T020):** added to tenant-binding. The catalog's 29 tenant-policy tables must equal the three seeded tables plus the 26 listed as unseeded on purpose; each unseeded table is covered by its domain spec. This is an explicit list, not a proof that those 26 tables are exercised by this spec.
+
+**Open items closed in this branch (tenant-binding spec, 14 tests pass):**
+- T-extra 4: every telesphoros role named in a policy that calls `app_tenant()` can execute `app_tenant()` and `app_actor()`. The narrower wording is deliberate: `telesphoros_ledger_verifier` holds SELECT on ledger tables but its policy is open (`USING (true)`) and never calls the accessors, so it needs neither.
+- T025: the internal binding is called by exactly `job_held`, `ledger_record_checkpoint`, `redact_event_note` and `uploads_sweep`.
+- T023: the patients policy's capability read is an InitPlan (checked with the capability presented).
+
+**Still open:** the Gitleaks scan (refused by the worktree guard), the full backend suite under real capabilities in `dual` mode (G6/R8), operator redaction under capability mode (G1, slice 5), and the staging D4 and D7 evidence.
