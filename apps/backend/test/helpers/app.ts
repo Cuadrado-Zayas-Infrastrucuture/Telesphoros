@@ -24,6 +24,7 @@ import { FIXTURES, TEST_KNOWLEDGE } from './lab-pipeline';
 import { TEST_AUDIENCE, TEST_ISSUER, TEST_SECRET } from './env';
 import type { TestingModule } from '@nestjs/testing';
 import { disposeFixtures, onceFixtureCleanup } from './fixture-cleanup';
+import { trackedBuild, trackLive } from './fixture-registry';
 import type { EphemeralDatabase } from './database';
 import type { RecoveryObjectStorage } from '../../src/object-storage/recovery-object-storage';
 
@@ -101,17 +102,21 @@ async function createBucket(runId?: string) {
  * The stores follow the environment, so the SAME e2e tests run against memory, a real PostgreSQL,
  * and an S3-compatible server.
  */
-export async function createTestApp(options: TestAppOptions = {}): Promise<NestExpressApplication> {
+async function buildTestApp(options: TestAppOptions, onClosed: () => void): Promise<NestExpressApplication> {
   let database: EphemeralDatabase | undefined;
   let adminPool: Pool | undefined;
   let moduleRef: TestingModule | undefined;
   let app: NestExpressApplication | undefined;
   let closeApplication: (() => Promise<void>) | undefined;
-  const dispose = onceFixtureCleanup(() => disposeFixtures([
-    async () => { if (closeApplication) await closeApplication(); else await moduleRef?.close(); },
-    async () => { await adminPool?.end(); },
-    async () => { await database?.drop(); },
-  ]));
+  const dispose = onceFixtureCleanup(async () => {
+    try {
+      await disposeFixtures([
+        async () => { if (closeApplication) await closeApplication(); else await moduleRef?.close(); },
+        async () => { await adminPool?.end(); },
+        async () => { await database?.drop(); },
+      ]);
+    } finally { onClosed(); }
+  });
   try {
     options.signal?.throwIfAborted();
     database = usingPostgres() && !options.postgresUrl ? await createEphemeralDatabase({ signal: options.signal }) : undefined;
@@ -194,6 +199,18 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
     await disposeFixtures([dispose], [error]);
     throw error;
   }
+}
+
+/**
+ * The application, or the failure that unwound it. If the caller's hook times out while this is pending, Jest abandons the call but not
+ * the work: the build keeps going. It is registered so that the end of the test file cancels it and closes what it built, and the
+ * application is registered until its owner closes it (see fixture-registry.ts).
+ */
+export async function createTestApp(options: TestAppOptions = {}): Promise<NestExpressApplication> {
+  let forget = () => {};
+  const app = await trackedBuild((signal) => buildTestApp({ ...options, signal }, () => forget()), options.signal);
+  forget = trackLive(() => app.close());
+  return app;
 }
 
 const handles = new WeakMap<object, MembershipAdmin>();
