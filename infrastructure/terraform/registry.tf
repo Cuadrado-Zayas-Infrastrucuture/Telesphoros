@@ -22,20 +22,35 @@ resource "aws_ecr_repository" "api" {
   encryption_configuration {
     encryption_type = "AES256"
   }
+
+  lifecycle {
+    precondition {
+      condition     = (var.github_repository == "") == (var.github_repository_id == "") && (var.github_repository_id == "") == (var.github_repository_owner_id == "")
+      error_message = "Set github_repository, github_repository_id and github_repository_owner_id together, or none of them (signing.tf)."
+    }
+    # INF-03: production must not get a registry whose images nobody signed. The signed release path (signing.tf) needs the repository IDs.
+    precondition {
+      condition     = var.environment != "production" || local.image_release_count == 1
+      error_message = "Production with API hosting requires the signed image release path: set github_repository, github_repository_id and github_repository_owner_id (signing.tf, INF-03)."
+    }
+  }
 }
 
-# Keep the most recent images so the registry does not grow without bound; a rollback target is always within the last ten.
+# Keep the most recent images so the registry does not grow without bound; a rollback target is always within the last ten. Tagged images only (decision D5,
+# 2026-10-20): image signatures are untagged OCI 1.1 referrers, which ECR protects while their image exists and expires within 24 hours after it, so
+# they must never take one of the ten slots.
 resource "aws_ecr_lifecycle_policy" "api" {
   count      = local.api_count
   repository = aws_ecr_repository.api[0].name
   policy = jsonencode({
     rules = [{
       rulePriority = 1
-      description  = "Keep the last 10 images"
+      description  = "Keep the last 10 tagged images"
       selection = {
-        tagStatus   = "any"
-        countType   = "imageCountMoreThan"
-        countNumber = 10
+        tagStatus      = "tagged"
+        tagPatternList = ["*"]
+        countType      = "imageCountMoreThan"
+        countNumber    = 10
       }
       action = { type = "expire" }
     }]
