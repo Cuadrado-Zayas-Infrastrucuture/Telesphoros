@@ -14,7 +14,7 @@ Read [CLAUDE.md](../../CLAUDE.md), [STATUS working agreements](../../docs/STATUS
 | Required CI, image evidence, cancellation | [CI runbook](../../docs/ops/ci-cd.md), [workflow](../../.github/workflows/ci.yml), [image runbook](../../infrastructure/docker/README.md) |
 | Release prerequisites | [deployment design](../../docs/ops/deployment.md), [hosting](../../docs/ops/domains-and-hosting.md), [staging plan](../../docs/design/plans/fd7-staged-synthetic-deploy.md) |
 
-Verify the current code, callers and history before relying on a dated status paragraph. Separate implemented code, local tests, exact-commit CI, hosted acceptance and clinical approval.
+Verify the current code, callers and history before relying on a dated status paragraph. New status entries are fragments in `docs/status/` (index: `pnpm status:index`); `docs/STATUS.md` holds the history before 2026-10-20. Separate implemented code, local tests, exact-commit CI, hosted acceptance and clinical approval.
 
 ## Verification selection
 
