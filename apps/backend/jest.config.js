@@ -13,7 +13,11 @@ if (skipped.length > 0) process.stderr.write(`[jest] NOT RUNNING: ${skipped.join
 
 module.exports = {
   rootDir: '.',
-  testEnvironment: 'node',
+  // The node environment, plus: at the end of each file, cancel and close fixtures whose owner (a timed-out hook) is gone. Without it a
+  // timed-out fixture build finishes unowned and keeps this process alive after the summary.
+  testEnvironment: '<rootDir>/test/helpers/fixture-environment.cjs',
+  // JEST_HANDLE_REPORT=1 prints what still holds the process open after the run.
+  ...(process.env.JEST_HANDLE_REPORT ? { globalTeardown: '<rootDir>/test/helpers/handle-report.cjs' } : {}),
   // Opt-in diagnostic observer; profile commands, selection and deadlines stay unchanged.
   ...(process.env.OFFSITE_PHASE_TRACE_DIR ? { setupFilesAfterEnv: ['<rootDir>/../../.github/ci/offsite-phase-timings.cjs'] } : {}),
   // Service-backed suites share one PostgreSQL instance. Host CPU-count worker defaults
