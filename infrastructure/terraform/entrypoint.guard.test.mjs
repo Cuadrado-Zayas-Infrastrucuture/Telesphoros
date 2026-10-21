@@ -5,60 +5,16 @@
 // Like the other guards it reads Terraform TEXT. `entrypointProblems` returns what is wrong with a set of files (empty when nothing is); the tests run it on the
 // real files and on deliberately broken copies, so every rule has been seen to fail.
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { apiImageContainers, code, commandHead, imageEntrypoint } from './entrypoint.mjs';
 
 const dir = new URL('./', import.meta.url);
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const dockerfile = read('../docker/api.Dockerfile');
 const runTask = read('../../scripts/staging/run-task.sh');
 const files = Object.fromEntries(readdirSync(dir).filter((f) => f.endsWith('.tf')).map((f) => [f, read(`./${f}`)]));
-
-const code = (text) => text.split('\n').filter((line) => !/^\s*#/.test(line)).join('\n');
-
-/** The image's ENTRYPOINT as a list, or null when the Dockerfile does not give one in exec form (then this guard cannot judge a command and says so). */
-export function imageEntrypoint(docker) {
-  const found = [...code(docker).matchAll(/^ENTRYPOINT\s+(\[.*\])\s*$/gm)];
-  if (found.length === 0) return null;
-  try {
-    const list = JSON.parse(found[found.length - 1][1]);
-    return Array.isArray(list) && list.every((x) => typeof x === 'string') ? list : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Every `{ ... }` object of the text that runs a pinned API image, with its OWN top-level lines (nested objects, such as healthCheck, removed). A container
- * definition is one of these; a nested `command` belongs to a child object and is never read as the container's.
- */
-export function apiImageContainers(text) {
-  const found = [];
-  const open = [];
-  const body = code(text);
-  for (let i = 0; i < body.length; i++) {
-    if (body[i] === '{') open.push({ start: i, children: [] });
-    else if (body[i] === '}' && open.length > 0) {
-      const node = open.pop();
-      if (open.length > 0) open[open.length - 1].children.push([node.start, i + 1]);
-      let own = '';
-      let at = node.start + 1;
-      for (const [from, to] of node.children) {
-        own += body.slice(at, from);
-        at = to;
-      }
-      own += body.slice(at, i);
-      if (/^\s*image\s*=.*\bvar\.(?:api_image|api_migrate_image)\b/m.test(own)) found.push(own);
-    }
-  }
-  return found;
-}
-
-/** The first element of a container's top-level `command = [...]`, or undefined when it has none. */
-export function commandHead(container) {
-  const match = /^\s*command\s*=\s*\[\s*"([^"]*)"/m.exec(container);
-  return match ? match[1] : undefined;
-}
 
 /** What is wrong with the Terraform files `tf` (name -> text) given the Dockerfile `docker`, as a list of sentences. */
 export function entrypointProblems(tf = files, docker = dockerfile) {
@@ -138,4 +94,46 @@ test('the entrypoint guard has been seen to fail', () => {
   const other = { ...real, 'extra.tf': '  container_definitions = jsonencode([{\n    name = "y"\n    image = var.some_other_image\n    command = ["node", "x.js"]\n  }])\n' };
   assert.deepEqual(entrypointProblems(other), []); // control: only containers of the API image are judged
   assert.deepEqual(entrypointProblems(files, dockerfile), []); // control: the unchanged text is clean
+});
+
+// The image rehearsal runs the same commands through the image's real ENTRYPOINT (infrastructure/docker/command-smoke.cjs). `docker` is not available to this
+// suite, so the smoke is driven here with a stand-in for `docker run` that answers the way the image does; the real run is the image job's rehearsal.
+const smokeModule = createRequire(import.meta.url)('../docker/command-smoke.cjs');
+const rehearsal = read('../docker/rehearsal.cjs');
+/** What is wrong with the rehearsal script's use of the smoke (a sentence each, empty when nothing is). */
+export function rehearsalProblems(source = rehearsal) {
+  const text = code(source.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n'));
+  const problems = [];
+  if (!/require\('\.\/command-smoke\.cjs'\)/.test(text)) problems.push('rehearsal.cjs must load command-smoke.cjs');
+  const call = text.search(/await smoke\(tag\)/);
+  if (call < 0) problems.push('rehearsal.cjs must run the command smoke on the image under test');
+  else if (call > text.indexOf("docker('network','create'")) problems.push('the command smoke must run before the first container or network is created');
+  return problems;
+}
+const answering = (output) => () => ({ status: 1, stdout: '', stderr: output });
+const four = async () => ['worker.tf', 'api-compute.tf', 'api-compute.tf', 'issuer.tf'].map((file) => ({ file, command: ['x/main.js'] }));
+
+test('the rehearsal runs every task command through the image ENTRYPOINT', async () => {
+  const found = await smokeModule.taskCommands();
+  assert.ok(found.length >= 4, `the smoke must find the task commands (found ${found.length})`);
+  assert.ok(found.some(({ file, command }) => file === 'worker.tf' && command.join(' ') === 'worker/main.js'), 'the worker command is among them');
+  assert.deepEqual(rehearsalProblems(), []);
+  assert.equal(await smokeModule.smoke('t', { commands: four, run: answering('worker failed to start: Worker settings are invalid: DATABASE_URL.') }), 4); // control: a refusal for missing configuration passes
+});
+
+test('the command smoke has been seen to fail', async () => {
+  const reject = (options, message) => assert.rejects(smokeModule.smoke('t', options), message);
+  await reject({ commands: four, run: answering("Error: Cannot find module '/app/node'") }, /does not start under the image ENTRYPOINT/);
+  await reject({ commands: four, run: answering('Error [ERR_MODULE_NOT_FOUND]: x') }, /does not start under the image ENTRYPOINT/);
+  await reject({ commands: async () => (await four()).slice(0, 3), run: answering('') }, /expected at least 4/);
+  await reject({ commands: async () => [], run: answering('') }, /expected at least 4/);
+  const docker = (code) => () => ({ error: Object.assign(new Error('x'), { code }), stdout: '', stderr: '' });
+  await reject({ commands: four, run: docker('ENOENT') }, /x/); // docker missing is a failure, not a pass
+  assert.equal(await smokeModule.smoke('t', { commands: four, run: docker('ETIMEDOUT') }), 4); // control: a process that keeps running found its script
+  // The script that runs it.
+  assert.ok(rehearsal.includes('await smoke(tag)'), 'the control for rehearsal.cjs must match the real text (it does not: fix the control)');
+  assert.ok(rehearsalProblems(rehearsal.replace("  console.log(`PASS ${await smoke(tag)}", "  console.log(`PASS ${4}")).length > 0, 'a rehearsal that never runs the smoke must be reported');
+  assert.ok(rehearsalProblems(rehearsal.replace("const {smoke}=require('./command-smoke.cjs');\n", '')).length > 0, 'a rehearsal that does not load the smoke must be reported');
+  const late = rehearsal.replace(/  console\.log\(`PASS \$\{await smoke\(tag\)\}[^\n]*\n/, '').replace("docker('network','create',network);networkCreated=true;", "docker('network','create',network);networkCreated=true;await smoke(tag);");
+  assert.ok(rehearsalProblems(late).length > 0, 'a smoke that runs after the network is created must be reported');
 });

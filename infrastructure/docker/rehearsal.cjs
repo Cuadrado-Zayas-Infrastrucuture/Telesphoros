@@ -1,6 +1,7 @@
 // Local/CI only. Creates uniquely named disposable resources; never contacts AWS.
 const assert=require('node:assert/strict');
 const {postgresReady}=require('./postgres-readiness.cjs');
+const {smoke}=require('./command-smoke.cjs');
 const {execFileSync}=require('node:child_process');
 const {mkdtempSync,writeFileSync,readFileSync,rmSync}=require('node:fs');
 const {tmpdir}=require('node:os');
@@ -23,6 +24,8 @@ function inside(mode){return docker('run','--rm','--platform','linux/amd64','--r
 function api(name){start(name,['--platform','linux/amd64','--read-only','--user','10001:10001','--network',network,'--env-file',join(scratch,'rehearsal.env'),'-v',`${join(scratch,'ca.crt')}:/test/ca.crt:ro`,'-v',`${join(root,'infrastructure/docker/rehearsal-driver.cjs')}:/test/driver.cjs:ro`,'-p','127.0.0.1::3000',tag,'/test/driver.cjs','api']);return Number(docker('port',name,'3000/tcp').trim().split(':').at(-1));}
 async function response(port,path,status){const r=await fetch(`http://127.0.0.1:${port}/api/v1/${path}`,{signal:AbortSignal.timeout(2500)});assert.equal(r.status,status);return r.json();}
 async function main(){
+  // First, before any container is created: the task commands in Terraform start under the image's real ENTRYPOINT (the driver below bypasses it).
+  console.log(`PASS ${await smoke(tag)} Terraform task commands start under the image ENTRYPOINT (no module-not-found; the processes then refuse for missing configuration)`);
   // No existing container, database, volume or network is reused.
   run('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',join(scratch,'ca.key'),'-out',join(scratch,'ca.crt'),'-days','1','-subj','/CN=synthetic-rehearsal-ca']);
   run('openssl',['req','-newkey','rsa:2048','-nodes','-keyout',join(scratch,'server.key'),'-out',join(scratch,'server.csr'),'-subj','/CN=pg']);
