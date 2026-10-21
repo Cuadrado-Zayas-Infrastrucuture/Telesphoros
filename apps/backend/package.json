@@ -22,9 +22,9 @@
     "knowledge:hash": "node dist/services/knowledge/cli.js hash"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1147.0",
-    "@aws-sdk/client-secrets-manager": "^3.1149.0",
-    "@aws-sdk/s3-request-presigner": "^3.1147.0",
+    "@aws-sdk/client-s3": "^3.1152.0",
+    "@aws-sdk/client-secrets-manager": "^3.1152.0",
+    "@aws-sdk/s3-request-presigner": "^3.1152.0",
     "@nestjs/common": "^11.2.7",
     "@nestjs/core": "^11.2.7",
     "@nestjs/platform-express": "^11.2.7",
@@ -38,24 +38,24 @@
     "pino-http": "^11.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@nestjs/testing": "^11.2.7",
-    "@swc/core": "^1.16.13",
+    "@swc/core": "^1.16.18",
     "@swc/jest": "^0.2.39",
     "@telesphoros/fake-idp": "workspace:*",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.5",
     "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",
-    "eslint": "^10.12.0",
+    "eslint": "^10.13.0",
     "globals": "^17.13.0",
     "jest": "^30.5.2",
     "supertest": "^7.3.1",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.71.1"
+    "typescript-eslint": "^8.71.2"
   }
 }
