@@ -53,6 +53,12 @@ variables {
 run "default_variables_plan" {
   command = plan
 
+  # INF-03 (specs/002-signed-image-release): the signing key, the GitHub OIDC trust and the release role exist only with API hosting on and the repository IDs set.
+  assert {
+    condition     = length(aws_kms_key.image_signing) == 0 && length(aws_iam_role.image_release) == 0 && length(aws_iam_openid_connect_provider.github) == 0 && output.image_release_role_arn == null
+    error_message = "the signed release path is off by default"
+  }
+
   # INF-12: every exported database log has a declared group (expiring, at the name RDS writes to), and a lost password-change notice alarms.
   assert {
     condition     = toset(keys(aws_cloudwatch_log_group.rds)) == toset(aws_db_instance.main.enabled_cloudwatch_logs_exports) && toset(keys(aws_cloudwatch_log_group.rds)) == toset(["postgresql", "upgrade"])
@@ -189,16 +195,39 @@ run "production_hosting_on" {
   command = plan
 
   variables {
-    environment        = "production"
-    db_multi_az        = true
-    audit_lock_mode    = "COMPLIANCE"
-    aws_baa_executed   = true
-    enable_api_hosting = true
-    api_domain         = "api.example.test"
-    public_subnet_ids  = ["subnet-pub1111", "subnet-pub2222"]
-    api_image          = "123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
-    api_cors_origins   = ["https://staging.example.test"]
-    api_desired_count  = 2
+    environment                = "production"
+    db_multi_az                = true
+    audit_lock_mode            = "COMPLIANCE"
+    aws_baa_executed           = true
+    enable_api_hosting         = true
+    api_domain                 = "api.example.test"
+    public_subnet_ids          = ["subnet-pub1111", "subnet-pub2222"]
+    api_image                  = "123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    api_cors_origins           = ["https://staging.example.test"]
+    api_desired_count          = 2
+    github_repository          = "example-org/example-repo"
+    github_repository_id       = "100000001"
+    github_repository_owner_id = "200000002"
+  }
+
+  assert {
+    condition     = length(aws_kms_key.image_signing) == 1 && aws_kms_key.image_signing[0].customer_master_key_spec == "ECC_NIST_P256" && aws_kms_key.image_signing[0].key_usage == "SIGN_VERIFY" && aws_kms_key.image_signing[0].deletion_window_in_days == 30
+    error_message = "production signs with an ECC P-256 signing key with the production deletion window"
+  }
+  assert {
+    condition     = length(aws_iam_role.image_release) == 1 && length(aws_iam_openid_connect_provider.github) == 1 && aws_iam_openid_connect_provider.github[0].url == "https://token.actions.githubusercontent.com" && toset(aws_iam_openid_connect_provider.github[0].client_id_list) == toset(["sts.amazonaws.com"])
+    error_message = "the release role and the GitHub OIDC provider exist when no existing provider is named"
+  }
+  assert {
+    condition = toset(flatten([for c in one(data.aws_iam_policy_document.image_release_trust[0].statement).condition : [for v in c.values : "${c.test} ${c.variable}=${v}"]])) == toset([
+      "StringEquals token.actions.githubusercontent.com:aud=sts.amazonaws.com",
+      "StringEquals token.actions.githubusercontent.com:repository_id=100000001",
+      "StringEquals token.actions.githubusercontent.com:repository_owner_id=200000002",
+      "StringEquals token.actions.githubusercontent.com:ref=refs/heads/main",
+      "StringEquals token.actions.githubusercontent.com:environment=image-release",
+      "StringEquals token.actions.githubusercontent.com:job_workflow_ref=example-org/example-repo/.github/workflows/ci.yml@refs/heads/main",
+    ])
+    error_message = "the release role trusts only this repository's ci.yml on main in the image-release environment"
   }
 
   assert {
@@ -723,4 +752,66 @@ run "preserves_reports_cors_exact_https_origin_with_port" {
     condition     = toset(one(aws_s3_bucket_cors_configuration.reports.cors_rule).allowed_origins) == toset(var.reports_cors_origins) && toset(one(aws_s3_bucket_cors_configuration.reports.cors_rule).allowed_methods) == toset(["GET"])
     error_message = "Exact approved origins and GET-only contract must survive planning"
   }
+}
+
+# ------------------------------------------------------------------------------------------------
+# INF-03: an existing GitHub OIDC provider is reused, never duplicated (D2); half a configuration and production without the signed path are refused.
+# ------------------------------------------------------------------------------------------------
+run "image_release_reuses_an_existing_oidc_provider" {
+  command = plan
+
+  variables {
+    deployment_profile         = "synthetic"
+    vpc_id                     = ""
+    private_subnet_ids         = []
+    enable_api_hosting         = true
+    api_domain                 = "api.example.test"
+    api_cors_origins           = ["https://staging.example.test"]
+    github_oidc_provider_arn   = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
+    github_repository          = "example-org/example-repo"
+    github_repository_id       = "100000001"
+    github_repository_owner_id = "200000002"
+  }
+
+  assert {
+    condition     = length(aws_iam_openid_connect_provider.github) == 0 && one(one(data.aws_iam_policy_document.image_release_trust[0].statement).principals).identifiers == toset(["arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"])
+    error_message = "a named provider is trusted and no second one is created"
+  }
+  assert {
+    condition     = length(aws_kms_key.image_signing) == 1 && aws_kms_key.image_signing[0].deletion_window_in_days == 7
+    error_message = "the synthetic rehearsal gets the key with the short deletion window"
+  }
+}
+
+run "refuses_half_a_github_repository_configuration" {
+  command = plan
+
+  variables {
+    deployment_profile   = "synthetic"
+    vpc_id               = ""
+    private_subnet_ids   = []
+    enable_api_hosting   = true
+    api_domain           = "api.example.test"
+    api_cors_origins     = ["https://staging.example.test"]
+    github_repository_id = "100000001"
+  }
+
+  expect_failures = [aws_ecr_repository.api]
+}
+
+run "refuses_production_hosting_without_the_signed_release_path" {
+  command = plan
+
+  variables {
+    environment        = "production"
+    db_multi_az        = true
+    audit_lock_mode    = "COMPLIANCE"
+    aws_baa_executed   = true
+    enable_api_hosting = true
+    api_domain         = "api.example.test"
+    public_subnet_ids  = ["subnet-pub1111", "subnet-pub2222"]
+    api_cors_origins   = ["https://staging.example.test"]
+  }
+
+  expect_failures = [aws_ecr_repository.api]
 }
