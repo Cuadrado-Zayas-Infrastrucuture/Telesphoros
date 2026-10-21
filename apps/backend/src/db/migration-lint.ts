@@ -127,7 +127,9 @@ function parsePrivilegeStatement(body: string, direction: 'TO' | 'FROM'): Privil
 /**
  * Positions of the REVOKE statements that only undo what this same migration created, so they cannot take anything from older code:
  *   - the default PUBLIC privilege on a FUNCTION or TABLE that this file creates (with CREATE, not CREATE OR REPLACE) and no earlier migration names; or
- *   - the exact reverse of a GRANT made earlier in this file, to roles this file creates and no earlier migration names.
+ *   - the exact reverse of a GRANT made earlier in this file, to roles this file creates and no earlier migration names; or
+ *   - the exact reverse of a GRANT made earlier in this file, to roles whose last mention of that same privilege in the earlier migrations was a REVOKE
+ *     (a role they had already taken it from, so the grant only lends it for this file's duration, as 0028 did for its own new role).
  * Matched on blanked SQL (strings and comments removed); anything it cannot read is not exempt.
  */
 function undoingRevokes(code: string, earlierSql: string | undefined): Set<number> {
@@ -138,6 +140,18 @@ function undoingRevokes(code: string, earlierSql: string | undefined): Set<numbe
   const namedEarlier = (name: string) => new RegExp(`\\b${name}\\b`, 'i').test(earlier);
   const createdBefore = (pattern: RegExp, index: number) =>
     new Set([...code.slice(0, index).matchAll(pattern)].map((m) => m[1]!.toLowerCase().replace(/^public\./, '')));
+  /** What the earlier migrations did, in order, with the privileges the exemption below cares about. */
+  const earlierEvents: Array<{ verb: 'GRANT' | 'REVOKE'; statement: PrivilegeStatement }> = [];
+  for (const m of earlier.matchAll(/\b(GRANT|REVOKE)\b([^;]*)/gi)) {
+    const verb = m[1]!.toUpperCase() as 'GRANT' | 'REVOKE';
+    const statement = parsePrivilegeStatement(m[2]!, verb === 'GRANT' ? 'TO' : 'FROM');
+    if (statement) earlierEvents.push({ verb, statement });
+  }
+  const sameObjects = (a: PrivilegeStatement, b: PrivilegeStatement) => JSON.stringify([...a.objects].sort()) === JSON.stringify([...b.objects].sort());
+  const lastEarlierWordWasRevoke = (revoke: PrivilegeStatement, role: string) => {
+    const last = [...earlierEvents].reverse().find((e) => e.statement.kind === revoke.kind && e.statement.privileges === revoke.privileges && sameObjects(e.statement, revoke) && e.statement.roles.includes(role));
+    return last?.verb === 'REVOKE';
+  };
   const grants: Array<{ index: number; statement: PrivilegeStatement }> = [];
   for (const m of code.matchAll(/\bGRANT\b([^;]*)/gi)) {
     const statement = parsePrivilegeStatement(m[1]!, 'TO');
@@ -153,10 +167,10 @@ function undoingRevokes(code: string, earlierSql: string | undefined): Set<numbe
     const created = revoke.kind === 'FUNCTION' ? functions : revoke.kind === 'TABLE' ? tables : new Set<string>();
     const defaultPrivilege = revoke.roles.length === 1 && revoke.roles[0] === 'public'
       && revoke.objects.every((o) => created.has(o) && !namedEarlier(o));
-    const reversesGrant = revoke.roles.every((r) => roles.has(r) && !namedEarlier(r))
-      && grants.some(({ index, statement }) => index < at && statement.kind === revoke.kind && statement.privileges === revoke.privileges
-        && JSON.stringify([...statement.objects].sort()) === JSON.stringify([...revoke.objects].sort())
-        && revoke.roles.every((r) => statement.roles.includes(r)));
+    const reversesGrantMade = grants.some(({ index, statement }) => index < at && statement.kind === revoke.kind && statement.privileges === revoke.privileges
+      && sameObjects(statement, revoke) && revoke.roles.every((r) => statement.roles.includes(r)));
+    const reversesGrant = reversesGrantMade
+      && (revoke.roles.every((r) => roles.has(r) && !namedEarlier(r)) || revoke.roles.every((r) => lastEarlierWordWasRevoke(revoke, r)));
     if (defaultPrivilege || reversesGrant) exempt.add(at);
   }
   return exempt;
