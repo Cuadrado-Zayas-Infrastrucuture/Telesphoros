@@ -10,6 +10,7 @@ import { PostgresBrowserSessionRepository } from '../../src/storage/postgres/bro
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { migrationsThrough } from '../helpers/migrations-through';
 import { registeringAdmin } from '../helpers/membership';
+import { revertAbove } from '../helpers/migration-history';
 
 const A='tenant-clock-review-a', B='tenant-clock-review-b';
 let pg:EphemeralDatabase, db:Database, otherDb:Database;
@@ -95,7 +96,7 @@ it('a non-superuser owner upgrades populated custody and refuses incompatible do
  try{
   await withAdmin(isolated.adminUrl,async c=>{
    await registeringAdmin(c).grant({tenantId:A,sub:A+'-person',roles:['reader'],by:'review-fixture',reason:'synthetic populated migration review'});
-   expect(await migrateDown(c, 2)).toEqual(['0029', '0028']); // this test is about 0027 as its own owner: the later (empty) migrations are out of the way
+   const aboveClocks=revertAbove('browser_session_clocks');expect(await migrateDown(c, aboveClocks.steps)).toEqual(aboveClocks.reverted); // this test is about 0027 as its own owner: the later (empty) migrations are out of the way
    await c.query("DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='m51_clock_review_owner') THEN CREATE ROLE m51_clock_review_owner NOLOGIN NOSUPERUSER NOBYPASSRLS; END IF; END $$");
    await c.query('GRANT USAGE,CREATE ON SCHEMA public TO m51_clock_review_owner');
    await c.query('ALTER TABLE browser_sessions OWNER TO m51_clock_review_owner');await c.query('ALTER TABLE schema_migrations OWNER TO m51_clock_review_owner');
