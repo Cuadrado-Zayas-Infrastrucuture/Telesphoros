@@ -9,6 +9,7 @@ The Working agreements and [CONTRIBUTING.md](../../CONTRIBUTING.md) stay authori
 | Artifact | Location | Notes |
 |---|---|---|
 | Feature spec, plan, tasks | `specs/NNN-slug/` (`spec.md`, `plan.md`, `tasks.md`, plus any `research.md`, `data-model.md`, `contracts/`, `checklists/`) | **Default for new multi-step features.** `NNN` is assigned by `.specify/scripts/bash/create-new-feature.sh`. A `plan.md` the founder has approved satisfies Working agreement 1. |
+| Status entry | `docs/status/YYYY-MM-DD-slug.md` | One fragment per pull request (`# Title`, then `Date: YYYY-MM-DD`), not a new section in `docs/STATUS.md`. `pnpm status:index` prints the index. |
 | Verification record | `docs/verification/` | Unchanged. Spec Kit has no verification artifact; what was run, passed, skipped and left unverified is still recorded here and linked from the PR. |
 | Clinical validation note | `docs/clinical-validation/` | Unchanged. Required for clinical-logic changes whatever the workflow. |
 | Constitution | `.specify/memory/constitution.md` | Content, not scaffolding: a `specify init` upgrade must not regenerate it. |

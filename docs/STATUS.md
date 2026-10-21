@@ -1,7 +1,11 @@
 # Status, history and working agreements
 
-Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. Update it in the same pull request as any change it describes.
+Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. A pull request that changes what is described here adds a fragment under `docs/status/` (next section).
 Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
+
+## Where new entries go: docs/status/ (from 2026-10-20)
+
+New entries are not added to this file. Each pull request adds one file, `docs/status/YYYY-MM-DD-slug.md`, whose first line is `# Title` and whose first line after it is `Date: YYYY-MM-DD` (the file name's date); two pull requests never edit the same file, so they cannot conflict. Print the index, newest first, with `pnpm status:index` (it is not committed, so it cannot conflict either); `pnpm test:ci-config` checks every fragment. The sections below are the history up to 2026-10-20: they stay where they are because other documents link to their anchors, and a correction to one of them still edits this file.
 
 ## Audit follow-ups: diagnostic tooling removed, INF-18 recorded as accepted (draft PR, 2026-10-20)
 
