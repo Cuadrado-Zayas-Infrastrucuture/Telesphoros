@@ -9,6 +9,7 @@ import { migrateDown, migrateUp } from '../../src/db/migrator';
 import { PostgresBrowserSessionRepository } from '../../src/storage/postgres/browser-session.repository';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { registeringAdmin } from '../helpers/membership';
+import { revertAbove, revertThrough, versionsFrom } from '../helpers/migration-history';
 
 const A = 'tenant-session-a'; const B = 'tenant-session-b';
 let pg: EphemeralDatabase;
@@ -228,7 +229,8 @@ it('refuses incompatible clock-rule rollback atomically until expired custody is
       await c.query(`INSERT INTO browser_sessions (tenant_id,handle_hash,sub,issued_at,created_at,expires_at,credential,revoked_at)
         VALUES ($1,$2,'person-a',0,clock_timestamp()-interval '2 minutes',clock_timestamp()-interval '1 minute',$3,clock_timestamp()-interval '3 minutes')`,
       [A, hash, crypto.sealCredential('synthetic-token', 'rollback-fixture')]);
-      expect(await migrateDown(c, 2)).toEqual(['0029', '0028']); // the empty later migrations first, so the next step is 0027's own rollback
+      const aboveClocks = revertAbove('browser_session_clocks');
+      expect(await migrateDown(c, aboveClocks.steps)).toEqual(aboveClocks.reverted); // the empty later migrations first, so the next step is 0027's own rollback
       await expect(migrateDown(c)).rejects.toThrow(/Migration 0027 failed and was rolled back/);
       expect((await c.query("SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1")).rows[0].version).toBe('0027');
       expect((await c.query('SELECT count(*)::int AS n FROM browser_sessions WHERE tenant_id=$1 AND handle_hash=$2', [A, hash])).rows[0].n).toBe(1);
@@ -237,7 +239,7 @@ it('refuses incompatible clock-rule rollback atomically until expired custody is
     expect(await isolatedRepo.cleanupExpired(A, 1)).toBe(1);
     await withAdmin(isolated.adminUrl, async (c) => {
       expect(await migrateDown(c)).toEqual(['0027']);
-      expect(await migrateUp(c)).toEqual(['0027', '0028', '0029']);
+      expect(await migrateUp(c)).toEqual(versionsFrom('browser_session_clocks'));
     });
   } finally { await isolatedDb.onModuleDestroy(); await isolated.drop(); }
 });
@@ -253,7 +255,8 @@ it('the new migration and rollback execute as a non-superuser owner with no BYPA
   const isolated = await createEphemeralDatabase();
   try {
     await withAdmin(isolated.adminUrl, async (client) => {
-      expect(await migrateDown(client, 4)).toEqual(['0029', '0028', '0027', '0026']);
+      const throughSessions = revertThrough('browser_sessions');
+      expect(await migrateDown(client, throughSessions.steps)).toEqual(throughSessions.reverted);
       await client.query("DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='m51a_migration_owner') THEN CREATE ROLE m51a_migration_owner NOLOGIN NOSUPERUSER NOBYPASSRLS; END IF; END $$");
       await client.query('GRANT USAGE,CREATE ON SCHEMA public TO m51a_migration_owner');
       await client.query('GRANT REFERENCES ON tenant_memberships TO m51a_migration_owner');

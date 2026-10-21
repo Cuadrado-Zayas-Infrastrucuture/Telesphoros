@@ -14,6 +14,7 @@ import {
   pendingMigrations,
 } from '../../src/db/migrator';
 import { adminUrl, createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
+import { allVersions, revertAbove } from '../helpers/migration-history';
 
 const dbs: EphemeralDatabase[] = [];
 const dirs: string[] = [];
@@ -35,13 +36,10 @@ const tempMigrations = () => {
 const run = <T>(db: EphemeralDatabase, work: (c: Client) => Promise<T>) => withAdmin(db.adminUrl, work);
 
 /**
- * The migrations that ship, asserted INDEPENDENTLY of the loader: this list is edited by hand, deliberately, with every new
- * migration. (Every other test derives from it rather than repeating it, and a separate test proves the loader finds exactly these,
- * so a discovery bug cannot hide itself by supplying both the actual and the expected value.)
+ * The migrations that ship, read from the directory: adding a migration edits no list here. What pins the history (a gap, a repeat, an edited,
+ * removed or renumbered shipped file) is test/migration-history.spec.ts, which needs no database.
  */
-const SHIPPED = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010', '0011', '0012', '0013', '0014', '0015', '0016', '0017', '0018', '0019', '0020', '0021', '0022', '0023', '0024', '0025', '0026', '0027', '0028', '0029'];
-/** The compat label each shipped migration from 0028 on carries, written by hand. */
-const SHIPPED_LABELS: Record<string, Compat> = { '0028': 'expand', '0029': 'breaking' };
+const SHIPPED = allVersions();
 /** The first migration that creates append-only audit tables: reverting it (and everything after it) needs the explicit setting. */
 const FIRST_AUDIT_MIGRATION = '0005';
 const nextVersion = String(SHIPPED.length + 1).padStart(4, '0');
@@ -62,8 +60,7 @@ const down = (db: EphemeralDatabase, steps: number) =>
   });
 
 describe('migration runner', () => {
-  it('ships exactly the migrations this test expects (discovery is checked on its own, against a list written by hand)', () => {
-    expect(loadMigrations().map((m) => m.version)).toEqual(SHIPPED);
+  it('ships a non-empty up and down for every migration (the history itself is pinned in test/migration-history.spec.ts)', () => {
     for (const migration of loadMigrations()) {
       expect(migration.upSql.length).toBeGreaterThan(0);
       expect(migration.downSql.length).toBeGreaterThan(0);
@@ -102,7 +99,8 @@ describe('migration runner', () => {
     // 0023 (the job queue) reverts freely while no attempt is recorded, and so does 0022 (intake rejections) while no rejection is recorded; the guards on populated ones are tested in jobs and security-events.
     // 0028 (the tenant capability) reverts freely while its issuance log is empty; the guard on a populated one is tested in tenant-capability.
     // 0029 (the synthetic agentic fixtures) reverts freely while none of its tables holds a row; the guard on a populated one is tested in the ai-service durable schema-roles suite.
-    expect(await down(db, 8)).toEqual(['0029', '0028', '0027', '0026', '0025', '0024', '0023', '0022']);
+    const aboveMerge = revertAbove('patient_duplicates_and_merge'); // everything above 0021, whatever has been added since
+    expect(await down(db, aboveMerge.steps)).toEqual(aboveMerge.reverted);
     await expect(run(db, (c) => migrateDown(c, 1))).rejects.toThrow(/Refusing to drop patient merge records/);
     expect(await down(db, 1)).toEqual(['0021']);
     await expect(run(db, (c) => migrateDown(c, 1))).rejects.toThrow(/Refusing to drop patient-link decisions/);
@@ -237,7 +235,7 @@ describe('migration runner', () => {
     await run(db, (c) => migrateUp(c, dir));
     const rows = (await run(db, (c) => c.query('SELECT version, compat FROM schema_migrations ORDER BY version'))).rows;
     // Shipped migrations before the label carry none (stored as breaking); from 0028 on each states its own.
-    expect(rows.slice(0, SHIPPED.length).map((r) => [r.version, r.compat])).toEqual(SHIPPED.map((v) => [v, SHIPPED_LABELS[v] ?? 'breaking']));
+    expect(rows.slice(0, SHIPPED.length).map((r) => [r.version, r.compat])).toEqual(loadMigrations().map((m) => [m.version, m.compat]));
     expect(rows.slice(SHIPPED.length)).toEqual([{ version: version(1), compat: 'expand' }, { version: version(2), compat: 'breaking' }]);
   });
 
