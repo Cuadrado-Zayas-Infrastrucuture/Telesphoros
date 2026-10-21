@@ -267,3 +267,22 @@ M-A3a (the new function reads the membership without `status = 'active'`) first 
 4. The version read and the issuance are two statements: a membership that moves between them is refused (`membership-not-current`), failing closed. A move between the issuance and the lookup binds the older version, so writes are refused at commit and reads proceed.
 5. **Migration number:** this was `0030` until P2 option B (#227) merged with `0030_agentic_synthetic_identity`; the branch was merged with `main` and renumbered `0031` (two file renames and the text above; the specs name the migration, so nothing else changed). The two touch different objects (P2 calls `app_tenant()`, `app_actor()` and `membership_assert_current`, none of what 0031 adds).
 6. The six-argument function stays callable by the issuer. Removing it is a `breaking` change for a later migration.
+
+## Slice 3 PR B: tenant binding policies (migration 0032, mode dual), mutant controls, 2026-10-21 (local, not pushed)
+
+Each mutant was applied to `apps/backend/migrations/0032_tenant_binding_policies.up.sql` alone, the spec run, and the file restored from commit `1997b94` (`git checkout`; the tree was clean afterwards). Scratch cluster, same as the tier runs. Result = pass/fail of the spec run; "red" means a named test failed.
+
+| Mutant | What it breaks | Spec run | Caught by |
+|---|---|---|---|
+| M6 | `job_enqueue` reads the actor setting, not the capability | tenant-binding: 1 failed, 8 passed | the requested_by test (T021) |
+| M9 | `membership_assert_current` skips the capability check (FR-007) | tenant-binding: before this PR's new test 9/9 green (a gap, see below); after the new stale-capability test: 1 failed, 9 passed | the stale-capability test |
+| M11 | the internal binding granted to `telesphoros_app` | tenant-binding: 1 failed, 9 passed | the EXECUTE-grant test |
+| M12 | `uploads_sweep` does not restore `app.capability` | tenant-binding: 1 failed, 9 passed | the restore test |
+| M14 | mode left at `guc` | tenant-binding: 10/10 green (no mode assertion in this spec); tenant-capability: 2 failed | the "binding mode is dual" test (in tenant-capability) |
+| M1 | the `patients` policy left on the setting | tenant-binding: migration refused at its own postcondition ("1 policies still read the setting, 47 read app_tenant()") | the migration postcondition, before T020 runs |
+
+**Gap found and closed:** before the stale-capability test was added, M9 was green. The membership table check already compares the sub and version, so the capability check only matters for a capability issued at an older version. The test "a capability issued before a membership change is refused after it" covers that case.
+
+**Not a test failure, but noted:** M1 is caught by the migration's postcondition, not by T020. T020 has no independent control for a single policy left on the setting while the postcondition is present.
+
+**Not run:** M2 (ledger policy reverted), M17 (down migration omits a policy), and the M-A mutants for migration 0031.

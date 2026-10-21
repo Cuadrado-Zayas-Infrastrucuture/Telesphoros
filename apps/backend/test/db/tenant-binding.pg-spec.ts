@@ -125,6 +125,16 @@ describe('T021: definer functions bind the actor from the capability, not from t
     expect(await ask('alice', v, { 'app.current_tenant_id': 'org-beta' })).toBe(false); // the mismatch fails closed
   });
 
+  // The check FR-007 adds on top of the membership row: the table alone would accept a stale capability once the version has moved on.
+  it('a capability issued before a membership change is refused after it (the version it carries no longer matches), and a fresh one is accepted', async () => {
+    const { token: stale, membership_version: before } = await issueCurrent('org-alpha', 'alice');
+    await owner((c) => c.query(`UPDATE tenant_memberships SET roles = ARRAY['reviewer'], changed_by = 'test' WHERE tenant_id = 'org-alpha' AND sub = 'alice'`));
+    const after = Number(before) + 1;
+    expect(await scalar<boolean>(db.appUrl, { 'app.capability': stale }, 'SELECT membership_assert_current($1, $2)', ['alice', after])).toBe(false);
+    const { token: fresh } = await issueCurrent('org-alpha', 'alice');
+    expect(await scalar<boolean>(db.appUrl, { 'app.capability': fresh }, 'SELECT membership_assert_current($1, $2)', ['alice', after])).toBe(true);
+  });
+
   it('the internal binding is callable by the three class (b) owner roles only, never by an application, worker, verifier, operator, auditor or issuer login', async () => {
     const logins = [db.appUrl, db.workerUrl, db.verifierUrl, db.operatorUrl, db.auditorUrl, db.issuerUrl];
     for (const url of logins) {
