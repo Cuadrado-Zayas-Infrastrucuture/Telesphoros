@@ -307,6 +307,18 @@ test('dependabot watches every ecosystem the repository uses', () => {
   for (const eco of ['npm', 'github-actions', 'terraform', 'pip', 'docker-compose']) assert.match(dependabot, new RegExp(`package-ecosystem: ${eco}\\b`));
 });
 
+/** The ecosystem blocks that ignore major updates of a dependency that must move by a planned migration (not a lone bump). */
+export function missingMajorIgnores(config) {
+  const block = (eco) => config.split(/^  - package-ecosystem: /m).find((b) => b.startsWith(`${eco}\n`)) ?? '';
+  const ignored = (eco, name) => new RegExp(`ignore:\\n(?:\\s+.*\\n)*?\\s+- dependency-name: "${name}"\\n\\s+update-types: \\["version-update:semver-major"\\]`).test(block(eco));
+  return [['npm', '@nestjs/\\*'], ['docker', 'node']].filter(([eco, name]) => !ignored(eco, name)).map(([eco, name]) => `${eco}: ${name.replace('\\', '')}`);
+}
+test('dependabot ignores major updates of @nestjs/* and the node base image (planned migrations only)', () => {
+  assert.deepEqual(missingMajorIgnores(dependabot), []);
+  assert.deepEqual(missingMajorIgnores(dependabot.replace('"@nestjs/*"', '"@nestjs/core"')), ['npm: @nestjs/*']); // control: fails when removed
+  assert.deepEqual(missingMajorIgnores(dependabot.replace('dependency-name: "node"', 'dependency-name: "nodex"')), ['docker: node']);
+});
+
 // ---- CLAUDE.md is a pointer: it must stay short and may only name files that exist ----
 
 const REPO = new URL('../../', import.meta.url);
