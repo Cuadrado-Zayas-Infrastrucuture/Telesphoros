@@ -122,8 +122,8 @@ resource "aws_cloudfront_response_headers_policy" "web" {
   name  = "${local.name}-web"
   security_headers_config {
     content_security_policy {
-      # Existing React components use inline styles. Inline scripts and eval remain forbidden.
-      content_security_policy = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src ${local.web_connect}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+      # Styles come only from the built stylesheet; React style props use the CSSOM, which CSP does not restrict. Inline scripts and eval remain forbidden.
+      content_security_policy = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src ${local.web_connect}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
       override                = true
     }
     content_type_options {
