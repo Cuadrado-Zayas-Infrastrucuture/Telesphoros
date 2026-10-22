@@ -1,16 +1,17 @@
 import { recoveryScopeSchema } from '@telesphoros/shared-types';
 import { z } from 'zod';
-import { attemptSchema, declarationSchema, fileFactsSchema, type FileFacts, type OwnedProgress } from './uploadProgress';
+import { attemptSchema, declarationSchema, fileFingerprintSchema, type FileFingerprint, type OwnedProgress } from './uploadProgress';
 
-/** One tab, one verified caller/tenant, at most one hour from the initial save. No bytes, token, signed link or raw identity. */
+/** One tab, one verified caller/tenant, at most one hour from the initial save. No bytes, token, signed link, raw identity or file name. */
 const KEY = 'telesphoros.upload-recovery.v2';
 const LEGACY_KEY = 'telesphoros.upload-recovery.v1';
 export const RECOVERY_LIFETIME_MS = 60 * 60 * 1000;
+/** Records saved before the file name was dropped carry `name`, which this strict schema refuses: they are removed on read. */
 const entrySchema = z.strictObject({
   v: z.literal(2), scope: recoveryScopeSchema,
   requestId: z.uuid(), reportId: z.uuid(),
   declaration: declarationSchema.optional(), attempt: attemptSchema.optional(),
-  file: fileFactsSchema, savedAt: z.iso.datetime(),
+  file: fileFingerprintSchema, savedAt: z.iso.datetime(),
 });
 export type RecoveryEntry = z.infer<typeof entrySchema>;
 /** Created only after /me succeeds. A null scope guards in-flight work without enabling persistence. */
@@ -104,13 +105,13 @@ export function rememberUpload(progress: OwnedProgress & { requestId?: string; r
   try {
     const entry: RecoveryEntry = {
       v: 2, scope: binding.session.scope, requestId: progress.requestId, reportId: progress.reportId,
-      file: progress.facts, savedAt: binding.savedAt,
+      file: { reportType: progress.facts.reportType, sizeBytes: progress.facts.sizeBytes, sha256: progress.facts.sha256 }, savedAt: binding.savedAt,
       ...(progress.declaration ? { declaration: progress.declaration } : {}), ...(progress.attempt ? { attempt: progress.attempt } : {}),
     };
     store()?.setItem(KEY, JSON.stringify(entry));
     armExpiry(entry);
   } catch { /* storage full/blocked: the upload continues without reload recovery */ }
 }
-export function sameFile(saved: FileFacts, facts: FileFacts): boolean {
-  return saved.reportType === facts.reportType && saved.name === facts.name && saved.sizeBytes === facts.sizeBytes && saved.sha256 === facts.sha256;
+export function sameFile(saved: FileFingerprint, facts: FileFingerprint): boolean {
+  return saved.reportType === facts.reportType && saved.sizeBytes === facts.sizeBytes && saved.sha256 === facts.sha256;
 }

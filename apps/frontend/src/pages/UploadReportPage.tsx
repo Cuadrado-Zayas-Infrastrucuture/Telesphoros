@@ -231,7 +231,7 @@ export default function UploadReportPage() {
           <AlertTitle>An upload was interrupted</AlertTitle>
           <AlertDescription>
             <p>
-              <strong>{interrupted.file.name}</strong> ({describeSize(interrupted.file.sizeBytes)}) was not finished. Choose the same patient and the same file again and press Upload report to finish it, or cancel it.
+              <strong>The file you chose earlier</strong> ({describeSize(interrupted.file.sizeBytes)}) was not finished. Choose the same patient and the same file again and press Upload report to finish it, or cancel it.
             </p>
             <Button type="button" variant="outline" className="mt-2" disabled={cancelling} onClick={() => void cancelInterrupted()}>{cancelling ? 'Cancelling…' : 'Cancel the interrupted upload'}</Button>
           </AlertDescription>

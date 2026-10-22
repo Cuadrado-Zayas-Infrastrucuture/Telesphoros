@@ -152,12 +152,13 @@ test('a reload during the transfer finishes the same upload: one report, one sto
   expect(kept).toBeTruthy();
   expect(kept).not.toContain(fixture.id);
   expect(kept).not.toMatch(/Bearer|eyJ|patientId|uploadUrl|X-Amz/i);
-  expect(JSON.parse(kept!)).toMatchObject({ v: 2, scope: expect.stringMatching(/^[0-9a-f]{64}$/), file: { name: 'reload.vcf', sizeBytes: VCF.length, reportType: 'vcf', sha256: createHash('sha256').update(VCF).digest('hex') } });
+  expect(kept).not.toContain('reload.vcf');
+  expect(JSON.parse(kept!)).toMatchObject({ v: 2, scope: expect.stringMatching(/^[0-9a-f]{64}$/), file: { sizeBytes: VCF.length, reportType: 'vcf', sha256: createHash('sha256').update(VCF).digest('hex') } });
   expect((await stored(page, fixture))[0]!.fileUploaded).toBe(false);
 
   await reloadAndSignIn(page, held.interrupt);
   await expect(page.getByText('An upload was interrupted')).toBeVisible();
-  await expect(page.getByText('reload.vcf', { exact: true })).toBeVisible();
+  await expect(page.getByText('The file you chose earlier', { exact: true })).toBeVisible();
   await page.screenshot({ path: `test-results/screens/upload-interrupted-${test.info().project.name}.png`, fullPage: true });
   await reselect(page, fixture, 'reload.vcf', VCF);
   await page.getByRole('button', { name: 'Upload report' }).click();

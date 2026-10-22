@@ -51,11 +51,20 @@ describe('what the browser keeps', () => {
     const first = await interrupt();
     const raw = memory.get('telesphoros.upload-recovery.v2')!;
     const saved = JSON.parse(raw);
-    expect(saved).toMatchObject({ v: 2, scope: owner.scope, requestId: first.requestId, reportId: id, file: { reportType: 'structured', name: 'synthetic.json', sizeBytes: 1, sha256: sha },
+    expect(saved).toMatchObject({ v: 2, scope: owner.scope, requestId: first.requestId, reportId: id, file: { reportType: 'structured', sizeBytes: 1, sha256: sha },
       declaration: { revision: original, contentType: 'application/json', sha256: sha }, attempt: { attemptId, revision, state: 'declared' } });
     expect(Object.keys(saved).sort()).toEqual(['attempt', 'declaration', 'file', 'reportId', 'requestId', 'savedAt', 'scope', 'v']);
+    expect(saved.file).not.toHaveProperty('name');
+    expect(raw).not.toContain('synthetic.json');
     expect(raw).not.toContain(patientId);
     expect(raw).not.toMatch(/Bearer|eyJ|patientId|uploadUrl|signature/i);
+  });
+
+  it('removes a record saved with a file name before the name was dropped', () => {
+    memory.set('telesphoros.upload-recovery.v2', JSON.stringify({ v: 2, scope: owner.scope, requestId: id, reportId: id,
+      file: { reportType: 'structured', name: 'synthetic.json', sizeBytes: 1, sha256: sha }, savedAt: new Date().toISOString() }));
+    expect(readRecovery(owner)).toBeUndefined();
+    expect(memory.has('telesphoros.upload-recovery.v2')).toBe(false);
   });
 
   it('keeps nothing before the report exists, and refuses a damaged or extended record (removing it)', async () => {
@@ -313,7 +322,7 @@ describe('late responses racing newer recovery', () => {
   }
   function saveNewerRecovery() {
     const newer = { requestId: otherPatient, reportId: attemptId,
-      facts: { reportType: 'structured' as const, name: 'synthetic-newer.json', sizeBytes: 1, sha256: sha } };
+      facts: { reportType: 'structured' as const, name: 'synthetic-newer.json', sizeBytes: 2, sha256: sha } };
     bindRecovery(newer, owner);
     rememberUpload(newer);
     return readRecovery(owner)!;
@@ -340,7 +349,7 @@ describe('late responses racing newer recovery', () => {
       const before = JSON.stringify(progress);
       retire(lifetime, progress);
       const kept = saveNewerRecovery();
-      expect(kept.file.name).toBe('synthetic-newer.json');
+      expect(kept.file.sizeBytes).toBe(2);
       finish(bodies[pendingIndex]);
       await refused;
       expect(JSON.stringify(progress)).toBe(before);
@@ -362,7 +371,7 @@ describe('late responses racing newer recovery', () => {
     const before = JSON.stringify(progress);
     retire(lifetime, progress);
     const kept = saveNewerRecovery();
-    expect(kept.file.name).toBe('synthetic-newer.json');
+    expect(kept.file.sizeBytes).toBe(2);
     finish(response({}, 404));
     await refused;
     expect(JSON.stringify(progress)).toBe(before);
@@ -395,10 +404,10 @@ describe('recovery-to-download', () => {
   }
   function saveNewerRecoveryForDownload() {
     const newer = { requestId: otherPatient, reportId: attemptId,
-      facts: { reportType: 'structured' as const, name: 'synthetic-review-newer.json', sizeBytes: 1, sha256: sha } };
+      facts: { reportType: 'structured' as const, name: 'synthetic-review-newer.json', sizeBytes: 2, sha256: sha } };
     bindRecovery(newer, owner); rememberUpload(newer);
     const kept = readRecovery(owner)!;
-    expect(kept.file.name).toBe('synthetic-review-newer.json');
+    expect(kept.file.sizeBytes).toBe(2);
     return kept;
   }
   it.each(['stored', 'unresolved', 'committed'])('recovered %s attempt clears only its recovery and downloads verified bytes', async state => {

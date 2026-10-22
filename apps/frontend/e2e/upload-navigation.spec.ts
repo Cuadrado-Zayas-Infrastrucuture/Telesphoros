@@ -7,7 +7,7 @@ async function record(page: Page) {
   return page.evaluate(() => {
     const records = ['telesphoros.upload-recovery.v1', 'telesphoros.upload-recovery.v2'].map(key => sessionStorage.getItem(key)).filter(raw => raw !== null);
     if (records.length > 1) throw new Error('Multiple recovery records');
-    return records.length ? JSON.parse(records[0]!) as { requestId: string; reportId: string; declaration?: { requestId: string }; file: { name: string } } : null;
+    return records.length ? JSON.parse(records[0]!) as { requestId: string; reportId: string; declaration?: { requestId: string }; file: { reportType: string; sizeBytes: number; sha256: string } } : null;
   });
 }
 async function fill(page: Page, fixture: { id: string; label: string }, name: string) {
@@ -60,7 +60,7 @@ test('an abandoned registration cannot replace newer recovery, and the newer upl
     await fill(page, fixture, 'navigation-old.vcf'); await arrived.promise;
     await navigateAwayAndBack(page);
     await fill(page, fixture, 'navigation-current.vcf'); await held.arrived;
-    const kept = await record(page); expect(kept?.file.name).toBe('navigation-current.vcf');
+    const kept = await record(page); expect(kept?.file).not.toHaveProperty('name'); expect(kept?.file.reportType).toBe('vcf');
     const received = page.waitForResponse(reply => reply.url().endsWith('/api/v1/reports') && reply.request().postDataJSON()?.filename === 'navigation-old.vcf');
     released.release(); await delivered.promise; await received;
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
