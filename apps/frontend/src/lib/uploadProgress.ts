@@ -21,13 +21,16 @@ export const fileFactsSchema = z.strictObject({
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
 });
 export type FileFacts = z.infer<typeof fileFactsSchema>;
+/** What the browser keeps across a reload: the same file recognized by type, size and digest. The name stays in memory only (it can carry a patient's name). */
+export const fileFingerprintSchema = fileFactsSchema.omit({ name: true });
+export type FileFingerprint = z.infer<typeof fileFingerprintSchema>;
 
 export interface OwnedProgress {
   declaration?: Declaration;
   attempt?: Attempt;
   cancelRequested?: boolean;
-  /** The file this progress is about (set once the file has been read). */
-  facts?: FileFacts;
+  /** The file this progress is about (set once the file has been read). A progress restored after a reload has no name. */
+  facts?: FileFacts | FileFingerprint;
   /** True when this progress was restored after a reload; the server confirms or refuses it on the first request. */
   restored?: boolean;
 }

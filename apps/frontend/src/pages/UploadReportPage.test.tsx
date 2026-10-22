@@ -116,7 +116,7 @@ describe('UploadReportPage', () => {
     expect(await screen.findByText(/SYN-TEST1234/)).toBeInTheDocument();
   });
 
-  it('offers to finish or cancel an upload that a reload interrupted, naming the file, and says nothing when there is none', async () => {
+  it('offers to finish or cancel an upload that a reload interrupted, showing its size but not its name, and says nothing when there is none', async () => {
     const { unmount } = render(<UploadReportPage />);
     await screen.findByRole('option', { name: 'SYN-0001' });
     expect(screen.queryByText('An upload was interrupted')).not.toBeInTheDocument();
@@ -124,7 +124,8 @@ describe('UploadReportPage', () => {
     interruptedUpload();
     render(<UploadReportPage />);
     expect(await screen.findByText('An upload was interrupted')).toBeInTheDocument();
-    expect(screen.getByText('half.vcf')).toBeInTheDocument();
+    expect(screen.getByText('The file you chose earlier')).toBeInTheDocument();
+    expect(screen.queryByText('half.vcf')).not.toBeInTheDocument();
     expect(screen.getByText(/2\.0 KiB/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Cancel the interrupted upload' })).toBeEnabled();
   });
@@ -311,8 +312,8 @@ it('removes an idle recovery banner at the fixed one-hour boundary', async () =>
   vi.useFakeTimers(); vi.setSystemTime('2026-10-14T12:00:00Z');
   interruptedUpload();
   await act(async () => { render(<UploadReportPage />); });
-  expect(screen.getByText('half.vcf')).toBeVisible();
+  expect(screen.getByText('The file you chose earlier')).toBeVisible();
   await act(async () => { vi.advanceTimersByTime(3600000); });
-  expect(screen.queryByText('half.vcf')).not.toBeInTheDocument();
+  expect(screen.queryByText('The file you chose earlier')).not.toBeInTheDocument();
   expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v2')).toBeNull();
 });
