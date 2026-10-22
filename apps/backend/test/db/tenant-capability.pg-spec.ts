@@ -495,9 +495,10 @@ describe('reverting 0031 and 0028', () => {
     const through = revertThrough('tenant_capability_issue_current'); // this migration and anything above it
     expect(await owner((c) => migrateDown(c, through.steps))).toEqual(through.reverted);
     const down = await owner(catalogSnapshot);
-    // 0032 sits above 0031 and goes with it: its internal binding is the one other function this revert removes
-    expect(down.filter((l) => /tenant_capability_issue_current|app_capability_version|tenant_capability_bind_internal/.test(l))).toEqual([]);
-    expect(full.filter((l) => !/tenant_capability_issue_current|app_capability_version|tenant_capability_bind_internal/.test(l))).toEqual(down); // nothing else moved
+    // 0032 and 0033 sit above 0031 and go with it: 0032's internal binding and 0033's member_sign_out are the other functions this revert removes
+    const removed = /tenant_capability_issue_current|app_capability_version|tenant_capability_bind_internal|member_sign_out/;
+    expect(down.filter((l) => removed.test(l))).toEqual([]);
+    expect(full.filter((l) => !removed.test(l))).toEqual(down); // nothing else moved
     expect(await owner((c) => migrateUp(c))).toEqual(versionsFrom('tenant_capability_issue_current'));
     expect(await owner(catalogSnapshot)).toEqual(full);
     // the snapshot is sensitive to the thing it guards: a grant to PUBLIC changes it

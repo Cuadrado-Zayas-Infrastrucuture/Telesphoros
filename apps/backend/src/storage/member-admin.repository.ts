@@ -48,6 +48,8 @@ export abstract class MemberAdminRepository {
   abstract listMembers(tenantId: string, page: PageRequest): Promise<{ items: MemberView[]; total: number }>;
   abstract changeRoles(actor: Principal, sub: string, roles: Role[]): Promise<void>;
   abstract removeMember(actor: Principal, sub: string): Promise<void>;
+  /** The caller's own sessions in this organization end: tokens issued before now are refused on their next request. */
+  abstract signOut(actor: Principal): Promise<void>;
   abstract createInvitation(actor: Principal, invitation: { digest: Buffer; hint: string; roles: Role[] }): Promise<InvitationView>;
   abstract listInvitations(tenantId: string, page: PageRequest): Promise<{ items: InvitationView[]; total: number }>;
   abstract cancelInvitation(actor: Principal, id: string): Promise<void>;

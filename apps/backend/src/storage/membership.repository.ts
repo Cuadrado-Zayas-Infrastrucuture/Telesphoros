@@ -165,6 +165,13 @@ export class InMemoryMembershipRepository extends MembershipRepository implement
     return { items: all.slice(offset, offset + limit).map((r) => ({ sub: r.sub, roles: [...r.roles], changedAt: this.changedAt.get(this.key(r.tenantId, r.sub)) ?? new Date(0) })), total: all.length };
   }
 
+  /** Mirrors member_sign_out(): the caller's own active row only, and idempotent for a person with no active membership. */
+  async signOut(actor: Principal): Promise<void> {
+    const existing = this.rows.get(this.key(actor.tenantId, actor.sub));
+    if (!existing || existing.status !== 'active') return;
+    this.store({ ...existing, tokensValidAfter: Math.max(existing.tokensValidAfter, nowSeconds()), version: existing.version + 1 });
+  }
+
   async changeRoles(actor: Principal, sub: string, roles: Role[]): Promise<void> {
     this.context(actor);
     if (sub === actor.sub) throw new MemberAdminRuleError('member-self');
