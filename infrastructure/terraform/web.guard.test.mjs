@@ -80,6 +80,7 @@ test('headers forbid inline scripts, framing and referrer leaks; HSTS preload st
   has(headers, 'referrer_policy = "no-referrer"');
   has(headers, 'preload = false');
   has(headers, 'include_subdomains = false');
+  assert.match(headers, /^\s*access_control_max_age_sec = 31536000$/m, 'HSTS must last one year (31536000 seconds)');
   has(headers, 'override = true');
   has(headers, 'camera=(), microphone=(), geolocation=()');
   const connect = block(source, 'locals');
