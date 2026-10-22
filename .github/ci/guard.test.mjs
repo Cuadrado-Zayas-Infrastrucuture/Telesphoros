@@ -12,7 +12,7 @@ import { join, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { recoveryMetricControl, applicationMetricControl } from './fixtures/recovery.mjs';
-import { serviceLayoutProblems, internalJobs } from './service-layout.mjs';
+import { serviceLayoutProblems, internalJobs, withoutScopeGate } from './service-layout.mjs';
 import { verifyAllProfiles, verifyRecoveryMetrics } from './verify-recovery-metrics.mjs';
 import { verifyApplicationRecovery, verifyApplicationProfiles } from './verify-application-recovery.mjs';
 
@@ -89,6 +89,8 @@ test('application recovery requires three artifacts at the expected checkout', (
 const ADVISORY = new Set(['terraform-lint']);
 /** Jobs that run only after a merge to main (so a pull request cannot wait on them), yet must fail visibly: not required, never continue-on-error. */
 const AFTER_MERGE = new Set(['release-image']);
+/** Helper jobs that decide what the others do. Not required and not advisory: a failure here makes every gate run (scope.test.mjs). */
+const SUPPORT = new Set(['changes']);
 
 /** { key, name } for each job under `jobs:`; a job with `continue-on-error: true` cannot be a gate. */
 function jobsOf(text) {
@@ -145,7 +147,7 @@ test('each job is named like its key, so the check name is predictable', () => {
 });
 
 test('the ruleset requires exactly the non-advisory jobs of the workflow', () => {
-  const gates = jobsOf(workflow).filter((j) => !ADVISORY.has(j.key) && !AFTER_MERGE.has(j.key) && !internalJobs.includes(j.key)).map((j) => j.name).sort();
+  const gates = jobsOf(workflow).filter((j) => !ADVISORY.has(j.key) && !AFTER_MERGE.has(j.key) && !SUPPORT.has(j.key) && !internalJobs.includes(j.key)).map((j) => j.name).sort();
   const required = ruleset.rules
     .find((r) => r.type === 'required_status_checks')
     .parameters.required_status_checks.map((c) => c.context)
@@ -169,7 +171,7 @@ export function launcherCorsJobProblems(text) {
   const command = 'pnpm test:launcher-cors';
   const job = text.split(/^jobs:\s*$/m)[1]?.split(/^ {2}(?=[a-z][a-z0-9-]*:\s*$)/m).find(b => b.startsWith('browser:')) ?? '';
   const problems = [];
-  if (/^ {4}if:/m.test(job)) problems.push('the required browser job must not be conditional');
+  if (/^ {4}if:/m.test(withoutScopeGate(job))) problems.push('the required browser job must not be conditional');
   if (runSteps(text, 'browser').filter(s => s === command).length !== 1) problems.push('one native launcher test command is required');
   const step = job.split(/^ {6}(?=- )/m).find(b => b.startsWith('- run: ' + command)) ?? '';
   if (step.trim() !== '- run: ' + command) problems.push('the launcher step must run unconditionally and propagate failure');
@@ -228,7 +230,7 @@ export function terraformJobProblems(text) {
   const problems = [];
   if (JSON.stringify(steps) !== JSON.stringify(terraformCommands)) problems.push('both roots require every unfiltered command in order');
   if (blocks.length !== terraformCommands.length + 4) problems.push('unexpected or missing Terraform job step');
-  if (/^ {4}(?:if|continue-on-error|defaults|env):/m.test(job) || /^defaults:/m.test(text.split(/^jobs:\s*$/m)[0])) problems.push('Terraform gate must be unconditional and run from the repository root');
+  if (/^ {4}(?:if|continue-on-error|defaults|env):/m.test(withoutScopeGate(job)) || /^defaults:/m.test(text.split(/^jobs:\s*$/m)[0])) problems.push('Terraform gate must be unconditional and run from the repository root');
   if (!/^ {4}timeout-minutes: 15$/m.test(job)) problems.push('retain the existing Terraform timeout');
   if (!/^ {2}NODE_VERSION: "22\.22\.0"$/m.test(text)) problems.push('retain the exact Node runtime');
   for (const command of terraformCommands) {

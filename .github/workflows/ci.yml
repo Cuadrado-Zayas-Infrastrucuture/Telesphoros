@@ -29,10 +29,39 @@ env:
   NODE_VERSION: "22.22.0"
 
 jobs:
+  # Decides what this run must do (.github/ci/scope.mjs; docs/ops/ci-cd.md "Skipping work: what is proved"). It is not a required check: when it fails,
+  # every job below runs anyway, so a broken decision costs minutes, never coverage. secret-scan never waits for it.
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      heavy: ${{ steps.scope.outputs.heavy }}
+      archive: ${{ steps.scope.outputs.archive }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Decide the scope of this run
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ENABLED: ${{ vars.IMAGE_RELEASE_ROLE_ARN != '' }}
+        run: node .github/ci/scope.mjs
+
   # Fast gate: types, lint, the unit/API suites on the in-memory store, the production builds,
   # the knowledge-directory check, and the infrastructure tripwire.
   verify:
     name: verify
+    if: ${{ !cancelled() && (needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure') }}
+    needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -65,6 +94,8 @@ jobs:
   # Every job shares the run-attempt start + 30 minutes; no new job grants a fresh budget.
   service-memory:
     name: service-memory
+    if: ${{ !cancelled() && (needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure') }}
+    needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -493,6 +524,8 @@ jobs:
 
   service-postgres:
     name: service-postgres
+    if: ${{ !cancelled() && (needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure') }}
+    needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -603,6 +636,8 @@ jobs:
 
   service-postgres-s3:
     name: service-postgres-s3
+    if: ${{ !cancelled() && (needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure') }}
+    needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -719,7 +754,7 @@ jobs:
   # Keep the existing required check name. Skipped/cancelled/failed producers never satisfy it.
   database-and-storage:
     name: database-and-storage
-    if: always()
+    if: always() && !(needs.service-memory.result == 'skipped' && needs.service-postgres.result == 'skipped' && needs.service-postgres-s3.result == 'skipped')
     needs: [service-memory, service-postgres, service-postgres-s3]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -872,6 +907,8 @@ jobs:
   # frontend, driven by a browser at 375 px and 1280 px.
   browser:
     name: browser
+    if: ${{ !cancelled() && (needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure') }}
+    needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -930,6 +967,8 @@ jobs:
   # Both roots are mandatory; mocked plans and policy probes use no cloud credentials or apply.
   terraform:
     name: terraform
+    if: ${{ !cancelled() && (needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure') }}
+    needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -969,6 +1008,8 @@ jobs:
   # Promote it to a required check once it has been clean on main (docs/ops/ci-cd.md).
   terraform-lint:
     name: terraform-lint
+    if: ${{ !cancelled() && (needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure') }}
+    needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     continue-on-error: true
@@ -1016,6 +1057,8 @@ jobs:
 
   image:
     name: image
+    if: ${{ !cancelled() && (needs.changes.outputs.archive == 'true' || needs.changes.result == 'failure') }}
+    needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     # INF-03 (specs/002-signed-image-release): the one digest the release-image job may push and sign.

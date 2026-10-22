@@ -7,6 +7,7 @@ Synthetic data only: no CI job has cloud credentials, and nothing is deployed fr
 
 Runs on every pull request and on every push to `main`. A newer push to the same pull request cancels the older run;
 runs on `main` are never cancelled. The workflow has read-only repository permissions and no job uses a secret.
+A first job, `changes`, decides how much of the rest a run must do (next section); it is not a required check.
 
 | Job | Required | What a green result proves |
 | --- | --- | --- |
@@ -21,6 +22,46 @@ runs on `main` are never cancelled. The workflow has read-only repository permis
 | `terraform-lint` | no (advisory) | tflint with the AWS ruleset. Promote it once it has run clean on `main` (below) |
 
 A green run is evidence about the code at that commit. It is not evidence about AWS: Terraform has never been applied.
+
+### Skipping work: what is proved
+
+GitHub Actions minutes are a budget, so a run does not repeat work whose result is already proved. The `changes` job runs
+`.github/ci/scope.mjs` and writes two outputs; every other job reads only those:
+
+- `heavy`: `verify`, the service path (`service-memory`, `service-postgres`, `service-postgres-s3`, `database-and-storage`), `browser`,
+  `terraform` and `terraform-lint` run.
+- `archive`: the `image` job runs (it also feeds `release-image`, so it is kept whenever the release variables are set).
+
+`secret-scan` never waits for `changes` and is never skipped: it scans every commit, and a secret can sit in a skipped file.
+Every doubt resolves to "run everything". If `changes` itself fails, the other jobs run anyway (`needs.changes.result == 'failure'`
+is an arm of their condition, and `!cancelled()` stops GitHub adding an implicit `success()`), so a broken decision costs minutes,
+never coverage. The decision logic lives in `scope.mjs`, not in the jobs' `if:` lines, so that no required job's condition reads the event or the
+branch: a merge-queue batch (a future option, see "Draft pull requests") has no pull request, and a condition that assumed one would
+skip or hang a required check.
+
+**Tree reuse after a merge (push to `main`).** The ruleset requires a pull request to be up to date with `main`, so the merged head
+`P` contains main's previous tip `B`, and the merge commit `M` keeps exactly `P`'s tree. The pull-request run tested the merge of
+`P` with an older `main` that is an ancestor of `B`, so it tested that same tree. The push run skips the heavy jobs only when
+**all** of these hold, each checked by `scope.mjs` and none assumed:
+
+1. the event is a push to `refs/heads/main`;
+2. `M` is a merge commit with exactly two parents `B` and `P` (a squash or rebase merge records no head, so it runs everything);
+3. `tree(M)` equals `tree(P)`, and `P` contains `B` (`git merge-base --is-ancestor B P`);
+4. a completed run of `ci.yml` in this repository (not a fork) has event `pull_request`, `head_sha` `P` and conclusion success;
+5. that run's latest attempt shows each of the six required checks as a job that completed with conclusion **success**. A skipped job
+   does not count: a draft or documentation-only run reports every check as skipped, which proves nothing about code.
+
+When the proof holds, the push run still runs `secret-scan`, and `image` only while the release variables are set. The step
+summary of `changes` names the pull-request run that supplied the proof. When it does not hold (a stale branch merged by an
+admin, a squash merge, an API error, a missing run) the push run is the full run it always was. The lookup uses the job token with
+`actions: read`, the permission the four service jobs already hold; no top-level permission changes.
+
+What this does not do: it does not make `main`'s checks "green by assumption". The required checks bind to pull requests; the push
+run exists to catch drift, and it still runs in full whenever the proof is missing.
+
+Expected effect: the post-merge push run (about 40% of runs, measured by the report that prompted this) drops from ten jobs to
+`changes`, `secret-scan` and, while armed, `image`. That is an estimate from job counts and the durations recorded below, not a
+measurement; real minutes can only be read from the first hosted runs after the change.
 
 ### Documentation merge and post-merge CI (#162, 2026-10-17)
 
