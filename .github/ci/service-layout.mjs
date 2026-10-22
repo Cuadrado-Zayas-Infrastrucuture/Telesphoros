@@ -10,11 +10,12 @@ export const guardsCondition = "${{ !cancelled() && (needs.changes.outputs.guard
 export const terraformCondition = "${{ !cancelled() && (needs.changes.outputs.terraform == 'true' || needs.changes.result == 'failure') }}";
 /** The condition of a step inside a job that always runs (verify): the heavy half of its work. No status function, so GitHub keeps its implicit success(). */
 export const heavyStepCondition = "${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}";
+export const postgresCondition = "${{ !cancelled() && (needs.changes.outputs.postgres == 'true' || needs.changes.result == 'failure') }}";
 export const archiveCondition = "${{ !cancelled() && (needs.changes.outputs.archive == 'true' || needs.changes.result == 'failure') }}";
 // The joining gate is skipped only when ALL three producers were skipped; one skipped beside a producer that ran still reaches its dependency check.
 export const gateCondition = "always() && !(needs.service-memory.result == 'skipped' && needs.service-postgres.result == 'skipped' && needs.service-postgres-s3.result == 'skipped')";
 /** A job with its scope condition and `needs: changes` removed, so the rest of its shape can be checked as before. */
-export const withoutScopeGate = job => [heavyCondition, guardsCondition, terraformCondition, archiveCondition].reduce((text, c) => text.replace(`    if: ${c}\n`, ''), job).replace('    needs: changes\n', '');
+export const withoutScopeGate = job => [heavyCondition, guardsCondition, terraformCondition, postgresCondition, archiveCondition].reduce((text, c) => text.replace(`    if: ${c}\n`, ''), job).replace('    needs: changes\n', '');
 export function jobOf(text, key) {
   return text.split(/^jobs:\s*$/m)[1]?.split(/^  (?=[a-z][a-z0-9-]*:\s*$)/m).find(b => b.startsWith(key + ':')) ?? '';
 }
@@ -32,7 +33,7 @@ export function serviceLayoutProblems(text) {
   require(!text.includes('fromJSON(steps.budget.outputs.minutes)'), 'no stale relative action timeout');
   const gate = resolvedJob(text, 'database-and-storage');
   require((gate.match(/^    if:.*$/gm) ?? []).join('\n') === `    if: ${gateCondition}`, 'joining gate runs unless every producer was skipped');
-  require(/^    needs: \[service-memory, service-postgres, service-postgres-s3\]$/m.test(gate), 'joining gate needs all three producers');
+  require(/^    needs: \[service-memory, service-postgres, service-postgres-s3, changes\]$/m.test(gate), 'joining gate needs all three producers and the scope that says which are expected');
   for (const key of [...internalJobs, 'database-and-storage']) {
     const job = resolvedJob(text, key);
     require(/^    timeout-minutes: 30$/m.test(job), key + ' keeps the timeout');
@@ -70,7 +71,7 @@ export function serviceLayoutProblems(text) {
     require(job.lastIndexOf('service-budget.mjs check') > job.lastIndexOf('uses:'), key + ' checks the clock after transfers');
     require(job.indexOf('service-budget.mjs init') < job.indexOf('pnpm install --frozen-lockfile'), key + ' starts clock before install');
     if (internalJobs.includes(key)) {
-      require((job.match(/^    if:.*$/gm) ?? []).join('\n') === `    if: ${heavyCondition}` && (job.match(/^    needs:.*$/gm) ?? []).join('\n') === '    needs: changes', key + ' independent producer skipped only by the scope condition');
+      require((job.match(/^    if:.*$/gm) ?? []).join('\n') === `    if: ${key === 'service-postgres' ? postgresCondition : heavyCondition}` && (job.match(/^    needs:.*$/gm) ?? []).join('\n') === '    needs: changes', key + ' independent producer skipped only by the scope condition');
       const profile = key.slice('service-'.length);
       const command = { memory: 'pnpm --filter @telesphoros/backend test', postgres: 'TEST_STORAGE=postgres pnpm --filter @telesphoros/backend test',
         'postgres-s3': 'TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 pnpm --filter @telesphoros/backend test' }[profile];

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { allProfiles, profilesFromEnv } from './service-profiles.mjs';
 
 const refuse = () => { throw new Error('Application recovery measurement validation failed.'); };
 const keys = (value, names) => {
@@ -54,14 +55,14 @@ export function verifyApplicationRecovery(value) {
   if (value.measurements[0].recovery.volumes.writeAttempted.bytes <= 0 || value.measurements[1].recovery.volumes.writeAttempted.bytes !== 0) refuse();
   return true;
 }
-export function verifyApplicationProfiles(directory, head) {
-  for (const profile of ['memory', 'postgres', 'postgres-s3']) {
+export function verifyApplicationProfiles(directory, head, profiles = allProfiles) {
+  for (const profile of profiles) {
     let value;
     try { value = JSON.parse(readFileSync(resolve(directory, 'application-recovery-' + profile + '.json'), 'utf8')); } catch { refuse(); }
     verifyApplicationRecovery(value); if (head && value.runtime.gitHead !== head) refuse();
   }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  try { verifyApplicationProfiles('apps/backend/test-results', execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()); process.stdout.write('PASS all three application recovery measurement profiles.\n'); }
+  try { verifyApplicationProfiles('apps/backend/test-results', execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), profilesFromEnv()); process.stdout.write('PASS the expected application recovery measurement profiles.\n'); }
   catch { process.stderr.write('FAIL application recovery measurement profiles.\n'); process.exitCode = 1; }
 }

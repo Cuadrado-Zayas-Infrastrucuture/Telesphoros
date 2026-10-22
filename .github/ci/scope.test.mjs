@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { allRequiredPassed, changedFiles, classify, decide, docsPath, githubApi, main, requiredChecks } from './scope.mjs';
-import { archiveCondition, gateCondition, guardsCondition, heavyCondition, heavyStepCondition, jobOf, terraformCondition } from './service-layout.mjs';
+import { archiveCondition, gateCondition, guardsCondition, heavyCondition, heavyStepCondition, jobOf, postgresCondition, terraformCondition } from './service-layout.mjs';
 
 const read = p => readFileSync(new URL(p, import.meta.url), 'utf8');
 const workflow = read('../workflows/ci.yml');
@@ -78,7 +78,7 @@ test('reuse: an up-to-date pull request merged with a merge commit, whose run pa
 test('reuse is refused: every missing proof runs everything (controls)', async t => {
   const h = mergedUpToDate(t);
   const run = { git: h.git, api: apiFor({ runs: green(h.head) }) };
-  const refused = async (env, deps, pattern) => { const r = await decide(env, deps); for (const key of ['heavy', 'guards', 'terraform', 'archive']) assert.equal(r[key], true, key + ' must run: everything'); assert.match(r.reason, pattern); };
+  const refused = async (env, deps, pattern) => { const r = await decide(env, deps); for (const key of ['heavy', 'guards', 'terraform', 'postgres', 'archive']) assert.equal(r[key], true, key + ' must run: everything'); assert.match(r.reason, pattern); };
   await refused({ ...pushEnv(h.merge), GITHUB_EVENT_NAME: 'pull_request' }, run, /not a push to main/);
   await refused({ ...pushEnv(h.merge), GITHUB_EVENT_NAME: 'merge_group' }, run, /not a push to main/);
   await refused({ ...pushEnv(h.merge), GITHUB_REF: 'refs/heads/feature' }, run, /not a push to main/);
@@ -158,14 +158,14 @@ test('main writes both outputs and a summary that names no value beyond ids', as
   writeFileSync(GITHUB_OUTPUT, ''); writeFileSync(GITHUB_STEP_SUMMARY, '');
   const result = await main({ ...pushEnv('a'.repeat(40)), GITHUB_OUTPUT, GITHUB_STEP_SUMMARY, GH_TOKEN: 'synthetic-token' }, { git: () => { throw new Error('x'); }, api: async () => { throw new Error('x'); } });
   assert.equal(result.heavy, true);
-  assert.equal(readFileSync(GITHUB_OUTPUT, 'utf8'), 'heavy=true\nguards=true\nterraform=true\narchive=true\n');
+  assert.equal(readFileSync(GITHUB_OUTPUT, 'utf8'), 'heavy=true\nguards=true\nterraform=true\npostgres=true\narchive=true\n');
   await assert.rejects(main({ ...pushEnv('a'.repeat(40)) }, { git: () => { throw new Error('x'); }, api: async () => { throw new Error('x'); } }), /GITHUB_OUTPUT/, 'no output file must fail the step, so `changes` fails and every job runs');
   assert.doesNotMatch(readFileSync(GITHUB_STEP_SUMMARY, 'utf8'), /synthetic-token/);
 });
 
 // ---- ci.yml: who may be skipped, and by what ----
 
-const CONDITION = { verify: guardsCondition, 'service-memory': heavyCondition, 'service-postgres': heavyCondition, 'service-postgres-s3': heavyCondition,
+const CONDITION = { verify: guardsCondition, 'service-memory': heavyCondition, 'service-postgres': postgresCondition, 'service-postgres-s3': heavyCondition,
   browser: heavyCondition, terraform: terraformCondition, 'terraform-lint': terraformCondition };
 /** The steps of verify that only a code change needs. The install and the two guards that read documentation (test:infra, test:ci-config) are not here and carry no condition: test:infra loads the backend's config loader, which needs zod. */
 const HEAVY_STEPS = ['Typecheck', 'Lint', 'Workspace tests', 'Production builds', 'Published FHIR Genomics IG validation (synthetic only)',
@@ -220,9 +220,11 @@ export function scopeProblems(text) {
   need(/^        run: node \.github\/ci\/scope\.mjs$/m.test(changes) && /GH_TOKEN: \$\{\{ github\.token \}\}/.test(changes), 'changes runs scope.mjs with the job token');
   need(changes.includes('          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}\n') && changes.includes('          BEFORE_SHA: ${{ github.event.before }}\n'), 'changes passes the pull-request head and the previous main tip');
   const outputs = changes.match(/^    outputs:\n((?: {6}\S.*\n)+)/m)?.[1].trimEnd().split('\n') ?? [];
-  need(JSON.stringify(outputs) === JSON.stringify(['heavy', 'guards', 'terraform', 'archive'].map(k => `      ${k}: \${{ steps.scope.outputs.${k} }}`)), 'changes exposes exactly the four outputs');
+  need(JSON.stringify(outputs) === JSON.stringify(['heavy', 'guards', 'terraform', 'postgres', 'archive'].map(k => `      ${k}: \${{ steps.scope.outputs.${k} }}`)), 'changes exposes exactly the five outputs');
   const everyUse = [...text.matchAll(/needs\.changes\.[^\s)]*/g)].map(m => m[0]);
-  need(everyUse.every(u => ['heavy', 'guards', 'terraform', 'archive'].map(k => `needs.changes.outputs.${k}`).concat('needs.changes.result').includes(u)), 'jobs read only the four outputs and the result');
+  need(everyUse.every(u => ['heavy', 'guards', 'terraform', 'postgres', 'archive'].map(k => `needs.changes.outputs.${k}`).concat('needs.changes.result').includes(u)), 'jobs read only the five outputs and the result');
+  need(on.includes("  schedule:\n    - cron: '41 7 * * *'\n  workflow_dispatch:\n"), 'the nightly and the manual run exist');
+  need(/^    needs: \[service-memory, service-postgres, service-postgres-s3, changes\]$/m.test(jobOf(text, 'database-and-storage')), 'the joining gate reads the scope that narrows its expected profiles');
   return problems;
 }
 
@@ -258,6 +260,9 @@ test('the scope structure check turns red for each way a gate could be skipped w
     'the install is skipped on a documentation-only change, which test:infra cannot survive': swap(verify, '      - name: Install locked dependencies\n', `      - name: Install locked dependencies\n        if: \${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}\n`),
     'typecheck is no longer skipped when only documentation changed': swap(verify, `      - name: Typecheck\n        if: \${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}\n`, '      - name: Typecheck\n'),
     'verify is skipped by the heavy output (a documentation-only change would then skip the docs guards)': swap(verify, "needs.changes.outputs.guards == 'true'", "needs.changes.outputs.heavy == 'true'"),
+    'the standalone PostgreSQL profile follows the heavy output (it would then run on every pull request)': swap(jobOf(workflow, 'service-postgres'), "needs.changes.outputs.postgres == 'true'", "needs.changes.outputs.heavy == 'true'"),
+    'the nightly is removed': workflow.replace("  schedule:\n    - cron: '41 7 * * *'\n  workflow_dispatch:\n", ''),
+    'the joining gate stops reading the scope': workflow.replace('needs: [service-memory, service-postgres, service-postgres-s3, changes]', 'needs: [service-memory, service-postgres, service-postgres-s3]'),
     'terraform follows the heavy output': swap(terraform, "needs.changes.outputs.terraform == 'true'", "needs.changes.outputs.heavy == 'true'"),
   };
   for (const [label, text] of Object.entries(mutations)) {
@@ -393,4 +398,44 @@ test('the only code that reads documentation is code the documentation-only run 
     'infrastructure/terraform/staging.guard.test.mjs', // docs/ops/staging-plan-review.md (pnpm test:infra)
     'scripts/status-index.mjs', // docs/status/ fragments (pnpm test:ci-config, status-fragments.test.mjs)
   ]);
+});
+
+test('pull requests and pushes leave the standalone PostgreSQL profile to the nightly; doubt, the nightly and a manual run keep it', async t => {
+  const code = pullRequest(t, { change: r => r.commit('apps/backend/src/a.ts', 'a', 'code') });
+  const r = await decide(prEnv(code), { git: code.git, ...noApi });
+  assert.deepEqual([r.heavy, r.postgres], [true, false], r.reason);
+  const docs = pullRequest(t, { change: r => r.commit('docs/a.md', 'a', 'doc') });
+  assert.equal((await decide(prEnv(docs), { git: docs.git, ...noApi })).postgres, false);
+  assert.equal((await decide({ ...prEnv(code), PR_HEAD_SHA: undefined }, { git: code.git, ...noApi })).postgres, true, 'a run that cannot be narrowed keeps all three profiles');
+  assert.equal((await decide({ ...prEnv(code), GITHUB_EVENT_NAME: 'workflow_dispatch' }, { git: code.git, ...noApi })).postgres, true, 'a manual run is the complete run');
+});
+
+const nightlyEnv = sha => ({ GITHUB_EVENT_NAME: 'schedule', GITHUB_REF: 'refs/heads/main', GITHUB_SHA: sha, GITHUB_REPOSITORY: repository, RELEASE_ENABLED: 'true' });
+const nightlyRun = sha => ({ workflow_runs: [{ id: 900, head_sha: sha, event: 'schedule', status: 'completed', conclusion: 'success', head_repository: { full_name: repository }, repository: { full_name: repository } }] });
+const nightlyJobs = (overrides = {}) => ({ jobs: [...requiredChecks, 'service-postgres', 'service-memory'].map(name => ({ name, status: 'completed', conclusion: overrides[name] ?? 'success' })) });
+
+test('the nightly is the complete run, and is skipped only when an earlier nightly passed everything at the same commit', async () => {
+  const sha = 'c'.repeat(40);
+  const git = () => { throw new Error('the nightly reads no git history'); };
+  const full = await decide(nightlyEnv(sha), { git, api: async () => ({ workflow_runs: [] }) });
+  assert.deepEqual(scope(full).concat(full.postgres), [true, true, true, true, true], 'no earlier nightly: everything, standalone PostgreSQL included');
+  const seen = [];
+  const skipped = await decide(nightlyEnv(sha), { git, api: apiFor({ runs: nightlyRun(sha), jobs: nightlyJobs(), seen }) });
+  assert.deepEqual([skipped.heavy, skipped.guards, skipped.terraform, skipped.postgres, skipped.archive], [false, false, false, false, false], skipped.reason);
+  assert.ok(seen[0].includes(`head_sha=${sha}`) && seen[0].includes('event=schedule'));
+  for (const [label, run, jobs] of [
+    ['another commit', nightlyRun('d'.repeat(40)), nightlyJobs()],
+    ['the PostgreSQL profile skipped', nightlyRun(sha), nightlyJobs({ 'service-postgres': 'skipped' })],
+    ['the PostgreSQL profile missing', nightlyRun(sha), { jobs: nightlyJobs().jobs.filter(j => j.name !== 'service-postgres') }],
+    ['a required check failed', nightlyRun(sha), nightlyJobs({ browser: 'failure' })],
+    ['a required check skipped (an earlier no-op nightly)', nightlyRun(sha), nightlyJobs({ verify: 'skipped' })],
+  ]) {
+    const r = await decide(nightlyEnv(sha), { git, api: apiFor({ runs: run, jobs }) });
+    assert.deepEqual([r.heavy, r.postgres], [true, true], label);
+  }
+  const wrongRef = await decide({ ...nightlyEnv(sha), GITHUB_REF: 'refs/heads/feature' }, { git, api: apiFor({ runs: nightlyRun(sha), jobs: nightlyJobs() }) });
+  assert.equal(wrongRef.heavy, true);
+  const failing = await decide(nightlyEnv(sha), { git, api: async () => { throw new Error('API answered 500'); } });
+  assert.deepEqual([failing.heavy, failing.postgres], [true, true], 'an API failure runs the whole nightly');
+  assert.equal((await decide({ ...nightlyEnv(sha), GITHUB_EVENT_NAME: 'workflow_dispatch' }, { git, api: apiFor({ runs: nightlyRun(sha), jobs: nightlyJobs() }) })).heavy, true, 'a manual run is never skipped');
 });

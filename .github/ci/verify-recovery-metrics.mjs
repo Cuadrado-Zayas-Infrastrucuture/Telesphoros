@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { allProfiles, profilesFromEnv } from './service-profiles.mjs';
 
 const refuse = () => { throw new Error('Independent recovery measurement validation failed.'); };
 const keys = (value, expected) => {
@@ -44,8 +45,8 @@ export function verifyRecoveryMetrics(value) {
   return true;
 }
 
-export function verifyAllProfiles(directory, expectedHead) {
-  for (const profile of ['memory', 'postgres', 'postgres-s3']) {
+export function verifyAllProfiles(directory, expectedHead, profiles = allProfiles) {
+  for (const profile of profiles) {
     let value;
     try { value = JSON.parse(readFileSync(resolve(directory, 'independent-recovery-' + profile + '.json'), 'utf8')); }
     catch { refuse(); }
@@ -54,6 +55,6 @@ export function verifyAllProfiles(directory, expectedHead) {
   }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  try { verifyAllProfiles('apps/backend/test-results', execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()); process.stdout.write('PASS all three independent recovery measurement profiles.\n'); }
+  try { verifyAllProfiles('apps/backend/test-results', execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), profilesFromEnv()); process.stdout.write('PASS the expected independent recovery measurement profiles.\n'); }
   catch { process.stderr.write('FAIL independent recovery measurement profiles.\n'); process.exitCode = 1; }
 }
