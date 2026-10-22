@@ -172,6 +172,23 @@ describe('AuthProvider', () => {
     window.sessionStorage.clear();
   });
 
+  it.each([['answers', undefined], ['fails', new TypeError('network down')]])('sign out asks the server to end the sessions first, and leaves even when that call %s', async (_, failure) => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.endsWith('/me/sign-out')) {
+        if (failure) throw failure;
+        return new Response(null, { status: 204 });
+      }
+      return url.endsWith('/recovery-scope') ? new Response(JSON.stringify({ recoveryScope: RECOVERY_SCOPE })) : new Response(JSON.stringify({ roles: ['clinician'] }));
+    });
+    const { result, client } = setup({ fetchImpl: fetchImpl as never });
+    await act(async () => void (await result.current.completeSignIn()));
+    await act(async () => void (await result.current.signOut()));
+    expect(fetchImpl).toHaveBeenLastCalledWith(expect.stringMatching(/\/me\/sign-out$/), expect.objectContaining({ method: 'POST' }));
+    expect(client.signOut).toHaveBeenCalledTimes(1);
+    expect(result.current.status).toBe('signedOut');
+    expect(result.current.roles).toEqual([]);
+  });
+
   it('sign out forgets everything locally and ends the provider session', async () => {
     const { result, client } = setup();
     await act(async () => void (await result.current.completeSignIn()));

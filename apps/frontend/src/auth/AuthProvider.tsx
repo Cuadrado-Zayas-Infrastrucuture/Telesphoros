@@ -150,11 +150,14 @@ export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthPr
   }, [clear, client, send]);
 
   const signOut = useCallback(async () => {
+    // The server refuses this person's older tokens before the browser leaves. If that call fails, this browser still signs out, and the
+    // access token lapses within its 15-minute lifetime. `send`, not `apiFetch`: a 401 there would start a new sign-in instead of ending this one.
+    await send('/me/sign-out', { method: 'POST' }).catch(() => undefined);
     clear();
     clearRecovery(); // an interrupted upload is not carried into another person's session on this tab
     setStatus('signedOut');
     await client.signOut();
-  }, [clear, client]);
+  }, [clear, client, send]);
 
   const value = useMemo<AuthContextValue>(
     () => ({ status, roles, recoverySession, signIn, completeSignIn, signOut, apiFetch }),
