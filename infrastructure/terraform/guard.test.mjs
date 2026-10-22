@@ -39,9 +39,9 @@ test('multi-factor is required, authenticator app only (no SMS)', () => {
   lacks(cognito, /sms_configuration|sms_authentication_message|"SMS_MFA"/i, 'SMS multi-factor must not be configured');
 });
 
-test('strong passwords and email-only recovery', () => {
-  has(cognito, 'minimum_length = 14');
-  for (const rule of ['require_lowercase', 'require_uppercase', 'require_numbers', 'require_symbols']) has(cognito, `${rule} = true`);
+test('length-based passwords (no composition rules) and email-only recovery', () => {
+  has(cognito, 'minimum_length = 15');
+  for (const rule of ['require_lowercase', 'require_uppercase', 'require_numbers', 'require_symbols']) has(cognito, `${rule} = false`);
   has(cognito, 'name = "verified_email"');
   lacks(cognito, /name\s*=\s*"verified_phone_number"/, 'recovery by SMS must not be enabled');
 });

@@ -75,9 +75,12 @@ A browser test asserts that no token appears in `localStorage`, `sessionStorage`
 | After 15 minutes | | The app notices (or the API answers 401) and starts a new sign-in, which Cognito completes silently while its own session lasts |
 | Cognito's session | set by Cognito | Verify the actual value at first apply; it decides how often people re-enter credentials |
 
-**Sign-out** clears the app's memory *and* ends Cognito's session. A token already issued stays a valid *proof of identity*
-until it expires (at most 15 minutes), but it no longer decides anything: removal, a role change and a revocation take effect
-on the person's very next request (see below).
+**Sign-out** first calls `POST /api/v1/me/sign-out`, which cuts off every token this person holds in their own organization
+(migration 0033, `member_sign_out()`: it changes only the caller's own active membership row). Then it clears the app's memory
+and ends Cognito's session. A cut-off token is refused on its next request. A failed call does not block the sign-out: this
+browser still leaves, and the access token lapses within its 15-minute lifetime. The cut-off is for all devices of that person
+in that organization, not only this one. A sign-in after the cut-off, in the same second, is refused: the cut-off is whole seconds.
+Removal and a role change also take effect on the person's very next request (see below).
 
 ## Authority and revocation
 
@@ -179,6 +182,7 @@ tenant group, then `membership grant` in the new one; they are refused between t
 
 ## Passwords and email
 
+- Passwords must be at least 15 characters. There are no composition rules (no required capital, digit or symbol). There is no compromised-password blocklist: Cognito's check needs its paid advanced-security tier, which is not configured here. Decided 2026-10-21.
 - A forgotten password is recovered **by email only**, from Cognito's own "forgot password" page. The code and its
   lifetime are Cognito's; it is not configurable here. Verify the behaviour at first apply.
 - When a password is **reset**, a small Lambda (`infrastructure/lambda/password-change-notifier`) emails the account

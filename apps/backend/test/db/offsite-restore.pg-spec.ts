@@ -12,6 +12,8 @@ import { type Gateway, type Op, startGateway } from '../helpers/provider-gateway
 
 // Counts shared state (throwaway databases, temp dirs): must not overlap another restoring suite.
 serializeRestoreSuites();
+// Each test dumps a database, uploads it over the S3 protocol and restores it: the 5 s default fails on a loaded runner.
+jest.setTimeout(30_000);
 
 // This file counts `restore-*` folders in os.tmpdir() before and after a restore, and the restore deletes stale ones there. Another
 // process using the same temp dir (a neighbouring loop's restore specs, test/cleanup.spec.ts) would change the count or lose its own
