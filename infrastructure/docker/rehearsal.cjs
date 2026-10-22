@@ -7,6 +7,7 @@ const {mkdtempSync,writeFileSync,readFileSync,rmSync}=require('node:fs');
 const {tmpdir}=require('node:os');
 const {join,resolve}=require('node:path');
 const {randomUUID,randomBytes}=require('node:crypto');
+const https=require('node:https');
 const tag=process.argv[2] || 'telesphoros-fd4b:rehearsal';
 const root=resolve(__dirname,'../..');
 const scratch=mkdtempSync(join(tmpdir(),'telesphoros-fd4b-'));
@@ -20,9 +21,13 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function until(probe,label,seconds=60) {for(let i=0;i<seconds;i++){try{if(await probe())return;}catch{}await sleep(1000);}throw new Error(`timeout: ${label}`);}
 const password=randomBytes(32).toString('hex');
 function start(name,args){docker('run','-d','--name',name,...args);containers.push(name);}
-function inside(mode){return docker('run','--rm','--platform','linux/amd64','--read-only','--user','10001:10001','--network',network,'--env-file',join(scratch,'rehearsal.env'),'-v',`${join(scratch,'ca.crt')}:/test/ca.crt:ro`,'-v',`${join(root,'infrastructure/docker/rehearsal-driver.cjs')}:/test/driver.cjs:ro`,tag,'/test/driver.cjs',mode);}
-function api(name){start(name,['--platform','linux/amd64','--read-only','--user','10001:10001','--network',network,'--env-file',join(scratch,'rehearsal.env'),'-v',`${join(scratch,'ca.crt')}:/test/ca.crt:ro`,'-v',`${join(root,'infrastructure/docker/rehearsal-driver.cjs')}:/test/driver.cjs:ro`,'-p','127.0.0.1::3000',tag,'/test/driver.cjs','api']);return Number(docker('port',name,'3000/tcp').trim().split(':').at(-1));}
-async function response(port,path,status){const r=await fetch(`http://127.0.0.1:${port}/api/v1/${path}`,{signal:AbortSignal.timeout(2500)});assert.equal(r.status,status);return r.json();}
+// Production refuses to start without the API's own certificate (env.ts), so every production-mode container gets one. PEM cannot go in
+// --env-file (one line per entry), so it is passed as -e arguments.
+function tlsEnv(){return ['-e',`TLS_CERT_PEM=${readFileSync(join(scratch,'api.crt'),'utf8')}`,'-e',`TLS_KEY_PEM=${readFileSync(join(scratch,'api.key'),'utf8')}`];}
+function inside(mode){return docker('run','--rm','--platform','linux/amd64','--read-only','--user','10001:10001','--network',network,'--env-file',join(scratch,'rehearsal.env'),...tlsEnv(),'-v',`${join(scratch,'ca.crt')}:/test/ca.crt:ro`,'-v',`${join(root,'infrastructure/docker/rehearsal-driver.cjs')}:/test/driver.cjs:ro`,tag,'/test/driver.cjs',mode);}
+function api(name){start(name,['--platform','linux/amd64','--read-only','--user','10001:10001','--network',network,'--env-file',join(scratch,'rehearsal.env'),...tlsEnv(),'-v',`${join(scratch,'ca.crt')}:/test/ca.crt:ro`,'-v',`${join(root,'infrastructure/docker/rehearsal-driver.cjs')}:/test/driver.cjs:ro`,'-p','127.0.0.1::3000',tag,'/test/driver.cjs','api']);return Number(docker('port',name,'3000/tcp').trim().split(':').at(-1));}
+// The API serves HTTPS now; the probe trusts the rehearsal CA, which signed the API certificate for 127.0.0.1.
+function response(port,path,status){return new Promise((resolve,reject)=>{const req=https.get({host:'127.0.0.1',port,path:`/api/v1/${path}`,ca:readFileSync(join(scratch,'ca.crt')),timeout:2500},res=>{let body='';res.setEncoding('utf8');res.on('data',chunk=>{body+=chunk;});res.on('end',()=>{try{assert.equal(res.statusCode,status);resolve(JSON.parse(body));}catch(error){reject(error);}});});req.on('timeout',()=>req.destroy(new Error('API probe timed out')));req.on('error',reject);});}
 async function main(){
   // First, before any container is created: the task commands in Terraform start under the image's real ENTRYPOINT (the driver below bypasses it).
   console.log(`PASS ${await smoke(tag)} Terraform task commands start under the image ENTRYPOINT (no module-not-found; the processes then refuse for missing configuration)`);
@@ -31,6 +36,9 @@ async function main(){
   run('openssl',['req','-newkey','rsa:2048','-nodes','-keyout',join(scratch,'server.key'),'-out',join(scratch,'server.csr'),'-subj','/CN=pg']);
   writeFileSync(join(scratch,'server.ext'),'subjectAltName=DNS:pg\nextendedKeyUsage=serverAuth\n');
   run('openssl',['x509','-req','-in',join(scratch,'server.csr'),'-CA',join(scratch,'ca.crt'),'-CAkey',join(scratch,'ca.key'),'-CAcreateserial','-out',join(scratch,'server.crt'),'-days','1','-extfile',join(scratch,'server.ext')]);
+  run('openssl',['req','-newkey','rsa:2048','-nodes','-keyout',join(scratch,'api.key'),'-out',join(scratch,'api.csr'),'-subj','/CN=telesphoros-api']);
+  writeFileSync(join(scratch,'api.ext'),'subjectAltName=IP:127.0.0.1\nextendedKeyUsage=serverAuth\n');
+  run('openssl',['x509','-req','-in',join(scratch,'api.csr'),'-CA',join(scratch,'ca.crt'),'-CAkey',join(scratch,'ca.key'),'-CAcreateserial','-out',join(scratch,'api.crt'),'-days','1','-extfile',join(scratch,'api.ext')]);
   writeFileSync(join(scratch,'pg.env'),`POSTGRES_PASSWORD=${password}\nPOSTGRES_INITDB_ARGS=--auth-host=scram-sha-256\n`,{mode:0o600});
   writeFileSync(join(scratch,'rehearsal.env'),Object.entries({NODE_ENV:'production',NODE_EXTRA_CA_CERTS:'/test/ca.crt',DATABASE_SSL:'require',AUTH_VERIFIER:'cognito',COGNITO_REGION:'us-east-2',COGNITO_USER_POOL_ID:'us-east-2_Synthetic',COGNITO_APP_CLIENT_ID:'synthetic',STORAGE_DRIVER:'postgres',OBJECT_STORAGE_DRIVER:'s3',S3_ENDPOINT:'http://moto:5000',S3_FORCE_PATH_STYLE:'true',REPORTS_BUCKET:'synthetic-reports',AWS_REGION:'us-east-2',AWS_ACCESS_KEY_ID:'synthetic',AWS_SECRET_ACCESS_KEY:'synthetic',AWS_ENDPOINT_URL_SECRETS_MANAGER:'http://moto:5000',AWS_EC2_METADATA_DISABLED:'true',RATE_LIMIT_ENABLED:'true',TRUST_PROXY_HOPS:'1',BUILD_VERSION:'synthetic-fd4b',PORT:'3000',CORS_ALLOWED_ORIGINS:'https://synthetic.example.invalid',PROVISION_ADMIN_USER:'synthetic_admin',PROVISION_ADMIN_PASSWORD:password,DATABASE_HOST:'pg',REHEARSAL_WRONG_HOST:pg,DATABASE_PORT:'5432',DATABASE_NAME:'telesphoros',PROVISION_SECRET_APP:'synthetic/app',PROVISION_SECRET_VERIFIER:'synthetic/verifier',PROVISION_SECRET_MIGRATOR:'synthetic/migrator',PROVISION_SECRET_WORKER:'synthetic/worker',INVITATION_DIGEST_KEY:randomBytes(32).toString('hex'),IDENTIFIER_DIGEST_KEY:randomBytes(32).toString('hex')}).map(([k,v])=>`${k}=${v}`).join('\n')+'\n',{mode:0o600});
   docker('network','create',network);networkCreated=true;

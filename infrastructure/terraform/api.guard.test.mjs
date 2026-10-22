@@ -101,8 +101,9 @@ export function apiEdgeProblems(tf, vars = variables, db = database) {
 
   // Target group: the application's port, and readiness (not liveness) as the health check.
   const group = one('resource "aws_lb_target_group" "api"');
-  need(has(group, 'port = local.api_port') && has(group, 'protocol = "HTTP"') && has(group, 'target_type = "ip"'), 'the target group must be HTTP to the task port by address');
+  need(has(group, 'port = local.api_port') && has(group, 'protocol = "HTTPS"') && has(group, 'target_type = "ip"'), 'the target group must be HTTPS to the task port by address (audit FE-02)');
   need(has(group, 'path = local.api_ready_path') && has(group, 'matcher = "200"'), 'the health check must be the readiness route expecting 200');
+  need(/health_check \{[^}]*protocol\s*=\s*"HTTPS"/.test(group), 'the health check must use HTTPS to reach the task');
   need(has(text, 'api_port = 3000') && has(text, 'api_ready_path = "/api/v1/ready"'), 'the port and readiness path locals must keep their agreed values');
 
   // Security groups: rules only, and exactly the agreed rules.

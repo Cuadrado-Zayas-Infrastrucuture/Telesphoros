@@ -65,12 +65,20 @@ describe('loadEnv', () => {
     });
   });
 
+  it('takes the listener certificate and key together, or neither', () => {
+    expect(loadEnv({ ...base, TLS_CERT_PEM: 'cert', TLS_KEY_PEM: 'key' })).toMatchObject({ TLS_CERT_PEM: 'cert', TLS_KEY_PEM: 'key' });
+    expect(loadEnv({ ...base }).TLS_CERT_PEM).toBeUndefined();
+    expect(() => loadEnv({ ...base, TLS_CERT_PEM: 'cert' })).toThrow(/TLS_KEY_PEM/);
+    expect(() => loadEnv({ ...base, TLS_KEY_PEM: 'key' })).toThrow(/TLS_KEY_PEM/);
+  });
+
   describe('production fails closed', () => {
     const production = {
       NODE_ENV: 'production', AUTH_VERIFIER: 'cognito', COGNITO_REGION: 'us-east-2', COGNITO_USER_POOL_ID: 'us-east-2_AbCdEf123',
       COGNITO_APP_CLIENT_ID: 'client123', STORAGE_DRIVER: 'postgres', DATABASE_URL: 'postgres://app@db/app', DATABASE_SSL: 'require',
       OBJECT_STORAGE_DRIVER: 's3', REPORTS_BUCKET: 'a-bucket', CORS_ALLOWED_ORIGINS: 'https://app.example.com',
       LEDGER_VERIFIER_DATABASE_URL: 'postgres://verifier@db/app', TRUST_PROXY_HOPS: '1', INVITATION_DIGEST_KEY: 'ab'.repeat(32), IDENTIFIER_DIGEST_KEY: 'cd'.repeat(32),
+      TLS_CERT_PEM: 'synthetic-cert-pem', TLS_KEY_PEM: 'synthetic-key-pem',
     };
 
     it('starts with the real setup', () => {
@@ -91,6 +99,8 @@ describe('loadEnv', () => {
       ['a malformed invitation digest key', { INVITATION_DIGEST_KEY: 'short' }, /INVITATION_DIGEST_KEY/],
       ['a missing identifier digest key', { IDENTIFIER_DIGEST_KEY: undefined }, /IDENTIFIER_DIGEST_KEY.*production/],
       ['a malformed identifier digest key', { IDENTIFIER_DIGEST_KEY: 'short' }, /IDENTIFIER_DIGEST_KEY/],
+      ['no listener certificate (the load balancer would reach the task in clear text)', { TLS_CERT_PEM: undefined, TLS_KEY_PEM: undefined }, /TLS_CERT_PEM.*production/],
+      ['a listener certificate without its key', { TLS_KEY_PEM: undefined }, /TLS_KEY_PEM/],
       ['a missing ledger verifier login', { LEDGER_VERIFIER_DATABASE_URL: undefined }, /LEDGER_VERIFIER_DATABASE_URL.*production/],
       ['the synthetic lab-report pipeline', { LAB_REPORT_PIPELINE: 'enabled', LAB_REPORT_FIXTURES_DIR: '/some/recorded/pdfs', KNOWLEDGE_DIR: '/k', BUILD_VERSION: 'b1' }, /LAB_REPORT_PIPELINE.*production/],
     ])('refuses %s', (_name, change, message) => {
@@ -211,6 +221,7 @@ describe('loadEnv', () => {
       COGNITO_APP_CLIENT_ID: 'client123', STORAGE_DRIVER: 'postgres', DATABASE_URL: 'postgres://app@db/app', DATABASE_SSL: 'require',
       OBJECT_STORAGE_DRIVER: 's3', REPORTS_BUCKET: 'a-bucket', CORS_ALLOWED_ORIGINS: 'https://app.example.com',
       LEDGER_VERIFIER_DATABASE_URL: 'postgres://verifier@db/app', TRUST_PROXY_HOPS: '1', INVITATION_DIGEST_KEY: 'ab'.repeat(32), IDENTIFIER_DIGEST_KEY: 'cd'.repeat(32),
+      TLS_CERT_PEM: 'synthetic-cert-pem', TLS_KEY_PEM: 'synthetic-key-pem',
     };
 
     it('is unset by default, which keeps today\'s behaviour (no issuer is asked), in development and in production', () => {

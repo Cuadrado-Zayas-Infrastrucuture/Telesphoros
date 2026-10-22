@@ -167,14 +167,14 @@ resource "aws_lb_target_group" "api" {
   count                = local.api_count
   name                 = "${local.name}-api"
   vpc_id               = local.vpc_id
-  protocol             = "HTTP"
+  protocol             = "HTTPS"
   port                 = local.api_port
   target_type          = "ip"
   deregistration_delay = 30
 
   # Readiness, not liveness: a task whose database is down, whose migrations are pending or whose record log failed a check leaves rotation.
   health_check {
-    protocol            = "HTTP"
+    protocol            = "HTTPS"
     path                = local.api_ready_path
     matcher             = "200"
     interval            = 15
