@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import type { AddressInfo } from 'node:net';
 import { CreateBucketCommand, PutBucketVersioningCommand, S3Client } from '@aws-sdk/client-s3';
 import { Controller, Get, type Type } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -8,6 +9,8 @@ import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.factory';
 import { Public } from '../../src/auth/decorators';
 import { createVerifier } from '../../src/auth/auth.module';
+import { IssuerCore, PgCapabilityIssueStore } from '../../src/issuer/issuer-core';
+import { createIssuerServer, drainServer } from '../../src/issuer/issuer-server';
 import { MirrorTokenVerifier } from '../../src/auth/mirror-token-verifier';
 import { TokenVerifier } from '../../src/auth/token-verifier';
 import type { MembershipAdmin } from '../../src/membership/membership';
@@ -98,6 +101,28 @@ async function createBucket(runId?: string) {
 }
 
 /**
+ * TEST_REAL_ISSUER=1 (opt-in; unset, nothing here runs): a real issuer HTTP server, the issuer's own core, over the ISSUER login of this test
+ * database. The application then reaches it through ISSUER_URL, the same path as production, instead of the null issuer. The verifier is the HMAC
+ * one the test tokens are signed for (the deployed issuer verifies Cognito tokens; that verifier is not exercised here).
+ */
+async function startRealIssuer(database: EphemeralDatabase): Promise<{ url: string; stop(): Promise<void> }> {
+  const verifier = createVerifier(loadEnv({ NODE_ENV: 'test', JWT_SECRET: TEST_SECRET, JWT_ISSUER: TEST_ISSUER, JWT_AUDIENCE: TEST_AUDIENCE }));
+  const store = new PgCapabilityIssueStore({ url: database.issuerUrl, ssl: 'disable' });
+  const server = createIssuerServer(new IssuerCore(verifier, store));
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  return {
+    url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    stop: async () => {
+      await drainServer(server, 2_000);
+      await store.close();
+    },
+  };
+}
+
+/**
  * Boots the REAL module graph with the REAL app configuration (prefix, versioning, filters, guards).
  * The stores follow the environment, so the SAME e2e tests run against memory, a real PostgreSQL,
  * and an S3-compatible server.
@@ -108,10 +133,12 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
   let moduleRef: TestingModule | undefined;
   let app: NestExpressApplication | undefined;
   let closeApplication: (() => Promise<void>) | undefined;
+  let realIssuer: { url: string; stop(): Promise<void> } | undefined;
   const dispose = onceFixtureCleanup(async () => {
     try {
       await disposeFixtures([
         async () => { if (closeApplication) await closeApplication(); else await moduleRef?.close(); },
+        async () => { await realIssuer?.stop(); },
         async () => { await adminPool?.end(); },
         async () => { await database?.drop(); },
       ]);
@@ -120,6 +147,8 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
   try {
     options.signal?.throwIfAborted();
     database = usingPostgres() && !options.postgresUrl ? await createEphemeralDatabase({ signal: options.signal }) : undefined;
+    options.signal?.throwIfAborted();
+    realIssuer = process.env.TEST_REAL_ISSUER === '1' && database ? await startRealIssuer(database) : undefined;
     options.signal?.throwIfAborted();
     const runId = options.labReportPipeline || options.recoveryStorage || options.organizationIntake ? undefined : randomUUID();
     const s3 = usingS3() ? await createBucket(runId) : undefined;
@@ -132,6 +161,7 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
       JWT_AUDIENCE: TEST_AUDIENCE,
       STORAGE_DRIVER: database || options.postgresUrl ? 'postgres' : 'memory',
       ...(database || options.postgresUrl ? { DATABASE_URL: options.postgresUrl ?? database!.appUrl } : {}),
+      ...(realIssuer ? { ISSUER_URL: realIssuer.url } : {}),
       ...(options.labReportPipeline ? { LAB_REPORT_PIPELINE: 'enabled' } : {}),
       ...(options.labReportPipeline
         ? { LAB_REPORT_FIXTURES_DIR: options.fixturesDir ?? FIXTURES, KNOWLEDGE_DIR: options.knowledgeDir ?? TEST_KNOWLEDGE, BUILD_VERSION: options.buildVersion ?? 'test-build-1', ...(options.maxConcurrentReads ? { LAB_REPORT_MAX_CONCURRENT_READS: String(options.maxConcurrentReads) } : {}) }
