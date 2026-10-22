@@ -74,6 +74,8 @@ test('headers forbid inline scripts, framing and referrer leaks; HSTS preload st
   const headers = block(source, 'resource "aws_cloudfront_response_headers_policy" "web"');
   has(headers, "script-src 'self';");
   assert.ok(!/unsafe-eval|script-src[^;]*unsafe-inline/.test(headers));
+  has(headers, "style-src 'self';");
+  assert.ok(!/style-src[^;]*unsafe-inline/.test(headers), 'style-src must not allow unsafe-inline');
   has(headers, "frame-ancestors 'none'");
   has(headers, 'referrer_policy = "no-referrer"');
   has(headers, 'preload = false');
