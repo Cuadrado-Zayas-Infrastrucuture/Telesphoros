@@ -48,6 +48,9 @@ export const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+    // The API's own certificate and key (PEM), so the load balancer reaches the task over TLS (audit FE-02). Both or neither; required in production.
+    TLS_CERT_PEM: z.string().min(1).optional(),
+    TLS_KEY_PEM: z.string().min(1).optional(),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 
     /**
@@ -192,7 +195,9 @@ export const envSchema = z
     if (env.LOCAL_UPLOAD_CLEANUP_GRACE_SECONDS < 86400 && (!env.LOCAL_STORAGE_RUN_ID || env.NODE_ENV === 'production' || env.LAB_REPORT_PIPELINE !== 'disabled')) problem('LOCAL_UPLOAD_CLEANUP_GRACE_SECONDS', 'shortened grace requires a disposable local run with processing disabled');
 
     // Production fails closed: anything that is only fit for development is refused outright.
+    if (Boolean(env.TLS_CERT_PEM) !== Boolean(env.TLS_KEY_PEM)) problem('TLS_KEY_PEM', 'must be set together with TLS_CERT_PEM');
     if (env.NODE_ENV === 'production') {
+      if (!env.TLS_CERT_PEM || !env.TLS_KEY_PEM) problem('TLS_CERT_PEM', 'and TLS_KEY_PEM are required in production: the load balancer reaches the API over TLS');
       if (env.AUTH_VERIFIER !== 'cognito') problem('AUTH_VERIFIER', 'must be cognito in production (the shared-secret verifier is for development and tests)');
       if (env.COGNITO_ISSUER || env.COGNITO_JWKS_URI) problem('COGNITO_ISSUER', 'and COGNITO_JWKS_URI are development-only overrides and are refused in production');
       if (env.STORAGE_DRIVER !== 'postgres') problem('STORAGE_DRIVER', 'must be postgres in production (the in-memory store loses data)');
