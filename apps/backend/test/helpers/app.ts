@@ -9,10 +9,10 @@ import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.factory';
 import { Public } from '../../src/auth/decorators';
 import { createVerifier } from '../../src/auth/auth.module';
-import { IssuerCore, PgCapabilityIssueStore } from '../../src/issuer/issuer-core';
-import { createIssuerServer, drainServer } from '../../src/issuer/issuer-server';
 import { MirrorTokenVerifier } from '../../src/auth/mirror-token-verifier';
 import { TokenVerifier } from '../../src/auth/token-verifier';
+import { IssuerCore, PgCapabilityIssueStore } from '../../src/issuer/issuer-core';
+import { createIssuerServer, drainServer } from '../../src/issuer/issuer-server';
 import type { MembershipAdmin } from '../../src/membership/membership';
 import { PgMembershipAdmin } from '../../src/membership/pg-membership-admin';
 import { PgTenantAdmin } from '../../src/membership/pg-tenant-admin';
@@ -103,7 +103,8 @@ async function createBucket(runId?: string) {
 /**
  * TEST_REAL_ISSUER=1 (opt-in; unset, nothing here runs): a real issuer HTTP server, the issuer's own core, over the ISSUER login of this test
  * database. The application then reaches it through ISSUER_URL, the same path as production, instead of the null issuer. The verifier is the HMAC
- * one the test tokens are signed for (the deployed issuer verifies Cognito tokens; that verifier is not exercised here).
+ * one the test tokens are signed for (the deployed issuer verifies Cognito tokens; that verifier is not exercised here). A spec that overrides
+ * CapabilityIssuerPort (guard-capability-order) keeps its own issuer: the override wins over this one.
  */
 async function startRealIssuer(database: EphemeralDatabase): Promise<{ url: string; stop(): Promise<void> }> {
   const verifier = createVerifier(loadEnv({ NODE_ENV: 'test', JWT_SECRET: TEST_SECRET, JWT_ISSUER: TEST_ISSUER, JWT_AUDIENCE: TEST_AUDIENCE }));
@@ -148,7 +149,9 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
     options.signal?.throwIfAborted();
     database = usingPostgres() && !options.postgresUrl ? await createEphemeralDatabase({ signal: options.signal }) : undefined;
     options.signal?.throwIfAborted();
-    realIssuer = process.env.TEST_REAL_ISSUER === '1' && database ? await startRealIssuer(database) : undefined;
+    // Asked for but impossible here (memory tier, or a spec that brings its own URL): fail loudly rather than run on the null issuer unnoticed.
+    if (process.env.TEST_REAL_ISSUER === '1' && !database) throw new Error('TEST_REAL_ISSUER=1 needs this app on the ephemeral PostgreSQL tier; refusing to run on the null issuer.');
+    realIssuer = database && process.env.TEST_REAL_ISSUER === '1' ? await startRealIssuer(database) : undefined;
     options.signal?.throwIfAborted();
     const runId = options.labReportPipeline || options.recoveryStorage || options.organizationIntake ? undefined : randomUUID();
     const s3 = usingS3() ? await createBucket(runId) : undefined;
