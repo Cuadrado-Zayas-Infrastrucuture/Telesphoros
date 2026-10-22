@@ -170,6 +170,8 @@ const CONDITION = { verify: guardsCondition, 'service-memory': heavyCondition, '
 /** The steps of verify that only a code change needs. The install and the two guards that read documentation (test:infra, test:ci-config) are not here and carry no condition: test:infra loads the backend's config loader, which needs zod. */
 const HEAVY_STEPS = ['Typecheck', 'Lint', 'Workspace tests', 'Production builds', 'Published FHIR Genomics IG validation (synthetic only)',
   'Frontend chunk budget', 'Knowledge directory loads under production rules'];
+const draftCondition = '${{ github.event.pull_request.draft != true }}';
+const secretScanCondition = "${{ !cancelled() && needs.changes.result != 'skipped' }}";
 const lines = (block, key) => block.match(new RegExp(`^    ${key}:.*$`, 'gm')) ?? [];
 
 /** The documentation-only run of verify: which steps it keeps. */
@@ -205,12 +207,15 @@ export function scopeProblems(text) {
   const image = jobOf(text, 'image');
   need(lines(image, 'if').join('\n') === `    if: ${archiveCondition}` && lines(image, 'needs').join('\n') === '    needs: changes', 'image is skipped only by the archive condition');
   const scan = jobOf(text, 'secret-scan');
-  need(scan !== '' && lines(scan, 'if').length === 0 && lines(scan, 'needs').length === 0, 'secret-scan never waits for or is skipped by the scope');
+  need(scan !== '' && lines(scan, 'if').join('\n') === `    if: ${secretScanCondition}` && lines(scan, 'needs').join('\n') === '    needs: changes', 'secret-scan is skipped only when the changes job was skipped (a draft)');
   need(/^    if: always\(\) && !\(needs\.service-memory\.result == 'skipped'/m.test(jobOf(text, 'database-and-storage')), 'the joining gate is skipped only with all producers');
   const changes = jobOf(text, 'changes');
   need(changes !== '', 'the changes job exists');
   need(/^    permissions:\n      contents: read\n      actions: read\n/m.test(changes), 'changes reads contents and actions only');
-  need(lines(changes, 'needs').length === 0 && lines(changes, 'continue-on-error').length === 0 && lines(changes, 'if').length === 0, 'changes depends on nothing, always runs and cannot swallow failure');
+  need(lines(changes, 'needs').length === 0 && lines(changes, 'continue-on-error').length === 0, 'changes depends on nothing and cannot swallow failure');
+  need(lines(changes, 'if').join('\n') === `    if: ${draftCondition}`, 'changes is skipped only for a draft pull request');
+  const on = text.split(/^on:\s*$/m)[1]?.split(/^\S/m)[0] ?? '';
+  need(on.includes('  pull_request:\n    types: [opened, synchronize, reopened, ready_for_review]\n'), 'a draft marked ready starts a run (ready_for_review)');
   need(/fetch-depth: 0\n/.test(changes) && /persist-credentials: false\n/.test(changes), 'changes sees the history it compares and keeps no credentials');
   need(/^        run: node \.github\/ci\/scope\.mjs$/m.test(changes) && /GH_TOKEN: \$\{\{ github\.token \}\}/.test(changes), 'changes runs scope.mjs with the job token');
   need(changes.includes('          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}\n') && changes.includes('          BEFORE_SHA: ${{ github.event.before }}\n'), 'changes passes the pull-request head and the previous main tip');
@@ -236,7 +241,12 @@ test('the scope structure check turns red for each way a gate could be skipped w
     'implicit success() skips on a changes failure': swap(verify, '!cancelled() && (', 'success() && ('),
     'draft logic in a job condition': swap(verify, "needs.changes.outputs.heavy == 'true'", "needs.changes.outputs.heavy == 'true' && github.event.pull_request.draft == false"),
     'a gate that no longer waits for changes': swap(terraform, '    needs: changes\n', ''),
-    'secret-scan skipped': swap(scan, '    name: secret-scan\n', "    name: secret-scan\n    if: ${{ needs.changes.outputs.heavy == 'true' }}\n"),
+    'secret-scan follows the heavy output': swap(scan, "needs.changes.result != 'skipped'", "needs.changes.outputs.heavy == 'true'"),
+    'secret-scan skipped when changes fails': swap(scan, '!cancelled() && ', ''),
+    'secret-scan runs on drafts': swap(scan, '    needs: changes\n', ''),
+    'a draft marked ready starts no run': workflow.replace('    types: [opened, synchronize, reopened, ready_for_review]\n', '    types: [opened, synchronize, reopened]\n'),
+    'drafts run the whole workflow': swap(changes, '    if: ${{ github.event.pull_request.draft != true }}\n', ''),
+    'the draft check reads the wrong field': swap(changes, 'draft != true', 'draft == false'),
     'changes can write': swap(changes, 'actions: read', 'actions: write'),
     'changes sees only a shallow history': swap(changes, 'fetch-depth: 0', 'fetch-depth: 1'),
     'changes is optional': swap(changes, '    timeout-minutes: 5\n', '    timeout-minutes: 5\n    continue-on-error: true\n'),
