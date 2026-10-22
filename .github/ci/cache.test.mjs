@@ -7,12 +7,15 @@ import { test } from 'node:test';
 
 const workflow = readFileSync(new URL('../workflows/ci.yml', import.meta.url), 'utf8');
 const dockerfile = readFileSync(new URL('../../infrastructure/docker/api.Dockerfile', import.meta.url), 'utf8');
+const gitleaksPin = readFileSync(new URL('./gitleaks.version', import.meta.url), 'utf8');
 const job = (text, name) => text.split(new RegExp(`^  ${name}:\\s*$`, 'm'))[1]?.split(/^  [a-z][a-z0-9-]*:\s*$/m)[0] ?? '';
 
-function cacheProblems(text, image) {
+function cacheProblems(text, image, pin = gitleaksPin) {
   const problems = [];
   const scan = job(text, 'secret-scan');
-  if (!/cache: true\n\s+cache-dependency-path: \.github\/workflows\/ci\.yml/.test(scan)) problems.push('Go cache tracks the pinned install configuration');
+  if (!/cache: true\n\s+cache-dependency-path: \.github\/ci\/gitleaks\.version\n/.test(scan)) problems.push('Go cache tracks the pinned install configuration');
+  const install = scan.match(/run: go install github\.com\/zricethezav\/gitleaks\/v8@(\S+)/)?.[1];
+  if (!install || !/^v\d+\.\d+\.\d+$/.test(install) || pin.trim() !== install || scan.match(/- name: Install gitleaks (\S+)/)?.[1] !== install) problems.push('the version file, the install command and the step name name one gitleaks version');
   for (const name of ['Install gitleaks v8.30.1', 'Scan the full history']) {
     const step = scan.split(/^      - /m).find(s => s.startsWith('name: ' + name + '\n')) ?? '';
     if (!step || /^        (?:if|continue-on-error):/m.test(step)) problems.push('scan and install must run on a cache hit');
@@ -28,7 +31,38 @@ function cacheProblems(text, image) {
 
 test('dependency caches preserve fresh installation/scanning and isolate Docker dependency inputs', () => {
   assert.deepEqual(cacheProblems(workflow, dockerfile), []);
+  assert.deepEqual(lockfileCacheProblems(workflow), []);
   assert.match(workflow, /cancel-in-progress: \$\{\{ github.event_name == 'pull_request' \}\}/);
+});
+
+/** Every dependency cache is keyed by the file that decides its contents, so an unrelated edit cannot discard it and a changed lockfile cannot reuse it. */
+function lockfileCacheProblems(text) {
+  const problems = [];
+  const pnpm = [...text.matchAll(/^( *)cache: pnpm\n(.*)\n/gm)];
+  if (pnpm.length < 6) problems.push('expected every pnpm-using job to cache the store');
+  for (const [, indent, next] of pnpm) if (next !== indent + 'cache-dependency-path: pnpm-lock.yaml') problems.push('a pnpm cache must be keyed by pnpm-lock.yaml');
+  const pip = [...text.matchAll(/^( *)cache: pip\n(.*)\n/gm)];
+  if (pip.length < 5) problems.push('expected every emulator job to cache pip downloads');
+  for (const [, indent, next] of pip) if (next !== indent + 'cache-dependency-path: .github/ci/requirements.txt') problems.push('a pip cache must be keyed by the hashed requirements');
+  if (/cache-dependency-path:.*\.github\/workflows\//.test(text)) problems.push('no cache may be keyed by a workflow file: every workflow edit would discard it');
+  if (/key:.*(?:github\.sha|github\.run_id|github\.run_number)/.test(text)) problems.push('no cache key may contain a per-commit or per-run value');
+  return problems;
+}
+
+test('lockfile-scoped caches: each pnpm and pip cache names its dependency file, none follows the workflow or the commit', () => {
+  assert.deepEqual(lockfileCacheProblems(workflow), []);
+  for (const [label, text] of Object.entries({
+    'a pnpm cache keyed by the workflow': workflow.replace('cache-dependency-path: pnpm-lock.yaml', 'cache-dependency-path: .github/workflows/ci.yml'),
+    'a pnpm cache with no explicit path': workflow.replace('          cache: pnpm\n          cache-dependency-path: pnpm-lock.yaml\n', '          cache: pnpm\n'),
+    'a pip cache keyed by requirements.in': workflow.replace('cache-dependency-path: .github/ci/requirements.txt', 'cache-dependency-path: .github/ci/requirements.in'),
+    'a browser key that follows the commit': workflow.replace('key: playwright-${{ runner.os }}', 'key: playwright-${{ github.sha }}-${{ runner.os }}'),
+    'a Go cache keyed by the workflow again': workflow.replace('cache-dependency-path: .github/ci/gitleaks.version', 'cache-dependency-path: .github/workflows/ci.yml'),
+  })) {
+    assert.notEqual(text, workflow, label);
+    assert.ok(lockfileCacheProblems(text).length + cacheProblems(text, dockerfile).length > 0, label + ' must be reported');
+  }
+  assert.ok(cacheProblems(workflow, dockerfile, 'v9.9.9\n').length > 0, 'a version file that disagrees with the install command must be reported');
+  assert.ok(cacheProblems(workflow.replace('gitleaks/v8@v8.30.1', 'gitleaks/v8@v8.31.0'), dockerfile).length > 0, 'an install bump that leaves the version file behind must be reported');
 });
 
 test('cache controls reject stale browser keys, optional scanning and invalid layer order', () => {
