@@ -28,6 +28,12 @@ export interface TenantWorkOptions {
    * CLAIM supplied by authenticated application code, never taken from a request body, and transaction-local.
    */
   actor?: string;
+  /**
+   * Only for the sign-out write (AUTH-03): member_sign_out() changes the caller's OWN membership row, so the version this request was admitted with
+   * moves by design and the post-work recheck would refuse the very write that ends the session. The function touches only an ACTIVE row, so a
+   * removal that lands in the meantime makes it a no-op, not a bypass. Admission before the work is unchanged.
+   */
+  ownVersionMayChange?: boolean;
 }
 
 /**
@@ -88,7 +94,7 @@ export class Database {
       if (actor !== undefined) await client.query(`SELECT set_config('app.current_actor', $1, true)`, [actor]);
       await this.bindCapability(client);
       const result = await work(client);
-      if (!(await this.authorityStillCurrent(client, tenantId))) {
+      if (!options.ownVersionMayChange && !(await this.authorityStillCurrent(client, tenantId))) {
         refused = currentRequestAuthority();
         throw AppException.forbidden();
       }
