@@ -151,3 +151,16 @@ describe('CORS: an explicit allowlist, nothing else', () => {
     }
   });
 });
+
+// Last in the file: signing out cuts off every token this person holds, so later tests that mint for the same person would be refused.
+describe('sign-out (AUTH-03)', () => {
+  it('refuses a token replayed after sign-out, and a sign-in after it is accepted again', async () => {
+    const held = await token('hal');
+    await api().get('/api/v1/me').set(bearer(held)).expect(200);
+    await api().post('/api/v1/me/sign-out').set(bearer(held)).expect(204);
+    await api().get('/api/v1/me').set(bearer(held)).expect(401);
+    // The cut-off is whole seconds: a token minted after the next second is newer than it.
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    await api().get('/api/v1/me').set(bearer(await token('hal'))).expect(200);
+  });
+});

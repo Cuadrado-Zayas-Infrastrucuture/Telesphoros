@@ -36,11 +36,12 @@ resource "aws_cognito_user_pool" "main" {
   }
 
   password_policy {
-    minimum_length                   = 14
-    require_lowercase                = true
-    require_uppercase                = true
-    require_numbers                  = true
-    require_symbols                  = true
+    # Length is the rule; no composition rules (audit AUTH-01). No compromised-password blocklist here: see docs/auth.md.
+    minimum_length                   = 15
+    require_lowercase                = false
+    require_uppercase                = false
+    require_numbers                  = false
+    require_symbols                  = false
     temporary_password_validity_days = 3
   }
 
