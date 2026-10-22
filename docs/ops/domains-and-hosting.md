@@ -62,9 +62,9 @@ database, storage, Cognito and notifier resources are still part of a whole-root
   This supports existing BrowserRouter routes and its not-found page; missing files keep their
   origin errors. No 403/404-to-200 error mapping disguises a broken origin.
 - CSP permits self-hosted scripts and explicit API, Cognito and regional report-upload
-  endpoints. Existing React inline styles require `style-src 'unsafe-inline'`; inline
+  endpoints. Styles are external stylesheets only (`style-src 'self'`); inline
   scripts/eval remain forbidden. Referrers are suppressed, framing denied, and HSTS starts
-  at one day without subdomains or preload. The browser/Cognito/S3 path needs a live check
+  for one year without subdomains or preload. The browser/Cognito/S3 path needs a live check
   before release; schema/text tests do not prove compatibility in an actual deployment.
 
 No CloudFront access logging is configured here: auth query strings must not enter logs.

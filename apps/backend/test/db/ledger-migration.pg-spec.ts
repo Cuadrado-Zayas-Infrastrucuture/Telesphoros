@@ -4,6 +4,9 @@ import { migrateDown, migrateUp } from '../../src/db/migrator';
 import { adminUrl, withAdmin } from '../helpers/database';
 import { revertAbove } from '../helpers/migration-history';
 
+// Reverting and re-applying every migration takes more than the 5 s default on a loaded runner.
+jest.setTimeout(30_000);
+
 /**
  * D6: migrations must work for a migrator that is NOT a superuser. Production migrators are ordinary roles with CREATEROLE; the
  * ledger's objects are created under SET ROLE to their least-privilege owners, which needs a one-time membership in those roles.

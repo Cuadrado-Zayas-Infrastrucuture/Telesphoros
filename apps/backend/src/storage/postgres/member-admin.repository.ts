@@ -63,6 +63,15 @@ export class PostgresMemberAdminRepository extends MemberAdminRepository {
     await this.run(actor, (client) => client.query('SELECT member_remove($1)', [sub]));
   }
 
+  /** The one write that moves the caller's own membership version, so it opts out of the post-work recheck (see TenantWorkOptions). */
+  async signOut(actor: Principal): Promise<void> {
+    try {
+      await this.db.withTenant(actor.tenantId, (client) => client.query('SELECT member_sign_out()'), { actor: actor.sub, ownVersionMayChange: true });
+    } catch (error) {
+      throw asRule(error);
+    }
+  }
+
   createInvitation(actor: Principal, invitation: { digest: Buffer; hint: string; roles: Role[] }): Promise<InvitationView> {
     return this.run(actor, async (client) => {
       const { rows } = await client.query<{ id: string }>('SELECT invitation_create($1, $2, $3::text[]) AS id', [invitation.digest, invitation.hint, invitation.roles]);
