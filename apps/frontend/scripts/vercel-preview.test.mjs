@@ -23,6 +23,15 @@ export function findPreviewViolations(configText, scriptText) {
   if (rewrites.length !== 1 || rewrites[0].source !== '/(.*)' || rewrites[0].destination !== '/index.html') errors.push('vercel.json: the only rewrite is the single-page fallback to /index.html');
   const headers = (config.headers ?? []).find(rule => rule.source === '/(.*)')?.headers ?? [];
   if (!headers.some(header => header.key === 'X-Robots-Tag' && /noindex/.test(header.value))) errors.push('vercel.json: every response must carry X-Robots-Tag noindex');
+  const hsts = headers.find(header => header.key === 'Strict-Transport-Security')?.value ?? '';
+  if (Number(/max-age=(\d+)/.exec(hsts)?.[1] ?? 0) < 31536000) errors.push('vercel.json: Strict-Transport-Security must set max-age of at least one year');
+  const csp = headers.find(header => header.key === 'Content-Security-Policy')?.value ?? '';
+  const directives = new Map(csp.split(';').map(part => part.trim().split(/\s+/)).map(([name, ...values]) => [name, values.join(' ')]));
+  const requiredCsp = { 'default-src': "'none'", 'script-src': "'self'", 'style-src': "'self'", 'object-src': "'none'", 'frame-ancestors': "'none'" };
+  for (const [name, value] of Object.entries(requiredCsp)) {
+    if (directives.get(name) !== value) errors.push(`vercel.json: Content-Security-Policy must set ${name} ${value}`);
+  }
+  if (/'unsafe-(inline|eval)'/.test(csp)) errors.push("vercel.json: Content-Security-Policy must not allow 'unsafe-inline' or 'unsafe-eval'");
 
   if (!/compgen -e[\s\S]*VITE_\*\) unset/.test(scriptText)) errors.push('script: inherited VITE_ settings must be discarded');
   const assigned = [...scriptText.matchAll(/^\s*(VITE_[A-Z0-9_]+)=(\S+)/gm)];
@@ -40,6 +49,12 @@ test('the real preview configuration passes', () => {
   assert.deepEqual(findPreviewViolations(realConfig, realScript), []);
 });
 
+// Rewrites one header of the single catch-all rule; a missing header stays missing.
+const editHeader = (config, key, edit) => ({
+  ...config,
+  headers: [{ ...config.headers[0], headers: config.headers[0].headers.flatMap(header => (header.key !== key ? [header] : edit(header))) }],
+});
+
 const configDefects = {
   'adds a backend service': config => ({ ...config, services: { backend: { root: 'apps/backend' } } }),
   'adds environment settings': config => ({ ...config, env: { VITE_API_BASE_URL: 'https://api.telesphoros.app' } }),
@@ -47,6 +62,10 @@ const configDefects = {
   'publishes another directory': config => ({ ...config, outputDirectory: 'apps/frontend' }),
   'proxies the API elsewhere': config => ({ ...config, rewrites: [{ source: '/api/(.*)', destination: 'https://api.telesphoros.app/api/$1' }, ...config.rewrites] }),
   'drops noindex': config => ({ ...config, headers: [] }),
+  'drops the CSP': config => editHeader(config, 'Content-Security-Policy', () => []),
+  'allows inline styles': config => editHeader(config, 'Content-Security-Policy', header => [{ ...header, value: header.value.replace("style-src 'self'", "style-src 'self' 'unsafe-inline'") }]),
+  'drops HSTS': config => editHeader(config, 'Strict-Transport-Security', () => []),
+  'shortens HSTS to a day': config => editHeader(config, 'Strict-Transport-Security', header => [{ ...header, value: 'max-age=86400' }]),
 };
 for (const [name, mutate] of Object.entries(configDefects)) {
   test(`refuses a config that ${name}`, () => {
