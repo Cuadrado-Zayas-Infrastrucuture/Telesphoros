@@ -68,6 +68,30 @@ The migrations create the privilege roles but not their logins, and RDS creates 
 
 **The load balancer's TLS to the task (audit FE-02), two secrets set by hand:** `.../api/tls-certificate` is `TLS_CERT_PEM` and `.../api/tls-private-key` is `TLS_KEY_PEM`: the PEM certificate and its private key that the API serves on its port. The load balancer uses HTTPS to the task and does not check this certificate, so a self-signed one encrypts the hop; it does not authenticate the task. The service refuses to start in production without both. Put the values in with real line breaks, and never in Terraform, a plan, a log or a command line. Rotating the certificate means setting both values again and redeploying the tasks.
 
+To create and set them (run on a trusted workstation, in a private directory; the key never leaves it):
+
+```bash
+umask 077 && mkdir -p ~/tls-task && cd ~/tls-task
+```
+
+```bash
+openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 365 -subj "/CN=telesphoros-api"
+```
+
+```bash
+openssl x509 -noout -subject -enddate -in cert.pem && openssl rsa -check -noout -in key.pem
+```
+
+```bash
+aws secretsmanager put-secret-value --secret-id "<prefix>/api/tls-certificate" --secret-string file://cert.pem
+```
+
+```bash
+aws secretsmanager put-secret-value --secret-id "<prefix>/api/tls-private-key" --secret-string file://key.pem
+```
+
+Then delete the directory (`rm -rf ~/tls-task`) and redeploy the API tasks so they read the new values. `<prefix>` is the name prefix of the secrets in this environment. `file://` keeps the line breaks; the values are never passed as arguments.
+
 What the command does, in order: takes a lock; creates the privilege groups (including the queue's `telesphoros_jobs` and `telesphoros_worker`) if they do not exist, with exactly the attributes the migrations give them (a test keeps the two in agreement); for each login, **writes the new connection string to the secret first, then sets the password** (sent to the database only as a SCRAM-SHA-256 verifier, because the RDS parameter group logs DDL statements and a plaintext password would be written to that log); makes the migrator the database owner; grants the memberships; then **reads the result back from the catalog** and fails if a login has an extra attribute or membership, if the verifier could execute `ledger_append` (or the application the incident, checkpoint or hold functions), if either could write a ledger table, or (once the queue is migrated) if the worker could run a function it should not, read a table the queue's functions guard, or the application could claim a job.
 
 **It is safe to run twice.** A login whose stored string still signs in is left alone (`unchanged`); a missing role, an empty secret or a changed password is `repaired`; `--rotate` replaces every password (`rotated`; restart the service afterwards so tasks pick up the new secrets). If the database step fails after the secret was written, the secret holds a password nothing accepts and the next run repairs it.
