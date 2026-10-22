@@ -5,10 +5,11 @@ import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { configureApp } from './app.factory';
 import { loadEnv } from './config/env';
+import { listenerTls } from './config/listener-tls';
 
 async function bootstrap() {
   const env = loadEnv(); // throws on a bad or unsafe configuration: fail fast, before listening
-  const app = await NestFactory.create<NestExpressApplication>(AppModule.register(env), { bufferLogs: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule.register(env), { bufferLogs: true, httpsOptions: listenerTls(env) });
   app.useLogger(app.get(Logger));
   configureApp(app, { corsOrigins: env.CORS_ALLOWED_ORIGINS, trustProxyHops: env.TRUST_PROXY_HOPS });
   app.enableShutdownHooks();
