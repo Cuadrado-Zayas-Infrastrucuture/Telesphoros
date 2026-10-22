@@ -197,6 +197,25 @@ resource "aws_secretsmanager_secret" "api_identifier_digest_key" {
   recovery_window_in_days = local.secret_recovery_days
 }
 
+# The API's own certificate and key (PEM) for the load balancer hop (audit FE-02). Containers only, as above: the values are set by hand.
+resource "aws_secretsmanager_secret" "api_tls_cert" {
+  count       = local.api_count
+  name        = "${local.name}/api/tls-certificate"
+  description = "TLS_CERT_PEM: the API certificate (PEM) the load balancer reaches the task with. Value set by hand."
+  kms_key_id  = aws_kms_key.data.arn
+
+  recovery_window_in_days = local.secret_recovery_days
+}
+
+resource "aws_secretsmanager_secret" "api_tls_key" {
+  count       = local.api_count
+  name        = "${local.name}/api/tls-private-key"
+  description = "TLS_KEY_PEM: the private key for the API certificate. Value set by hand and NEVER in Terraform or state."
+  kms_key_id  = aws_kms_key.data.arn
+
+  recovery_window_in_days = local.secret_recovery_days
+}
+
 resource "aws_secretsmanager_secret" "api_migrator_url" {
   count       = local.api_count
   name        = "${local.name}/api/migrator-database-url"
@@ -266,7 +285,7 @@ data "aws_iam_policy_document" "api_execution_service" {
   statement {
     sid       = "ReadTheRuntimeSecrets"
     actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_invitation_digest_key[0].arn, aws_secretsmanager_secret.api_identifier_digest_key[0].arn]
+    resources = [aws_secretsmanager_secret.api_database_url[0].arn, aws_secretsmanager_secret.api_ledger_verifier_url[0].arn, aws_secretsmanager_secret.api_invitation_digest_key[0].arn, aws_secretsmanager_secret.api_identifier_digest_key[0].arn, aws_secretsmanager_secret.api_tls_cert[0].arn, aws_secretsmanager_secret.api_tls_key[0].arn]
   }
   statement {
     sid       = "DecryptSecretsThroughSecretsManager"
@@ -443,6 +462,8 @@ resource "aws_ecs_task_definition" "api" {
         { name = "LEDGER_VERIFIER_DATABASE_URL", valueFrom = aws_secretsmanager_secret.api_ledger_verifier_url[0].arn },
         { name = "INVITATION_DIGEST_KEY", valueFrom = aws_secretsmanager_secret.api_invitation_digest_key[0].arn },
         { name = "IDENTIFIER_DIGEST_KEY", valueFrom = aws_secretsmanager_secret.api_identifier_digest_key[0].arn },
+        { name = "TLS_CERT_PEM", valueFrom = aws_secretsmanager_secret.api_tls_cert[0].arn },
+        { name = "TLS_KEY_PEM", valueFrom = aws_secretsmanager_secret.api_tls_key[0].arn },
       ]
       logConfiguration = {
         logDriver = "awslogs"
