@@ -35,6 +35,8 @@ export async function seedLabReport(adminUrl: string, tenantId: string, uploader
   const pdfSha256 = sha(`pdf:${reportId}`);
   const objectVersion = `syn-version-${reportId.slice(0, 8)}`;
   await withAdmin(adminUrl, async (c) => {
+    // A tenant binds through its capability row, which needs the tenant row (0032 and the foreign key on tenant_capabilities).
+    await c.query(`INSERT INTO tenants (id, display_name, created_by, changed_by) VALUES ($1, $1, 'test-helper', 'test-helper') ON CONFLICT (id) DO NOTHING`, [tenantId]);
     await c.query(`INSERT INTO patients (id, tenant_id, created_by, label) VALUES ($1, $2, $3, $4)`, [patientId, tenantId, uploader, label]);
     await c.query(
       `INSERT INTO reports (id, tenant_id, created_by, patient_id, type, original_filename, size_bytes, status, content_type, sha256, storage_key, uploaded_at,

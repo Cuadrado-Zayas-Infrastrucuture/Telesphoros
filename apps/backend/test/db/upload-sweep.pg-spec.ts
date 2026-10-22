@@ -7,6 +7,7 @@ import { PostgresPatientsRepository } from '../../src/storage/postgres/patients.
 import { PostgresReportsRepository } from '../../src/storage/postgres/reports.repository';
 import type { ReportRecord } from '../../src/storage/records';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
+import { registerTenantRow } from '../helpers/membership';
 import { commitUpload, declareUpload } from '../helpers/uploads';
 
 // The operator's sweep of abandoned intake attempts (M2.2b): what it closes, what it must leave alone, and that it deletes nothing but a reservation.
@@ -37,6 +38,11 @@ async function newReport(tenantId: string, size = 1000): Promise<ReportRecord> {
   return r;
 }
 const owner = <T>(work: (c: Client) => Promise<T>) => withAdmin(db.adminUrl, work);
+// A tenant binds through its capability row, which needs the tenant row (0032): register it before the sweep, as the application does on first use.
+const sweepRegistered = async (c: Client, tenantId: string, options: Parameters<typeof sweepTenantUploads>[2]) => {
+  await registerTenantRow(c, tenantId);
+  return sweepTenantUploads(c, tenantId, options);
+};
 const asApp = async <T>(work: (c: Client) => Promise<T>) => {
   const c = new Client({ connectionString: db.appUrl });
   await c.connect();
@@ -65,7 +71,7 @@ describe('closing abandoned attempts', () => {
     for (const h of [hOld, hStored, hHeld]) await age(h.attempt.id, 3 * 86400);
     await owner((c) => c.query(`UPDATE report_upload_attempts SET lease_until = now() + interval '1 hour' WHERE id = $1`, [hHeld.attempt.id])); // the writer's lease is current
 
-    const result = await owner((c) => sweepTenantUploads(c, t, { graceSeconds: 86400, dryRun: false }));
+    const result = await owner((c) => sweepRegistered(c, t, { graceSeconds: 86400, dryRun: false }));
     expect(result).toEqual({ tenantId: t, released: 2, releasedBytes: 3000, objectsKept: 1 });
     expect(await stateOf(hOld.attempt.id)).toBe('cleaned');
     expect(await stateOf(hStored.attempt.id)).toBe('cleaned');
@@ -74,7 +80,7 @@ describe('closing abandoned attempts', () => {
     expect(await stateOf(hHeld.attempt.id)).toBe('intaking');
     expect(await reserved(t)).toBe(4000 + 16000);
     // Running it again finds nothing (idempotent), and the report whose attempt was closed can declare again.
-    expect(await owner((c) => sweepTenantUploads(c, t, { graceSeconds: 86400, dryRun: false }))).toMatchObject({ released: 0 });
+    expect(await owner((c) => sweepRegistered(c, t, { graceSeconds: 86400, dryRun: false }))).toMatchObject({ released: 0 });
     const again = await declareUpload(reports, old, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf', expectedRevision: (await reports.findById(t, old.id))!.uploadRevision });
     expect(again).toBeDefined();
   });
@@ -84,10 +90,10 @@ describe('closing abandoned attempts', () => {
     const r = await newReport(t, 900);
     const h = (await declareUpload(reports, r, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!;
     await owner((c) => c.query(`UPDATE report_upload_attempts SET state = 'cancelled', writer = $2, lease_until = now() + interval '1 hour' WHERE id = $1`, [h.attempt.id, randomUUID()]));
-    expect(await owner((c) => sweepTenantUploads(c, t, { graceSeconds: 0, dryRun: false }))).toMatchObject({ released: 0 });
+    expect(await owner((c) => sweepRegistered(c, t, { graceSeconds: 0, dryRun: false }))).toMatchObject({ released: 0 });
     expect(await stateOf(h.attempt.id)).toBe('cancelled');
     await owner((c) => c.query(`UPDATE report_upload_attempts SET writer = NULL WHERE id = $1`, [h.attempt.id]));
-    expect(await owner((c) => sweepTenantUploads(c, t, { graceSeconds: 0, dryRun: false }))).toMatchObject({ released: 1, releasedBytes: 900 });
+    expect(await owner((c) => sweepRegistered(c, t, { graceSeconds: 0, dryRun: false }))).toMatchObject({ released: 1, releasedBytes: 900 });
   });
 
   it('respects the grace period (control: the same attempt is closed with a shorter one), closes a cancelled attempt at once, and a dry run changes nothing', async () => {
@@ -97,12 +103,12 @@ describe('closing abandoned attempts', () => {
     const hb = (await declareUpload(reports, b, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!;
     await age(ha.attempt.id, 2 * 3600); // lease ended two hours ago
     await reports.cancelAttempt(hb.identity); // cancelled just now
-    expect(await owner((c) => sweepTenantUploads(c, t, { graceSeconds: 86400, dryRun: true }))).toMatchObject({ released: 1, releasedBytes: 700 }); // only the cancelled one
+    expect(await owner((c) => sweepRegistered(c, t, { graceSeconds: 86400, dryRun: true }))).toMatchObject({ released: 1, releasedBytes: 700 }); // only the cancelled one
     expect(await stateOf(hb.attempt.id)).toBe('cancelled'); // dry run: nothing changed
     expect(await reserved(t)).toBe(1200);
-    expect(await owner((c) => sweepTenantUploads(c, t, { graceSeconds: 86400, dryRun: false }))).toMatchObject({ released: 1, releasedBytes: 700 });
+    expect(await owner((c) => sweepRegistered(c, t, { graceSeconds: 86400, dryRun: false }))).toMatchObject({ released: 1, releasedBytes: 700 });
     expect(await stateOf(ha.attempt.id)).toBe('declared'); // inside the grace
-    expect(await owner((c) => sweepTenantUploads(c, t, { graceSeconds: 3600, dryRun: false }))).toMatchObject({ released: 1, releasedBytes: 500 });
+    expect(await owner((c) => sweepRegistered(c, t, { graceSeconds: 3600, dryRun: false }))).toMatchObject({ released: 1, releasedBytes: 500 });
     expect(await reserved(t)).toBe(0);
   });
 
@@ -114,14 +120,14 @@ describe('closing abandoned attempts', () => {
     await age(h1.attempt.id, 3 * 86400);
     await age(h2.attempt.id, 3 * 86400);
     // The sweep is the queue owner's function (migration 0024): the application login cannot run it, so a request can never sweep.
-    await expect(asApp((c) => sweepTenantUploads(c, t1, { graceSeconds: 86400, dryRun: false }))).rejects.toThrow(/permission denied/);
+    await expect(asApp((c) => sweepRegistered(c, t1, { graceSeconds: 86400, dryRun: false }))).rejects.toThrow(/permission denied/);
     await expect(asApp((c) => c.query('SELECT * FROM uploads_sweep($1, 0, false)', [t1]))).rejects.toThrow(/permission denied/);
-    expect(await owner((c) => sweepTenantUploads(c, t1, { graceSeconds: 86400, dryRun: false }))).toMatchObject({ released: 1, releasedBytes: 100 });
+    expect(await owner((c) => sweepRegistered(c, t1, { graceSeconds: 86400, dryRun: false }))).toMatchObject({ released: 1, releasedBytes: 100 });
     expect(await stateOf(h1.attempt.id)).toBe('cleaned');
     expect(await stateOf(h2.attempt.id)).toBe('declared');
     expect(await reserved(t2)).toBe(200);
     // The sweep of the whole registry reaches the other one (control).
-    expect(await owner((c) => sweepTenantUploads(c, t2, { graceSeconds: 86400, dryRun: false }))).toMatchObject({ released: 1 });
+    expect(await owner((c) => sweepRegistered(c, t2, { graceSeconds: 86400, dryRun: false }))).toMatchObject({ released: 1 });
   });
 
   it('deletes no object, no report and no committed row, and refuses a grace outside its range', async () => {
@@ -129,10 +135,10 @@ describe('closing abandoned attempts', () => {
     const r = await newReport(t, 300);
     const h = await commitUpload(reports, r, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf', version: 'v1' });
     const before = await owner(async (c) => (await c.query('SELECT * FROM reports WHERE id = $1', [r.id])).rows[0]);
-    await owner((c) => sweepTenantUploads(c, t, { graceSeconds: 0, dryRun: false }));
+    await owner((c) => sweepRegistered(c, t, { graceSeconds: 0, dryRun: false }));
     expect(await owner(async (c) => (await c.query('SELECT * FROM reports WHERE id = $1', [r.id])).rows[0])).toEqual(before);
     expect(await stateOf(h.attempt.id)).toBe('committed');
-    for (const bad of [-1, 1.5, 604801]) await expect(owner((c) => sweepTenantUploads(c, t, { graceSeconds: bad, dryRun: false }))).rejects.toThrow(/graceSeconds/);
+    for (const bad of [-1, 1.5, 604801]) await expect(owner((c) => sweepRegistered(c, t, { graceSeconds: bad, dryRun: false }))).rejects.toThrow(/graceSeconds/);
   });
 });
 
@@ -166,7 +172,7 @@ describe('the uploads sweep command', () => {
     await age(h3.attempt.id, 3 * 86400);
     // t2 is in the registry and has a job; t1 is the one swept.
     await owner(async (c) => { for (const t of [t1, t2]) await c.query(`INSERT INTO tenants (id, display_name, created_by, changed_by) VALUES ($1, $1, 'syn', 'syn') ON CONFLICT DO NOTHING`, [t]); });
-    const dry = await owner((c) => sweepTenantUploads(c, t1, { graceSeconds: 86400, dryRun: true })); // what the operator command would close
+    const dry = await owner((c) => sweepRegistered(c, t1, { graceSeconds: 86400, dryRun: true })); // what the operator command would close
     const jobId = (await owner((c) => c.query(`INSERT INTO jobs (tenant_id, type, payload, idempotency_key, requested_by, state, attempts, locked_by, lease_until, started_at)
       VALUES ($1, 'uploads.sweep', '{}', 'sweep-parity', 'system:scheduler', 'running', 1, 'w1', now() + interval '5 minutes', now()) RETURNING id`, [t1]))).rows[0].id as string;
     const viaJob = await withAdmin(db.workerUrl, async (c) => (await c.query('SELECT * FROM job_uploads_sweep($1, $2)', [jobId, 'w1'])).rows[0]);

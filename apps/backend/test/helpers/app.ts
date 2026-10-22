@@ -194,6 +194,7 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
     tenantHandles.set(app, tenantAdmin);
     handles.set(app, new RegisteringMembershipAdmin(adminPool ? new PgMembershipAdmin(adminPool) : (app.get(MembershipRepository as never) as unknown as MembershipAdmin), tenantAdmin));
     app.close = dispose;
+    ephemeralDatabases.set(app, database);
     return app;
   } catch (error) {
     await disposeFixtures([dispose], [error]);
@@ -215,6 +216,12 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
 
 const handles = new WeakMap<object, MembershipAdmin>();
 const tenantHandles = new WeakMap<object, TenantAdmin>();
+const ephemeralDatabases = new WeakMap<object, EphemeralDatabase | undefined>();
+
+/** The issuer login's URL for this app's database, or undefined when the app does not run on PostgreSQL. A scripted issuer uses it to mint real rows. */
+export function issuerUrlOf(app: object): string | undefined {
+  return ephemeralDatabases.get(app)?.issuerUrl;
+}
 
 /** The organization registry handle for an app made by createTestApp. */
 export function tenantsOf(app: object): TenantAdmin {

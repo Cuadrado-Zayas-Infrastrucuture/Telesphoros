@@ -52,6 +52,8 @@ export async function seedRecovery(pg: EphemeralDatabase, storage: S3ObjectStora
       const disputeBasis: string[] = [];
       // Bulk core fixture; no uploaded bytes are claimed for these received metadata-only reports.
       await withAdmin(pg.adminUrl, async c => {
+        // A tenant binds through its capability row, which needs the tenant row (0032): register the organization, as the application does on first use.
+        await c.query("INSERT INTO tenants (id, display_name, created_by, changed_by) VALUES ($1, $1, 'test-helper', 'test-helper') ON CONFLICT (id) DO NOTHING", [tenant]);
         for (let i = 0; i < GENERATOR.coreRowsPerTenant; i++) {
           const patient = randomUUID(); const report = randomUUID();
           await c.query('INSERT INTO patients (id,tenant_id,created_by,label) VALUES ($1,$2,$3,$4)', [patient, tenant, 'syn-uploader', `SYN-CORE-${i}`]);

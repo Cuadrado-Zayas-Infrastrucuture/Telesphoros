@@ -267,3 +267,37 @@ M-A3a (the new function reads the membership without `status = 'active'`) first 
 4. The version read and the issuance are two statements: a membership that moves between them is refused (`membership-not-current`), failing closed. A move between the issuance and the lookup binds the older version, so writes are refused at commit and reads proceed.
 5. **Migration number:** this was `0030` until P2 option B (#227) merged with `0030_agentic_synthetic_identity`; the branch was merged with `main` and renumbered `0031` (two file renames and the text above; the specs name the migration, so nothing else changed). The two touch different objects (P2 calls `app_tenant()`, `app_actor()` and `membership_assert_current`, none of what 0031 adds).
 6. The six-argument function stays callable by the issuer. Removing it is a `breaking` change for a later migration.
+
+## Slice 3 PR B: tenant binding policies (migration 0032, mode dual), mutant controls, 2026-10-21 (local, not pushed)
+
+Each mutant was applied to `apps/backend/migrations/0032_tenant_binding_policies.up.sql` alone, the spec run, and the file restored from commit `1997b94` (`git checkout`; the tree was clean afterwards). Scratch cluster, same as the tier runs. Result = pass/fail of the spec run; "red" means a named test failed.
+
+| Mutant | What it breaks | Spec run | Caught by |
+|---|---|---|---|
+| M6 | `job_enqueue` reads the actor setting, not the capability | tenant-binding: 1 failed, 8 passed | the requested_by test (T021) |
+| M9 | `membership_assert_current` skips the capability check (FR-007) | tenant-binding: before this PR's new test 9/9 green (a gap, see below); after the new stale-capability test: 1 failed, 9 passed | the stale-capability test |
+| M11 | the internal binding granted to `telesphoros_app` | tenant-binding: 1 failed, 9 passed | the EXECUTE-grant test |
+| M12 | `uploads_sweep` does not restore `app.capability` | tenant-binding: 1 failed, 9 passed | the restore test |
+| M14 | mode left at `guc` | tenant-binding: 10/10 green (no mode assertion in this spec); tenant-capability: 2 failed | the "binding mode is dual" test (in tenant-capability) |
+| M1 | the `patients` policy left on the setting | tenant-binding: migration refused at its own postcondition ("1 policies still read the setting, 47 read app_tenant()") | the migration postcondition, before T020 runs |
+
+**Gap found and closed:** before the stale-capability test was added, M9 was green. The membership table check already compares the sub and version, so the capability check only matters for a capability issued at an older version. The test "a capability issued before a membership change is refused after it" covers that case.
+
+**Not a test failure, but noted:** M1 is caught by the migration's postcondition, not by T020. T020 has no independent control for a single policy left on the setting while the postcondition is present.
+
+**Not run:** M2 (ledger policy reverted), M17 (down migration omits a policy), and the M-A mutants for migration 0031.
+
+**Follow-up runs (same method):**
+- M2: a ledger policy left out of the up loop. The loop's own count assertion refuses the migration ("changed 47 policies, expected 48") before any policy is altered, so T020 is not the control that fires.
+- M17: the down loop omits the `patients` policy. The tenant-capability revert tests fail (2 of 56: the 0031 revert snapshot and the 0028 revert with the issuance log). The up path is unaffected.
+
+**M-A8 (0031, shipped migration, mutated for one run and restored from commit):** `app_capability_version()` granted to PUBLIC. tenant-capability: 2 failed (the "EXECUTE goes to the roles that bind through app_tenant(), never PUBLIC" test and the 0031 revert snapshot).
+
+**Vacuity guard (T020):** added to tenant-binding. The catalog's 29 tenant-policy tables must equal the three seeded tables plus the 26 listed as unseeded on purpose; each unseeded table is covered by its domain spec. This is an explicit list, not a proof that those 26 tables are exercised by this spec.
+
+**Open items closed in this branch (tenant-binding spec, 14 tests pass):**
+- T-extra 4: every telesphoros role named in a policy that calls `app_tenant()` can execute `app_tenant()` and `app_actor()`. The narrower wording is deliberate: `telesphoros_ledger_verifier` holds SELECT on ledger tables but its policy is open (`USING (true)`) and never calls the accessors, so it needs neither.
+- T025: the internal binding is called by exactly `job_held`, `ledger_record_checkpoint`, `redact_event_note` and `uploads_sweep`.
+- T023: the patients policy's capability read is an InitPlan (checked with the capability presented).
+
+**Still open:** the Gitleaks scan (refused by the worktree guard), the full backend suite under real capabilities in `dual` mode (G6/R8), operator redaction under capability mode (G1, slice 5), and the staging D4 and D7 evidence.

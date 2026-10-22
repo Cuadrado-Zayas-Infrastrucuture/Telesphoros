@@ -302,6 +302,8 @@ describe('reverting 0010', () => {
       await withAdmin(db.adminUrl, async (c) => {
         // 0011 (incidents) sits above 0010 and has its own guard: revert it on purpose first, then drop the setting again so 0010's guard is what is tested.
         await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
+        // The seed registers its organization (the shared seed helper, DATA-01 slice 3), so 0019's registry guard needs the disposable-fixture opt-in too.
+        await c.query(`SET telesphoros.allow_membership_drop = 'yes'`);
         const aboveIncidents = revertAbove('ledger_incidents');
         expect(await migrateDown(c, aboveIncidents.steps)).toEqual(aboveIncidents.reverted); // 0021 and 0020 hold audit records: the setting above covers it too
         expect(await migrateDown(c, 1)).toEqual(['0011']);

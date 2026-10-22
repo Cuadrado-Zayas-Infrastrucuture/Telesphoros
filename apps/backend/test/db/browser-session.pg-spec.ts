@@ -75,7 +75,7 @@ it('has forced RLS, exact policies and only column-scoped mutation privileges', 
     expect((await client.query("SELECT relrowsecurity,relforcerowsecurity FROM pg_class WHERE oid='browser_sessions'::regclass")).rows[0]).toEqual({ relrowsecurity: true, relforcerowsecurity: true });
     const policies = (await client.query("SELECT cmd,roles::text,qual,with_check FROM pg_policies WHERE schemaname='public' AND tablename='browser_sessions' ORDER BY cmd")).rows;
     expect(policies.map((row) => row.cmd)).toEqual(['DELETE', 'INSERT', 'SELECT', 'UPDATE']);
-    for (const row of policies) { expect(row.roles).toBe('{telesphoros_app}'); expect(row.qual ?? row.with_check).toContain('app.current_tenant_id'); }
+    for (const row of policies) { expect(row.roles).toBe('{telesphoros_app}'); expect(row.qual ?? row.with_check).toContain('app_tenant()'); }
     expect(policies[0].qual).toContain('expires_at'); expect(policies[0].qual).toContain('clock_timestamp');
     const columns = (await client.query("SELECT column_name FROM information_schema.column_privileges WHERE table_name='browser_sessions' AND grantee='telesphoros_app' AND privilege_type='UPDATE' ORDER BY column_name")).rows;
     expect(columns.map((row) => row.column_name)).toEqual(['revoked_at']);
