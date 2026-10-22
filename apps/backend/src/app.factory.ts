@@ -26,6 +26,16 @@ export interface ConfigureOptions {
  */
 export function configureApp(app: NestExpressApplication, options: ConfigureOptions = {}) {
   app.disable('x-powered-by');
+  // Browser-side protections for every response, including errors. The API serves JSON only, so nothing it returns needs to load anything.
+  // HSTS is ignored over plain HTTP, and the load balancer serves the API over HTTPS (audit FE-05).
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    next();
+  });
   app.set('trust proxy', options.trustProxyHops && options.trustProxyHops > 0 ? options.trustProxyHops : false);
   // Before everything else, so even 404s and parse errors carry a request id.
   app.use(requestIdMiddleware);
