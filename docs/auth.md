@@ -179,6 +179,7 @@ tenant group, then `membership grant` in the new one; they are refused between t
 
 ## Passwords and email
 
+- Passwords must be at least 15 characters. There are no composition rules (no required capital, digit or symbol). There is no compromised-password blocklist: Cognito's check needs its paid advanced-security tier, which is not configured here. Decided 2026-10-21.
 - A forgotten password is recovered **by email only**, from Cognito's own "forgot password" page. The code and its
   lifetime are Cognito's; it is not configurable here. Verify the behaviour at first apply.
 - When a password is **reset**, a small Lambda (`infrastructure/lambda/password-change-notifier`) emails the account
