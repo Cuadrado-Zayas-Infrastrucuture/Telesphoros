@@ -3,7 +3,7 @@
 # Python sidecar (sidecars/report-reader) removed. The two directories are RENAMED in place (same filesystem, so a rename cannot be left
 # half done) and put back on exit, on Ctrl-C and on error; those two directories must have no uncommitted changes first, so the restore can be proven.
 #
-#   scripts/check-without-reader.sh                 run the backend suite without the engine; it must pass (the engine specs are skipped, and said so)
+#   scripts/check-without-reader.sh                 run the backend suite and the launcher-cors test without the engine; both must pass (the engine specs are skipped, and said so)
 #   scripts/check-without-reader.sh --measure       run it WITHOUT skipping anything, find the spec files that fail, and compare them with
 #                                                   apps/backend/test/helpers/reader-engine-specs.json (exit 1 if they differ)
 #   scripts/check-without-reader.sh --measure --write   the same, then rewrite that list from the measurement
@@ -43,7 +43,16 @@ for d in "${dirs[@]}"; do mv "$d" "$d.hidden" || exit 1; done
 
 if [ "$measure" = 0 ]; then
   (cd apps/backend && pnpm exec jest)
-  exit $?
+  status=$?
+  # The browser job's launcher-cors test loads the review launcher (scripts/local-review/start.cjs) outside Jest, and the launcher names the
+  # reader fixtures. It needs the pinned Moto (set LOCAL_MOTO_PYTHON to a Python that has it, or have it on python3); without it the run says
+  # so and does not pretend to have covered this lane.
+  if "${LOCAL_MOTO_PYTHON:-python3}" -c 'import moto' >/dev/null 2>&1; then
+    pnpm test:launcher-cors || status=1
+  else
+    echo "NOT RUN: test:launcher-cors (no Python with Moto; set LOCAL_MOTO_PYTHON). The browser job runs it without the engine only once the engine is gone from the repository." >&2
+  fi
+  exit $status
 fi
 
 out="$(mktemp -t reader-measure.XXXXXX)" || exit 1
