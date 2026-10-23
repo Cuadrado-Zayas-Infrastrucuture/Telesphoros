@@ -1,0 +1,51 @@
+name: Bug report
+description: Something does not behave as the documentation says
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not include patient data.** No names, identifiers, dates of birth, real reports, real genetic results or credentials. Use synthetic examples only. Report security problems through SECURITY.md, never here.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Commands or clicks, starting from a clean checkout.
+      placeholder: "1. pnpm install --frozen-lockfile"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Commit
+      description: Output of git rev-parse --short HEAD
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Frontend
+        - Backend API
+        - Worker
+        - Lab-report pipeline
+        - Infrastructure
+        - CI
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Relevant output
+      description: Redact anything that could identify a person or contain a secret.
+      render: shell
