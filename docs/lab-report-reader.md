@@ -25,6 +25,16 @@ TypeScript  SubprocessReportReader  ──stdin: {"text": ...}──►  python3
 | The pinned build the repository accepts | `pinned-reader.ts` (`PINNED_READER`, `PINNED_POPPLER_VERSION = 26.03.0`) |
 | Hand-written expected output for the twelve captures | `tests/report_reader/golden.json` |
 
+## The engine is optional
+
+The engine, its twelve development PDFs with captured text, and the Python wrapper are **not part of the public repository** (their provenance is still with counsel). A checkout without `knowledge/lab-report-reader/` and `sidecars/report-reader/` therefore has to work:
+
+- **Pipeline off (the default):** nothing needs the engine. The routes answer 503 `PIPELINE_DISABLED`; the port, the wrapper class, the adapter, the lookup and the ledger code are all there and tested with stand-ins.
+- **Pipeline on, engine absent:** the app refuses to start with a message that names the missing paths (`assertReaderEnginePresent`, run when the reader is built).
+- **Tests:** the 21 spec files that run the engine or read its fixtures are skipped, and the skip is announced (`[jest] NOT RUNNING: 21 specs that need the report-reader engine`). The list is `apps/backend/test/helpers/reader-engine-specs.json`; `reader-engine.spec.ts` fails if it names a file that is gone or if a new spec names the engine paths or fixture helpers without being listed. Six of the 21 also hold tests that pass without the engine (the list says how many); splitting them out, and writing fresh public fixtures that need no engine, is the follow-up.
+- **Proof:** `scripts/check-without-reader.sh` renames the two directories, runs the backend suite, and puts them back. `--measure` runs everything *without* skipping, finds the files that fail, and compares them with the list (`--write` rewrites it). A stand-in does not prove this: the directories really are absent.
+- **Local review demos** (`scripts/local-review/`): the three `verify-*` scripts read a capture PDF directly and say so when the fixtures are missing. The launcher (`start.cjs`) is left alone on purpose: the browser job's `launcher-cors` test loads it, and it must keep working in a checkout without the engine (the API it starts then refuses with the start message above).
+
 ## What the runner guarantees
 
 - **Bounded input:** a text over 200 000 UTF-16 units is never sent (held `source-limit`); the engine applies its exact

@@ -690,7 +690,7 @@ TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 pnpm test      # tier 3: ... upload
 cd ../worker && pnpm test                                    # the job queue and real worker processes (needs TEST_DATABASE_URL)
 ```
 
-Python 3 is needed on the PATH for the reader tests. Backup and restore tests need the PostgreSQL 16 client tools and `openssl`
+Python 3 is needed on the PATH for the reader tests. Without the reader engine in the checkout (the public repository has none) the specs that need it are skipped and announced; `scripts/check-without-reader.sh` runs the suite that way ([lab-report-reader.md](lab-report-reader.md#the-engine-is-optional)). Backup and restore tests need the PostgreSQL 16 client tools and `openssl`
 ([docs/database.md](database.md)).
 
 ## Synthetic FHIR terminology/profile slice

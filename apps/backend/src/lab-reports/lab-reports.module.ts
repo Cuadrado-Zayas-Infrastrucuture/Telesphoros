@@ -2,6 +2,7 @@ import { Logger, Global, Module } from '@nestjs/common';
 import { ENV, type Env } from '../config/env';
 import { loadKnowledge } from '../services/knowledge/knowledge-loader';
 import type { KnowledgeSet } from '../services/knowledge/knowledge-set';
+import { assertReaderEnginePresent } from '../services/report-reader/engine-presence';
 import type { ReportReader } from '../services/report-reader/report-reader';
 import { SubprocessReportReader } from '../services/report-reader/subprocess-report-reader';
 import { CapturesController, ReportCaptureController } from './captures.controller';
@@ -55,6 +56,7 @@ const enabled = (env: Env) => env.LAB_REPORT_PIPELINE === 'enabled';
       inject: [ENV],
       useFactory: async (env: Env): Promise<ReportReader | undefined> => {
         if (!enabled(env)) return undefined;
+        assertReaderEnginePresent();
         const logger = new Logger('ReportReader');
         const reader = new SubprocessReportReader({ mode: 'non-production', logger: { warn: (fields, message) => logger.warn({ ...fields, message }) } });
         const mismatches = await reader.verifyPinned();

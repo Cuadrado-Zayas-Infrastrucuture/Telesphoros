@@ -5,6 +5,7 @@ const { createHash, randomUUID } = require('node:crypto');
 const { createRequire } = require('node:module');
 const path = require('node:path');
 const root=path.resolve(__dirname,'../..');
+require('./require-reader.cjs')(root);
 for (const name of Object.keys(process.env)) if (name.startsWith('AWS_')) delete process.env[name];
 const req = createRequire(path.join(root, 'apps/backend/package.json'));
 const { startFakeIdp, DEFAULT_USERS } = require('../../packages/fake-idp/dist/index.cjs');
