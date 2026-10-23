@@ -90,6 +90,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
       # Unconditional: test:infra loads the backend's configuration loader (zod), so even a documentation-only run needs the install.
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
@@ -484,6 +485,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
       - name: Establish the shared run-attempt deadline
         id: budget
         run: node .github/ci/service-budget.mjs init
@@ -591,6 +593,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
       - name: Establish the shared run-attempt deadline
         id: budget
         run: node .github/ci/service-budget.mjs init
@@ -703,6 +706,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
       - name: Establish the shared run-attempt deadline
         id: budget
         run: node .github/ci/service-budget.mjs init
@@ -822,6 +826,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
       - name: Require all isolated jobs to succeed
         run: node .github/ci/service-evidence.mjs dependencies
       - name: Establish the shared run-attempt deadline
@@ -952,6 +957,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - name: Resolve the installed Playwright browser version
         id: playwright-version
@@ -1077,10 +1083,10 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27.3' # an exact release, not "stable": the toolchain that builds gitleaks is a build input
-          # This repository has no go.sum. Hash the file containing the exact
-          # gitleaks install pin; setup-go also keys by OS, architecture and Go version.
+          # This repository has no go.sum. Hash the one-line file that holds the gitleaks version, not the whole workflow: every workflow edit used to
+          # discard this cache. setup-go also keys by OS, architecture and Go version. cache.test.mjs keeps the file equal to the install command below.
           cache: true
-          cache-dependency-path: .github/workflows/ci.yml
+          cache-dependency-path: .github/ci/gitleaks.version
       # Built from source: the Go module checksum database verifies it. (The module still carries its
       # former path, github.com/zricethezav/gitleaks.) The maintainers' GitHub Action needs a paid licence
       # for organization repositories, so it is deliberately not used.
