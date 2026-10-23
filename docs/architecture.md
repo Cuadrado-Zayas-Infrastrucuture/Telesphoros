@@ -14,7 +14,7 @@ applied in AWS.
     ├──► PostgreSQL 16 ── row-level security by tenant; append-only record tables; per-tenant hash-chained ledger
     ├──► S3 (versioned bucket) ── validated API intake; version-pinned reads and signed GET links
     ├──► knowledge/ (signed content, loaded at start) ──► phenotype engine ──► recommendation engine
-    └──► sidecars/report-reader (Python subprocess) ── the imported, test-only reader engine
+    └──► sidecars/report-reader (Python subprocess) ── the imported, test-only reader engine (optional: not in the public repository)
 ```
 
 The product [capability matrix](product-capabilities.md) distinguishes normal builds, local-storage opt-in, development routes and server pipeline gates. Main still declares PUT-only reports CORS; the GET-only download repair is local F07, so this architecture does not claim hosted browser downloads are accepted.
