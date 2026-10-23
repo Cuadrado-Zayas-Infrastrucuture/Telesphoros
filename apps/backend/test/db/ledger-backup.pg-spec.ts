@@ -96,7 +96,7 @@ describe('a backup of a populated ledger', () => {
     ]));
 
     const name = target();
-    const report = await restoreAndVerify({ adminUrl: adminUrl(), backupDir, targetDatabase: name });
+    const report = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: adminUrl(), backupDir, targetDatabase: name });
     expect(report.checks.filter((c) => !c.ok)).toEqual([]);
     expect(report.checks.map((c) => c.name)).toEqual(expect.arrayContaining(['required roles', 'ownership and privileges']));
 
@@ -128,7 +128,7 @@ describe('a backup of a populated ledger', () => {
 
   it('refuses before restoring anything when a role the backup names is missing from the server', async () => {
     const dir = editedCopy((m) => m.privileges.roles.push('telesphoros_role_that_does_not_exist'));
-    const report = await restoreAndVerify({ adminUrl: adminUrl(), backupDir: dir });
+    const report = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: adminUrl(), backupDir: dir });
     expect(report.ok).toBe(false);
     const check = report.checks.find((c) => c.name === 'required roles')!;
     expect(check).toMatchObject({ ok: false });
@@ -142,14 +142,14 @@ describe('a backup of a populated ledger', () => {
       (m: EditableManifest) => { m.privileges.grants.push('function:ledger_append_internal(uuid,text,text,uuid,text,smallint)|PUBLIC|EXECUTE'); },
       (m: EditableManifest) => { m.privileges.grants = m.privileges.grants.filter((g: string) => !g.startsWith('function:ledger_record_checkpoint')); },
     ]) {
-      const report = await restoreAndVerify({ adminUrl: adminUrl(), backupDir: editedCopy(edit) });
+      const report = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: adminUrl(), backupDir: editedCopy(edit) });
       expect(report.ok).toBe(false);
       expect(report.checks.find((c) => c.name === 'ownership and privileges')).toMatchObject({ ok: false });
     }
   });
 
   it('control: an unedited copy of the same backup passes every check', async () => {
-    const report = await restoreAndVerify({ adminUrl: adminUrl(), backupDir: editedCopy(() => undefined) });
+    const report = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: adminUrl(), backupDir: editedCopy(() => undefined) });
     expect(report.checks.filter((c) => !c.ok)).toEqual([]);
   });
 });
@@ -161,7 +161,7 @@ describe('a backup taken while a tenant is contained (migration 0011)', () => {
     const during = (await createBackup({ adminUrl: pg.adminUrl, destDir: tempDir() })).dir;
 
     const name = target();
-    const report = await restoreAndVerify({ adminUrl: adminUrl(), backupDir: during, targetDatabase: name });
+    const report = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: adminUrl(), backupDir: during, targetDatabase: name });
     expect(report.checks.filter((c) => !c.ok)).toEqual([]);
 
     const open = await withAdmin(withDb(adminUrl(), name), async (c: Client) => (await c.query(

@@ -34,6 +34,10 @@ pnpm --filter @telesphoros/backend db:restore -- --from /var/backups/telesphoros
 `--passphrase-file` on `restore` exists only for old (format 1) backups. `backup` no longer accepts it, and a backup
 made without `--key-file` is **not encrypted** (development and tests only; the command says so).
 
+A format 1 manifest is plain, unsigned JSON, so `restore` **refuses** it unless you add `--allow-unauthenticated`: the
+checksum and the list of required roles in it are only as trustworthy as whoever could write the backup folder. Add the flag
+only for a backup you made yourself and kept private. Every backup made with `--key-file` is signed and needs no flag.
+
 A real recovery: `restore ... --target-db telesphoros_restored` keeps the database; then point the application at it.
 The target server must already have every role the backup names (`telesphoros_app` and, from migration 0005, the ledger roles, plus
 the role that owns the tables): roles belong to the server, not the database, so a dump cannot carry them. `restore` checks this
@@ -79,7 +83,7 @@ Environment: PostgreSQL 16.15 on the build host, `moto` S3 emulator, the built `
 5. Negative controls: a corrupted backup file was refused (exit 1); a missing passphrase was refused (exit 1).
 
 That drill was run with format 1 (passphrase). Format 2 (below) is covered by automated tests, including a real format 1
-backup kept in `tests/backup_fixtures/v1-encrypted/` that must keep restoring. **A format 2 drill with the real CLI
+backup kept in `tests/backup_fixtures/v1-encrypted/` that must keep restoring (with `--allow-unauthenticated`). **A format 2 drill with the real CLI
 against the real second provider has not been run**; it is part of the next change.
 Defects this drill and its tests found and fixed: backup files were created world-readable; a failed encrypted backup
 left an **unencrypted dump** on disk; the manifest dropped the PostgreSQL version.
