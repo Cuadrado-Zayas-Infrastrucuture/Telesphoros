@@ -49,8 +49,8 @@ updates:
     directory: /infrastructure/docker
     schedule:
       interval: weekly
-    # The Node runtime is pinned on purpose (Node 22; the toolchain and CI pin the same version). A new major, including a
-    # non-LTS one such as 25, changes the whole toolchain: move it deliberately in its own PR.
+    # The Node runtime is pinned to an exact release on purpose (22.22.0): CI, the evidence checks, the Dockerfile guard and the
+    # docs all name it, and the lab-report reader needs its Unicode tables. Any new Node, major or patch, is one planned PR
+    # that moves every pin together; a lone base-image bump fails the Dockerfile guard.
     ignore:
       - dependency-name: "node"
-        update-types: ["version-update:semver-major"]
