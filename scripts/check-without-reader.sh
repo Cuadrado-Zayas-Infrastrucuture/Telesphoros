@@ -9,7 +9,7 @@
 #   scripts/check-without-reader.sh --measure --write   the same, then rewrite that list from the measurement
 #
 # The database and object-storage tiers run when TEST_DATABASE_URL / TEST_S3_ENDPOINT (and TEST_STORAGE / TEST_OBJECT_STORAGE) are set, exactly as for `pnpm test`.
-# Do not edit files while it runs: the engine is absent from the tree until it finishes.
+# Do not edit, stage or commit while it runs: the engine is absent from the tree until it finishes (`git add -A` now would stage the renames).
 set -uo pipefail
 
 measure=0; write=0
