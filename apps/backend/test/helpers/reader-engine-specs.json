@@ -8,7 +8,6 @@
     "src/services/report-reader/reader-checkpoint.spec.ts",
     "src/services/report-reader/subprocess-report-reader.spec.ts",
     "test/cell-usage.e2e-spec.ts",
-    "test/db/application-recovery.pg-spec.ts",
     "test/db/evaluation-context.pg-spec.ts",
     "test/db/stored-pgx-preview.pg-spec.ts",
     "test/lab-pdf-reports.e2e-spec.ts",

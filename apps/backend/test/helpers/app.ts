@@ -23,7 +23,11 @@ import { loadEnv } from '../../src/config/env';
 import { READINESS_CHECKS, type ReadinessCheck } from '../../src/health/readiness.service';
 import { createEphemeralDatabase, ownerUrlFor, verifierUrlFor } from './database';
 import { PgMembershipMirror, RegisteringMembershipAdmin } from './membership';
+import { LAB_READER } from '../../src/lab-reports/evaluations.service';
 import { FIXTURES, TEST_KNOWLEDGE } from './lab-pipeline';
+import { StandInReportReader } from './stand-in-reader';
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- plain CommonJS shared with jest.config.js
+const { readerEnginePresent } = require('./reader-engine.cjs') as { readerEnginePresent: () => boolean };
 import { TEST_AUDIENCE, TEST_ISSUER, TEST_SECRET } from './env';
 import type { TestingModule } from '@nestjs/testing';
 import { disposeFixtures, onceFixtureCleanup } from './fixture-cleanup';
@@ -200,7 +204,10 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
         return new MirrorTokenVerifier(base, adminPool ? new PgMembershipMirror(adminPool) : (memberships as InMemoryMembershipRepository));
       },
     });
-    for (const override of options.overrides ?? []) builder = builder.overrideProvider(override.provide).useValue(override.useValue);
+    const overrides = [...(options.overrides ?? [])];
+    // Without the imported reader engine the pipeline reads reports with the test stand-in, unless the spec supplies its own reader.
+    if (options.labReportPipeline && !readerEnginePresent() && !overrides.some((o) => o.provide === LAB_READER)) overrides.push({ provide: LAB_READER, useValue: new StandInReportReader() });
+    for (const override of overrides) builder = builder.overrideProvider(override.provide).useValue(override.useValue);
     moduleRef = await builder.compile();
     options.signal?.throwIfAborted();
     app = moduleRef.createNestApplication<NestExpressApplication>();

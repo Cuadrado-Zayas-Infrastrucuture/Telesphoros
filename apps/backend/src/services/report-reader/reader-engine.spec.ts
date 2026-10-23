@@ -42,6 +42,8 @@ describe('the skip list for a checkout without the reader engine', () => {
     'src/config/env.spec.ts', // the name of the LAB_REPORT_FIXTURES_DIR variable only
     'src/services/report-lookup/strict-json.spec.ts', // imports the lookup helper but never starts the engine
     'src/services/report-reader/reader-engine.spec.ts', // this file
+    'test/db/application-recovery.pg-spec.ts', // runs on the public synthetic fixtures and the test stand-in reader (the evidence gate needs its metric)
+    'test/stand-in-reader.spec.ts', // tests that stand-in and those fixtures
   ]);
   const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? (entry.name === 'node_modules' ? [] : walk(join(dir, entry.name))) : [join(dir, entry.name)]));
   const specFiles = [...walk(join(BACKEND, 'src')), ...walk(join(BACKEND, 'test'))].filter((file) => /\.(spec|e2e-spec|pg-spec|s3-spec)\.ts$/.test(file));
