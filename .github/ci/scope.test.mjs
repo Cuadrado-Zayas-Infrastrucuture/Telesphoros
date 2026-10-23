@@ -2,7 +2,7 @@
 // Controls for the run-scope decision (.github/ci/scope.mjs) and for how ci.yml uses it. A skip is only safe if the proof behind it is
 // real, so every refusal below is checked on a real git repository, and every structural rule has a mutation that must turn it red.
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -193,6 +193,25 @@ function verifyStepProblems(text) {
   return problems;
 }
 
+/** The exact command of the scope step. A pull request reads the decision code from its base; every other event is main itself. */
+const SCOPE_RUN = `if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+  printf '%s\\n' "$BASE_SHA" | grep -Eq '^[0-9a-f]{40}$'
+  git show "$BASE_SHA:.github/ci/scope.mjs" > "$RUNNER_TEMP/scope.mjs"
+  node "$RUNNER_TEMP/scope.mjs"
+else
+  node .github/ci/scope.mjs
+fi`;
+/** The run: block of the "Decide the scope of this run" step, dedented. */
+export function scopeRunBlock(changesJob) {
+  const step = changesJob.split(/^      - /m).find(st => st.startsWith('name: Decide the scope of this run\n')) ?? '';
+  const lines = step.split('\n');
+  const at = lines.findIndex(l => l === '        run: |');
+  if (at < 0) return '';
+  const body = [];
+  for (const l of lines.slice(at + 1)) { if (l !== '' && !l.startsWith('          ')) break; body.push(l.replace(/^ {10}/, '')); }
+  return body.join('\n').trimEnd();
+}
+
 /** Everything a skipped job could be mistaken for: only the named jobs carry the scope condition, nothing else does, and `changes` is built as reviewed. */
 export function scopeProblems(text) {
   const problems = [];
@@ -217,7 +236,8 @@ export function scopeProblems(text) {
   const on = text.split(/^on:\s*$/m)[1]?.split(/^\S/m)[0] ?? '';
   need(on.includes('  pull_request:\n    types: [opened, synchronize, reopened, ready_for_review]\n'), 'a draft marked ready starts a run (ready_for_review)');
   need(/fetch-depth: 0\n/.test(changes) && /persist-credentials: false\n/.test(changes), 'changes sees the history it compares and keeps no credentials');
-  need(/^        run: node \.github\/ci\/scope\.mjs$/m.test(changes) && /GH_TOKEN: \$\{\{ github\.token \}\}/.test(changes), 'changes runs scope.mjs with the job token');
+  need(scopeRunBlock(changes) === SCOPE_RUN && /GH_TOKEN: \$\{\{ github\.token \}\}/.test(changes), 'changes runs the base branch copy of scope.mjs on a pull request, with the job token');
+  need(changes.includes('          BASE_SHA: ${{ github.event.pull_request.base.sha }}\n'), 'changes passes the pull-request base');
   need(changes.includes('          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}\n') && changes.includes('          BEFORE_SHA: ${{ github.event.before }}\n'), 'changes passes the pull-request head and the previous main tip');
   const outputs = changes.match(/^    outputs:\n((?: {6}\S.*\n)+)/m)?.[1].trimEnd().split('\n') ?? [];
   need(JSON.stringify(outputs) === JSON.stringify(['heavy', 'guards', 'terraform', 'postgres', 'archive'].map(k => `      ${k}: \${{ steps.scope.outputs.${k} }}`)), 'changes exposes exactly the five outputs');
@@ -253,6 +273,8 @@ test('the scope structure check turns red for each way a gate could be skipped w
     'changes sees only a shallow history': swap(changes, 'fetch-depth: 0', 'fetch-depth: 1'),
     'changes is optional': swap(changes, '    timeout-minutes: 5\n', '    timeout-minutes: 5\n    continue-on-error: true\n'),
     'another script decides': swap(changes, 'node .github/ci/scope.mjs', 'node .github/ci/other.mjs'),
+    'a pull request runs the checked-out scope.mjs again': swap(changes, '          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then\n            printf \'%s\\n\' "$BASE_SHA" | grep -Eq \'^[0-9a-f]{40}$\'\n            git show "$BASE_SHA:.github/ci/scope.mjs" > "$RUNNER_TEMP/scope.mjs"\n            node "$RUNNER_TEMP/scope.mjs"\n          else\n            node .github/ci/scope.mjs\n          fi', '          node .github/ci/scope.mjs'),
+    'the base copy is read from the head instead': swap(changes, 'git show "$BASE_SHA:.github/ci/scope.mjs"', 'git show "$PR_HEAD_SHA:.github/ci/scope.mjs"'),
     'a fifth output leaks in': swap(changes, '      archive:', '      docs: ${{ steps.scope.outputs.docs }}\n      archive:'),
     'the joining gate always runs even with nothing to join (old shape)': workflow.replace(/    if: always\(\) && !\(needs\.service-memory.*\n/, '    if: always()\n'),
     'a documentation-only run skips the docs guard': workflow.replace('      - name: Terraform security tripwire\n        run: pnpm test:infra', `      - name: Terraform security tripwire\n        if: \${{ needs.changes.outputs.heavy == 'true' }}\n        run: pnpm test:infra`),
@@ -438,4 +460,35 @@ test('the nightly is the complete run, and is skipped only when an earlier night
   const failing = await decide(nightlyEnv(sha), { git, api: async () => { throw new Error('API answered 500'); } });
   assert.deepEqual([failing.heavy, failing.postgres], [true, true], 'an API failure runs the whole nightly');
   assert.equal((await decide({ ...nightlyEnv(sha), GITHUB_EVENT_NAME: 'workflow_dispatch' }, { git, api: apiFor({ runs: nightlyRun(sha), jobs: nightlyJobs() }) })).heavy, true, 'a manual run is never skipped');
+});
+
+// ---- the pull-request scope step really runs the base branch's code (executed, not only read) ----
+
+test('the scope step on a pull request runs the base branch copy of scope.mjs, so the change under review cannot decide its own scope', t => {
+  const script = scopeRunBlock(jobOf(workflow, 'changes'));
+  assert.equal(script, SCOPE_RUN, 'the step must be the reviewed command');
+  const r = repo(t);
+  const stub = verdict => `import { appendFileSync } from 'node:fs';\nappendFileSync(process.env.GITHUB_OUTPUT, 'heavy=${verdict}\\n');\n`;
+  r.commit('.github/ci/scope.mjs', stub('true'), 'base scope: run everything');
+  const base = r.git(['rev-parse', 'HEAD']).trim();
+  r.commit('.github/ci/scope.mjs', stub('false'), 'the change rewrites its own scope to skip everything');
+  const head = r.git(['rev-parse', 'HEAD']).trim();
+  const run = env => {
+    const out = join(r.dir, 'github-output'); writeFileSync(out, '');
+    const result = spawnSync('bash', ['-e', '-c', script], { cwd: r.dir, encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, RUNNER_TEMP: tmpdir(), GITHUB_OUTPUT: out, ...env } });
+    return { status: result.status, output: readFileSync(out, 'utf8') };
+  };
+  const pr = run({ GITHUB_EVENT_NAME: 'pull_request', BASE_SHA: base });
+  assert.equal(pr.status, 0);
+  assert.equal(pr.output, 'heavy=true\n', 'the pull request must get the base decision, not its own');
+  // Positive control: the same checkout on a push runs the checked-out copy, which does say heavy=false. Without this the test above would prove nothing.
+  const push = run({ GITHUB_EVENT_NAME: 'push', BASE_SHA: '' });
+  assert.equal(push.status, 0);
+  assert.equal(push.output, 'heavy=false\n', 'the checked-out copy is the one that was rewritten');
+  // Fail closed: a base that cannot be read stops the step, so `changes` fails and every job runs.
+  for (const bad of ['', '0'.repeat(40), 'not-a-sha', head + 'x']) {
+    const refused = run({ GITHUB_EVENT_NAME: 'pull_request', BASE_SHA: bad });
+    assert.notEqual(refused.status, 0, `BASE_SHA ${JSON.stringify(bad)} must fail the step`);
+    assert.equal(refused.output, '', 'a failed step writes no output');
+  }
 });

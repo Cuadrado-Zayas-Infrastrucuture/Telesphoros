@@ -70,8 +70,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_ENABLED: ${{ vars.IMAGE_RELEASE_ROLE_ARN != '' }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BEFORE_SHA: ${{ github.event.before }}
-        run: node .github/ci/scope.mjs
+        # A pull request must not decide its own scope: the decision code is read from the base branch, never from the change under review.
+        # The base must be a full commit id: an empty one would make `git show` read the index, which is the change's own copy.
+        # If the base copy cannot be read the step fails, `changes` fails, and every job runs.
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            printf '%s\n' "$BASE_SHA" | grep -Eq '^[0-9a-f]{40}$'
+            git show "$BASE_SHA:.github/ci/scope.mjs" > "$RUNNER_TEMP/scope.mjs"
+            node "$RUNNER_TEMP/scope.mjs"
+          else
+            node .github/ci/scope.mjs
+          fi
 
   # Fast gate: types, lint, the unit/API suites on the in-memory store, the production builds,
   # the knowledge-directory check, and the infrastructure tripwire.
