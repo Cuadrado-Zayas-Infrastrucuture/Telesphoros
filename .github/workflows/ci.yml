@@ -11,6 +11,12 @@ on:
   # draft's skipped, "successful" checks would be the only ones on the head (guard: scope.test.mjs). The other three are GitHub's defaults.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  # The complete run, with the standalone PostgreSQL profile that pull requests leave out (docs/ops/ci-cd.md "Nightly"). 07:41 UTC is 03:41 in Puerto Rico,
+  # when no merge is likely: it shares the concurrency group of pushes to main, and a queued run is replaced by a newer queued one. Skipped when an
+  # earlier nightly already passed everything at the same commit. workflow_dispatch is the same complete run, on demand, on any branch.
+  schedule:
+    - cron: '41 7 * * *'
+  workflow_dispatch:
   push:
     branches: [main]
 
@@ -48,6 +54,7 @@ jobs:
       heavy: ${{ steps.scope.outputs.heavy }}
       guards: ${{ steps.scope.outputs.guards }}
       terraform: ${{ steps.scope.outputs.terraform }}
+      postgres: ${{ steps.scope.outputs.postgres }}
       archive: ${{ steps.scope.outputs.archive }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -549,7 +556,7 @@ jobs:
 
   service-postgres:
     name: service-postgres
-    if: ${{ !cancelled() && (needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure') }}
+    if: ${{ !cancelled() && (needs.changes.outputs.postgres == 'true' || needs.changes.result == 'failure') }}
     needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -780,7 +787,7 @@ jobs:
   database-and-storage:
     name: database-and-storage
     if: always() && !(needs.service-memory.result == 'skipped' && needs.service-postgres.result == 'skipped' && needs.service-postgres-s3.result == 'skipped')
-    needs: [service-memory, service-postgres, service-postgres-s3]
+    needs: [service-memory, service-postgres, service-postgres-s3, changes]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -877,9 +884,9 @@ jobs:
       - name: "Worker: show the failing tests"
         if: failure() && hashFiles('tier-worker.log') != ''
         run: grep -n -B2 -A30 -E "FAIL|AssertionError|Error:|NOT RUNNING" tier-worker.log | head -400
-      - name: Validate all three independent-recovery measurement profiles
+      - name: Validate the expected independent-recovery measurement profiles
         run: node .github/ci/verify-recovery-metrics.mjs
-      - name: Validate all three application-recovery measurement profiles
+      - name: Validate the expected application-recovery measurement profiles
         run: node .github/ci/verify-application-recovery.mjs
       - name: Require worker completion and unchanged collected evidence
         run: node .github/ci/service-evidence.mjs finish

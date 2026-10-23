@@ -28,8 +28,8 @@ test('CI runs the worker against PostgreSQL after the API tiers, and a skipped t
   assert.ok(workflow.includes('tier*.log'));
 });
 
-test('CI validates all three recovery artifacts after the service tiers', () => {
-  const command = '      - name: Validate all three independent-recovery measurement profiles\n        run: node .github/ci/verify-recovery-metrics.mjs';
+test('CI validates the expected recovery artifacts after the service tiers', () => {
+  const command = '      - name: Validate the expected independent-recovery measurement profiles\n        run: node .github/ci/verify-recovery-metrics.mjs';
   assert.ok(workflow.includes(command));
   assert.ok(workflow.indexOf(command) > workflow.indexOf('TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 pnpm'));
   assert.ok(workflow.includes('path: apps/backend/test-results/independent-recovery-*.json'));

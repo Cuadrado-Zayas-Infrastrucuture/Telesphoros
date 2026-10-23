@@ -6,6 +6,9 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { budgetFromRun, budgetMs, initialize, loadBudget, remainingMs, root, runScript } from './service-budget.mjs';
 import { collect, finish, metricFiles, parseSummary, profiles, runProducer, validateMetric, validateNeeds } from './service-evidence.mjs';
+import { expectedProfiles, profilesFromEnv } from './service-profiles.mjs';
+import { verifyAllProfiles } from './verify-recovery-metrics.mjs';
+import { verifyApplicationProfiles } from './verify-application-recovery.mjs';
 import { internalJobs, jobOf, serviceLayoutProblems } from './service-layout.mjs';
 import { recoveryMetricControl, applicationMetricControl } from './fixtures/recovery.mjs';
 import { catalogueMetricControl } from './fixtures/catalogue.mjs';
@@ -17,7 +20,8 @@ const backendLog = 'PASS test/control.spec.ts (1 s)\nTest Suites: 1 skipped, 1 p
 const workerLog = ' ✓ test/control.test.ts (3 tests) 100ms\n Test Files  1 passed (1)\n      Tests  3 passed (3)\n';
 const json = (file, value) => writeFileSync(file, JSON.stringify(value) + '\n');
 const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
-function fixture(t) {
+const reducedNeeds = (postgres = 'false') => ({ ...needs(), 'service-postgres': { result: 'skipped', outputs: {} }, changes: { result: 'success', outputs: { postgres } } });
+function fixture(t, serviceNeeds = needs(), profileList = Object.keys(profiles)) {
   const directory = mkdtempSync(join(tmpdir(), 'service-isolation-'));
   // Only generated synthetic fixtures are removed; no repository or service data lives here.
   t.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -25,7 +29,7 @@ function fixture(t) {
   const startedMs = Date.now() - 5000;
   const budget = { format: 1, ...identity, startedMs, deadlineMs: startedMs + budgetMs };
   const env = { ...process.env, RUNNER_TEMP: directory, GITHUB_REPOSITORY: identity.repository, GITHUB_RUN_ID: identity.runId,
-    GITHUB_RUN_ATTEMPT: identity.attempt, SERVICE_HEAD_SHA: identity.headSha, GITHUB_SHA: identity.checkout, SERVICE_NEEDS: JSON.stringify(needs()) };
+    GITHUB_RUN_ATTEMPT: identity.attempt, SERVICE_HEAD_SHA: identity.headSha, GITHUB_SHA: identity.checkout, SERVICE_NEEDS: JSON.stringify(serviceNeeds) };
   delete env.TELESPHOROS_WORKSPACE_PREPARED;
   json(join(directory, 'service-budget.json'), budget);
   const timing = { format: 1, phase: 'shared-library-build', libraries: ['shared-types', 'cpic-schema', 'fake-idp', 'jobs'], durationMs: 42, exitCode: 0, nodeVersion: '22.22.0' };
@@ -44,7 +48,7 @@ function fixture(t) {
   } });
   const download = async () => {
     const directory = join(env.RUNNER_TEMP, 'service-profiles'); mkdirSync(directory);
-    for (const profile of Object.keys(profiles)) {
+    for (const profile of profileList) {
       assert.equal(await producer(profile), 0);
       cpSync(join(env.RUNNER_TEMP, 'service-profile-' + profile), join(directory, `service-profile-${profile}-1`), { recursive: true });
     }
@@ -61,7 +65,8 @@ test('layout controls reject orphaned, optional, swallowed, incomplete or cross-
   const gate = jobOf(workflow, 'database-and-storage');
   const commands = ['service-evidence.mjs dependencies', 'service-evidence.mjs collect', 'service-evidence.mjs finish', 'verify-recovery-metrics.mjs', 'verify-application-recovery.mjs', 'service-budget.mjs check'];
   const mutations = [
-    workflow.replace('needs: [service-memory, service-postgres, service-postgres-s3]', 'needs: [service-memory, service-postgres]'),
+    workflow.replace('needs: [service-memory, service-postgres, service-postgres-s3, changes]', 'needs: [service-memory, service-postgres, changes]'),
+    workflow.replace('needs: [service-memory, service-postgres, service-postgres-s3, changes]', 'needs: [service-memory, service-postgres, service-postgres-s3]'),
     workflow.replace(gate, gate.replace('    if: always() && !(', '    if: success() && !(')),
     workflow.replace(gate, gate.replace("needs.service-postgres.result == 'skipped'", "needs.service-postgres.result != 'x'")),
     workflow.replace('pattern: service-profile-*-${{ github.run_attempt }}', 'pattern: service-profile-*'),
@@ -272,4 +277,52 @@ test('CLI validation failures are generic and never print rejected environment d
     const result = spawnSync(process.execPath, [join(root, '.github/ci', script), 'unexpected'], { env: { ...f.env, PRIVATE: 'PRIVATE_DATA' }, encoding: 'utf8' });
     assert.equal(result.status, 1); assert.equal(result.stdout, ''); assert.match(result.stderr, /^Service (?:budget|evidence) command failed\.\n$/); assert.doesNotMatch(result.stderr, /PRIVATE_DATA/);
   }
+});
+
+test('the joining gate expects exactly the profiles the scope names: two on a pull request, three in the nightly, three on any doubt', () => {
+  const three = { ...needs(), changes: { result: 'success', outputs: { postgres: 'true' } } };
+  assert.doesNotThrow(() => validateNeeds(needs()), 'the old three-key shape still expects all three');
+  assert.doesNotThrow(() => validateNeeds(three));
+  assert.doesNotThrow(() => validateNeeds(reducedNeeds()));
+  assert.deepEqual(expectedProfiles(reducedNeeds()), ['memory', 'postgres-s3']);
+  for (const [label, value] of Object.entries({
+    'the standalone profile ran although it was not expected': { ...reducedNeeds(), 'service-postgres': { result: 'success', outputs: {} } },
+    'the standalone profile was skipped although it was expected': { ...three, 'service-postgres': { result: 'skipped', outputs: {} } },
+    'changes failed and the standalone profile was skipped': { ...reducedNeeds(), changes: { result: 'failure', outputs: { postgres: 'false' } } },
+    'changes was skipped': { ...reducedNeeds(), changes: { result: 'skipped', outputs: { postgres: 'false' } } },
+    'changes gave no output': { ...reducedNeeds(), changes: { result: 'success', outputs: {} } },
+    'changes gave a near miss': { ...reducedNeeds(), changes: { result: 'success', outputs: { postgres: 'False' } } },
+    'changes gave nothing at all': { ...reducedNeeds(), changes: {} },
+    'memory skipped in the reduced set': { ...reducedNeeds(), 'service-memory': { result: 'skipped', outputs: {} } },
+    'PostgreSQL + S3 skipped in the reduced set': { ...reducedNeeds(), 'service-postgres-s3': { result: 'skipped', outputs: {} } },
+    'memory failed in the reduced set': { ...reducedNeeds(), 'service-memory': { result: 'failure', outputs: {} } },
+    'an unknown dependency': { ...reducedNeeds(), unknown: { result: 'success' } },
+  })) assert.throws(() => validateNeeds(value), label);
+  for (const bad of [null, undefined, [], 'x', 3]) assert.throws(() => validateNeeds(bad));
+  for (const unnarrowed of [needs(), three, { ...needs(), changes: { result: 'failure', outputs: { postgres: 'false' } } }]) assert.deepEqual(expectedProfiles(unnarrowed), ['memory', 'postgres', 'postgres-s3']);
+});
+
+test('two-profile evidence joins six metrics and the worker; evidence that does not match the expected set is refused before copying', async t => {
+  const f = fixture(t, reducedNeeds(), ['memory', 'postgres-s3']); await f.download(); collect(f.options);
+  assert.equal(readdirSync(join(f.cwd, 'apps/backend/test-results')).length, 6);
+  assert.throws(() => finish(f.options));
+  assert.equal(await f.producer('worker'), 0); assert.doesNotThrow(() => finish(f.options));
+  // An unexpected third bundle, or a missing expected one, never joins.
+  const extra = fixture(t, reducedNeeds()); await extra.download();
+  assert.throws(() => collect(extra.options)); assert.equal(existsSync(join(extra.cwd, 'apps/backend/test-results')), false);
+  const missing = fixture(t, needs(), ['memory', 'postgres-s3']); await missing.download();
+  assert.throws(() => collect(missing.options)); assert.equal(existsSync(join(missing.cwd, 'apps/backend/test-results')), false);
+  // The recovery validators take the same list: all three by default, two when told.
+  const four = fixture(t, reducedNeeds(), ['memory', 'postgres-s3']); await four.download(); collect(four.options);
+  assert.doesNotThrow(() => verifyAllProfiles(join(four.cwd, 'apps/backend/test-results'), identity.checkout, ['memory', 'postgres-s3']));
+  assert.throws(() => verifyAllProfiles(join(four.cwd, 'apps/backend/test-results'), identity.checkout));
+  assert.doesNotThrow(() => verifyApplicationProfiles(join(four.cwd, 'apps/backend/test-results'), identity.checkout, ['memory', 'postgres-s3']));
+  assert.throws(() => verifyApplicationProfiles(join(four.cwd, 'apps/backend/test-results'), identity.checkout));
+});
+
+test('the recovery validators read the expected set from the gate environment and default to all three', () => {
+  assert.deepEqual(profilesFromEnv({}), ['memory', 'postgres', 'postgres-s3']);
+  assert.deepEqual(profilesFromEnv({ SERVICE_NEEDS: JSON.stringify(reducedNeeds()) }), ['memory', 'postgres-s3']);
+  assert.deepEqual(profilesFromEnv({ SERVICE_NEEDS: JSON.stringify(needs()) }), ['memory', 'postgres', 'postgres-s3']);
+  assert.throws(() => profilesFromEnv({ SERVICE_NEEDS: 'not json' }));
 });

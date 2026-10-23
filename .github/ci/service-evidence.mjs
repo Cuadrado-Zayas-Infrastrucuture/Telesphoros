@@ -6,6 +6,7 @@ import { stripVTControlCharacters } from 'node:util';
 import { exactKeys, loadBudget, readJson, remainingMs, root, runScript, temporary } from './service-budget.mjs';
 import { verifyAllProfiles, verifyRecoveryMetrics } from './verify-recovery-metrics.mjs';
 import { verifyApplicationProfiles, verifyApplicationRecovery } from './verify-application-recovery.mjs';
+import { expectedProfiles } from './service-profiles.mjs';
 
 export const profiles = { memory: 'service-memory', postgres: 'service-postgres', 'postgres-s3': 'service-postgres-s3' };
 const logs = { memory: 'tier1.log', postgres: 'tier2.log', 'postgres-s3': 'tier3.log', worker: 'tier-worker.log' };
@@ -32,9 +33,15 @@ function metricFence(profile, cwd) {
   finally { unlinkSync(marker); } // Only this invocation's exclusively created marker is removed.
 }
 
+/**
+ * The joining gate's dependency check. Every expected producer must have succeeded and every other one must have been skipped, exactly: a skipped
+ * producer that was expected, or a successful one that was not, is a mismatch. The expected set comes from service-profiles.mjs (the `changes` job
+ * narrows it to two profiles only by explicit success); a `needs` map without `changes` expects all three, as before.
+ */
 export function validateNeeds(needs) {
-  exactKeys(needs, Object.values(profiles));
-  for (const job of Object.values(profiles)) if (needs[job]?.result !== 'success') refuse();
+  const expected = expectedProfiles(needs);
+  exactKeys(needs, 'changes' in needs ? [...Object.values(profiles), 'changes'] : Object.values(profiles));
+  for (const [profile, job] of Object.entries(profiles)) if (needs[job]?.result !== (expected.includes(profile) ? 'success' : 'skipped')) refuse();
 }
 function counts(line, worker = false) {
   const value = { passed: Number(line.match(/(\d+) passed/)?.[1] ?? 0), skipped: Number(line.match(/(\d+) skipped/)?.[1] ?? 0),
@@ -160,13 +167,15 @@ export async function runProducer(profile, script, { env = process.env, cwd = ro
 }
 
 function bundles({ env, directory, now }) {
-  validateNeeds(JSON.parse(env.SERVICE_NEEDS ?? 'null'));
+  const needs = JSON.parse(env.SERVICE_NEEDS ?? 'null');
+  validateNeeds(needs);
+  const wanted = expectedProfiles(needs);
   const budget = loadBudget(env, now());
   if (!lstatSync(directory).isDirectory()) refuse();
-  const expected = Object.keys(profiles).map(p => `service-profile-${p}-${budget.attempt}`);
+  const expected = wanted.map(p => `service-profile-${p}-${budget.attempt}`);
   if (JSON.stringify(readdirSync(directory).sort()) !== JSON.stringify(expected.sort())) refuse();
   const records = [];
-  for (const profile of Object.keys(profiles)) {
+  for (const profile of wanted) {
     const bundle = join(directory, `service-profile-${profile}-${budget.attempt}`);
     if (!lstatSync(bundle).isDirectory()) refuse();
     const files = [...metricFiles(profile), 'service-test-prerequisites.json'];
@@ -185,20 +194,20 @@ function bundles({ env, directory, now }) {
     }
   }
   remainingMs(budget, now());
-  return { budget, records };
+  return { budget, records, wanted };
 }
 export function collect({ env = process.env, directory = join(temporary(env), 'service-profiles'), cwd = root, now = Date.now } = {}) {
-  const { budget, records } = bundles({ env, directory, now });
+  const { budget, records, wanted } = bundles({ env, directory, now });
   // No existing result, cached file or overwrite can satisfy this collection boundary.
   const target = join(cwd, 'apps/backend/test-results'); mkdirSync(target, { recursive: true });
   for (const [name, bytes] of records) writeFileSync(join(target, name), bytes, { mode: 0o600, flag: 'wx' });
-  verifyAllProfiles(target, budget.checkout); verifyApplicationProfiles(target, budget.checkout);
+  verifyAllProfiles(target, budget.checkout, wanted); verifyApplicationProfiles(target, budget.checkout, wanted);
   remainingMs(budget, now());
 }
 export function finish({ env = process.env, cwd = root, now = Date.now } = {}) {
   validateNeeds(JSON.parse(env.SERVICE_NEEDS ?? 'null'));
   const budget = loadBudget(env, now());
-  const { records } = bundles({ env, directory: join(temporary(env), 'service-profiles'), now });
+  const { records, wanted } = bundles({ env, directory: join(temporary(env), 'service-profiles'), now });
   for (const [name, bytes] of records) {
     const result = join(cwd, 'apps/backend/test-results', name); safeFile(result);
     if (sha(readFileSync(result)) !== sha(bytes)) refuse();
@@ -206,8 +215,8 @@ export function finish({ env = process.env, cwd = root, now = Date.now } = {}) {
   const worker = readJson(join(temporary(env), 'service-worker/completion.json'));
   validateCompletion(worker, 'worker', budget); exactKeys(worker.hashes, []);
   if (worker.finishedMs > now()) refuse();
-  verifyAllProfiles(join(cwd, 'apps/backend/test-results'), budget.checkout);
-  verifyApplicationProfiles(join(cwd, 'apps/backend/test-results'), budget.checkout);
+  verifyAllProfiles(join(cwd, 'apps/backend/test-results'), budget.checkout, wanted);
+  verifyApplicationProfiles(join(cwd, 'apps/backend/test-results'), budget.checkout, wanted);
   remainingMs(budget, now());
 }
 

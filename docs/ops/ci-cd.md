@@ -12,8 +12,8 @@ A first job, `changes`, decides how much of the rest a run must do (next section
 | Job | Required | What a green result proves |
 | --- | --- | --- |
 | `verify` | yes | Typecheck and lint pass; the unit and API suites pass on the in-memory store; everything builds; the frontend stays inside its chunk budget; the real `knowledge/cpic` directory loads under **production** rules (nothing synthetic or unreviewed); the Terraform security tripwire (`pnpm test:infra`) and the CI-configuration tripwire (`pnpm test:ci-config`) pass |
-| `database-and-storage` | yes | Joining gate: all three isolated backend profiles succeed, their nine current-checkout recovery records validate, and the complete worker suite passes on a fresh PostgreSQL/Moto pair, within one shared 30-minute run-attempt budget. Native failures and missing-service notices fail the gate |
-| `service-memory`, `service-postgres`, `service-postgres-s3` | through the joining gate | The same complete backend commands as before, each on its own PostgreSQL 16, Moto and runner filesystem. The memory profile still includes database/S3 specs; PostgreSQL/S3 settings, discovery, workers and test deadlines are unchanged |
+| `database-and-storage` | yes | Joining gate: every **expected** isolated backend profile succeeds (memory and PostgreSQL + S3 on a pull request or push; all three in the nightly and whenever the scope is in doubt), their current-checkout recovery records validate (six, or nine for three profiles), and the complete worker suite passes on a fresh PostgreSQL/Moto pair, within one shared 30-minute run-attempt budget. Native failures and missing-service notices fail the gate |
+| `service-memory`, `service-postgres`, `service-postgres-s3` | through the joining gate | The same complete backend commands as before, each on its own PostgreSQL 16, Moto and runner filesystem. The memory profile still includes database/S3 specs; PostgreSQL/S3 settings, discovery, workers and test deadlines are unchanged. `service-postgres` (the PostgreSQL store with the in-memory object store) runs in the nightly, not on pull requests |
 | `browser` | yes | The login flow and pages, driven by Chromium at 375 px and 1280 px against the fake identity provider (test only), the built API and the built frontend. On failure, traces and screenshots are kept 7 days |
 | `terraform` | yes | `terraform fmt -check`, `init -backend=false`, `validate`, then `terraform test`: an offline plan of the whole root under each deployment profile with every provider mocked (what each profile builds, what it refuses, that the default variables plan). No credentials; nothing is created or applied, and it does not prove AWS accepts the plan |
 | `secret-scan` | yes | gitleaks over the **full git history** (rules and the one named allowlist entry in `.gitleaks.toml`) |
@@ -94,12 +94,37 @@ maintainer and strict up-to-date checking the practical risk is a person merging
 GitHub offers merge queues for private repositories only on Enterprise Cloud, which is why PR #249 (the `merge_group` trigger) was
 closed, and a public repository gets it on the Free plan. Until then: mark ready, then wait for the checks to appear.
 
+**Nightly (all three backend profiles).** The standalone `service-postgres` profile (PostgreSQL store, in-memory object store) no longer runs on pull
+requests: memory and PostgreSQL + S3 do, and between them they exercise the database specs, the PostgreSQL store and the S3 protocol; what
+only the standalone profile adds is that exact pairing. A `schedule` run (07:41 UTC, 03:41 in Puerto Rico) and a manual `workflow_dispatch`
+run execute the whole workflow with all three profiles, so `main` is still proved in full every day it changes. A scheduled run is skipped when an
+earlier scheduled run already passed all six required checks and `service-postgres` at the same commit of `main`; a manual run is never skipped.
+The nightly shares the concurrency group of pushes to `main` (`cancel-in-progress` is false for it), and GitHub keeps one running and one
+queued run per group, so a queued nightly can be replaced by a queued push run or the reverse; the early hour makes that unlikely. Its cost is
+a knob: the cron line in `ci.yml`.
+
 What this does not do: it does not make `main`'s checks "green by assumption". The required checks bind to pull requests; the push
 run exists to catch drift, and it still runs in full whenever the proof is missing.
 
 Expected effect: the post-merge push run (about 40% of runs, measured by the report that prompted this) drops from ten jobs to
 `changes`, `secret-scan` and, while armed, `image`. That is an estimate from job counts and the durations recorded below, not a
 measurement; real minutes can only be read from the first hosted runs after the change.
+
+### Required checks: what each does now
+
+Before this change every required check ran in full on every pull request and every push to `main`. "Skipped" below means the job is skipped by a
+job-level condition and reports success to the ruleset (see "How GitHub treats a skipped required check").
+
+| Check | Pull request, code | Pull request, docs only | Draft pull request | Push to `main`, tree proved | Push to `main`, not proved | Nightly / manual |
+| --- | --- | --- | --- | --- | --- | --- |
+| `verify` | all steps | install, `test:infra`, `test:ci-config` | skipped (no run) | skipped | all steps (docs only: reduced) | all steps |
+| `database-and-storage` | gate over memory + PostgreSQL + S3 | skipped | skipped | skipped | gate over memory + PostgreSQL + S3 | gate over all three profiles |
+| `browser` | runs | skipped | skipped | skipped | runs | runs |
+| `terraform` | runs if infrastructure, `.tflint.hcl` or `.github/` changed, else skipped | skipped | skipped | skipped | as for a pull request | runs |
+| `secret-scan` | runs | runs | skipped | runs | runs | runs |
+| `image` | runs | skipped | skipped | runs only while the release variables are set | runs | runs |
+
+A scheduled run is skipped entirely when an earlier one already passed everything at the same commit.
 
 ### Documentation merge and post-merge CI (#162, 2026-10-17)
 
@@ -266,7 +291,7 @@ At expiry the watchdog cancels this job’s `Runner.Worker` with SIGTERM and ter
 
 Initial VM provisioning, service-container startup and GitHub’s action-download preparation occur before workflow code can run. They consume the same clock, and an already expired attempt is refused by the first-step bootstrap. Workflow code cannot cancel platform work before that step. The existing 30-minute job caps remain as a second bound. If bootstrap cannot arm, retention actions are not launched. Failure artifacts remain seven-day, best-effort evidence within the active budget; they cannot extend it. The successful main run above establishes hosted bootstrap/live-watchdog acceptance, complete profiles, evidence transfers and normal teardown. Native controls cover interruption and detached cleanup; actual hosted cancellation at expiry remains untriggered. The [deadline-supervision verification](../verification/ci-service-deadline-supervision.md) records the earlier local stage.
 
-The gate uses `if: always()` and explicitly requires **all three** `needs` results to be `success`. GitHub can otherwise treat a skipped check as successful. It downloads only the current run’s attempt-suffixed profile artifacts, without merging directories or overriding repository/run, and fails on digest mismatch. Each profile bundle requires a completed test summary with unique passing suite records, the existing build-timing receipt, three strict synthetic recovery aggregates and SHA-256 hashes. Its manifest binds the run, attempt, head, checkout, shared deadline and completion time. Missing, extra, changed, stale or incomplete evidence fails before copying. Existing results cannot substitute for a download.
+The gate uses `if: always()` (skipped only when all three producers were skipped, which is the documentation-only, draft and proven-tree case) and explicitly requires every **expected** producer to be `success` and every other one to be `skipped`. The expected set comes from one place, `.github/ci/service-profiles.mjs`: memory and PostgreSQL + S3 only when the `changes` job succeeded and said `postgres == 'false'`; all three in every other case, including a failed, skipped or silent `changes`. The collector, the final acceptance and both recovery validators use the same set. GitHub can otherwise treat a skipped check as successful. It downloads only the current run’s attempt-suffixed profile artifacts, without merging directories or overriding repository/run, and fails on digest mismatch. Each profile bundle requires a completed test summary with unique passing suite records, the existing build-timing receipt, three strict synthetic recovery aggregates and SHA-256 hashes. Its manifest binds the run, attempt, head, checkout, shared deadline and completion time. Missing, extra, changed, stale or incomplete evidence fails before copying. Existing results cannot substitute for a download.
 
 After collection the complete worker profile runs against the joining job’s fresh cluster and Moto. Both existing all-profile F2/F3 CLI validators remain mandatory and unchanged. Final acceptance rechecks the bundles, copied metrics, complete worker summary, dependency results, live watchdog and deadline. A metric emitted early by a timed-out profile is insufficient, even when all nine aggregates passed. Intentional test skips from existing profile discovery are recorded; a missing-service `NOT RUNNING` notice is always refused. Seven-day aggregate/timing retention and failure/cancellation logs remain; attempt suffixes prevent collisions with immutable artifacts on reruns. Re-running only failed jobs cannot reuse an earlier attempt’s successful profiles: a new acceptance attempt needs all three producers again.
 
