@@ -157,6 +157,8 @@ test('a signalled CLI fails and kills its child process group without printing e
 
 test('summaries require final counters and a unique PASS record for every completed suite', () => {
   assert.equal(parseSummary(backendLog).tests.passed, 3); assert.equal(parseSummary(workerLog, true).tests.passed, 3);
+  // The public repository has no report-reader engine: its announcement is a different marker and must not be refused, while NOT RUNNING stays refused.
+  assert.equal(parseSummary(backendLog + '\n[jest] ENGINE ABSENT: skipping 21 specs that need the report-reader engine (list in test/helpers/reader-engine-specs.json)\n').tests.passed, 3);
   for (const log of ['', backendLog.replace('Test Suites:', 'Interrupted:'), backendLog + backendLog, backendLog + '[jest] NOT RUNNING',
     backendLog.replace('3 passed', '3 failed'), backendLog.replace('2 total', '3 total'), backendLog.replace('PASS', 'FAIL'), backendLog.replace('test/control', '../control'),
     backendLog.replace('1 passed, 2 total', '2 passed, 3 total')]) assert.throws(() => parseSummary(log));
