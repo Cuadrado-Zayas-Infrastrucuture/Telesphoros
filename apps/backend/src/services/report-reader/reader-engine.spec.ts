@@ -6,7 +6,7 @@ import { DEFAULT_CLI_PATH, DEFAULT_ENGINE_DIR } from './subprocess-report-reader
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const helper = require('../../../test/helpers/reader-engine.cjs') as {
-  ENGINE_DIR: string; CLI_PATH: string; SPECS_NEEDING_ENGINE: string[]; readerEnginePresent: () => boolean;
+  ENGINE_DIR: string; FIXTURES_DIR: string; CLI_PATH: string; SPECS_NEEDING_ENGINE: string[]; readerEnginePresent: () => boolean;
 };
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const list = require('../../../test/helpers/reader-engine-specs.json') as { specs: string[]; partialSkip: Record<string, string> };
@@ -80,7 +80,7 @@ describe('the skip list for a checkout without the reader engine', () => {
     });
 
     it('skips none of them while the engine is present', () => {
-      if (!helper.readerEnginePresent()) return; // a checkout without the engine cannot show the present case
+      if (missingReaderEngineFiles().length > 0 || !existsSync(helper.FIXTURES_DIR)) return; // a checkout without the engine cannot show the present case
       const { patterns, announced } = configFor(undefined);
       expect(patterns.filter((p) => p.startsWith('<rootDir>/'))).toEqual([]);
       expect(announced).not.toMatch(/report-reader engine/);

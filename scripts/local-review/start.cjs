@@ -4,6 +4,7 @@ const { createRequire } = require('node:module');
 const path = require('node:path');
 const { reportsCorsRule } = require('../local-storage/cors.cjs');
 const root = path.resolve(__dirname, '../..');
+require('./require-reader.cjs')(root);
 const poppler = process.argv.includes('--poppler');
 function port(name,fallback){const value=process.env[name]||fallback;if(!/^[1-9][0-9]{3,4}$/.test(value)||Number(value)>65535)throw new Error('Invalid local port');return value;}
 const ports={web:port('LOCAL_REVIEW_WEB_PORT','4173'),idp:port('LOCAL_REVIEW_IDP_PORT','4010'),api:port('LOCAL_REVIEW_API_PORT','3010'),moto:port('LOCAL_REVIEW_MOTO_PORT','5555'),pg:port('LOCAL_REVIEW_PG_PORT','54359')};
