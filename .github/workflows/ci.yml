@@ -40,6 +40,8 @@ jobs:
       actions: read
     outputs:
       heavy: ${{ steps.scope.outputs.heavy }}
+      guards: ${{ steps.scope.outputs.guards }}
+      terraform: ${{ steps.scope.outputs.terraform }}
       archive: ${{ steps.scope.outputs.archive }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -54,13 +56,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_ENABLED: ${{ vars.IMAGE_RELEASE_ROLE_ARN != '' }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
         run: node .github/ci/scope.mjs
 
   # Fast gate: types, lint, the unit/API suites on the in-memory store, the production builds,
   # the knowledge-directory check, and the infrastructure tripwire.
   verify:
     name: verify
-    if: ${{ !cancelled() && (needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure') }}
+    if: ${{ !cancelled() && (needs.changes.outputs.guards == 'true' || needs.changes.result == 'failure') }}
     needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -73,18 +77,33 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm lint
-      - run: pnpm test
-      - run: pnpm build
+      # Unconditional: test:infra loads the backend's configuration loader (zod), so even a documentation-only run needs the install.
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
+        run: pnpm typecheck
+      - name: Lint
+        if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
+        run: pnpm lint
+      - name: Workspace tests
+        if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
+        run: pnpm test
+      - name: Production builds
+        if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
+        run: pnpm build
       - name: Published FHIR Genomics IG validation (synthetic only)
+        if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
         run: JAVA_HOME="$JAVA_HOME_21_X64" pnpm --filter @telesphoros/smart-pilot test:ig
       - name: Frontend chunk budget
+        if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
         run: pnpm --filter @telesphoros/frontend check:chunks
       # Fails if anything synthetic or unreviewed sits in the real knowledge directory.
       - name: Knowledge directory loads under production rules
+        if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
         run: pnpm --filter @telesphoros/backend knowledge:verify --production
+      # The two guards below run on every pull request, including documentation-only ones: they are the only code that reads docs/ and CLAUDE.md
+      # (scope.test.mjs lists the readers). Everything above is skipped when only documentation changed.
       - name: Terraform security tripwire
         run: pnpm test:infra
       - name: CI configuration tripwire (pinned actions, required checks match the ruleset)
@@ -967,7 +986,7 @@ jobs:
   # Both roots are mandatory; mocked plans and policy probes use no cloud credentials or apply.
   terraform:
     name: terraform
-    if: ${{ !cancelled() && (needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure') }}
+    if: ${{ !cancelled() && (needs.changes.outputs.terraform == 'true' || needs.changes.result == 'failure') }}
     needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -1008,7 +1027,7 @@ jobs:
   # Promote it to a required check once it has been clean on main (docs/ops/ci-cd.md).
   terraform-lint:
     name: terraform-lint
-    if: ${{ !cancelled() && (needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure') }}
+    if: ${{ !cancelled() && (needs.changes.outputs.terraform == 'true' || needs.changes.result == 'failure') }}
     needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 15

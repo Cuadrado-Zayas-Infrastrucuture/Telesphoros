@@ -6,11 +6,15 @@ export const internalJobs = ['service-memory', 'service-postgres', 'service-post
 // the job whenever `changes` fails; the failure arm makes a broken `changes` run everything. Event, branch and draft logic stays inside scope.mjs, so no required job's `if`
 // reads the event or the branch (a merge-queue batch has neither a pull request nor a branch of its own).
 export const heavyCondition = "${{ !cancelled() && (needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure') }}";
+export const guardsCondition = "${{ !cancelled() && (needs.changes.outputs.guards == 'true' || needs.changes.result == 'failure') }}";
+export const terraformCondition = "${{ !cancelled() && (needs.changes.outputs.terraform == 'true' || needs.changes.result == 'failure') }}";
+/** The condition of a step inside a job that always runs (verify): the heavy half of its work. No status function, so GitHub keeps its implicit success(). */
+export const heavyStepCondition = "${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}";
 export const archiveCondition = "${{ !cancelled() && (needs.changes.outputs.archive == 'true' || needs.changes.result == 'failure') }}";
 // The joining gate is skipped only when ALL three producers were skipped; one skipped beside a producer that ran still reaches its dependency check.
 export const gateCondition = "always() && !(needs.service-memory.result == 'skipped' && needs.service-postgres.result == 'skipped' && needs.service-postgres-s3.result == 'skipped')";
 /** A job with its scope condition and `needs: changes` removed, so the rest of its shape can be checked as before. */
-export const withoutScopeGate = job => job.replace(`    if: ${heavyCondition}\n`, '').replace(`    if: ${archiveCondition}\n`, '').replace('    needs: changes\n', '');
+export const withoutScopeGate = job => [heavyCondition, guardsCondition, terraformCondition, archiveCondition].reduce((text, c) => text.replace(`    if: ${c}\n`, ''), job).replace('    needs: changes\n', '');
 export function jobOf(text, key) {
   return text.split(/^jobs:\s*$/m)[1]?.split(/^  (?=[a-z][a-z0-9-]*:\s*$)/m).find(b => b.startsWith(key + ':')) ?? '';
 }
