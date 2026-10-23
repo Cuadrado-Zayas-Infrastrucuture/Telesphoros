@@ -10,6 +10,10 @@ const API = 'http://127.0.0.1:3010';
 export default defineConfig({
   testDir: './e2e',
   outputDir: './test-results',
+  // One worker, stated rather than left to the runner's CPU count (the default is half the cores). The tests share a few synthetic people, and the
+  // API refuses a token issued in the same second as that person's sign-out (`issuedAt <= tokensValidAfter`), so a sign-out in one worker makes a
+  // sign-in as the same person in another worker fail with "Sign-in did not complete". Two workers on a 4-core runner did exactly that.
+  workers: 1,
   reporter: [['list']],
   use: {
     baseURL: APP,

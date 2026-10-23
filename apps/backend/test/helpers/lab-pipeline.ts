@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -11,7 +11,11 @@ import { bearer, signToken } from './tokens';
 
 export const TEST_KNOWLEDGE = resolve(__dirname, '../../../../data/fixtures/knowledge/test-only-reader');
 export const REPO_ROOT = resolve(__dirname, '../../../..');
-export const FIXTURES = resolve(__dirname, '../../../../knowledge/lab-report-reader/v2-handoff/fixtures/captures');
+const ENGINE_FIXTURES = resolve(__dirname, '../../../../knowledge/lab-report-reader/v2-handoff/fixtures/captures');
+// Without the imported reader engine (the public repository has none) the pipeline specs use the public synthetic fixtures (D01, D02, D08; see
+// data/fixtures/lab-reports/README.md), whose ids match the same hand-written oracle, and the test stand-in reader (see app.ts).
+const PUBLIC_FIXTURES = resolve(__dirname, '../../../../data/fixtures/lab-reports/captures');
+export const FIXTURES = existsSync(ENGINE_FIXTURES) ? ENGINE_FIXTURES : PUBLIC_FIXTURES;
 export const fixturePdf = (id: string) => readFileSync(join(FIXTURES, id, 'source.pdf'));
 export const fixtureText = (id: string) => readFileSync(join(FIXTURES, id, 'report.txt'), 'utf8');
 export const fixtureManifest = (id: string) => JSON.parse(readFileSync(join(FIXTURES, id, 'capture.json'), 'utf8')) as { source_pdf_sha256: string; stored_text_sha256: string };

@@ -1,0 +1,11 @@
+{
+  "id": "D01",
+  "synthetic": true,
+  "note": "Original synthetic fixture written for this repository; the text is recorded, not extracted from the PDF.",
+  "source_pdf_sha256": "fd2b6475143803a2add6446de753cbbe61879b567fa016b10434d7b5d38aac14",
+  "stored_text_sha256": "d28340cdc1f421ebed21775a84729c80dd4dcff0d7cbb902faa45f7caaf3c456",
+  "extractor": {
+    "name": "recorded text (no extraction)",
+    "version": "recorded to model pdftotext 26.03.0"
+  }
+}

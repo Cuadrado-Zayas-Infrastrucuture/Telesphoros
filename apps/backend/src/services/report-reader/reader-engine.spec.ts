@@ -42,6 +42,8 @@ describe('the skip list for a checkout without the reader engine', () => {
     'src/config/env.spec.ts', // the name of the LAB_REPORT_FIXTURES_DIR variable only
     'src/services/report-lookup/strict-json.spec.ts', // imports the lookup helper but never starts the engine
     'src/services/report-reader/reader-engine.spec.ts', // this file
+    'test/db/application-recovery.pg-spec.ts', // runs on the public synthetic fixtures and the test stand-in reader (the evidence gate needs its metric)
+    'test/stand-in-reader.spec.ts', // tests that stand-in and those fixtures
   ]);
   const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? (entry.name === 'node_modules' ? [] : walk(join(dir, entry.name))) : [join(dir, entry.name)]));
   const specFiles = [...walk(join(BACKEND, 'src')), ...walk(join(BACKEND, 'test'))].filter((file) => /\.(spec|e2e-spec|pg-spec|s3-spec)\.ts$/.test(file));
@@ -74,7 +76,9 @@ describe('the skip list for a checkout without the reader engine', () => {
     it('skips exactly the listed specs, and says so, when the engine is absent', () => {
       const { patterns, announced } = configFor('absent');
       for (const spec of list.specs) expect(patterns.some((p) => new RegExp(p.replace('<rootDir>', BACKEND.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))).test(join(BACKEND, spec)))).toBe(true);
-      expect(announced).toMatch(new RegExp(`NOT RUNNING:.*${list.specs.length} specs that need the report-reader engine`));
+      expect(announced).toMatch(new RegExp(`ENGINE ABSENT: skipping ${list.specs.length} specs that need the report-reader engine`));
+      // CI refuses every "NOT RUNNING" line, so the engine skip must never use that marker (it would fail every tier in a checkout without the engine).
+      expect(announced.split('\n').filter((line) => line.includes('report-reader engine') && line.includes('NOT RUNNING'))).toEqual([]);
       const thisFile = join(BACKEND, 'src/services/report-reader/reader-engine.spec.ts');
       expect(patterns.some((p) => new RegExp(p.replace('<rootDir>', BACKEND.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))).test(thisFile))).toBe(false);
     });

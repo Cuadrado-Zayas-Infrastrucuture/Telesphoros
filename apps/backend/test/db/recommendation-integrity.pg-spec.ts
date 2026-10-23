@@ -7,6 +7,9 @@ import { loadMigrations, migrateDown, migrateUp } from '../../src/db/migrator';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { revertAbove, versionsFrom } from '../helpers/migration-history';
 
+// Each test builds a throwaway database and runs migrations up and down; 5 seconds (the default) is tight on a cold runner, as the first run on the public repository showed.
+jest.setTimeout(30_000);
+
 const FK = 'recommendations_report_patient_fk';
 let pg: EphemeralDatabase;
 let app: Database;
