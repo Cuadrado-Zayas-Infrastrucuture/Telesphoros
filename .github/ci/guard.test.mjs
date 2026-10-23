@@ -307,16 +307,18 @@ test('dependabot watches every ecosystem the repository uses', () => {
   for (const eco of ['npm', 'github-actions', 'terraform', 'pip', 'docker-compose']) assert.match(dependabot, new RegExp(`package-ecosystem: ${eco}\\b`));
 });
 
-/** The ecosystem blocks that ignore major updates of a dependency that must move by a planned migration (not a lone bump). */
-export function missingMajorIgnores(config) {
+/** Dependencies Dependabot must not bump alone: @nestjs/* majors (they move together) and every Node base-image update (an exact pin held in many files). */
+export function missingIgnores(config) {
   const block = (eco) => config.split(/^  - package-ecosystem: /m).find((b) => b.startsWith(`${eco}\n`)) ?? '';
-  const ignored = (eco, name) => new RegExp(`ignore:\\n(?:\\s+.*\\n)*?\\s+- dependency-name: "${name}"\\n\\s+update-types: \\["version-update:semver-major"\\]`).test(block(eco));
-  return [['npm', '@nestjs/\\*'], ['docker', 'node']].filter(([eco, name]) => !ignored(eco, name)).map(([eco, name]) => `${eco}: ${name.replace('\\', '')}`);
+  const nest = (b) => /ignore:\n(?:\s+.*\n)*?\s+- dependency-name: "@nestjs\/\*"\n\s+update-types: \["version-update:semver-major"\]/.test(b);
+  const node = (b) => /ignore:\n(?:\s+.*\n)*?\s+- dependency-name: "node"\n(?!\s+update-types)/.test(b); // no update-types: every update is ignored
+  return [['npm', '@nestjs/*', nest], ['docker', 'node', node]].filter(([eco, , ok]) => !ok(block(eco))).map(([eco, name]) => `${eco}: ${name}`);
 }
-test('dependabot ignores major updates of @nestjs/* and the node base image (planned migrations only)', () => {
-  assert.deepEqual(missingMajorIgnores(dependabot), []);
-  assert.deepEqual(missingMajorIgnores(dependabot.replace('"@nestjs/*"', '"@nestjs/core"')), ['npm: @nestjs/*']); // control: fails when removed
-  assert.deepEqual(missingMajorIgnores(dependabot.replace('dependency-name: "node"', 'dependency-name: "nodex"')), ['docker: node']);
+test('dependabot ignores @nestjs/* majors and every update of the node base image (planned migrations only)', () => {
+  assert.deepEqual(missingIgnores(dependabot), []);
+  assert.deepEqual(missingIgnores(dependabot.replace('"@nestjs/*"', '"@nestjs/core"')), ['npm: @nestjs/*']); // controls: each fails when removed
+  assert.deepEqual(missingIgnores(dependabot.replace('dependency-name: "node"', 'dependency-name: "nodex"')), ['docker: node']);
+  assert.deepEqual(missingIgnores(dependabot.replace('dependency-name: "node"\n', 'dependency-name: "node"\n        update-types: ["version-update:semver-major"]\n')), ['docker: node']); // majors only is not enough
 });
 
 // ---- CLAUDE.md is a pointer: it must stay short and may only name files that exist ----
