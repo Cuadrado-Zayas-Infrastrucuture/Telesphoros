@@ -51,4 +51,4 @@ Everyone who takes part in this project follows the [Code of Conduct](CODE_OF_CO
 - **Required approvals are 0 while there is one maintainer** (the author cannot approve their own PR). When a second
   maintainer is added, the policy becomes **1 approval + the checks**, with code-owner review required for the paths in `.github/CODEOWNERS`.
 - Every GitHub Action is pinned to a commit SHA; Dependabot updates them. Run `pnpm test:ci-config` after touching `.github/`.
-- Secrets never go in the repository. `secret-scan` checks the whole history; explicit test-vector exceptions are in `.gitleaks.toml`; `.gitleaksignore` names one exact historical false positive for a dummy Moto secret-container identifier.
+- Secrets never go in the repository. `secret-scan` checks the whole history; explicit exceptions (test vectors, a dummy Moto secret-container name, the migration hash list) are in `.gitleaks.toml`, scoped by path, rule and line shape, never by commit hash, so they survive a history rewrite.

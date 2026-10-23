@@ -16,3 +16,11 @@ ruleIDs = ["generic-api-key"]
 paths = ['''^infrastructure/docker/rehearsal\.cjs$''']
 regexTarget = "secret"
 regexes = ['''^synthetic/migrator$''']
+
+[[allowlists]]
+description = "Migration names with the SHA-256 of their files in the pinned list of migration-history.spec.ts (the value the migrator stores in schema_migrations). A hash is not a credential; one row matches the generic-api-key rule because its name contains 'access'. Scoped by path, rule and the exact row shape, not by commit, so it survives a history rewrite."
+condition = "AND"
+ruleIDs = ["generic-api-key"]
+paths = ['''^apps/backend/test/migration-history\.spec\.ts$''']
+regexTarget = "line"
+regexes = ['''^\s*\['\d{4}', '[a-z_0-9]+', '[0-9a-f]{64}'\],?\s*$''']
