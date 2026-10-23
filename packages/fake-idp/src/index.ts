@@ -9,7 +9,7 @@
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { exportJWK, generateKeyPair, type JWK, type KeyLike, SignJWT } from 'jose';
+import { type CryptoKey, exportJWK, generateKeyPair, type JWK, SignJWT } from 'jose';
 
 export interface FakeUser {
   sub: string;
@@ -78,7 +78,7 @@ export interface FakeIdp {
 
 interface SigningKey {
   kid: string;
-  privateKey: KeyLike;
+  privateKey: CryptoKey;
   publicJwk: JWK;
 }
 

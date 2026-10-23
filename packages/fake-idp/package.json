@@ -31,7 +31,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "jose": "^5.10.0"
+    "jose": "^6.2.12"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
