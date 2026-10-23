@@ -64,10 +64,11 @@ ${SECURITY_EVENTS_USAGE}${UPLOADS_USAGE}${JOBS_USAGE}
                                 keys, a canary round trip, newest backup authentic and recent); exit 1 on any FAIL
                                 (BACKUP_S3_UPLOAD_*, BACKUP_S3_READ_*, optional BACKUP_S3_ADMIN_*)
   restore --from DIR|s3://bucket/prefix[/backup-TIME] [--latest] [--key-file FILE | --passphrase-file FILE]
-          [--keep] [--target-db NAME]
+          [--keep] [--target-db NAME] [--allow-unauthenticated]
                                 restore into a THROWAWAY database and verify it; exit 1 if anything is off
                                 (--key-file: format 2 backups, signature and every chunk checked;
-                                 --passphrase-file: old format 1 backups only; s3:// uses BACKUP_S3_READ_*)
+                                 --passphrase-file: old format 1 backups only; format 1 is unsigned, so it is refused
+                                 unless --allow-unauthenticated is given; s3:// uses BACKUP_S3_READ_*)
                                                                   (DATABASE_ADMIN_URL on the target server)
 
 Off-site settings (all BACKUP_S3_*): ENDPOINT, REGION, FORCE_PATH_STYLE, SSE (default none), KMS_KEY_ID;
@@ -343,7 +344,7 @@ async function main(argv: string[]) {
     };
     const report = from.startsWith('s3://')
       ? await restoreFromRemote({ ...common, client: createOffsiteClient(loadOffsiteSettings(), loadCredentials('read')), location: parseRemote(from), latest: f.bool('latest') })
-      : await restoreAndVerify({ ...common, backupDir: from });
+      : await restoreAndVerify({ ...common, backupDir: from, allowUnauthenticated: f.bool('allow-unauthenticated') });
     for (const check of report.checks) out(`${check.ok ? 'PASS' : 'FAIL'}  ${check.name}: ${check.detail}`);
     out(report.ok ? `RESTORE VERIFIED (${report.kept ? `kept as ${report.database}` : 'throwaway database dropped'})` : 'RESTORE FAILED');
     process.exitCode = report.ok ? 0 : 1;

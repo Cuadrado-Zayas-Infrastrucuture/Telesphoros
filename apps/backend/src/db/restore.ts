@@ -19,6 +19,11 @@ export interface RestoreOptions {
   keyFile?: string;
   /** Format 1 backups only (the old passphrase scheme). */
   passphraseFile?: string;
+  /**
+   * A format 1 manifest is plain, unsigned JSON: its checksum, its required roles and its migration list are whatever whoever can write the
+   * backup folder says. Restore refuses it unless the operator opts in here (CLI: --allow-unauthenticated). Format 2 never needs this.
+   */
+  allowUnauthenticated?: boolean;
   /** Keep the restored database afterwards (a real recovery). Default: a throwaway that is dropped. */
   keep?: boolean;
   /** Restore into this named database instead of a random throwaway one. Implies keep. */
@@ -92,6 +97,10 @@ export async function restoreAndVerify(options: RestoreOptions): Promise<Restore
       record('manifest signature', false, error instanceof BackupCryptoError ? error.message : 'the key file could not be read');
       return failed();
     }
+  }
+  if (manifest.formatVersion === 1 && !options.allowUnauthenticated) {
+    record('manifest signature', false, 'this backup is format 1: its manifest is not signed, so its checksum and role list cannot be trusted. Restore it only if you made it and kept the folder private, with --allow-unauthenticated; new backups made with --key-file are signed');
+    return failed();
   }
   if (manifest.formatVersion === 2) {
     if (!masterKey) {

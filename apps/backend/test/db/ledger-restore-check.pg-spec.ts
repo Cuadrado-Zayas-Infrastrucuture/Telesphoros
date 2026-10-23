@@ -88,7 +88,7 @@ describe('the restore check "ledger chain"', () => {
   it('passes for a good backup, says what it walked, and writes nothing to the restored copy', async () => {
     const { pg, backupDir } = await populated();
     const name = target();
-    const report = await restoreAndVerify({ adminUrl: adminUrl(), backupDir, targetDatabase: name });
+    const report = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: adminUrl(), backupDir, targetDatabase: name });
     expect(report.checks.filter((c) => !c.ok)).toEqual([]);
     expect(chainCheck(report)).toMatchObject({ ok: true });
     expect(chainCheck(report)!.detail).toMatch(/^1 tenant ledger\(s\), 5 events: chain, records and notes verified in full$/);
@@ -101,18 +101,18 @@ describe('the restore check "ledger chain"', () => {
 
   it('is NOT ok when the chain cannot be walked to the end (too large for the limit): incomplete is never a pass', async () => {
     const { backupDir } = await populated();
-    const report = await restoreAndVerify({ adminUrl: adminUrl(), backupDir, ledgerChainMaxEvents: 2 });
+    const report = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: adminUrl(), backupDir, ledgerChainMaxEvents: 2 });
     expect(report.ok).toBe(false);
     expect(chainCheck(report)).toMatchObject({ ok: false });
     expect(chainCheck(report)!.detail).toBe('ledger 1 of 1 could not be walked to the end (2 events checked)');
     expect(report.checks.filter((c) => !c.ok).map((c) => c.name)).toEqual(['ledger chain']);
     // Control: the same backup with room to walk everything passes.
-    expect(chainCheck(await restoreAndVerify({ adminUrl: adminUrl(), backupDir, ledgerChainMaxEvents: 5 }))).toMatchObject({ ok: true });
+    expect(chainCheck(await restoreAndVerify({ allowUnauthenticated: true, adminUrl: adminUrl(), backupDir, ledgerChainMaxEvents: 5 }))).toMatchObject({ ok: true });
   });
 
   it('is NOT ok for a restored ledger with an edited record, names the kind and sequence number, and shows no value or tenant', async () => {
     const { backupDir, tenantId } = await populated((c, ids) => c.query(`UPDATE report_captures SET text_scalars = text_scalars + 1 WHERE id = $1`, [ids.capture]));
-    const report = await restoreAndVerify({ adminUrl: adminUrl(), backupDir });
+    const report = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: adminUrl(), backupDir });
     expect(report.ok).toBe(false);
     const check = chainCheck(report)!;
     expect(check.ok).toBe(false);
@@ -124,7 +124,7 @@ describe('the restore check "ledger chain"', () => {
 
   it('is NOT ok for a restored ledger with an edited event', async () => {
     const { backupDir } = await populated((c, ids) => c.query(`UPDATE ledger_events SET payload_sha256 = repeat('b', 64) WHERE tenant_id = $1 AND seq = 2`, [ids.tenantId]));
-    const report = await restoreAndVerify({ adminUrl: adminUrl(), backupDir });
+    const report = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: adminUrl(), backupDir });
     expect(report.ok).toBe(false);
     expect(chainCheck(report)).toMatchObject({ ok: false });
     expect(chainCheck(report)!.detail).toMatch(/FAILED: .*record-hash-mismatch at 2/);
@@ -138,7 +138,7 @@ describe('the restore check "ledger chain"', () => {
     for (const file of readdirSync(MIGRATIONS_DIR)) if (/^000[1-4]_/.test(file)) copyFileSync(join(MIGRATIONS_DIR, file), join(older, file));
     await withAdmin(pg.adminUrl, (c) => migrateUp(c, older));
     const { dir } = await createBackup({ adminUrl: pg.adminUrl, destDir: tempDir() });
-    const report = await restoreAndVerify({ adminUrl: adminUrl(), backupDir: dir });
+    const report = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: adminUrl(), backupDir: dir });
     expect(report.checks.filter((c) => !c.ok)).toEqual([]);
     expect(chainCheck(report)).toEqual({ name: 'ledger chain', ok: true, detail: 'not applicable: this backup predates the ledger' });
   });
@@ -147,7 +147,7 @@ describe('the restore check "ledger chain"', () => {
     const pg = await createEphemeralDatabase();
     sources.push(pg);
     const { dir } = await createBackup({ adminUrl: pg.adminUrl, destDir: tempDir() });
-    const report = await restoreAndVerify({ adminUrl: adminUrl(), backupDir: dir });
+    const report = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: adminUrl(), backupDir: dir });
     expect(chainCheck(report)).toEqual({ name: 'ledger chain', ok: true, detail: 'no ledger events in this backup' });
   });
 });

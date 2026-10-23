@@ -172,7 +172,7 @@ describe('restore (the one-command procedure, actually executed)', () => {
     const { dir } = await createBackup({ adminUrl: db.adminUrl, destDir: tempDir() });
     const before = await throwawayDatabases();
 
-    const report = await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir });
+    const report = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: clusterAdmin(), backupDir: dir });
 
     expect(report.checks.map((c) => `${c.ok ? 'PASS' : 'FAIL'} ${c.name}`)).toEqual([
       'PASS manifest valid',
@@ -202,7 +202,7 @@ describe('restore (the one-command procedure, actually executed)', () => {
     const db = await seededDatabase();
     const { dir } = await createBackup({ adminUrl: db.adminUrl, destDir: tempDir() });
     const target = `restored_${randomBytes(4).toString('hex')}`;
-    const report = await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir, targetDatabase: target });
+    const report = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: clusterAdmin(), backupDir: dir, targetDatabase: target });
     expect(report.ok).toBe(true);
     try {
       const url = new URL(clusterAdmin());
@@ -229,7 +229,7 @@ describe('restore (the one-command procedure, actually executed)', () => {
     const live = await withAdmin(db.adminUrl, (c) => c.query('SELECT count(*)::int AS n FROM patients'));
     expect(live.rows[0].n).toBe(8); // the source really did move on
 
-    const report = await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir });
+    const report = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: clusterAdmin(), backupDir: dir });
     expect(report.ok).toBe(true);
     expect(byName(report.checks, 'row counts')!.ok).toBe(true);
   });
@@ -266,7 +266,7 @@ describe('restore verification is not a rubber stamp (negative controls)', () =>
     bytes[Math.floor(bytes.length / 2)] ^= 0xff;
     writeFileSync(file, bytes);
     const before = await throwawayDatabases();
-    const report = await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir });
+    const report = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: clusterAdmin(), backupDir: dir });
     failing(report, 'backup file checksum');
     expect(report.checks.at(-1)!.name).toBe('backup file checksum'); // it stopped there
     expect(await throwawayDatabases()).toBe(before); // nothing was created
@@ -276,7 +276,7 @@ describe('restore verification is not a rubber stamp (negative controls)', () =>
     const db = await seededDatabase();
     const { dir } = await createBackup({ adminUrl: db.adminUrl, destDir: tempDir() });
     rmSync(join(dir, 'db.dump'));
-    failing(await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir }), 'backup file present');
+    failing(await restoreAndVerify({ allowUnauthenticated: true, adminUrl: clusterAdmin(), backupDir: dir }), 'backup file present');
   });
 
   it('catches a restored copy whose row counts differ from the baseline', async () => {
@@ -284,7 +284,7 @@ describe('restore verification is not a rubber stamp (negative controls)', () =>
     const { dir, manifest } = await createBackup({ adminUrl: db.adminUrl, destDir: tempDir() });
     manifest.tables.patients!.rows += 1; // pretend the baseline said one more row
     writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest));
-    failing(await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir }), 'row counts');
+    failing(await restoreAndVerify({ allowUnauthenticated: true, adminUrl: clusterAdmin(), backupDir: dir }), 'row counts');
   });
 
   it('catches a copy that lost its row-level security settings', async () => {
@@ -292,7 +292,7 @@ describe('restore verification is not a rubber stamp (negative controls)', () =>
     const { dir, manifest } = await createBackup({ adminUrl: db.adminUrl, destDir: tempDir() });
     manifest.tables.reports!.policies = 3; // baseline claims something the copy cannot have (the table has two: the application's and the queue role's)
     writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest));
-    failing(await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir }), 'row-level security settings');
+    failing(await restoreAndVerify({ allowUnauthenticated: true, adminUrl: clusterAdmin(), backupDir: dir }), 'row-level security settings');
   });
 
   it('catches a restore target that is missing the application role (isolation cannot be proven)', async () => {
@@ -306,7 +306,7 @@ describe('restore verification is not a rubber stamp (negative controls)', () =>
       return (original as (...a: unknown[]) => unknown).apply(this, args);
     };
     try {
-      failing(await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir }), 'row-level security isolation');
+      failing(await restoreAndVerify({ allowUnauthenticated: true, adminUrl: clusterAdmin(), backupDir: dir }), 'row-level security isolation');
     } finally {
       Client.prototype.query = original;
     }
@@ -318,7 +318,7 @@ describe('restore verification is not a rubber stamp (negative controls)', () =>
     const before = await throwawayDatabases();
     const leftovers = () => readdirSync(tmpdir()).filter((n) => n.startsWith('restore-')).length;
     const files = leftovers();
-    await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: dir, passphraseFile: join(tempDir(), 'unused') }); // dump is not encrypted: the passphrase is never read, harmless, passes
+    await restoreAndVerify({ allowUnauthenticated: true, adminUrl: clusterAdmin(), backupDir: dir, passphraseFile: join(tempDir(), 'unused') }); // dump is not encrypted: the passphrase is never read, harmless, passes
     expect(await throwawayDatabases()).toBe(before);
     expect(leftovers()).toBe(files);
     expect(existsSync(dir)).toBe(true);
@@ -453,15 +453,24 @@ describe('a stored backup cannot be altered without restore noticing (format 2)'
   });
 });
 
-describe('backups written before format 2 still restore', () => {
+describe('backups written before format 2 still restore, when the operator allows it', () => {
   const fixture = join(__dirname, '..', '..', '..', '..', 'tests', 'backup_fixtures', 'v1-encrypted');
 
   it('restores the real format 1 fixture (AES-256-CBC + passphrase) and verifies it completely', async () => {
-    const report = await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: fixture, passphraseFile: join(fixture, 'passphrase.txt') });
+    const report = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: clusterAdmin(), backupDir: fixture, passphraseFile: join(fixture, 'passphrase.txt') });
     expect(report.checks.filter((c) => !c.ok)).toEqual([]);
     expect(report.ok).toBe(true);
     expect(byName(report.checks, 'manifest valid')!.detail).toBe('format 1');
     expect(byName(report.checks, 'row counts')!.detail).toBe('all 4 tables match (15 rows)');
+  });
+
+  it('refuses a format 1 backup by default (its manifest is unsigned), restoring nothing; the same backup passes once the operator allows it', async () => {
+    const passphraseFile = join(fixture, 'passphrase.txt');
+    const refused = await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: fixture, passphraseFile });
+    expect(refused.ok).toBe(false);
+    expect(refused.checks.map((c) => c.name)).toEqual(['manifest valid', 'manifest signature']);
+    expect(byName(refused.checks, 'manifest signature')!.detail).toMatch(/format 1.*not signed.*--allow-unauthenticated/);
+    expect((await restoreAndVerify({ allowUnauthenticated: true, adminUrl: clusterAdmin(), backupDir: fixture, passphraseFile })).ok).toBe(true); // control: only the option differs
   });
 
   it('a key file cannot be used to open a format 1 backup, and a wrong passphrase still fails', async () => {
@@ -470,7 +479,7 @@ describe('backups written before format 2 still restore', () => {
     expect(refused.checks.at(-1)!.name).toBe('manifest signature');
     const wrong = join(tempDir(), 'wrong');
     writeFileSync(wrong, 'a different passphrase entirely');
-    const bad = await restoreAndVerify({ adminUrl: clusterAdmin(), backupDir: fixture, passphraseFile: wrong });
+    const bad = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: clusterAdmin(), backupDir: fixture, passphraseFile: wrong });
     expect(bad.ok).toBe(false);
   });
 });
