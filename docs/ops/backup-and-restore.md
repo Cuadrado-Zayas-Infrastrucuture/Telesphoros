@@ -52,7 +52,10 @@ first and stops, restoring nothing, with the list of missing roles. How to creat
 1. The backup file's SHA-256 matches the manifest. For format 2, the file's own header agrees with the signed
    manifest, **every chunk authenticates** (a flipped byte, a missing, repeated or reordered chunk, a truncated file
    or extra data all fail), and the decrypted file matches the signed checksum.
-2. `pg_restore` completes with no errors, into a brand-new database.
+2. `pg_restore` completes with no errors, into a brand-new database. If it fails, the report gives the exit code and, for a failure while
+   loading data, only the **table's name**: PostgreSQL's own message there quotes the offending key and the row, and the report goes to the
+   terminal and to the log of a drill or job (no patient data in logs). The full message is in the **target server's log**. A failure while
+   creating objects keeps its first error line, which is schema text.
 3. Tables present; **row counts equal the baseline**, including soft-deleted rows.
 4. Applied migrations equal; constraint, index and trigger counts equal.
 5. **Ownership and privileges** equal the record in the manifest (from the backup that first recorded them): who owns each table and
