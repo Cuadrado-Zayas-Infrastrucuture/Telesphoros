@@ -1,0 +1,11 @@
+# Fix: a patient cannot be deleted while a merge into it is being approved (migration 0034, local)
+
+Date: 2026-10-23
+
+A candidate from the 2026-10-19 security audit, reproduced before the fix. The patient soft delete was guarded only by two reads in the service (the patient's reports, then whether other patients were merged into it) in transactions of their own, and an approved merge is checked at COMMIT without holding the patient rows. A merge approval and a delete could therefore interleave and both succeed, leaving a merge in force into a patient that is gone: its aliases hidden behind it and the merge impossible to undo. It needed two people acting within milliseconds and affected one organisation's record integrity only; no cross-organisation or patient-data exposure.
+
+Reproduced on real PostgreSQL with three tests (`patient-delete-merge-race.pg-spec.ts`), each pinning one interleaving with a gate just before the commit: the delete passing a stale check, an approval checked first with a delete arriving before it commits, and a delete in flight with an approval arriving. All three failed on the unfixed code (the second ended with both the approval and the delete succeeded). Migration 0034 (`expand`, nothing redefined) adds a deferred trigger on `patient_merge_decisions` that takes `FOR SHARE` locks on both patients before the existing graph rule runs at commit, and a `BEFORE UPDATE` trigger on `patients` that refuses to soft-delete a patient other patients were merged into (SQLSTATE PM002). Whichever commits first, the other is refused: the delete with 409 `patient-has-merged-records`, the approval as `patient-gone`. The service maps the database's refusal to the same 409 as its own check.
+
+Verified with the unfixed behaviour as the control (3 of 3 red), the three tests green with the migration, and two mutants (each half of the migration disabled in turn) each turned two of the three tests red. Not changed: the in-memory store (single-threaded, no race), the ledger lock, and report handling. Not fixed here: a report created at the same moment as a delete is a related race this change does not cover; it is recorded for its own look.
+
+Local only until the pull request is opened.
