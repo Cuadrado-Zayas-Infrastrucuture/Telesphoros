@@ -26,10 +26,12 @@ A green run is evidence about the code at that commit. It is not evidence about 
 ### Skipping work: what is proved
 
 GitHub Actions minutes are a budget, so a run does not repeat work whose result is already proved. The `changes` job runs
-`.github/ci/scope.mjs` and writes two outputs; every other job reads only those:
+`.github/ci/scope.mjs` and writes four outputs; every other job reads only those:
 
-- `heavy`: `verify`, the service path (`service-memory`, `service-postgres`, `service-postgres-s3`, `database-and-storage`), `browser`,
-  `terraform` and `terraform-lint` run.
+- `heavy`: the service path (`service-memory`, `service-postgres`, `service-postgres-s3`, `database-and-storage`) and `browser` run,
+  and `verify` runs all of its steps.
+- `guards`: `verify` runs at all. With `heavy` false it runs only `pnpm test:infra` and `pnpm test:ci-config` (below).
+- `terraform`: `terraform` and `terraform-lint` run.
 - `archive`: the `image` job runs (it also feeds `release-image`, so it is kept whenever the release variables are set).
 
 `secret-scan` never waits for `changes` and is never skipped: it scans every commit, and a secret can sit in a skipped file.
@@ -55,6 +57,29 @@ When the proof holds, the push run still runs `secret-scan`, and `image` only wh
 summary of `changes` names the pull-request run that supplied the proof. When it does not hold (a stale branch merged by an
 admin, a squash merge, an API error, a missing run) the push run is the full run it always was. The lookup uses the job token with
 `actions: read`, the permission the four service jobs already hold; no top-level permission changes.
+
+**Documentation only (pull requests and pushes).** When every changed file is `docs/**/*.md` or a `*.md` in the repository root, `heavy`,
+`terraform` and `archive` are false and `guards` is true: `verify` still runs and reports, but only its `test:infra` and `test:ci-config`
+steps (after the install, which `test:infra` needs: it loads the backend's configuration loader), and the other required checks report as skipped. The rule is that narrow on purpose, from what the repository's
+own tests read: `knowledge/lab-report-reader/v2-handoff/ORIGIN.md` is read by a backend test, and `docs/` also holds JSON results and PNG
+previews that are not documentation. The only code that reads documentation is `test:infra` (`docs/ops/break-glass.md`,
+`docs/ops/staging-plan-review.md`) and `test:ci-config` (`docs/status/`, `CLAUDE.md`), which is why those two stay. `scope.test.mjs`
+lists the readers it can see (literal docs paths beside a file call), so a new one turns the guard red before it can be skipped.
+The changed files come from the test merge GitHub checks out for a pull request (two parents, the second being the event's head;
+anything else runs everything) and from `before..after` for a push to `main`. Renames are listed as a delete plus an add, so moving a
+code file into `docs/` is not documentation only. A `merge_group` run (not enabled: see "Draft pull requests") would always run everything.
+
+**No infrastructure change (pull requests and pushes).** `terraform` and `terraform-lint` are skipped when no changed file is under
+`infrastructure/`, is `.tflint.hcl` or is under `.github/`. Their only inputs are the two Terraform roots, `infrastructure/lambda/` and
+the workflow. Other jobs are **not** filtered by area: `apps/worker/src/deploy-contract.test.ts`, `scripts/staging/*.test.mjs` and
+`scripts/local-storage/cors.cjs` read files under `infrastructure/`, so an infrastructure change still runs `verify`, `browser` and the
+service path.
+
+**How GitHub treats a skipped required check.** GitHub's page "Troubleshooting required status checks" (read 2026-10-22) says a job skipped
+by a job-level condition reports "Success", which satisfies a required check, and that a whole workflow that does not start (a `paths:`
+filter on `on:`) leaves its checks pending, which blocks the merge. This design therefore filters inside the workflow, never in `on:`. It was not checked
+against this repository's ruleset on a real pull request because hosted CI is stopped until the October minutes reset; the first hosted run is that check. A skipped job that `needs` a failed job is
+also skipped and also reports success, which is why every job here carries `!cancelled()` and the `changes`-failed arm.
 
 What this does not do: it does not make `main`'s checks "green by assumption". The required checks bind to pull requests; the push
 run exists to catch drift, and it still runs in full whenever the proof is missing.
