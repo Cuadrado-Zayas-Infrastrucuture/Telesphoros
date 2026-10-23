@@ -254,7 +254,9 @@ file (then re-import or edit the ruleset in the UI).
 
 - **Dependabot** (`.github/dependabot.yml`): weekly; npm, GitHub Actions and Terraform minor/patch updates are grouped,
   major updates arrive one at a time; also the CI emulator pin, the local compose file and the API image's base layers
-  (`docker`, for `infrastructure/docker`).
+  (`docker`, for `infrastructure/docker`). Major updates of `@nestjs/*` and of the `node` base image are ignored: Nest
+  packages must move together and Node is pinned deliberately, so each is a planned migration PR (a lone bump fails typecheck
+  or the Dockerfile guard).
 - **Weekly rescan** (`.github/workflows/rescan.yml`, founder decision 2026-10-20: weekly, advisory): every Monday it builds the
   API image fresh and fails on a fixed CRITICAL or HIGH finding (the same gate as the `image` job), and fails on a high or
   critical advisory in the production dependencies (`pnpm audit --prod`). It also prints, without failing, the findings in the
