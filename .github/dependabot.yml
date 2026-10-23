@@ -10,6 +10,11 @@ updates:
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
+    # NestJS packages move together: a lone @nestjs/* major (platform-express 12 on 11 siblings, ESM-only) fails typecheck.
+    # Upgrade them in one deliberate migration PR; minor and patch updates still arrive.
+    ignore:
+      - dependency-name: "@nestjs/*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
@@ -44,3 +49,8 @@ updates:
     directory: /infrastructure/docker
     schedule:
       interval: weekly
+    # The Node runtime is pinned on purpose (Node 22; the toolchain and CI pin the same version). A new major, including a
+    # non-LTS one such as 25, changes the whole toolchain: move it deliberately in its own PR.
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
