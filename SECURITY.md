@@ -6,8 +6,7 @@ Telesphoros is clinical decision support for pharmacogenomics. It is under const
 
 Report privately. **Do not open a public issue, pull request or discussion for a security problem.**
 
-1. **Preferred:** GitHub private vulnerability reporting. On this repository open **Security**, then **Report a vulnerability**.
-2. **Fallback:** email security@cuadradozayasinfrastructure.com. It reaches the maintainer. It is not a support line (see [SUPPORT.md](SUPPORT.md)).
+Use GitHub private vulnerability reporting: on this repository open **Security**, then **Report a vulnerability**. Only the maintainer can see the report. It is not a support line (see [SUPPORT.md](SUPPORT.md)).
 
 Include what you found, where, how to reproduce it, and what an attacker could do with it. **Never include patient data, real lab reports, real genetic results or credentials** in a report, even as an example; a description or synthetic data is enough.
 
