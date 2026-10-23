@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import type { PatientInput, PatientListQuery } from '@telesphoros/shared-types';
 import { AppException } from '../common/app-exception';
 import type { Principal } from '../auth/principal';
+import { PatientHasMergedRecordsError } from '../storage/errors';
 import { PatientsRepository } from '../storage/patients.repository';
 import type { PatientRecord } from '../storage/records';
 import { ReportsRepository } from '../storage/reports.repository';
@@ -58,7 +59,13 @@ export class PatientsService {
     if (await this.patients.hasMergedRecords(principal.tenantId, id)) {
       throw AppException.conflictBecause('patient-has-merged-records', 'Other patient records were merged into this one. Unmerge them first.');
     }
-    await this.patients.delete(principal.tenantId, id);
+    try {
+      await this.patients.delete(principal.tenantId, id);
+    } catch (error) {
+      // A merge landed after the check above; the database refuses the delete and the answer is the same.
+      if (error instanceof PatientHasMergedRecordsError) throw AppException.conflictBecause('patient-has-merged-records', 'Other patient records were merged into this one. Unmerge them first.');
+      throw error;
+    }
   }
 
   private async assertLabelFree(tenantId: string, label: string, ignoreId?: string) {

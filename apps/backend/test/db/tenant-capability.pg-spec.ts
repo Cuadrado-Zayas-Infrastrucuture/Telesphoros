@@ -495,8 +495,8 @@ describe('reverting 0031 and 0028', () => {
     const through = revertThrough('tenant_capability_issue_current'); // this migration and anything above it
     expect(await owner((c) => migrateDown(c, through.steps))).toEqual(through.reverted);
     const down = await owner(catalogSnapshot);
-    // 0032 and 0033 sit above 0031 and go with it: 0032's internal binding and 0033's member_sign_out are the other functions this revert removes
-    const removed = /tenant_capability_issue_current|app_capability_version|tenant_capability_bind_internal|member_sign_out/;
+    // 0032, 0033 and 0034 sit above 0031 and go with it: 0032's internal binding, 0033's member_sign_out and 0034's two patient-delete guards are the other functions this revert removes
+    const removed = /tenant_capability_issue_current|app_capability_version|tenant_capability_bind_internal|member_sign_out|patient_merge_decisions_hold|patients_guard_delete/;
     expect(down.filter((l) => removed.test(l))).toEqual([]);
     expect(full.filter((l) => !removed.test(l))).toEqual(down); // nothing else moved
     expect(await owner((c) => migrateUp(c))).toEqual(versionsFrom('tenant_capability_issue_current'));

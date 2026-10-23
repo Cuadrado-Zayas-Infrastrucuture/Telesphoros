@@ -4,6 +4,7 @@ import { migrateDown, migrateUp } from '../../src/db/migrator';
 import { checkGroups, type LoginNames, type ProvisionOptions, type ProvisionReport, provisionLogins, type SecretStore, scramVerifier } from '../../src/db/provision-logins';
 import { pgClientConfig } from '../../src/db/tls';
 import { adminUrl, withAdmin } from '../helpers/database';
+import { revertThrough } from '../helpers/migration-history';
 
 /**
  * `db provision-logins` against a REAL PostgreSQL (FD-4). Roles are cluster-wide and other Jest workers share them, so every test uses its own login names
@@ -404,7 +405,8 @@ describe('a database that has the capability but not yet migration 0031', () => 
     const withIssuer: ProvisionOptions = { ...f.options, secrets: { ...f.options.secrets, issuer: 'secret-issuer' }, requireMigrated: true };
     await provisionLogins({ ...withIssuer, requireMigrated: false });
     await asLogin(f.store.values.get('secret-migrator')!, (c) => migrateUp(c));
-    expect(await withAdmin(f.options.adminUrl, (c) => migrateDown(c, 3))).toEqual(['0033', '0032', '0031']); // 0032 and 0033 sit above 0031 and revert with it (functions and policies only); 0028 stays
+    const through = revertThrough('tenant_capability_issue_current'); // 0031 and everything above it (0032 to 0034: functions, policies and triggers only); 0028 stays
+    expect(await withAdmin(f.options.adminUrl, (c) => migrateDown(c, through.steps))).toEqual(through.reverted);
     expect(await withAdmin(f.options.adminUrl, async (c) => (await c.query(`SELECT count(*)::int AS n FROM pg_proc WHERE proname IN ('tenant_capability_issue_current', 'app_capability_version')`)).rows[0].n)).toBe(0);
     expect(failing(await provisionLogins(withIssuer))).toEqual([]); // no "missing" complaint about functions that do not exist yet
     await asLogin(f.store.values.get('secret-migrator')!, (c) => migrateUp(c));

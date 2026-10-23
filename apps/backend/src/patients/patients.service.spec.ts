@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { expectAppException } from '../../test/helpers/expect-app-exception';
+import { AppException } from '../common/app-exception';
 import type { Principal } from '../auth/principal';
+import { PatientHasMergedRecordsError } from '../storage/errors';
 import { InMemoryPatientsRepository } from '../storage/patients.repository';
 import { InMemoryReportsRepository } from '../storage/reports.repository';
 import { PatientsService } from './patients.service';
@@ -108,6 +110,24 @@ describe('PatientsService', () => {
         sizeBytes: 1, status: 'received', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       });
       await expectAppException(service.remove(alice, created.id), 409, 'CONFLICT');
+    });
+
+    it('answers 409 when a merge lands after the check and the database refuses the delete (migration 0034)', async () => {
+      const { service, patients } = setup();
+      const created = await service.create(alice, { label: 'SYN-1' });
+      jest.spyOn(patients, 'delete').mockRejectedValueOnce(new PatientHasMergedRecordsError());
+      const error = await service.remove(alice, created.id).then(() => undefined, (e: unknown) => e);
+      expect(error).toBeInstanceOf(AppException);
+      expect((error as AppException).getStatus()).toBe(409);
+      expect((error as AppException).details?.[0]).toMatchObject({ reason: 'patient-has-merged-records' });
+      await expect(service.get(alice, created.id)).resolves.toBeDefined();
+    });
+
+    it('does not turn other storage failures into a conflict', async () => {
+      const { service, patients } = setup();
+      const created = await service.create(alice, { label: 'SYN-1' });
+      jest.spyOn(patients, 'delete').mockRejectedValueOnce(new Error('connection lost'));
+      await expect(service.remove(alice, created.id)).rejects.toThrow('connection lost');
     });
 
     it('cannot delete another tenant’s record', async () => {
