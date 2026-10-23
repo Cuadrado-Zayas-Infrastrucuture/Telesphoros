@@ -36,6 +36,9 @@ module.exports = {
     '^@telesphoros/shared-types$': '<rootDir>/../../packages/shared-types/src/index.ts',
     '^@telesphoros/fake-idp$': '<rootDir>/../../packages/fake-idp/src/index.ts',
   },
+  // jose 6 ships ES modules only, and Jest's CommonJS runtime cannot load them. Production needs no such step (Node 22 loads an ES
+  // module from require() natively), so only jose is compiled to CommonJS here; every other dependency stays untouched.
+  transformIgnorePatterns: ['/node_modules/(?!\\.pnpm/jose@|jose/)'],
   transform: {
     '^.+\\.ts$': [
       '@swc/jest',
@@ -48,5 +51,6 @@ module.exports = {
         module: { type: 'commonjs' },
       },
     ],
+    '^.+\\.js$': ['@swc/jest', { jsc: { target: 'es2022' }, module: { type: 'commonjs' } }],
   },
 };

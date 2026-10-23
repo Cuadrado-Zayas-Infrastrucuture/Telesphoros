@@ -1,5 +1,7 @@
+import { createServer as createHttpServer } from 'node:http';
 import { createServer, type Server } from 'node:net';
 import { DEFAULT_USERS, type FakeIdp, startFakeIdp } from '@telesphoros/fake-idp';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { invalidTokenCases, noTenantCases } from '../../test/helpers/token-rejections';
 import { CognitoTokenVerifier } from './cognito-token-verifier';
 import { InvalidTokenError, NoTenantError } from './token-verifier';
@@ -93,6 +95,36 @@ describe('CognitoTokenVerifier: rejects', () => {
 
   it.each(noTenantCases(() => idp))('a genuine token is refused with NoTenantError, not "Invalid token": %s', async (_name, make) => {
     await expect(verifier().verify(await make())).rejects.toBeInstanceOf(NoTenantError);
+  });
+});
+
+describe('CognitoTokenVerifier: the signing algorithm', () => {
+  // Cognito and the fake IdP both publish keys that name RS256, which would refuse another algorithm anyway. This key set names none, so
+  // only the verifier's own allow-list stands between an RS384 token (genuine key, valid signature) and acceptance.
+  it('accepts RS256 and refuses any other algorithm, even with the genuine key and a valid signature', async () => {
+    // A Web Crypto RSA key is bound to one hash, so each algorithm gets its own key, all published without an `alg`.
+    const algs = ['RS256', 'RS384', 'RS512'];
+    const pairs = new Map(await Promise.all(algs.map(async (alg) => [alg, await generateKeyPair(alg, { extractable: true })] as const)));
+    const jwks = JSON.stringify({ keys: await Promise.all(algs.map(async (alg) => ({ ...(await exportJWK(pairs.get(alg)!.publicKey)), kid: alg, use: 'sig' }))) });
+    const server = createHttpServer((_req, res) => res.writeHead(200, { 'content-type': 'application/json' }).end(jwks));
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const { port } = server.address() as { port: number };
+      const v = verifier({ jwksUri: `http://127.0.0.1:${port}/jwks.json` });
+      const sign = (alg: string) =>
+        new SignJWT({ token_use: 'access', client_id: 'app-client', 'cognito:groups': ['tenant:alpha', 'clinician'] })
+          .setProtectedHeader({ alg, kid: alg })
+          .setSubject(alice!.sub)
+          .setIssuer(idp.issuer)
+          .setIssuedAt()
+          .setExpirationTime('5m')
+          .sign(pairs.get(alg)!.privateKey);
+      await expect(v.verify(await sign('RS256'))).resolves.toMatchObject({ sub: alice!.sub, tenantId: 'alpha' }); // control: the key and claims are good
+      await rejects(await sign('RS384'), v);
+      await rejects(await sign('RS512'), v);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 });
 
