@@ -7,7 +7,10 @@
 name: ci
 
 on:
+  # ready_for_review is what runs CI for a draft once it is marked ready: a draft's own runs are skipped (the `changes` job below), so without it a
+  # draft's skipped, "successful" checks would be the only ones on the head (guard: scope.test.mjs). The other three are GitHub's defaults.
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
 
@@ -33,6 +36,9 @@ jobs:
   # every job below runs anyway, so a broken decision costs minutes, never coverage. secret-scan never waits for it.
   changes:
     name: changes
+    # The only place a draft is recognised. A draft pull request skips this job, so every job that needs it is skipped too, and secret-scan
+    # (which waits only for it to be skipped) as well: no hosted minutes until the pull request is marked ready.
+    if: ${{ github.event.pull_request.draft != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -1051,6 +1057,9 @@ jobs:
   # Every commit in the history, not just the diff: a secret removed in a later commit is still leaked.
   secret-scan:
     name: secret-scan
+    # Never decided by the scope: it runs unless the `changes` job was skipped (a draft). If `changes` fails, it runs.
+    if: ${{ !cancelled() && needs.changes.result != 'skipped' }}
+    needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

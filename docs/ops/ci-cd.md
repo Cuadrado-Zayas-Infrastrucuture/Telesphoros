@@ -81,6 +81,19 @@ filter on `on:`) leaves its checks pending, which blocks the merge. This design 
 against this repository's ruleset on a real pull request because hosted CI is stopped until the October minutes reset; the first hosted run is that check. A skipped job that `needs` a failed job is
 also skipped and also reports success, which is why every job here carries `!cancelled()` and the `changes`-failed arm.
 
+**Draft pull requests.** A draft runs nothing. The `changes` job is skipped for a draft (`github.event.pull_request.draft != true`, the one
+place a draft is recognised), so every job that needs it is skipped, and `secret-scan` is skipped because it runs unless `changes` was
+skipped. A skipped job costs no minutes. `ready_for_review` is in the `pull_request` types, and marking a draft ready is what starts the
+real run at the same head: without it, the draft's skipped checks, which report success, would be the only ones on that head.
+Nothing else is run "to mark ready": GitHub does not need a check to convert a draft.
+
+**Known window (draft marked ready).** Between the click and the moment the new run creates its queued checks (seconds), the head carries
+the draft's skipped checks, which satisfy the required ones. A merge in that gap would merge a head no run has verified. With one
+maintainer and strict up-to-date checking the practical risk is a person merging within seconds of marking ready. The merge queue would close it
+(a queued batch runs the whole workflow, so a skipped pull-request check could no longer decide a merge), but it is not available now:
+GitHub offers merge queues for private repositories only on Enterprise Cloud, which is why PR #249 (the `merge_group` trigger) was
+closed, and a public repository gets it on the Free plan. Until then: mark ready, then wait for the checks to appear.
+
 What this does not do: it does not make `main`'s checks "green by assumption". The required checks bind to pull requests; the push
 run exists to catch drift, and it still runs in full whenever the proof is missing.
 
