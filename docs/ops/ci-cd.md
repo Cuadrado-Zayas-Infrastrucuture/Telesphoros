@@ -81,6 +81,17 @@ filter on `on:`) leaves its checks pending, which blocks the merge. This design 
 against this repository's ruleset on a real pull request because hosted CI is stopped until the October minutes reset; the first hosted run is that check. A skipped job that `needs` a failed job is
 also skipped and also reports success, which is why every job here carries `!cancelled()` and the `changes`-failed arm.
 
+**Who decides the scope.** On a pull request the `changes` job runs the **base branch's** copy of `scope.mjs`
+(`git show $BASE_SHA:.github/ci/scope.mjs`), never the checked-out change, so a pull request that edits `scope.mjs` cannot skip its own
+required jobs. The base must be a full commit id: an empty value would make `git show` read the index, which is the change's own file,
+so the step validates it and fails closed (then `changes` fails and every job runs). A test executes the real step in a scratch
+repository, with a positive control, to show this.
+
+What this does not close: a pull request still supplies the workflow file GitHub runs, so it can edit `ci.yml` itself, for example give a
+job `if: false`, which reports success. Only human review of changes under `.github/` stops that. With one maintainer and zero
+required approvals, the maintainer's own review is that control. Before the repository is public, require maintainer approval for
+workflow runs from outside contributors, and add a second reviewer for `.github/` when there is one.
+
 **Draft pull requests.** A draft runs nothing. The `changes` job is skipped for a draft (`github.event.pull_request.draft != true`, the one
 place a draft is recognised), so every job that needs it is skipped, and `secret-scan` is skipped because it runs unless `changes` was
 skipped. A skipped job costs no minutes. `ready_for_review` is in the `pull_request` types, and marking a draft ready is what starts the
