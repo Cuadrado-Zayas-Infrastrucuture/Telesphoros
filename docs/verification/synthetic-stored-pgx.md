@@ -23,6 +23,6 @@ Local evidence links (real paths; not portable):
 - [Real PostgreSQL/API/S3 tests](/private/tmp/stored-pgx-real-api-final.log)
 - [Tenant-guard defect injection](/private/tmp/stored-pgx-mutation.log)
 - [Workspace typecheck](/private/tmp/stored-pgx-types-final.log)
-- [Browser verification JSON](<home>/Documents/Codex/2026-10-11/ch/work/telesphoros-remastered-smart-pilot/packages/smart-pilot/openemr/.runtime/browser-verification.json)
+- Browser verification JSON (`<task workspace>/telesphoros-remastered-smart-pilot/packages/smart-pilot/openemr/.runtime/browser-verification.json`)
 
 Runtime files and credentials remain ignored. The new PostgreSQL spec joins existing CI tiers automatically; merge still requires repository-wide CI. This record does not predeclare CI results. Multiple closing reads detect observed changes but do not provide an atomic database snapshot or continuous invalidation. Production consent/delegation, source retrieval, correction-history exchange and clinical/IG validation remain separate work.

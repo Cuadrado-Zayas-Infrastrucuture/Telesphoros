@@ -44,7 +44,7 @@ macOS, Node 22.22.0, pnpm 10.28.0; native PostgreSQL 16 with SCRAM on a new loop
 | Complete backend default / PostgreSQL / PostgreSQL+S3 | 1,558 / 1,739 / 1,740 passed; 182 / 1 / 0 intentional profile skips; zero failures or missing-service notices. Durations 128.907 / 162.960 / 168.245 seconds |
 | Final-head CI / inspected tier logs | Pending |
 
-Raw local logs are retained in the task workspace under `<home>/Documents/Codex/2026-10-10/c/work/phase3d-*.log`; none is evidence of live AWS, Cognito/provider behavior or production readiness. Application/storage services and database migrations were not run against any shared or production target.
+Raw local logs are retained in the task workspace under `<task workspace>/phase3d-*.log`; none is evidence of live AWS, Cognito/provider behavior or production readiness. Application/storage services and database migrations were not run against any shared or production target.
 
 ## Remaining acceptance
 

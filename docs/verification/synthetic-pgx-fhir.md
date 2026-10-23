@@ -18,9 +18,9 @@ The fixture preserves v1 and v2 as distinct source/evaluation snapshots, but onl
 
 Local evidence (synthetic only; real paths retained):
 
-- [Consented preview screenshot](<home>/Documents/Codex/2026-10-11/ch/work/telesphoros-remastered-smart-pilot/packages/smart-pilot/openemr/.runtime/patient-1.png)
-- [Consent-withheld screenshot](<home>/Documents/Codex/2026-10-11/ch/work/telesphoros-remastered-smart-pilot/packages/smart-pilot/openemr/.runtime/patient-2.png)
-- [Browser verification JSON](<home>/Documents/Codex/2026-10-11/ch/work/telesphoros-remastered-smart-pilot/packages/smart-pilot/openemr/.runtime/browser-verification.json)
+- Consented preview screenshot (`<task workspace>/telesphoros-remastered-smart-pilot/packages/smart-pilot/openemr/.runtime/patient-1.png`)
+- Consent-withheld screenshot (`<task workspace>/telesphoros-remastered-smart-pilot/packages/smart-pilot/openemr/.runtime/patient-2.png`)
+- Browser verification JSON (`<task workspace>/telesphoros-remastered-smart-pilot/packages/smart-pilot/openemr/.runtime/browser-verification.json`)
 - [Final pilot test log](/private/tmp/pgx-pilot-tests-final.log)
 - [Mutation failure log](/private/tmp/pgx-mutation.log)
 
