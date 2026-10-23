@@ -8,6 +8,7 @@ import { type BackupManifest, ManifestError, parseManifest } from './backup-mani
 import { LedgerVerifier } from '../ledger/verifier';
 import { makeTempDir, sweepStaleTempDirs } from './cleanup';
 import { pgEnv, quoteIdent, run } from './pg-process';
+import { describeRestoreFailure } from './restore-failure';
 import { diffPrivilegeFacts, legacyRequiredRoles, missingRoles, readPrivilegeFacts } from './privilege-facts';
 import { pgClientConfig } from './tls';
 
@@ -196,7 +197,7 @@ export async function restoreAndVerify(options: RestoreOptions): Promise<Restore
       await verify(restoredUrl, manifest, record, options.ledgerChainMaxEvents ?? RESTORE_CHAIN_MAX_EVENTS, options.operationTimeoutMs, options.assertBudget);
       if (checks.every(check => check.ok)) await options.afterVerified?.(restoredUrl, manifest);
     } catch (error) {
-      record('pg_restore', false, (error as Error).message.slice(0, 300));
+      record('pg_restore', false, describeRestoreFailure(error));
     } finally {
       if (!keep) await dropDatabase(options.adminUrl, database, options.operationTimeoutMs);
     }
