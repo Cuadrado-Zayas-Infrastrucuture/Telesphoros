@@ -44,7 +44,7 @@
     "vitest": "^5.0.5",
     "eslint": "^10.13.0",
     "@eslint/js": "^10.0.1",
-    "typescript-eslint": "^8.71.2",
+    "typescript-eslint": "^8.72.0",
     "globals": "^17.13.0"
   },
   "description": "Synthetic control-flow library only; no models, service, effects or deployment"

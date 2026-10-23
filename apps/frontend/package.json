@@ -18,12 +18,12 @@
     "test:brand": "node --test scripts/check-branding.test.mjs"
   },
   "dependencies": {
-    "@ai-sdk/react": "4.0.147",
+    "@ai-sdk/react": "4.0.149",
     "@hookform/resolvers": "^6.0.0",
     "@radix-ui/react-label": "^2.1.17",
     "@radix-ui/react-slot": "^1.5.0",
     "@telesphoros/shared-types": "workspace:*",
-    "ai": "7.0.143",
+    "ai": "7.0.145",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.59.0",
@@ -56,7 +56,7 @@
     "sharp": "^0.35.5",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.71.2",
+    "typescript-eslint": "^8.72.0",
     "vite": "^8.3.4",
     "vite-imagetools": "^12.0.1",
     "vitest": "^5.0.5",
