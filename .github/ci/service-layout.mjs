@@ -2,6 +2,15 @@ import { readFileSync } from 'node:fs';
 const supervisorSource = readFileSync(new URL('./service-deadline.mjs', import.meta.url), 'utf8');
 // Structural tripwire; native execution and evidence controls live in service-isolation.test.mjs.
 export const internalJobs = ['service-memory', 'service-postgres', 'service-postgres-s3'];
+// The one condition by which a job may be skipped. `!cancelled()` is the status function that stops GitHub adding an implicit success(), which would skip
+// the job whenever `changes` fails; the failure arm makes a broken `changes` run everything. Event, branch and draft logic stays inside scope.mjs, so no required job's `if`
+// reads the event or the branch (a merge-queue batch has neither a pull request nor a branch of its own).
+export const heavyCondition = "${{ !cancelled() && (needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure') }}";
+export const archiveCondition = "${{ !cancelled() && (needs.changes.outputs.archive == 'true' || needs.changes.result == 'failure') }}";
+// The joining gate is skipped only when ALL three producers were skipped; one skipped beside a producer that ran still reaches its dependency check.
+export const gateCondition = "always() && !(needs.service-memory.result == 'skipped' && needs.service-postgres.result == 'skipped' && needs.service-postgres-s3.result == 'skipped')";
+/** A job with its scope condition and `needs: changes` removed, so the rest of its shape can be checked as before. */
+export const withoutScopeGate = job => job.replace(`    if: ${heavyCondition}\n`, '').replace(`    if: ${archiveCondition}\n`, '').replace('    needs: changes\n', '');
 export function jobOf(text, key) {
   return text.split(/^jobs:\s*$/m)[1]?.split(/^  (?=[a-z][a-z0-9-]*:\s*$)/m).find(b => b.startsWith(key + ':')) ?? '';
 }
@@ -18,7 +27,7 @@ export function serviceLayoutProblems(text) {
   require((text.match(/- &service_deadline$/gm) ?? []).length === 1 && (text.match(/- \*service_deadline$/gm) ?? []).length === 3, 'every service job arms the same first-step supervisor');
   require(!text.includes('fromJSON(steps.budget.outputs.minutes)'), 'no stale relative action timeout');
   const gate = resolvedJob(text, 'database-and-storage');
-  require(/^    if: always\(\)$/m.test(gate), 'joining gate always runs');
+  require((gate.match(/^    if:.*$/gm) ?? []).join('\n') === `    if: ${gateCondition}`, 'joining gate runs unless every producer was skipped');
   require(/^    needs: \[service-memory, service-postgres, service-postgres-s3\]$/m.test(gate), 'joining gate needs all three producers');
   for (const key of [...internalJobs, 'database-and-storage']) {
     const job = resolvedJob(text, key);
@@ -57,7 +66,7 @@ export function serviceLayoutProblems(text) {
     require(job.lastIndexOf('service-budget.mjs check') > job.lastIndexOf('uses:'), key + ' checks the clock after transfers');
     require(job.indexOf('service-budget.mjs init') < job.indexOf('pnpm install --frozen-lockfile'), key + ' starts clock before install');
     if (internalJobs.includes(key)) {
-      require(!/^    (?:if|needs):/m.test(job), key + ' independent mandatory producer');
+      require((job.match(/^    if:.*$/gm) ?? []).join('\n') === `    if: ${heavyCondition}` && (job.match(/^    needs:.*$/gm) ?? []).join('\n') === '    needs: changes', key + ' independent producer skipped only by the scope condition');
       const profile = key.slice('service-'.length);
       const command = { memory: 'pnpm --filter @telesphoros/backend test', postgres: 'TEST_STORAGE=postgres pnpm --filter @telesphoros/backend test',
         'postgres-s3': 'TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 pnpm --filter @telesphoros/backend test' }[profile];

@@ -62,7 +62,8 @@ test('layout controls reject orphaned, optional, swallowed, incomplete or cross-
   const commands = ['service-evidence.mjs dependencies', 'service-evidence.mjs collect', 'service-evidence.mjs finish', 'verify-recovery-metrics.mjs', 'verify-application-recovery.mjs', 'service-budget.mjs check'];
   const mutations = [
     workflow.replace('needs: [service-memory, service-postgres, service-postgres-s3]', 'needs: [service-memory, service-postgres]'),
-    workflow.replace(gate, gate.replace('    if: always()', '    if: success()')),
+    workflow.replace(gate, gate.replace('    if: always() && !(', '    if: success() && !(')),
+    workflow.replace(gate, gate.replace("needs.service-postgres.result == 'skipped'", "needs.service-postgres.result != 'x'")),
     workflow.replace('pattern: service-profile-*-${{ github.run_attempt }}', 'pattern: service-profile-*'),
     workflow.replace('merge-multiple: false', 'merge-multiple: true'),
     workflow.replace('digest-mismatch: error', 'digest-mismatch: warn'),
