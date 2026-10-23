@@ -42,7 +42,7 @@ These are real workstation links, not GitHub-hosted artifacts. Temporary logs ma
 - [Revocation defect log](/private/tmp/openemr-revocation-mutation.log)
 - [Pilot test log](/private/tmp/openemr-pilot-tests.log)
 - [PostgreSQL/S3 reader test log](/private/tmp/openemr-stored-reader-tests.log)
-- [Aggregate workflow manifest](<home>/Documents/Codex/2026-10-11/ch/work/telesphoros-remastered-smart-pilot/packages/smart-pilot/openemr/.runtime/workflow-verification.json)
+- Aggregate workflow manifest (`<task workspace>/telesphoros-remastered-smart-pilot/packages/smart-pilot/openemr/.runtime/workflow-verification.json`)
 - Portable sources: [workflow suite](../../apps/backend/test/workflow/openemr.workflow.ts), [browser driver](../../packages/smart-pilot/openemr/workflow-browser.mjs), [launcher](../../packages/smart-pilot/openemr/verify-workflow.cjs).
 
 ## Limits

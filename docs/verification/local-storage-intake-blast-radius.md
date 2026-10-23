@@ -2,7 +2,7 @@
 
 Approved scope: synthetic local L1 API and library tests only. Clinical processing remains disabled in storage-only apps; existing explicitly enabled regression suites use their own disposable fixtures. L2/L3 implementation, cloud access, spending and agreements remain deferred.
 
-The test PostgreSQL cluster is newly created at `<home>/Documents/Codex/2026-10-10/c/work/l1-fixtures/pg16`, listening only on 127.0.0.1:54471 with an owned socket directory. Its test helper creates generated `test_<hex>` databases and drops only those databases on this cluster after closing clients. The test S3 emulator is a newly launched owned Moto 5.2.3 process on 127.0.0.1:5571; generated versioned `synthetic-storage-<UUID>` buckets contain synthetic files only. Other tests create their own generated buckets on this same new emulator.
+The test PostgreSQL cluster is newly created at `<task workspace>/l1-fixtures/pg16`, listening only on 127.0.0.1:54471 with an owned socket directory. Its test helper creates generated `test_<hex>` databases and drops only those databases on this cluster after closing clients. The test S3 emulator is a newly launched owned Moto 5.2.3 process on 127.0.0.1:5571; generated versioned `synthetic-storage-<UUID>` buckets contain synthetic files only. Other tests create their own generated buckets on this same new emulator.
 
 Existing clinical-review databases, PostgreSQL processes, Moto endpoints and SMART/OpenEMR containers are protected and will not be reset or stopped. Both selected ports were checked for listeners before launch. Busy ports are a refusal, not permission to kill a process.
 

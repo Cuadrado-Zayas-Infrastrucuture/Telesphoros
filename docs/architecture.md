@@ -71,6 +71,6 @@ different person where the rules say so:
 Details of the reader and adapter: [lab-report-reader.md](lab-report-reader.md).
 
 ## Delivery
-CI runs five required checks (`verify`, `database-and-storage`, `browser`, `terraform`, `secret-scan`) plus an advisory lint; every GitHub
+CI runs six required checks (`verify`, `database-and-storage`, `browser`, `terraform`, `secret-scan`, `image`) plus an advisory lint; every GitHub
 Action is pinned to a commit SHA ([ops/ci-cd.md](ops/ci-cd.md)). Infrastructure is Terraform that has **never been applied**
 ([ops/deployment.md](ops/deployment.md)).
