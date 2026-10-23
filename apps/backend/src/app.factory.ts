@@ -1,7 +1,7 @@
 import type { Request,Response,NextFunction } from 'express';
 import type { IncomingMessage, Server } from 'node:http';
 import { isIntakePath } from './reports/intake/raw-intake';
-import { VersioningType } from '@nestjs/common';
+import { NotFoundException, VersioningType } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { requestIdMiddleware } from './common/request-id.middleware';
 import { authorityContextMiddleware } from './auth/authority-context';
@@ -71,4 +71,10 @@ export function configureApp(app: NestExpressApplication, options: ConfigureOpti
   const server=app.getHttpServer() as Server; server.headersTimeout=30000;
   app.setGlobalPrefix(API_PREFIX);
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
+  // Every route lives under the global prefix, so a path outside it can never match one. NestJS 12 mounts its not-found handler under the
+  // prefix only; without this, such a request reaches Express's own HTML 404 and skips the error envelope (and its request id).
+  app.use((req: Request, _res: Response, next: NextFunction) => {
+    const path = (req.url ?? '').split('?')[0]!;
+    next(path === `/${API_PREFIX}` || path.startsWith(`/${API_PREFIX}/`) ? undefined : new NotFoundException());
+  });
 }

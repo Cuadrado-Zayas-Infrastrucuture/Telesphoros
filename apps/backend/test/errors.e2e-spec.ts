@@ -90,6 +90,17 @@ describe('request id', () => {
     expect(missing.body.error.requestId).toBe(missing.headers['x-request-id']);
   });
 
+  it('a path outside /api, for any method, gets the same JSON envelope and request id (not Express\'s HTML 404)', async () => {
+    for (const [method, path] of [['get', '/'], ['get', '/nope'], ['post', '/nope'], ['put', '/health'], ['delete', '/apiary'], ['get', '/apiary/v1']] as const) {
+      const res = await api()[method](path).expect(404);
+      expect(res.headers['content-type']).toMatch(/json/);
+      expect(errorResponseSchema.safeParse(res.body).success).toBe(true);
+      expect(res.body.error.code).toBe(ErrorCode.NOT_FOUND);
+      expect(res.body.error.requestId).toBe(res.headers['x-request-id']);
+      expect(res.text).not.toContain('Cannot'); // Express's default page names the method and path
+    }
+  });
+
   it('echoes a safe caller-supplied id so a frontend can correlate its own request', async () => {
     const res = await api().get('/api/v1/patients').set('X-Request-Id', 'frontend-req-12345').expect(401);
     expect(res.headers['x-request-id']).toBe('frontend-req-12345');
