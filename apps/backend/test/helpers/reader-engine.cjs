@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- Jest loads jest.config.js and this file as plain CommonJS; they are not transformed. */
+/* global require, module, process, __dirname */
 // Is the imported report-reader engine in this checkout? The engine, its development fixtures and the Python sidecar are kept out of the
 // public repository (docs/status/2026-10-23-reader-engine-optional.md), so the specs that need them are skipped when they are absent.
 // The paths mirror DEFAULT_ENGINE_DIR and DEFAULT_CLI_PATH in src/services/report-reader/subprocess-report-reader.ts; reader-engine.spec.ts

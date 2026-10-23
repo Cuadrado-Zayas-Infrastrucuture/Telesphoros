@@ -10,6 +10,7 @@ const skipped = [];
 if (!process.env.TEST_DATABASE_URL) skipped.push('test/db (set TEST_DATABASE_URL; see scripts/dev-postgres.sh)');
 if (!process.env.TEST_S3_ENDPOINT) skipped.push('test/object-storage (set TEST_S3_ENDPOINT)');
 // The imported report-reader engine is not part of the public repository. Without it the specs that run it are skipped, and said so.
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- plain CommonJS, as Jest loads this file
 const { readerEnginePresent, SPECS_NEEDING_ENGINE } = require('./test/helpers/reader-engine.cjs');
 const withoutEngine = readerEnginePresent() ? [] : SPECS_NEEDING_ENGINE;
 if (withoutEngine.length > 0) skipped.push(`${withoutEngine.length} specs that need the report-reader engine (knowledge/lab-report-reader, sidecars/report-reader; list in test/helpers/reader-engine-specs.json)`);
