@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
-import { openWorkspaceNavigation, signInWithPatient } from './helpers';
+import { openWorkspaceNavigation, signInWithPatient, waitPastSignOutSecond } from './helpers';
 
 const STORAGE_ORIGIN = process.env.E2E_REPORT_STORAGE_ORIGIN ?? 'http://127.0.0.1:5557';
 
@@ -242,6 +242,7 @@ test('signing out clears an interrupted upload, so the next person on this tab i
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(/\/signed-out$/);
   expect(await page.evaluate(key => window.sessionStorage.getItem(key), RECOVERY_KEY)).toBeNull();
+  await waitPastSignOutSecond(page); // the next test signs in as the same person; the API refuses a token issued in the sign-out second
 });
 
 

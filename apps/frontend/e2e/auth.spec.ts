@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { expect, test, type Page } from '@playwright/test';
-import { openWorkspaceNavigation, JWT_PATTERN, ROLE, signInAs } from './helpers';
+import { openWorkspaceNavigation, JWT_PATTERN, ROLE, signInAs, waitPastSignOutSecond } from './helpers';
 
 const require = createRequire(import.meta.url);
 
@@ -106,6 +106,7 @@ test.describe('signing out', () => {
     await expect(page).toHaveURL(/\/signed-out$/);
     await expect(page.getByRole('heading', { level: 1, name: 'You have been signed out' })).toBeVisible();
     expect(await axeViolations(page)).toEqual([]);
+    await waitPastSignOutSecond(page); // the API refuses a token issued in the same second as the sign-out
 
     const loginPosts: string[] = [];
     page.on('request', (r) => r.method() === 'POST' && r.url().endsWith('/oauth2/login') && loginPosts.push(r.url()));

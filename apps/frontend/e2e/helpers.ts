@@ -15,6 +15,15 @@ export async function signInAs(page: Page, persona: Persona, path = '/reports/up
   await page.waitForURL(`**${path}`);
 }
 
+/**
+ * After a product sign-out, wait until the next whole second before signing in as the same person.
+ * The API refuses a token issued in the same second as the sign-out (`issuedAt <= tokensValidAfter`, whole seconds), so a fast re-sign-in
+ * is rejected and the page stays on /auth/callback. Real sign-out reaching the server (AUTH-03) made this visible; do not shorten it.
+ */
+export async function waitPastSignOutSecond(page: Page) {
+  await page.waitForTimeout(1100);
+}
+
 /** A JWT-shaped string: three base64url parts, the first starting like a JSON header. */
 export const JWT_PATTERN = /eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*/;
 
