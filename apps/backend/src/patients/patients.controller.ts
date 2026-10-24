@@ -5,7 +5,9 @@ import {
   idParamSchema,
   type Paginated,
   type PatientDto,
+  type PatientCreate,
   type PatientInput,
+  patientCreateSchema,
   patientInputSchema,
   type PatientListQuery,
   patientListQuerySchema,
@@ -48,7 +50,7 @@ export class PatientsController {
   @HttpCode(201)
   async create(
     @CurrentPrincipal() principal: Principal,
-    @Body(new ZodValidationPipe(patientInputSchema)) body: PatientInput,
+    @Body(new ZodValidationPipe(patientCreateSchema)) body: PatientCreate,
   ): Promise<PatientDto> {
     return toPatientDto(await this.service.create(principal, body));
   }
