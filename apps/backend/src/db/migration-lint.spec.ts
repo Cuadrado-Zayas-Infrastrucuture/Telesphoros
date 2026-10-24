@@ -1,12 +1,16 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { blankCommentsAndStrings, EXPAND_RULES, FIRST_LABELED_VERSION, lintMigration, lintMigrations } from './migration-lint';
+import { blankCommentsAndStrings, EXPAND_RULES, FIRST_LABELED_VERSION, GRANDFATHERED, lintMigration, lintMigrations } from './migration-lint';
 import { loadMigrations } from './migrator';
 
 const V = '0028';
-const expand = (sql: string) => `-- compat: expand\n${sql}`;
-const breaking = (sql: string) => `-- compat: breaking\n${sql}`;
+// The setting rides on the first line of the SQL, so a statement keeps the line number it would have had without it. `plain*` leave it out.
+const SETTING = "SET LOCAL lock_timeout = '2s'; ";
+const expand = (sql: string) => `-- compat: expand\n${SETTING}${sql}`;
+const breaking = (sql: string) => `-- compat: breaking\n${SETTING}${sql}`;
+const plainExpand = (sql: string) => `-- compat: expand\n${sql}`;
+const plainBreaking = (sql: string) => `-- compat: breaking\n${sql}`;
 
 const created: string[] = [];
 afterAll(() => created.forEach((dir) => rmSync(dir, { recursive: true, force: true })));
@@ -103,7 +107,6 @@ describe('migration lint: what an expand migration may not contain', () => {
     'CREATE INDEX t_a_idx ON t (a);',
     'CREATE FUNCTION f() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;',
     'GRANT SELECT ON t TO telesphoros_app;',
-    'ALTER TABLE t ADD CONSTRAINT c CHECK (a IS NOT NULL);',
   ])('accepts the additive statement `%s` in an expand migration', (sql) => {
     expect(lintMigration(V, expand(`${sql}\n`))).toEqual([]);
   });
@@ -148,7 +151,8 @@ describe('migration lint: comments, strings and unreadable files', () => {
     for (const sql of ["SELECT 'unterminated;\nDROP TABLE x;\n", 'SELECT "unterminated;\nDROP TABLE x;\n', '/* never closed\nDROP TABLE x;\n']) {
       const problems = lintMigration(V, expand(sql));
       expect(problems.join('\n')).toContain('could not read the SQL safely');
-      expect(lintMigration(V, breaking(sql))).toEqual([]); // a breaking migration promises nothing, so nothing is checked
+      // a breaking migration promises nothing about compatibility, but its lock_timeout use still cannot be read, so it is not passed in silence
+      expect(lintMigration(V, breaking(sql)).join('\n')).toContain('lock_timeout use cannot be checked');
     }
     const input = "a 'b' -- c\n/* d\ne */ f";
     const blanked = blankCommentsAndStrings(input)!;
@@ -245,5 +249,169 @@ describe('migration lint: a REVOKE that only undoes what the same migration crea
   it('over a directory, knows what the earlier migrations created', () => {
     expect(lintMigrations(directoryWith(expand(`${newFunction}REVOKE ALL ON FUNCTION f_new(text) FROM PUBLIC;\n`)))).toEqual([]);
     expect(lintMigrations(directoryWith(expand('REVOKE ALL ON FUNCTION f_filler() FROM PUBLIC;\n'))).join('\n')).toContain('REVOKE');
+  });
+});
+
+const LOCK = '';
+
+describe('migration lint: a trigger or constraint added to an existing table', () => {
+  // Each statement acts on `t`, which this file does not create. LOCK keeps the lock_timeout rule out of these cases.
+  const added: Array<[string, string, string]> = [
+    ['a trigger', 'CREATE TRIGGER g BEFORE UPDATE ON t FOR EACH ROW EXECUTE FUNCTION f();', 'TRIGGER'],
+    ['a constraint trigger', 'CREATE CONSTRAINT TRIGGER g AFTER INSERT ON t DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION f();', 'TRIGGER'],
+    ['a CHECK constraint', 'ALTER TABLE t ADD CONSTRAINT c CHECK (a > 0);', 'CHECK'],
+    ['an unnamed CHECK constraint', 'ALTER TABLE t ADD CHECK (a > 0);', 'CHECK'],
+    ['a FOREIGN KEY', 'ALTER TABLE t ADD CONSTRAINT c FOREIGN KEY (a) REFERENCES u (id);', 'FOREIGN KEY'],
+    ['a UNIQUE constraint', 'ALTER TABLE t ADD CONSTRAINT c UNIQUE (a);', 'UNIQUE'],
+    ['a column that carries a reference', 'ALTER TABLE t ADD COLUMN a int REFERENCES u (id);', 'REFERENCES'],
+    ['a column that carries a CHECK', 'ALTER TABLE t ADD COLUMN a int DEFAULT 1 CHECK (a > 0);', 'CHECK'],
+    ['a unique index', 'CREATE UNIQUE INDEX i ON t (a);', 'UNIQUE'],
+    ['an exclusion constraint', 'ALTER TABLE t ADD CONSTRAINT c EXCLUDE USING gist (a WITH =);', 'EXCLUDE'],
+    ['a primary key', 'ALTER TABLE t ADD PRIMARY KEY (a);', 'PRIMARY KEY'],
+  ];
+
+  it.each(added)('refuses %s on an existing table in an expand migration, and accepts it labelled breaking', (_what, sql, mention) => {
+    const problems = lintMigration(V, expand(`${LOCK}${sql}\n`));
+    expect(problems.length).toBeGreaterThan(0);
+    expect(problems.join('\n')).toContain('existing table t');
+    expect(problems.join('\n')).toContain(mention);
+    expect(problems.join('\n')).toContain('Label it breaking');
+    expect(lintMigration(V, breaking(`${LOCK}${sql}\n`))).toEqual([]); // control
+  });
+
+  it('accepts the same statements on a table the same file creates (nothing older can be using it)', () => {
+    for (const [, sql] of added) {
+      const onNew = sql.replace(/\bt\b/g, 'fresh').replace(/\bu\b/g, 'fresh');
+      expect(lintMigration(V, expand(`CREATE TABLE fresh (a int, id int);\n${onNew}\n`))).toEqual([]);
+    }
+  });
+
+  it('accepts a table created with IF NOT EXISTS or a schema prefix, and refuses one created only AFTER the statement', () => {
+    expect(lintMigration(V, expand('CREATE TABLE IF NOT EXISTS public.fresh (a int);\nCREATE TRIGGER g BEFORE UPDATE ON fresh FOR EACH ROW EXECUTE FUNCTION f();\n'))).toEqual([]);
+    expect(lintMigration(V, expand(`${LOCK}CREATE TRIGGER g BEFORE UPDATE ON fresh FOR EACH ROW EXECUTE FUNCTION f();\nCREATE TABLE fresh (a int);\n`)).length).toBeGreaterThan(0);
+  });
+
+  it('still allows what is additive: a plain index, a new nullable column, an enabled policy on a new role', () => {
+    expect(lintMigration(V, expand(`${LOCK}CREATE INDEX i ON t (a);\nALTER TABLE t ADD COLUMN b int;\n`))).toEqual([]);
+  });
+
+  it('does not read a trigger or constraint inside a comment, a string or a function body', () => {
+    expect(lintMigration(V, expand(`${LOCK}-- CREATE TRIGGER g BEFORE UPDATE ON t\nSELECT 'ALTER TABLE t ADD CHECK (a > 0)';\n`))).toEqual([]);
+    expect(lintMigration(V, expand("CREATE FUNCTION f() RETURNS void LANGUAGE plpgsql AS $$ BEGIN EXECUTE 'x'; PERFORM 1; END $$;\n"))).toEqual([]);
+  });
+
+  it('reports the line of the statement', () => {
+    const problems = lintMigration(V, expand(`${LOCK}SELECT 1;\nSELECT 2;\nALTER TABLE t ADD CHECK (a > 0);\n`));
+    expect(problems.join('\n')).toMatch(/line 4\b/); // 1 is the label, 2 the setting and SELECT 1
+  });
+});
+
+describe('migration lint: DDL on an existing table must set lock_timeout first', () => {
+  const ddl: Array<[string, string]> = [
+    ['ALTER TABLE', 'ALTER TABLE t ADD COLUMN a int;'],
+    ['ENABLE ROW LEVEL SECURITY', 'ALTER TABLE t ENABLE ROW LEVEL SECURITY;'],
+    ['CREATE INDEX', 'CREATE INDEX i ON t (a);'],
+    ['CREATE UNIQUE INDEX', 'CREATE UNIQUE INDEX i ON t (a);'],
+    ['CREATE TRIGGER', 'CREATE TRIGGER g BEFORE UPDATE ON t FOR EACH ROW EXECUTE FUNCTION f();'],
+    ['DROP TRIGGER', 'DROP TRIGGER IF EXISTS g ON t;'],
+    ['CREATE POLICY', 'CREATE POLICY p ON t FOR SELECT TO r USING (true);'],
+    ['DROP POLICY', 'DROP POLICY p ON t;'],
+  ];
+  const lockProblems = (up: string) => lintMigration(V, up).filter((p) => p.includes('lock_timeout'));
+
+  it.each(ddl)('%s: refused without lock_timeout, accepted after SET LOCAL lock_timeout', (_what, sql) => {
+    const refused = lockProblems(plainBreaking(`${sql}\n`));
+    expect(refused).toHaveLength(1);
+    expect(refused[0]).toContain('existing table t');
+    expect(lintMigration(V, breaking(`${sql}\n`))).toEqual([]); // control: the same statement with the setting
+  });
+
+  it('applies to an expand migration too', () => {
+    expect(lockProblems(plainExpand('ALTER TABLE t ADD COLUMN a int;\n'))).toHaveLength(1);
+    expect(lintMigration(V, expand('ALTER TABLE t ADD COLUMN a int;\n'))).toEqual([]);
+  });
+
+  it('wants it BEFORE the statement, and a real value', () => {
+    expect(lockProblems(plainBreaking(`CREATE INDEX i ON t (a);\nSET LOCAL lock_timeout = '2s';\n`))).toHaveLength(1);
+    for (const setting of ["SET LOCAL lock_timeout = '0';", 'SET LOCAL lock_timeout = 0;', "SET LOCAL lock_timeout = '0ms';", 'SET LOCAL lock_timeout TO DEFAULT;']) {
+      expect(lockProblems(plainBreaking(`${setting}\nCREATE INDEX i ON t (a);\n`))).toHaveLength(1);
+    }
+    for (const setting of ["SET lock_timeout = '2s';", "SET SESSION lock_timeout TO '500ms';", 'SET LOCAL lock_timeout TO 2000;', "set local lock_timeout='3s';"]) {
+      expect(lintMigration(V, plainBreaking(`${setting}\nCREATE INDEX i ON t (a);\n`))).toEqual([]);
+    }
+  });
+
+  it('a later SET 0 turns it off again for what follows', () => {
+    expect(lockProblems(plainBreaking("SET LOCAL lock_timeout = '2s';\nSET LOCAL lock_timeout = 0;\nCREATE INDEX i ON t (a);\n"))).toHaveLength(1);
+  });
+
+  it("does not take a function's own SET lock_timeout, or one in a comment or string, for the session setting", () => {
+    const fn = "CREATE FUNCTION f() RETURNS void LANGUAGE sql SET lock_timeout = '2s' AS $$ SELECT 1 $$;\n";
+    expect(lockProblems(plainBreaking(`${fn}CREATE INDEX i ON t (a);\n`))).toHaveLength(1);
+    expect(lockProblems(plainBreaking("-- SET LOCAL lock_timeout = '2s';\nSELECT 'SET LOCAL lock_timeout = 1';\nCREATE INDEX i ON t (a);\n"))).toHaveLength(1);
+  });
+
+  it('needs none for a table the file creates, or when the file only creates functions and grants', () => {
+    expect(lintMigration(V, plainBreaking('CREATE TABLE fresh (a int);\nCREATE INDEX i ON fresh (a);\nALTER TABLE fresh ENABLE ROW LEVEL SECURITY;\nCREATE POLICY p ON fresh FOR SELECT TO r USING (true);\n'))).toEqual([]);
+    expect(lintMigration(V, plainExpand('CREATE FUNCTION f() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;\nGRANT EXECUTE ON FUNCTION f() TO r;\n'))).toEqual([]);
+  });
+
+  it('names the statement and its line, once per statement', () => {
+    const problems = lockProblems(plainBreaking('SELECT 1;\nCREATE INDEX i ON t (a);\nALTER TABLE u ADD COLUMN b int;\n'));
+    expect(problems).toHaveLength(2);
+    expect(problems.join('\n')).toMatch(/line 3\b/);
+    expect(problems.join('\n')).toMatch(/line 4\b/);
+  });
+
+  it('is not applied before the label existed (those migrations are not checked at all)', () => {
+    expect(lintMigration('0027', 'CREATE INDEX i ON t (a);')).toEqual([]);
+  });
+
+  it('does not read the body of a function as a statement the migration runs', () => {
+    const body = 'CREATE FUNCTION f() RETURNS void LANGUAGE plpgsql AS $$ BEGIN PERFORM 1; CREATE INDEX i ON t (a); ALTER TABLE t ADD CHECK (a > 0); END $$;\n';
+    expect(lintMigration(V, plainBreaking(body))).toEqual([]);
+    expect(lintMigration(V, plainExpand(body))).toEqual([]);
+    expect(lockProblems(plainBreaking('CREATE FUNCTION f() RETURNS void LANGUAGE sql AS $tag$ SELECT 1 $tag$;\nCREATE INDEX i ON t (a);\n'))).toHaveLength(1); // and the statement after it is still read
+  });
+
+  it('does not see DDL that is run from inside a function body or a DO block (a stated limit, so the next test is its control)', () => {
+    expect(lintMigration(V, plainBreaking("DO $$ BEGIN EXECUTE 'CREATE INDEX i ON t (a)'; END $$;\n"))).toEqual([]);
+    expect(lintMigration(V, plainBreaking("DO $$ BEGIN CREATE INDEX i ON t (a); END $$;\n"))).toEqual([]);
+  });
+});
+
+describe('migration lint: migrations that predate the rules, by number', () => {
+  const real = loadMigrations();
+  const ungrandfathered = (version: string) => {
+    const m = real.find((x) => x.version === version)!;
+    const earlier = real.filter((x) => x.version < version).map((x) => x.upSql).join('\n');
+    return lintMigration(version, m.upSql, { earlier, grandfathered: {} });
+  };
+
+  it('lists only migrations that exist, and each entry names the rules it excuses and why', () => {
+    for (const [version, entry] of Object.entries(GRANDFATHERED)) {
+      expect(real.map((m) => m.version)).toContain(version);
+      expect(entry.rules.length).toBeGreaterThan(0);
+      expect(entry.why.length).toBeGreaterThan(40);
+    }
+  });
+
+  it('is live: without its entry each listed migration really is reported for exactly the rules it excuses', () => {
+    for (const [version, entry] of Object.entries(GRANDFATHERED)) {
+      const found = ungrandfathered(version).join('\n');
+      expect(found.length).toBeGreaterThan(0);
+      for (const rule of entry.rules) expect(found).toContain(rule === 'expand-adds-constraint-or-trigger' ? 'Label it breaking' : 'lock_timeout');
+    }
+  });
+
+  it('excuses only that number: the same text under a later number is reported', () => {
+    for (const [version] of Object.entries(GRANDFATHERED)) {
+      const m = real.find((x) => x.version === version)!;
+      expect(lintMigration('9999', m.upSql, { earlier: '' }).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('passes every migration that ships, with the list in force (control)', () => {
+    expect(lintMigrations()).toEqual([]);
   });
 });
