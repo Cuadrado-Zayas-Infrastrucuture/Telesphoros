@@ -66,7 +66,7 @@ describe('registering a report while its patient is deleted', () => {
     const t = tenant();
     const p = await patient(t);
     await reports.insert(report(t, p));
-    await expect(patients.delete(t, p)).rejects.toBeInstanceOf(IntegrityError);
+    await expect(patients.delete(t, p, 'syn-actor')).rejects.toBeInstanceOf(IntegrityError);
     expect(await liveReports(p)).toBe(1);
     expect(await isDeleted(p)).toBe(false);
   });
@@ -74,7 +74,7 @@ describe('registering a report while its patient is deleted', () => {
   it('control: a report for a patient that was already deleted is refused', async () => {
     const t = tenant();
     const p = await patient(t);
-    expect(await patients.delete(t, p)).toBe(true);
+    expect(await patients.delete(t, p, 'syn-actor')).toBe(true);
     await expect(reports.insert(report(t, p))).rejects.toBeInstanceOf(IntegrityError);
     expect(await liveReports(p)).toBe(0);
   });
@@ -85,7 +85,7 @@ describe('registering a report while its patient is deleted', () => {
     const hold = pauseBeforeCommit();
     const registering = reports.insert(report(t, p)).then(() => 'registered' as const, (error: unknown) => error);
     await hold.arrived; // the row is inserted, the registration has not committed
-    const deleting = patients.delete(t, p).then(() => 'deleted' as const, (error: unknown) => error);
+    const deleting = patients.delete(t, p, 'syn-actor').then(() => 'deleted' as const, (error: unknown) => error);
     await Promise.race([deleting, sleep(1500)]); // before the fix the delete commits here; after it, it waits for the registration
     hold.release();
     const [registration, deletion] = await Promise.all([registering, deleting]);
@@ -99,7 +99,7 @@ describe('registering a report while its patient is deleted', () => {
     const t = tenant();
     const p = await patient(t);
     const hold = pauseBeforeCommit();
-    const deleting = patients.delete(t, p).then(() => 'deleted' as const, (error: unknown) => error);
+    const deleting = patients.delete(t, p, 'syn-actor').then(() => 'deleted' as const, (error: unknown) => error);
     await hold.arrived; // the patient row is updated, the delete has not committed
     const registering = reports.insert(report(t, p)).then(() => 'registered' as const, (error: unknown) => error);
     await Promise.race([registering, sleep(1500)]); // before the fix the registration commits here; after it, it waits for the delete
@@ -117,7 +117,7 @@ describe('registering a report while its patient is deleted', () => {
     const hold = pauseBeforeCommit();
     const registering = reports.insertOrReplay({ ...report(t, p), creationRequestId: randomUUID(), creationRequestHash: 'a'.repeat(64) }).then(() => 'registered' as const, (error: unknown) => error);
     await hold.arrived;
-    const deleting = patients.delete(t, p).then(() => 'deleted' as const, (error: unknown) => error);
+    const deleting = patients.delete(t, p, 'syn-actor').then(() => 'deleted' as const, (error: unknown) => error);
     await Promise.race([deleting, sleep(1500)]);
     hold.release();
     const [registration, deletion] = await Promise.all([registering, deleting]);

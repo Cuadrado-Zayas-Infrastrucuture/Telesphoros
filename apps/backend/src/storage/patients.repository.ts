@@ -13,7 +13,8 @@ export abstract class PatientsRepository {
   abstract findByLabel(tenantId: string, label: string): Promise<PatientRecord | undefined>;
   abstract insert(record: PatientRecord): Promise<void>;
   abstract update(record: PatientRecord): Promise<void>;
-  abstract delete(tenantId: string, id: string): Promise<boolean>;
+  /** Soft-deletes the patient. Its active identifiers are withdrawn by `actor` in the same step: a deleted patient holds no identifier. False when there was nothing to delete. */
+  abstract delete(tenantId: string, id: string, actor: string): Promise<boolean>;
   /** True while another patient's record is merged into this one (an approved merge in force). Merges exist only on PostgreSQL; elsewhere this is false. */
   abstract hasMergedRecords(tenantId: string, id: string): Promise<boolean>;
 }
@@ -44,6 +45,7 @@ export class InMemoryPatientsRepository extends PatientsRepository {
   async update(record: PatientRecord) {
     this.rows.set(record.id, { ...record });
   }
+  // The identifiers sit in InMemoryPatientIdentifiersRepository, which treats a missing patient's identifiers as not held.
   async delete(tenantId: string, id: string) {
     const row = this.rows.get(id);
     if (!row || row.tenantId !== tenantId) return false;

@@ -117,15 +117,22 @@ export class PostgresPatientsRepository extends PatientsRepository {
     }
   }
 
-  async delete(tenantId: string, id: string): Promise<boolean> {
+  async delete(tenantId: string, id: string, actor: string): Promise<boolean> {
     try {
       return await this.db.withTenant(tenantId, async (client) => {
         const result = await client.query(
           'UPDATE patients SET deleted_at = now(), updated_at = now() WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL',
           [id, tenantId],
         );
-        return (result.rowCount ?? 0) > 0;
-      });
+        if ((result.rowCount ?? 0) === 0) return false;
+        // Same transaction: a deleted patient must not keep an active identifier (the unique index would go on holding the value for a record nobody can see).
+        // Running after the patient update, the soft-delete trigger's refusals come first and nothing is withdrawn for a delete that did not happen.
+        await client.query(
+          `UPDATE patient_identifiers SET status = 'withdrawn', withdrawn_by = $3, withdrawn_at = now() WHERE tenant_id = $1 AND patient_id = $2 AND status = 'active'`,
+          [tenantId, id, actor],
+        );
+        return true;
+      }, { actor });
     } catch (error) {
       throw toStorageError(error);
     }

@@ -60,7 +60,7 @@ export class PatientsService {
       throw AppException.conflictBecause('patient-has-merged-records', 'Other patient records were merged into this one. Unmerge them first.');
     }
     try {
-      await this.patients.delete(principal.tenantId, id);
+      await this.patients.delete(principal.tenantId, id, principal.sub);
     } catch (error) {
       // A merge landed after the check above; the database refuses the delete and the answer is the same.
       if (error instanceof PatientHasMergedRecordsError) throw AppException.conflictBecause('patient-has-merged-records', 'Other patient records were merged into this one. Unmerge them first.');
