@@ -270,6 +270,16 @@ export function apiComputeProblems(tf, sources = {}) {
   const unhealthy = one('resource "aws_cloudwatch_metric_alarm" "api_unhealthy_targets"');
   need(has(unhealthy, 'metric_name = "UnHealthyHostCount"') && has(unhealthy, 'threshold = 0') && has(unhealthy, 'comparison_operator = "GreaterThanThreshold"'), 'any unhealthy task must raise the unhealthy-targets alarm');
   need(has(one('resource "aws_cloudwatch_metric_alarm" "api_target_5xx"'), 'metric_name = "HTTPCode_Target_5XX_Count"'), 'server errors must raise the 5xx alarm');
+  // The other two record-log lines nobody read before: the check could not run, and a chain too long to walk. The application must still write both, top-level.
+  for (const [name, event, metric, period] of [['api_ledger_verification_error', 'ledger-verification-error', 'LedgerVerificationErrors', 900], ['api_ledger_chain_over_size', 'ledger-chain-over-size', 'LedgerChainOverSize', 3600]]) {
+    const f = one(`resource "aws_cloudwatch_log_metric_filter" "${name}"`);
+    need(has(f, `pattern = "{ $.event = \\"${event}\\" }"`) && has(f, `name = "${metric}"`) && has(f, 'value = "1"'), `the ${name} filter must count the ${event} event`);
+    const a = one(`resource "aws_cloudwatch_metric_alarm" "${name}"`);
+    // Whole lines, not substrings: `threshold = 10` must not satisfy `threshold = 1`, nor `period = 9000` satisfy `period = 900`.
+    const alarmLine = (key, value) => new RegExp(`^\\s*${key}\\s*=\\s*${value}\\s*$`, 'm').test(code(a));
+    need(has(a, `metric_name = "${metric}"`) && has(a, 'statistic = "Sum"') && alarmLine('period', String(period)) && alarmLine('evaluation_periods', '1') && alarmLine('threshold', '1') && has(a, 'comparison_operator = "GreaterThanOrEqualToThreshold"') && has(a, 'treat_missing_data = "notBreaching"') && has(a, 'alarm_actions = [aws_sns_topic.audit_alarms.arn]'), `one ${event} line must raise the ${name} alarm, and silence is normal`);
+    need(new RegExp(`event: '${event}'`).test(ledger), `the application must still write the ${event} event`);
+  }
   for (const [alarm, metric] of [['api_elb_502', 'HTTPCode_ELB_502_Count'], ['api_elb_504', 'HTTPCode_ELB_504_Count']]) {
     const b = one(`resource "aws_cloudwatch_metric_alarm" "${alarm}"`);
     need(has(b, `metric_name = "${metric}"`) && has(b, 'namespace = "AWS/ApplicationELB"') && has(b, 'statistic = "Sum"') && has(b, 'comparison_operator = "GreaterThanOrEqualToThreshold"') && has(b, 'treat_missing_data = "notBreaching"'), `errors the load balancer answers itself (${metric}) must raise the ${alarm} alarm`);
@@ -337,6 +347,11 @@ const envLine = (key, value) => `${key.padEnd(33)} = ${value}`;
 
 test('the API compute guard reports each way the text could be weakened (controls)', () => {
   const weakened = [
+    ['the verification-error filter names another event', 'pattern        = "{ $.event = \\"ledger-verification-error\\" }"', 'pattern        = "{ $.event = \\"ledger-verification-failed\\" }"'],
+    ['the over-size alarm treats silence as failure', 'treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]', 'treat_missing_data  = "breaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]'],
+    ['the over-size alarm needs ten lines', 'threshold           = 1\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]', 'threshold           = 10\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]'],
+    ['the verification-error period is nine times longer', 'period              = 900', 'period              = 9000'],
+    ['the over-size alarm needs two lines', 'threshold           = 1\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]', 'threshold           = 2\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]'],
     ['service count ignores the image', 'api_service_count = var.enable_api_hosting && var.api_image != "" ? 1 : 0', 'api_service_count = var.enable_api_hosting ? 1 : 0'],
     ['a foundation resource not counted', 'resource "aws_ecs_cluster" "api" {\n  count = local.api_count\n', 'resource "aws_ecs_cluster" "api" {\n'],
     ['the service counted by the wrong switch', 'resource "aws_ecs_service" "api" {\n  count                              = local.api_service_count', 'resource "aws_ecs_service" "api" {\n  count                              = local.api_count'],
@@ -452,6 +467,8 @@ test('the API compute guard reports each way the text could be weakened (control
   // The application side of the alarm contract.
   const applicationSide = [
     ['the application stops logging the event', { ledger: ledgerSource.replace("event: 'ledger-compromised'", "event: 'ledger-broken'") }],
+    ['the application renames the over-size event', { ledger: ledgerSource.replace("event: 'ledger-chain-over-size'", "event: 'ledger-too-long'") }],
+    ['the application renames the verification-error event', { ledger: ledgerSource.replaceAll("event: 'ledger-verification-error'", "event: 'ledger-check-error'") }],
     ['the log-shape test is deleted', { spec: '' }],
     ['the logger options start nesting objects', { options: `${loggerOptions}\n  nestedKey: 'payload'` }],
     ['the application stops using the shared options', { appModule: appModule.replace('pinoHttpOptions(config)', '{}') }],
