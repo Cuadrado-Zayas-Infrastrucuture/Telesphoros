@@ -85,6 +85,10 @@ loader rejects it, in every environment**, until someone reviews it again.
 - A test (`knowledge-loader.spec.ts`) loads the real `knowledge/cpic/` under the production rules, so
   committing unreviewed, edited or synthetic content there fails the build.
 - `pnpm --filter @telesphoros/backend knowledge:verify -- --production` runs the same check by hand.
+- An evaluation stores only the knowledge set id. `pnpm --filter @telesphoros/backend knowledge:locate -- <id>` finds
+  the git commits whose `knowledge/cpic` loads to that id, with the same loader, so a reviewer can get back to the exact
+  files. It reads git only and prints no file content. It can find only commits that still exist: a history rewrite
+  can remove them, and the id is not archived anywhere else.
 
 Wiring the loader into application start-up (`KNOWLEDGE_DIR`, refusing to process reports when loading
 fails) arrives with the processing pipeline in PR 5B.
