@@ -767,6 +767,66 @@ resource "aws_cloudwatch_metric_alarm" "api_elb_504" {
   }
 }
 
+# Two more lines from the record-log watch (ledger-monitor.ts; each has a top-level `event`, pinned like the compromise line above). Neither is damage; both mean the
+# record log is not being fully checked. One alarm notification per state change, not per pass: while the line keeps coming, the alarm stays in ALARM and says nothing more.
+# A failed verification (the check could not run: login, network, missing tables), written at start and by each background pass.
+resource "aws_cloudwatch_log_metric_filter" "api_ledger_verification_error" {
+  count          = local.api_count
+  name           = "${local.name}-api-ledger-verification-error"
+  log_group_name = aws_cloudwatch_log_group.api[0].name
+  pattern        = "{ $.event = \"ledger-verification-error\" }"
+  metric_transformation {
+    name      = "LedgerVerificationErrors"
+    namespace = local.api_metrics
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "api_ledger_verification_error" {
+  count               = local.api_count
+  alarm_name          = "${local.name}-api-ledger-verification-error"
+  alarm_description   = "The record log could not be checked (the verifier login, the network or the tables). Nothing is known about it until a check succeeds: docs/ops/ledger-watch.md."
+  namespace           = local.api_metrics
+  metric_name         = "LedgerVerificationErrors"
+  statistic           = "Sum"
+  period              = 900
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_verification_error]
+}
+
+# A tenant's record log is longer than one verification walks (1 000 000 events), so it can never be fully verified; nothing is contained and nothing is recorded as verified.
+resource "aws_cloudwatch_log_metric_filter" "api_ledger_chain_over_size" {
+  count          = local.api_count
+  name           = "${local.name}-api-ledger-chain-over-size"
+  log_group_name = aws_cloudwatch_log_group.api[0].name
+  pattern        = "{ $.event = \"ledger-chain-over-size\" }"
+  metric_transformation {
+    name      = "LedgerChainOverSize"
+    namespace = local.api_metrics
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "api_ledger_chain_over_size" {
+  count               = local.api_count
+  alarm_name          = "${local.name}-api-ledger-chain-over-size"
+  alarm_description   = "A tenant's record log is longer than one verification walks, so it cannot be fully verified. Not damage: see docs/ops/ledger-watch.md (a checkpoint does not help; the walk limit must be dealt with)."
+  namespace           = local.api_metrics
+  metric_name         = "LedgerChainOverSize"
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]
+}
+
 # Missing data counts as a breach here: no report from Container Insights means no running task is reporting.
 resource "aws_cloudwatch_metric_alarm" "api_running_tasks" {
   count               = local.api_service_count
