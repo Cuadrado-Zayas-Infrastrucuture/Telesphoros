@@ -13,6 +13,10 @@ const compute = read('./api-compute.tf');
 const issuerTf = read('./issuer.tf');
 const edgeTf = read('./api-edge.tf');
 const appFactory = read('../../apps/backend/src/app.factory.ts');
+const apiMain = read('../../apps/backend/src/main.ts');
+const { installProcessFaultHandlers } = await import('../../apps/backend/src/common/process-faults.ts').catch((error) => {
+  throw new Error(`the API's process fault handler could not be imported (this guard needs Node 22.18 or newer): ${error.message}`);
+});
 const ledgerSource = read('../../apps/backend/src/ledger/ledger-monitor.ts');
 const logShapeSpec = read('../../apps/backend/src/log-shape.spec.ts');
 const loggerOptions = read('../../apps/backend/src/logger-options.ts');
@@ -95,6 +99,7 @@ export function apiComputeProblems(tf, sources = {}) {
   const cli = sources.cli ?? cliSource;
   const edge = sources.edge ?? edgeTf;
   const factory = sources.factory ?? appFactory;
+  const main = sources.main ?? apiMain;
   const problems = [];
   const text = code(tf);
   const need = (condition, why) => {
@@ -275,6 +280,18 @@ export function apiComputeProblems(tf, sources = {}) {
   need(idle !== null && keepAlive !== null, 'the scan must find the balancer idle timeout and the API keep-alive constant (a floor, so an empty read cannot pass)');
   if (idle && keepAlive) need(Number(keepAlive[1].replaceAll('_', '')) >= Number(idle[1]) * 1000 + 5000, `the API keep-alive (${keepAlive[1]} ms) must exceed the balancer idle timeout (${idle[1]} s) by at least 5 s`);
   need(/server\.keepAliveTimeout\s*=\s*API_KEEP_ALIVE_TIMEOUT_MS\b/.test(code(factory)), 'configureApp must apply the keep-alive constant to the server');
+  // A process fault: the API writes one `process-fault` line and exits 1; one occurrence raises the alarm.
+  const faultFilter = one('resource "aws_cloudwatch_log_metric_filter" "api_process_fault"');
+  need(has(faultFilter, 'pattern = "{ $.event = \\"process-fault\\" }"') && has(faultFilter, 'name = "ProcessFaults"') && has(faultFilter, 'value = "1"'), 'the process-fault filter must count the process-fault event');
+  const faultAlarm = one('resource "aws_cloudwatch_metric_alarm" "api_process_fault"');
+  // Whole lines, not substrings: `threshold = 10` must not satisfy `threshold = 1`.
+  const faultLine = (key, value) => new RegExp(`^\\s*${key}\\s*=\\s*${value}\\s*$`, 'm').test(code(faultAlarm));
+  need(has(faultAlarm, 'metric_name = "ProcessFaults"') && has(faultAlarm, 'statistic = "Sum"') && faultLine('threshold', '1') && faultLine('period', '60') && faultLine('evaluation_periods', '1') && has(faultAlarm, 'comparison_operator = "GreaterThanOrEqualToThreshold"') && has(faultAlarm, 'treat_missing_data = "notBreaching"') && has(faultAlarm, 'alarm_actions = [aws_sns_topic.audit_alarms.arn]'), 'one process fault must raise the API process-fault alarm, and silence is normal');
+  need(/installProcessFaultHandlers\(process, \{ service: 'api' \}\)/.test(main), 'the API must still install the process fault handlers');
+  const emittedLines = [];
+  installProcessFaultHandlers({ on: (_event, listener) => listener(new TypeError('x')) }, { service: 'api', write: (l) => emittedLines.push(l), exit: () => undefined });
+  const emittedEvent = emittedLines.length > 0 ? JSON.parse(emittedLines[0]).event : undefined;
+  need(emittedEvent === 'process-fault' && new RegExp(`\\$\\.event = \\\\"${emittedEvent}\\\\"`).test(text.split('\n').find((l) => l.includes('process-fault') && l.includes('pattern')) ?? ''), 'the API handler must write the event the filter matches');
   const running = one('resource "aws_cloudwatch_metric_alarm" "api_running_tasks"');
   need(has(running, 'threshold = var.api_desired_count') && has(running, 'comparison_operator = "LessThanThreshold"') && has(running, 'treat_missing_data = "breaching"'), 'too few running tasks (or no report at all) must raise the running-tasks alarm');
 
@@ -422,6 +439,10 @@ test('the API compute guard reports each way the text could be weakened (control
     ['the 502 alarm reads the target metric', 'metric_name         = "HTTPCode_ELB_502_Count"', 'metric_name         = "HTTPCode_Target_5XX_Count"'],
     ['the 504 alarm is removed', 'resource "aws_cloudwatch_metric_alarm" "api_elb_504" {', 'resource "aws_cloudwatch_metric_alarm" "api_elb_504_gone" {'],
     ['the 504 alarm counted by the wrong switch', 'resource "aws_cloudwatch_metric_alarm" "api_elb_504" {\n  count               = local.api_service_count', 'resource "aws_cloudwatch_metric_alarm" "api_elb_504" {\n  count               = local.api_count'],
+    ['the process-fault filter names another event', 'pattern        = "{ $.event = \\"process-fault\\" }"', 'pattern        = "{ $.event = \\"process-faulted\\" }"'],
+    ['the process-fault alarm needs two faults', 'threshold           = 1\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_process_fault]', 'threshold           = 2\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_process_fault]'],
+    ['the process-fault alarm needs ten faults', 'threshold           = 1\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_process_fault]', 'threshold           = 10\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_process_fault]'],
+    ['the process-fault alarm is renamed away', 'resource "aws_cloudwatch_metric_alarm" "api_process_fault" {', 'resource "aws_cloudwatch_metric_alarm" "api_process_fault_x" {'],
     ['provisioning task not counted by the image', 'resource "aws_ecs_task_definition" "api_provision" {\n  count                    = local.api_service_count', 'resource "aws_ecs_task_definition" "api_provision" {\n  count                    = local.api_count'],
   ];
   for (const [name, from, to] of weakened) {
@@ -440,6 +461,7 @@ test('the API compute guard reports each way the text could be weakened (control
     ['the balancer idle timeout is raised past the keep-alive', { edge: edgeTf.replace(/idle_timeout(\s*)=\s*60/, 'idle_timeout$1= 120') }],
     ['configureApp stops applying the constant', { factory: appFactory.replace('server.keepAliveTimeout=API_KEEP_ALIVE_TIMEOUT_MS;', '') }],
     ['the scan finds no idle timeout', { edge: '' }],
+    ['the API stops installing the process fault handlers', { main: apiMain.replace("installProcessFaultHandlers(process, { service: 'api' });", '') }],
     ['cli.ts stops reading the issuer variable', { cli: cliSource.replace('...(process.env.PROVISION_SECRET_ISSUER ? { issuer: process.env.PROVISION_SECRET_ISSUER } : {})', '') }],
     ['cli.ts reads an extra provisioning secret Terraform does not pass', { cli: cliSource.replace("worker: required('PROVISION_SECRET_WORKER')", "worker: required('PROVISION_SECRET_WORKER'), extra: required('PROVISION_SECRET_EXTRA')") }],
   ];

@@ -68,6 +68,15 @@ describe('the worker\'s database pool and stop sequence are the bounded ones', (
   });
 });
 
+describe('the worker ends on a process fault with one safe line', () => {
+  const main = readFileSync(join(here, 'main.ts'), 'utf8');
+  it('installs the handlers before main() runs', () => {
+    const install = main.indexOf('installProcessFaultHandlers(process, jsonLogger())');
+    expect(install).toBeGreaterThan(-1);
+    expect(install).toBeLessThan(main.indexOf('async function main()'));
+  });
+});
+
 describe('the worker writes no files', () => {
   // The task runs with a read-only root filesystem and no volume (infrastructure/terraform/worker.guard.test.mjs), so a file write would fail on Fargate
   // and pass in every test on a writable disk. The test-only handler writes marker files by design; a production worker refuses to register it.
