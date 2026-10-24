@@ -1,6 +1,14 @@
 import { JobError, UNEXPECTED_ERROR_CODE, systemActor, type ClaimedJob, type JobDefinition, type JobQueue } from '@telesphoros/jobs';
 import type { Logger } from './log';
 
+/**
+ * How long to wait after the `failures`-th claim in a row failed: twice the poll interval, doubling, at most 30 seconds, with up to 20% either way
+ * so that workers that lost the database together do not all come back on the same tick. `random` is in [0, 1).
+ */
+export function claimBackoffMs(failures: number, pollMs: number, random: number = Math.random()): number {
+  return Math.min(30_000, Math.round(pollMs * 2 ** Math.min(failures, 6) * (0.8 + 0.4 * random)));
+}
+
 export interface HandlerContext {
   job: ClaimedJob;
   /** `system:<job type>`: what the job records as `created_by`. Never a person (see packages/jobs/src/actor.ts). */
@@ -135,7 +143,7 @@ export class Runner {
       } catch {
         failures += 1;
         log('error', 'claim-failed', { workerId, code: 'queue-unavailable', count: failures });
-        await this.sleep(Math.min(30_000, pollMs * 2 ** Math.min(failures, 6)));
+        await this.sleep(claimBackoffMs(failures, pollMs));
         continue;
       }
       // A full batch means there is probably more: go again at once. Otherwise wait for the poll interval or for a job to finish.

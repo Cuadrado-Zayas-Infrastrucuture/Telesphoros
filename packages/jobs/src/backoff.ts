@@ -1,5 +1,6 @@
 /**
- * Seconds to wait before attempt `attempt + 1` after attempt number `attempt` (1-based) failed: 60, 300, 1500, ... capped at an hour, with +-20% jitter.
+ * Seconds to wait before attempt `attempt + 1` after attempt number `attempt` (1-based) failed: 60, 300, 1500, ... capped at an hour, with +-20% jitter
+ * (the cap is applied first, so the longest wait is 4320 seconds).
  * The database computes the same thing in `job_fail` (migration 0023); a test keeps the two in agreement.
  */
 export function retryDelaySeconds(attempt: number, random: number = Math.random()): number {
