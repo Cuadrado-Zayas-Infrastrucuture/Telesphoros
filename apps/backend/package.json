@@ -19,7 +19,8 @@
     "db:backup": "node dist/db/cli.js backup",
     "db:restore": "node dist/db/cli.js restore",
     "knowledge:verify": "node dist/services/knowledge/cli.js verify",
-    "knowledge:hash": "node dist/services/knowledge/cli.js hash"
+    "knowledge:hash": "node dist/services/knowledge/cli.js hash",
+    "knowledge:locate": "node dist/services/knowledge/cli.js locate"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1153.0",
