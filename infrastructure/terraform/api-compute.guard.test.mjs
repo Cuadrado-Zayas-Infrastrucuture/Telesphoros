@@ -302,6 +302,12 @@ export function apiComputeProblems(tf, sources = {}) {
   installProcessFaultHandlers({ on: (_event, listener) => listener(new TypeError('x')) }, { service: 'api', write: (l) => emittedLines.push(l), exit: () => undefined });
   const emittedEvent = emittedLines.length > 0 ? JSON.parse(emittedLines[0]).event : undefined;
   need(emittedEvent === 'process-fault' && new RegExp(`\\$\\.event = \\\\"${emittedEvent}\\\\"`).test(text.split('\n').find((l) => l.includes('process-fault') && l.includes('pattern')) ?? ''), 'the API handler must write the event the filter matches');
+  // A deployment that fails must fail the apply, and a wedged process must be replaced (audit items 49 and the foundation layers 5 and 11).
+  need(has(one('resource "aws_ecs_service" "api"'), 'wait_for_steady_state = true'), 'apply must wait for the API service to become steady, or a deployment the circuit breaker rolls back reads as a success');
+  const container = one('resource "aws_ecs_task_definition" "api"');
+  const check = /healthCheck = \{[\s\S]*?\n      \}/.exec(code(container))?.[0] ?? '';
+  need(has(check, '/api/v1/health') && !has(check, '/ready') && has(check, 'interval = 30') && has(check, 'timeout = 5') && has(check, 'retries = 3') && has(check, 'startPeriod = 60'), 'the API container must be checked on /api/v1/health (no dependency, so a database slowdown cannot restart healthy tasks), never /ready');
+  need(has(check, "https://127.0.0.1:${local.api_port}") && has(check, "NODE_TLS_REJECT_UNAUTHORIZED='0'"), 'the container check must speak HTTPS to loopback without verifying the listener certificate (the listener is TLS, and the load balancer does not verify it either)');
   const running = one('resource "aws_cloudwatch_metric_alarm" "api_running_tasks"');
   need(has(running, 'threshold = var.api_desired_count') && has(running, 'comparison_operator = "LessThanThreshold"') && has(running, 'treat_missing_data = "breaching"'), 'too few running tasks (or no report at all) must raise the running-tasks alarm');
 
@@ -352,6 +358,10 @@ test('the API compute guard reports each way the text could be weakened (control
     ['the over-size alarm needs ten lines', 'threshold           = 1\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]', 'threshold           = 10\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]'],
     ['the verification-error period is nine times longer', 'period              = 900', 'period              = 9000'],
     ['the over-size alarm needs two lines', 'threshold           = 1\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]', 'threshold           = 2\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]'],
+    ['the API service stops waiting for a steady state', '  wait_for_steady_state = true\n', ''],
+    ['the API container is checked on /ready', "/api/v1/health').then", "/api/v1/ready').then"],
+    ['the API container check is plain HTTP', "fetch('https://127.0.0.1:", "fetch('http://127.0.0.1:"],
+    ['the API container check retries once', 'retries     = 3\n        startPeriod = 60\n      }\n      logConfiguration', 'retries     = 1\n        startPeriod = 60\n      }\n      logConfiguration'],
     ['service count ignores the image', 'api_service_count = var.enable_api_hosting && var.api_image != "" ? 1 : 0', 'api_service_count = var.enable_api_hosting ? 1 : 0'],
     ['a foundation resource not counted', 'resource "aws_ecs_cluster" "api" {\n  count = local.api_count\n', 'resource "aws_ecs_cluster" "api" {\n'],
     ['the service counted by the wrong switch', 'resource "aws_ecs_service" "api" {\n  count                              = local.api_service_count', 'resource "aws_ecs_service" "api" {\n  count                              = local.api_count'],
@@ -484,4 +494,45 @@ test('the API compute guard reports each way the text could be weakened (control
   ];
   for (const [name, sources] of applicationSide) assert.ok(apiComputeProblems(compute, sources).length > 0, `a changed application must be reported: ${name}`);
   assert.deepEqual(apiComputeProblems(compute), []); // control: the unchanged text is clean
+});
+
+test('the API container health command, as written in Terraform, passes against a healthy HTTPS server with a self-signed certificate and fails otherwise', async () => {
+  const { spawn, execFileSync } = await import('node:child_process');
+  const { mkdtempSync, readFileSync: readFile, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { createServer } = await import('node:https');
+  const line = /command\s*=\s*(\["CMD", "node", "-e", "[^\n]*?"\])\s*\n\s*interval/.exec(compute)?.[1];
+  assert.ok(line, 'the API container health command must be found in Terraform (a floor, so an empty read cannot pass)');
+  const dir = mkdtempSync(join(tmpdir(), 'api-healthcheck-'));
+  try {
+    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', join(dir, 'key.pem'), '-out', join(dir, 'cert.pem'), '-days', '1', '-subj', '/CN=localhost'], { stdio: 'ignore' });
+    const answers = { status: 200 };
+    const server = createServer({ key: readFile(join(dir, 'key.pem')), cert: readFile(join(dir, 'cert.pem')) }, (req, res) => {
+      res.statusCode = req.url === '/api/v1/health' ? answers.status : 404;
+      res.end('{}');
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address();
+    // Asynchronous on purpose: the server above lives in this process, so a blocking spawn would stop it answering.
+    const run = (script) => new Promise((resolve) => {
+      const child = spawn(process.execPath, ['-e', script], { env: { PATH: process.env.PATH ?? '' }, stdio: 'ignore' });
+      const timer = setTimeout(() => child.kill('SIGKILL'), 15_000);
+      child.on('exit', (code) => { clearTimeout(timer); resolve(code); });
+    });
+    const [, , , script] = JSON.parse(line.replace('${local.api_port}', String(port)));
+    try {
+      answers.status = 200;
+      assert.equal(await run(script), 0, 'a healthy answer must pass');
+      answers.status = 503;
+      assert.equal(await run(script), 1, 'an unhealthy answer must fail');
+      assert.equal(await run(script.replace("process.env.NODE_TLS_REJECT_UNAUTHORIZED='0';", '')), 1, 'control: without the certificate setting the self-signed listener is refused, so the setting is what lets the check pass');
+      assert.equal(await run(script.replace('/api/v1/health', '/api/v1/elsewhere')), 1, 'control: a path the server does not answer fails');
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+    assert.equal(await run(script), 1, 'nothing listening must fail');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

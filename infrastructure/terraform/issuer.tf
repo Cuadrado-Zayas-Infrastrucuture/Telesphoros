@@ -426,6 +426,10 @@ resource "aws_ecs_service" "issuer" {
     rollback = true
   }
 
+  # Without this, `terraform apply` returns as soon as the service is updated: a deployment the circuit breaker then rolls back would still read as a success.
+  # With it, apply waits for the new tasks to become steady and fails if the deployment fails.
+  wait_for_steady_state = true
+
   network_configuration {
     subnets          = local.data_subnet_ids
     security_groups  = [aws_security_group.issuer_tasks[0].id]
