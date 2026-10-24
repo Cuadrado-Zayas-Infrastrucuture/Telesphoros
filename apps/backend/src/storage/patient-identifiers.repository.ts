@@ -69,7 +69,10 @@ export class InMemoryPatientIdentifiersRepository extends PatientIdentifiersRepo
   }
 
   async add(tenantId: string, actor: string, input: { patientId: string; system: string; digest: Buffer; keyVersion: number }): Promise<IdentifierRecord> {
-    const holder = this.rows.find((r) => r.tenantId === tenantId && r.status === 'active' && r.system === input.system && r.digest.equals(input.digest));
+    // An identifier of a patient that was deleted is not held (PostgreSQL withdraws it when the patient is deleted; here the patient lookup stands in for that).
+    const live = new Map<string, boolean>();
+    for (const r of this.rows) if (!live.has(r.patientId)) live.set(r.patientId, (await this.patients.findById(r.tenantId, r.patientId)) !== undefined);
+    const holder = this.rows.find((r) => r.tenantId === tenantId && r.status === 'active' && r.system === input.system && r.digest.equals(input.digest) && live.get(r.patientId));
     if (holder) {
       if (holder.patientId !== input.patientId) {
         const [patientId, otherPatientId] = [holder.patientId, input.patientId].sort();

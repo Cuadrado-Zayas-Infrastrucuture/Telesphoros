@@ -82,7 +82,7 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
       expect(await patients.findById(b, p.id)).toBeUndefined();
       expect(await patients.findByLabel(b, 'SYN-1')).toBeUndefined();
       expect((await patients.list(b, { offset: 0, limit: 10 })).total).toBe(0);
-      expect(await patients.delete(b, p.id)).toBe(false);
+      expect(await patients.delete(b, p.id, 'syn-actor')).toBe(false);
       expect(await patients.findById(a, p.id)).toBeDefined();
     });
 
@@ -113,11 +113,11 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
       const o = tenant();
       const p = patient(o, 'SYN-1');
       await patients.insert(p);
-      expect(await patients.delete(o, p.id)).toBe(true);
+      expect(await patients.delete(o, p.id, 'syn-actor')).toBe(true);
       expect(await patients.findById(o, p.id)).toBeUndefined();
       expect(await patients.findByLabel(o, 'SYN-1')).toBeUndefined();
       expect((await patients.list(o, { offset: 0, limit: 10 })).total).toBe(0);
-      expect(await patients.delete(o, p.id)).toBe(false);
+      expect(await patients.delete(o, p.id, 'syn-actor')).toBe(false);
       await expect(patients.insert(patient(o, 'SYN-1'))).resolves.toBeUndefined();
     });
   });
@@ -260,7 +260,7 @@ describe('postgres: what only the database can guarantee', () => {
     const o = tenant();
     const p = patient(o, 'SYN-KEEP');
     await patients.insert(p);
-    await patients.delete(o, p.id);
+    await patients.delete(o, p.id, 'syn-actor');
     const row = await withAdmin(pgDb.adminUrl, (c) => c.query('SELECT deleted_at FROM patients WHERE id = $1', [p.id]));
     expect(row.rows).toHaveLength(1);
     expect(row.rows[0].deleted_at).toBeInstanceOf(Date);
@@ -273,9 +273,9 @@ describe('postgres: what only the database can guarantee', () => {
     await patients.insert(p);
     const r = report(o, p.id);
     await reports.insert(r);
-    await expect(patients.delete(o, p.id)).rejects.toBeInstanceOf(IntegrityError);
+    await expect(patients.delete(o, p.id, 'syn-actor')).rejects.toBeInstanceOf(IntegrityError);
     await reports.delete(o, r.id);
-    await expect(patients.delete(o, p.id)).resolves.toBe(true);
+    await expect(patients.delete(o, p.id, 'syn-actor')).resolves.toBe(true);
   });
 
   it('refuses a report that points at another tenant’s patient', async () => {

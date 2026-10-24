@@ -66,7 +66,7 @@ describe('deleting a patient that others are being merged into', () => {
     const p = await propose(t, a, b);
     expect(await patients.hasMergedRecords(t, b)).toBe(false); // what the service asked first
     await approve(t, p.record.id); // a merge lands in the gap before the service deletes
-    await expect(patients.delete(t, b)).rejects.toMatchObject({ reason: 'patient-has-merged-records' });
+    await expect(patients.delete(t, b, 'syn-actor')).rejects.toMatchObject({ reason: 'patient-has-merged-records' });
     expect(await isDeleted(b)).toBe(false);
     expect(await mergedInto(t, a)).toBe(b);
   });
@@ -80,7 +80,7 @@ describe('deleting a patient that others are being merged into', () => {
     const hold = pauseBeforeCommit((client) => client.query('SET CONSTRAINTS ALL IMMEDIATE').then(() => undefined));
     const approving = approve(t, p.record.id).then(() => 'approved' as const, (error: unknown) => error);
     await hold.arrived;
-    const deleting = patients.delete(t, b).then(() => 'deleted' as const, (error: unknown) => error);
+    const deleting = patients.delete(t, b, 'syn-actor').then(() => 'deleted' as const, (error: unknown) => error);
     await Promise.race([deleting, sleep(1500)]); // before the fix the delete commits here; after it, it waits for the approval
     hold.release();
     const [approval, deletion] = await Promise.all([approving, deleting]);
@@ -93,7 +93,7 @@ describe('deleting a patient that others are being merged into', () => {
     const [a, b] = [await patient(t), await patient(t)];
     const p = await propose(t, a, b);
     const hold = pauseBeforeCommit();
-    const deleting = patients.delete(t, b).then(() => 'deleted' as const, (error: unknown) => error);
+    const deleting = patients.delete(t, b, 'syn-actor').then(() => 'deleted' as const, (error: unknown) => error);
     await hold.arrived; // the row is updated, the delete has not committed
     const approving = approve(t, p.record.id).then(() => 'approved' as const, (error: unknown) => error);
     await Promise.race([approving, sleep(1500)]); // before the fix the approval commits here; after it, it waits for the delete
