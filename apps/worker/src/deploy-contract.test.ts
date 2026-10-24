@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from './config';
 import { jsonLogger } from './log';
+import { shutdownDeadlineMs } from './shutdown';
 
 /**
  * The contract between the worker and its Terraform (infrastructure/terraform/worker.tf, NOT applied): the environment block is handed to the worker's OWN
@@ -54,6 +55,7 @@ describe('worker.tf and the worker agree', () => {
     const c = loadConfig({ ...environment(), ...LOGIN }, 'host');
     const stop = Number(/stopTimeout\s*=\s*(\d+)/.exec(code)?.[1]);
     expect(stop).toBeGreaterThan(c.drainSeconds);
+    expect(stop * 1000).toBeGreaterThan(shutdownDeadlineMs(c.drainSeconds)); // the process gives up (and says so) before the runtime has to kill it
     expect(code).toMatch(/worker_health\s*=\s*8081/);
     expect(code).toMatch(/127\.0\.0\.1:\$\{local\.worker_health\}\/livez/);
   });
