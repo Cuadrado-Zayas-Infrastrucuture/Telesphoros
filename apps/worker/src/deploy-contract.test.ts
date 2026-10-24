@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from './config';
 import { jsonLogger } from './log';
+import { Ticker } from './scheduler';
 import { shutdownDeadlineMs } from './shutdown';
 
 /**
@@ -171,5 +172,62 @@ describe('the alarm patterns match the lines the worker writes', () => {
     }
     expect(typeof stats!.ageSeconds).toBe('number');
     expect(code).toContain('value     = "$.ageSeconds"');
+  });
+
+  it('the queue-stats line carries the dead count as a number, which the dead-waiting alarm reads; other lines do not feed it', () => {
+    const [stats, other] = lines((log) => {
+      log('info', 'queue-stats', { count: 3, running: 1, dead: 2, ageSeconds: 12 });
+      log('error', 'outbox-relay-failed', { code: 'queue-unavailable' });
+    });
+    expect(matches(filterPattern('worker_dead_waiting'), stats!)).toBe(true);
+    expect(matches(filterPattern('worker_dead_waiting'), other!)).toBe(false);
+    expect(stats!.dead).toBe(2);
+    expect(code).toContain('value     = "$.dead"');
+  });
+
+  // The two tickers are built here exactly as main.ts builds them (the names are pinned against main.ts below), and fail the way a database that does not answer does.
+  const emitted = async (name: string, run: () => Promise<number>): Promise<Json[]> => {
+    const out: Json[] = [];
+    await new Ticker(name, run, 60, jsonLogger((l) => out.push(JSON.parse(l) as Json))).tick();
+    return out;
+  };
+  const refused = async (): Promise<number> => {
+    throw new Error('connect ECONNREFUSED 10.0.0.5:5432');
+  };
+
+  it('a failed relay tick raises the relay filter and only it; a failed scheduler tick raises the scheduler filter and only it', async () => {
+    const relay = await emitted('outbox-relay', refused);
+    const schedule = await emitted('schedule', refused);
+    expect(relay).toHaveLength(1);
+    expect(schedule).toHaveLength(1);
+    expect(matches(filterPattern('worker_relay_failed'), relay[0]!)).toBe(true);
+    expect(matches(filterPattern('worker_schedule_failed'), relay[0]!)).toBe(false);
+    expect(matches(filterPattern('worker_schedule_failed'), schedule[0]!)).toBe(true);
+    expect(matches(filterPattern('worker_relay_failed'), schedule[0]!)).toBe(false);
+    expect(JSON.stringify([relay, schedule])).not.toMatch(/ECONNREFUSED|10\.0\.0\.5/); // the line carries a code, not the error
+  });
+
+  it('a healthy tick, with or without work, raises neither', async () => {
+    const lines_ = [...(await emitted('outbox-relay', async () => 0)), ...(await emitted('outbox-relay', async () => 3)), ...(await emitted('schedule', async () => 2))];
+    expect(lines_.length).toBeGreaterThan(0); // the ones with work log "...-ran"; the silent one logs nothing
+    for (const l of lines_) for (const name of ['worker_relay_failed', 'worker_schedule_failed']) expect(matches(filterPattern(name), l), `${String(l.event)} / ${name}`).toBe(false);
+  });
+
+  it('main.ts names the tickers as the test does', () => {
+    const main = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
+    expect(main).toContain("new Ticker('outbox-relay'");
+    expect(main).toContain("new Ticker('schedule'");
+  });
+
+  it('the failure alarms need a failure in each of three consecutive minutes, and silence is healthy', () => {
+    for (const [alarm, metric] of [['worker_relay_failing', 'OutboxRelayFailures'], ['worker_schedule_failing', 'ScheduleFailures']] as const) {
+      const at = code.indexOf(`resource "aws_cloudwatch_metric_alarm" "${alarm}"`);
+      const block = code.slice(at, code.indexOf('\n}', at));
+      expect(block).toContain(`metric_name         = "${metric}"`);
+      expect(block).toMatch(/period\s+= 60\b/);
+      expect(block).toMatch(/evaluation_periods\s+= 3\b/);
+      expect(block).toMatch(/datapoints_to_alarm\s+= 3\b/);
+      expect(block).toMatch(/treat_missing_data\s+= "notBreaching"/);
+    }
   });
 });

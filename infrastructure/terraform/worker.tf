@@ -402,6 +402,103 @@ resource "aws_cloudwatch_metric_alarm" "worker_heartbeat_stale" {
   depends_on          = [aws_cloudwatch_log_metric_filter.worker_heartbeat]
 }
 
+# Silent failures. None of these has an exception to raise: the lease-expiry dead letter is decided inside the database (job_claim), and the relay and the scheduler
+# log a failure and try again on their next tick. Each alarm below reads a line the worker already writes (a test runs the worker's own Ticker to produce them).
+#
+# A job is dead and waits for a person, however it got there. `worker_job_dead` above fires once when a handler's failure ends a job; it never sees a job whose lease
+# expired on its last attempt, because that is decided in SQL and no worker logs it. The `queue-stats` line carries the number of dead jobs, so this alarm stays in alarm
+# until the dead jobs are retried or cancelled (`jobs dead`, `jobs retry`, `jobs cancel`). It cannot say why a job died: `jobs show` can. A job whose lease expired but
+# which still has attempts left is not dead yet, and is not seen here.
+resource "aws_cloudwatch_log_metric_filter" "worker_dead_waiting" {
+  count          = local.api_count
+  name           = "${local.name}-worker-dead-waiting"
+  log_group_name = aws_cloudwatch_log_group.worker[0].name
+  pattern        = "{ $.event = \"queue-stats\" }"
+  metric_transformation {
+    name      = "JobsDeadWaiting"
+    namespace = local.worker_metrics
+    value     = "$.dead"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "worker_dead_waiting" {
+  count               = local.api_count
+  alarm_name          = "${local.name}-worker-dead-waiting"
+  alarm_description   = "One or more background jobs are dead and wait for a person, whatever killed them (including a lease that expired on the last attempt, which no log line reports). Run `jobs dead`, then `jobs show` (docs/ops/jobs.md)."
+  namespace           = local.worker_metrics
+  metric_name         = "JobsDeadWaiting"
+  statistic           = "Maximum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  depends_on          = [aws_cloudwatch_log_metric_filter.worker_dead_waiting]
+}
+
+# The outbox relay (turns pending outbox events into jobs) and the scheduler (creates the recurring jobs) each log `<name>-failed` and retry. One failure is a blip.
+# A failure in each of three consecutive one-minute periods is a database that has been unreachable or failing for between one and three minutes, about two minutes
+# typically, whatever each tick's cadence: while it lasts, events are not becoming jobs, or the hourly sweep and the daily re-check are not being created.
+# Minutes with no failure publish no data point, which counts as healthy; a worker that is down entirely is the heartbeat alarm's.
+resource "aws_cloudwatch_log_metric_filter" "worker_relay_failed" {
+  count          = local.api_count
+  name           = "${local.name}-worker-relay-failed"
+  log_group_name = aws_cloudwatch_log_group.worker[0].name
+  pattern        = "{ $.event = \"outbox-relay-failed\" }"
+  metric_transformation {
+    name      = "OutboxRelayFailures"
+    namespace = local.worker_metrics
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "worker_relay_failing" {
+  count               = local.api_count
+  alarm_name          = "${local.name}-worker-relay-failing"
+  alarm_description   = "The outbox relay has failed in each of the last three minutes: events are not becoming jobs. Check the database and the worker log (docs/ops/jobs.md); nothing is lost, events wait in the outbox."
+  namespace           = local.worker_metrics
+  metric_name         = "OutboxRelayFailures"
+  statistic           = "Sum"
+  period              = 60
+  evaluation_periods  = 3
+  datapoints_to_alarm = 3
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  depends_on          = [aws_cloudwatch_log_metric_filter.worker_relay_failed]
+}
+
+resource "aws_cloudwatch_log_metric_filter" "worker_schedule_failed" {
+  count          = local.api_count
+  name           = "${local.name}-worker-schedule-failed"
+  log_group_name = aws_cloudwatch_log_group.worker[0].name
+  pattern        = "{ $.event = \"schedule-failed\" }"
+  metric_transformation {
+    name      = "ScheduleFailures"
+    namespace = local.worker_metrics
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "worker_schedule_failing" {
+  count               = local.api_count
+  alarm_name          = "${local.name}-worker-schedule-failing"
+  alarm_description   = "The scheduler has failed in each of the last three minutes: recurring jobs (the upload sweep, the stored-file re-check) are not being created. Check the database and the worker log (docs/ops/jobs.md)."
+  namespace           = local.worker_metrics
+  metric_name         = "ScheduleFailures"
+  statistic           = "Sum"
+  period              = 60
+  evaluation_periods  = 3
+  datapoints_to_alarm = 3
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  depends_on          = [aws_cloudwatch_log_metric_filter.worker_schedule_failed]
+}
+
 output "worker_secret_arn" {
   description = "The worker's database-login secret container (written by provision-logins; the value is never in Terraform)."
   value       = var.enable_api_hosting ? aws_secretsmanager_secret.worker_database_url[0].arn : null
