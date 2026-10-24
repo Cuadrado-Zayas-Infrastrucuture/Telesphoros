@@ -25,7 +25,6 @@ pnpm --filter @telesphoros/backend build && JWT_SECRET=<32+ chars> pnpm --filter
 | POST | `/reports/:id/upload-attempts` | `clinician` | Declare an upload: `requestId`, `revision`, `contentType`, `sha256` (replaying the same declaration returns the attempt) |
 | PUT | `/reports/:id/upload-attempts/:attemptId/bytes` | `clinician` | The raw bytes, with `X-Upload-Revision`: the server validates, stores, pins and commits |
 | POST | `/reports/:id/upload-attempts/:attemptId/resume`, `/cancel` | `clinician` | Reconcile a lost reply; cancel (both need `X-Upload-Revision`) |
-| GET | `/recommendations`, `/recommendations/:id` | any token | **Read-only.** Only the rules engine (Phase 5) creates recommendations; a client cannot. |
 
 Health vs ready: use **health** for "restart this process if it fails", and **ready** for "stop
 routing traffic here if it fails". A database outage must fail *ready* but not *health*, or an

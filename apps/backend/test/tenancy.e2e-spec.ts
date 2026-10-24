@@ -114,7 +114,7 @@ describe('tenancy: stored files are grouped by tenant, not by person', () => {
 });
 
 describe('tenancy: a genuine token without exactly one tenant is refused with 403', () => {
-  const routes = ['/api/v1/me', '/api/v1/patients', '/api/v1/reports', '/api/v1/recommendations'];
+  const routes = ['/api/v1/me', '/api/v1/patients', '/api/v1/reports'];
 
   it.each([
     ['no tenant claim', null],

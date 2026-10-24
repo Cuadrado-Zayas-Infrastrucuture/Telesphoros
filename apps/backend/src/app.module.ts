@@ -18,7 +18,6 @@ import type { RecoveryObjectStorage } from './object-storage/recovery-object-sto
 import { PatientIdentityModule } from './patient-identity/patient-identity.module';
 import { PatientMergeModule } from './patient-merge/patient-merge.module';
 import { PatientsModule } from './patients/patients.module';
-import { RecommendationsModule } from './recommendations/recommendations.module';
 import { ReportsModule } from './reports/reports.module';
 import { StorageModule } from './storage/storage.module';
 
@@ -44,7 +43,6 @@ export class AppModule {
         PatientIdentityModule,
         PatientMergeModule,
         ReportsModule,
-        RecommendationsModule,
         HealthModule,
         MeModule,
         MembersModule,

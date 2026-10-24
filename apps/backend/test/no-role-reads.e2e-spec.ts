@@ -78,8 +78,6 @@ describe('the clinical reads', () => {
     [`/api/v1/patients/${id}`, 404],
     ['/api/v1/reports', 200],
     [`/api/v1/reports/${id}`, 404],
-    ['/api/v1/recommendations', 200],
-    [`/api/v1/recommendations/${id}`, 404],
   ];
   // These sit behind the lab-report pipeline switch, which is off here: a person who may read gets that answer, never 403.
   const PIPELINE_READS = ['/api/v1/evaluations', `/api/v1/evaluations/${id}`, '/api/v1/cell-disputes', `/api/v1/cell-disputes/${id}`, `/api/v1/captures/${id}`];

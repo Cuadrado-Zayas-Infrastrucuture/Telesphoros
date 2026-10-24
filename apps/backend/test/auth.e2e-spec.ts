@@ -69,7 +69,7 @@ describe('authentication (every protected route)', () => {
   it('leaves only the health endpoints public', async () => {
     await request(app.getHttpServer()).get('/api/v1/health').expect(200);
     await request(app.getHttpServer()).get('/api/v1/ready').expect(200);
-    for (const path of ['/api/v1/patients', '/api/v1/reports', '/api/v1/recommendations']) {
+    for (const path of ['/api/v1/patients', '/api/v1/reports']) {
       await request(app.getHttpServer()).get(path).expect(401);
     }
   });

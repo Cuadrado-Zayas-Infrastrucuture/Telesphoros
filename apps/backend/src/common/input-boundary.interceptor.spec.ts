@@ -6,7 +6,6 @@ import { resolve } from 'node:path';
 import { of } from 'rxjs';
 import { PatientsController } from '../patients/patients.controller';
 import { ReportsController } from '../reports/reports.controller';
-import { RecommendationsController } from '../recommendations/recommendations.controller';
 import { CapturesController, ReportCaptureController } from '../lab-reports/captures.controller';
 import { EvaluationsController, ReportEvaluationController } from '../lab-reports/evaluations.controller';
 import { NotesController, EvaluationCorrectionsController } from '../lab-reports/corrections.controller';
@@ -23,7 +22,6 @@ import { ZodValidationPipe } from './zod-validation.pipe';
 const controllers: Type[] = [
   PatientsController,
   ReportsController,
-  RecommendationsController,
   CapturesController,
   ReportCaptureController,
   EvaluationsController,
@@ -68,7 +66,7 @@ it('inventories every registered production controller and strict input pipe', (
     .filter((file) => String(file).endsWith('.controller.ts'))
     .flatMap((file) => [...readFileSync(resolve(source, String(file)), 'utf8').matchAll(/export class (\w+Controller)\b/g)].map((match) => match[1]));
   expect(controllers.map((c) => c.name).sort()).toEqual(declared.sort());
-  expect(controllers).toHaveLength(19);
+  expect(controllers).toHaveLength(18);
   expect(routes.length).toBeGreaterThan(30);
   for (const { controller, name } of routes) {
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, controller, name) ?? {};
