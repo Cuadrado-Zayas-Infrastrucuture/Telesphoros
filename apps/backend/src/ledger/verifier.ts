@@ -4,6 +4,7 @@ import { checkpointPayload, GENESIS_HASH, recordHash, redactionPayload } from '.
 import { HASH_VERSION, PROJECTION_VERSION, RECORD_TABLES, TOMBSTONE } from './ledger-types';
 import { loadProjections, projectionHash } from './projections';
 import type { Compromise, OpenIncident } from './ledger-status';
+import type { PassLock } from './ledger-monitor';
 import { pgClientConfig } from '../db/tls';
 
 /**
@@ -98,7 +99,7 @@ export class LedgerVerifier {
   /** A verifier on its own pool. `url` must be the verifier login, never the application's. */
   static connect(url: string, ssl: 'disable' | 'require' = 'disable'): LedgerVerifier {
     const pool = new Pool({
-      ...pgClientConfig(url, ssl), max: 2, connectionTimeoutMillis: 5_000, application_name: 'telesphoros-ledger-verifier',
+      ...pgClientConfig(url, ssl), max: 3, connectionTimeoutMillis: 5_000, application_name: 'telesphoros-ledger-verifier',
     });
     pool.on('error', () => undefined); // intentional: an idle verifier connection can die; the next verification opens another
     return new LedgerVerifier(pool);
@@ -106,6 +107,35 @@ export class LedgerVerifier {
 
   async close(): Promise<void> {
     await this.pool.end();
+  }
+
+  /**
+   * The lock that spaces the tasks' full walks out: one session-level advisory lock for the database, taken on a connection of its own that is kept
+   * for the whole walk. `undefined` when another task holds it. If this process dies the connection closes and the database frees the lock.
+   */
+  async acquirePassLock(): Promise<PassLock | undefined> {
+    const client = await this.pool.connect();
+    client.on('error', () => undefined); // intentional: a held connection that dies must not crash the process; the lock is gone with it
+    try {
+      const { rows } = await client.query<{ held: boolean }>(`SELECT pg_try_advisory_lock(hashtextextended('telesphoros:ledger-full-walk', 0)) AS held`);
+      if (!rows[0]!.held) {
+        client.release();
+        return undefined;
+      }
+    } catch (error) {
+      client.release(true);
+      throw error;
+    }
+    return {
+      release: async () => {
+        try {
+          await client.query(`SELECT pg_advisory_unlock(hashtextextended('telesphoros:ledger-full-walk', 0))`);
+          client.release();
+        } catch {
+          client.release(true); // closing the connection frees the lock too
+        }
+      },
+    };
   }
 
   /** Every tenant that has a ledger. */

@@ -14,7 +14,16 @@ export interface VerifierPort {
   recordIncident(finding: Pick<Compromise, 'tenantId' | 'kind' | 'seq' | 'source'>): Promise<string>;
   /** Every incident no clearance names. */
   openIncidents(): Promise<OpenIncident[]>;
+  /**
+   * Takes the one lock that spaces the tasks' full walks out, or answers `undefined` when another task holds it. Optional: a verifier without it
+   * walks at once, as before. The lock only ever delays a walk (see `waitForPassLock`).
+   */
+  acquirePassLock?(): Promise<PassLock | undefined>;
   close(): Promise<void>;
+}
+
+export interface PassLock {
+  release(): Promise<void>;
 }
 
 export interface LedgerWatchConfig {
@@ -38,6 +47,15 @@ export interface LedgerWatchConfig {
   fullWalkAtOrBelowEvents: number;
   /** How often the open incidents are read again, so a sibling task's finding (or a person's clearance) reaches this process's view. 0 turns it off. */
   incidentPollMs: number;
+  /** The full walk right after start begins after a random delay of up to this long, so tasks started together do not all walk the ledger at the same moment. 0 or unset: at once. */
+  bootPassJitterMs?: number;
+  /**
+   * One task at a time takes the pass lock for a full walk, so the walks of N tasks follow each other instead of overlapping. A task that cannot get it
+   * retries (about every `passLockRetryMs`) for up to this long, then walks anyway: every task still verifies for itself, the lock only spaces them out.
+   * 0 or unset: no lock.
+   */
+  passLockWaitMs?: number;
+  passLockRetryMs?: number;
 }
 
 /** Measured in slice 5B-3.3c (docs/ops/ledger-watch.md): these are the defaults the environment settings are layered over. */
@@ -45,6 +63,9 @@ export const FULL_WALK_AT_OR_BELOW_EVENTS = 50_000;
 export const FULL_BUDGET_MS = 15 * 60_000;
 export const ON_DEMAND_BUDGET_MS = 30_000;
 export const INCIDENT_POLL_MS = 60_000;
+export const BOOT_PASS_JITTER_MS = 60_000;
+export const PASS_LOCK_WAIT_MS = 30 * 60_000;
+export const PASS_LOCK_RETRY_MS = 10_000;
 /** The share of `startupBudgetMs` that full walks of small chains may use at start, counted after the checkpoint checks. */
 export const STARTUP_FULL_WALK_SHARE = 0.5;
 
@@ -234,7 +255,14 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
     this.status.setFullRunning(true);
     const done = (async () => {
       let allOk = true;
+      let lock: PassLock | undefined;
       try {
+        if (source === 'background') await this.pause(Math.floor(Math.random() * (this.config.bootPassJitterMs ?? 0)));
+        lock = await this.waitForPassLock(verifier);
+        if (this.stopped) {
+          allOk = false;
+          return;
+        }
         await this.syncIncidents();
         for (const tenantId of await verifier.tenants()) {
           if (this.stopped) {
@@ -254,12 +282,59 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
         allOk = false;
         this.logger.error({ event: 'ledger-verification-error', source, error: describe(error), message: 'A full check of the record log could not run.' });
       } finally {
+        await lock?.release().catch((error: unknown) => this.logger.warn({ event: 'ledger-pass-lock-release-error', error: describe(error) }));
         this.status.setFullRunning(false);
         this.passInProgress = false;
       }
       if (allOk && !this.stopped) this.status.markFullCompleted();
     })();
     return done;
+  }
+
+  /** A wait that ends early at shutdown. The timer alone never keeps the process alive. */
+  private pause(ms: number): Promise<void> {
+    if (ms <= 0 || this.abort.signal.aborted) return Promise.resolve();
+    return new Promise((resolve) => {
+      const timer = setTimeout(done, ms);
+      timer.unref();
+      const onAbort = () => done();
+      function done() {
+        clearTimeout(timer);
+        resolve();
+      }
+      this.abort.signal.addEventListener('abort', onAbort, { once: true });
+    });
+  }
+
+  /**
+   * The lock that spaces the tasks' full walks out. It can only delay a check, never prevent one: a task that is refused it for the whole wait, or
+   * that cannot ask for it at all, walks anyway and says so. (The walks are reads; the lock is there to cap the load, not to be the control.)
+   */
+  private async waitForPassLock(verifier: VerifierPort): Promise<PassLock | undefined> {
+    const wait = this.config.passLockWaitMs ?? 0;
+    if (!verifier.acquirePassLock || wait <= 0) return undefined;
+    const retry = Math.max(1, this.config.passLockRetryMs ?? PASS_LOCK_RETRY_MS);
+    const deadline = Date.now() + wait;
+    let announced = false;
+    while (!this.stopped) {
+      try {
+        const lock = await verifier.acquirePassLock();
+        if (lock) return lock;
+      } catch (error) {
+        this.logger.warn({ event: 'ledger-pass-lock-error', error: describe(error), message: 'The walk lock could not be asked for; walking without it.' });
+        return undefined;
+      }
+      if (Date.now() >= deadline) {
+        this.logger.warn({ event: 'ledger-pass-lock-timeout', waitedMs: wait, message: 'Another task kept the walk lock for the whole wait; walking without it.' });
+        return undefined;
+      }
+      if (!announced) {
+        announced = true;
+        this.logger.log({ event: 'ledger-pass-lock-waiting', message: 'Another task is walking the record log; this one waits its turn.' });
+      }
+      await this.pause(Math.floor(retry * (0.5 + Math.random())));
+    }
+    return undefined;
   }
 
   private armTimer(): void {
