@@ -9,6 +9,7 @@ export type MemberRule =
   | 'not-administrator'
   | 'tenant-inactive'
   | 'invitation-limit'
+  | 'request-id-reused'
   | 'invitation-pending'
   | 'invitation-not-found';
 
@@ -50,7 +51,11 @@ export abstract class MemberAdminRepository {
   abstract removeMember(actor: Principal, sub: string): Promise<void>;
   /** The caller's own sessions in this organization end: tokens issued before now are refused on their next request. */
   abstract signOut(actor: Principal): Promise<void>;
-  abstract createInvitation(actor: Principal, invitation: { digest: Buffer; hint: string; roles: Role[] }): Promise<InvitationView>;
+  /**
+   * Records an invitation. With `request`, a repeat by the same administrator with the same fingerprint returns the invitation already stored under it (whatever its
+   * status is now) and a different fingerprint throws the rule `request-id-reused`.
+   */
+  abstract createInvitation(actor: Principal, invitation: { digest: Buffer; hint: string; roles: Role[]; request?: { id: string; hash: string } }): Promise<InvitationView>;
   abstract listInvitations(tenantId: string, page: PageRequest): Promise<{ items: InvitationView[]; total: number }>;
   abstract cancelInvitation(actor: Principal, id: string): Promise<void>;
 }

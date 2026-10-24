@@ -8,6 +8,7 @@ import {
   correctionCreateSchema,
   evaluationListQuerySchema,
   identifierCreateSchema,
+  invitationCreateSchema,
   identifierDtoSchema,
   patientLinkDecisionCreateSchema,
   disputeListQuerySchema,
@@ -270,5 +271,17 @@ describe('identifierCreateSchema retry id (audit item 25)', () => {
   it('refuses an id that is not a UUID and any other extra field', () => {
     for (const requestId of ['', 'abc', 5]) expect(identifierCreateSchema.safeParse({ system: 'a', value: 'x', requestId }).success).toBe(false);
     expect(identifierCreateSchema.safeParse({ system: 'a', value: 'x', patientId: 'p' }).success).toBe(false);
+  });
+});
+
+describe('invitationCreateSchema retry id (audit item 25)', () => {
+  const id = '9A8B7C6D-5E4F-4A3B-8C2D-1E0F9A8B7C6D';
+  it('takes an optional UUID, lower-cased, beside the address and roles', () => {
+    expect(invitationCreateSchema.parse({ email: 'A@Example.test', roles: ['reader'] })).toEqual({ email: 'a@example.test', roles: ['reader'] });
+    expect(invitationCreateSchema.parse({ email: 'a@example.test', roles: ['reader'], requestId: id }).requestId).toBe(id.toLowerCase());
+  });
+  it('refuses an id that is not a UUID and any other extra field', () => {
+    for (const requestId of ['', 'abc', 5]) expect(invitationCreateSchema.safeParse({ email: 'a@example.test', roles: [], requestId }).success).toBe(false);
+    expect(invitationCreateSchema.safeParse({ email: 'a@example.test', roles: [], tenantId: 't' }).success).toBe(false);
   });
 });
