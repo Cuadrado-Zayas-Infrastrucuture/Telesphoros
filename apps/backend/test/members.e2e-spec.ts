@@ -257,3 +257,51 @@ describe('invitations are a record, never an account', () => {
 it(`ran against ${usingPostgres() ? 'PostgreSQL (functions, RLS)' : 'the in-memory store'}`, () => {
   expect(typeof usingPostgres()).toBe('boolean');
 });
+
+describe('a retried invitation (audit item 25)', () => {
+  const invite = (headers: Record<string, string>, body: Record<string, unknown>) => api().post('/api/v1/members/invitations').set(headers).send(body);
+  it('answers a repeat of the same request with the same invitation, where a repeat without an id answers 409 invitation-pending', async () => {
+    const { tenant, admin } = await organization();
+    const headers = await as(tenant, admin);
+    const body = { email: `retry.${randomUUID().slice(0, 6)}@example.test`, roles: ['clinician', 'reader'], requestId: randomUUID() };
+    const first = await invite(headers, body).expect(201);
+    const again = await invite(headers, body).expect(201);
+    expect(again.body.id).toBe(first.body.id);
+    expect(JSON.stringify(again.body)).not.toContain(body.requestId);
+    const bare = await invite(headers, { email: body.email, roles: body.roles }).expect(409); // control: no id, no replay
+    expect(bare.body.error.details[0].reason).toBe('invitation-pending');
+    const list = await api().get('/api/v1/members/invitations').set(headers).expect(200);
+    expect(list.body.data).toHaveLength(1);
+  });
+
+  it('treats the same roles in another order as the same request, and a different address or roles as another', async () => {
+    const { tenant, admin } = await organization();
+    const headers = await as(tenant, admin);
+    const email = `order.${randomUUID().slice(0, 6)}@example.test`;
+    const requestId = randomUUID();
+    const first = await invite(headers, { email: email.toUpperCase(), roles: ['clinician', 'reader'], requestId }).expect(201);
+    expect((await invite(headers, { email, roles: ['reader', 'clinician'], requestId }).expect(201)).body.id).toBe(first.body.id);
+    const roles = await invite(headers, { email, roles: ['reader'], requestId }).expect(409);
+    expect(roles.body.error.details[0].reason).toBe('request-id-reused');
+    const address = await invite(headers, { email: `other.${email}`, roles: ['clinician', 'reader'], requestId }).expect(409);
+    expect(address.body.error.details[0].reason).toBe('request-id-reused');
+  });
+
+  it('replays an invitation that has since been cancelled (its status says so), and keeps the id for the administrator who made it', async () => {
+    const { tenant, admin } = await organization();
+    const second = await person(tenant, ['admin']);
+    const headers = await as(tenant, admin);
+    const body = { email: `cancel.${randomUUID().slice(0, 6)}@example.test`, roles: ['reader'], requestId: randomUUID() };
+    const made = await invite(headers, body).expect(201);
+    await api().delete(`/api/v1/members/invitations/${made.body.id}`).set(headers).expect(204);
+    const replay = await invite(headers, body).expect(201);
+    expect(replay.body).toMatchObject({ id: made.body.id, status: 'cancelled' });
+    const other = await invite(await as(tenant, second), body).expect(201); // another administrator: its own id space, and the address is free again
+    expect(other.body.id).not.toBe(made.body.id);
+  });
+
+  it('refuses an id that is not a UUID', async () => {
+    const { tenant, admin } = await organization();
+    await invite(await as(tenant, admin), { email: 'bad@example.test', roles: ['reader'], requestId: 'nope' }).expect(400);
+  });
+});

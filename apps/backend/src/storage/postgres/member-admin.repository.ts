@@ -15,7 +15,7 @@ interface InvitationRow {
   expired: boolean;
 }
 
-const KNOWN_RULES: readonly string[] = ['member-self', 'member-not-found', 'last-administrator', 'not-administrator', 'tenant-inactive', 'invitation-limit', 'invitation-not-found'];
+const KNOWN_RULES: readonly string[] = ['member-self', 'member-not-found', 'last-administrator', 'not-administrator', 'tenant-inactive', 'invitation-limit', 'invitation-not-found', 'request-id-reused'];
 
 const INVITATION_COLUMNS = `id, email_hint, roles, status, expires_at, created_at, (status = 'pending' AND expires_at <= now()) AS expired`;
 const toInvitation = (r: InvitationRow): InvitationView => ({
@@ -72,9 +72,12 @@ export class PostgresMemberAdminRepository extends MemberAdminRepository {
     }
   }
 
-  createInvitation(actor: Principal, invitation: { digest: Buffer; hint: string; roles: Role[] }): Promise<InvitationView> {
+  createInvitation(actor: Principal, invitation: { digest: Buffer; hint: string; roles: Role[]; request?: { id: string; hash: string } }): Promise<InvitationView> {
     return this.run(actor, async (client) => {
-      const { rows } = await client.query<{ id: string }>('SELECT invitation_create($1, $2, $3::text[]) AS id', [invitation.digest, invitation.hint, invitation.roles]);
+      // With a retry id the keyed function is used; without one, the function that images before it also call.
+      const { rows } = invitation.request
+        ? await client.query<{ id: string }>('SELECT invitation_create_keyed($1, $2, $3::text[], $4, $5) AS id', [invitation.digest, invitation.hint, invitation.roles, invitation.request.id, invitation.request.hash])
+        : await client.query<{ id: string }>('SELECT invitation_create($1, $2, $3::text[]) AS id', [invitation.digest, invitation.hint, invitation.roles]);
       const made = await client.query<InvitationRow>(`SELECT ${INVITATION_COLUMNS} FROM invitations WHERE id = $1 AND tenant_id = $2`, [rows[0]!.id, actor.tenantId]);
       return toInvitation(made.rows[0]!);
     });

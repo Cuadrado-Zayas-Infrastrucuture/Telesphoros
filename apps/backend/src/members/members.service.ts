@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import {
   buildMeta,
@@ -27,6 +28,8 @@ function refusal(error: unknown): never {
       throw AppException.conflictBecause('last-administrator', 'The organization must keep at least one administrator.');
     case 'invitation-limit':
       throw AppException.conflictBecause('invitation-limit', 'Too many invitations are pending. Cancel some or wait for them to expire.');
+    case 'request-id-reused':
+      throw AppException.conflictBecause('request-id-reused', 'That request id was already used for a different invitation.');
     case 'invitation-pending':
       throw AppException.conflictBecause('invitation-pending', 'That person already has a pending invitation.');
     case 'member-not-found':
@@ -67,7 +70,12 @@ export class MembersService {
   }
 
   async invite(principal: Principal, input: InvitationCreate): Promise<InvitationDto> {
-    const made = await this.members.createInvitation(principal, { digest: this.digest.digest(input.email), hint: this.digest.hint(input.email), roles: input.roles }).catch(refusal);
+    const digest = this.digest.digest(input.email);
+    // The fingerprint of the original request: the address's keyed digest and the roles (as a set, so their order does not matter), never the address.
+    const request = input.requestId
+      ? { id: input.requestId, hash: createHash('sha256').update(JSON.stringify([digest.toString('hex'), [...new Set(input.roles)].sort()])).digest('hex') }
+      : undefined;
+    const made = await this.members.createInvitation(principal, { digest, hint: this.digest.hint(input.email), roles: input.roles, ...(request ? { request } : {}) }).catch(refusal);
     return toInvitation(made);
   }
 

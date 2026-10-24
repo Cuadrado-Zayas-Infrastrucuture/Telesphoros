@@ -35,7 +35,7 @@ const nowSeconds = () => Math.floor(Date.now() / 1000);
 export class InMemoryMembershipRepository extends MembershipRepository implements MembershipAdmin, TenantAdmin, MemberAdminRepository {
   private readonly rows = new Map<string, MembershipRecord>();
   private readonly tenants = new Map<string, TenantRecord>();
-  private readonly invitations: Array<InvitationView & { tenantId: string; digestHex: string; createdBy: string }> = [];
+  private readonly invitations: Array<InvitationView & { tenantId: string; digestHex: string; createdBy: string; requestId?: string; requestHash?: string }> = [];
   /** Changed-at per membership, for the member list. */
   private readonly changedAt = new Map<string, Date>();
 
@@ -192,14 +192,21 @@ export class InMemoryMembershipRepository extends MembershipRepository implement
     this.store({ ...target, status: 'removed', tokensValidAfter: Math.max(target.tokensValidAfter, nowSeconds()), version: target.version + 1 });
   }
 
-  async createInvitation(actor: Principal, invitation: { digest: Buffer; hint: string; roles: Role[] }): Promise<InvitationView> {
+  async createInvitation(actor: Principal, invitation: { digest: Buffer; hint: string; roles: Role[]; request?: { id: string; hash: string } }): Promise<InvitationView> {
     this.context(actor);
+    if (invitation.request) {
+      const prior = this.invitations.find((i) => i.tenantId === actor.tenantId && i.createdBy === actor.sub && i.requestId === invitation.request!.id);
+      if (prior) {
+        if (prior.requestHash !== invitation.request.hash) throw new MemberAdminRuleError('request-id-reused');
+        return this.viewOf(prior);
+      }
+    }
     const digestHex = invitation.digest.toString('hex');
     const now = Date.now();
     const live = this.invitations.filter((i) => i.tenantId === actor.tenantId && i.status === 'pending' && i.expiresAt.getTime() > now);
     if (live.length >= 100) throw new MemberAdminRuleError('invitation-limit');
     if (live.some((i) => i.digestHex === digestHex)) throw new MemberAdminRuleError('invitation-pending');
-    const made = { id: randomUUID(), emailHint: invitation.hint, roles: normalizeRoles(invitation.roles), status: 'pending' as const, expiresAt: new Date(now + 14 * 86_400_000), createdAt: new Date(now), tenantId: actor.tenantId, digestHex, createdBy: actor.sub };
+    const made = { id: randomUUID(), emailHint: invitation.hint, roles: normalizeRoles(invitation.roles), status: 'pending' as const, expiresAt: new Date(now + 14 * 86_400_000), createdAt: new Date(now), tenantId: actor.tenantId, digestHex, createdBy: actor.sub, ...(invitation.request ? { requestId: invitation.request.id, requestHash: invitation.request.hash } : {}) };
     this.invitations.push(made);
     return this.viewOf(made);
   }

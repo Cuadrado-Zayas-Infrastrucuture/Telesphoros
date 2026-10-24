@@ -23,6 +23,8 @@ export type MemberDto = z.infer<typeof memberDtoSchema>;
 export const invitationCreateSchema = z.strictObject({
   email: z.string().trim().toLowerCase().pipe(z.email().max(254)),
   roles: z.array(roleSchema).max(4),
+  /** Retry identity for this administrator in this organization. A repeat with the same id and the same body replays the invitation; without one nothing is replayed. */
+  requestId: z.uuid().transform((value) => value.toLowerCase()).optional(),
 });
 export type InvitationCreate = z.infer<typeof invitationCreateSchema>;
 
