@@ -37,6 +37,18 @@ const make = (data: FakeData, found: Parameters<typeof inspector>[0]) => { const
 const rejection = async (p: Promise<void>) => p.then(() => undefined, (e: unknown) => e as JobError);
 
 describe('files.verify-stored', () => {
+  it('names the request that caused the check in its log line when the job carries one, and says nothing about it when it does not', async () => {
+    const data = new FakeData(); data.single = target();
+    const jobs = filesVerifyJobs({ data, inspector: inspector(ok), log: capture });
+    const handler = jobs.find((j) => j.definition.type === 'files.verify-stored')!.handler;
+    const withRequest = { ...job('files.verify-stored'), payload: { reportId: target().reportId, requestId: '33333333-3333-4333-8333-333333333333' } };
+    logged.length = 0;
+    await handler({ job: withRequest, actor: 'system:files.verify-stored', workerId: 'w1', signal: new AbortController().signal } as HandlerContext);
+    await handler({ job: job('files.verify-stored'), actor: 'system:files.verify-stored', workerId: 'w1', signal: new AbortController().signal } as HandlerContext);
+    const lines = logged.filter((l) => l.event === 'file-verified').map((l) => l.fields as Record<string, unknown>);
+    expect(lines[0]).toMatchObject({ requestId: '33333333-3333-4333-8333-333333333333' });
+    expect(lines[1]!.requestId).toBeUndefined(); // (the logger drops an undefined field, so no key is written)
+  });
   it('does not record a finding, and does not raise the alarm line, when the read was cut short by an abort (the job is retried)', async () => {
     logged.length = 0;
     const data = new FakeData(); data.single = target();

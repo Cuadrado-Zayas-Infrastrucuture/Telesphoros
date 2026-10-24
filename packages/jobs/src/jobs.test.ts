@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { filesVerifyStored } from './definitions';
 import { assertPerson, defineJob, enqueueJob, fatal, isSystemActor, JobError, JobQueue, JobRegistry, retryable, retryDelaySeconds, systemActor, assertFlatPayload } from './index';
 
 const echo = defineJob({ type: 'test.echo', payload: z.strictObject({ reportId: z.string(), n: z.number().int() }), maxAttempts: 3, leaseSeconds: 30, timeoutSeconds: 10, testOnly: true });
@@ -105,5 +106,20 @@ describe('enqueueJob', () => {
     await expect(enqueueJob(d, echo, { reportId: 'has space', n: 1 }, { idempotencyKey: 'k' })).rejects.toThrow('short string');
     await expect(enqueueJob(d, echo, { reportId: 'abc', n: 1, extra: 1 }, { idempotencyKey: 'k' })).rejects.toThrow();
     expect(d.query).not.toHaveBeenCalled();
+  });
+});
+
+describe('the stored-file check payload (audit item 50: a job could not be traced to its request)', () => {
+  const report = '11111111-1111-4111-8111-111111111111';
+  it('takes the report, and may also carry the id of the request that caused it', () => {
+    expect(filesVerifyStored.payload.safeParse({ reportId: report }).success).toBe(true);
+    expect(filesVerifyStored.payload.safeParse({ reportId: report, requestId: '22222222-2222-4222-8222-222222222222' }).success).toBe(true);
+    expect(() => assertFlatPayload({ reportId: report, requestId: '22222222-2222-4222-8222-222222222222' })).not.toThrow(); // what the database's jobs_payload_shape accepts
+  });
+  it('refuses a request id the database would refuse, and still refuses anything else extra', () => {
+    for (const requestId of ['', 'has space', 'with.dot', 'with_underscore', 'x'.repeat(65), 7]) {
+      expect(filesVerifyStored.payload.safeParse({ reportId: report, requestId }).success).toBe(false);
+    }
+    expect(filesVerifyStored.payload.safeParse({ reportId: report, other: 'x' }).success).toBe(false);
   });
 });

@@ -6,6 +6,8 @@ export interface LogFields {
   workerId?: string;
   jobId?: string;
   jobType?: string;
+  /** The id of the API request that caused the job, when the job carries one. A short code like any other string here. */
+  requestId?: string;
   attempt?: number;
   outcome?: string;
   code?: string;
