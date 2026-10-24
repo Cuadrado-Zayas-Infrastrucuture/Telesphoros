@@ -222,8 +222,12 @@ describe('the commit boundary for writes', () => {
     }
   });
 
-  it('under many interleavings, a write is either committed whole or absent, and both outcomes occur', async () => {
-    const outcomes = { committed: 0, refused: 0 };
+  // The property: however a write and a removal interleave, the write is committed whole or absent, and the outcome the caller sees matches the
+  // database. This test does not assert that both outcomes occur: that depended on wall-clock sleeps against connection and insert latency, and a
+  // runner where every iteration landed on one side would fail it. Both outcomes are pinned deterministically by the tests above ("refuses a write whose person
+  // was removed after the request was admitted" and "a removal cannot commit while a write holds the check"). The cause of the one CI failure of the old assertion is
+  // UNCONFIRMED: it did not reproduce in 8 runs under heavy CPU load (16-19 committed, 5-8 refused of 24 each time).
+  it('under many interleavings, a write is either committed whole or absent', async () => {
     for (let i = 0; i < 24; i++) {
       const { sub, version } = await newMember();
       const name = label();
@@ -237,11 +241,8 @@ describe('the commit boundary for writes', () => {
       ).then(() => 'committed' as const, (error: { status?: number }) => (error.status === 403 ? ('refused' as const) : Promise.reject(error)));
       const removal = sleep(removalDelay).then(() => admin((a) => a.remove({ tenantId: TENANT, sub, ...OPERATOR })));
       const [outcome] = await Promise.all([write, removal]);
-      outcomes[outcome]++;
       expect(await exists(name)).toBe(outcome === 'committed');
     }
-    expect(outcomes.committed).toBeGreaterThan(0);
-    expect(outcomes.refused).toBeGreaterThan(0);
   });
 
   it('does not lock or check a read-only transaction', async () => {
