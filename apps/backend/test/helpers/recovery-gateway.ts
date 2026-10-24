@@ -9,7 +9,7 @@ export async function recoveryGateway(upstream: string, allowedBuckets: string[]
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://fixture');
     const bucket = url.pathname.split('/')[1];
-    const caller = /Credential=([^/,\s]+)\//.exec(String(req.headers.authorization ?? ''))?.[1]
+    const caller = /Credential=([^/,\s=]+)\//.exec(String(req.headers.authorization ?? ''))?.[1]
       ?? url.searchParams.get('X-Amz-Credential')?.split('/')[0];
     const reader = caller === 'SYNRECOVERYREADER';
     const record = (status: number) => requests.push({ bucket, method: req.method ?? '', reader, object: url.pathname.split('/').filter(Boolean).length > 1, pinned: url.searchParams.has('versionId'), status });

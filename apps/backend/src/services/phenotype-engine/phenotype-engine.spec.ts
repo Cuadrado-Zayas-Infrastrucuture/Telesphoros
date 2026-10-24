@@ -117,7 +117,7 @@ describe('mapPhenotype: input it will not guess about', () => {
   });
   it('allele names are case sensitive', () => {
     expect(mapPhenotype(map('GENEA'), '*1/*1')).toMatchObject({ status: 'determined' });
-    const lower = { ...map('GENEA'), alleles: map('GENEA').alleles!.map((a) => ({ ...a, name: a.name.replace('*', 'x') })) };
+    const lower = { ...map('GENEA'), alleles: map('GENEA').alleles!.map((a) => ({ ...a, name: a.name.replace(/\*/g, 'x') })) };
     expect(mapPhenotype(lower, '*1/*1')).toMatchObject({ reasonCode: 'allele-not-in-definitions' });
   });
 });

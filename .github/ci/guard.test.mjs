@@ -312,9 +312,24 @@ test('dependabot watches every ecosystem the repository uses', () => {
 /** Dependencies Dependabot must not bump alone: @nestjs/* majors (they move together) and every Node base-image update (an exact pin held in many files). */
 export function missingIgnores(config) {
   const block = (eco) => config.split(/^  - package-ecosystem: /m).find((b) => b.startsWith(`${eco}\n`)) ?? '';
-  const nest = (b) => /ignore:\n(?:\s+.*\n)*?\s+- dependency-name: "@nestjs\/\*"\n\s+update-types: \["version-update:semver-major"\]/.test(b);
-  const node = (b) => /ignore:\n(?:\s+.*\n)*?\s+- dependency-name: "node"\n(?!\s+update-types)/.test(b); // no update-types: every update is ignored
-  return [['npm', '@nestjs/*', nest], ['docker', 'node', node]].filter(([eco, , ok]) => !ok(block(eco))).map(([eco, name]) => `${eco}: ${name}`);
+  const nest = (entries) => entries.some((e) => e.name === '@nestjs/*' && e.next.trim() === 'update-types: ["version-update:semver-major"]');
+  const node = (entries) => entries.some((e) => e.name === 'node' && !/^\s*update-types/.test(e.next)); // no update-types: every update is ignored
+  return [['npm', '@nestjs/*', nest], ['docker', 'node', node]].filter(([eco, , ok]) => !ok(ignoreEntries(block(eco)))).map(([eco, name]) => `${eco}: ${name}`);
+}
+/** The `- dependency-name:` entries of a block's `ignore:` list, each with the line that follows it. Read line by line: linear in the file, whatever it contains. */
+function ignoreEntries(block) {
+  const lines = block.split('\n');
+  const at = lines.findIndex((l) => l.trim() === 'ignore:');
+  if (at < 0) return [];
+  const indent = /^\s*/.exec(lines[at])[0].length;
+  const entries = [];
+  for (let i = at + 1; i < lines.length; i++) {
+    if (lines[i].trim() === '') continue;
+    if (/^\s*/.exec(lines[i])[0].length <= indent) break;
+    const name = /^\s*- dependency-name: "([^"]*)"\s*$/.exec(lines[i]);
+    if (name) entries.push({ name: name[1], next: lines[i + 1] ?? '' });
+  }
+  return entries;
 }
 test('dependabot ignores @nestjs/* majors and every update of the node base image (planned migrations only)', () => {
   assert.deepEqual(missingIgnores(dependabot), []);
