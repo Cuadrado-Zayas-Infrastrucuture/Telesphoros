@@ -36,13 +36,31 @@ export class IdentifierInUseError extends Error {
   }
 }
 
+/** The retry id of a registration was already used for a different original request. */
+export class IdentifierRequestReusedError extends Error {
+  constructor() {
+    super('That request id was already used for a different identifier.');
+    this.name = 'IdentifierRequestReusedError';
+  }
+}
+
+/** The retry identity of a registration: set by the caller, kept with the row, never shown. `hash` fingerprints the original request. */
+export interface RegistrationRequest {
+  id: string;
+  hash: string;
+}
+
 /** See PatientsRepository: every method is tenant-scoped. Only the digest is stored; the value never reaches this layer. */
 export abstract class PatientIdentifiersRepository {
   /**
    * Throws IdentifierInUseError when an active identifier already holds the same system and digest. When that holder is ANOTHER patient, the
    * collision also leaves a possible-duplicate flag (one per unordered pair) before the error is thrown; no number or digest is kept in it.
    */
-  abstract add(tenantId: string, actor: string, input: { patientId: string; system: string; digest: Buffer; keyVersion: number }): Promise<IdentifierRecord>;
+  /**
+   * Registers an identifier. With `request`, a repeat by the same person with the same fingerprint returns the identifier already stored under it (also after it was
+   * withdrawn) and a different fingerprint throws `IdentifierRequestReusedError`; a number another patient holds still throws `IdentifierInUseError`.
+   */
+  abstract add(tenantId: string, actor: string, input: { patientId: string; system: string; digest: Buffer; keyVersion: number; request?: RegistrationRequest }): Promise<IdentifierRecord>;
   /** Every identifier of the patient, oldest first, withdrawn ones included. */
   abstract list(tenantId: string, patientId: string): Promise<IdentifierRecord[]>;
   /** False when there is no such active identifier on that patient. */
@@ -62,13 +80,21 @@ export abstract class PatientIdentifiersRepository {
 @Injectable()
 export class InMemoryPatientIdentifiersRepository extends PatientIdentifiersRepository {
   private readonly rows: IdentifierRecord[] = [];
+  private readonly requests = new Map<string, { hash: string; record: IdentifierRecord }>();
   private readonly flags: { tenantId: string; patientId: string; otherPatientId: string; system: string; flaggedAt: Date }[] = [];
 
   constructor(private readonly patients: PatientsRepository) {
     super();
   }
 
-  async add(tenantId: string, actor: string, input: { patientId: string; system: string; digest: Buffer; keyVersion: number }): Promise<IdentifierRecord> {
+  async add(tenantId: string, actor: string, input: { patientId: string; system: string; digest: Buffer; keyVersion: number; request?: RegistrationRequest }): Promise<IdentifierRecord> {
+    if (input.request) {
+      const prior = this.requests.get(`${tenantId}\u0000${actor}\u0000${input.request.id}`);
+      if (prior) {
+        if (prior.hash !== input.request.hash) throw new IdentifierRequestReusedError();
+        return { ...prior.record };
+      }
+    }
     // An identifier of a patient that was deleted is not held (PostgreSQL withdraws it when the patient is deleted; here the patient lookup stands in for that).
     const live = new Map<string, boolean>();
     for (const r of this.rows) if (!live.has(r.patientId)) live.set(r.patientId, (await this.patients.findById(r.tenantId, r.patientId)) !== undefined);
@@ -87,6 +113,8 @@ export class InMemoryPatientIdentifiersRepository extends PatientIdentifiersRepo
       status: 'active', createdBy: actor, createdAt: new Date(), withdrawnAt: null,
     };
     this.rows.push(record);
+    // The stored row is shared by reference, so a later withdrawal shows in a replay (as on PostgreSQL).
+    if (input.request) this.requests.set(`${tenantId}\u0000${actor}\u0000${input.request.id}`, { hash: input.request.hash, record });
     return { ...record };
   }
 

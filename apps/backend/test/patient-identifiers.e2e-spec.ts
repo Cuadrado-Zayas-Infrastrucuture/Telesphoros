@@ -187,3 +187,38 @@ describe('who may do what', () => {
     });
   });
 });
+
+describe('a retried registration (audit item 25)', () => {
+  const post = (headers: Record<string, string>, patientId: string, body: Record<string, unknown>) => api().post(`/api/v1/patients/${patientId}/identifiers`).set(headers).send(body);
+  it('answers a repeat of the same request with the same identifier, where a repeat without an id answers 409', async () => {
+    const clin = await as(tenantOf(), ['clinician']);
+    const patient = await newPatient(clin);
+    const body = { system: 'hospital-a-mrn', value: secretNumber(), requestId: randomUUID() };
+    const first = await post(clin, patient, body).expect(201);
+    const again = await post(clin, patient, body).expect(201);
+    expect(again.body.id).toBe(first.body.id);
+    expect(identifierDtoSchema.safeParse(again.body).success).toBe(true);
+    expect(JSON.stringify(again.body)).not.toContain(body.requestId);
+    await post(clin, patient, { system: body.system, value: body.value }).expect(409); // control: no id, no replay
+    const list = await api().get(`/api/v1/patients/${patient}/identifiers`).set(clin).expect(200);
+    expect(list.body.data).toHaveLength(1);
+  });
+
+  it('refuses the same id with another number, and keeps the id for the person who made it', async () => {
+    const tenant = tenantOf();
+    const clin = await as(tenant, ['clinician']);
+    const patient = await newPatient(clin);
+    const requestId = randomUUID();
+    await post(clin, patient, { system: 'hospital-a-mrn', value: secretNumber(), requestId }).expect(201);
+    const changed = await post(clin, patient, { system: 'hospital-a-mrn', value: secretNumber(), requestId }).expect(409);
+    expect(changed.body.error.details?.[0]?.reason).toBe('request-id-reused');
+    const other = await as(tenant, ['clinician']);
+    await post(other, patient, { system: 'hospital-a-mrn', value: secretNumber(), requestId }).expect(201); // another person: its own id space
+  });
+
+  it('refuses an id that is not a UUID', async () => {
+    const clin = await as(tenantOf(), ['clinician']);
+    const patient = await newPatient(clin);
+    await post(clin, patient, { system: 'hospital-a-mrn', value: secretNumber(), requestId: 'nope' }).expect(400);
+  });
+});

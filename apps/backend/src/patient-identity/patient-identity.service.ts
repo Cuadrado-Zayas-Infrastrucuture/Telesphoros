@@ -1,9 +1,10 @@
+import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import type { IdentifierCreate, IdentifierDto } from '@telesphoros/shared-types';
 import type { Principal } from '../auth/principal';
 import { AppException } from '../common/app-exception';
 import { ENV, type Env } from '../config/env';
-import { IdentifierInUseError, PatientIdentifiersRepository } from '../storage/patient-identifiers.repository';
+import { IdentifierInUseError, IdentifierRequestReusedError, PatientIdentifiersRepository } from '../storage/patient-identifiers.repository';
 import { PatientsRepository } from '../storage/patients.repository';
 import { CURRENT_KEY_VERSION, IdentifierDigest } from './identifier-digest';
 import { toIdentifierDto } from './patient-identity.mapper';
@@ -34,15 +35,19 @@ export class PatientIdentityService {
     const patient = await this.requirePatient(principal, patientId);
     // A merged-away patient keeps its identifiers but takes no new ones: they belong on the patient it was merged into.
     if (patient.mergedInto) throw AppException.conflictBecause('patient-merged', `That patient was merged into patient ${patient.mergedInto}. Register the identifier there.`);
+    const digest = this.digest.digest(principal.tenantId, body.system, body.value);
     try {
       const stored = await this.identifiers.add(principal.tenantId, principal.sub, {
         patientId,
         system: body.system,
-        digest: this.digest.digest(principal.tenantId, body.system, body.value),
+        digest,
         keyVersion: CURRENT_KEY_VERSION,
+        // The fingerprint of the original request: the patient, the system and the keyed digest, never the value.
+        ...(body.requestId ? { request: { id: body.requestId, hash: createHash('sha256').update(JSON.stringify([patientId.toLowerCase(), body.system, digest.toString('hex')])).digest('hex') } } : {}),
       });
       return toIdentifierDto(stored);
     } catch (error) {
+      if (error instanceof IdentifierRequestReusedError) throw AppException.conflictBecause('request-id-reused', 'That request id was already used for a different identifier.');
       if (error instanceof IdentifierInUseError) throw AppException.conflictBecause('identifier-in-use', 'That identifier is already registered to a patient of this organization.');
       throw error;
     }

@@ -86,6 +86,7 @@ const uniqueKeys: Record<string, string> = {
   patients_id_tenant_uq: 'id, tenant_id', reports_id_tenant_uq: 'id, tenant_id',
   reports_creation_request_uq: 'tenant_id, created_by, creation_request_id',
   patients_creation_request_uq: 'tenant_id, created_by, creation_request_id',
+  patient_identifiers_creation_request_uq: 'tenant_id, created_by, creation_request_id',
   reports_id_patient_tenant_uq: 'id, patient_id, tenant_id', reports_tenant_patient_id_uq: 'tenant_id, patient_id, id',
   ledger_events_id_tenant_uq: 'id, tenant_id', ledger_events_subject_uq: 'subject_table, subject_id',
   ledger_events_tenant_prev_uq: 'tenant_id, prev_hash', ledger_events_tenant_seq_uq: 'tenant_id, seq',
@@ -112,7 +113,7 @@ const uniqueKeys: Record<string, string> = {
 // Complete CHECK inventory; semantic refusal/control tests remain in the existing behavior suites.
 const checkNames: Record<string, string> = {
   browser_sessions: 'handle_hash_shape issued_at_range lifetime created_at_bound credential_shape revoked_at_bound',
-  patient_identifiers: 'tenant_id_len created_by_len system_shape digest_len key_version status withdrawal_shape withdrawn_by_len created_by_human',
+  patient_identifiers: 'tenant_id_len created_by_len system_shape digest_len key_version status withdrawal_shape withdrawn_by_len created_by_human creation_request_pair',
   report_patient_decisions: 'tenant_id_len created_by_len hash version_len decision method shape created_by_human',
   patient_duplicate_flags: 'tenant_id_len flagged_by_len system_shape pair_order',
   jobs: 'type_shape key_shape state_check attempts_range requested_by_len locked_by_len error_code_shape running_shape finished_shape payload_shape',

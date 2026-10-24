@@ -27,7 +27,12 @@ export const identifierValueSchema = z
   .regex(NO_CONTROL, 'Use printable characters only.');
 
 /** `POST /patients/:id/identifiers`. */
-export const identifierCreateSchema = z.strictObject({ system: identifierSystemSchema, value: identifierValueSchema });
+export const identifierCreateSchema = z.strictObject({
+  system: identifierSystemSchema,
+  value: identifierValueSchema,
+  /** Retry identity for this person in this organization. A repeat with the same id and the same body replays the identifier; without one nothing is replayed. */
+  requestId: z.uuid().transform((value) => value.toLowerCase()).optional(),
+});
 export type IdentifierCreate = z.infer<typeof identifierCreateSchema>;
 
 /** `/patients/:id/identifiers/:identifierId` */
