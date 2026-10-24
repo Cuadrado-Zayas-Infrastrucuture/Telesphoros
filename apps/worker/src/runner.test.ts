@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { defineJob, fatal, retryable, type ClaimedJob, type JobQueue } from '@telesphoros/jobs';
-import { Runner, type Handler } from './runner';
+import { claimBackoffMs, Runner, type Handler } from './runner';
 import { silentLogger } from './log';
 
 const def = (type: string, extra: Partial<Parameters<typeof defineJob>[0]> = {}) => defineJob({ type, payload: z.strictObject({}), maxAttempts: 3, leaseSeconds: 5, timeoutSeconds: 30, ...extra });
@@ -130,5 +130,31 @@ describe('Runner', () => {
     await new Promise((r) => setTimeout(r, 100));
     expect(q.claims).toBeLessThanOrEqual(claimsBefore + 1);
     finish();
+  });
+});
+
+describe('the pause after a failed claim (audit item 28: workers recovering from one outage all came back in step)', () => {
+  it('doubles from twice the poll interval, with up to 20% either way, and never passes 30 seconds', () => {
+    expect([1, 2, 3].map((f) => claimBackoffMs(f, 1000, 0.5))).toEqual([2000, 4000, 8000]); // no jitter at the middle of the range
+    expect([1, 2, 3].map((f) => claimBackoffMs(f, 1000, 0))).toEqual([1600, 3200, 6400]);
+    expect([1, 2, 3].map((f) => claimBackoffMs(f, 1000, 1))).toEqual([2400, 4800, 9600]);
+    for (const random of [0, 0.5, 1]) expect(claimBackoffMs(50, 1000, random)).toBeLessThanOrEqual(30_000);
+  });
+
+  it('is used by the claim loop: each failure waits a randomised time, not the same one for every worker', async () => {
+    const delays: number[] = [];
+    const real = globalThis.setTimeout;
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
+      if (typeof ms === 'number' && [32, 64, 128].includes(ms)) delays.push(ms);
+      return real(fn, Math.min(ms ?? 0, 5));
+    }) as typeof setTimeout);
+    const q = new FakeQueue();
+    q.claimError = true;
+    runner = make(q, { 'test.a': { handler: async () => undefined } });
+    runner.start();
+    await until(() => delays.length >= 3);
+    vi.restoreAllMocks();
+    expect(delays.slice(0, 3)).toEqual([32, 64, 128]); // pollMs is 20: base 40, 80, 160, each at 80% (random 0)
   });
 });
