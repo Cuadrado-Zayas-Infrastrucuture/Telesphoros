@@ -53,7 +53,8 @@ export function filesVerifyJobs(deps: HandlerDeps): RegisteredJob[] {
         const target = await deps.data.verifyTarget(job.id, workerId);
         if (!target) return; // the report has no uploaded file any more: nothing to check
         const verdict = await verifyAndRecord(deps, job.id, workerId, target, signal);
-        deps.log(verdict.outcome === 'ok' ? 'info' : 'error', 'file-verified', { jobId: job.id, jobType: job.type, outcome: verdict.outcome, code: verdict.reason });
+        const requestId = typeof job.payload.requestId === 'string' ? job.payload.requestId : undefined; // the request that caused the upload commit, when the job carries it
+        deps.log(verdict.outcome === 'ok' ? 'info' : 'error', 'file-verified', { jobId: job.id, jobType: job.type, outcome: verdict.outcome, code: verdict.reason, requestId });
         if (verdict.outcome !== 'ok') throw failure([verdict]);
       },
     },

@@ -17,4 +17,12 @@ describe('the log', () => {
     expect(out.jobId).toBe('ok-1');
     expect(lines[0]).not.toContain('Jane');
   });
+  it('carries a request id when it is a short code, and drops one that is not', () => {
+    const lines: string[] = [];
+    const log = jsonLogger((l) => lines.push(l));
+    log('info', 'file-verified', { requestId: '22222222-2222-4222-8222-222222222222' });
+    log('info', 'file-verified', { requestId: 'not a short code' });
+    expect(JSON.parse(lines[0]!).requestId).toBe('22222222-2222-4222-8222-222222222222');
+    expect(JSON.parse(lines[1]!).requestId).toBeUndefined();
+  });
 });
