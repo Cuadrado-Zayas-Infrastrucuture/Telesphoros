@@ -57,7 +57,8 @@ function runChild(ending: string, signal?: NodeJS.Signals): Promise<{ dir: strin
       if (signal && dir.includes('\n')) child.kill(signal);
     });
     child.on('error', reject);
-    child.on('exit', (code, signalled) => resolve({ dir: dir.trim(), code, signalled, stillThere: existsSync(dir.trim()) }));
+    // 'close', not 'exit': 'exit' can fire before the child's output has been read (more often under load), which left `dir` empty.
+    child.on('close', (code, signalled) => resolve({ dir: dir.trim(), code, signalled, stillThere: existsSync(dir.trim()) }));
   });
 }
 
@@ -89,7 +90,7 @@ describe('temporary folders that hold decrypted data', () => {
         out += chunk.toString();
         if (out.includes('\n')) child.kill('SIGTERM');
       });
-      child.on('exit', () => resolve(out.trim()));
+      child.on('close', () => resolve(out.trim())); // 'close': after the output has been read, which 'exit' does not promise
     });
     expect(dirname(dir)).toBe(tmpdir());
     expect(existsSync(dir)).toBe(true);
