@@ -111,8 +111,16 @@ deployment task. The alarm is written ([ops/api-hosting.md](api-hosting.md), `ap
 Terraform is **never applied**, so **no alarm exists in AWS yet**. Until it is applied and tested, someone has to be reading the logs, or must treat `/ready` failing on
 `ledger` as the signal. A test pins that the application writes `event` at the top level of its JSON log line (the field the alarm matches).
 
-The over-size line (`ledger-chain-over-size`, above) is also an **error** line but has **no metric filter**: only `ledger-compromised` is wired in Terraform. Someone
-reading the logs would see it; nothing pages for it. Adding a filter is a separate, deliberate change, because an alarm that fires on every pass needs a decision on how often to repeat.
+Two more lines now have a metric filter and an alarm into the audit topic (`api-compute.tf`), written and never applied like the first:
+
+| Alarm | Line | Raised by | Means |
+|---|---|---|---|
+| `api-ledger-verification-error` | `ledger-verification-error` (error) | one line in 15 minutes | The check could not run (the verifier login, the network, missing tables), at start or in a background pass. Nothing is known about the record log until one succeeds. |
+| `api-ledger-chain-over-size` | `ledger-chain-over-size` (error) | one line in an hour | A tenant's chain is longer than one walk covers. Not damage; a checkpoint does not help. |
+
+How often they repeat: CloudWatch notifies when an alarm changes state, not on every line. While the over-size line keeps arriving (once per full pass, about a day apart) the alarm stays in ALARM after the first notification and says nothing more; it returns to OK after a quiet hour and notifies again at the next pass. That is the default chosen here; a different rule (a reminder every day, say) is a decision for the founder.
+
+`ledger-verification-incomplete` (a walk ran out of time) is **deliberately not alarmed**: it is expected on every cold start while the first walk runs (`/ready` reports `verifying`), so an alarm on it would fire on every deploy. A walk that never completes shows as `ledger-chain-over-size` or `ledger-verification-error`, which are alarmed. `ledger-incident-record-failed` (a finding could not be written to the database) is not alarmed either: it is retried every minute, the finding itself already raised `api-ledger-compromised`, and a database that cannot be written trips the readiness and database alarms.
 
 ## Restore
 
