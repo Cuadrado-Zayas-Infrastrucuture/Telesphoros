@@ -11,3 +11,5 @@ Date: 2026-10-23
 **Risk and limits.** `CREATE OR REPLACE FUNCTION` is `breaking` under the migration lint; nothing is deployed, so no outage window is spent. A failing event is retried on every call and, if as many sit at the head as the batch size, still crowds the rest out (the alarm would fire). The poison in the test is a synthetic trigger; no real event is known to fail. The ten-minute threshold is a judgement (normal lag is seconds), not a measurement.
 
 **Not established.** Nothing observed in AWS.
+
+**Caught by CI, not by my local runs.** Adding `outboxStats()` to the shared `JobQueue` failed `apps/ai-service/test/durable-surface.test.ts` (P2-03), which requires every queue method to be fenced by the synthetic queue or reviewed into a read-only list. `outboxStats` only counts and reads, so it is added to that list. I had run the worker and backend suites but not the workspace's own `pnpm test`, and had run ai-service's vitest directly, which skips its `pretest` rebuild of `@telesphoros/jobs`, so I tested a stale build. Now checked with `pnpm test` over the whole workspace (exit 0).

@@ -105,8 +105,9 @@ describe('durable surface: reachability, imports and inherited queue methods', (
     const methods = (proto: object) => Object.getOwnPropertyNames(proto).filter(m => m !== 'constructor').sort();
     const inherited = methods(JobQueue.prototype);
     const overridden = methods(SyntheticJobQueue.prototype);
-    // Read-only bookkeeping the Runner may call; neither claims, settles nor schedules work.
-    const readOnly = ['stats', 'workerSeen'];
+    // Read-only bookkeeping the Runner may call; none claims, settles nor schedules work. outboxStats (migration 0036) only counts pending
+    // outbox events and the age of the oldest: it reads, takes no lock and changes nothing, so it needs no fence.
+    const readOnly = ['outboxStats', 'stats', 'workerSeen'];
     expect(inherited.filter(m => !overridden.includes(m))).toEqual(readOnly);
     // A new shared queue method fails this test until it is fenced or reviewed into the exception list.
     expect(overridden).toEqual(expect.arrayContaining(['claim', 'fail', 'heartbeat', 'release', 'relayOutbox', 'scheduleTick', 'succeed']));
