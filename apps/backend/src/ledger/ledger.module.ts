@@ -1,6 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { ENV, type Env } from '../config/env';
-import { FULL_BUDGET_MS, FULL_WALK_AT_OR_BELOW_EVENTS, INCIDENT_POLL_MS, LEDGER_VERIFIER, LEDGER_WATCH_CONFIG, LedgerMonitor, type LedgerWatchConfig, ON_DEMAND_BUDGET_MS } from './ledger-monitor';
+import { BOOT_PASS_JITTER_MS, FULL_BUDGET_MS, FULL_WALK_AT_OR_BELOW_EVENTS, INCIDENT_POLL_MS, LEDGER_VERIFIER, LEDGER_WATCH_CONFIG, LedgerMonitor, type LedgerWatchConfig, ON_DEMAND_BUDGET_MS, PASS_LOCK_RETRY_MS, PASS_LOCK_WAIT_MS } from './ledger-monitor';
 import { LedgerStatus } from './ledger-status';
 import { LedgerVerifier } from './verifier';
 
@@ -24,6 +24,9 @@ import { LedgerVerifier } from './verifier';
         onDemandBudgetMs: ON_DEMAND_BUDGET_MS,
         fullWalkAtOrBelowEvents: FULL_WALK_AT_OR_BELOW_EVENTS,
         incidentPollMs: INCIDENT_POLL_MS,
+        bootPassJitterMs: BOOT_PASS_JITTER_MS,
+        passLockWaitMs: PASS_LOCK_WAIT_MS,
+        passLockRetryMs: PASS_LOCK_RETRY_MS,
       }),
     },
     // The verifier has its own pool and its own login; the monitor closes it when the application shuts down.

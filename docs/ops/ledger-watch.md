@@ -52,6 +52,15 @@ that reaches a caller.
 
 Validation errors name variables, never values.
 
+## Several tasks: how the full walks are spaced out
+
+Every task walks the whole ledger for itself, once after start and then on its timer; that is deliberate (a checkpoint is a shortcut, not an independent control, and each task's own view should rest on its own check). Left alone, N tasks started together would all walk at the same moment and load the database N times over. Two things space them out:
+
+- **A random delay after start.** The walk that follows the check at start begins after a random delay of up to 60 seconds (`BOOT_PASS_JITTER_MS`). The check at start itself, which decides whether the task starts, is not delayed.
+- **One walk at a time.** A task takes a database advisory lock (`telesphoros:ledger-full-walk`) on a connection of its own for the length of its walk (start and timer alike). A task that finds it taken retries about every 10 seconds, for up to 30 minutes (`PASS_LOCK_WAIT_MS`), then **walks anyway** and logs `ledger-pass-lock-timeout`. A lock it cannot ask for at all is logged as `ledger-pass-lock-error` and the walk goes ahead. The lock therefore only ever delays a check; it is never the reason one does not happen. It is freed when the walk ends or when the task's connection closes (a killed task frees it).
+
+While a task waits its turn its `ledger` readiness stays `verifying`, which is ready. The waits and the timeout are fixed constants, not environment settings. Not verified under real load or in AWS: how long N walks take end to end on production-sized chains.
+
 ## Readiness
 
 `GET /ready` gains `ledger` when the watch is on:
