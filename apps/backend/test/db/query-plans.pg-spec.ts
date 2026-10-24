@@ -5,7 +5,6 @@ import { Database } from '../../src/db/database';
 import { PostgresMembershipRepository } from '../../src/storage/postgres/membership.repository';
 import { PostgresPatientsRepository } from '../../src/storage/postgres/patients.repository';
 import { PostgresReportsRepository } from '../../src/storage/postgres/reports.repository';
-import { PostgresRecommendationsRepository } from '../../src/storage/postgres/recommendations.repository';
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { registerTenantRow } from '../helpers/membership';
@@ -18,9 +17,8 @@ let pg: EphemeralDatabase;
 let db: Database;
 let patients: PostgresPatientsRepository;
 let reports: PostgresReportsRepository;
-let recommendations: PostgresRecommendationsRepository;
 let ledger: PostgresLedgerRecordsRepository;
-let selected: { patientId: string; reportId: string; recommendationId: string };
+let selected: { patientId: string; reportId: string };
 const histories: { reportId: string; patientId: string; captureId: string; evaluationIds: string[] }[] = [];
 const evidence: Record<string, unknown>[] = [];
 
@@ -29,7 +27,6 @@ beforeAll(async () => {
   db = new Database({ url: pg.appUrl, ssl: 'disable' });
   patients = new PostgresPatientsRepository(db);
   reports = new PostgresReportsRepository(db);
-  recommendations = new PostgresRecommendationsRepository(db);
   ledger = new PostgresLedgerRecordsRepository(db);
   await withAdmin(pg.adminUrl, async c => {
     for (const tenant of tenants) {
@@ -41,11 +38,8 @@ beforeAll(async () => {
         SELECT $1, 'syn-author', 'SYN-' || g FROM generate_series(1,$2::int) g`, [tenant, CORE_PATIENTS]);
       await c.query(`INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes)
         SELECT $1, 'syn-author', p.id, 'vcf', 'syn.vcf', 100 FROM patients p CROSS JOIN generate_series(1,2) g WHERE p.tenant_id=$1`, [tenant]);
-      await c.query(`INSERT INTO recommendations (tenant_id, created_by, patient_id, report_id, gene, drug, phenotype, summary, strength, guideline_version)
-        SELECT $1, 'syn-author', r.patient_id, r.id, 'G', 'syn-drug', 'syn-phenotype', 'Synthetic', 'Strong', 'syn-1' FROM reports r WHERE r.tenant_id=$1`, [tenant]);
     }
-    selected = (await c.query(`SELECT r.patient_id AS "patientId", r.id AS "reportId", x.id AS "recommendationId"
-      FROM reports r JOIN recommendations x ON x.report_id=r.id AND x.tenant_id=r.tenant_id WHERE r.tenant_id=$1 ORDER BY r.seq LIMIT 1`, [tenants[0]])).rows[0];
+    selected = (await c.query(`SELECT r.patient_id AS "patientId", r.id AS "reportId" FROM reports r WHERE r.tenant_id=$1 ORDER BY r.seq LIMIT 1`, [tenants[0]])).rows[0];
   });
   for (const tenant of tenants) {
     for (const count of [60, 5]) {
@@ -84,7 +78,7 @@ afterAll(async () => {
         postgres: (await c.query('SHOW server_version')).rows[0],
         databaseBytes: (await c.query('SELECT pg_database_size(current_database())::text AS bytes')).rows[0].bytes,
         rows: (await c.query(`SELECT 'patients' AS table_name, count(*)::int AS rows FROM patients UNION ALL SELECT 'reports', count(*)::int FROM reports
-          UNION ALL SELECT 'recommendations', count(*)::int FROM recommendations UNION ALL SELECT 'evaluations', count(*)::int FROM evaluations
+          UNION ALL SELECT 'evaluations', count(*)::int FROM evaluations
           UNION ALL SELECT 'corrections', count(*)::int FROM corrections UNION ALL SELECT 'capture_acceptances', count(*)::int FROM capture_acceptances
           UNION ALL SELECT 'cell_disputes', count(*)::int FROM cell_disputes UNION ALL SELECT 'ledger_events', count(*)::int FROM ledger_events`)).rows,
       }));
@@ -138,10 +132,6 @@ it('measures real core list/count, filtered and parent/detail lookups with hand-
   expect((await measure('reports-by-patient', () => reports.list(t,page,{ patientId:selected.patientId }))).total).toBe(2);
   expect(await measure('report-parent-count', () => reports.countByPatient(t,selected.patientId))).toBe(2);
   expect((await measure('report-detail', () => reports.findById(t,selected.reportId)))?.id).toBe(selected.reportId);
-  expect((await measure('recommendations-list', () => recommendations.list(t,page,{}))).total).toBe(3000);
-  expect((await measure('recommendations-by-patient', () => recommendations.list(t,page,{ patientId:selected.patientId }))).total).toBe(2);
-  expect((await measure('recommendations-by-report', () => recommendations.list(t,page,{ reportId:selected.reportId }))).total).toBe(1);
-  expect((await measure('recommendation-detail', () => recommendations.findById(t,selected.recommendationId)))?.id).toBe(selected.recommendationId);
 });
 
 it('measures filtered/public pages, complete internal reads and sparse/dense context histories', async () => {
@@ -176,7 +166,6 @@ it('resolves a patient group (merged patients) with real merge data in the organ
   expect((await measure('patients-list-include-merged', () => patients.list(t, page, { includeMerged: true }))).total).toBe(1502);
   expect((await measure('patient-detail-alias', () => patients.findById(t, alias)))?.mergedInto).toBe(root);
   expect((await measure('reports-by-patient-group', () => reports.list(t, page, { patientId: alias }))).total).toBe(4); // two reports on each of the two patients, found from either end
-  expect((await measure('recommendations-by-patient-group', () => recommendations.list(t, page, { patientId: root }))).total).toBe(4);
   expect((await measure('merges-page', () => ledger.pageMerges(t, page))).total).toBe(60);
   expect((await measure('merges-pending', () => ledger.pageMerges(t, page, 'pending'))).total).toBe(0);
   // The plans are recorded as evidence like every other read here; the planner's index choice is not asserted (this file never forces one).

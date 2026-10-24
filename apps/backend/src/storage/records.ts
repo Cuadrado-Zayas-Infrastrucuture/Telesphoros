@@ -1,4 +1,4 @@
-import type { RecommendationStrength, ReportStatus, ReportType } from '@telesphoros/shared-types';
+import type { ReportStatus, ReportType } from '@telesphoros/shared-types';
 
 /**
  * Internal records. `tenantId` (who may see the row) and `createdBy` (the individual who made it)
@@ -45,21 +45,6 @@ export interface ReportRecord {
   uploadedBy?: string | null;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface RecommendationRecord {
-  id: string;
-  tenantId: string;
-  createdBy: string;
-  patientId: string;
-  reportId: string;
-  gene: string;
-  drug: string;
-  phenotype: string;
-  summary: string;
-  strength: RecommendationStrength;
-  guidelineVersion: string;
-  createdAt: string;
 }
 
 export interface PageRequest {
