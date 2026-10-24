@@ -60,6 +60,10 @@ export class AppException extends HttpException {
   static readerUnavailable() {
     return new AppException(503, ErrorCode.READER_UNAVAILABLE, 'The report could not be read just now. Nothing was saved; try again later.', undefined, 30);
   }
+  /** No database connection could be had in time (pool full, or the database not answering). Nothing was started, so repeating is safe. */
+  static databaseBusy() {
+    return new AppException(503, ErrorCode.SERVICE_UNAVAILABLE, 'The service is busy. Nothing was saved; try again shortly.', undefined, 2);
+  }
   static ledgerBusy() {
     return new AppException(503, ErrorCode.LEDGER_BUSY, 'The record log is busy. Nothing was saved; try again.', undefined, 2);
   }
