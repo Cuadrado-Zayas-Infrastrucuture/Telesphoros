@@ -698,6 +698,45 @@ resource "aws_cloudwatch_metric_alarm" "api_target_5xx" {
   }
 }
 
+# Errors the load balancer itself answers are not in HTTPCode_Target_5XX_Count, so the alarm above cannot see them. A 502 is what a caller gets when the
+# balancer reuses a connection the API has already closed (the API's keepAliveTimeout must stay above the balancer's idle timeout; see app.factory.ts), or
+# when a task drops a request; a 504 is a task that did not answer within the balancer's idle timeout. Five in five minutes is a judgement, not a measurement.
+resource "aws_cloudwatch_metric_alarm" "api_elb_502" {
+  count               = local.api_service_count
+  alarm_name          = "${local.name}-api-elb-502"
+  alarm_description   = "The load balancer answered five or more 502s in five minutes (a connection the API closed, or a task that dropped a request)."
+  namespace           = "AWS/ApplicationELB"
+  metric_name         = "HTTPCode_ELB_502_Count"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 5
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  dimensions = {
+    LoadBalancer = aws_lb.api[0].arn_suffix
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "api_elb_504" {
+  count               = local.api_service_count
+  alarm_name          = "${local.name}-api-elb-504"
+  alarm_description   = "The load balancer answered five or more 504s in five minutes (a task did not answer within the idle timeout)."
+  namespace           = "AWS/ApplicationELB"
+  metric_name         = "HTTPCode_ELB_504_Count"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 5
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  dimensions = {
+    LoadBalancer = aws_lb.api[0].arn_suffix
+  }
+}
+
 # Missing data counts as a breach here: no report from Container Insights means no running task is reporting.
 resource "aws_cloudwatch_metric_alarm" "api_running_tasks" {
   count               = local.api_service_count

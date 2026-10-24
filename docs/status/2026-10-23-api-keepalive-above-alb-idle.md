@@ -1,0 +1,13 @@
+# The API keeps an idle connection open longer than the load balancer does (2026-10-23)
+
+Date: 2026-10-23
+
+**Implemented (no migration).** From the production-readiness audit (item 28, High). The API set only `headersTimeout` (30 s); `keepAliveTimeout` stayed at Node's default of 5 s, while the load balancer keeps an idle connection for 60 s (`idle_timeout` in `api-edge.tf`). When the API closes an idle connection first, the balancer can send the next request down a socket the API is already closing and answer the caller 502. `configureApp` now sets `server.keepAliveTimeout` to `API_KEEP_ALIVE_TIMEOUT_MS` (65 s).
+
+**Measured, not assumed.** On Node 22.22.0, with scaled-down timers against a plain `http` server, an idle keep-alive socket closed at `keepAliveTimeout` + 1000 ms in every case, whatever `headersTimeout` was (1, 2, 3 and 4 s all gave 4.0 s with `keepAliveTimeout` 3 s; `keepAliveTimeout` 1 s gave 2.0 s). So `headersTimeout` at 30 s does not cut an idle connection short, and the effective idle life with this change is about 66 s. The one-second addition is Node's, not ours.
+
+**Tests, written first.** `apps/backend/src/keep-alive.spec.ts` builds an app through the real `configureApp` and requires `keepAliveTimeout` to equal the constant and to be at least 5 s above 60 s (red on the old code: 5 s), and `headersTimeout` to stay 30 s. In `api-compute.guard.test.mjs`, the guard reads the balancer's `idle_timeout` from `api-edge.tf` and the constant from `app.factory.ts` and requires a gap of at least 5 s, so raising the balancer's timeout without the API's fails the infra tests; five weakened-text controls prove each rule can fail (including an empty read).
+
+**Made visible in the same change.** The existing `api-target-5xx` alarm reads `HTTPCode_Target_5XX_Count`, which does not include errors the balancer answers itself, so this failure would have been silent. Two alarms added to `api-compute.tf`: `api-elb-502` and `api-elb-504` (`HTTPCode_ELB_502_Count` / `_504_Count`, Sum, five or more in five minutes, silence is normal, audit topic). Five in five minutes is a judgement. Three weakened-text controls cover them.
+
+**Risk and limits.** Terraform written; `tofu fmt` is clean but nothing was validated, planned or applied (no provider was installed locally; CI's terraform jobs run `validate`). Nothing has been tried against a real balancer: the 502 was reasoned from the timeouts, and the fix is verified only as a server property plus the measurement above. A longer keep-alive holds idle sockets slightly longer per task; the connection count is bounded by the balancer. The issuer's separate server keeps its own 5 s limit (it is not behind this balancer) and is unchanged.

@@ -9,6 +9,12 @@ import { noStoreMiddleware } from './common/no-store.middleware';
 
 export const API_PREFIX = 'api';
 export const JSON_BODY_LIMIT = '100kb';
+/**
+ * How long an idle connection is kept open. It must exceed the load balancer's idle timeout (60 s in infrastructure/terraform/api-edge.tf):
+ * if the API closes first, the balancer can reuse a socket the API is already closing and answer the caller 502. Node's default is 5 s.
+ * api-compute.guard.test.mjs reads this value and that timeout and requires the gap to stay at least 5 s.
+ */
+export const API_KEEP_ALIVE_TIMEOUT_MS = 65_000;
 
 export interface ConfigureOptions {
   /** Browser origins allowed to call the API. Empty or omitted: no cross-origin access at all. */
@@ -68,7 +74,7 @@ export function configureApp(app: NestExpressApplication, options: ConfigureOpti
 
   app.useBodyParser('json', { limit: JSON_BODY_LIMIT, type: (req: IncomingMessage) => !isIntakePath((req.url ?? '').split('?')[0]!, req.method ?? '') && /^application\/json(?:;|$)/i.test(req.headers['content-type'] ?? '') });
   // Finite pre-authentication header/body lifetime; intake imposes its tighter progress deadlines after admission.
-  const server=app.getHttpServer() as Server; server.headersTimeout=30000;
+  const server=app.getHttpServer() as Server; server.headersTimeout=30000; server.keepAliveTimeout=API_KEEP_ALIVE_TIMEOUT_MS;
   app.setGlobalPrefix(API_PREFIX);
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   // Every route lives under the global prefix, so a path outside it can never match one. NestJS 12 mounts its not-found handler under the
