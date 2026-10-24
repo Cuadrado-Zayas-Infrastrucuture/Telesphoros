@@ -1,0 +1,9 @@
+# Knowledge set locate command (2026-10-24)
+
+Date: 2026-10-24
+
+**Implemented.** An evaluation stores only its knowledge set id, a hash of the knowledge files (path and whole-file hash, sign-off included). Nothing mapped an id back to files. `pnpm --filter @telesphoros/backend knowledge:locate -- <id>` now finds the git commits whose `knowledge/cpic` loads to that id. It checks out each commit's knowledge directory into a scratch folder and runs the same `loadKnowledge` the API uses, so the answer cannot drift from how the id is made. Options: `--repo`, `--dir` (relative, default `knowledge/cpic`), `--production` (also requires reviewed, non-synthetic files), `--all-refs`, `--limit` (default 500). Exit 0 when a commit matches, 1 when none does (with the number of commits examined and the number that did not load), 2 on a malformed id. It reads git only, prints no file content and changes nothing; the one piece of repository text it prints, a commit subject, has control characters replaced and is cut to 100 characters. A commit where the directory is missing, a file was edited after its sign-off, or an entry is a link or submodule does not load, exactly as the real loader refuses it, and is counted but never reported as a match.
+
+**Not changed:** the loader, the id, `BUILD_VERSION`, the schema, any stored evaluation, or any knowledge file. Nothing here archives knowledge content.
+
+**Limit.** The search can find only commits that still exist. A history rewrite can remove the commit an old evaluation used, and the id is not stored anywhere else. Public `main` was rewritten once already and now has two commits that touch `knowledge/`, and the shipped `knowledge/cpic` holds placeholders only, so today this proves the mechanism on synthetic repositories, not on any real evaluation. Archiving each release's knowledge content by id (for example in locked object storage) is a separate decision and is not part of this change.
