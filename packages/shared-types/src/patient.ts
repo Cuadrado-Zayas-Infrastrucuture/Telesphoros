@@ -16,6 +16,15 @@ export const patientLabelSchema = z
 export const patientInputSchema = z.strictObject({ label: patientLabelSchema });
 export type PatientInput = z.infer<typeof patientInputSchema>;
 
+/**
+ * POST body: the label, and optionally a retry id. A repeat of the same request by the same person (same id, same label) replays the patient it created; the
+ * same id with a different label is refused. Without an id nothing is replayed, as before. The replacement body (PUT) takes no retry id.
+ */
+export const patientCreateSchema = patientInputSchema.extend({
+  requestId: z.uuid().transform((value) => value.toLowerCase()).optional(),
+});
+export type PatientCreate = z.infer<typeof patientCreateSchema>;
+
 /** What the API returns. Internal fields (owner, storage keys) never appear here. */
 export const patientDtoSchema = z.strictObject({
   id: z.uuid(),
