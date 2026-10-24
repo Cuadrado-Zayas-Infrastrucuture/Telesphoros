@@ -1,9 +1,9 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import type { PatientInput, PatientListQuery } from '@telesphoros/shared-types';
+import type { PatientCreate, PatientInput, PatientListQuery } from '@telesphoros/shared-types';
 import { AppException } from '../common/app-exception';
 import type { Principal } from '../auth/principal';
-import { PatientHasMergedRecordsError } from '../storage/errors';
+import { IntegrityError, PatientHasMergedRecordsError } from '../storage/errors';
 import { PatientsRepository } from '../storage/patients.repository';
 import type { PatientRecord } from '../storage/records';
 import { ReportsRepository } from '../storage/reports.repository';
@@ -26,7 +26,20 @@ export class PatientsService {
     return record;
   }
 
-  async create(principal: Principal, input: PatientInput): Promise<PatientRecord> {
+  async create(principal: Principal, input: PatientCreate): Promise<PatientRecord> {
+    const requestId = input.requestId;
+    // The hash is of the original request alone, so a later label change cannot make a repeat look like a different request.
+    const requestHash = requestId ? createHash('sha256').update(JSON.stringify([input.label])).digest('hex') : undefined;
+    if (requestId) {
+      // A repeat of a create that succeeded must not meet the label it created.
+      const prior = await this.patients.findByRequest(principal.tenantId, principal.sub, requestId);
+      if (prior) {
+        if (prior.creationRequestHash !== requestHash) throw AppException.conflictBecause('request-id-reused', 'That request id was already used for a different patient.');
+        const live = await this.patients.findById(principal.tenantId, prior.id);
+        if (!live) throw AppException.conflictBecause('request-id-reused', 'That request id was used for a patient that has since been deleted.');
+        return live;
+      }
+    }
     await this.assertLabelFree(principal.tenantId, input.label);
     const now = new Date().toISOString();
     const record: PatientRecord = {
@@ -36,9 +49,19 @@ export class PatientsService {
       label: input.label,
       createdAt: now,
       updatedAt: now,
+      ...(requestId ? { creationRequestId: requestId, creationRequestHash: requestHash! } : {}),
     };
-    await this.patients.insert(record);
-    return record;
+    if (!requestId) {
+      await this.patients.insert(record);
+      return record;
+    }
+    try {
+      return await this.patients.insertOrReplay(record);
+    } catch (error) {
+      // A concurrent repeat with another body, or a label taken in the meantime: both are conflicts, and the id says which only to the one who set it.
+      if (error instanceof IntegrityError) throw AppException.conflict('A patient with that label already exists, or that request id was used for a different patient.');
+      throw error;
+    }
   }
 
   async replace(principal: Principal, id: string, input: PatientInput): Promise<PatientRecord> {

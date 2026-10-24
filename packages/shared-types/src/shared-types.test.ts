@@ -17,6 +17,7 @@ import {
   MAX_PAGE_SIZE,
   paginationQuerySchema,
   patientDtoSchema,
+  patientCreateSchema,
   patientInputSchema,
   REPORT_CONTENT_TYPES,
   reportCreateSchema,
@@ -243,5 +244,19 @@ describe('compatible identity capability contracts', () => {
   it('refuses raw identity fields on either endpoint', () => {
     expect(meDtoSchema.safeParse({ roles: [], sub: 'synthetic-person' }).success).toBe(false);
     expect(recoveryScopeDtoSchema.safeParse({ recoveryScope: 'a'.repeat(64), sub: 'synthetic-person' }).success).toBe(false);
+  });
+});
+
+describe('patientCreateSchema (audit item 25: POST /patients could not be retried safely)', () => {
+  it('takes the label, and an optional retry id that is lower-cased', () => {
+    expect(patientCreateSchema.parse({ label: 'SYN-1' })).toEqual({ label: 'SYN-1' });
+    expect(patientCreateSchema.parse({ label: 'SYN-1', requestId: '2F3A8E3C-9B64-4C55-8B7E-0B5C1D8E9A10' })).toEqual({ label: 'SYN-1', requestId: '2f3a8e3c-9b64-4c55-8b7e-0b5c1d8e9a10' });
+  });
+  it('refuses a retry id that is not a UUID, and any other extra field', () => {
+    for (const requestId of ['', 'abc', 7, '2f3a8e3c-9b64-4c55-8b7e']) expect(patientCreateSchema.safeParse({ label: 'SYN-1', requestId }).success).toBe(false);
+    expect(patientCreateSchema.safeParse({ label: 'SYN-1', ownerId: 'x' }).success).toBe(false);
+  });
+  it('leaves the replacement body (PUT) as it was: it has no retry id', () => {
+    expect(patientInputSchema.safeParse({ label: 'SYN-1', requestId: '2f3a8e3c-9b64-4c55-8b7e-0b5c1d8e9a10' }).success).toBe(false);
   });
 });
