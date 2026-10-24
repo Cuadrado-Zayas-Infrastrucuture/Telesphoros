@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Database } from '../../db/database';
-import { type DuplicateCandidate, IdentifierInUseError, type IdentifierRecord, PatientIdentifiersRepository } from '../patient-identifiers.repository';
+import { type DuplicateCandidate, IdentifierInUseError, IdentifierRequestReusedError, type IdentifierRecord, PatientIdentifiersRepository, type RegistrationRequest } from '../patient-identifiers.repository';
 import type { Page, PageRequest } from '../records';
 
 interface Row {
@@ -29,21 +29,39 @@ export class PostgresPatientIdentifiersRepository extends PatientIdentifiersRepo
     super();
   }
 
-  async add(tenantId: string, actor: string, input: { patientId: string; system: string; digest: Buffer; keyVersion: number }): Promise<IdentifierRecord> {
+  async add(tenantId: string, actor: string, input: { patientId: string; system: string; digest: Buffer; keyVersion: number; request?: RegistrationRequest }): Promise<IdentifierRecord> {
     const result = await this.db.withTenant(
       tenantId,
-      async (client): Promise<IdentifierRecord | 'in-use'> => {
+      async (client): Promise<IdentifierRecord | 'in-use' | 'reused'> => {
+        // A repeat of a registration that went through: the identifier stored under this person's retry id, if its fingerprint is the same.
+        const replay = async (): Promise<IdentifierRecord | 'reused' | undefined> => {
+          if (!input.request) return undefined;
+          const { rows } = await client.query<Row & { creation_request_hash: string }>(
+            `SELECT ${COLUMNS}, creation_request_hash FROM patient_identifiers WHERE tenant_id = $1 AND created_by = $2 AND creation_request_id = $3`,
+            [tenantId, actor, input.request.id],
+          );
+          if (!rows[0]) return undefined;
+          return rows[0].creation_request_hash === input.request.hash ? toRecord(rows[0]) : 'reused';
+        };
+        const prior = await replay();
+        if (prior) return prior;
         // A savepoint, so the refused insert does not abort the transaction that also records the possible-duplicate flag.
         await client.query('SAVEPOINT add_identifier');
         try {
           const { rows } = await client.query<Row>(
-            `INSERT INTO patient_identifiers (tenant_id, patient_id, system, value_digest, key_version, created_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${COLUMNS}`,
-            [tenantId, input.patientId, input.system, input.digest, input.keyVersion, actor],
+            `INSERT INTO patient_identifiers (tenant_id, patient_id, system, value_digest, key_version, created_by, creation_request_id, creation_request_hash)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING ${COLUMNS}`,
+            [tenantId, input.patientId, input.system, input.digest, input.keyVersion, actor, input.request?.id ?? null, input.request?.hash ?? null],
           );
           return toRecord(rows[0]!);
         } catch (error) {
-          if ((error as { code?: string }).code !== '23505' || (error as { constraint?: string }).constraint !== 'patient_identifiers_active_uq') throw error;
+          const { code, constraint } = error as { code?: string; constraint?: string };
+          if (code !== '23505' || (constraint !== 'patient_identifiers_active_uq' && constraint !== 'patient_identifiers_creation_request_uq')) throw error;
           await client.query('ROLLBACK TO SAVEPOINT add_identifier');
+          // A concurrent repeat of this very request can meet the number's index before the request id's: either way, the question is whether the winner is this request.
+          const raced = await replay();
+          if (raced) return raced;
+          if (constraint === 'patient_identifiers_creation_request_uq') throw error;
           const holder = await client.query<{ patient_id: string }>(
             `SELECT patient_id::text AS patient_id FROM patient_identifiers WHERE tenant_id = $1 AND system = $2 AND value_digest = $3 AND status = 'active'`,
             [tenantId, input.system, input.digest],
@@ -64,6 +82,7 @@ export class PostgresPatientIdentifiersRepository extends PatientIdentifiersRepo
     );
     // Thrown after the transaction committed, so the flag is kept while the answer is still 409.
     if (result === 'in-use') throw new IdentifierInUseError();
+    if (result === 'reused') throw new IdentifierRequestReusedError();
     return result;
   }
 

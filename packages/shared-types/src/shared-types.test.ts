@@ -260,3 +260,15 @@ describe('patientCreateSchema (audit item 25: POST /patients could not be retrie
     expect(patientInputSchema.safeParse({ label: 'SYN-1', requestId: '2f3a8e3c-9b64-4c55-8b7e-0b5c1d8e9a10' }).success).toBe(false);
   });
 });
+
+describe('identifierCreateSchema retry id (audit item 25)', () => {
+  const id = '3F0C2A4B-1D5E-4B6A-9C7D-8E1F2A3B4C5D';
+  it('takes an optional UUID, lower-cased, beside the system and value', () => {
+    expect(identifierCreateSchema.parse({ system: 'hospital-a-mrn', value: 'x1' })).toEqual({ system: 'hospital-a-mrn', value: 'x1' });
+    expect(identifierCreateSchema.parse({ system: 'hospital-a-mrn', value: 'x1', requestId: id }).requestId).toBe(id.toLowerCase());
+  });
+  it('refuses an id that is not a UUID and any other extra field', () => {
+    for (const requestId of ['', 'abc', 5]) expect(identifierCreateSchema.safeParse({ system: 'a', value: 'x', requestId }).success).toBe(false);
+    expect(identifierCreateSchema.safeParse({ system: 'a', value: 'x', patientId: 'p' }).success).toBe(false);
+  });
+});
