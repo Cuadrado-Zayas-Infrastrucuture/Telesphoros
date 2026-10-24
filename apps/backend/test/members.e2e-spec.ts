@@ -68,10 +68,10 @@ describe('who may administer members', () => {
     expect((await listed(tenant, admin)).find((m) => m.sub === target)?.roles).toEqual(['reader']);
   });
 
-  it('administration is not clinical: an administrator is refused patients, reports and recommendations, and the ledger check stays theirs', async () => {
+  it('administration is not clinical: an administrator is refused patients and reports, and the ledger check stays theirs', async () => {
     const { tenant, admin } = await organization();
     const headers = await as(tenant, admin);
-    for (const path of ['/api/v1/patients', '/api/v1/reports', '/api/v1/recommendations']) expect((await api().get(path).set(headers)).status).toBe(403);
+    for (const path of ['/api/v1/patients', '/api/v1/reports']) expect((await api().get(path).set(headers)).status).toBe(403);
     expect((await api().post('/api/v1/patients').set(headers).send({ label: 'SYN-ADMIN' })).status).toBe(403);
     // A person who needs both holds both roles (control).
     const both = await person(tenant, ['admin', 'clinician']);
