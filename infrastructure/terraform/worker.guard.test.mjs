@@ -129,6 +129,7 @@ export function workerProblems(tf, iamTf = iam, sources = {}) {
   need(!/portMappings/.test(code(task)), 'the worker publishes no port');
   const service = one('resource "aws_ecs_service" "worker"');
   need(!/load_balancer/.test(code(service)) && !/aws_lb\b/.test(code(service)), 'no load balancer may reach the worker');
+  need(has(service, 'wait_for_steady_state = true'), 'apply must wait for the service to become steady, or a deployment the circuit breaker rolls back reads as a success');
   need(has(service, 'enable_execute_command = false'), 'no shell may be opened into a worker task');
   need(has(service, 'launch_type = "FARGATE"') && has(service, 'desired_count = var.worker_desired_count') && has(service, 'cluster = aws_ecs_cluster.api[0].id'), 'the worker must be Fargate on the API cluster with its own desired count');
   need(has(service, 'security_groups = [aws_security_group.worker_tasks[0].id]') && has(service, 'subnets = local.data_subnet_ids') && has(service, 'assign_public_ip = local.tasks_public_ip') && !/assign_public_ip\s*=\s*true/.test(code(service)), 'the worker must sit in its own security group in the data subnets, with a public address only through the synthetic profile');
@@ -206,6 +207,7 @@ test('the worker compute text has no problems (and the scan found the files: a f
 test('the worker compute guard reports each way the text could be weakened (controls)', () => {
   const weakened = [
     ['the secret container not counted', 'resource "aws_secretsmanager_secret" "worker_database_url" {\n  count       = local.api_count\n', 'resource "aws_secretsmanager_secret" "worker_database_url" {\n'],
+    ['the service stops waiting for a steady state', '  wait_for_steady_state = true\n', ''],
     ['the service counted by the wrong switch', 'resource "aws_ecs_service" "worker" {\n  count                              = local.api_service_count', 'resource "aws_ecs_service" "worker" {\n  count                              = local.api_count'],
     ['a secret value in Terraform', 'resource "aws_secretsmanager_secret" "worker_database_url" {', 'resource "aws_secretsmanager_secret_version" "oops" {\n  count         = local.api_count\n  secret_id     = "x"\n  secret_string = "postgres://x"\n}\n\nresource "aws_secretsmanager_secret" "worker_database_url" {'],
     ['the secret not encrypted with the data key', 'Written by provision-logins."\n  kms_key_id  = aws_kms_key.data.arn', 'Written by provision-logins."\n  kms_key_id  = "alias/aws/secretsmanager"'],
