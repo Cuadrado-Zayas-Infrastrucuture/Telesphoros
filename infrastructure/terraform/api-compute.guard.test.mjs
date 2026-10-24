@@ -11,6 +11,8 @@ import { test } from 'node:test';
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const compute = read('./api-compute.tf');
 const issuerTf = read('./issuer.tf');
+const edgeTf = read('./api-edge.tf');
+const appFactory = read('../../apps/backend/src/app.factory.ts');
 const ledgerSource = read('../../apps/backend/src/ledger/ledger-monitor.ts');
 const logShapeSpec = read('../../apps/backend/src/log-shape.spec.ts');
 const loggerOptions = read('../../apps/backend/src/logger-options.ts');
@@ -91,6 +93,8 @@ export function apiComputeProblems(tf, sources = {}) {
   const options = sources.options ?? loggerOptions;
   const moduleSource = sources.appModule ?? appModule;
   const cli = sources.cli ?? cliSource;
+  const edge = sources.edge ?? edgeTf;
+  const factory = sources.factory ?? appFactory;
   const problems = [];
   const text = code(tf);
   const need = (condition, why) => {
@@ -103,7 +107,7 @@ export function apiComputeProblems(tf, sources = {}) {
   need(has(text, 'api_service_count = var.enable_api_hosting && var.api_image != "" ? 1 : 0'), 'api_service_count must need the switch and an image');
   const resources = [...text.matchAll(/^resource "([^"]+)" "([^"]+)"/gm)];
   need(resources.length >= 21, 'the scan must find the resources (a floor, so an empty read cannot pass)');
-  const SERVICE_ONLY = new Set(['aws_ecs_task_definition.api', 'aws_ecs_task_definition.api_migrate', 'aws_ecs_task_definition.api_provision', 'aws_ecs_service.api', 'aws_cloudwatch_metric_alarm.api_unhealthy_targets', 'aws_cloudwatch_metric_alarm.api_target_5xx', 'aws_cloudwatch_metric_alarm.api_running_tasks']);
+  const SERVICE_ONLY = new Set(['aws_ecs_task_definition.api', 'aws_ecs_task_definition.api_migrate', 'aws_ecs_task_definition.api_provision', 'aws_ecs_service.api', 'aws_cloudwatch_metric_alarm.api_unhealthy_targets', 'aws_cloudwatch_metric_alarm.api_target_5xx', 'aws_cloudwatch_metric_alarm.api_elb_502', 'aws_cloudwatch_metric_alarm.api_elb_504', 'aws_cloudwatch_metric_alarm.api_running_tasks']);
   for (const [header, type, name] of resources) {
     const b = blocks(text, header.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))[0] ?? '';
     const want = SERVICE_ONLY.has(`${type}.${name}`) ? 'local.api_service_count' : 'local.api_count';
@@ -257,10 +261,20 @@ export function apiComputeProblems(tf, sources = {}) {
   const ledgerAlarm = one('resource "aws_cloudwatch_metric_alarm" "api_ledger_compromised"');
   need(has(ledgerAlarm, 'metric_name = "LedgerCompromised"') && has(ledgerAlarm, 'comparison_operator = "GreaterThanOrEqualToThreshold"') && has(ledgerAlarm, 'threshold = 1') && has(ledgerAlarm, 'period = 60'), 'one occurrence of the ledger event must raise the alarm within a minute');
   need(has(ledgerAlarm, 'treat_missing_data = "notBreaching"'), 'silence is normal for the ledger alarm');
-  for (const alarm of ['api_ledger_compromised', 'api_unhealthy_targets', 'api_target_5xx', 'api_running_tasks']) need(has(one(`resource "aws_cloudwatch_metric_alarm" "${alarm}"`), 'alarm_actions = [aws_sns_topic.audit_alarms.arn]'), `the ${alarm} alarm must notify the audit topic`);
+  for (const alarm of ['api_ledger_compromised', 'api_unhealthy_targets', 'api_target_5xx', 'api_elb_502', 'api_elb_504', 'api_running_tasks']) need(has(one(`resource "aws_cloudwatch_metric_alarm" "${alarm}"`), 'alarm_actions = [aws_sns_topic.audit_alarms.arn]'), `the ${alarm} alarm must notify the audit topic`);
   const unhealthy = one('resource "aws_cloudwatch_metric_alarm" "api_unhealthy_targets"');
   need(has(unhealthy, 'metric_name = "UnHealthyHostCount"') && has(unhealthy, 'threshold = 0') && has(unhealthy, 'comparison_operator = "GreaterThanThreshold"'), 'any unhealthy task must raise the unhealthy-targets alarm');
   need(has(one('resource "aws_cloudwatch_metric_alarm" "api_target_5xx"'), 'metric_name = "HTTPCode_Target_5XX_Count"'), 'server errors must raise the 5xx alarm');
+  for (const [alarm, metric] of [['api_elb_502', 'HTTPCode_ELB_502_Count'], ['api_elb_504', 'HTTPCode_ELB_504_Count']]) {
+    const b = one(`resource "aws_cloudwatch_metric_alarm" "${alarm}"`);
+    need(has(b, `metric_name = "${metric}"`) && has(b, 'namespace = "AWS/ApplicationELB"') && has(b, 'statistic = "Sum"') && has(b, 'comparison_operator = "GreaterThanOrEqualToThreshold"') && has(b, 'treat_missing_data = "notBreaching"'), `errors the load balancer answers itself (${metric}) must raise the ${alarm} alarm`);
+  }
+  // A 502 from a connection the API closed first: the API's idle limit must stay above the balancer's (apps/backend/src/keep-alive.spec.ts pins the server property).
+  const idle = /idle_timeout\s*=\s*(\d+)/.exec(code(edge));
+  const keepAlive = /API_KEEP_ALIVE_TIMEOUT_MS\s*=\s*([\d_]+)/.exec(code(factory));
+  need(idle !== null && keepAlive !== null, 'the scan must find the balancer idle timeout and the API keep-alive constant (a floor, so an empty read cannot pass)');
+  if (idle && keepAlive) need(Number(keepAlive[1].replaceAll('_', '')) >= Number(idle[1]) * 1000 + 5000, `the API keep-alive (${keepAlive[1]} ms) must exceed the balancer idle timeout (${idle[1]} s) by at least 5 s`);
+  need(/server\.keepAliveTimeout\s*=\s*API_KEEP_ALIVE_TIMEOUT_MS\b/.test(code(factory)), 'configureApp must apply the keep-alive constant to the server');
   const running = one('resource "aws_cloudwatch_metric_alarm" "api_running_tasks"');
   need(has(running, 'threshold = var.api_desired_count') && has(running, 'comparison_operator = "LessThanThreshold"') && has(running, 'treat_missing_data = "breaching"'), 'too few running tasks (or no report at all) must raise the running-tasks alarm');
 
@@ -405,6 +419,9 @@ test('the API compute guard reports each way the text could be weakened (control
     ['the service execution role gains the issuer secret', 'aws_secretsmanager_secret.api_identifier_digest_key[0].arn, aws_secretsmanager_secret.api_tls_cert[0].arn, aws_secretsmanager_secret.api_tls_key[0].arn]', 'aws_secretsmanager_secret.api_identifier_digest_key[0].arn, aws_secretsmanager_secret.api_tls_cert[0].arn, aws_secretsmanager_secret.api_tls_key[0].arn, aws_secretsmanager_secret.issuer_database_url[0].arn]'],
     ['the migration execution role gains the issuer secret', 'resources = [aws_secretsmanager_secret.api_migrator_url[0].arn]', 'resources = [aws_secretsmanager_secret.api_migrator_url[0].arn, aws_secretsmanager_secret.issuer_database_url[0].arn]'],
     ['the service task injects the issuer secret', '        { name = "IDENTIFIER_DIGEST_KEY", valueFrom = aws_secretsmanager_secret.api_identifier_digest_key[0].arn },\n', '        { name = "IDENTIFIER_DIGEST_KEY", valueFrom = aws_secretsmanager_secret.api_identifier_digest_key[0].arn },\n        { name = "ISSUER_DATABASE_URL", valueFrom = aws_secretsmanager_secret.issuer_database_url[0].arn },\n'],
+    ['the 502 alarm reads the target metric', 'metric_name         = "HTTPCode_ELB_502_Count"', 'metric_name         = "HTTPCode_Target_5XX_Count"'],
+    ['the 504 alarm is removed', 'resource "aws_cloudwatch_metric_alarm" "api_elb_504" {', 'resource "aws_cloudwatch_metric_alarm" "api_elb_504_gone" {'],
+    ['the 504 alarm counted by the wrong switch', 'resource "aws_cloudwatch_metric_alarm" "api_elb_504" {\n  count               = local.api_service_count', 'resource "aws_cloudwatch_metric_alarm" "api_elb_504" {\n  count               = local.api_count'],
     ['provisioning task not counted by the image', 'resource "aws_ecs_task_definition" "api_provision" {\n  count                    = local.api_service_count', 'resource "aws_ecs_task_definition" "api_provision" {\n  count                    = local.api_count'],
   ];
   for (const [name, from, to] of weakened) {
@@ -418,6 +435,11 @@ test('the API compute guard reports each way the text could be weakened (control
     ['the logger options start nesting objects', { options: `${loggerOptions}\n  nestedKey: 'payload'` }],
     ['the application stops using the shared options', { appModule: appModule.replace('pinoHttpOptions(config)', '{}') }],
     ['cli.ts reads a renamed issuer variable', { cli: cliSource.replace('process.env.PROVISION_SECRET_ISSUER ? { issuer: process.env.PROVISION_SECRET_ISSUER }', 'process.env.PROVISION_SECRET_SESSION_ISSUER ? { issuer: process.env.PROVISION_SECRET_SESSION_ISSUER }') }],
+    ['the API keep-alive drops to the balancer idle timeout', { factory: appFactory.replace('API_KEEP_ALIVE_TIMEOUT_MS = 65_000', 'API_KEEP_ALIVE_TIMEOUT_MS = 60_000') }],
+    ['the API keep-alive drops to Node\'s default', { factory: appFactory.replace('API_KEEP_ALIVE_TIMEOUT_MS = 65_000', 'API_KEEP_ALIVE_TIMEOUT_MS = 5_000') }],
+    ['the balancer idle timeout is raised past the keep-alive', { edge: edgeTf.replace(/idle_timeout(\s*)=\s*60/, 'idle_timeout$1= 120') }],
+    ['configureApp stops applying the constant', { factory: appFactory.replace('server.keepAliveTimeout=API_KEEP_ALIVE_TIMEOUT_MS;', '') }],
+    ['the scan finds no idle timeout', { edge: '' }],
     ['cli.ts stops reading the issuer variable', { cli: cliSource.replace('...(process.env.PROVISION_SECRET_ISSUER ? { issuer: process.env.PROVISION_SECRET_ISSUER } : {})', '') }],
     ['cli.ts reads an extra provisioning secret Terraform does not pass', { cli: cliSource.replace("worker: required('PROVISION_SECRET_WORKER')", "worker: required('PROVISION_SECRET_WORKER'), extra: required('PROVISION_SECRET_EXTRA')") }],
   ];
