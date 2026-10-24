@@ -15,7 +15,7 @@ import { WORKER_POOL_LIMITS } from './pool-limits';
 import { Runner, type RegisteredJob } from './runner';
 import { Ticker } from './scheduler';
 import { createShutdown, shutdownDeadlineMs } from './shutdown';
-import { S3ObjectInspector } from './storage';
+import { S3ObjectInspector, bucketIsMissing } from './storage';
 
 /**
  * Production consumers are registered here, one reviewed line per job type. The upload sweep needs only the database; the stored-file re-check also needs the
@@ -37,6 +37,8 @@ async function main(): Promise<void> {
   pool.on('error', () => log('error', 'database-connection-error', { code: 'pool-error' }));
   const queue = new JobQueue(pool);
   const s3 = new S3Client({ ...(config.awsRegion ? { region: config.awsRegion } : {}), ...(config.s3Endpoint ? { endpoint: config.s3Endpoint } : {}), forcePathStyle: config.s3ForcePathStyle });
+  // A mistyped or deleted bucket would otherwise show only as failing file checks. Refuse to start instead, naming the setting and never the value.
+  if (config.reportsBucket && (await bucketIsMissing(s3, config.reportsBucket))) throw new Error('REPORTS_BUCKET names a bucket that does not exist.');
   const deps: HandlerDeps = { data: new PgJobData(pool), inspector: new S3ObjectInspector(s3, config.reportsBucket ?? 'unconfigured'), log };
   const jobs = registeredJobs(config, deps);
   const runner = new Runner({ workerId: config.workerId, queue, jobs, concurrency: config.concurrency, tenantCap: config.tenantCap, pollMs: config.pollMs, drainSeconds: config.drainSeconds, log });
