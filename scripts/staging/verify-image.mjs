@@ -86,7 +86,9 @@ function verifySigned({ namePrefix, environment }, images) {
   if (described.status !== 0) throw new Refusal(`cannot read the image-signing key ${keyAlias} in ${region}: ${lastLine(described.stderr)}`);
   let key;
   try { key = JSON.parse(described.stdout); } catch { key = {}; }
-  if (!new RegExp(`^arn:aws:kms:${region}:${account}:key/[a-z0-9-]+$`).test(key.arn ?? '')) throw new Refusal(`${keyAlias}: the key ARN is not a KMS key in ${region} of account ${account}`);
+  // A fixed prefix and a key id, compared as text: region and account are checked by ECR_IMAGE above, and nothing here treats them as a pattern.
+  const arnPrefix = `arn:aws:kms:${region}:${account}:key/`;
+  if (typeof key.arn !== 'string' || !key.arn.startsWith(arnPrefix) || !/^[a-z0-9-]+$/.test(key.arn.slice(arnPrefix.length))) throw new Refusal(`${keyAlias}: the key ARN is not a KMS key in ${region} of account ${account}`);
   if (key.spec !== 'ECC_NIST_P256' || key.usage !== 'SIGN_VERIFY') throw new Refusal(`${keyAlias} is not an ECC_NIST_P256 SIGN_VERIFY key`);
   if (key.state !== 'Enabled') throw new Refusal(`${keyAlias} is ${key.state}, not Enabled`);
 
