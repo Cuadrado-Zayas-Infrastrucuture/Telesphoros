@@ -499,6 +499,37 @@ resource "aws_cloudwatch_metric_alarm" "worker_schedule_failing" {
   depends_on          = [aws_cloudwatch_log_metric_filter.worker_schedule_failed]
 }
 
+# An outbox event that has waited a long time has not become a job. The relay isolates a failing event (migration 0036), so it returns normally and logs no failure:
+# the age of the oldest pending event, which the worker puts on its `queue-stats` line, is how it shows. Normal lag is seconds (the relay runs every few seconds); ten
+# minutes means a stuck event or a relay that is not running. Query it as the owner (docs/ops/jobs.md); the PostgreSQL log has a WARNING with the event id.
+resource "aws_cloudwatch_log_metric_filter" "worker_outbox_age" {
+  count          = local.api_count
+  name           = "${local.name}-worker-outbox-age"
+  log_group_name = aws_cloudwatch_log_group.worker[0].name
+  pattern        = "{ $.event = \"queue-stats\" }"
+  metric_transformation {
+    name      = "OutboxAgeSeconds"
+    namespace = local.worker_metrics
+    value     = "$.outboxAgeSeconds"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "worker_outbox_stuck" {
+  count               = local.api_count
+  alarm_name          = "${local.name}-worker-outbox-stuck"
+  alarm_description   = "An outbox event has waited more than ten minutes without becoming a job: one event is failing (the relay skips it and goes on) or the relay is not running. Nothing is lost; read docs/ops/jobs.md, 'The outbox'."
+  namespace           = local.worker_metrics
+  metric_name         = "OutboxAgeSeconds"
+  statistic           = "Maximum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 600
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  depends_on          = [aws_cloudwatch_log_metric_filter.worker_outbox_age]
+}
+
 output "worker_secret_arn" {
   description = "The worker's database-login secret container (written by provision-logins; the value is never in Terraform)."
   value       = var.enable_api_hosting ? aws_secretsmanager_secret.worker_database_url[0].arn : null

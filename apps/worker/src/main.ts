@@ -46,12 +46,15 @@ async function main(): Promise<void> {
   // jobs are not counted: they are held on purpose).
   const stats = new Ticker('queue-stats', async () => {
     const rows = await queue.stats();
+    const outbox = await queue.outboxStats();
     const waiting = rows.filter((r) => r.state === 'queued' || r.state === 'retry');
     log('info', 'queue-stats', {
       count: waiting.reduce((n, r) => n + r.count, 0),
       running: rows.filter((r) => r.state === 'running').reduce((n, r) => n + r.count, 0),
       dead: rows.filter((r) => r.state === 'dead').reduce((n, r) => n + r.count, 0),
       ageSeconds: Math.round(Math.max(0, ...waiting.map((r) => r.oldestReadySeconds ?? 0))),
+      outboxPending: outbox.pending,
+      outboxAgeSeconds: Math.round(outbox.oldestPendingSeconds ?? 0),
     });
     return 0;
   }, config.statsSeconds, log);

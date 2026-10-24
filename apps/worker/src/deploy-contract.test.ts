@@ -185,6 +185,18 @@ describe('the alarm patterns match the lines the worker writes', () => {
     expect(code).toContain('value     = "$.dead"');
   });
 
+  it('the queue-stats line carries the outbox age as a number, which the outbox-stuck alarm reads, and other lines do not feed it', () => {
+    const [stats, other] = lines((log) => {
+      log('info', 'queue-stats', { count: 3, running: 1, dead: 0, ageSeconds: 12, outboxPending: 2, outboxAgeSeconds: 700 });
+      log('info', 'job-finished', { outcome: 'succeeded' });
+    });
+    expect(matches(filterPattern('worker_outbox_age'), stats!)).toBe(true);
+    expect(matches(filterPattern('worker_outbox_age'), other!)).toBe(false);
+    expect(stats!.outboxAgeSeconds).toBe(700);
+    expect(typeof stats!.outboxPending).toBe('number');
+    expect(code).toContain('value     = "$.outboxAgeSeconds"');
+  });
+
   // The two tickers are built here exactly as main.ts builds them (the names are pinned against main.ts below), and fail the way a database that does not answer does.
   const emitted = async (name: string, run: () => Promise<number>): Promise<Json[]> => {
     const out: Json[] = [];

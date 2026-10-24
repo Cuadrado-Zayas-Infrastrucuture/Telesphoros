@@ -181,6 +181,7 @@ describe('provisioning on a database nothing has been applied to', () => {
     await asLogin(f.store.values.get('secret-worker')!, async (c) => {
       await expect(c.query('SELECT * FROM job_stats()')).resolves.toBeDefined();
       await expect(c.query('SELECT outbox_relay(1)')).resolves.toBeDefined();
+      await expect(c.query('SELECT * FROM outbox_stats()')).resolves.toBeDefined();
       await expect(c.query('SELECT job_schedule_tick()')).resolves.toBeDefined();
       for (const sql of ["INSERT INTO jobs (tenant_id, type, idempotency_key, requested_by) VALUES ('t', 'x.y', 'k', 'u')", 'SELECT * FROM patients', 'SELECT * FROM reports', 'SELECT * FROM ledger_events', 'SELECT * FROM tenants',
         "SELECT ledger_append('00000000-0000-0000-0000-000000000000', 'x', 'y', gen_random_uuid(), 'z', 1::smallint)", "SELECT outbox_append('report.file-committed', gen_random_uuid())", 'SELECT * FROM uploads_sweep(\'t\', 0, true)', 'SET ROLE telesphoros_jobs']) {
