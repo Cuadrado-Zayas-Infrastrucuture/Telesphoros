@@ -173,6 +173,9 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 
   insertMergeProposal(tenantId: string, actor: string, input: MergeProposalInput): Promise<InsertResult> {
     return this.write(tenantId, actor, async (client) => {
+      // One proposer at a time per pair and kind: without this, two calls read "nothing pending" together and both insert (the ledger lock comes only at
+      // the end). The lock is held to commit, so the second call's check below sees the first call's proposal. Other pairs are not held up.
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`merge-proposal:${tenantId}:${input.kind}:${input.sourcePatientId}:${input.targetPatientId}`]);
       // The database's own rule, asked before anything is written so an impossible proposal is refused early. The decision is what is guaranteed.
       const refusal = await client.query<{ why: string | null }>(`SELECT patient_merge_refusal($1, $2, $3::uuid, $4::uuid) AS why`, [tenantId, input.kind, input.sourcePatientId, input.targetPatientId]);
       if (refusal.rows[0]!.why !== null) throw new MergeRefusedError(refusal.rows[0]!.why);
