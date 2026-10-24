@@ -13,3 +13,8 @@ overrides:
   # The coverage loader uses yaml.load(), supported by v4. Retire its v3-only
   # argparse 1 -> sprintf-js chain (GHSA-hp3w-g68c-fv3c); keep all test tooling.
   "@istanbuljs/load-nyc-config@1.1.0>js-yaml": ^4.3.2
+  # Trivy (image scan) reports two HIGH denial-of-service advisories in what the newest NestJS (12.2.0) and Express (5.3.0) pin exactly:
+  # body-parser 2.3.0 (CVE-2026-111181, fixed in 2.4.0) and multer 2.4.0 (CVE-2026-113872, fixed in 2.5.0). Raise both until a NestJS or
+  # Express release carries them; drop these two lines then.
+  body-parser: 2.4.0
+  multer: 2.5.0
