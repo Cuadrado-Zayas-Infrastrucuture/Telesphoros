@@ -1,6 +1,7 @@
 import type { AttemptIdentity, UploadAttempt, UploadState } from '../upload-attempt';
 import { sameAttempt } from '../upload-attempt';
 import { Injectable } from '@nestjs/common';
+import type { PoolClient } from 'pg';
 import type { ReportStatus, ReportType } from '@telesphoros/shared-types';
 import { Database } from '../../db/database';
 import { IntegrityError, toStorageError } from '../errors';
@@ -71,6 +72,20 @@ const toRecord = (row: ReportRow): ReportRecord => ({
   updatedAt: row.updated_at.toISOString(),
 });
 
+/**
+ * Holds the report's patient against a soft delete until this transaction ends, and refuses a patient that is already gone.
+ *
+ * The service reads the patient in one transaction and inserts the report in another. The patient's soft-delete trigger asks "are there live reports?" under
+ * READ COMMITTED, so it cannot see a report that has not committed, and the report's foreign key takes only a KEY SHARE lock, which a soft delete (an update that
+ * does not touch the key) does not conflict with. FOR SHARE does conflict with that update: a delete that arrives after this lock waits for this transaction,
+ * then sees the committed report and is refused; a delete that committed before it is seen here and refuses the report. Without the lock both could commit and
+ * leave a live report on a deleted patient.
+ */
+async function holdPatient(client: PoolClient, record: ReportRecord): Promise<void> {
+  const held = await client.query('SELECT 1 FROM patients WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL FOR SHARE', [record.patientId, record.tenantId]);
+  if (held.rowCount === 0) throw new IntegrityError('reports_patient_gone');
+}
+
 @Injectable()
 export class PostgresReportsRepository extends ReportsRepository {
   constructor(private readonly db: Database) {
@@ -116,9 +131,10 @@ export class PostgresReportsRepository extends ReportsRepository {
 
   async insert(record: ReportRecord): Promise<void> {
     try {
-      await this.db.withTenant(record.tenantId, (client) =>
-        client.query(INSERT, insertValues(record)),
-      );
+      await this.db.withTenant(record.tenantId, async (client) => {
+        await holdPatient(client, record);
+        await client.query(INSERT, insertValues(record));
+      });
     } catch (error) {
       throw toStorageError(error);
     }
@@ -128,6 +144,7 @@ export class PostgresReportsRepository extends ReportsRepository {
     if (!record.creationRequestId || !record.creationRequestHash) throw new Error('Missing report creation identity');
     try {
       return await this.db.withTenant(record.tenantId, async client => {
+        await holdPatient(client, record);
         const inserted = await client.query<ReportRow>(`${INSERT}
           ON CONFLICT ON CONSTRAINT reports_creation_request_uq DO NOTHING RETURNING ${COLUMNS}`, insertValues(record));
         if (inserted.rows[0]) return toRecord(inserted.rows[0]);
