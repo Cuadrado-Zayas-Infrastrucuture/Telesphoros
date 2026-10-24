@@ -127,6 +127,8 @@ The task's execution role injects the administrator's `username` and `password` 
 
 **Destructive changes take two releases.** Dropping, renaming or retyping something older code uses is never `expand`. Release N adds the new shape (`expand`) and ships code that no longer needs the old one. Only after every task of the old image is gone (the API service and the worker, which run the same image) does release N+1 apply the `breaking` migration that removes it.
 
+**How a task stops.** On SIGTERM the API waits 5 seconds (the load balancer takes a moment to stop sending to a task it is draining), stops accepting, lets requests in flight finish for up to 20 seconds and cuts what is left, then closes the application, which ends the database pool, and exits 0. A deadline of 29 seconds ends the process with exit 1 if the close itself hangs, inside the 30-second `stopTimeout`; `api-compute.guard.test.mjs` requires that to stay true. Nest's own `enableShutdownHooks()` is not used: it ends the pool before it closes the listener. The lines are `shutdown-requested`, `shutdown-drain-cut` (a request outlasted the cap) and `shutdown-forced` (the deadline), each with fixed fields only. An upload in flight when the task stops is cut after the cap, as it would have been before; a retry resumes it. Not verified in AWS: how long the load balancer actually keeps sending, so the 5-second pause is a judgement.
+
 **Before a `breaking` release, recommended and manual:** take an RDS snapshot and note the time, so there is a recovery marker if the fix-forward goes wrong.
 
 ```

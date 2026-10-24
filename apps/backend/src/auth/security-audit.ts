@@ -3,7 +3,7 @@ import { AppException } from '../common/app-exception';
 import { Database } from '../db/database';
 
 export type SecurityAuditEvent = {
-  type: 'api-auth' | 'private-read' | 'download-link';
+  type: 'api-auth' | 'private-read' | 'download-link' | 'private-write';
   outcome: 'accepted' | 'succeeded' | 'refused';
   tenantId: string | null;
   actorSub: string | null;
