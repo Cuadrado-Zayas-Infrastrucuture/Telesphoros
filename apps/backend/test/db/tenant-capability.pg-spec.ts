@@ -495,8 +495,8 @@ describe('reverting 0031 and 0028', () => {
     const through = revertThrough('tenant_capability_issue_current'); // this migration and anything above it
     expect(await owner((c) => migrateDown(c, through.steps))).toEqual(through.reverted);
     const down = await owner(catalogSnapshot);
-    // 0032 to 0041 sit above 0031 and go with it: 0032's internal binding, 0033's member_sign_out, 0034's two patient-delete guards, 0036's outbox_stats and 0039's patient, 0040's identifier and 0041's invitation retry-identity guards (and its keyed create function) are the other functions this revert removes
-    const removed = /tenant_capability_issue_current|app_capability_version|tenant_capability_bind_internal|member_sign_out|patient_merge_decisions_hold|patients_guard_delete|outbox_stats|patients_creation_request_guard|patient_identifiers_creation_request_guard|invitations_creation_request_guard|invitation_create_keyed/;
+    // 0032 to 0042 sit above 0031 and go with it: 0032's internal binding, 0033's member_sign_out, 0034's two patient-delete guards, 0036's outbox_stats and 0039's patient, 0040's identifier and 0041's invitation retry-identity guards (and its keyed create function) and 0042's three-argument outbox_append are the other functions this revert removes
+    const removed = /tenant_capability_issue_current|app_capability_version|tenant_capability_bind_internal|member_sign_out|patient_merge_decisions_hold|patients_guard_delete|outbox_stats|patients_creation_request_guard|patient_identifiers_creation_request_guard|invitations_creation_request_guard|invitation_create_keyed|outbox_append\(text,uuid,text\)/;
     expect(down.filter((l) => removed.test(l))).toEqual([]);
     expect(full.filter((l) => !removed.test(l))).toEqual(down); // nothing else moved
     expect(await owner((c) => migrateUp(c))).toEqual(versionsFrom('tenant_capability_issue_current'));

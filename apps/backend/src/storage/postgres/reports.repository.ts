@@ -1,3 +1,4 @@
+import { currentRequestId } from '../../auth/authority-context';
 import type { AttemptIdentity, UploadAttempt, UploadState } from '../upload-attempt';
 import { sameAttempt } from '../upload-attempt';
 import { Injectable } from '@nestjs/common';
@@ -236,7 +237,7 @@ export class PostgresReportsRepository extends ReportsRepository {
     [i.tenantId,i.reportId,a.principal,a.version,a.revision,a.patientId,a.type,a.sizeBytes,a.contentType,a.sha256,a.key,a.id]);
     if(!pin.rowCount) return false;
     // The follow-up (a re-check of the stored file) is recorded in THIS transaction: a commit that rolls back leaves no event, and one that commits cannot lose it.
-    await c.query('SELECT outbox_append($1, $2)',['report.file-committed',i.reportId]);
+    await c.query('SELECT outbox_append($1, $2, $3)',['report.file-committed',i.reportId,currentRequestId() ?? null]); // the id of the request that is committing, so the stored-file check can be traced to it
     await c.query("UPDATE report_upload_attempts SET state='committed',updated_at=now() WHERE tenant_id=$1 AND id=$2 AND state='stored'",[i.tenantId,a.id]);
     await c.query('UPDATE report_upload_runs SET reserved_bytes=reserved_bytes-$3,updated_at=now() WHERE tenant_id=$1 AND run_id=$2',[i.tenantId,a.runId,a.sizeBytes]); return true;
   })); }
