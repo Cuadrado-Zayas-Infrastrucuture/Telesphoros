@@ -7,6 +7,7 @@ import { Database } from '../../db/database';
 import { IntegrityError, toStorageError } from '../errors';
 import type { Page, PageRequest, ReportRecord } from '../records';
 import { type ReportFilter, ReportsRepository } from '../reports.repository';
+import { retryOnConflict } from './retry-conflict';
 
 interface ReportRow {
   upload_revision: string;
@@ -179,8 +180,11 @@ export class PostgresReportsRepository extends ReportsRepository {
   }
 
   async declareAttempt(a: UploadAttempt, expectedRevision: string) {
-    return this.db.withTenant(a.tenantId, async c => {
+    return retryOnConflict(() => this.db.withTenant(a.tenantId, async c => {
       await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [a.runId]);
+      // The report row BEFORE the run row, the order commitAttempt takes them in. Declare used to take the run row first, so a declaration and a commit for the same report could each
+      // hold one and wait for the other (40P01). Every transaction that holds a run row now already holds its report row.
+      await c.query('SELECT 1 FROM reports WHERE tenant_id=$1 AND id=$2 AND deleted_at IS NULL FOR UPDATE', [a.tenantId, a.reportId]);
       const prior = await c.query('SELECT * FROM report_upload_attempts WHERE tenant_id=$1 AND report_id=$2 AND principal=$3 AND request_id=$4', [a.tenantId,a.reportId,a.principal,a.requestId]);
       if (prior.rows[0]) { const p=attemptRecord(prior.rows[0]); return sameAttempt(p,a) && !['cancelled','cleanup','cleaned'].includes(p.state) ? p : undefined; }
       await c.query('INSERT INTO report_upload_runs(run_id,tenant_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [a.runId,a.tenantId]);
@@ -194,7 +198,7 @@ export class PostgresReportsRepository extends ReportsRepository {
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'declared',now()+interval '1 hour',$14) RETURNING *`,
       [a.id,a.requestId,a.runId,a.tenantId,a.reportId,a.patientId,a.principal,changed.rows[0].upload_revision,a.type,a.sizeBytes,a.contentType,a.sha256,a.key,a.declarationRevision]);
       return attemptRecord(result.rows[0]);
-    });
+    }));
   }
   async findAttempt(i: AttemptIdentity) { return this.db.withTenant(i.tenantId, async c => {
     const r=await c.query(`SELECT * FROM report_upload_attempts WHERE ${ATTEMPT_WHERE}`, identityValues(i)); return r.rows[0] ? attemptRecord(r.rows[0]) : undefined;
@@ -219,7 +223,7 @@ export class PostgresReportsRepository extends ReportsRepository {
       WHERE ${ATTEMPT_WHERE} AND state NOT IN ('committed','cleanup','cleaned')`, identityValues(i));
     const r=await c.query(`SELECT * FROM report_upload_attempts WHERE ${ATTEMPT_WHERE}`,identityValues(i)); return r.rows[0]?attemptRecord(r.rows[0]):undefined;
   }); }
-  async commitAttempt(i: AttemptIdentity) { return this.db.withTenant(i.tenantId, async c => {
+  async commitAttempt(i: AttemptIdentity) { return retryOnConflict(() => this.db.withTenant(i.tenantId, async c => {
     const report=await c.query('SELECT * FROM reports WHERE tenant_id=$1 AND id=$2 AND deleted_at IS NULL FOR UPDATE',[i.tenantId,i.reportId]);
     const found=await c.query(`SELECT * FROM report_upload_attempts WHERE ${ATTEMPT_WHERE} FOR UPDATE`,identityValues(i));
     if (!found.rows[0] || !report.rows[0]) return false;
@@ -235,7 +239,7 @@ export class PostgresReportsRepository extends ReportsRepository {
     await c.query('SELECT outbox_append($1, $2)',['report.file-committed',i.reportId]);
     await c.query("UPDATE report_upload_attempts SET state='committed',updated_at=now() WHERE tenant_id=$1 AND id=$2 AND state='stored'",[i.tenantId,a.id]);
     await c.query('UPDATE report_upload_runs SET reserved_bytes=reserved_bytes-$3,updated_at=now() WHERE tenant_id=$1 AND run_id=$2',[i.tenantId,a.runId,a.sizeBytes]); return true;
-  }); }
+  })); }
   async runStatus(tenantId:string,runId:string){return this.db.withTenant(tenantId,async c=>{const r=(await c.query(`SELECT reserved_bytes,last_reconciled_at,cleanup_stalled,(SELECT count(*) FROM report_upload_attempts WHERE tenant_id=$1 AND run_id=$2 AND state NOT IN ('committed','cleaned')) AS pending_count FROM report_upload_runs WHERE tenant_id=$1 AND run_id=$2`,[tenantId,runId])).rows[0];return {pendingBytes:Number(r?.reserved_bytes??0),pendingCount:Number(r?.pending_count??0),lastReconciledAt:r?.last_reconciled_at?.toISOString()??null,cleanupStalled:r?.cleanup_stalled??false};});}
   async recordReconciliation(tenantId:string,runId:string,success:boolean){await this.db.withTenant(tenantId,async c=>{await c.query('UPDATE report_upload_runs SET cleanup_stalled=NOT $3,last_reconciled_at=CASE WHEN $3 THEN now() ELSE last_reconciled_at END,updated_at=now() WHERE tenant_id=$1 AND run_id=$2',[tenantId,runId,success]);});}
   async runAttempts(tenantId: string,runId: string) {return this.db.withTenant(tenantId,async c=>{const r=await c.query('SELECT * FROM report_upload_attempts WHERE tenant_id=$1 AND run_id=$2 LIMIT 10001',[tenantId,runId]);if(r.rows.length>10000)throw new Error('Incomplete attempt inventory.');return r.rows.map(attemptRecord);});}
