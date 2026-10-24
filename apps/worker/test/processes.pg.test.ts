@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { PERSON, TENANT_A, TENANT_B, attemptsOf, createFixture, effectDir, enqueueAs, jobRow, startWorker, until, type Fixture, type WorkerProcess } from './support';
+import { PERSON, REPORTS_BUCKET, TENANT_A, TENANT_B, attemptsOf, createFixture, effectDir, enqueueAs, jobRow, s3Client, startWorker, until, type Fixture, type WorkerProcess } from './support';
 
 let f: Fixture;
 let effects: Awaited<ReturnType<typeof effectDir>>;
@@ -247,5 +247,35 @@ describe('what a worker writes to its log', () => {
     expect(w.output()).not.toContain('Jane');
     expect(w.output()).not.toContain('patient');
     for (const line of w.output().trim().split('\n')) expect(() => JSON.parse(line)).not.toThrow();
+  });
+});
+
+describe.skipIf(!process.env.TEST_S3_ENDPOINT)('the reports bucket check at start-up', () => {
+  const s3Env = (bucket: string) => ({
+    REPORTS_BUCKET: bucket,
+    S3_ENDPOINT: process.env.TEST_S3_ENDPOINT as string,
+    S3_FORCE_PATH_STYLE: 'true',
+    AWS_REGION: 'us-east-2',
+    AWS_ACCESS_KEY_ID: 'synthetic',
+    AWS_SECRET_ACCESS_KEY: 'synthetic',
+  });
+
+  it('refuses to start when REPORTS_BUCKET names a bucket that does not exist, naming the setting and not the value', async () => {
+    const r = spawnSync(process.execPath, [join(__dirname, '..', 'dist', 'main.js')], {
+      env: { PATH: process.env.PATH ?? '', DATABASE_URL: f.db.workerUrl, WORKER_HEALTH_PORT: '0', ...s3Env('worker-test-bucket-that-is-not-there') },
+      encoding: 'utf8',
+      timeout: 30_000,
+    });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('REPORTS_BUCKET names a bucket that does not exist');
+    expect(r.stderr + r.stdout).not.toContain('worker-test-bucket-that-is-not-there');
+  });
+
+  it('starts when the bucket exists (control: the same environment with a real bucket gets past the check)', async () => {
+    await s3Client(); // creates the reports bucket
+    await begin();
+    const w = worker(s3Env(REPORTS_BUCKET));
+    await until('the worker to listen', async () => w.output().includes('"event":"health-listening"') || undefined);
+    expect(w.output()).not.toContain('bucket');
   });
 });
