@@ -84,7 +84,9 @@ export class Database {
     if (actor !== undefined && (!actor || actor.length > MAX_ACTOR_LENGTH || CONTROL_CHARACTERS.test(actor))) throw new Error('Invalid actor');
     const client = await this.pool.connect().catch(error => {
       if (currentRequestAuthority()?.session) throw AppException.unavailable('Access checks are unavailable.');
-      throw error;
+      // Pool full past the 2 s limit, or the database not answering: busy, not a fault in the request. The driver's message can carry the host.
+      this.logger.warn({ event: 'database-connection-unavailable', code: (error as { code?: unknown })?.code }, 'No database connection could be had.');
+      throw AppException.databaseBusy();
     });
     let discard = false;
     let refused: ReturnType<typeof currentRequestAuthority>;

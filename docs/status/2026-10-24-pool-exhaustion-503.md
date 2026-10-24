@@ -1,0 +1,9 @@
+# A request that cannot get a database connection answers 503 (2026-10-24)
+
+Date: 2026-10-24
+
+**Implemented (no migration).** From the production-readiness audit (item 47, Medium; the 2026-10-19 foundation note listed it as "pool exhaustion answers 500"). `Database.withTenant` waits at most 2 seconds for a pooled connection. When that wait ran out, or the database did not answer at all, the driver's plain error went to the exception filter, which answers 500 `INTERNAL_ERROR` for anything it does not know. Only a request bound to a browser session was turned into a 503. Now every caller gets `AppException.databaseBusy()`: 503 `SERVICE_UNAVAILABLE`, `Retry-After: 2`, "The service is busy. Nothing was saved; try again shortly." Nothing had started, so repeating is safe. The log carries one fixed `database-connection-unavailable` line with the error code only (the driver's message can name the host).
+
+**Tests, red first.** `pool-unavailable.spec.ts` (no database: a refused port): the answer is 503 with a Retry-After, and nothing about the host, user or driver appears in it. `pool-exhaustion.pg-spec.ts` (real PostgreSQL, pool of one): while one request holds the only connection, the next answers 503 with a Retry-After, the held request still finishes, and the next one afterwards is served (control). Both failed on the old code (the error was a plain `Error`).
+
+**Limits.** Only the wait for a connection is changed. A statement that runs past the 5-second limit, or an idle-in-transaction cut, still reaches the filter as a plain error and answers 500; that is a separate decision (it can mean the request did partial work before the cut, so it is not safely retryable in general). Not verified in AWS: how the load balancer treats a 503 with `Retry-After` (it passes it through; nothing here depends on it).
