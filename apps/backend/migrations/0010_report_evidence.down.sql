@@ -1,10 +1,15 @@
 -- GUARD: removes who uploaded a report and which stored version was verified. See 0005 for how to allow it on purpose.
+SET LOCAL lock_timeout = '2s';
+-- reports has FORCE ROW LEVEL SECURITY and every policy on it is for another role, so the migrator (its owner, but not a superuser and without BYPASSRLS)
+-- sees no rows, and the check below would always read "empty". The owner may lift FORCE inside this transaction; it is put back straight after the check (and a refusal rolls it back with everything else).
+ALTER TABLE reports NO FORCE ROW LEVEL SECURITY;
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM reports WHERE object_version IS NOT NULL OR uploaded_by IS NOT NULL OR upload_requested_by IS NOT NULL)
      AND current_setting('telesphoros.allow_audit_drop', true) IS DISTINCT FROM 'yes' THEN
     RAISE EXCEPTION 'Refusing to drop report evidence columns that hold data: set telesphoros.allow_audit_drop=yes for this session if you really mean it.';
   END IF;
 END $$;
+ALTER TABLE reports FORCE ROW LEVEL SECURITY;
 
 DROP TRIGGER reports_evidence_guard ON reports;
 DROP FUNCTION reports_evidence_guard();
