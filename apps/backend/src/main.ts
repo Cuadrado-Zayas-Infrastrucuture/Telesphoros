@@ -6,6 +6,10 @@ import { AppModule } from './app.module';
 import { configureApp } from './app.factory';
 import { loadEnv } from './config/env';
 import { listenerTls } from './config/listener-tls';
+import { installProcessFaultHandlers } from './common/process-faults';
+
+// First, so a fault during start-up or at any later point ends the process with one PHI-safe line instead of Node's default message and stack.
+installProcessFaultHandlers(process, { service: 'api' });
 
 async function bootstrap() {
   const env = loadEnv(); // throws on a bad or unsafe configuration: fail fast, before listening
