@@ -121,3 +121,59 @@ it('withholds a successful private response when the audit writer cannot persist
   }
   await api().get('/api/v1/me').set(bearer(await clinicianA())).expect(200);
 });
+
+it('records a private write BEFORE it runs, with the route and the id in the path, and no body or field', async () => {
+  const token = await clinicianA();
+  const label = `SYN-WRITE-${randomUUID().slice(0, 8)}`;
+  const createId = 'synthetic-audit-write-001';
+  const created = await api().post('/api/v1/patients').set(bearer(token)).set('X-Request-Id', createId).send({ label }).expect(201);
+  const patientId = created.body.id as string;
+  expect(await events(createId)).toEqual([
+    expect.objectContaining({ event_type: 'api-auth', outcome: 'accepted' }),
+    expect.objectContaining({ event_type: 'private-write', outcome: 'accepted', tenant_id: 'tenant-user-a', actor_sub: 'user-a', route_key: 'PatientsController.create', subject_id: null, request_id: createId }),
+  ]);
+  const replaceId = 'synthetic-audit-write-002';
+  await api().put(`/api/v1/patients/${patientId}`).set(bearer(token)).set('X-Request-Id', replaceId).send({ label: `${label}-B` }).expect(200);
+  expect((await events(replaceId)).map(row => [row.event_type, row.outcome, row.route_key, row.subject_id])).toEqual([
+    ['api-auth', 'accepted', 'PatientsController.replace', null],
+    ['private-write', 'accepted', 'PatientsController.replace', patientId],
+  ]);
+  const removeId = 'synthetic-audit-write-003';
+  await api().delete(`/api/v1/patients/${patientId}`).set(bearer(token)).set('X-Request-Id', removeId).expect(204);
+  expect((await events(removeId)).map(row => [row.event_type, row.subject_id])).toEqual([['api-auth', null], ['private-write', patientId]]);
+  expect(JSON.stringify([await events(createId), await events(replaceId)])).not.toContain(label);
+});
+
+it('does not perform a write whose audit row cannot be stored', async () => {
+  const token = await clinicianA();
+  const label = `SYN-NOWRITE-${randomUUID().slice(0, 8)}`;
+  const id = 'synthetic-audit-write-fail-001';
+  await withAdmin(pg.adminUrl, c => c.query("ALTER TABLE security_audit_events ADD CONSTRAINT test_refuse_private_write CHECK (event_type <> 'private-write') NOT VALID"));
+  try {
+    const response = await api().post('/api/v1/patients').set(bearer(token)).set('X-Request-Id', id).send({ label }).expect(503);
+    expect(JSON.stringify(response.body)).not.toContain('user-a');
+    expect((await events(id)).map(row => [row.event_type, row.outcome])).toEqual([['api-auth', 'accepted']]);
+  } finally {
+    await withAdmin(pg.adminUrl, c => c.query('ALTER TABLE security_audit_events DROP CONSTRAINT test_refuse_private_write'));
+  }
+  // Nothing was created: the label is free, and the same request now goes through.
+  await api().post('/api/v1/patients').set(bearer(token)).send({ label }).expect(201);
+});
+
+it('allows the new event type only as an accepted write, and the constraint is validated', async () => {
+  const appClient = new Client({ connectionString: pg.appUrl });
+  await appClient.connect();
+  try {
+    const call = (type: string, outcome: string, subject: string | null) =>
+      appClient.query('SELECT public.security_audit_record($1,$2,$3,$4,$5,$6,$7)', [type, outcome, 'tenant-user-a', 'user-a', 'ProbeController.write', subject, `synthetic-check-${randomUUID().slice(0, 8)}`]);
+    await call('private-write', 'accepted', randomUUID());
+    await call('private-write', 'accepted', null);
+    for (const [type, outcome] of [['private-write', 'succeeded'], ['private-write', 'refused'], ['api-auth', 'succeeded'], ['private-edit', 'accepted']]) {
+      await expect(call(type!, outcome!, null)).rejects.toMatchObject({ code: '23514' });
+    }
+  } finally { await appClient.end(); }
+  await withAdmin(pg.adminUrl, async c => {
+    const row = (await c.query("SELECT convalidated FROM pg_constraint WHERE conname = 'security_audit_kind' AND conrelid = 'public.security_audit_events'::regclass")).rows;
+    expect(row).toEqual([{ convalidated: true }]);
+  });
+});
