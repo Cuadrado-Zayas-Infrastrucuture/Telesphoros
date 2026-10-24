@@ -7,8 +7,15 @@ import { type Compat, loadMigrations, MIGRATIONS_DIR, parseCompat } from './migr
  * Migration 0027 and earlier predate the label (unlabelled counts as `breaking`) and are not checked. From 0028 on every
  * migration must say which it is, and an `expand` migration may not contain the statements below.
  *
- * This is a guard against the obvious mistakes, not a proof of compatibility. It does not look at `ADD CONSTRAINT`, unique
- * indexes, data rewrites or row-level-security policy changes, any of which can still break older code: label those `breaking`.
+ * This is a guard against the obvious mistakes, not a proof of compatibility. It does not look at data rewrites or at changes to
+ * row-level-security policies on existing tables, either of which can still break older code: label those `breaking`.
+ *
+ * Two more rules concern a table that already existed (one this file does not itself create), from the same version on:
+ *   - an `expand` migration may not add a trigger, a CHECK, FOREIGN KEY, UNIQUE, EXCLUDE or PRIMARY KEY constraint, or a unique index to it,
+ *     because each can refuse or change a write that older code still makes;
+ *   - any migration that runs DDL on it must `SET [LOCAL] lock_timeout` to a non-zero value first, so a lock it cannot get fails the
+ *     migration quickly instead of queueing every writer behind it.
+ * Matched on SQL with comments, strings and dollar-quoted bodies blanked, so DDL run through EXECUTE or a DO block is not seen.
  */
 export const FIRST_LABELED_VERSION = 28;
 
@@ -82,9 +89,24 @@ function addColumnNotNullWithoutDefault(code: string): number[] {
   return lines;
 }
 
+export type DisciplineRule = 'expand-adds-constraint-or-trigger' | 'table-ddl-without-lock-timeout';
+
+/**
+ * Migrations that were applied before the two rules above existed and break them. An applied migration is never edited (its checksum is
+ * recorded), so each is excused here, by number and by rule, with the reason. Nothing else is: a later migration with the same text is reported.
+ */
+export const GRANDFATHERED: Readonly<Record<string, { rules: readonly DisciplineRule[]; why: string }>> = {
+  '0034': {
+    rules: ['expand-adds-constraint-or-trigger', 'table-ddl-without-lock-timeout'],
+    why: 'Labelled expand, but it adds a trigger on patients and a constraint trigger on patient_merge_decisions (an older image gets PM002 where it used to corrupt a merge, and reports it as a server error), with no lock_timeout. Audit 2026-10-23 items 15 and 16.',
+  },
+};
+
 export interface LintContext {
   /** The `.up.sql` of every earlier migration. Without it the lint cannot tell a new object from an old one, so it exempts no REVOKE. */
   earlier?: string;
+  /** Migrations excused from the two table rules; GRANDFATHERED unless a test passes another set. */
+  grandfathered?: Readonly<Record<string, { rules: readonly DisciplineRule[]; why: string }>>;
 }
 
 interface PrivilegeStatement {
@@ -176,6 +198,86 @@ function undoingRevokes(code: string, earlierSql: string | undefined): Set<numbe
   return exempt;
 }
 
+/** Replaces what sits between dollar quotes (`$$ ... $$`, `$tag$ ... $tag$`) with spaces, keeping newlines and every offset. */
+function blankDollarBodies(code: string): string {
+  return code.replace(/(\$(?:[A-Za-z_]\w*)?\$)([\s\S]*?)\1/g, (_all, quote: string, body: string) => `${quote}${body.replace(/[^\n]/g, ' ')}${quote}`);
+}
+
+const TABLE = String.raw`((?:"?\w+"?\.)?"?\w+"?)`;
+const tableName = (raw: string) => raw.replace(/"/g, '').toLowerCase().replace(/^public\./, '');
+
+interface DisciplineFinding {
+  rule: DisciplineRule;
+  message: string;
+}
+
+/**
+ * The two table rules over one file. `code` is the file with comments and strings blanked; `raw` is the original, same length, used only to
+ * read a lock_timeout value that the blanking hid. `expand` says whether the first rule applies.
+ */
+function disciplineFindings(raw: string, code: string, expand: boolean): DisciplineFinding[] {
+  const found: DisciplineFinding[] = [];
+  const body = blankDollarBodies(code);
+  const created = new Set<string>();
+  let lockTimeoutSet = false;
+  for (const part of body.matchAll(/[^;]+/g)) {
+    const lead = part[0].length - part[0].trimStart().length;
+    const text = part[0].trim();
+    if (text.length === 0) continue;
+    const at = part.index! + lead;
+    const line = lineOf(body, at);
+    const make = /^CREATE\s+(?:(?:GLOBAL\s+|LOCAL\s+)?(?:TEMP|TEMPORARY)\s+|UNLOGGED\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?/i.exec(text);
+    if (make) {
+      const name = new RegExp(`^${TABLE}`).exec(text.slice(make[0].length));
+      if (name) created.add(tableName(name[1]!));
+      continue;
+    }
+    const setting = /^SET\s+(?:LOCAL\s+|SESSION\s+)?lock_timeout\s*(?:=|TO)/i.exec(text);
+    if (setting) {
+      const value = raw.slice(at + setting[0].length, part.index! + part[0].length).trim(); // not text.length: trimming dropped the blanked quotes
+      lockTimeoutSet = !/^(?:DEFAULT|'?0+(?:\.0+)?\s*(?:us|ms|s|min|h|d)?'?)$/i.test(value);
+      continue;
+    }
+    let table: string | undefined;
+    let what = '';
+    let additive: string | undefined;
+    let m: RegExpExecArray | null;
+    if ((m = new RegExp(`^ALTER\\s+TABLE\\s+(?:ONLY\\s+)?(?:IF\\s+EXISTS\\s+)?${TABLE}`, 'i').exec(text))) {
+      table = tableName(m[1]!);
+      what = 'ALTER TABLE';
+      additive = /\bADD\b[^]*?\b(CHECK|FOREIGN\s+KEY|REFERENCES|UNIQUE|EXCLUDE|PRIMARY\s+KEY)\b/i.exec(text)?.[1];
+    } else if ((m = new RegExp(`^CREATE\\s+(UNIQUE\\s+)?INDEX\\s+(?:CONCURRENTLY\\s+)?(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:\\w+\\s+)?ON\\s+(?:ONLY\\s+)?${TABLE}`, 'i').exec(text))) {
+      table = tableName(m[2]!);
+      what = m[1] ? 'CREATE UNIQUE INDEX' : 'CREATE INDEX';
+      if (m[1]) additive = 'UNIQUE';
+    } else if ((m = new RegExp(`^CREATE\\s+(?:OR\\s+REPLACE\\s+)?(?:CONSTRAINT\\s+)?TRIGGER\\s+\\w+[^]*?\\bON\\s+${TABLE}`, 'i').exec(text))) {
+      table = tableName(m[1]!);
+      what = 'CREATE TRIGGER';
+      additive = 'TRIGGER';
+    } else if ((m = new RegExp(`^DROP\\s+TRIGGER\\s+(?:IF\\s+EXISTS\\s+)?\\w+\\s+ON\\s+${TABLE}`, 'i').exec(text))) {
+      table = tableName(m[1]!);
+      what = 'DROP TRIGGER';
+    } else if ((m = new RegExp(`^(CREATE|ALTER|DROP)\\s+POLICY\\s+(?:IF\\s+EXISTS\\s+)?\\w+\\s+ON\\s+${TABLE}`, 'i').exec(text))) {
+      table = tableName(m[2]!);
+      what = `${m[1]!.toUpperCase()} POLICY`;
+    }
+    if (table === undefined || created.has(table)) continue;
+    if (expand && additive !== undefined) {
+      found.push({
+        rule: 'expand-adds-constraint-or-trigger',
+        message: `labelled expand but line ${line} adds ${additive.replace(/\s+/g, ' ').toUpperCase()} to the existing table ${table}, which can refuse or change a write that older code still makes. Label it breaking.`,
+      });
+    }
+    if (!lockTimeoutSet) {
+      found.push({
+        rule: 'table-ddl-without-lock-timeout',
+        message: `line ${line} runs ${what} on the existing table ${table} with no SET LOCAL lock_timeout (a non-zero value) before it, so a lock it cannot get would queue every writer behind it. Add \`SET LOCAL lock_timeout = '2s';\` at the top.`,
+      });
+    }
+  }
+  return found;
+}
+
 /**
  * Problems with one migration's `.up.sql`, empty when it is fine. Applies only from FIRST_LABELED_VERSION; earlier ones return [].
  */
@@ -208,13 +310,19 @@ export function lintMigration(version: string, upSql: string, context: LintConte
     );
     return problems;
   }
-  if (compat !== 'expand') return problems;
-
   const code = blankCommentsAndStrings(upSql);
+  const excused = (context.grandfathered ?? GRANDFATHERED)[version]?.rules ?? [];
+  if (compat !== 'expand') {
+    if (code === undefined) say('could not read the SQL safely (an unterminated quote or comment), so its lock_timeout use cannot be checked. Fix the quote.');
+    else for (const finding of disciplineFindings(upSql, code, false)) if (!excused.includes(finding.rule)) say(finding.message);
+    return problems;
+  }
+
   if (code === undefined) {
     say('could not read the SQL safely (an unterminated quote or comment), so it cannot be accepted as expand. Fix the quote or label it breaking.');
     return problems;
   }
+  for (const finding of disciplineFindings(upSql, code, true)) if (!excused.includes(finding.rule)) say(finding.message);
   const undoing = undoingRevokes(code, context.earlier);
   for (const rule of EXPAND_RULES) {
     // A REVOKE that only undoes what this migration created is skipped; the first one that is not is reported.
