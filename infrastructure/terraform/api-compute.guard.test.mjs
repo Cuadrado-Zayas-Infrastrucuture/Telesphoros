@@ -17,6 +17,7 @@ const apiMain = read('../../apps/backend/src/main.ts');
 const { installProcessFaultHandlers } = await import('../../apps/backend/src/common/process-faults.ts').catch((error) => {
   throw new Error(`the API's process fault handler could not be imported (this guard needs Node 22.18 or newer): ${error.message}`);
 });
+const gracefulShutdown = read('../../apps/backend/src/common/graceful-shutdown.ts');
 const ledgerSource = read('../../apps/backend/src/ledger/ledger-monitor.ts');
 const logShapeSpec = read('../../apps/backend/src/log-shape.spec.ts');
 const loggerOptions = read('../../apps/backend/src/logger-options.ts');
@@ -100,6 +101,7 @@ export function apiComputeProblems(tf, sources = {}) {
   const edge = sources.edge ?? edgeTf;
   const factory = sources.factory ?? appFactory;
   const main = sources.main ?? apiMain;
+  const shutdown = sources.shutdown ?? gracefulShutdown;
   const problems = [];
   const text = code(tf);
   const need = (condition, why) => {
@@ -308,6 +310,14 @@ export function apiComputeProblems(tf, sources = {}) {
   const check = /healthCheck = \{[\s\S]*?\n      \}/.exec(code(container))?.[0] ?? '';
   need(has(check, '/api/v1/health') && !has(check, '/ready') && has(check, 'interval = 30') && has(check, 'timeout = 5') && has(check, 'retries = 3') && has(check, 'startPeriod = 60'), 'the API container must be checked on /api/v1/health (no dependency, so a database slowdown cannot restart healthy tasks), never /ready');
   need(has(check, "https://127.0.0.1:${local.api_port}") && has(check, "NODE_TLS_REJECT_UNAUTHORIZED='0'"), 'the container check must speak HTTPS to loopback without verifying the listener certificate (the listener is TLS, and the load balancer does not verify it either)');
+  // The API's stop sequence (pause, drain, then close) must finish inside ECS's stop timeout, or SIGKILL ends it with the pool still open (graceful-shutdown.ts).
+  const constant = (name) => Number((new RegExp(`export const ${name} = ([\\d_]+);`).exec(code(shutdown))?.[1] ?? 'NaN').replaceAll('_', ''));
+  const margin = Number((/export const SHUTDOWN_DEADLINE_MS = SHUTDOWN_PAUSE_MS \+ SHUTDOWN_DRAIN_MS \+ ([\d_]+);/.exec(code(shutdown))?.[1] ?? 'NaN').replaceAll('_', ''));
+  const stopTimeout = Number(/stopTimeout\s*=\s*(\d+)/.exec(code(one('resource "aws_ecs_task_definition" "api"')))?.[1] ?? 'NaN');
+  const deadline = constant('SHUTDOWN_PAUSE_MS') + constant('SHUTDOWN_DRAIN_MS') + margin;
+  need(Number.isFinite(deadline) && Number.isFinite(stopTimeout), 'the scan must find the shutdown constants and the container stopTimeout (a floor, so an empty read cannot pass)');
+  if (Number.isFinite(deadline) && Number.isFinite(stopTimeout)) need(margin >= 2000 && deadline < stopTimeout * 1000, `the API stop sequence (${deadline} ms) must end, with at least 2 s of margin, before ECS's stopTimeout (${stopTimeout} s)`);
+  need(/installGracefulShutdown\(app,/.test(code(main)) && !/enableShutdownHooks\(\)\s*;/.test(code(main)), 'the API must stop through installGracefulShutdown, not Nest\'s own shutdown hooks (they end the pool before the listener)');
   const running = one('resource "aws_cloudwatch_metric_alarm" "api_running_tasks"');
   need(has(running, 'threshold = var.api_desired_count') && has(running, 'comparison_operator = "LessThanThreshold"') && has(running, 'treat_missing_data = "breaching"'), 'too few running tasks (or no report at all) must raise the running-tasks alarm');
 
@@ -462,6 +472,7 @@ test('the API compute guard reports each way the text could be weakened (control
     ['the migration execution role gains the issuer secret', 'resources = [aws_secretsmanager_secret.api_migrator_url[0].arn]', 'resources = [aws_secretsmanager_secret.api_migrator_url[0].arn, aws_secretsmanager_secret.issuer_database_url[0].arn]'],
     ['the service task injects the issuer secret', '        { name = "IDENTIFIER_DIGEST_KEY", valueFrom = aws_secretsmanager_secret.api_identifier_digest_key[0].arn },\n', '        { name = "IDENTIFIER_DIGEST_KEY", valueFrom = aws_secretsmanager_secret.api_identifier_digest_key[0].arn },\n        { name = "ISSUER_DATABASE_URL", valueFrom = aws_secretsmanager_secret.issuer_database_url[0].arn },\n'],
     ['the 502 alarm reads the target metric', 'metric_name         = "HTTPCode_ELB_502_Count"', 'metric_name         = "HTTPCode_Target_5XX_Count"'],
+    ['the stop timeout is shortened below the sequence', 'stopTimeout            = 30', 'stopTimeout            = 20'],
     ['the 504 alarm is removed', 'resource "aws_cloudwatch_metric_alarm" "api_elb_504" {', 'resource "aws_cloudwatch_metric_alarm" "api_elb_504_gone" {'],
     ['the 504 alarm counted by the wrong switch', 'resource "aws_cloudwatch_metric_alarm" "api_elb_504" {\n  count               = local.api_service_count', 'resource "aws_cloudwatch_metric_alarm" "api_elb_504" {\n  count               = local.api_count'],
     ['the process-fault filter names another event', 'pattern        = "{ $.event = \\"process-fault\\" }"', 'pattern        = "{ $.event = \\"process-faulted\\" }"'],
@@ -489,6 +500,11 @@ test('the API compute guard reports each way the text could be weakened (control
     ['configureApp stops applying the constant', { factory: appFactory.replace('server.keepAliveTimeout=API_KEEP_ALIVE_TIMEOUT_MS;', '') }],
     ['the scan finds no idle timeout', { edge: '' }],
     ['the API stops installing the process fault handlers', { main: apiMain.replace("installProcessFaultHandlers(process, { service: 'api' });", '') }],
+    ['the pause grows past the stop timeout', { shutdown: gracefulShutdown.replace('SHUTDOWN_PAUSE_MS = 5_000', 'SHUTDOWN_PAUSE_MS = 15_000') }],
+    ['the drain grows past the stop timeout', { shutdown: gracefulShutdown.replace('SHUTDOWN_DRAIN_MS = 20_000', 'SHUTDOWN_DRAIN_MS = 30_000') }],
+    ['the margin before the deadline is gone', { shutdown: gracefulShutdown.replace('SHUTDOWN_DRAIN_MS + 4_000', 'SHUTDOWN_DRAIN_MS + 0') }],
+    ['the scan finds no shutdown constants', { shutdown: '' }],
+    ['main goes back to Nest\'s shutdown hooks', { main: apiMain.replace('installGracefulShutdown(app, app.getHttpServer() as Server);', 'app.enableShutdownHooks();') }],
     ['cli.ts stops reading the issuer variable', { cli: cliSource.replace('...(process.env.PROVISION_SECRET_ISSUER ? { issuer: process.env.PROVISION_SECRET_ISSUER } : {})', '') }],
     ['cli.ts reads an extra provisioning secret Terraform does not pass', { cli: cliSource.replace("worker: required('PROVISION_SECRET_WORKER')", "worker: required('PROVISION_SECRET_WORKER'), extra: required('PROVISION_SECRET_EXTRA')") }],
   ];
