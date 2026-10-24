@@ -85,6 +85,19 @@ export class JobQueue {
     const { rows } = await this.db.query('SELECT * FROM job_stats()');
     return rows.map((r) => ({ type: r.type as string, state: r.state as string, count: Number(r.n), oldestReadySeconds: r.oldest_ready_seconds === null ? null : Number(r.oldest_ready_seconds) }));
   }
+
+  /** Pending outbox events and the age of the oldest: one that keeps failing to become a job stays pending, so its age is how it shows (migration 0036). */
+  async outboxStats(): Promise<OutboxStats> {
+    const { rows } = await this.db.query('SELECT * FROM outbox_stats()');
+    const r = rows[0]!;
+    return { pending: Number(r.pending), oldestPendingSeconds: r.oldest_pending_seconds === null ? null : Number(r.oldest_pending_seconds) };
+  }
+}
+
+/** How many outbox events are waiting to become jobs, and how long the oldest has waited (null when none). */
+export interface OutboxStats {
+  pending: number;
+  oldestPendingSeconds: number | null;
 }
 
 export interface EnqueueOptions {

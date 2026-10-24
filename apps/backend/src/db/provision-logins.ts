@@ -151,10 +151,12 @@ const FUNCTION_RIGHTS: Record<'app' | 'verifier' | 'worker', Record<string, bool
   },
 };
 
-/** The queue's functions (migrations 0023 and 0024), by who may run them. Checked only on a database that has them. */
-const WORKER_FUNCTIONS = ['job_claim', 'job_heartbeat', 'job_succeed', 'job_fail', 'job_release', 'job_schedule_tick', 'job_worker_seen', 'job_stats', 'outbox_relay',
+/** The queue's functions (migrations 0023, 0024 and 0036), by who may run them. Checked only on a database that has them. */
+const WORKER_FUNCTIONS = ['job_claim', 'job_heartbeat', 'job_succeed', 'job_fail', 'job_release', 'job_schedule_tick', 'job_worker_seen', 'job_stats', 'outbox_relay', 'outbox_stats',
   'file_verification_target', 'file_verification_stale', 'file_verification_record', 'job_uploads_sweep'];
 const APPLICATION_FUNCTIONS = ['job_enqueue', 'outbox_append'];
+/** Queue functions a later migration added: checked only once they exist, as the capability's 0031 entries are, so a database that has not reached that migration is not called broken. */
+const LATER_QUEUE_FUNCTIONS = ['outbox_stats']; // 0036
 const OWNER_ONLY_FUNCTIONS = ['uploads_sweep', 'uploads_organization_run_id', 'job_held'];
 const JOB_TABLES = ['jobs', 'job_attempts', 'job_schedules', 'job_workers', 'outbox_events', 'outbox_routes', 'file_verifications'];
 /** Tables the worker login must not even read (it reaches data only through the queue's functions). */
@@ -369,8 +371,9 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
       for (const fn of [...WORKER_FUNCTIONS, ...APPLICATION_FUNCTIONS, ...OWNER_ONLY_FUNCTIONS]) {
         const allowed = kind === 'worker' ? WORKER_FUNCTIONS.includes(fn) : kind === 'app' ? APPLICATION_FUNCTIONS.includes(fn) : false;
         const can = await canExecute(names[kind], fn);
-        if (can === undefined) wrong.push(`${fn} (missing)`);
-        else if (can !== allowed) wrong.push(`${fn} (${allowed ? 'cannot' : 'CAN'} execute)`);
+        if (can === undefined) {
+          if (!LATER_QUEUE_FUNCTIONS.includes(fn)) wrong.push(`${fn} (missing)`);
+        } else if (can !== allowed) wrong.push(`${fn} (${allowed ? 'cannot' : 'CAN'} execute)`);
       }
       for (const table of JOB_TABLES) if (await canWrite(names[kind], table)) wrong.push(`${table} (CAN write)`);
     }

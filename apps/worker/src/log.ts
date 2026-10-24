@@ -14,6 +14,9 @@ export interface LogFields {
   /** Seconds the oldest ready job has waited (the queue-not-draining alarm reads it). */
   ageSeconds?: number;
   dead?: number;
+  /** Outbox events not yet turned into jobs, and the seconds the oldest has waited (the outbox-stuck alarm reads the age). */
+  outboxPending?: number;
+  outboxAgeSeconds?: number;
   reason?: string;
 }
 
