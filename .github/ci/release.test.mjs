@@ -130,6 +130,7 @@ test('the release guard reports each way the files could be weakened (controls)'
 const DIGEST = `sha256:${'a'.repeat(64)}`;
 const OTHER = `sha256:${'b'.repeat(64)}`;
 const REPO = '123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-staging-api';
+const literal = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // REPO is a name, not a pattern: its dots must match only dots
 
 function runRelease({ ecrDigest = '', pushDigest = DIGEST, tags = 'git-0123456789ab\n', env = {}, verifyExit = 0 } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'release-stub-'));
@@ -166,10 +167,10 @@ test('release-image.sh pushes the archive under git-<sha>, checks the digest, si
   const pushIndex = r.calls.findIndex((c) => c.startsWith('crane push '));
   const signIndex = r.calls.findIndex((c) => c.startsWith('cosign sign '));
   assert.ok(pushIndex >= 0 && signIndex > pushIndex);
-  assert.match(r.calls[pushIndex], new RegExp(`^crane push \\S+/layout ${REPO}:git-0123456789ab$`));
+  assert.match(r.calls[pushIndex], new RegExp(`^crane push \\S+/layout ${literal(REPO)}:git-0123456789ab$`));
   assert.equal(r.calls[signIndex], `cosign sign --key awskms:///alias/telesphoros-staging-image-signing --use-signing-config=false --tlog-upload=false --yes ${REPO}@${DIGEST}`);
   assert.ok(r.calls.some((c) => c === `cosign verify --key awskms:///alias/telesphoros-staging-image-signing --insecure-ignore-tlog ${REPO}@${DIGEST}`));
-  assert.match(r.summary, new RegExp(`${REPO}@${DIGEST}`));
+  assert.match(r.summary, new RegExp(`${literal(REPO)}@${DIGEST}`));
 });
 
 test('a rerun finds its own image under the immutable tag, does not push again, and signs', () => {
