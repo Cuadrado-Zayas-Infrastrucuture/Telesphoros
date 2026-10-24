@@ -6,7 +6,7 @@ import { JobQueue } from '@telesphoros/jobs';
 import { filesVerifyJobs } from '../src/handlers/files-verify';
 import { uploadsSweepJob } from '../src/handlers/uploads-sweep';
 import { PgJobData } from '../src/job-data';
-import { jsonLogger } from '../src/log';
+import { jsonLogger, silentLogger } from '../src/log';
 import { Runner } from '../src/runner';
 import { S3ObjectInspector } from '../src/storage';
 import { PERSON, REPORTS_BUCKET, TENANT_A, TENANT_B, TENANT_SUSPENDED, createFixture, enqueueAs, jobRow, s3Client, seedReport, until, type Fixture } from './support';
@@ -188,6 +188,95 @@ describe('the scheduled integrity re-check (files.verify-stale)', () => {
     expect(await jobRow(f.admin, jobId)).toMatchObject({ state: 'dead', last_error_code: 'file-changed' });
     expect(await verifications(bad.reportId)).toMatchObject([{ outcome: 'changed', reason: 'hash-mismatch' }]);
     expect(await verifications(good.reportId)).toMatchObject([{ outcome: 'ok' }]);
+  });
+});
+
+describe('a read that failed is not a check (files.verify-stale)', () => {
+  // Its own organization, so the reports of the other tests (and the finding one of them leaves) are not in the batch.
+  const GAMMA = 'worker-test-gamma';
+  beforeAll(async () => {
+    await f.admin.query(`INSERT INTO tenants (id, display_name, status, created_by, changed_by) VALUES ($1, $1, 'active', 'worker-test', 'worker-test')`, [GAMMA]);
+  });
+
+  async function hold(): Promise<{ jobId: string; worker: Client }> {
+    const jobId = (await enqueueAs(f.db, GAMMA, PERSON, 'files.verify-stale', {}, `unreadable-${++n}`)).jobId;
+    await f.admin.query(`UPDATE jobs SET state = 'running', locked_by = 'holder', lease_until = now() + interval '5 minutes', attempts = 1, started_at = now() WHERE id = $1`, [jobId]);
+    const worker = new Client({ connectionString: f.db.workerUrl });
+    await worker.connect();
+    return { jobId, worker };
+  }
+  const record = (worker: Client, jobId: string, r: { reportId: string; version: string }, outcome: string, reason: string | null) =>
+    worker.query(`SELECT file_verification_record($1, 'holder', $2, $3, $4, $5)`, [jobId, r.reportId, outcome, reason, r.version]);
+  /** Moves a report's rows of one outcome back in time (the table is append-only; the test steps around its trigger the way only a superuser can). */
+  async function age(reportId: string, outcome: string, interval: string): Promise<void> {
+    const c = await f.admin.connect();
+    try {
+      await c.query(`SET session_replication_role = replica`);
+      await c.query(`UPDATE file_verifications SET verified_at = now() - $3::interval WHERE report_id = $1 AND outcome = $2`, [reportId, outcome, interval]);
+    } finally {
+      await c.query(`RESET session_replication_role`);
+      c.release();
+    }
+  }
+  /** What the scheduled job would be handed, in order, among the given reports (a day is the freshness window, so a check made now is fresh). */
+  const due = async (worker: Client, jobId: string, ids: string[]) =>
+    (await worker.query('SELECT report_id FROM file_verification_stale($1, $2, 200, 86400) WHERE report_id = ANY($3)', [jobId, 'holder', ids])).rows.map((r) => r.report_id as string);
+
+  it('hands out a report whose last read failed, and leaves alone one that was just verified, or just found missing or changed', async () => {
+    const [unreadable, ok, missing, changed, agedOkThenUnreadable] = await Promise.all([1, 2, 3, 4, 5].map(() => seedReport(f, s3, GAMMA)));
+    const { jobId, worker } = await hold();
+    try {
+      await record(worker, jobId, unreadable!, 'unreadable', 'storage-error');
+      await record(worker, jobId, ok!, 'ok', null);
+      await record(worker, jobId, missing!, 'missing', 'version-missing');
+      await record(worker, jobId, changed!, 'changed', 'hash-mismatch');
+      await record(worker, jobId, agedOkThenUnreadable!, 'ok', null);
+      await age(agedOkThenUnreadable!.reportId, 'ok', '90 days'); // its last real check is old...
+      await record(worker, jobId, agedOkThenUnreadable!, 'unreadable', 'storage-error'); // ...and the failed read since then tells nothing about the file
+      const ids = [unreadable!, ok!, missing!, changed!, agedOkThenUnreadable!].map((r) => r.reportId);
+      expect((await due(worker, jobId, ids)).sort()).toEqual([unreadable!.reportId, agedOkThenUnreadable!.reportId].sort());
+    } finally {
+      await worker.end();
+    }
+  });
+
+  it('hands out the never-attempted first, then the least recently attempted, so a report that keeps failing goes to the back instead of starving the rest', async () => {
+    const [never, okOld, unreadableOld, unreadableNow] = await Promise.all([1, 2, 3, 4].map(() => seedReport(f, s3, GAMMA)));
+    const { jobId, worker } = await hold();
+    try {
+      await record(worker, jobId, okOld!, 'ok', null);
+      await age(okOld!.reportId, 'ok', '90 days');
+      await record(worker, jobId, unreadableOld!, 'unreadable', 'storage-error');
+      await age(unreadableOld!.reportId, 'unreadable', '5 days');
+      await record(worker, jobId, unreadableNow!, 'unreadable', 'storage-error');
+      const ids = [never!, okOld!, unreadableOld!, unreadableNow!].map((r) => r.reportId);
+      expect(await due(worker, jobId, [...ids].reverse())).toEqual(ids);
+    } finally {
+      await worker.end();
+    }
+  });
+
+  it('a retry of the same job looks again at the report the first attempt could not read, and a good read then ends it', async () => {
+    const r = await seedReport(f, s3, GAMMA);
+    const { jobId, worker } = await hold();
+    try {
+      let storeDown = true;
+      const real = new S3ObjectInspector(s3, REPORTS_BUCKET);
+      const inspector = { inspect: (key: string, version: string, options: { maxBytes: number; signal?: AbortSignal }) => (storeDown ? Promise.reject(new Error('socket hang up')) : real.inspect(key, version, options)) };
+      const job = filesVerifyJobs({ data: new PgJobData(f.worker), inspector, log: silentLogger }).find((j) => j.definition.type === 'files.verify-stale')!;
+      const context = { job: { id: jobId, type: 'files.verify-stale' }, workerId: 'holder', signal: new AbortController().signal } as unknown as Parameters<typeof job.handler>[0];
+      // The store is down: every report in the organization is recorded unreadable and the attempt asks to be retried.
+      await expect(job.handler(context)).rejects.toMatchObject({ code: 'storage-unreadable', retryable: true });
+      expect((await verifications(r.reportId)).map((v) => v.outcome)).toEqual(['unreadable']);
+      // The store is back. The retry must pick the same report up again, not treat the failed read as a check.
+      storeDown = false;
+      await job.handler(context);
+      expect((await verifications(r.reportId)).map((v) => v.outcome)).toEqual(['unreadable', 'ok']);
+      // Now it is checked: another run has nothing to do for it (control).
+      expect(await due(worker, jobId, [r.reportId])).toEqual([]);
+    } finally {
+      await worker.end();
+    }
   });
 });
 
