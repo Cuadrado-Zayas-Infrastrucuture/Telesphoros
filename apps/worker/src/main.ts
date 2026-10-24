@@ -11,8 +11,10 @@ import { testJobs } from './handlers/test-jobs';
 import { uploadsSweepJob } from './handlers/uploads-sweep';
 import { PgJobData } from './job-data';
 import { jsonLogger } from './log';
+import { WORKER_POOL_LIMITS } from './pool-limits';
 import { Runner, type RegisteredJob } from './runner';
 import { Ticker } from './scheduler';
+import { createShutdown, shutdownDeadlineMs } from './shutdown';
 import { S3ObjectInspector } from './storage';
 
 /**
@@ -31,7 +33,7 @@ function registeredJobs(config: WorkerConfig, deps: HandlerDeps): RegisteredJob[
 async function main(): Promise<void> {
   const log = jsonLogger();
   const config = loadConfig();
-  const pool = new Pool({ ...pgClientConfig(config.databaseUrl, config.databaseTls), max: config.concurrency + 3, application_name: 'telesphoros-worker' });
+  const pool = new Pool({ ...pgClientConfig(config.databaseUrl, config.databaseTls), ...WORKER_POOL_LIMITS, max: config.concurrency + 3, application_name: 'telesphoros-worker' });
   pool.on('error', () => log('error', 'database-connection-error', { code: 'pool-error' }));
   const queue = new JobQueue(pool);
   const s3 = new S3Client({ ...(config.awsRegion ? { region: config.awsRegion } : {}), ...(config.s3Endpoint ? { endpoint: config.s3Endpoint } : {}), forcePathStyle: config.s3ForcePathStyle });
@@ -60,18 +62,18 @@ async function main(): Promise<void> {
   const health = await startHealthServer(runner, { host: config.healthHost, port: config.healthPort, staleAfterMs: Math.max(30_000, config.pollMs * 5) });
   log('info', 'health-listening', { count: (health.address() as AddressInfo).port });
 
-  let stopping = false;
-  const shutdown = async (signal: string) => {
-    if (stopping) return;
-    stopping = true;
-    log('info', 'shutdown-requested', { reason: signal });
-    health.close();
-    health.closeAllConnections();
-    await Promise.all([scheduler.stop(), relay.stop(), stats.stop()]);
-    await runner.stop();
-    await pool.end().catch(() => undefined);
-    process.exit(0);
-  };
+  const shutdown = createShutdown({
+    closeHealth: () => {
+      health.close();
+      health.closeAllConnections();
+    },
+    tickers: [scheduler, relay, stats],
+    runner,
+    closePool: () => pool.end().catch(() => undefined),
+    log,
+    exit: (code) => process.exit(code),
+    deadlineMs: shutdownDeadlineMs(config.drainSeconds),
+  });
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
   process.on('SIGINT', () => void shutdown('SIGINT'));
 }

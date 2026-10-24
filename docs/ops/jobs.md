@@ -53,7 +53,7 @@ Environment (all validated at start; a refusal names the setting, never a value)
 | `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE`, `AWS_REGION` | none | For an S3-compatible server in development and tests; AWS credentials come from the environment's role |
 | `WORKER_TEST_JOBS`, `WORKER_TEST_EFFECT_DIR` | `no` | Test job types; refused when `NODE_ENV=production` |
 
-`SIGTERM`/`SIGINT` drains: it stops claiming, waits up to `WORKER_DRAIN_SECONDS` for running jobs, **releases** what is left (the unmade attempt is not counted) and exits 0. A hard kill leaves leases that expire; nothing else is needed.
+`SIGTERM`/`SIGINT` drains: it stops claiming, waits up to `WORKER_DRAIN_SECONDS` for running jobs, **releases** what is left (the unmade attempt is not counted) and exits 0. A hard kill leaves leases that expire; nothing else is needed. The whole stop is bounded: if a step is still waiting `WORKER_DRAIN_SECONDS` + 15 s after the signal (a database that has stopped answering, a handler that ignores its abort), the worker logs `shutdown-forced` and exits **1**, ahead of the container's 60 s `stopTimeout`; the leases it did not release expire as after a hard kill. The worker's database pool is limited (`apps/worker/src/pool-limits.ts`): 2 s to connect, 10 s per statement, 10 s idle inside a transaction, so a hung database fails the claim, the tickers and the stop instead of holding them.
 
 Its log is one JSON line per event with a fixed set of fields (worker id, job id, job type, attempt, outcome code, counts). Any string that is not a short code is dropped, so a payload value or an error message cannot be written.
 

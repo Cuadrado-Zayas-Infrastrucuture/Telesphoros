@@ -56,6 +56,18 @@ describe('what the worker as a whole may import from the API', () => {
   });
 });
 
+describe('the worker\'s database pool and stop sequence are the bounded ones', () => {
+  // Behavioural tests prove the limits and the deadline work (pool-limits.pg.test.ts, shutdown.test.ts); only a source pin proves main.ts uses them.
+  const main = readFileSync(join(here, 'main.ts'), 'utf8');
+  it('builds its pool with WORKER_POOL_LIMITS', () => {
+    expect(main).toMatch(/new Pool\(\{[^}]*\.\.\.WORKER_POOL_LIMITS/);
+  });
+  it('stops through createShutdown with a deadline taken from the drain, and does not call process.exit(0) itself', () => {
+    expect(main).toMatch(/createShutdown\(\{[\s\S]*deadlineMs:\s*shutdownDeadlineMs\(config\.drainSeconds\)/);
+    expect(main).not.toMatch(/process\.exit\(0\)/);
+  });
+});
+
 describe('the worker writes no files', () => {
   // The task runs with a read-only root filesystem and no volume (infrastructure/terraform/worker.guard.test.mjs), so a file write would fail on Fargate
   // and pass in every test on a writable disk. The test-only handler writes marker files by design; a production worker refuses to register it.
