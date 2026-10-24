@@ -11,6 +11,7 @@ import { testJobs } from './handlers/test-jobs';
 import { uploadsSweepJob } from './handlers/uploads-sweep';
 import { PgJobData } from './job-data';
 import { jsonLogger } from './log';
+import { installProcessFaultHandlers } from './process-faults';
 import { WORKER_POOL_LIMITS } from './pool-limits';
 import { Runner, type RegisteredJob } from './runner';
 import { Ticker } from './scheduler';
@@ -29,6 +30,9 @@ function registeredJobs(config: WorkerConfig, deps: HandlerDeps): RegisteredJob[
   if (config.testJobs) jobs.push(...testJobs(config.testEffectDir as string));
   return jobs;
 }
+
+// First, so a fault at any point ends the process with one PHI-safe line instead of Node's default message and stack.
+installProcessFaultHandlers(process, jsonLogger());
 
 async function main(): Promise<void> {
   const log = jsonLogger();

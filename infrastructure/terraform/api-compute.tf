@@ -660,6 +660,36 @@ resource "aws_cloudwatch_metric_alarm" "api_ledger_compromised" {
   depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_compromised]
 }
 
+# The API process hit an uncaught exception or an unhandled rejection and ended (apps/backend/src/common/process-faults.ts writes one line with a top-level `event`).
+# ECS replaces the task, so without this the only trace would be a restart. One occurrence is worth a person looking: it is a bug, not a blip.
+resource "aws_cloudwatch_log_metric_filter" "api_process_fault" {
+  count          = local.api_count
+  name           = "${local.name}-api-process-fault"
+  log_group_name = aws_cloudwatch_log_group.api[0].name
+  pattern        = "{ $.event = \"process-fault\" }"
+  metric_transformation {
+    name      = "ProcessFaults"
+    namespace = local.api_metrics
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "api_process_fault" {
+  count               = local.api_count
+  alarm_name          = "${local.name}-api-process-fault"
+  alarm_description   = "An API task ended on an uncaught exception or an unhandled rejection and was replaced. Read the `process-fault` line (the error class and code, never the message) in the API log group."
+  namespace           = local.api_metrics
+  metric_name         = "ProcessFaults"
+  statistic           = "Sum"
+  period              = 60
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  depends_on          = [aws_cloudwatch_log_metric_filter.api_process_fault]
+}
+
 resource "aws_cloudwatch_metric_alarm" "api_unhealthy_targets" {
   count               = local.api_service_count
   alarm_name          = "${local.name}-api-unhealthy-targets"

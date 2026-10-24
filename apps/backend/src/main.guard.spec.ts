@@ -19,6 +19,13 @@ describe('main.ts wiring', () => {
     expect(call).toMatch(/corsOrigins:\s*env\.CORS_ALLOWED_ORIGINS\b/);
   });
 
+  it('installs the process fault handlers before anything else runs', () => {
+    const install = main.indexOf("installProcessFaultHandlers(process, { service: 'api' })");
+    expect(install).toBeGreaterThan(-1);
+    expect(install).toBeLessThan(main.indexOf('async function bootstrap'));
+    expect(main).toMatch(/import \{ installProcessFaultHandlers \} from '\.\/common\/process-faults'/);
+  });
+
   it('detects a missing setting (control: the pattern fails on a call that leaves it out)', () => {
     expect(/trustProxyHops:\s*env\.TRUST_PROXY_HOPS\b/.test('configureApp(app, { corsOrigins: env.CORS_ALLOWED_ORIGINS })')).toBe(false);
   });

@@ -225,6 +225,19 @@ describe('the alarm patterns match the lines the worker writes', () => {
     for (const l of lines_) for (const name of ['worker_relay_failed', 'worker_schedule_failed']) expect(matches(filterPattern(name), l), `${String(l.event)} / ${name}`).toBe(false);
   });
 
+  it('the line a faulting worker writes raises the process-fault filter, and no other worker filter', async () => {
+    const { EventEmitter } = await import('node:events');
+    const { installProcessFaultHandlers } = await import('./process-faults');
+    const target = new EventEmitter();
+    const out: Json[] = [];
+    installProcessFaultHandlers(target, jsonLogger((l) => out.push(JSON.parse(l) as Json)), () => undefined);
+    target.emit('unhandledRejection', new Error('patient Jane Doe'));
+    expect(out).toHaveLength(1);
+    expect(matches(filterPattern('worker_process_fault'), out[0]!)).toBe(true);
+    for (const name of ['worker_relay_failed', 'worker_schedule_failed', 'worker_job_dead', 'worker_queue_age']) expect(matches(filterPattern(name), out[0]!), name).toBe(false);
+    expect(JSON.stringify(out)).not.toContain('Jane');
+  });
+
   it('main.ts names the tickers as the test does', () => {
     const main = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
     expect(main).toContain("new Ticker('outbox-relay'");

@@ -91,7 +91,7 @@ run "default_variables_plan" {
     error_message = "API hosting, and with it the provisioning task, is off by default"
   }
   assert {
-    condition     = length(aws_ecs_service.worker) == 0 && length(aws_ecs_task_definition.worker) == 0 && length(aws_cloudwatch_metric_alarm.worker_heartbeat_stale) == 0 && length(aws_cloudwatch_metric_alarm.worker_dead_waiting) == 0 && length(aws_cloudwatch_metric_alarm.worker_relay_failing) == 0 && length(aws_cloudwatch_metric_alarm.worker_schedule_failing) == 0 && length(aws_cloudwatch_metric_alarm.worker_outbox_stuck) == 0 && length(aws_secretsmanager_secret.worker_database_url) == 0
+    condition     = length(aws_ecs_service.worker) == 0 && length(aws_ecs_task_definition.worker) == 0 && length(aws_cloudwatch_metric_alarm.worker_heartbeat_stale) == 0 && length(aws_cloudwatch_metric_alarm.worker_dead_waiting) == 0 && length(aws_cloudwatch_metric_alarm.worker_relay_failing) == 0 && length(aws_cloudwatch_metric_alarm.worker_schedule_failing) == 0 && length(aws_cloudwatch_metric_alarm.worker_outbox_stuck) == 0 && length(aws_cloudwatch_metric_alarm.worker_process_fault) == 0 && length(aws_secretsmanager_secret.worker_database_url) == 0
     error_message = "the worker, with its secret and alarms, is off by default"
   }
   assert {
@@ -255,7 +255,7 @@ run "production_hosting_on" {
     error_message = "production keeps the 30-day recovery windows"
   }
   assert {
-    condition     = length(aws_ecs_service.worker) == 1 && length(aws_ecs_task_definition.worker) == 1 && length(aws_cloudwatch_metric_alarm.worker_heartbeat_stale) == 1 && length(aws_cloudwatch_metric_alarm.worker_dead_waiting) == 1 && length(aws_cloudwatch_metric_alarm.worker_relay_failing) == 1 && length(aws_cloudwatch_metric_alarm.worker_schedule_failing) == 1 && length(aws_cloudwatch_metric_alarm.worker_outbox_stuck) == 1
+    condition     = length(aws_ecs_service.worker) == 1 && length(aws_ecs_task_definition.worker) == 1 && length(aws_cloudwatch_metric_alarm.worker_heartbeat_stale) == 1 && length(aws_cloudwatch_metric_alarm.worker_dead_waiting) == 1 && length(aws_cloudwatch_metric_alarm.worker_relay_failing) == 1 && length(aws_cloudwatch_metric_alarm.worker_schedule_failing) == 1 && length(aws_cloudwatch_metric_alarm.worker_outbox_stuck) == 1 && length(aws_cloudwatch_metric_alarm.worker_process_fault) == 1
     error_message = "hosting on creates the worker service, its task definition and its alarms"
   }
   assert {
