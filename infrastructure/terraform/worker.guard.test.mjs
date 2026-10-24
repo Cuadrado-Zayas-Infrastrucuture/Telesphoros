@@ -14,6 +14,7 @@ const iam = read('./iam.tf');
 const runnerSource = read('../../apps/worker/src/runner.ts');
 const filesVerifySource = read('../../apps/worker/src/handlers/files-verify.ts');
 const mainSource = read('../../apps/worker/src/main.ts');
+const schedulerSource = read('../../apps/worker/src/scheduler.ts');
 
 const squash = (s) => s.replace(/[ \t]+/g, ' ');
 const code = (text) => text.split('\n').filter((line) => !/^\s*#/.test(line)).join('\n');
@@ -48,6 +49,7 @@ export function workerProblems(tf, iamTf = iam, sources = {}) {
   const runner = sources.runner ?? runnerSource;
   const filesVerify = sources.filesVerify ?? filesVerifySource;
   const main = sources.main ?? mainSource;
+  const scheduler = sources.scheduler ?? schedulerSource;
   const problems = [];
   const text = code(tf);
   const need = (condition, why) => {
@@ -163,7 +165,19 @@ export function workerProblems(tf, iamTf = iam, sources = {}) {
   need(has(drain, 'metric_name = "QueueAgeSeconds"') && line(drain, 'threshold = 900') && has(drain, 'comparison_operator = "GreaterThanThreshold"') && line(drain, 'evaluation_periods = 2'), 'a ready job waiting more than 15 minutes, twice running, must raise the queue alarm');
   const beat = one('resource "aws_cloudwatch_metric_alarm" "worker_heartbeat_stale"');
   need(has(beat, 'metric_name = "WorkerHeartbeats"') && has(beat, 'comparison_operator = "LessThanThreshold"') && line(beat, 'threshold = 1') && has(beat, 'treat_missing_data = "breaching"') && has(beat, 'statistic = "Sum"'), 'no worker report for five minutes (or no data at all) must raise the heartbeat alarm');
-  for (const alarm of ['worker_job_dead', 'worker_file_check_failed', 'worker_queue_not_draining', 'worker_heartbeat_stale']) {
+  // Silent failures: the dead count the worker logs, and the two tickers' failure lines.
+  need(pattern('worker_dead_waiting') === '{ $.event = "queue-stats" }' && has(one('resource "aws_cloudwatch_log_metric_filter" "worker_dead_waiting"'), 'value = "$.dead"'), 'the dead-waiting metric must be the dead count of the queue-stats line');
+  need(/\bdead:/.test(main), 'the worker must still log the dead count in queue-stats');
+  const waiting = one('resource "aws_cloudwatch_metric_alarm" "worker_dead_waiting"');
+  need(has(waiting, 'metric_name = "JobsDeadWaiting"') && has(waiting, 'statistic = "Maximum"') && line(waiting, 'threshold = 0') && has(waiting, 'comparison_operator = "GreaterThanThreshold"') && has(waiting, 'treat_missing_data = "notBreaching"'), 'any dead job waiting must raise the dead-waiting alarm');
+  need(pattern('worker_relay_failed') === '{ $.event = "outbox-relay-failed" }' && pattern('worker_schedule_failed') === '{ $.event = "schedule-failed" }', 'the relay and scheduler filters must match their failure events');
+  need(/new Ticker\('outbox-relay'/.test(main) && /new Ticker\('schedule'/.test(main) && /`\$\{this\.name\}-failed`/.test(scheduler), 'the tickers must still be named outbox-relay and schedule and log <name>-failed');
+  for (const [alarm, metric] of [['worker_relay_failing', 'OutboxRelayFailures'], ['worker_schedule_failing', 'ScheduleFailures']]) {
+    const b = one(`resource "aws_cloudwatch_metric_alarm" "${alarm}"`);
+    need(has(b, `metric_name = "${metric}"`) && has(b, 'statistic = "Sum"') && line(b, 'period = 60') && line(b, 'evaluation_periods = 3') && line(b, 'datapoints_to_alarm = 3') && line(b, 'threshold = 1') && has(b, 'comparison_operator = "GreaterThanOrEqualToThreshold"'), `${alarm} must need a failure in each of three consecutive minutes`);
+    need(has(b, 'treat_missing_data = "notBreaching"'), `a minute with no failure publishes no data point and must count as healthy for ${alarm}`);
+  }
+  for (const alarm of ['worker_job_dead', 'worker_file_check_failed', 'worker_queue_not_draining', 'worker_heartbeat_stale', 'worker_dead_waiting', 'worker_relay_failing', 'worker_schedule_failing']) {
     const b = one(`resource "aws_cloudwatch_metric_alarm" "${alarm}"`);
     need(has(b, 'alarm_actions = [aws_sns_topic.audit_alarms.arn]'), `the ${alarm} alarm must notify the audit topic`);
     need(has(b, 'namespace = local.worker_metrics'), `the ${alarm} alarm must read the worker metrics namespace`);
@@ -228,6 +242,13 @@ test('the worker compute guard reports each way the text could be weakened (cont
     ['the queue alarm threshold raised', 'threshold           = 900', 'threshold           = 90000'],
     ['the queue alarm needs one check only', 'evaluation_periods  = 2', 'evaluation_periods  = 1'],
     ['silence is fine for the heartbeat', 'comparison_operator = "LessThanThreshold"\n  treat_missing_data  = "breaching"', 'comparison_operator = "LessThanThreshold"\n  treat_missing_data  = "notBreaching"'],
+    ['the dead-waiting metric is a count', 'value     = "$.dead"', 'value     = "1"'],
+    ['the dead-waiting alarm needs two dead jobs', 'comparison_operator = "GreaterThanThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.worker_dead_waiting]', 'comparison_operator = "GreaterThanThreshold"\n  treat_missing_data  = "breaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.worker_dead_waiting]'],
+    ['the relay pattern names another event', '\\"outbox-relay-failed\\"', '\\"outbox-relay-ran\\"'],
+    ['the scheduler pattern names another event', '\\"schedule-failed\\"', '\\"schedule-ran\\"'],
+    ['the relay alarm fires on one failed minute', 'datapoints_to_alarm = 3\n  threshold           = 1\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.worker_relay_failed]', 'datapoints_to_alarm = 1\n  threshold           = 1\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.worker_relay_failed]'],
+    ['the scheduler alarm treats silence as failure', 'treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.worker_schedule_failed]', 'treat_missing_data  = "breaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.worker_schedule_failed]'],
+    ['the scheduler alarm tells nobody', 'alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.worker_schedule_failed]', 'alarm_actions       = []\n  depends_on          = [aws_cloudwatch_log_metric_filter.worker_schedule_failed]'],
     ['an alarm tells nobody', 'resource "aws_cloudwatch_metric_alarm" "worker_job_dead" {\n  count               = local.api_count\n  alarm_name          = "${local.name}-worker-job-dead"\n  alarm_description   = "A background job ended dead and waits for a person: run `jobs dead` (docs/ops/jobs.md)."\n  namespace           = local.worker_metrics\n  metric_name         = "JobsDead"\n  statistic           = "Sum"\n  period              = 300\n  evaluation_periods  = 1\n  threshold           = 1\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]', 'resource "aws_cloudwatch_metric_alarm" "worker_job_dead" {\n  count               = local.api_count\n  alarm_name          = "${local.name}-worker-job-dead"\n  alarm_description   = "A background job ended dead and waits for a person: run `jobs dead` (docs/ops/jobs.md)."\n  namespace           = local.worker_metrics\n  metric_name         = "JobsDead"\n  statistic           = "Sum"\n  period              = 300\n  evaluation_periods  = 1\n  threshold           = 1\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = []'],
     ['an output missing', 'output "worker_service_name"', 'output "worker_service"'],
   ];
@@ -254,6 +275,10 @@ test('the worker compute guard reports each way the text could be weakened (cont
     ['the file handlers stop logging the run', { filesVerify: filesVerifySource.replace('running: bad.length', 'bad: bad.length') }],
     ['the worker stops logging queue-stats', { main: mainSource.replaceAll("'queue-stats'", "'queue'") }],
     ['the worker stops logging the age', { main: mainSource.replace('ageSeconds:', 'age:') }],
+    ['the worker stops logging the dead count', { main: mainSource.replace('dead: rows', 'deadJobs: rows') }],
+    ['the relay ticker is renamed', { main: mainSource.replace("new Ticker('outbox-relay'", "new Ticker('relay'") }],
+    ['the scheduler ticker is renamed', { main: mainSource.replace("new Ticker('schedule'", "new Ticker('sched'") }],
+    ['the ticker stops logging <name>-failed', { scheduler: schedulerSource.replace('`${this.name}-failed`', '`${this.name}-error`') }],
   ];
   for (const [name, sources] of workerSide) assert.ok(workerProblems(worker, iam, sources).length > 0, `a changed worker must be reported: ${name}`);
   assert.deepEqual(workerProblems(worker), []); // control: the unchanged text is clean
