@@ -170,8 +170,19 @@ export interface MigrationReadiness {
  * Pending migrations are reported, not tolerated: the caller refuses them. The migrator itself (`migrateUp`, `migrateDown`,
  * `migrationStatus`) stays strict and still refuses any history it does not know.
  */
+let shipped: Migration[] | undefined;
+
+/**
+ * The migrations in this image's own directory, read and hashed once. /ready is public and is asked on every health probe, and `loadMigrations` reads every file
+ * with synchronous calls, which blocks the event loop for each request. The files of a running image cannot change (read-only root filesystem), so the answer cannot
+ * go stale. Only the default directory is kept: a directory a caller names is read each time, as before.
+ */
+function shippedMigrations(): Migration[] {
+  return (shipped ??= loadMigrations());
+}
+
 export async function migrationReadiness(db: Queryable, dir?: string): Promise<MigrationReadiness> {
-  const known = loadMigrations(dir);
+  const known = dir === undefined ? shippedMigrations() : loadMigrations(dir);
   const applied = await readApplied(db);
   verifyHistory(applied.slice(0, known.length), known);
   const newer = applied.slice(known.length);
