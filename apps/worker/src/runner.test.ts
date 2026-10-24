@@ -145,9 +145,9 @@ describe('the pause after a failed claim (audit item 28: workers recovering from
     const delays: number[] = [];
     const real = globalThis.setTimeout;
     vi.spyOn(Math, 'random').mockReturnValue(0);
-    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number, ...rest: unknown[]) => {
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
       if (typeof ms === 'number' && [32, 64, 128].includes(ms)) delays.push(ms);
-      return real(fn, Math.min(ms ?? 0, 5), ...rest);
+      return real(fn, Math.min(ms ?? 0, 5));
     }) as typeof setTimeout);
     const q = new FakeQueue();
     q.claimError = true;
