@@ -1,4 +1,4 @@
-import type { RecommendationStrength, ReportStatus, ReportType } from '@telesphoros/shared-types';
+import type { ReportStatus, ReportType } from '@telesphoros/shared-types';
 
 /**
  * Internal records. `tenantId` (who may see the row) and `createdBy` (the individual who made it)
@@ -13,6 +13,9 @@ export interface PatientRecord {
   updatedAt: string;
   /** The patient this one was merged into (M2.1c-2), if any. Read from the merge records; never stored on the patient row. */
   mergedInto?: string | null;
+  /** The retry identity the patient was created under, and the hash of the original request (internal; never returned by the API). */
+  creationRequestId?: string;
+  creationRequestHash?: string;
 }
 
 export interface ReportRecord {
@@ -42,21 +45,6 @@ export interface ReportRecord {
   uploadedBy?: string | null;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface RecommendationRecord {
-  id: string;
-  tenantId: string;
-  createdBy: string;
-  patientId: string;
-  reportId: string;
-  gene: string;
-  drug: string;
-  phenotype: string;
-  summary: string;
-  strength: RecommendationStrength;
-  guidelineVersion: string;
-  createdAt: string;
 }
 
 export interface PageRequest {

@@ -3,10 +3,8 @@ import { Database } from '../../src/db/database';
 import { IntegrityError } from '../../src/storage/errors';
 import { InMemoryPatientsRepository, PatientsRepository } from '../../src/storage/patients.repository';
 import { PostgresPatientsRepository } from '../../src/storage/postgres/patients.repository';
-import { PostgresRecommendationsRepository } from '../../src/storage/postgres/recommendations.repository';
 import { PostgresReportsRepository } from '../../src/storage/postgres/reports.repository';
-import { InMemoryRecommendationsRepository, RecommendationsRepository } from '../../src/storage/recommendations.repository';
-import type { PatientRecord, RecommendationRecord, ReportRecord } from '../../src/storage/records';
+import type { PatientRecord, ReportRecord } from '../../src/storage/records';
 import { InMemoryReportsRepository, ReportsRepository } from '../../src/storage/reports.repository';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { declareUpload, finishUpload } from '../helpers/uploads';
@@ -14,7 +12,6 @@ import { declareUpload, finishUpload } from '../helpers/uploads';
 interface Stores {
   patients: PatientsRepository;
   reports: ReportsRepository;
-  recommendations: RecommendationsRepository;
   close(): Promise<void>;
 }
 
@@ -26,10 +23,6 @@ const report = (tenantId: string, patientId: string, over: Partial<ReportRecord>
   id: randomUUID(), tenantId, createdBy: 'syn-actor', patientId, type: 'vcf', filename: 'a.vcf', sizeBytes: 100, status: 'received',
   storageKey: null, contentType: null, sha256: null, uploadedAt: null, objectVersion: null, uploadRequestedBy: null, uploadedBy: null,
   createdAt: stamp(), updatedAt: stamp(), ...over,
-});
-const recommendation = (tenantId: string, patientId: string, reportId: string, over: Partial<RecommendationRecord> = {}): RecommendationRecord => ({
-  id: randomUUID(), tenantId, createdBy: 'syn-actor', patientId, reportId, gene: 'G', drug: 'd', phenotype: 'p', summary: 's',
-  strength: 'Strong', guidelineVersion: 'v0', createdAt: stamp(), ...over,
 });
 
 let pgDb: EphemeralDatabase;
@@ -46,14 +39,12 @@ afterAll(async () => {
 const memory = async (): Promise<Stores> => ({
   patients: new InMemoryPatientsRepository(),
   reports: new InMemoryReportsRepository(),
-  recommendations: new InMemoryRecommendationsRepository(),
   close: async () => undefined,
 });
 // The Postgres stores share one database, so each test uses its own tenant ids to stay independent.
 const postgres = async (): Promise<Stores> => ({
   patients: new PostgresPatientsRepository(database),
   reports: new PostgresReportsRepository(database),
-  recommendations: new PostgresRecommendationsRepository(database),
   close: async () => undefined,
 });
 
@@ -207,31 +198,6 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
       expect(await reports.findById(b, r.id)).toBeUndefined();
       expect((await reports.list(b, { offset: 0, limit: 10 }, {})).total).toBe(0);
       expect(await reports.delete(b, r.id)).toBe(false);
-    });
-  });
-
-  describe('recommendations', () => {
-    it('lists, filters and fetches, scoped to the tenant', async () => {
-      const { patients, reports, recommendations } = await make();
-      const [a, b] = [tenant(), tenant()];
-      const pa = patient(a, 'SYN-A');
-      const pb = patient(b, 'SYN-B');
-      await patients.insert(pa);
-      await patients.insert(pb);
-      const ra1 = report(a, pa.id);
-      const ra2 = report(a, pa.id);
-      const rb = report(b, pb.id);
-      for (const r of [ra1, ra2, rb]) await reports.insert(r);
-      const rec1 = recommendation(a, pa.id, ra1.id);
-      await recommendations.insert(rec1);
-      await recommendations.insert(recommendation(a, pa.id, ra2.id));
-      await recommendations.insert(recommendation(b, pb.id, rb.id));
-
-      expect((await recommendations.list(a, { offset: 0, limit: 10 }, {})).total).toBe(2);
-      expect((await recommendations.list(a, { offset: 0, limit: 10 }, { reportId: ra1.id })).total).toBe(1);
-      expect((await recommendations.list(a, { offset: 0, limit: 10 }, { patientId: pa.id })).total).toBe(2);
-      expect(await recommendations.findById(a, rec1.id)).toEqual(rec1);
-      expect(await recommendations.findById(b, rec1.id)).toBeUndefined();
     });
   });
 });

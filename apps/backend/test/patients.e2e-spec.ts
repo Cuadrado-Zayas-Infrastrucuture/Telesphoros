@@ -183,3 +183,34 @@ describe('patients: pagination envelope', () => {
     },
   );
 });
+
+describe('patients: a retried create (audit item 25)', () => {
+  const requestId = '5a1d3c2e-7b84-4f6a-9d21-3c8e0f7a4b19';
+  it('answers a repeat of the same request with the same patient, where a repeat without an id answers 409', async () => {
+    const token = await clinicianA();
+    const first = await api().post(BASE).set(bearer(token)).send({ label: 'SYN-RETRY-1', requestId }).expect(201);
+    const again = await api().post(BASE).set(bearer(token)).send({ label: 'SYN-RETRY-1', requestId }).expect(201);
+    expect(again.body.id).toBe(first.body.id);
+    expect(Object.keys(again.body).sort()).toEqual(['createdAt', 'id', 'label', 'mergedInto', 'updatedAt']); // the retry id is not an output
+    await api().post(BASE).set(bearer(token)).send({ label: 'SYN-RETRY-1' }).expect(409); // control: no id, no replay
+    const list = await api().get(BASE).set(bearer(token)).expect(200);
+    expect(list.body.data.filter((p: { label: string }) => p.label === 'SYN-RETRY-1')).toHaveLength(1);
+  });
+
+  it('refuses the same id with another label, and reserves the id for the person who made it', async () => {
+    const token = await clinicianA();
+    const id = '6b2e4d3f-8c95-4a7b-8e32-4d9f1a8b5c20';
+    await api().post(BASE).set(bearer(token)).send({ label: 'SYN-RETRY-2', requestId: id }).expect(201);
+    const changed = await api().post(BASE).set(bearer(token)).send({ label: 'SYN-RETRY-2B', requestId: id }).expect(409);
+    expect(changed.body.error.details?.[0]?.reason).toBe('request-id-reused');
+    const other = await api().post(BASE).set(bearer(await clinicianB())).send({ label: 'SYN-RETRY-2', requestId: id }).expect(201); // another organization: its own
+    expect(other.body.label).toBe('SYN-RETRY-2');
+  });
+
+  it('refuses a request id that is not a UUID, and the replacement body still takes none', async () => {
+    const token = await clinicianA();
+    await api().post(BASE).set(bearer(token)).send({ label: 'SYN-RETRY-3', requestId: 'not-a-uuid' }).expect(400);
+    const mine = await makePatient(token, 'SYN-RETRY-4');
+    await api().put(`${BASE}/${mine.id}`).set(bearer(token)).send({ label: 'SYN-RETRY-4B', requestId }).expect(400);
+  });
+});
