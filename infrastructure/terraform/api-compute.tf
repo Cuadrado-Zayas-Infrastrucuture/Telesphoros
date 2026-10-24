@@ -465,6 +465,16 @@ resource "aws_ecs_task_definition" "api" {
         { name = "TLS_CERT_PEM", valueFrom = aws_secretsmanager_secret.api_tls_cert[0].arn },
         { name = "TLS_KEY_PEM", valueFrom = aws_secretsmanager_secret.api_tls_key[0].arn },
       ]
+      # Liveness: a wedged process (an event loop that no longer answers) is replaced by ECS. It asks /api/v1/health, which touches no dependency, so a database slowdown
+      # cannot restart healthy tasks; the load balancer keeps asking /api/v1/ready. The listener is TLS with a certificate the load balancer does not verify, and nor does this
+      # loopback request. Not counted during the first 60 seconds.
+      healthCheck = {
+        command     = ["CMD", "node", "-e", "process.env.NODE_TLS_REJECT_UNAUTHORIZED='0';fetch('https://127.0.0.1:${local.api_port}/api/v1/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 60
+      }
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -594,6 +604,10 @@ resource "aws_ecs_service" "api" {
     enable   = true
     rollback = true
   }
+
+  # Without this, `terraform apply` returns as soon as the service is updated: a deployment the circuit breaker then rolls back would still read as a success.
+  # With it, apply waits for the new tasks to become steady and fails if the deployment fails.
+  wait_for_steady_state = true
 
   network_configuration {
     subnets          = local.data_subnet_ids

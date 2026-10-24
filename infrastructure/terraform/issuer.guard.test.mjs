@@ -242,6 +242,7 @@ export function issuerProblems(tf, rest = others, sources = {}) {
   need(has(task, 'healthCheck') && has(task, '/livez'), 'the issuer must be checked on /livez (by the container itself)');
   const service = one('resource "aws_ecs_service" "issuer"');
   need(!/load_balancer/.test(code(service)), 'no load balancer may reach the issuer');
+  need(has(service, 'wait_for_steady_state = true'), 'apply must wait for the service to become steady, or a deployment the circuit breaker rolls back reads as a success');
   need(has(service, 'enable_execute_command = false'), 'no shell may be opened into an issuer task');
   need(has(service, 'launch_type = "FARGATE"') && has(service, 'desired_count = var.issuer_desired_count') && has(service, 'cluster = aws_ecs_cluster.api[0].id'), 'the issuer must be Fargate on the API cluster with its own desired count');
   need(has(service, 'security_groups = [aws_security_group.issuer_tasks[0].id]') && has(service, 'subnets = local.data_subnet_ids') && has(service, 'assign_public_ip = local.tasks_public_ip') && !/assign_public_ip\s*=\s*true/.test(code(service)), 'the issuer must sit in its own security group in the data subnets, with a public address only through the synthetic profile');
@@ -316,6 +317,7 @@ test('the issuer compute text has no problems (and the scan found the files: a f
 
 test('the issuer compute guard reports each way the issuer text could be weakened (controls)', () => {
   const weakened = [
+    ['the service stops waiting for a steady state', '  wait_for_steady_state = true\n', ''],
     ['the API address typed again instead of built', 'issuer_client_url         = "http://${local.issuer_dns_name}:${local.issuer_port}"', 'issuer_client_url         = "http://session-issuer:8082"'],
     ['the API address uses another port', 'issuer_client_url         = "http://${local.issuer_dns_name}:${local.issuer_port}"', 'issuer_client_url         = "http://${local.issuer_dns_name}:8083"'],
     ['the API address is given even with the issuer off', ' name => value if local.issuer_service_count == 1 }', ' name => value }'],
