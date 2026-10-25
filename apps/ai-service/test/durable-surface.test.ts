@@ -61,11 +61,23 @@ describe('durable surface: reachability, imports and inherited queue methods', (
   });
 
   test('P2-02 durable modules import only an allowlist and touch no process, network, timer or dynamic import', () => {
-    const allowed = ['zod', 'node:crypto', '@telesphoros/jobs', '../src/contracts', '../src/evidence', '../src/outcome-v2', './contracts', './kernel', './postgres', './queue'];
+    const allowed = [
+      'zod',
+      'node:crypto',
+      '@telesphoros/jobs',
+      '../src/contracts',
+      '../src/evidence',
+      '../src/explain-contracts',
+      '../src/outcome-v2',
+      './contracts',
+      './kernel',
+      './postgres',
+      './queue',
+    ];
     const files = readdirSync(resolve(root, 'durable'))
       .filter((f) => f.endsWith('.ts'))
       .sort();
-    expect(files).toEqual(['contracts.ts', 'job.ts', 'kernel.ts', 'postgres.ts', 'queue.ts', 'receipt-store.ts']);
+    expect(files).toEqual(['contracts.ts', 'job.ts', 'kernel.ts', 'postgres.ts', 'queue.ts', 'receipt-store.ts', 'run-store.ts']);
     for (const f of files) {
       const { specifiers, ambient } = scan(readFileSync(resolve(root, 'durable', f), 'utf8'));
       expect.soft({ f, extra: specifiers.filter((s) => !allowed.includes(s)), ambient }).toEqual({ f, extra: [], ambient: [] });

@@ -50,17 +50,18 @@ export const explainContextSchema = z.strictObject({
 export type ExplainContext = z.infer<typeof explainContextSchema>;
 export const EXPLAIN_CAPABILITY = 'pgx.explain';
 
+/** Asynchronous because the real store is a database. Every method may reject; the run treats a rejection as a hold, never as a pass. */
 export interface ExplainStore {
-  admit(key: string, tuple: string, context: ExplainContext, harnessVersion: string, utc: number, mono: number): { kind: 'new' | 'existing' | 'conflict'; run: Run };
-  get(id: string): Run;
-  advance(expected: Run, state: State): Run | null;
+  admit(key: string, tuple: string, context: ExplainContext, harnessVersion: string, utc: number, mono: number): Promise<{ kind: 'new' | 'existing' | 'conflict'; run: Run }>;
+  get(id: string): Promise<Run>;
+  advance(expected: Run, state: State): Promise<Run | null>;
 }
 export interface ExplainBudgets {
-  reserve(run: Run): boolean;
-  begin(runId: string, attemptId: string): boolean;
-  observe(runId: string, role: 'draft' | 'verify', attemptId: string, observation: Observation | null): boolean;
-  complete(runId: string): void;
-  counters(runId: string): { slots: number; tokens: number };
+  reserve(run: Run): Promise<boolean>;
+  begin(runId: string, attemptId: string): Promise<boolean>;
+  observe(runId: string, role: 'draft' | 'verify', attemptId: string, observation: Observation | null): Promise<boolean>;
+  complete(runId: string): Promise<void>;
+  counters(runId: string): Promise<{ slots: number; tokens: number }>;
 }
 export interface ExplainPorts {
   authority: { current(context: ExplainContext): Authority };

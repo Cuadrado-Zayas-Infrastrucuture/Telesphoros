@@ -3,7 +3,7 @@ import { Client } from 'pg';
 import { migrateDown } from '../../src/db/migrator';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { registerTenantRow } from '../helpers/membership';
-import { revertThrough } from '../helpers/migration-history';
+import { revertAbove, revertThrough } from '../helpers/migration-history';
 
 /**
  * Migration 0048 (LLM harness 3b-1): the receipt of an explanation run is stored by three functions and nothing else. Every hostile case sits next to a positive control that
@@ -446,7 +446,7 @@ describe('ownership and privileges', () => {
                   has_function_privilege('telesphoros_app', p.oid, 'EXECUTE') AS app, has_function_privilege('telesphoros_worker', p.oid, 'EXECUTE') AS worker,
                   has_function_privilege('telesphoros_ledger_verifier', p.oid, 'EXECUTE') AS verifier, has_function_privilege('telesphoros_issuer', p.oid, 'EXECUTE') AS issuer,
                   has_function_privilege('public', p.oid, 'EXECUTE') AS pub
-           FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname LIKE 'agentic_explain_%' ORDER BY 1`,
+           FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND (p.proname LIKE 'agentic_explain_receipt%' OR p.proname = 'agentic_explain_identity') ORDER BY 1`,
         )
       ).rows;
       expect(fns.map((f) => f.proname)).toEqual([
@@ -573,14 +573,15 @@ describe('the down migration', () => {
           [SHA('a'), HMAC('c')],
         ),
       );
-      const undo = revertThrough('agentic_explain_receipts');
+      const above = revertAbove('agentic_explain_receipts'); // whatever sits above 0048 (the runs, 0049) reverts freely while it is empty
       await withAdmin(fresh.adminUrl, async (c) => {
-        await expect(migrateDown(c, undo.steps)).rejects.toThrow(/Refusing to drop agentic_explain_receipts/);
+        expect(await migrateDown(c, above.steps)).toEqual(above.reverted);
+        await expect(migrateDown(c, 1)).rejects.toThrow(/Refusing to drop agentic_explain_receipts/);
         expect((await c.query(`SELECT to_regclass('public.agentic_explain_receipts') AS t`)).rows[0].t).not.toBeNull();
         await c.query(`SET telesphoros.allow_receipts_drop = 'Yes'`);
-        await expect(migrateDown(c, undo.steps)).rejects.toThrow(/Refusing to drop agentic_explain_receipts/);
+        await expect(migrateDown(c, 1)).rejects.toThrow(/Refusing to drop agentic_explain_receipts/);
         await c.query(`SET telesphoros.allow_receipts_drop = 'yes'`);
-        expect(await migrateDown(c, undo.steps)).toEqual(undo.reverted);
+        expect(await migrateDown(c, 1)).toEqual(['0048']);
       });
     } finally {
       await fresh.drop();
