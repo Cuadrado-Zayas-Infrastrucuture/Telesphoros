@@ -3,13 +3,14 @@ import { ALL_SENSORS, runSensors } from '../src/evaluators/sensors';
 import { glossaryDigest, lexiconDigest } from '../src/evaluators/lexicons';
 import { explainableResultSchema, explanationSchema, SENSORS, type Sensor, type SensorId } from '../src/evaluators/types';
 import { obedient, scripted } from '../src/model-clients/scripted';
-import { buildPrompt, templateDigest } from '../src/prompts/explain-v1';
+import { buildPrompt, repairTemplateDigest, templateDigest } from '../src/prompts/explain-v1';
+import { verifyTemplateDigest } from '../src/prompts/verify-v1';
 import { ATTACKS, type Attack } from './attacks/attacks';
 import { CASES, type GoldenCase } from './golden/cases';
 import { RESULTS } from './golden/results';
 import { PINNED } from './pinned';
 
-export const currentDigests = () => ({ template: templateDigest(), lexicon: lexiconDigest(), glossary: glossaryDigest() });
+export const currentDigests = () => ({ template: templateDigest(), repair: repairTemplateDigest(), verify: verifyTemplateDigest(), lexicon: lexiconDigest(), glossary: glossaryDigest() });
 export const harnessVersion = (d = currentDigests()): string => hashBytes(JSON.stringify(d));
 
 /** How the prompt is composed from a result and the hostile inbound fields. The real builder ignores the inbound fields by construction. */
@@ -67,7 +68,7 @@ export async function runGate(options: GateOptions = {}): Promise<GateReport> {
   for (const atk of attacks) { a[atk.cls]++; if (await attackEffect(atk, sensors, compose)) a.effective++; }
   const sensorsComplete = Object.keys(sensors).sort().join() === [...SENSORS].sort().join() && SENSORS.every(id => typeof sensors[id] === 'function');
   const digests = currentDigests(), pinned = options.pinned ?? PINNED;
-  const digestsMatch = (['template', 'lexicon', 'glossary'] as const).every(k => digests[k] === pinned[k]);
+  const digestsMatch = (['template', 'repair', 'verify', 'lexicon', 'glossary'] as const).every(k => digests[k] === pinned[k]);
   const ok = sensorsComplete && digestsMatch && c.wronglyReleased === 0 && c.reasonMismatch === 0 && a.effective === 0 && c.total > 0 && a.total > 0;
   return { harnessVersion: harnessVersion(digests), cases: c, attacks: a, sensorsComplete, digestsMatch, ok };
 }
