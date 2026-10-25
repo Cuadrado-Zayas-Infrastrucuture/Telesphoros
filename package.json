@@ -8,7 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "lint": "pnpm -r --if-present lint",
+    "lint": "pnpm -r --if-present lint && pnpm format:check",
     "format": "prettier --write \"{apps,packages}/*/{src,test}/**/*.{ts,tsx,mts,cts,js,mjs,cjs}\"",
     "format:check": "prettier --check \"{apps,packages}/*/{src,test}/**/*.{ts,tsx,mts,cts,js,mjs,cjs}\"",
     "typecheck": "node scripts/workspace-build/workspace.cjs run typecheck",

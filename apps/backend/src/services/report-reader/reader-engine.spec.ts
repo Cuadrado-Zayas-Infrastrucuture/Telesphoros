@@ -77,8 +77,9 @@ describe('the skip list for a checkout without the reader engine', () => {
         else process.env.READER_ENGINE = readerEngine;
         let config!: { testPathIgnorePatterns: string[] };
         jest.isolateModules(() => {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
           config = require('../../../jest.config.js');
-        }); // eslint-disable-line @typescript-eslint/no-require-imports
+        });
         return { patterns: config.testPathIgnorePatterns, announced };
       } finally {
         process.stderr.write = write;
