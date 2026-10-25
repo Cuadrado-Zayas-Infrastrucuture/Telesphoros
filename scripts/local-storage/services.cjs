@@ -89,4 +89,8 @@ async function api(m) {
   stop.reconcile = () => schedule.run(); // Operations/test handle only; no HTTP trigger or interval override.
   return stop;
 }
-module.exports = { saveMultipart, reconcileStaging, backend, dist, dbUrl, endpoint, sweep, clocks, api };
+// Registers the demo organizations and users. Lazy on purpose: it needs the built backend and identity provider, which the launcher-cors test (and the CI browser job)
+// do not have, and that test replaces this whole object.
+const seedPersonas = (db) => require('../local-review/seed.cjs').seedPersonas(db);
+
+module.exports = { saveMultipart, reconcileStaging, backend, dist, dbUrl, endpoint, sweep, clocks, api, seedPersonas };

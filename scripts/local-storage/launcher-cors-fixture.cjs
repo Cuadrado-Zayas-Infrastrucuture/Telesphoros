@@ -72,7 +72,7 @@ async function captureOwned(root, webPort, motoPort, runtime, defect) {
         rolsuper: false, rolbypassrls: false, rolcreatedb: false, rolcreaterole: false,
       }] }; }
     } } : captureSdk(policies),
-    dist: () => ({ migrateUp: async () => {} }), saveMultipart() {},
+    dist: () => ({ migrateUp: async () => {} }), seedPersonas: async () => {}, saveMultipart() {},
     dbUrl: () => 'postgresql://synthetic-capture@127.0.0.1/capture',
     endpoint: () => 'http://127.0.0.1:' + motoPort,
   };

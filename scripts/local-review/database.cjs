@@ -16,7 +16,8 @@ async function setup(){
  await db.query(`DO $$ BEGIN
  IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='demo_app') THEN CREATE ROLE demo_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS IN ROLE telesphoros_app; END IF;
  IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='demo_verifier') THEN CREATE ROLE demo_verifier LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS IN ROLE telesphoros_ledger_verifier; END IF; END $$`);
- await db.end();console.log('Dedicated synthetic database ready. Loopback trust authentication: no real data.');
+ const seeded=await require('./seed.cjs').seedPersonas(db);await db.end();
+ console.log(`Dedicated synthetic database ready. Loopback trust authentication: no real data. Demo users: ${seeded.members} members of ${seeded.tenants} organizations (${seeded.changed} changed).`);
 }
 const command=process.argv[2];
 if(command==='setup')setup().catch(()=>{console.error('Local database setup failed; no connection values logged.');process.exitCode=1;});
