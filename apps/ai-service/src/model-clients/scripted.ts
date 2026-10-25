@@ -2,6 +2,7 @@ import { assertRequestShape, type ModelPort, type ModelRequest } from './port';
 
 /** A stand-in that returns what a script says, whatever the prompt is. No network. */
 export const scripted = (reply: (request: ModelRequest) => unknown): ModelPort => ({
+  identity: { modelId: 'scripted-v1', invocationPath: 'scripted', sdkVersion: 'none' },
   async complete(request) {
     assertRequestShape(request);
     return { artifact: reply(request), observation: { inputUnits: Math.ceil(request.prompt.length / 4), generatedUnits: 64 } };

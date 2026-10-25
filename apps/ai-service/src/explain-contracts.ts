@@ -2,6 +2,8 @@ import { z } from 'zod';
 import type { Authority, Observation, Run, State } from './contracts';
 import type { ExplainableResult, Explanation } from './evaluators/types';
 import type { ModelPort } from './model-clients/port';
+import type { OutcomeV2 } from './outcome-v2';
+import type { TraceStep } from './trace';
 
 export const EXPLAIN_TASK = 'pgx.explain.v1';
 /** The kernel's loop limits (kernel.ts, budgets.ts), restated for the explanation run. A test pins them to the synthetic profile's budget. */
@@ -70,6 +72,8 @@ export interface ExplainPorts {
   clock: { utcNowMs(): number; monotonicNowMs(): number };
   boundary(name: string): void;
   harnessVersion: string;
+  /** The secret key for keyed digests (FR-009), from the secrets store at the composition root. At least 32 bytes. */
+  digestKey: Uint8Array;
 }
 
 export const EXPLANATION_LABEL = 'AI-generated explanation of the guideline text above. Check it against the guideline.';
@@ -77,7 +81,11 @@ export interface OutcomeBase {
   runId: string | null;
   engineText: string;
   guardsRun: string[];
-  counters: { slots: number; tokens: number; modelCalls: number };
+  counters: { slots: number; tokens: number; modelCalls: number; inputUnits: number; generatedUnits: number; usageState: 'known' | 'unknown' };
+  /** Steps of this run: names, states, fixed codes, durations and usage. No text. */
+  trace: TraceStep[];
+  /** The durable record (outcome v2), or null when the facts do not make a valid one. The engine text above is returned either way. */
+  receipt: OutcomeV2 | null;
 }
 export type ExplainOutcome = OutcomeBase &
   ({ released: true; reasonCode: 'RELEASED'; label: typeof EXPLANATION_LABEL; explanation: Explanation } | { released: false; reasonCode: FailureReason; detail: string | null });

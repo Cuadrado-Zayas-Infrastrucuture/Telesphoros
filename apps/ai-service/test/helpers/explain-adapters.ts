@@ -5,7 +5,7 @@ import { canTransition } from '../../src/kernel';
 import { syntheticProfile } from '../../src/policy';
 import { EXPLAIN_CAPABILITY, type ExplainBudgets, type ExplainContext, type ExplainPorts, type ExplainRequest, type ExplainStore } from '../../src/explain-contracts';
 import type { Authority, Observation, Run, State } from '../../src/contracts';
-import type { ModelPort, ModelRequest } from '../../src/model-clients/port';
+import type { ModelPort, ModelReply, ModelRequest } from '../../src/model-clients/port';
 import { scripted } from '../../src/model-clients/scripted';
 import { repairTemplateDigest, templateDigest } from '../../src/prompts/explain-v1';
 import { verifyTemplateDigest } from '../../src/prompts/verify-v1';
@@ -79,6 +79,10 @@ export type Role = 'draft' | 'repair' | 'verify';
 export const roleOf = (r: ModelRequest): Role =>
   r.templateDigest === verifyTemplateDigest() ? 'verify' : r.templateDigest === repairTemplateDigest() ? 'repair' : r.templateDigest === templateDigest() ? 'draft' : 'draft';
 
+/** A model port from a bare `complete`, with the offline stand-in's identity. */
+export const modelOf = (complete: (request: ModelRequest) => Promise<ModelReply>): ModelPort => ({ identity: scripted(() => 0).identity, complete });
+export const TEST_KEY = new Uint8Array(32).fill(7);
+
 export interface ScenarioOptions {
   replies?: Partial<Record<Role, unknown | (() => unknown)>>;
   model?: ModelPort;
@@ -127,6 +131,7 @@ export function explainScenario(options: ScenarioOptions = {}) {
       hooks[name]?.();
     },
     harnessVersion: 'sha256:' + 'b'.repeat(64),
+    digestKey: TEST_KEY,
   };
   const context: ExplainContext = { tenantId: 'tenant-a', requesterRef: 'staff-a', authorityGeneration: 1, purpose: 'pharmacogenomic-explanation' };
   const request: ExplainRequest = {

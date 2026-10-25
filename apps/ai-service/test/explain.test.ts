@@ -8,7 +8,7 @@ import { FALLBACK_TEXT } from '../src/fallback';
 import { syntheticProfile } from '../src/policy';
 import { TASKS } from '../src/tasks';
 import { runVector } from './helpers/memory-adapters';
-import { accept, BAD_GLOSS, explainScenario, GOOD } from './helpers/explain-adapters';
+import { accept, BAD_GLOSS, explainScenario, GOOD, modelOf } from './helpers/explain-adapters';
 
 type S = ReturnType<typeof explainScenario>;
 const go = (s: S, registry?: Parameters<typeof runExplanation>[3]) => runExplanation(s.request, s.context, s.ports, registry);
@@ -182,16 +182,14 @@ describe('every failure shows the engine text alone, with no model-written word 
       return { o: await go(s), text: FALLBACK_TEXT['unknown-outcome'] };
     },
     USAGE_HELD: async () => {
-      const s = explainScenario({ model: { complete: async () => ({ artifact: marked, observation: null }) } });
+      const s = explainScenario({ model: modelOf(async () => ({ artifact: marked, observation: null })) });
       return { o: await go(s), text: avoidText };
     },
     MODEL_ERROR: async () => {
       const s = explainScenario({
-        model: {
-          complete: async () => {
-            throw new Error('MODELWORD upstream said no');
-          },
-        },
+        model: modelOf(async () => {
+          throw new Error('MODELWORD upstream said no');
+        }),
       });
       return { o: await go(s), text: avoidText };
     },
@@ -256,7 +254,7 @@ describe('loop control, authority and caps carry over from the kernel (FR-007)',
     expect(s.calls.model).toBe(calls);
   });
   test('an over-large usage report is a cap hold', async () => {
-    const s = explainScenario({ model: { complete: async () => ({ artifact: GOOD, observation: { inputUnits: 999999, generatedUnits: 1 } }) } });
+    const s = explainScenario({ model: modelOf(async () => ({ artifact: GOOD, observation: { inputUnits: 999999, generatedUnits: 1 } })) });
     expect(await go(s)).toMatchObject({ released: false, reasonCode: 'USAGE_HELD' });
   });
   test('the slot cap is four: both drafts and both checks never exceed it', async () => {

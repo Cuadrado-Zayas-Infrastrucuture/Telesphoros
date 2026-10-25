@@ -56,17 +56,17 @@
 
 ### Tests first
 
-- [ ] T023 [P] [US6] The scan test: no result text or phenotype string appears in any trace, receipt or log from the golden run.
-- [ ] T024 [P] [US6] Unknown usage holds the run; a provider that reports none is `USAGE_HELD`.
+- [x] T023 [P] [US6] The scan test: no result text or phenotype string appears in any trace, receipt or log from the golden run.
+- [x] T024 [P] [US6] Unknown usage holds the run; a provider that reports none is `USAGE_HELD`.
 - [ ] T025 [P] [US6] PostgreSQL tier: the fleet and tenant caps hold under concurrent runs; a test fails if the in-memory budget class is wired as a fleet control.
-- [ ] T026 [P] R5 conformance: no explanation text is stored (FR-014); a test fails if an outcome v2 row carries text.
+- [x] T026 [P] R5 conformance: no explanation text is stored (FR-014); a test fails if an outcome v2 row carries text. **Done for the row shape in slice 3a (the v2 schema has nowhere to put text); the database row check follows the migration in 3b.**
 
 ### Implementation
 
 - [ ] T027 Migration (new number, down file, lint label) for the v2 outcome and counters tables; digests and reason codes only. Run the three backend tiers.
-- [ ] T028 `src/trace.ts` : per-step trace and receipt with the pinned model ID, digests and counters (FR-009, FR-010).
-- [ ] T029 Break the caps and the scan on purpose; record the red runs.
-- [ ] T043 [P] [US6] Keyed digests (FR-009): evidence and output digests are HMAC-SHA-256; a plain SHA-256 of a known evidence value does not match the stored digest; the key comes from the secrets store and is absent from the repository (gitleaks). Written before T028 and seen failing.
+- [x] T028 `src/trace.ts` : per-step trace and receipt with the pinned model ID, digests and counters (FR-009, FR-010). **Done as `trace.ts`, `receipt.ts` and `outcome-v2.ts`.**
+- [ ] T029 Break the caps and the scan on purpose; record the red runs. **Scan and keyed digest broken in slice 3a; the caps follow in 3b.**
+- [x] T043 [P] [US6] Keyed digests (FR-009): evidence and output digests are HMAC-SHA-256; a plain SHA-256 of a known evidence value does not match the stored digest; the key comes from the secrets store and is absent from the repository (gitleaks). Written before T028 and seen failing.
 
 ## Phase 4: Slice 4, the Bedrock adapter and shadow mode (US7, US8) — needs D4 and Bedrock access
 
