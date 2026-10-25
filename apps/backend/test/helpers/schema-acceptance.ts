@@ -102,6 +102,7 @@ const primaryKeys: Record<string, string> = {
   capability_purposes: 'purpose',
   tenant_binding_mode: 'singleton',
   agentic_explain_receipts: 'receipt_id',
+  agentic_explain_runs: 'run_id',
   agentic_synthetic_audit: 'tenant_id, run_id, event_sequence',
   agentic_synthetic_buckets: 'scope, scope_key, period_kind, period_start',
   agentic_synthetic_capacity: 'singleton',
@@ -163,6 +164,7 @@ const uniqueKeys: Record<string, string> = {
   outbox_events_subject_uq: 'tenant_id, event_type, subject_id',
   file_verifications_seq_uq: 'seq',
   agentic_synthetic_invocations_invocation_id_key: 'invocation_id',
+  agentic_explain_runs_tenant_id_requester_ref_key_hash_key: 'tenant_id, requester_ref, key_hash',
   agentic_synthetic_outcomes_simulation_receipt_ref_key: 'simulation_receipt_ref',
   agentic_synthetic_runs_job_id_key: 'job_id',
   agentic_synthetic_runs_run_id_key: 'run_id',
@@ -214,6 +216,8 @@ const checkNames: Record<string, string> = {
   tenant_binding_mode: 'one_row value',
   agentic_explain_receipts:
     'check check1 check2 check3 detail_codes_check evidence_digest_check generated_units_check guards_run_check harness_version_check input_units_check invocation_path_check model_calls_check model_id_check output_digest_check reason_code_check requester_ref_check run_id_check sdk_version_check slots_check task_check template_digest_check tenant_id_check terminal_state_check usage_state_check',
+  agentic_explain_runs:
+    'check check1 fence_check harness_version_check key_hash_check mono_at_check requester_ref_check sequence_check state_check tenant_id_check tuple_digest_check',
   agentic_synthetic_audit: 'artifact_digest_check code_check event_sequence_check fence_check observed_units_check reason_code_check reserved_units_check',
   agentic_synthetic_buckets: 'check check1 consumed_units_check limit_units_check period_kind_check reserved_units_check scope_check scope_key_check',
   agentic_synthetic_capacity: 'fleet_month_units_check singleton_check tenant_day_units_check',

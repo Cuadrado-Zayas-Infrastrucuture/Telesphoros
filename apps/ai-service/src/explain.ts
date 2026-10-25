@@ -4,7 +4,6 @@ import type { Observation, Run, State } from './contracts';
 import { checkVerifierReply } from './evaluators/verifier';
 import { runSensors } from './evaluators/sensors';
 import { explainableResultSchema, explanationSchema, SENSORS } from './evaluators/types';
-import { hashBytes } from './evidence';
 import {
   EXPLAIN_CAPABILITY,
   EXPLAIN_LIMITS,
@@ -21,13 +20,14 @@ import {
 import { eligibility, FALLBACK_TEXT } from './fallback';
 import { terminal } from './kernel';
 import { buildPrompt, buildRepairPrompt } from './prompts/explain-v1';
+import { canonicalJson, keyedDigest } from './keyed-digest';
 import { buildReceipt } from './receipt';
 import type { TraceStep } from './trace';
 import { buildVerifierPrompt } from './prompts/verify-v1';
 import { taskProblems, TASKS, type TaskDeclaration } from './tasks';
 
 const refusalSchema = z.strictObject({ refused: z.literal(true) });
-const FIXED_CAUSES = new Set(['STALE_FENCE', 'COMMIT_HELD', 'STORE_BINDING']);
+const FIXED_CAUSES = new Set(['STALE_FENCE', 'COMMIT_HELD', 'STORE_BINDING', 'RUN_STORE_BUSY']);
 
 function authorityCurrent(context: ExplainContext, ports: ExplainPorts): boolean {
   const a = ports.authority.current(context);
@@ -73,17 +73,21 @@ export async function runExplanation(
     lastMark = now;
   };
   /** Usage is known only when every call that began has reported; a call that began and did not report leaves it unknown, never zero. */
-  const counters = () => ({
-    ...(run ? ports.budgets.counters(run.id) : { slots: 0, tokens: 0 }),
-    modelCalls,
-    inputUnits: usage.input,
-    generatedUnits: usage.generated,
-    usageState: (usage.pending > 0 ? 'unknown' : 'known') as 'known' | 'unknown',
-  });
+  const counters = async () => {
+    let base = { slots: 0, tokens: 0 };
+    if (run) {
+      try {
+        base = await ports.budgets.counters(run.id);
+      } catch {
+        /* the store is unreachable: the slot and token figures stay zero, the usage this process saw is still reported */
+      }
+    }
+    return { ...base, modelCalls, inputUnits: usage.input, generatedUnits: usage.generated, usageState: (usage.pending > 0 ? 'unknown' : 'known') as 'known' | 'unknown' };
+  };
   /** Close the trace and build the durable record. Called once, on the way out of every path. */
-  const seal = (reasonCode: string, detail: string | null, released: boolean) => {
+  const seal = async (reasonCode: string, detail: string | null, released: boolean) => {
     mark('end', reasonCode);
-    const c = counters();
+    const c = await counters();
     const receipt = context
       ? buildReceipt({
           context,
@@ -103,14 +107,19 @@ export async function runExplanation(
       : null;
     return { runId: run?.id ?? null, engineText, guardsRun: [...guards], counters: c, trace: [...trace], receipt };
   };
-  const outcome = (reasonCode: FailureReason, detail: string | null): ExplainOutcome => ({ released: false, reasonCode, detail, ...seal(reasonCode, detail, false) });
+  const outcome = async (reasonCode: FailureReason, detail: string | null): Promise<ExplainOutcome> => ({
+    released: false,
+    reasonCode,
+    detail,
+    ...(await seal(reasonCode, detail, false)),
+  });
   /** End the run held, failed or expired. Never throws: a store that cannot settle still lets the engine text through. */
-  const fail = (reason: FailureReason, detail: string | null = null, state: 'held' | 'failed' | 'expired' = 'held'): ExplainOutcome => {
+  const fail = async (reason: FailureReason, detail: string | null = null, state: 'held' | 'failed' | 'expired' = 'held'): Promise<ExplainOutcome> => {
     try {
       if (run && !terminal(run.state)) {
-        const next = ports.store.advance(run, state);
+        const next = await ports.store.advance(run, state);
         if (next) run = next;
-        ports.budgets.complete(run.id);
+        await ports.budgets.complete(run.id);
       }
     } catch {
       /* the outcome below is still the engine text */
@@ -138,17 +147,17 @@ export async function runExplanation(
     if (!ports.provider.baaCovered) return outcome('NO_BAA', null);
   }
 
-  const check = (name: string) => {
+  const check = async (name: string): Promise<void> => {
     ports.boundary(name);
     if (!authorityCurrent(trusted, ports)) throw new Error('AUTHORITY_HELD');
     if (run && expired(run, ports.clock.utcNowMs(), ports.clock.monotonicNowMs())) throw new Error('DEADLINE');
     if (run) {
-      const now = ports.store.get(run.id);
+      const now = await ports.store.get(run.id);
       if (now.sequence !== run.sequence || now.fence !== run.fence || terminal(now.state)) throw new Error('STALE_FENCE');
     }
   };
-  const advance = (state: State) => {
-    const next = run ? ports.store.advance(run, state) : null;
+  const advance = async (state: State): Promise<void> => {
+    const next = run ? await ports.store.advance(run, state) : null;
     if (!next) throw new Error('STALE_FENCE');
     run = next;
   };
@@ -158,14 +167,14 @@ export async function runExplanation(
     return ports.model.complete({ prompt: prompt.prompt, templateDigest: prompt.templateDigest, maxOutputUnits });
   };
 
-  const begin = (attemptId: string): boolean => {
-    const started = ports.budgets.begin(run!.id, attemptId);
+  const begin = async (attemptId: string): Promise<boolean> => {
+    const started = await ports.budgets.begin(run!.id, attemptId);
     if (started) usage.pending++;
     return started;
   };
   /** Units count as known once the provider has reported well-formed numbers, even if they break a cap; a missing or malformed report leaves the usage unknown. */
-  const observe = (role: 'draft' | 'verify', attemptId: string, observation: Observation | null): boolean => {
-    const ok = ports.budgets.observe(run!.id, role, attemptId, observation);
+  const observe = async (role: 'draft' | 'verify', attemptId: string, observation: Observation | null): Promise<boolean> => {
+    const ok = await ports.budgets.observe(run!.id, role, attemptId, observation);
     if (
       observation &&
       Number.isSafeInteger(observation.inputUnits) &&
@@ -181,27 +190,28 @@ export async function runExplanation(
   };
 
   try {
-    check('admission');
-    const tuple = hashBytes(JSON.stringify([request.dataMarker, engine.outcome, engine.reasonCode, engine.strength, engine.explainable]));
+    await check('admission');
+    // Keyed, because the store keeps it: the evidence is a small space, and a plain hash of it could be reversed by trying every candidate (FR-009).
+    const tuple = keyedDigest(ports.digestKey, canonicalJson([request.dataMarker, engine.outcome, engine.reasonCode, engine.strength, engine.explainable]));
     const key = JSON.stringify([trusted.tenantId, trusted.requesterRef, EXPLAIN_TASK, request.idempotencyKey]);
-    const admitted = ports.store.admit(key, tuple, trusted, ports.harnessVersion, ports.clock.utcNowMs(), ports.clock.monotonicNowMs());
+    const admitted = await ports.store.admit(key, tuple, trusted, ports.harnessVersion, ports.clock.utcNowMs(), ports.clock.monotonicNowMs());
     if (admitted.run.tenantId !== trusted.tenantId || admitted.run.requesterRef !== trusted.requesterRef) return outcome('CONTROL_HELD', 'STORE_BINDING');
     // An existing run is another request's: report on it, never settle it. The harness stores no explanation text (FR-014), so a replay returns the engine text only.
     if (admitted.kind === 'conflict') return outcome('IDEMPOTENCY_CONFLICT', null);
     if (admitted.kind === 'existing') return outcome(terminal(admitted.run.state) ? 'IDEMPOTENT_REPLAY' : 'IN_PROGRESS', null);
     run = admitted.run;
     mark('admission');
-    if (!ports.budgets.reserve(run)) return fail('BUDGET_HELD');
-    advance('queued');
-    check('retrieve');
-    advance('running');
+    if (!(await ports.budgets.reserve(run))) return fail('BUDGET_HELD');
+    await advance('queued');
+    await check('retrieve');
+    await advance('running');
     if (!eligible.eligible) return fail('NOT_ELIGIBLE', eligible.reason);
     if (!explainable.success) return fail('INPUT_REFUSED');
     const result = explainable.data;
 
     let reasons: string[] = [];
     for (let attempt = 1; attempt <= EXPLAIN_LIMITS.draftAttempts; attempt++) {
-      check('draft');
+      await check('draft');
       let drafting;
       try {
         drafting = attempt === 1 ? buildPrompt(result) : buildRepairPrompt(result, reasons);
@@ -209,21 +219,21 @@ export async function runExplanation(
         return fail('INPUT_REFUSED');
       }
       const draftAttempt = `${run!.id}:draft:${attempt}`;
-      if (!begin(draftAttempt)) return fail('USAGE_HELD');
+      if (!(await begin(draftAttempt))) return fail('USAGE_HELD');
       let reply;
       try {
         reply = await call(drafting, 768);
       } catch {
         return fail('MODEL_ERROR');
       }
-      check('draft-complete');
+      await check('draft-complete');
       artifact.present = true;
       artifact.value = reply.artifact;
-      const observed = observe('draft', draftAttempt, reply.observation);
+      const observed = await observe('draft', draftAttempt, reply.observation);
       mark('draft', observed ? null : 'USAGE_HELD');
       if (!observed) return fail('USAGE_HELD');
       if (refusalSchema.safeParse(reply.artifact).success) return fail('MODEL_REFUSED');
-      advance('reviewing');
+      await advance('reviewing');
 
       const explanation = explanationSchema.safeParse(reply.artifact);
       if (explanation.success && guards.length === 0) guards.push(...SENSORS);
@@ -231,25 +241,25 @@ export async function runExplanation(
       mark('sensors', reasons.length > 0 ? (explanation.success ? 'SENSOR_HOLD' : 'INVALID_STRUCTURE') : null);
       if (reasons.length > 0) {
         if (attempt >= EXPLAIN_LIMITS.draftAttempts) return fail(explanation.success ? 'SENSOR_HOLD' : 'INVALID_STRUCTURE', reasons.join(','));
-        advance('repair-pending');
-        advance('running');
+        await advance('repair-pending');
+        await advance('running');
         continue;
       }
       if (!explanation.success) return fail('CONTROL_HELD');
 
       // The verifier is called only for an explanation every sensor passed, and it can only add a hold.
-      check('verify');
+      await check('verify');
       const verifying = buildVerifierPrompt(result, explanation.data);
       const verifyAttempt = `${run!.id}:verify:${attempt}`;
-      if (!begin(verifyAttempt)) return fail('USAGE_HELD');
+      if (!(await begin(verifyAttempt))) return fail('USAGE_HELD');
       let judged;
       try {
         judged = await call(verifying, 1024);
       } catch {
         return fail('MODEL_ERROR');
       }
-      check('verify-complete');
-      const judgedOk = observe('verify', verifyAttempt, judged.observation);
+      await check('verify-complete');
+      const judgedOk = await observe('verify', verifyAttempt, judged.observation);
       if (!judgedOk) {
         mark('verify', 'USAGE_HELD');
         return fail('USAGE_HELD');
@@ -259,10 +269,10 @@ export async function runExplanation(
       mark('verify', verdict.ok ? null : 'VERIFIER_HOLD');
       if (!verdict.ok) return fail('VERIFIER_HOLD', verdict.reason);
 
-      advance('release-pending');
-      check('release');
-      advance('released');
-      ports.budgets.complete(run!.id);
+      await advance('release-pending');
+      await check('release');
+      await advance('released');
+      await ports.budgets.complete(run!.id);
       mark('release');
       artifact.value = explanation.data;
       return {
@@ -270,7 +280,7 @@ export async function runExplanation(
         reasonCode: 'RELEASED',
         label: EXPLANATION_LABEL,
         explanation: explanation.data,
-        ...seal('RELEASED', null, true),
+        ...(await seal('RELEASED', null, true)),
       };
     }
     return fail('SENSOR_HOLD', reasons.join(','));

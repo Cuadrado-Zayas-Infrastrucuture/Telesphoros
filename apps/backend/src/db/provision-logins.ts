@@ -243,15 +243,75 @@ const CAPABILITY_CURRENT_RIGHTS: Record<'app' | 'verifier' | 'worker' | 'issuer'
 };
 
 /**
- * The explanation receipts (migration 0048): the application login appends and reads through the two capability-bound functions; nobody else may run them, and the identity
+ * The explanation receipts (0048) and runs (0049): the application login appends and reads receipts and admits, reads, advances and cancels runs through capability-bound functions; nobody else may run them, and the identity
  * helper and the operator purge are executable by no login. No login may read or write the table. Checked only once the migration is applied.
  */
-const EXPLAIN_RECEIPT_TABLES = ['agentic_explain_receipts'];
+const EXPLAIN_RECEIPT_TABLES = ['agentic_explain_receipts', 'agentic_explain_runs'];
 const EXPLAIN_RECEIPT_RIGHTS: Record<'app' | 'verifier' | 'worker' | 'issuer', Record<string, boolean>> = {
-  app: { agentic_explain_receipt_append: true, agentic_explain_receipt_read: true, agentic_explain_receipt_purge: false, agentic_explain_identity: false },
-  verifier: { agentic_explain_receipt_append: false, agentic_explain_receipt_read: false, agentic_explain_receipt_purge: false, agentic_explain_identity: false },
-  worker: { agentic_explain_receipt_append: false, agentic_explain_receipt_read: false, agentic_explain_receipt_purge: false, agentic_explain_identity: false },
-  issuer: { agentic_explain_receipt_append: false, agentic_explain_receipt_read: false, agentic_explain_receipt_purge: false, agentic_explain_identity: false },
+  app: {
+    agentic_explain_receipt_append: true,
+    agentic_explain_receipt_read: true,
+    agentic_explain_receipt_purge: false,
+    agentic_explain_identity: false,
+    agentic_explain_run_admit: true,
+    agentic_explain_run_get: true,
+    agentic_explain_run_advance: true,
+    agentic_explain_run_cancel: true,
+    agentic_explain_run_sweep: false,
+    agentic_explain_run_purge: false,
+    agentic_explain_transition_ok: false,
+    agentic_explain_run_json: false,
+    agentic_explain_run_guard: false,
+    agentic_explain_receipt_guard: false,
+  },
+  verifier: {
+    agentic_explain_receipt_append: false,
+    agentic_explain_receipt_read: false,
+    agentic_explain_receipt_purge: false,
+    agentic_explain_identity: false,
+    agentic_explain_run_admit: false,
+    agentic_explain_run_get: false,
+    agentic_explain_run_advance: false,
+    agentic_explain_run_cancel: false,
+    agentic_explain_run_sweep: false,
+    agentic_explain_run_purge: false,
+    agentic_explain_transition_ok: false,
+    agentic_explain_run_json: false,
+    agentic_explain_run_guard: false,
+    agentic_explain_receipt_guard: false,
+  },
+  worker: {
+    agentic_explain_receipt_append: false,
+    agentic_explain_receipt_read: false,
+    agentic_explain_receipt_purge: false,
+    agentic_explain_identity: false,
+    agentic_explain_run_admit: false,
+    agentic_explain_run_get: false,
+    agentic_explain_run_advance: false,
+    agentic_explain_run_cancel: false,
+    agentic_explain_run_sweep: false,
+    agentic_explain_run_purge: false,
+    agentic_explain_transition_ok: false,
+    agentic_explain_run_json: false,
+    agentic_explain_run_guard: false,
+    agentic_explain_receipt_guard: false,
+  },
+  issuer: {
+    agentic_explain_receipt_append: false,
+    agentic_explain_receipt_read: false,
+    agentic_explain_receipt_purge: false,
+    agentic_explain_identity: false,
+    agentic_explain_run_admit: false,
+    agentic_explain_run_get: false,
+    agentic_explain_run_advance: false,
+    agentic_explain_run_cancel: false,
+    agentic_explain_run_sweep: false,
+    agentic_explain_run_purge: false,
+    agentic_explain_transition_ok: false,
+    agentic_explain_run_json: false,
+    agentic_explain_run_guard: false,
+    agentic_explain_receipt_guard: false,
+  },
 };
 export async function provisionLogins(options: ProvisionOptions): Promise<ProvisionReport> {
   const names = options.names ?? DEFAULT_LOGINS;

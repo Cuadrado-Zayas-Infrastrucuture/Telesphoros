@@ -14,9 +14,9 @@ export class MemoryExplainStore implements ExplainStore {
   runs = new Map<string, Run>();
   keys = new Map<string, { tuple: string; id: string }>();
   next = 0;
-  admit(key: string, tuple: string, context: ExplainContext, harnessVersion: string, utc: number, mono: number) {
+  async admit(key: string, tuple: string, context: ExplainContext, harnessVersion: string, utc: number, mono: number) {
     const prior = this.keys.get(key);
-    if (prior) return { kind: prior.tuple === tuple ? ('existing' as const) : ('conflict' as const), run: this.get(prior.id) };
+    if (prior) return { kind: prior.tuple === tuple ? ('existing' as const) : ('conflict' as const), run: this.row(prior.id) };
     const run: Run = {
       id: `${context.tenantId}-x${++this.next}`,
       tenantId: context.tenantId,
@@ -33,20 +33,24 @@ export class MemoryExplainStore implements ExplainStore {
     this.keys.set(key, { tuple, id: run.id });
     return { kind: 'new' as const, run: { ...run } };
   }
-  get(id: string): Run {
+  /** The synchronous read the other methods of the double use. */
+  row(id: string): Run {
     const r = this.runs.get(id);
     if (!r) throw new Error('NO_RUN');
     return { ...r };
   }
-  advance(expected: Run, state: State): Run | null {
-    const r = this.get(expected.id);
+  async get(id: string): Promise<Run> {
+    return this.row(id);
+  }
+  async advance(expected: Run, state: State): Promise<Run | null> {
+    const r = this.row(expected.id);
     if (r.state !== expected.state || r.sequence !== expected.sequence || r.fence !== expected.fence || !canTransition(expected.state, state)) return null;
     const next = { ...expected, state, sequence: expected.sequence + 1 };
     this.runs.set(next.id, next);
     return { ...next };
   }
   cancel(id: string) {
-    const r = this.get(id);
+    const r = this.row(id);
     this.runs.set(id, { ...r, state: 'cancelled', fence: r.fence + 1, sequence: r.sequence + 1 });
   }
 }
@@ -54,19 +58,19 @@ export class MemoryExplainStore implements ExplainStore {
 /** The real in-memory budget class behind the explanation run's interface, so the cap tests exercise the real counting rules. */
 export class MemoryExplainBudgets implements ExplainBudgets {
   inner = new SyntheticBudgets();
-  reserve(run: Run) {
+  async reserve(run: Run) {
     return this.inner.reserve(run, syntheticProfile());
   }
-  begin(runId: string, attemptId: string) {
+  async begin(runId: string, attemptId: string) {
     return this.inner.begin(runId, attemptId);
   }
-  observe(runId: string, role: 'draft' | 'verify', attemptId: string, observation: Observation | null) {
+  async observe(runId: string, role: 'draft' | 'verify', attemptId: string, observation: Observation | null) {
     return this.inner.observe(runId, role === 'draft' ? 'draft' : 'director', attemptId, observation);
   }
-  complete(runId: string) {
+  async complete(runId: string) {
     this.inner.complete(runId);
   }
-  counters(runId: string) {
+  async counters(runId: string) {
     const c = this.inner.counters(runId);
     return { slots: c.logicalSlots, tokens: c.projectedTokens };
   }
