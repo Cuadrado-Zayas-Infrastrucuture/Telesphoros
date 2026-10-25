@@ -86,6 +86,9 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 
   insertPatientDecision(tenantId: string, actor: string, input: PatientDecisionInput): Promise<InsertResult> {
     return this.write(tenantId, actor, async (client) => {
+      // One decision at a time per report, taken before anything is read: a shared row lock lets callers overlap, and the "same decision again" look-up below runs before
+      // the ledger lock, so without this several identical callers each read "nothing new" and each insert. Held to commit, so a later caller's look-up sees this one's row.
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`patient-link:${tenantId}:${input.reportId}`]);
       // The report row is locked FOR SHARE for the rest of this transaction, then what the caller looked at is compared with what is there NOW.
       const locked = await client.query<{ patient_id: string; sha256: string | null; object_version: string | null; uploaded: boolean; deleted: boolean }>(
         `SELECT patient_id::text AS patient_id, sha256, object_version, uploaded_at IS NOT NULL AS uploaded, deleted_at IS NOT NULL AS deleted
