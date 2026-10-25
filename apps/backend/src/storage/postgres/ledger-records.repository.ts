@@ -8,7 +8,7 @@ import { appendEvent, newId } from '../../ledger/ledger-writer';
 import { DisputeChangedError, MergeAlreadyDecidedError, MergeRefusedError, PatientLinkUnverifiedError, StaleAcceptanceError, SourceChangedError, toLedgerError, type RecordTable } from '../../ledger/ledger-types';
 import { loadProjections } from '../../ledger/projections';
 import { canonicalHash } from '../../services/report-adapter/canonical-json';
-import { CaptureDecisionRequestReusedError, LedgerRecordsRepository } from '../ledger-records.repository';
+import { CaptureDecisionRequestReusedError, DisputeRequestReusedError, LedgerRecordsRepository } from '../ledger-records.repository';
 import type {
   AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationReadContext, EvaluationState, InsertResult, MergeDecisionInput, MergeProposalInput, MergeStatus, NoteRecord, PatientDecisionInput, PatientLinkStateValue, Projected, QuarantineEntry,
 } from '../ledger-records';
@@ -484,12 +484,26 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 
   raiseDispute(tenantId: string, actor: string, input: DisputeInput): Promise<InsertResult> {
     return this.write(tenantId, actor, async (client) => {
+      if (input.request) {
+        // Repeats of one retry identity queue here, so two at once cannot both miss the look-up and the second cannot leave a note behind.
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`dispute-request:${tenantId}:${actor}:${input.request.id}`]);
+        const { rows } = await client.query<{ id: string; hash: string }>(
+          `SELECT id::text AS id, creation_request_hash AS hash FROM cell_disputes WHERE tenant_id = $1 AND created_by = $2 AND creation_request_id = $3`,
+          [tenantId, actor, input.request.id],
+        );
+        if (rows[0]) {
+          if (rows[0].hash !== input.request.hash) throw new DisputeRequestReusedError();
+          return this.existing(client, tenantId, 'cell_disputes', rows[0].id);
+        }
+      }
       const id = newId();
       const noteId = await this.insertNote(client, tenantId, actor, input.note);
       await client.query(
-        `INSERT INTO cell_disputes (id, tenant_id, created_by, ledger_event_id, guideline_id, guideline_version, guideline_content_sha256, locator_table, locator_row, locator_column, note_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-        [id, tenantId, actor, newId(), input.guidelineId, input.guidelineVersion, input.guidelineContentSha256, input.locator.table, input.locator.row, input.locator.column ?? null, noteId],
+        `INSERT INTO cell_disputes (id, tenant_id, created_by, ledger_event_id, guideline_id, guideline_version, guideline_content_sha256, locator_table, locator_row, locator_column, note_id,
+                                    creation_request_id, creation_request_hash)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+        [id, tenantId, actor, newId(), input.guidelineId, input.guidelineVersion, input.guidelineContentSha256, input.locator.table, input.locator.row, input.locator.column ?? null, noteId,
+         input.request?.id ?? null, input.request?.hash ?? null],
       );
       return this.finish(client, tenantId, 'cell_disputes', id);
     });

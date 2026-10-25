@@ -142,11 +142,26 @@ const cases: GuardCase[] = [
       }
     },
   },
+  {
+    anchor: 'dispute_creation_requests', allow: 'telesphoros.allow_dispute_retry_drop', refusal: /Refusing to drop populated dispute creation retry identities/,
+    // A ledger record: written the way the API writes it, through the application login.
+    populate: async (_c, f) => {
+      const database = new Database({ url: f.app, ssl: 'disable' });
+      try {
+        await new PostgresLedgerRecordsRepository(database).raiseDispute(tenant, 'syn-reviewer', {
+          guidelineId: 'syn-guideline', guidelineVersion: '1', guidelineContentSha256: 'c'.repeat(64), locator: { table: 'recommendations', row: 'r1' }, note: 'reads wrongly',
+          request: { id: randomUUID(), hash: createHash('sha256').update('dispute').digest('hex') },
+        });
+      } finally {
+        await database.onModuleDestroy();
+      }
+    },
+  },
 ];
 
 /** Whether each of these tables that still exists is FORCE ROW LEVEL SECURITY (a table a rollback has removed is not asked about). */
 const stillForced = async (c: Client) => (await c.query<{ relname: string; f: boolean }>(
-  `SELECT relname, relforcerowsecurity AS f FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relname IN ('reports', 'patients', 'patient_identifiers', 'capture_acceptances') ORDER BY 1`,
+  `SELECT relname, relforcerowsecurity AS f FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relname IN ('reports', 'patients', 'patient_identifiers', 'capture_acceptances', 'cell_disputes') ORDER BY 1`,
 )).rows;
 
 const setting = (c: Client, name: string, value: string) => c.query('SELECT set_config($1, $2, false)', [name, value]);

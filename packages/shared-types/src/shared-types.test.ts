@@ -19,6 +19,7 @@ import {
   paginationQuerySchema,
   patientDtoSchema,
   decisionCreateSchema,
+  disputeCreateSchema,
   patientCreateSchema,
   patientInputSchema,
   REPORT_CONTENT_TYPES,
@@ -258,6 +259,18 @@ describe('decisionCreateSchema (a capture decision can be retried safely)', () =
   it('refuses a retry id that is not a UUID, and any other extra field', () => {
     for (const requestId of ['', 'abc', 7, '2f3a8e3c-9b64-4c55-8b7e']) expect(decisionCreateSchema.safeParse({ decision: 'accepted', requestId }).success).toBe(false);
     expect(decisionCreateSchema.safeParse({ decision: 'accepted', textSha256: 'x' }).success).toBe(false);
+  });
+});
+
+describe('disputeCreateSchema (raising a dispute can be retried safely)', () => {
+  const base = { guidelineId: 'syn-guideline', locator: { table: 'recommendations', row: 'r1' }, note: 'reads wrongly' };
+  it('takes the cell and the note, and an optional retry id that is lower-cased', () => {
+    expect(disputeCreateSchema.parse(base)).toEqual(base);
+    expect(disputeCreateSchema.parse({ ...base, requestId: '2F3A8E3C-9B64-4C55-8B7E-0B5C1D8E9A10' })).toEqual({ ...base, requestId: '2f3a8e3c-9b64-4c55-8b7e-0b5c1d8e9a10' });
+  });
+  it('refuses a retry id that is not a UUID, and any other extra field', () => {
+    for (const requestId of ['', 'abc', 7, '2f3a8e3c-9b64-4c55-8b7e']) expect(disputeCreateSchema.safeParse({ ...base, requestId }).success).toBe(false);
+    expect(disputeCreateSchema.safeParse({ ...base, guidelineVersion: '9' }).success).toBe(false);
   });
 });
 

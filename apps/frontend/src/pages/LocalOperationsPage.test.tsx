@@ -103,6 +103,50 @@ it("preserves dispute inputs after refusal and disables repeat submission while 
   expect(screen.getByText("Raise dispute")).toBeEnabled();
 });
 
+const disputeBodies = () =>
+  mocks.apiFetch.mock.calls.filter(([path]) => String(path).endsWith('/cell-disputes')).map(([, init]) => JSON.parse(String((init as RequestInit).body)) as { requestId?: string; note: string });
+const fillDispute = (note = 'Synthetic reason') => {
+  for (const [label, value] of [['Guideline ID', 'synthetic-guideline'], ['Table', 'Table 1'], ['Row', 'Normal'], ['Synthetic note or decision evidence', note]])
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+  const box = screen.getByLabelText('I reviewed the selected record and intend this synthetic change') as HTMLInputElement;
+  if (!box.checked) fireEvent.click(box);
+};
+const validDispute = {
+  id: '2f3a8e3c-9b64-4c55-8b7e-0b5c1d8e9a10', guidelineId: 'synthetic-guideline', guidelineVersion: '1', guidelineContentSha256: 'c'.repeat(64),
+  locator: { table: 'Table 1', row: 'Normal', column: null }, status: 'open', inForce: true, note: null, decision: null, createdAt: '2026-10-25T00:00:00.000Z',
+};
+
+it('sends one retry id per unchanged dispute: a repeat after a refusal reuses it, a changed note gets a new one, and a raise that went through starts a new one', async () => {
+  mocks.apiFetch.mockResolvedValueOnce(new Response('{}', { status: 503 })).mockResolvedValueOnce(new Response('{}', { status: 503 }));
+  renderPage();
+  fillDispute();
+  fireEvent.click(screen.getByText('Raise dispute'));
+  await screen.findByRole('alert');
+  fireEvent.click(screen.getByText('Raise dispute'));
+  await vi.waitFor(() => expect(disputeBodies()).toHaveLength(2));
+  const [first, second] = disputeBodies();
+  expect(first!.requestId).toMatch(/^[0-9a-f-]{36}$/);
+  expect(second!.requestId).toBe(first!.requestId); // the same dispute again: the server can recognise it
+
+  await screen.findByRole('alert');
+  fillDispute('Another concern');
+  mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify(validDispute), { headers: { 'Content-Type': 'application/json' } }));
+  mocks.apiFetch.mockResolvedValue(new Response(JSON.stringify({ data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } }), { headers: { 'Content-Type': 'application/json' } }));
+  fireEvent.click(screen.getByText('Raise dispute'));
+  await vi.waitFor(() => expect(disputeBodies()).toHaveLength(3));
+  const third = disputeBodies()[2]!;
+  expect(third.requestId).not.toBe(first!.requestId); // another note is another dispute
+
+  // The page clears its confirmation once a raise has gone through; tick it again and ask for the same thing.
+  await vi.waitFor(() => expect(screen.getByLabelText('I reviewed the selected record and intend this synthetic change')).not.toBeChecked());
+  mocks.apiFetch.mockReset();
+  mocks.apiFetch.mockResolvedValueOnce(new Response('{}', { status: 503 }));
+  fillDispute('Another concern');
+  fireEvent.click(screen.getByText('Raise dispute'));
+  await vi.waitFor(() => expect(disputeBodies()).toHaveLength(1));
+  expect(disputeBodies()[0]!.requestId).not.toBe(third.requestId); // the earlier raise went through: asking for the same thing again is a new request
+});
+
 it('allows only one history request from two same-turn clicks',()=>{mocks.apiFetch.mockReturnValue(new Promise(()=>{}));renderPage();const button=screen.getByText('Refresh evaluations');act(()=>{button.dispatchEvent(new MouseEvent('click',{bubbles:true}));button.dispatchEvent(new MouseEvent('click',{bubbles:true}));});expect(mocks.apiFetch).toHaveBeenCalledTimes(1);});
 
 const summary = {

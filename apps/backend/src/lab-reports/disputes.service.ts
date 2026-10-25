@@ -1,10 +1,11 @@
+import { createHash } from 'node:crypto';
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { buildMeta, type Paginated, CLINICAL_USE, cellUsageDtoSchema, type CellUsageDto, type CellUsageQuery, type DisputeCreate, type DisputeDecisionCreate, type DisputeDto, type DisputeListQuery } from '@telesphoros/shared-types';
 import type { Principal } from '../auth/principal';
 import { AppException } from '../common/app-exception';
 import type { KnowledgeSet } from '../services/knowledge/knowledge-set';
 import type { DisputeStatus } from '../storage/ledger-records';
-import { LedgerRecordsRepository } from '../storage/ledger-records.repository';
+import { DisputeRequestReusedError, LedgerRecordsRepository } from '../storage/ledger-records.repository';
 import { LAB_KNOWLEDGE } from './evaluations.service';
 import { toDisputeDto } from './lab-report.mapper';
 import { cellMatches } from './cell-usage';
@@ -36,14 +37,23 @@ export class DisputesService {
     if (!exists) throw AppException.conflictBecause('unknown-cell', 'That guideline has no cell at that locator.');
 
     // The version and the content hash come from the loaded file, so a dispute is always about the file that is in force.
-    const { record } = await ledger.raiseDispute(principal.tenantId, principal.sub, {
-      guidelineId: guideline.id,
-      guidelineVersion: guideline.guidelineVersion,
-      guidelineContentSha256: file.contentSha256,
-      locator: { table: body.locator.table, row: body.locator.row, ...(column === null ? {} : { column }) },
-      note: body.note,
-    });
-    return this.present(knowledge, { dispute: record, status: 'open', decision: null });
+    try {
+      const stored = await ledger.raiseDispute(principal.tenantId, principal.sub, {
+        guidelineId: guideline.id,
+        guidelineVersion: guideline.guidelineVersion,
+        guidelineContentSha256: file.contentSha256,
+        locator: { table: body.locator.table, row: body.locator.row, ...(column === null ? {} : { column }) },
+        note: body.note,
+        // The fingerprint of the original request: the guideline, the cell and the note (not the version or the file hash, so a repeat after the knowledge was re-signed still finds its dispute).
+        ...(body.requestId ? { request: { id: body.requestId, hash: createHash('sha256').update(JSON.stringify([guideline.id, body.locator.table, body.locator.row, column, body.note])).digest('hex') } } : {}),
+      });
+      if (stored.created) return this.present(knowledge, { dispute: stored.record, status: 'open', decision: null });
+      // A repeat: show the dispute as it is now (it may have been decided since), never as a new open one.
+      return this.present(knowledge, (await ledger.findDispute(principal.tenantId, stored.record.id)) ?? { dispute: stored.record, status: 'open', decision: null });
+    } catch (error) {
+      if (error instanceof DisputeRequestReusedError) throw AppException.conflictBecause('request-id-reused', 'That request id was already used for a different dispute.');
+      throw error;
+    }
   }
 
   async decide(principal: Principal, id: string, body: DisputeDecisionCreate): Promise<DisputeDto> {
