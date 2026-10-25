@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { Client } from 'pg';
 import { migrateDown, migrateUp } from '../../src/db/migrator';
-import { checkGroups, type LoginNames, type ProvisionOptions, type ProvisionReport, provisionLogins, type SecretStore, scramVerifier } from '../../src/db/provision-logins';
+import { checkGroups, LOGIN_LIMITS, type LoginKind, type LoginNames, type ProvisionOptions, type ProvisionReport, provisionLogins, type SecretStore, scramVerifier } from '../../src/db/provision-logins';
 import { pgClientConfig } from '../../src/db/tls';
 import { adminUrl, withAdmin } from '../helpers/database';
 import { revertThrough } from '../helpers/migration-history';
@@ -152,6 +152,41 @@ describe('provisioning on a database nothing has been applied to', () => {
     const privileges = after.checks.filter((c) => /login privileges$/.test(c.name));
     expect(privileges.map((c) => [c.name, c.ok, c.skipped ?? false])).toEqual([['app login privileges', true, false], ['verifier login privileges', true, false], ['worker login privileges', true, false]]);
     expect(after.logins.every((l) => l.action === 'unchanged')).toBe(true);
+  });
+
+  it('puts the server-side limits on every login, and a later run repairs a login that lost them (assessment item 3)', async () => {
+    const f = await fixture();
+    const first = await provisionLogins(f.options);
+    expect(failing(first)).toEqual([]);
+    const kinds = ['migrator', 'app', 'verifier', 'worker'] as const satisfies readonly LoginKind[];
+    const read = (kind: LoginKind) => withAdmin(f.options.adminUrl, async (c) => (await c.query('SELECT rolconfig, rolconnlimit FROM pg_roles WHERE rolname = $1', [f.names[kind]])).rows[0]);
+    for (const kind of kinds) {
+      const row = await read(kind);
+      expect(row.rolconnlimit).toBe(LOGIN_LIMITS[kind].connectionLimit);
+      expect([...row.rolconfig].sort()).toEqual(Object.entries(LOGIN_LIMITS[kind].settings).map(([k, v]) => `${k}=${v}`).sort());
+    }
+    // A live session of the application login really carries the timeouts (not only the catalog row).
+    await asLogin(f.store.values.get('secret-app')!, async (c) => {
+      expect((await c.query('SHOW statement_timeout')).rows[0].statement_timeout).toBe('10s');
+      expect((await c.query('SHOW idle_in_transaction_session_timeout')).rows[0].idle_in_transaction_session_timeout).toBe('15s');
+    });
+    // PUBLIC no longer holds TEMPORARY on the database, so a login cannot create a temporary table.
+    expect(await withAdmin(f.options.adminUrl, async (c) => (await c.query("SELECT has_database_privilege('public', current_database(), 'TEMPORARY') AS ok")).rows[0].ok)).toBe(false);
+    await asLogin(f.store.values.get('secret-app')!, async (c) => {
+      await expect(c.query('CREATE TEMPORARY TABLE zz_probe (a int)')).rejects.toMatchObject({ code: '42501' });
+    });
+
+    // Tamper, then run again: the limits come back, and nothing else (no secret is written).
+    await withAdmin(f.options.adminUrl, async (c) => {
+      await c.query(`ALTER ROLE ${f.names.app} RESET ALL`);
+      await c.query(`ALTER ROLE ${f.names.app} CONNECTION LIMIT -1`);
+      await c.query(`GRANT TEMPORARY ON DATABASE ${f.database} TO PUBLIC`);
+    });
+    const putsBefore = f.store.puts.length;
+    const again = await provisionLogins(f.options);
+    expect(failing(again)).toEqual([]);
+    expect(f.store.puts.length).toBe(putsBefore);
+    expect((await read('app')).rolconnlimit).toBe(LOGIN_LIMITS.app.connectionLimit);
   });
 
   it('the logins cannot do what the ledger forbids them (live attempts, not catalog reads)', async () => {
