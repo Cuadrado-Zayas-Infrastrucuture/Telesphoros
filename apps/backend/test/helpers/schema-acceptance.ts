@@ -23,9 +23,6 @@ const relationships: [string, string, string, string][] = [
   ['upload_attempt_report_fk', 'report_upload_attempts', 'tenant_id,patient_id,report_id', 'reports:tenant_id,patient_id,id'],
   ['upload_attempt_run_fk', 'report_upload_attempts', 'tenant_id,run_id', 'report_upload_runs:tenant_id,run_id'],
   ['reports_patient_fk', 'reports', 'patient_id,tenant_id', 'patients:id,tenant_id'],
-  ['recommendations_patient_fk', 'recommendations', 'patient_id,tenant_id', 'patients:id,tenant_id'],
-  ['recommendations_report_fk', 'recommendations', 'report_id,tenant_id', 'reports:id,tenant_id'],
-  ['recommendations_report_patient_fk', 'recommendations', 'tenant_id,patient_id,report_id', 'reports:tenant_id,patient_id,id'],
   ['report_captures_report_fk', 'report_captures', 'report_id,tenant_id', 'reports:id,tenant_id'],
   ['capture_acceptances_capture_fk', 'capture_acceptances', 'capture_id,tenant_id', 'report_captures:id,tenant_id'],
   ['capture_acceptances_note_fk', 'capture_acceptances', 'note_id,tenant_id', 'event_notes:id,tenant_id'],
@@ -60,7 +57,7 @@ const relationships: [string, string, string, string][] = [
 const primaryKeys: Record<string, string> = {
   browser_sessions: 'tenant_id, handle_hash',
   report_upload_runs: 'run_id', report_upload_attempts: 'id',
-  patients: 'id', reports: 'id', recommendations: 'id', schema_migrations: 'version',
+  patients: 'id', reports: 'id', schema_migrations: 'version',
   ledger_heads: 'tenant_id', ledger_events: 'id', ledger_checkpoints: 'id', event_notes: 'id',
   report_captures: 'id', capture_acceptances: 'id', evaluations: 'id', evaluation_results: 'id',
   evaluation_gene_states: 'id', corrections: 'id', cell_disputes: 'id', cell_dispute_decisions: 'id',
@@ -135,7 +132,6 @@ const checkNames: Record<string, string> = {
   upload_attempt: 'committed_pin',
   patients: 'created_by_len creation_request_pair label_format tenant_id_len',
   reports: 'created_by_len creation_request_pair filename_format lab_pdf_pinned object_version_valid pin_after_upload sha256_format size_range status_valid tenant_id_len type_valid upload_consistent upload_requested_by_len uploaded_by_len',
-  recommendations: 'created_by_len strength_valid tenant_id_len',
   report_captures: 'created_by_len hashes key_len poppler runner scalars tenant_id_len',
   capture_acceptances: 'created_by_len decision poppler tenant_id_len text_hash created_by_human',
   evaluations: 'created_by_len disposition engine_version_len hash_formats hold_code hold_consistent json_shapes tenant_id_len',
@@ -179,9 +175,6 @@ const queryIndexes: Record<string, string> = {
   reports_tenant_patient_idx: 'INDEX reports_tenant_patient_idx ON public.reports USING btree (tenant_id, patient_id) WHERE (deleted_at IS NULL)',
   reports_storage_key_uq: 'UNIQUE INDEX reports_storage_key_uq ON public.reports USING btree (storage_key) WHERE (storage_key IS NOT NULL)',
   reports_tenant_patient_id_uq: 'UNIQUE INDEX reports_tenant_patient_id_uq ON public.reports USING btree (tenant_id, patient_id, id)',
-  recommendations_tenant_seq_idx: 'INDEX recommendations_tenant_seq_idx ON public.recommendations USING btree (tenant_id, seq) WHERE (deleted_at IS NULL)',
-  recommendations_tenant_patient_idx: 'INDEX recommendations_tenant_patient_idx ON public.recommendations USING btree (tenant_id, patient_id) WHERE (deleted_at IS NULL)',
-  recommendations_tenant_report_idx: 'INDEX recommendations_tenant_report_idx ON public.recommendations USING btree (tenant_id, report_id) WHERE (deleted_at IS NULL)',
   report_captures_tenant_report_idx: 'INDEX report_captures_tenant_report_idx ON public.report_captures USING btree (tenant_id, report_id, seq)',
   capture_acceptances_tenant_capture_idx: 'INDEX capture_acceptances_tenant_capture_idx ON public.capture_acceptances USING btree (tenant_id, capture_id, seq)',
   evaluations_tenant_report_idx: 'INDEX evaluations_tenant_report_idx ON public.evaluations USING btree (tenant_id, report_id, seq)',
@@ -234,7 +227,7 @@ export async function assertSchemaAcceptance(c: Client): Promise<void> {
     const deferred = name.endsWith('_event_fk');
     expect(fks.find(r => r.conname === name)).toEqual({
       conname: name, child, parent, child_columns: columns.split(','), parent_columns: parentColumns!.split(','),
-      confdeltype: 'r', confupdtype: ['recommendations_report_patient_fk', 'tenant_memberships_tenant_fk', 'invitations_tenant_id_fkey'].includes(name) ? 'r' : 'a',
+      confdeltype: 'r', confupdtype: ['tenant_memberships_tenant_fk', 'invitations_tenant_id_fkey'].includes(name) ? 'r' : 'a',
       convalidated: true, condeferrable: deferred, condeferred: deferred,
     });
   }

@@ -11,11 +11,11 @@ it('accepts all reviewed relationships and query-index definitions, with no unva
 
 it('catches the unvalidated state even though the FK name, columns and count are unchanged', async () => {
   await withAdmin(pg.adminUrl, async c => {
-    const definition = (await c.query("SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conname='recommendations_report_patient_fk'")).rows[0].definition as string;
+    const definition = (await c.query("SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conname='upload_attempt_report_fk'")).rows[0].definition as string;
     await c.query('BEGIN');
     try {
-      await c.query('ALTER TABLE recommendations DROP CONSTRAINT recommendations_report_patient_fk');
-      await c.query(`ALTER TABLE recommendations ADD CONSTRAINT recommendations_report_patient_fk ${definition} NOT VALID`);
+      await c.query('ALTER TABLE report_upload_attempts DROP CONSTRAINT upload_attempt_report_fk');
+      await c.query(`ALTER TABLE report_upload_attempts ADD CONSTRAINT upload_attempt_report_fk ${definition.replace(/ NOT VALID$/, '')} NOT VALID`);
       await expect(assertSchemaAcceptance(c)).rejects.toThrow();
     } finally { await c.query('ROLLBACK'); }
     await assertSchemaAcceptance(c);
@@ -38,9 +38,9 @@ it('catches weakened patient agreement with the same FK name/count, then passes 
   await withAdmin(pg.adminUrl, async c => {
     await c.query('BEGIN');
     try {
-      await c.query('ALTER TABLE recommendations DROP CONSTRAINT recommendations_report_patient_fk');
-      await c.query(`ALTER TABLE recommendations ADD CONSTRAINT recommendations_report_patient_fk FOREIGN KEY (report_id, tenant_id)
-        REFERENCES reports (id, tenant_id) ON DELETE RESTRICT ON UPDATE RESTRICT`);
+      await c.query('ALTER TABLE report_upload_attempts DROP CONSTRAINT upload_attempt_report_fk');
+      await c.query(`ALTER TABLE report_upload_attempts ADD CONSTRAINT upload_attempt_report_fk FOREIGN KEY (report_id, tenant_id)
+        REFERENCES reports (id, tenant_id) ON DELETE RESTRICT`);
       await expect(assertSchemaAcceptance(c)).rejects.toThrow();
     } finally { await c.query('ROLLBACK'); }
     await assertSchemaAcceptance(c);

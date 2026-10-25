@@ -11,7 +11,7 @@ import { commitUpload } from './uploads';
 
 export const GENERATOR = { tenants: 3, coreRowsPerTenant: 100, uploadedPdfsPerTenant: 2, evaluationsPerCapture: 4, pdfBytes: 262144 };
 export const EXPECTED_ROWS: Record<string, number> = {
-  patients: 306, reports: 306, recommendations: 300, report_captures: 6, capture_acceptances: 6,
+  patients: 306, reports: 306, report_captures: 6, capture_acceptances: 6,
   evaluations: 24, evaluation_results: 72, evaluation_gene_states: 48, corrections: 12,
   cell_disputes: 6, cell_dispute_decisions: 3, ledger_checkpoints: 3, ledger_events: 60,
   security_audit_events: 1,
@@ -61,8 +61,6 @@ export async function seedRecovery(pg: EphemeralDatabase, storage: S3ObjectStora
           const requestHash = requestId ? sha(JSON.stringify([patient, 'vcf', 'synthetic.vcf', 100])) : null;
           await c.query(`INSERT INTO reports (id,tenant_id,created_by,patient_id,type,original_filename,size_bytes,creation_request_id,creation_request_hash)
             VALUES ($1,$2,$3,$4,'vcf','synthetic.vcf',100,$5,$6)`, [report, tenant, 'syn-uploader', patient, requestId, requestHash]);
-          await c.query(`INSERT INTO recommendations (tenant_id,created_by,patient_id,report_id,gene,drug,phenotype,summary,strength,guideline_version)
-            VALUES ($1,$2,$3,$4,'SYN','syn-drug','synthetic','synthetic','Strong','syn-1')`, [tenant, 'syn-uploader', patient, report]);
         }
       });
       for (let p = 0; p < GENERATOR.uploadedPdfsPerTenant; p++) {

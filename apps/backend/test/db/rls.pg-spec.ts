@@ -58,13 +58,12 @@ describe('the application role is constrained', () => {
     expect(await code(asApp('alice', (q) => q('CREATE TABLE sneaky (x int)')))).toBe('42501');
     expect(await code(asApp('alice', (q) => q('SET ROLE postgres')))).toBe('42501');
     expect(await code(asApp('alice', (q) => q(`SET session_replication_role = 'replica'`)))).toBe('42501');
-    expect(await code(asApp('alice', (q) => q(`UPDATE recommendations SET gene = 'X'`)))).toBe('42501'); // never updated
   });
 });
 
 describe('row-level security fails closed and isolates tenants', () => {
   it('with NO tenant set the role sees nothing, even though rows exist', async () => {
-    for (const table of ['patients', 'reports', 'recommendations']) {
+    for (const table of ['patients', 'reports']) {
       expect((await asApp(null, (q) => q(`SELECT * FROM ${table}`))).rows).toEqual([]);
     }
     const total = await withAdmin(db.adminUrl, (c) => c.query('SELECT count(*)::int AS n FROM patients'));
@@ -94,7 +93,7 @@ describe('row-level security fails closed and isolates tenants', () => {
 
   it('cannot see through a UNION / subquery / function trick: policy applies to every table scan', async () => {
     const res = await asApp('alice', (q) =>
-      q(`SELECT tenant_id FROM patients UNION ALL SELECT tenant_id FROM reports UNION ALL SELECT tenant_id FROM recommendations`),
+      q(`SELECT tenant_id FROM patients UNION ALL SELECT tenant_id FROM reports`),
     );
     expect(new Set(res.rows.map((r) => r.tenant_id))).toEqual(new Set(['alice']));
   });

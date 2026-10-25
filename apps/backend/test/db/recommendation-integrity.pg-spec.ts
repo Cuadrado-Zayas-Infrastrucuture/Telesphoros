@@ -2,18 +2,16 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from 'pg';
-import { Database } from '../../src/db/database';
 import { loadMigrations, migrateDown, migrateUp } from '../../src/db/migrator';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
-import { revertAbove, versionsFrom } from '../helpers/migration-history';
+import { revertAbove, versionsAfter } from '../helpers/migration-history';
 
+// Migrations 0012 and 0013 made the database enforce that a recommendation names the patient who owns its report. The table was dropped by 0043, so these
+// tests replay only the history up to 0013 (never to the head, where the table no longer exists) and prove what those two migrations did.
 // Each test builds a throwaway database and runs migrations up and down; 5 seconds (the default) is tight on a cold runner, as the first run on the public repository showed.
 jest.setTimeout(30_000);
 
 const FK = 'recommendations_report_patient_fk';
-let pg: EphemeralDatabase;
-let app: Database;
-let ids: { a: string; b: string; report: string; otherReport: string };
 const tenant = 'syn-integrity';
 const insert = `INSERT INTO recommendations (tenant_id, created_by, patient_id, report_id, gene, drug, phenotype, summary, strength, guideline_version)
   VALUES ($1, 'syn-author', $2, $3, 'G', 'syn-drug', 'syn-phenotype', 'Synthetic', 'Strong', 'syn-1') RETURNING id`;
@@ -40,41 +38,6 @@ async function through(db: EphemeralDatabase, version: string) {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 
-beforeAll(async () => {
-  pg = await createEphemeralDatabase();
-  ids = await seed(pg);
-  app = new Database({ url: pg.appUrl, ssl: 'disable' });
-});
-afterAll(async () => { await app?.onModuleDestroy(); await pg?.drop(); });
-
-it('the engine refuses a recommendation for another patient in the SAME tenant, for app and bypassing admin', async () => {
-  for (const write of [
-    (patient: string) => app.withTenant(tenant, c => c.query(insert, [tenant, patient, ids.report])),
-    (patient: string) => withAdmin(pg.adminUrl, c => c.query(insert, [tenant, patient, ids.report])),
-  ]) {
-    await expect(write(ids.a)).resolves.toHaveProperty('rowCount', 1);
-    await expect(write(ids.b)).rejects.toMatchObject({ code: '23503', constraint: FK });
-  }
-});
-
-it('refuses foreign tenants and missing parents, while retaining valid same-tenant writes', async () => {
-  await expect(app.withTenant(tenant, c => c.query(insert, [tenant, ids.b, ids.otherReport]))).resolves.toHaveProperty('rowCount', 1);
-  await expect(app.withTenant('syn-foreign', c => c.query(insert, ['syn-foreign', ids.a, ids.report]))).rejects.toMatchObject({ code: '23503' });
-  await expect(withAdmin(pg.adminUrl, c => c.query(insert, [tenant, ids.a, '11111111-1111-4111-8111-111111111111']))).rejects.toMatchObject({ code: '23503' });
-});
-
-it('refuses parent reassignment and child-reference changes; unrelated report updates still work', async () => {
-  await withAdmin(pg.adminUrl, c => c.query(insert, [tenant, ids.a, ids.report]));
-  await expect(app.withTenant(tenant, c => c.query('UPDATE reports SET patient_id = $1 WHERE id = $2 AND tenant_id = $3', [ids.b, ids.report, tenant]))).rejects.toMatchObject({ code: '23503', constraint: FK });
-  await expect(withAdmin(pg.adminUrl, c => c.query('UPDATE recommendations SET patient_id = $1 WHERE report_id = $2 AND tenant_id = $3', [ids.b, ids.report, tenant]))).rejects.toMatchObject({ code: '23503', constraint: FK });
-  await expect(app.withTenant(tenant, c => c.query('UPDATE reports SET status = $1 WHERE id = $2 AND tenant_id = $3', ['processing', ids.report, tenant]))).resolves.toHaveProperty('rowCount', 1);
-});
-
-it('restricts hard deletion even when recommendations are soft-deleted', async () => {
-  await withAdmin(pg.adminUrl, c => c.query('UPDATE recommendations SET deleted_at = now() WHERE report_id = $1 AND tenant_id = $2', [ids.report, tenant]));
-  await expect(withAdmin(pg.adminUrl, c => c.query('DELETE FROM reports WHERE id = $1 AND tenant_id = $2', [ids.report, tenant]))).rejects.toMatchObject({ code: '23503' });
-});
-
 it('commits NOT VALID without changing legacy mismatches, refuses new violations, and keeps failed validation separate', async () => {
   const legacy = await createEphemeralDatabase({ migrate: false });
   try {
@@ -87,12 +50,12 @@ it('commits NOT VALID without changing legacy mismatches, refuses new violations
     expect(after.rows).toEqual(before.rows);
     expect((await withAdmin(legacy.adminUrl, c => c.query('SELECT convalidated FROM pg_constraint WHERE conname = $1', [FK]))).rows).toEqual([{ convalidated: false }]);
     await expect(withAdmin(legacy.adminUrl, c => c.query(insert, [tenant, old.b, old.report]))).rejects.toMatchObject({ code: '23503', constraint: FK });
-    await expect(withAdmin(legacy.adminUrl, c => migrateUp(c))).rejects.toThrow(/Migration 0013 failed/);
+    await expect(through(legacy, '0013')).rejects.toThrow(/Migration 0013 failed/);
     expect((await withAdmin(legacy.adminUrl, c => c.query('SELECT version FROM schema_migrations ORDER BY version'))).rows.at(-1)).toEqual({ version: '0012' });
     expect((await withAdmin(legacy.adminUrl, c => c.query('SELECT * FROM recommendations WHERE id = $1 AND tenant_id = $2', [bad.rows[0].id, tenant]))).rows).toEqual(before.rows);
     // Fixture-only repair of a deliberately planted synthetic violation; never an operational remediation script.
     await withAdmin(legacy.adminUrl, c => c.query('UPDATE recommendations SET report_id = $1 WHERE id = $2 AND tenant_id = $3', [old.otherReport, bad.rows[0].id, tenant]));
-    expect(await withAdmin(legacy.adminUrl, c => migrateUp(c))).toEqual(versionsFrom('validate_recommendation_report_patient'));
+    expect(await through(legacy, '0013')).toEqual(['0013']);
     expect((await withAdmin(legacy.adminUrl, c => c.query('SELECT convalidated FROM pg_constraint WHERE conname = $1', [FK]))).rows).toEqual([{ convalidated: true }]);
   } finally { await legacy.drop(); }
 });
@@ -110,8 +73,11 @@ it('rolls back validation to an unvalidated enforced constraint, then removes/re
       expect((await c.query('SELECT convalidated FROM pg_constraint WHERE conname = $1', [FK])).rows).toEqual([{ convalidated: false }]);
       expect(await migrateDown(c, 1)).toEqual(['0012']);
       expect((await c.query('SELECT 1 FROM pg_constraint WHERE conname = $1', [FK])).rows).toEqual([]);
-      expect(await migrateUp(c)).toEqual(versionsFrom('recommendation_report_patient'));
+      expect(await through(disposable, '0013')).toEqual(['0012', '0013']);
       expect((await c.query('SELECT convalidated FROM pg_constraint WHERE conname = $1', [FK])).rows).toEqual([{ convalidated: true }]);
+      // The rest of the history then applies on top, and ends with the table dropped (0043).
+      expect(await migrateUp(c)).toEqual(versionsAfter('validate_recommendation_report_patient'));
+      expect((await c.query('SELECT 1 FROM pg_constraint WHERE conname = $1', [FK])).rows).toEqual([]);
     });
   } finally { await disposable.drop(); }
 });
@@ -130,6 +96,6 @@ it('bounds lock waits and rolls back DDL while another connection holds the repo
     expect((await withAdmin(disposable.adminUrl, c => c.query('SELECT 1 FROM pg_constraint WHERE conname = $1', [FK]))).rowCount).toBe(0);
     await blocker.query('ROLLBACK');
     expect(await through(disposable, '0012')).toEqual(['0012']);
-    expect(await withAdmin(disposable.adminUrl, c => migrateUp(c))).toEqual(versionsFrom('validate_recommendation_report_patient'));
+    expect(await through(disposable, '0013')).toEqual(['0013']);
   } finally { await blocker.end(); await disposable.drop(); }
 });

@@ -21,7 +21,7 @@ export const APPEND_ONLY_CLASSES = {
 } as const;
 
 /** Tables from before the ledger: protected by tenant isolation, not by append-only rules. */
-export const LEGACY_TABLES = ['patients', 'reports', 'recommendations', 'schema_migrations'] as const;
+export const LEGACY_TABLES = ['patients', 'reports', 'schema_migrations'] as const;
 
 // Local operational state advances under CAS/identity guards; it is not a clinical append-only fact.
 export const MUTABLE_OPERATIONAL_TABLES = ['report_upload_runs','report_upload_attempts'] as const;

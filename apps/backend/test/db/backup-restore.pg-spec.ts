@@ -65,7 +65,7 @@ const keyFile = async () => {
   return file;
 };
 
-/** A realistic synthetic dataset: several tenants, a soft-deleted patient, an uploaded report, recommendations. */
+/** A realistic synthetic dataset: several tenants, a soft-deleted patient, an uploaded report. */
 async function seededDatabase(): Promise<EphemeralDatabase> {
   const db = await createEphemeralDatabase();
   dbs.push(db);
@@ -74,15 +74,10 @@ async function seededDatabase(): Promise<EphemeralDatabase> {
       const live = (await c.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ($1, $1, $2) RETURNING id`, [tenant, `SYN-${tenant}-1`])).rows[0].id;
       const dead = (await c.query(`INSERT INTO patients (tenant_id, created_by, label, deleted_at) VALUES ($1, $1, $2, now()) RETURNING id`, [tenant, `SYN-${tenant}-gone`])).rows[0].id;
       expect(dead).toBeDefined();
-      const report = (await c.query(
-        `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes, content_type, sha256, storage_key, uploaded_at)
-         VALUES ($1, $1, $2, 'vcf', 'a.vcf', 100, 'text/plain', $3, $4, now()) RETURNING id`,
-        [tenant, live, 'a'.repeat(64), `reports/${tenant}/1`],
-      )).rows[0].id;
       await c.query(
-        `INSERT INTO recommendations (tenant_id, created_by, patient_id, report_id, gene, drug, phenotype, summary, strength, guideline_version)
-         VALUES ($1, $1, $2, $3, 'G', 'd', 'p', 's', 'Strong', 'v0')`,
-        [tenant, live, report],
+        `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes, content_type, sha256, storage_key, uploaded_at)
+         VALUES ($1, $1, $2, 'vcf', 'a.vcf', 100, 'text/plain', $3, $4, now())`,
+        [tenant, live, 'a'.repeat(64), `reports/${tenant}/1`],
       );
     }
   });
@@ -108,7 +103,6 @@ describe('backup', () => {
     expect(manifest.migrations).toEqual(readdirSync(join(__dirname, '..', '..', 'migrations')).filter((f) => f.endsWith('.up.sql')).map((f) => f.slice(0, 4)).sort());
     expect(manifest.tables.patients).toMatchObject({ rows: 6, rlsEnabled: true, rlsForced: true, policies: 1 });
     expect(manifest.tables.reports!.rows).toBe(3);
-    expect(manifest.tables.recommendations!.rows).toBe(3);
     expect(manifest.schema.constraints).toBeGreaterThan(10);
     expect(manifest.dump.encrypted).toBe(false);
     expect(manifest.dump.sha256).toMatch(/^[0-9a-f]{64}$/);
@@ -189,11 +183,11 @@ describe('restore (the one-command procedure, actually executed)', () => {
       'PASS ledger chain',
     ]);
     expect(report.ok).toBe(true);
-    // 6 patients (3 live + 3 soft-deleted) + 3 reports + 3 recommendations + one row per applied migration
-    // 12 seeded rows, one history row per migration, the 3 rows migration 0024 seeds (one outbox route, two schedules) and the 2 rows 0028 seeds
+    // 6 patients (3 live + 3 soft-deleted) + 3 reports + one row per applied migration
+    // 9 seeded rows, one history row per migration, the 3 rows migration 0024 seeds (one outbox route, two schedules) and the 2 rows 0028 seeds
     // (the 'request' capability purpose and the binding mode)
     // Migration 0032 seeds one more row: the 'internal' capability purpose (DATA-01 slice 3, the binding of the class (b) functions).
-    const manifestRows = 12 + 3 + 2 + 1 + readdirSync(join(__dirname, '..', '..', 'migrations')).filter((f) => f.endsWith('.up.sql')).length;
+    const manifestRows = 9 + 3 + 2 + 1 + readdirSync(join(__dirname, '..', '..', 'migrations')).filter((f) => f.endsWith('.up.sql')).length;
     expect(byName(report.checks, 'row counts')!.detail).toMatch(new RegExp(`^all \\d+ tables match \\(${manifestRows} rows\\)$`));
     expect(await throwawayDatabases()).toBe(before); // the throwaway was dropped
   });
