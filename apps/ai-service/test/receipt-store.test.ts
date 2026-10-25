@@ -50,7 +50,7 @@ describe('the receipt store adapter', () => {
     expect(sent).toEqual([]);
   });
   test('maps the database refusals through unchanged, and refuses a refusal code it does not know', async () => {
-    for (const code of ['DUPLICATE', 'NOT_AUTHORIZED', 'INVALID_INPUT']) {
+    for (const code of ['DUPLICATE', 'NOT_AUTHORIZED', 'INVALID_INPUT', 'RATE_LIMITED']) {
       const { app } = binder(() => ({ kind: 'refused', code }));
       expect(await new PostgresReceiptStore(app).append(await receipt())).toEqual({ kind: 'refused', code });
     }
@@ -80,9 +80,5 @@ describe('the receipt store adapter', () => {
     const extra = binder(() => ({ kind: 'ok', value: { ...r, explanation: 'text' } }));
     expect(await new PostgresReceiptStore(extra.app).read(r.tenantId, r.requesterRef, r.runId)).toEqual({ kind: 'refused', code: 'STORAGE_UNAVAILABLE' });
   });
-  test('purge is one call with no argument, and returns the count', async () => {
-    const { app, sent } = binder(() => ({ kind: 'ok', value: { deleted: 3 } }));
-    expect(await new PostgresReceiptStore(app).purge('tenant-a', 'staff-a')).toEqual({ kind: 'ok', value: { deleted: 3 } });
-    expect(sent[0]).toMatchObject({ tenant: 'tenant-a', actor: 'staff-a', sql: 'SELECT public.agentic_explain_receipt_purge() AS result', args: [] });
-  });
+  test('there is no purge method: no login can run the purge, so the store offers none', () => expect('purge' in PostgresReceiptStore.prototype).toBe(false));
 });

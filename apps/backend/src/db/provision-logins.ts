@@ -242,6 +242,17 @@ const CAPABILITY_CURRENT_RIGHTS: Record<'app' | 'verifier' | 'worker' | 'issuer'
   issuer: { tenant_capability_issue_current: true, app_capability_version: false, app_tenant_bound: false },
 };
 
+/**
+ * The explanation receipts (migration 0048): the application login appends and reads through the two capability-bound functions; nobody else may run them, and the identity
+ * helper and the operator purge are executable by no login. No login may read or write the table. Checked only once the migration is applied.
+ */
+const EXPLAIN_RECEIPT_TABLES = ['agentic_explain_receipts'];
+const EXPLAIN_RECEIPT_RIGHTS: Record<'app' | 'verifier' | 'worker' | 'issuer', Record<string, boolean>> = {
+  app: { agentic_explain_receipt_append: true, agentic_explain_receipt_read: true, agentic_explain_receipt_purge: false, agentic_explain_identity: false },
+  verifier: { agentic_explain_receipt_append: false, agentic_explain_receipt_read: false, agentic_explain_receipt_purge: false, agentic_explain_identity: false },
+  worker: { agentic_explain_receipt_append: false, agentic_explain_receipt_read: false, agentic_explain_receipt_purge: false, agentic_explain_identity: false },
+  issuer: { agentic_explain_receipt_append: false, agentic_explain_receipt_read: false, agentic_explain_receipt_purge: false, agentic_explain_identity: false },
+};
 export async function provisionLogins(options: ProvisionOptions): Promise<ProvisionReport> {
   const names = options.names ?? DEFAULT_LOGINS;
   for (const name of Object.values(names)) if (!IDENTIFIER.test(name)) throw new Error('A login name must be lowercase letters, digits and underscores.');
@@ -473,6 +484,8 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
     .rows[0].ok as boolean;
   const hasCurrent = (await admin.query("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'tenant_capability_issue_current' AND pronamespace = 'public'::regnamespace) AS ok"))
     .rows[0].ok as boolean;
+  const hasReceipts = (await admin.query("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'agentic_explain_receipt_append' AND pronamespace = 'public'::regnamespace) AS ok"))
+    .rows[0].ok as boolean;
   const canExecute = async (login: string, fn: string): Promise<boolean | undefined> => {
     const rows = (
       await admin.query<{ ok: boolean }>(
@@ -492,12 +505,16 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
   /** What a login must and must not be able to do with the tenant capability (migration 0028). */
   const capabilityProblems = async (login: string, kind: keyof typeof CAPABILITY_RIGHTS): Promise<string[]> => {
     const wrong: string[] = [];
-    for (const [fn, allowed] of Object.entries({ ...CAPABILITY_RIGHTS[kind], ...(hasCurrent ? CAPABILITY_CURRENT_RIGHTS[kind] : {}) })) {
+    for (const [fn, allowed] of Object.entries({
+      ...CAPABILITY_RIGHTS[kind],
+      ...(hasCurrent ? CAPABILITY_CURRENT_RIGHTS[kind] : {}),
+      ...(hasReceipts ? EXPLAIN_RECEIPT_RIGHTS[kind] : {}),
+    })) {
       const can = await canExecute(login, fn);
       if (can === undefined) wrong.push(`${fn} (missing)`);
       else if (can !== allowed) wrong.push(`${fn} (${allowed ? 'cannot' : 'CAN'} execute)`);
     }
-    for (const table of CAPABILITY_TABLES) {
+    for (const table of [...CAPABILITY_TABLES, ...(hasReceipts ? EXPLAIN_RECEIPT_TABLES : [])]) {
       const readable = (await admin.query<{ ok: boolean }>(`SELECT has_table_privilege($1, $2, 'SELECT') AS ok`, [login, `public.${table}`])).rows[0].ok;
       if (readable) wrong.push(`${table} (CAN read)`);
       if (await canWrite(login, table)) wrong.push(`${table} (CAN write)`);

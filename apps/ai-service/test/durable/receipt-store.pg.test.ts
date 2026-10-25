@@ -102,9 +102,8 @@ describe('a receipt produced by runExplanation is stored and read back exactly',
       if (o.receipt!.runId !== 'unadmitted') expect(await store().read(TENANT, ACTOR, o.receipt!.runId), name).toEqual({ kind: 'ok', value: o.receipt });
     }
   });
-  test('another organization reads nothing, and a purge of a young receipt removes nothing', async () => {
+  test('another organization reads nothing', async () => {
     await register(admin, 'tenant-z', 'staff-z');
     expect(await store().read('tenant-z', 'staff-z', 'tenant-a-x1')).toEqual({ kind: 'ok', value: null });
-    expect(await store().purge(TENANT, ACTOR)).toEqual({ kind: 'ok', value: { deleted: 0 } });
   });
 });

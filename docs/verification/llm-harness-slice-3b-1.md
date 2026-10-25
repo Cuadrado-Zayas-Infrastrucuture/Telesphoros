@@ -9,14 +9,32 @@ Node 22.22.0, PostgreSQL 16.15 (Homebrew tools first on PATH), `LC_ALL=en_US.UTF
 ## Checks
 
 - Migration written before its spec; the spec was then written and run (41 tests). The red evidence is the mutations below, not a pre-migration run.
-- `test/db/agentic-explain-receipts.pg-spec.ts`: 41 tests pass.
+- `test/db/agentic-explain-receipts.pg-spec.ts`: 47 tests pass (after the review fixes below).
 - Down guard: a new case in `down-guards-as-migrator.pg-spec.ts` (the non-superuser migrator login): a populated table is refused, the refusal rolls back whole, the exact setting allows it.
 - `apps/ai-service`: `receipt-store.test.ts` (6, in the default run) and `durable/receipt-store.pg.test.ts` (3, local-only, against my cluster): every kind of ending `runExplanation` produces (nine) is accepted by the database and reads back equal, so the TypeScript shape and the SQL checks agree.
 - The first full backend tier (`TEST_STORAGE=postgres`, 207 suites) found four failing suites (12 tests), all caused by this change, fixed here: the migration lint (`REVOKE` and a `TRUNCATE` trigger in an `expand` migration, so relabelled `breaking`), the schema-acceptance primary-key and check-constraint pins (which also failed `report-registration`), and the 0031 revert test's list of removed functions. The second full run: 201 suites passed, 6 skipped (the report-reader engine and object storage are absent in this repository or locally), 2666 tests passed, 0 failed.
 - The root `pnpm test` then found one more pin: `test/durable-surface.test.ts` lists the durable modules and their import allowlist; `receipt-store.ts` and its two imports (`../src/outcome-v2`, `./postgres`, a type) were added to it on purpose. Prettier reformatted three test files; the DB specs were rerun after (102 passed, and the 3 local-only adapter tests).
 - Final loop (Node 22.22.0): `typecheck`, `lint` (with the Prettier check), root `pnpm test` (ai-service 21 files, 311 tests), `test:infra`, `test:ci-config` 203 of 203, gitleaks no findings.
 
-## Broken on purpose (against the 41-test spec)
+## Review by the schema session (read-only, 2026-10-25)
+
+No blocker; label `breaking` confirmed correct under today's lint; `FORCE RLS` with an owner policy confirmed; the down guard confirmed real as the migrator. Fixed here:
+
+| Finding | Fix |
+|---|---|
+| Unbounded immutable rows (any capability holder could append without limit) | At most 1000 receipts an hour per organization, `RATE_LIMITED` beyond; tested at the boundary, with old rows not counting and another organization unaffected |
+| Purge could not reach a suspended or offboarded organization | Operator purge (`SET ROLE telesphoros_jobs`, executable by no login), per organization or all; tested with a suspended organization; the store has no purge |
+| Reused the synthetic identity helper | The family's own `agentic_explain_identity()`; a test shows the functions name it and not the synthetic one |
+| List round trip not exact (`["AB,CD"]`, `[""]`) | Each element checked on its own before joining; six hostile lists tested |
+| Triggers skipped under `session_replication_role = replica` | `ENABLE ALWAYS`; tested with a control showing an ordinary trigger is skipped |
+| Validation relied on OR evaluation order | Sequential checks, each after the one that proves its type |
+| Grant to the worker was dead weight; `provision-logins` did not know the functions | Application only; `provision-logins` now checks the rights and that no login touches the table, with four negative controls |
+| Suspended organization not tested | Tested: append and read refused, purge still works, reinstated reads again |
+| The down migration granted and revoked CREATE it did not need | Removed; the setting is stated as the only protection against `DROP TABLE` |
+
+Not checked by the reviewer: it ran no test and read neither the test file nor the TypeScript store.
+
+## Broken on purpose, first round (against the 41-test spec)
 
 | Mutation of `0048` | Failing tests |
 |---|---|
@@ -29,10 +47,24 @@ Node 22.22.0, PostgreSQL 16.15 (Homebrew tools first on PATH), `LC_ALL=en_US.UTF
 
 The file was restored after each and the 41 tests passed again.
 
+## Broken on purpose, after the review (against the 47-test spec)
+
+| Mutation of `0048` | Failing tests |
+|---|---|
+| `ENABLE ALWAYS` removed from the row guard | 1 |
+| The hourly cap switched off | 1 |
+| The per-element list check removed | 1 |
+| The purge granted to the application login | 2 |
+| The append function granted to the worker | 2 |
+
+Restored after each; 47 passed again.
+
 ## Known limits
 
-- The functions refuse a caller with no capability. The worker login has no way to present one today (the worker side binds through an internal binding that is not built), so the worker's EXECUTE grant is unusable until it is. Review question for the schema session.
-- The purge is per organization and has no scheduler; nothing runs it.
+- The worker login has no way to present a capability today (the worker side binds through an internal binding that is not built), so only the application may run the functions.
+- The operator purge has no scheduler; nothing runs it.
+- The hourly cap (1000) is an initial value; the count is not locked, so concurrent appends can overshoot it slightly.
+- Owner-level tampering (disabling or dropping the triggers, dropping the table, back-dating a row) is not closable in a migration; it needs database audit or an event trigger.
 - Retention is a constant in the trigger and the purge function (2190 days). Changing it is a migration.
 - The digest key's custody and rotation are not designed here.
 - Nothing in a running service calls the store yet.

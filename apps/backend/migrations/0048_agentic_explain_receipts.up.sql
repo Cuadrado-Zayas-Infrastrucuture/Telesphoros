@@ -5,14 +5,20 @@
 -- A receipt is digests, fixed codes and counters. It has no column that can hold text (FR-014, R5): every text column below is bound to a pattern or a list, so a
 -- result, a phenotype or a model word cannot be written even by the function that writes it. The evidence and output digests are keyed (hmac-sha256:), never plain.
 --   * Table owned by the NOLOGIN role telesphoros_jobs, as the synthetic agentic tables are (0029). No login holds a table privilege. FORCE ROW LEVEL SECURITY, one
---     owner policy; the application and the worker reach the table only through the three functions below.
---   * agentic_explain_receipt_append / _read / _purge take their caller from agentic_synthetic_identity() (0030): a presented capability, never a raw setting.
---     The receipt's tenant and requester must equal that identity, so a caller cannot write or read another organization's receipt.
+--     owner policy; the application reaches the table only through agentic_explain_receipt_append and _read.
+--   * Those two take their caller from agentic_explain_identity(), a thin helper of this family with the body of agentic_synthetic_identity() (0030): a presented
+--     capability, never a raw setting, and NULL for a suspended organization (0047). Its own copy, so dropping the synthetic family later does not break receipts.
+--     The receipt's tenant and requester must equal that identity. EXECUTE goes to the application login only: the worker cannot present a capability.
 --   * Append-only: an UPDATE is refused for everyone, the owner included; so is TRUNCATE; a DELETE is refused until the row is 2190 days (6 years) old, whoever asks
---     (founder decision 2026-10-25: retention 6 years, as the reports bucket). The purge function removes the bound organization's expired rows only.
+--     (founder decision 2026-10-25: retention 6 years, as the reports bucket). The triggers are ENABLE ALWAYS, so session_replication_role = replica does not skip them.
+--     Not closable here, same class as security_events: the owner (the migrator through SET ROLE) can disable or drop the triggers, drop the table, or back-date a row.
+--   * A tenant can add at most 1000 receipts an hour (initial value, a founder-adjustable constant): rows are undeletable for six years, so an unbounded writer would be
+--     an irreversible way to grow the table. The count is not locked, so concurrent appends may overshoot it slightly.
+--   * Purge is an operator function: agentic_explain_receipt_purge(tenant or NULL) is executable by no login, run by the migrator through SET ROLE telesphoros_jobs. It reaches
+--     every organization, suspended or offboarded ones included, which a capability-bound purge could not.
 --   * Erasure on request: there is no row erasure. A receipt holds no text; the path to make its digests unlinkable is destroying or rotating the digest key.
 --     Counsel is to confirm that before real data (R5).
--- Nothing is seeded. Nothing references this table yet except the three functions; the TypeScript store is apps/ai-service/durable/receipt-store.ts.
+-- Nothing is seeded. Nothing references this table yet except the functions below; the TypeScript store is apps/ai-service/durable/receipt-store.ts.
 SET LOCAL lock_timeout = '2s';
 SET LOCAL statement_timeout = '60s';
 GRANT CREATE ON SCHEMA public TO telesphoros_jobs;
@@ -68,6 +74,25 @@ CREATE TRIGGER agentic_explain_receipt_guard BEFORE UPDATE OR DELETE ON public.a
 FOR EACH ROW EXECUTE FUNCTION public.agentic_explain_receipt_guard();
 CREATE TRIGGER agentic_explain_receipt_no_truncate BEFORE TRUNCATE ON public.agentic_explain_receipts
 FOR EACH STATEMENT EXECUTE FUNCTION public.agentic_explain_receipt_guard();
+-- ENABLE ALWAYS: a session with session_replication_role = replica (a superuser, or a role granted SET on it) must not skip the guard.
+ALTER TABLE public.agentic_explain_receipts ENABLE ALWAYS TRIGGER agentic_explain_receipt_guard;
+ALTER TABLE public.agentic_explain_receipts ENABLE ALWAYS TRIGGER agentic_explain_receipt_no_truncate;
+
+CREATE FUNCTION public.agentic_explain_identity() RETURNS TABLE (tenant_id text, actor text)
+LANGUAGE plpgsql STABLE SET search_path = pg_catalog, pg_temp AS $$
+DECLARE
+  v_tenant text;
+  v_actor text;
+BEGIN
+  -- A capability must be presented. app_tenant() and app_actor() alone fall back to the raw settings in the guc and dual modes (0028), so without this line a forged
+  -- setting would still be an identity. With a token they ignore the actor setting and refuse a foreign tenant setting; app_tenant() is NULL for a suspended organization (0047).
+  IF nullif(current_setting('app.capability', true), '') IS NULL THEN RETURN; END IF;
+  v_tenant := public.app_tenant();
+  v_actor := public.app_actor();
+  IF v_tenant IS NULL OR v_actor IS NULL THEN RETURN; END IF;
+  RETURN QUERY SELECT v_tenant, v_actor;
+END $$;
+REVOKE ALL ON FUNCTION public.agentic_explain_identity() FROM PUBLIC;
 
 CREATE FUNCTION public.agentic_explain_receipt_append(p_receipt jsonb) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
@@ -78,15 +103,19 @@ DECLARE
   v_model jsonb;
   v_digests jsonb;
   v_counters jsonb;
+  v_recent bigint;
   v_id uuid;
 BEGIN
-  SELECT i.tenant_id, i.actor INTO v_tenant, v_actor FROM public.agentic_synthetic_identity() i;
+  SELECT i.tenant_id, i.actor INTO v_tenant, v_actor FROM public.agentic_explain_identity() i;
   IF v_tenant IS NULL OR v_actor IS NULL THEN
     RETURN jsonb_build_object('kind','refused','code','NOT_AUTHORIZED');
   END IF;
-  -- Exactly the outcome v2 keys at every level: an extra key is where text would be smuggled in.
-  IF p_receipt IS NULL OR jsonb_typeof(p_receipt) IS DISTINCT FROM 'object'
-    OR (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(p_receipt) k)
+  -- Exactly the outcome v2 keys at every level: an extra key is where text would be smuggled in. Each step below runs only after the one before it
+  -- has proved the type it relies on (SQL does not promise the order of OR terms, so there is no OR across a type test and a use of the value).
+  IF p_receipt IS NULL OR jsonb_typeof(p_receipt) <> 'object' THEN
+    RETURN jsonb_build_object('kind','refused','code','INVALID_INPUT');
+  END IF;
+  IF (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(p_receipt) k)
        IS DISTINCT FROM ARRAY['counters','detailCodes','digests','evidenceKind','guardsRun','harnessVersion','model','reasonCode','requesterRef','runId','schemaVersion','task','tenantId','terminalState']
     OR p_receipt->>'schemaVersion' IS DISTINCT FROM 'agentic.explain-outcome.v2'
     OR p_receipt->>'evidenceKind' IS DISTINCT FROM 'harness-run' THEN
@@ -95,21 +124,36 @@ BEGIN
   v_model := p_receipt->'model';
   v_digests := p_receipt->'digests';
   v_counters := p_receipt->'counters';
-  IF jsonb_typeof(v_digests) IS DISTINCT FROM 'object'
-    OR (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(v_digests) k) IS DISTINCT FROM ARRAY['evidence','output','template']
-    OR jsonb_typeof(v_counters) IS DISTINCT FROM 'object'
-    OR (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(v_counters) k) IS DISTINCT FROM ARRAY['generatedUnits','inputUnits','modelCalls','slots','usageState']
-    OR jsonb_typeof(v_model) NOT IN ('object','null')
-    OR (jsonb_typeof(v_model) = 'object' AND (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(v_model) k) IS DISTINCT FROM ARRAY['invocationPath','modelId','sdkVersion'])
-    OR jsonb_typeof(p_receipt->'detailCodes') IS DISTINCT FROM 'array' OR jsonb_typeof(p_receipt->'guardsRun') IS DISTINCT FROM 'array'
-    OR EXISTS (SELECT 1 FROM jsonb_array_elements(p_receipt->'detailCodes') e WHERE jsonb_typeof(e) IS DISTINCT FROM 'string')
-    OR EXISTS (SELECT 1 FROM jsonb_array_elements(p_receipt->'guardsRun') e WHERE jsonb_typeof(e) IS DISTINCT FROM 'string')
-    OR EXISTS (SELECT 1 FROM jsonb_each(v_counters) c WHERE c.key <> 'usageState' AND (jsonb_typeof(c.value) IS DISTINCT FROM 'number' OR c.value::text !~ '^[0-9]{1,15}$'))
-    OR EXISTS (SELECT 1 FROM jsonb_each(p_receipt) t WHERE t.key IN ('runId','tenantId','requesterRef','task','terminalState','reasonCode','harnessVersion') AND jsonb_typeof(t.value) IS DISTINCT FROM 'string') THEN
+  IF jsonb_typeof(v_digests) <> 'object' OR jsonb_typeof(v_counters) <> 'object' THEN
+    RETURN jsonb_build_object('kind','refused','code','INVALID_INPUT');
+  END IF;
+  IF (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(v_digests) k) IS DISTINCT FROM ARRAY['evidence','output','template']
+    OR (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(v_counters) k) IS DISTINCT FROM ARRAY['generatedUnits','inputUnits','modelCalls','slots','usageState'] THEN
+    RETURN jsonb_build_object('kind','refused','code','INVALID_INPUT');
+  END IF;
+  IF jsonb_typeof(v_model) = 'object' THEN
+    IF (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(v_model) k) IS DISTINCT FROM ARRAY['invocationPath','modelId','sdkVersion'] THEN
+      RETURN jsonb_build_object('kind','refused','code','INVALID_INPUT');
+    END IF;
+  ELSIF jsonb_typeof(v_model) <> 'null' THEN
+    RETURN jsonb_build_object('kind','refused','code','INVALID_INPUT');
+  END IF;
+  IF jsonb_typeof(p_receipt->'detailCodes') <> 'array' OR jsonb_typeof(p_receipt->'guardsRun') <> 'array' THEN
+    RETURN jsonb_build_object('kind','refused','code','INVALID_INPUT');
+  END IF;
+  -- Each element is checked on its own against the single-code pattern before the list is joined, so ["AB,CD"] and [""] cannot read back as something else.
+  IF EXISTS (SELECT 1 FROM jsonb_array_elements(p_receipt->'detailCodes') e WHERE jsonb_typeof(e) <> 'string' OR (e #>> '{}') !~ '^[A-Za-z][A-Za-z0-9_-]{1,63}$')
+    OR EXISTS (SELECT 1 FROM jsonb_array_elements(p_receipt->'guardsRun') e WHERE jsonb_typeof(e) <> 'string' OR (e #>> '{}') !~ '^(S[1-6]|VERIFIER)$')
+    OR EXISTS (SELECT 1 FROM jsonb_each(v_counters) c WHERE c.key <> 'usageState' AND (jsonb_typeof(c.value) <> 'number' OR c.value::text !~ '^[0-9]{1,15}$'))
+    OR EXISTS (SELECT 1 FROM jsonb_each(p_receipt) t WHERE t.key IN ('runId','tenantId','requesterRef','task','terminalState','reasonCode','harnessVersion') AND jsonb_typeof(t.value) <> 'string') THEN
     RETURN jsonb_build_object('kind','refused','code','INVALID_INPUT');
   END IF;
   IF p_receipt->>'tenantId' IS DISTINCT FROM v_tenant OR p_receipt->>'requesterRef' IS DISTINCT FROM v_actor THEN
     RETURN jsonb_build_object('kind','refused','code','NOT_AUTHORIZED');
+  END IF;
+  SELECT count(*) INTO v_recent FROM public.agentic_explain_receipts WHERE tenant_id = v_tenant AND created_at > clock_timestamp() - interval '1 hour';
+  IF v_recent >= 1000 THEN
+    RETURN jsonb_build_object('kind','refused','code','RATE_LIMITED');
   END IF;
   BEGIN
     INSERT INTO public.agentic_explain_receipts (tenant_id, run_id, requester_ref, task, terminal_state, reason_code, detail_codes, harness_version, model_id, invocation_path,
@@ -127,7 +171,7 @@ BEGIN
   RETURN jsonb_build_object('kind','ok','value',jsonb_build_object('receiptId',v_id));
 END $$;
 
--- Rebuilds outcome v2 from the typed columns, so a stored receipt round-trips to exactly what was appended.
+-- Rebuilds outcome v2 from the typed columns, so a stored receipt round-trips to exactly what was appended (the append function checks each list element on its own).
 CREATE FUNCTION public.agentic_explain_receipt_read(p_run text) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
 SET lock_timeout = '2s' SET statement_timeout = '5s' AS $$
@@ -136,7 +180,7 @@ DECLARE
   v_actor text;
   r public.agentic_explain_receipts%ROWTYPE;
 BEGIN
-  SELECT i.tenant_id, i.actor INTO v_tenant, v_actor FROM public.agentic_synthetic_identity() i;
+  SELECT i.tenant_id, i.actor INTO v_tenant, v_actor FROM public.agentic_explain_identity() i;
   IF v_tenant IS NULL OR v_actor IS NULL THEN
     RETURN jsonb_build_object('kind','refused','code','NOT_AUTHORIZED');
   END IF;
@@ -158,26 +202,25 @@ BEGIN
     'counters',jsonb_build_object('slots',r.slots,'modelCalls',r.model_calls,'inputUnits',r.input_units,'generatedUnits',r.generated_units,'usageState',r.usage_state)));
 END $$;
 
--- Deletes the bound organization's receipts past their retention, and no one else's. The age floor is enforced by the row trigger, not trusted to this body.
-CREATE FUNCTION public.agentic_explain_receipt_purge() RETURNS jsonb
+-- Operator purge: deletes receipts past their retention for one organization, or for all when the argument is NULL. Executable by no login; the migrator runs it through
+-- SET ROLE telesphoros_jobs. It does not depend on a capability, so a suspended or offboarded organization's expired receipts can still be purged. The age floor is enforced
+-- by the row trigger, not trusted to this body.
+CREATE FUNCTION public.agentic_explain_receipt_purge(p_tenant text DEFAULT NULL) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
-SET lock_timeout = '2s' SET statement_timeout = '30s' AS $$
+SET lock_timeout = '2s' SET statement_timeout = '60s' AS $$
 DECLARE
-  v_tenant text;
-  v_actor text;
   v_deleted bigint;
 BEGIN
-  SELECT i.tenant_id, i.actor INTO v_tenant, v_actor FROM public.agentic_synthetic_identity() i;
-  IF v_tenant IS NULL OR v_actor IS NULL THEN
-    RETURN jsonb_build_object('kind','refused','code','NOT_AUTHORIZED');
+  IF p_tenant IS NOT NULL AND p_tenant !~ '^[A-Za-z0-9._:@-]{1,128}$' THEN
+    RETURN jsonb_build_object('kind','refused','code','INVALID_INPUT');
   END IF;
-  DELETE FROM public.agentic_explain_receipts WHERE tenant_id = v_tenant AND created_at < clock_timestamp() - interval '2190 days';
+  DELETE FROM public.agentic_explain_receipts WHERE (p_tenant IS NULL OR tenant_id = p_tenant) AND created_at < clock_timestamp() - interval '2190 days';
   GET DIAGNOSTICS v_deleted = ROW_COUNT;
   RETURN jsonb_build_object('kind','ok','value',jsonb_build_object('deleted',v_deleted));
 END $$;
 
-REVOKE ALL ON FUNCTION public.agentic_explain_receipt_append(jsonb), public.agentic_explain_receipt_read(text), public.agentic_explain_receipt_purge() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.agentic_explain_receipt_append(jsonb), public.agentic_explain_receipt_read(text), public.agentic_explain_receipt_purge() TO telesphoros_app, telesphoros_worker;
+REVOKE ALL ON FUNCTION public.agentic_explain_receipt_append(jsonb), public.agentic_explain_receipt_read(text), public.agentic_explain_receipt_purge(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.agentic_explain_receipt_append(jsonb), public.agentic_explain_receipt_read(text) TO telesphoros_app;
 
 RESET ROLE;
 REVOKE CREATE ON SCHEMA public FROM telesphoros_jobs;

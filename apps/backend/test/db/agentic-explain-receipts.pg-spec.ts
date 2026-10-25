@@ -81,7 +81,15 @@ const call = async (c: Client, fn: string, ...args: unknown[]) =>
   ).rows[0].r as Json;
 const append = (c: Client, receipt: unknown) => call(c, 'agentic_explain_receipt_append', receipt);
 const read = (c: Client, run: string) => call(c, 'agentic_explain_receipt_read', run);
-const purge = (c: Client) => call(c, 'agentic_explain_receipt_purge');
+/** The operator purge: executable by no login, run here the way the migrator runs it, as the owning role. `null` purges every organization. */
+const purge = (tenant: string | null) =>
+  owner(async (c) => {
+    await c.query('BEGIN');
+    await c.query('SET LOCAL ROLE telesphoros_jobs');
+    const r = (await c.query('SELECT public.agentic_explain_receipt_purge($1::text) AS r', [tenant])).rows[0].r as Json;
+    await c.query('COMMIT');
+    return r;
+  });
 
 const released = (tenant: string, actor: string, run: string): Json => ({
   schemaVersion: 'agentic.explain-outcome.v2',
@@ -142,9 +150,14 @@ describe('append and read: a receipt round-trips exactly, and only for its own c
       expect(await as(db.appUrl, await capA(), (c) => read(c, `run-rt-${i}`))).toEqual({ kind: 'ok', value: receipt });
     }
   });
-  it('the worker login can append too (it is granted the same functions)', async () => {
-    const out = await as(db.workerUrl, await capA(), (c) => append(c, released(TENANT_A, ACTOR_A, 'run-worker')));
-    expect(out).toMatchObject({ kind: 'ok' });
+  it('only the application login may run the functions: the worker, the verifier and the issuer are refused by the database, and the application succeeds (control)', async () => {
+    const before = await count(TENANT_A);
+    for (const url of [db.workerUrl, db.verifierUrl, db.issuerUrl]) {
+      await expect(as(url, await capA(), (c) => append(c, released(TENANT_A, ACTOR_A, 'run-other-login')))).rejects.toMatchObject({ code: '42501' });
+      await expect(as(url, await capA(), (c) => read(c, 'run-once'))).rejects.toMatchObject({ code: '42501' });
+    }
+    expect(await count(TENANT_A)).toBe(before);
+    expect(await as(db.appUrl, await capA(), (c) => append(c, released(TENANT_A, ACTOR_A, 'run-app-login')))).toMatchObject({ kind: 'ok' });
   });
   it('refusals before admission share the run id "unadmitted" and are all kept; a real run id is stored once', async () => {
     const cap = await capA();
@@ -167,11 +180,11 @@ describe('append and read: a receipt round-trips exactly, and only for its own c
     // Control: the same caller appending its own receipt succeeds.
     expect(await as(db.appUrl, await capB(), (c) => append(c, released(TENANT_B, ACTOR_B, 'run-b')))).toMatchObject({ kind: 'ok' });
   });
-  it('a caller with no capability is refused by every function, even naming the organization in a setting', async () => {
+  it('a caller with no capability is refused by both functions, even naming the organization in a setting', async () => {
     const before = await count(TENANT_A);
     const out = await as(db.appUrl, undefined, async (c) => {
       await c.query(`SELECT set_config('app.current_tenant_id', $1, true), set_config('app.current_actor', $2, true)`, [TENANT_A, ACTOR_A]);
-      return [await append(c, released(TENANT_A, ACTOR_A, 'run-nocap')), await read(c, 'run-once'), await purge(c)];
+      return [await append(c, released(TENANT_A, ACTOR_A, 'run-nocap')), await read(c, 'run-once')];
     });
     for (const r of out) expect(r).toEqual({ kind: 'refused', code: 'NOT_AUTHORIZED' });
     expect(await count(TENANT_A)).toBe(before);
@@ -301,21 +314,45 @@ describe('retention: six years, enforced by the row, for the bound organization 
     );
   const present = (run: string) => owner(async (c) => (await c.query('SELECT 1 FROM public.agentic_explain_receipts WHERE run_id = $1', [run])).rowCount === 1);
 
-  it("purge removes the bound organization's receipts older than 2190 days, keeps younger ones and other organizations' rows", async () => {
+  it("the operator purge removes one organization's receipts older than 2190 days, and keeps younger ones and other organizations' rows", async () => {
     await seed(TENANT_A, ACTOR_A, 'ret-a-old-1', 2191);
     await seed(TENANT_A, ACTOR_A, 'ret-a-old-2', 4000);
     await seed(TENANT_A, ACTOR_A, 'ret-a-edge', 2189);
     await seed(TENANT_A, ACTOR_A, 'ret-a-new', 1);
     await seed(TENANT_B, ACTOR_B, 'ret-b-old', 3000);
-    expect(await as(db.appUrl, await capA(), (c) => purge(c))).toEqual({ kind: 'ok', value: { deleted: 2 } });
+    expect(await purge(TENANT_A)).toEqual({ kind: 'ok', value: { deleted: 2 } });
     expect(await present('ret-a-old-1')).toBe(false);
     expect(await present('ret-a-old-2')).toBe(false);
     expect(await present('ret-a-edge')).toBe(true);
     expect(await present('ret-a-new')).toBe(true);
-    expect(await present('ret-b-old')).toBe(true); // another organization's expired row is not this caller's to purge
-    expect(await as(db.appUrl, await capB(), (c) => purge(c))).toEqual({ kind: 'ok', value: { deleted: 1 } });
+    expect(await present('ret-b-old')).toBe(true); // named organization only
+    expect(await purge(TENANT_A)).toEqual({ kind: 'ok', value: { deleted: 0 } }); // control: nothing left to purge for it
+    expect(await purge(null)).toEqual({ kind: 'ok', value: { deleted: 1 } }); // NULL reaches every organization
     expect(await present('ret-b-old')).toBe(false);
-    expect(await as(db.appUrl, await capA(), (c) => purge(c))).toEqual({ kind: 'ok', value: { deleted: 0 } }); // control: nothing left to purge
+    expect(await purge('a tenant with spaces')).toEqual({ kind: 'refused', code: 'INVALID_INPUT' });
+  });
+  it('no login can run the purge, so a request cannot trigger it (control: the owner can)', async () => {
+    for (const url of [db.appUrl, db.workerUrl, db.verifierUrl, db.issuerUrl]) {
+      await expect(as(url, await capA(), (c) => c.query('SELECT public.agentic_explain_receipt_purge($1::text)', [TENANT_A]))).rejects.toMatchObject({ code: '42501' });
+    }
+    expect(await purge(TENANT_A)).toMatchObject({ kind: 'ok' });
+  });
+  it('a suspended organization cannot append or read (0047), and its expired receipts can still be purged', async () => {
+    const t = 'rcpt-susp';
+    await member(t, 'rcpt-susp-sam');
+    const cap = await mint(t, 'rcpt-susp-sam');
+    expect(await as(db.appUrl, cap, (c) => append(c, released(t, 'rcpt-susp-sam', 'run-susp-1')))).toMatchObject({ kind: 'ok' }); // control, while active
+    await seed(t, 'rcpt-susp-sam', 'run-susp-old', 3000);
+    await owner((c) => c.query(`UPDATE tenants SET status = 'suspended', changed_by = 'test-operator' WHERE id = $1`, [t]));
+    try {
+      expect(await as(db.appUrl, cap, (c) => append(c, released(t, 'rcpt-susp-sam', 'run-susp-2')))).toEqual({ kind: 'refused', code: 'NOT_AUTHORIZED' });
+      expect(await as(db.appUrl, cap, (c) => read(c, 'run-susp-1'))).toEqual({ kind: 'refused', code: 'NOT_AUTHORIZED' });
+      expect(await purge(t)).toEqual({ kind: 'ok', value: { deleted: 1 } }); // the operator purge does not need the tenant to be active
+      expect(await present('run-susp-old')).toBe(false);
+    } finally {
+      await owner((c) => c.query(`UPDATE tenants SET status = 'active', changed_by = 'test-operator' WHERE id = $1`, [t]));
+    }
+    expect(await as(db.appUrl, await mint(t, 'rcpt-susp-sam'), (c) => read(c, 'run-susp-1'))).toMatchObject({ kind: 'ok' }); // reinstated: readable again
   });
   it("the age floor is the row's own: the owner may delete an expired row and may not delete one a day short of it", async () => {
     await seed(TENANT_A, ACTOR_A, 'floor-old', 2191);
@@ -394,7 +431,7 @@ describe('what the table can hold (R5, FR-014)', () => {
 });
 
 describe('ownership and privileges', () => {
-  it('the table and the functions are owned by telesphoros_jobs, row security is forced, the functions are definers with a fixed search_path, and only app and worker may run them', async () => {
+  it('the table and the functions are owned by telesphoros_jobs, row security is forced, the functions are definers with a fixed search_path, and only the application may run the two capability-bound ones', async () => {
     await owner(async (c) => {
       const t = (
         await c.query(
@@ -407,16 +444,107 @@ describe('ownership and privileges', () => {
         await c.query(
           `SELECT p.proname, pg_get_userbyid(p.proowner) AS owner, p.prosecdef, p.proconfig::text AS config,
                   has_function_privilege('telesphoros_app', p.oid, 'EXECUTE') AS app, has_function_privilege('telesphoros_worker', p.oid, 'EXECUTE') AS worker,
+                  has_function_privilege('telesphoros_ledger_verifier', p.oid, 'EXECUTE') AS verifier, has_function_privilege('telesphoros_issuer', p.oid, 'EXECUTE') AS issuer,
                   has_function_privilege('public', p.oid, 'EXECUTE') AS pub
-           FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ('agentic_explain_receipt_append', 'agentic_explain_receipt_read', 'agentic_explain_receipt_purge') ORDER BY 1`,
+           FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname LIKE 'agentic_explain_%' ORDER BY 1`,
         )
       ).rows;
-      expect(fns.map((f) => f.proname)).toEqual(['agentic_explain_receipt_append', 'agentic_explain_receipt_purge', 'agentic_explain_receipt_read']);
-      for (const f of fns) expect(f).toMatchObject({ owner: 'telesphoros_jobs', prosecdef: true, app: true, worker: true, pub: false });
-      for (const f of fns) expect(f.config).toMatch(/search_path=pg_catalog, pg_temp/);
+      expect(fns.map((f) => f.proname)).toEqual([
+        'agentic_explain_identity',
+        'agentic_explain_receipt_append',
+        'agentic_explain_receipt_guard',
+        'agentic_explain_receipt_purge',
+        'agentic_explain_receipt_read',
+      ]);
+      const appMay = new Set(['agentic_explain_receipt_append', 'agentic_explain_receipt_read']);
+      for (const f of fns) {
+        expect(f).toMatchObject({ owner: 'telesphoros_jobs', app: appMay.has(f.proname), worker: false, verifier: false, issuer: false, pub: false });
+        expect(f.config).toMatch(/search_path=pg_catalog, pg_temp/);
+      }
+      expect(fns.filter((f) => f.prosecdef).map((f) => f.proname)).toEqual(['agentic_explain_receipt_append', 'agentic_explain_receipt_purge', 'agentic_explain_receipt_read']);
       const schemaCreate = (await c.query(`SELECT has_schema_privilege('telesphoros_jobs', 'public', 'CREATE') AS can`)).rows[0].can;
       expect(schemaCreate).toBe(false); // the migration gave CREATE only while it ran
     });
+  });
+  it("the identity helper is the family's own, not the synthetic one: the three functions name it and not agentic_synthetic_identity", async () => {
+    await owner(async (c) => {
+      const bodies = (
+        await c.query(
+          `SELECT p.proname, p.prosrc FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ('agentic_explain_receipt_append', 'agentic_explain_receipt_read')`,
+        )
+      ).rows;
+      expect(bodies).toHaveLength(2);
+      for (const b of bodies) {
+        expect(b.prosrc).toMatch(/agentic_explain_identity\(\)/);
+        expect(b.prosrc).not.toMatch(/agentic_synthetic_|app\.current_(tenant_id|actor)/);
+      }
+    });
+  });
+});
+
+describe('the guards cannot be skipped', () => {
+  it('both triggers are ENABLE ALWAYS, so session_replication_role = replica does not skip them (control: an ordinary trigger is skipped)', async () => {
+    await owner(async (c) => {
+      const flags = (await c.query(`SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'public.agentic_explain_receipts'::regclass AND NOT tgisinternal ORDER BY 1`)).rows;
+      expect(flags).toEqual([
+        { tgname: 'agentic_explain_receipt_guard', tgenabled: 'A' },
+        { tgname: 'agentic_explain_receipt_no_truncate', tgenabled: 'A' },
+      ]);
+      await c.query('BEGIN');
+      await c.query(`SET LOCAL session_replication_role = replica`);
+      await c.query('SAVEPOINT s1');
+      await expect(c.query(`UPDATE public.agentic_explain_receipts SET slots = 1 WHERE run_id = 'run-once'`)).rejects.toMatchObject({ code: '23000' });
+      await c.query('ROLLBACK TO s1');
+      await expect(c.query(`DELETE FROM public.agentic_explain_receipts WHERE run_id = 'run-once'`)).rejects.toMatchObject({ code: '23000' });
+      await c.query('ROLLBACK TO s1');
+      await expect(c.query('TRUNCATE public.agentic_explain_receipts')).rejects.toMatchObject({ code: '23000' });
+      await c.query('ROLLBACK');
+      // Control: with the same setting an ORDINARY trigger does not fire, so the cases above would have passed if the guards were not ALWAYS.
+      await c.query('BEGIN');
+      await c.query('CREATE TEMP TABLE probe (n int)');
+      await c.query(`CREATE FUNCTION pg_temp.refuse() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fired'; END $$`);
+      await c.query('CREATE TRIGGER ordinary BEFORE INSERT ON probe FOR EACH ROW EXECUTE FUNCTION pg_temp.refuse()');
+      await c.query(`SET LOCAL session_replication_role = replica`);
+      expect((await c.query('INSERT INTO probe VALUES (1)')).rowCount).toBe(1);
+      await c.query('ROLLBACK');
+    });
+  });
+});
+
+describe('the list columns are exact, and the table cannot be grown without limit', () => {
+  it('refuses a list element that only looks right once joined: ["AB,CD"], [""], a number, a nested list', async () => {
+    const cap = await capA();
+    const before = await count(TENANT_A);
+    for (const [i, bad] of [['AB,CD'], [''], ['ok_code', ''], [7], [['x']], ['a b']].entries()) {
+      const r = { ...held(TENANT_A, ACTOR_A, `run-list-${i}`), detailCodes: bad };
+      expect(await as(db.appUrl, cap, (c) => append(c, r))).toEqual({ kind: 'refused', code: 'INVALID_INPUT' });
+    }
+    const guards = { ...released(TENANT_A, ACTOR_A, 'run-list-guards'), guardsRun: ['S1,S2'] };
+    expect(await as(db.appUrl, cap, (c) => append(c, guards))).toEqual({ kind: 'refused', code: 'INVALID_INPUT' });
+    expect(await count(TENANT_A)).toBe(before);
+    // Control: two separate, valid codes are stored and read back as two.
+    const ok = { ...held(TENANT_A, ACTOR_A, 'run-list-ok'), detailCodes: ['AB', 'CD'] };
+    expect(await as(db.appUrl, cap, (c) => append(c, ok))).toMatchObject({ kind: 'ok' });
+    expect(await as(db.appUrl, await capA(), (c) => read(c, 'run-list-ok'))).toEqual({ kind: 'ok', value: ok });
+  });
+  it('an organization may add at most 1000 receipts an hour: the next is RATE_LIMITED, older rows do not count, and another organization is unaffected', async () => {
+    const t = 'rcpt-rate';
+    await member(t, 'rcpt-rate-ray');
+    const fill = (age: string, run: string) =>
+      owner((c) =>
+        c.query(
+          `INSERT INTO public.agentic_explain_receipts (tenant_id, run_id, requester_ref, task, terminal_state, reason_code, harness_version, evidence_digest, slots, model_calls, input_units, generated_units, usage_state, created_at)
+           SELECT $1, $2 || g, 'rcpt-rate-ray', 'pgx.explain.v1', 'held', 'NOT_ELIGIBLE', $3, $4, 0, 0, 0, 0, 'known', clock_timestamp() - interval '${age}' FROM generate_series(1, 1000) g`,
+          [t, run, SHA('a'), HMAC('c')],
+        ),
+      );
+    await fill('2 hours', 'rate-old-');
+    const cap = await mint(t, 'rcpt-rate-ray');
+    expect(await as(db.appUrl, cap, (c) => append(c, released(t, 'rcpt-rate-ray', 'rate-first')))).toMatchObject({ kind: 'ok' }); // 1000 old rows do not count
+    await fill('5 minutes', 'rate-new-'); // now 1000 recent rows (plus the one just appended)
+    expect(await as(db.appUrl, await mint(t, 'rcpt-rate-ray'), (c) => append(c, released(t, 'rcpt-rate-ray', 'rate-second')))).toEqual({ kind: 'refused', code: 'RATE_LIMITED' });
+    expect(await as(db.appUrl, await capB(), (c) => append(c, released(TENANT_B, ACTOR_B, 'run-b-rate')))).toMatchObject({ kind: 'ok' });
+    expect(await owner(async (c) => (await c.query(`SELECT 1 FROM public.agentic_explain_receipts WHERE run_id = 'rate-second'`)).rowCount)).toBe(0);
   });
 });
 
