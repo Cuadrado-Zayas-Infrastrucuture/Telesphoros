@@ -1,0 +1,9 @@
+# Requirements R3 to R5 recorded for any future model path (2026-10-24)
+
+Date: 2026-10-24
+
+**Implemented (documentation only).** `docs/ai-safety-and-hallucination-controls.md` now holds three more requirements for the first change that adds a model call, after R1 and R2 (recorded 2026-10-23). R3: the evaluation gate runs on the pull request that changes a prompt, model, route or decoding setting and is a required check; a gate that makes no model call says what it does not prove. R4: every task declares its output class, and free text shown to a person is checked, withheld or labelled unreviewed; a length limit is not a check. R5: a stored model output has a declared retention, a purge that covers rows with no expiry, and a way to erase it; the synthetic task outcome in `apps/ai-service` stores the released artifact text in an immutable table, which is acceptable for synthetic text and a blocker for real text. They come from the review of the earlier gateway prototype (`telesphoros-ui` at `5591a6f`), read only.
+
+**Not changed:** code, CI, the ruleset, R1 and R2, the two sentences already in the document (including the `PGX_CLINICAL_HOLD_LIFTED` line, which nothing in the code reads, because there is no model layer to gate), and the old gateway checkout. The repository still has no model client, so none of the five requirements has a test yet.
+
+**Not checked, so not stated as findings:** the encryption of the prototype's response-cache column, whether its backups keep expired rows, the Anthropic-direct error log text, the deployed provider chain, and whether the expediente narrative is stored. An earlier version of the review listed three tasks as using the response cache; the response cache covers two (`clinical_summary` and `file_classification`) and the others use provider-side prompt caching, which R5 treats as a separate surface.
