@@ -1,0 +1,11 @@
+# LLM harness slice 2: the explanation run, the failure path and the readiness conditions
+
+Date: 2026-10-25
+
+**Implemented.** `runExplanation` in `apps/ai-service/src/explain.ts`, the sibling of `runSynthetic`: it admits a request (idempotency key, authority, deadline, budget), sends only an eligible `shown` result to the model port, runs the sensors S1 to S6 on the draft, allows one repair attempt (its prompt lists fixed reason codes only), then a verifier call that can only add a hold, and releases only after authority and deadline are checked again. Every other path returns the engine's own text with one of 19 fixed reason codes and no model-written word. Also: the task registry (`src/tasks.ts`) that holds R1, R2 and R4, the verifier and its prompt, the repair prompt, and `readiness(conditions)` in `policy.ts` (closed unless all eight FR-012 conditions are `true`). Still no model is called and nothing is exported from the package entry.
+
+**Controls.** One test per failure reason, with a coverage test that fails when a reason has none. R1, R2 and R4 each have a test that was broken on purpose and went red (see `docs/verification/llm-harness-slice-2.md`). A verifier reply that is malformed, incomplete or says hold is a hold; a verifier that accepts cannot release what a sensor holds (it is not even called). Authority is re-checked at every boundary, and a replay of a finished run returns the engine text only (no explanation text is stored, FR-014).
+
+**Not changed:** the engine, `kernel.ts`, `contracts.ts`, `index.ts`, migrations, Terraform, the AWS account, the BAA. Contracts for this task live in `src/explain-contracts.ts`, because the synthetic `Context` fixes `purpose` to `business-assistance`.
+
+**Not verified or still open:** fencing, idempotency and caps are proven against in-memory doubles (the real `SyntheticBudgets` class behind an adapter); the durable store, real usage counters and outcome v2 are slice 3. `readiness()` is not wired into any runtime. The fixed engine-text sentences, the glossary and the golden cases are still my drafts, unmarked by the pharmacist (D5). The verifier prompt, the repair prompt and the pinned digests changed the harness version.

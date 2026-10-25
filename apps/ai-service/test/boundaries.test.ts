@@ -80,4 +80,5 @@ test('slice 1 subdirectories are scanned by the same rules (positive and negativ
 });
 test('the dormant harness is not exported from the package entry', () => {
   expect(readFileSync(resolve(root, 'src/index.ts'), 'utf8')).not.toMatch(/evaluators|prompts|model-clients|fallback/);
+  expect(readFileSync(resolve(root,'src/index.ts'),'utf8')).not.toMatch(/evaluators|prompts|model-clients|fallback|explain|tasks/);
 });

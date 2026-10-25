@@ -67,7 +67,7 @@ describe('the evaluation gate (R3, FR-013)', () => {
   });
   test('changing a template, lexicon or glossary without updating the pinned digest turns the gate red', async () => {
     const d = currentDigests();
-    for (const k of ['template', 'lexicon', 'glossary'] as const) {
+    for (const k of ['template', 'repair', 'verify', 'lexicon', 'glossary'] as const) {
       const report = await runGate({ pinned: { ...d, [k]: 'sha256:' + '0'.repeat(64) } });
       expect(report.digestsMatch, k).toBe(false);
       expect(report.ok, k).toBe(false);
