@@ -44,7 +44,7 @@ async function newReport(tenantId: string): Promise<ReportRecord> {
 }
 /** Runs `work` the way a request does: inside the per-request slot the API opens, with the id the request middleware set. */
 const inRequest = <T>(requestId: string | undefined, work: () => Promise<T>): Promise<T> =>
-  new Promise<T>((resolve, reject) => authorityContextMiddleware({ id: requestId } as unknown as Request, {} as Response, () => work().then(resolve, reject)));
+  new Promise<T>((resolve, reject) => authorityContextMiddleware({ id: requestId } as unknown as Request, {} as Response, () => { void work().then(resolve, reject); }));
 const eventOf = (reportId: string) => owner(async (c) => (await c.query<{ request_id: string | null }>('SELECT request_id FROM outbox_events WHERE subject_id = $1', [reportId])).rows[0]);
 const relay = () => owner((c) => c.query('SELECT outbox_relay(500)'));
 const payloadOf = (reportId: string) => owner(async (c) => (await c.query<{ payload: Record<string, unknown> }>(`SELECT payload FROM jobs WHERE payload ->> 'reportId' = $1`, [reportId])).rows[0]?.payload);

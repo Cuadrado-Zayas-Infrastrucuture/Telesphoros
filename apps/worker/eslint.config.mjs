@@ -1,6 +1,7 @@
 import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+import { promiseRules } from '../../scripts/lint/promise-rules.mjs';
 
 export default tseslint.config(
   { ignores: ['dist', 'coverage'] },
@@ -15,4 +16,5 @@ export default tseslint.config(
     files: ['src/**/*.ts'],
     rules: { 'no-console': 'error' },
   },
+  promiseRules(['src/**/*.ts', 'test/**/*.ts'], import.meta.dirname),
 );

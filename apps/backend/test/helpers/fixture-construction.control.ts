@@ -20,6 +20,7 @@ afterAll(async () => { await protectedDatabase?.drop(); });
 it('closes an already-connected migrator and drops its database when connect rejects', async () => {
   const connect = Client.prototype.connect;
   let injected = false;
+  // eslint-disable-next-line @typescript-eslint/no-misused-promises -- pg types connect's callback overload as void; the real method returns this promise
   jest.spyOn(Client.prototype, 'connect').mockImplementation(async function (this: Client) {
     await Reflect.apply(connect, this, []);
     if (!injected && /^test_/.test((this as unknown as { database: string }).database)) {
@@ -33,6 +34,7 @@ it('closes an already-connected migrator and drops its database when connect rej
 it('drops the database when the real migrator rejects before returning a handle', async () => {
   const query = Client.prototype.query;
   let injected = false;
+  // eslint-disable-next-line @typescript-eslint/no-misused-promises -- pg types query's callback overloads as void; the real method returns this promise
   jest.spyOn(Client.prototype, 'query').mockImplementation(function (this: Client, ...args: unknown[]) {
     if (!injected && args[0] === 'SELECT pg_advisory_lock($1)' && (args[1] as number[])?.[0] === 7262001) {
       injected = true; return Promise.reject(new Error('synthetic migration rejection'));
@@ -127,6 +129,7 @@ it('attempts all disposals and retains original and cleanup failures exactly onc
 
 it('retains both work and client-end errors while still closing the real connection', async () => {
   const end = Client.prototype.end;
+  // eslint-disable-next-line @typescript-eslint/no-misused-promises -- pg types end's callback overload as void; the real method returns this promise
   jest.spyOn(Client.prototype, 'end').mockImplementation(async function (this: Client) {
     await Reflect.apply(end, this, []); throw new Error('synthetic end rejection');
   });
