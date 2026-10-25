@@ -35,7 +35,7 @@ The checker validates skill frontmatter, local linked files, UI invocation names
 
 Routing is a stemmed lexical approximation adapted from the upstream evaluator. A high score is not evidence that an LLM follows safety or approval instructions. [Scenario rubrics](../../.agents/evals/scenarios.json) cover approval continuity, skipped tiers, failure propagation, tenant access, cost equivalence, untrusted text and release boundaries. Exercise them on synthetic artifacts and record observable outcomes. Separate manual walkthroughs from independent model evaluations; no skill authorizes subagents, paid evaluations or running a hosted agent by itself.
 
-For changes, preserve the first evaluation, repair observed gaps and record before/after results against the same prompts. Do not rewrite a failing prompt to match a description. Use the existing [query protocol](../../work/QUERY_PROTOCOL.md) for local state/evidence and [verification record](../verification/engineering-workflows.md) for this adoption. No required CI job is changed or replaced by these local checks.
+For changes, preserve the first evaluation, repair observed gaps and record before/after results against the same prompts. Do not rewrite a failing prompt to match a description. Record evidence for this adoption in the [verification record](../verification/engineering-workflows.md). No required CI job is changed or replaced by these local checks.
 
 ## Maintenance
 
