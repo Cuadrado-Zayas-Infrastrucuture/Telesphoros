@@ -15,7 +15,7 @@ This folder is a pinned reference copy. It sits outside `.agents/skills/` on pur
 | `to-tickets` | `skills/engineering/to-tickets` | Turns findings into tickets |
 | `triage` | `skills/engineering/triage` | Issue triage vocabulary |
 | `git-guardrails-claude-code` | `skills/misc/git-guardrails-claude-code` | Blocks destructive git commands; hook not active |
-| `domain-modeling` | `skills/engineering/domain-modeling` | `GLOSSARY.md` and ADR formats |
+| `domain-modeling` | `skills/engineering/domain-modeling` | `GLOSSARY.md` and ADR formats; adopted as [`telesphoros-domain-modeling`](../../skills/telesphoros-domain-modeling/SKILL.md) |
 | `codebase-design` | `skills/engineering/codebase-design` | Shared module-design vocabulary |
 
 ## What is not vendored, and why

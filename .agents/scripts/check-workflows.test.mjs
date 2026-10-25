@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, mkdirSync, symlinkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readSkill, rank, checkLinks, evaluate } from './check-workflows.mjs';
+import { readSkill, rank, checkLinks, evaluate, baselineInputs } from './check-workflows.mjs';
 
 const skills = [
   { name: 'debug', description: 'Reproduce crashes and isolate failure root causes.' },
@@ -51,4 +51,18 @@ test('metadata accepts the supported frontmatter and refuses missing or unfinish
     writeFileSync(file, value);
     assert.throws(() => readSkill(file));
   }
+});
+
+test('the upstream comparison leaves out a skill from another source, and still refuses a missing upstream skill', () => {
+  const upstream = [{ name: 'debugging', description: 'Reproduce crashes.' }, { name: 'shipping', description: 'Assess launch readiness.' }];
+  const cases = [
+    { name: 'debug', upstream_name: 'debugging', positive: ['a', 'b', 'c'], negative: [{ prompt: 'x', owner: 'release' }, { prompt: 'y', owner: 'glossary' }, { prompt: 'z', owner: 'release' }] },
+    { name: 'release', upstream_name: 'shipping', positive: ['a', 'b', 'c'], negative: [{ prompt: 'x', owner: 'debug' }, { prompt: 'y', owner: 'debug' }] },
+    { name: 'glossary', positive: ['a', 'b', 'c'], negative: [{ prompt: 'x', owner: 'debug' }, { prompt: 'y', owner: 'release' }] },
+  ];
+  const { skills: chosen, cases: mapped } = baselineInputs(cases, upstream);
+  assert.deepEqual(chosen.map(s => s.name), ['debugging', 'shipping']);
+  assert.deepEqual(mapped.map(c => c.name), ['debugging', 'shipping']);
+  assert.deepEqual(mapped[0].negative.map(n => n.owner), ['shipping', 'shipping'], 'a negative owned by the other-source skill is dropped');
+  assert.throws(() => baselineInputs(cases, upstream.slice(0, 1)), /Missing baseline skill: shipping/);
 });
