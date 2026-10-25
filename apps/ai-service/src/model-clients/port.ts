@@ -1,4 +1,5 @@
 import type { Observation } from '../contracts';
+import type { ModelIdentity } from '../outcome-v2';
 
 /**
  * The only way the harness talks to a model. There is no tools parameter and no way to add one: a request is exactly these
@@ -13,7 +14,10 @@ export interface ModelReply {
   artifact: unknown;
   observation: Observation | null;
 }
+/** What a port is, recorded in every receipt (FR-010): the exact model id, the invocation path and the SDK version. */
+export type { ModelIdentity };
 export interface ModelPort {
+  readonly identity: ModelIdentity;
   complete(request: ModelRequest): Promise<ModelReply>;
 }
 

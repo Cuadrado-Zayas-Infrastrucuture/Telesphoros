@@ -79,5 +79,5 @@ test('slice 1 subdirectories are scanned by the same rules (positive and negativ
   expect(sourceAllowed("const x = fetch('https://example.invalid');", 'model-clients')).toBe(false);
 });
 test('the dormant harness is not exported from the package entry', () => {
-  expect(readFileSync(resolve(root, 'src/index.ts'), 'utf8')).not.toMatch(/evaluators|prompts|model-clients|fallback|explain|tasks/);
+  expect(readFileSync(resolve(root, 'src/index.ts'), 'utf8')).not.toMatch(/evaluators|prompts|model-clients|fallback|explain|tasks|outcome-v2|trace|keyed-digest|receipt/);
 });
