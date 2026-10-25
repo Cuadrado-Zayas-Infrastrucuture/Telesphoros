@@ -143,7 +143,6 @@ export const s6: Sensor = (e, r) => {
 export const ALL_SENSORS: Readonly<Record<SensorId, Sensor>> = { S1: s1, S2: s2, S3: s3, S4: s4, S5: s5, S6: s6 };
 /** Runs every sensor. A sensor that is missing is a hold, never a pass: the harness fails closed. */
 export const runSensors = (e: Explanation, r: ExplainableResult, sensors: Readonly<Record<SensorId, Sensor>> = ALL_SENSORS): Hold[] =>
-  SENSORS.flatMap((id) => (typeof sensors[id] === 'function' ? sensors[id](e, r) : [{ sensor: id, reason: 'SENSOR_MISSING', statement: null }]));
   SENSORS.flatMap(id => typeof sensors[id] === 'function' ? sensors[id](e, r) : [{ sensor: id, reason: 'SENSOR_MISSING', statement: null }]);
 
 /** Every reason a sensor or the structure check can report. The repair prompt may list only these. */
