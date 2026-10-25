@@ -37,3 +37,51 @@ show the test goes red.
   nothing about clinical prose.
 - Origin: the same prototype held an output guard that was written and unit-tested but called by no
   production code. Its tests stayed green because they called it directly.
+
+### R3. A change to a prompt, a model or a decoding setting is evaluated before it merges
+
+- The evaluation gate runs on the pull request that changes a prompt, a model name, a provider route or a
+  decoding setting (temperature, token limits, response schema), and it is a required check on the
+  protected branch. A job that runs only after the merge is a report, not a gate.
+- The gate names the paths that count as such a change, and a test fails when a file that builds a prompt
+  or selects a model sits outside them.
+- A gate that makes no model call says so, and the document says what it does not prove. A contract check
+  on committed outputs proves the scoring code and the fixtures agree; it does not show that a changed
+  prompt still produces grounded text. The live evaluation that does, with its approval and cost, is a
+  separate named step, and release of the changed task waits for it.
+- Origin: the same prototype ran its evaluation workflow only on pushes to the main branch, so a prompt or
+  model change could merge before any check had run on it. Its live evaluation was manual.
+
+### R4. Every task's output class is declared, and free text shown to a person is checked, withheld or labelled
+
+- Each task declares what it returns: structured fields checked against a schema, or free text. Free text
+  that reaches a person must be checked against its source, withheld, or shown labelled as unreviewed
+  model output. A length limit is not a check.
+- The check for a class of output is listed beside the task (see R2). A task with free text and no listed
+  check does not run. A test fails when a task's declared class and its listed checks disagree.
+- A check that tests wording against the evidence (a term or a figure appears in the source) is described
+  as that. It does not show that a claim follows from the evidence, and the document does not call it
+  clinical agreement.
+- Origin: in the prototype only one task had an output check, and that check compared words with the
+  evidence. Five other tasks returned free text under a length limit, one of them clinical notes for a
+  pharmacist whose review was described in prose only.
+
+### R5. A stored model output has a declared retention, a purge that covers every row, and a way to erase it
+
+- A model response or a model-written text kept anywhere (a response cache, a task outcome, a log, a trace)
+  is listed with its data class (R1), how long it is kept, what deletes it, and who can read it. A `phi`
+  response is not cached unless that decision is written down with those four answers, and encryption at
+  rest of the stored text is one of the answers.
+- The purge covers every row. A row with no expiry is a retention decision, not a default: the code either
+  forbids it for `phi` tasks or a test shows it is purged.
+- Erasure on request is possible for the stored text, or the text is not stored. A table that refuses
+  deletion cannot hold model text that may need to be erased. The synthetic task outcome in `apps/ai-service`
+  stores the released artifact text (`kernel.ts`, `simulatedArtifact`), and its table
+  (`agentic_synthetic_outcomes`, migration 0029) is immutable by trigger: acceptable for synthetic text,
+  and a blocker for any real text until this is decided.
+- Provider-side prompt caching is a separate surface from a stored response cache. A decision names which
+  one it covers.
+- Origin: the prototype cached the responses of two `phi` tasks for seven days in a table whose
+  `response` column held the text as plain JSON. An hourly job deleted expired rows, but a row written
+  with no expiry was never deleted by it, and whether the column was encrypted or could be erased on request
+  was not checked.
