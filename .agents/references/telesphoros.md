@@ -1,6 +1,6 @@
 # Telesphoros engineering context
 
-Read [CLAUDE.md](../../CLAUDE.md), [STATUS working agreements](../../docs/STATUS.md#working-agreements), [CONTRIBUTING](../../CONTRIBUTING.md), and the existing [query protocol](../../work/QUERY_PROTOCOL.md). They remain authoritative; these skills do not grant permissions or restart an already approved plan. Repository guidance and direct founder instructions take precedence over upstream examples.
+Read [CLAUDE.md](../../CLAUDE.md), [STATUS working agreements](../../docs/STATUS.md#working-agreements) and [CONTRIBUTING](../../CONTRIBUTING.md). They remain authoritative; these skills do not grant permissions or restart an already approved plan. Repository guidance and direct founder instructions take precedence over upstream examples.
 
 ## Where to look
 

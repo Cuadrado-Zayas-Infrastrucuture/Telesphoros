@@ -62,4 +62,4 @@ const { startFakeIdp, DEFAULT_USERS } = require('../../packages/fake-idp/dist/in
     }
     console.log('PASS unauthenticated 401; reader 403; missing upload recovered');
   } finally { if (app) await app.close(); await idp.stop(); }
-})().catch(() => { console.error('FAIL local upload checks (no token/configuration output)'); process.exitCode = 1; });
+})().catch(require('./report-failure.cjs').reportFailure);

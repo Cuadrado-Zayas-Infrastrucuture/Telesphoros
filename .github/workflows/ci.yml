@@ -117,6 +117,11 @@ jobs:
       - name: Production builds
         if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
         run: pnpm build
+      # The demo's users come from the fake identity provider's own list and the verify scripts report the failing step. This job has no
+      # PostgreSQL, so the run that seeds an empty database skips here and says so; `TEST_DATABASE_URL=... pnpm test:demo-seed` runs it.
+      - name: Demo users and verify-script reports
+        if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
+        run: pnpm test:demo-seed
       - name: Published FHIR Genomics IG validation (synthetic only)
         if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
         run: JAVA_HOME="$JAVA_HOME_21_X64" pnpm --filter @telesphoros/smart-pilot test:ig
