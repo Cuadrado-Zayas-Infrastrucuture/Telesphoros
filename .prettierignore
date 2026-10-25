@@ -1,0 +1,5 @@
+# Prettier runs only on the source glob in the root package.json `format` scripts (apps/*/{src,test} and packages/*/{src,test}).
+# Inside that scope, these files are pinned by SHA-256 in docs/verification/phase3c-rehearsal-evidence.json (the 2026-10-10 recovery
+# rehearsal), so they keep their bytes. scripts/lint/prettier-scope.test.mjs fails if a pinned source file is missing from this list.
+apps/backend/test/helpers/recovery-cli-observe.cjs
+apps/backend/test/helpers/recovery-evidence.ts
