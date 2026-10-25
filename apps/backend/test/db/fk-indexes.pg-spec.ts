@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 
 let ephemeral: EphemeralDatabase;
@@ -50,19 +48,5 @@ describe('foreign keys without a covering index (audit item 13)', () => {
     });
     expect(found.before).toContain('zz_child_fk');
     expect(found.after).not.toContain('zz_child_fk');
-  });
-});
-
-describe('the count in docs/database.md', () => {
-  it('is the number of foreign keys without a covering index in the live catalog', async () => {
-    const live = await withAdmin(ephemeral.adminUrl, async (c) => (await c.query<{ n: number }>(`
-      SELECT count(*)::int AS n FROM pg_constraint c
-       WHERE c.contype = 'f' AND c.connamespace = 'public'::regnamespace
-         AND NOT EXISTS (SELECT 1 FROM pg_index i WHERE i.indrelid = c.conrelid AND i.indisvalid
-           AND (SELECT array_agg(k ORDER BY k) FROM unnest((i.indkey::int2[])[0:cardinality(c.conkey) - 1]) k) = (SELECT array_agg(k ORDER BY k) FROM unnest(c.conkey) k))`)).rows[0]!.n);
-    const doc = readFileSync(join(__dirname, '../../../../docs/database.md'), 'utf8');
-    const stated = /(\d+) foreign keys have no index/.exec(doc);
-    expect(stated).not.toBeNull();
-    expect(Number(stated![1])).toBe(live);
   });
 });

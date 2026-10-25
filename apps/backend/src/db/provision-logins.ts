@@ -252,7 +252,7 @@ export async function provisionLogins(options: ProvisionOptions): Promise<Provis
 
     // Every run, including a login whose password already works: the limits are repaired like the groups are.
     for (const kind of ['migrator', ...members] as LoginKind[]) await applyLoginLimits(admin, names[kind], kind);
-    await admin.query(`REVOKE TEMPORARY ON DATABASE ${q(database)} FROM PUBLIC`);
+    await revokePublicTemporary(admin, names.migrator, database);
 
     report.checks.push(...(await verifyLogins(admin, names, options)));
     report.ok = report.checks.every((c) => c.ok);
@@ -300,6 +300,27 @@ async function makeOwner(admin: Client, migrator: string, database: string): Pro
   if (!already) await admin.query(`GRANT ${q(migrator)} TO CURRENT_USER WITH SET TRUE, INHERIT FALSE`);
   try {
     await admin.query(`ALTER DATABASE ${q(database)} OWNER TO ${q(migrator)}`);
+  } finally {
+    if (!already) await admin.query(`REVOKE ${q(migrator)} FROM CURRENT_USER`);
+  }
+}
+
+/**
+ * Takes the TEMPORARY right on the database away from PUBLIC. Only the database's owner can: after `makeOwner` that is the migrator, not the administrator (on RDS the
+ * administrator never owns it), and a REVOKE by anyone else succeeds silently and changes nothing. So this acts as the owner, with the same temporary membership
+ * `makeOwner` uses; the `database temporary tables` check reads the result back.
+ */
+async function revokePublicTemporary(admin: Client, migrator: string, database: string): Promise<void> {
+  const q = (identifier: string) => admin.escapeIdentifier(identifier);
+  const already = (await admin.query('SELECT pg_has_role(current_user, $1, \'SET\') AS ok', [migrator])).rows[0].ok as boolean;
+  if (!already) await admin.query(`GRANT ${q(migrator)} TO CURRENT_USER WITH SET TRUE, INHERIT FALSE`);
+  try {
+    await admin.query(`SET ROLE ${q(migrator)}`);
+    try {
+      await admin.query(`REVOKE TEMPORARY ON DATABASE ${q(database)} FROM PUBLIC`);
+    } finally {
+      await admin.query('RESET ROLE');
+    }
   } finally {
     if (!already) await admin.query(`REVOKE ${q(migrator)} FROM CURRENT_USER`);
   }

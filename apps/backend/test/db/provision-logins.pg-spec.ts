@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { Client } from 'pg';
 import { migrateDown, migrateUp } from '../../src/db/migrator';
-import { checkGroups, LOGIN_LIMITS, type LoginKind, type LoginNames, type ProvisionOptions, type ProvisionReport, provisionLogins, type SecretStore, scramVerifier } from '../../src/db/provision-logins';
+import { checkGroups, LOGIN_LIMITS, PRIVILEGE_GROUPS, type LoginKind, type LoginNames, type ProvisionOptions, type ProvisionReport, provisionLogins, type SecretStore, scramVerifier } from '../../src/db/provision-logins';
 import { pgClientConfig } from '../../src/db/tls';
 import { adminUrl, withAdmin } from '../helpers/database';
 import { revertThrough } from '../helpers/migration-history';
@@ -187,6 +187,30 @@ describe('provisioning on a database nothing has been applied to', () => {
     expect(failing(again)).toEqual([]);
     expect(f.store.puts.length).toBe(putsBefore);
     expect((await read('app')).rolconnlimit).toBe(LOGIN_LIMITS.app.connectionLimit);
+  });
+
+  whenPasswordsAreChecked('revokes TEMPORARY from PUBLIC when the administrator is NOT a superuser and does not own the database (the RDS and CI rehearsal shape), and repairs it again', async () => {
+    const f = await fixture();
+    const admin = `prov_adm_${f.database.slice(-8)}`;
+    logins.push(admin);
+    await withAdmin(adminUrl(), async (c) => {
+      await c.query(`CREATE ROLE ${admin} LOGIN NOSUPERUSER CREATEDB CREATEROLE PASSWORD 'adm-test-only'`);
+      await c.query(`ALTER DATABASE ${f.database} OWNER TO ${admin}`);
+      // The groups are cluster-wide and were made by the superuser here; on a fresh cluster the administrator creates them and so holds ADMIN on each.
+      for (const group of PRIVILEGE_GROUPS) await c.query(`GRANT ${group} TO ${admin} WITH ADMIN OPTION`);
+    });
+    const url = new URL(f.options.adminUrl);
+    url.username = admin;
+    url.password = 'adm-test-only';
+    const options = { ...f.options, adminUrl: url.toString() };
+    const temporary = () => withAdmin(f.options.adminUrl, async (c) => (await c.query("SELECT has_database_privilege('public', current_database(), 'TEMPORARY') AS ok")).rows[0].ok as boolean);
+    expect(failing(await provisionLogins(options))).toEqual([]);
+    expect(await temporary()).toBe(false);
+    // Tampered by the owner (the migrator now), then repaired by a run that is not the owner and not a superuser.
+    await withAdmin(f.options.adminUrl, (c) => c.query(`GRANT TEMPORARY ON DATABASE ${f.database} TO PUBLIC`));
+    expect(await temporary()).toBe(true);
+    expect(failing(await provisionLogins(options))).toEqual([]);
+    expect(await temporary()).toBe(false);
   });
 
   it('the logins cannot do what the ledger forbids them (live attempts, not catalog reads)', async () => {
