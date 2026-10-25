@@ -119,7 +119,7 @@ Cases are hand-written from the synthetic fixtures (`GENEA` to `GENEE`, invented
 | 2 | Explanation contract, `runExplanation`, fixed-text fallback, readiness conditions in `policy.ts`, tests for R1, R2, R4 | Slice 1 |
 | 3 | Outcome v2 and counters, trace and receipt, database caps under concurrency, R5 conformance | Slice 2; a migration |
 | 4 | Bedrock adapter behind the gate, pinned model, in-region refusal test, a manual live-run script, the shadow review file | Slice 3; D4; Bedrock access (unverified) |
-| Founder | Marks the golden set, sets thresholds (D8), reviews shadow output, records counsel's view (D10), decides readiness | After slice 4 |
+| Founder | Marks the golden set, sets thresholds (D8) before the first live run, reviews shadow output, records counsel's view (D10), approves the model path (FR-016), decides readiness | Thresholds and the model path before slice 4's live run; the rest after slice 4 |
 
 ## Founder decisions (only the founder can make these)
 
@@ -131,9 +131,22 @@ Cases are hand-written from the synthetic fixtures (`GENEA` to `GENEE`, invented
 
 - **D6 stored text: no in v1** (FR-014). The caller may store it under its own retention, which R5 then governs.
 - **D7 where the gate runs: inside the existing `verify` job, selected by path,** so the ruleset and required check names stay as they are. (The alternative, a new required check, would need a ruleset change through `gh api`.)
-- **D8 thresholds: decided after slice 1 produces real numbers,** not before: the release rate for acceptable explanations, the tolerable hold rate, and trials per case.
+- **D8 thresholds: decided after slice 1 produces real numbers,** not before: the release rate for acceptable explanations, the tolerable hold rate, and k (trials per case, measured as pass^k). **Amended 2026-10-25 after review:** the thresholds and k are committed to `docs/verification/` before the first live run (slice 4), never set from live results.
 - **D9 languages: English first.** Spanish needs its own glossary, sensors and the founder's review; it follows as its own slice.
 - **D10 regulatory: counsel is asked before readiness** whether this is non-device clinical decision support, with the product's behaviour as written here. This plan does not decide it.
+
+## Amendments after review (2026-10-25)
+
+An external review was checked against this spec; the founder approved these changes (findings 1, 4, 5, 7, 9 and monitoring and rollback). Not adopted now: a second blinded pharmacist (D5 stays as decided), and the Bedrock Automated Reasoning, contextual grounding and NeMo Guardrails options, which would each need their own spike with measurements.
+
+| Change | Where |
+|---|---|
+| Region rule: on-demand us-east-2 by default; a cross-region profile only through a recorded allowlist entry; `global.*` refused | FR-016, T030, T042 |
+| Thresholds and k committed before the first live run; pass^k | SC-008, D8, T038 |
+| Keyed (HMAC) digests for evidence and output | FR-009, T043 |
+| Config files that set the model ID, SDK or decoding select the gate | FR-013, T012, T044 |
+| OWASP coverage table | spec "Threat model coverage", T045 |
+| Monitoring, rollback and the clinician-facing document as readiness conditions | FR-012, T046, T047 |
 
 ## Not touched by this plan or PR
 
