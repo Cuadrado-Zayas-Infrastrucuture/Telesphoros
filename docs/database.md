@@ -65,7 +65,8 @@ row. Tests prove each layer separately and together (`test/db/rls.pg-spec.ts`, `
 
 | Role | Used by | Can |
 | --- | --- | --- |
-| table owner / admin | migrations, backup, restore (`DATABASE_MIGRATOR_URL`, `DATABASE_ADMIN_URL`) | everything; bypasses RLS (needed so a backup sees every row) |
+| admin (a superuser, or a role with `BYPASSRLS`) | backup, restore (`DATABASE_ADMIN_URL`) | everything; bypasses RLS (needed so a backup sees every row) |
+| migrator (the table owner) | migrations, the `membership`, `tenant` and `invite` commands (`DATABASE_MIGRATOR_URL`) | DDL on what it owns; **not** a superuser and **no** `BYPASSRLS`, so on a table with `FORCE ROW LEVEL SECURITY` and policies only for other roles it sees **no rows**. A down migration that must look at the rows first (a "refuse if populated" guard) therefore either switches to the role that owns the table or lifts `FORCE` for the check inside its own transaction (`test/db/down-guards-as-migrator.pg-spec.ts` runs every such guard as this login) |
 | `telesphoros_app` (group) + a login user | the API (`DATABASE_URL`) | `SELECT/INSERT/UPDATE` on `patients`, `reports`; `SELECT/INSERT` on `recommendations`; read `schema_migrations`; **bound by RLS** |
 
 The ledger adds four more `NOLOGIN` roles (`telesphoros_ledger`, `telesphoros_redactor`, `telesphoros_ledger_verifier`,
