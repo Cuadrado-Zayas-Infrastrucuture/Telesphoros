@@ -61,4 +61,4 @@ const { startFakeIdp, DEFAULT_USERS } = require('../../packages/fake-idp/dist/in
     const admin=await idp.mintAccessToken({user:DEFAULT_USERS[2]});const ledgerResponse=await call('/ledger/verify?full=true',undefined,admin,'GET');assert.equal(ledgerResponse.status,200);const ledger=await ledgerResponse.json();assert.equal(ledger.status,'ok');assert.ok(ledger.eventsChecked>0);console.log('PASS full ledger verification');
     console.log('PASS D01 matches pinned hand-written outcome oracle; live synthetic evaluation, non-clinical flags, cross-tenant isolation');
   } finally { if (app) await app.close(); await idp.stop(); }
-})().catch(e => { console.error(e.code ?? e.name); console.error('FAIL local upload checks (no token/configuration output)'); process.exitCode = 1; });
+})().catch(require('./report-failure.cjs').reportFailure);

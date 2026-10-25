@@ -11,7 +11,7 @@ pnpm demo:storage:build
 pnpm demo:storage
 ```
 
-The foreground launcher reports the generated run UUID and browser address. The fixed loopback ports are PostgreSQL 54481, Moto 5557, API 3010, IDP 4010, and browser 4173. An occupied port is a refusal; the runner never stops a process by its port. The review runner can share some port numbers but cannot run concurrently; it is never reset or stopped by this runner.
+The setup registers the demo organizations and grants each fake user their membership (derived from the fake identity provider's own users, the same seed the review demo uses); without a membership the API refuses every user. The foreground launcher reports the generated run UUID and browser address. The fixed loopback ports are PostgreSQL 54481, Moto 5557, API 3010, IDP 4010, and browser 4173. An occupied port is a refusal; the runner never stops a process by its port. The review runner can share some port numbers but cannot run concurrently; it is never reset or stopped by this runner.
 
 Each invocation creates a new private `.local-storage/runs/<UUID>/` directory and an independent control receipt under `.local-storage/control/`. PostgreSQL owns its **own cluster**, database and roles inside that run, with loopback trust authentication for disposable synthetic use. The API uses a non-owner `storage_app` login without superuser, role/database creation, or RLS bypass. Migrations and the protected-evidence inventory use the separate owned-cluster administrative identity. The fake personas upload in tenant `alpha`; reader `bob` belongs to `beta`.
 
