@@ -78,12 +78,12 @@ export const REPAIR_SUFFIX_V1 = `Your previous reply was held for: {{reasons}}. 
 export const repairTemplateDigest = (): string => hashBytes(TEMPLATE_V1 + REPAIR_SUFFIX_V1);
 
 export function buildRepairPrompt(input: unknown, reasons: readonly string[]): { prompt: string; templateDigest: string; segments: Segment[] } {
-  if (reasons.length === 0 || reasons.length > 16 || reasons.some(x => !KNOWN_HOLD_REASONS.has(x))) throw new InputRefused();
+  if (reasons.length === 0 || reasons.length > 16 || reasons.some((x) => !KNOWN_HOLD_REASONS.has(x))) throw new InputRefused();
   const base = buildPrompt(input);
   const segments: Segment[] = [...base.segments];
   for (const part of REPAIR_SUFFIX_V1.split(/(\{\{\w+\}\})/)) {
     if (part === '{{reasons}}') segments.push({ from: 'field', field: 'reasons', text: [...new Set(reasons)].join(', ') });
     else if (part !== '') segments.push({ from: 'template', text: part });
   }
-  return { prompt: segments.map(s => s.text).join(''), templateDigest: repairTemplateDigest(), segments };
+  return { prompt: segments.map((s) => s.text).join(''), templateDigest: repairTemplateDigest(), segments };
 }

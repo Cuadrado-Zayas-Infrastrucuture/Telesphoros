@@ -27,9 +27,18 @@ export const liveReadiness = () => ({ ready: false as const, reasonCode: 'MODEL_
  * environment); only the boolean `true` counts. Nothing wires this into a runtime yet: `liveReadiness()` above stays closed, and the
  * adapter that reads the founder's flag arrives with the Bedrock slice.
  */
-export const READINESS_KEYS = ['baaExecuted', 'founderFlagSet', 'thresholdsMet', 'shadowReviewPassed', 'counselViewRecorded', 'monitorLive', 'rollbackRehearsed', 'clinicianDocument'] as const;
+export const READINESS_KEYS = [
+  'baaExecuted',
+  'founderFlagSet',
+  'thresholdsMet',
+  'shadowReviewPassed',
+  'counselViewRecorded',
+  'monitorLive',
+  'rollbackRehearsed',
+  'clinicianDocument',
+] as const;
 export type ReadinessKey = (typeof READINESS_KEYS)[number];
 export function readiness(conditions: Partial<Record<ReadinessKey, boolean>>): { ready: true } | { ready: false; reasonCode: 'NOT_READY'; missing: ReadinessKey[] } {
-  const missing = READINESS_KEYS.filter(k => conditions[k] !== true);
+  const missing = READINESS_KEYS.filter((k) => conditions[k] !== true);
   return missing.length === 0 ? { ready: true } : { ready: false, reasonCode: 'NOT_READY', missing };
 }

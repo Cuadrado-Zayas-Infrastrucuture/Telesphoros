@@ -9,8 +9,25 @@ export const EXPLAIN_LIMITS = { draftAttempts: 2, repairs: 1, slots: 4, deadline
 
 /** Every way a run can end without releasing a model-written explanation. Each has a test (T014); the clinician then sees the engine text alone. */
 export const FAILURE_REASONS = [
-  'INVALID_INPUT', 'TASK_UNDECLARED', 'NOT_SYNTHETIC', 'NO_BAA', 'AUTHORITY_HELD', 'IDEMPOTENCY_CONFLICT', 'IN_PROGRESS', 'IDEMPOTENT_REPLAY', 'BUDGET_HELD',
-  'NOT_ELIGIBLE', 'INPUT_REFUSED', 'USAGE_HELD', 'MODEL_ERROR', 'MODEL_REFUSED', 'INVALID_STRUCTURE', 'SENSOR_HOLD', 'VERIFIER_HOLD', 'DEADLINE', 'CONTROL_HELD',
+  'INVALID_INPUT',
+  'TASK_UNDECLARED',
+  'NOT_SYNTHETIC',
+  'NO_BAA',
+  'AUTHORITY_HELD',
+  'IDEMPOTENCY_CONFLICT',
+  'IN_PROGRESS',
+  'IDEMPOTENT_REPLAY',
+  'BUDGET_HELD',
+  'NOT_ELIGIBLE',
+  'INPUT_REFUSED',
+  'USAGE_HELD',
+  'MODEL_ERROR',
+  'MODEL_REFUSED',
+  'INVALID_STRUCTURE',
+  'SENSOR_HOLD',
+  'VERIFIER_HOLD',
+  'DEADLINE',
+  'CONTROL_HELD',
 ] as const;
 export type FailureReason = (typeof FAILURE_REASONS)[number];
 
@@ -22,7 +39,12 @@ export const explainRequestSchema = z.strictObject({
 });
 export type ExplainRequest = z.infer<typeof explainRequestSchema>;
 
-export const explainContextSchema = z.strictObject({ tenantId: z.string().min(1).max(128), requesterRef: z.string().min(1).max(128), authorityGeneration: z.number().int().positive(), purpose: z.literal('pharmacogenomic-explanation') });
+export const explainContextSchema = z.strictObject({
+  tenantId: z.string().min(1).max(128),
+  requesterRef: z.string().min(1).max(128),
+  authorityGeneration: z.number().int().positive(),
+  purpose: z.literal('pharmacogenomic-explanation'),
+});
 export type ExplainContext = z.infer<typeof explainContextSchema>;
 export const EXPLAIN_CAPABILITY = 'pgx.explain';
 
@@ -51,12 +73,15 @@ export interface ExplainPorts {
 }
 
 export const EXPLANATION_LABEL = 'AI-generated explanation of the guideline text above. Check it against the guideline.';
-export interface OutcomeBase { runId: string | null; engineText: string; guardsRun: string[]; counters: { slots: number; tokens: number; modelCalls: number } }
-export type ExplainOutcome = OutcomeBase & (
-  | { released: true; reasonCode: 'RELEASED'; label: typeof EXPLANATION_LABEL; explanation: Explanation }
-  | { released: false; reasonCode: FailureReason; detail: string | null }
-);
+export interface OutcomeBase {
+  runId: string | null;
+  engineText: string;
+  guardsRun: string[];
+  counters: { slots: number; tokens: number; modelCalls: number };
+}
+export type ExplainOutcome = OutcomeBase &
+  ({ released: true; reasonCode: 'RELEASED'; label: typeof EXPLANATION_LABEL; explanation: Explanation } | { released: false; reasonCode: FailureReason; detail: string | null });
 
 /** The engine's own text for a `shown` result: citation, locator and wording, always shown first (FR-006). */
 export const engineTextOf = (r: ExplainableResult): string =>
-  `Guideline ${r.guidelineId} version ${r.guidelineVersion}, ${[r.locator.table, r.locator.row, r.locator.column].filter(x => x !== null).join(', ')}. Strength: ${r.strength}. ${r.recommendationText}${r.implication === null ? '' : ` ${r.implication}`}`;
+  `Guideline ${r.guidelineId} version ${r.guidelineVersion}, ${[r.locator.table, r.locator.row, r.locator.column].filter((x) => x !== null).join(', ')}. Strength: ${r.strength}. ${r.recommendationText}${r.implication === null ? '' : ` ${r.implication}`}`;
