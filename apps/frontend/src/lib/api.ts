@@ -1,4 +1,4 @@
-import { paginatedSchema, patientDtoSchema } from '@telesphoros/shared-types';
+import { paginatedSchema, patientCreateSchema, patientDtoSchema } from '@telesphoros/shared-types';
 import { SessionEndedError, NotSignedInError } from '@/auth/AuthProvider';
 import { productUploadSchema, type ProductUploadValues } from './productUploadSchema';
 
@@ -57,6 +57,31 @@ export async function listPatients(apiFetch: ApiFetch, page: number, signal?: Ab
   } catch (error) {
     if (signal?.aborted || error instanceof SessionEndedError || error instanceof NotSignedInError) throw error;
     throw new SubmitError('Patients could not be loaded. Please retry.');
+  }
+}
+
+function patientRefusal(status: number): SubmitError {
+  if (status === 409) return new SubmitError('A patient with that label already exists. Choose it from the list, or use a different label.', status);
+  if (status === 403) return new SubmitError('Your role cannot add patients.', status);
+  if (status === 400 || status === 422) return new SubmitError('That label was not accepted. Use letters, numbers and hyphens only.', status);
+  if (status === 429) return new SubmitError('Too many requests. Wait a moment, then retry.', status);
+  return new SubmitError('The patient could not be added. Please retry.', status);
+}
+
+/**
+ * Adds a synthetic patient, identified by its label alone (no name or date of birth exists in this model). The same requestId with the same label replays
+ * the patient the first request created, so a retry after a lost response never makes a second one; use a new requestId for a different label.
+ */
+export async function createPatient(apiFetch: ApiFetch, label: string, requestId: string, signal?: AbortSignal) {
+  const body = patientCreateSchema.parse({ label, requestId });
+  try {
+    const response = await apiFetch('/api/v1/patients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal });
+    if (!response.ok) throw patientRefusal(response.status);
+    return patientDtoSchema.parse(await response.json());
+  } catch (error) {
+    if (signal?.aborted || error instanceof SubmitError || error instanceof SessionEndedError || error instanceof NotSignedInError) throw error;
+    // Never display raw transport errors or response payloads.
+    throw new SubmitError('The patient could not be added. Check your connection, then retry.');
   }
 }
 
