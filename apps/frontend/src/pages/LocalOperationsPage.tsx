@@ -54,6 +54,7 @@ export default function LocalOperationsPage() {
   const [output, setOutput] = useState('');
   const [cursor, setCursor] = useState<string>();
   const locked = useRef(false);
+  const disputeAttempt = useRef<{ key: string; id: string } | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});
   function validate(
     issues: readonly { path: readonly PropertyKey[]; message: string }[],
@@ -181,7 +182,12 @@ export default function LocalOperationsPage() {
     }
     validate([]);
     const body = parsed.data;
-    await json('/cell-disputes', body).then(disputeDtoSchema.parse);
+    // One retry id per unchanged dispute: repeating a request that may or may not have gone through reuses it, so the server answers with the dispute it already has;
+    // changing anything starts a new one, and so does asking again after the dispute was raised.
+    const key = JSON.stringify(body);
+    if (disputeAttempt.current?.key !== key) disputeAttempt.current = { key, id: crypto.randomUUID() };
+    await json('/cell-disputes', { ...body, requestId: disputeAttempt.current.id }).then(disputeDtoSchema.parse);
+    disputeAttempt.current = null;
     setConfirmed(false);
     setNote('');
     await listDisputes();

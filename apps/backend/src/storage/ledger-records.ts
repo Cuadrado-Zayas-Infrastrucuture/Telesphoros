@@ -116,6 +116,11 @@ export interface DisputeInput {
   guidelineContentSha256: string;
   locator: { table: string; row: string; column?: string };
   note: string;
+  /**
+   * The retry identity of this dispute: set by the caller, kept with the row, never shown. `hash` fingerprints the original request (the guideline, the cell and the
+   * note), so a repeat by the same reviewer with the same fingerprint returns the dispute already stored and another fingerprint is refused.
+   */
+  request?: { id: string; hash: string };
 }
 
 export interface DisputeDecisionInput {

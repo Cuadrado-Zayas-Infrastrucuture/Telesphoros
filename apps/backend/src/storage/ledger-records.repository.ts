@@ -12,6 +12,14 @@ export class CaptureDecisionRequestReusedError extends Error {
   }
 }
 
+/** The same retry id came with a different guideline, cell or note than the dispute stored under it. */
+export class DisputeRequestReusedError extends Error {
+  constructor() {
+    super('That request id was already used for a different dispute.');
+    this.name = 'DisputeRequestReusedError';
+  }
+}
+
 /**
  * The records of the lab-report pipeline. PostgreSQL only: the ledger's guarantees (database-computed hashes, triggers, deferred
  * checks) cannot be honoured by an in-memory store, so with STORAGE_DRIVER=memory these are not registered at all.

@@ -242,6 +242,11 @@ export const disputeCreateSchema = z.strictObject({
   guidelineId: cellLabel,
   locator: z.strictObject({ table: cellLabel, row: cellLabel, column: cellLabel.optional() }),
   note: z.string().trim().min(1).max(MAX_NOTE_LENGTH),
+  /**
+   * Optional. Send the same one when repeating a request you cannot be sure went through, and the dispute already raised under it is returned (with its status now)
+   * instead of a second one being made; the same id with another cell or note is refused with 409 `request-id-reused`.
+   */
+  requestId: z.uuid().transform((value) => value.toLowerCase()).optional(),
 });
 export type DisputeCreate = z.infer<typeof disputeCreateSchema>;
 

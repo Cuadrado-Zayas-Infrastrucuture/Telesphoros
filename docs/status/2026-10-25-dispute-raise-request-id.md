@@ -1,0 +1,15 @@
+# A retried dispute raise no longer makes a second dispute (2026-10-25)
+
+Date: 2026-10-25
+
+**Implemented (migration 0045, labelled `breaking`).** Found in the read-only retry check of the ledger write routes (2026-10-25). `POST /cell-disputes` inserted a new dispute on every call and nothing stopped a duplicate (the service checks only that the cell exists). A dispute in force (open, or upheld) holds the evaluations that rely on its cell, so a reviewer who repeated a raise left two open disputes on one cell: after the first was dismissed the duplicate kept the cell disputed until someone also decided it.
+
+**What changed.** Same cure as the report, patient, identifier, invitation and capture-decision creates. Migration 0045 adds `creation_request_id` and `creation_request_hash` to `cell_disputes`, a pair CHECK and `UNIQUE (tenant_id, created_by, creation_request_id)`. `disputeCreateSchema` takes an optional `requestId`. The service fingerprints the guideline id, the cell and the note (not the guideline version or file hash, so a repeat after the knowledge was re-signed still finds its dispute); the repository takes an advisory lock on (organization, reviewer, id), looks the id up, and either returns the stored dispute (nothing written, no second note) or writes the new one. A replay is shown with the dispute's status now, not as a new open one. The same id with another fingerprint raises `DisputeRequestReusedError`, answered 409 `request-id-reused`. A raise without an id behaves exactly as before. No guard trigger (the table refuses every update); the ledger projection names its columns, so no event hash changes (tested). The down refuses while any identity is stored and lifts `FORCE ROW LEVEL SECURITY` for that check.
+
+**Frontend (the one caller).** `LocalOperationsPage` keeps one retry id per unchanged dispute form: a repeat after a refusal reuses it, any change starts a new one, and so does asking again after a raise went through.
+
+**Release class.** A CHECK and a UNIQUE on an existing table make it `breaking`, as 0039 to 0041 and 0044 were; it adds no new class to the unreleased set.
+
+**Tests, red first.** `dispute-request.pg-spec.ts` (real PostgreSQL, 8; five failed before the change): replay writes nothing (one dispute, one note, one event); raise, dismiss, repeat: no dispute is open; control: a repeat without an id is a new open dispute; another guideline, cell or note under the same id is refused and leaves no note; per reviewer and per organization; five concurrent repeats leave one dispute (a sleeping trigger opens the window); the projection is unchanged; the table refuses an id without a fingerprint, a bad fingerprint, a duplicate and any update. `disputes.raise.spec.ts` (5), `shared-types` (2), a frontend test of the retry-id behaviour, and a 0045 case in the migrator-login down test. Pins updated: `schema-acceptance.ts`.
+
+**Limits.** Only this route; corrections and dispute decisions answer a repeat with a 409 and make no duplicate. A client must send the id to be protected (the one frontend page now does). The id is not authorization or audit. Not run against a deployed API or in AWS.
