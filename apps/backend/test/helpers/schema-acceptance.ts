@@ -101,6 +101,7 @@ const primaryKeys: Record<string, string> = {
   capability_issuance_log: 'seq',
   capability_purposes: 'purpose',
   tenant_binding_mode: 'singleton',
+  agentic_explain_receipts: 'receipt_id',
   agentic_synthetic_audit: 'tenant_id, run_id, event_sequence',
   agentic_synthetic_buckets: 'scope, scope_key, period_kind, period_start',
   agentic_synthetic_capacity: 'singleton',
@@ -211,6 +212,8 @@ const checkNames: Record<string, string> = {
   capability_purposes: 'name lifetime limits',
   capability_issuance: 'outcome reason lengths', // constraint prefix differs from table capability_issuance_log
   tenant_binding_mode: 'one_row value',
+  agentic_explain_receipts:
+    'check check1 check2 check3 detail_codes_check evidence_digest_check generated_units_check guards_run_check harness_version_check input_units_check invocation_path_check model_calls_check model_id_check output_digest_check reason_code_check requester_ref_check run_id_check sdk_version_check slots_check task_check template_digest_check tenant_id_check terminal_state_check usage_state_check',
   agentic_synthetic_audit: 'artifact_digest_check code_check event_sequence_check fence_check observed_units_check reason_code_check reserved_units_check',
   agentic_synthetic_buckets: 'check check1 consumed_units_check limit_units_check period_kind_check reserved_units_check scope_check scope_key_check',
   agentic_synthetic_capacity: 'fleet_month_units_check singleton_check tenant_day_units_check',

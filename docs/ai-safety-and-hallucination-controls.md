@@ -85,3 +85,5 @@ show the test goes red.
   `response` column held the text as plain JSON. An hourly job deleted expired rows, but a row written
   with no expiry was never deleted by it, and whether the column was encrypted or could be erased on request
   was not checked.
+
+**Decided 2026-10-25 for the explanation harness receipts (`agentic_explain_receipts`, migration 0048).** The receipt stores no model text, so the stored-text questions above do not arise for it: it holds a keyed digest of the evidence and of the output, fixed codes and counters. Data class: derived from `phi` input (a keyed digest of one person's gene and phenotype), kept as `phi`-adjacent. Retention: 2190 days, enforced by the row itself (no role can delete a younger row). Deletion: only after that age, by the organization's purge function. Erasure on request: not by row; destroying or rotating the digest key makes the digests unlinkable. Who reads: the organization's own application login, through a function bound to its capability. Open: counsel confirms the key-destruction path before real data.

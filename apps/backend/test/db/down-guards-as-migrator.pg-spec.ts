@@ -102,6 +102,18 @@ interface GuardCase {
 
 const cases: GuardCase[] = [
   {
+    anchor: 'agentic_explain_receipts',
+    allow: 'telesphoros.allow_receipts_drop',
+    refusal: /Refusing to drop agentic_explain_receipts/,
+    populate: async (c) => {
+      await c.query(
+        `INSERT INTO public.agentic_explain_receipts (tenant_id, run_id, requester_ref, task, terminal_state, reason_code, harness_version, evidence_digest, slots, model_calls, input_units, generated_units, usage_state)
+         VALUES ($1, 'run-down-guard', 'syn-author', 'pgx.explain.v1', 'held', 'NOT_ELIGIBLE', $2, $3, 0, 0, 0, 0, 'known')`,
+        [tenant, `sha256:${hash}`, `hmac-sha256:${hash}`],
+      );
+    },
+  },
+  {
     anchor: 'report_evidence',
     allow: 'telesphoros.allow_audit_drop',
     refusal: /Refusing to drop report evidence columns that hold data/,

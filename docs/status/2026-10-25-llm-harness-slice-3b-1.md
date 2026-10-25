@@ -1,0 +1,13 @@
+# LLM harness slice 3b-1: the receipt table and its three functions
+
+Date: 2026-10-25
+
+**Implemented.** Migration `0048_agentic_explain_receipts` (labelled `breaking` only because the migration lint refuses `REVOKE` and a `TRUNCATE` trigger in an `expand` migration; every object is new, as in 0029). `agentic_explain_receipts` has typed columns only; every text column is bound to a pattern or a list, so it cannot hold text, and the evidence and output digests must be `hmac-sha256:`. It is owned by `telesphoros_jobs`, forced row-level security, and no login has a table privilege. `agentic_explain_receipt_append`, `_read` and `_purge` (definer functions, executable by the application and the worker) take their caller from a presented capability through `agentic_synthetic_identity()`, and a receipt is written or read only for the caller's own organization and requester. A receipt is never updated and cannot be deleted before it is 2190 days old, by any role, the owner included; the purge removes only the bound organization's expired rows. Down migration refuses a populated table unless `telesphoros.allow_receipts_drop=yes`. `apps/ai-service/durable/receipt-store.ts` is the TypeScript store: it checks a receipt against outcome v2 before the database is called and the answer against the schema after.
+
+**Decided by the founder on 2026-10-25:** retention 6 years; no row erasure, with key destruction as the erasure path pending counsel; the writer is the jobs role through functions. Recorded in `docs/database.md` and in R5 of `docs/ai-safety-and-hallucination-controls.md`.
+
+**Controls.** 41 PostgreSQL specs for the table and functions (isolation, hostile shapes, immutability and retention as a non-superuser owner, column shape, privileges, down migration), a down-guard case run as the migrator login, and a local-only round trip of every kind of ending `runExplanation` can produce. Six mutations broken on purpose, each red (see `docs/verification/llm-harness-slice-3b-1.md`).
+
+**Not changed:** the synthetic agentic tables and functions, `kernel.ts`, the engine, Terraform, the AWS account. Existing pins were updated for the new table: the schema-acceptance primary-key and check-constraint lists, the table classification, the 0031 revert test's list of removed functions, and one down-guard case.
+
+**Not done (slice 3b-2):** durable run fencing, usage reservation and the fleet and tenant caps under concurrency (T025, T027). Nothing calls the store from a running service yet. The writer login for a worker is open: the worker has no way to present a capability today, so the functions are granted to it but refuse until it can; the schema review is asked to confirm.
