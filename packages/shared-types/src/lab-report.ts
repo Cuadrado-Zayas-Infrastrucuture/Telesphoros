@@ -51,10 +51,15 @@ export type FileLinkDto = z.infer<typeof fileLinkDtoSchema>;
 
 export const MAX_NOTE_LENGTH = 1000;
 
-/** `POST /captures/:id/decision`. The text hash and Poppler version are copied from the capture, never taken from the body. */
+/**
+ * `POST /captures/:id/decision`. The text hash and Poppler version are copied from the capture, never taken from the body. `requestId` is optional: send the same
+ * one when repeating a request you cannot be sure went through, and a decision already recorded under it is returned instead of a second one being made
+ * (the same id with a different decision or note is refused with 409 `request-id-reused`).
+ */
 export const decisionCreateSchema = z.strictObject({
   decision: z.enum(['accepted', 'rejected']),
   note: z.string().trim().min(1).max(MAX_NOTE_LENGTH).optional(),
+  requestId: z.uuid().transform((value) => value.toLowerCase()).optional(),
 });
 export type DecisionCreate = z.infer<typeof decisionCreateSchema>;
 

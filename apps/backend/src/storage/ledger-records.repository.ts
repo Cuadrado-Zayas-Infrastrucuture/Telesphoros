@@ -4,6 +4,14 @@ import type {
 import type { DisputeStatusValue } from '@telesphoros/shared-types';
 import type { Page, PageRequest } from './records';
 
+/** The same retry id came with a different decision or note (or for another capture) than the one stored under it. */
+export class CaptureDecisionRequestReusedError extends Error {
+  constructor() {
+    super('That request id was already used for a different capture decision.');
+    this.name = 'CaptureDecisionRequestReusedError';
+  }
+}
+
 /**
  * The records of the lab-report pipeline. PostgreSQL only: the ledger's guarantees (database-computed hashes, triggers, deferred
  * checks) cannot be honoured by an in-memory store, so with STORAGE_DRIVER=memory these are not registered at all.

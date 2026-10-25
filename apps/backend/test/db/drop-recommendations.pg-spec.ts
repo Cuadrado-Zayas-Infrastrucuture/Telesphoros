@@ -8,7 +8,7 @@ import { MIGRATIONS_DIR, migrateDown, migrateUp } from '../../src/db/migrator';
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { acceptanceFor, captureFor, evaluationFor, seedLabReport } from '../helpers/ledger-fixtures';
-import { lastVersion } from '../helpers/migration-history';
+import { lastVersion, revertThrough } from '../helpers/migration-history';
 
 // Migration 0043 drops the legacy `recommendations` table (its code went in #19 and #39). Each test builds a throwaway database and replays history.
 jest.setTimeout(60_000);
@@ -24,6 +24,15 @@ async function beforeDrop(): Promise<{ db: EphemeralDatabase; dir: string }> {
   for (const file of readdirSync(MIGRATIONS_DIR)) if (/^\d{4}_/.test(file) && file.slice(0, 4) < VERSION) copyFileSync(join(MIGRATIONS_DIR, file), join(dir, file));
   await withAdmin(db.adminUrl, (c) => migrateUp(c, dir));
   return { db, dir };
+}
+/**
+ * The migrations up to and including the drop, in a directory of their own. A test that applies "the rest of the history" as a restricted owner would otherwise also
+ * apply every later migration, and a later one may touch tables that owner does not own.
+ */
+function throughDrop(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'drop-recs-through-'));
+  for (const file of readdirSync(MIGRATIONS_DIR)) if (/^\d{4}_/.test(file) && file.slice(0, 4) <= VERSION) copyFileSync(join(MIGRATIONS_DIR, file), join(dir, file));
+  return dir;
 }
 const parents = (db: EphemeralDatabase) =>
   withAdmin(db.adminUrl, async (c) => {
@@ -72,6 +81,7 @@ it('drops an empty table, with its policy, indexes and grants, and leaves the sh
 
 it('refuses to drop a table that holds a row, run as a non-superuser owner that row-level security hides the row from; only the exact word allows it', async () => {
   const { db, dir } = await beforeDrop();
+  const through = throughDrop();
   // The production-like case: the migrating role owns the table and is no superuser, so FORCE ROW LEVEL SECURITY (policy: telesphoros_app only) hides every row from it.
   const owner = `test_drop_owner_${randomBytes(5).toString('hex')}`;
   try {
@@ -86,20 +96,20 @@ it('refuses to drop a table that holds a row, run as a non-superuser owner that 
       await c.query(`SET ROLE ${owner}`);
       expect((await c.query('SELECT count(*)::int AS n FROM recommendations')).rows[0].n).toBe(0); // the premise: the owner sees nothing, though a row exists
       try {
-        await expect(migrateUp(c)).rejects.toThrow(/Refusing to drop recommendations/);
+        await expect(migrateUp(c, through)).rejects.toThrow(/Refusing to drop recommendations/);
         expect(await tableExists(db)).toBe(true); // the whole migration rolled back, including the guard rewrite and the row-security change
         expect((await c.query(`SELECT relforcerowsecurity FROM pg_class WHERE relname = 'recommendations'`)).rows).toEqual([{ relforcerowsecurity: true }]);
         expect((await c.query(`SELECT pg_get_functiondef('block_report_soft_delete'::regproc) AS def`)).rows[0].def).toMatch(/live recommendations/);
         await c.query(`SET telesphoros.allow_recommendations_drop = 'Yes'`);
-        await expect(migrateUp(c)).rejects.toThrow(/Refusing to drop recommendations/);
+        await expect(migrateUp(c, through)).rejects.toThrow(/Refusing to drop recommendations/);
         await c.query(`SET telesphoros.allow_recommendations_drop = 'yes'`);
-        expect(await migrateUp(c)).toEqual(expect.arrayContaining([VERSION]));
+        expect(await migrateUp(c, through)).toEqual(expect.arrayContaining([VERSION]));
       } finally { await c.query('RESET ROLE'); }
     });
     expect(await tableExists(db)).toBe(false);
   } finally {
     await withAdmin(db.adminUrl, async (c) => { await c.query(`REASSIGN OWNED BY ${owner} TO CURRENT_USER`); await c.query(`DROP OWNED BY ${owner}`); await c.query(`DROP ROLE ${owner}`); }).catch(() => undefined);
-    await db.drop(); rmSync(dir, { recursive: true, force: true });
+    await db.drop(); rmSync(dir, { recursive: true, force: true }); rmSync(through, { recursive: true, force: true });
   }
 });
 
@@ -109,7 +119,8 @@ it('reverting recreates the table exactly as it stood, so 0032 can be reverted a
   try {
     const expected = await tableFacts(db);
     expect(expected).toMatch(/app_tenant/); // the policy is the one 0032 left, which is what the revert must reproduce
-    await withAdmin(reverted.adminUrl, async (c) => expect(await migrateDown(c, 1)).toEqual([VERSION]));
+    const undo = revertThrough('drop_recommendations'); // the drop and any migration after it, newest first
+    await withAdmin(reverted.adminUrl, async (c) => expect(await migrateDown(c, undo.steps)).toEqual(undo.reverted));
     expect(await tableFacts(reverted)).toBe(expected);
   } finally { await db.drop(); await reverted.drop(); rmSync(dir, { recursive: true, force: true }); }
 });

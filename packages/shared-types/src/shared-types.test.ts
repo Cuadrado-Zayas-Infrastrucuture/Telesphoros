@@ -18,6 +18,7 @@ import {
   MAX_PAGE_SIZE,
   paginationQuerySchema,
   patientDtoSchema,
+  decisionCreateSchema,
   patientCreateSchema,
   patientInputSchema,
   REPORT_CONTENT_TYPES,
@@ -245,6 +246,18 @@ describe('compatible identity capability contracts', () => {
   it('refuses raw identity fields on either endpoint', () => {
     expect(meDtoSchema.safeParse({ roles: [], sub: 'synthetic-person' }).success).toBe(false);
     expect(recoveryScopeDtoSchema.safeParse({ recoveryScope: 'a'.repeat(64), sub: 'synthetic-person' }).success).toBe(false);
+  });
+});
+
+describe('decisionCreateSchema (a capture decision can be retried safely)', () => {
+  it('takes the decision, an optional note, and an optional retry id that is lower-cased', () => {
+    expect(decisionCreateSchema.parse({ decision: 'accepted' })).toEqual({ decision: 'accepted' });
+    expect(decisionCreateSchema.parse({ decision: 'rejected', note: ' checked ', requestId: '2F3A8E3C-9B64-4C55-8B7E-0B5C1D8E9A10' }))
+      .toEqual({ decision: 'rejected', note: 'checked', requestId: '2f3a8e3c-9b64-4c55-8b7e-0b5c1d8e9a10' });
+  });
+  it('refuses a retry id that is not a UUID, and any other extra field', () => {
+    for (const requestId of ['', 'abc', 7, '2f3a8e3c-9b64-4c55-8b7e']) expect(decisionCreateSchema.safeParse({ decision: 'accepted', requestId }).success).toBe(false);
+    expect(decisionCreateSchema.safeParse({ decision: 'accepted', textSha256: 'x' }).success).toBe(false);
   });
 });
 
