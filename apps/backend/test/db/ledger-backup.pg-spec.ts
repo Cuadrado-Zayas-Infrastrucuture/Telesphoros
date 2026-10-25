@@ -76,7 +76,9 @@ const target = () => {
   restored.push(name);
   return name;
 };
-interface EditableManifest { privileges: { roles: string[]; ownership: string[]; grants: string[] } }
+interface EditableManifest {
+  privileges: { roles: string[]; ownership: string[]; grants: string[] };
+}
 const editedCopy = (edit: (manifest: EditableManifest) => void): string => {
   // An unencrypted (format 1) manifest is a plain file: the way to hand the restore a backup that lies about its roles or owners.
   const dir = tempDir();
@@ -90,10 +92,12 @@ const editedCopy = (edit: (manifest: EditableManifest) => void): string => {
 describe('a backup of a populated ledger', () => {
   it('records who owns and may do what, and restores it exactly', async () => {
     const manifest = JSON.parse(readFileSync(join(backupDir, 'manifest.json'), 'utf8'));
-    expect(manifest.privileges.roles).toEqual(expect.arrayContaining(['telesphoros_app', 'telesphoros_ledger', 'telesphoros_ledger_verifier', 'telesphoros_redactor', 'telesphoros_ledger_operator']));
-    expect(manifest.privileges.ownership).toEqual(expect.arrayContaining([
-      'function:ledger_append(uuid,text,text,uuid,text,smallint)|telesphoros_ledger', 'function:redact_event_note(uuid,uuid,text)|telesphoros_redactor',
-    ]));
+    expect(manifest.privileges.roles).toEqual(
+      expect.arrayContaining(['telesphoros_app', 'telesphoros_ledger', 'telesphoros_ledger_verifier', 'telesphoros_redactor', 'telesphoros_ledger_operator']),
+    );
+    expect(manifest.privileges.ownership).toEqual(
+      expect.arrayContaining(['function:ledger_append(uuid,text,text,uuid,text,smallint)|telesphoros_ledger', 'function:redact_event_note(uuid,uuid,text)|telesphoros_redactor']),
+    );
 
     const name = target();
     const report = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: adminUrl(), backupDir, targetDatabase: name });
@@ -109,8 +113,16 @@ describe('a backup of a populated ledger', () => {
       await verifier.close();
     }
     await withAdmin(withDb(adminUrl(), name), async (c: Client) => {
-      const owners = (await c.query(`SELECT proname, pg_get_userbyid(proowner) AS owner FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname IN ('ledger_append', 'ledger_append_internal', 'redact_event_note')`)).rows;
-      expect(Object.fromEntries(owners.map((r) => [r.proname, r.owner]))).toEqual({ ledger_append: 'telesphoros_ledger', ledger_append_internal: 'telesphoros_ledger', redact_event_note: 'telesphoros_redactor' });
+      const owners = (
+        await c.query(
+          `SELECT proname, pg_get_userbyid(proowner) AS owner FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname IN ('ledger_append', 'ledger_append_internal', 'redact_event_note')`,
+        )
+      ).rows;
+      expect(Object.fromEntries(owners.map((r) => [r.proname, r.owner]))).toEqual({
+        ledger_append: 'telesphoros_ledger',
+        ledger_append_internal: 'telesphoros_ledger',
+        redact_event_note: 'telesphoros_redactor',
+      });
     });
     // And it still works: the application can append to the restored ledger, and the longer chain verifies.
     const database = new Database({ url: withDb(pg.appUrl, name), ssl: 'disable' });
@@ -138,9 +150,17 @@ describe('a backup of a populated ledger', () => {
 
   it('notices when ownership or a privilege differs from what the backup recorded', async () => {
     for (const edit of [
-      (m: EditableManifest) => { m.privileges.ownership = m.privileges.ownership.map((o: string) => o.replace('ledger_append(uuid,text,text,uuid,text,smallint)|telesphoros_ledger', 'ledger_append(uuid,text,text,uuid,text,smallint)|postgres')); },
-      (m: EditableManifest) => { m.privileges.grants.push('function:ledger_append_internal(uuid,text,text,uuid,text,smallint)|PUBLIC|EXECUTE'); },
-      (m: EditableManifest) => { m.privileges.grants = m.privileges.grants.filter((g: string) => !g.startsWith('function:ledger_record_checkpoint')); },
+      (m: EditableManifest) => {
+        m.privileges.ownership = m.privileges.ownership.map((o: string) =>
+          o.replace('ledger_append(uuid,text,text,uuid,text,smallint)|telesphoros_ledger', 'ledger_append(uuid,text,text,uuid,text,smallint)|postgres'),
+        );
+      },
+      (m: EditableManifest) => {
+        m.privileges.grants.push('function:ledger_append_internal(uuid,text,text,uuid,text,smallint)|PUBLIC|EXECUTE');
+      },
+      (m: EditableManifest) => {
+        m.privileges.grants = m.privileges.grants.filter((g: string) => !g.startsWith('function:ledger_record_checkpoint'));
+      },
     ]) {
       const report = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: adminUrl(), backupDir: editedCopy(edit) });
       expect(report.ok).toBe(false);
@@ -157,15 +177,21 @@ describe('a backup of a populated ledger', () => {
 describe('a backup taken while a tenant is contained (migration 0011)', () => {
   it('restores the incident still OPEN: a restore cannot quietly reopen the writes of a tenant under investigation', async () => {
     // Runs last in this file: it leaves an open incident behind in the source database.
-    const incident = await withAdmin(pg.verifierUrl, async (c: Client) => (await c.query(`SELECT ledger_record_incident($1, 'payload-mismatch', 1::bigint, 'background')::text AS id`, [tenantId])).rows[0].id as string);
+    const incident = await withAdmin(
+      pg.verifierUrl,
+      async (c: Client) => (await c.query(`SELECT ledger_record_incident($1, 'payload-mismatch', 1::bigint, 'background')::text AS id`, [tenantId])).rows[0].id as string,
+    );
     const during = (await createBackup({ adminUrl: pg.adminUrl, destDir: tempDir() })).dir;
 
     const name = target();
     const report = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: adminUrl(), backupDir: during, targetDatabase: name });
     expect(report.checks.filter((c) => !c.ok)).toEqual([]);
 
-    const open = await withAdmin(withDb(adminUrl(), name), async (c: Client) => (await c.query(
-      `SELECT id::text AS id FROM ledger_incidents i WHERE NOT EXISTS (SELECT 1 FROM ledger_incident_clearances c WHERE c.incident_id = i.id)`)).rows.map((r) => r.id));
+    const open = await withAdmin(withDb(adminUrl(), name), async (c: Client) =>
+      (await c.query(`SELECT id::text AS id FROM ledger_incidents i WHERE NOT EXISTS (SELECT 1 FROM ledger_incident_clearances c WHERE c.incident_id = i.id)`)).rows.map(
+        (r) => r.id,
+      ),
+    );
     expect(open).toEqual([incident]);
 
     // And the restored database enforces it: the application cannot append for that tenant (a copy of the data, the same refusal).

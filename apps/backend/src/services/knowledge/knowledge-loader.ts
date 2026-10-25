@@ -124,13 +124,7 @@ export async function loadKnowledge(options: LoadKnowledgeOptions): Promise<Know
  * A combined table may replace narrower single-gene tables for the same drug. The replaced tables
  * are then never shown on their own, so a mistake here would hide a guideline or allow a fallback.
  */
-function checkSupersession(
-  path: string,
-  file: GuidelineFile,
-  byId: ReadonlyMap<string, GuidelineFile>,
-  supersededBy: Map<string, string>,
-  problems: string[],
-): void {
+function checkSupersession(path: string, file: GuidelineFile, byId: ReadonlyMap<string, GuidelineFile>, supersededBy: Map<string, string>, problems: string[]): void {
   for (const id of file.supersedes) {
     const target = byId.get(id);
     if (!target) {

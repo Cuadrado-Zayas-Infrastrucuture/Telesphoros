@@ -24,7 +24,12 @@ const hashOf = (value: string) => createHash('sha256').update(value, 'utf8').dig
 const owner = <T>(work: (c: Client) => Promise<T>) => withAdmin(db.adminUrl, work);
 const setMode = (mode: string) => owner((c) => c.query('UPDATE tenant_binding_mode SET mode = $1', [mode]));
 
-interface World { tenant: string; actor: string; grantId: string; caller: Json }
+interface World {
+  tenant: string;
+  actor: string;
+  grantId: string;
+  caller: Json;
+}
 
 /** One organization with one active member, a grant and one eligible source. Seeded by the owner, as the P2 fixtures are (nothing is seeded by a migration). */
 async function world(name: string): Promise<World> {
@@ -36,11 +41,20 @@ async function world(name: string): Promise<World> {
     await registerTenantRow(c, tenant);
     await c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ($1, $2, 'active', ARRAY['reader'], 'test')`, [tenant, actor]);
     await c.query(`INSERT INTO public.agentic_synthetic_capacity (singleton, tenant_day_units, fleet_month_units) VALUES (1, 5000000, 300000000) ON CONFLICT DO NOTHING`);
-    await c.query(`INSERT INTO public.agentic_synthetic_grants (tenant_id, grant_id, requester_ref, generation, purpose, capabilities, enabled, expires_at)
-      VALUES ($1, $2, $3, 1, 'business-assistance', ARRAY['business.sop.read', 'business.sop.draft']::text[], true, clock_timestamp() + interval '1 hour')`, [tenant, grantId, actor]);
-    await c.query(`INSERT INTO public.agentic_synthetic_sources (tenant_id, source_id, source_version, digest, body, eligible) VALUES ($1, 'source-1', 'v1', $2, $3, true)`,
-      [tenant, `sha256:${createHash('sha256').update(body, 'utf8').digest('hex')}`, body]);
-    await c.query(`INSERT INTO public.agentic_synthetic_grant_sources (tenant_id, grant_id, source_id, source_version, enabled) VALUES ($1, $2, 'source-1', 'v1', true)`, [tenant, grantId]);
+    await c.query(
+      `INSERT INTO public.agentic_synthetic_grants (tenant_id, grant_id, requester_ref, generation, purpose, capabilities, enabled, expires_at)
+      VALUES ($1, $2, $3, 1, 'business-assistance', ARRAY['business.sop.read', 'business.sop.draft']::text[], true, clock_timestamp() + interval '1 hour')`,
+      [tenant, grantId, actor],
+    );
+    await c.query(`INSERT INTO public.agentic_synthetic_sources (tenant_id, source_id, source_version, digest, body, eligible) VALUES ($1, 'source-1', 'v1', $2, $3, true)`, [
+      tenant,
+      `sha256:${createHash('sha256').update(body, 'utf8').digest('hex')}`,
+      body,
+    ]);
+    await c.query(`INSERT INTO public.agentic_synthetic_grant_sources (tenant_id, grant_id, source_id, source_version, enabled) VALUES ($1, $2, 'source-1', 'v1', true)`, [
+      tenant,
+      grantId,
+    ]);
   });
   return { tenant, actor, grantId, caller: { tenantId: tenant, requesterRef: actor, membershipVersion: '1', grantId, grantGeneration: '1' } };
 }
@@ -51,7 +65,14 @@ async function mint(tenant: string, sub: string, version = 1): Promise<string> {
   const c = new Client({ connectionString: db.issuerUrl });
   await c.connect();
   try {
-    const { rows } = await c.query<{ refusal: string | null }>('SELECT * FROM tenant_capability_issue($1, $2, $3, $4, $5, $6)', [tenant, sub, version, 'request', hashOf(value), `req-${randomUUID().slice(0, 12)}`]);
+    const { rows } = await c.query<{ refusal: string | null }>('SELECT * FROM tenant_capability_issue($1, $2, $3, $4, $5, $6)', [
+      tenant,
+      sub,
+      version,
+      'request',
+      hashOf(value),
+      `req-${randomUUID().slice(0, 12)}`,
+    ]);
     expect(rows[0]!.refusal).toBeNull();
   } finally {
     await c.end();
@@ -59,7 +80,11 @@ async function mint(tenant: string, sub: string, version = 1): Promise<string> {
   return value;
 }
 
-interface Binding { tenant?: string; actor?: string; capability?: string }
+interface Binding {
+  tenant?: string;
+  actor?: string;
+  capability?: string;
+}
 
 /** The application login, one transaction, these transaction-local settings. Rolled back unless `commit`. */
 async function app<T>(binding: Binding, work: (c: Client) => Promise<T>, commit = false): Promise<T> {
@@ -81,18 +106,36 @@ async function app<T>(binding: Binding, work: (c: Client) => Promise<T>, commit 
   }
 }
 
-const request = (key: string) => ({ schemaVersion: 'agentic.request.v1', taskKey: 'business.sop-draft.v1', locale: 'en', question: 'How do I wash hands? (synthetic)', idempotencyKey: key });
-const admit = async (c: Client, key: string, caller: Json) => (await c.query('SELECT public.agentic_synthetic_admit($1::jsonb, $2::jsonb) AS r', [JSON.stringify(request(key)), JSON.stringify(caller)])).rows[0].r as Json;
-const read = async (c: Client, runId: string, caller: Json) => (await c.query('SELECT public.agentic_synthetic_read($1::uuid, $2::jsonb) AS r', [runId, JSON.stringify(caller)])).rows[0].r as Json;
-const cancel = async (c: Client, runId: string, caller: Json) => (await c.query('SELECT public.agentic_synthetic_cancel($1::uuid, $2::jsonb) AS r', [runId, JSON.stringify(caller)])).rows[0].r as Json;
+const request = (key: string) => ({
+  schemaVersion: 'agentic.request.v1',
+  taskKey: 'business.sop-draft.v1',
+  locale: 'en',
+  question: 'How do I wash hands? (synthetic)',
+  idempotencyKey: key,
+});
+const admit = async (c: Client, key: string, caller: Json) =>
+  (await c.query('SELECT public.agentic_synthetic_admit($1::jsonb, $2::jsonb) AS r', [JSON.stringify(request(key)), JSON.stringify(caller)])).rows[0].r as Json;
+const read = async (c: Client, runId: string, caller: Json) =>
+  (await c.query('SELECT public.agentic_synthetic_read($1::uuid, $2::jsonb) AS r', [runId, JSON.stringify(caller)])).rows[0].r as Json;
+const cancel = async (c: Client, runId: string, caller: Json) =>
+  (await c.query('SELECT public.agentic_synthetic_cancel($1::uuid, $2::jsonb) AS r', [runId, JSON.stringify(caller)])).rows[0].r as Json;
 const REFUSED = { kind: 'refused', code: 'NOT_AUTHORIZED' };
 
 /** Rows the owner can see for one organization: the hostile cases must leave all of them exactly as they were. */
-const counts = (tenant: string) => owner(async (c) => (await c.query(`SELECT
+const counts = (tenant: string) =>
+  owner(
+    async (c) =>
+      (
+        await c.query(
+          `SELECT
   (SELECT count(*)::int FROM public.agentic_synthetic_runs WHERE tenant_id = $1) AS runs,
   (SELECT count(*)::int FROM public.agentic_synthetic_outcomes WHERE tenant_id = $1) AS outcomes,
   (SELECT count(*)::int FROM public.agentic_synthetic_audit WHERE tenant_id = $1) AS audit,
-  (SELECT count(*)::int FROM public.jobs WHERE tenant_id = $1 AND type = 'test.agentic-synthetic') AS jobs`, [tenant])).rows[0]);
+  (SELECT count(*)::int FROM public.jobs WHERE tenant_id = $1 AND type = 'test.agentic-synthetic') AS jobs`,
+          [tenant],
+        )
+      ).rows[0],
+  );
 
 /** Admits one run with a fresh capability and commits it. */
 async function admitted(w: World, key = 'p2b/1'): Promise<string> {
@@ -118,7 +161,11 @@ afterAll(async () => {
 
 describe('the login under test is the application, not a superuser', () => {
   it('has no superuser or BYPASSRLS, and the binding mode starts at dual (0032)', async () => {
-    const row = await app({}, async (c) => (await c.query(`SELECT rolsuper, rolbypassrls, pg_has_role(current_user, 'telesphoros_app', 'MEMBER') AS app FROM pg_roles WHERE rolname = current_user`)).rows[0]);
+    const row = await app(
+      {},
+      async (c) =>
+        (await c.query(`SELECT rolsuper, rolbypassrls, pg_has_role(current_user, 'telesphoros_app', 'MEMBER') AS app FROM pg_roles WHERE rolname = current_user`)).rows[0],
+    );
     expect(row).toEqual({ rolsuper: false, rolbypassrls: false, app: true });
     expect(await owner(async (c) => (await c.query('SELECT mode FROM tenant_binding_mode')).rows)).toEqual([{ mode: 'dual' }]);
   });
@@ -166,9 +213,16 @@ describe.each(MODES)('hostile application login, binding mode %s', (mode) => {
     const expired = await mint(w.tenant, w.actor);
     await owner(async (c) => {
       await c.query('UPDATE tenant_capabilities SET revoked_at = clock_timestamp() WHERE token_hash = $1', [hashOf(revoked)]);
-      await c.query(`UPDATE tenant_capabilities SET issued_at = issued_at - interval '5 minutes', expires_at = expires_at - interval '5 minutes' WHERE token_hash = $1`, [hashOf(expired)]);
+      await c.query(`UPDATE tenant_capabilities SET issued_at = issued_at - interval '5 minutes', expires_at = expires_at - interval '5 minutes' WHERE token_hash = $1`, [
+        hashOf(expired),
+      ]);
     });
-    for (const [label, capability] of [['garbage', 'x'], ['unknown', token()], ['revoked', revoked], ['expired', expired]] as const) {
+    for (const [label, capability] of [
+      ['garbage', 'x'],
+      ['unknown', token()],
+      ['revoked', revoked],
+      ['expired', expired],
+    ] as const) {
       const forged = { tenant: w.tenant, actor: w.actor, capability };
       expect([label, await app(forged, (c) => read(c, runId, w.caller))]).toEqual([label, REFUSED]);
       // control after every refusal: the valid capability still works
@@ -267,20 +321,35 @@ describe('the catalog says the same thing the behaviour does', () => {
   it('the scanner finds a setting name (control), and no function the application can execute reads one', async () => {
     expect(scan(`current_setting('app.current_actor', true)`)).toBe(true);
     expect(scan(`SELECT public.app_tenant()`)).toBe(false);
-    const rows = await owner(async (c) => (await c.query(`SELECT proname, prosrc FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname LIKE 'agentic_synthetic_%'
-      AND has_function_privilege('telesphoros_app', oid, 'EXECUTE') ORDER BY proname`)).rows);
+    const rows = await owner(
+      async (c) =>
+        (
+          await c.query(`SELECT proname, prosrc FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname LIKE 'agentic_synthetic_%'
+      AND has_function_privilege('telesphoros_app', oid, 'EXECUTE') ORDER BY proname`)
+        ).rows,
+    );
     expect(rows.map((r) => r.proname)).toEqual(['agentic_synthetic_admit', 'agentic_synthetic_cancel', 'agentic_synthetic_read']);
     for (const r of rows) expect([r.proname, scan(r.prosrc), /public\.agentic_synthetic_identity\(\)/.test(r.prosrc)]).toEqual([r.proname, false, true]);
   });
 
   it('across the whole schema, the only P2 function that still reads a tenant setting is the worker-side member_current (pinned; DATA-01 slice 5 must not flip the mode before it moves)', async () => {
-    const names = await owner(async (c) => (await c.query(`SELECT proname, prosrc FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname LIKE 'agentic_synthetic_%' ORDER BY proname`)).rows
-      .filter((r) => scan(r.prosrc)).map((r) => r.proname));
+    const names = await owner(async (c) =>
+      (await c.query(`SELECT proname, prosrc FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname LIKE 'agentic_synthetic_%' ORDER BY proname`)).rows
+        .filter((r) => scan(r.prosrc))
+        .map((r) => r.proname),
+    );
     expect(names).toEqual(['agentic_synthetic_member_current']);
   });
 
   it('privileges: the helper is executable by no login; the entry points are app-only; the owner can call the helper', async () => {
-    const logins = [['app', db.appUrl], ['worker', db.workerUrl], ['verifier', db.verifierUrl], ['operator', db.operatorUrl], ['auditor', db.auditorUrl], ['issuer', db.issuerUrl]] as const;
+    const logins = [
+      ['app', db.appUrl],
+      ['worker', db.workerUrl],
+      ['verifier', db.verifierUrl],
+      ['operator', db.operatorUrl],
+      ['auditor', db.auditorUrl],
+      ['issuer', db.issuerUrl],
+    ] as const;
     for (const [name, url] of logins) {
       const c = new Client({ connectionString: url });
       await c.connect();
@@ -291,9 +360,16 @@ describe('the catalog says the same thing the behaviour does', () => {
         await c.end();
       }
     }
-    expect(await owner(async (c) => (await c.query(`SELECT has_function_privilege('telesphoros_jobs', 'public.agentic_synthetic_identity()', 'EXECUTE') AS ok`)).rows[0].ok)).toBe(true);
-    const acl = await owner(async (c) => (await c.query(`SELECT proname, proacl::text AS acl FROM pg_proc WHERE pronamespace = 'public'::regnamespace
-      AND proname IN ('agentic_synthetic_identity', 'agentic_synthetic_admit', 'agentic_synthetic_read', 'agentic_synthetic_cancel') ORDER BY proname`)).rows);
+    expect(await owner(async (c) => (await c.query(`SELECT has_function_privilege('telesphoros_jobs', 'public.agentic_synthetic_identity()', 'EXECUTE') AS ok`)).rows[0].ok)).toBe(
+      true,
+    );
+    const acl = await owner(
+      async (c) =>
+        (
+          await c.query(`SELECT proname, proacl::text AS acl FROM pg_proc WHERE pronamespace = 'public'::regnamespace
+      AND proname IN ('agentic_synthetic_identity', 'agentic_synthetic_admit', 'agentic_synthetic_read', 'agentic_synthetic_cancel') ORDER BY proname`)
+        ).rows,
+    );
     expect(acl).toEqual([
       { proname: 'agentic_synthetic_admit', acl: '{telesphoros_jobs=X/telesphoros_jobs,telesphoros_app=X/telesphoros_jobs}' },
       { proname: 'agentic_synthetic_cancel', acl: '{telesphoros_jobs=X/telesphoros_jobs,telesphoros_app=X/telesphoros_jobs}' },
@@ -304,10 +380,18 @@ describe('the catalog says the same thing the behaviour does', () => {
 });
 
 describe('migration 0030 on its own database', () => {
-  const snapshot = (c: Client) => c.query<{ f: string }>(`SELECT p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ') owner=' || pg_get_userbyid(p.proowner)
+  const snapshot = (c: Client) =>
+    c
+      .query<{ f: string }>(
+        `SELECT p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ') owner=' || pg_get_userbyid(p.proowner)
       || ' acl=' || coalesce(p.proacl::text, '-') || ' config=' || coalesce(array_to_string(p.proconfig, ','), '-') || ' src=' || md5(p.prosrc) AS f
-    FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace ORDER BY 1`).then((r) => r.rows.map((x) => x.f));
-  const sameSchemaExceptP2 = (a: string[], b: string[]) => [a.filter((f) => !/^agentic_synthetic_(admit|read|cancel|identity)\(/.test(f)), b.filter((f) => !/^agentic_synthetic_(admit|read|cancel|identity)\(/.test(f))];
+    FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace ORDER BY 1`,
+      )
+      .then((r) => r.rows.map((x) => x.f));
+  const sameSchemaExceptP2 = (a: string[], b: string[]) => [
+    a.filter((f) => !/^agentic_synthetic_(admit|read|cancel|identity)\(/.test(f)),
+    b.filter((f) => !/^agentic_synthetic_(admit|read|cancel|identity)\(/.test(f)),
+  ];
 
   it('applies on top of 0029, changes only the three entry points and adds the helper, and its down restores the 0029 catalog byte for byte', async () => {
     const own = await createEphemeralDatabase({ migrate: false });

@@ -20,12 +20,16 @@ export abstract class SecurityAuditStore {
 @Injectable()
 export class InMemorySecurityAuditStore extends SecurityAuditStore {
   readonly events: SecurityAuditEvent[] = [];
-  async record(event: SecurityAuditEvent): Promise<void> { this.events.push({ ...event }); }
+  async record(event: SecurityAuditEvent): Promise<void> {
+    this.events.push({ ...event });
+  }
 }
 
 @Injectable()
 export class PostgresSecurityAuditStore extends SecurityAuditStore {
-  constructor(private readonly database: Database) { super(); }
+  constructor(private readonly database: Database) {
+    super();
+  }
 
   async record(event: SecurityAuditEvent): Promise<void> {
     try {

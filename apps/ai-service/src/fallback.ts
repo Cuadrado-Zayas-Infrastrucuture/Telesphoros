@@ -25,7 +25,17 @@ export type Eligibility = { eligible: true } | { eligible: false; reason: string
 /** Only a `shown` result with a strength other than "No recommendation" may reach a model. Anything unrecognised fails closed. */
 export function eligibility(outcome: string, reasonCode: string | null, strength: string | null): Eligibility {
   const no = (reason: string): Eligibility => ({ eligible: false, reason, text: Object.hasOwn(FALLBACK_TEXT, reason) ? FALLBACK_TEXT[reason] : FALLBACK_TEXT['unknown-outcome'] });
-  if (outcome === 'shown') return strength === 'Strong' || strength === 'Moderate' || strength === 'Optional' ? { eligible: true } : no(strength === 'No recommendation' ? 'no-recommendation-strength' : 'unknown-outcome');
-  if (['held', 'abstained', 'no-published-recommendation', 'no-guideline'].includes(outcome) && reasonCode !== null && Object.hasOwn(FALLBACK_TEXT, reasonCode) && reasonCode !== 'unknown-outcome' && reasonCode !== 'no-recommendation-strength') return no(reasonCode);
+  if (outcome === 'shown')
+    return strength === 'Strong' || strength === 'Moderate' || strength === 'Optional'
+      ? { eligible: true }
+      : no(strength === 'No recommendation' ? 'no-recommendation-strength' : 'unknown-outcome');
+  if (
+    ['held', 'abstained', 'no-published-recommendation', 'no-guideline'].includes(outcome) &&
+    reasonCode !== null &&
+    Object.hasOwn(FALLBACK_TEXT, reasonCode) &&
+    reasonCode !== 'unknown-outcome' &&
+    reasonCode !== 'no-recommendation-strength'
+  )
+    return no(reasonCode);
   return no('unknown-outcome');
 }

@@ -21,7 +21,8 @@ interface GoldenCase {
 }
 const golden = (JSON.parse(readFileSync(join(REPO_ROOT, 'tests/report_reader/golden.json'), 'utf8')) as { cases: GoldenCase[] }).cases;
 
-const spanKey = (s: { gene: string; occurrenceIndex: number; role: string; start: number; end: number; text: string }) => `${s.gene}|${s.occurrenceIndex}|${s.role}|${s.start}|${s.end}|${s.text}`;
+const spanKey = (s: { gene: string; occurrenceIndex: number; role: string; start: number; end: number; text: string }) =>
+  `${s.gene}|${s.occurrenceIndex}|${s.role}|${s.start}|${s.end}|${s.text}`;
 
 function recordingLogger() {
   const entries: Array<Record<string, unknown>> = [];
@@ -65,17 +66,29 @@ describe('the real engine, through the real sidecar, on the twelve captured repo
     expect(empties.sort()).toEqual([...expected.emptyFieldRoles].sort());
   });
 
-  it.each(golden.filter((c) => c.unassociated).map((c) => [c.id, c] as const))('%s: the unassociated genes and results are exactly those expected, and nothing is assigned', (id, expected) => {
-    const provenance = results.get(id)!.projection.provenance as { unassociatedEvidence?: Array<{ kind: string; start: number; end: number; text: string }> };
-    const key = (e: { kind: string; start: number; end: number; text: string }) => `${e.kind}|${e.start}|${e.end}|${e.text}`;
-    expect((provenance.unassociatedEvidence ?? []).map(key).sort()).toEqual((expected.unassociated ?? []).map(key).sort());
-    expect(results.get(id)!.projection.payload).toEqual({ spans: [], abstain: true });
-  });
+  it.each(golden.filter((c) => c.unassociated).map((c) => [c.id, c] as const))(
+    '%s: the unassociated genes and results are exactly those expected, and nothing is assigned',
+    (id, expected) => {
+      const provenance = results.get(id)!.projection.provenance as { unassociatedEvidence?: Array<{ kind: string; start: number; end: number; text: string }> };
+      const key = (e: { kind: string; start: number; end: number; text: string }) => `${e.kind}|${e.start}|${e.end}|${e.text}`;
+      expect((provenance.unassociatedEvidence ?? []).map(key).sort()).toEqual((expected.unassociated ?? []).map(key).sort());
+      expect(results.get(id)!.projection.payload).toEqual({ spans: [], abstain: true });
+    },
+  );
 
   it('every packet was built by the pinned reader', () => {
     for (const [id, result] of results) {
       if (!('packetHash' in result.packet)) continue;
-      expect({ id, bindings: { generatorVersion: result.packet.generatorVersion, generatorCodeHash: result.packet.generatorCodeHash, grammarHash: result.packet.grammarHash, offsetContractHash: result.packet.offsetContractHash, fieldBoundaryPolicyHash: result.packet.fieldBoundaryPolicyHash } }).toEqual({ id, bindings: PINNED_READER });
+      expect({
+        id,
+        bindings: {
+          generatorVersion: result.packet.generatorVersion,
+          generatorCodeHash: result.packet.generatorCodeHash,
+          grammarHash: result.packet.grammarHash,
+          offsetContractHash: result.packet.offsetContractHash,
+          fieldBoundaryPolicyHash: result.packet.fieldBoundaryPolicyHash,
+        },
+      }).toEqual({ id, bindings: PINNED_READER });
     }
   });
 
@@ -128,7 +141,7 @@ describe('what the reader will and will not run', () => {
     expect(result.projection).toMatchObject({ status: 'held', reason: 'source-limit' });
   });
 
-  it('holds, with the engine\'s class name only, on text that is not valid Unicode (a lone surrogate)', async () => {
+  it("holds, with the engine's class name only, on text that is not valid Unicode (a lone surrogate)", async () => {
     const log = recordingLogger();
     const result = await reader({ logger: log.logger }).read('CYP2C19: \ud800');
     expect(result.projection).toMatchObject({ status: 'held', reason: 'worker-error' });
@@ -150,7 +163,14 @@ describe('a misbehaving subprocess becomes a hold, never a hang, a crash, or a l
     expect(Date.now() - started).toBeLessThan(5_000);
     expect(result.projection).toMatchObject({ status: 'held', reason: 'source-time-budget' });
     const grandchild = Number(readFileSync(pidFile, 'utf8').trim());
-    const alive = () => { try { process.kill(grandchild, 0); return true; } catch { return false; } };
+    const alive = () => {
+      try {
+        process.kill(grandchild, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
     for (let i = 0; i < 40 && alive(); i += 1) await new Promise((r2) => setTimeout(r2, 50));
     expect(alive()).toBe(false);
   }, 15_000);
@@ -187,7 +207,7 @@ describe('a misbehaving subprocess becomes a hold, never a hang, a crash, or a l
     expect(log.text()).not.toContain(marker);
   });
 
-  it('passes on the engine\'s class name and frames when stderr is exactly the wrapper\'s structured line, and nothing else', async () => {
+  it("passes on the engine's class name and frames when stderr is exactly the wrapper's structured line, and nothing else", async () => {
     const good = recordingLogger();
     await reader({ command: sh(`echo '{"readerError":"Invalid","frames":["main:49","process_source:280"]}' >&2; exit 2`), logger: good.logger }).read('x');
     expect(good.entries[0]).toMatchObject({ readerError: 'Invalid', frames: ['main:49', 'process_source:280'] });
@@ -204,7 +224,7 @@ describe('a misbehaving subprocess becomes a hold, never a hang, a crash, or a l
     expect(injected.text()).not.toContain('diplotype');
   });
 
-  it('does not pass the caller\'s environment to the subprocess', async () => {
+  it("does not pass the caller's environment to the subprocess", async () => {
     process.env.REPORT_READER_TEST_SECRET = 'must-not-leak';
     try {
       const dir = mkdtempSync(join(tmpdir(), 'reader-'));

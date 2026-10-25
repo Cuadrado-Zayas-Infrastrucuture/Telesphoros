@@ -10,5 +10,11 @@ import { useAuth } from './AuthProvider';
  */
 export function RequireRole({ anyOf }: { anyOf: readonly Role[] }) {
   const { roles } = useAuth();
-  return roles.some((role) => anyOf.includes(role)) ? <Outlet /> : <Suspense fallback={<p role="status">Loading page…</p>}><ForbiddenPage /></Suspense>;
+  return roles.some((role) => anyOf.includes(role)) ? (
+    <Outlet />
+  ) : (
+    <Suspense fallback={<p role="status">Loading page…</p>}>
+      <ForbiddenPage />
+    </Suspense>
+  );
 }

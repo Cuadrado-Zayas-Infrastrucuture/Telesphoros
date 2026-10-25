@@ -40,30 +40,48 @@ async function main(): Promise<void> {
   const pool = new Pool({ ...pgClientConfig(config.databaseUrl, config.databaseTls), ...WORKER_POOL_LIMITS, max: config.concurrency + 3, application_name: 'telesphoros-worker' });
   pool.on('error', () => log('error', 'database-connection-error', { code: 'pool-error' }));
   const queue = new JobQueue(pool);
-  const s3 = new S3Client({ ...(config.awsRegion ? { region: config.awsRegion } : {}), ...(config.s3Endpoint ? { endpoint: config.s3Endpoint } : {}), forcePathStyle: config.s3ForcePathStyle });
+  const s3 = new S3Client({
+    ...(config.awsRegion ? { region: config.awsRegion } : {}),
+    ...(config.s3Endpoint ? { endpoint: config.s3Endpoint } : {}),
+    forcePathStyle: config.s3ForcePathStyle,
+  });
   // A mistyped or deleted bucket would otherwise show only as failing file checks. Refuse to start instead, naming the setting and never the value.
   if (config.reportsBucket && (await bucketIsMissing(s3, config.reportsBucket))) throw new Error('REPORTS_BUCKET names a bucket that does not exist.');
   const deps: HandlerDeps = { data: new PgJobData(pool), inspector: new S3ObjectInspector(s3, config.reportsBucket ?? 'unconfigured'), log };
   const jobs = registeredJobs(config, deps);
-  const runner = new Runner({ workerId: config.workerId, queue, jobs, concurrency: config.concurrency, tenantCap: config.tenantCap, pollMs: config.pollMs, drainSeconds: config.drainSeconds, log });
+  const runner = new Runner({
+    workerId: config.workerId,
+    queue,
+    jobs,
+    concurrency: config.concurrency,
+    tenantCap: config.tenantCap,
+    pollMs: config.pollMs,
+    drainSeconds: config.drainSeconds,
+    log,
+  });
   const scheduler = new Ticker('schedule', () => queue.scheduleTick(), config.scheduleTickSeconds, log);
   const relay = new Ticker('outbox-relay', () => queue.relayOutbox(), config.relaySeconds, log);
   // The queue's depth and the age of its oldest ready job, as one log line a minute: the "queue is not draining" alarm reads `ageSeconds` (suspended organizations'
   // jobs are not counted: they are held on purpose).
-  const stats = new Ticker('queue-stats', async () => {
-    const rows = await queue.stats();
-    const outbox = await queue.outboxStats();
-    const waiting = rows.filter((r) => r.state === 'queued' || r.state === 'retry');
-    log('info', 'queue-stats', {
-      count: waiting.reduce((n, r) => n + r.count, 0),
-      running: rows.filter((r) => r.state === 'running').reduce((n, r) => n + r.count, 0),
-      dead: rows.filter((r) => r.state === 'dead').reduce((n, r) => n + r.count, 0),
-      ageSeconds: Math.round(Math.max(0, ...waiting.map((r) => r.oldestReadySeconds ?? 0))),
-      outboxPending: outbox.pending,
-      outboxAgeSeconds: Math.round(outbox.oldestPendingSeconds ?? 0),
-    });
-    return 0;
-  }, config.statsSeconds, log);
+  const stats = new Ticker(
+    'queue-stats',
+    async () => {
+      const rows = await queue.stats();
+      const outbox = await queue.outboxStats();
+      const waiting = rows.filter((r) => r.state === 'queued' || r.state === 'retry');
+      log('info', 'queue-stats', {
+        count: waiting.reduce((n, r) => n + r.count, 0),
+        running: rows.filter((r) => r.state === 'running').reduce((n, r) => n + r.count, 0),
+        dead: rows.filter((r) => r.state === 'dead').reduce((n, r) => n + r.count, 0),
+        ageSeconds: Math.round(Math.max(0, ...waiting.map((r) => r.oldestReadySeconds ?? 0))),
+        outboxPending: outbox.pending,
+        outboxAgeSeconds: Math.round(outbox.oldestPendingSeconds ?? 0),
+      });
+      return 0;
+    },
+    config.statsSeconds,
+    log,
+  );
   runner.start();
   scheduler.start();
   relay.start();

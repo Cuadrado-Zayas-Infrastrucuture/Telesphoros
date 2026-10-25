@@ -15,14 +15,25 @@ describe('applyDisputeOverlay', () => {
 
   const cells = () => base.allGuidelines().flatMap((g) => g.recommendations.map((row) => ({ guideline: g, row })));
   const hash = (guidelineId: string) => base.files.find((f) => f.id === guidelineId)!.contentSha256;
-  const dispute = (guideline: { id: string; guidelineVersion: string }, row: { locator: { table: string; row: string; column?: string } }, over: Partial<DisputedCell> = {}): DisputedCell => ({
-    guidelineId: guideline.id, guidelineVersion: guideline.guidelineVersion, guidelineContentSha256: hash(guideline.id), locator: { ...row.locator }, ...over,
+  const dispute = (
+    guideline: { id: string; guidelineVersion: string },
+    row: { locator: { table: string; row: string; column?: string } },
+    over: Partial<DisputedCell> = {},
+  ): DisputedCell => ({
+    guidelineId: guideline.id,
+    guidelineVersion: guideline.guidelineVersion,
+    guidelineContentSha256: hash(guideline.id),
+    locator: { ...row.locator },
+    ...over,
   });
   const verified = () => cells().find((c) => c.row.verification.state === 'verified')!;
   const unverified = () => cells().find((c) => c.row.verification.state === 'unverified')!;
   const alreadyDisputed = () => cells().find((c) => c.row.verification.state === 'disputed')!;
   const stateOf = (set: KnowledgeSet, guidelineId: string, row: { locator: { table: string; row: string } }) =>
-    set.allGuidelines().find((g) => g.id === guidelineId)!.recommendations.find((r) => r.locator.table === row.locator.table && r.locator.row === row.locator.row)!.verification;
+    set
+      .allGuidelines()
+      .find((g) => g.id === guidelineId)!
+      .recommendations.find((r) => r.locator.table === row.locator.table && r.locator.row === row.locator.row)!.verification;
 
   it('has the three kinds of cell this suite needs (a floor, so a changed fixture cannot make the other tests vacuous)', () => {
     expect([verified(), unverified(), alreadyDisputed()].every(Boolean)).toBe(true);
@@ -98,13 +109,18 @@ describe('applyDisputeOverlay', () => {
   });
 
   it('the engine holds a disputed cell with its citation and NO wording, and the other drug is untouched (D01 inputs from the hand-written golden)', () => {
-    const inputs = [{ gene: 'CYP2C19', state: 'diplotype' as const, diplotype: '*1/*2' }, { gene: 'CYP2B6', state: 'diplotype' as const, diplotype: '*1/*1' }];
+    const inputs = [
+      { gene: 'CYP2C19', state: 'diplotype' as const, diplotype: '*1/*2' },
+      { gene: 'CYP2B6', state: 'diplotype' as const, diplotype: '*1/*1' },
+    ];
     const before = evaluate(base, inputs);
     const shown = before.results.find((r) => r.drug === 'drugq')!;
     expect(shown).toMatchObject({ outcome: 'shown', recommendationText: 'Q intermediate.' }); // control: shown without a dispute
     const cited = (shown as { citation: { guidelineId: string; locator: { table: string; row: string; column?: string | null } } }).citation;
     const guideline = base.allGuidelines().find((g) => g.id === cited.guidelineId)!;
-    const overlaid = applyDisputeOverlay(base, [dispute(guideline, { locator: { table: cited.locator.table, row: cited.locator.row, column: cited.locator.column ?? undefined } })]);
+    const overlaid = applyDisputeOverlay(base, [
+      dispute(guideline, { locator: { table: cited.locator.table, row: cited.locator.row, column: cited.locator.column ?? undefined } }),
+    ]);
     expect(overlaid.cellKeys).toHaveLength(1);
 
     const after = evaluate(overlaid.knowledge, inputs);

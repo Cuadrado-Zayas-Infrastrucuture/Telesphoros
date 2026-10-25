@@ -22,7 +22,11 @@ beforeAll(async () => {
   otherPool = new PostgresPatientIdentifiersRepository(second);
   patients = new PostgresPatientsRepository(first);
 });
-afterAll(async () => { await first?.onModuleDestroy(); await second?.onModuleDestroy(); await pg?.drop(); });
+afterAll(async () => {
+  await first?.onModuleDestroy();
+  await second?.onModuleDestroy();
+  await pg?.drop();
+});
 
 const owner = <T>(work: (c: Client) => Promise<T>) => withAdmin(pg.adminUrl, work);
 const tenant = () => `tenant-${randomUUID().slice(0, 8)}`;
@@ -33,9 +37,15 @@ async function patient(t: string): Promise<string> {
   return id;
 }
 const input = (patientId: string, over: Record<string, unknown> = {}) => ({
-  patientId, system: 'hospital-a-mrn', digest: randomBytes(32), keyVersion: 1, request: { id: randomUUID(), hash: 'a'.repeat(64) }, ...over,
+  patientId,
+  system: 'hospital-a-mrn',
+  digest: randomBytes(32),
+  keyVersion: 1,
+  request: { id: randomUUID(), hash: 'a'.repeat(64) },
+  ...over,
 });
-const rowsFor = (t: string, requestId: string) => owner(async (c) => (await c.query(`SELECT id::text AS id FROM patient_identifiers WHERE tenant_id = $1 AND creation_request_id = $2`, [t, requestId])).rows);
+const rowsFor = (t: string, requestId: string) =>
+  owner(async (c) => (await c.query(`SELECT id::text AS id FROM patient_identifiers WHERE tenant_id = $1 AND creation_request_id = $2`, [t, requestId])).rows);
 
 describe('PostgresPatientIdentifiersRepository.add with a retry id', () => {
   it('stores one identifier however many times, from however many pools, the same request arrives at once', async () => {
@@ -78,10 +88,12 @@ describe('PostgresPatientIdentifiersRepository.add with a retry id', () => {
     const t = tenant();
     const body = input(await patient(t));
     await identifiers.add(t, actor, body);
-    await expect(identifiers.add(t, actor, { ...body, digest: randomBytes(32), request: { id: body.request.id, hash: 'b'.repeat(64) } })).rejects.toBeInstanceOf(IdentifierRequestReusedError);
+    await expect(identifiers.add(t, actor, { ...body, digest: randomBytes(32), request: { id: body.request.id, hash: 'b'.repeat(64) } })).rejects.toBeInstanceOf(
+      IdentifierRequestReusedError,
+    );
   });
 
-  it('keeps one person\'s request ids apart from another\'s', async () => {
+  it("keeps one person's request ids apart from another's", async () => {
     const t = tenant();
     const body = input(await patient(t));
     const a = await identifiers.add(t, 'syn-a', body);
@@ -112,7 +124,16 @@ describe('the retry identity of an identifier', () => {
     const t = tenant();
     const body = input(await patient(t));
     await identifiers.add(t, actor, body);
-    await expect(owner((c) => c.query(`UPDATE patient_identifiers SET creation_request_id = gen_random_uuid() WHERE creation_request_id = $1`, [body.request.id]))).rejects.toThrow(/retry identity/);
-    await expect(owner((c) => c.query(`INSERT INTO patient_identifiers (tenant_id, patient_id, system, value_digest, created_by, creation_request_id) VALUES ($1, $2, 'x', $3, 'syn', gen_random_uuid())`, [t, body.patientId, randomBytes(32)]))).rejects.toThrow(/patient_identifiers_creation_request_pair/);
+    await expect(owner((c) => c.query(`UPDATE patient_identifiers SET creation_request_id = gen_random_uuid() WHERE creation_request_id = $1`, [body.request.id]))).rejects.toThrow(
+      /retry identity/,
+    );
+    await expect(
+      owner((c) =>
+        c.query(
+          `INSERT INTO patient_identifiers (tenant_id, patient_id, system, value_digest, created_by, creation_request_id) VALUES ($1, $2, 'x', $3, 'syn', gen_random_uuid())`,
+          [t, body.patientId, randomBytes(32)],
+        ),
+      ),
+    ).rejects.toThrow(/patient_identifiers_creation_request_pair/);
   });
 });

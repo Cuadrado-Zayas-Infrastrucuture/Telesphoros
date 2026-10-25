@@ -6,12 +6,23 @@ import { bearer, clinicianA, readerA, signToken } from './helpers/tokens';
 
 let app: NestExpressApplication;
 let token: string;
-beforeAll(async () => { app = await createTestApp(); token = await clinicianA(); });
-afterAll(async () => { await app.close(); });
+beforeAll(async () => {
+  app = await createTestApp();
+  token = await clinicianA();
+});
+afterAll(async () => {
+  await app.close();
+});
 const api = () => request(app.getHttpServer());
 const base = '/api/v1/reports';
-const patient = async (who = token) => (await api().post('/api/v1/patients').set(bearer(who))
-  .send({ label: `SYN-${randomUUID()}` }).expect(201)).body.id as string;
+const patient = async (who = token) =>
+  (
+    await api()
+      .post('/api/v1/patients')
+      .set(bearer(who))
+      .send({ label: `SYN-${randomUUID()}` })
+      .expect(201)
+  ).body.id as string;
 const metadata = (patientId: string) => ({ patientId, type: 'vcf', filename: 'synthetic.vcf', sizeBytes: 100 });
 const create = (body: object, who = token) => api().post(base).set(bearer(who)).send(body);
 
@@ -29,7 +40,7 @@ describe('report registration retries', () => {
     const body = { ...metadata(await patient()), requestId: randomUUID() };
     await create(body).expect(201); // caller does not retain the response
     const responses = await Promise.all(Array.from({ length: 8 }, () => create(body).expect(201)));
-    expect(new Set(responses.map(response => response.body.id)).size).toBe(1);
+    expect(new Set(responses.map((response) => response.body.id)).size).toBe(1);
     const listed = await api().get(`${base}?patientId=${body.patientId}`).set(bearer(token)).expect(200);
     expect(listed.body.meta.total).toBe(1);
     expect(responses[0]!.body.id).toBe(listed.body.data[0].id);
@@ -45,13 +56,18 @@ describe('report registration retries', () => {
     expect(other.body.id).not.toBe(first.body.id);
   });
 
-  it.each(['patientId', 'type', 'filename', 'sizeBytes'])('refuses key reuse with changed %s', async field => {
+  it.each(['patientId', 'type', 'filename', 'sizeBytes'])('refuses key reuse with changed %s', async (field) => {
     const body = { ...metadata(await patient()), requestId: randomUUID() };
     const otherPatient = await patient();
     const first = await create(body).expect(201);
-    const changed = field === 'type' ? { type: 'structured', filename: 'synthetic.json' }
-      : field === 'patientId' ? { patientId: otherPatient }
-      : field === 'filename' ? { filename: 'different.vcf' } : { sizeBytes: 101 };
+    const changed =
+      field === 'type'
+        ? { type: 'structured', filename: 'synthetic.json' }
+        : field === 'patientId'
+          ? { patientId: otherPatient }
+          : field === 'filename'
+            ? { filename: 'different.vcf' }
+            : { sizeBytes: 101 };
     const refusal = await create({ ...body, ...changed }).expect(409);
     expect(refusal.body.error.code).toBe('CONFLICT');
     expect((await create(body).expect(201)).body.id).toBe(first.body.id);
@@ -95,7 +111,7 @@ describe('report registration retries', () => {
     expect((await create(body).expect(201)).body.id).toBe(first.body.id);
   });
 
-  it.each([null, '', 'not-a-uuid', 42])('rejects invalid request keys (%j) without creating metadata', async requestId => {
+  it.each([null, '', 'not-a-uuid', 42])('rejects invalid request keys (%j) without creating metadata', async (requestId) => {
     const body = metadata(await patient());
     await create({ ...body, requestId }).expect(400);
     expect((await api().get(`${base}?patientId=${body.patientId}`).set(bearer(token)).expect(200)).body.meta.total).toBe(0);

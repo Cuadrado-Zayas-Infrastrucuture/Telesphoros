@@ -31,10 +31,7 @@ export default function SignInPage() {
   return (
     <div className="flex max-w-prose flex-col gap-4">
       <h1 className="text-3xl leading-tight font-bold">Sign in</h1>
-      <p className="text-muted-foreground">
-        You will be taken to the secure sign-in page. Accounts are by invitation only: if you need access, ask your
-        administrator.
-      </p>
+      <p className="text-muted-foreground">You will be taken to the secure sign-in page. Accounts are by invitation only: if you need access, ask your administrator.</p>
       {error && (
         <Alert variant="destructive">
           <AlertTitle>Could not reach the sign-in page</AlertTitle>

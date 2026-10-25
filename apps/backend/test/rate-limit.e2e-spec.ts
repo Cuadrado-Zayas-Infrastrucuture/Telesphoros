@@ -17,12 +17,24 @@ import { bearer, signToken } from './helpers/tokens';
 
 @Controller('rl-test')
 class RateTestController {
-  @Get('read') read() { return { ok: true }; }
-  @Post('write') @HttpCode(200) write() { return { ok: true }; }
-  @Get('expensive') @RateLimitClass('expensive') expensive() { return { ok: true }; }
-  @Get('admin') @Roles('admin') admin() { return { ok: true }; }
-  @Public() @Get('open') open() { return { ok: true }; }
-  @Public() @SkipRateLimit() @Get('skipped') skipped() { return { ok: true }; }
+  @Get('read') read() {
+    return { ok: true };
+  }
+  @Post('write') @HttpCode(200) write() {
+    return { ok: true };
+  }
+  @Get('expensive') @RateLimitClass('expensive') expensive() {
+    return { ok: true };
+  }
+  @Get('admin') @Roles('admin') admin() {
+    return { ok: true };
+  }
+  @Public() @Get('open') open() {
+    return { ok: true };
+  }
+  @Public() @SkipRateLimit() @Get('skipped') skipped() {
+    return { ok: true };
+  }
 }
 
 const PREFIX = '/api/v1/rl-test';
@@ -112,7 +124,7 @@ describe('where the limits sit around authentication', () => {
     expect(await statuses(4, () => get(app, '/read'))).toEqual([401, 401, 429, 429]);
   });
 
-  it('an unauthenticated or refused request never spends a person\'s tokens', async () => {
+  it("an unauthenticated or refused request never spends a person's tokens", async () => {
     const app = await start({ rateLimit: { ip: 1000, read: 2 } });
     const reader = await person('p1', 'tenant-1', ['reader']);
     // A reader is refused 403 on the admin route, five times; and bad tokens are refused 401 five times. None of that is the person's budget.

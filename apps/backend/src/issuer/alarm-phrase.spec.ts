@@ -70,7 +70,13 @@ describe('the alarm phrase belongs to the issuer core', () => {
     const files = sourcesUnder(join(BACKEND_ROOT, 'src'));
     const names = Object.keys(files);
     expect(names.length).toBeGreaterThan(100); // control: the whole tree was read, not one folder
-    for (const expected of ['src/issuer/capability-issuer.port.ts', 'src/issuer/issuer-http-client.ts', 'src/issuer/request-capabilities.ts', 'src/issuer/issuer-server.ts', CORE]) {
+    for (const expected of [
+      'src/issuer/capability-issuer.port.ts',
+      'src/issuer/issuer-http-client.ts',
+      'src/issuer/request-capabilities.ts',
+      'src/issuer/issuer-server.ts',
+      CORE,
+    ]) {
       expect([expected, names.includes(expected)]).toEqual([expected, true]);
     }
     expect(names.some((n) => n.endsWith('.spec.ts'))).toBe(false); // tests may name the phrase: they assert on the issuer's lines
@@ -79,7 +85,7 @@ describe('the alarm phrase belongs to the issuer core', () => {
   });
 
   it('the scan reports a writer wherever it hides (controls)', () => {
-    const clean = { [CORE]: "this.logger.warn(`Capability not issued: ${reason}`);", 'src/a.ts': 'const x = 1;' };
+    const clean = { [CORE]: 'this.logger.warn(`Capability not issued: ${reason}`);', 'src/a.ts': 'const x = 1;' };
     expect(phraseWriters(clean)).toEqual([]); // control: the core itself is allowed
     const writers: [string, Record<string, string>][] = [
       ['a single-quoted literal', { ...clean, 'src/a.ts': "logger.error('Capability not issued: unavailable');" }],
@@ -89,7 +95,7 @@ describe('the alarm phrase belongs to the issuer core', () => {
       ['the port itself', { ...clean, 'src/issuer/capability-issuer.port.ts': 'super(`Capability not issued: ${reason}`);' }],
       ['the client', { ...clean, 'src/issuer/issuer-http-client.ts': "this.logger.warn('Capability not issued: unavailable');" }],
       ['a trailing comment after code', { ...clean, 'src/a.ts': "log('x'); // Capability not issued" }],
-      ['a file that only has the core\'s file name', { ...clean, 'src/other/issuer-core.ts': "log('Capability not issued: unavailable');" }],
+      ["a file that only has the core's file name", { ...clean, 'src/other/issuer-core.ts': "log('Capability not issued: unavailable');" }],
       ['a second core-looking path', { ...clean, 'src/issuer/issuer-core.ts.bak.ts': "log('Capability not issued: unavailable');" }],
     ];
     for (const [name, files] of writers) expect([name, phraseWriters(files).length > 0]).toEqual([name, true]);

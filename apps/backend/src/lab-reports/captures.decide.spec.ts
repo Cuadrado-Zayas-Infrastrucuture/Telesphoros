@@ -19,9 +19,23 @@ async function setup() {
   const reports = new InMemoryReportsRepository();
   const now = new Date().toISOString();
   const report: ReportRecord = {
-    id: randomUUID(), tenantId: 'tenant-unit', createdBy: 'syn-creator', patientId: randomUUID(), type: 'lab-pdf', filename: 'a.pdf', sizeBytes: 10, status: 'received',
-    storageKey: 'reports/x/k', contentType: 'application/pdf', sha256: 'a'.repeat(64), uploadedAt: now, objectVersion: 'v1', uploadRequestedBy: 'syn-creator', uploadedBy: 'syn-creator',
-    createdAt: now, updatedAt: now,
+    id: randomUUID(),
+    tenantId: 'tenant-unit',
+    createdBy: 'syn-creator',
+    patientId: randomUUID(),
+    type: 'lab-pdf',
+    filename: 'a.pdf',
+    sizeBytes: 10,
+    status: 'received',
+    storageKey: 'reports/x/k',
+    contentType: 'application/pdf',
+    sha256: 'a'.repeat(64),
+    uploadedAt: now,
+    objectVersion: 'v1',
+    uploadRequestedBy: 'syn-creator',
+    uploadedBy: 'syn-creator',
+    createdAt: now,
+    updatedAt: now,
   };
   await reports.insert(report);
   const captureId = randomUUID();
@@ -50,7 +64,12 @@ describe('CapturesService.decide with a retry id', () => {
     ledger.findCapture.mockImplementation(async (_tenant, id) => ({ ...found!, id }));
     const requestId = randomUUID();
     const calls: Array<[string, 'accepted' | 'rejected', string | undefined]> = [
-      [captureId, 'accepted', 'n'], [captureId, 'accepted', 'n'], [captureId, 'rejected', 'n'], [captureId, 'accepted', 'other'], [captureId, 'accepted', undefined], [otherCapture, 'accepted', 'n'],
+      [captureId, 'accepted', 'n'],
+      [captureId, 'accepted', 'n'],
+      [captureId, 'rejected', 'n'],
+      [captureId, 'accepted', 'other'],
+      [captureId, 'accepted', undefined],
+      [otherCapture, 'accepted', 'n'],
     ];
     for (const [id, decision, note] of calls) await service.decide(reviewer, id, { decision, requestId, ...(note === undefined ? {} : { note }) });
     const hashes = ledger.insertAcceptance.mock.calls.map((call) => call[2].request!.hash);

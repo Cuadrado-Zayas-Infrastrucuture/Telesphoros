@@ -50,12 +50,32 @@ export abstract class ObjectStorage {
   abstract createDownloadUrl(key: string, version: string, ttlSeconds: number, options?: { filename: string }): Promise<string>;
 
   /** Validated owned file stream; unsupported/read-only adapters refuse rather than buffer or grant a write. */
-  async uploadVersions(_key: string, _signal: AbortSignal): Promise<UploadVersion[]> { void _key; void _signal; throw new Error('Upload inventory unavailable.'); }
+  async uploadVersions(_key: string, _signal: AbortSignal): Promise<UploadVersion[]> {
+    void _key;
+    void _signal;
+    throw new Error('Upload inventory unavailable.');
+  }
 
-  async uploadMultipart(_key: string, _signal: AbortSignal): Promise<UploadMultipart[]> {void _key;void _signal;throw new Error('Multipart inventory unavailable.');}
+  async uploadMultipart(_key: string, _signal: AbortSignal): Promise<UploadMultipart[]> {
+    void _key;
+    void _signal;
+    throw new Error('Multipart inventory unavailable.');
+  }
 
-  async putStream(_key: string, _bytes: Readable, _contentType: string, _size: number, _signal: AbortSignal, _metadata?: Record<string,string>): Promise<{ version: string | undefined }> {
-    void _key; void _bytes; void _contentType; void _size; void _signal; void _metadata;
+  async putStream(
+    _key: string,
+    _bytes: Readable,
+    _contentType: string,
+    _size: number,
+    _signal: AbortSignal,
+    _metadata?: Record<string, string>,
+  ): Promise<{ version: string | undefined }> {
+    void _key;
+    void _bytes;
+    void _contentType;
+    void _size;
+    void _signal;
+    void _metadata;
     throw new Error('Streaming writes unavailable.');
   }
 

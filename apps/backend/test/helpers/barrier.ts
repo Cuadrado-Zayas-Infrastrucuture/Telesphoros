@@ -13,7 +13,12 @@ const OPEN_GATE = { assertOpen: (): void => undefined };
 const BLOCKED_MS = 5_000;
 
 export class Session {
-  private constructor(readonly client: Client, readonly name: string, readonly actor: string, readonly tenantId: string) {}
+  private constructor(
+    readonly client: Client,
+    readonly name: string,
+    readonly actor: string,
+    readonly tenantId: string,
+  ) {}
 
   /** A transaction as the application role, in a tenant, with an actor. */
   static async open(url: string, name: string, tenantId: string, actor = 'syn-session'): Promise<Session> {
@@ -27,7 +32,10 @@ export class Session {
 
   /** Starts a statement without waiting for it; the outcome is read later. */
   start(sql: string, values: unknown[] = []): Promise<PgError | undefined> {
-    return this.client.query(sql, values).then(() => undefined, (error: PgError) => error);
+    return this.client.query(sql, values).then(
+      () => undefined,
+      (error: PgError) => error,
+    );
   }
 
   /** Inserts a capture and its ledger event, uncommitted: this session then holds the tenant's ledger lock until it commits or rolls back. */

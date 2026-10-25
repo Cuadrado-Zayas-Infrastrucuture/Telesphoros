@@ -1,8 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { Readable } from 'node:stream';
-import {
-  CreateBucketCommand, DeleteObjectCommand, GetObjectCommand, PutBucketVersioningCommand, PutObjectCommand, S3Client,
-} from '@aws-sdk/client-s3';
+import { CreateBucketCommand, DeleteObjectCommand, GetObjectCommand, PutBucketVersioningCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // What 3.2a relies on from the object store, proven against the S3-compatible server BEFORE any code is built on it (plan 12.1/12.4):

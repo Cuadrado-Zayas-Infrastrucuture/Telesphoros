@@ -1,6 +1,19 @@
 import {
-  type AcceptanceDto, acceptanceDtoSchema, type CaptureDto, captureDtoSchema, CLINICAL_USE, type CorrectionDto, correctionDtoSchema, type DisputeDto, disputeDtoSchema,
-  type EvaluationDto, evaluationDtoSchema, type EvaluationSummaryDto, evaluationSummaryDtoSchema, type NoteDto, noteDtoSchema,
+  type AcceptanceDto,
+  acceptanceDtoSchema,
+  type CaptureDto,
+  captureDtoSchema,
+  CLINICAL_USE,
+  type CorrectionDto,
+  correctionDtoSchema,
+  type DisputeDto,
+  disputeDtoSchema,
+  type EvaluationDto,
+  evaluationDtoSchema,
+  type EvaluationSummaryDto,
+  evaluationSummaryDtoSchema,
+  type NoteDto,
+  noteDtoSchema,
 } from '@telesphoros/shared-types';
 import { REPORT_HOLD_ACTIONS, REPORT_HOLD_MESSAGES, type ReportHoldCode } from '../services/report-adapter';
 import type { KnowledgeSet } from '../services/knowledge/knowledge-set';
@@ -100,7 +113,10 @@ export function toEvaluationDto(record: Projected, context: EvaluationContext): 
     acceptance: context.acceptance,
     disposition: record.disposition,
     holdCode,
-    hold: holdCode && holdCode in REPORT_HOLD_MESSAGES ? { message: REPORT_HOLD_MESSAGES[holdCode as ReportHoldCode], reviewerAction: REPORT_HOLD_ACTIONS[holdCode as ReportHoldCode] } : null,
+    hold:
+      holdCode && holdCode in REPORT_HOLD_MESSAGES
+        ? { message: REPORT_HOLD_MESSAGES[holdCode as ReportHoldCode], reviewerAction: REPORT_HOLD_ACTIONS[holdCode as ReportHoldCode] }
+        : null,
     knowledgeSetId: record.knowledgeSetId,
     engineVersion: record.engineVersion,
     scope: text(binding.scope),
@@ -109,7 +125,12 @@ export function toEvaluationDto(record: Projected, context: EvaluationContext): 
     supersededBy: derived.by,
     results,
     geneStates: (record.geneStates as Array<Record<string, unknown>>).map((s) => ({
-      gene: s.gene, state: s.state, phenotype: text(s.phenotype), diplotype: text(s.diplotype), activityScore: text(s.activityScore), reasonCode: text(s.reasonCode),
+      gene: s.gene,
+      state: s.state,
+      phenotype: text(s.phenotype),
+      diplotype: text(s.diplotype),
+      activityScore: text(s.activityScore),
+      reasonCode: text(s.reasonCode),
     })),
     geneInputs: record.geneInputs,
     corrections: context.corrections.map(toCorrectionDto),

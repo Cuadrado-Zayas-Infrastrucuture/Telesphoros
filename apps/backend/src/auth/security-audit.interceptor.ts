@@ -38,7 +38,10 @@ const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 @Injectable()
 export class SecurityAuditInterceptor implements NestInterceptor {
-  constructor(private readonly reflector: Reflector, private readonly audit: SecurityAuditStore) {}
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly audit: SecurityAuditStore,
+  ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [context.getHandler(), context.getClass()]);
@@ -49,8 +52,14 @@ export class SecurityAuditInterceptor implements NestInterceptor {
     if (WRITE_METHODS.has(req.method)) return from(this.audit.record(writeEvent(context, req))).pipe(mergeMap(() => next.handle()));
     if (req.method !== 'GET') return next.handle();
     return next.handle().pipe(
-      catchError(error => from(this.audit.record(accessEvent(context, req, 'refused')).then(() => { throw error; }))),
-      mergeMap(value => from(this.audit.record(accessEvent(context, req, 'succeeded')).then(() => value))),
+      catchError((error) =>
+        from(
+          this.audit.record(accessEvent(context, req, 'refused')).then(() => {
+            throw error;
+          }),
+        ),
+      ),
+      mergeMap((value) => from(this.audit.record(accessEvent(context, req, 'succeeded')).then(() => value))),
     );
   }
 }

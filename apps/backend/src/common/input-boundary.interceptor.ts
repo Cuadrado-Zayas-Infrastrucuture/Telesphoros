@@ -21,7 +21,7 @@ export class InputBoundaryInterceptor implements NestInterceptor {
     // Capture while Nest's matched route is active; the HTTP logger binds its request BEFORE routing.
     (req as Request & { [LOG_ROUTE]?: string })[LOG_ROUTE] = typeof req.route?.path === 'string' ? req.route.path : '[unmatched]';
     const framedBody = Number(req.headers?.['content-length'] ?? 0) > 0 || req.headers?.['transfer-encoding'] !== undefined;
-    if (framedBody && req.body === undefined && !Reflect.getMetadata(RAW_INTAKE,context.getHandler())) {
+    if (framedBody && req.body === undefined && !Reflect.getMetadata(RAW_INTAKE, context.getHandler())) {
       throw AppException.validation([
         {
           field: '(body)',
@@ -29,8 +29,7 @@ export class InputBoundaryInterceptor implements NestInterceptor {
         },
       ]);
     }
-    const emptyBody =
-      req.body === undefined || (req.body !== null && typeof req.body === 'object' && !Array.isArray(req.body) && Object.keys(req.body).length === 0);
+    const emptyBody = req.body === undefined || (req.body !== null && typeof req.body === 'object' && !Array.isArray(req.body) && Object.keys(req.body).length === 0);
     if (!kinds.has(String(RouteParamtypes.BODY)) && !emptyBody) {
       throw AppException.validation([{ field: '(body)', message: 'This endpoint does not accept a body.' }]);
     }

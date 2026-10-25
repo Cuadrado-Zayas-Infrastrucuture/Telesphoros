@@ -31,7 +31,12 @@ export interface DisputedCell {
 export type CellKey = [string, string, string, string, string, string | null];
 
 export const cellKey = (cell: DisputedCell): CellKey => [
-  cell.guidelineId, cell.guidelineVersion, cell.guidelineContentSha256, cell.locator.table, cell.locator.row, cell.locator.column ?? null,
+  cell.guidelineId,
+  cell.guidelineVersion,
+  cell.guidelineContentSha256,
+  cell.locator.table,
+  cell.locator.row,
+  cell.locator.column ?? null,
 ];
 
 export interface OverlayResult {
@@ -55,7 +60,9 @@ export function applyDisputeOverlay(knowledge: KnowledgeSet, disputes: readonly 
   let touched = false;
 
   const guidelines = knowledge.allGuidelines().map((guideline): GuidelineFile => {
-    const wanted = disputes.filter((d) => d.guidelineId === guideline.id && d.guidelineVersion === guideline.guidelineVersion && d.guidelineContentSha256 === hashOf.get(guideline.id));
+    const wanted = disputes.filter(
+      (d) => d.guidelineId === guideline.id && d.guidelineVersion === guideline.guidelineVersion && d.guidelineContentSha256 === hashOf.get(guideline.id),
+    );
     if (wanted.length === 0) return guideline;
 
     const replaced = guideline.recommendations.map((row) => {

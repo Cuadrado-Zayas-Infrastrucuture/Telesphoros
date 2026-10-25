@@ -37,8 +37,12 @@ function throughDrop(): string {
 const parents = (db: EphemeralDatabase) =>
   withAdmin(db.adminUrl, async (c) => {
     const patient = (await c.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ('syn-drop', 'syn-author', 'SYN-DROP') RETURNING id`)).rows[0].id as string;
-    const report = (await c.query(
-      `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ('syn-drop', 'syn-author', $1, 'vcf', 'syn.vcf', 1) RETURNING id`, [patient])).rows[0].id as string;
+    const report = (
+      await c.query(
+        `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ('syn-drop', 'syn-author', $1, 'vcf', 'syn.vcf', 1) RETURNING id`,
+        [patient],
+      )
+    ).rows[0].id as string;
     return { patient, report };
   });
 const tableExists = (db: EphemeralDatabase) =>
@@ -49,9 +53,14 @@ async function tableFacts(db: EphemeralDatabase): Promise<string> {
   const ddl = execFileSync('pg_dump', ['-s', '--no-owner', '-t', 'recommendations', db.adminUrl], { encoding: 'utf8' }).replace(/^(--|\\(un)?restrict).*\n/gm, '');
   const rest = await withAdmin(db.adminUrl, async (c) => ({
     policies: (await c.query(`SELECT policyname, roles, cmd, qual, with_check FROM pg_policies WHERE tablename = 'recommendations'`)).rows,
-    flags: (await c.query(`SELECT relacl::text AS acl, pg_get_userbyid(relowner) AS owner, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = 'recommendations'`)).rows,
+    flags: (await c.query(`SELECT relacl::text AS acl, pg_get_userbyid(relowner) AS owner, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = 'recommendations'`))
+      .rows,
     triggers: (await c.query(`SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'recommendations'::regclass AND NOT tgisinternal ORDER BY 1`)).rows,
-    columns: (await c.query(`SELECT attnum, attname, format_type(atttypid, atttypmod) AS type, attnotnull, attidentity FROM pg_attribute WHERE attrelid = 'recommendations'::regclass AND attnum > 0 AND NOT attisdropped ORDER BY 1`)).rows,
+    columns: (
+      await c.query(
+        `SELECT attnum, attname, format_type(atttypid, atttypmod) AS type, attnotnull, attidentity FROM pg_attribute WHERE attrelid = 'recommendations'::regclass AND attnum > 0 AND NOT attisdropped ORDER BY 1`,
+      )
+    ).rows,
     guard: (await c.query(`SELECT pg_get_functiondef('block_report_soft_delete'::regproc) AS def`)).rows,
     tenantPolicies: (await c.query(`SELECT count(*)::int AS n FROM pg_policies WHERE qual LIKE '%app_tenant()%' OR with_check LIKE '%app_tenant()%'`)).rows,
   }));
@@ -61,7 +70,11 @@ async function tableFacts(db: EphemeralDatabase): Promise<string> {
 it('the drop is the last migration so far, and it is labelled breaking', () => {
   expect(lastVersion() >= VERSION).toBe(true);
   const up = readdirSync(MIGRATIONS_DIR).find((f) => f.startsWith(`${VERSION}_`) && f.endsWith('.up.sql'))!;
-  expect(readdirSync(MIGRATIONS_DIR).filter((f) => f.startsWith(`${VERSION}_`)).sort()).toEqual([up.replace('.up.', '.down.'), up].sort());
+  expect(
+    readdirSync(MIGRATIONS_DIR)
+      .filter((f) => f.startsWith(`${VERSION}_`))
+      .sort(),
+  ).toEqual([up.replace('.up.', '.down.'), up].sort());
 });
 
 it('drops an empty table, with its policy, indexes and grants, and leaves the shared trigger functions', async () => {
@@ -76,7 +89,10 @@ it('drops an empty table, with its policy, indexes and grants, and leaves the sh
       functions: (await c.query(`SELECT proname FROM pg_proc WHERE proname IN ('set_updated_at', 'forbid_identity_change') ORDER BY 1`)).rows.map((r) => r.proname),
     }));
     expect(left).toEqual({ policies: 0, indexes: 0, functions: ['forbid_identity_change', 'set_updated_at'] });
-  } finally { await db.drop(); rmSync(dir, { recursive: true, force: true }); }
+  } finally {
+    await db.drop();
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 it('refuses to drop a table that holds a row, run as a non-superuser owner that row-level security hides the row from; only the exact word allows it', async () => {
@@ -104,12 +120,20 @@ it('refuses to drop a table that holds a row, run as a non-superuser owner that 
         await expect(migrateUp(c, through)).rejects.toThrow(/Refusing to drop recommendations/);
         await c.query(`SET telesphoros.allow_recommendations_drop = 'yes'`);
         expect(await migrateUp(c, through)).toEqual(expect.arrayContaining([VERSION]));
-      } finally { await c.query('RESET ROLE'); }
+      } finally {
+        await c.query('RESET ROLE');
+      }
     });
     expect(await tableExists(db)).toBe(false);
   } finally {
-    await withAdmin(db.adminUrl, async (c) => { await c.query(`REASSIGN OWNED BY ${owner} TO CURRENT_USER`); await c.query(`DROP OWNED BY ${owner}`); await c.query(`DROP ROLE ${owner}`); }).catch(() => undefined);
-    await db.drop(); rmSync(dir, { recursive: true, force: true }); rmSync(through, { recursive: true, force: true });
+    await withAdmin(db.adminUrl, async (c) => {
+      await c.query(`REASSIGN OWNED BY ${owner} TO CURRENT_USER`);
+      await c.query(`DROP OWNED BY ${owner}`);
+      await c.query(`DROP ROLE ${owner}`);
+    }).catch(() => undefined);
+    await db.drop();
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(through, { recursive: true, force: true });
   }
 });
 
@@ -122,7 +146,11 @@ it('reverting recreates the table exactly as it stood, so 0032 can be reverted a
     const undo = revertThrough('drop_recommendations'); // the drop and any migration after it, newest first
     await withAdmin(reverted.adminUrl, async (c) => expect(await migrateDown(c, undo.steps)).toEqual(undo.reverted));
     expect(await tableFacts(reverted)).toBe(expected);
-  } finally { await db.drop(); await reverted.drop(); rmSync(dir, { recursive: true, force: true }); }
+  } finally {
+    await db.drop();
+    await reverted.drop();
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 describe('the report soft-delete guard after the drop', () => {
@@ -134,7 +162,10 @@ describe('the report soft-delete guard after the drop', () => {
     app = new Database({ url: pg.appUrl, ssl: 'disable' });
     ledger = new PostgresLedgerRecordsRepository(app);
   });
-  afterAll(async () => { await app?.onModuleDestroy(); await pg?.drop(); });
+  afterAll(async () => {
+    await app?.onModuleDestroy();
+    await pg?.drop();
+  });
 
   const softDelete = (reportId: string) => withAdmin(pg.adminUrl, (c) => c.query(`UPDATE reports SET deleted_at = now() WHERE id = $1`, [reportId]));
 

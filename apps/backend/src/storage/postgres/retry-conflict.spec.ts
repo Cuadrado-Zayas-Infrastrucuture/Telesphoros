@@ -9,7 +9,7 @@ describe('retryOnConflict', () => {
     expect(work).toHaveBeenCalledTimes(2);
   });
 
-  it('retries only once: a second conflict is the caller\'s', async () => {
+  it("retries only once: a second conflict is the caller's", async () => {
     const work = jest.fn().mockRejectedValue(pgError('40P01'));
     await expect(retryOnConflict(work)).rejects.toMatchObject({ code: '40P01' });
     expect(work).toHaveBeenCalledTimes(2);

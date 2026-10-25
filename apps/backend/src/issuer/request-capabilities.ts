@@ -12,9 +12,7 @@ export const CAPABILITY_ISSUE_TIMEOUT_MS = 3000;
  * What the guard learns from asking. `bound`: the request holds a capability and this is the membership version it was issued at. `absent`: it has none, and
  * why. `refusal` is the database's closed code when the issuer REFUSED (the refusal is then in the issuance log, which is what decision D1=(i) relies on).
  */
-export type CapabilityOutcome =
-  | { status: 'bound'; membershipVersion: number }
-  | { status: 'absent'; reason: string; refusal?: string };
+export type CapabilityOutcome = { status: 'bound'; membershipVersion: number } | { status: 'absent'; reason: string; refusal?: string };
 
 /**
  * The API's side of FR-011: obtain ONE capability for the request and keep it in the request's slot, beside its authority, so every `withTenant` call in

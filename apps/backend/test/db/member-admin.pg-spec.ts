@@ -50,12 +50,19 @@ async function organization(roles: string[] = ['admin']): Promise<{ tenant: stri
   });
   return { tenant, admin };
 }
-const grant = (tenant: string, sub: string, roles: string[]) => owner((c) => new PgMembershipAdmin(c).grant({ tenantId: tenant, sub, roles: roles as never, by: 'ops', reason: 'test' }));
-const rolesOf = (tenant: string, sub: string) => owner(async (c) => (await c.query(`SELECT roles, status FROM tenant_memberships WHERE tenant_id = $1 AND sub = $2`, [tenant, sub])).rows[0]);
-const events = (tenant: string) => owner(async (c) => (await c.query(`SELECT event_type, actor_kind, actor_ref, subject_ref FROM security_events WHERE tenant_id = $1 ORDER BY seq`, [tenant])).rows);
+const grant = (tenant: string, sub: string, roles: string[]) =>
+  owner((c) => new PgMembershipAdmin(c).grant({ tenantId: tenant, sub, roles: roles as never, by: 'ops', reason: 'test' }));
+const rolesOf = (tenant: string, sub: string) =>
+  owner(async (c) => (await c.query(`SELECT roles, status FROM tenant_memberships WHERE tenant_id = $1 AND sub = $2`, [tenant, sub])).rows[0]);
+const events = (tenant: string) =>
+  owner(async (c) => (await c.query(`SELECT event_type, actor_kind, actor_ref, subject_ref FROM security_events WHERE tenant_id = $1 ORDER BY seq`, [tenant])).rows);
 
 describe('the application login cannot write the authority tables', () => {
-  it.each([['tenant_memberships', 'changed_by'], ['tenants', 'changed_by'], ['invitations', 'created_by']])('%s: no insert, update, delete or truncate', async (table, column) => {
+  it.each([
+    ['tenant_memberships', 'changed_by'],
+    ['tenants', 'changed_by'],
+    ['invitations', 'created_by'],
+  ])('%s: no insert, update, delete or truncate', async (table, column) => {
     const { tenant } = await organization();
     for (const sql of [
       `INSERT INTO ${table} SELECT * FROM ${table} WHERE false`,
@@ -67,7 +74,7 @@ describe('the application login cannot write the authority tables', () => {
     }
   });
 
-  it('can read only its own organization\'s registry row, members and invitations', async () => {
+  it("can read only its own organization's registry row, members and invitations", async () => {
     const a = await organization();
     const b = await organization();
     expect((await asApplication(a.tenant, a.admin, (c) => c.query('SELECT id FROM tenants'))).rows).toEqual([{ id: a.tenant }]);
@@ -80,8 +87,11 @@ describe('the application login cannot write the authority tables', () => {
     const { tenant, admin } = await organization();
     await expect(asApplication(tenant, admin, (c) => c.query('SELECT * FROM member_admin_context()'))).rejects.toMatchObject({ code: '42501' });
     const { rows } = await owner((c) =>
-      c.query(`SELECT p.proname, has_function_privilege('public', p.oid, 'EXECUTE') AS public_exec, has_function_privilege('telesphoros_app', p.oid, 'EXECUTE') AS app_exec
-                 FROM pg_proc p WHERE p.proname = ANY($1) ORDER BY p.proname`, [['member_change_roles', 'member_remove', 'invitation_create', 'invitation_cancel', 'member_admin_context']]),
+      c.query(
+        `SELECT p.proname, has_function_privilege('public', p.oid, 'EXECUTE') AS public_exec, has_function_privilege('telesphoros_app', p.oid, 'EXECUTE') AS app_exec
+                 FROM pg_proc p WHERE p.proname = ANY($1) ORDER BY p.proname`,
+        [['member_change_roles', 'member_remove', 'invitation_create', 'invitation_cancel', 'member_admin_context']],
+      ),
     );
     expect(rows).toEqual([
       { proname: 'invitation_cancel', public_exec: false, app_exec: true },
@@ -98,8 +108,14 @@ describe('the functions take the organization and the person from the transactio
     const { tenant, admin } = await organization();
     const target = id('t');
     await grant(tenant, target, ['reader']);
-    for (const [t, a] of [[null, admin], [tenant, null], [null, null]] as const) {
-      await expect(asApplication(t, a, (c) => c.query('SELECT member_change_roles($1, $2::text[])', [target, ['clinician']]))).rejects.toMatchObject({ message: 'member-admin-context' });
+    for (const [t, a] of [
+      [null, admin],
+      [tenant, null],
+      [null, null],
+    ] as const) {
+      await expect(asApplication(t, a, (c) => c.query('SELECT member_change_roles($1, $2::text[])', [target, ['clinician']]))).rejects.toMatchObject({
+        message: 'member-admin-context',
+      });
     }
     expect((await rolesOf(tenant, target)).roles).toEqual(['reader']);
   });
@@ -112,19 +128,25 @@ describe('the functions take the organization and the person from the transactio
     const target = id('t');
     await grant(a.tenant, target, ['reader']);
     for (const actor of [clinician, b.admin, id('stranger')]) {
-      await expect(asApplication(a.tenant, actor, (c) => c.query('SELECT member_change_roles($1, $2::text[])', [target, ['admin']]))).rejects.toMatchObject({ message: 'not-administrator' });
+      await expect(asApplication(a.tenant, actor, (c) => c.query('SELECT member_change_roles($1, $2::text[])', [target, ['admin']]))).rejects.toMatchObject({
+        message: 'not-administrator',
+      });
       await expect(asApplication(a.tenant, actor, (c) => c.query('SELECT member_remove($1)', [target]))).rejects.toMatchObject({ message: 'not-administrator' });
-      await expect(asApplication(a.tenant, actor, (c) => c.query('SELECT invitation_create($1, $2, $3::text[])', [Buffer.alloc(32, 1), 'x***@y', ['reader']]))).rejects.toMatchObject({ message: 'not-administrator' });
+      await expect(
+        asApplication(a.tenant, actor, (c) => c.query('SELECT invitation_create($1, $2, $3::text[])', [Buffer.alloc(32, 1), 'x***@y', ['reader']])),
+      ).rejects.toMatchObject({ message: 'not-administrator' });
     }
     expect((await rolesOf(a.tenant, target)).roles).toEqual(['reader']);
   });
 
-  it('cannot be pointed at another organization\'s person: the lookup is inside the bound organization (member-not-found)', async () => {
+  it("cannot be pointed at another organization's person: the lookup is inside the bound organization (member-not-found)", async () => {
     const a = await organization();
     const b = await organization();
     const victim = id('victim');
     await grant(b.tenant, victim, ['clinician']);
-    await expect(asApplication(a.tenant, a.admin, (c) => c.query('SELECT member_change_roles($1, $2::text[])', [victim, ['reader']]))).rejects.toMatchObject({ message: 'member-not-found' });
+    await expect(asApplication(a.tenant, a.admin, (c) => c.query('SELECT member_change_roles($1, $2::text[])', [victim, ['reader']]))).rejects.toMatchObject({
+      message: 'member-not-found',
+    });
     await expect(asApplication(a.tenant, a.admin, (c) => c.query('SELECT member_remove($1)', [victim]))).rejects.toMatchObject({ message: 'member-not-found' });
     expect(await rolesOf(b.tenant, victim)).toMatchObject({ roles: ['clinician'], status: 'active' });
   });
@@ -134,7 +156,9 @@ describe('the functions take the organization and the person from the transactio
     const target = id('t');
     await grant(tenant, target, ['reader']);
     await owner((c) => new PgTenantAdmin(c).setTenantStatus({ id: tenant, status: 'suspended', by: 'ops' }));
-    await expect(asApplication(tenant, admin, (c) => c.query('SELECT member_change_roles($1, $2::text[])', [target, ['clinician']]))).rejects.toMatchObject({ message: 'tenant-inactive' });
+    await expect(asApplication(tenant, admin, (c) => c.query('SELECT member_change_roles($1, $2::text[])', [target, ['clinician']]))).rejects.toMatchObject({
+      message: 'tenant-inactive',
+    });
     await owner((c) => new PgTenantAdmin(c).setTenantStatus({ id: tenant, status: 'active', by: 'ops' }));
     await asApplication(tenant, admin, (c) => c.query('SELECT member_change_roles($1, $2::text[])', [target, ['clinician']]));
     expect((await rolesOf(tenant, target)).roles).toEqual(['clinician']);
@@ -159,11 +183,13 @@ describe('the functions take the organization and the person from the transactio
     const rejected = outcomes.find((o): o is PromiseRejectedResult => o.status === 'rejected')!;
     // The loser had already passed the administrator check when the winner committed; the rule after the lock refuses it (or the check does, if it ran later).
     expect(['last-administrator', 'not-administrator']).toContain((rejected.reason as Error).message);
-    const admins = await owner(async (c) => (await c.query(`SELECT count(*)::int AS n FROM tenant_memberships WHERE tenant_id = $1 AND status = 'active' AND 'admin' = ANY(roles)`, [tenant])).rows[0].n);
+    const admins = await owner(
+      async (c) => (await c.query(`SELECT count(*)::int AS n FROM tenant_memberships WHERE tenant_id = $1 AND status = 'active' AND 'admin' = ANY(roles)`, [tenant])).rows[0].n,
+    );
     expect(admins).toBe(1);
   });
 
-  it('write a version bump and the membership\'s change record, so the person\'s next request sees the change', async () => {
+  it("write a version bump and the membership's change record, so the person's next request sees the change", async () => {
     const { tenant, admin } = await organization();
     const target = id('t');
     await grant(tenant, target, ['reader']);
@@ -176,7 +202,7 @@ describe('the functions take the organization and the person from the transactio
 });
 
 describe('the membership events name who did it', () => {
-  it('a change through the application is a person\'s act; the same change by an operator is an operator\'s', async () => {
+  it("a change through the application is a person's act; the same change by an operator is an operator's", async () => {
     const { tenant, admin } = await organization();
     const target = id('t');
     await grant(tenant, target, ['reader']); // operator
@@ -201,7 +227,9 @@ describe('the membership events name who did it', () => {
 
 describe('the organization registry', () => {
   it('a membership must name a registered organization (foreign key), and the id and creation record never change', async () => {
-    await expect(owner((c) => c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ('never-registered', 'p', 'active', '{reader}', 'x')`))).rejects.toMatchObject({ code: '23503', constraint: 'tenant_memberships_tenant_fk' });
+    await expect(
+      owner((c) => c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ('never-registered', 'p', 'active', '{reader}', 'x')`)),
+    ).rejects.toMatchObject({ code: '23503', constraint: 'tenant_memberships_tenant_fk' });
     const { tenant } = await organization();
     await expect(owner((c) => c.query(`UPDATE tenants SET id = 'renamed' WHERE id = $1`, [tenant]))).rejects.toMatchObject({ code: '23000' });
     await expect(owner((c) => c.query(`UPDATE tenants SET created_by = 'someone-else' WHERE id = $1`, [tenant]))).rejects.toMatchObject({ code: '23000' });
@@ -225,14 +253,20 @@ describe('the organization registry', () => {
   });
 
   it('the operator cannot grant a membership into an unregistered organization (the command says to register it first)', async () => {
-    await expect(owner((c) => new PgMembershipAdmin(c).grant({ tenantId: id('unregistered'), sub: 'p', roles: ['reader'], by: 'ops', reason: 'test' }))).rejects.toMatchObject({ failure: 'unknown-tenant' });
+    await expect(owner((c) => new PgMembershipAdmin(c).grant({ tenantId: id('unregistered'), sub: 'p', roles: ['reader'], by: 'ops', reason: 'test' }))).rejects.toMatchObject({
+      failure: 'unknown-tenant',
+    });
   });
 });
 
 describe('invitations', () => {
   const digest = new InvitationDigest();
   const create = (tenant: string, admin: string, email: string, roles: string[] = ['clinician']) =>
-    asApplication(tenant, admin, async (c) => (await c.query('SELECT invitation_create($1, $2, $3::text[]) AS id', [digest.digest(email), digest.hint(email), roles])).rows[0].id as string);
+    asApplication(
+      tenant,
+      admin,
+      async (c) => (await c.query('SELECT invitation_create($1, $2, $3::text[]) AS id', [digest.digest(email), digest.hint(email), roles])).rows[0].id as string,
+    );
 
   it('store a keyed digest and a hint, never the address, and are read-only to the application', async () => {
     const { tenant, admin } = await organization();
@@ -299,7 +333,10 @@ describe('invitations', () => {
     expect(await run(['list', '--tenant', tenant])).toBe(0);
     expect(lines.join('\n')).toContain('status=fulfilled');
     expect(lines.join('\n')).not.toContain(email);
-    expect((await owner(async (c) => (await c.query(`SELECT status, fulfilled_sub FROM invitations WHERE id = $1`, [invitation])).rows[0]))).toEqual({ status: 'fulfilled', fulfilled_sub: person });
+    expect(await owner(async (c) => (await c.query(`SELECT status, fulfilled_sub FROM invitations WHERE id = $1`, [invitation])).rows[0])).toEqual({
+      status: 'fulfilled',
+      fulfilled_sub: person,
+    });
   });
 
   it('a cancelled or expired invitation cannot be fulfilled, and a failed grant leaves the invitation pending', async () => {

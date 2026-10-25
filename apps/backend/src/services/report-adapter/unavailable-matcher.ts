@@ -50,7 +50,10 @@ function fold(text: string): string {
 
 /** The comparison copy: NFC, White_Space runs to one U+0020, trim U+0020, fold, then remove exactly one terminal period (and do not trim again). */
 export function comparisonCopy(text: string): string {
-  const collapsed = text.normalize('NFC').replace(WHITE_SPACE_RUN, ' ').replace(/^ +| +$/g, '');
+  const collapsed = text
+    .normalize('NFC')
+    .replace(WHITE_SPACE_RUN, ' ')
+    .replace(/^ +| +$/g, '');
   const folded = fold(collapsed);
   return folded.endsWith('.') ? folded.slice(0, -1) : folded;
 }

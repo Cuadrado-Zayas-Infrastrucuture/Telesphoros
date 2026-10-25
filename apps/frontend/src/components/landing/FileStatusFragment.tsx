@@ -11,10 +11,17 @@ export const statusRows = [
 /** Decorative fictional file list for a capability row; see PatientLinkFragment for the rules these fragments keep. */
 export function FileStatusFragment() {
   const { statuses } = useLandingLanguage().copy;
-  return <div className="landing-fragment landing-fragment--status" aria-hidden="true">
-    {statusRows.map(row => <span key={row.name} className="landing-fragment-row">
-      <span><FileText />{row.name}</span>
-      <span className={row.status === 'verified' ? 'landing-fragment-verified' : undefined}>{statuses[row.status]}</span>
-    </span>)}
-  </div>;
+  return (
+    <div className="landing-fragment landing-fragment--status" aria-hidden="true">
+      {statusRows.map((row) => (
+        <span key={row.name} className="landing-fragment-row">
+          <span>
+            <FileText />
+            {row.name}
+          </span>
+          <span className={row.status === 'verified' ? 'landing-fragment-verified' : undefined}>{statuses[row.status]}</span>
+        </span>
+      ))}
+    </div>
+  );
 }

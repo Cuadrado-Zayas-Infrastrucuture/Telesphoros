@@ -28,14 +28,14 @@ describe('capture acceptance (append-only)', () => {
     await pending;
   });
 
-  it('never shows one tenant another tenant\'s record', async () => {
+  it("never shows one tenant another tenant's record", async () => {
     const store = new InMemoryCaptureAcceptanceStore();
     const saved = await store.record(record());
     expect(await store.get('beta', saved.id)).toBeNull();
     expect(await store.get('alpha', 'no-such-id')).toBeNull();
   });
 
-  it('refuses a reviewer from another tenant: nobody accepts a capture on another tenant\'s behalf', async () => {
+  it("refuses a reviewer from another tenant: nobody accepts a capture on another tenant's behalf", async () => {
     await expect(new InMemoryCaptureAcceptanceStore().record(record({ reviewer: { sub: 'someone', tenantId: 'beta' } }))).rejects.toThrow();
   });
 

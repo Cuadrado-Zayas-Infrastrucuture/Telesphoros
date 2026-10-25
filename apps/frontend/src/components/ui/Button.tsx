@@ -23,9 +23,7 @@ const buttonVariants = cva(
   },
 );
 
-export interface ButtonProps
-  extends ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
+export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
   ref?: Ref<HTMLButtonElement>;
   /** Render the child element (e.g. a router link) with button styling. */
   asChild?: boolean;

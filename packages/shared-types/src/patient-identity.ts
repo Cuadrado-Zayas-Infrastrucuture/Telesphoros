@@ -31,7 +31,10 @@ export const identifierCreateSchema = z.strictObject({
   system: identifierSystemSchema,
   value: identifierValueSchema,
   /** Retry identity for this person in this organization. A repeat with the same id and the same body replays the identifier; without one nothing is replayed. */
-  requestId: z.uuid().transform((value) => value.toLowerCase()).optional(),
+  requestId: z
+    .uuid()
+    .transform((value) => value.toLowerCase())
+    .optional(),
 });
 export type IdentifierCreate = z.infer<typeof identifierCreateSchema>;
 
@@ -63,17 +66,21 @@ export type LinkRejectBasisCode = (typeof LINK_REJECT_BASIS_CODES)[number];
  *  - verify by the person's own attestation, with a coded reason (the weaker method, shown as such);
  *  - reject the link, with a coded reason.
  */
-export const patientLinkDecisionCreateSchema = z.discriminatedUnion('method', [
-  z.strictObject({ method: z.literal('identifier-match'), decision: z.literal('verified'), system: identifierSystemSchema, value: identifierValueSchema }),
-  z.strictObject({
-    method: z.literal('person-confirmed'),
-    decision: z.enum(['verified', 'rejected']),
-    basisCode: z.enum([...LINK_VERIFY_BASIS_CODES, ...LINK_REJECT_BASIS_CODES]),
-  }),
-]).refine(
-  (body) => body.method === 'identifier-match' || (body.decision === 'verified' ? (LINK_VERIFY_BASIS_CODES as readonly string[]) : (LINK_REJECT_BASIS_CODES as readonly string[])).includes(body.basisCode),
-  { message: 'That reason does not go with that decision.', path: ['basisCode'] },
-);
+export const patientLinkDecisionCreateSchema = z
+  .discriminatedUnion('method', [
+    z.strictObject({ method: z.literal('identifier-match'), decision: z.literal('verified'), system: identifierSystemSchema, value: identifierValueSchema }),
+    z.strictObject({
+      method: z.literal('person-confirmed'),
+      decision: z.enum(['verified', 'rejected']),
+      basisCode: z.enum([...LINK_VERIFY_BASIS_CODES, ...LINK_REJECT_BASIS_CODES]),
+    }),
+  ])
+  .refine(
+    (body) =>
+      body.method === 'identifier-match' ||
+      (body.decision === 'verified' ? (LINK_VERIFY_BASIS_CODES as readonly string[]) : (LINK_REJECT_BASIS_CODES as readonly string[])).includes(body.basisCode),
+    { message: 'That reason does not go with that decision.', path: ['basisCode'] },
+  );
 export type PatientLinkDecisionCreate = z.infer<typeof patientLinkDecisionCreateSchema>;
 
 export const patientLinkDecisionDtoSchema = z.strictObject({

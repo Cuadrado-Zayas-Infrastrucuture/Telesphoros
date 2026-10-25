@@ -12,20 +12,37 @@ const KEY = 'telesphoros.landing.language';
 const listeners = new Set<() => void>();
 
 function stored(): LandingLanguage {
-  try { return window.localStorage.getItem(KEY) === 'es' ? 'es' : 'en'; } catch { return 'en'; }
+  try {
+    return window.localStorage.getItem(KEY) === 'es' ? 'es' : 'en';
+  } catch {
+    return 'en';
+  }
 }
 let current: LandingLanguage = typeof window === 'undefined' ? 'en' : stored();
 
 export function setLandingLanguage(language: LandingLanguage) {
   current = language;
-  try { window.localStorage.setItem(KEY, language); } catch { /* the choice still applies for this session */ }
+  try {
+    window.localStorage.setItem(KEY, language);
+  } catch {
+    /* the choice still applies for this session */
+  }
   listeners.forEach((listener) => listener());
 }
 
-const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
+const subscribe = (listener: () => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
 
 export function useLandingLanguage() {
-  const language = useSyncExternalStore(subscribe, () => current, () => 'en' as LandingLanguage);
+  const language = useSyncExternalStore(
+    subscribe,
+    () => current,
+    () => 'en' as LandingLanguage,
+  );
   return { language, copy: LANDING_COPY[language], setLanguage: setLandingLanguage };
 }
 

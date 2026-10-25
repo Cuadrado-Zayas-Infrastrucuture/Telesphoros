@@ -85,10 +85,7 @@ function addIssue(ctx: z.RefinementCtx, path: (string | number)[], message: stri
  * Real content that carries a reviewer's signature must say what its license allows. Drafts and synthetic
  * files may leave either "unknown", because nothing downstream redistributes them.
  */
-function requireStatedLicense(
-  file: { synthetic: boolean; provenance: { license: string; redistribution: string }; review: { status: string } },
-  ctx: z.RefinementCtx,
-): void {
+function requireStatedLicense(file: { synthetic: boolean; provenance: { license: string; redistribution: string }; review: { status: string } }, ctx: z.RefinementCtx): void {
   if (file.synthetic || file.review.status !== 'reviewed') return;
   if (file.provenance.license === 'unknown') addIssue(ctx, ['provenance', 'license'], 'A reviewed file must state its license (not "unknown").');
   if (file.provenance.redistribution === 'unknown') {
@@ -97,11 +94,7 @@ function requireStatedLicense(
 }
 
 /** Ranges of an activity score. Bounds are explicit about being inclusive so no edge is ambiguous. */
-const activityValueSchema = z
-  .number()
-  .min(0)
-  .max(100)
-  .refine(hasAtMostTwoDecimals, 'At most two decimal places.');
+const activityValueSchema = z.number().min(0).max(100).refine(hasAtMostTwoDecimals, 'At most two decimal places.');
 
 const activityRangeSchema = z.strictObject({
   min: activityValueSchema,
@@ -122,7 +115,10 @@ const alleleSchema = z.strictObject({
 const methodSchema = z.discriminatedUnion('type', [
   z.strictObject({
     type: z.literal('diplotype-table'),
-    rows: z.array(z.strictObject({ diplotype: label(100), phenotype: label(100) })).min(1).max(5000),
+    rows: z
+      .array(z.strictObject({ diplotype: label(100), phenotype: label(100) }))
+      .min(1)
+      .max(5000),
   }),
   z.strictObject({
     type: z.literal('function-pair'),
@@ -280,7 +276,7 @@ export const guidelineFileSchema = z
     file.recommendations.forEach((row, index) => {
       const given = Object.keys(row.when).sort();
       if (given.length !== wanted.length || given.some((gene, position) => gene !== wanted[position])) {
-        addIssue(ctx, ['recommendations', index, 'when'], 'A cell must give a phenotype for exactly this guideline\'s genes.');
+        addIssue(ctx, ['recommendations', index, 'when'], "A cell must give a phenotype for exactly this guideline's genes.");
         return;
       }
       const key = JSON.stringify(wanted.map((gene) => row.when[gene]));
@@ -292,4 +288,3 @@ export type GuidelineFile = z.infer<typeof guidelineFileSchema>;
 
 export const knowledgeFileSchema = z.discriminatedUnion('kind', [geneMapFileSchema, guidelineFileSchema]);
 export type KnowledgeFile = z.infer<typeof knowledgeFileSchema>;
-

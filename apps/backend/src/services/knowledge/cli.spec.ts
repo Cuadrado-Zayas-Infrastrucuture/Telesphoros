@@ -37,7 +37,10 @@ describe('knowledge CLI', () => {
   it('hash refuses to prepare a signature for real content whose license or redistribution is "unknown"', async () => {
     const dir = await tempDir();
     const source = (await readJson(join(SYNTHETIC_DIR, 'guidelines/drugx-genea.json'))) as unknown as { synthetic: boolean; provenance: Record<string, string> };
-    for (const [field, value] of [['license', 'cc0-1.0'], ['redistribution', 'allowed']] as const) {
+    for (const [field, value] of [
+      ['license', 'cc0-1.0'],
+      ['redistribution', 'allowed'],
+    ] as const) {
       const real = { ...source, synthetic: false, provenance: { ...source.provenance, license: 'cc0-1.0', redistribution: 'allowed', [field]: 'unknown' } };
       const path = join(dir, `${field}.json`);
       await writeFile(path, JSON.stringify(real));

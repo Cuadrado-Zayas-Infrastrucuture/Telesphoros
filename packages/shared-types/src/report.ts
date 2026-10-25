@@ -29,14 +29,19 @@ const FILENAME_TYPE_MISMATCH = { path: ['filename'] as PropertyKey[], message: '
  * POST body. This registers report METADATA only: the file itself goes to object storage in
  * Phase 3, and ingestion arrives in Phase 5. `status` is set by the system, never by the client.
  */
-export const reportCreateSchema = z.strictObject({
-  patientId: z.uuid(),
-  type: reportTypeSchema,
-  filename: reportFilenameSchema,
-  sizeBytes: z.number().int().min(1).max(MAX_REPORT_BYTES),
-  /** Retry identity for this creator in this tenant; omitted callers retain ordinary creation. */
-  requestId: z.uuid().transform(value => value.toLowerCase()).optional(),
-}).refine((body) => filenameMatchesType(body.type, body.filename), FILENAME_TYPE_MISMATCH);
+export const reportCreateSchema = z
+  .strictObject({
+    patientId: z.uuid(),
+    type: reportTypeSchema,
+    filename: reportFilenameSchema,
+    sizeBytes: z.number().int().min(1).max(MAX_REPORT_BYTES),
+    /** Retry identity for this creator in this tenant; omitted callers retain ordinary creation. */
+    requestId: z
+      .uuid()
+      .transform((value) => value.toLowerCase())
+      .optional(),
+  })
+  .refine((body) => filenameMatchesType(body.type, body.filename), FILENAME_TYPE_MISMATCH);
 export type ReportCreate = z.infer<typeof reportCreateSchema>;
 
 /** PATCH body: correct metadata. At least one field is required. */

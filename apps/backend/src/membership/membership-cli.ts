@@ -39,7 +39,13 @@ export async function runMembership(admin: MembershipAdmin, args: string[], out:
     };
     const target = { tenantId: need('tenant'), sub: need('sub') };
     const change = () => ({ ...target, by: need('by'), reason: f.get('reason') });
-    const roles = () => normalizeRoles(need('roles').split(',').map((r) => r.trim()).filter((r) => r.length > 0));
+    const roles = () =>
+      normalizeRoles(
+        need('roles')
+          .split(',')
+          .map((r) => r.trim())
+          .filter((r) => r.length > 0),
+      );
     switch (action) {
       case 'grant':
         out(`granted: ${describe(await admin.grant({ ...change(), roles: roles() }))}`);

@@ -14,9 +14,7 @@ export function RouteError() {
     <div className="mx-auto flex max-w-prose flex-col gap-4 px-4 py-10">
       <Alert variant="destructive">
         <AlertTitle>Something went wrong{status}</AlertTitle>
-        <AlertDescription>
-          The page could not be shown. Try again, or go back to the overview.
-        </AlertDescription>
+        <AlertDescription>The page could not be shown. Try again, or go back to the overview.</AlertDescription>
       </Alert>
       <div className="flex gap-3">
         <Button onClick={() => window.location.reload()}>Reload</Button>

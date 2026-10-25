@@ -4,11 +4,18 @@ import { S3ObjectInspector, bucketIsMissing } from './storage';
 
 /** A client whose single GET fails the way the SDK reports an S3 error: a name and, on the metadata, an HTTP status. */
 const failing = (name: string, httpStatusCode: number): S3Client =>
-  ({ send: async () => { throw Object.assign(new Error(name), { name, $metadata: { httpStatusCode } }); } }) as unknown as S3Client;
+  ({
+    send: async () => {
+      throw Object.assign(new Error(name), { name, $metadata: { httpStatusCode } });
+    },
+  }) as unknown as S3Client;
 const inspect = (client: S3Client) => new S3ObjectInspector(client, 'bucket').inspect('reports/k', 'v1', { maxBytes: 10 });
 
 describe('S3ObjectInspector: what counts as a missing object', () => {
-  it.each([['NoSuchKey', 404], ['NoSuchVersion', 404]])('%s is a finding about the object: missing', async (name, status) => {
+  it.each([
+    ['NoSuchKey', 404],
+    ['NoSuchVersion', 404],
+  ])('%s is a finding about the object: missing', async (name, status) => {
     await expect(inspect(failing(name, status))).resolves.toBe('missing');
   });
 
@@ -17,7 +24,11 @@ describe('S3ObjectInspector: what counts as a missing object', () => {
     await expect(inspect(failing('NoSuchBucket', 404))).rejects.toMatchObject({ name: 'NoSuchBucket' });
   });
 
-  it.each([['AccessDenied', 403], ['SlowDown', 503], ['InternalError', 500]])('%s is a failure to read', async (name, status) => {
+  it.each([
+    ['AccessDenied', 403],
+    ['SlowDown', 503],
+    ['InternalError', 500],
+  ])('%s is a failure to read', async (name, status) => {
     await expect(inspect(failing(name, status))).rejects.toMatchObject({ name });
   });
 
@@ -27,7 +38,9 @@ describe('S3ObjectInspector: what counts as a missing object', () => {
   });
 
   it('reads an object: size, hash and type (control: the happy path still works)', async () => {
-    const body = (async function* () { yield new Uint8Array([1, 2, 3]); })();
+    const body = (async function* () {
+      yield new Uint8Array([1, 2, 3]);
+    })();
     const client = { send: async () => ({ Body: body, ContentType: 'application/pdf' }) } as unknown as S3Client;
     await expect(inspect(client)).resolves.toMatchObject({ sizeBytes: 3, contentType: 'application/pdf', sha256: expect.stringMatching(/^[0-9a-f]{64}$/) });
   });
@@ -42,13 +55,27 @@ describe('bucketIsMissing: the start-up check that REPORTS_BUCKET names a bucket
 
   // The worker's role cannot list, so a key that is not there may come back as NoSuchKey or as AccessDenied: either way the bucket answered. An outage or a hang
   // says nothing about the bucket and must not stop a worker from starting.
-  it.each([['NoSuchKey', 404], ['AccessDenied', 403], ['SlowDown', 503], ['InternalError', 500]])('%s does not stop the worker', async (name, status) => {
+  it.each([
+    ['NoSuchKey', 404],
+    ['AccessDenied', 403],
+    ['SlowDown', 503],
+    ['InternalError', 500],
+  ])('%s does not stop the worker', async (name, status) => {
     await expect(check(failing(name, status))).resolves.toBe(false);
   });
 
   it('does not stop the worker when S3 cannot be reached, or does not answer in time', async () => {
-    await expect(check({ send: async () => { throw Object.assign(new Error('connect ECONNREFUSED'), { name: 'Error', code: 'ECONNREFUSED' }); } } as unknown as S3Client)).resolves.toBe(false);
-    const hangs = { send: (_c: unknown, o?: { abortSignal?: AbortSignal }) => new Promise((_resolve, reject) => o?.abortSignal?.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })))) } as unknown as S3Client;
+    await expect(
+      check({
+        send: async () => {
+          throw Object.assign(new Error('connect ECONNREFUSED'), { name: 'Error', code: 'ECONNREFUSED' });
+        },
+      } as unknown as S3Client),
+    ).resolves.toBe(false);
+    const hangs = {
+      send: (_c: unknown, o?: { abortSignal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => o?.abortSignal?.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })))),
+    } as unknown as S3Client;
     await expect(check(hangs, 20)).resolves.toBe(false);
   });
 
@@ -58,7 +85,12 @@ describe('bucketIsMissing: the start-up check that REPORTS_BUCKET names a bucket
 
   it('asks about a key under reports/, the only prefix the worker role may read', async () => {
     const seen: string[] = [];
-    await check({ send: async (command: { input: { Key: string } }) => { seen.push(command.input.Key); throw Object.assign(new Error('x'), { name: 'NoSuchKey' }); } } as unknown as S3Client);
+    await check({
+      send: async (command: { input: { Key: string } }) => {
+        seen.push(command.input.Key);
+        throw Object.assign(new Error('x'), { name: 'NoSuchKey' });
+      },
+    } as unknown as S3Client);
     expect(seen[0]).toMatch(/^reports\//);
   });
 });

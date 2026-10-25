@@ -73,9 +73,7 @@ export interface HttpCapabilityIssuerOptions {
   fetchImpl?: typeof fetch;
 }
 
-type Attempt =
-  | { kind: 'issued'; capability: IssuedCapability }
-  | { kind: 'failed'; error: CapabilityIssueError; retry: boolean };
+type Attempt = { kind: 'issued'; capability: IssuedCapability } | { kind: 'failed'; error: CapabilityIssueError; retry: boolean };
 
 const unavailable = (detail: IssuerClientDetail, retry = false): Attempt => ({ kind: 'failed', error: new CapabilityIssueError('unavailable', detail), retry });
 
@@ -91,7 +89,8 @@ export class HttpCapabilityIssuer extends CapabilityIssuerPort {
     const problem = checkIssuerBaseUrl(options.baseUrl);
     if (problem) throw new Error(`Invalid issuer URL: ${problem}`);
     const timeoutMs = options.timeoutMs ?? ISSUER_CLIENT_TIMEOUT_MS;
-    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs >= SERVER_REQUEST_TIMEOUT_MS) throw new Error('Invalid issuer client timeout: must be above 0 and below the issuer\'s own request timeout');
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs >= SERVER_REQUEST_TIMEOUT_MS)
+      throw new Error("Invalid issuer client timeout: must be above 0 and below the issuer's own request timeout");
     this.endpoint = new URL('/v1/capabilities', options.baseUrl).toString();
     this.timeoutMs = timeoutMs;
     this.retryPauseMs = options.retryPauseMs ?? DEFAULT_RETRY_PAUSE_MS;

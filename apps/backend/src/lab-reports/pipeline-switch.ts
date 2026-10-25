@@ -58,10 +58,9 @@ export class PipelineStartupCheck implements OnApplicationBootstrap {
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
-
     if (!(await this.storage.versioningEnabled())) {
       throw new Error('Report storage requires object storage that keeps versions (enable versioning on the reports bucket).');
     }
-    if(this.pipeline.enabled) this.logger.warn('The lab-report pipeline is ENABLED: a synthetic, non-production integration. Never use real patient data.');
+    if (this.pipeline.enabled) this.logger.warn('The lab-report pipeline is ENABLED: a synthetic, non-production integration. Never use real patient data.');
   }
 }

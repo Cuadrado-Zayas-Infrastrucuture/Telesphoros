@@ -5,7 +5,15 @@ describe('the log', () => {
   it('writes one JSON line per event with only the fixed fields', () => {
     const lines: string[] = [];
     jsonLogger((l) => lines.push(l))('info', 'job-finished', { jobId: 'abc-1', jobType: 'uploads.sweep', attempt: 2, outcome: 'succeeded' });
-    expect(JSON.parse(lines[0]!)).toMatchObject({ level: 'info', service: 'worker', event: 'job-finished', jobId: 'abc-1', jobType: 'uploads.sweep', attempt: 2, outcome: 'succeeded' });
+    expect(JSON.parse(lines[0]!)).toMatchObject({
+      level: 'info',
+      service: 'worker',
+      event: 'job-finished',
+      jobId: 'abc-1',
+      jobType: 'uploads.sweep',
+      attempt: 2,
+      outcome: 'succeeded',
+    });
   });
   it('drops any string that is not a short code, so a message or a value cannot be logged', () => {
     const lines: string[] = [];

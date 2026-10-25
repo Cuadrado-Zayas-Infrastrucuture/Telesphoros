@@ -39,7 +39,8 @@ async function tenant(): Promise<{ tenantId: string; head: number }> {
   return { tenantId, head: await headOf(tenantId) };
 }
 const headOf = (tenantId: string) => withAdmin(pg.adminUrl, async (c) => Number((await c.query(`SELECT seq FROM ledger_heads WHERE tenant_id = $1`, [tenantId])).rows[0].seq));
-const eventCount = (tenantId: string) => withAdmin(pg.adminUrl, async (c) => Number((await c.query(`SELECT count(*) AS n FROM ledger_events WHERE tenant_id = $1`, [tenantId])).rows[0].n));
+const eventCount = (tenantId: string) =>
+  withAdmin(pg.adminUrl, async (c) => Number((await c.query(`SELECT count(*) AS n FROM ledger_events WHERE tenant_id = $1`, [tenantId])).rows[0].n));
 const q = <T = Record<string, unknown>>(sql: string, values: unknown[] = []) => withAdmin(pg.adminUrl, async (c) => (await c.query(sql, values)).rows as T[]);
 
 /** A login's own connection, for the calls only it may make. */
@@ -62,9 +63,14 @@ const fail = async (work: Promise<unknown>): Promise<PgError> => {
 };
 const record = (tenantId: string, kind = 'payload-mismatch', seq: number | null = 1, source = 'background') =>
   as(pg.verifierUrl, async (c) => (await c.query(`SELECT ledger_record_incident($1, $2, $3::bigint, $4)::text AS id`, [tenantId, kind, seq, source])).rows[0].id as string);
-const hold = (basis = 'investigating a report from the founder') => as(pg.operatorUrl, async (c) => (await c.query(`SELECT ledger_set_global_hold($1)::text AS id`, [basis])).rows[0].id as string);
-const clear = (incident: string, basis = 'chain verified again after repair') => as(pg.operatorUrl, async (c) => (await c.query(`SELECT ledger_clear_incident($1::uuid, $2)::text AS id`, [incident, basis])).rows[0].id as string);
-const openIds = () => q<{ id: string }>(`SELECT id::text AS id FROM ledger_incidents i WHERE NOT EXISTS (SELECT 1 FROM ledger_incident_clearances c WHERE c.incident_id = i.id)`).then((r) => r.map((x) => x.id));
+const hold = (basis = 'investigating a report from the founder') =>
+  as(pg.operatorUrl, async (c) => (await c.query(`SELECT ledger_set_global_hold($1)::text AS id`, [basis])).rows[0].id as string);
+const clear = (incident: string, basis = 'chain verified again after repair') =>
+  as(pg.operatorUrl, async (c) => (await c.query(`SELECT ledger_clear_incident($1::uuid, $2)::text AS id`, [incident, basis])).rows[0].id as string);
+const openIds = () =>
+  q<{ id: string }>(`SELECT id::text AS id FROM ledger_incidents i WHERE NOT EXISTS (SELECT 1 FROM ledger_incident_clearances c WHERE c.incident_id = i.id)`).then((r) =>
+    r.map((x) => x.id),
+  );
 /** Clears whatever is open, with the evidence the rules demand (a full walk that begins now), so a test starts from a clean state. */
 async function reset(): Promise<void> {
   for (const id of await openIds()) {
@@ -160,7 +166,9 @@ describe('what ledger_append refuses, and when', () => {
     expect(await eventCount(a.tenantId)).toBe(before);
     expect(await captures()).toBe(capturesBefore); // the capture row rolled back with it
     // The raw code, for the record.
-    const error = await attempt(pg.appUrl, a.tenantId, 'syn-x', (c) => c.query(`SELECT ledger_append($1::uuid, 'capture', 'report_captures', $2::uuid, $3, 1::smallint)`, [uuid(), uuid(), 'a'.repeat(64)]));
+    const error = await attempt(pg.appUrl, a.tenantId, 'syn-x', (c) =>
+      c.query(`SELECT ledger_append($1::uuid, 'capture', 'report_captures', $2::uuid, $3, 1::smallint)`, [uuid(), uuid(), 'a'.repeat(64)]),
+    );
     expect(error?.code).toBe('LC001');
     await expect(write(b.tenantId)).resolves.toBeDefined(); // control: the same call works for a tenant without an incident
     await reset();
@@ -237,9 +245,9 @@ describe('clearing an incident', () => {
     const walked = await verifier.verify(tenantId, { mode: 'full', recordCheckpoint: true });
     expect(walked.checkpointId).toEqual(expect.any(String));
     const cleared = await clear(id, 'repaired from the nightly backup');
-    expect(await q(`SELECT incident_id::text AS incident, cleared_by, basis, verified_checkpoint_id::text AS checkpoint FROM ledger_incident_clearances WHERE id = $1`, [cleared])).toEqual([
-      { incident: id, cleared_by: 'telesphoros_test_operator', basis: 'repaired from the nightly backup', checkpoint: walked.checkpointId },
-    ]);
+    expect(
+      await q(`SELECT incident_id::text AS incident, cleared_by, basis, verified_checkpoint_id::text AS checkpoint FROM ledger_incident_clearances WHERE id = $1`, [cleared]),
+    ).toEqual([{ incident: id, cleared_by: 'telesphoros_test_operator', basis: 'repaired from the nightly backup', checkpoint: walked.checkpointId }]);
     expect((await fail(clear(id))).code).toBe('23000'); // once only
     expect((await fail(clear(uuid()))).code).toBe('P0002');
     expect((await fail(clear(id, ''))).code).toBe('22023');
@@ -268,14 +276,20 @@ describe('clearing an incident', () => {
     await clear(id);
   });
 
-  it('RACE, end to end: the real verifier\'s walk is running when the incident is recorded and finishes OK afterwards; its checkpoint does not clear the incident', async () => {
+  it("RACE, end to end: the real verifier's walk is running when the incident is recorded and finishes OK afterwards; its checkpoint does not clear the incident", async () => {
     const { tenantId } = await tenant();
     // A verifier whose walk can be held at its COMMIT: the snapshot (and the walk's start time) are behind it, the checkpoint call still ahead.
-    const inner = verifier as unknown as { pool: { connect: () => Promise<{ query: (...args: unknown[]) => Promise<unknown>; release: () => void }>; query: (...args: unknown[]) => Promise<unknown> } };
+    const inner = verifier as unknown as {
+      pool: { connect: () => Promise<{ query: (...args: unknown[]) => Promise<unknown>; release: () => void }>; query: (...args: unknown[]) => Promise<unknown> };
+    };
     let reached!: () => void;
     let release!: () => void;
-    const atCommit = new Promise<void>((resolve) => { reached = resolve; });
-    const held = new Promise<void>((resolve) => { release = resolve; });
+    const atCommit = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const slow = new LedgerVerifier({
       connect: async () => {
         const client = await inner.pool.connect();
@@ -305,11 +319,12 @@ describe('clearing an incident', () => {
     await clear(id);
   });
 
-  it('does not accept a tail checkpoint, a checkpoint from the older four-argument function (rolling upgrade), another tenant\'s checkpoint, or one that stops short of the failed sequence', async () => {
+  it("does not accept a tail checkpoint, a checkpoint from the older four-argument function (rolling upgrade), another tenant's checkpoint, or one that stops short of the failed sequence", async () => {
     const a = await tenant();
     const b = await tenant();
     const id = await record(a.tenantId, 'payload-mismatch', a.head); // the failure is at the current head
-    const at = async (seq: number) => (await q<{ seq: string; record_hash: string }>(`SELECT seq::text, record_hash FROM ledger_events WHERE tenant_id = $1 AND seq = $2`, [a.tenantId, seq]))[0]!;
+    const at = async (seq: number) =>
+      (await q<{ seq: string; record_hash: string }>(`SELECT seq::text, record_hash FROM ledger_events WHERE tenant_id = $1 AND seq = $2`, [a.tenantId, seq]))[0]!;
     const headA = await at(await headOf(a.tenantId));
 
     // An older task's four-argument call: it works for its own purpose and carries no walk start.
@@ -335,7 +350,8 @@ describe('clearing an incident', () => {
   it('a start time in the future, or none, is refused by the function that writes the evidence', async () => {
     const { tenantId } = await tenant();
     const head = (await q<{ seq: string; record_hash: string }>(`SELECT seq::text, record_hash FROM ledger_heads WHERE tenant_id = $1`, [tenantId]))[0]!;
-    const call = (start: string | null) => as(pg.verifierUrl, (c) => c.query(`SELECT ledger_record_checkpoint($1, $2::bigint, $3, 'full', $4::timestamptz)`, [tenantId, head.seq, head.record_hash, start]));
+    const call = (start: string | null) =>
+      as(pg.verifierUrl, (c) => c.query(`SELECT ledger_record_checkpoint($1, $2::bigint, $3, 'full', $4::timestamptz)`, [tenantId, head.seq, head.record_hash, start]));
     expect((await fail(call(null))).code).toBe('22023');
     expect((await fail(call(new Date(Date.now() + 3_600_000).toISOString()))).code).toBe('22023');
     await call(new Date(Date.now() - 1_000).toISOString()); // control
@@ -374,7 +390,10 @@ describe('an in-flight write and a new incident never interleave', () => {
   const recordOn = async (tenantId: string, name: string) => {
     const client = new Client({ connectionString: pg.verifierUrl, application_name: name });
     await client.connect();
-    const done = client.query(`SELECT ledger_record_incident($1, 'payload-mismatch', 1::bigint, 'background')::text AS id`, [tenantId]).then((r) => r.rows[0].id as string).finally(() => client.end());
+    const done = client
+      .query(`SELECT ledger_record_incident($1, 'payload-mismatch', 1::bigint, 'background')::text AS id`, [tenantId])
+      .then((r) => r.rows[0].id as string)
+      .finally(() => client.end());
     return done;
   };
 
@@ -399,7 +418,7 @@ describe('an in-flight write and a new incident never interleave', () => {
     await reset();
   });
 
-  it('a write queued BEHIND the incident\'s lock is refused when it gets the lock, and stores nothing', async () => {
+  it("a write queued BEHIND the incident's lock is refused when it gets the lock, and stores nothing", async () => {
     const { tenantId } = await tenant();
     const report = await seedLabReport(pg.adminUrl, tenantId);
     const holder = await headLock(tenantId);
@@ -407,7 +426,10 @@ describe('an in-flight write and a new incident never interleave', () => {
     try {
       const incident = recordOn(tenantId, 'first-in-line'); // queued first
       await untilBlocked(pg.adminUrl, 'first-in-line');
-      const writing = writer.insertCapture(report).then(() => undefined, (error: unknown) => error); // queued second
+      const writing = writer.insertCapture(report).then(
+        () => undefined,
+        (error: unknown) => error,
+      ); // queued second
       await untilBlocked(pg.adminUrl, 'queued-writer');
       const before = await eventCount(tenantId);
       await holder.query('ROLLBACK'); // lets the queue run in order
@@ -427,7 +449,10 @@ describe('an in-flight write and a new incident never interleave', () => {
     const holder = await headLock(tenantId);
     const writer = await Session.open(pg.appUrl, 'writer-first', tenantId);
     try {
-      const writing = writer.insertCapture(report).then(() => undefined, (error: unknown) => error);
+      const writing = writer.insertCapture(report).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
       await untilBlocked(pg.adminUrl, 'writer-first');
       const incident = recordOn(tenantId, 'recorder-second');
       await untilBlocked(pg.adminUrl, 'recorder-second');

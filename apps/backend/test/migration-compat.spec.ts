@@ -19,8 +19,8 @@ describe('migration compat label', () => {
 
   it('ignores a label that is not in the leading comment block', () => {
     expect(parseCompat('0099', 'CREATE TABLE t (id int);\n-- compat: expand\n')).toBe('breaking');
-    expect(parseCompat('0099', "SELECT 1; -- compat: expand\n")).toBe('breaking');
-    expect(parseCompat('0099', '-- notes\nSET LOCAL lock_timeout = \'2s\';\n-- compat: expand\n')).toBe('breaking');
+    expect(parseCompat('0099', 'SELECT 1; -- compat: expand\n')).toBe('breaking');
+    expect(parseCompat('0099', "-- notes\nSET LOCAL lock_timeout = '2s';\n-- compat: expand\n")).toBe('breaking');
   });
 
   it.each([

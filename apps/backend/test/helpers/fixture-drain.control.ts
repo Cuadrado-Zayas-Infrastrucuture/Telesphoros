@@ -24,31 +24,51 @@ if (mode === 'app') {
   beforeEach(async () => {
     const create = Test.createTestingModule;
     jest.spyOn(Test, 'createTestingModule').mockImplementation((...args) => {
-      const builder = create.apply(Test, args), compile = builder.compile.bind(builder);
-      jest.spyOn(builder, 'compile').mockImplementation(async (...params) => { await delay(SLOW_MS); return compile(...params); });
+      const builder = create.apply(Test, args),
+        compile = builder.compile.bind(builder);
+      jest.spyOn(builder, 'compile').mockImplementation(async (...params) => {
+        await delay(SLOW_MS);
+        return compile(...params);
+      });
       return builder;
     });
     app = await createTestApp();
   });
-  afterEach(async () => { await app.close(); });
+  afterEach(async () => {
+    await app.close();
+  });
   it('a hook that times out while the application is still being built', () => {});
 } else if (mode === 'app-late') {
-  let app: NestExpressApplication, builds = 0;
+  let app: NestExpressApplication,
+    builds = 0;
   beforeAll(() => {
     const create = Test.createTestingModule;
     jest.spyOn(Test, 'createTestingModule').mockImplementation((...args) => {
-      const builder = create.apply(Test, args), compile = builder.compile.bind(builder), slow = builds++ === 0;
-      jest.spyOn(builder, 'compile').mockImplementation(async (...params) => { if (slow) await delay(SLOW_MS); return compile(...params); });
+      const builder = create.apply(Test, args),
+        compile = builder.compile.bind(builder),
+        slow = builds++ === 0;
+      jest.spyOn(builder, 'compile').mockImplementation(async (...params) => {
+        if (slow) await delay(SLOW_MS);
+        return compile(...params);
+      });
       return builder;
     });
   });
-  beforeEach(async () => { app = await createTestApp(); });
-  afterEach(async () => { await app.close(); });
+  beforeEach(async () => {
+    app = await createTestApp();
+  });
+  afterEach(async () => {
+    await app.close();
+  });
   it('first case: the hook times out while the application is still being built', () => {});
-  it('second case: outlasts the abandoned build, which then finishes and listens', async () => { await delay(5000); });
+  it('second case: outlasts the abandoned build, which then finishes and listens', async () => {
+    await delay(5000);
+  });
 } else if (mode === 'db') {
   const databases: EphemeralDatabase[] = [];
-  afterAll(async () => { await Promise.all(databases.map((database) => database.drop())); });
+  afterAll(async () => {
+    await Promise.all(databases.map((database) => database.drop()));
+  });
   it('a test that times out while the database is still being migrated', async () => {
     const connect = Client.prototype.connect;
     // eslint-disable-next-line @typescript-eslint/no-misused-promises -- pg types connect's callback overload as void; the real method returns this promise

@@ -43,8 +43,15 @@ describe('corrections: a chain with one child per node', () => {
     expect(await repo.evaluationState(s.tenantId, id(s.e1))).toEqual({ state: 'active' });
     const retract = await repo.insertCorrection(s.tenantId, 'rev-1', { evaluationId: id(s.e1), kind: 'retraction', reasonCode: 'input-misread' });
     expect(await repo.evaluationState(s.tenantId, id(s.e1))).toEqual({ state: 'retracted' });
-    await refused(repo.insertCorrection(s.tenantId, 'rev-1', { evaluationId: id(s.e1), kind: 'reinstatement', reasonCode: 'retraction-mistaken', previousCorrectionId: id(retract) }));
-    const back = await repo.insertCorrection(s.tenantId, 'rev-2', { evaluationId: id(s.e1), kind: 'reinstatement', reasonCode: 'retraction-mistaken', previousCorrectionId: id(retract) });
+    await refused(
+      repo.insertCorrection(s.tenantId, 'rev-1', { evaluationId: id(s.e1), kind: 'reinstatement', reasonCode: 'retraction-mistaken', previousCorrectionId: id(retract) }),
+    );
+    const back = await repo.insertCorrection(s.tenantId, 'rev-2', {
+      evaluationId: id(s.e1),
+      kind: 'reinstatement',
+      reasonCode: 'retraction-mistaken',
+      previousCorrectionId: id(retract),
+    });
     expect(await repo.evaluationState(s.tenantId, id(s.e1))).toEqual({ state: 'active' });
     // After a reinstatement the evaluation can be retracted again (a longer chain), but not reinstated twice.
     await refused(repo.insertCorrection(s.tenantId, 'rev-3', { evaluationId: id(s.e1), kind: 'reinstatement', reasonCode: 'retraction-mistaken', previousCorrectionId: id(back) }));
@@ -57,7 +64,9 @@ describe('corrections: a chain with one child per node', () => {
     const s = await scene();
     const e2 = await s.evaluate('v2');
     const other = await scene(s.tenantId); // same tenant, a different report
-    await refused(repo.insertCorrection(s.tenantId, 'rev-1', { evaluationId: id(s.e1), kind: 'supersession', reasonCode: 'software-defect', replacementEvaluationId: id(other.e1) }));
+    await refused(
+      repo.insertCorrection(s.tenantId, 'rev-1', { evaluationId: id(s.e1), kind: 'supersession', reasonCode: 'software-defect', replacementEvaluationId: id(other.e1) }),
+    );
     await refused(repo.insertCorrection(s.tenantId, 'rev-1', { evaluationId: id(s.e1), kind: 'supersession', reasonCode: 'software-defect', replacementEvaluationId: id(s.e1) }));
     const sup = await repo.insertCorrection(s.tenantId, 'rev-1', { evaluationId: id(s.e1), kind: 'supersession', reasonCode: 'software-defect', replacementEvaluationId: id(e2) });
     expect(await repo.evaluationState(s.tenantId, id(s.e1))).toEqual({ state: 'superseded', by: id(e2) });
@@ -81,7 +90,9 @@ describe('corrections: a chain with one child per node', () => {
     const t = await scene();
     const mine = await repo.insertCorrection(s.tenantId, 'rev-1', { evaluationId: id(s.e1), kind: 'retraction', reasonCode: 'input-misread' });
     const theirs = await repo.insertCorrection(t.tenantId, 'rev-1', { evaluationId: id(t.e1), kind: 'retraction', reasonCode: 'input-misread' });
-    await refused(repo.insertCorrection(s.tenantId, 'rev-2', { evaluationId: id(s.e1), kind: 'reinstatement', reasonCode: 'retraction-mistaken', previousCorrectionId: id(theirs) }));
+    await refused(
+      repo.insertCorrection(s.tenantId, 'rev-2', { evaluationId: id(s.e1), kind: 'reinstatement', reasonCode: 'retraction-mistaken', previousCorrectionId: id(theirs) }),
+    );
     await refused(repo.insertCorrection(s.tenantId, 'rev-2', { evaluationId: id(t.e1), kind: 'retraction', reasonCode: 'input-misread' })); // another tenant's evaluation: not visible
     expect((await repo.listCorrections(t.tenantId, id(s.e1))).length).toBe(0);
     await repo.insertCorrection(s.tenantId, 'rev-2', { evaluationId: id(s.e1), kind: 'reinstatement', reasonCode: 'retraction-mistaken', previousCorrectionId: id(mine) }); // control
@@ -91,13 +102,17 @@ describe('corrections: a chain with one child per node', () => {
     const s = await scene();
     const first = await repo.insertCorrection(s.tenantId, 'rev-1', { evaluationId: id(s.e1), kind: 'retraction', reasonCode: 'input-misread' });
     const attempts = await Promise.allSettled(
-      ['rev-2', 'rev-3', 'rev-4', 'rev-5'].map((who) => repo.insertCorrection(s.tenantId, who, { evaluationId: id(s.e1), kind: 'reinstatement', reasonCode: 'retraction-mistaken', previousCorrectionId: id(first) })),
+      ['rev-2', 'rev-3', 'rev-4', 'rev-5'].map((who) =>
+        repo.insertCorrection(s.tenantId, who, { evaluationId: id(s.e1), kind: 'reinstatement', reasonCode: 'retraction-mistaken', previousCorrectionId: id(first) }),
+      ),
     );
     expect(attempts.filter((a) => a.status === 'fulfilled').length).toBe(1);
     expect(attempts.filter((a) => a.status === 'rejected').every((a) => (a as PromiseRejectedResult).reason instanceof LedgerIntegrityError)).toBe(true);
     // And the same for the FIRST correction of an evaluation.
     const e2 = await s.evaluate('v2');
-    const firsts = await Promise.allSettled(['a', 'b', 'c'].map((who) => repo.insertCorrection(s.tenantId, who, { evaluationId: id(e2), kind: 'retraction', reasonCode: 'input-misread' })));
+    const firsts = await Promise.allSettled(
+      ['a', 'b', 'c'].map((who) => repo.insertCorrection(s.tenantId, who, { evaluationId: id(e2), kind: 'retraction', reasonCode: 'input-misread' })),
+    );
     expect(firsts.filter((a) => a.status === 'fulfilled').length).toBe(1);
     expect(await verifier.verify(s.tenantId)).toMatchObject({ status: 'ok' });
   });
@@ -111,7 +126,13 @@ describe('corrections: a chain with one child per node', () => {
 });
 
 describe('disputes: raised by one person, decided by another, once', () => {
-  const dispute = { guidelineId: 'syn-guideline', guidelineVersion: '1', guidelineContentSha256: 'b'.repeat(64), locator: { table: 'recommendations', row: 'poor', column: 'text' }, note: 'the cell is wrong' };
+  const dispute = {
+    guidelineId: 'syn-guideline',
+    guidelineVersion: '1',
+    guidelineContentSha256: 'b'.repeat(64),
+    locator: { table: 'recommendations', row: 'poor', column: 'text' },
+    note: 'the cell is wrong',
+  };
 
   it('lists open, upheld and dismissed disputes; the decider is never the raiser; one decision per dispute', async () => {
     const t = `tenant-${randomUUID()}`;
@@ -122,12 +143,16 @@ describe('disputes: raised by one person, decided by another, once', () => {
     await repo.decideDispute(t, 'rev-2', { disputeId: id(d2), decision: 'dismissed', evidenceNote: 'the source agrees with the cell' });
     await refused(repo.decideDispute(t, 'rev-2', { disputeId: randomUUID(), decision: 'upheld', evidenceNote: 'no such dispute' }));
     const listed = await repo.listDisputes(t);
-    expect(listed.map((x) => [x.dispute.id, x.status])).toEqual([[id(d1), 'upheld'], [id(d2), 'dismissed'], [id(d3), 'open']]);
+    expect(listed.map((x) => [x.dispute.id, x.status])).toEqual([
+      [id(d1), 'upheld'],
+      [id(d2), 'dismissed'],
+      [id(d3), 'open'],
+    ]);
     expect(listed[2]!.decision).toBeNull();
     expect(await verifier.verify(t)).toMatchObject({ status: 'ok' });
   });
 
-  it('tenants never see each other\'s disputes, and cannot decide them', async () => {
+  it("tenants never see each other's disputes, and cannot decide them", async () => {
     const [a, b] = [`tenant-${randomUUID()}`, `tenant-${randomUUID()}`];
     const d = await repo.raiseDispute(a, 'rev-1', dispute);
     expect(await repo.listDisputes(b)).toEqual([]);
@@ -141,14 +166,14 @@ describe('captures and acceptances', () => {
     const r = await seedLabReport(pg.adminUrl, t);
     // The repository compares what the caller relied on with the locked report row, so each of these is "the report is not what you saw".
     await expect(repo.insertCapture(t, r.uploader, captureFor(r, 'x', { pdfSha256: sha('some other file') }))).rejects.toBeInstanceOf(SourceChangedError);
-    await expect(withAdmin(pg.adminUrl, (c) => c.query(`UPDATE reports SET type = 'vcf' WHERE id = $1`, [r.reportId]))).rejects.toMatchObject({code:'23000'});
+    await expect(withAdmin(pg.adminUrl, (c) => c.query(`UPDATE reports SET type = 'vcf' WHERE id = $1`, [r.reportId]))).rejects.toMatchObject({ code: '23000' });
     await withAdmin(pg.adminUrl, (c) => c.query(`UPDATE reports SET deleted_at = now() WHERE id = $1`, [r.reportId]));
     await expect(repo.insertCapture(t, r.uploader, captureFor(r))).rejects.toBeInstanceOf(SourceChangedError);
     const [other] = [`tenant-${randomUUID()}`];
     await expect(repo.insertCapture(other, r.uploader, captureFor(r))).rejects.toBeInstanceOf(SourceChangedError); // another tenant's report
   });
 
-  it('an acceptance repeats its capture\'s hash and version exactly; a rejection by the uploader is allowed, an acceptance is not', async () => {
+  it("an acceptance repeats its capture's hash and version exactly; a rejection by the uploader is allowed, an acceptance is not", async () => {
     const t = `tenant-${randomUUID()}`;
     const r = await seedLabReport(pg.adminUrl, t);
     const capture = captureFor(r);
@@ -169,76 +194,112 @@ describe('evaluations: idempotence, immutability of inputs, and fidelity of what
     const results = await Promise.all(Array.from({ length: 6 }, () => s.evaluate('same')));
     expect(new Set(results.map(id)).size).toBe(1);
     expect(results.filter((r) => r.created).length).toBe(1);
-    const events = await withAdmin(pg.adminUrl, async (c) => Number((await c.query(`SELECT count(*) FROM ledger_events WHERE tenant_id = $1 AND event_type = 'evaluation'`, [s.tenantId])).rows[0].count));
+    const events = await withAdmin(pg.adminUrl, async (c) =>
+      Number((await c.query(`SELECT count(*) FROM ledger_events WHERE tenant_id = $1 AND event_type = 'evaluation'`, [s.tenantId])).rows[0].count),
+    );
     expect(events).toBe(2); // v1 from scene() and 'same'
   });
 
   it('key order inside the stored JSON does not make a different evaluation, and does not change what is hashed', async () => {
     const s = await scene();
-    const a = await repo.insertEvaluation(s.tenantId, 'syn-system', evaluationFor(s.report, id(s.c), id(s.a), { engineVersion: 'order', binding: { zeta: 1, alpha: 2, mid: { y: 1, x: 2 } } }));
-    const b = await repo.insertEvaluation(s.tenantId, 'syn-system', evaluationFor(s.report, id(s.c), id(s.a), { engineVersion: 'order', binding: { mid: { x: 2, y: 1 }, alpha: 2, zeta: 1 } }));
+    const a = await repo.insertEvaluation(
+      s.tenantId,
+      'syn-system',
+      evaluationFor(s.report, id(s.c), id(s.a), { engineVersion: 'order', binding: { zeta: 1, alpha: 2, mid: { y: 1, x: 2 } } }),
+    );
+    const b = await repo.insertEvaluation(
+      s.tenantId,
+      'syn-system',
+      evaluationFor(s.report, id(s.c), id(s.a), { engineVersion: 'order', binding: { mid: { x: 2, y: 1 }, alpha: 2, zeta: 1 } }),
+    );
     expect([b.created, id(b)]).toEqual([false, id(a)]);
     expect(await verifier.verify(s.tenantId)).toMatchObject({ status: 'ok' });
   });
 
   it('round-trips awkward values exactly: microsecond timestamps, numeric scale, unicode and astral characters, stored order', async () => {
     const s = await scene();
-    const r = await repo.insertEvaluation(s.tenantId, 'syn-system', evaluationFor(s.report, id(s.c), id(s.a), {
-      engineVersion: 'fidelity',
-      geneInputs: [{ gene: 'CYP2C19', state: 'diplotype', diplotype: '*2/*2' }],
-      occurrences: [{ text: 'naïve — 日本語 😀 \u{1F9EC}', n: 0 }],
-      results: [{ outcome: 'held', drug: 'drug-ß', genes: ['CYP2D6'], geneStates: heldResult.geneStates, reasonCode: 'gene-absent', citation: null }],
-      geneStates: [
-        { gene: 'CYP2D6', state: 'canonical', phenotype: 'Intermediate Metabolizer', diplotype: '*1/*4', activityScore: 1.5, reasonCode: null },
-        { gene: 'CYP2C19', state: 'absent', phenotype: null, diplotype: null, activityScore: null, reasonCode: 'gene-absent' },
-      ],
-    }));
+    const r = await repo.insertEvaluation(
+      s.tenantId,
+      'syn-system',
+      evaluationFor(s.report, id(s.c), id(s.a), {
+        engineVersion: 'fidelity',
+        geneInputs: [{ gene: 'CYP2C19', state: 'diplotype', diplotype: '*2/*2' }],
+        occurrences: [{ text: 'naïve — 日本語 😀 \u{1F9EC}', n: 0 }],
+        results: [{ outcome: 'held', drug: 'drug-ß', genes: ['CYP2D6'], geneStates: heldResult.geneStates, reasonCode: 'gene-absent', citation: null }],
+        geneStates: [
+          { gene: 'CYP2D6', state: 'canonical', phenotype: 'Intermediate Metabolizer', diplotype: '*1/*4', activityScore: 1.5, reasonCode: null },
+          { gene: 'CYP2C19', state: 'absent', phenotype: null, diplotype: null, activityScore: null, reasonCode: 'gene-absent' },
+        ],
+      }),
+    );
     const stored = r.record as unknown as { occurrences: Array<{ text: string }>; geneStates: Array<{ gene: string; activityScore: string | null }>; createdAt: string };
     expect(stored.occurrences[0].text).toBe('naïve — 日本語 😀 \u{1F9EC}');
-    expect(stored.geneStates.map((g) => [g.gene, g.activityScore])).toEqual([['CYP2C19', null], ['CYP2D6', '1.50']]); // sorted by gene; numeric(6,2) keeps its scale
+    expect(stored.geneStates.map((g) => [g.gene, g.activityScore])).toEqual([
+      ['CYP2C19', null],
+      ['CYP2D6', '1.50'],
+    ]); // sorted by gene; numeric(6,2) keeps its scale
     expect(stored.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/);
-    const dbValue = await withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS t FROM evaluations WHERE id = $1`, [id(r)])).rows[0].t);
+    const dbValue = await withAdmin(
+      pg.adminUrl,
+      async (c) => (await c.query(`SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS t FROM evaluations WHERE id = $1`, [id(r)])).rows[0].t,
+    );
     expect(stored.createdAt).toBe(dbValue);
     expect(await verifier.verify(s.tenantId)).toMatchObject({ status: 'ok' });
   });
 
   it('a note is stored once as text and committed to by its UTF-8 digest only', async () => {
     const t = `tenant-${randomUUID()}`;
-    const d = await repo.raiseDispute(t, 'rev-1', { guidelineId: 'g', guidelineVersion: '1', guidelineContentSha256: 'c'.repeat(64), locator: { table: 't', row: 'r' }, note: 'naïve 😀 note' });
+    const d = await repo.raiseDispute(t, 'rev-1', {
+      guidelineId: 'g',
+      guidelineVersion: '1',
+      guidelineContentSha256: 'c'.repeat(64),
+      locator: { table: 't', row: 'r' },
+      note: 'naïve 😀 note',
+    });
     const digest = createHash('sha256').update('naïve 😀 note', 'utf8').digest('hex');
     expect((d.record.note as { bodySha256: string }).bodySha256).toBe(digest);
     expect(JSON.stringify(d.record)).not.toContain('naïve');
     await refused(repo.raiseDispute(t, 'rev-1', { guidelineId: 'g', guidelineVersion: '1', guidelineContentSha256: 'c'.repeat(64), locator: { table: 't', row: 'r' }, note: '' })); // empty note
-    await refused(repo.raiseDispute(t, 'rev-1', { guidelineId: 'g', guidelineVersion: '1', guidelineContentSha256: 'c'.repeat(64), locator: { table: 't', row: 'r' }, note: 'x'.repeat(1001) }));
+    await refused(
+      repo.raiseDispute(t, 'rev-1', { guidelineId: 'g', guidelineVersion: '1', guidelineContentSha256: 'c'.repeat(64), locator: { table: 't', row: 'r' }, note: 'x'.repeat(1001) }),
+    );
   });
 });
 
-describe('concurrency on one tenant\'s chain', () => {
+describe("concurrency on one tenant's chain", () => {
   const batch = async (tenantId: string, reports: SeededReport[]) => {
     const started = process.hrtime.bigint();
     const timings: number[] = [];
-    await Promise.all(reports.map(async (r) => {
-      const t0 = process.hrtime.bigint();
-      await repo.insertCapture(tenantId, r.uploader, captureFor(r));
-      timings.push(Number(process.hrtime.bigint() - t0) / 1e6);
-    }));
+    await Promise.all(
+      reports.map(async (r) => {
+        const t0 = process.hrtime.bigint();
+        await repo.insertCapture(tenantId, r.uploader, captureFor(r));
+        timings.push(Number(process.hrtime.bigint() - t0) / 1e6);
+      }),
+    );
     timings.sort((x, y) => x - y);
     return { wallMs: Number(process.hrtime.bigint() - started) / 1e6, p50: timings[Math.floor(timings.length / 2)]!, p95: timings[Math.floor(timings.length * 0.95)]! };
   };
 
-  it.each([1, 4, 16])('%i concurrent writers: every write succeeds, the sequence has no gap, the chain verifies', async (writers) => {
-    const tenantId = `tenant-${randomUUID()}`;
-    const reports = await Promise.all(Array.from({ length: writers }, (_, i) => seedLabReport(pg.adminUrl, tenantId, 'syn-uploader', `SYN-${i}`)));
-    const timing = await batch(tenantId, reports);
-    const seqs = await withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT seq::int AS seq FROM ledger_events WHERE tenant_id = $1 ORDER BY seq`, [tenantId])).rows.map((r) => r.seq));
-    expect(seqs).toEqual(Array.from({ length: writers }, (_, i) => i + 1));
-    const verdict = await verifier.verify(tenantId);
-    expect({ status: verdict.status, n: verdict.eventsChecked, failures: verdict.failures }).toEqual({ status: 'ok', n: writers, failures: [] });
-    // Measured, not asserted against a number (a loaded CI machine is slower); printed so a regression is visible in the log.
-    process.stdout.write(`[ledger contention] writers=${writers} wall=${timing.wallMs.toFixed(0)}ms p50=${timing.p50.toFixed(0)}ms p95=${timing.p95.toFixed(0)}ms\n`);
-  }, 30_000);
+  it.each([1, 4, 16])(
+    '%i concurrent writers: every write succeeds, the sequence has no gap, the chain verifies',
+    async (writers) => {
+      const tenantId = `tenant-${randomUUID()}`;
+      const reports = await Promise.all(Array.from({ length: writers }, (_, i) => seedLabReport(pg.adminUrl, tenantId, 'syn-uploader', `SYN-${i}`)));
+      const timing = await batch(tenantId, reports);
+      const seqs = await withAdmin(pg.adminUrl, async (c) =>
+        (await c.query(`SELECT seq::int AS seq FROM ledger_events WHERE tenant_id = $1 ORDER BY seq`, [tenantId])).rows.map((r) => r.seq),
+      );
+      expect(seqs).toEqual(Array.from({ length: writers }, (_, i) => i + 1));
+      const verdict = await verifier.verify(tenantId);
+      expect({ status: verdict.status, n: verdict.eventsChecked, failures: verdict.failures }).toEqual({ status: 'ok', n: writers, failures: [] });
+      // Measured, not asserted against a number (a loaded CI machine is slower); printed so a regression is visible in the log.
+      process.stdout.write(`[ledger contention] writers=${writers} wall=${timing.wallMs.toFixed(0)}ms p50=${timing.p50.toFixed(0)}ms p95=${timing.p95.toFixed(0)}ms\n`);
+    },
+    30_000,
+  );
 
-  it('one tenant\'s open transaction does not delay another tenant, and a stuck head lock gives up after the lock timeout', async () => {
+  it("one tenant's open transaction does not delay another tenant, and a stuck head lock gives up after the lock timeout", async () => {
     const [a, b] = [`tenant-${randomUUID()}`, `tenant-${randomUUID()}`];
     const [ra, rb, ra2] = [await seedLabReport(pg.adminUrl, a), await seedLabReport(pg.adminUrl, b), await seedLabReport(pg.adminUrl, a, 'syn-uploader', 'SYN-2')];
     const holder = await database['pool'].connect(); // a transaction that has appended and not yet committed: it holds tenant A's head lock
@@ -248,7 +309,9 @@ describe('concurrency on one tenant\'s chain', () => {
       const [cid, ev] = [randomUUID(), randomUUID()];
       await holder.query(
         `INSERT INTO report_captures (id, tenant_id, created_by, ledger_event_id, report_id, pdf_sha256, text_storage_key, text_sha256, text_scalars, poppler_version, runner)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 5, '26.03.0', 'fake')`, [cid, a, ra.uploader, ev, ra.reportId, ra.pdfSha256, `text/${randomUUID()}`, sha('held')]);
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 5, '26.03.0', 'fake')`,
+        [cid, a, ra.uploader, ev, ra.reportId, ra.pdfSha256, `text/${randomUUID()}`, sha('held')],
+      );
       await holder.query(`SELECT ledger_append($1, 'capture', 'report_captures', $2, $3, 1::smallint)`, [ev, cid, sha('placeholder')]);
 
       const t0 = Date.now();

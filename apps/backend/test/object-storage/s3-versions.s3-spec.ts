@@ -47,7 +47,11 @@ describe('S3ObjectStorage: the signed download link', () => {
     expect(new URL(link).searchParams.get('versionId')).toBe(v1);
     expect(new URL(link).searchParams.get('X-Amz-Expires')).toBe('120');
     const ok = await fetch(link);
-    expect(createHash('sha256').update(Buffer.from(await ok.arrayBuffer())).digest('hex')).toBe(createHash('sha256').update(v1Bytes).digest('hex'));
+    expect(
+      createHash('sha256')
+        .update(Buffer.from(await ok.arrayBuffer()))
+        .digest('hex'),
+    ).toBe(createHash('sha256').update(v1Bytes).digest('hex'));
 
     await client.send(new DeleteObjectCommand({ Bucket: versionedBucket, Key: key, VersionId: v1 }));
     const gone = await fetch(await versioned.createDownloadUrl(key, v1, 120));

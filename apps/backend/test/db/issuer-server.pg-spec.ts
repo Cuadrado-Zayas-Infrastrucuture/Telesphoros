@@ -28,11 +28,17 @@ const owner = <T>(work: (c: Client) => Promise<T>) => withAdmin(db.adminUrl, wor
 const user = (name: string) => idp.users.find((u) => u.email.startsWith(name))!;
 const everything = () => [...lines, ...written].join('\n');
 const envFor = (databaseUrl: string) => ({
-  NODE_ENV: 'development', DATABASE_URL: databaseUrl, DATABASE_SSL: 'disable', COGNITO_ISSUER: idp.issuer, COGNITO_APP_CLIENT_ID: 'app-client',
+  NODE_ENV: 'development',
+  DATABASE_URL: databaseUrl,
+  DATABASE_SSL: 'disable',
+  COGNITO_ISSUER: idp.issuer,
+  COGNITO_APP_CLIENT_ID: 'app-client',
 });
 const versionOf = (sub: string) => owner(async (c) => Number((await c.query('SELECT version FROM tenant_memberships WHERE sub = $1', [sub])).rows[0].version));
-const logRows = (requestId: string) => owner(async (c) => (await c.query('SELECT outcome, reason, tenant_id FROM capability_issuance_log WHERE request_id = $1 ORDER BY seq', [requestId])).rows);
-const capabilityRows = (requestId: string) => owner(async (c) => Number((await c.query('SELECT count(*) AS n FROM tenant_capabilities WHERE request_id = $1', [requestId])).rows[0].n));
+const logRows = (requestId: string) =>
+  owner(async (c) => (await c.query('SELECT outcome, reason, tenant_id FROM capability_issuance_log WHERE request_id = $1 ORDER BY seq', [requestId])).rows);
+const capabilityRows = (requestId: string) =>
+  owner(async (c) => Number((await c.query('SELECT count(*) AS n FROM tenant_capabilities WHERE request_id = $1', [requestId])).rows[0].n));
 const appTenantFor = async (token: string) => {
   const c = new Client({ connectionString: db.appUrl });
   await c.connect();
@@ -76,7 +82,11 @@ beforeAll(async () => {
   idp = await startFakeIdp({ clientId: 'app-client' });
   await owner(async (c) => {
     for (const tenant of ['alpha', 'beta']) await registerTenantRow(c, tenant);
-    for (const [tenant, name, status] of [['alpha', 'alice', 'active'], ['beta', 'bob', 'active'], ['alpha', 'carol', 'removed']] as const) {
+    for (const [tenant, name, status] of [
+      ['alpha', 'alice', 'active'],
+      ['beta', 'bob', 'active'],
+      ['alpha', 'carol', 'removed'],
+    ] as const) {
       await c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ($1, $2, $3, ARRAY['clinician'], 'test')`, [tenant, user(name).sub, status]);
     }
   });
@@ -110,7 +120,11 @@ describe('the positive control', () => {
   });
 
   it('connects as the issuer login and as nothing else', async () => {
-    const users = await owner(async (c) => (await c.query(`SELECT DISTINCT usename FROM pg_stat_activity WHERE application_name = 'telesphoros-session-issuer' AND datname = current_database()`)).rows.map((r) => r.usename));
+    const users = await owner(async (c) =>
+      (await c.query(`SELECT DISTINCT usename FROM pg_stat_activity WHERE application_name = 'telesphoros-session-issuer' AND datname = current_database()`)).rows.map(
+        (r) => r.usename,
+      ),
+    );
     const loginOf = (url: string) => decodeURIComponent(new URL(url).username);
     expect(loginOf(db.issuerUrl)).not.toBe(loginOf(db.appUrl)); // control: the two logins differ, so the next line can tell them apart
     expect(users).toEqual([loginOf(db.issuerUrl)]);
@@ -118,7 +132,7 @@ describe('the positive control', () => {
 });
 
 describe('refusals through the real server, each followed by the control', () => {
-  it('a removed member: 403 refused, with the database\'s code, one log row, no capability, and the alarm phrase once', async () => {
+  it("a removed member: 403 refused, with the database's code, one log row, no capability, and the alarm phrase once", async () => {
     const before = lines.filter((l) => l.includes('Capability not issued: refused (membership-not-current)')).length;
     const reply = await ask(issuer!, 'req-srv-refused-01', { who: 'carol' });
     expect(reply.status).toBe(403);
@@ -189,7 +203,10 @@ describe('no token anywhere', () => {
 
 describe('stopping', () => {
   it('stops accepting, closes its pool, and the database sees no session of its own left', async () => {
-    const sessions = () => owner(async (c) => Number((await c.query(`SELECT count(*) AS n FROM pg_stat_activity WHERE application_name = 'telesphoros-session-issuer' AND datname = current_database()`)).rows[0].n));
+    const sessions = () =>
+      owner(async (c) =>
+        Number((await c.query(`SELECT count(*) AS n FROM pg_stat_activity WHERE application_name = 'telesphoros-session-issuer' AND datname = current_database()`)).rows[0].n),
+      );
     expect(await sessions()).toBeGreaterThan(0); // control: it had a session
     const port = issuer!.port;
     await issuer!.stop(2000);

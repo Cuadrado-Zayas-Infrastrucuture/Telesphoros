@@ -59,7 +59,14 @@ export async function runKnowledgeCli(args: readonly string[], write: (line: str
       const directory = flag('--dir') ?? 'knowledge/cpic';
       let result;
       try {
-        result = await locateKnowledgeSet({ repo: resolve(flag('--repo') ?? '.'), directory, id, mode: rest.includes('--production') ? 'production' : 'non-production', limit, allRefs: rest.includes('--all-refs') });
+        result = await locateKnowledgeSet({
+          repo: resolve(flag('--repo') ?? '.'),
+          directory,
+          id,
+          mode: rest.includes('--production') ? 'production' : 'non-production',
+          limit,
+          allRefs: rest.includes('--all-refs'),
+        });
       } catch {
         // intentional: git's own error text can quote paths and refs; the operator needs the one thing to check
         write('The search could not run (is --repo inside a git working tree, is --dir a relative path, and is git installed?).');

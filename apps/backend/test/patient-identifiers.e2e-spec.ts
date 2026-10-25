@@ -15,7 +15,14 @@ let db: EphemeralDatabase | undefined;
 const api = () => request(app.getHttpServer());
 const tenantOf = () => `org-${randomUUID().slice(0, 8)}`;
 const as = async (tenant: string, roles: string[], sub = `person-${randomUUID().slice(0, 6)}`) => bearer(await signToken({ sub, roles, tenant }));
-const newPatient = async (headers: Record<string, string>) => (await api().post('/api/v1/patients').set(headers).send({ label: `SYN-${randomUUID().slice(0, 8)}` }).expect(201)).body.id as string;
+const newPatient = async (headers: Record<string, string>) =>
+  (
+    await api()
+      .post('/api/v1/patients')
+      .set(headers)
+      .send({ label: `SYN-${randomUUID().slice(0, 8)}` })
+      .expect(201)
+  ).body.id as string;
 const register = (headers: Record<string, string>, patientId: string, system: string, value: string) =>
   api().post(`/api/v1/patients/${patientId}/identifiers`).set(headers).send({ system, value });
 /** A number that cannot occur by accident anywhere else in the database or the logs. */
@@ -57,7 +64,10 @@ describe('registering and listing', () => {
     const first = await newPatient(clin);
     const second = await newPatient(clin);
     await register(clin, first, 'hospital-a-mrn', 'Mrn-7001').expect(201);
-    for (const [patient, value] of [[first, '  mrn-7001'], [second, 'MRN-7001 ']] as const) {
+    for (const [patient, value] of [
+      [first, '  mrn-7001'],
+      [second, 'MRN-7001 '],
+    ] as const) {
       const res = await register(clin, patient, 'hospital-a-mrn', value);
       expect([res.status, res.body.error.details[0].reason]).toEqual([409, 'identifier-in-use']);
     }
@@ -77,7 +87,7 @@ describe('registering and listing', () => {
     expect(JSON.stringify(otherHolder.body)).not.toContain(first);
   });
 
-  it('keeps organizations apart: the same number in two organizations is two identifiers, and another organization\'s patient is a 404', async () => {
+  it("keeps organizations apart: the same number in two organizations is two identifiers, and another organization's patient is a 404", async () => {
     const a = tenantOf();
     const b = tenantOf();
     const clinA = await as(a, ['clinician']);
@@ -134,7 +144,8 @@ describe('withdrawing', () => {
       [a, `/api/v1/patients/${patient}/identifiers/${randomUUID()}`],
       [a, `/api/v1/patients/${other}/identifiers/${made.id}`],
       [b, `/api/v1/patients/${patient}/identifiers/${made.id}`],
-    ] as const) expect((await api().delete(path).set(headers)).status).toBe(404);
+    ] as const)
+      expect((await api().delete(path).set(headers)).status).toBe(404);
     await api().delete(`/api/v1/patients/${patient}/identifiers/${made.id}`).set(a).expect(204);
     expect((await api().delete(`/api/v1/patients/${patient}/identifiers/${made.id}`).set(a)).status).toBe(404);
   });
@@ -151,8 +162,22 @@ describe('who may do what', () => {
       expect([roles, (await register(who, patient, 'hospital-a-mrn', 'ROLE-2')).status]).toEqual([roles, 403]);
       expect([roles, (await api().delete(`/api/v1/patients/${patient}/identifiers/${made.id}`).set(who)).status]).toEqual([roles, 403]);
     }
-    for (const roles of [['reader'], ['reviewer'], ['clinician']]) expect((await api().get(`/api/v1/patients/${patient}/identifiers`).set(await as(tenant, roles))).status).toBe(200);
-    for (const roles of [['admin'], []]) expect((await api().get(`/api/v1/patients/${patient}/identifiers`).set(await as(tenant, roles))).status).toBe(403);
+    for (const roles of [['reader'], ['reviewer'], ['clinician']])
+      expect(
+        (
+          await api()
+            .get(`/api/v1/patients/${patient}/identifiers`)
+            .set(await as(tenant, roles))
+        ).status,
+      ).toBe(200);
+    for (const roles of [['admin'], []])
+      expect(
+        (
+          await api()
+            .get(`/api/v1/patients/${patient}/identifiers`)
+            .set(await as(tenant, roles))
+        ).status,
+      ).toBe(403);
     expect((await register(await as(tenant, ['admin', 'clinician']), patient, 'hospital-a-mrn', 'ROLE-3')).status).toBe(201); // control: both roles
     await api().post(`/api/v1/patients/${patient}/identifiers`).send({ system: 'hospital-a-mrn', value: 'x' }).expect(401);
   });
@@ -189,7 +214,8 @@ describe('who may do what', () => {
 });
 
 describe('a retried registration (audit item 25)', () => {
-  const post = (headers: Record<string, string>, patientId: string, body: Record<string, unknown>) => api().post(`/api/v1/patients/${patientId}/identifiers`).set(headers).send(body);
+  const post = (headers: Record<string, string>, patientId: string, body: Record<string, unknown>) =>
+    api().post(`/api/v1/patients/${patientId}/identifiers`).set(headers).send(body);
   it('answers a repeat of the same request with the same identifier, where a repeat without an id answers 409', async () => {
     const clin = await as(tenantOf(), ['clinician']);
     const patient = await newPatient(clin);

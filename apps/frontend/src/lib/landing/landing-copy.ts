@@ -66,9 +66,21 @@ const en = {
     title: ['Built around', 'the report.'],
     intro: 'Patient-linked intake, file information, and a separate look at the assistant interface.',
     rows: [
-      { title: 'Keep the patient and report connected.', text: 'Select an existing synthetic patient before uploading. Standard intake accepts VCF and JSON; the storage workspace also accepts PDF.', note: 'Uploads require a clinician role.' },
-      { title: 'Find a file. Check its status.', text: 'In the storage workspace, filter reports by patient and open a record to see its format and upload status. Download a verified file when your role permits.', note: 'File verification confirms storage, not clinical review.' },
-      { title: 'Meet the PGx assistant preview.', text: 'Explore sample questions and fixed example responses in a separate local demonstration. Uploaded reports are not analyzed.', note: 'Development-only interface. No live AI or prescribing recommendations.' },
+      {
+        title: 'Keep the patient and report connected.',
+        text: 'Select an existing synthetic patient before uploading. Standard intake accepts VCF and JSON; the storage workspace also accepts PDF.',
+        note: 'Uploads require a clinician role.',
+      },
+      {
+        title: 'Find a file. Check its status.',
+        text: 'In the storage workspace, filter reports by patient and open a record to see its format and upload status. Download a verified file when your role permits.',
+        note: 'File verification confirms storage, not clinical review.',
+      },
+      {
+        title: 'Meet the PGx assistant preview.',
+        text: 'Explore sample questions and fixed example responses in a separate local demonstration. Uploaded reports are not analyzed.',
+        note: 'Development-only interface. No live AI or prescribing recommendations.',
+      },
     ],
   },
   fragments: {
@@ -80,11 +92,26 @@ const en = {
     eyebrow: 'Before you begin',
     title: ['Access and', 'preview questions.'],
     items: [
-      { q: 'Who can access Telesphoros?', a: 'Access is by invitation. Ask your organization’s administrator for an account. Signing in does not change your existing permissions.' },
-      { q: 'Can I upload real patient reports?', a: 'No. Use synthetic records only. This environment is not approved for clinical use, and real patient information must not be entered or uploaded.' },
-      { q: 'What does “verified” mean?', a: 'It means the server verified the stored file. It does not mean the report has been clinically interpreted or that a treatment recommendation has been established.' },
-      { q: 'Does Telesphoros recommend a medication?', a: 'No. Less trial-and-error prescribing is our direction, not an outcome established by this preview. It does not recommend medications or doses, and is not for clinical use.' },
-      { q: 'Does the assistant interpret my reports?', a: 'No. The assistant interface is a separate local development preview with fixed synthetic responses. It is not connected to the selected patient or report.' },
+      {
+        q: 'Who can access Telesphoros?',
+        a: 'Access is by invitation. Ask your organization’s administrator for an account. Signing in does not change your existing permissions.',
+      },
+      {
+        q: 'Can I upload real patient reports?',
+        a: 'No. Use synthetic records only. This environment is not approved for clinical use, and real patient information must not be entered or uploaded.',
+      },
+      {
+        q: 'What does “verified” mean?',
+        a: 'It means the server verified the stored file. It does not mean the report has been clinically interpreted or that a treatment recommendation has been established.',
+      },
+      {
+        q: 'Does Telesphoros recommend a medication?',
+        a: 'No. Less trial-and-error prescribing is our direction, not an outcome established by this preview. It does not recommend medications or doses, and is not for clinical use.',
+      },
+      {
+        q: 'Does the assistant interpret my reports?',
+        a: 'No. The assistant interface is a separate local development preview with fixed synthetic responses. It is not connected to the selected patient or report.',
+      },
     ],
   },
   closing: {
@@ -97,9 +124,24 @@ const en = {
   workflow: {
     group: 'Explore the report workflow',
     steps: [
-      { label: 'Upload', title: 'Start with the patient.', description: 'Select an existing synthetic patient and attach their report. The file is checked before submission.', boundary: 'Uploads require a clinician role.' },
-      { label: 'Check', title: 'See whether the upload completed.', description: 'Check whether the server verified the stored file. A report record can exist even when its upload is incomplete.', boundary: 'File verification does not indicate clinical review.' },
-      { label: 'Find', title: 'Find the record. Check the details.', description: 'In the storage workspace, browse reports by patient and open a record to see its format and upload status.', boundary: 'File retrieval follows your existing permissions. This example does not download files.' },
+      {
+        label: 'Upload',
+        title: 'Start with the patient.',
+        description: 'Select an existing synthetic patient and attach their report. The file is checked before submission.',
+        boundary: 'Uploads require a clinician role.',
+      },
+      {
+        label: 'Check',
+        title: 'See whether the upload completed.',
+        description: 'Check whether the server verified the stored file. A report record can exist even when its upload is incomplete.',
+        boundary: 'File verification does not indicate clinical review.',
+      },
+      {
+        label: 'Find',
+        title: 'Find the record. Check the details.',
+        description: 'In the storage workspace, browse reports by patient and open a record to see its format and upload status.',
+        boundary: 'File retrieval follows your existing permissions. This example does not download files.',
+      },
     ],
     kicker: (step: number) => `Explore step 0${step} / 03`,
     next: (label: string) => `Next: ${label.toLowerCase()}`,
@@ -194,7 +236,8 @@ const es: LandingCopy = {
     p1: 'Las personas responden de manera distinta a los medicamentos. La farmacogenómica estudia cómo las diferencias genéticas influyen en esa respuesta, junto con otros factores que importan en la atención.',
     p2: 'Nuestro objetivo es ayudar a clínicos y farmacéuticos a incorporar la información farmacogenómica en las decisiones de prescripción.',
     todayTitle: 'Dónde estamos hoy',
-    today: 'Esta vista previa de desarrollo comienza con informes vinculados a pacientes y almacenamiento de archivos verificado. La interpretación clínica y las recomendaciones de prescripción no están disponibles.',
+    today:
+      'Esta vista previa de desarrollo comienza con informes vinculados a pacientes y almacenamiento de archivos verificado. La interpretación clínica y las recomendaciones de prescripción no están disponibles.',
     source: 'Acerca de la farmacogenómica · NHGRI',
   },
   workspace: {
@@ -207,9 +250,21 @@ const es: LandingCopy = {
     title: ['Construido en torno', 'al informe.'],
     intro: 'Carga vinculada a pacientes, información de archivos y una mirada aparte a la interfaz del asistente.',
     rows: [
-      { title: 'Mantén unidos al paciente y al informe.', text: 'Selecciona un paciente sintético existente antes de cargar. La carga estándar acepta VCF y JSON; el espacio de almacenamiento también acepta PDF.', note: 'Cargar requiere un rol de clínico.' },
-      { title: 'Encuentra un archivo. Revisa su estado.', text: 'En el espacio de almacenamiento, filtra los informes por paciente y abre un registro para ver su formato y el estado de carga. Descarga un archivo verificado cuando tu rol lo permita.', note: 'La verificación del archivo confirma el almacenamiento, no una revisión clínica.' },
-      { title: 'Conoce la vista previa del asistente PGx.', text: 'Explora preguntas de ejemplo y respuestas fijas de muestra en una demostración local aparte. Los informes cargados no se analizan.', note: 'Interfaz solo para desarrollo. Sin IA en vivo ni recomendaciones de prescripción.' },
+      {
+        title: 'Mantén unidos al paciente y al informe.',
+        text: 'Selecciona un paciente sintético existente antes de cargar. La carga estándar acepta VCF y JSON; el espacio de almacenamiento también acepta PDF.',
+        note: 'Cargar requiere un rol de clínico.',
+      },
+      {
+        title: 'Encuentra un archivo. Revisa su estado.',
+        text: 'En el espacio de almacenamiento, filtra los informes por paciente y abre un registro para ver su formato y el estado de carga. Descarga un archivo verificado cuando tu rol lo permita.',
+        note: 'La verificación del archivo confirma el almacenamiento, no una revisión clínica.',
+      },
+      {
+        title: 'Conoce la vista previa del asistente PGx.',
+        text: 'Explora preguntas de ejemplo y respuestas fijas de muestra en una demostración local aparte. Los informes cargados no se analizan.',
+        note: 'Interfaz solo para desarrollo. Sin IA en vivo ni recomendaciones de prescripción.',
+      },
     ],
   },
   fragments: {
@@ -221,11 +276,26 @@ const es: LandingCopy = {
     eyebrow: 'Antes de empezar',
     title: ['Preguntas sobre', 'acceso y vista previa.'],
     items: [
-      { q: '¿Quién puede acceder a Telesphoros?', a: 'El acceso es por invitación. Pide una cuenta al administrador de tu organización. Iniciar sesión no cambia tus permisos existentes.' },
-      { q: '¿Puedo cargar informes reales de pacientes?', a: 'No. Usa solo registros sintéticos. Este entorno no está aprobado para uso clínico y no se debe ingresar ni cargar información real de pacientes.' },
-      { q: '¿Qué significa «verificado»?', a: 'Significa que el servidor verificó el archivo almacenado. No significa que el informe haya sido interpretado clínicamente ni que se haya establecido una recomendación de tratamiento.' },
-      { q: '¿Telesphoros recomienda un medicamento?', a: 'No. Reducir la prescripción por ensayo y error es nuestra dirección, no un resultado establecido por esta vista previa. No recomienda medicamentos ni dosis, y no es para uso clínico.' },
-      { q: '¿El asistente interpreta mis informes?', a: 'No. La interfaz del asistente es una vista previa de desarrollo local y aparte, con respuestas sintéticas fijas. No está conectada al paciente ni al informe seleccionados.' },
+      {
+        q: '¿Quién puede acceder a Telesphoros?',
+        a: 'El acceso es por invitación. Pide una cuenta al administrador de tu organización. Iniciar sesión no cambia tus permisos existentes.',
+      },
+      {
+        q: '¿Puedo cargar informes reales de pacientes?',
+        a: 'No. Usa solo registros sintéticos. Este entorno no está aprobado para uso clínico y no se debe ingresar ni cargar información real de pacientes.',
+      },
+      {
+        q: '¿Qué significa «verificado»?',
+        a: 'Significa que el servidor verificó el archivo almacenado. No significa que el informe haya sido interpretado clínicamente ni que se haya establecido una recomendación de tratamiento.',
+      },
+      {
+        q: '¿Telesphoros recomienda un medicamento?',
+        a: 'No. Reducir la prescripción por ensayo y error es nuestra dirección, no un resultado establecido por esta vista previa. No recomienda medicamentos ni dosis, y no es para uso clínico.',
+      },
+      {
+        q: '¿El asistente interpreta mis informes?',
+        a: 'No. La interfaz del asistente es una vista previa de desarrollo local y aparte, con respuestas sintéticas fijas. No está conectada al paciente ni al informe seleccionados.',
+      },
     ],
   },
   closing: {
@@ -238,9 +308,24 @@ const es: LandingCopy = {
   workflow: {
     group: 'Explora el flujo del informe',
     steps: [
-      { label: 'Cargar', title: 'Empieza por el paciente.', description: 'Selecciona un paciente sintético existente y adjunta su informe. El archivo se revisa antes de enviarse.', boundary: 'Cargar requiere un rol de clínico.' },
-      { label: 'Verificar', title: 'Comprueba si la carga se completó.', description: 'Revisa si el servidor verificó el archivo almacenado. Puede existir un registro del informe aunque su carga esté incompleta.', boundary: 'La verificación del archivo no indica revisión clínica.' },
-      { label: 'Buscar', title: 'Encuentra el registro. Revisa los detalles.', description: 'En el espacio de almacenamiento, explora los informes por paciente y abre un registro para ver su formato y el estado de carga.', boundary: 'La recuperación de archivos sigue tus permisos existentes. Este ejemplo no descarga archivos.' },
+      {
+        label: 'Cargar',
+        title: 'Empieza por el paciente.',
+        description: 'Selecciona un paciente sintético existente y adjunta su informe. El archivo se revisa antes de enviarse.',
+        boundary: 'Cargar requiere un rol de clínico.',
+      },
+      {
+        label: 'Verificar',
+        title: 'Comprueba si la carga se completó.',
+        description: 'Revisa si el servidor verificó el archivo almacenado. Puede existir un registro del informe aunque su carga esté incompleta.',
+        boundary: 'La verificación del archivo no indica revisión clínica.',
+      },
+      {
+        label: 'Buscar',
+        title: 'Encuentra el registro. Revisa los detalles.',
+        description: 'En el espacio de almacenamiento, explora los informes por paciente y abre un registro para ver su formato y el estado de carga.',
+        boundary: 'La recuperación de archivos sigue tus permisos existentes. Este ejemplo no descarga archivos.',
+      },
     ],
     kicker: (step: number) => `Explora el paso 0${step} / 03`,
     next: (label: string) => `Siguiente: ${label.toLowerCase()}`,

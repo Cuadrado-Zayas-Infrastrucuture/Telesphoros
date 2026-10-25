@@ -106,8 +106,16 @@ describe('PatientsService', () => {
       const { service, reports } = setup();
       const created = await service.create(alice, { label: 'SYN-1' });
       await reports.insert({
-        id: randomUUID(), tenantId: 'alice', createdBy: 'alice', patientId: created.id, type: 'vcf', filename: 'a.vcf',
-        sizeBytes: 1, status: 'received', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        id: randomUUID(),
+        tenantId: 'alice',
+        createdBy: 'alice',
+        patientId: created.id,
+        type: 'vcf',
+        filename: 'a.vcf',
+        sizeBytes: 1,
+        status: 'received',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       });
       await expectAppException(service.remove(alice, created.id), 409, 'CONFLICT');
     });
@@ -116,7 +124,10 @@ describe('PatientsService', () => {
       const { service, patients } = setup();
       const created = await service.create(alice, { label: 'SYN-1' });
       jest.spyOn(patients, 'delete').mockRejectedValueOnce(new PatientHasMergedRecordsError());
-      const error = await service.remove(alice, created.id).then(() => undefined, (e: unknown) => e);
+      const error = await service.remove(alice, created.id).then(
+        () => undefined,
+        (e: unknown) => e,
+      );
       expect(error).toBeInstanceOf(AppException);
       expect((error as AppException).getStatus()).toBe(409);
       expect((error as AppException).details?.[0]).toMatchObject({ reason: 'patient-has-merged-records' });

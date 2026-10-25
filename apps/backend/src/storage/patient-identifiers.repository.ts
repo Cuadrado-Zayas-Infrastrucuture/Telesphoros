@@ -60,7 +60,11 @@ export abstract class PatientIdentifiersRepository {
    * Registers an identifier. With `request`, a repeat by the same person with the same fingerprint returns the identifier already stored under it (also after it was
    * withdrawn) and a different fingerprint throws `IdentifierRequestReusedError`; a number another patient holds still throws `IdentifierInUseError`.
    */
-  abstract add(tenantId: string, actor: string, input: { patientId: string; system: string; digest: Buffer; keyVersion: number; request?: RegistrationRequest }): Promise<IdentifierRecord>;
+  abstract add(
+    tenantId: string,
+    actor: string,
+    input: { patientId: string; system: string; digest: Buffer; keyVersion: number; request?: RegistrationRequest },
+  ): Promise<IdentifierRecord>;
   /** Every identifier of the patient, oldest first, withdrawn ones included. */
   abstract list(tenantId: string, patientId: string): Promise<IdentifierRecord[]>;
   /** False when there is no such active identifier on that patient. */
@@ -87,7 +91,11 @@ export class InMemoryPatientIdentifiersRepository extends PatientIdentifiersRepo
     super();
   }
 
-  async add(tenantId: string, actor: string, input: { patientId: string; system: string; digest: Buffer; keyVersion: number; request?: RegistrationRequest }): Promise<IdentifierRecord> {
+  async add(
+    tenantId: string,
+    actor: string,
+    input: { patientId: string; system: string; digest: Buffer; keyVersion: number; request?: RegistrationRequest },
+  ): Promise<IdentifierRecord> {
     if (input.request) {
       const prior = this.requests.get(`${tenantId}\u0000${actor}\u0000${input.request.id}`);
       if (prior) {
@@ -109,8 +117,16 @@ export class InMemoryPatientIdentifiersRepository extends PatientIdentifiersRepo
       throw new IdentifierInUseError();
     }
     const record: IdentifierRecord = {
-      id: randomUUID(), tenantId, patientId: input.patientId, system: input.system, digest: Buffer.from(input.digest), keyVersion: input.keyVersion,
-      status: 'active', createdBy: actor, createdAt: new Date(), withdrawnAt: null,
+      id: randomUUID(),
+      tenantId,
+      patientId: input.patientId,
+      system: input.system,
+      digest: Buffer.from(input.digest),
+      keyVersion: input.keyVersion,
+      status: 'active',
+      createdBy: actor,
+      createdAt: new Date(),
+      withdrawnAt: null,
     };
     this.rows.push(record);
     // The stored row is shared by reference, so a later withdrawal shows in a replay (as on PostgreSQL).

@@ -1,6 +1,17 @@
 import { createHash } from 'node:crypto';
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import { buildMeta, type Paginated, CLINICAL_USE, cellUsageDtoSchema, type CellUsageDto, type CellUsageQuery, type DisputeCreate, type DisputeDecisionCreate, type DisputeDto, type DisputeListQuery } from '@telesphoros/shared-types';
+import {
+  buildMeta,
+  type Paginated,
+  CLINICAL_USE,
+  cellUsageDtoSchema,
+  type CellUsageDto,
+  type CellUsageQuery,
+  type DisputeCreate,
+  type DisputeDecisionCreate,
+  type DisputeDto,
+  type DisputeListQuery,
+} from '@telesphoros/shared-types';
 import type { Principal } from '../auth/principal';
 import { AppException } from '../common/app-exception';
 import type { KnowledgeSet } from '../services/knowledge/knowledge-set';
@@ -33,7 +44,9 @@ export class DisputesService {
     const file = knowledge.files.find((f) => f.kind === 'guideline' && f.id === body.guidelineId);
     if (!guideline || !file) throw AppException.notFoundBecause('unknown-guideline', 'No guideline with that id is loaded.');
     const column = body.locator.column ?? null;
-    const exists = guideline.recommendations.some((row) => row.locator.table === body.locator.table && row.locator.row === body.locator.row && (row.locator.column ?? null) === column);
+    const exists = guideline.recommendations.some(
+      (row) => row.locator.table === body.locator.table && row.locator.row === body.locator.row && (row.locator.column ?? null) === column,
+    );
     if (!exists) throw AppException.conflictBecause('unknown-cell', 'That guideline has no cell at that locator.');
 
     // The version and the content hash come from the loaded file, so a dispute is always about the file that is in force.
@@ -45,7 +58,16 @@ export class DisputesService {
         locator: { table: body.locator.table, row: body.locator.row, ...(column === null ? {} : { column }) },
         note: body.note,
         // The fingerprint of the original request: the guideline, the cell and the note (not the version or the file hash, so a repeat after the knowledge was re-signed still finds its dispute).
-        ...(body.requestId ? { request: { id: body.requestId, hash: createHash('sha256').update(JSON.stringify([guideline.id, body.locator.table, body.locator.row, column, body.note])).digest('hex') } } : {}),
+        ...(body.requestId
+          ? {
+              request: {
+                id: body.requestId,
+                hash: createHash('sha256')
+                  .update(JSON.stringify([guideline.id, body.locator.table, body.locator.row, column, body.note]))
+                  .digest('hex'),
+              },
+            }
+          : {}),
       });
       if (stored.created) return this.present(knowledge, { dispute: stored.record, status: 'open', decision: null });
       // A repeat: show the dispute as it is now (it may have been decided since), never as a new open one.
@@ -87,7 +109,8 @@ export class DisputesService {
     if (!found) throw AppException.notFound('Dispute not found.');
     const d = found.dispute;
     const cell = {
-      guidelineId: d.guidelineId as string, guidelineVersion: d.guidelineVersion as string,
+      guidelineId: d.guidelineId as string,
+      guidelineVersion: d.guidelineVersion as string,
       guidelineContentSha256: d.guidelineContentSha256 as string,
       locator: { table: d.locatorTable as string, row: d.locatorRow as string, ...(d.locatorColumn === null ? {} : { column: d.locatorColumn as string }) },
       note: '',
@@ -102,8 +125,11 @@ export class DisputesService {
       entries.push({ evaluationId: record.id, reportId: record.reportId as string, createdAt: record.createdAt, state: state.state, matches });
     }
     return cellUsageDtoSchema.parse({
-      disputeId: id, entries, nextAfterSeq: candidates.length > query.limit ? page[page.length - 1]!.seq : null,
-      clinicalUse: CLINICAL_USE, actionable: false,
+      disputeId: id,
+      entries,
+      nextAfterSeq: candidates.length > query.limit ? page[page.length - 1]!.seq : null,
+      clinicalUse: CLINICAL_USE,
+      actionable: false,
     });
   }
 

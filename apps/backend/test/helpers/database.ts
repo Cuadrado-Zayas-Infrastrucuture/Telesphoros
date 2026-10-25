@@ -22,7 +22,17 @@ const AUDITOR_LOGIN = 'telesphoros_test_auditor';
 const WORKER_LOGIN = 'telesphoros_test_worker';
 // The session issuer (migration 0028): mints tenant capabilities and nothing else.
 const ISSUER_LOGIN = 'telesphoros_test_issuer';
-const PRIVILEGE_ROLES = ['telesphoros_ledger', 'telesphoros_redactor', 'telesphoros_ledger_verifier', 'telesphoros_ledger_operator', 'telesphoros_security_auditor', 'telesphoros_jobs', 'telesphoros_worker', 'telesphoros_capability', 'telesphoros_issuer'];
+const PRIVILEGE_ROLES = [
+  'telesphoros_ledger',
+  'telesphoros_redactor',
+  'telesphoros_ledger_verifier',
+  'telesphoros_ledger_operator',
+  'telesphoros_security_auditor',
+  'telesphoros_jobs',
+  'telesphoros_worker',
+  'telesphoros_capability',
+  'telesphoros_issuer',
+];
 const ROLE_LOCK = 4242;
 
 function withDatabase(url: string, database: string, credentials?: { user: string; password: string }): string {
@@ -88,14 +98,17 @@ async function buildEphemeralDatabase(options: { migrate?: boolean; signal?: Abo
   let created = false;
   const drop = onceFixtureCleanup(async () => {
     try {
-      if (created) await withAdmin(base, async client => {
-        await client.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
-      });
-    } finally { onDropped(); }
+      if (created)
+        await withAdmin(base, async (client) => {
+          await client.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+        });
+    } finally {
+      onDropped();
+    }
   });
   try {
     options.signal?.throwIfAborted();
-    await withAdmin(base, async admin => {
+    await withAdmin(base, async (admin) => {
       options.signal?.throwIfAborted();
       await admin.query('SELECT pg_advisory_lock($1)', [ROLE_LOCK]);
       await admin.query(`DO $$ BEGIN
@@ -107,9 +120,17 @@ async function buildEphemeralDatabase(options: { migrate?: boolean; signal?: Abo
         END IF;
       END $$`);
       for (const role of PRIVILEGE_ROLES) {
-        await admin.query(`DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${role}') THEN CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS; END IF; END $$`);
+        await admin.query(
+          `DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${role}') THEN CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS; END IF; END $$`,
+        );
       }
-      for (const [login, group] of [[VERIFIER_LOGIN, 'telesphoros_ledger_verifier'], [OPERATOR_LOGIN, 'telesphoros_ledger_operator'], [AUDITOR_LOGIN, 'telesphoros_security_auditor'], [WORKER_LOGIN, 'telesphoros_worker'], [ISSUER_LOGIN, 'telesphoros_issuer']] as const) {
+      for (const [login, group] of [
+        [VERIFIER_LOGIN, 'telesphoros_ledger_verifier'],
+        [OPERATOR_LOGIN, 'telesphoros_ledger_operator'],
+        [AUDITOR_LOGIN, 'telesphoros_security_auditor'],
+        [WORKER_LOGIN, 'telesphoros_worker'],
+        [ISSUER_LOGIN, 'telesphoros_issuer'],
+      ] as const) {
         await admin.query(`DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${login}') THEN
           CREATE ROLE ${login} LOGIN PASSWORD '${APP_LOGIN_PASSWORD}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS IN ROLE ${group}; END IF; END $$`);
       }
@@ -120,7 +141,7 @@ async function buildEphemeralDatabase(options: { migrate?: boolean; signal?: Abo
     options.signal?.throwIfAborted();
     const url = withDatabase(base, name);
     if (options.migrate !== false) {
-      await withAdmin(url, async migrator => {
+      await withAdmin(url, async (migrator) => {
         options.signal?.throwIfAborted();
         await migrateUp(migrator);
         options.signal?.throwIfAborted();

@@ -174,7 +174,8 @@ describe('migration lint: over a migrations directory', () => {
 describe('migration lint: a REVOKE that only undoes what the same migration created', () => {
   // `earlier` is the SQL of the migrations before this one. Without it the lint cannot know an object is new, so it exempts nothing.
   const newFunction = 'CREATE FUNCTION f_new(p text) RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;\n';
-  const newRole = "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'telesphoros_newrole') THEN\n  CREATE ROLE telesphoros_newrole NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;\nEND IF; END $$;\n";
+  const newRole =
+    "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'telesphoros_newrole') THEN\n  CREATE ROLE telesphoros_newrole NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;\nEND IF; END $$;\n";
   const lint = (sql: string, earlier = 'CREATE TABLE t (id int);\n') => lintMigration(V, expand(sql), { earlier });
 
   it('accepts revoking the default PUBLIC privilege on a function this migration creates', () => {
@@ -189,7 +190,11 @@ describe('migration lint: a REVOKE that only undoes what the same migration crea
 
   // Positive controls: the same shapes, each with the one fact that makes the REVOKE remove something older code may rely on.
   it.each([
-    ['the function already existed before this migration', `${newFunction}REVOKE ALL ON FUNCTION f_new(text) FROM PUBLIC;\n`, 'CREATE FUNCTION f_new(p text) RETURNS int LANGUAGE sql AS $$ SELECT 2 $$;\n'],
+    [
+      'the function already existed before this migration',
+      `${newFunction}REVOKE ALL ON FUNCTION f_new(text) FROM PUBLIC;\n`,
+      'CREATE FUNCTION f_new(p text) RETURNS int LANGUAGE sql AS $$ SELECT 2 $$;\n',
+    ],
     ['the function is not created in this migration', 'REVOKE ALL ON FUNCTION f_old(text) FROM PUBLIC;\n', undefined],
     ['the revoke is from a role, not PUBLIC', `${newFunction}REVOKE ALL ON FUNCTION f_new(text) FROM telesphoros_app;\n`, undefined],
     ['one object in the list is older', `${newFunction}REVOKE ALL ON FUNCTION f_new(text), f_old() FROM PUBLIC;\n`, undefined],
@@ -197,7 +202,11 @@ describe('migration lint: a REVOKE that only undoes what the same migration crea
     ['the grant comes after the revoke', `${newRole}REVOKE CREATE ON SCHEMA public FROM telesphoros_newrole;\nGRANT CREATE ON SCHEMA public TO telesphoros_newrole;\n`, undefined],
     ['a different privilege was granted', `${newRole}GRANT USAGE ON SCHEMA public TO telesphoros_newrole;\nREVOKE CREATE ON SCHEMA public FROM telesphoros_newrole;\n`, undefined],
     ['the role is not introduced by this migration', 'GRANT CREATE ON SCHEMA public TO telesphoros_app;\nREVOKE CREATE ON SCHEMA public FROM telesphoros_app;\n', undefined],
-    ['the role already appears in an earlier migration', `${newRole}GRANT CREATE ON SCHEMA public TO telesphoros_newrole;\nREVOKE CREATE ON SCHEMA public FROM telesphoros_newrole;\n`, 'GRANT SELECT ON t TO telesphoros_newrole;\n'],
+    [
+      'the role already appears in an earlier migration',
+      `${newRole}GRANT CREATE ON SCHEMA public TO telesphoros_newrole;\nREVOKE CREATE ON SCHEMA public FROM telesphoros_newrole;\n`,
+      'GRANT SELECT ON t TO telesphoros_newrole;\n',
+    ],
     ['a role membership', `${newRole}GRANT telesphoros_newrole TO telesphoros_app;\nREVOKE telesphoros_newrole FROM telesphoros_app;\n`, undefined],
   ])('still refuses it when %s', (_why, sql, earlier) => {
     const problems = lint(sql, earlier);
@@ -214,19 +223,37 @@ describe('migration lint: a REVOKE that only undoes what the same migration crea
     it('accepts it when the last earlier word on that privilege for that role was a REVOKE', () => {
       expect(lint(handedBack, earlierEndedRevoked)).toEqual([]);
       expect(lint(handedBack, `${earlierEndedRevoked}GRANT CREATE ON SCHEMA public TO telesphoros_other;\n`)).toEqual([]); // another role's grant is not this role's
-      expect(lint(handedBack, `GRANT CREATE ON SCHEMA public TO telesphoros_owner, telesphoros_other;\nREVOKE CREATE ON SCHEMA public FROM telesphoros_owner, telesphoros_other;\n`)).toEqual([]);
+      expect(
+        lint(handedBack, `GRANT CREATE ON SCHEMA public TO telesphoros_owner, telesphoros_other;\nREVOKE CREATE ON SCHEMA public FROM telesphoros_owner, telesphoros_other;\n`),
+      ).toEqual([]);
     });
 
     it.each([
       ['the earlier migrations left the role holding it (granted, never revoked)', handedBack, 'GRANT CREATE ON SCHEMA public TO telesphoros_owner;\n'],
       ['the earlier migrations granted it again after revoking it', handedBack, `${earlierEndedRevoked}GRANT CREATE ON SCHEMA public TO telesphoros_owner;\n`],
       ['the earlier migrations say nothing about the role', handedBack, 'CREATE TABLE o (id int);\n'],
-      ['the earlier REVOKE was of a different privilege', handedBack, 'GRANT CREATE ON SCHEMA public TO telesphoros_owner;\nREVOKE USAGE ON SCHEMA public FROM telesphoros_owner;\n'],
+      [
+        'the earlier REVOKE was of a different privilege',
+        handedBack,
+        'GRANT CREATE ON SCHEMA public TO telesphoros_owner;\nREVOKE USAGE ON SCHEMA public FROM telesphoros_owner;\n',
+      ],
       ['the earlier REVOKE was from a different role', handedBack, 'GRANT CREATE ON SCHEMA public TO telesphoros_owner;\nREVOKE CREATE ON SCHEMA public FROM telesphoros_other;\n'],
-      ['the earlier REVOKE was on a different schema', handedBack, 'GRANT CREATE ON SCHEMA public TO telesphoros_owner;\nREVOKE CREATE ON SCHEMA private FROM telesphoros_owner;\n'],
+      [
+        'the earlier REVOKE was on a different schema',
+        handedBack,
+        'GRANT CREATE ON SCHEMA public TO telesphoros_owner;\nREVOKE CREATE ON SCHEMA private FROM telesphoros_owner;\n',
+      ],
       ['this file revokes without having granted it first', 'CREATE TABLE y (id int);\nREVOKE CREATE ON SCHEMA public FROM telesphoros_owner;\n', earlierEndedRevoked],
-      ['this file grants a different privilege than it revokes', 'GRANT USAGE ON SCHEMA public TO telesphoros_owner;\nREVOKE CREATE ON SCHEMA public FROM telesphoros_owner;\n', earlierEndedRevoked],
-      ['this file revokes it from a second role it never granted it to', 'GRANT CREATE ON SCHEMA public TO telesphoros_owner;\nREVOKE CREATE ON SCHEMA public FROM telesphoros_owner, telesphoros_other;\n', earlierEndedRevoked],
+      [
+        'this file grants a different privilege than it revokes',
+        'GRANT USAGE ON SCHEMA public TO telesphoros_owner;\nREVOKE CREATE ON SCHEMA public FROM telesphoros_owner;\n',
+        earlierEndedRevoked,
+      ],
+      [
+        'this file revokes it from a second role it never granted it to',
+        'GRANT CREATE ON SCHEMA public TO telesphoros_owner;\nREVOKE CREATE ON SCHEMA public FROM telesphoros_owner, telesphoros_other;\n',
+        earlierEndedRevoked,
+      ],
     ])('still refuses it when %s', (_why, sql, earlier) => {
       const problems = lint(sql, earlier);
       expect(problems.join('\n')).toContain('REVOKE');
@@ -352,7 +379,14 @@ describe('migration lint: DDL on an existing table must set lock_timeout first',
   });
 
   it('needs none for a table the file creates, or when the file only creates functions and grants', () => {
-    expect(lintMigration(V, plainBreaking('CREATE TABLE fresh (a int);\nCREATE INDEX i ON fresh (a);\nALTER TABLE fresh ENABLE ROW LEVEL SECURITY;\nCREATE POLICY p ON fresh FOR SELECT TO r USING (true);\n'))).toEqual([]);
+    expect(
+      lintMigration(
+        V,
+        plainBreaking(
+          'CREATE TABLE fresh (a int);\nCREATE INDEX i ON fresh (a);\nALTER TABLE fresh ENABLE ROW LEVEL SECURITY;\nCREATE POLICY p ON fresh FOR SELECT TO r USING (true);\n',
+        ),
+      ),
+    ).toEqual([]);
     expect(lintMigration(V, plainExpand('CREATE FUNCTION f() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;\nGRANT EXECUTE ON FUNCTION f() TO r;\n'))).toEqual([]);
   });
 
@@ -376,7 +410,7 @@ describe('migration lint: DDL on an existing table must set lock_timeout first',
 
   it('does not see DDL that is run from inside a function body or a DO block (a stated limit, so the next test is its control)', () => {
     expect(lintMigration(V, plainBreaking("DO $$ BEGIN EXECUTE 'CREATE INDEX i ON t (a)'; END $$;\n"))).toEqual([]);
-    expect(lintMigration(V, plainBreaking("DO $$ BEGIN CREATE INDEX i ON t (a); END $$;\n"))).toEqual([]);
+    expect(lintMigration(V, plainBreaking('DO $$ BEGIN CREATE INDEX i ON t (a); END $$;\n'))).toEqual([]);
   });
 });
 
@@ -384,7 +418,10 @@ describe('migration lint: migrations that predate the rules, by number', () => {
   const real = loadMigrations();
   const ungrandfathered = (version: string) => {
     const m = real.find((x) => x.version === version)!;
-    const earlier = real.filter((x) => x.version < version).map((x) => x.upSql).join('\n');
+    const earlier = real
+      .filter((x) => x.version < version)
+      .map((x) => x.upSql)
+      .join('\n');
     return lintMigration(version, m.upSql, { earlier, grandfathered: {} });
   };
 

@@ -26,7 +26,11 @@ class StubPort extends CapabilityIssuerPort {
   }
 }
 
-interface Reply { status: number; headers: Record<string, string | string[] | undefined>; body: string }
+interface Reply {
+  status: number;
+  headers: Record<string, string | string[] | undefined>;
+  body: string;
+}
 let servers: Server[] = [];
 const lines: string[] = [];
 
@@ -39,11 +43,14 @@ async function start(port: CapabilityIssuerPort, limits?: Parameters<typeof crea
 
 function send(port: number, options: { method?: string; path?: string; headers?: Record<string, string>; body?: string | Buffer; chunks?: Buffer[] }): Promise<Reply> {
   return new Promise((resolve, reject) => {
-    const req = httpRequest({ host: '127.0.0.1', port, method: options.method ?? 'POST', path: options.path ?? '/v1/capabilities', headers: options.headers, agent: false }, (res) => {
-      const parts: Buffer[] = [];
-      res.on('data', (c: Buffer) => parts.push(c));
-      res.on('end', () => resolve({ status: res.statusCode!, headers: res.headers, body: Buffer.concat(parts).toString('utf8') }));
-    });
+    const req = httpRequest(
+      { host: '127.0.0.1', port, method: options.method ?? 'POST', path: options.path ?? '/v1/capabilities', headers: options.headers, agent: false },
+      (res) => {
+        const parts: Buffer[] = [];
+        res.on('data', (c: Buffer) => parts.push(c));
+        res.on('end', () => resolve({ status: res.statusCode!, headers: res.headers, body: Buffer.concat(parts).toString('utf8') }));
+      },
+    );
     req.on('error', reject);
     if (options.chunks) for (const chunk of options.chunks) req.write(chunk);
     else if (options.body !== undefined) req.write(options.body);
@@ -59,7 +66,15 @@ beforeEach(() => {
   Logger.overrideLogger(new IssuerLogger((line) => lines.push(line)));
 });
 afterEach(async () => {
-  await Promise.all(servers.map((s) => new Promise<void>((resolve) => { s.closeAllConnections(); s.close(() => resolve()); })));
+  await Promise.all(
+    servers.map(
+      (s) =>
+        new Promise<void>((resolve) => {
+          s.closeAllConnections();
+          s.close(() => resolve());
+        }),
+    ),
+  );
   servers = [];
 });
 afterAll(() => Logger.overrideLogger(['log', 'error', 'warn']));
@@ -94,17 +109,32 @@ describe('POST /v1/capabilities: the positive control', () => {
     expect((await post(p, atCap)).status).toBe(200); // whitespace is padding: still exactly the three fields, so it is accepted
     const over = body(MAX_BODY_BYTES + 1);
     expect((await post(p, over)).status).toBe(413);
-    expect((await send(p, { headers: { 'content-type': 'application/json', 'transfer-encoding': 'chunked' }, chunks: [Buffer.from(over.slice(0, 4096)), Buffer.from(over.slice(4096))] }).catch(() => ({ status: 413 }))).status).toBe(413);
+    expect(
+      (
+        await send(p, {
+          headers: { 'content-type': 'application/json', 'transfer-encoding': 'chunked' },
+          chunks: [Buffer.from(over.slice(0, 4096)), Buffer.from(over.slice(4096))],
+        }).catch(() => ({ status: 413 }))
+      ).status,
+    ).toBe(413);
     expect(port.calls).toHaveLength(1);
   });
 });
 
 describe('the closed table from failure reasons to status codes', () => {
-  const table: [CapabilityIssueFailure, number][] = [['invalid-token', 401], ['no-tenant', 403], ['invalid-request', 400], ['refused', 403], ['unavailable', 503]];
+  const table: [CapabilityIssueFailure, number][] = [
+    ['invalid-token', 401],
+    ['no-tenant', 403],
+    ['invalid-request', 400],
+    ['refused', 403],
+    ['unavailable', 503],
+  ];
   for (const [reason, status] of table) {
     it(`${reason} is ${status}, and the body holds the reason and nothing else`, async () => {
       const port = new StubPort();
-      port.behave = async () => { throw new CapabilityIssueError(reason); };
+      port.behave = async () => {
+        throw new CapabilityIssueError(reason);
+      };
       const { port: p } = await start(port);
       const reply = await post(p, validBody);
       expect(reply.status).toBe(status);
@@ -113,15 +143,19 @@ describe('the closed table from failure reasons to status codes', () => {
     });
   }
 
-  it('a refusal carries the database\'s closed code as detail, and only a closed code', async () => {
+  it("a refusal carries the database's closed code as detail, and only a closed code", async () => {
     const port = new StubPort();
     const { port: p } = await start(port);
-    port.behave = async () => { throw new CapabilityIssueError('refused', 'rate-limited'); };
+    port.behave = async () => {
+      throw new CapabilityIssueError('refused', 'rate-limited');
+    };
     const ok = await post(p, validBody);
     expect(ok.status).toBe(403);
     expect(json(ok)).toEqual({ error: 'refused', detail: 'rate-limited' });
     for (const detail of ['membership not current for 10.0.0.5', 'password=hunter2', 'A'.repeat(200), '', 'Upper_Case']) {
-      port.behave = async () => { throw new CapabilityIssueError('refused', detail); };
+      port.behave = async () => {
+        throw new CapabilityIssueError('refused', detail);
+      };
       const reply = await post(p, validBody);
       expect(reply.status).toBe(403);
       expect(json(reply)).toEqual({ error: 'refused' });
@@ -131,7 +165,9 @@ describe('the closed table from failure reasons to status codes', () => {
 
   it('anything else the port throws is a 503 "unavailable" and its message reaches neither the caller nor the log', async () => {
     const port = new StubPort();
-    port.behave = async () => { throw new Error('connect ECONNREFUSED 10.9.8.7:5432 password=sentinel-db-secret'); };
+    port.behave = async () => {
+      throw new Error('connect ECONNREFUSED 10.9.8.7:5432 password=sentinel-db-secret');
+    };
     const { port: p } = await start(port);
     const reply = await post(p, validBody);
     expect(reply.status).toBe(503);
@@ -185,7 +221,13 @@ describe('what is refused before the port is asked', () => {
   it('only application/json: 415, port not called', async () => {
     const port = new StubPort();
     const { port: p } = await start(port);
-    const wrong: Record<string, string>[] = [{ 'content-type': 'text/plain' }, {}, { 'content-type': 'application/jsonx' }, { 'content-type': 'application/x-www-form-urlencoded' }, { 'content-type': 'multipart/form-data; boundary=x' }];
+    const wrong: Record<string, string>[] = [
+      { 'content-type': 'text/plain' },
+      {},
+      { 'content-type': 'application/jsonx' },
+      { 'content-type': 'application/x-www-form-urlencoded' },
+      { 'content-type': 'multipart/form-data; boundary=x' },
+    ];
     for (const headers of wrong) {
       const reply = await post(p, validBody, headers);
       expect(reply.status).toBe(415);
@@ -203,7 +245,10 @@ describe('what is refused before the port is asked', () => {
     const counted = await post(p, big);
     expect(counted.status).toBe(413);
     expect(json(counted)).toEqual({ error: 'payload-too-large' });
-    const chunked = await send(p, { headers: { 'content-type': 'application/json', 'transfer-encoding': 'chunked' }, chunks: [Buffer.alloc(4096, 0x61), Buffer.alloc(4096, 0x61), Buffer.alloc(16, 0x61)] }).catch(() => ({ status: 413 }));
+    const chunked = await send(p, {
+      headers: { 'content-type': 'application/json', 'transfer-encoding': 'chunked' },
+      chunks: [Buffer.alloc(4096, 0x61), Buffer.alloc(4096, 0x61), Buffer.alloc(16, 0x61)],
+    }).catch(() => ({ status: 413 }));
     expect(chunked.status).toBe(413);
     expect(port.calls).toHaveLength(0);
     expect((await post(p, validBody)).status).toBe(200);
@@ -217,8 +262,28 @@ describe('routing: everything else is 404', () => {
     const live = await send(p, { method: 'GET', path: '/livez' });
     expect(live.status).toBe(200);
     expect(json(live)).toEqual({ status: 'ok' });
-    for (const [method, path] of [['POST', '/livez'], ['GET', '/v1/capabilities'], ['PUT', '/v1/capabilities'], ['DELETE', '/v1/capabilities'], ['POST', '/v1/capabilities?x=1'], ['POST', '/v1/capabilities/'], ['POST', '/v1/capabilities/extra'], ['POST', '/'], ['GET', '/'], ['GET', '/readyz'], ['GET', '/livez?x=1'], ['HEAD', '/livez'], ['OPTIONS', '/v1/capabilities'], ['POST', '/V1/CAPABILITIES']] as const) {
-      const reply = await send(p, { method, path, headers: { 'content-type': 'application/json' }, ...(method === 'POST' || method === 'PUT' ? { body: JSON.stringify(validBody) } : {}) });
+    for (const [method, path] of [
+      ['POST', '/livez'],
+      ['GET', '/v1/capabilities'],
+      ['PUT', '/v1/capabilities'],
+      ['DELETE', '/v1/capabilities'],
+      ['POST', '/v1/capabilities?x=1'],
+      ['POST', '/v1/capabilities/'],
+      ['POST', '/v1/capabilities/extra'],
+      ['POST', '/'],
+      ['GET', '/'],
+      ['GET', '/readyz'],
+      ['GET', '/livez?x=1'],
+      ['HEAD', '/livez'],
+      ['OPTIONS', '/v1/capabilities'],
+      ['POST', '/V1/CAPABILITIES'],
+    ] as const) {
+      const reply = await send(p, {
+        method,
+        path,
+        headers: { 'content-type': 'application/json' },
+        ...(method === 'POST' || method === 'PUT' ? { body: JSON.stringify(validBody) } : {}),
+      });
       expect([method, path, reply.status]).toEqual([method, path, 404]);
     }
     expect(port.calls).toHaveLength(0);
@@ -237,7 +302,10 @@ describe('time limits, connection limits and the drain', () => {
         socket.on('close', () => resolve(Date.now() - started));
         socket.on('error', () => undefined);
         socket.resume(); // read what the server sends, or the close is never seen
-        setTimeout(() => { socket.destroy(); reject(new Error('the server kept a slow connection open')); }, 5000).unref();
+        setTimeout(() => {
+          socket.destroy();
+          reject(new Error('the server kept a slow connection open'));
+        }, 5000).unref();
       });
     expect(await closed('POST /v1/capabilities HTTP/1.1\r\nHost: x\r\n')).toBeLessThan(4000); // headers never finish
     expect(await closed('POST /v1/capabilities HTTP/1.1\r\nHost: x\r\ncontent-type: application/json\r\ncontent-length: 100\r\n\r\n{"acc')).toBeLessThan(4000); // body never finishes
@@ -257,7 +325,10 @@ describe('time limits, connection limits and the drain', () => {
   it('drains: a request in flight finishes, new connections are refused, and the drain then ends', async () => {
     const port = new StubPort();
     let release!: () => void;
-    port.behave = () => new Promise((resolve) => { release = () => resolve({ token: TOKEN, expiresAt: EXPIRES, membershipVersion: 7 }); });
+    port.behave = () =>
+      new Promise((resolve) => {
+        release = () => resolve({ token: TOKEN, expiresAt: EXPIRES, membershipVersion: 7 });
+      });
     const { server, port: p } = await start(port);
     const inFlight = post(p, validBody);
     while (port.calls.length === 0) await new Promise((r) => setTimeout(r, 10));
@@ -265,7 +336,9 @@ describe('time limits, connection limits and the drain', () => {
     await new Promise((r) => setTimeout(r, 50));
     await expect(send(p, { method: 'GET', path: '/livez' })).rejects.toThrow(); // new connection: refused
     let finished = false;
-    void draining.then(() => { finished = true; });
+    void draining.then(() => {
+      finished = true;
+    });
     await new Promise((r) => setTimeout(r, 100));
     expect(finished).toBe(false); // it waits for the request in flight
     release();
@@ -278,7 +351,10 @@ describe('time limits, connection limits and the drain', () => {
     const port = new StubPort();
     port.behave = () => new Promise(() => undefined); // never answers
     const { server, port: p } = await start(port);
-    const stuck = post(p, validBody).then(() => 'answered', () => 'cut');
+    const stuck = post(p, validBody).then(
+      () => 'answered',
+      () => 'cut',
+    );
     while (port.calls.length === 0) await new Promise((r) => setTimeout(r, 10));
     const started = Date.now();
     await drainServer(server, 300);
@@ -298,7 +374,9 @@ describe('with the real core: what reaches the log, and what reaches the caller'
       return this.outcome;
     }
   }
-  beforeAll(async () => { idp = await startFakeIdp({ clientId: 'app-client' }); });
+  beforeAll(async () => {
+    idp = await startFakeIdp({ clientId: 'app-client' });
+  });
   afterAll(() => idp.stop());
   const alice = () => idp.users.find((u) => u.email.startsWith('alice'))!;
   const real = (store: Store) => new IssuerCore(new CognitoTokenVerifier({ issuer: idp.issuer, clientId: 'app-client', cooldownMs: 0 }), store);
@@ -350,7 +428,7 @@ describe('with the real core: what reaches the log, and what reaches the caller'
     expect(lines.filter((l) => l.includes('Capability not issued'))).toHaveLength(1);
   });
 
-  it('the unavailable phrase the alarm matches reaches the log exactly once, with the database\'s message nowhere', async () => {
+  it("the unavailable phrase the alarm matches reaches the log exactly once, with the database's message nowhere", async () => {
     const store = new Store();
     store.outcome = new Error('password authentication failed for user "telesphoros_session_issuer" at 10.4.4.4 sentinel-pw');
     const { port: p } = await start(real(store));
@@ -365,7 +443,7 @@ describe('with the real core: what reaches the log, and what reaches the caller'
     expect(log()).not.toContain(access);
   });
 
-  it('the server\'s own refusals never use the alarm phrase', async () => {
+  it("the server's own refusals never use the alarm phrase", async () => {
     const { port: p } = await start(real(new Store()));
     await post(p, '{"accessToken":');
     await post(p, validBody, { 'content-type': 'text/plain' });

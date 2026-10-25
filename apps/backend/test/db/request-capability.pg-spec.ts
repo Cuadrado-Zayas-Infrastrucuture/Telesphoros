@@ -30,7 +30,8 @@ class CapabilityProbe {
   async who(@Req() req: Request): Promise<Seen> {
     const db = holder.database!;
     const tenantId = req.principal!.tenantId;
-    const look = (c: { query: (sql: string) => Promise<{ rows: Array<Record<string, string | null>> }> }) => c.query(`SELECT current_setting('app.capability', true) AS cap, app_tenant() AS tenant`);
+    const look = (c: { query: (sql: string) => Promise<{ rows: Array<Record<string, string | null>> }> }) =>
+      c.query(`SELECT current_setting('app.capability', true) AS cap, app_tenant() AS tenant`);
     const probe = async () =>
       db.withTenant(tenantId, async (c) => {
         const first = (await look(c)).rows[0]!;
@@ -47,7 +48,11 @@ class CapabilityProbe {
   /** A write inside the request: the commit-time check compares the authority the guard bound with the membership row. */
   @Get('write')
   async write(@Req() req: Request): Promise<{ ok: true }> {
-    await holder.database!.withTenant(req.principal!.tenantId, (c) => c.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ($1, $2, $3)`, [req.principal!.tenantId, req.principal!.sub, `SYN-ORDER-${req.id}`]), { actor: req.principal!.sub });
+    await holder.database!.withTenant(
+      req.principal!.tenantId,
+      (c) => c.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ($1, $2, $3)`, [req.principal!.tenantId, req.principal!.sub, `SYN-ORDER-${req.id}`]),
+      { actor: req.principal!.sub },
+    );
     return { ok: true };
   }
 
@@ -82,7 +87,8 @@ const apps: NestExpressApplication[] = [];
 const stores: PgCapabilityIssueStore[] = [];
 const verifier = () => new CognitoTokenVerifier({ issuer: idp.issuer, clientId: 'app-client', cooldownMs: 0 });
 const alice = () => idp.users.find((u) => u.email.startsWith('alice'))!;
-const issuedFor = (requestId: string) => withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT outcome, reason, tenant_id, sub FROM capability_issuance_log WHERE request_id = $1`, [requestId])).rows);
+const issuedFor = (requestId: string) =>
+  withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT outcome, reason, tenant_id, sub FROM capability_issuance_log WHERE request_id = $1`, [requestId])).rows);
 
 async function app(issuer?: CapabilityIssuerPort, extra: { membershipFromTokens?: boolean } = {}) {
   const created = await createTestApp({
@@ -98,7 +104,11 @@ async function app(issuer?: CapabilityIssuerPort, extra: { membershipFromTokens?
   return created;
 }
 const who = async (a: NestExpressApplication, requestId: string) => {
-  const res = await request(a.getHttpServer()).get('/api/v1/probe-capability/who').set(bearer(await idp.mintAccessToken({ user: alice() }))).set('X-Request-Id', requestId).expect(200);
+  const res = await request(a.getHttpServer())
+    .get('/api/v1/probe-capability/who')
+    .set(bearer(await idp.mintAccessToken({ user: alice() })))
+    .set('X-Request-Id', requestId)
+    .expect(200);
   return res.body as Seen;
 };
 
@@ -135,7 +145,7 @@ describe('with an issuer: one capability per request', () => {
     expect(after.missing - before.missing).toBe(0); // nothing is exempt from the count
   });
 
-  it('a second request is a second issuance, not a reuse of the first one\'s capability', async () => {
+  it("a second request is a second issuance, not a reuse of the first one's capability", async () => {
     const counting = new Counting(new IssuerCore(verifier(), store));
     const a = await app(counting);
     const first = await who(a, 'req-cap-e2e-0002');
@@ -156,7 +166,10 @@ describe('with an issuer: one capability per request', () => {
   it('a refused token never reaches the issuer', async () => {
     const counting = new Counting(new IssuerCore(verifier(), store));
     const a = await app(counting);
-    await request(a.getHttpServer()).get('/api/v1/probe-capability/who').set(bearer(await idp.mintAccessToken({ user: alice(), signWith: 'foreign' }))).expect(401);
+    await request(a.getHttpServer())
+      .get('/api/v1/probe-capability/who')
+      .set(bearer(await idp.mintAccessToken({ user: alice(), signWith: 'foreign' })))
+      .expect(401);
     expect(counting.calls).toBe(0);
   });
 });
@@ -257,12 +270,14 @@ describe('the capability comes before the membership lookup', () => {
   it('the guard never sends a membership version: the issuer is asked for the token and the request id only', async () => {
     const asked: CapabilityIssueRequest[] = [];
     const inner = new IssuerCore(verifier(), store);
-    const a = await app(new (class extends CapabilityIssuerPort {
-      issue(r: CapabilityIssueRequest) {
-        asked.push(r);
-        return inner.issue(r);
-      }
-    })());
+    const a = await app(
+      new (class extends CapabilityIssuerPort {
+        issue(r: CapabilityIssueRequest) {
+          asked.push(r);
+          return inner.issue(r);
+        }
+      })(),
+    );
     await who(a, 'req-cap-order-03');
     expect(asked).toHaveLength(1);
     expect(Object.keys(asked[0]!).sort()).toEqual(['accessToken', 'requestId']);
@@ -274,13 +289,23 @@ describe('the capability comes before the membership lookup', () => {
  * is refused at commit (403, and an `authority-changed` event, written under the request's still-valid capability); a read is allowed, as it always was.
  */
 describe('the membership moves between the issuance and the lookup', () => {
-  const bump = () => withAdmin(pg.adminUrl, (c) => c.query(`UPDATE tenant_memberships SET roles = ARRAY['clinician', 'reader'], changed_by = 'test-move' WHERE sub = $1 AND tenant_id = 'alpha'`, [alice().sub]));
-  const patientsLabelled = (label: string) => withAdmin(pg.adminUrl, async (c) => (await c.query('SELECT count(*)::int AS n FROM patients WHERE label = $1', [label])).rows[0].n as number);
+  const bump = () =>
+    withAdmin(pg.adminUrl, (c) =>
+      c.query(`UPDATE tenant_memberships SET roles = ARRAY['clinician', 'reader'], changed_by = 'test-move' WHERE sub = $1 AND tenant_id = 'alpha'`, [alice().sub]),
+    );
+  const patientsLabelled = (label: string) =>
+    withAdmin(pg.adminUrl, async (c) => (await c.query('SELECT count(*)::int AS n FROM patients WHERE label = $1', [label])).rows[0].n as number);
   const get = async (a: NestExpressApplication, route: string, requestId: string) =>
-    request(a.getHttpServer()).get(`/api/v1/probe-capability/${route}`).set(bearer(await idp.mintAccessToken({ user: alice() }))).set('X-Request-Id', requestId);
+    request(a.getHttpServer())
+      .get(`/api/v1/probe-capability/${route}`)
+      .set(bearer(await idp.mintAccessToken({ user: alice() })))
+      .set('X-Request-Id', requestId);
 
   class Moving extends CapabilityIssuerPort {
-    constructor(private readonly inner: CapabilityIssuerPort, private readonly move: boolean) {
+    constructor(
+      private readonly inner: CapabilityIssuerPort,
+      private readonly move: boolean,
+    ) {
       super();
     }
     async issue(r: CapabilityIssueRequest): Promise<IssuedCapability | undefined> {
@@ -290,16 +315,24 @@ describe('the membership moves between the issuance and the lookup', () => {
     }
   }
 
-  it('no move (control): the write commits, and the capability\'s version is the one the row has', async () => {
+  it("no move (control): the write commits, and the capability's version is the one the row has", async () => {
     const a = await app(new Moving(new IssuerCore(verifier(), store), false));
     const reply = await get(a, 'write', 'req-cap-move-01');
     expect(reply.status).toBe(200);
     expect(await patientsLabelled('SYN-ORDER-req-cap-move-01')).toBe(1);
-    const [row] = await withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT c.membership_version AS v, m.version AS current FROM tenant_capabilities c JOIN tenant_memberships m ON m.sub = c.sub AND m.tenant_id = c.tenant_id WHERE c.request_id = 'req-cap-move-01'`)).rows);
+    const [row] = await withAdmin(
+      pg.adminUrl,
+      async (c) =>
+        (
+          await c.query(
+            `SELECT c.membership_version AS v, m.version AS current FROM tenant_capabilities c JOIN tenant_memberships m ON m.sub = c.sub AND m.tenant_id = c.tenant_id WHERE c.request_id = 'req-cap-move-01'`,
+          )
+        ).rows,
+    );
     expect(row.v).toBe(row.current);
   });
 
-  it('a move after the issuance: the write is refused at commit with 403 and leaves no row; the same request\'s read is allowed', async () => {
+  it("a move after the issuance: the write is refused at commit with 403 and leaves no row; the same request's read is allowed", async () => {
     const a = await app(new Moving(new IssuerCore(verifier(), store), true));
     const write = await get(a, 'write', 'req-cap-move-02');
     expect(write.status).toBe(403);
@@ -318,20 +351,37 @@ describe('the membership moves between the issuance and the lookup', () => {
  */
 describe('refusal records (decision D1=(i))', () => {
   const sub = (name: string) => idp.users.find((u) => u.email.startsWith(name))!.sub;
-  const refusals = async (a: NestExpressApplication, person: string) => (await securityEventsOf(a)).filter((e) => e.eventType === 'access.refused' && e.subjectRef === person).map((e) => e.details.reason);
-  const logRowsFor = (person: string) => withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT outcome, reason FROM capability_issuance_log WHERE sub = $1 ORDER BY seq`, [person])).rows);
+  const refusals = async (a: NestExpressApplication, person: string) =>
+    (await securityEventsOf(a)).filter((e) => e.eventType === 'access.refused' && e.subjectRef === person).map((e) => e.details.reason);
+  const logRowsFor = (person: string) =>
+    withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT outcome, reason FROM capability_issuance_log WHERE sub = $1 ORDER BY seq`, [person])).rows);
   const status = async (a: NestExpressApplication, name: string, requestId: string) =>
-    (await request(a.getHttpServer()).get('/api/v1/probe-capability/read').set(bearer(await idp.mintAccessToken({ user: idp.users.find((u) => u.email.startsWith(name))! }))).set('X-Request-Id', requestId)).status;
+    (
+      await request(a.getHttpServer())
+        .get('/api/v1/probe-capability/read')
+        .set(bearer(await idp.mintAccessToken({ user: idp.users.find((u) => u.email.startsWith(name))! })))
+        .set('X-Request-Id', requestId)
+    ).status;
 
   beforeAll(async () => {
     await withAdmin(pg.adminUrl, async (c) => {
       for (const t of ['alpha', 'beta']) await registerTenantRow(c, t);
       // carol: removed. dave: active, but his tokens are revoked. alice may exist from the mirror in earlier tests.
       // One removed person per test below: the database throttles a refusal event to one a minute per person and reason, so a shared person would let one test's event satisfy another's.
-      for (const name of ['carol', 'gina', 'hal']) await c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ('alpha', $1, 'removed', ARRAY['reader'], 'test') ON CONFLICT (tenant_id, sub) DO NOTHING`, [sub(name)]);
-      await c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ('beta', $1, 'active', ARRAY['reader'], 'test') ON CONFLICT (tenant_id, sub) DO NOTHING`, [sub('dave')]);
+      for (const name of ['carol', 'gina', 'hal'])
+        await c.query(
+          `INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ('alpha', $1, 'removed', ARRAY['reader'], 'test') ON CONFLICT (tenant_id, sub) DO NOTHING`,
+          [sub(name)],
+        );
+      await c.query(
+        `INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ('beta', $1, 'active', ARRAY['reader'], 'test') ON CONFLICT (tenant_id, sub) DO NOTHING`,
+        [sub('dave')],
+      );
       await c.query(`UPDATE tenant_memberships SET tokens_valid_after = now() + interval '1 hour' WHERE sub = $1`, [sub('dave')]);
-      await c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ('alpha', $1, 'active', ARRAY['reader'], 'test') ON CONFLICT (tenant_id, sub) DO UPDATE SET status = 'active'`, [sub('alice')]);
+      await c.query(
+        `INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ('alpha', $1, 'active', ARRAY['reader'], 'test') ON CONFLICT (tenant_id, sub) DO UPDATE SET status = 'active'`,
+        [sub('alice')],
+      );
     });
   });
 

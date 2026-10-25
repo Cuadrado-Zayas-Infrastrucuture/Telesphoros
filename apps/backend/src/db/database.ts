@@ -82,7 +82,7 @@ export class Database {
     if (!tenantId || tenantId.length > MAX_TENANT_ID_LENGTH) throw new Error('Invalid tenant id');
     const { actor } = options;
     if (actor !== undefined && (!actor || actor.length > MAX_ACTOR_LENGTH || CONTROL_CHARACTERS.test(actor))) throw new Error('Invalid actor');
-    const client = await this.pool.connect().catch(error => {
+    const client = await this.pool.connect().catch((error) => {
       if (currentRequestAuthority()?.session) throw AppException.unavailable('Access checks are unavailable.');
       // Pool full past the 2 s limit, or the database not answering: busy, not a fault in the request. The driver's message can carry the host.
       this.logger.warn({ event: 'database-connection-unavailable', code: (error as { code?: unknown })?.code }, 'No database connection could be had.');
@@ -162,7 +162,13 @@ export class Database {
   /** The app role has EXECUTE on this writer, but no table privileges. */
   async recordSecurityEvent(event: SecurityAuditEvent): Promise<void> {
     await this.pool.query('SELECT public.security_audit_record($1,$2,$3,$4,$5,$6,$7)', [
-      event.type, event.outcome, event.tenantId, event.actorSub, event.routeKey, event.subjectId, event.requestId,
+      event.type,
+      event.outcome,
+      event.tenantId,
+      event.actorSub,
+      event.routeKey,
+      event.subjectId,
+      event.requestId,
     ]);
   }
 

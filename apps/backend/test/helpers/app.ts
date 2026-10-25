@@ -95,13 +95,15 @@ async function createBucket(runId?: string) {
   process.env.AWS_ACCESS_KEY_ID ??= 'test';
   process.env.AWS_SECRET_ACCESS_KEY ??= 'test';
   const bucket = runId ? `synthetic-storage-${runId}` : `reports-test-${randomBytes(6).toString('hex')}`;
-  const client = new S3Client({ region: 'us-east-1', endpoint, forcePathStyle: true, credentials: {accessKeyId:'local-test',secretAccessKey:'local-test'} });
+  const client = new S3Client({ region: 'us-east-1', endpoint, forcePathStyle: true, credentials: { accessKeyId: 'local-test', secretAccessKey: 'local-test' } });
   try {
     await client.send(new CreateBucketCommand({ Bucket: bucket }));
     // Like the Terraform reports bucket: versioning on, so an uploaded file can be pinned to the exact version that was verified.
     await client.send(new PutBucketVersioningCommand({ Bucket: bucket, VersioningConfiguration: { Status: 'Enabled' } }));
     return { bucket, endpoint };
-  } finally { client.destroy(); }
+  } finally {
+    client.destroy();
+  }
 }
 
 /**
@@ -142,19 +144,31 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
   const dispose = onceFixtureCleanup(async () => {
     try {
       await disposeFixtures([
-        async () => { if (closeApplication) await closeApplication(); else await moduleRef?.close(); },
-        async () => { await realIssuer?.stop(); },
-        async () => { await adminPool?.end(); },
-        async () => { await database?.drop(); },
+        async () => {
+          if (closeApplication) await closeApplication();
+          else await moduleRef?.close();
+        },
+        async () => {
+          await realIssuer?.stop();
+        },
+        async () => {
+          await adminPool?.end();
+        },
+        async () => {
+          await database?.drop();
+        },
       ]);
-    } finally { onClosed(); }
+    } finally {
+      onClosed();
+    }
   });
   try {
     options.signal?.throwIfAborted();
     database = usingPostgres() && !options.postgresUrl ? await createEphemeralDatabase({ signal: options.signal }) : undefined;
     options.signal?.throwIfAborted();
     // Asked for but impossible here (memory tier, or a spec that brings its own URL): fail loudly rather than run on the null issuer unnoticed.
-    if (process.env.TEST_REAL_ISSUER === '1' && !database) throw new Error('TEST_REAL_ISSUER=1 needs this app on the ephemeral PostgreSQL tier; refusing to run on the null issuer.');
+    if (process.env.TEST_REAL_ISSUER === '1' && !database)
+      throw new Error('TEST_REAL_ISSUER=1 needs this app on the ephemeral PostgreSQL tier; refusing to run on the null issuer.');
     realIssuer = database && process.env.TEST_REAL_ISSUER === '1' ? await startRealIssuer(database) : undefined;
     options.signal?.throwIfAborted();
     const runId = options.labReportPipeline || options.recoveryStorage || options.organizationIntake ? undefined : randomUUID();
@@ -162,7 +176,7 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
     const env = loadEnv({
       NODE_ENV: 'test',
       LOG_LEVEL: 'silent',
-      ...(runId ? {LOCAL_STORAGE_RUN_ID:runId} : {}),
+      ...(runId ? { LOCAL_STORAGE_RUN_ID: runId } : {}),
       JWT_SECRET: TEST_SECRET,
       JWT_ISSUER: TEST_ISSUER,
       JWT_AUDIENCE: TEST_AUDIENCE,
@@ -171,7 +185,12 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
       ...(realIssuer ? { ISSUER_URL: realIssuer.url } : {}),
       ...(options.labReportPipeline ? { LAB_REPORT_PIPELINE: 'enabled' } : {}),
       ...(options.labReportPipeline
-        ? { LAB_REPORT_FIXTURES_DIR: options.fixturesDir ?? FIXTURES, KNOWLEDGE_DIR: options.knowledgeDir ?? TEST_KNOWLEDGE, BUILD_VERSION: options.buildVersion ?? 'test-build-1', ...(options.maxConcurrentReads ? { LAB_REPORT_MAX_CONCURRENT_READS: String(options.maxConcurrentReads) } : {}) }
+        ? {
+            LAB_REPORT_FIXTURES_DIR: options.fixturesDir ?? FIXTURES,
+            KNOWLEDGE_DIR: options.knowledgeDir ?? TEST_KNOWLEDGE,
+            BUILD_VERSION: options.buildVersion ?? 'test-build-1',
+            ...(options.maxConcurrentReads ? { LAB_REPORT_MAX_CONCURRENT_READS: String(options.maxConcurrentReads) } : {}),
+          }
         : {}),
       ...(options.labReportPipeline || options.ledgerWatch
         ? { LEDGER_VERIFIER_DATABASE_URL: options.verifierUrl ?? (database ? database.verifierUrl : verifierUrlFor(options.postgresUrl!)), ...options.ledgerSettings }
@@ -188,7 +207,8 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
 
     options.signal?.throwIfAborted();
     const mirror = options.membershipFromTokens ?? true;
-    adminPool = usingPostgres() || options.postgresUrl ? new Pool({ connectionString: database?.adminUrl ?? options.ownerUrl ?? ownerUrlFor(options.postgresUrl!), max: 2 }) : undefined;
+    adminPool =
+      usingPostgres() || options.postgresUrl ? new Pool({ connectionString: database?.adminUrl ?? options.ownerUrl ?? ownerUrlFor(options.postgresUrl!), max: 2 }) : undefined;
     // Idle connections die when a test drops its database on purpose; that must not become an unhandled 'error' event.
     adminPool?.on('error', () => undefined);
     let builder = Test.createTestingModule({
@@ -206,7 +226,8 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
     });
     const overrides = [...(options.overrides ?? [])];
     // Without the imported reader engine the pipeline reads reports with the test stand-in, unless the spec supplies its own reader.
-    if (options.labReportPipeline && !readerEnginePresent() && !overrides.some((o) => o.provide === LAB_READER)) overrides.push({ provide: LAB_READER, useValue: new StandInReportReader() });
+    if (options.labReportPipeline && !readerEnginePresent() && !overrides.some((o) => o.provide === LAB_READER))
+      overrides.push({ provide: LAB_READER, useValue: new StandInReportReader() });
     for (const override of overrides) builder = builder.overrideProvider(override.provide).useValue(override.useValue);
     moduleRef = await builder.compile();
     options.signal?.throwIfAborted();
@@ -226,13 +247,31 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
     readers.set(
       app,
       adminPool
-        ? async () => (await readyPool!.query(`SELECT tenant_id, event_type, outcome, actor_ref, subject_kind, subject_ref, request_id, details FROM security_events ORDER BY seq`)).rows
-            .map((r) => ({ tenantId: r.tenant_id, eventType: r.event_type, outcome: r.outcome, actorRef: r.actor_ref, subjectKind: r.subject_kind, subjectRef: r.subject_ref, requestId: r.request_id ?? undefined, details: r.details }) as SeenSecurityEvent)
-        : async () => (readyApp.get(SecurityEvents as never) as InMemorySecurityEvents).events.map((e) => Object.fromEntries(Object.entries(e).filter(([key]) => key !== 'at')) as unknown as SeenSecurityEvent),
+        ? async () =>
+            (await readyPool!.query(`SELECT tenant_id, event_type, outcome, actor_ref, subject_kind, subject_ref, request_id, details FROM security_events ORDER BY seq`)).rows.map(
+              (r) =>
+                ({
+                  tenantId: r.tenant_id,
+                  eventType: r.event_type,
+                  outcome: r.outcome,
+                  actorRef: r.actor_ref,
+                  subjectKind: r.subject_kind,
+                  subjectRef: r.subject_ref,
+                  requestId: r.request_id ?? undefined,
+                  details: r.details,
+                }) as SeenSecurityEvent,
+            )
+        : async () =>
+            (readyApp.get(SecurityEvents as never) as InMemorySecurityEvents).events.map(
+              (e) => Object.fromEntries(Object.entries(e).filter(([key]) => key !== 'at')) as unknown as SeenSecurityEvent,
+            ),
     );
     const tenantAdmin: TenantAdmin = adminPool ? new PgTenantAdmin(adminPool) : (app.get(MembershipRepository as never) as unknown as TenantAdmin);
     tenantHandles.set(app, tenantAdmin);
-    handles.set(app, new RegisteringMembershipAdmin(adminPool ? new PgMembershipAdmin(adminPool) : (app.get(MembershipRepository as never) as unknown as MembershipAdmin), tenantAdmin));
+    handles.set(
+      app,
+      new RegisteringMembershipAdmin(adminPool ? new PgMembershipAdmin(adminPool) : (app.get(MembershipRepository as never) as unknown as MembershipAdmin), tenantAdmin),
+    );
     app.close = dispose;
     ephemeralDatabases.set(app, database);
     return app;

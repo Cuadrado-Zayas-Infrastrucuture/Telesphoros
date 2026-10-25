@@ -15,8 +15,9 @@ export function checkVerifierReply(artifact: unknown, explanation: Explanation):
   const parsed = verifierReplySchema.safeParse(artifact);
   if (!parsed.success) return { ok: false, reason: 'VERIFIER_INVALID' };
   const { decision, statements } = parsed.data;
-  const seen = new Set(statements.map(s => s.index));
-  if (seen.size !== statements.length || statements.length !== explanation.statements.length || explanation.statements.some((_, i) => !seen.has(i))) return { ok: false, reason: 'VERIFIER_COVERAGE' };
-  if (decision !== 'accept' || statements.some(s => !s.supported)) return { ok: false, reason: 'VERIFIER_HELD' };
+  const seen = new Set(statements.map((s) => s.index));
+  if (seen.size !== statements.length || statements.length !== explanation.statements.length || explanation.statements.some((_, i) => !seen.has(i)))
+    return { ok: false, reason: 'VERIFIER_COVERAGE' };
+  if (decision !== 'accept' || statements.some((s) => !s.supported)) return { ok: false, reason: 'VERIFIER_HELD' };
   return { ok: true };
 }

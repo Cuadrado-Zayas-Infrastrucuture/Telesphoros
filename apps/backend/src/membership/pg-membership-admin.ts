@@ -1,13 +1,5 @@
 import type { Role } from '@telesphoros/shared-types';
-import {
-  checkChange,
-  type MembershipAdmin,
-  MembershipAdminError,
-  type MembershipChange,
-  type MembershipGrant,
-  type MembershipRecord,
-  normalizeRoles,
-} from './membership';
+import { checkChange, type MembershipAdmin, MembershipAdminError, type MembershipChange, type MembershipGrant, type MembershipRecord, normalizeRoles } from './membership';
 
 /** Anything with a pg-style `query`: a Client or a PoolClient. */
 export interface Queryable {

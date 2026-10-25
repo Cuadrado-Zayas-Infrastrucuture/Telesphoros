@@ -13,8 +13,8 @@ export function assertReaderEnginePresent(paths?: { engineDir: string; cliPath: 
   const missing = missingReaderEngineFiles(paths);
   if (missing.length > 0) {
     throw new Error(
-      `LAB_REPORT_PIPELINE is enabled but the report-reader engine is not in this checkout (missing: ${missing.join(', ')}). `
-        + 'The engine is not part of the public repository; leave the pipeline disabled, or add the engine files to run it.',
+      `LAB_REPORT_PIPELINE is enabled but the report-reader engine is not in this checkout (missing: ${missing.join(', ')}). ` +
+        'The engine is not part of the public repository; leave the pipeline disabled, or add the engine files to run it.',
     );
   }
 }

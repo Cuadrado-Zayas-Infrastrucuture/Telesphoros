@@ -9,13 +9,22 @@ export interface RecoveryStorageOptions {
   catalogueKey: Buffer;
   /** Derived by the trusted loader from the verified DB restore, never from an HTTP request or the catalogue itself. */
   expected: {
-    binding: EvidenceBinding; references: EvidenceReference[]; uncompletedRegistrations: number;
-    sourceBucket: string; destinationBucket: string; destinationPrefix: string;
+    binding: EvidenceBinding;
+    references: EvidenceReference[];
+    uncompletedRegistrations: number;
+    sourceBucket: string;
+    destinationBucket: string;
+    destinationPrefix: string;
   };
   /** Configured independently for exactly destinationBucket; use an application read-only credential, not the loader/copy credential. */
   target: ObjectStorage & { readonly bucket: string };
 }
-interface Entry { source: ResolvedEvidence; key: string; version: string; logicalVersion: string }
+interface Entry {
+  source: ResolvedEvidence;
+  key: string;
+  version: string;
+  logicalVersion: string;
+}
 
 /**
  * Opt-in recovery library. No environment switch or automatic production activation.
@@ -24,7 +33,10 @@ interface Entry { source: ResolvedEvidence; key: string; version: string; logica
  */
 export class RecoveryObjectStorage extends ObjectStorage {
   private readonly entries = new Map<string, Entry[]>();
-  private constructor(private readonly target: ObjectStorage, entries: Entry[]) {
+  private constructor(
+    private readonly target: ObjectStorage,
+    entries: Entry[],
+  ) {
     super();
     for (const entry of entries) this.entries.set(entry.source.reference.key, [...(this.entries.get(entry.source.reference.key) ?? []), entry]);
   }
@@ -32,15 +44,27 @@ export class RecoveryObjectStorage extends ObjectStorage {
   static async open(options: RecoveryStorageOptions): Promise<RecoveryObjectStorage> {
     const catalogue = await decryptDocument(options.encryptedCatalogue, options.catalogueKey, catalogueSchema);
     const { expected } = options;
-    if (options.target.bucket !== expected.destinationBucket || catalogue.sourceBucket === catalogue.destinationBucket || catalogue.sourceBucket !== expected.sourceBucket ||
-      catalogue.destinationBucket !== expected.destinationBucket || catalogue.destinationPrefix !== expected.destinationPrefix ||
-      digest(catalogue.binding) !== digest(expected.binding) || digest(catalogue.sources.map(s => s.reference)) !== digest(expected.references) ||
-      catalogue.uncompletedRegistrations !== expected.uncompletedRegistrations || Date.parse(catalogue.policy.retainUntil) <= Date.now()) throw new EvidenceError('binding');
-    const unique = new Map(catalogue.sources.map(s => [s.sourceId, s]));
-    const entries = [...unique.values()].map(source => {
-      const mapping = catalogue.mappings.find(m => m.sourceId === source.sourceId)!;
-      return { source, key: mapping.mode === 'native' ? source.reference.key : catalogue.destinationPrefix + catalogue.generation + '/objects/' + source.sourceId,
-        version: mapping.destinationVersion, logicalVersion: source.reference.dbVersion ?? source.observedVersion };
+    if (
+      options.target.bucket !== expected.destinationBucket ||
+      catalogue.sourceBucket === catalogue.destinationBucket ||
+      catalogue.sourceBucket !== expected.sourceBucket ||
+      catalogue.destinationBucket !== expected.destinationBucket ||
+      catalogue.destinationPrefix !== expected.destinationPrefix ||
+      digest(catalogue.binding) !== digest(expected.binding) ||
+      digest(catalogue.sources.map((s) => s.reference)) !== digest(expected.references) ||
+      catalogue.uncompletedRegistrations !== expected.uncompletedRegistrations ||
+      Date.parse(catalogue.policy.retainUntil) <= Date.now()
+    )
+      throw new EvidenceError('binding');
+    const unique = new Map(catalogue.sources.map((s) => [s.sourceId, s]));
+    const entries = [...unique.values()].map((source) => {
+      const mapping = catalogue.mappings.find((m) => m.sourceId === source.sourceId)!;
+      return {
+        source,
+        key: mapping.mode === 'native' ? source.reference.key : catalogue.destinationPrefix + catalogue.generation + '/objects/' + source.sourceId,
+        version: mapping.destinationVersion,
+        logicalVersion: source.reference.dbVersion ?? source.observedVersion,
+      };
     });
     // An unversioned caller cannot choose between different original identities for the same key.
     // Explicitly pinned reads remain supported, but reject two different destinations for one logical identity.
@@ -59,7 +83,7 @@ export class RecoveryObjectStorage extends ObjectStorage {
   }
 
   private resolve(key: string, version?: string): Entry {
-    const entries = (this.entries.get(key) ?? []).filter(e => version === undefined || e.logicalVersion === version);
+    const entries = (this.entries.get(key) ?? []).filter((e) => version === undefined || e.logicalVersion === version);
     if (!entries.length) throw new EvidenceError('missing');
     if (entries.length !== 1) throw new EvidenceError('ambiguous');
     return entries[0];
@@ -70,11 +94,21 @@ export class RecoveryObjectStorage extends ObjectStorage {
     const fetched = await this.target.getObject(key, { version, maxBytes: Math.min(maxBytes, source.bytes) });
     if (!fetched) throw new EvidenceError('missing');
     const ref = source.reference;
-    if (fetched.version !== version || fetched.sizeBytes !== source.bytes || fetched.bytes.length !== source.bytes ||
-      fetched.sha256 !== ref.sha256 || byteDigest(fetched.bytes) !== ref.sha256 || fetched.contentType !== ref.contentType) throw new EvidenceError('integrity');
+    if (
+      fetched.version !== version ||
+      fetched.sizeBytes !== source.bytes ||
+      fetched.bytes.length !== source.bytes ||
+      fetched.sha256 !== ref.sha256 ||
+      byteDigest(fetched.bytes) !== ref.sha256 ||
+      fetched.contentType !== ref.contentType
+    )
+      throw new EvidenceError('integrity');
     if (ref.scalars !== null) {
-      try { if ([...new TextDecoder('utf-8', { fatal: true }).decode(fetched.bytes)].length !== ref.scalars) throw new EvidenceError('integrity'); }
-      catch { throw new EvidenceError('integrity'); }
+      try {
+        if ([...new TextDecoder('utf-8', { fatal: true }).decode(fetched.bytes)].length !== ref.scalars) throw new EvidenceError('integrity');
+      } catch {
+        throw new EvidenceError('integrity');
+      }
     }
     return { ...fetched, version: logicalVersion };
   }
@@ -95,6 +129,10 @@ export class RecoveryObjectStorage extends ObjectStorage {
     await this.read(entry, entry.source.bytes); // exact bytes verified again before signing; never signs a missing/corrupt substitute
     return this.target.createDownloadUrl(entry.key, entry.version, ttlSeconds, options);
   }
-  async versioningEnabled(): Promise<boolean> { return this.target.versioningEnabled(); }
-  async putObject(): Promise<never> { throw AppException.unavailable('Recovery file storage is read only.'); }
+  async versioningEnabled(): Promise<boolean> {
+    return this.target.versioningEnabled();
+  }
+  async putObject(): Promise<never> {
+    throw AppException.unavailable('Recovery file storage is read only.');
+  }
 }

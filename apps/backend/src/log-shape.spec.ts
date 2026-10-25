@@ -13,7 +13,11 @@ const stream = new Writable({
     done();
   },
 });
-const parse = (raw: string) => raw.split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
+const parse = (raw: string) =>
+  raw
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
 
 async function capture(write: (log: NestLogger) => void): Promise<{ entries: Array<Record<string, unknown>>; raw: string }> {
   lines.length = 0;
@@ -34,17 +38,30 @@ async function capture(write: (log: NestLogger) => void): Promise<{ entries: Arr
  * so a change to the logger setup that would nest or rename the field (and silently stop the alarm) fails here instead.
  */
 describe('log line shape (the alarm contract)', () => {
-  it('writes an object logged through Nest\'s Logger as one JSON line with the fields at the top level (and only the named event matches)', async () => {
+  it("writes an object logged through Nest's Logger as one JSON line with the fields at the top level (and only the named event matches)", async () => {
     const { entries: out } = await capture((log) => {
       log.error({ event: 'something-else', message: 'x' }); // control: another event must not look like the alarm's
       log.error({
-        event: 'ledger-compromised', source: 'timer', tenantId: 'tenant-1', mode: 'full', eventsChecked: 3,
-        failures: [{ kind: 'hash', seq: 7 }], message: 'The record log failed verification.',
+        event: 'ledger-compromised',
+        source: 'timer',
+        tenantId: 'tenant-1',
+        mode: 'full',
+        eventsChecked: 3,
+        failures: [{ kind: 'hash', seq: 7 }],
+        message: 'The record log failed verification.',
       });
     });
     const matching = out.filter((entry) => entry.event === 'ledger-compromised');
     expect(matching).toHaveLength(1);
-    expect(matching[0]).toMatchObject({ event: 'ledger-compromised', source: 'timer', tenantId: 'tenant-1', mode: 'full', eventsChecked: 3, failures: [{ kind: 'hash', seq: 7 }], level: 50 });
+    expect(matching[0]).toMatchObject({
+      event: 'ledger-compromised',
+      source: 'timer',
+      tenantId: 'tenant-1',
+      mode: 'full',
+      eventsChecked: 3,
+      failures: [{ kind: 'hash', seq: 7 }],
+      level: 50,
+    });
     expect(out.some((entry) => entry.event === 'something-else')).toBe(true);
   });
 });
@@ -64,7 +81,7 @@ describe('log line projection (no field nobody listed, no error message)', () =>
     expect(raw).not.toContain('1970-01-01');
   });
 
-  it('keeps an error\'s class, code and frames, but not its message (Nest\'s Logger.error(message, stack) form)', async () => {
+  it("keeps an error's class, code and frames, but not its message (Nest's Logger.error(message, stack) form)", async () => {
     const error = Object.assign(new Error('duplicate key value (mrn)=(SYN-0042) for owner@example.test'), { code: '23505' });
     const { entries, raw } = await capture((log) => log.error(error.message, error.stack));
     expect(raw).not.toContain('SYN-0042');

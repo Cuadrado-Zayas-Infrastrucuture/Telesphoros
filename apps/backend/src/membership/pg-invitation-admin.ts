@@ -27,7 +27,15 @@ interface Row {
 }
 
 const COLUMNS = `id, tenant_id, email_hint, roles, status, expires_at, created_by, email_digest, (status = 'pending' AND expires_at <= now()) AS expired`;
-const toRecord = (r: Row): InvitationRecord => ({ id: r.id, tenantId: r.tenant_id, emailHint: r.email_hint, roles: r.roles as Role[], status: r.expired ? 'expired' : r.status, expiresAt: r.expires_at, createdBy: r.created_by });
+const toRecord = (r: Row): InvitationRecord => ({
+  id: r.id,
+  tenantId: r.tenant_id,
+  emailHint: r.email_hint,
+  roles: r.roles as Role[],
+  status: r.expired ? 'expired' : r.status,
+  expiresAt: r.expires_at,
+  createdBy: r.created_by,
+});
 
 /**
  * What the operator does with an invitation (the organization administrator only records it). Over a connection that owns the tables: the migration
@@ -57,7 +65,13 @@ export class PgInvitationAdmin {
       if (wanted.length !== row.email_digest.length || !timingSafeEqual(wanted, row.email_digest)) {
         throw new MembershipAdminError('invalid', 'That address is not the one the invitation was made for.');
       }
-      const membership = await new PgMembershipAdmin(this.db).grant({ tenantId: row.tenant_id, sub: input.sub, roles: row.roles as Role[], by: input.by, reason: `invitation ${row.id}` });
+      const membership = await new PgMembershipAdmin(this.db).grant({
+        tenantId: row.tenant_id,
+        sub: input.sub,
+        roles: row.roles as Role[],
+        by: input.by,
+        reason: `invitation ${row.id}`,
+      });
       await this.db.query(`UPDATE invitations SET status = 'fulfilled', decided_by = $2, decided_at = now(), fulfilled_sub = $3 WHERE id = $1`, [row.id, input.by, input.sub]);
       await this.db.query('COMMIT');
       return membership;

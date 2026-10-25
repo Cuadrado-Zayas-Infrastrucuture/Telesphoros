@@ -46,23 +46,39 @@ async function asApplication<T>(tenantId: string | null, actor: string | null, w
 }
 
 const addIdentifier = (t: string, patientId: string, over: { system?: string; digest?: Buffer; status?: string } = {}) =>
-  owner(async (c) =>
-    (await c.query(
-      `INSERT INTO patient_identifiers (tenant_id, patient_id, system, value_digest, created_by) VALUES ($1, $2, $3, $4, 'syn-registrar') RETURNING id::text AS id`,
-      [t, patientId, over.system ?? 'hospital-a-mrn', over.digest ?? digest()],
-    )).rows[0].id as string,
+  owner(
+    async (c) =>
+      (
+        await c.query(
+          `INSERT INTO patient_identifiers (tenant_id, patient_id, system, value_digest, created_by) VALUES ($1, $2, $3, $4, 'syn-registrar') RETURNING id::text AS id`,
+          [t, patientId, over.system ?? 'hospital-a-mrn', over.digest ?? digest()],
+        )
+      ).rows[0].id as string,
   );
 
 describe('patient_identifiers', () => {
   it('lets the application login read and register within its own organization, and withdraw by the one permitted update', async () => {
     const t = tenant();
     const r = await seedLabReport(pg.adminUrl, t);
-    const id = await asApplication(t, 'syn-clinician', async (c) =>
-      (await c.query(`INSERT INTO patient_identifiers (tenant_id, patient_id, system, value_digest, created_by) VALUES ($1, $2, 'hospital-a-mrn', $3, 'syn-clinician') RETURNING id::text AS id`, [t, r.patientId, digest()])).rows[0].id as string,
+    const id = await asApplication(
+      t,
+      'syn-clinician',
+      async (c) =>
+        (
+          await c.query(
+            `INSERT INTO patient_identifiers (tenant_id, patient_id, system, value_digest, created_by) VALUES ($1, $2, 'hospital-a-mrn', $3, 'syn-clinician') RETURNING id::text AS id`,
+            [t, r.patientId, digest()],
+          )
+        ).rows[0].id as string,
     );
     expect((await asApplication(t, 'syn-clinician', (c) => c.query('SELECT id FROM patient_identifiers'))).rows).toEqual([{ id }]);
-    await asApplication(t, 'syn-clinician', (c) => c.query(`UPDATE patient_identifiers SET status = 'withdrawn', withdrawn_by = 'syn-clinician', withdrawn_at = now() WHERE id = $1`, [id]));
-    expect((await owner((c) => c.query(`SELECT status, withdrawn_by FROM patient_identifiers WHERE id = $1`, [id]))).rows[0]).toEqual({ status: 'withdrawn', withdrawn_by: 'syn-clinician' });
+    await asApplication(t, 'syn-clinician', (c) =>
+      c.query(`UPDATE patient_identifiers SET status = 'withdrawn', withdrawn_by = 'syn-clinician', withdrawn_at = now() WHERE id = $1`, [id]),
+    );
+    expect((await owner((c) => c.query(`SELECT status, withdrawn_by FROM patient_identifiers WHERE id = $1`, [id]))).rows[0]).toEqual({
+      status: 'withdrawn',
+      withdrawn_by: 'syn-clinician',
+    });
   });
 
   it('refuses the application login every other change: editing a column, deleting, truncating (42501)', async () => {
@@ -81,7 +97,7 @@ describe('patient_identifiers', () => {
     }
   });
 
-  it('refuses even the owner a delete, a truncate, an edit of the digest, a second withdrawal, a return to active, and a withdrawal in another person\'s name than the one making the request', async () => {
+  it("refuses even the owner a delete, a truncate, an edit of the digest, a second withdrawal, a return to active, and a withdrawal in another person's name than the one making the request", async () => {
     const t = tenant();
     const r = await seedLabReport(pg.adminUrl, t);
     const id = await addIdentifier(t, r.patientId);
@@ -89,11 +105,19 @@ describe('patient_identifiers', () => {
     await expect(owner((c) => c.query('TRUNCATE patient_identifiers'))).rejects.toThrow(); // by the trigger, or because the decisions table references it: either way refused
     await expect(owner((c) => c.query('TRUNCATE patient_identifiers CASCADE'))).rejects.toThrow();
     expect((await owner((c) => c.query(`SELECT count(*)::int AS n FROM patient_identifiers WHERE id = $1`, [id]))).rows[0].n).toBe(1);
-    await expect(owner((c) => c.query(`UPDATE patient_identifiers SET value_digest = decode(repeat('00', 32), 'hex') WHERE id = $1`, [id]))).rejects.toMatchObject({ code: '23000' });
-    await expect(asApplication(t, 'syn-clinician', (c) => c.query(`UPDATE patient_identifiers SET status = 'withdrawn', withdrawn_by = 'syn-impostor', withdrawn_at = now() WHERE id = $1`, [id]))).rejects.toMatchObject({ code: '23000' });
+    await expect(owner((c) => c.query(`UPDATE patient_identifiers SET value_digest = decode(repeat('00', 32), 'hex') WHERE id = $1`, [id]))).rejects.toMatchObject({
+      code: '23000',
+    });
+    await expect(
+      asApplication(t, 'syn-clinician', (c) =>
+        c.query(`UPDATE patient_identifiers SET status = 'withdrawn', withdrawn_by = 'syn-impostor', withdrawn_at = now() WHERE id = $1`, [id]),
+      ),
+    ).rejects.toMatchObject({ code: '23000' });
     await owner((c) => c.query(`UPDATE patient_identifiers SET status = 'withdrawn', withdrawn_by = 'syn-ops', withdrawn_at = now() WHERE id = $1`, [id])); // control
     await expect(owner((c) => c.query(`UPDATE patient_identifiers SET withdrawn_by = 'syn-ops-2' WHERE id = $1`, [id]))).rejects.toMatchObject({ code: '23000' });
-    await expect(owner((c) => c.query(`UPDATE patient_identifiers SET status = 'active', withdrawn_by = NULL, withdrawn_at = NULL WHERE id = $1`, [id]))).rejects.toMatchObject({ code: '23000' });
+    await expect(owner((c) => c.query(`UPDATE patient_identifiers SET status = 'active', withdrawn_by = NULL, withdrawn_at = NULL WHERE id = $1`, [id]))).rejects.toMatchObject({
+      code: '23000',
+    });
   });
 
   it('holds one number for one patient at a time: a second active row for the same organization, system and digest is refused; a withdrawn one frees it; another organization or system is separate', async () => {
@@ -116,13 +140,36 @@ describe('patient_identifiers', () => {
     const t = tenant();
     const r = await seedLabReport(pg.adminUrl, t);
     for (const bad of [
-      { system: 'Hospital A' }, { system: '-x' }, { system: 'x-' }, { system: '' }, { system: 'a'.repeat(41) }, { digest: randomBytes(31) }, { digest: randomBytes(33) },
-    ]) await expect(addIdentifier(t, r.patientId, bad)).rejects.toMatchObject({ code: '23514' });
-    await expect(owner((c) => c.query(`INSERT INTO patient_identifiers (tenant_id, patient_id, system, value_digest, key_version, created_by) VALUES ($1, $2, 'x', $3, 0, 'p')`, [t, r.patientId, digest()]))).rejects.toMatchObject({ code: '23514' });
-    await expect(owner((c) => c.query(`INSERT INTO patient_identifiers (tenant_id, patient_id, system, value_digest, status, created_by) VALUES ($1, $2, 'x', $3, 'withdrawn', 'p')`, [t, r.patientId, digest()]))).rejects.toMatchObject({ code: '23514' });
+      { system: 'Hospital A' },
+      { system: '-x' },
+      { system: 'x-' },
+      { system: '' },
+      { system: 'a'.repeat(41) },
+      { digest: randomBytes(31) },
+      { digest: randomBytes(33) },
+    ])
+      await expect(addIdentifier(t, r.patientId, bad)).rejects.toMatchObject({ code: '23514' });
+    await expect(
+      owner((c) =>
+        c.query(`INSERT INTO patient_identifiers (tenant_id, patient_id, system, value_digest, key_version, created_by) VALUES ($1, $2, 'x', $3, 0, 'p')`, [
+          t,
+          r.patientId,
+          digest(),
+        ]),
+      ),
+    ).rejects.toMatchObject({ code: '23514' });
+    await expect(
+      owner((c) =>
+        c.query(`INSERT INTO patient_identifiers (tenant_id, patient_id, system, value_digest, status, created_by) VALUES ($1, $2, 'x', $3, 'withdrawn', 'p')`, [
+          t,
+          r.patientId,
+          digest(),
+        ]),
+      ),
+    ).rejects.toMatchObject({ code: '23514' });
   });
 
-  it('is invisible to another organization and to a caller with none, and a row cannot be written for another organization or another organization\'s patient', async () => {
+  it("is invisible to another organization and to a caller with none, and a row cannot be written for another organization or another organization's patient", async () => {
     const a = tenant();
     const b = tenant();
     const ra = await seedLabReport(pg.adminUrl, a);
@@ -130,7 +177,11 @@ describe('patient_identifiers', () => {
     await addIdentifier(a, ra.patientId);
     expect((await asApplication(b, 'syn', (c) => c.query('SELECT 1 FROM patient_identifiers'))).rows).toEqual([]);
     expect((await asApplication(null, null, (c) => c.query('SELECT 1 FROM patient_identifiers'))).rows).toEqual([]);
-    await expect(asApplication(b, 'syn', (c) => c.query(`INSERT INTO patient_identifiers (tenant_id, patient_id, system, value_digest, created_by) VALUES ($1, $2, 'x', $3, 'syn')`, [a, ra.patientId, digest()]))).rejects.toMatchObject({ code: '42501' });
+    await expect(
+      asApplication(b, 'syn', (c) =>
+        c.query(`INSERT INTO patient_identifiers (tenant_id, patient_id, system, value_digest, created_by) VALUES ($1, $2, 'x', $3, 'syn')`, [a, ra.patientId, digest()]),
+      ),
+    ).rejects.toMatchObject({ code: '42501' });
     await expect(addIdentifier(b, ra.patientId)).rejects.toMatchObject({ code: '23503' }); // organization b, a's patient
     void rb;
   });
@@ -139,7 +190,17 @@ describe('patient_identifiers', () => {
 describe('report_patient_decisions: the rules the table enforces on its own', () => {
   /** An owner insert with an invented event id: the BEFORE INSERT rules raise first, so no ledger event is needed to prove a refusal. */
   const insert = (r: SeededReport, by: string, over: Record<string, unknown> = {}) => {
-    const v = { report_id: r.reportId, patient_id: r.patientId, sha: r.pdfSha256, version: r.objectVersion, decision: 'verified', method: 'person-confirmed', basis: 'no-identifier-on-report', identifier: null, ...over };
+    const v = {
+      report_id: r.reportId,
+      patient_id: r.patientId,
+      sha: r.pdfSha256,
+      version: r.objectVersion,
+      decision: 'verified',
+      method: 'person-confirmed',
+      basis: 'no-identifier-on-report',
+      identifier: null,
+      ...over,
+    };
     return owner((c) =>
       c.query(
         `INSERT INTO report_patient_decisions (tenant_id, created_by, ledger_event_id, report_id, patient_id, report_sha256, object_version, decision, method, basis_code, identifier_id)
@@ -149,7 +210,7 @@ describe('report_patient_decisions: the rules the table enforces on its own', ()
     );
   };
 
-  it('refuses the report\'s creator, its upload requester and its uploader, each alone (23000), and a bystander gets as far as the ledger check', async () => {
+  it("refuses the report's creator, its upload requester and its uploader, each alone (23000), and a bystander gets as far as the ledger check", async () => {
     const t = tenant();
     const r = await seedLabReport(pg.adminUrl, t, { uploader: 'syn-creator', requestedBy: 'syn-requester', completedBy: 'syn-completer' });
     for (const by of ['syn-creator', 'syn-requester', 'syn-completer']) await expect(insert(r, by)).rejects.toMatchObject({ code: '23000' });
@@ -167,7 +228,7 @@ describe('report_patient_decisions: the rules the table enforces on its own', ()
     }
   });
 
-  it('refuses shapes outside the frozen vocabulary (the table\'s own CHECK, with the row triggers off inside a rolled-back transaction so only the CHECK can speak): a match that is a rejection, an attestation without a reason or with the wrong list, a reason on a match, an identifier on an attestation', async () => {
+  it("refuses shapes outside the frozen vocabulary (the table's own CHECK, with the row triggers off inside a rolled-back transaction so only the CHECK can speak): a match that is a rejection, an attestation without a reason or with the wrong list, a reason on a match, an identifier on an attestation", async () => {
     const t = tenant();
     const r = await seedLabReport(pg.adminUrl, t);
     const id = await addIdentifier(t, r.patientId);
@@ -205,10 +266,11 @@ describe('report_patient_decisions: the rules the table enforces on its own', ()
       { identifier: id },
       { decision: 'maybe' },
       { method: 'guess' },
-    ]) await expect(attempt(over)).rejects.toMatchObject({ code: '23514' });
+    ])
+      await expect(attempt(over)).rejects.toMatchObject({ code: '23514' });
   });
 
-  it('refuses a match that names a withdrawn identifier or another patient\'s (23000)', async () => {
+  it("refuses a match that names a withdrawn identifier or another patient's (23000)", async () => {
     const t = tenant();
     const r = await seedLabReport(pg.adminUrl, t);
     const other = await seedLabReport(pg.adminUrl, t);
@@ -222,8 +284,18 @@ describe('report_patient_decisions: the rules the table enforces on its own', ()
   it('is append-only even for the owner, and tenant-isolated for the application login', async () => {
     const t = tenant();
     const r = await seedLabReport(pg.adminUrl, t);
-    const stored = await repo.insertPatientDecision(t, 'syn-bystander', { reportId: r.reportId, expectedReport: { patientId: r.patientId, sha256: r.pdfSha256, objectVersion: r.objectVersion }, decision: 'verified', method: 'person-confirmed', basisCode: 'no-identifier-on-report' });
-    for (const sql of [`UPDATE report_patient_decisions SET decision = 'rejected', basis_code = 'different-person' WHERE id = '${stored.record.id}'`, `DELETE FROM report_patient_decisions WHERE id = '${stored.record.id}'`, 'TRUNCATE report_patient_decisions']) {
+    const stored = await repo.insertPatientDecision(t, 'syn-bystander', {
+      reportId: r.reportId,
+      expectedReport: { patientId: r.patientId, sha256: r.pdfSha256, objectVersion: r.objectVersion },
+      decision: 'verified',
+      method: 'person-confirmed',
+      basisCode: 'no-identifier-on-report',
+    });
+    for (const sql of [
+      `UPDATE report_patient_decisions SET decision = 'rejected', basis_code = 'different-person' WHERE id = '${stored.record.id}'`,
+      `DELETE FROM report_patient_decisions WHERE id = '${stored.record.id}'`,
+      'TRUNCATE report_patient_decisions',
+    ]) {
       await expect(owner((c) => c.query(sql))).rejects.toMatchObject({ code: '23000' });
     }
     expect((await asApplication(tenant(), 'syn', (c) => c.query('SELECT 1 FROM report_patient_decisions'))).rows).toEqual([]);
@@ -240,10 +312,26 @@ describe('the repository', () => {
     const r = await seedLabReport(pg.adminUrl, t);
     const first = await repo.insertPatientDecision(t, 'syn-bystander', { reportId: r.reportId, expectedReport: expected(r), ...attest });
     expect(first.created).toBe(true);
-    expect(first.record).toMatchObject({ kind: 'patient-link-decision', reportId: r.reportId, patientId: r.patientId, reportSha256: r.pdfSha256, objectVersion: r.objectVersion, decision: 'verified', method: 'person-confirmed', basisCode: 'no-identifier-on-report', identifierId: null });
+    expect(first.record).toMatchObject({
+      kind: 'patient-link-decision',
+      reportId: r.reportId,
+      patientId: r.patientId,
+      reportSha256: r.pdfSha256,
+      objectVersion: r.objectVersion,
+      decision: 'verified',
+      method: 'person-confirmed',
+      basisCode: 'no-identifier-on-report',
+      identifierId: null,
+    });
     const again = await repo.insertPatientDecision(t, 'syn-other', { reportId: r.reportId, expectedReport: expected(r), ...attest });
     expect([again.created, again.record.id]).toEqual([false, first.record.id]);
-    const changed = await repo.insertPatientDecision(t, 'syn-other', { reportId: r.reportId, expectedReport: expected(r), decision: 'rejected', method: 'person-confirmed', basisCode: 'cannot-establish' });
+    const changed = await repo.insertPatientDecision(t, 'syn-other', {
+      reportId: r.reportId,
+      expectedReport: expected(r),
+      decision: 'rejected',
+      method: 'person-confirmed',
+      basisCode: 'cannot-establish',
+    });
     expect(changed.created).toBe(true);
     expect((await repo.latestPatientDecision(t, r.reportId))?.id).toBe(changed.record.id);
     expect(await repo.latestPatientDecision(tenant(), r.reportId)).toBeUndefined();
@@ -254,11 +342,17 @@ describe('the repository', () => {
     const r = await seedLabReport(pg.adminUrl, t);
     const other = await seedLabReport(pg.adminUrl, t);
     const before = (await owner((c) => c.query('SELECT count(*)::int AS n FROM report_patient_decisions'))).rows[0].n;
-    for (const exp of [{ ...expected(r), sha256: sha('another') }, { ...expected(r), objectVersion: 'another-version' }, { ...expected(r), patientId: other.patientId }]) {
+    for (const exp of [
+      { ...expected(r), sha256: sha('another') },
+      { ...expected(r), objectVersion: 'another-version' },
+      { ...expected(r), patientId: other.patientId },
+    ]) {
       await expect(repo.insertPatientDecision(t, 'syn-bystander', { reportId: r.reportId, expectedReport: exp, ...attest })).rejects.toBeInstanceOf(SourceChangedError);
     }
     await expect(repo.insertPatientDecision(t, 'syn-bystander', { reportId: randomUUID(), expectedReport: expected(r), ...attest })).rejects.toBeInstanceOf(SourceChangedError);
-    await expect(repo.insertPatientDecision(tenant(), 'syn-bystander', { reportId: r.reportId, expectedReport: expected(r), ...attest })).rejects.toBeInstanceOf(SourceChangedError);
+    await expect(repo.insertPatientDecision(tenant(), 'syn-bystander', { reportId: r.reportId, expectedReport: expected(r), ...attest })).rejects.toBeInstanceOf(
+      SourceChangedError,
+    );
     expect((await owner((c) => c.query('SELECT count(*)::int AS n FROM report_patient_decisions'))).rows[0].n).toBe(before);
   });
 
@@ -274,7 +368,10 @@ describe('the repository', () => {
         repo.insertPatientDecision(t, by, { reportId: r.reportId, expectedReport: expected(r), ...attest, ...over });
       let n = 0;
       const evaluate = (relied?: string) =>
-        repo.insertEvaluation(t, 'syn-system', { ...evaluationFor(r, c.record.id, a.record.id, { knowledgeSetId: sha(`ks-${++n}`) }), ...(relied === undefined ? {} : { patientLinkDecisionId: relied }) });
+        repo.insertEvaluation(t, 'syn-system', {
+          ...evaluationFor(r, c.record.id, a.record.id, { knowledgeSetId: sha(`ks-${++n}`) }),
+          ...(relied === undefined ? {} : { patientLinkDecisionId: relied }),
+        });
       return { t, r, decide, evaluate };
     }
 

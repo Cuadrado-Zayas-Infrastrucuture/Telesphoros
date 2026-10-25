@@ -48,14 +48,25 @@ beforeAll(async () => {
 });
 
 async function accept(text: string, over: Partial<Parameters<InMemoryCaptureAcceptanceStore['record']>[0]> = {}): Promise<CaptureAcceptance> {
-  return store.record({ tenantId: TENANT, textSha256: sha256Hex(text), popplerVersion: PINNED_POPPLER_VERSION, decision: 'accepted', reviewer: { sub: 'test-reviewer', tenantId: TENANT }, note: null, ...over });
+  return store.record({
+    tenantId: TENANT,
+    textSha256: sha256Hex(text),
+    popplerVersion: PINNED_POPPLER_VERSION,
+    decision: 'accepted',
+    reviewer: { sub: 'test-reviewer', tenantId: TENANT },
+    note: null,
+    ...over,
+  });
 }
 
 /** Read a text with the real reader and adapt it, with an acceptance on file unless told otherwise. */
 async function full(text: string, tweak?: (result: ReaderResult) => ReaderResult): Promise<AdapterResult> {
   const acceptance = await accept(text);
   const raw = await readFixture(text);
-  return adaptReport({ tenantId: TENANT, captureAcceptanceId: acceptance.id, text, reader: tweak ? tweak(structuredClone(raw)) : raw }, { captures: store, knowledge: adapterKnowledge });
+  return adaptReport(
+    { tenantId: TENANT, captureAcceptanceId: acceptance.id, text, reader: tweak ? tweak(structuredClone(raw)) : raw },
+    { captures: store, knowledge: adapterKnowledge },
+  );
 }
 
 async function readFixture(text: string, source: ReportReader = reader): Promise<ReaderResult> {
@@ -68,9 +79,13 @@ async function readFixture(text: string, source: ReportReader = reader): Promise
   return source.read(text);
 }
 
-
 /** The hand-written expectations name genes and states only; the source is asserted separately (every emitted input says where it came from). */
-const bare = (inputs: object[]) => inputs.map((i) => { const copy: Record<string, unknown> = { ...i }; delete copy.callSource; return copy; });
+const bare = (inputs: object[]) =>
+  inputs.map((i) => {
+    const copy: Record<string, unknown> = { ...i };
+    delete copy.callSource;
+    return copy;
+  });
 
 describe('adapter fixture reader timeouts', () => {
   const directories: string[] = [];
@@ -88,17 +103,25 @@ describe('adapter fixture reader timeouts', () => {
     directories.push(directory);
     const marker = join(directory, 'attempt');
     const command = [
-      'python3', '-I', '-B', '-c',
+      'python3',
+      '-I',
+      '-B',
+      '-c',
       'import os, pathlib, sys, time; marker = pathlib.Path(sys.argv[1]); delay = not marker.exists() or sys.argv[4] == "always"; marker.write_text("attempted"); time.sleep(2 if delay else 0); os.execv(sys.executable, [sys.executable, "-I", "-B", sys.argv[2], sys.argv[3], "process"])',
-      marker, DEFAULT_CLI_PATH, DEFAULT_ENGINE_DIR, alwaysDelay ? 'always' : 'once',
+      marker,
+      DEFAULT_CLI_PATH,
+      DEFAULT_ENGINE_DIR,
+      alwaysDelay ? 'always' : 'once',
     ];
     const attempts: ReaderResult[] = [];
     const real = new SubprocessReportReader({ mode: 'non-production', command, deadlineMs: 1_000 });
-    const source: ReportReader = { read: async (text) => {
-      const result = await real.read(text);
-      attempts.push(result);
-      return result;
-    } };
+    const source: ReportReader = {
+      read: async (text) => {
+        const result = await real.read(text);
+        attempts.push(result);
+        return result;
+      },
+    };
     return { source, attempts };
   };
 
@@ -122,14 +145,19 @@ describe('adapter fixture reader timeouts', () => {
   });
 
   it('does not retry a content hold or a broken worker', async () => {
-    for (const command of [['python3', '-I', '-B', DEFAULT_CLI_PATH, DEFAULT_ENGINE_DIR, 'process'], ['python3', '-I', '-B', '-c', 'print("not-json")']]) {
+    for (const command of [
+      ['python3', '-I', '-B', DEFAULT_CLI_PATH, DEFAULT_ENGINE_DIR, 'process'],
+      ['python3', '-I', '-B', '-c', 'print("not-json")'],
+    ]) {
       const attempts: ReaderResult[] = [];
       const real = new SubprocessReportReader({ mode: 'non-production', command });
-      const result = await readFixture(captureText('D08'), { read: async (text) => {
-        const outcome = await real.read(text);
-        attempts.push(outcome);
-        return outcome;
-      } });
+      const result = await readFixture(captureText('D08'), {
+        read: async (text) => {
+          const outcome = await real.read(text);
+          attempts.push(outcome);
+          return outcome;
+        },
+      });
       expect(attempts).toHaveLength(1);
       expect(result.projection.status).toBe('held');
       expect(result.projection.reason).toBe(command.length === 6 ? 'alignment-unsupported' : 'worker-error');
@@ -184,7 +212,12 @@ describe('the twelve development reports, end to end', () => {
     expect(evaluationResultSchema.safeParse(output).success).toBe(true);
     for (const result of output.results) {
       const want = expected.engine![result.drug]!;
-      expect({ outcome: result.outcome, reasonCode: 'reasonCode' in result ? result.reasonCode : undefined, strength: 'strength' in result ? result.strength : undefined, recommendationText: 'recommendationText' in result ? result.recommendationText : undefined }).toEqual({
+      expect({
+        outcome: result.outcome,
+        reasonCode: 'reasonCode' in result ? result.reasonCode : undefined,
+        strength: 'strength' in result ? result.strength : undefined,
+        recommendationText: 'recommendationText' in result ? result.recommendationText : undefined,
+      }).toEqual({
         outcome: want.outcome,
         reasonCode: want.reasonCode,
         strength: want.strength,
@@ -207,7 +240,10 @@ describe('the twelve development reports, end to end', () => {
 
   it('repeats keep every occurrence in the audit trail even though the gene has one input', () => {
     const d06 = evaluated(results.get('D06')!);
-    expect(d06.occurrences.map((o) => [o.gene, o.occurrenceIndex, o.emitted.length])).toEqual([['CYP2C19', 0, 0], ['CYP2C19', 1, 0]]);
+    expect(d06.occurrences.map((o) => [o.gene, o.occurrenceIndex, o.emitted.length])).toEqual([
+      ['CYP2C19', 0, 0],
+      ['CYP2C19', 1, 0],
+    ]);
     expect(bare(d06.geneInputs)).toEqual([{ gene: 'CYP2C19', state: 'unresolved', reasonCode: 'duplicate-identical' }]);
     expect(d06.geneInputs[0]!.callSource).toBe('lab-report'); // the duplicate path too
     expect(d06.geneInputs).toHaveLength(1);
@@ -215,7 +251,10 @@ describe('the twelve development reports, end to end', () => {
 
   it('D09 keeps the proportional-table result: both genes tied to their own values', () => {
     const d09 = evaluated(results.get('D09')!);
-    expect(d09.occurrences.map((o) => [o.gene, o.roles.diplotype?.start, o.roles.reportedResult?.start])).toEqual([['CYP2C19', 44, 84], ['CYP2B6', 71, 111]]);
+    expect(d09.occurrences.map((o) => [o.gene, o.roles.diplotype?.start, o.roles.reportedResult?.start])).toEqual([
+      ['CYP2C19', 44, 84],
+      ['CYP2B6', 71, 111],
+    ]);
   });
 
   it('is deterministic: the same text gives the same result (apart from which acceptance record it relied on)', async () => {
@@ -250,7 +289,15 @@ describe('every combination of the states the specification names (full chain)',
   type D = 'missing' | 'empty' | 'unmappable' | 'mapped';
   type R = 'missing' | 'empty' | 'equal' | 'different' | 'unavailable' | 'quoted' | 'unfamiliar';
   const dPart: Record<D, string | null> = { missing: null, empty: 'diplotype', unmappable: 'diplotype *1/*Z', mapped: 'diplotype *1/*2' };
-  const rPart: Record<R, string | null> = { missing: null, empty: 'result', equal: 'result Intermediate Metabolizer', different: 'result Poor Metabolizer', unavailable: 'result Not Available.', quoted: 'result "not available"', unfamiliar: 'result Indeterminate' };
+  const rPart: Record<R, string | null> = {
+    missing: null,
+    empty: 'result',
+    equal: 'result Intermediate Metabolizer',
+    different: 'result Poor Metabolizer',
+    unavailable: 'result Not Available.',
+    quoted: 'result "not available"',
+    unfamiliar: 'result Indeterminate',
+  };
   const textFor = (d: D, r: R) => `${G}: ${[dPart[d], rPart[r]].filter(Boolean).join('; ')}\n`;
 
   const other = { gene: G, state: 'unresolved', reasonCode: 'other-gene-unresolved' };
@@ -316,7 +363,8 @@ describe('what the adapter will not accept (every check in the specification, on
   let base: ReaderResult;
   let acceptance: CaptureAcceptance;
   const deps = () => ({ captures: store, knowledge: adapterKnowledge });
-  const run = (reader: ReaderResult, over: { id?: string; tenantId?: string; text?: string } = {}) => adaptReport({ tenantId: over.tenantId ?? TENANT, captureAcceptanceId: over.id ?? acceptance.id, text: over.text ?? text, reader }, deps());
+  const run = (reader: ReaderResult, over: { id?: string; tenantId?: string; text?: string } = {}) =>
+    adaptReport({ tenantId: over.tenantId ?? TENANT, captureAcceptanceId: over.id ?? acceptance.id, text: over.text ?? text, reader }, deps());
   /** Rewrites a copy of the packet and seals it again, as a forger who knows the hash rule would. */
   const forge = (mutate: (packet: Forgeable, result: Forgeable) => void): ReaderResult => {
     const result = structuredClone(base) as unknown as Forgeable;
@@ -329,7 +377,18 @@ describe('what the adapter will not accept (every check in the specification, on
   };
   const candidateIds = (packet: Forgeable, c: { kind: string; start: number; end: number }) => {
     const contentId = canonicalHash(['pgx-span-content/1', packet.sourceRef.sourceHash, c.kind, c.start, c.end]);
-    return { contentId, candidateId: canonicalHash(['pgx-span-build/3', contentId, packet.generatorVersion, packet.generatorCodeHash, packet.grammarHash, packet.offsetContractHash, packet.fieldBoundaryPolicyHash]) };
+    return {
+      contentId,
+      candidateId: canonicalHash([
+        'pgx-span-build/3',
+        contentId,
+        packet.generatorVersion,
+        packet.generatorCodeHash,
+        packet.grammarHash,
+        packet.offsetContractHash,
+        packet.fieldBoundaryPolicyHash,
+      ]),
+    };
   };
 
   beforeAll(async () => {
@@ -363,7 +422,13 @@ describe('what the adapter will not accept (every check in the specification, on
   });
 
   describe('the reader build', () => {
-    it.each([['generatorVersion', 'stage-a/3'], ['generatorCodeHash', '0'.repeat(64)], ['grammarHash', '0'.repeat(64)], ['offsetContractHash', '0'.repeat(64)], ['fieldBoundaryPolicyHash', '0'.repeat(64)]])('holds when %s is not the pinned one, even if the packet is resealed', async (field, value) => {
+    it.each([
+      ['generatorVersion', 'stage-a/3'],
+      ['generatorCodeHash', '0'.repeat(64)],
+      ['grammarHash', '0'.repeat(64)],
+      ['offsetContractHash', '0'.repeat(64)],
+      ['fieldBoundaryPolicyHash', '0'.repeat(64)],
+    ])('holds when %s is not the pinned one, even if the packet is resealed', async (field, value) => {
       expect(held(await run(forge((packet) => void (packet[field] = value)))).code).toBe('reader-binding-mismatch');
     });
   });
@@ -376,14 +441,14 @@ describe('what the adapter will not accept (every check in the specification, on
     });
 
     it.each<[string, (packet: Forgeable, result: Forgeable) => void]>([
-      ['a candidate\'s text is changed', (p) => void (p.candidates[0].text = 'CYP2B6')],
+      ["a candidate's text is changed", (p) => void (p.candidates[0].text = 'CYP2B6')],
       ['a candidate points outside the text', (p) => void (p.candidates[0].end = 99999)],
       ['a candidate identifier is altered', (p) => void (p.candidates[0].candidateId = 'f'.repeat(64))],
       ['a candidate content identifier is altered', (p) => void (p.candidates[0].contentId = 'f'.repeat(64))],
       ['a frame identifier is altered', (p) => void (p.frames[0].frameId = 'f'.repeat(64))],
       ['a frame anchor is moved', (p) => void (p.frames[0].sourceAnchor += 1)],
       ['an edge is removed', (p) => void p.allowedEdges.pop()],
-      ['an edge\'s evidence is changed', (p) => void (p.allowedEdges[0].evidence.end += 1)],
+      ["an edge's evidence is changed", (p) => void (p.allowedEdges[0].evidence.end += 1)],
       ['a frame is dropped', (p) => void p.frames.pop()],
       ['the declared length is wrong', (p) => void (p.sourceRef.decodedLength += 1)],
       ['the source hash is wrong', (p) => void (p.sourceRef.sourceHash = 'f'.repeat(64))],
@@ -396,7 +461,7 @@ describe('what the adapter will not accept (every check in the specification, on
       expect(held(await run(forge(mutate))).code).toBe('packet-invalid');
     });
 
-    it('holds when the packet hash is wrong, when the result is not the reader\'s shape, and when the verdict points at another packet', async () => {
+    it("holds when the packet hash is wrong, when the result is not the reader's shape, and when the verdict points at another packet", async () => {
       const wrongHash = structuredClone(base) as unknown as Forgeable;
       wrongHash.packet.packetHash = '0'.repeat(64);
       expect(held(await run(wrongHash as unknown as ReaderResult)).code).toBe('packet-invalid');
@@ -487,16 +552,17 @@ describe('what the adapter will not accept (every check in the specification, on
     });
   });
 
-  describe('the reader\'s own verdict', () => {
-    it.each([
-      ['source-limit'],
-      ['candidate-or-frame-limit'],
-      ['source-time-budget'],
-      ['worker-error'],
-    ] as const)('maps the reader\'s failure envelope %s to the hold of the same name', async (reason) => {
-      const failure = { packet: { schema: 'pgx-span-processing-failure/1', status: 'held', reason, payload: null }, projection: { status: 'held', reason, payload: null, provenance: { packetHash: null } } } as ReaderResult;
-      expect(held(await run(failure)).code).toBe(reason);
-    });
+  describe("the reader's own verdict", () => {
+    it.each([['source-limit'], ['candidate-or-frame-limit'], ['source-time-budget'], ['worker-error']] as const)(
+      "maps the reader's failure envelope %s to the hold of the same name",
+      async (reason) => {
+        const failure = {
+          packet: { schema: 'pgx-span-processing-failure/1', status: 'held', reason, payload: null },
+          projection: { status: 'held', reason, payload: null, provenance: { packetHash: null } },
+        } as ReaderResult;
+        expect(held(await run(failure)).code).toBe(reason);
+      },
+    );
 
     it('holds as invalid when the verdict names a different reason than the packet it came from', async () => {
       const d10 = captureText('D10');
@@ -509,11 +575,16 @@ describe('what the adapter will not accept (every check in the specification, on
       const acceptance08 = await accept(d08);
       const heldResult = structuredClone(await reader.read(d08)) as Forgeable;
       heldResult.projection.reason = 'unsupported-layout'; // a real reason, but not the packet's
-      expect(held(await adaptReport({ tenantId: TENANT, captureAcceptanceId: acceptance08.id, text: d08, reader: heldResult as ReaderResult }, deps())).code).toBe('packet-invalid');
+      expect(held(await adaptReport({ tenantId: TENANT, captureAcceptanceId: acceptance08.id, text: d08, reader: heldResult as ReaderResult }, deps())).code).toBe(
+        'packet-invalid',
+      );
     });
 
     it('holds as invalid when a failure envelope and its verdict disagree', async () => {
-      const failure = { packet: { schema: 'pgx-span-processing-failure/1', status: 'held', reason: 'worker-error', payload: null }, projection: { status: 'held', reason: 'source-limit', payload: null, provenance: { packetHash: null } } } as ReaderResult;
+      const failure = {
+        packet: { schema: 'pgx-span-processing-failure/1', status: 'held', reason: 'worker-error', payload: null },
+        projection: { status: 'held', reason: 'source-limit', payload: null, provenance: { packetHash: null } },
+      } as ReaderResult;
       expect(held(await run(failure)).code).toBe('packet-invalid');
     });
 
@@ -523,7 +594,7 @@ describe('what the adapter will not accept (every check in the specification, on
       ['CYP2C19: diplotype *1/*2; result Intermediate Metabolizer\nGenes: CYP2C19 CYP2B6\nResults: Poor Metabolizer Normal Metabolizer\n', 'mixed-frame-set'],
       [captureText('D08'), 'alignment-unsupported'],
       [captureText('D12'), 'unaccounted-text'],
-    ])('maps the reader\'s own hold for %j to %s', async (source, code) => {
+    ])("maps the reader's own hold for %j to %s", async (source, code) => {
       expect(held(await full(source)).code).toBe(code);
     });
 

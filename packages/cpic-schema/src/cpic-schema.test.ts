@@ -23,7 +23,14 @@ import {
 const base = {
   schemaVersion: '1.2',
   synthetic: true,
-  provenance: { source: 'SYNTHETIC TEST FIXTURE', sourceUrl: 'https://example.invalid/synthetic', retrievedAt: '2026-01-01', sourceVersion: 'test', license: 'proprietary', redistribution: 'restricted' },
+  provenance: {
+    source: 'SYNTHETIC TEST FIXTURE',
+    sourceUrl: 'https://example.invalid/synthetic',
+    retrievedAt: '2026-01-01',
+    sourceVersion: 'test',
+    license: 'proprietary',
+    redistribution: 'restricted',
+  },
   review: { status: 'unreviewed' },
 } as const;
 
@@ -192,7 +199,8 @@ describe('gene input', () => {
       { gene: 'GENEA', state: 'diplotype', diplotype: '*1/*2' },
       { gene: 'GENEA', state: 'null' },
       { gene: 'GENEA', state: 'unresolved', reasonCode: 'other-gene-unresolved' },
-    ]) expect(geneInputSchema.safeParse(input).success, JSON.stringify(input)).toBe(true);
+    ])
+      expect(geneInputSchema.safeParse(input).success, JSON.stringify(input)).toBe(true);
   });
 
   it('refuses a reason only the engine may decide, extra keys, missing values and lower-case genes', () => {
@@ -205,7 +213,8 @@ describe('gene input', () => {
       { gene: 'GENEA', state: 'canonical', phenotype: 'Normal', extra: 1 },
       { gene: 'genea', state: 'canonical', phenotype: 'Normal' },
       { gene: 'GENEA', state: 'absent' },
-    ]) expect(geneInputSchema.safeParse(input).success, JSON.stringify(input)).toBe(false);
+    ])
+      expect(geneInputSchema.safeParse(input).success, JSON.stringify(input)).toBe(false);
   });
 
   it('accepts a call source on every state, and still accepts the same inputs without one (evaluations stored before the field existed)', () => {
@@ -260,7 +269,17 @@ describe('results', () => {
   });
 
   it('the five outcomes accept only their own reason codes', () => {
-    const noRec = { outcome: 'no-published-recommendation', drug: 'drugx', genes: ['GENEA'], geneStates: evidence, reasonCode: 'no-published-recommendation', citation: null, strength: null, recommendationText: null, implication: null };
+    const noRec = {
+      outcome: 'no-published-recommendation',
+      drug: 'drugx',
+      genes: ['GENEA'],
+      geneStates: evidence,
+      reasonCode: 'no-published-recommendation',
+      citation: null,
+      strength: null,
+      recommendationText: null,
+      implication: null,
+    };
     expect(drugResultSchema.safeParse(noRec).success).toBe(true);
     expect(drugResultSchema.safeParse({ ...noRec, reasonCode: 'gene-absent' }).success).toBe(false);
     const none = { outcome: 'no-guideline', drug: 'drugz', genes: [], geneStates: [], reasonCode: 'no-guideline-for-drug' };
@@ -270,9 +289,13 @@ describe('results', () => {
 
   it('a gene state is either canonical with a phenotype, or one of three problems with a reason', () => {
     expect(geneStateResultSchema.safeParse({ gene: 'GENEA', state: 'canonical', phenotype: 'Normal', diplotype: null, activityScore: null, reasonCode: null }).success).toBe(true);
-    expect(geneStateResultSchema.safeParse({ gene: 'GENEA', state: 'absent', phenotype: null, diplotype: null, activityScore: null, reasonCode: 'gene-absent' }).success).toBe(true);
+    expect(geneStateResultSchema.safeParse({ gene: 'GENEA', state: 'absent', phenotype: null, diplotype: null, activityScore: null, reasonCode: 'gene-absent' }).success).toBe(
+      true,
+    );
     expect(geneStateResultSchema.safeParse({ gene: 'GENEA', state: 'absent', phenotype: null, diplotype: null, activityScore: null, reasonCode: null }).success).toBe(false);
-    expect(geneStateResultSchema.safeParse({ gene: 'GENEA', state: 'canonical', phenotype: 'Normal', diplotype: null, activityScore: null, reasonCode: 'gene-absent' }).success).toBe(false);
+    expect(
+      geneStateResultSchema.safeParse({ gene: 'GENEA', state: 'canonical', phenotype: 'Normal', diplotype: null, activityScore: null, reasonCode: 'gene-absent' }).success,
+    ).toBe(false);
   });
 });
 
@@ -332,7 +355,13 @@ describe('gene map file', () => {
     expect(geneMapFileSchema.safeParse(table([{ diplotype: '*1/*2', phenotype: 'Normal' }])).success).toBe(true);
     expect(issuesOf(geneMapFileSchema, table([{ diplotype: '*1/*9', phenotype: 'Normal' }])).join('|')).toContain('two known alleles');
     expect(
-      issuesOf(geneMapFileSchema, table([{ diplotype: '*1/*2', phenotype: 'Normal' }, { diplotype: '*2/*1', phenotype: 'Poor' }])).join('|'),
+      issuesOf(
+        geneMapFileSchema,
+        table([
+          { diplotype: '*1/*2', phenotype: 'Normal' },
+          { diplotype: '*2/*1', phenotype: 'Poor' },
+        ]),
+      ).join('|'),
     ).toContain('more than once');
   });
 

@@ -34,7 +34,8 @@ const present = async (user: ReturnType<typeof idp.users.find>, options: { signW
 const owner = <T>(work: (c: Client) => Promise<T>) => withAdmin(db.adminUrl, work);
 const user = (name: string) => idp.users.find((u) => u.email.startsWith(name))!;
 const sha256 = (value: string) => createHash('sha256').update(value, 'utf8').digest();
-const logRows = (requestId: string) => owner(async (c) => (await c.query(`SELECT *, row_to_json(l)::text AS whole FROM capability_issuance_log l WHERE request_id = $1 ORDER BY seq`, [requestId])).rows);
+const logRows = (requestId: string) =>
+  owner(async (c) => (await c.query(`SELECT *, row_to_json(l)::text AS whole FROM capability_issuance_log l WHERE request_id = $1 ORDER BY seq`, [requestId])).rows);
 const versionOf = (sub: string) => owner(async (c) => Number((await c.query('SELECT version FROM tenant_memberships WHERE sub = $1', [sub])).rows[0].version));
 const everything = () => captured.join('');
 
@@ -72,7 +73,11 @@ beforeAll(async () => {
   idp = await startFakeIdp({ clientId: 'app-client' });
   await owner(async (c) => {
     for (const tenant of ['alpha', 'beta']) await registerTenantRow(c, tenant);
-    for (const [tenant, name, status] of [['alpha', 'alice', 'active'], ['beta', 'bob', 'active'], ['alpha', 'carol', 'removed']] as const) {
+    for (const [tenant, name, status] of [
+      ['alpha', 'alice', 'active'],
+      ['beta', 'bob', 'active'],
+      ['alpha', 'carol', 'removed'],
+    ] as const) {
       await c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ($1, $2, $3, ARRAY['clinician'], 'test')`, [tenant, user(name).sub, status]);
     }
   });
@@ -112,7 +117,7 @@ describe('one issuance, one row, no token (SC-006)', () => {
     expect(everything()).not.toContain(issued.token);
   });
 
-  it('the token it returned is the one the database resolves (control), and a stranger\'s is not', async () => {
+  it("the token it returned is the one the database resolves (control), and a stranger's is not", async () => {
     const issued = await issue({ requestId: 'req-issuer-ok-02' });
     expect(await appTenantFor(issued.token)).toBe('alpha');
     expect(await appTenantFor('A'.repeat(43))).toBeNull();
@@ -131,9 +136,10 @@ describe('one issuance, one row, no token (SC-006)', () => {
   });
 
   it('a removed member is refused as one row with a closed reason and no capability, and an active member is issued in the same run (control)', async () => {
-    const error = await core
-      .issue({ accessToken: await present(user('carol')), requestId: 'req-issuer-refused-01' })
-      .then(() => undefined, (e: unknown) => e);
+    const error = await core.issue({ accessToken: await present(user('carol')), requestId: 'req-issuer-refused-01' }).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
     expect(error).toBeInstanceOf(CapabilityIssueError);
     expect(error).toMatchObject({ reason: 'refused', detail: 'membership-not-current' });
     const rows = await logRows('req-issuer-refused-01');

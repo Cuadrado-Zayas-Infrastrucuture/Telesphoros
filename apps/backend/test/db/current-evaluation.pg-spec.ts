@@ -63,7 +63,13 @@ describe('the current evaluation of a report', () => {
     expect(await current(t, r.reportId)).toBe(e2); // e1 is active too, but e2 is the newer one
 
     const e3 = await r.evaluate();
-    await repo.insertCorrection(t, 'syn-reviewer', { evaluationId: e2, kind: 'supersession', reasonCode: 'software-defect', previousCorrectionId: reinstated, replacementEvaluationId: e3 });
+    await repo.insertCorrection(t, 'syn-reviewer', {
+      evaluationId: e2,
+      kind: 'supersession',
+      reasonCode: 'software-defect',
+      previousCorrectionId: reinstated,
+      replacementEvaluationId: e3,
+    });
     expect(await current(t, r.reportId)).toBe(e3);
     const third = await retract(t, e3);
     expect(await current(t, r.reportId)).toBeNull(); // e2 is superseded (terminal) and e1 is active, yet neither is the newest: nothing is current
@@ -92,7 +98,12 @@ describe('the current evaluation of a report', () => {
     const a = await report(t);
     const b = await report(t);
     const [a1, a2, b1] = [await a.evaluate(), await a.evaluate(), await b.evaluate()];
-    expect([...(await repo.currentEvaluationIds(t, [a.reportId, b.reportId])).entries()].sort()).toEqual([[a.reportId, a2], [b.reportId, b1]].sort());
+    expect([...(await repo.currentEvaluationIds(t, [a.reportId, b.reportId])).entries()].sort()).toEqual(
+      [
+        [a.reportId, a2],
+        [b.reportId, b1],
+      ].sort(),
+    );
     await retract(t, a2);
     const listed = (await repo.listEvaluations(t, { current: true }, { offset: 0, limit: 100 })).items.map((e) => e.id).sort();
     expect(listed).toEqual([b1]); // a's newest is retracted, so a has no current evaluation (a1 is active but not promoted)
@@ -107,7 +118,12 @@ describe('the current evaluation of a report', () => {
     const a = await report(ta);
     const b = await report(tb);
     const [ea, eb] = [await a.evaluate(), await b.evaluate()];
-    expect(await bypassing.currentEvaluationIds(ta, [a.reportId, b.reportId])).toEqual(new Map([[a.reportId, ea], [b.reportId, null]]));
+    expect(await bypassing.currentEvaluationIds(ta, [a.reportId, b.reportId])).toEqual(
+      new Map([
+        [a.reportId, ea],
+        [b.reportId, null],
+      ]),
+    );
     expect((await bypassing.listEvaluations(ta, {}, { offset: 0, limit: 100 })).items.map((e) => e.id)).toEqual([ea]); // the unfiltered list, too
     expect((await bypassing.listEvaluations(ta, { current: true }, { offset: 0, limit: 100 })).items.map((e) => e.id)).toEqual([ea]);
     expect((await bypassing.listEvaluations(tb, { current: true }, { offset: 0, limit: 100 })).items.map((e) => e.id)).toEqual([eb]);

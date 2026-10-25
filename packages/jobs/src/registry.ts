@@ -54,6 +54,9 @@ export class JobRegistry {
     return this.byType.get(type);
   }
   types(options: { includeTestOnly?: boolean } = {}): string[] {
-    return [...this.byType.values()].filter((d) => options.includeTestOnly || !d.testOnly).map((d) => d.type).sort();
+    return [...this.byType.values()]
+      .filter((d) => options.includeTestOnly || !d.testOnly)
+      .map((d) => d.type)
+      .sort();
   }
 }

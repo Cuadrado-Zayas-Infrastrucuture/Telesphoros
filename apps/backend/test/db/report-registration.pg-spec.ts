@@ -23,24 +23,48 @@ beforeAll(async () => {
   reports = new PostgresReportsRepository(first);
   otherPool = new PostgresReportsRepository(second);
 });
-afterAll(async () => { await first?.onModuleDestroy(); await second?.onModuleDestroy(); await pg?.drop(); });
+afterAll(async () => {
+  await first?.onModuleDestroy();
+  await second?.onModuleDestroy();
+  await pg?.drop();
+});
 
 async function record(): Promise<ReportRecord> {
-  const patient = await first.withTenant(tenant, c => c.query(`INSERT INTO patients (tenant_id, created_by, label)
-    VALUES ($1, $2, $3) RETURNING id`, [tenant, actor, `SYN-${randomUUID()}`]));
+  const patient = await first.withTenant(tenant, (c) =>
+    c.query(
+      `INSERT INTO patients (tenant_id, created_by, label)
+    VALUES ($1, $2, $3) RETURNING id`,
+      [tenant, actor, `SYN-${randomUUID()}`],
+    ),
+  );
   const now = new Date().toISOString();
-  return { id: randomUUID(), tenantId: tenant, createdBy: actor, patientId: patient.rows[0].id,
-    type: 'vcf', filename: 'synthetic.vcf', sizeBytes: 100, status: 'received', createdAt: now, updatedAt: now,
-    creationRequestId: randomUUID(), creationRequestHash: hash };
+  return {
+    id: randomUUID(),
+    tenantId: tenant,
+    createdBy: actor,
+    patientId: patient.rows[0].id,
+    type: 'vcf',
+    filename: 'synthetic.vcf',
+    sizeBytes: 100,
+    status: 'received',
+    createdAt: now,
+    updatedAt: now,
+    creationRequestId: randomUUID(),
+    creationRequestHash: hash,
+  };
 }
 
 it('deduplicates concurrent creates across independent restricted-role pools', async () => {
   const input = await record();
-  const results = await Promise.all(Array.from({ length: 16 }, (_, index) =>
-    (index % 2 ? reports : otherPool).insertOrReplay({ ...input, id: randomUUID() })));
-  expect(new Set(results.map(row => row.id)).size).toBe(1);
-  const rows = await first.withTenant(tenant, c => c.query(`SELECT id FROM reports
-    WHERE tenant_id=$1 AND created_by=$2 AND creation_request_id=$3`, [tenant, actor, input.creationRequestId]));
+  const results = await Promise.all(Array.from({ length: 16 }, (_, index) => (index % 2 ? reports : otherPool).insertOrReplay({ ...input, id: randomUUID() })));
+  expect(new Set(results.map((row) => row.id)).size).toBe(1);
+  const rows = await first.withTenant(tenant, (c) =>
+    c.query(
+      `SELECT id FROM reports
+    WHERE tenant_id=$1 AND created_by=$2 AND creation_request_id=$3`,
+      [tenant, actor, input.creationRequestId],
+    ),
+  );
   expect(rows.rows).toEqual([{ id: results[0]!.id }]);
   await expect(reports.insert({ ...input, id: randomUUID() })).rejects.toMatchObject({ constraint: 'reports_creation_request_uq' });
   expect((await reports.insertOrReplay(input)).id).toBe(results[0]!.id);
@@ -50,9 +74,10 @@ it('admits one winner and rejects a different original payload when requests rac
   const input = await record();
   const changed = { ...input, id: randomUUID(), filename: 'different.vcf', creationRequestHash: 'b'.repeat(64) };
   const results = await Promise.allSettled([reports.insertOrReplay(input), otherPool.insertOrReplay(changed)]);
-  const won = results.filter(result => result.status === 'fulfilled');
-  const lost = results.filter(result => result.status === 'rejected');
-  expect(won).toHaveLength(1); expect(lost).toHaveLength(1);
+  const won = results.filter((result) => result.status === 'fulfilled');
+  const lost = results.filter((result) => result.status === 'rejected');
+  expect(won).toHaveLength(1);
+  expect(lost).toHaveLength(1);
   expect(lost[0]).toMatchObject({ reason: { constraint: 'reports_creation_request_uq' } });
   if (won[0]!.status !== 'fulfilled') throw new Error('Expected one winning registration');
   const original = won[0]!.value.creationRequestHash === hash ? input : changed;
@@ -71,22 +96,36 @@ it('retains retry identity after pool recreation, correction and soft deletion',
     await expect(repository.insertOrReplay(input)).rejects.toMatchObject({ constraint: 'reports_creation_request_uq' });
     expect(await repository.findById(tenant, created.id)).toBeUndefined();
     expect((await repository.insertOrReplay({ ...input, id: randomUUID(), creationRequestId: randomUUID() })).id).not.toBe(created.id);
-  } finally { await fresh.onModuleDestroy(); }
+  } finally {
+    await fresh.onModuleDestroy();
+  }
 });
 
 it('enforces pair validity and immutable identity in PostgreSQL; ordinary metadata correction still succeeds', async () => {
-  const input = await record(); await reports.insertOrReplay(input);
-  for (const [column, value] of [['creation_request_id', randomUUID()], ['creation_request_hash', 'b'.repeat(64)]] as const) {
-    await expect(first.withTenant(tenant, c => c.query(`UPDATE reports SET ${column}=$1 WHERE id=$2 AND tenant_id=$3`,
-      [value, input.id, tenant]))).rejects.toMatchObject({ code: '23000' });
+  const input = await record();
+  await reports.insertOrReplay(input);
+  for (const [column, value] of [
+    ['creation_request_id', randomUUID()],
+    ['creation_request_hash', 'b'.repeat(64)],
+  ] as const) {
+    await expect(first.withTenant(tenant, (c) => c.query(`UPDATE reports SET ${column}=$1 WHERE id=$2 AND tenant_id=$3`, [value, input.id, tenant]))).rejects.toMatchObject({
+      code: '23000',
+    });
   }
   for (const change of [{ creationRequestHash: null }, { creationRequestHash: 'invalid' }, { creationRequestId: null }]) {
     await expect(reports.insert({ ...input, ...change, id: randomUUID() })).rejects.toMatchObject({ code: '23514', constraint: 'reports_creation_request_pair' });
   }
   const legacy = { ...input, id: randomUUID(), creationRequestId: null, creationRequestHash: null };
   await reports.insert(legacy);
-  await expect(first.withTenant(tenant, c => c.query(`UPDATE reports SET creation_request_id=$1, creation_request_hash=$2
-    WHERE id=$3 AND tenant_id=$4`, [randomUUID(), hash, legacy.id, tenant]))).rejects.toMatchObject({ code: '23000' });
+  await expect(
+    first.withTenant(tenant, (c) =>
+      c.query(
+        `UPDATE reports SET creation_request_id=$1, creation_request_hash=$2
+    WHERE id=$3 AND tenant_id=$4`,
+        [randomUUID(), hash, legacy.id, tenant],
+      ),
+    ),
+  ).rejects.toMatchObject({ code: '23000' });
   await reports.update({ ...input, filename: 'corrected.vcf' });
   expect(await reports.insertOrReplay(input)).toMatchObject({ filename: 'corrected.vcf', creationRequestHash: hash });
 });
@@ -94,15 +133,20 @@ it('enforces pair validity and immutable identity in PostgreSQL; ordinary metada
 it('upgrades legacy rows unchanged and guards populated rollback before explicit fixture-only opt-in', async () => {
   const disposable = await createEphemeralDatabase();
   try {
-    await withAdmin(disposable.adminUrl, async c => {
+    await withAdmin(disposable.adminUrl, async (c) => {
       // 0021 and 0020 hold audit records (merge and patient-link decisions), so reverting them needs the same deliberate setting as the other audit migrations.
       await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
       const throughRequests = revertThrough('report_creation_requests');
       expect(await migrateDown(c, throughRequests.steps)).toEqual(throughRequests.reverted);
       await c.query(`RESET telesphoros.allow_audit_drop`);
       const p = (await c.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ($1,$2,'SYN-LEGACY') RETURNING id`, [tenant, actor])).rows[0].id;
-      const row = (await c.query(`INSERT INTO reports (tenant_id,created_by,patient_id,type,original_filename,size_bytes)
-        VALUES ($1,$2,$3,'vcf','legacy.vcf',100) RETURNING *`, [tenant, actor, p])).rows[0];
+      const row = (
+        await c.query(
+          `INSERT INTO reports (tenant_id,created_by,patient_id,type,original_filename,size_bytes)
+        VALUES ($1,$2,$3,'vcf','legacy.vcf',100) RETURNING *`,
+          [tenant, actor, p],
+        )
+      ).rows[0];
       expect(await migrateUp(c)).toEqual(versionsFrom('report_creation_requests'));
       const upgraded = (await c.query('SELECT * FROM reports WHERE id=$1 AND tenant_id=$2', [row.id, tenant])).rows[0];
       expect(upgraded).toEqual({ ...row, creation_request_id: null, creation_request_hash: null, upload_revision: expect.any(String) });
@@ -114,20 +158,27 @@ it('upgrades legacy rows unchanged and guards populated rollback before explicit
       await c.query(`RESET telesphoros.allow_audit_drop`);
       // The only data loss here is retry metadata in this helper-owned disposable database.
       const key = randomUUID();
-      await c.query(`INSERT INTO reports (tenant_id,created_by,patient_id,type,original_filename,size_bytes,creation_request_id,creation_request_hash)
-        VALUES ($1,$2,$3,'vcf','keyed.vcf',100,$4,$5)`, [tenant, actor, p, key, hash]);
+      await c.query(
+        `INSERT INTO reports (tenant_id,created_by,patient_id,type,original_filename,size_bytes,creation_request_id,creation_request_hash)
+        VALUES ($1,$2,$3,'vcf','keyed.vcf',100,$4,$5)`,
+        [tenant, actor, p, key, hash],
+      );
       for (const setting of ['', 'true', 'YES']) {
         await c.query("SELECT set_config('telesphoros.allow_report_retry_drop',$1,false)", [setting]);
         await expect(migrateDown(c, 1)).rejects.toThrow(/Refusing to drop populated/);
       }
-      expect((await c.query('SELECT creation_request_hash FROM reports WHERE tenant_id=$1 AND created_by=$2 AND creation_request_id=$3', [tenant, actor, key])).rows).toEqual([{ creation_request_hash: hash }]);
+      expect((await c.query('SELECT creation_request_hash FROM reports WHERE tenant_id=$1 AND created_by=$2 AND creation_request_id=$3', [tenant, actor, key])).rows).toEqual([
+        { creation_request_hash: hash },
+      ]);
       await c.query("SELECT set_config('telesphoros.allow_report_retry_drop','yes',false)");
       expect(await migrateDown(c, 1)).toEqual(['0014']);
       expect((await c.query('SELECT count(*)::int AS n FROM reports WHERE tenant_id=$1', [tenant])).rows).toEqual([{ n: 2 }]);
       expect(await migrateUp(c)).toEqual(versionsFrom('report_creation_requests'));
       await assertSchemaAcceptance(c);
     });
-  } finally { await disposable.drop(); }
+  } finally {
+    await disposable.drop();
+  }
 });
 
 describe('bounded migration lock contention', () => {
@@ -137,12 +188,15 @@ describe('bounded migration lock contention', () => {
   let preparing: Promise<void> | undefined;
   // Full schema creation and rollback are fixture preparation, not the bounded lock check.
   // Each hook and the test retain Jest's default deadline; SQL lock_timeout stays at two seconds.
-  beforeAll(async () => { disposable = createEphemeralDatabase({ signal: cancellation.signal }); await disposable; });
+  beforeAll(async () => {
+    disposable = createEphemeralDatabase({ signal: cancellation.signal });
+    await disposable;
+  });
   beforeAll(() => {
     preparing = (async () => {
       const pg = await disposable;
       cancellation.signal.throwIfAborted();
-      await withAdmin(pg.adminUrl, async c => {
+      await withAdmin(pg.adminUrl, async (c) => {
         await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
         await migrateDown(c, revertThrough('report_creation_requests').steps); // 0021 and 0020 are audit migrations
       });
@@ -152,10 +206,14 @@ describe('bounded migration lock contention', () => {
   afterAll(async () => {
     cancellation.abort(new Error('Migration fixture scope ended'));
     // A timed-out test is still running. Drain its finally block before Jest tears down imports.
-    try { await preparing; }
-    finally {
-      try { await checking; }
-      finally { await (await disposable).drop(); }
+    try {
+      await preparing;
+    } finally {
+      try {
+        await checking;
+      } finally {
+        await (await disposable).drop();
+      }
     }
   });
   it('fails migration on bounded lock contention without a partial upgrade, then succeeds after release', () => {
@@ -163,38 +221,47 @@ describe('bounded migration lock contention', () => {
       const pg = await disposable;
       const blocker = new Client({ connectionString: pg.adminUrl });
       try {
-        await blocker.connect(); await blocker.query('BEGIN'); await blocker.query('LOCK TABLE reports IN ACCESS EXCLUSIVE MODE');
-        await expect(withAdmin(pg.adminUrl, c => migrateUp(c))).rejects.toThrow(/lock timeout/);
+        await blocker.connect();
+        await blocker.query('BEGIN');
+        await blocker.query('LOCK TABLE reports IN ACCESS EXCLUSIVE MODE');
+        await expect(withAdmin(pg.adminUrl, (c) => migrateUp(c))).rejects.toThrow(/lock timeout/);
         await blocker.query('ROLLBACK');
-        await withAdmin(pg.adminUrl, async c => {
+        await withAdmin(pg.adminUrl, async (c) => {
           expect((await c.query("SELECT 1 FROM information_schema.columns WHERE table_name='reports' AND column_name='creation_request_id'")).rows).toEqual([]);
           expect(await migrateUp(c)).toEqual(versionsFrom('report_creation_requests'));
           await assertSchemaAcceptance(c);
         });
-      } finally { await blocker.end(); }
+      } finally {
+        await blocker.end();
+      }
     })();
     return checking;
   });
 });
 
 it('detects an injected uniqueness defect and an injected disabled identity guard, with restored controls', async () => {
-  const input = await record(); await reports.insertOrReplay(input);
-  await withAdmin(pg.adminUrl, async c => {
+  const input = await record();
+  await reports.insertOrReplay(input);
+  await withAdmin(pg.adminUrl, async (c) => {
     await assertSchemaAcceptance(c);
     await c.query('BEGIN');
     try {
       await c.query('ALTER TABLE reports DROP CONSTRAINT reports_creation_request_uq');
       await expect(assertSchemaAcceptance(c)).rejects.toThrow();
-    } finally { await c.query('ROLLBACK'); }
+    } finally {
+      await c.query('ROLLBACK');
+    }
     await assertSchemaAcceptance(c);
-    const attempt = () => expect(c.query('UPDATE reports SET creation_request_hash=$1 WHERE id=$2 AND tenant_id=$3', ['b'.repeat(64), input.id, tenant]))
-      .rejects.toMatchObject({ code: '23000' });
+    const attempt = () =>
+      expect(c.query('UPDATE reports SET creation_request_hash=$1 WHERE id=$2 AND tenant_id=$3', ['b'.repeat(64), input.id, tenant])).rejects.toMatchObject({ code: '23000' });
     await attempt();
     await c.query('BEGIN');
     try {
       await c.query('ALTER TABLE reports DISABLE TRIGGER reports_creation_request_guard');
       await expect(attempt()).rejects.toThrow(/promise resolved/i);
-    } finally { await c.query('ROLLBACK'); }
+    } finally {
+      await c.query('ROLLBACK');
+    }
     await attempt();
     expect((await reports.insertOrReplay(input)).creationRequestHash).toBe(hash);
   });

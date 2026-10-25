@@ -19,12 +19,32 @@ interface Stores {
 
 const stamp = (offsetMs = 0) => new Date(Date.now() + offsetMs).toISOString();
 const patient = (tenantId: string, label: string, createdAt = stamp()): PatientRecord => ({
-  id: randomUUID(), tenantId, createdBy: 'syn-actor', label, createdAt, updatedAt: createdAt,
+  id: randomUUID(),
+  tenantId,
+  createdBy: 'syn-actor',
+  label,
+  createdAt,
+  updatedAt: createdAt,
 });
 const report = (tenantId: string, patientId: string, over: Partial<ReportRecord> = {}): ReportRecord => ({
-  id: randomUUID(), tenantId, createdBy: 'syn-actor', patientId, type: 'vcf', filename: 'a.vcf', sizeBytes: 100, status: 'received',
-  storageKey: null, contentType: null, sha256: null, uploadedAt: null, objectVersion: null, uploadRequestedBy: null, uploadedBy: null,
-  createdAt: stamp(), updatedAt: stamp(), ...over,
+  id: randomUUID(),
+  tenantId,
+  createdBy: 'syn-actor',
+  patientId,
+  type: 'vcf',
+  filename: 'a.vcf',
+  sizeBytes: 100,
+  status: 'received',
+  storageKey: null,
+  contentType: null,
+  sha256: null,
+  uploadedAt: null,
+  objectVersion: null,
+  uploadRequestedBy: null,
+  uploadedBy: null,
+  createdAt: stamp(),
+  updatedAt: stamp(),
+  ...over,
 });
 
 let pgDb: EphemeralDatabase;
@@ -53,7 +73,10 @@ const postgres = async (): Promise<Stores> => ({
 // ---------------------------------------------------------------------------------------------
 // One contract, run against BOTH implementations: they must be interchangeable.
 // ---------------------------------------------------------------------------------------------
-describe.each([['in-memory', memory], ['postgres', postgres]] as const)('repository contract: %s', (_name, make) => {
+describe.each([
+  ['in-memory', memory],
+  ['postgres', postgres],
+] as const)('repository contract: %s', (_name, make) => {
   const tenant = () => `tenant-${randomUUID()}`;
 
   describe('patients', () => {
@@ -123,13 +146,16 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
       await patients.insert(p1);
       await patients.insert(p2);
       const uploaded = report(o, p1.id, {
-        storageKey: `reports/${randomUUID()}`, contentType: 'text/plain', sha256: 'a'.repeat(64), uploadedAt: stamp(),
+        storageKey: `reports/${randomUUID()}`,
+        contentType: 'text/plain',
+        sha256: 'a'.repeat(64),
+        uploadedAt: stamp(),
       });
       await reports.insert(uploaded);
       await reports.insert(report(o, p1.id));
       await reports.insert(report(o, p2.id));
 
-      expect(await reports.findById(o, uploaded.id)).toEqual({...uploaded, uploadRevision:expect.any(String),deletedAt:null});
+      expect(await reports.findById(o, uploaded.id)).toEqual({ ...uploaded, uploadRevision: expect.any(String), deletedAt: null });
       expect((await reports.list(o, { offset: 0, limit: 10 }, { patientId: p1.id })).total).toBe(2);
       expect((await reports.list(o, { offset: 0, limit: 10 }, {})).total).toBe(3);
       expect(await reports.countByPatient(o, p1.id)).toBe(2);
@@ -146,7 +172,7 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
       await reports.insert(r);
       const edited = { ...r, filename: 'b.json', type: 'structured' as const, status: 'processing' as const, updatedAt: stamp(10) };
       await reports.update(edited);
-      expect(await reports.findById(o, r.id)).toEqual({...edited, uploadRevision:expect.any(String),deletedAt:null});
+      expect(await reports.findById(o, r.id)).toEqual({ ...edited, uploadRevision: expect.any(String), deletedAt: null });
     });
 
     it('update() never touches the stored file: only type, file name and status change', async () => {
@@ -185,7 +211,9 @@ describe.each([['in-memory', memory], ['postgres', postgres]] as const)('reposit
       expect(await reports.findById(o, r.id)).toMatchObject({ uploadedAt: expect.any(String) });
 
       // A late declaration, and a late commit attempt by someone else, find the upload already done and change nothing.
-      expect(await declareUpload(reports, r, { principal: 'syn-late', sha256: 'e'.repeat(64), contentType: 'application/json', expectedRevision: second.attempt.revision })).toBeUndefined();
+      expect(
+        await declareUpload(reports, r, { principal: 'syn-late', sha256: 'e'.repeat(64), contentType: 'application/json', expectedRevision: second.attempt.revision }),
+      ).toBeUndefined();
       expect(await reports.commitAttempt(first.identity)).toBe(false);
       expect(await reports.findById(o, r.id)).toMatchObject({ objectVersion: 'ver-1', uploadedBy: 'syn-second', sha256: hash, uploadRequestedBy: 'syn-first' });
     });

@@ -16,9 +16,17 @@ let database: Database;
 let repo: PostgresLedgerRecordsRepository;
 const tenant = () => `tenant-${randomUUID()}`;
 const cell = (over: Partial<DisputeInput> = {}): DisputeInput => ({
-  guidelineId: 'syn-guideline', guidelineVersion: '1', guidelineContentSha256: 'c'.repeat(64), locator: { table: 'recommendations', row: 'r1' }, note: 'the cell reads wrongly', ...over,
+  guidelineId: 'syn-guideline',
+  guidelineVersion: '1',
+  guidelineContentSha256: 'c'.repeat(64),
+  locator: { table: 'recommendations', row: 'r1' },
+  note: 'the cell reads wrongly',
+  ...over,
 });
-const fingerprint = (input: DisputeInput) => createHash('sha256').update(JSON.stringify([input.guidelineId, input.locator.table, input.locator.row, input.locator.column ?? null, input.note])).digest('hex');
+const fingerprint = (input: DisputeInput) =>
+  createHash('sha256')
+    .update(JSON.stringify([input.guidelineId, input.locator.table, input.locator.row, input.locator.column ?? null, input.note]))
+    .digest('hex');
 const keyed = (input: DisputeInput, id = randomUUID()): DisputeInput => ({ ...input, request: { id, hash: fingerprint(input) } });
 
 beforeAll(async () => {
@@ -130,10 +138,12 @@ describe('the table itself', () => {
     const input = keyed(cell());
     const stored = await repo.raiseDispute(t, 'syn-reviewer', input);
     await withAdmin(pg.adminUrl, async (c: Client) => {
-      const insert = (id: string | null, hash: string | null) => c.query(
-        `INSERT INTO cell_disputes (tenant_id, created_by, ledger_event_id, guideline_id, guideline_version, guideline_content_sha256, locator_table, locator_row, note_id, creation_request_id, creation_request_hash)
+      const insert = (id: string | null, hash: string | null) =>
+        c.query(
+          `INSERT INTO cell_disputes (tenant_id, created_by, ledger_event_id, guideline_id, guideline_version, guideline_content_sha256, locator_table, locator_row, note_id, creation_request_id, creation_request_hash)
          SELECT tenant_id, created_by, gen_random_uuid(), guideline_id, guideline_version, guideline_content_sha256, locator_table, locator_row, note_id, $2, $3 FROM cell_disputes WHERE id = $1`,
-        [stored.record.id, id, hash]);
+          [stored.record.id, id, hash],
+        );
       await expect(insert(randomUUID(), null)).rejects.toMatchObject({ code: '23514', constraint: 'cell_disputes_creation_request_pair' });
       await expect(insert(null, 'a'.repeat(64))).rejects.toMatchObject({ code: '23514', constraint: 'cell_disputes_creation_request_pair' });
       await expect(insert(randomUUID(), 'not-a-hash')).rejects.toMatchObject({ code: '23514', constraint: 'cell_disputes_creation_request_pair' });

@@ -41,11 +41,25 @@ describe('Cache-Control on authenticated and refused responses', () => {
   it('marks 401, 403 and 404 responses no-store', async () => {
     expect((await api().get('/api/v1/patients').expect(401)).headers['cache-control']).toBe(NO_STORE);
     expect((await api().get('/api/v1/patients').set(bearer('not-a-token')).expect(401)).headers['cache-control']).toBe(NO_STORE);
-    const forbidden = await api().post('/api/v1/patients').set(bearer(await readerA())).send({ label: 'SYN-FORBIDDEN' }).expect(403);
+    const forbidden = await api()
+      .post('/api/v1/patients')
+      .set(bearer(await readerA()))
+      .send({ label: 'SYN-FORBIDDEN' })
+      .expect(403);
     expect(forbidden.headers['cache-control']).toBe(NO_STORE);
-    const missing = await api().get(`/api/v1/patients/${MISSING_ID}`).set(bearer(await clinicianA())).expect(404);
+    const missing = await api()
+      .get(`/api/v1/patients/${MISSING_ID}`)
+      .set(bearer(await clinicianA()))
+      .expect(404);
     expect(missing.headers['cache-control']).toBe(NO_STORE);
-    expect((await api().get('/api/v1/no-such-route').set(bearer(await clinicianA())).expect(404)).headers['cache-control']).toBe(NO_STORE);
+    expect(
+      (
+        await api()
+          .get('/api/v1/no-such-route')
+          .set(bearer(await clinicianA()))
+          .expect(404)
+      ).headers['cache-control'],
+    ).toBe(NO_STORE);
   });
 
   it('marks the public health and readiness answers no-store too, so a probe never reads a stale answer', async () => {

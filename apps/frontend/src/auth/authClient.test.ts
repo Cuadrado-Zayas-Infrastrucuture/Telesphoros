@@ -47,8 +47,14 @@ describe('createAuthClient: configuration', () => {
     expect(stateStore.options.store).toBe(window.sessionStorage);
     expect(stateStore.options.store).not.toBe(window.localStorage);
     expect(settings).toMatchObject({
-      authority: config.authority, client_id: config.clientId, redirect_uri: config.redirectUri,
-      response_type: 'code', scope: 'openid email', automaticSilentRenew: false, monitorSession: false, loadUserInfo: false,
+      authority: config.authority,
+      client_id: config.clientId,
+      redirect_uri: config.redirectUri,
+      response_type: 'code',
+      scope: 'openid email',
+      automaticSilentRenew: false,
+      monitorSession: false,
+      loadUserInfo: false,
     });
   });
 });
@@ -70,13 +76,14 @@ describe('createAuthClient: signing in', () => {
     expect(manager.removeUser).toHaveBeenCalledTimes(1);
   });
 
-  it.each([['an external URL', 'https://evil.example.com'], ['a missing state', undefined], ['the callback itself', '/auth/callback?code=1']])(
-    'ignores %s as the place to return to',
-    async (_name, returnTo) => {
-      manager.signinRedirectCallback.mockResolvedValue(user(returnTo === undefined ? undefined : { returnTo }));
-      expect((await createAuthClient(config).completeSignIn()).returnTo).toBe('/');
-    },
-  );
+  it.each([
+    ['an external URL', 'https://evil.example.com'],
+    ['a missing state', undefined],
+    ['the callback itself', '/auth/callback?code=1'],
+  ])('ignores %s as the place to return to', async (_name, returnTo) => {
+    manager.signinRedirectCallback.mockResolvedValue(user(returnTo === undefined ? undefined : { returnTo }));
+    expect((await createAuthClient(config).completeSignIn()).returnTo).toBe('/');
+  });
 
   it('redeems the one-time code only once, even if asked twice (React StrictMode runs effects twice)', async () => {
     manager.signinRedirectCallback.mockResolvedValue(user({ returnTo: '/' }));

@@ -132,7 +132,9 @@ suite('restore from the second provider', () => {
     const { g, keyFile, upload } = await setup();
     const dest = tempDir();
     const noLockBucket = await newBucket({ lock: false });
-    await expect(createBackup({ adminUrl: db.adminUrl, destDir: dest, keyFile, upload: { ...upload, bucket: noLockBucket }, removeLocalAfterUpload: true })).rejects.toMatchObject({ name: 'InvalidRequest' });
+    await expect(createBackup({ adminUrl: db.adminUrl, destDir: dest, keyFile, upload: { ...upload, bucket: noLockBucket }, removeLocalAfterUpload: true })).rejects.toMatchObject({
+      name: 'InvalidRequest',
+    });
     expect(readdirSync(dest)).toHaveLength(1); // the only copy is not deleted
     expect(g.requests.filter((r) => r.op === 'put' && r.status === 200)).toHaveLength(0);
   });
@@ -152,7 +154,8 @@ suite('restore from the second provider', () => {
       const env = await setup();
       const result = await createBackup({ adminUrl: db.adminUrl, destDir: tempDir(), keyFile: env.keyFile, upload: env.upload });
       const name = result.upload!.keys[0]!.split('/')[1]!;
-      const restore = (keyFile = env.keyFile) => restoreFromRemote({ adminUrl: adminUrl(), keyFile, client: env.read, location: { bucket: env.bucket, prefix: 'nightly', backup: name } });
+      const restore = (keyFile = env.keyFile) =>
+        restoreFromRemote({ adminUrl: adminUrl(), keyFile, client: env.read, location: { bucket: env.bucket, prefix: 'nightly', backup: name } });
       const key = (file: string) => `nightly/${name}/${file}`;
       return { ...env, name, restore, key };
     };

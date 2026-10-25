@@ -10,16 +10,34 @@ const reviewer: Principal = { sub: 'syn-reviewer', tenantId: 'tenant-unit', role
 const body = { guidelineId: 'syn-guideline', locator: { table: 'recommendations', row: 'r1' }, note: 'reads wrongly' };
 
 function setup() {
-  const cells = [{ table: 'recommendations', row: 'r1' }, { table: 'recommendations', row: 'r2' }, { table: 't2', row: 'r1' }, { table: 'recommendations', row: 'r1', column: 'c' }];
+  const cells = [
+    { table: 'recommendations', row: 'r1' },
+    { table: 'recommendations', row: 'r2' },
+    { table: 't2', row: 'r1' },
+    { table: 'recommendations', row: 'r1', column: 'c' },
+  ];
   const guideline = (id: string) => ({ id, guidelineVersion: '1', recommendations: cells.map((locator) => ({ locator })) });
   const knowledge = {
     allGuidelines: () => [guideline('syn-guideline'), guideline('other')],
-    files: [{ kind: 'guideline', id: 'syn-guideline', contentSha256: 'c'.repeat(64) }, { kind: 'guideline', id: 'other', contentSha256: 'd'.repeat(64) }],
+    files: [
+      { kind: 'guideline', id: 'syn-guideline', contentSha256: 'c'.repeat(64) },
+      { kind: 'guideline', id: 'other', contentSha256: 'd'.repeat(64) },
+    ],
   } as unknown as KnowledgeSet;
   const now = new Date().toISOString();
   const record = {
-    id: randomUUID(), tenantId: 'tenant-unit', seq: '1', createdBy: 'syn-reviewer', createdAt: now, guidelineId: 'syn-guideline', guidelineVersion: '1', guidelineContentSha256: 'c'.repeat(64),
-    locatorTable: 'recommendations', locatorRow: 'r1', locatorColumn: null, note: null,
+    id: randomUUID(),
+    tenantId: 'tenant-unit',
+    seq: '1',
+    createdBy: 'syn-reviewer',
+    createdAt: now,
+    guidelineId: 'syn-guideline',
+    guidelineVersion: '1',
+    guidelineContentSha256: 'c'.repeat(64),
+    locatorTable: 'recommendations',
+    locatorRow: 'r1',
+    locatorColumn: null,
+    note: null,
   };
   const ledger = {
     raiseDispute: jest.fn().mockResolvedValue({ record, created: true }),
@@ -39,7 +57,15 @@ describe('DisputesService.raise with a retry id', () => {
   it('gives the same fingerprint for the same request and another for any change in guideline, table, row, column or note', async () => {
     const { service, ledger } = setup();
     const requestId = randomUUID();
-    const variants = [body, body, { ...body, note: 'other' }, { ...body, locator: { ...body.locator, row: 'r2' } }, { ...body, locator: { ...body.locator, table: 't2' } }, { ...body, locator: { ...body.locator, column: 'c' } }, { ...body, guidelineId: 'other' }];
+    const variants = [
+      body,
+      body,
+      { ...body, note: 'other' },
+      { ...body, locator: { ...body.locator, row: 'r2' } },
+      { ...body, locator: { ...body.locator, table: 't2' } },
+      { ...body, locator: { ...body.locator, column: 'c' } },
+      { ...body, guidelineId: 'other' },
+    ];
     for (const variant of variants) await service.raise(reviewer, { ...variant, requestId });
     const hashes = ledger.raiseDispute.mock.calls.map((call) => call[2].request!.hash);
     expect(hashes).toHaveLength(variants.length);
@@ -56,7 +82,11 @@ describe('DisputesService.raise with a retry id', () => {
   it('shows the dispute as it is now when the ledger answers with one it already had (a replay after a decision is not shown as open)', async () => {
     const { service, ledger, record } = setup();
     ledger.raiseDispute.mockResolvedValue({ record, created: false } as never);
-    ledger.findDispute.mockResolvedValue({ dispute: record, status: 'dismissed', decision: { id: randomUUID(), decision: 'dismissed', createdBy: 'syn-decider', createdAt: record.createdAt, evidenceNote: null } } as never);
+    ledger.findDispute.mockResolvedValue({
+      dispute: record,
+      status: 'dismissed',
+      decision: { id: randomUUID(), decision: 'dismissed', createdBy: 'syn-decider', createdAt: record.createdAt, evidenceNote: null },
+    } as never);
     const shown = await service.raise(reviewer, { ...body, requestId: randomUUID() });
     expect(shown.status).toBe('dismissed');
     expect(ledger.findDispute).toHaveBeenCalledWith('tenant-unit', record.id);

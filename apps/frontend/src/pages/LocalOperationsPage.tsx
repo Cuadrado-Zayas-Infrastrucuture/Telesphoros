@@ -56,9 +56,7 @@ export default function LocalOperationsPage() {
   const locked = useRef(false);
   const disputeAttempt = useRef<{ key: string; id: string } | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});
-  function validate(
-    issues: readonly { path: readonly PropertyKey[]; message: string }[],
-  ) {
+  function validate(issues: readonly { path: readonly PropertyKey[]; message: string }[]) {
     const errors: Record<string, string> = {};
     for (const issue of issues) {
       const key = issue.path.join('.');
@@ -76,14 +74,12 @@ export default function LocalOperationsPage() {
     }
     setFields(errors);
     const key = Object.keys(errors)[0];
-    if (key)
-      document.getElementById(key === 'evidenceNote' ? 'note' : key)?.focus();
+    if (key) document.getElementById(key === 'evidenceNote' ? 'note' : key)?.focus();
     return !!key;
   }
   const reviewer = roles.includes('reviewer');
   async function json(path: string, body?: unknown) {
-    if (!import.meta.env.DEV || window.location.hostname !== '127.0.0.1')
-      throw new Error('Local experiment only.');
+    if (!import.meta.env.DEV || window.location.hostname !== '127.0.0.1') throw new Error('Local experiment only.');
     const response = await apiFetch(
       '/api/v1' + path,
       body === undefined
@@ -94,10 +90,7 @@ export default function LocalOperationsPage() {
             body: JSON.stringify(body),
           },
     );
-    if (!response.ok)
-      throw new Error(
-        `Request refused (${response.status}). Refresh the record before retrying.`,
-      );
+    if (!response.ok) throw new Error(`Request refused (${response.status}). Refresh the record before retrying.`);
     return response.json();
   }
   async function act(work: () => Promise<void>) {
@@ -115,8 +108,7 @@ export default function LocalOperationsPage() {
     }
   }
   function guard() {
-    if (!reviewer || !confirmed)
-      throw new Error('Explicit reviewer confirmation required.');
+    if (!reviewer || !confirmed) throw new Error('Explicit reviewer confirmation required.');
   }
   async function history(page = evaluationMeta?.page ?? 1) {
     const result = paginatedSchema(evaluationSummaryDtoSchema).parse(await json(`/evaluations?page=${page}&pageSize=${DEFAULT_PAGE_SIZE}`));
@@ -140,9 +132,7 @@ export default function LocalOperationsPage() {
       kind,
       reasonCode: reason,
       ...(last ? { previousCorrectionId: last.id } : {}),
-      ...(kind === 'supersession'
-        ? { replacementEvaluationId: replacement }
-        : {}),
+      ...(kind === 'supersession' ? { replacementEvaluationId: replacement } : {}),
       ...(note.trim() ? { note } : {}),
     });
     if (!parsed.success) {
@@ -151,9 +141,7 @@ export default function LocalOperationsPage() {
     }
     validate([]);
     const body = parsed.data;
-    correctionDtoSchema.parse(
-      await json('/evaluations/' + selected.id + '/corrections', body),
-    );
+    correctionDtoSchema.parse(await json('/evaluations/' + selected.id + '/corrections', body));
     await open(selected.id);
     await history();
     setNote('');
@@ -205,9 +193,7 @@ export default function LocalOperationsPage() {
     }
     validate([]);
     const body = parsed.data;
-    const updated = disputeDtoSchema.parse(
-      await json('/cell-disputes/' + chosen.id + '/decision', body),
-    );
+    const updated = disputeDtoSchema.parse(await json('/cell-disputes/' + chosen.id + '/decision', body));
     setChosen(updated);
     setConfirmed(false);
     setNote('');
@@ -215,25 +201,14 @@ export default function LocalOperationsPage() {
   }
   async function impact(next = false) {
     if (!chosen) throw new Error('Select a dispute.');
-    const data = cellUsageDtoSchema.parse(
-      await json(
-        '/cell-disputes/' +
-          chosen.id +
-          '/evaluations?limit=50&afterSeq=' +
-          (next ? (cursor ?? '0') : '0'),
-      ),
-    );
+    const data = cellUsageDtoSchema.parse(await json('/cell-disputes/' + chosen.id + '/evaluations?limit=50&afterSeq=' + (next ? (cursor ?? '0') : '0')));
     setCursor(data.nextAfterSeq ?? undefined);
     setOutput(JSON.stringify(data, null, 2));
   }
   return (
     <div className="min-w-0 space-y-6">
       <h1 className="text-2xl">Local review operations</h1>
-      <p>
-        Synthetic records only. Clinical use: not approved. Changes are explicit
-        reviewer actions; the server enforces identity, stale-record and tenant
-        rules.
-      </p>
+      <p>Synthetic records only. Clinical use: not approved. Changes are explicit reviewer actions; the server enforces identity, stale-record and tenant rules.</p>
       <Button asChild variant="outline">
         <Link to="/local-review">PDF capture and review</Link>
       </Button>
@@ -243,12 +218,7 @@ export default function LocalOperationsPage() {
           Refresh evaluations
         </Button>
         {evaluationMeta && <PaginationControls label="Evaluation" meta={evaluationMeta} busy={busy} onPage={(page) => void act(() => history(page))} />}
-        <div
-          role="region"
-          aria-label="Evaluation history table"
-          tabIndex={0}
-          className="max-w-full overflow-auto"
-        >
+        <div role="region" aria-label="Evaluation history table" tabIndex={0} className="max-w-full overflow-auto">
           <table className="w-full">
             <caption className="sr-only">Synthetic evaluation history</caption>
             <thead>
@@ -268,11 +238,7 @@ export default function LocalOperationsPage() {
                   <td>{e.disposition}</td>
                   <td>{e.current ? 'yes' : 'no'}</td>
                   <td>
-                    <Button
-                      className="h-auto min-h-control whitespace-normal break-all py-2"
-                      disabled={busy}
-                      onClick={() => void act(() => open(e.id))}
-                    >
+                    <Button className="h-auto min-h-control whitespace-normal break-all py-2" disabled={busy} onClick={() => void act(() => open(e.id))}>
                       Open {e.id}
                     </Button>
                   </td>
@@ -284,15 +250,9 @@ export default function LocalOperationsPage() {
         {selected && (
           <>
             <p className="break-all">
-              Selected: {selected.id}. State: {selected.state}. Actionable:
-              false. A retraction must be reinstated by a different reviewer.
+              Selected: {selected.id}. State: {selected.state}. Actionable: false. A retraction must be reinstated by a different reviewer.
             </p>
-            <pre
-              role="region"
-              aria-label="Synthetic record details"
-              tabIndex={0}
-              className="max-w-full overflow-auto rounded-md border border-border p-3"
-            >
+            <pre role="region" aria-label="Synthetic record details" tabIndex={0} className="max-w-full overflow-auto rounded-md border border-border p-3">
               {JSON.stringify(selected, null, 2)}
             </pre>
             <label htmlFor="localoperationspage-control-1" className="block">
@@ -307,11 +267,9 @@ export default function LocalOperationsPage() {
                   setConfirmed(false);
                 }}
               >
-                {(['retraction', 'supersession', 'reinstatement'] as const).map(
-                  (k) => (
-                    <option key={k}>{k}</option>
-                  ),
-                )}
+                {(['retraction', 'supersession', 'reinstatement'] as const).map((k) => (
+                  <option key={k}>{k}</option>
+                ))}
               </NativeSelect>
             </label>
             <label htmlFor="localoperationspage-control-2" className="block">
@@ -336,11 +294,7 @@ export default function LocalOperationsPage() {
                   <Input
                     id="replacementEvaluationId"
                     aria-invalid={!!fields['replacementEvaluationId']}
-                    aria-describedby={
-                      fields['replacementEvaluationId']
-                        ? 'replacementEvaluationId-error'
-                        : undefined
-                    }
+                    aria-describedby={fields['replacementEvaluationId'] ? 'replacementEvaluationId-error' : undefined}
                     value={replacement}
                     onChange={(e) => {
                       setReplacement(e.target.value);
@@ -348,16 +302,10 @@ export default function LocalOperationsPage() {
                     }}
                   />
                 </label>
-                <FieldError
-                  id="replacementEvaluationId-error"
-                  message={fields['replacementEvaluationId']}
-                />
+                <FieldError id="replacementEvaluationId-error" message={fields['replacementEvaluationId']} />
               </>
             )}
-            <Button
-              disabled={busy || !reviewer || !confirmed}
-              onClick={() => void act(correct)}
-            >
+            <Button disabled={busy || !reviewer || !confirmed} onClick={() => void act(correct)}>
               Record correction
             </Button>
           </>
@@ -392,9 +340,7 @@ export default function LocalOperationsPage() {
           <Input
             id="guidelineId"
             aria-invalid={!!fields['guidelineId']}
-            aria-describedby={
-              fields['guidelineId'] ? 'guidelineId-error' : undefined
-            }
+            aria-describedby={fields['guidelineId'] ? 'guidelineId-error' : undefined}
             value={guideline}
             onChange={(e) => {
               setGuideline(e.target.value);
@@ -408,9 +354,7 @@ export default function LocalOperationsPage() {
           <Input
             id="locator.table"
             aria-invalid={!!fields['locator.table']}
-            aria-describedby={
-              fields['locator.table'] ? 'locator.table-error' : undefined
-            }
+            aria-describedby={fields['locator.table'] ? 'locator.table-error' : undefined}
             value={table}
             onChange={(e) => {
               setTable(e.target.value);
@@ -418,18 +362,13 @@ export default function LocalOperationsPage() {
             }}
           />
         </label>
-        <FieldError
-          id="locator.table-error"
-          message={fields['locator.table']}
-        />
+        <FieldError id="locator.table-error" message={fields['locator.table']} />
         <label htmlFor="locator.row" className="block">
           Row{' '}
           <Input
             id="locator.row"
             aria-invalid={!!fields['locator.row']}
-            aria-describedby={
-              fields['locator.row'] ? 'locator.row-error' : undefined
-            }
+            aria-describedby={fields['locator.row'] ? 'locator.row-error' : undefined}
             value={row}
             onChange={(e) => {
               setRow(e.target.value);
@@ -443,9 +382,7 @@ export default function LocalOperationsPage() {
           <Input
             id="locator.column"
             aria-invalid={!!fields['locator.column']}
-            aria-describedby={
-              fields['locator.column'] ? 'locator.column-error' : undefined
-            }
+            aria-describedby={fields['locator.column'] ? 'locator.column-error' : undefined}
             value={column}
             onChange={(e) => {
               setColumn(e.target.value);
@@ -453,14 +390,8 @@ export default function LocalOperationsPage() {
             }}
           />
         </label>
-        <FieldError
-          id="locator.column-error"
-          message={fields['locator.column']}
-        />
-        <Button
-          disabled={busy || !reviewer || !confirmed}
-          onClick={() => void act(raise)}
-        >
+        <FieldError id="locator.column-error" message={fields['locator.column']} />
+        <Button disabled={busy || !reviewer || !confirmed} onClick={() => void act(raise)}>
           Raise dispute
         </Button>
         {chosen && (
@@ -468,34 +399,18 @@ export default function LocalOperationsPage() {
             <p className="break-all">
               Selected dispute: {chosen.id}. Status: {chosen.status}.
             </p>
-            <Button
-              disabled={
-                busy || !reviewer || !confirmed || chosen.status !== 'open'
-              }
-              onClick={() => void act(() => decide('upheld'))}
-            >
+            <Button disabled={busy || !reviewer || !confirmed || chosen.status !== 'open'} onClick={() => void act(() => decide('upheld'))}>
               Uphold dispute
             </Button>{' '}
-            <Button
-              disabled={
-                busy || !reviewer || !confirmed || chosen.status !== 'open'
-              }
-              onClick={() => void act(() => decide('dismissed'))}
-            >
+            <Button disabled={busy || !reviewer || !confirmed || chosen.status !== 'open'} onClick={() => void act(() => decide('dismissed'))}>
               Dismiss dispute
             </Button>
-            <p>
-              A different reviewer must decide; the raiser is refused by the
-              API.
-            </p>
+            <p>A different reviewer must decide; the raiser is refused by the API.</p>
             <Button disabled={busy} onClick={() => void act(() => impact())}>
               Show affected evaluations
             </Button>
             {cursor && (
-              <Button
-                disabled={busy}
-                onClick={() => void act(() => impact(true))}
-              >
+              <Button disabled={busy} onClick={() => void act(() => impact(true))}>
                 Next impact page
               </Button>
             )}
@@ -508,9 +423,7 @@ export default function LocalOperationsPage() {
           maxLength={1000}
           id="note"
           aria-invalid={!!fields['note'] || !!fields.evidenceNote}
-          aria-describedby={
-            fields['note'] || fields.evidenceNote ? 'note-error' : undefined
-          }
+          aria-describedby={fields['note'] || fields.evidenceNote ? 'note-error' : undefined}
           value={note}
           onChange={(e) => {
             setNote(e.target.value);
@@ -518,51 +431,20 @@ export default function LocalOperationsPage() {
           }}
         />
       </label>
-      <FieldError
-        id="note-error"
-        message={fields['note'] ?? fields.evidenceNote}
-      />
-      <label
-        htmlFor="localoperationspage-control-9"
-        className="flex min-h-control items-center gap-3"
-      >
-        <Checkbox
-          id="localoperationspage-control-9"
-          disabled={busy}
-          checked={confirmed}
-          onChange={(e) => setConfirmed(e.target.checked)}
-        />{' '}
-        I reviewed the selected record and intend this synthetic change
+      <FieldError id="note-error" message={fields['note'] ?? fields.evidenceNote} />
+      <label htmlFor="localoperationspage-control-9" className="flex min-h-control items-center gap-3">
+        <Checkbox id="localoperationspage-control-9" disabled={busy} checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} /> I reviewed the selected record and
+        intend this synthetic change
       </label>
       {roles.includes('admin') && (
-        <Button
-          disabled={busy}
-          onClick={() =>
-            void act(async () =>
-              setOutput(
-                JSON.stringify(
-                  ledgerVerifyResultSchema.parse(
-                    await json('/ledger/verify?full=true'),
-                  ),
-                  null,
-                  2,
-                ),
-              ),
-            )
-          }
-        >
+        <Button disabled={busy} onClick={() => void act(async () => setOutput(JSON.stringify(ledgerVerifyResultSchema.parse(await json('/ledger/verify?full=true')), null, 2)))}>
           Verify full ledger
         </Button>
       )}
       {busy && <p role="status">Working locally…</p>}
       {error && <p role="alert">{error}</p>}
       {output && (
-        <pre
-          role="region"
-          aria-label="Synthetic record details"
-          tabIndex={0}
-          className="max-w-full overflow-auto rounded-md border border-border p-3"
-        >
+        <pre role="region" aria-label="Synthetic record details" tabIndex={0} className="max-w-full overflow-auto rounded-md border border-border p-3">
           {output}
         </pre>
       )}

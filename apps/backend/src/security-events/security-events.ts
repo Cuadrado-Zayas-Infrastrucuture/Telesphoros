@@ -55,7 +55,9 @@ export class InMemorySecurityEvents extends SecurityEvents {
   }
 
   private record(tenantId: string, row: ReturnType<typeof eventRow>): void {
-    const recent = this.events.some((e) => e.eventType === row.eventType && e.tenantId === tenantId && e.actorRef === row.subjectRef && e.details.reason === row.details.reason && Date.now() - e.at < 60_000);
+    const recent = this.events.some(
+      (e) => e.eventType === row.eventType && e.tenantId === tenantId && e.actorRef === row.subjectRef && e.details.reason === row.details.reason && Date.now() - e.at < 60_000,
+    );
     if (recent) return;
     this.events.push({ tenantId, actorRef: row.subjectRef, requestId: currentRequestId(), at: Date.now(), ...row });
   }
@@ -93,7 +95,15 @@ export class PostgresSecurityEvents extends SecurityEvents {
   private append(tenantId: string, actor: string, row: ReturnType<typeof eventRow>, requestId: string | undefined) {
     return this.db.withTenant(
       tenantId,
-      (client) => client.query('SELECT security_event_append($1, $2, $3, $4, $5::jsonb, $6)', [row.eventType, row.outcome, row.subjectKind, row.subjectRef, JSON.stringify(row.details), requestId ?? null]),
+      (client) =>
+        client.query('SELECT security_event_append($1, $2, $3, $4, $5::jsonb, $6)', [
+          row.eventType,
+          row.outcome,
+          row.subjectKind,
+          row.subjectRef,
+          JSON.stringify(row.details),
+          requestId ?? null,
+        ]),
       { actor },
     );
   }

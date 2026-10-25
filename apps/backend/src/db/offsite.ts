@@ -39,9 +39,11 @@ export class OffsiteError extends Error {
 /** Discovery cannot establish the newest backup from an incomplete listing. Never use its partial results. */
 export class IncompleteBackupListingError extends OffsiteError {
   constructor(reason: 'missing-token' | 'page-limit') {
-    super(reason === 'missing-token'
-      ? 'Backup listing is incomplete: a truncated page has no continuation token. Recovery aborted.'
-      : 'Backup listing is incomplete: the 1,000-page limit was reached with more results remaining. Recovery aborted.');
+    super(
+      reason === 'missing-token'
+        ? 'Backup listing is incomplete: a truncated page has no continuation token. Recovery aborted.'
+        : 'Backup listing is incomplete: the 1,000-page limit was reached with more results remaining. Recovery aborted.',
+    );
     this.name = 'IncompleteBackupListingError';
   }
 }
@@ -190,7 +192,11 @@ export async function withRetry<T>(operation: () => Promise<T>, attempts = 3, de
 
 /** Providers differ: quotes or none, any case, a weak-validator prefix. Compare the bare lower-case hex. */
 export function normalizeEtag(etag: string | undefined): string {
-  return (etag ?? '').trim().replace(/^W\//i, '').replace(/^"+|"+$/g, '').toLowerCase();
+  return (etag ?? '')
+    .trim()
+    .replace(/^W\//i, '')
+    .replace(/^"+|"+$/g, '')
+    .toLowerCase();
 }
 
 async function md5OfFile(path: string): Promise<{ hex: string; base64: string }> {
@@ -210,7 +216,8 @@ async function sha256OfFile(path: string): Promise<string> {
 
 /** Throws above the single-upload ceiling; returns a warning from 4 GiB so there are weeks of notice, not a failed night. */
 export function checkUploadSize(size: number): string[] {
-  if (size > SINGLE_PUT_LIMIT) throw new OffsiteError(`Refused: this backup is ${(size / 1024 ** 3).toFixed(2)} GiB, above the 5 GiB single-upload limit. Multipart upload is not built yet.`);
+  if (size > SINGLE_PUT_LIMIT)
+    throw new OffsiteError(`Refused: this backup is ${(size / 1024 ** 3).toFixed(2)} GiB, above the 5 GiB single-upload limit. Multipart upload is not built yet.`);
   return size >= SINGLE_PUT_WARN ? [`This backup is ${(size / 1024 ** 3).toFixed(2)} GiB. Off-site uploads stop working at 5 GiB (single upload); plan multipart upload now.`] : [];
 }
 
@@ -243,7 +250,8 @@ export async function uploadBackup(dir: string, manifest: BackupManifest, target
   const dumpPath = `${dir}/${manifest.dump.file}`;
   const size = statSync(dumpPath).size;
   const warnings = checkUploadSize(size); // refuses before reading a multi-GiB file
-  if (size !== manifest.dump.bytes || (await sha256OfFile(dumpPath)) !== manifest.dump.sha256) throw new OffsiteError('Refused: the backup files on disk no longer match the signed manifest.');
+  if (size !== manifest.dump.bytes || (await sha256OfFile(dumpPath)) !== manifest.dump.sha256)
+    throw new OffsiteError('Refused: the backup files on disk no longer match the signed manifest.');
 
   const retainUntil = new Date(Date.now() + target.retainDays * 86_400_000);
   let etagVerified = true;
@@ -295,11 +303,7 @@ export async function listBackups(target: ReadTarget): Promise<string[]> {
   const listPrefix = target.prefix ? `${target.prefix}/` : '';
   let token: string | undefined;
   for (let page = 0; page < 1000; page++) {
-    const out = await withRetry(() =>
-      target.client.send(
-        new ListObjectsV2Command({ Bucket: target.bucket, Prefix: listPrefix, Delimiter: '/', ContinuationToken: token }),
-      ),
-    );
+    const out = await withRetry(() => target.client.send(new ListObjectsV2Command({ Bucket: target.bucket, Prefix: listPrefix, Delimiter: '/', ContinuationToken: token })));
     for (const common of out.CommonPrefixes ?? []) {
       const name = (common.Prefix ?? '').replace(/\/$/, '').split('/').pop() ?? '';
       if (BACKUP_NAME.test(name)) names.push(name);

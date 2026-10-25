@@ -33,11 +33,22 @@ import {
 } from './index';
 
 describe('bounded review list queries', () => {
-  for (const [name, schema] of [['evaluations', evaluationListQuerySchema], ['disputes', disputeListQuerySchema]] as const) {
+  for (const [name, schema] of [
+    ['evaluations', evaluationListQuerySchema],
+    ['disputes', disputeListQuerySchema],
+  ] as const) {
     it(`${name} defaults to 20, caps at 100 and rejects invalid/unsafe pages`, () => {
       expect(schema.parse({})).toEqual({ page: 1, pageSize: 20 });
       expect(schema.parse({ page: '2', pageSize: '100' })).toEqual({ page: 2, pageSize: 100 });
-      for (const query of [{ page: '0' }, { page: '-1' }, { page: '1.5' }, { pageSize: '0' }, { pageSize: '101' }, { page: '9007199254740991', pageSize: '100' }, { unknown: '1' }]) {
+      for (const query of [
+        { page: '0' },
+        { page: '-1' },
+        { page: '1.5' },
+        { pageSize: '0' },
+        { pageSize: '101' },
+        { page: '9007199254740991', pageSize: '100' },
+        { unknown: '1' },
+      ]) {
         expect(schema.safeParse(query).success, JSON.stringify(query)).toBe(false);
       }
     });
@@ -65,10 +76,7 @@ describe('pagination', () => {
 describe('inputs are strict (no mass assignment)', () => {
   it('rejects unknown fields', () => {
     expect(patientInputSchema.safeParse({ label: 'SYN-1', ownerId: 'x' }).success).toBe(false);
-    expect(
-      reportCreateSchema.safeParse({ patientId: uuid, type: 'vcf', filename: 'a.vcf', sizeBytes: 5, status: 'processed' })
-        .success,
-    ).toBe(false);
+    expect(reportCreateSchema.safeParse({ patientId: uuid, type: 'vcf', filename: 'a.vcf', sizeBytes: 5, status: 'processed' }).success).toBe(false);
   });
   it('rejects labels that look like names and bad filenames', () => {
     expect(patientInputSchema.safeParse({ label: 'Jane Doe' }).success).toBe(false);
@@ -80,7 +88,13 @@ describe('inputs are strict (no mass assignment)', () => {
     // A file name must end in the extension of its type, in both directions, on create and on patch.
     const create = (type: string, filename: string) => reportCreateSchema.safeParse({ patientId: uuid, type, filename, sizeBytes: 5 }).success;
     expect([create('lab-pdf', 'a.pdf'), create('lab-pdf', 'A.PDF'), create('vcf', 'a.vcf'), create('structured', 'a.json')]).toEqual([true, true, true, true]);
-    expect([create('vcf', 'a.pdf'), create('lab-pdf', 'a.vcf'), create('lab-pdf', 'a.json'), create('structured', 'a.pdf'), create('vcf', 'a.json')]).toEqual([false, false, false, false, false]);
+    expect([create('vcf', 'a.pdf'), create('lab-pdf', 'a.vcf'), create('lab-pdf', 'a.json'), create('structured', 'a.pdf'), create('vcf', 'a.json')]).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
     expect(reportPatchSchema.safeParse({ type: 'lab-pdf', filename: 'a.pdf' }).success).toBe(true);
     expect(reportPatchSchema.safeParse({ type: 'vcf', filename: 'a.pdf' }).success).toBe(false);
     expect(reportPatchSchema.safeParse({ filename: 'a.pdf' }).success).toBe(true); // alone: the service checks it against the stored type
@@ -118,9 +132,17 @@ describe('upload contract (the declaration an upload makes)', () => {
     expect(REPORT_CONTENT_TYPES.vcf).toContain('text/x-vcf');
     expect(REPORT_CONTENT_TYPES.structured).toEqual(['application/json']);
     const dto = {
-      id: uuid, patientId: uuid, type: 'vcf', filename: 'a.vcf', sizeBytes: 5, status: 'received',
-      fileUploaded: false, contentType: null, sha256: null,
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      id: uuid,
+      patientId: uuid,
+      type: 'vcf',
+      filename: 'a.vcf',
+      sizeBytes: 5,
+      status: 'received',
+      fileUploaded: false,
+      contentType: null,
+      sha256: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
     expect(reportDtoSchema.safeParse(dto).success).toBe(true);
     expect(reportDtoSchema.safeParse({ ...dto, storageKey: 'reports/x' }).success).toBe(false);
@@ -157,7 +179,9 @@ describe('correction requests', () => {
     for (const kind of CORRECTION_KINDS) {
       for (const reasonCode of CORRECTION_REASON_CODES) {
         const body = {
-          kind, reasonCode, note: 'a note',
+          kind,
+          reasonCode,
+          note: 'a note',
           ...(kind === 'supersession' ? { replacementEvaluationId: uuid } : {}),
           ...(kind === 'reinstatement' ? { previousCorrectionId: uuid } : {}),
         };
@@ -201,14 +225,30 @@ describe('patient identifiers and the patient link', () => {
 
   it('takes a system code and a printable value, trims both, lower-cases the system, and nothing else', () => {
     expect(create({ system: ' Hospital-A-MRN ', value: '  mrn-1 ' })).toMatchObject({ success: true, data: { system: 'hospital-a-mrn', value: 'mrn-1' } });
-    for (const bad of [{ system: 'hospital a', value: 'x' }, { system: '-a', value: 'x' }, { system: 'a'.repeat(41), value: 'x' }, { system: 'a', value: '' }, { system: 'a', value: 'x'.repeat(65) }, { system: 'a', value: 'x\u0000y' }, { system: 'a', value: 'x', extra: 1 }, { value: 'x' }]) {
+    for (const bad of [
+      { system: 'hospital a', value: 'x' },
+      { system: '-a', value: 'x' },
+      { system: 'a'.repeat(41), value: 'x' },
+      { system: 'a', value: '' },
+      { system: 'a', value: 'x'.repeat(65) },
+      { system: 'a', value: 'x\u0000y' },
+      { system: 'a', value: 'x', extra: 1 },
+      { value: 'x' },
+    ]) {
       expect(create(bad).success, JSON.stringify(bad)).toBe(false);
     }
     expect(create({ system: 'a'.repeat(40), value: 'x'.repeat(64) }).success).toBe(true);
   });
 
   it('shows an identifier without a value or a digest, and refuses a DTO that carries one', () => {
-    const dto = { id: '2b2f0a52-9a43-4f2a-8bd2-7e0f8a2f5d11', patientId: '3b2f0a52-9a43-4f2a-8bd2-7e0f8a2f5d11', system: 'hospital-a-mrn', status: 'active', createdAt: '2026-10-13T00:00:00.000Z', withdrawnAt: null };
+    const dto = {
+      id: '2b2f0a52-9a43-4f2a-8bd2-7e0f8a2f5d11',
+      patientId: '3b2f0a52-9a43-4f2a-8bd2-7e0f8a2f5d11',
+      system: 'hospital-a-mrn',
+      status: 'active',
+      createdAt: '2026-10-13T00:00:00.000Z',
+      withdrawnAt: null,
+    };
     expect(identifierDtoSchema.safeParse(dto).success).toBe(true);
     expect(identifierDtoSchema.safeParse({ ...dto, value: 'x' }).success).toBe(false);
     expect(identifierDtoSchema.safeParse({ ...dto, digest: 'ab' }).success).toBe(false);
@@ -232,7 +272,6 @@ describe('patient identifiers and the patient link', () => {
   });
 });
 
-
 describe('compatible identity capability contracts', () => {
   it('keeps /me exactly roles-only for old and cached clients', () => {
     expect(meDtoSchema.parse({ roles: ['clinician'] })).toEqual({ roles: ['clinician'] });
@@ -241,7 +280,7 @@ describe('compatible identity capability contracts', () => {
   it('accepts an opaque scope only through its separate strict contract', () => {
     expect(recoveryScopeDtoSchema.parse({ recoveryScope: 'a'.repeat(64) })).toEqual({ recoveryScope: 'a'.repeat(64) });
   });
-  it.each([undefined, '', 'tenant:alice', 'A'.repeat(64), 'a'.repeat(63)])('refuses invalid or missing scope %s', recoveryScope => {
+  it.each([undefined, '', 'tenant:alice', 'A'.repeat(64), 'a'.repeat(63)])('refuses invalid or missing scope %s', (recoveryScope) => {
     expect(recoveryScopeDtoSchema.safeParse({ recoveryScope }).success).toBe(false);
   });
   it('refuses raw identity fields on either endpoint', () => {
@@ -253,8 +292,11 @@ describe('compatible identity capability contracts', () => {
 describe('decisionCreateSchema (a capture decision can be retried safely)', () => {
   it('takes the decision, an optional note, and an optional retry id that is lower-cased', () => {
     expect(decisionCreateSchema.parse({ decision: 'accepted' })).toEqual({ decision: 'accepted' });
-    expect(decisionCreateSchema.parse({ decision: 'rejected', note: ' checked ', requestId: '2F3A8E3C-9B64-4C55-8B7E-0B5C1D8E9A10' }))
-      .toEqual({ decision: 'rejected', note: 'checked', requestId: '2f3a8e3c-9b64-4c55-8b7e-0b5c1d8e9a10' });
+    expect(decisionCreateSchema.parse({ decision: 'rejected', note: ' checked ', requestId: '2F3A8E3C-9B64-4C55-8B7E-0B5C1D8E9A10' })).toEqual({
+      decision: 'rejected',
+      note: 'checked',
+      requestId: '2f3a8e3c-9b64-4c55-8b7e-0b5c1d8e9a10',
+    });
   });
   it('refuses a retry id that is not a UUID, and any other extra field', () => {
     for (const requestId of ['', 'abc', 7, '2f3a8e3c-9b64-4c55-8b7e']) expect(decisionCreateSchema.safeParse({ decision: 'accepted', requestId }).success).toBe(false);
@@ -277,7 +319,10 @@ describe('disputeCreateSchema (raising a dispute can be retried safely)', () => 
 describe('patientCreateSchema (audit item 25: POST /patients could not be retried safely)', () => {
   it('takes the label, and an optional retry id that is lower-cased', () => {
     expect(patientCreateSchema.parse({ label: 'SYN-1' })).toEqual({ label: 'SYN-1' });
-    expect(patientCreateSchema.parse({ label: 'SYN-1', requestId: '2F3A8E3C-9B64-4C55-8B7E-0B5C1D8E9A10' })).toEqual({ label: 'SYN-1', requestId: '2f3a8e3c-9b64-4c55-8b7e-0b5c1d8e9a10' });
+    expect(patientCreateSchema.parse({ label: 'SYN-1', requestId: '2F3A8E3C-9B64-4C55-8B7E-0B5C1D8E9A10' })).toEqual({
+      label: 'SYN-1',
+      requestId: '2f3a8e3c-9b64-4c55-8b7e-0b5c1d8e9a10',
+    });
   });
   it('refuses a retry id that is not a UUID, and any other extra field', () => {
     for (const requestId of ['', 'abc', 7, '2f3a8e3c-9b64-4c55-8b7e']) expect(patientCreateSchema.safeParse({ label: 'SYN-1', requestId }).success).toBe(false);

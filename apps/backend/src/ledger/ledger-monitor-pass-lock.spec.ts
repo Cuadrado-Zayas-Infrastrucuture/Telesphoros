@@ -7,12 +7,28 @@ import type { VerifyOptions, VerifyResult } from './verifier';
 // tasks out. These tests use fake verifiers that share one fake lock; the real lock against PostgreSQL is test/db/ledger-pass-lock.pg-spec.ts.
 
 const config = (over: Partial<LedgerWatchConfig> = {}): LedgerWatchConfig => ({
-  production: false, startupBudgetMs: 20_000, fullIntervalMs: 0, fullBudgetMs: 900_000, onDemandBudgetMs: 30_000, fullWalkAtOrBelowEvents: 50_000, incidentPollMs: 0,
-  bootPassJitterMs: 0, passLockWaitMs: 60_000, passLockRetryMs: 1_000, ...over,
+  production: false,
+  startupBudgetMs: 20_000,
+  fullIntervalMs: 0,
+  fullBudgetMs: 900_000,
+  onDemandBudgetMs: 30_000,
+  fullWalkAtOrBelowEvents: 50_000,
+  incidentPollMs: 0,
+  bootPassJitterMs: 0,
+  passLockWaitMs: 60_000,
+  passLockRetryMs: 1_000,
+  ...over,
 });
 
 const ok = (tenantId: string, options: VerifyOptions): VerifyResult => ({
-  tenantId, status: 'ok', mode: options.mode ?? 'tail', headSeq: '5', headHash: 'a'.repeat(64), eventsChecked: 5, failures: [], checkpointId: null,
+  tenantId,
+  status: 'ok',
+  mode: options.mode ?? 'tail',
+  headSeq: '5',
+  headHash: 'a'.repeat(64),
+  eventsChecked: 5,
+  failures: [],
+  checkpointId: null,
 });
 
 /** One lock that every fake verifier in a test shares, as the database's advisory lock is shared by every task. */
@@ -27,26 +43,47 @@ class Fake implements VerifierPort {
   fullStarted = 0;
   fullActive = 0;
   holdFull: Promise<void> | null = null;
-  constructor(readonly name: string, readonly hub: LockHub, readonly walked: { active: number; max: number }) {}
-  async tenants() { return ['t1']; }
+  constructor(
+    readonly name: string,
+    readonly hub: LockHub,
+    readonly walked: { active: number; max: number },
+  ) {}
+  async tenants() {
+    return ['t1'];
+  }
   async verify(tenantId: string, options: VerifyOptions = {}): Promise<VerifyResult> {
     if (options.mode === 'full') {
       this.fullStarted += 1;
       this.walked.active += 1;
       this.walked.max = Math.max(this.walked.max, this.walked.active);
-      try { await this.holdFull; } finally { this.walked.active -= 1; }
+      try {
+        await this.holdFull;
+      } finally {
+        this.walked.active -= 1;
+      }
     }
     return ok(tenantId, options);
   }
-  async recordIncident() { return 'i'; }
-  async openIncidents() { return []; }
-  async close() { /* nothing to close */ }
+  async recordIncident() {
+    return 'i';
+  }
+  async openIncidents() {
+    return [];
+  }
+  async close() {
+    /* nothing to close */
+  }
   async acquirePassLock(): Promise<PassLock | undefined> {
     if (this.hub.failAcquire) throw this.hub.failAcquire;
     if (this.hub.holder !== null) return undefined;
     this.hub.holder = this.name;
     this.hub.grants.push(this.name);
-    return { release: async () => { this.hub.holder = null; this.hub.releases += 1; } };
+    return {
+      release: async () => {
+        this.hub.holder = null;
+        this.hub.releases += 1;
+      },
+    };
   }
 }
 
@@ -82,7 +119,9 @@ describe('the full walk after start', () => {
     const hub = new LockHub();
     const verifier = new Fake('a', hub, { active: 0, max: 0 });
     let finish!: () => void;
-    verifier.holdFull = new Promise<void>((resolve) => { finish = resolve; });
+    verifier.holdFull = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
     const monitor = monitorFor(verifier);
     await monitor.onApplicationBootstrap();
     await settle();
@@ -100,7 +139,9 @@ describe('the full walk after start', () => {
     const walked = { active: 0, max: 0 };
     const [a, b] = [new Fake('a', hub, walked), new Fake('b', hub, walked)];
     let finishA!: () => void;
-    a.holdFull = new Promise<void>((resolve) => { finishA = resolve; });
+    a.holdFull = new Promise<void>((resolve) => {
+      finishA = resolve;
+    });
     const [ma, mb] = [monitorFor(a), monitorFor(b)];
     await ma.onApplicationBootstrap();
     await mb.onApplicationBootstrap();
@@ -148,7 +189,9 @@ describe('the full walk after start', () => {
   it('gives the lock back when the walk fails', async () => {
     const hub = new LockHub();
     const verifier = new Fake('a', hub, { active: 0, max: 0 });
-    verifier.tenants = async () => { throw new Error('tenants unreadable'); };
+    verifier.tenants = async () => {
+      throw new Error('tenants unreadable');
+    };
     const monitor = monitorFor(verifier);
     await monitor.onApplicationBootstrap().catch(() => undefined);
     await monitor.idle();

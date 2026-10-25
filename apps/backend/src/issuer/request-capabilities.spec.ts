@@ -19,7 +19,11 @@ const ask = (over: Partial<CapabilityIssueRequest> = {}): CapabilityIssueRequest
 
 class Recorder extends CapabilityIssuerPort {
   readonly requests: CapabilityIssueRequest[] = [];
-  next: () => Promise<IssuedCapability | undefined> = async () => ({ token: `${this.requests.length}`.padStart(43, 'T'), expiresAt: new Date('2030-01-01T00:00:00Z'), membershipVersion: 4 });
+  next: () => Promise<IssuedCapability | undefined> = async () => ({
+    token: `${this.requests.length}`.padStart(43, 'T'),
+    expiresAt: new Date('2030-01-01T00:00:00Z'),
+    membershipVersion: 4,
+  });
   async issue(request: CapabilityIssueRequest) {
     this.requests.push(request);
     return this.next();
@@ -77,17 +81,20 @@ describe('RequestCapabilities.obtain', () => {
     ['refused', 'tenant-inactive', 'issuer-refused', 'tenant-inactive'],
     ['refused', 'rate-limited', 'issuer-refused', 'rate-limited'],
     ['unavailable', undefined, 'issuer-unavailable', undefined],
-  ] as const)('an issuer failure (%s %s) does not fail the request; the reason is recorded, with the database\'s closed code when it refused', async (reason, detail, expected, refusal) => {
-    const port = new Recorder();
-    port.next = async () => {
-      throw new CapabilityIssueError(reason, detail);
-    };
-    await inRequest(async () => {
-      await expect(new RequestCapabilities(port).obtain(ask())).resolves.toEqual({ status: 'absent', reason: expected, ...(refusal ? { refusal } : {}) });
-      expect(currentRequestCapability()).toBeUndefined();
-      expect(capabilityAbsentReason()).toBe(expected);
-    });
-  });
+  ] as const)(
+    "an issuer failure (%s %s) does not fail the request; the reason is recorded, with the database's closed code when it refused",
+    async (reason, detail, expected, refusal) => {
+      const port = new Recorder();
+      port.next = async () => {
+        throw new CapabilityIssueError(reason, detail);
+      };
+      await inRequest(async () => {
+        await expect(new RequestCapabilities(port).obtain(ask())).resolves.toEqual({ status: 'absent', reason: expected, ...(refusal ? { refusal } : {}) });
+        expect(currentRequestCapability()).toBeUndefined();
+        expect(capabilityAbsentReason()).toBe(expected);
+      });
+    },
+  );
 
   it('an unexpected error from the issuer is recorded the same way, not thrown', async () => {
     const port = new Recorder();
@@ -115,9 +122,10 @@ describe('RequestCapabilities.obtain: a port that does not answer', () => {
   it('does not hold the request: after the budget the request goes on, labelled "issuer-unavailable", and a late answer is ignored', async () => {
     const port = new Recorder();
     let late!: (value: IssuedCapability) => void;
-    port.next = () => new Promise<IssuedCapability | undefined>((resolve) => {
-      late = resolve;
-    });
+    port.next = () =>
+      new Promise<IssuedCapability | undefined>((resolve) => {
+        late = resolve;
+      });
     const started = Date.now();
     await inRequest(async () => {
       await withBudget(new RequestCapabilities(port), 30).obtain(ask());
@@ -141,9 +149,10 @@ describe('RequestCapabilities.obtain: a port that does not answer', () => {
   it('a late failure after the budget is not an unhandled rejection', async () => {
     const port = new Recorder();
     let fail!: (e: Error) => void;
-    port.next = () => new Promise<IssuedCapability | undefined>((_resolve, reject) => {
-      fail = reject;
-    });
+    port.next = () =>
+      new Promise<IssuedCapability | undefined>((_resolve, reject) => {
+        fail = reject;
+      });
     const unhandled = jest.fn();
     process.once('unhandledRejection', unhandled);
     await inRequest(() => withBudget(new RequestCapabilities(port), 10).obtain(ask()));

@@ -146,7 +146,10 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
     const verifier = this.verifier;
     const outcome = await this.tryHold(async () => {
       const result = await verifier.verify(tenantId, {
-        mode: full ? 'full' : 'tail', budgetMs: this.config.onDemandBudgetMs, recordCheckpoint: true, signal: this.abort.signal,
+        mode: full ? 'full' : 'tail',
+        budgetMs: this.config.onDemandBudgetMs,
+        recordCheckpoint: true,
+        signal: this.abort.signal,
       });
       await this.note(result, 'on-demand');
       return result;
@@ -164,7 +167,12 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
     await this.syncIncidents(); // what the database already holds (a sibling's findings, a person's global hold)
     const knownBefore = this.status.containedTenants().length;
     if (knownBefore > 0 || this.status.hold) {
-      this.logger.warn({ event: 'ledger-contained-at-start', containedTenants: knownBefore, globalHold: this.status.hold !== null, message: 'Record logs are already contained; this instance starts, and does not re-judge them. Their full walk goes on in the background.' });
+      this.logger.warn({
+        event: 'ledger-contained-at-start',
+        containedTenants: knownBefore,
+        globalHold: this.status.hold !== null,
+        message: 'Record logs are already contained; this instance starts, and does not re-judge them. Their full walk goes on in the background.',
+      });
     }
     try {
       const tenants = await verifier.tenants();
@@ -202,7 +210,12 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
     if (this.config.production) {
       throw new Error(`The record log did not pass its check at start: ${outcome}${summary}. Production does not start until it does (docs/ops/ledger-watch.md).`);
     }
-    this.logger.warn({ event: 'ledger-startup-check', outcome, tenantsChecked: checked, message: `The record log did not pass its check at start (${outcome}); continuing because this is not production.` });
+    this.logger.warn({
+      event: 'ledger-startup-check',
+      outcome,
+      tenantsChecked: checked,
+      message: `The record log did not pass its check at start (${outcome}); continuing because this is not production.`,
+    });
   }
 
   /**
@@ -222,9 +235,14 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
         left += 1;
         continue;
       }
-      const result = await this.queued(() => verifier.verify(tenantId, {
-        mode: 'tail', budgetMs: remaining, fullWalkAtOrBelow: this.config.fullWalkAtOrBelowEvents, signal: this.abort.signal,
-      }));
+      const result = await this.queued(() =>
+        verifier.verify(tenantId, {
+          mode: 'tail',
+          budgetMs: remaining,
+          fullWalkAtOrBelow: this.config.fullWalkAtOrBelowEvents,
+          signal: this.abort.signal,
+        }),
+      );
       if (result.status === 'incomplete') {
         left += 1; // the allowance ended inside this walk (a checkpoint check of a larger chain was already done in phase A)
       } else {
@@ -235,8 +253,11 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
     }
     if (left > 0 && !this.abort.signal.aborted) {
       this.logger.warn({
-        event: 'ledger-startup-full-walks-deferred', fullWalks: walked, deferred: left,
-        message: 'Some full walks of small record logs did not fit in the time allowed at start. They were checked from their checkpoint, and the background full pass, which starts now, walks them in full.',
+        event: 'ledger-startup-full-walks-deferred',
+        fullWalks: walked,
+        deferred: left,
+        message:
+          'Some full walks of small record logs did not fit in the time allowed at start. They were checked from their checkpoint, and the background full pass, which starts now, walks them in full.',
       });
     }
     return failed ? 'failed' : 'ok';
@@ -269,11 +290,16 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
             allOk = false;
             break;
           }
-          const result = await this.queued(() => verifier.verify(tenantId, {
-            // A checkpoint is a true statement about the tenant that was walked, so it is recorded for every tenant that passes, a contained
-            // one included: it is the evidence a person needs to clear the incident.
-            mode: 'full', budgetMs: this.config.fullBudgetMs, recordCheckpoint: true, signal: this.abort.signal,
-          }));
+          const result = await this.queued(() =>
+            verifier.verify(tenantId, {
+              // A checkpoint is a true statement about the tenant that was walked, so it is recorded for every tenant that passes, a contained
+              // one included: it is the evidence a person needs to clear the incident.
+              mode: 'full',
+              budgetMs: this.config.fullBudgetMs,
+              recordCheckpoint: true,
+              signal: this.abort.signal,
+            }),
+          );
           await this.note(result, source);
           // A contained tenant that still fails is expected and already reported; it must not keep the instance "verifying" forever.
           if (result.status !== 'ok' && !(result.status === 'failed' && this.status.hasIncident(tenantId))) allOk = false;
@@ -369,7 +395,11 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
       for (const finding of this.status.unrecorded()) await this.record(finding);
       this.status.syncOpen(await verifier.openIncidents());
     } catch (error) {
-      this.logger.warn({ event: 'ledger-incident-sync-failed', error: describe(error), message: 'The open incidents could not be read; this instance keeps what it knows, and the database still refuses writes for contained tenants.' });
+      this.logger.warn({
+        event: 'ledger-incident-sync-failed',
+        error: describe(error),
+        message: 'The open incidents could not be read; this instance keeps what it knows, and the database still refuses writes for contained tenants.',
+      });
     }
   }
 
@@ -381,7 +411,12 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
       await verifier.recordIncident({ tenantId: finding.tenantId, kind: finding.kind, seq: finding.seq, source: finding.source });
       this.status.markRecorded(finding.tenantId);
     } catch (error) {
-      this.logger.error({ event: 'ledger-incident-record-failed', tenantId: finding.tenantId, error: describe(error), message: 'A finding could not be recorded in the database; this instance refuses writes for the tenant meanwhile and retries.' });
+      this.logger.error({
+        event: 'ledger-incident-record-failed',
+        tenantId: finding.tenantId,
+        error: describe(error),
+        message: 'A finding could not be recorded in the database; this instance refuses writes for the tenant meanwhile and retries.',
+      });
     }
   }
 
@@ -417,27 +452,45 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
       if (!alreadyContained) {
         this.status.latch(finding); // before the first await: this process refuses at once, whatever the database call does
         this.logger.error({
-          event: 'ledger-compromised', source, tenantId: result.tenantId, mode: result.mode, eventsChecked: result.eventsChecked,
-          failures: result.failures.slice(0, 10).map(({ kind, seq }) => ({ kind, seq })), message: 'The record log of this tenant failed verification. Records are no longer written for it.',
+          event: 'ledger-compromised',
+          source,
+          tenantId: result.tenantId,
+          mode: result.mode,
+          eventsChecked: result.eventsChecked,
+          failures: result.failures.slice(0, 10).map(({ kind, seq }) => ({ kind, seq })),
+          message: 'The record log of this tenant failed verification. Records are no longer written for it.',
         });
         await this.record(finding);
       } else {
         // The tenant is already contained and reported (the alarm fired on the first finding): a repeat is a warning, not a second page.
         this.logger.warn({
-          event: 'ledger-incident-still-open', source, tenantId: result.tenantId, mode: result.mode, eventsChecked: result.eventsChecked,
-          failures: result.failures.slice(0, 10).map(({ kind, seq }) => ({ kind, seq })), message: 'A contained tenant still fails verification.',
+          event: 'ledger-incident-still-open',
+          source,
+          tenantId: result.tenantId,
+          mode: result.mode,
+          eventsChecked: result.eventsChecked,
+          failures: result.failures.slice(0, 10).map(({ kind, seq }) => ({ kind, seq })),
+          message: 'A contained tenant still fails verification.',
         });
       }
     } else if (result.status === 'incomplete' && result.incompleteReason === 'size' && !this.abort.signal.aborted) {
       // Not damage and not a wait: this chain is longer than one verification will walk, so it repeats every pass until the limit or the chain is dealt with.
       this.logger.error({
-        event: 'ledger-chain-over-size', source, tenantId: result.tenantId, mode: result.mode, eventsChecked: result.eventsChecked,
+        event: 'ledger-chain-over-size',
+        source,
+        tenantId: result.tenantId,
+        mode: result.mode,
+        eventsChecked: result.eventsChecked,
         message: 'The record log of this tenant is longer than one verification walks, so it cannot be fully verified. Nothing was recorded as verified and nothing is contained.',
       });
     } else if (result.status === 'incomplete' && !this.abort.signal.aborted) {
       // (A walk stopped because the application is shutting down is not worth a line: the next start walks again.)
       this.logger.warn({
-        event: 'ledger-verification-incomplete', source, tenantId: result.tenantId, mode: result.mode, eventsChecked: result.eventsChecked,
+        event: 'ledger-verification-incomplete',
+        source,
+        tenantId: result.tenantId,
+        mode: result.mode,
+        eventsChecked: result.eventsChecked,
         message: 'A check of the record log ran out of time or size before it finished; nothing was recorded as verified.',
       });
     }

@@ -22,10 +22,19 @@ function api(app: NestExpressApplication) {
   return request(app.getHttpServer());
 }
 async function newPatient(app: NestExpressApplication, token: string) {
-  return (await api(app).post('/api/v1/patients').set(bearer(token)).send({ label: `SYN-${randomUUID().slice(0, 8)}` }).expect(201)).body.id as string;
+  return (
+    await api(app)
+      .post('/api/v1/patients')
+      .set(bearer(token))
+      .send({ label: `SYN-${randomUUID().slice(0, 8)}` })
+      .expect(201)
+  ).body.id as string;
 }
 const createReport = (app: NestExpressApplication, token: string, patientId: string, over: object = {}) =>
-  api(app).post('/api/v1/reports').set(bearer(token)).send({ patientId, type: 'lab-pdf', filename: 'sample.pdf', sizeBytes: PDF.length, ...over });
+  api(app)
+    .post('/api/v1/reports')
+    .set(bearer(token))
+    .send({ patientId, type: 'lab-pdf', filename: 'sample.pdf', sizeBytes: PDF.length, ...over });
 
 describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
   let app: NestExpressApplication;
@@ -50,7 +59,7 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
     const token = await tenantToken('clin-1', ['clinician']);
     const patientId = await newPatient(app, token);
     const res = await createReport(app, token, patientId).expect(201);
-    expect(res.body).toMatchObject({ type: 'lab-pdf',fileUploaded:false });
+    expect(res.body).toMatchObject({ type: 'lab-pdf', fileUploaded: false });
     expect(res.headers['retry-after']).toBeUndefined();
     expect((await api(app).get('/api/v1/reports').set(bearer(token)).expect(200)).body.data).toHaveLength(1);
     expect(storageCalls).toEqual([]);
@@ -81,7 +90,10 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
   });
 
   it('reports every role a person holds, reviewer included', async () => {
-    const me = await api(app).get('/api/v1/me').set(bearer(await tenantToken('rev', ['clinician', 'reviewer']))).expect(200);
+    const me = await api(app)
+      .get('/api/v1/me')
+      .set(bearer(await tenantToken('rev', ['clinician', 'reviewer'])))
+      .expect(200);
     expect(me.body.roles).toEqual(['clinician', 'reviewer']);
   });
 
@@ -95,7 +107,11 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
   it('keeps a file name and its type together on create (a .pdf is never a "vcf", a lab-pdf is never a .vcf)', async () => {
     const token = await tenantToken('clin-1', ['clinician']);
     const patientId = await newPatient(app, token);
-    for (const bad of [{ type: 'vcf', filename: 'a.pdf' }, { type: 'structured', filename: 'a.pdf' }, { type: 'lab-pdf', filename: 'a.vcf' }]) {
+    for (const bad of [
+      { type: 'vcf', filename: 'a.pdf' },
+      { type: 'structured', filename: 'a.pdf' },
+      { type: 'lab-pdf', filename: 'a.vcf' },
+    ]) {
       const res = await createReport(app, token, patientId, bad).expect(400);
       expect(res.body.error.code).toBe('VALIDATION_ERROR');
     }
@@ -127,7 +143,10 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
   /** Declares an attempt for a lab PDF and returns what the bytes route needs (the declared hash is `declared`, default the bytes' own). */
   async function declare(token: string, id: string, bytes: Buffer = PDF, declared: Buffer = bytes, target = app) {
     const revision = (await api(target).get(`/api/v1/reports/${id}/upload-state`).set(bearer(token)).expect(200)).body.revision;
-    const res = await api(target).post(`/api/v1/reports/${id}/upload-attempts`).set(bearer(token)).send({ requestId: randomUUID(), revision, contentType: PDF_TYPE, sha256: sha(declared) });
+    const res = await api(target)
+      .post(`/api/v1/reports/${id}/upload-attempts`)
+      .set(bearer(token))
+      .send({ requestId: randomUUID(), revision, contentType: PDF_TYPE, sha256: sha(declared) });
     return { res, attempt: res.body as { attemptId: string; revision: string } };
   }
   const send = (token: string, id: string, a: { attemptId: string; revision: string }, bytes: Buffer = PDF, target = app) =>
@@ -143,7 +162,6 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
   }
   const row = (id: string) => withAdmin(db.adminUrl, async (c) => (await c.query(`SELECT * FROM reports WHERE id = $1`, [id])).rows[0]);
 
-
   it('creates a lab-pdf, uploads it through the intake, and pins the exact version that was verified, with the person who declared and sent it', async () => {
     const alice = await tenantToken('alice', ['clinician']);
     const patientId = await newPatient(app, alice);
@@ -158,7 +176,7 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
     expect(stored.object_version).not.toBe('null');
   });
 
-  it('keeps the attempt with the person who declared it: another clinician cannot send its bytes, and repeating a resume changes nobody\'s identity', async () => {
+  it("keeps the attempt with the person who declared it: another clinician cannot send its bytes, and repeating a resume changes nobody's identity", async () => {
     const alice = await tenantToken('alice', ['clinician']);
     const bob = await tenantToken('bob', ['clinician']);
     const patientId = await newPatient(app, alice);
@@ -228,7 +246,15 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
     const id = (await createReport(app, alice, patientId).expect(201)).body.id as string;
     await uploaded(alice, id);
     const stored = await row(id);
-    const seeded: SeededReport = { tenantId: 'tenant-cap', uploader: 'alice', patientId, reportId: id, pdfSha256: stored.sha256, objectVersion: stored.object_version, storageKey: stored.storage_key };
+    const seeded: SeededReport = {
+      tenantId: 'tenant-cap',
+      uploader: 'alice',
+      patientId,
+      reportId: id,
+      pdfSha256: stored.sha256,
+      objectVersion: stored.object_version,
+      storageKey: stored.storage_key,
+    };
     await app.get(LedgerRecordsRepository).insertCapture('tenant-cap', 'cap-person', captureFor(seeded));
 
     const patch = await api(app).patch(`/api/v1/reports/${id}`).set(bearer(alice)).send({ type: 'vcf', filename: 'a.vcf' }).expect(409);
@@ -269,7 +295,11 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
     const id = (await createReport(app, alice, patientId).expect(201)).body.id as string;
     const { attempt } = await declare(alice, id);
     await api(app).get(`/api/v1/reports/${id}/upload-state`).set(bearer(mallory)).expect(404);
-    await api(app).post(`/api/v1/reports/${id}/upload-attempts`).set(bearer(mallory)).send({ requestId: randomUUID(), revision: attempt.revision, contentType: PDF_TYPE, sha256: sha(PDF) }).expect(404);
+    await api(app)
+      .post(`/api/v1/reports/${id}/upload-attempts`)
+      .set(bearer(mallory))
+      .send({ requestId: randomUUID(), revision: attempt.revision, contentType: PDF_TYPE, sha256: sha(PDF) })
+      .expect(404);
     await send(mallory, id, attempt).expect(404);
   });
 });

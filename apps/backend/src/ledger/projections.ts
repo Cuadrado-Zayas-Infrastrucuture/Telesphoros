@@ -47,8 +47,15 @@ const LOADERS: Record<Exclude<RecordTable, 'evaluations'>, Loader> = {
                  report_id::text AS report_id, pdf_sha256, text_storage_key, text_sha256, text_scalars, poppler_version, runner
             FROM report_captures WHERE id = ANY($1::uuid[])`,
     project: (r) => ({
-      kind: 'capture', ...common(r), reportId: r.report_id, pdfSha256: r.pdf_sha256, textStorageKey: r.text_storage_key,
-      textSha256: r.text_sha256, textScalars: r.text_scalars, popplerVersion: r.poppler_version, runner: r.runner,
+      kind: 'capture',
+      ...common(r),
+      reportId: r.report_id,
+      pdfSha256: r.pdf_sha256,
+      textStorageKey: r.text_storage_key,
+      textSha256: r.text_sha256,
+      textScalars: r.text_scalars,
+      popplerVersion: r.poppler_version,
+      runner: r.runner,
     }),
   },
   capture_acceptances: {
@@ -56,8 +63,13 @@ const LOADERS: Record<Exclude<RecordTable, 'evaluations'>, Loader> = {
                  a.capture_id::text AS capture_id, a.decision, a.text_sha256, a.poppler_version, n.id::text AS note_id, n.body_sha256 AS note_digest
             FROM capture_acceptances a LEFT JOIN event_notes n ON n.id = a.note_id AND n.tenant_id = a.tenant_id WHERE a.id = ANY($1::uuid[])`,
     project: (r) => ({
-      kind: 'capture-decision', ...common(r), captureId: r.capture_id, decision: r.decision, textSha256: r.text_sha256,
-      popplerVersion: r.poppler_version, note: note(r.note_id, r.note_digest),
+      kind: 'capture-decision',
+      ...common(r),
+      captureId: r.capture_id,
+      decision: r.decision,
+      textSha256: r.text_sha256,
+      popplerVersion: r.poppler_version,
+      note: note(r.note_id, r.note_digest),
     }),
   },
   corrections: {
@@ -67,8 +79,15 @@ const LOADERS: Record<Exclude<RecordTable, 'evaluations'>, Loader> = {
                  n.id::text AS note_id, n.body_sha256 AS note_digest
             FROM corrections c LEFT JOIN event_notes n ON n.id = c.note_id AND n.tenant_id = c.tenant_id WHERE c.id = ANY($1::uuid[])`,
     project: (r) => ({
-      kind: 'correction', ...common(r), evaluationId: r.evaluation_id, reportId: r.report_id, correctionKind: r.kind, reasonCode: r.reason_code,
-      previousCorrectionId: r.previous_correction_id, replacementEvaluationId: r.replacement_evaluation_id, note: note(r.note_id, r.note_digest),
+      kind: 'correction',
+      ...common(r),
+      evaluationId: r.evaluation_id,
+      reportId: r.report_id,
+      correctionKind: r.kind,
+      reasonCode: r.reason_code,
+      previousCorrectionId: r.previous_correction_id,
+      replacementEvaluationId: r.replacement_evaluation_id,
+      note: note(r.note_id, r.note_digest),
     }),
   },
   cell_disputes: {
@@ -77,8 +96,15 @@ const LOADERS: Record<Exclude<RecordTable, 'evaluations'>, Loader> = {
                  n.id::text AS note_id, n.body_sha256 AS note_digest
             FROM cell_disputes d LEFT JOIN event_notes n ON n.id = d.note_id AND n.tenant_id = d.tenant_id WHERE d.id = ANY($1::uuid[])`,
     project: (r) => ({
-      kind: 'dispute', ...common(r), guidelineId: r.guideline_id, guidelineVersion: r.guideline_version, guidelineContentSha256: r.guideline_content_sha256,
-      locatorTable: r.locator_table, locatorRow: r.locator_row, locatorColumn: r.locator_column, note: note(r.note_id, r.note_digest),
+      kind: 'dispute',
+      ...common(r),
+      guidelineId: r.guideline_id,
+      guidelineVersion: r.guideline_version,
+      guidelineContentSha256: r.guideline_content_sha256,
+      locatorTable: r.locator_table,
+      locatorRow: r.locator_row,
+      locatorColumn: r.locator_column,
+      note: note(r.note_id, r.note_digest),
     }),
   },
   cell_dispute_decisions: {
@@ -86,7 +112,11 @@ const LOADERS: Record<Exclude<RecordTable, 'evaluations'>, Loader> = {
                  d.dispute_id::text AS dispute_id, d.decision, n.id::text AS note_id, n.body_sha256 AS note_digest
             FROM cell_dispute_decisions d LEFT JOIN event_notes n ON n.id = d.evidence_note_id AND n.tenant_id = d.tenant_id WHERE d.id = ANY($1::uuid[])`,
     project: (r) => ({
-      kind: 'dispute-decision', ...common(r), disputeId: r.dispute_id, decision: r.decision, evidence: note(r.note_id, r.note_digest),
+      kind: 'dispute-decision',
+      ...common(r),
+      disputeId: r.dispute_id,
+      decision: r.decision,
+      evidence: note(r.note_id, r.note_digest),
     }),
   },
   report_patient_decisions: {
@@ -95,8 +125,16 @@ const LOADERS: Record<Exclude<RecordTable, 'evaluations'>, Loader> = {
                  identifier_id::text AS identifier_id
             FROM report_patient_decisions WHERE id = ANY($1::uuid[])`,
     project: (r) => ({
-      kind: 'patient-link-decision', ...common(r), reportId: r.report_id, patientId: r.patient_id, reportSha256: r.report_sha256, objectVersion: r.object_version,
-      decision: r.decision, method: r.method, basisCode: r.basis_code, identifierId: r.identifier_id,
+      kind: 'patient-link-decision',
+      ...common(r),
+      reportId: r.report_id,
+      patientId: r.patient_id,
+      reportSha256: r.report_sha256,
+      objectVersion: r.object_version,
+      decision: r.decision,
+      method: r.method,
+      basisCode: r.basis_code,
+      identifierId: r.identifier_id,
     }),
   },
   patient_merge_proposals: {
@@ -104,7 +142,12 @@ const LOADERS: Record<Exclude<RecordTable, 'evaluations'>, Loader> = {
                  kind, source_patient_id::text AS source_patient_id, target_patient_id::text AS target_patient_id, reason_code
             FROM patient_merge_proposals WHERE id = ANY($1::uuid[])`,
     project: (r) => ({
-      kind: 'patient-merge-proposal', ...common(r), mergeKind: r.kind, sourcePatientId: r.source_patient_id, targetPatientId: r.target_patient_id, reasonCode: r.reason_code,
+      kind: 'patient-merge-proposal',
+      ...common(r),
+      mergeKind: r.kind,
+      sourcePatientId: r.source_patient_id,
+      targetPatientId: r.target_patient_id,
+      reasonCode: r.reason_code,
     }),
   },
   patient_merge_decisions: {
@@ -138,17 +181,43 @@ async function loadEvaluations(db: Queryable, ids: string[]): Promise<Map<string
     const ownResults = results.rows.filter((r) => r.evaluation_id === id).sort((a, b) => (a.ordinal as number) - (b.ordinal as number));
     const ownStates = states.rows.filter((r) => r.evaluation_id === id).sort((a, b) => byUnits(a.gene as string, b.gene as string));
     out.set(id, {
-      kind: 'evaluation', ...common(h),
-      patientId: h.patient_id, reportId: h.report_id, captureId: h.capture_id, captureAcceptanceId: h.capture_acceptance_id,
-      disposition: h.disposition, holdCode: h.hold_code, binding: h.binding, knowledgeSetId: h.knowledge_set_id, engineVersion: h.engine_version,
-      geneInputs: h.gene_inputs, occurrences: h.occurrences, identityKey: h.identity_key,
+      kind: 'evaluation',
+      ...common(h),
+      patientId: h.patient_id,
+      reportId: h.report_id,
+      captureId: h.capture_id,
+      captureAcceptanceId: h.capture_acceptance_id,
+      disposition: h.disposition,
+      holdCode: h.hold_code,
+      binding: h.binding,
+      knowledgeSetId: h.knowledge_set_id,
+      engineVersion: h.engine_version,
+      geneInputs: h.gene_inputs,
+      occurrences: h.occurrences,
+      identityKey: h.identity_key,
       results: ownResults.map((r) => ({
-        id: r.id, ordinal: r.ordinal, drug: r.drug, genes: r.genes, outcome: r.outcome, reasonCode: r.reason_code, strength: r.strength,
-        citation: r.citation, guidelineId: r.guideline_id, guidelineVersion: r.guideline_version, recommendationText: r.recommendation_text,
-        implication: r.implication, geneEvidence: r.gene_evidence,
+        id: r.id,
+        ordinal: r.ordinal,
+        drug: r.drug,
+        genes: r.genes,
+        outcome: r.outcome,
+        reasonCode: r.reason_code,
+        strength: r.strength,
+        citation: r.citation,
+        guidelineId: r.guideline_id,
+        guidelineVersion: r.guideline_version,
+        recommendationText: r.recommendation_text,
+        implication: r.implication,
+        geneEvidence: r.gene_evidence,
       })),
       geneStates: ownStates.map((s) => ({
-        id: s.id, gene: s.gene, state: s.state, phenotype: s.phenotype, diplotype: s.diplotype, activityScore: s.activity_score, reasonCode: s.reason_code,
+        id: s.id,
+        gene: s.gene,
+        state: s.state,
+        phenotype: s.phenotype,
+        diplotype: s.diplotype,
+        activityScore: s.activity_score,
+        reasonCode: s.reason_code,
       })),
     });
   }

@@ -142,7 +142,17 @@ function evaluateGuideline(guideline: GuidelineFile, stateOf: (gene: string) => 
   const phenotypes = new Map(states.map((state) => [state.gene, state.phenotype]));
   const row = guideline.recommendations.find((candidate) => genes.every((gene) => candidate.when[gene] === phenotypes.get(gene)));
   if (!row) {
-    return { outcome: 'no-published-recommendation', drug, genes, geneStates, reasonCode: 'no-published-recommendation', citation: null, strength: null, recommendationText: null, implication: null };
+    return {
+      outcome: 'no-published-recommendation',
+      drug,
+      genes,
+      geneStates,
+      reasonCode: 'no-published-recommendation',
+      citation: null,
+      strength: null,
+      recommendationText: null,
+      implication: null,
+    };
   }
 
   const citation = citationFor(guideline, row);

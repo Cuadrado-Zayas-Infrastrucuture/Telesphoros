@@ -1,12 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { FILE_LINK_ROLES } from '../auth/file-access';
 import { Injectable } from '@nestjs/common';
-import {
-  filenameMatchesType,
-  type ReportCreate,
-  type ReportListQuery,
-  type ReportPatch,
-} from '@telesphoros/shared-types';
+import { filenameMatchesType, type ReportCreate, type ReportListQuery, type ReportPatch } from '@telesphoros/shared-types';
 import { AppException } from '../common/app-exception';
 import type { Principal } from '../auth/principal';
 import { PipelineSwitch } from '../lab-reports/pipeline-switch';
@@ -53,19 +48,21 @@ export class ReportsService {
       filename: input.filename,
       sizeBytes: input.sizeBytes,
       status: 'received',
-      ...(input.requestId ? {
-        creationRequestId: input.requestId,
-        // Fixed tuple: request property order and later metadata corrections cannot change the original identity.
-        creationRequestHash: createHash('sha256').update(JSON.stringify([
-          input.patientId.toLowerCase(), input.type, input.filename, input.sizeBytes,
-        ])).digest('hex'),
-      } : {}),
+      ...(input.requestId
+        ? {
+            creationRequestId: input.requestId,
+            // Fixed tuple: request property order and later metadata corrections cannot change the original identity.
+            creationRequestHash: createHash('sha256')
+              .update(JSON.stringify([input.patientId.toLowerCase(), input.type, input.filename, input.sizeBytes]))
+              .digest('hex'),
+          }
+        : {}),
       createdAt: now,
       updatedAt: now,
     };
     if (input.requestId) return this.reports.insertOrReplay(record);
     await this.reports.insert(record);
-    return this.get(principal,record.id);
+    return this.get(principal, record.id);
   }
 
   async patch(principal: Principal, id: string, patch: ReportPatch): Promise<ReportRecord> {
@@ -87,16 +84,22 @@ export class ReportsService {
     return this.get(principal, id);
   }
 
-  async downloadUrl(principal: Principal,id: string) {
-    if(!principal.roles.some(r=>FILE_LINK_ROLES.includes(r as typeof FILE_LINK_ROLES[number])))throw AppException.forbidden();
-    const report=await this.get(principal,id);
-    if(!await this.patients.findById(principal.tenantId,report.patientId))throw AppException.notFound();
-    if(!report.uploadedAt||!report.storageKey||!report.objectVersion||report.objectVersion==='null'||!report.sha256||!report.contentType)throw AppException.conflictBecause('source-unpinned','A verified pinned upload is required.');
-    const stored=await this.storage.inspect(report.storageKey,{version:report.objectVersion});
-    if(!stored||stored.version!==report.objectVersion||stored.sha256!==report.sha256||stored.sizeBytes!==report.sizeBytes||stored.contentType!==report.contentType)throw AppException.conflictBecause('source-changed','The stored version is missing or does not match the verified file.');
-    const current=await this.get(principal,id);if(current.objectVersion!==report.objectVersion||current.storageKey!==report.storageKey)throw AppException.conflict('The report changed during verification.');
-    const ttl=this.pipeline.downloadUrlTtlSeconds;
-    return {url:await this.storage.createDownloadUrl(report.storageKey,report.objectVersion,ttl,{filename:current.filename}),expiresAt:new Date(Date.now()+ttl*1000).toISOString()};
+  async downloadUrl(principal: Principal, id: string) {
+    if (!principal.roles.some((r) => FILE_LINK_ROLES.includes(r as (typeof FILE_LINK_ROLES)[number]))) throw AppException.forbidden();
+    const report = await this.get(principal, id);
+    if (!(await this.patients.findById(principal.tenantId, report.patientId))) throw AppException.notFound();
+    if (!report.uploadedAt || !report.storageKey || !report.objectVersion || report.objectVersion === 'null' || !report.sha256 || !report.contentType)
+      throw AppException.conflictBecause('source-unpinned', 'A verified pinned upload is required.');
+    const stored = await this.storage.inspect(report.storageKey, { version: report.objectVersion });
+    if (!stored || stored.version !== report.objectVersion || stored.sha256 !== report.sha256 || stored.sizeBytes !== report.sizeBytes || stored.contentType !== report.contentType)
+      throw AppException.conflictBecause('source-changed', 'The stored version is missing or does not match the verified file.');
+    const current = await this.get(principal, id);
+    if (current.objectVersion !== report.objectVersion || current.storageKey !== report.storageKey) throw AppException.conflict('The report changed during verification.');
+    const ttl = this.pipeline.downloadUrlTtlSeconds;
+    return {
+      url: await this.storage.createDownloadUrl(report.storageKey, report.objectVersion, ttl, { filename: current.filename }),
+      expiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
+    };
   }
 
   async remove(principal: Principal, id: string): Promise<void> {

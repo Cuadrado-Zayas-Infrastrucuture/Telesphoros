@@ -14,8 +14,7 @@ afterAll(async () => {
 
 const api = () => request(app.getHttpServer());
 const BASE = '/api/v1/reports';
-const newPatient = async (token: string, label: string) =>
-  (await api().post('/api/v1/patients').set(bearer(token)).send({ label }).expect(201)).body.id as string;
+const newPatient = async (token: string, label: string) => (await api().post('/api/v1/patients').set(bearer(token)).send({ label }).expect(201)).body.id as string;
 const validBody = (patientId: string) => ({ patientId, type: 'vcf', filename: 'sample.vcf', sizeBytes: 1024 });
 
 describe('reports', () => {
@@ -31,14 +30,26 @@ describe('reports', () => {
   it('forbids a reader from creating reports', async () => {
     const a = await clinicianA();
     const patientId = await newPatient(a, 'SYN-R-2');
-    await api().post(BASE).set(bearer(await readerA())).send(validBody(patientId)).expect(403);
+    await api()
+      .post(BASE)
+      .set(bearer(await readerA()))
+      .send(validBody(patientId))
+      .expect(403);
   });
 
   it('treats another user’s patient exactly like a missing one (404)', async () => {
     const patientOfA = await newPatient(await clinicianA(), 'SYN-R-3');
-    const res = await api().post(BASE).set(bearer(await clinicianB())).send(validBody(patientOfA)).expect(404);
+    const res = await api()
+      .post(BASE)
+      .set(bearer(await clinicianB()))
+      .send(validBody(patientOfA))
+      .expect(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
-    await api().post(BASE).set(bearer(await clinicianA())).send(validBody('3f2b8c1e-5a47-4d0e-9c3a-1b2c3d4e5f60')).expect(404);
+    await api()
+      .post(BASE)
+      .set(bearer(await clinicianA()))
+      .send(validBody('3f2b8c1e-5a47-4d0e-9c3a-1b2c3d4e5f60'))
+      .expect(404);
   });
 
   it.each([
@@ -58,7 +69,13 @@ describe('reports', () => {
 
   it('PATCH corrects metadata, but needs at least one valid field and refuses unknown ones', async () => {
     const a = await clinicianA();
-    const created = (await api().post(BASE).set(bearer(a)).send(validBody(await newPatient(a, 'SYN-P-1'))).expect(201)).body;
+    const created = (
+      await api()
+        .post(BASE)
+        .set(bearer(a))
+        .send(validBody(await newPatient(a, 'SYN-P-1')))
+        .expect(201)
+    ).body;
     const ok = await api().patch(`${BASE}/${created.id}`).set(bearer(a)).send({ type: 'structured', filename: 'fixed.json' }).expect(200);
     expect(ok.body).toMatchObject({ type: 'structured', filename: 'fixed.json', status: 'received' });
     await api().patch(`${BASE}/${created.id}`).set(bearer(a)).send({}).expect(400);

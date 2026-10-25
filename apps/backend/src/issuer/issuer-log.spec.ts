@@ -14,7 +14,7 @@ beforeEach(() => {
 afterAll(() => Logger.overrideLogger(['log', 'error', 'warn']));
 
 describe('IssuerLogger', () => {
-  it('writes the core\'s message unchanged, in one line, with level and context', () => {
+  it("writes the core's message unchanged, in one line, with level and context", () => {
     new Logger('SessionIssuer').warn('Capability not issued: refused (rate-limited) request=req-1');
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z WARN \[SessionIssuer\] Capability not issued: refused \(rate-limited\) request=req-1$/);

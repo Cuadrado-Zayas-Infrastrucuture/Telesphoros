@@ -44,7 +44,8 @@ const begin = async () => {
   await f.admin.query(`UPDATE jobs SET state = 'cancelled', lease_until = NULL, locked_by = NULL, finished_at = now() WHERE state IN ('queued', 'retry', 'running')`);
 };
 let n = 0;
-const enqueue = (type: string, payload: unknown, options: { maxAttempts?: number } = {}) => enqueueAs(f.db, TENANT_A, PERSON, type, payload, `r-${++n}`, options).then((r) => r.jobId);
+const enqueue = (type: string, payload: unknown, options: { maxAttempts?: number } = {}) =>
+  enqueueAs(f.db, TENANT_A, PERSON, type, payload, `r-${++n}`, options).then((r) => r.jobId);
 const state = (id: string) => jobRow(f.admin, id).then((r) => r.state as string);
 const settled = (id: string, wanted: string[]) => until(`job ${id} to be ${wanted.join('/')}`, async () => wanted.includes(await state(id)));
 
@@ -119,7 +120,16 @@ describe('the claim loop', () => {
     const runner = await start({ concurrency: 2 });
     let peak = 0;
     const watcher = setInterval(() => (peak = Math.max(peak, runner.activeCount)), 10);
-    await until('all six to finish', async () => (await f.admin.query(`SELECT count(*)::int AS n FROM jobs WHERE state = 'succeeded' AND type = 'test.slow' AND tenant_id = $1 AND updated_at > now() - interval '1 minute'`, [TENANT_A])).rows[0].n >= 6);
+    await until(
+      'all six to finish',
+      async () =>
+        (
+          await f.admin.query(
+            `SELECT count(*)::int AS n FROM jobs WHERE state = 'succeeded' AND type = 'test.slow' AND tenant_id = $1 AND updated_at > now() - interval '1 minute'`,
+            [TENANT_A],
+          )
+        ).rows[0].n >= 6,
+    );
     clearInterval(watcher);
     expect(peak).toBe(2);
   });

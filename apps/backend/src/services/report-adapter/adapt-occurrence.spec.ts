@@ -56,7 +56,7 @@ describe('one occurrence to engine input (spec section 5.2, as amended)', () => 
     expect(adaptOccurrence(facts(MISSING, present('not reported'), gene), knowledge)).toEqual({ emitted: [{ gene, state: 'null' }], note: 'unavailable' });
   });
 
-  it('never emits a value the engine\'s schema would refuse: over-long text is unresolved', () => {
+  it("never emits a value the engine's schema would refuse: over-long text is unresolved", () => {
     const long = 'x'.repeat(MAX_VALUE_LENGTH + 1);
     expect(adaptOccurrence(facts(present(long), MISSING), knowledge).emitted).toEqual([other]);
     expect(adaptOccurrence(facts(MISSING, present(long)), knowledge).emitted).toEqual([other]);
@@ -108,7 +108,12 @@ describe('repeated genes (rule R03, option A)', () => {
   it('never decides by normalizing: a conflict among three is a conflict whatever the order', () => {
     const a = facts(MISSING, present('Normal Metabolizer'));
     const b = facts(MISSING, present('Poor Metabolizer'));
-    for (const order of [[a, a, b], [a, b, a], [b, a, a]]) expect(duplicateInput(G, order).note).toBe('duplicate-gene-conflict');
+    for (const order of [
+      [a, a, b],
+      [a, b, a],
+      [b, a, a],
+    ])
+      expect(duplicateInput(G, order).note).toBe('duplicate-gene-conflict');
   });
 
   it('derives the result basis the specification names', () => {

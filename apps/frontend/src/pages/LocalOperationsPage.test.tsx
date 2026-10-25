@@ -1,12 +1,12 @@
 /** @vitest-environment-options {"url":"http://127.0.0.1:4180"} */
-import { render, screen, fireEvent, act } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { beforeEach, it, expect, vi } from "vitest";
-import LocalOperationsPage from "./LocalOperationsPage";
-const mocks = vi.hoisted(() => ({ roles: ["reviewer"], apiFetch: vi.fn() }));
-vi.mock("@/auth/AuthProvider", () => ({ useAuth: () => mocks }));
+import { render, screen, fireEvent, act } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, it, expect, vi } from 'vitest';
+import LocalOperationsPage from './LocalOperationsPage';
+const mocks = vi.hoisted(() => ({ roles: ['reviewer'], apiFetch: vi.fn() }));
+vi.mock('@/auth/AuthProvider', () => ({ useAuth: () => mocks }));
 beforeEach(() => {
-  mocks.roles = ["reviewer"];
+  mocks.roles = ['reviewer'];
   mocks.apiFetch.mockReset();
 });
 const renderPage = () =>
@@ -15,60 +15,44 @@ const renderPage = () =>
       <LocalOperationsPage />
     </MemoryRouter>,
   );
-it("does not fetch or write on initial render and requires explicit confirmation", () => {
+it('does not fetch or write on initial render and requires explicit confirmation', () => {
   renderPage();
   expect(mocks.apiFetch).not.toHaveBeenCalled();
-  expect(screen.getByText("Raise dispute")).toBeDisabled();
-  fireEvent.click(
-    screen.getByLabelText(
-      "I reviewed the selected record and intend this synthetic change",
-    ),
-  );
-  expect(screen.getByText("Raise dispute")).toBeEnabled();
+  expect(screen.getByText('Raise dispute')).toBeDisabled();
+  fireEvent.click(screen.getByLabelText('I reviewed the selected record and intend this synthetic change'));
+  expect(screen.getByText('Raise dispute')).toBeEnabled();
 });
-it("clinician cannot raise even after confirmation", () => {
-  mocks.roles = ["clinician"];
+it('clinician cannot raise even after confirmation', () => {
+  mocks.roles = ['clinician'];
   renderPage();
-  fireEvent.click(
-    screen.getByLabelText(
-      "I reviewed the selected record and intend this synthetic change",
-    ),
-  );
-  expect(screen.getByText("Raise dispute")).toBeDisabled();
+  fireEvent.click(screen.getByLabelText('I reviewed the selected record and intend this synthetic change'));
+  expect(screen.getByText('Raise dispute')).toBeDisabled();
 });
-it("editing the cell after confirming requires a new confirmation", () => {
+it('editing the cell after confirming requires a new confirmation', () => {
   renderPage();
-  fireEvent.click(
-    screen.getByLabelText(
-      "I reviewed the selected record and intend this synthetic change",
-    ),
-  );
-  fireEvent.change(screen.getByLabelText("Row"), {
-    target: { value: "Intermediate Metabolizer" },
+  fireEvent.click(screen.getByLabelText('I reviewed the selected record and intend this synthetic change'));
+  fireEvent.change(screen.getByLabelText('Row'), {
+    target: { value: 'Intermediate Metabolizer' },
   });
-  expect(screen.getByText("Raise dispute")).toBeDisabled();
+  expect(screen.getByText('Raise dispute')).toBeDisabled();
 });
-it("only admin is offered the full-ledger control", () => {
+it('only admin is offered the full-ledger control', () => {
   renderPage();
-  expect(screen.queryByText("Verify full ledger")).not.toBeInTheDocument();
+  expect(screen.queryByText('Verify full ledger')).not.toBeInTheDocument();
 });
 
-it("links dispute errors to their fields, focuses the first and makes no request", async () => {
+it('links dispute errors to their fields, focuses the first and makes no request', async () => {
   renderPage();
-  fireEvent.click(
-    screen.getByLabelText(
-      "I reviewed the selected record and intend this synthetic change",
-    ),
-  );
-  fireEvent.click(screen.getByText("Raise dispute"));
-  const field = screen.getByLabelText("Guideline ID");
-  expect(await screen.findByText("Enter a guideline ID.")).toBeVisible();
-  expect(field).toHaveAttribute("aria-invalid", "true");
-  expect(field).toHaveAccessibleDescription("Enter a guideline ID.");
+  fireEvent.click(screen.getByLabelText('I reviewed the selected record and intend this synthetic change'));
+  fireEvent.click(screen.getByText('Raise dispute'));
+  const field = screen.getByLabelText('Guideline ID');
+  expect(await screen.findByText('Enter a guideline ID.')).toBeVisible();
+  expect(field).toHaveAttribute('aria-invalid', 'true');
+  expect(field).toHaveAccessibleDescription('Enter a guideline ID.');
   expect(field).toHaveFocus();
   expect(mocks.apiFetch).not.toHaveBeenCalled();
 });
-it("preserves dispute inputs after refusal and disables repeat submission while busy", async () => {
+it('preserves dispute inputs after refusal and disables repeat submission while busy', async () => {
   let finish!: (value: Response) => void;
   mocks.apiFetch.mockReturnValue(
     new Promise((resolve) => {
@@ -77,43 +61,50 @@ it("preserves dispute inputs after refusal and disables repeat submission while 
   );
   renderPage();
   for (const [label, value] of [
-    ["Guideline ID", "synthetic-guideline"],
-    ["Table", "Table 1"],
-    ["Row", "Normal"],
-    ["Synthetic note or decision evidence", "Synthetic reason"],
+    ['Guideline ID', 'synthetic-guideline'],
+    ['Table', 'Table 1'],
+    ['Row', 'Normal'],
+    ['Synthetic note or decision evidence', 'Synthetic reason'],
   ])
     fireEvent.change(screen.getByLabelText(label), { target: { value } });
-  fireEvent.click(
-    screen.getByLabelText(
-      "I reviewed the selected record and intend this synthetic change",
-    ),
-  );
-  fireEvent.click(screen.getByText("Raise dispute"));
-  expect(screen.getByText("Raise dispute")).toBeDisabled();
-  fireEvent.click(screen.getByText("Raise dispute"));
+  fireEvent.click(screen.getByLabelText('I reviewed the selected record and intend this synthetic change'));
+  fireEvent.click(screen.getByText('Raise dispute'));
+  expect(screen.getByText('Raise dispute')).toBeDisabled();
+  fireEvent.click(screen.getByText('Raise dispute'));
   expect(mocks.apiFetch).toHaveBeenCalledTimes(1);
-  finish(new Response("{}", { status: 503 }));
-  expect(await screen.findByRole("alert")).toHaveTextContent("Request refused");
-  expect(screen.getByLabelText("Guideline ID")).toHaveValue(
-    "synthetic-guideline",
-  );
-  expect(
-    screen.getByLabelText("Synthetic note or decision evidence"),
-  ).toHaveValue("Synthetic reason");
-  expect(screen.getByText("Raise dispute")).toBeEnabled();
+  finish(new Response('{}', { status: 503 }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Request refused');
+  expect(screen.getByLabelText('Guideline ID')).toHaveValue('synthetic-guideline');
+  expect(screen.getByLabelText('Synthetic note or decision evidence')).toHaveValue('Synthetic reason');
+  expect(screen.getByText('Raise dispute')).toBeEnabled();
 });
 
 const disputeBodies = () =>
-  mocks.apiFetch.mock.calls.filter(([path]) => String(path).endsWith('/cell-disputes')).map(([, init]) => JSON.parse(String((init as RequestInit).body)) as { requestId?: string; note: string });
+  mocks.apiFetch.mock.calls
+    .filter(([path]) => String(path).endsWith('/cell-disputes'))
+    .map(([, init]) => JSON.parse(String((init as RequestInit).body)) as { requestId?: string; note: string });
 const fillDispute = (note = 'Synthetic reason') => {
-  for (const [label, value] of [['Guideline ID', 'synthetic-guideline'], ['Table', 'Table 1'], ['Row', 'Normal'], ['Synthetic note or decision evidence', note]])
+  for (const [label, value] of [
+    ['Guideline ID', 'synthetic-guideline'],
+    ['Table', 'Table 1'],
+    ['Row', 'Normal'],
+    ['Synthetic note or decision evidence', note],
+  ])
     fireEvent.change(screen.getByLabelText(label), { target: { value } });
   const box = screen.getByLabelText('I reviewed the selected record and intend this synthetic change') as HTMLInputElement;
   if (!box.checked) fireEvent.click(box);
 };
 const validDispute = {
-  id: '2f3a8e3c-9b64-4c55-8b7e-0b5c1d8e9a10', guidelineId: 'synthetic-guideline', guidelineVersion: '1', guidelineContentSha256: 'c'.repeat(64),
-  locator: { table: 'Table 1', row: 'Normal', column: null }, status: 'open', inForce: true, note: null, decision: null, createdAt: '2026-10-25T00:00:00.000Z',
+  id: '2f3a8e3c-9b64-4c55-8b7e-0b5c1d8e9a10',
+  guidelineId: 'synthetic-guideline',
+  guidelineVersion: '1',
+  guidelineContentSha256: 'c'.repeat(64),
+  locator: { table: 'Table 1', row: 'Normal', column: null },
+  status: 'open',
+  inForce: true,
+  note: null,
+  decision: null,
+  createdAt: '2026-10-25T00:00:00.000Z',
 };
 
 it('sends one retry id per unchanged dispute: a repeat after a refusal reuses it, a changed note gets a new one, and a raise that went through starts a new one', async () => {
@@ -131,7 +122,9 @@ it('sends one retry id per unchanged dispute: a repeat after a refusal reuses it
   await screen.findByRole('alert');
   fillDispute('Another concern');
   mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify(validDispute), { headers: { 'Content-Type': 'application/json' } }));
-  mocks.apiFetch.mockResolvedValue(new Response(JSON.stringify({ data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } }), { headers: { 'Content-Type': 'application/json' } }));
+  mocks.apiFetch.mockResolvedValue(
+    new Response(JSON.stringify({ data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } }), { headers: { 'Content-Type': 'application/json' } }),
+  );
   fireEvent.click(screen.getByText('Raise dispute'));
   await vi.waitFor(() => expect(disputeBodies()).toHaveLength(3));
   const third = disputeBodies()[2]!;
@@ -147,14 +140,39 @@ it('sends one retry id per unchanged dispute: a repeat after a refusal reuses it
   expect(disputeBodies()[0]!.requestId).not.toBe(third.requestId); // the earlier raise went through: asking for the same thing again is a new request
 });
 
-it('allows only one history request from two same-turn clicks',()=>{mocks.apiFetch.mockReturnValue(new Promise(()=>{}));renderPage();const button=screen.getByText('Refresh evaluations');act(()=>{button.dispatchEvent(new MouseEvent('click',{bubbles:true}));button.dispatchEvent(new MouseEvent('click',{bubbles:true}));});expect(mocks.apiFetch).toHaveBeenCalledTimes(1);});
+it('allows only one history request from two same-turn clicks', () => {
+  mocks.apiFetch.mockReturnValue(new Promise(() => {}));
+  renderPage();
+  const button = screen.getByText('Refresh evaluations');
+  act(() => {
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+  expect(mocks.apiFetch).toHaveBeenCalledTimes(1);
+});
 
 const summary = {
   id: '11111111-1111-4111-8111-111111111111',
-  reportId: '11111111-1111-4111-8111-111111111111', patientId: '11111111-1111-4111-8111-111111111111', captureId: '11111111-1111-4111-8111-111111111111',
-  acceptance: null, disposition: 'held', holdCode: 'unsupported-layout', hold: { message: 'Synthetic hold', reviewerAction: 'Review' },
-  knowledgeSetId: 'syn', engineVersion: 'test', scope: null, clinicalUse: 'not-approved', state: 'active', supersededBy: null,
-  results: [], geneStates: [], corrections: [], current: true, advisory: { activeDisputes: 0, patientLink: 'verified' }, actionable: false, createdAt: 'now',
+  reportId: '11111111-1111-4111-8111-111111111111',
+  patientId: '11111111-1111-4111-8111-111111111111',
+  captureId: '11111111-1111-4111-8111-111111111111',
+  acceptance: null,
+  disposition: 'held',
+  holdCode: 'unsupported-layout',
+  hold: { message: 'Synthetic hold', reviewerAction: 'Review' },
+  knowledgeSetId: 'syn',
+  engineVersion: 'test',
+  scope: null,
+  clinicalUse: 'not-approved',
+  state: 'active',
+  supersededBy: null,
+  results: [],
+  geneStates: [],
+  corrections: [],
+  current: true,
+  advisory: { activeDisputes: 0, patientLink: 'verified' },
+  actionable: false,
+  createdAt: 'now',
 };
 const response = (data: unknown) => new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } });
 
@@ -189,7 +207,11 @@ it('offers independent dispute pages and disables repeat navigation while a requ
   fireEvent.click(screen.getByText('Refresh disputes'));
   await screen.findByText('Next dispute page');
   let finish!: (value: Response) => void;
-  mocks.apiFetch.mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+  mocks.apiFetch.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
   fireEvent.click(screen.getByText('Next dispute page'));
   expect(screen.getByText('Next dispute page')).toBeDisabled();
   fireEvent.click(screen.getByText('Next dispute page'));

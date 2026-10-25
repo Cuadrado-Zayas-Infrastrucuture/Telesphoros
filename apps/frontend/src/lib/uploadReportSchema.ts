@@ -18,11 +18,7 @@ export const uploadReportSchema = z.object({
     .refine((file) => !(file instanceof File) || file.size <= MAX_REPORT_BYTES, {
       error: 'The file is larger than 10 MB.',
     })
-    .refine(
-      (file) =>
-        !(file instanceof File) || ALLOWED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext)),
-      { error: 'Only .vcf and .json files are accepted.' },
-    ),
+    .refine((file) => !(file instanceof File) || ALLOWED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext)), { error: 'Only .vcf and .json files are accepted.' }),
   syntheticConfirmed: z.boolean().refine((value) => value, {
     error: 'Confirm that this file contains synthetic data only.',
   }),

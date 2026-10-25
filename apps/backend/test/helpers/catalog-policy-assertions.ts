@@ -17,9 +17,7 @@ export function expectRecordTablePolicies(table: string, policies: readonly Cata
     return matches[0]!;
   };
   const app = forRole('telesphoros_app');
-  expect([table, app.qual, app.with_check]).toEqual([
-    table, expect.stringContaining('app_tenant()'), expect.stringContaining('app_tenant()'),
-  ]);
+  expect([table, app.qual, app.with_check]).toEqual([table, expect.stringContaining('app_tenant()'), expect.stringContaining('app_tenant()')]);
   const verifier = forRole('telesphoros_ledger_verifier');
   expect([table, verifier.cmd]).toEqual([table, 'SELECT']);
   // Forced RLS also applies to owners; ledger functions require their own tenant read policy.

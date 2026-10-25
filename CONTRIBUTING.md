@@ -5,6 +5,7 @@
 - Parameterized SQL, every query tenant-scoped; no PHI in logs.
 - A promise is awaited, handled or explicitly `void`ed: `pnpm lint` checks it with types (`scripts/lint/promise-rules.mjs`). A suppression names the rule and gives its reason after `--`; one that suppresses nothing fails lint.
 - An import used only as a type is written `import type`, on its own line (`scripts/lint/type-imports.mjs`; `eslint --fix` writes it). In the backend, decorator metadata needs the runtime import, so the rule runs only with type information there; `pnpm test` fails if it does not.
+- Source under `apps/*/{src,test}` and `packages/*/{src,test}` is formatted by Prettier (`.prettierrc.json`: width 180, single quotes): run `pnpm format`; `pnpm lint` fails on an unformatted file. A source file whose SHA-256 is recorded in the repository keeps its bytes and is listed in `.prettierignore` (`pnpm test` fails otherwise). `git blame` skips the one formatting commit when `git config blame.ignoreRevsFile .git-blame-ignore-revs` is set; GitHub skips it by itself.
 - Changes to clinical logic need tests and a validation note in `docs/clinical-validation/`.
 - Commits by agents carry a `Co-Authored-By` trailer.
 - Database changes are **new numbered migrations** with a matching down file (never edit an applied one). Run the database tier before opening a PR: see docs/database.md. From migration 0028 each `.up.sql` starts with `-- compat: expand` or `-- compat: breaking` (use `breaking` when unsure); see "Migration labels" in docs/database.md.

@@ -15,18 +15,26 @@ import { bearer } from '../helpers/tokens';
 // Explicit command only: this is NOT matched by the ordinary service-backed test tier.
 // No evidence/SMART/HTTP mocks: real OpenEMR -> built pilot -> real API/PG/S3 -> built React.
 const root = resolve(__dirname, '../../../..');
-interface Reply { ok: boolean; step?: string; reads: { ehr: number; backend: number; pdf: number; tokenExchanges: number; unexpected: number } }
+interface Reply {
+  ok: boolean;
+  step?: string;
+  reads: { ehr: number; backend: number; pdf: number; tokenExchanges: number; unexpected: number };
+}
 let child: ChildProcess;
 function browser(action: string, data: object = {}): Promise<Reply> {
   return new Promise((resolveReply, reject) => {
     const finish = (error?: Error, reply?: Reply) => {
-      clearTimeout(timer); child.off('message', received); child.off('exit', exited);
-      if (error) reject(error); else resolveReply(reply!);
+      clearTimeout(timer);
+      child.off('message', received);
+      child.off('exit', exited);
+      if (error) reject(error);
+      else resolveReply(reply!);
     };
     const received = (reply: Reply) => finish(reply.ok ? undefined : new Error(`Synthetic workflow browser failed: ${action}/${reply.step}`), reply);
     const exited = () => finish(new Error(`Synthetic workflow browser exited: ${action}`));
     const timer = setTimeout(() => finish(new Error(`Synthetic workflow browser timed out: ${action}`)), 60000);
-    child.once('message', received); child.once('exit', exited);
+    child.once('message', received);
+    child.once('exit', exited);
     child.send({ action, ...data });
   });
 }
@@ -43,36 +51,49 @@ describe('real synthetic OpenEMR workflow acceptance (explicit opt-in)', () => {
     }
     db = await createEphemeralDatabase();
     idp = await startFakeIdp({ port: 0 });
-    app = await createTestApp({ postgresUrl: db.appUrl, labReportPipeline: true,
-      tokenVerifier: new CognitoTokenVerifier({ issuer: idp.issuer, clientId: 'fake-client-id' }) });
+    app = await createTestApp({ postgresUrl: db.appUrl, labReportPipeline: true, tokenVerifier: new CognitoTokenVerifier({ issuer: idp.issuer, clientId: 'fake-client-id' }) });
     app.getHttpServer().on('request', (req: { method: string }) => requests.push(req.method));
     lab = new LabPipeline(app, db.adminUrl, tenant);
     const person = async (index: number): Promise<Person> => {
       const user = DEFAULT_USERS[index]!;
-      return { sub: user.sub, token: await idp.mintAccessToken({ user: { ...user, groups: [...user.groups.filter(g => !g.startsWith('tenant:')), `tenant:${tenant}`] } }) };
+      return { sub: user.sub, token: await idp.mintAccessToken({ user: { ...user, groups: [...user.groups.filter((g) => !g.startsWith('tenant:')), `tenant:${tenant}`] } }) };
     };
-    writer = await person(0); reviewer = await person(6);
+    writer = await person(0);
+    reviewer = await person(6);
     child = fork(resolve(root, 'packages/smart-pilot/openemr/workflow-browser.mjs'), [], {
-      cwd: root, env: { ...process.env, NODE_ENV: 'test' }, stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+      cwd: root,
+      env: { ...process.env, NODE_ENV: 'test' },
+      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
     });
   }, 30000);
   afterAll(async () => {
     let failed = false;
     if (child?.connected) {
-      try { await browser('close'); } catch { failed = true; } finally { child.disconnect(); }
+      try {
+        await browser('close');
+      } catch {
+        failed = true;
+      } finally {
+        child.disconnect();
+      }
     }
     // Blast radius: the newly generated test_<random> database only. Fixture source recreates it.
     // Shared synthetic demo data, retention policies and production resources are never touched.
     for (const cleanup of [() => app?.close(), () => idp?.stop(), () => db?.drop()]) {
-      try { await cleanup(); } catch { failed = true; }
+      try {
+        await cleanup();
+      } catch {
+        failed = true;
+      }
     }
     if (failed) throw new Error('Synthetic workflow cleanup failed');
   }, 65000);
   const counts = async () => ({ evaluations: await lab.count('evaluations', 'tenant_id = $1', [tenant]), ledger: await lab.count('ledger_events', 'tenant_id = $1', [tenant]) });
   async function readOnly(action: string, data: object = {}) {
-    const before = await counts(); requests.length = 0;
+    const before = await counts();
+    requests.length = 0;
     const reply = await browser(action, data);
-    expect(requests.every(method => method === 'GET')).toBe(true);
+    expect(requests.every((method) => method === 'GET')).toBe(true);
     if (!['offline', 'consent'].includes(action)) expect(requests.length).toBeGreaterThan(0);
     if (action === 'consent') expect(requests).toEqual([]);
     expect(await counts()).toEqual(before);
@@ -81,7 +102,7 @@ describe('real synthetic OpenEMR workflow acceptance (explicit opt-in)', () => {
     return reply;
   }
   it('accepts a pinned source, clears retracted/stale evidence, requires explicit replacement, and withholds missing sources and unconsented charts', async () => {
-    const role = await app.get(Database).withTenant(tenant, async c => (await c.query('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user')).rows[0]);
+    const role = await app.get(Database).withTenant(tenant, async (c) => (await c.query('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user')).rows[0]);
     expect(role).toEqual({ rolsuper: false, rolbypassrls: false });
     // Test setup writes are deliberately separate from the read-only connector observations.
     const s = await lab.reviewedCapture(fixturePdf('D01'), { clinician: writer, reviewer });
@@ -91,9 +112,14 @@ describe('real synthetic OpenEMR workflow acceptance (explicit opt-in)', () => {
     const registration = JSON.parse(readFileSync(resolve(root, 'packages/smart-pilot/openemr/.runtime/registration.json'), 'utf8')) as { issuer: string };
     const seed = JSON.parse(readFileSync(resolve(root, 'packages/smart-pilot/openemr/.runtime/seed.json'), 'utf8')) as { clinicianUuid: string };
     const address = app.getHttpServer().address() as { port: number };
-    const config = { mode: 'stored-synthetic', apiBaseUrl: `http://127.0.0.1:${address.port}/api/v1`, issuer: idp.issuer, clientId: 'fake-client-id',
+    const config = {
+      mode: 'stored-synthetic',
+      apiBaseUrl: `http://127.0.0.1:${address.port}/api/v1`,
+      issuer: idp.issuer,
+      clientId: 'fake-client-id',
       sourcePdf: { storageOrigin: new URL(process.env.TEST_S3_ENDPOINT!).origin },
-      readers: [{ ehrIssuer: registration.issuer, clinician: `Practitioner/${seed.clinicianUuid}`, subject: writer.sub, tenantId: tenant, token: writer.token }] };
+      readers: [{ ehrIssuer: registration.issuer, clinician: `Practitioner/${seed.clinicianUuid}`, subject: writer.sub, tenantId: tenant, token: writer.token }],
+    };
     const expected = { evaluationId: evaluation.id, version: s.upload.version };
     const initial = await readOnly('start', { registration, config, selection, pdf: fixturePdf('D01').toString('base64'), ...expected });
     expect(initial.reads.ehr).toBeGreaterThanOrEqual(2);
@@ -104,18 +130,29 @@ describe('real synthetic OpenEMR workflow acceptance (explicit opt-in)', () => {
     // Actual browser network loss revokes the old blob, then a positive control recovers.
     await readOnly('offline');
     await readOnly('online', expected);
-    const retraction = (await lab.api().post(`/api/v1/evaluations/${evaluation.id}/corrections`).set(bearer(reviewer.token))
-      .send({ kind: 'retraction', reasonCode: 'input-misread' }).expect(201)).body as { id: string };
+    const retraction = (
+      await lab.api().post(`/api/v1/evaluations/${evaluation.id}/corrections`).set(bearer(reviewer.token)).send({ kind: 'retraction', reasonCode: 'input-misread' }).expect(201)
+    ).body as { id: string };
     await readOnly('withheld', { state: 'retracted' });
     const independent = await idp.mintAccessToken({ user: { ...DEFAULT_USERS[6]!, sub: 'synthetic-workflow-reinstater', groups: ['reviewer', `tenant:${tenant}`] } });
-    const reinstatement = (await lab.api().post(`/api/v1/evaluations/${evaluation.id}/corrections`).set(bearer(independent))
-      .send({ kind: 'reinstatement', reasonCode: 'retraction-mistaken', previousCorrectionId: retraction.id }).expect(201)).body as { id: string };
+    const reinstatement = (
+      await lab
+        .api()
+        .post(`/api/v1/evaluations/${evaluation.id}/corrections`)
+        .set(bearer(independent))
+        .send({ kind: 'reinstatement', reasonCode: 'retraction-mistaken', previousCorrectionId: retraction.id })
+        .expect(201)
+    ).body as { id: string };
     await readOnly('active', expected);
 
     const decision = (await lab.decide(reviewer, s.captureId, { decision: 'accepted' }).expect(201)).body as { id: string };
     const replacement = (await lab.evaluate(writer, s.reportId, { captureId: s.captureId, acceptanceId: decision.id }).expect(201)).body as EvaluationDto;
-    await lab.api().post(`/api/v1/evaluations/${evaluation.id}/corrections`).set(bearer(reviewer.token))
-      .send({ kind: 'supersession', reasonCode: 'input-misread', previousCorrectionId: reinstatement.id, replacementEvaluationId: replacement.id }).expect(201);
+    await lab
+      .api()
+      .post(`/api/v1/evaluations/${evaluation.id}/corrections`)
+      .set(bearer(reviewer.token))
+      .send({ kind: 'supersession', reasonCode: 'input-misread', previousCorrectionId: reinstatement.id, replacementEvaluationId: replacement.id })
+      .expect(201);
     await readOnly('withheld', { state: 'superseded', absent: replacement.id });
     const next = { evaluationId: replacement.id, version: s.upload.version };
     await readOnly('relaunch', { selection: { ...selection, evaluationId: replacement.id }, ...next });

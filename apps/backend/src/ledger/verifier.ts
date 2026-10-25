@@ -28,9 +28,20 @@ export type VerifyStatus = 'ok' | 'failed' | 'incomplete';
 export type IncompleteReason = 'time' | 'size' | 'shutdown';
 
 export type FailureKind =
-  | 'seq-gap' | 'prev-hash-mismatch' | 'record-hash-mismatch' | 'unsupported-hash-version' | 'unsupported-projection-version'
-  | 'payload-mismatch' | 'record-missing' | 'record-event-mismatch' | 'row-without-event' | 'note-digest-mismatch' | 'note-redaction-invalid'
-  | 'head-mismatch' | 'checkpoint-mismatch' | 'checkpoint-payload-mismatch';
+  | 'seq-gap'
+  | 'prev-hash-mismatch'
+  | 'record-hash-mismatch'
+  | 'unsupported-hash-version'
+  | 'unsupported-projection-version'
+  | 'payload-mismatch'
+  | 'record-missing'
+  | 'record-event-mismatch'
+  | 'row-without-event'
+  | 'note-digest-mismatch'
+  | 'note-redaction-invalid'
+  | 'head-mismatch'
+  | 'checkpoint-mismatch'
+  | 'checkpoint-payload-mismatch';
 
 export interface Failure {
   kind: FailureKind;
@@ -99,7 +110,10 @@ export class LedgerVerifier {
   /** A verifier on its own pool. `url` must be the verifier login, never the application's. */
   static connect(url: string, ssl: 'disable' | 'require' = 'disable'): LedgerVerifier {
     const pool = new Pool({
-      ...pgClientConfig(url, ssl), max: 3, connectionTimeoutMillis: 5_000, application_name: 'telesphoros-ledger-verifier',
+      ...pgClientConfig(url, ssl),
+      max: 3,
+      connectionTimeoutMillis: 5_000,
+      application_name: 'telesphoros-ledger-verifier',
     });
     pool.on('error', () => undefined); // intentional: an idle verifier connection can die; the next verification opens another
     return new LedgerVerifier(pool);
@@ -152,7 +166,11 @@ export class LedgerVerifier {
       // `startedAt` is the DATABASE's clock at the start of the walk's snapshot: a clearance of an incident accepts only a checkpoint whose
       // walk began after the incident was recorded, so a walk that was already running when the damage was found cannot clear it.
       const { rows } = await this.pool.query<{ id: string }>(`SELECT ledger_record_checkpoint($1, $2::bigint, $3, $4, $5::timestamptz) AS id`, [
-        tenantId, result.headSeq, result.headHash, result.mode, startedAt,
+        tenantId,
+        result.headSeq,
+        result.headHash,
+        result.mode,
+        startedAt,
       ]);
       result.checkpointId = rows[0]!.id;
     }
@@ -165,16 +183,28 @@ export class LedgerVerifier {
    */
   async recordIncident(finding: Pick<Compromise, 'tenantId' | 'kind' | 'seq' | 'source'>): Promise<string> {
     const { rows } = await this.pool.query<{ id: string }>(`SELECT ledger_record_incident($1, $2, $3::bigint, $4)::text AS id`, [
-      finding.tenantId, finding.kind, finding.seq, finding.source,
+      finding.tenantId,
+      finding.kind,
+      finding.seq,
+      finding.source,
     ]);
     return rows[0]!.id;
   }
 
   /** Every incident that no clearance names: tenant incidents and global holds. */
   async openIncidents(): Promise<OpenIncident[]> {
-    const { rows } = await this.pool.query<{ id: string; scope: 'tenant' | 'global'; tenant_id: string | null; kind: OpenIncident['kind']; failed_seq: string | null; source: OpenIncident['source']; detected_at: Date }>(
+    const { rows } = await this.pool.query<{
+      id: string;
+      scope: 'tenant' | 'global';
+      tenant_id: string | null;
+      kind: OpenIncident['kind'];
+      failed_seq: string | null;
+      source: OpenIncident['source'];
+      detected_at: Date;
+    }>(
       `SELECT i.id::text AS id, i.scope, i.tenant_id, i.kind, i.failed_seq::text AS failed_seq, i.source, i.detected_at
-         FROM ledger_incidents i WHERE NOT EXISTS (SELECT 1 FROM ledger_incident_clearances c WHERE c.incident_id = i.id) ORDER BY i.seq`);
+         FROM ledger_incidents i WHERE NOT EXISTS (SELECT 1 FROM ledger_incident_clearances c WHERE c.incident_id = i.id) ORDER BY i.seq`,
+    );
     return rows.map((r) => ({ id: r.id, scope: r.scope, tenantId: r.tenant_id, kind: r.kind, seq: r.failed_seq, source: r.source, detectedAt: r.detected_at }));
   }
 
@@ -203,10 +233,16 @@ export class LedgerVerifier {
       const small = options.fullWalkAtOrBelow !== undefined && BigInt(head.seq) <= BigInt(options.fullWalkAtOrBelow);
       if (options.mode === 'tail' && !small) {
         const cp = await client.query<{ id: string; up_to_seq: string; head_hash: string; mode: string }>(
-          `SELECT id::text AS id, up_to_seq::text AS up_to_seq, head_hash, mode FROM ledger_checkpoints c WHERE c.tenant_id = $1 ORDER BY c.up_to_seq DESC LIMIT 1`, [tenantId]);
+          `SELECT id::text AS id, up_to_seq::text AS up_to_seq, head_hash, mode FROM ledger_checkpoints c WHERE c.tenant_id = $1 ORDER BY c.up_to_seq DESC LIMIT 1`,
+          [tenantId],
+        );
         const latest = cp.rows[0];
         if (latest) {
-          const at = await client.query(`SELECT 1 FROM ledger_events WHERE tenant_id = $1 AND seq = $2::bigint AND record_hash = $3`, [tenantId, latest.up_to_seq, latest.head_hash]);
+          const at = await client.query(`SELECT 1 FROM ledger_events WHERE tenant_id = $1 AND seq = $2::bigint AND record_hash = $3`, [
+            tenantId,
+            latest.up_to_seq,
+            latest.head_hash,
+          ]);
           if (at.rowCount === 1) {
             mode = 'tail';
             position = { seq: BigInt(latest.up_to_seq), hash: latest.head_hash };
@@ -244,8 +280,17 @@ export class LedgerVerifier {
             fail('unsupported-hash-version', e.seq);
           } else if (
             recordHash({
-              tenantId, seq: e.seq, eventType: e.event_type, subjectTable: e.subject_table, subjectId: e.subject_id, actorSub: e.actor_sub,
-              payloadSha256: e.payload_sha256, projectionVersion: e.projection_version, hashVersion: e.hash_version, prevHash: e.prev_hash, createdAtUtc: e.created_at_utc,
+              tenantId,
+              seq: e.seq,
+              eventType: e.event_type,
+              subjectTable: e.subject_table,
+              subjectId: e.subject_id,
+              actorSub: e.actor_sub,
+              payloadSha256: e.payload_sha256,
+              projectionVersion: e.projection_version,
+              hashVersion: e.hash_version,
+              prevHash: e.prev_hash,
+              createdAtUtc: e.created_at_utc,
             }) !== e.record_hash
           ) {
             fail('record-hash-mismatch', e.seq);
@@ -284,7 +329,11 @@ export class LedgerVerifier {
     for (const table of RECORD_TABLES) {
       const own = events.filter((e) => e.subject_table === table);
       if (own.length === 0) continue;
-      const loaded = await loadProjections(client, table, own.map((e) => e.subject_id));
+      const loaded = await loadProjections(
+        client,
+        table,
+        own.map((e) => e.subject_id),
+      );
       for (const e of own) {
         const projection = loaded.get(e.subject_id);
         if (!projection) {

@@ -29,7 +29,11 @@ export class PatientsService {
   async create(principal: Principal, input: PatientCreate): Promise<PatientRecord> {
     const requestId = input.requestId;
     // The hash is of the original request alone, so a later label change cannot make a repeat look like a different request.
-    const requestHash = requestId ? createHash('sha256').update(JSON.stringify([input.label])).digest('hex') : undefined;
+    const requestHash = requestId
+      ? createHash('sha256')
+          .update(JSON.stringify([input.label]))
+          .digest('hex')
+      : undefined;
     if (requestId) {
       // A repeat of a create that succeeded must not meet the label it created.
       const prior = await this.patients.findByRequest(principal.tenantId, principal.sub, requestId);
@@ -86,7 +90,8 @@ export class PatientsService {
       await this.patients.delete(principal.tenantId, id, principal.sub);
     } catch (error) {
       // A merge landed after the check above; the database refuses the delete and the answer is the same.
-      if (error instanceof PatientHasMergedRecordsError) throw AppException.conflictBecause('patient-has-merged-records', 'Other patient records were merged into this one. Unmerge them first.');
+      if (error instanceof PatientHasMergedRecordsError)
+        throw AppException.conflictBecause('patient-has-merged-records', 'Other patient records were merged into this one. Unmerge them first.');
       throw error;
     }
   }

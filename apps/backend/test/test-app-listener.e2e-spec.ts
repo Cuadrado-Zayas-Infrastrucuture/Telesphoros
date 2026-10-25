@@ -5,8 +5,14 @@ import { createTestApp } from './helpers/app';
 
 function listen(server: Server, port: number): Promise<string | undefined> {
   return new Promise((resolve) => {
-    const error = (cause: NodeJS.ErrnoException) => { server.removeListener('listening', listening); resolve(cause.code); };
-    const listening = () => { server.removeListener('error', error); resolve(undefined); };
+    const error = (cause: NodeJS.ErrnoException) => {
+      server.removeListener('listening', listening);
+      resolve(cause.code);
+    };
+    const listening = () => {
+      server.removeListener('error', error);
+      resolve(undefined);
+    };
     server.once('error', error);
     server.once('listening', listening);
     server.listen(port, '127.0.0.1');
@@ -15,15 +21,21 @@ function listen(server: Server, port: number): Promise<string | undefined> {
 
 function close(server: Server): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (!server.listening) { resolve(); return; }
-    server.close((error) => error ? reject(error) : resolve());
+    if (!server.listening) {
+      resolve();
+      return;
+    }
+    server.close((error) => (error ? reject(error) : resolve()));
   });
 }
 
 it('owns the client loopback port so another listener cannot answer its health requests', async () => {
   const app = await createTestApp();
   let competingRequests = 0;
-  const competing = createServer((_req, res) => { competingRequests++; res.writeHead(404).end(); });
+  const competing = createServer((_req, res) => {
+    competingRequests++;
+    res.writeHead(404).end();
+  });
   try {
     // Positive control: this server can bind loopback and serve a real request.
     expect(await listen(competing, 0)).toBeUndefined();
@@ -41,6 +53,10 @@ it('owns the client loopback port so another listener cannot answer its health r
     expect(collision).toBe('EADDRINUSE');
     expect(competingRequests).toBe(1);
   } finally {
-    try { await close(competing); } finally { await app.close(); }
+    try {
+      await close(competing);
+    } finally {
+      await app.close();
+    }
   }
 });

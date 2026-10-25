@@ -30,34 +30,81 @@ const api = () => request(app.getHttpServer());
 describe('the API, authenticating real RS256 Cognito-shaped tokens', () => {
   it('roles come from cognito:groups: a clinician writes, a reader reads, an administrator (carol) reads and writes no clinical data, a user with no role group can neither write nor read', async () => {
     const label = () => `SYN-${randomUUID().slice(0, 8)}`;
-    await api().post('/api/v1/patients').set(bearer(await token('alice'))).send({ label: label() }).expect(201);
+    await api()
+      .post('/api/v1/patients')
+      .set(bearer(await token('alice')))
+      .send({ label: label() })
+      .expect(201);
     for (const who of ['bob', 'carol', 'dave'] as const) {
-      const res = await api().post('/api/v1/patients').set(bearer(await token(who))).send({ label: label() }).expect(403);
+      const res = await api()
+        .post('/api/v1/patients')
+        .set(bearer(await token(who)))
+        .send({ label: label() })
+        .expect(403);
       expect(res.body.error.code).toBe('FORBIDDEN');
-      await api().get('/api/v1/patients').set(bearer(await token(who))).expect(who === 'bob' ? 200 : 403); // carol: administration only (DP-1)
+      await api()
+        .get('/api/v1/patients')
+        .set(bearer(await token(who)))
+        .expect(who === 'bob' ? 200 : 403); // carol: administration only (DP-1)
     }
   });
 
   it('one tenant can never see or touch another tenant’s records (the tenant group becomes the scope, RLS binds on PostgreSQL)', async () => {
-    const created = (await api().post('/api/v1/patients').set(bearer(await token('alice'))).send({ label: `SYN-${randomUUID().slice(0, 8)}` }).expect(201)).body;
-    const bobsList = await api().get('/api/v1/patients').set(bearer(await token('bob'))).expect(200);
+    const created = (
+      await api()
+        .post('/api/v1/patients')
+        .set(bearer(await token('alice')))
+        .send({ label: `SYN-${randomUUID().slice(0, 8)}` })
+        .expect(201)
+    ).body;
+    const bobsList = await api()
+      .get('/api/v1/patients')
+      .set(bearer(await token('bob')))
+      .expect(200);
     expect(bobsList.body.data.map((p: { id: string }) => p.id)).not.toContain(created.id);
-    await api().get(`/api/v1/patients/${created.id}`).set(bearer(await token('bob'))).expect(404);
-    await api().get(`/api/v1/patients/${created.id}`).set(bearer(await token('alice'))).expect(200);
+    await api()
+      .get(`/api/v1/patients/${created.id}`)
+      .set(bearer(await token('bob')))
+      .expect(404);
+    await api()
+      .get(`/api/v1/patients/${created.id}`)
+      .set(bearer(await token('alice')))
+      .expect(200);
   });
 
   it('members of one tenant share records: alice and hal (tenant alpha) see each other’s, bob (beta) sees neither', async () => {
-    const created = (await api().post('/api/v1/patients').set(bearer(await token('alice'))).send({ label: `SYN-${randomUUID().slice(0, 8)}` }).expect(201)).body;
-    await api().get(`/api/v1/patients/${created.id}`).set(bearer(await token('hal'))).expect(200);
-    await api().get(`/api/v1/patients/${created.id}`).set(bearer(await token('gina'))).expect(200);
-    await api().get(`/api/v1/patients/${created.id}`).set(bearer(await token('carol'))).expect(403); // same tenant, administration only
-    await api().get(`/api/v1/patients/${created.id}`).set(bearer(await token('bob'))).expect(404);
+    const created = (
+      await api()
+        .post('/api/v1/patients')
+        .set(bearer(await token('alice')))
+        .send({ label: `SYN-${randomUUID().slice(0, 8)}` })
+        .expect(201)
+    ).body;
+    await api()
+      .get(`/api/v1/patients/${created.id}`)
+      .set(bearer(await token('hal')))
+      .expect(200);
+    await api()
+      .get(`/api/v1/patients/${created.id}`)
+      .set(bearer(await token('gina')))
+      .expect(200);
+    await api()
+      .get(`/api/v1/patients/${created.id}`)
+      .set(bearer(await token('carol')))
+      .expect(403); // same tenant, administration only
+    await api()
+      .get(`/api/v1/patients/${created.id}`)
+      .set(bearer(await token('bob')))
+      .expect(404);
   });
 
   it('a signed-in user without exactly one tenant group is refused with 403: erin has none, frank has two', async () => {
     for (const who of ['erin', 'frank'] as const) {
       for (const path of ['/api/v1/me', '/api/v1/me/recovery-scope', '/api/v1/patients']) {
-        const res = await api().get(path).set(bearer(await token(who))).expect(403);
+        const res = await api()
+          .get(path)
+          .set(bearer(await token(who)))
+          .expect(403);
         expect(errorResponseSchema.safeParse(res.body).success).toBe(true);
         expect(res.body.error.code).toBe('FORBIDDEN');
       }
@@ -65,18 +112,42 @@ describe('the API, authenticating real RS256 Cognito-shaped tokens', () => {
   });
 
   it('keeps GET /me roles-only and supplies a separate verified recovery capability', async () => {
-    const res = await api().get('/api/v1/me').set(bearer(await token('alice'))).expect(200);
+    const res = await api()
+      .get('/api/v1/me')
+      .set(bearer(await token('alice')))
+      .expect(200);
     expect(res.body).toEqual({ roles: ['clinician'] });
     expect(meDtoSchema.safeParse(res.body).success).toBe(true);
-    const scope = await api().get('/api/v1/me/recovery-scope').set(bearer(await token('alice'))).expect(200);
+    const scope = await api()
+      .get('/api/v1/me/recovery-scope')
+      .set(bearer(await token('alice')))
+      .expect(200);
     expect(recoveryScopeDtoSchema.safeParse(scope.body).success).toBe(true);
     expect(scope.body).toEqual({ recoveryScope: expect.stringMatching(/^[0-9a-f]{64}$/) });
-    const repeated = await api().get('/api/v1/me/recovery-scope').set(bearer(await token('alice'))).set('X-Recovery-Scope', 'forged-client-hint').expect(200);
+    const repeated = await api()
+      .get('/api/v1/me/recovery-scope')
+      .set(bearer(await token('alice')))
+      .set('X-Recovery-Scope', 'forged-client-hint')
+      .expect(200);
     expect(repeated.body).toEqual(scope.body);
     for (const who of ['hal', 'bob'] as const) {
-      expect((await api().get('/api/v1/me/recovery-scope').set(bearer(await token(who))).expect(200)).body.recoveryScope).not.toBe(scope.body.recoveryScope);
+      expect(
+        (
+          await api()
+            .get('/api/v1/me/recovery-scope')
+            .set(bearer(await token(who)))
+            .expect(200)
+        ).body.recoveryScope,
+      ).not.toBe(scope.body.recoveryScope);
     }
-    expect((await api().get('/api/v1/me').set(bearer(await token('dave'))).expect(200)).body).toEqual({ roles: [] });
+    expect(
+      (
+        await api()
+          .get('/api/v1/me')
+          .set(bearer(await token('dave')))
+          .expect(200)
+      ).body,
+    ).toEqual({ roles: [] });
     await api().get('/api/v1/me').expect(401);
     await api().get('/api/v1/me/recovery-scope').expect(401);
   });
@@ -88,7 +159,10 @@ describe('the API, authenticating real RS256 Cognito-shaped tokens', () => {
     ['an expired token', () => idp.mintAccessToken({ user: user('carol'), issuedAtOffsetSeconds: -7200, expiresInSeconds: 60 })],
   ])('refuses %s with the standard 401 envelope', async (_name, make) => {
     for (const path of ['/api/v1/me', '/api/v1/me/recovery-scope']) {
-      const res = await api().get(path).set(bearer(await make())).expect(401);
+      const res = await api()
+        .get(path)
+        .set(bearer(await make()))
+        .expect(401);
       expect(errorResponseSchema.safeParse(res.body).success).toBe(true);
       expect(res.body.error.code).toBe('UNAUTHORIZED');
     }
@@ -126,7 +200,11 @@ describe('CORS: an explicit allowlist, nothing else', () => {
   });
 
   it('lets the browser read X-Request-Id on a real response from an allowed origin', async () => {
-    const res = await api().get('/api/v1/me').set('Origin', ORIGIN).set(bearer(await token('alice'))).expect(200);
+    const res = await api()
+      .get('/api/v1/me')
+      .set('Origin', ORIGIN)
+      .set(bearer(await token('alice')))
+      .expect(200);
     expect(res.headers['access-control-allow-origin']).toBe(ORIGIN);
     expect(res.headers['access-control-expose-headers']).toMatch(/X-Request-Id/i);
   });
@@ -136,7 +214,10 @@ describe('CORS: an explicit allowlist, nothing else', () => {
     async (origin) => {
       const pre = await api().options('/api/v1/patients').set('Origin', origin).set('Access-Control-Request-Method', 'GET');
       expect(pre.headers['access-control-allow-origin']).toBeUndefined();
-      const real = await api().get('/api/v1/me').set('Origin', origin).set(bearer(await token('alice')));
+      const real = await api()
+        .get('/api/v1/me')
+        .set('Origin', origin)
+        .set(bearer(await token('alice')));
       expect(real.headers['access-control-allow-origin']).toBeUndefined();
     },
   );
@@ -161,6 +242,9 @@ describe('sign-out (AUTH-03)', () => {
     await api().get('/api/v1/me').set(bearer(held)).expect(401);
     // The cut-off is whole seconds: a token minted after the next second is newer than it.
     await new Promise((resolve) => setTimeout(resolve, 1100));
-    await api().get('/api/v1/me').set(bearer(await token('hal'))).expect(200);
+    await api()
+      .get('/api/v1/me')
+      .set(bearer(await token('hal')))
+      .expect(200);
   });
 });

@@ -30,8 +30,17 @@ export const GENESIS_HASH = '0'.repeat(64);
 export function recordHash(event: HashableEvent): string {
   if (event.hashVersion !== HASH_VERSION) throw new RangeError('Unsupported ledger hash version.');
   const input = [
-    event.tenantId, event.seq, event.eventType, event.subjectTable, event.subjectId, event.actorSub, event.payloadSha256,
-    String(event.projectionVersion), String(event.hashVersion), event.prevHash, event.createdAtUtc,
+    event.tenantId,
+    event.seq,
+    event.eventType,
+    event.subjectTable,
+    event.subjectId,
+    event.actorSub,
+    event.payloadSha256,
+    String(event.projectionVersion),
+    String(event.hashVersion),
+    event.prevHash,
+    event.createdAtUtc,
   ].join(SEPARATOR);
   return createHash('sha256').update(input, 'utf8').digest('hex');
 }

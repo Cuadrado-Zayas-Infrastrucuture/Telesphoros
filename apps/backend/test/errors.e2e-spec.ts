@@ -27,7 +27,10 @@ const api = () => request(app.getHttpServer());
 
 describe('one error contract for every failure', () => {
   it('unknown routes: 404 NOT_FOUND in the standard envelope', async () => {
-    const res = await api().get('/api/v1/nothing-here').set(bearer(await clinicianA())).expect(404);
+    const res = await api()
+      .get('/api/v1/nothing-here')
+      .set(bearer(await clinicianA()))
+      .expect(404);
     expect(errorResponseSchema.safeParse(res.body).success).toBe(true);
     expect(res.body.error.code).toBe(ErrorCode.NOT_FOUND);
   });
@@ -90,8 +93,15 @@ describe('request id', () => {
     expect(missing.body.error.requestId).toBe(missing.headers['x-request-id']);
   });
 
-  it('a path outside /api, for any method, gets the same JSON envelope and request id (not Express\'s HTML 404)', async () => {
-    for (const [method, path] of [['get', '/'], ['get', '/nope'], ['post', '/nope'], ['put', '/health'], ['delete', '/apiary'], ['get', '/apiary/v1']] as const) {
+  it("a path outside /api, for any method, gets the same JSON envelope and request id (not Express's HTML 404)", async () => {
+    for (const [method, path] of [
+      ['get', '/'],
+      ['get', '/nope'],
+      ['post', '/nope'],
+      ['put', '/health'],
+      ['delete', '/apiary'],
+      ['get', '/apiary/v1'],
+    ] as const) {
       const res = await api()[method](path).expect(404);
       expect(res.headers['content-type']).toMatch(/json/);
       expect(errorResponseSchema.safeParse(res.body).success).toBe(true);
@@ -107,11 +117,8 @@ describe('request id', () => {
     expect(res.body.error.requestId).toBe('frontend-req-12345');
   });
 
-  it.each(['short', 'has spaces in it!', 'x'.repeat(65), '<script>alert(1)</script>'])(
-    'replaces an unsafe caller-supplied id (%s)',
-    async (unsafe) => {
-      const res = await api().get('/api/v1/health').set('X-Request-Id', unsafe).expect(200);
-      expect(res.headers['x-request-id']).toMatch(UUID);
-    },
-  );
+  it.each(['short', 'has spaces in it!', 'x'.repeat(65), '<script>alert(1)</script>'])('replaces an unsafe caller-supplied id (%s)', async (unsafe) => {
+    const res = await api().get('/api/v1/health').set('X-Request-Id', unsafe).expect(200);
+    expect(res.headers['x-request-id']).toMatch(UUID);
+  });
 });

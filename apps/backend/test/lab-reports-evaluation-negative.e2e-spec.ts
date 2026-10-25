@@ -70,10 +70,21 @@ const real = new SubprocessReportReader({ mode: 'non-production' });
 
     it('a NEWER capture of the same report, left unaccepted, does not invalidate an older accepted one', async () => {
       const s = await lab.reviewedCapture(fixturePdf('D02'));
-      const row = (await lab.row<{ storage_key: string; sha256: string; object_version: string; patient_id: string }>(`SELECT storage_key, sha256, object_version, patient_id FROM reports WHERE id = $1`, [s.reportId]))[0]!;
+      const row = (
+        await lab.row<{ storage_key: string; sha256: string; object_version: string; patient_id: string }>(
+          `SELECT storage_key, sha256, object_version, patient_id FROM reports WHERE id = $1`,
+          [s.reportId],
+        )
+      )[0]!;
       await app.get(LedgerRecordsRepository).insertCapture(lab.tenant, 'syn-capturer', {
-        reportId: s.reportId, expectedReport: { patientId: row.patient_id, sha256: row.sha256, objectVersion: row.object_version, storageKey: row.storage_key },
-        pdfSha256: row.sha256, textStorageKey: `reports/x/${s.reportId}/text/another`, textSha256: sha('another reading'), textScalars: 15, popplerVersion: '26.03.0', runner: 'fake',
+        reportId: s.reportId,
+        expectedReport: { patientId: row.patient_id, sha256: row.sha256, objectVersion: row.object_version, storageKey: row.storage_key },
+        pdfSha256: row.sha256,
+        textStorageKey: `reports/x/${s.reportId}/text/another`,
+        textSha256: sha('another reading'),
+        textScalars: 15,
+        popplerVersion: '26.03.0',
+        runner: 'fake',
       });
       expect(await lab.count('report_captures', 'report_id = $1', [s.reportId])).toBe(2);
       await lab.evaluate(s.clinician, s.reportId, body(s)).expect(201);
@@ -113,7 +124,13 @@ const real = new SubprocessReportReader({ mode: 'non-production' });
       const s2 = await local.reviewedCapture(fixturePdf('D02'), { clinician: clin, reviewer: rev });
       const before = await local.evaluate(clin, s1.reportId, body(s1)).expect(201);
       const ledger = app.get(LedgerRecordsRepository);
-      const raised = await ledger.raiseDispute(t, 'syn-disputer', { guidelineId: 'g', guidelineVersion: '1', guidelineContentSha256: 'c'.repeat(64), locator: { table: 'r', row: 'x' }, note: 'wrong cell' });
+      const raised = await ledger.raiseDispute(t, 'syn-disputer', {
+        guidelineId: 'g',
+        guidelineVersion: '1',
+        guidelineContentSha256: 'c'.repeat(64),
+        locator: { table: 'r', row: 'x' },
+        note: 'wrong cell',
+      });
       const during = await local.evaluate(clin, s2.reportId, body(s2)).expect(201);
       expect(during.body.knowledgeSetId).toBe(before.body.knowledgeSetId); // no cell of the loaded knowledge was disputed: the same effective set
       const read = await local.api().get(`/api/v1/evaluations/${before.body.id}`).set(bearer(clin.token)).expect(200);
@@ -125,7 +142,8 @@ const real = new SubprocessReportReader({ mode: 'non-production' });
     it('needs a role that may evaluate (reader, administrator and no role are 403), and takes only the two ids', async () => {
       const s = await lab.reviewedCapture(fixturePdf('D04'));
       for (const roles of [['reader'], ['admin'], []]) await lab.evaluate(await lab.person('x', roles), s.reportId, body(s)).expect(403);
-      for (const bad of [{}, { captureId: s.captureId }, { ...body(s), extra: 1 }, { captureId: 'x', acceptanceId: s.acceptanceId }]) await lab.evaluate(s.clinician, s.reportId, bad).expect(400);
+      for (const bad of [{}, { captureId: s.captureId }, { ...body(s), extra: 1 }, { captureId: 'x', acceptanceId: s.acceptanceId }])
+        await lab.evaluate(s.clinician, s.reportId, bad).expect(400);
       expect([200, 201]).toContain((await lab.evaluate(await lab.person('adm', ['admin', 'clinician']), s.reportId, body(s))).status);
       expect([200, 201]).toContain((await lab.evaluate(await lab.person('rv', ['reviewer']), s.reportId, body(s))).status);
     });
@@ -184,7 +202,13 @@ const real = new SubprocessReportReader({ mode: 'non-production' });
       expect(res.body.error.code).toBe('READER_UNAVAILABLE');
       expect(res.headers['retry-after']).toBe(String(retryAfter));
       expect(await lab.count('evaluations', 'report_id = $1', [s.reportId])).toBe(0);
-      expect(await lab.count('ledger_events', `event_type = 'evaluation' AND tenant_id = $1 AND created_at > now() - interval '1 minute' AND subject_id IN (SELECT id FROM evaluations WHERE report_id = $2)`, [lab.tenant, s.reportId])).toBe(0);
+      expect(
+        await lab.count(
+          'ledger_events',
+          `event_type = 'evaluation' AND tenant_id = $1 AND created_at > now() - interval '1 minute' AND subject_id IN (SELECT id FROM evaluations WHERE report_id = $2)`,
+          [lab.tenant, s.reportId],
+        ),
+      ).toBe(0);
       await lab.evaluate(s.clinician, s.reportId, body(s)).expect(201); // no key was consumed by the failure
     });
 
@@ -214,7 +238,13 @@ const real = new SubprocessReportReader({ mode: 'non-production' });
       let started!: () => void;
       const running = new Promise<void>((resolve) => (started = resolve));
       const gate = new Promise<void>((resolve) => (release = resolve));
-      const slow: ReportReader = { read: async (text) => { started(); await gate; return real.read(text); } };
+      const slow: ReportReader = {
+        read: async (text) => {
+          started();
+          await gate;
+          return real.read(text);
+        },
+      };
       const gated = await other({ maxConcurrentReads: 1, overrides: [{ provide: LAB_READER, useValue: slow }] });
       const s1 = await lab.reviewedCapture(fixturePdf('D01'));
       const s2 = await lab.reviewedCapture(fixturePdf('D02'));
@@ -242,13 +272,22 @@ const real = new SubprocessReportReader({ mode: 'non-production' });
       let started!: () => void;
       const running = new Promise<void>((resolve) => (started = resolve));
       const gate = new Promise<void>((resolve) => (release = resolve));
-      const slow: ReportReader = { read: async (text) => { started(); await gate; return real.read(text); } };
+      const slow: ReportReader = {
+        read: async (text) => {
+          started();
+          await gate;
+          return real.read(text);
+        },
+      };
       const gated = await other({ maxConcurrentReads: 1, overrides: [{ provide: LAB_READER, useValue: slow }] });
       const s = await lab.reviewedCapture(fixturePdf('D01'));
       const controller = new AbortController();
       const port = (gated.app.getHttpServer().address() as { port: number }).port;
       const abandoned = fetch(`http://127.0.0.1:${port}/api/v1/reports/${s.reportId}/evaluations`, {
-        method: 'POST', headers: { ...bearer(s.clinician.token), 'Content-Type': 'application/json' }, body: JSON.stringify(body(s)), signal: controller.signal,
+        method: 'POST',
+        headers: { ...bearer(s.clinician.token), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body(s)),
+        signal: controller.signal,
       }).catch(() => 'aborted');
       await running;
       controller.abort(); // the caller leaves while the reader is still working
@@ -270,11 +309,21 @@ const real = new SubprocessReportReader({ mode: 'non-production' });
       const t = await lab.reviewedCapture(fixturePdf('D02'));
       const lines: string[] = [];
       const capture = new (class extends ConsoleLogger {
-        override log(...args: unknown[]) { lines.push(JSON.stringify(args)); }
-        override warn(...args: unknown[]) { lines.push(JSON.stringify(args)); }
-        override error(...args: unknown[]) { lines.push(JSON.stringify(args)); }
-        override debug(...args: unknown[]) { lines.push(JSON.stringify(args)); }
-        override verbose(...args: unknown[]) { lines.push(JSON.stringify(args)); }
+        override log(...args: unknown[]) {
+          lines.push(JSON.stringify(args));
+        }
+        override warn(...args: unknown[]) {
+          lines.push(JSON.stringify(args));
+        }
+        override error(...args: unknown[]) {
+          lines.push(JSON.stringify(args));
+        }
+        override debug(...args: unknown[]) {
+          lines.push(JSON.stringify(args));
+        }
+        override verbose(...args: unknown[]) {
+          lines.push(JSON.stringify(args));
+        }
       })();
       Logger.overrideLogger(capture);
       try {

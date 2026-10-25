@@ -52,9 +52,12 @@ export function mapException(exception: unknown): MappedError {
     };
   }
   // The ledger said no. These two never reach a client as a 500: a refused write is a conflict, a lock timeout is "busy".
-  if (exception instanceof StaleAcceptanceError) return mapException(AppException.conflictBecause('stale-acceptance', 'A later decision supersedes the acceptance named. Nothing was saved.'));
-  if (exception instanceof DisputeChangedError) return mapException(AppException.conflictBecause('dispute-changed', 'A guideline dispute changed while this was being evaluated. Nothing was saved; try again.'));
-  if (exception instanceof SourceChangedError) return mapException(AppException.conflictBecause('source-changed', 'The report changed while it was being captured. Nothing was saved; capture it again.'));
+  if (exception instanceof StaleAcceptanceError)
+    return mapException(AppException.conflictBecause('stale-acceptance', 'A later decision supersedes the acceptance named. Nothing was saved.'));
+  if (exception instanceof DisputeChangedError)
+    return mapException(AppException.conflictBecause('dispute-changed', 'A guideline dispute changed while this was being evaluated. Nothing was saved; try again.'));
+  if (exception instanceof SourceChangedError)
+    return mapException(AppException.conflictBecause('source-changed', 'The report changed while it was being captured. Nothing was saved; capture it again.'));
   if (exception instanceof LedgerCompromisedError) return mapException(AppException.ledgerCompromised());
   if (exception instanceof LedgerBusyError) return mapException(AppException.ledgerBusy());
   if (exception instanceof LedgerIntegrityError) return mapException(AppException.ledgerConflict());
@@ -67,8 +70,7 @@ export function mapException(exception: unknown): MappedError {
   }
   // body-parser / http-errors style errors (malformed JSON, body too large) carry a numeric status.
   if (typeof exception === 'object' && exception !== null) {
-    const status = (exception as { status?: unknown; statusCode?: unknown }).status ??
-      (exception as { statusCode?: unknown }).statusCode;
+    const status = (exception as { status?: unknown; statusCode?: unknown }).status ?? (exception as { statusCode?: unknown }).statusCode;
     if (typeof status === 'number' && status >= 400 && status < 500) return fromStatus(status);
   }
   return INTERNAL;

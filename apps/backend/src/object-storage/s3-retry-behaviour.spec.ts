@@ -14,7 +14,9 @@ function lostReplyServer() {
   const seen: Array<{ bytes: number; ifNoneMatch: string | undefined }> = [];
   const server = http.createServer((req, res) => {
     let bytes = 0;
-    req.on('data', (chunk: Buffer) => { bytes += chunk.length; });
+    req.on('data', (chunk: Buffer) => {
+      bytes += chunk.length;
+    });
     req.on('end', () => {
       seen.push({ bytes, ifNoneMatch: req.headers['if-none-match'] as string | undefined });
       if (seen.length === 1) {
@@ -33,11 +35,16 @@ async function put(body: () => Readable | Buffer, ifNoneMatch: boolean): Promise
   const { server, seen } = lostReplyServer();
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const client = new S3Client({
-    region: 'us-east-2', endpoint: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, forcePathStyle: true,
-    credentials: { accessKeyId: 'synthetic', secretAccessKey: 'synthetic' }, retryMode: 'standard',
+    region: 'us-east-2',
+    endpoint: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    forcePathStyle: true,
+    credentials: { accessKeyId: 'synthetic', secretAccessKey: 'synthetic' },
+    retryMode: 'standard',
   });
   try {
-    await client.send(new PutObjectCommand({ Bucket: 'b', Key: 'k', Body: body(), ContentLength: 1000, ...(ifNoneMatch ? { IfNoneMatch: '*' } : {}) }), { abortSignal: AbortSignal.timeout(8000) });
+    await client.send(new PutObjectCommand({ Bucket: 'b', Key: 'k', Body: body(), ContentLength: 1000, ...(ifNoneMatch ? { IfNoneMatch: '*' } : {}) }), {
+      abortSignal: AbortSignal.timeout(8000),
+    });
     return { seen, outcome: 'ok' };
   } catch {
     return { seen, outcome: 'error' };

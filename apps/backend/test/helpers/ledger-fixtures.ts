@@ -61,22 +61,38 @@ export const captureFor = (r: SeededReport, text = 'synthetic text', over: Parti
 });
 
 export const acceptanceFor = (captureId: string, capture: CaptureInput, over: Partial<AcceptanceInput> = {}): AcceptanceInput => ({
-  captureId, decision: 'accepted', textSha256: capture.textSha256, popplerVersion: capture.popplerVersion, ...over,
+  captureId,
+  decision: 'accepted',
+  textSha256: capture.textSha256,
+  popplerVersion: capture.popplerVersion,
+  ...over,
 });
 
 export const citation = {
-  guidelineId: 'syn-guideline', guidelineVersion: '1', sourceUrl: 'https://example.invalid/syn', locator: { table: 'recommendations', row: 'poor', column: null },
+  guidelineId: 'syn-guideline',
+  guidelineVersion: '1',
+  sourceUrl: 'https://example.invalid/syn',
+  locator: { table: 'recommendations', row: 'poor', column: null },
   verification: 'verified',
 } as unknown as Extract<DrugResult, { outcome: 'shown' }>['citation'];
 
 export const shownResult: DrugResult = {
-  outcome: 'shown', drug: 'syn-drug', genes: ['CYP2C19'],
+  outcome: 'shown',
+  drug: 'syn-drug',
+  genes: ['CYP2C19'],
   geneStates: [{ gene: 'CYP2C19', state: 'canonical', phenotype: 'Poor Metabolizer', reasonCode: null }],
-  strength: 'Strong', citation, recommendationText: 'Synthetic wording.', implication: null,
+  strength: 'Strong',
+  citation,
+  recommendationText: 'Synthetic wording.',
+  implication: null,
 };
 export const heldResult: DrugResult = {
-  outcome: 'held', drug: 'syn-other', genes: ['CYP2D6'], geneStates: [{ gene: 'CYP2D6', state: 'absent', phenotype: null, reasonCode: 'gene-absent' }],
-  reasonCode: 'gene-absent', citation: null,
+  outcome: 'held',
+  drug: 'syn-other',
+  genes: ['CYP2D6'],
+  geneStates: [{ gene: 'CYP2D6', state: 'absent', phenotype: null, reasonCode: 'gene-absent' }],
+  reasonCode: 'gene-absent',
+  citation: null,
 };
 export const noGuidelineResult: DrugResult = { outcome: 'no-guideline', drug: 'syn-none', genes: [], geneStates: [], reasonCode: 'no-guideline-for-drug' };
 
@@ -85,10 +101,19 @@ export const absentState: GeneStateResult = { gene: 'CYP2D6', state: 'absent', p
 
 export function evaluationFor(r: SeededReport, captureId: string, acceptanceId: string, over: Partial<EvaluationInput> = {}): EvaluationInput {
   return {
-    patientId: r.patientId, reportId: r.reportId, captureId, captureAcceptanceId: acceptanceId, disposition: 'evaluated', holdCode: null,
+    patientId: r.patientId,
+    reportId: r.reportId,
+    captureId,
+    captureAcceptanceId: acceptanceId,
+    disposition: 'evaluated',
+    holdCode: null,
     binding: { textSha256: sha('synthetic text'), popplerVersion: '26.03.0', packetHash: sha('packet'), generatorCodeHash: sha('generator'), captureAcceptanceId: acceptanceId },
-    knowledgeSetId: sha('knowledge'), engineVersion: 'syn-1',
-    geneInputs: [{ gene: 'CYP2C19', state: 'diplotype', diplotype: '*2/*2', callSource: 'lab-report' }], occurrences: [{ gene: 'CYP2C19', offset: 10 }],
-    results: [shownResult, heldResult, noGuidelineResult], geneStates: [canonicalState, absentState], ...over,
+    knowledgeSetId: sha('knowledge'),
+    engineVersion: 'syn-1',
+    geneInputs: [{ gene: 'CYP2C19', state: 'diplotype', diplotype: '*2/*2', callSource: 'lab-report' }],
+    occurrences: [{ gene: 'CYP2C19', offset: 10 }],
+    results: [shownResult, heldResult, noGuidelineResult],
+    geneStates: [canonicalState, absentState],
+    ...over,
   };
 }

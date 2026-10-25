@@ -5,12 +5,38 @@ import type { Page, PageRequest } from '../records';
 import { Database } from '../../db/database';
 import { LedgerStatus } from '../../ledger/ledger-status';
 import { appendEvent, newId } from '../../ledger/ledger-writer';
-import { DisputeChangedError, MergeAlreadyDecidedError, MergeRefusedError, PatientLinkUnverifiedError, StaleAcceptanceError, SourceChangedError, toLedgerError, type RecordTable } from '../../ledger/ledger-types';
+import {
+  DisputeChangedError,
+  MergeAlreadyDecidedError,
+  MergeRefusedError,
+  PatientLinkUnverifiedError,
+  StaleAcceptanceError,
+  SourceChangedError,
+  toLedgerError,
+  type RecordTable,
+} from '../../ledger/ledger-types';
 import { loadProjections } from '../../ledger/projections';
 import { canonicalHash } from '../../services/report-adapter/canonical-json';
 import { CaptureDecisionRequestReusedError, DisputeRequestReusedError, LedgerRecordsRepository } from '../ledger-records.repository';
 import type {
-  AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationReadContext, EvaluationState, InsertResult, MergeDecisionInput, MergeProposalInput, MergeStatus, NoteRecord, PatientDecisionInput, PatientLinkStateValue, Projected, QuarantineEntry,
+  AcceptanceInput,
+  CaptureInput,
+  CorrectionInput,
+  DisputeDecisionInput,
+  DisputeInput,
+  DisputeStatus,
+  EvaluationInput,
+  EvaluationReadContext,
+  EvaluationState,
+  InsertResult,
+  MergeDecisionInput,
+  MergeProposalInput,
+  MergeStatus,
+  NoteRecord,
+  PatientDecisionInput,
+  PatientLinkStateValue,
+  Projected,
+  QuarantineEntry,
 } from '../ledger-records';
 
 /**
@@ -26,7 +52,10 @@ import type {
 @Injectable()
 export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
   /** `ledger` is the watch's shared state; a repository built without one (a test) never has a latch to obey. */
-  constructor(private readonly db: Database, private readonly ledger: LedgerStatus = new LedgerStatus()) {
+  constructor(
+    private readonly db: Database,
+    private readonly ledger: LedgerStatus = new LedgerStatus(),
+  ) {
     super();
   }
 
@@ -34,15 +63,32 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
     return this.write(tenantId, actor, async (client) => {
       // The report row is locked FOR SHARE for the rest of this transaction: a concurrent change to it waits for us, and one that
       // committed before is seen here. Then what the caller relied on is compared with what is there NOW.
-      const locked = await client.query<{ type: string; patient_id: string; sha256: string | null; object_version: string | null; storage_key: string | null; uploaded: boolean; deleted: boolean }>(
+      const locked = await client.query<{
+        type: string;
+        patient_id: string;
+        sha256: string | null;
+        object_version: string | null;
+        storage_key: string | null;
+        uploaded: boolean;
+        deleted: boolean;
+      }>(
         `SELECT type, patient_id::text AS patient_id, sha256, object_version, storage_key, uploaded_at IS NOT NULL AS uploaded, deleted_at IS NOT NULL AS deleted
            FROM reports WHERE id = $1 AND tenant_id = $2 FOR SHARE`,
         [input.reportId, tenantId],
       );
       const report = locked.rows[0];
       const expected = input.expectedReport;
-      if (!report || report.deleted || !report.uploaded || report.type !== 'lab-pdf' || report.patient_id !== expected.patientId || report.sha256 !== expected.sha256
-        || report.object_version !== expected.objectVersion || report.storage_key !== expected.storageKey || report.sha256 !== input.pdfSha256) {
+      if (
+        !report ||
+        report.deleted ||
+        !report.uploaded ||
+        report.type !== 'lab-pdf' ||
+        report.patient_id !== expected.patientId ||
+        report.sha256 !== expected.sha256 ||
+        report.object_version !== expected.objectVersion ||
+        report.storage_key !== expected.storageKey ||
+        report.sha256 !== input.pdfSha256
+      ) {
         throw new SourceChangedError();
       }
       const existing = await client.query<{ id: string }>(
@@ -97,7 +143,14 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
       );
       const report = locked.rows[0];
       const expected = input.expectedReport;
-      if (!report || report.deleted || !report.uploaded || report.patient_id !== expected.patientId || report.sha256 !== expected.sha256 || report.object_version !== expected.objectVersion) {
+      if (
+        !report ||
+        report.deleted ||
+        !report.uploaded ||
+        report.patient_id !== expected.patientId ||
+        report.sha256 !== expected.sha256 ||
+        report.object_version !== expected.objectVersion
+      ) {
         throw new SourceChangedError();
       }
       // The same decision about the same file, again: nothing new to record.
@@ -107,14 +160,33 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
         [tenantId, input.reportId],
       );
       const last = newest.rows[0];
-      if (last && last.decision === input.decision && last.report_sha256 === expected.sha256 && last.object_version === expected.objectVersion && last.patient_id === expected.patientId) {
+      if (
+        last &&
+        last.decision === input.decision &&
+        last.report_sha256 === expected.sha256 &&
+        last.object_version === expected.objectVersion &&
+        last.patient_id === expected.patientId
+      ) {
         return this.existing(client, tenantId, 'report_patient_decisions', last.id);
       }
       const id = newId();
       await client.query(
         `INSERT INTO report_patient_decisions (id, tenant_id, created_by, ledger_event_id, report_id, patient_id, report_sha256, object_version, decision, method, basis_code, identifier_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-        [id, tenantId, actor, newId(), input.reportId, expected.patientId, expected.sha256, expected.objectVersion, input.decision, input.method, input.basisCode ?? null, input.identifierId ?? null],
+        [
+          id,
+          tenantId,
+          actor,
+          newId(),
+          input.reportId,
+          expected.patientId,
+          expected.sha256,
+          expected.objectVersion,
+          input.decision,
+          input.method,
+          input.basisCode ?? null,
+          input.identifierId ?? null,
+        ],
       );
       return this.finish(client, tenantId, 'report_patient_decisions', id);
     });
@@ -122,10 +194,10 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 
   latestPatientDecision(tenantId: string, reportId: string): Promise<Projected | undefined> {
     return this.read(tenantId, async (client) => {
-      const { rows } = await client.query<{ id: string }>(
-        `SELECT id::text AS id FROM report_patient_decisions WHERE tenant_id = $1 AND report_id = $2 ORDER BY seq DESC LIMIT 1`,
-        [tenantId, reportId],
-      );
+      const { rows } = await client.query<{ id: string }>(`SELECT id::text AS id FROM report_patient_decisions WHERE tenant_id = $1 AND report_id = $2 ORDER BY seq DESC LIMIT 1`, [
+        tenantId,
+        reportId,
+      ]);
       return rows[0] ? this.one(client, tenantId, 'report_patient_decisions', rows[0].id) : undefined;
     });
   }
@@ -148,7 +220,14 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
   pageQuarantine(tenantId: string, page: PageRequest): Promise<Page<QuarantineEntry>> {
     return this.read(tenantId, async (client) => {
       // One statement for the count and the page. An evaluation is active unless its last correction (the one with no child) retracts or supersedes it.
-      const { rows } = await client.query<{ report_id: string | null; patient_id: string; basis_code: string | null; rejected_at: string; evaluation_ids: string[]; total: number }>(
+      const { rows } = await client.query<{
+        report_id: string | null;
+        patient_id: string;
+        basis_code: string | null;
+        rejected_at: string;
+        evaluation_ids: string[];
+        total: number;
+      }>(
         `WITH quarantined AS MATERIALIZED (
            SELECT r.id AS report_id, r.patient_id, d.basis_code, d.seq AS decision_seq,
                   to_char(d.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS rejected_at,
@@ -168,7 +247,11 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
         [tenantId, page.limit, page.offset],
       );
       return {
-        items: rows.flatMap((r) => r.report_id === null ? [] : [{ reportId: r.report_id, patientId: r.patient_id, basisCode: r.basis_code, rejectedAt: r.rejected_at, activeEvaluationIds: r.evaluation_ids }]),
+        items: rows.flatMap((r) =>
+          r.report_id === null
+            ? []
+            : [{ reportId: r.report_id, patientId: r.patient_id, basisCode: r.basis_code, rejectedAt: r.rejected_at, activeEvaluationIds: r.evaluation_ids }],
+        ),
         total: rows[0]!.total,
       };
     });
@@ -180,7 +263,12 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
       // the end). The lock is held to commit, so the second call's check below sees the first call's proposal. Other pairs are not held up.
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`merge-proposal:${tenantId}:${input.kind}:${input.sourcePatientId}:${input.targetPatientId}`]);
       // The database's own rule, asked before anything is written so an impossible proposal is refused early. The decision is what is guaranteed.
-      const refusal = await client.query<{ why: string | null }>(`SELECT patient_merge_refusal($1, $2, $3::uuid, $4::uuid) AS why`, [tenantId, input.kind, input.sourcePatientId, input.targetPatientId]);
+      const refusal = await client.query<{ why: string | null }>(`SELECT patient_merge_refusal($1, $2, $3::uuid, $4::uuid) AS why`, [
+        tenantId,
+        input.kind,
+        input.sourcePatientId,
+        input.targetPatientId,
+      ]);
       if (refusal.rows[0]!.why !== null) throw new MergeRefusedError(refusal.rows[0]!.why);
       const pending = await client.query(
         `SELECT 1 FROM patient_merge_proposals p
@@ -200,7 +288,10 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 
   insertMergeDecision(tenantId: string, actor: string, input: MergeDecisionInput): Promise<InsertResult> {
     return this.write(tenantId, actor, async (client) => {
-      const existing = await client.query<{ id: string; decision: string }>(`SELECT id::text AS id, decision FROM patient_merge_decisions WHERE tenant_id = $1 AND proposal_id = $2`, [tenantId, input.proposalId]);
+      const existing = await client.query<{ id: string; decision: string }>(
+        `SELECT id::text AS id, decision FROM patient_merge_decisions WHERE tenant_id = $1 AND proposal_id = $2`,
+        [tenantId, input.proposalId],
+      );
       if (existing.rows[0]) {
         if (existing.rows[0].decision !== input.decision) throw new MergeAlreadyDecidedError();
         return this.existing(client, tenantId, 'patient_merge_decisions', existing.rows[0].id);
@@ -241,9 +332,14 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
         [tenantId, status ?? null, page.limit, page.offset],
       );
       // The whole page's proposals and decisions in one statement each, not one lookup per row.
-      const selected = rows.flatMap((r) => r.id === null ? [] : [{ id: r.id, decisionId: r.decision_id }]);
-      const proposals = await this.many(client, tenantId, 'patient_merge_proposals', selected.map((r) => r.id));
-      const decisionIds = selected.flatMap((r) => r.decisionId === null ? [] : [r.decisionId]);
+      const selected = rows.flatMap((r) => (r.id === null ? [] : [{ id: r.id, decisionId: r.decision_id }]));
+      const proposals = await this.many(
+        client,
+        tenantId,
+        'patient_merge_proposals',
+        selected.map((r) => r.id),
+      );
+      const decisionIds = selected.flatMap((r) => (r.decisionId === null ? [] : [r.decisionId]));
       const decisions = new Map((await this.many(client, tenantId, 'patient_merge_decisions', decisionIds)).map((d) => [d.id, d]));
       const items: MergeStatus[] = selected.map((r, i) => {
         const decision = r.decisionId === null ? null : decisions.get(r.decisionId)!;
@@ -304,10 +400,10 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 
   latestAcceptance(tenantId: string, captureId: string): Promise<Projected | undefined> {
     return this.read(tenantId, async (client) => {
-      const { rows } = await client.query<{ id: string }>(
-        `SELECT id::text AS id FROM capture_acceptances WHERE tenant_id = $1 AND capture_id = $2 ORDER BY seq DESC LIMIT 1`,
-        [tenantId, captureId],
-      );
+      const { rows } = await client.query<{ id: string }>(`SELECT id::text AS id FROM capture_acceptances WHERE tenant_id = $1 AND capture_id = $2 ORDER BY seq DESC LIMIT 1`, [
+        tenantId,
+        captureId,
+      ]);
       return rows[0] ? this.one(client, tenantId, 'capture_acceptances', rows[0].id) : undefined;
     });
   }
@@ -323,8 +419,24 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
                                   binding, knowledge_set_id, engine_version, gene_inputs, occurrences, identity_key)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14::jsonb, $15::jsonb, $16)
          ON CONFLICT ON CONSTRAINT evaluations_identity_uq DO NOTHING RETURNING id`,
-        [id, tenantId, actor, newId(), input.patientId, input.reportId, input.captureId, input.captureAcceptanceId, input.disposition, input.holdCode,
-         JSON.stringify(input.binding), input.knowledgeSetId, input.engineVersion, JSON.stringify(input.geneInputs), JSON.stringify(input.occurrences), identityKey],
+        [
+          id,
+          tenantId,
+          actor,
+          newId(),
+          input.patientId,
+          input.reportId,
+          input.captureId,
+          input.captureAcceptanceId,
+          input.disposition,
+          input.holdCode,
+          JSON.stringify(input.binding),
+          input.knowledgeSetId,
+          input.engineVersion,
+          JSON.stringify(input.geneInputs),
+          JSON.stringify(input.occurrences),
+          identityKey,
+        ],
       );
       if (inserted.rowCount === 0) return this.raced(client, tenantId, 'evaluations', 'evaluations_identity_uq', undefined, identityKey);
       let ordinal = 0;
@@ -334,9 +446,22 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
           `INSERT INTO evaluation_results (tenant_id, evaluation_id, ordinal, drug, genes, outcome, reason_code, strength, citation, guideline_id, guideline_version,
                                            recommendation_text, implication, gene_evidence)
            VALUES ($1, $2, $3, $4, $5::text[], $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14::jsonb)`,
-          [tenantId, id, ordinal++, result.drug, result.genes, result.outcome, 'reasonCode' in result ? result.reasonCode : null,
-           'strength' in result ? result.strength : null, citation ? JSON.stringify(citation) : null, citation?.guidelineId ?? null, citation?.guidelineVersion ?? null,
-           'recommendationText' in result ? result.recommendationText : null, 'implication' in result ? result.implication : null, JSON.stringify(result.geneStates)],
+          [
+            tenantId,
+            id,
+            ordinal++,
+            result.drug,
+            result.genes,
+            result.outcome,
+            'reasonCode' in result ? result.reasonCode : null,
+            'strength' in result ? result.strength : null,
+            citation ? JSON.stringify(citation) : null,
+            citation?.guidelineId ?? null,
+            citation?.guidelineVersion ?? null,
+            'recommendationText' in result ? result.recommendationText : null,
+            'implication' in result ? result.implication : null,
+            JSON.stringify(result.geneStates),
+          ],
         );
       }
       for (const state of input.geneStates) {
@@ -403,7 +528,15 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
             LEFT JOIN page ON true ORDER BY page.seq`,
         [tenantId, filter.reportId ?? null, filter.patientId ?? null, filter.current === true, page.limit, page.offset],
       );
-      return { items: await this.many(client, tenantId, 'evaluations', rows.flatMap((r) => r.id === null ? [] : [r.id])), total: rows[0]!.total };
+      return {
+        items: await this.many(
+          client,
+          tenantId,
+          'evaluations',
+          rows.flatMap((r) => (r.id === null ? [] : [r.id])),
+        ),
+        total: rows[0]!.total,
+      };
     });
   }
 
@@ -419,16 +552,26 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
             LEFT JOIN latest l ON l.capture_id = e.capture_id`,
         [tenantId, evaluationIds],
       );
-      const contexts = new Map<string, EvaluationReadContext>(rows.map((r) => [r.id, {
-        acceptance: r.acceptance_id === null ? null : { id: r.acceptance_id, decision: r.decision!, current: r.acceptance_id === r.latest_id },
-        corrections: [],
-      }]));
-      if (contexts.size === 0) return contexts;
-      const corrections = await client.query<{ id: string }>(
-        `SELECT id::text AS id FROM corrections WHERE tenant_id = $1 AND evaluation_id = ANY($2::uuid[]) ORDER BY seq`,
-        [tenantId, [...contexts.keys()]],
+      const contexts = new Map<string, EvaluationReadContext>(
+        rows.map((r) => [
+          r.id,
+          {
+            acceptance: r.acceptance_id === null ? null : { id: r.acceptance_id, decision: r.decision!, current: r.acceptance_id === r.latest_id },
+            corrections: [],
+          },
+        ]),
       );
-      for (const correction of await this.many(client, tenantId, 'corrections', corrections.rows.map((r) => r.id))) {
+      if (contexts.size === 0) return contexts;
+      const corrections = await client.query<{ id: string }>(`SELECT id::text AS id FROM corrections WHERE tenant_id = $1 AND evaluation_id = ANY($2::uuid[]) ORDER BY seq`, [
+        tenantId,
+        [...contexts.keys()],
+      ]);
+      for (const correction of await this.many(
+        client,
+        tenantId,
+        'corrections',
+        corrections.rows.map((r) => r.id),
+      )) {
         contexts.get(correction.evaluationId as string)!.corrections.push(correction);
       }
       return contexts;
@@ -451,21 +594,31 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
       const id = newId();
       const noteId = input.note === undefined ? null : await this.insertNote(client, tenantId, actor, input.note);
       // report_id is copied from the evaluation inside the statement, so a caller cannot name a different report.
-      await client.query(
-        `INSERT INTO corrections (id, tenant_id, created_by, ledger_event_id, evaluation_id, report_id, kind, reason_code, previous_correction_id, replacement_evaluation_id, note_id)
+      await client
+        .query(
+          `INSERT INTO corrections (id, tenant_id, created_by, ledger_event_id, evaluation_id, report_id, kind, reason_code, previous_correction_id, replacement_evaluation_id, note_id)
          SELECT $1, $2, $3, $4, e.id, e.report_id, $6, $7, $8::uuid, $9::uuid, $10::uuid FROM evaluations e WHERE e.id = $5::uuid AND e.tenant_id = $2`,
-        [id, tenantId, actor, newId(), input.evaluationId, input.kind, input.reasonCode, input.previousCorrectionId ?? null, input.replacementEvaluationId ?? null, noteId],
-      ).then((result) => {
-        if (result.rowCount === 0) throw toLedgerError(Object.assign(new Error('evaluation not found'), { code: '23503', constraint: 'corrections_evaluation_fk' }));
-      });
+          [id, tenantId, actor, newId(), input.evaluationId, input.kind, input.reasonCode, input.previousCorrectionId ?? null, input.replacementEvaluationId ?? null, noteId],
+        )
+        .then((result) => {
+          if (result.rowCount === 0) throw toLedgerError(Object.assign(new Error('evaluation not found'), { code: '23503', constraint: 'corrections_evaluation_fk' }));
+        });
       return this.finish(client, tenantId, 'corrections', id);
     });
   }
 
   listCorrections(tenantId: string, evaluationId: string): Promise<Projected[]> {
     return this.read(tenantId, async (client) => {
-      const { rows } = await client.query<{ id: string }>(`SELECT id::text AS id FROM corrections WHERE tenant_id = $1 AND evaluation_id = $2 ORDER BY seq`, [tenantId, evaluationId]);
-      return this.many(client, tenantId, 'corrections', rows.map((r) => r.id));
+      const { rows } = await client.query<{ id: string }>(`SELECT id::text AS id FROM corrections WHERE tenant_id = $1 AND evaluation_id = $2 ORDER BY seq`, [
+        tenantId,
+        evaluationId,
+      ]);
+      return this.many(
+        client,
+        tenantId,
+        'corrections',
+        rows.map((r) => r.id),
+      );
     });
   }
 
@@ -502,8 +655,21 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
         `INSERT INTO cell_disputes (id, tenant_id, created_by, ledger_event_id, guideline_id, guideline_version, guideline_content_sha256, locator_table, locator_row, locator_column, note_id,
                                     creation_request_id, creation_request_hash)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-        [id, tenantId, actor, newId(), input.guidelineId, input.guidelineVersion, input.guidelineContentSha256, input.locator.table, input.locator.row, input.locator.column ?? null, noteId,
-         input.request?.id ?? null, input.request?.hash ?? null],
+        [
+          id,
+          tenantId,
+          actor,
+          newId(),
+          input.guidelineId,
+          input.guidelineVersion,
+          input.guidelineContentSha256,
+          input.locator.table,
+          input.locator.row,
+          input.locator.column ?? null,
+          noteId,
+          input.request?.id ?? null,
+          input.request?.hash ?? null,
+        ],
       );
       return this.finish(client, tenantId, 'cell_disputes', id);
     });
@@ -536,7 +702,7 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
             FROM (SELECT count(*)::int AS total FROM matching) totals LEFT JOIN page ON true ORDER BY page.seq`,
         [tenantId, status ?? null, page.limit, page.offset],
       );
-      const selected = rows.flatMap((r) => r.id === null ? [] : [{ id: r.id, decision_id: r.decision_id }]);
+      const selected = rows.flatMap((r) => (r.id === null ? [] : [{ id: r.id, decision_id: r.decision_id }]));
       return { items: await this.loadDisputeStatuses(client, tenantId, selected), total: rows[0]!.total };
     });
   }
@@ -558,7 +724,12 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
           ORDER BY e.seq LIMIT $8`,
         [tenantId, afterSeq, cell.guidelineId, cell.guidelineVersion, cell.locator.table, cell.locator.row, cell.locator.column ?? null, limit],
       );
-      return this.many(client, tenantId, 'evaluations', rows.map((r) => r.id));
+      return this.many(
+        client,
+        tenantId,
+        'evaluations',
+        rows.map((r) => r.id),
+      );
     });
   }
 
@@ -573,7 +744,12 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
   }
 
   private async loadDisputeStatuses(client: PoolClient, tenantId: string, rows: { id: string; decision_id: string | null }[]): Promise<DisputeStatus[]> {
-    const disputeRows = await this.many(client, tenantId, 'cell_disputes', rows.map((r) => r.id));
+    const disputeRows = await this.many(
+      client,
+      tenantId,
+      'cell_disputes',
+      rows.map((r) => r.id),
+    );
     const decisionIds = rows.flatMap((r) => (r.decision_id ? [r.decision_id] : []));
     const decisions = new Map((await this.many(client, tenantId, 'cell_dispute_decisions', decisionIds)).map((d) => [d.id, d]));
     return rows.map((row, index) => {
@@ -628,20 +804,25 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 
   /** A concurrent writer won the identity race between our look-up and our insert: return what it stored. */
   private async raced(client: PoolClient, tenantId: string, table: RecordTable, constraint: string, keys?: string[], identityKey?: string): Promise<InsertResult> {
-    const { rows } = table === 'evaluations'
-      ? await client.query<{ id: string }>(`SELECT id::text AS id FROM evaluations WHERE tenant_id = $1 AND identity_key = $2`, [tenantId, identityKey])
-      : await client.query<{ id: string }>(
-          `SELECT id::text AS id FROM report_captures WHERE tenant_id = $1 AND report_id = $2 AND text_sha256 = $3 AND poppler_version = $4`, [tenantId, ...keys!]);
+    const { rows } =
+      table === 'evaluations'
+        ? await client.query<{ id: string }>(`SELECT id::text AS id FROM evaluations WHERE tenant_id = $1 AND identity_key = $2`, [tenantId, identityKey])
+        : await client.query<{ id: string }>(`SELECT id::text AS id FROM report_captures WHERE tenant_id = $1 AND report_id = $2 AND text_sha256 = $3 AND poppler_version = $4`, [
+            tenantId,
+            ...keys!,
+          ]);
     if (!rows[0]) throw toLedgerError(Object.assign(new Error('identity conflict'), { code: '23505', constraint }));
     return this.existing(client, tenantId, table, rows[0].id);
   }
 
   private async insertNote(client: PoolClient, tenantId: string, actor: string, body: string): Promise<string> {
     const id = newId();
-    await client.query(
-      `INSERT INTO event_notes (id, tenant_id, created_by, body, body_sha256) VALUES ($1, $2, $3, $4, encode(sha256(convert_to($4::text, 'UTF8')), 'hex'))`,
-      [id, tenantId, actor, body],
-    );
+    await client.query(`INSERT INTO event_notes (id, tenant_id, created_by, body, body_sha256) VALUES ($1, $2, $3, $4, encode(sha256(convert_to($4::text, 'UTF8')), 'hex'))`, [
+      id,
+      tenantId,
+      actor,
+      body,
+    ]);
     return id;
   }
 
@@ -702,7 +883,14 @@ const CURRENT_EVALUATIONS_SQL = `
  */
 export function evaluationIdentityKey(input: EvaluationInput): string {
   return canonicalHash({
-    v: 'evaluation-identity-v1', reportId: input.reportId, captureId: input.captureId, captureAcceptanceId: input.captureAcceptanceId,
-    disposition: input.disposition, holdCode: input.holdCode, knowledgeSetId: input.knowledgeSetId, engineVersion: input.engineVersion, binding: input.binding,
+    v: 'evaluation-identity-v1',
+    reportId: input.reportId,
+    captureId: input.captureId,
+    captureAcceptanceId: input.captureAcceptanceId,
+    disposition: input.disposition,
+    holdCode: input.holdCode,
+    knowledgeSetId: input.knowledgeSetId,
+    engineVersion: input.engineVersion,
+    binding: input.binding,
   });
 }

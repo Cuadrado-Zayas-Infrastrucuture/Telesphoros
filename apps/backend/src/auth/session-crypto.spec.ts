@@ -6,8 +6,10 @@ const make = () => new SessionCrypto('current', new Map([['current', randomBytes
 const locator = (crypto: SessionCrypto) => ({ tenantId: 'tenant-a', handle: crypto.newHandle(), expiresAt: Date.now() + 60_000 });
 const flip = (value: string, part: number) => {
   const parts = value.split('.');
-  const bytes = Buffer.from(parts[part]!, 'base64url'); bytes[0] = bytes[0]! ^ 1;
-  parts[part] = bytes.toString('base64url'); return parts.join('.');
+  const bytes = Buffer.from(parts[part]!, 'base64url');
+  bytes[0] = bytes[0]! ^ 1;
+  parts[part] = bytes.toString('base64url');
+  return parts.join('.');
 };
 
 it('seals and opens credentials only in their exact authenticated context', () => {
@@ -21,8 +23,11 @@ it('seals and opens credentials only in their exact authenticated context', () =
 });
 
 it('keeps tenant locators opaque, canonical and independent of credential envelopes', () => {
-  const crypto = make(); const input = locator(crypto); const sealed = crypto.sealLocator(input);
-  expect(sealed).not.toContain(input.tenantId); expect(sealed).not.toContain(input.handle);
+  const crypto = make();
+  const input = locator(crypto);
+  const sealed = crypto.sealLocator(input);
+  expect(sealed).not.toContain(input.tenantId);
+  expect(sealed).not.toContain(input.handle);
   expect(crypto.openLocator(sealed)).toEqual(input);
   expect(crypto.openLocator(crypto.sealCredential(JSON.stringify(input), ''))).toBeUndefined();
   expect(() => crypto.openCredential(sealed, '')).toThrow(SessionCustodyError);
@@ -31,23 +36,39 @@ it('keeps tenant locators opaque, canonical and independent of credential envelo
 });
 
 it.each([2, 3, 4])('rejects a modified nonce/ciphertext/tag (part %s)', (part) => {
-  const crypto = make(); const value = crypto.sealCredential('synthetic-token', 'binding');
+  const crypto = make();
+  const value = crypto.sealCredential('synthetic-token', 'binding');
   expect(() => crypto.openCredential(flip(value, part), 'binding')).toThrow('custody invalid');
   expect(crypto.openLocator(flip(crypto.sealLocator(locator(crypto)), part))).toBeUndefined();
 });
 
-it.each(['', 'v2.current.a.b.c', 'v1.unknown.a.b.c', 'v1.current.@@.b.c', 'v1.current.a.b.c.extra', 'x'.repeat(20_000)])('refuses malformed/unknown envelopes without exposing input: %#', (value) => {
-  const crypto = make();
-  expect(crypto.openLocator(value)).toBeUndefined();
-  try { crypto.openCredential(value, 'binding'); throw new Error('accepted'); }
-  catch (error) { expect(error).toBeInstanceOf(SessionCustodyError); expect((error as Error).message).toBe('Browser session custody invalid'); }
-});
+it.each(['', 'v2.current.a.b.c', 'v1.unknown.a.b.c', 'v1.current.@@.b.c', 'v1.current.a.b.c.extra', 'x'.repeat(20_000)])(
+  'refuses malformed/unknown envelopes without exposing input: %#',
+  (value) => {
+    const crypto = make();
+    expect(crypto.openLocator(value)).toBeUndefined();
+    try {
+      crypto.openCredential(value, 'binding');
+      throw new Error('accepted');
+    } catch (error) {
+      expect(error).toBeInstanceOf(SessionCustodyError);
+      expect((error as Error).message).toBe('Browser session custody invalid');
+    }
+  },
+);
 
 it('rejects the wrong key and supports an explicit retained key without silently inventing one', () => {
-  const old = randomBytes(32); const next = randomBytes(32);
+  const old = randomBytes(32);
+  const next = randomBytes(32);
   const oldCrypto = new SessionCrypto('old', new Map([['old', old]]));
   const sealed = oldCrypto.sealCredential('synthetic-token', 'binding');
-  const rotated = new SessionCrypto('next', new Map([['old', old], ['next', next]]));
+  const rotated = new SessionCrypto(
+    'next',
+    new Map([
+      ['old', old],
+      ['next', next],
+    ]),
+  );
   expect(rotated.openCredential(sealed, 'binding')).toBe('synthetic-token');
   expect(rotated.sealCredential('synthetic-token', 'binding')).toMatch(/^v1\.next\./);
   expect(() => new SessionCrypto('old', new Map([['old', next]])).openCredential(sealed, 'binding')).toThrow(SessionCustodyError);
@@ -69,7 +90,9 @@ it.each(['', 'space token', 'x'.repeat(8193)])('refuses empty/whitespace/oversiz
 });
 
 it('accepts the bounded maximum token and rejects noncanonical handles and locator payloads', () => {
-  const crypto = make(); const max = 'x'.repeat(8192); expect(crypto.openCredential(crypto.sealCredential(max, 'c'), 'c')).toBe(max);
+  const crypto = make();
+  const max = 'x'.repeat(8192);
+  expect(crypto.openCredential(crypto.sealCredential(max, 'c'), 'c')).toBe(max);
   for (const handle of ['', 'a'.repeat(43), crypto.newHandle() + '=']) expect(() => crypto.hashHandle(handle)).toThrow(SessionCustodyError);
   expect(() => crypto.sealLocator({ ...locator(crypto), expiresAt: NaN })).toThrow(SessionCustodyError);
   expect(() => crypto.sealLocator({ ...locator(crypto), tenantId: '' })).toThrow(SessionCustodyError);

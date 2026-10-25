@@ -77,7 +77,10 @@ describe('mapPhenotype: activity-score edges do not depend on the order of the r
   const upper = { min: 1, minInclusive: false, max: 2, maxInclusive: true, phenotype: 'Upper' };
 
   it('an exclusive lower bound excludes the edge score, whichever range is listed first', () => {
-    for (const ranges of [[lower, upper], [upper, lower]]) {
+    for (const ranges of [
+      [lower, upper],
+      [upper, lower],
+    ]) {
       expect(mapPhenotype(custom(ranges), '*1/*1')).toMatchObject({ phenotype: 'Lower', activityScore: 1 });
     }
     // Only the exclusive range exists: the edge itself is in no range.

@@ -87,10 +87,18 @@ describe('PipelineGateGuard on a route marked RequiresPipeline', () => {
 
 @Controller('faults')
 class FaultController {
-  @Get('busy') busy() { throw AppException.pipelineBusy(); }
-  @Get('reader') reader() { throw AppException.readerUnavailable(); }
-  @Get('ledger') ledger() { throw AppException.ledgerBusy(); }
-  @Get('misconfigured') misconfigured() { throw AppException.pipelineMisconfigured(); }
+  @Get('busy') busy() {
+    throw AppException.pipelineBusy();
+  }
+  @Get('reader') reader() {
+    throw AppException.readerUnavailable();
+  }
+  @Get('ledger') ledger() {
+    throw AppException.ledgerBusy();
+  }
+  @Get('misconfigured') misconfigured() {
+    throw AppException.pipelineMisconfigured();
+  }
 }
 
 describe('the Retry-After header', () => {

@@ -2,17 +2,7 @@ import { cpSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Client } from 'pg';
-import {
-  loadMigrations,
-  MIGRATIONS_DIR,
-  type Compat,
-  migrateDown,
-  migrateUp,
-  migrationReadiness,
-  migrationStatus,
-  MigrationError,
-  pendingMigrations,
-} from '../../src/db/migrator';
+import { loadMigrations, MIGRATIONS_DIR, type Compat, migrateDown, migrateUp, migrationReadiness, migrationStatus, MigrationError, pendingMigrations } from '../../src/db/migrator';
 import { adminUrl, createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { allVersions, revertAbove } from '../helpers/migration-history';
 
@@ -105,7 +95,7 @@ describe('migration runner', () => {
     expect(await down(db, 1)).toEqual(['0021']);
     await expect(run(db, (c) => migrateDown(c, 1))).rejects.toThrow(/Refusing to drop patient-link decisions/);
     expect(await down(db, 1)).toEqual(['0020']);
-    expect(await run(db, c => migrateDown(c, 8))).toEqual(['0019', '0018', '0017', '0016', '0015', '0014', '0013', '0012']);
+    expect(await run(db, (c) => migrateDown(c, 8))).toEqual(['0019', '0018', '0017', '0016', '0015', '0014', '0013', '0012']);
     await expect(run(db, (c) => migrateDown(c, 1))).rejects.toThrow(/Refusing to drop ledger incidents/);
     expect(await down(db, 1)).toEqual(['0011']);
     expect(await run(db, (c) => migrateDown(c, 1))).toEqual(['0010']);
@@ -172,16 +162,27 @@ describe('migration runner', () => {
     const db = await createEphemeralDatabase();
     dbs.push(db);
     // withAdmin is a short-lived connection helper: passing appUrl uses the real restricted login.
-    await withAdmin(db.appUrl, async c => {
-      const { rows: [role] } = await c.query(`SELECT r.rolsuper, r.rolbypassrls, r.rolcreatedb, r.rolcreaterole,
+    await withAdmin(db.appUrl, async (c) => {
+      const {
+        rows: [role],
+      } = await c.query(`SELECT r.rolsuper, r.rolbypassrls, r.rolcreatedb, r.rolcreaterole,
         pg_has_role(current_user, t.relowner, 'MEMBER') AS owns_history,
         has_table_privilege(current_user, 'schema_migrations', 'SELECT') AS can_read,
         has_table_privilege(current_user, 'schema_migrations', 'INSERT') AS can_insert,
         has_table_privilege(current_user, 'schema_migrations', 'UPDATE') AS can_update,
         has_table_privilege(current_user, 'schema_migrations', 'DELETE') AS can_delete
         FROM pg_roles r CROSS JOIN pg_class t WHERE r.rolname = current_user AND t.oid = 'schema_migrations'::regclass`);
-      expect(role).toEqual({ rolsuper: false, rolbypassrls: false, rolcreatedb: false, rolcreaterole: false,
-        owns_history: false, can_read: true, can_insert: false, can_update: false, can_delete: false });
+      expect(role).toEqual({
+        rolsuper: false,
+        rolbypassrls: false,
+        rolcreatedb: false,
+        rolcreaterole: false,
+        owns_history: false,
+        can_read: true,
+        can_insert: false,
+        can_update: false,
+        can_delete: false,
+      });
       await expect(c.query('UPDATE schema_migrations SET checksum = $1 WHERE version = $2', ['refused', SHIPPED[0]])).rejects.toMatchObject({ code: '42501' });
       const before = (await c.query('SELECT * FROM schema_migrations ORDER BY version')).rows;
       await c.query('BEGIN READ ONLY');
@@ -192,8 +193,8 @@ describe('migration runner', () => {
       }
       expect((await c.query('SELECT * FROM schema_migrations ORDER BY version')).rows).toEqual(before);
     });
-    await run(db, c => c.query('UPDATE schema_migrations SET checksum = $1 WHERE version = $2', ['t02-drift', SHIPPED[0]]));
-    await withAdmin(db.appUrl, async c => {
+    await run(db, (c) => c.query('UPDATE schema_migrations SET checksum = $1 WHERE version = $2', ['t02-drift', SHIPPED[0]]));
+    await withAdmin(db.appUrl, async (c) => {
       await c.query('BEGIN READ ONLY');
       try {
         await expect(pendingMigrations(c)).rejects.toBeInstanceOf(MigrationError);
@@ -203,15 +204,15 @@ describe('migration runner', () => {
     });
   });
 
-  it.each(['up', 'down', 'missing pair'] as const)('rejects shipped artifact drift: %s', async fault => {
+  it.each(['up', 'down', 'missing pair'] as const)('rejects shipped artifact drift: %s', async (fault) => {
     const db = await createEphemeralDatabase();
     dbs.push(db);
     const dir = tempMigrations();
-    await expect(withAdmin(db.appUrl, c => pendingMigrations(c, dir))).resolves.toEqual([]);
+    await expect(withAdmin(db.appUrl, (c) => pendingMigrations(c, dir))).resolves.toEqual([]);
     if (fault === 'missing pair') rmSync(join(dir, '0001_core_tables.down.sql'));
     else writeFileSync(join(dir, `0001_core_tables.${fault}.sql`), '\n-- T02 changed artifact\n', { flag: 'a' });
-    await expect(withAdmin(db.appUrl, c => pendingMigrations(c, dir))).rejects.toBeInstanceOf(MigrationError);
-    await expect(withAdmin(db.appUrl, c => pendingMigrations(c))).resolves.toEqual([]);
+    await expect(withAdmin(db.appUrl, (c) => pendingMigrations(c, dir))).rejects.toBeInstanceOf(MigrationError);
+    await expect(withAdmin(db.appUrl, (c) => pendingMigrations(c))).resolves.toEqual([]);
   });
 
   it('enforces the strict N/N+1 history matrix even for an additive migration', async () => {
@@ -220,14 +221,14 @@ describe('migration runner', () => {
     const newer = tempMigrations();
     writeFileSync(join(newer, `${nextVersion}_t02_expansion.up.sql`), 'CREATE TABLE t02_expansion (id integer);');
     writeFileSync(join(newer, `${nextVersion}_t02_expansion.down.sql`), 'DROP TABLE t02_expansion;');
-    await expect(withAdmin(db.appUrl, c => pendingMigrations(c))).resolves.toEqual([]); // N / N
-    await expect(withAdmin(db.appUrl, c => pendingMigrations(c, newer))).resolves.toEqual([nextVersion]); // N+1 / N
-    expect(await run(db, c => migrateUp(c, newer))).toEqual([nextVersion]);
-    await expect(withAdmin(db.appUrl, c => pendingMigrations(c))).rejects.toBeInstanceOf(MigrationError); // N / N+1
-    await expect(withAdmin(db.appUrl, c => pendingMigrations(c, newer))).resolves.toEqual([]); // N+1 / N+1
+    await expect(withAdmin(db.appUrl, (c) => pendingMigrations(c))).resolves.toEqual([]); // N / N
+    await expect(withAdmin(db.appUrl, (c) => pendingMigrations(c, newer))).resolves.toEqual([nextVersion]); // N+1 / N
+    expect(await run(db, (c) => migrateUp(c, newer))).toEqual([nextVersion]);
+    await expect(withAdmin(db.appUrl, (c) => pendingMigrations(c))).rejects.toBeInstanceOf(MigrationError); // N / N+1
+    await expect(withAdmin(db.appUrl, (c) => pendingMigrations(c, newer))).resolves.toEqual([]); // N+1 / N+1
   });
 
-  it('records each migration\'s compat label, and an unlabeled one is stored as breaking', async () => {
+  it("records each migration's compat label, and an unlabeled one is stored as breaking", async () => {
     const db = await emptyDb();
     const dir = tempMigrations();
     addMigration(dir, 1, 'expand');
@@ -236,7 +237,10 @@ describe('migration runner', () => {
     const rows = (await run(db, (c) => c.query('SELECT version, compat FROM schema_migrations ORDER BY version'))).rows;
     // Shipped migrations before the label carry none (stored as breaking); from 0028 on each states its own.
     expect(rows.slice(0, SHIPPED.length).map((r) => [r.version, r.compat])).toEqual(loadMigrations().map((m) => [m.version, m.compat]));
-    expect(rows.slice(SHIPPED.length)).toEqual([{ version: version(1), compat: 'expand' }, { version: version(2), compat: 'breaking' }]);
+    expect(rows.slice(SHIPPED.length)).toEqual([
+      { version: version(1), compat: 'expand' },
+      { version: version(2), compat: 'breaking' },
+    ]);
   });
 
   it('adds the compat column to a database an older migrator created, without touching its rows', async () => {
@@ -301,7 +305,8 @@ describe('migration runner', () => {
       const { db } = await aheadOfCode('expand');
       await run(db, (c) => c.query('UPDATE schema_migrations SET compat = NULL WHERE version = $1', [version(1)]));
       await expect(readiness(db)).rejects.toThrow(/not declared expand/);
-      for (const stray of ['Expand', 'additive', 'expand ', '']) { // anything but the exact text 'expand' is not a promise
+      for (const stray of ['Expand', 'additive', 'expand ', '']) {
+        // anything but the exact text 'expand' is not a promise
         await run(db, (c) => c.query('UPDATE schema_migrations SET compat = $1 WHERE version = $2', [stray, version(1)]));
         await expect(readiness(db)).rejects.toThrow(/not declared expand/);
       }
@@ -365,11 +370,13 @@ describe('schema (asserted by trying to break it on a real PostgreSQL)', () => {
   const patient = async (tenant: string, label: string) =>
     (await q('INSERT INTO patients (tenant_id, created_by, label) VALUES ($1, $1, $2) RETURNING id', [tenant, label])).rows[0].id as string;
   const report = async (tenant: string, patientId: string, extra = '') =>
-    (await q(
-      `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes${extra ? ', ' + extra.split('=')[0] : ''})
+    (
+      await q(
+        `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes${extra ? ', ' + extra.split('=')[0] : ''})
        VALUES ($1, $1, $2, 'vcf', 'a.vcf', 100${extra ? ', ' + extra.split('=')[1] : ''}) RETURNING id`,
-      [tenant, patientId],
-    )).rows[0].id as string;
+        [tenant, patientId],
+      )
+    ).rows[0].id as string;
 
   it('every foreign key states ON DELETE RESTRICT explicitly (the rule, not a list of names: a new table is held to it too)', async () => {
     const { rows } = await q(`SELECT conname, confdeltype FROM pg_constraint WHERE contype = 'f' ORDER BY conname`);
@@ -397,8 +404,12 @@ describe('schema (asserted by trying to break it on a real PostgreSQL)', () => {
     const { rows } = await q(`SELECT indexname FROM pg_indexes WHERE schemaname = 'public'`);
     const names = rows.map((r) => r.indexname);
     for (const expected of [
-      'patients_tenant_label_uq', 'patients_tenant_seq_idx', 'reports_storage_key_uq', 'reports_tenant_seq_idx',
-      'reports_tenant_patient_idx', 'reports_patient_idx',
+      'patients_tenant_label_uq',
+      'patients_tenant_seq_idx',
+      'reports_storage_key_uq',
+      'reports_tenant_seq_idx',
+      'reports_tenant_patient_idx',
+      'reports_patient_idx',
     ]) {
       expect(names).toContain(expected);
     }

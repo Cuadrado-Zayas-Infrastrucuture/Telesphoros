@@ -2,10 +2,7 @@ import { useId, type HTMLAttributes } from 'react';
 import { FormItemContext } from '@/lib/formContexts';
 import { cn } from '@/lib/utils';
 
-export function FormItem({
-  className,
-  ...props
-}: HTMLAttributes<HTMLDivElement>) {
+export function FormItem({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   const id = useId();
   return (
     <FormItemContext.Provider value={{ id }}>

@@ -6,7 +6,10 @@ const number = (min: number, max: number, fallback: number) => z.coerce.number()
 const schema = z.object({
   /** The worker's own login (`telesphoros_worker` members only): it can call the queue functions and read the job tables, nothing else. */
   DATABASE_URL: z.string().min(1),
-  WORKER_ID: z.string().regex(/^[A-Za-z0-9._:-]{1,96}$/).optional(),
+  WORKER_ID: z
+    .string()
+    .regex(/^[A-Za-z0-9._:-]{1,96}$/)
+    .optional(),
   WORKER_CONCURRENCY: number(1, 50, 4),
   /** At most this many running jobs for one organization, across all workers. */
   WORKER_TENANT_CAP: number(1, 50, 2),
@@ -19,10 +22,16 @@ const schema = z.object({
   /** How often the worker logs the queue's depth and age (an alarm reads it). */
   WORKER_STATS_SECONDS: number(10, 3600, 60),
   /** The bucket the stored-file re-check reads (read-only). Required in production; without it the file jobs are not registered. */
-  REPORTS_BUCKET: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/).optional(),
+  REPORTS_BUCKET: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/)
+    .optional(),
   S3_ENDPOINT: z.string().url().optional(),
   S3_FORCE_PATH_STYLE: z.enum(['true', 'false']).default('false'),
-  AWS_REGION: z.string().regex(/^[a-z0-9-]{2,32}$/).optional(),
+  AWS_REGION: z
+    .string()
+    .regex(/^[a-z0-9-]{2,32}$/)
+    .optional(),
   WORKER_HEALTH_PORT: number(0, 65_535, 8081),
   WORKER_HEALTH_HOST: z.string().min(1).default('127.0.0.1'),
   /** Registers the test-only job types. Refused in production. */

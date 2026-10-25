@@ -3,9 +3,22 @@ import { holdCodeForReaderReason, READER_HOLD_CODES, REPORT_HOLD_ACTIONS, REPORT
 describe('the report-level hold vocabulary (frozen by docs/design/report-adapter-spec.md, section 6)', () => {
   it('is exactly the sixteen codes of the specification', () => {
     expect([...REPORT_HOLD_CODES]).toEqual([
-      'capture-not-accepted', 'capture-hash-mismatch', 'poppler-version-mismatch', 'reader-binding-mismatch', 'packet-invalid', 'evidence-overlap',
-      'unsupported-layout', 'alignment-unsupported', 'unsupported-column-layout', 'unaccounted-text', 'mixed-frame-set', 'selector-quarantined',
-      'source-limit', 'candidate-or-frame-limit', 'source-time-budget', 'worker-error',
+      'capture-not-accepted',
+      'capture-hash-mismatch',
+      'poppler-version-mismatch',
+      'reader-binding-mismatch',
+      'packet-invalid',
+      'evidence-overlap',
+      'unsupported-layout',
+      'alignment-unsupported',
+      'unsupported-column-layout',
+      'unaccounted-text',
+      'mixed-frame-set',
+      'selector-quarantined',
+      'source-limit',
+      'candidate-or-frame-limit',
+      'source-time-budget',
+      'worker-error',
     ]);
   });
 
@@ -20,7 +33,7 @@ describe('the report-level hold vocabulary (frozen by docs/design/report-adapter
     expect(Object.keys(REPORT_HOLD_ACTIONS).sort()).toEqual([...REPORT_HOLD_CODES].sort());
   });
 
-  it('keeps the reader\'s own reason strings unchanged, and nothing else, as the reader codes', () => {
+  it("keeps the reader's own reason strings unchanged, and nothing else, as the reader codes", () => {
     expect([...READER_HOLD_CODES]).toEqual(REPORT_HOLD_CODES.slice(6));
     for (const code of READER_HOLD_CODES) expect(holdCodeForReaderReason(code)).toBe(code);
   });

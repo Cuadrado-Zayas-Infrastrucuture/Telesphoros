@@ -37,12 +37,18 @@ async function report(t: string) {
   const c = await repo.insertCapture(t, r.uploader, capture);
   const a = await repo.insertAcceptance(t, 'syn-reviewer', acceptanceFor(c.record.id, capture));
   let n = 0;
-  const evaluate = async () => (await repo.insertEvaluation(t, 'syn-system', evaluationFor(r, c.record.id, a.record.id, { knowledgeSetId: sha(`ks-${r.reportId}-${++n}`) }))).record.id;
+  const evaluate = async () =>
+    (await repo.insertEvaluation(t, 'syn-system', evaluationFor(r, c.record.id, a.record.id, { knowledgeSetId: sha(`ks-${r.reportId}-${++n}`) }))).record.id;
   const decide = (decision: 'verified' | 'rejected', by = 'syn-verifier') =>
-    repo.insertPatientDecision(t, by, {
-      reportId: r.reportId, expectedReport: bindings(r), decision, method: 'person-confirmed',
-      basisCode: decision === 'verified' ? 'no-identifier-on-report' : 'different-person',
-    }).then((x) => x.record.id);
+    repo
+      .insertPatientDecision(t, by, {
+        reportId: r.reportId,
+        expectedReport: bindings(r),
+        decision,
+        method: 'person-confirmed',
+        basisCode: decision === 'verified' ? 'no-identifier-on-report' : 'different-person',
+      })
+      .then((x) => x.record.id);
   const replaceFile = () =>
     withAdmin(pg.adminUrl, async (cl) => {
       await cl.query('BEGIN');
@@ -84,14 +90,17 @@ describe('the link state of a report', () => {
     }
   });
 
-  it('answers for every asked report, says unverified for an unknown one or another organization\'s (no leak), and an empty ask gives an empty answer', async () => {
+  it("answers for every asked report, says unverified for an unknown one or another organization's (no leak), and an empty ask gives an empty answer", async () => {
     const a = tenant();
     const b = tenant();
     const x = await report(a);
     await x.decide('rejected');
     const unknown = randomUUID();
     const asked = await repo.patientLinkStates(b, [x.r.reportId, unknown]);
-    expect([...asked.entries()]).toEqual([[x.r.reportId, 'unverified'], [unknown, 'unverified']]);
+    expect([...asked.entries()]).toEqual([
+      [x.r.reportId, 'unverified'],
+      [unknown, 'unverified'],
+    ]);
     expect([...(await bypassing.patientLinkStates(b, [x.r.reportId])).entries()]).toEqual([[x.r.reportId, 'unverified']]); // even without row-level security
     expect((await repo.patientLinkStates(a, [])).size).toBe(0);
     expect((await repo.patientLinkStates(a, [x.r.reportId])).get(x.r.reportId)).toBe('rejected'); // control
@@ -117,7 +126,7 @@ describe('"current" for a quarantined report', () => {
     expect(await current(t, x.r.reportId)).toBe(e2);
   });
 
-  it('is unchanged for an organization\'s other reports and for another organization', async () => {
+  it("is unchanged for an organization's other reports and for another organization", async () => {
     const t = tenant();
     const other = tenant();
     const bad = await report(t);
@@ -144,7 +153,8 @@ describe('the quarantine list', () => {
     expect((await queue(t))[0]).toMatchObject({ reportId: x.r.reportId, patientId: x.r.patientId, basisCode: 'different-person', activeEvaluationIds: [e1, e2, e3] });
     const r2 = await retract(t, e2);
     expect((await queue(t))[0]!.activeEvaluationIds).toEqual([e1, e3]);
-    const reinstated = (await repo.insertCorrection(t, 'syn-independent', { evaluationId: e2, kind: 'reinstatement', reasonCode: 'retraction-mistaken', previousCorrectionId: r2 })).record.id;
+    const reinstated = (await repo.insertCorrection(t, 'syn-independent', { evaluationId: e2, kind: 'reinstatement', reasonCode: 'retraction-mistaken', previousCorrectionId: r2 }))
+      .record.id;
     expect((await queue(t))[0]!.activeEvaluationIds).toEqual([e1, e2, e3]); // reinstated: active again
     await repo.insertCorrection(t, 'syn-reviewer', { evaluationId: e1, kind: 'supersession', reasonCode: 'software-defect', replacementEvaluationId: e3 });
     expect((await queue(t))[0]!.activeEvaluationIds).toEqual([e2, e3]); // superseded is not active
@@ -169,7 +179,7 @@ describe('the quarantine list', () => {
     expect(await queue(t)).toEqual([]);
   });
 
-  it('is ordered by the rejection, oldest first, with exact totals across pages, and never shows another organization\'s reports (even with row-level security out of the way)', async () => {
+  it("is ordered by the rejection, oldest first, with exact totals across pages, and never shows another organization's reports (even with row-level security out of the way)", async () => {
     const t = tenant();
     const other = tenant();
     const first = await report(t);

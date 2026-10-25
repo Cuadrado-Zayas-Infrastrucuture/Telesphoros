@@ -116,7 +116,12 @@ import { bearer } from './helpers/tokens';
       // Paging: one per page, with exact totals, in the same order.
       const page1 = (await queue(viewer, '?page=1&pageSize=1').expect(200)).body;
       const page2 = (await queue(viewer, '?page=2&pageSize=1').expect(200)).body;
-      expect([page1.data.map((x: Json) => x.reportId), page2.data.map((x: Json) => x.reportId), page1.meta.total, page2.meta.total]).toEqual([[first.reportId], [second.reportId], 2, 2]);
+      expect([page1.data.map((x: Json) => x.reportId), page2.data.map((x: Json) => x.reportId), page1.meta.total, page2.meta.total]).toEqual([
+        [first.reportId],
+        [second.reportId],
+        2,
+        2,
+      ]);
       expect((await queue(viewer, '?page=3&pageSize=1').expect(200)).body).toMatchObject({ data: [], meta: { total: 2 } });
     });
 
@@ -151,12 +156,16 @@ import { bearer } from './helpers/tokens';
       expect(await ids()).not.toContain(s.reportId);
       // Rejected again later, and the earlier retraction is reinstated by someone else: the evaluation is active on a quarantined report, so it is listed.
       await reject(await lab.person('rev4', ['reviewer']), s.reportId).expect(201);
-      await lab.api().post(`/api/v1/evaluations/${s.e.id}/corrections`).set(bearer((await lab.person('rev5', ['reviewer'])).token))
-        .send({ kind: 'reinstatement', reasonCode: 'retraction-mistaken', previousCorrectionId: retraction.id }).expect(201);
+      await lab
+        .api()
+        .post(`/api/v1/evaluations/${s.e.id}/corrections`)
+        .set(bearer((await lab.person('rev5', ['reviewer'])).token))
+        .send({ kind: 'reinstatement', reasonCode: 'retraction-mistaken', previousCorrectionId: retraction.id })
+        .expect(201);
       expect(await ids()).toContain(s.reportId);
     });
 
-    it('is the reviewer\'s alone: a clinician, a reader, an administrator and a person with no role are refused (403), another organization sees none, a bad page is 400', async () => {
+    it("is the reviewer's alone: a clinician, a reader, an administrator and a person with no role are refused (403), another organization sees none, a bad page is 400", async () => {
       const s = await scenario();
       await reject(s.rejecter, s.reportId).expect(201);
       for (const roles of [['clinician'], ['reader'], ['admin'], []]) {
@@ -174,8 +183,22 @@ import { bearer } from './helpers/tokens';
       const off = await createTestApp({ postgresUrl: db.appUrl, ownerUrl: db.adminUrl });
       try {
         const sw = new LabPipeline(off, db.adminUrl);
-        expect((await sw.api().get('/api/v1/patient-link/quarantine').set(bearer((await sw.person('rv', ['reviewer'])).token))).status).toBe(503);
-        expect((await sw.api().get('/api/v1/patient-link/quarantine').set(bearer((await sw.person('cl', ['clinician'])).token))).status).toBe(403);
+        expect(
+          (
+            await sw
+              .api()
+              .get('/api/v1/patient-link/quarantine')
+              .set(bearer((await sw.person('rv', ['reviewer'])).token))
+          ).status,
+        ).toBe(503);
+        expect(
+          (
+            await sw
+              .api()
+              .get('/api/v1/patient-link/quarantine')
+              .set(bearer((await sw.person('cl', ['clinician'])).token))
+          ).status,
+        ).toBe(403);
       } finally {
         await off.close();
       }

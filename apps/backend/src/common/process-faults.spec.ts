@@ -48,7 +48,13 @@ describe('process fault handlers', () => {
   it('still exits when the line cannot be written', () => {
     const target = new EventEmitter();
     const exits: number[] = [];
-    installProcessFaultHandlers(target, { service: 'api', write: () => { throw new Error('EPIPE'); }, exit: (code) => exits.push(code) });
+    installProcessFaultHandlers(target, {
+      service: 'api',
+      write: () => {
+        throw new Error('EPIPE');
+      },
+      exit: (code) => exits.push(code),
+    });
     target.emit('uncaughtException', new Error('x'));
     expect(exits).toEqual([1]);
   });

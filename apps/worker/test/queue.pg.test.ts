@@ -75,7 +75,12 @@ describe('enqueue (the application login)', () => {
     ];
     for (const payload of bad) {
       const label = JSON.stringify(payload).slice(0, 60);
-      await expect(enqueueAs(f.db, TENANT_A, PERSON, 'test.echo', payload, key()).then(() => `accepted ${label}`, (e: Error) => e.message)).resolves.toMatch(/jobs_payload_shape/);
+      await expect(
+        enqueueAs(f.db, TENANT_A, PERSON, 'test.echo', payload, key()).then(
+          () => `accepted ${label}`,
+          (e: Error) => e.message,
+        ),
+      ).resolves.toMatch(/jobs_payload_shape/);
     }
   });
 
@@ -146,7 +151,7 @@ describe('claim', () => {
     const got = batches.flat();
     await expectCommittedClaims(got);
     // Busy tenant/candidate locks may leave a slot for the next poll. Once every concurrent call has settled, a serial claim can fill it.
-    const settled = [...got, ...await claim('cap-settled', ['test.echo'], 10, 2)];
+    const settled = [...got, ...(await claim('cap-settled', ['test.echo'], 10, 2))];
     await expectCommittedClaims(settled);
     expect(settled.filter((j) => j.tenantId === TENANT_A)).toHaveLength(2);
     expect(settled.filter((j) => j.tenantId === TENANT_B)).toHaveLength(2);
@@ -187,21 +192,30 @@ describe('claim', () => {
       expectCapSafety(got);
       for (const client of holders) await client.query('COMMIT');
       await expectCommittedClaims(got);
-      const settled = [...got, ...await claim('busy-settled', ['test.echo'], 10, 2)];
+      const settled = [...got, ...(await claim('busy-settled', ['test.echo'], 10, 2))];
       await expectCommittedClaims(settled);
       expect(settled.filter((j) => j.tenantId === TENANT_A)).toHaveLength(2);
       expect(settled.filter((j) => j.tenantId === TENANT_B)).toHaveLength(2);
       expect(await claim('busy-full', ['test.echo'], 10, 2)).toEqual([]);
     } finally {
-      await Promise.all(holders.map(async (client) => {
-        try { await client.query('ROLLBACK'); } finally { client.release(); }
-      }));
+      await Promise.all(
+        holders.map(async (client) => {
+          try {
+            await client.query('ROLLBACK');
+          } finally {
+            client.release();
+          }
+        }),
+      );
     }
   });
 
   it('does not let an organization at its cap hide everyone else behind its backlog', async () => {
     await reset();
-    await f.admin.query(`INSERT INTO jobs (tenant_id, type, payload, idempotency_key, requested_by, run_after) SELECT $1, 'test.echo', '{}', 'bulk-' || g, $2, now() - interval '1 hour' FROM generate_series(1, 250) g`, [TENANT_A, PERSON]);
+    await f.admin.query(
+      `INSERT INTO jobs (tenant_id, type, payload, idempotency_key, requested_by, run_after) SELECT $1, 'test.echo', '{}', 'bulk-' || g, $2, now() - interval '1 hour' FROM generate_series(1, 250) g`,
+      [TENANT_A, PERSON],
+    );
     const { jobId } = await enqueueAs(f.db, TENANT_B, PERSON, 'test.echo', { n: 1 }, key());
     const first = await claim('cap-a', ['test.echo'], 10, 2);
     expect(first.filter((j) => j.tenantId === TENANT_A)).toHaveLength(2);
@@ -214,7 +228,11 @@ describe('claim', () => {
     await reset();
     const { jobId } = await enqueueAs(f.db, TENANT_SUSPENDED, PERSON, 'test.echo', { n: 1 }, key()).catch(async () => {
       // An organization that is suspended cannot be written for by the application, so the job is placed as the owner.
-      const inserted = await f.admin.query(`INSERT INTO jobs (tenant_id, type, payload, idempotency_key, requested_by) VALUES ($1, 'test.echo', '{"n":1}', $2, $3) RETURNING id`, [TENANT_SUSPENDED, key(), PERSON]);
+      const inserted = await f.admin.query(`INSERT INTO jobs (tenant_id, type, payload, idempotency_key, requested_by) VALUES ($1, 'test.echo', '{"n":1}', $2, $3) RETURNING id`, [
+        TENANT_SUSPENDED,
+        key(),
+        PERSON,
+      ]);
       return { jobId: inserted.rows[0].id as string };
     });
     expect(await claim('susp')).toEqual([]);
@@ -312,7 +330,10 @@ describe('failure, backoff and dead letters', () => {
     await reset();
     for (const attempt of [1, 2, 3, 4, 5, 6]) {
       const { jobId } = await enqueueAs(f.db, TENANT_A, PERSON, 'test.echo', { n: attempt }, key(), { maxAttempts: 20 });
-      await f.admin.query(`UPDATE jobs SET state = 'running', attempts = $2, locked_by = 'w', lease_until = now() + interval '1 minute', started_at = now() WHERE id = $1`, [jobId, attempt]);
+      await f.admin.query(`UPDATE jobs SET state = 'running', attempts = $2, locked_by = 'w', lease_until = now() + interval '1 minute', started_at = now() WHERE id = $1`, [
+        jobId,
+        attempt,
+      ]);
       await queue.fail(jobId, 'w', 'upstream-timeout', true);
       const seconds = (((await jobRow(f.admin, jobId)).run_after as Date).getTime() - Date.now()) / 1000;
       expect(seconds).toBeGreaterThanOrEqual(retryDelaySeconds(attempt, 0) - 2);
@@ -352,7 +373,11 @@ describe('the schedule', () => {
       expect(await queue.scheduleTick(at)).toBe(0);
       expect(await Promise.all([queue.scheduleTick(at), queue.scheduleTick(at), queue.scheduleTick(new Date('2030-01-01T10:59:59Z'))])).toEqual([0, 0, 0]);
       expect(await queue.scheduleTick(new Date('2030-01-01T11:00:01Z'))).toBe(2);
-      const rows = (await f.admin.query(`SELECT tenant_id, requested_by, idempotency_key FROM jobs WHERE type = 'test.echo' AND idempotency_key LIKE 'slot-%' ORDER BY idempotency_key, tenant_id`)).rows;
+      const rows = (
+        await f.admin.query(
+          `SELECT tenant_id, requested_by, idempotency_key FROM jobs WHERE type = 'test.echo' AND idempotency_key LIKE 'slot-%' ORDER BY idempotency_key, tenant_id`,
+        )
+      ).rows;
       expect(rows).toHaveLength(4);
       expect(new Set(rows.map((r) => r.requested_by))).toEqual(new Set(['system:scheduler']));
       expect(rows.map((r) => r.tenant_id)).not.toContain(TENANT_SUSPENDED);
@@ -401,7 +426,14 @@ describe('what the worker login can and cannot do', () => {
     const a = new Client({ connectionString: f.db.appUrl });
     await a.connect();
     try {
-      for (const sql of [`SELECT * FROM job_claim('x', ARRAY['test.echo'], 1, 1, 30)`, `SELECT job_succeed(gen_random_uuid(), 'x')`, `SELECT job_schedule_tick()`, `UPDATE jobs SET state = 'dead'`, `DELETE FROM jobs`, `INSERT INTO jobs (tenant_id, type, idempotency_key, requested_by) VALUES ('${TENANT_A}', 'test.echo', 'sneaky', 'x')`]) {
+      for (const sql of [
+        `SELECT * FROM job_claim('x', ARRAY['test.echo'], 1, 1, 30)`,
+        `SELECT job_succeed(gen_random_uuid(), 'x')`,
+        `SELECT job_schedule_tick()`,
+        `UPDATE jobs SET state = 'dead'`,
+        `DELETE FROM jobs`,
+        `INSERT INTO jobs (tenant_id, type, idempotency_key, requested_by) VALUES ('${TENANT_A}', 'test.echo', 'sneaky', 'x')`,
+      ]) {
         await expect(a.query(sql)).rejects.toThrow(/permission denied/);
       }
       await a.query('BEGIN');
@@ -423,10 +455,13 @@ describe('what the worker login can and cannot do', () => {
 });
 
 describe('statistics and liveness', () => {
-  it('counts a suspended organization\'s held jobs but does not let them age the queue (the alarm reads the age of what could run)', async () => {
+  it("counts a suspended organization's held jobs but does not let them age the queue (the alarm reads the age of what could run)", async () => {
     await reset();
     await enqueueAs(f.db, TENANT_A, PERSON, 'test.echo', { n: 1 }, key(), { runAfter: new Date(Date.now() - 60_000) });
-    await f.admin.query(`INSERT INTO jobs (tenant_id, type, payload, idempotency_key, requested_by, run_after) VALUES ($1, 'test.echo', '{}', $2, $3, now() - interval '5 hours')`, [TENANT_SUSPENDED, key(), PERSON]);
+    await f.admin.query(
+      `INSERT INTO jobs (tenant_id, type, payload, idempotency_key, requested_by, run_after) VALUES ($1, 'test.echo', '{}', $2, $3, now() - interval '5 hours')`,
+      [TENANT_SUSPENDED, key(), PERSON],
+    );
     const queued = (await queue.stats()).find((s) => s.type === 'test.echo' && s.state === 'queued')!;
     expect(queued.count).toBe(2);
     expect(queued.oldestReadySeconds).toBeGreaterThan(50);

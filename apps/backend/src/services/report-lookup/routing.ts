@@ -5,7 +5,10 @@ import { recordHash } from './strict-json';
 import { GENES, type GeneState, type LookupReason, type RowSelector, type SertralineRoutingPolicyV1 } from './contracts';
 
 export const selectorOf = (id: string, row: RecommendationRow): RowSelector => ({
-  guidelineId: id, table: row.locator.table, row: row.locator.row, column: row.locator.column ?? null,
+  guidelineId: id,
+  table: row.locator.table,
+  row: row.locator.row,
+  column: row.locator.column ?? null,
 });
 const key = (selector: RowSelector) => recordHash(selector);
 const sameGenes = (a: readonly string[], b: readonly string[]) => [...a].sort().join('+') === [...b].sort().join('+');
@@ -21,8 +24,13 @@ export function validatePolicyKnowledge(policy: SertralineRoutingPolicyV1, knowl
   for (const [i, id] of ids.entries()) {
     const matches = guidelines.filter((g) => g.id === id);
     const required = i === 0 ? [...GENES] : [GENES[i - 1]!];
-    if (matches.length !== 1 || !sameGenes(matches[0]!.genes, required) || matches[0]!.review.status !== 'reviewed'
-        || matches[0]!.review.contentSha256 !== contentSha256(matches[0]!)) return invalid;
+    if (
+      matches.length !== 1 ||
+      !sameGenes(matches[0]!.genes, required) ||
+      matches[0]!.review.status !== 'reviewed' ||
+      matches[0]!.review.contentSha256 !== contentSha256(matches[0]!)
+    )
+      return invalid;
     const file = knowledge.files.find((f) => f.id === id && f.kind === 'guideline');
     if (!file || file.reviewStatus !== 'reviewed' || file.contentSha256 !== contentSha256(matches[0]!)) return invalid;
   }

@@ -25,8 +25,20 @@ export class StandInReportReader implements ReportReader {
 }
 
 type Role = 'gene' | 'diplotype' | 'reportedResult';
-interface Candidate { contentId: string; candidateId: string; kind: Role; start: number; end: number; text: string }
-interface Found { role: Role; start: number; end: number; text: string }
+interface Candidate {
+  contentId: string;
+  candidateId: string;
+  kind: Role;
+  start: number;
+  end: number;
+  text: string;
+}
+interface Found {
+  role: Role;
+  start: number;
+  end: number;
+  text: string;
+}
 
 const RULE_ID = 'stand-in-line/1';
 const LABELS = { Gene: 'gene', Diplotype: 'diplotype', Result: 'reportedResult' } as const;
@@ -41,8 +53,18 @@ function baseFields(text: string) {
 }
 
 function held(text: string, reason: string): ReaderResult {
-  const rest = { schema: 'pgx-span-candidates/3-draft' as const, status: 'held' as const, reason, frameSetState: 'unclassified' as const, ...baseFields(text),
-    candidates: [], frames: [], allowedEdges: [], diagnostics: [], ambiguityEvidence: [] };
+  const rest = {
+    schema: 'pgx-span-candidates/3-draft' as const,
+    status: 'held' as const,
+    reason,
+    frameSetState: 'unclassified' as const,
+    ...baseFields(text),
+    candidates: [],
+    frames: [],
+    allowedEdges: [],
+    diagnostics: [],
+    ambiguityEvidence: [],
+  };
   const packetHash = canonicalHash(rest);
   return { packet: { ...rest, packetHash }, projection: { status: 'held', reason, payload: null, provenance: { packetHash } } };
 }
@@ -61,7 +83,10 @@ function parseGeneLine(line: string, lineStart: number): { fields: Found[]; empt
     if (!role) return null;
     const raw = part.slice(colon + 1);
     const value = raw.trim();
-    if (value === '') { empty.push(role); continue; }
+    if (value === '') {
+      empty.push(role);
+      continue;
+    }
     const valueAt = at + colon + 1 + raw.indexOf(value);
     const start = lineStart + scalarIndex(line, valueAt);
     fields.push({ role, start, end: start + Array.from(value).length, text: value });
@@ -81,7 +106,15 @@ export function standInRead(text: string): ReaderResult {
 
   const candidate = (found: Found): Candidate => {
     const contentId = canonicalHash(['pgx-span-content/1', base.sourceRef.sourceHash, found.role, found.start, found.end]);
-    const candidateId = canonicalHash(['pgx-span-build/3', contentId, base.generatorVersion, base.generatorCodeHash, base.grammarHash, base.offsetContractHash, base.fieldBoundaryPolicyHash]);
+    const candidateId = canonicalHash([
+      'pgx-span-build/3',
+      contentId,
+      base.generatorVersion,
+      base.generatorCodeHash,
+      base.grammarHash,
+      base.offsetContractHash,
+      base.fieldBoundaryPolicyHash,
+    ]);
     const made = { contentId, candidateId, kind: found.role, start: found.start, end: found.end, text: found.text };
     candidates.push(made);
     return made;
@@ -101,8 +134,17 @@ export function standInRead(text: string): ReaderResult {
     const d = diplotype ? candidate(diplotype) : null;
     const r = result ? candidate(result) : null;
     const frameId = canonicalHash(['frame/1', gene.candidateId, RULE_ID]);
-    frames.push({ frameId, geneCandidateId: gene.candidateId, sourceAnchor: gene.start, ruleId: RULE_ID, allowed: { diplotype: d ? [d.candidateId] : [], reportedResult: r ? [r.candidateId] : [] } });
-    for (const [role, value] of [['diplotype', d], ['reportedResult', r]] as const) {
+    frames.push({
+      frameId,
+      geneCandidateId: gene.candidateId,
+      sourceAnchor: gene.start,
+      ruleId: RULE_ID,
+      allowed: { diplotype: d ? [d.candidateId] : [], reportedResult: r ? [r.candidateId] : [] },
+    });
+    for (const [role, value] of [
+      ['diplotype', d],
+      ['reportedResult', r],
+    ] as const) {
       if (value) edges.push({ frameId, valueCandidateId: value.candidateId, role, evidence: { start: value.start, end: value.end, ruleId: RULE_ID } });
     }
     for (const role of parsed.empty) if (role === 'diplotype' || role === 'reportedResult') diagnostics.push({ kind: 'present-empty-field', frameId, role });
@@ -112,8 +154,18 @@ export function standInRead(text: string): ReaderResult {
   }
   if (frames.length === 0) return held(text, 'unsupported-layout');
 
-  const rest = { schema: 'pgx-span-candidates/3-draft' as const, status: 'ready' as const, reason: null, frameSetState: 'resolved' as const, ...base,
-    candidates, frames, allowedEdges: edges, diagnostics, ambiguityEvidence: [] };
+  const rest = {
+    schema: 'pgx-span-candidates/3-draft' as const,
+    status: 'ready' as const,
+    reason: null,
+    frameSetState: 'resolved' as const,
+    ...base,
+    candidates,
+    frames,
+    allowedEdges: edges,
+    diagnostics,
+    ambiguityEvidence: [],
+  };
   const packetHash = canonicalHash(rest);
   return { packet: { ...rest, packetHash }, projection: { status: 'projected', reason: null, payload: { spans, abstain: false }, provenance: { packetHash } } };
 }

@@ -49,7 +49,10 @@ beforeAll(async () => {
   await owner(async (c) => {
     await registerTenantRow(c, 'org-live');
     await registerTenantRow(c, 'org-held');
-    for (const [tenant, sub] of [['org-live', 'carol'], ['org-held', 'alice']]) {
+    for (const [tenant, sub] of [
+      ['org-live', 'carol'],
+      ['org-held', 'alice'],
+    ]) {
       await c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ($1, $2, 'active', ARRAY['clinician'], 'test')`, [tenant, sub]);
       await c.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ($1, 'test', 'SYN-1')`, [tenant]);
     }
@@ -114,8 +117,17 @@ describe('what a suspended organization must still be able to do (0047)', () => 
 
 describe('the catalog', () => {
   it('app_tenant_bound() has the same grantees as app_tenant(), and nobody else', async () => {
-    const acl = (name: string) => owner(async (c) => (await c.query(`SELECT string_agg(coalesce(nullif(pg_get_userbyid(a.grantee), ''), 'PUBLIC'), ',' ORDER BY 1) AS g
-      FROM pg_proc p, aclexplode(p.proacl) a WHERE p.proname = $1 AND p.pronamespace = 'public'::regnamespace`, [name])).rows[0].g as string);
+    const acl = (name: string) =>
+      owner(
+        async (c) =>
+          (
+            await c.query(
+              `SELECT string_agg(coalesce(nullif(pg_get_userbyid(a.grantee), ''), 'PUBLIC'), ',' ORDER BY 1) AS g
+      FROM pg_proc p, aclexplode(p.proacl) a WHERE p.proname = $1 AND p.pronamespace = 'public'::regnamespace`,
+              [name],
+            )
+          ).rows[0].g as string,
+      );
     expect(await acl('app_tenant_bound')).toBe(await acl('app_tenant'));
     expect(await acl('app_tenant_bound')).not.toContain('PUBLIC');
   });

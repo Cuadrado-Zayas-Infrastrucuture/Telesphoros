@@ -33,7 +33,16 @@ function start(): Runner {
   lines = [];
   const log = jsonLogger((l) => lines.push(l));
   const deps = { data: new PgJobData(f.worker), inspector: new S3ObjectInspector(s3, REPORTS_BUCKET), log };
-  runner = new Runner({ workerId: 'consumer-test', queue, jobs: [uploadsSweepJob(deps), ...filesVerifyJobs(deps)], concurrency: 4, tenantCap: 10, pollMs: 50, drainSeconds: 5, log });
+  runner = new Runner({
+    workerId: 'consumer-test',
+    queue,
+    jobs: [uploadsSweepJob(deps), ...filesVerifyJobs(deps)],
+    concurrency: 4,
+    tenantCap: 10,
+    pollMs: 50,
+    drainSeconds: 5,
+    log,
+  });
   runner.start();
   return runner;
 }
@@ -83,9 +92,9 @@ describe('a committed upload is re-checked end to end (event, relay, claim, hand
 
   it.each([
     ['a version the bucket does not have', { pinVersion: 'not-a-version-of-this-object' }, 'missing', 'version-missing', 'file-missing'],
-    ['bytes that differ from the report\'s hash', { claim: { sha256: 'c'.repeat(64) } }, 'changed', 'hash-mismatch', 'file-changed'],
-    ['a size that differs from the report\'s', { claim: { sizeBytes: 5 } }, 'changed', 'size-mismatch', 'file-changed'],
-    ['a content type that differs from the report\'s', { claim: { contentType: 'application/json' } }, 'changed', 'type-mismatch', 'file-changed'],
+    ["bytes that differ from the report's hash", { claim: { sha256: 'c'.repeat(64) } }, 'changed', 'hash-mismatch', 'file-changed'],
+    ["a size that differs from the report's", { claim: { sizeBytes: 5 } }, 'changed', 'size-mismatch', 'file-changed'],
+    ["a content type that differs from the report's", { claim: { contentType: 'application/json' } }, 'changed', 'type-mismatch', 'file-changed'],
   ])('finds %s, records it, and ends the job dead without touching the file', async (_name, options, outcome, reason, code) => {
     const r = await seedReport(f, s3, TENANT_A, options);
     await commitEvent(TENANT_A, r.reportId);
@@ -95,7 +104,8 @@ describe('a committed upload is re-checked end to end (event, relay, claim, hand
     expect(await jobRow(f.admin, jobId)).toMatchObject({ state: 'dead', last_error_code: code, attempts: 1 });
     expect(await verifications(r.reportId)).toMatchObject([{ outcome, reason }]);
     // The stored object is exactly as it was (nothing is repaired or deleted).
-    if (!('pinVersion' in options)) expect(await new S3ObjectInspector(s3, REPORTS_BUCKET).inspect(r.key, r.version, { maxBytes: 1_000_000 })).toMatchObject({ sizeBytes: r.bytes.length });
+    if (!('pinVersion' in options))
+      expect(await new S3ObjectInspector(s3, REPORTS_BUCKET).inspect(r.key, r.version, { maxBytes: 1_000_000 })).toMatchObject({ sizeBytes: r.bytes.length });
   });
 
   it('surfaces an abort from the real store as a thrown error, never as a verdict (the handler treats a throw with an aborted signal as a retry, not a finding)', async () => {
@@ -151,7 +161,7 @@ describe('a suspended organization', () => {
 });
 
 describe('the scheduled integrity re-check (files.verify-stale)', () => {
-  it('checks an organization\'s unchecked reports first, only its own, and leaves fresh ones alone until they age', async () => {
+  it("checks an organization's unchecked reports first, only its own, and leaves fresh ones alone until they age", async () => {
     const mine = await Promise.all([seedReport(f, s3, TENANT_A), seedReport(f, s3, TENANT_A)]);
     const theirs = await seedReport(f, s3, TENANT_B);
     start();
@@ -200,7 +210,9 @@ describe('a read that failed is not a check (files.verify-stale)', () => {
 
   async function hold(): Promise<{ jobId: string; worker: Client }> {
     const jobId = (await enqueueAs(f.db, GAMMA, PERSON, 'files.verify-stale', {}, `unreadable-${++n}`)).jobId;
-    await f.admin.query(`UPDATE jobs SET state = 'running', locked_by = 'holder', lease_until = now() + interval '5 minutes', attempts = 1, started_at = now() WHERE id = $1`, [jobId]);
+    await f.admin.query(`UPDATE jobs SET state = 'running', locked_by = 'holder', lease_until = now() + interval '5 minutes', attempts = 1, started_at = now() WHERE id = $1`, [
+      jobId,
+    ]);
     const worker = new Client({ connectionString: f.db.workerUrl });
     await worker.connect();
     return { jobId, worker };
@@ -220,7 +232,9 @@ describe('a read that failed is not a check (files.verify-stale)', () => {
   }
   /** What the scheduled job would be handed, in order, among the given reports (a day is the freshness window, so a check made now is fresh). */
   const due = async (worker: Client, jobId: string, ids: string[]) =>
-    (await worker.query('SELECT report_id FROM file_verification_stale($1, $2, 200, 86400) WHERE report_id = ANY($3)', [jobId, 'holder', ids])).rows.map((r) => r.report_id as string);
+    (await worker.query('SELECT report_id FROM file_verification_stale($1, $2, 200, 86400) WHERE report_id = ANY($3)', [jobId, 'holder', ids])).rows.map(
+      (r) => r.report_id as string,
+    );
 
   it('hands out a report whose last read failed, and leaves alone one that was just verified, or just found missing or changed', async () => {
     const [unreadable, ok, missing, changed, agedOkThenUnreadable] = await Promise.all([1, 2, 3, 4, 5].map(() => seedReport(f, s3, GAMMA)));
@@ -262,7 +276,10 @@ describe('a read that failed is not a check (files.verify-stale)', () => {
     try {
       let storeDown = true;
       const real = new S3ObjectInspector(s3, REPORTS_BUCKET);
-      const inspector = { inspect: (key: string, version: string, options: { maxBytes: number; signal?: AbortSignal }) => (storeDown ? Promise.reject(new Error('socket hang up')) : real.inspect(key, version, options)) };
+      const inspector = {
+        inspect: (key: string, version: string, options: { maxBytes: number; signal?: AbortSignal }) =>
+          storeDown ? Promise.reject(new Error('socket hang up')) : real.inspect(key, version, options),
+      };
       const job = filesVerifyJobs({ data: new PgJobData(f.worker), inspector, log: silentLogger }).find((j) => j.definition.type === 'files.verify-stale')!;
       const context = { job: { id: jobId, type: 'files.verify-stale' }, workerId: 'holder', signal: new AbortController().signal } as unknown as Parameters<typeof job.handler>[0];
       // The store is down: every report in the organization is recorded unreadable and the attempt asks to be retried.
@@ -283,7 +300,9 @@ describe('a read that failed is not a check (files.verify-stale)', () => {
 describe('the worker may reach these functions only through a job it holds', () => {
   async function held(type: string, payload: unknown, tenant = TENANT_A): Promise<{ jobId: string; worker: Client }> {
     const jobId = (await enqueueAs(f.db, tenant, PERSON, type, payload, `held-${++n}`)).jobId;
-    await f.admin.query(`UPDATE jobs SET state = 'running', locked_by = 'holder', lease_until = now() + interval '5 minutes', attempts = 1, started_at = now() WHERE id = $1`, [jobId]);
+    await f.admin.query(`UPDATE jobs SET state = 'running', locked_by = 'holder', lease_until = now() + interval '5 minutes', attempts = 1, started_at = now() WHERE id = $1`, [
+      jobId,
+    ]);
     const worker = new Client({ connectionString: f.db.workerUrl });
     await worker.connect();
     return { jobId, worker };
@@ -305,7 +324,7 @@ describe('the worker may reach these functions only through a job it holds', () 
     }
   });
 
-  it('records only about the report its job names, only for the job\'s organization, and never a made-up outcome', async () => {
+  it("records only about the report its job names, only for the job's organization, and never a made-up outcome", async () => {
     const mine = await seedReport(f, s3, TENANT_A);
     const other = await seedReport(f, s3, TENANT_A);
     const foreign = await seedReport(f, s3, TENANT_B);
@@ -313,9 +332,15 @@ describe('the worker may reach these functions only through a job it holds', () 
     try {
       await expect(worker.query(`SELECT file_verification_record($1, 'holder', $2, 'ok', NULL, 'v')`, [jobId, other.reportId])).rejects.toThrow(/verifies one report/);
       await expect(worker.query(`SELECT file_verification_record($1, 'holder', $2, 'ok', NULL, 'v')`, [jobId, foreign.reportId])).rejects.toThrow(/verifies one report/);
-      await expect(worker.query(`SELECT file_verification_record($1, 'holder', $2, 'fine', NULL, 'v')`, [jobId, mine.reportId])).rejects.toThrow(/file_verifications_outcome_check/);
-      await expect(worker.query(`SELECT file_verification_record($1, 'holder', $2, 'missing', 'Jane Doe', 'v')`, [jobId, mine.reportId])).rejects.toThrow(/file_verifications_reason_check/);
-      await expect(worker.query(`SELECT file_verification_record($1, 'holder', $2, 'ok', 'should-be-null', 'v')`, [jobId, mine.reportId])).rejects.toThrow(/file_verifications_reason_check/);
+      await expect(worker.query(`SELECT file_verification_record($1, 'holder', $2, 'fine', NULL, 'v')`, [jobId, mine.reportId])).rejects.toThrow(
+        /file_verifications_outcome_check/,
+      );
+      await expect(worker.query(`SELECT file_verification_record($1, 'holder', $2, 'missing', 'Jane Doe', 'v')`, [jobId, mine.reportId])).rejects.toThrow(
+        /file_verifications_reason_check/,
+      );
+      await expect(worker.query(`SELECT file_verification_record($1, 'holder', $2, 'ok', 'should-be-null', 'v')`, [jobId, mine.reportId])).rejects.toThrow(
+        /file_verifications_reason_check/,
+      );
       expect(await verifications(mine.reportId)).toEqual([]);
     } finally {
       await worker.end();
@@ -337,7 +362,15 @@ describe('the worker may reach these functions only through a job it holds', () 
         await c.query(`RESET session_replication_role`);
         c.release();
       }
-      const order = async (limit: number) => (await worker.query('SELECT report_id FROM file_verification_stale($1, $2, $3, 86400) WHERE report_id = ANY($4)', [jobId, 'holder', limit + 20, reportsOf.map((r) => r.reportId)])).rows.map((r) => r.report_id as string);
+      const order = async (limit: number) =>
+        (
+          await worker.query('SELECT report_id FROM file_verification_stale($1, $2, $3, 86400) WHERE report_id = ANY($4)', [
+            jobId,
+            'holder',
+            limit + 20,
+            reportsOf.map((r) => r.reportId),
+          ])
+        ).rows.map((r) => r.report_id as string);
       expect(await order(0)).toEqual([never!.reportId, older!.reportId, newer!.reportId]);
       expect((await worker.query('SELECT report_id FROM file_verification_stale($1, $2, 1, 86400)', [jobId, 'holder'])).rows).toHaveLength(1);
     } finally {
@@ -345,7 +378,7 @@ describe('the worker may reach these functions only through a job it holds', () 
     }
   });
 
-  it('cannot read another organization\'s reports through a stale job, and cannot call the sweep directly', async () => {
+  it("cannot read another organization's reports through a stale job, and cannot call the sweep directly", async () => {
     const a = await seedReport(f, s3, TENANT_A);
     const { jobId, worker } = await held('files.verify-stale', {}, TENANT_B);
     try {
@@ -377,7 +410,11 @@ describe('the worker may reach these functions only through a job it holds', () 
       await a.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [TENANT_A]);
       expect((await a.query('SELECT count(*)::int AS n FROM file_verifications WHERE report_id = $1', [r.reportId])).rows[0].n).toBe(1);
       await a.query('ROLLBACK');
-      await expect(a.query(`INSERT INTO file_verifications (tenant_id, report_id, job_id, source, outcome, object_version) VALUES ('${TENANT_A}', '${r.reportId}', '${jobId}', 'upload', 'ok', 'v')`)).rejects.toThrow(/permission denied/);
+      await expect(
+        a.query(
+          `INSERT INTO file_verifications (tenant_id, report_id, job_id, source, outcome, object_version) VALUES ('${TENANT_A}', '${r.reportId}', '${jobId}', 'upload', 'ok', 'v')`,
+        ),
+      ).rejects.toThrow(/permission denied/);
     } finally {
       await a.end();
     }

@@ -61,7 +61,14 @@ import { bearer } from './helpers/tokens';
 
       const res = await correct(s.reviewer, s.e1.id, { kind: 'retraction', reasonCode: 'software-defect' }).expect(201);
       expect(correctionDtoSchema.safeParse(res.body).success).toBe(true);
-      expect(res.body).toMatchObject({ evaluationId: s.e1.id, kind: 'retraction', reasonCode: 'software-defect', previousCorrectionId: null, replacementEvaluationId: null, note: null });
+      expect(res.body).toMatchObject({
+        evaluationId: s.e1.id,
+        kind: 'retraction',
+        reasonCode: 'software-defect',
+        previousCorrectionId: null,
+        replacementEvaluationId: null,
+        note: null,
+      });
       expect(JSON.stringify(res.body)).not.toMatch(/createdBy|created_by|tenant/i);
 
       const after: Evaluation = (await read(s.clinician, s.e1.id).expect(200)).body;
@@ -290,7 +297,12 @@ import { bearer } from './helpers/tokens';
       const mine = (query: string) => list(s.clinician, `?reportId=${s.reportId}${query}`);
       expect(ids(await mine('&current=true').expect(200))).toEqual([s.e2.id]);
       expect(ids(await mine('').expect(200))).toEqual([s.e1.id, s.e2.id].sort()); // without the filter, both
-      expect((await mine('').expect(200)).body.data.map((e: Evaluation) => [e.id, e.current]).sort()).toEqual([[s.e1.id, false], [s.e2.id, true]].sort());
+      expect((await mine('').expect(200)).body.data.map((e: Evaluation) => [e.id, e.current]).sort()).toEqual(
+        [
+          [s.e1.id, false],
+          [s.e2.id, true],
+        ].sort(),
+      );
 
       // Retract the NEWEST: the report has no current evaluation. The older one is still ACTIVE (it was never corrected) but is not promoted:
       // a reviewer who retracted the newest said "do not rely on this", and nobody has said the older one is what to rely on instead.
@@ -378,9 +390,15 @@ import { bearer } from './helpers/tokens';
       const s = await scenario();
       const lines: string[] = [];
       const capture = new (class extends ConsoleLogger {
-        override log(...args: unknown[]) { lines.push(JSON.stringify(args)); }
-        override warn(...args: unknown[]) { lines.push(JSON.stringify(args)); }
-        override error(...args: unknown[]) { lines.push(JSON.stringify(args)); }
+        override log(...args: unknown[]) {
+          lines.push(JSON.stringify(args));
+        }
+        override warn(...args: unknown[]) {
+          lines.push(JSON.stringify(args));
+        }
+        override error(...args: unknown[]) {
+          lines.push(JSON.stringify(args));
+        }
       })();
       Logger.overrideLogger(capture);
       try {

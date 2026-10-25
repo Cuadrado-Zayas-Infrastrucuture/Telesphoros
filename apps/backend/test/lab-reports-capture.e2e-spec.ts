@@ -48,7 +48,14 @@ const MAX_BURNERS = 40;
       const { reportId, pdfSha256 } = await lab.uploadedLabPdf(clinician, fixturePdf(id));
       const first = await lab.capture(clinician, reportId).expect(201);
       expect(captureDtoSchema.safeParse(first.body).success).toBe(true);
-      expect(first.body).toMatchObject({ reportId, pdfSha256, textSha256: fixtureManifest(id).stored_text_sha256, popplerVersion: '26.03.0', runner: 'fake', latestDecision: null });
+      expect(first.body).toMatchObject({
+        reportId,
+        pdfSha256,
+        textSha256: fixtureManifest(id).stored_text_sha256,
+        popplerVersion: '26.03.0',
+        runner: 'fake',
+        latestDecision: null,
+      });
       expect(first.body.textScalars).toBe([...fixtureText(id)].length);
       // Never the text, a storage key, or who made it.
       const shown = JSON.stringify(first.body);
@@ -76,50 +83,62 @@ const MAX_BURNERS = 40;
     // reports raced at once make that happen. This is a probabilistic guard: on the broken insert (it named only the identity key) it failed
     // in 10 of 15 runs; on the fixed insert it passed 13 of 13. A regression therefore shows up as a flaky test, not as a missing one.
     // Time-boxed (2026-10-20): broken insert 27 of 35 runs failed, including 9 of 10 on a host so loaded that only 12 or 13 batches fit; fixed 24 of 24 passed.
-    it('concurrent identical requests, for many reports at once, still give one 201 and the rest 200s while the CPUs are busy', async () => {
-      const started = Date.now();
-      const burners = Array.from({ length: Math.min(cpus().length * 4, MAX_BURNERS) }, () =>
-        spawn(process.execPath, ['-e', `const end = Date.now() + ${BURNER_LIFETIME_MS}; while (Date.now() < end) {}`], { stdio: 'ignore' })); // each stops itself if the test run dies
-      const inFlight = new Set<ReturnType<LabPipeline['capture']>>();
-      const stop = new AbortController();
-      const stopped = new Promise<never>((_, reject) => stop.signal.addEventListener('abort', () => reject(stop.signal.reason as Error), { once: true }));
-      stopped.catch(() => undefined);
-      const halt = (reason: string) => {
-        if (!stop.signal.aborted) stop.abort(new Error(reason));
-        for (const burner of burners) burner.kill('SIGKILL');
-        for (const req of inFlight) req.abort();
-      };
-      // Not `finally` alone: a body stuck awaiting never reaches it, Jest moves on at its timeout, and the busy processes and requests outlive the test.
-      const stopTimer = setTimeout(() => halt(`stopped after ${RACE_STOP_MS} ms, before the ${RACE_TIMEOUT_MS} ms timeout`), RACE_STOP_MS);
-      const unlessStopped = <T>(work: PromiseLike<T>) => Promise.race([work, stopped]);
-      const capture = (clinician: Person, reportId: string) => {
-        const req = lab.capture(clinician, reportId);
-        inFlight.add(req);
-        return req.then((res) => { inFlight.delete(req); return res; });
-      };
-      let batches = 0;
-      try {
-        const clinician = await unlessStopped(lab.person('clin', ['clinician']));
-        const patientId = await unlessStopped(lab.patient(clinician));
-        for (let batch = 0; batch < RACE_BATCHES && Date.now() - started < RACE_BUDGET_MS; batch++) {
-          const reports: Awaited<ReturnType<LabPipeline['uploadedLabPdf']>>[] = [];
-          // One at a time (the upload route sheds load), seeded straight to "uploaded": the upload path is not what is under test here.
-          for (let i = 0; i < RACES_PER_BATCH; i++) reports.push(await unlessStopped(lab.uploadedLabPdf(clinician, fixturePdf('D01'), { requester: clinician, patientId })));
-          const raced = await unlessStopped(Promise.all(reports.map(async ({ reportId }) => ({ reportId, responses: await Promise.all(Array.from({ length: CONTENDERS }, () => capture(clinician, reportId))) }))));
-          for (const { reportId, responses } of raced) {
-            const seen = responses.map((r) => `${r.status}${r.body.error ? ` ${r.body.error.code}` : ''}`).sort();
-            expect({ batch, seen }).toEqual({ batch, seen: [...Array<string>(CONTENDERS - 1).fill('200'), '201'].sort() });
-            expect(new Set(responses.map((r) => r.body.id)).size).toBe(1);
-            expect(await unlessStopped(lab.count('report_captures', 'report_id = $1', [reportId]))).toBe(1);
+    it(
+      'concurrent identical requests, for many reports at once, still give one 201 and the rest 200s while the CPUs are busy',
+      async () => {
+        const started = Date.now();
+        const burners = Array.from({ length: Math.min(cpus().length * 4, MAX_BURNERS) }, () =>
+          spawn(process.execPath, ['-e', `const end = Date.now() + ${BURNER_LIFETIME_MS}; while (Date.now() < end) {}`], { stdio: 'ignore' }),
+        ); // each stops itself if the test run dies
+        const inFlight = new Set<ReturnType<LabPipeline['capture']>>();
+        const stop = new AbortController();
+        const stopped = new Promise<never>((_, reject) => stop.signal.addEventListener('abort', () => reject(stop.signal.reason as Error), { once: true }));
+        stopped.catch(() => undefined);
+        const halt = (reason: string) => {
+          if (!stop.signal.aborted) stop.abort(new Error(reason));
+          for (const burner of burners) burner.kill('SIGKILL');
+          for (const req of inFlight) req.abort();
+        };
+        // Not `finally` alone: a body stuck awaiting never reaches it, Jest moves on at its timeout, and the busy processes and requests outlive the test.
+        const stopTimer = setTimeout(() => halt(`stopped after ${RACE_STOP_MS} ms, before the ${RACE_TIMEOUT_MS} ms timeout`), RACE_STOP_MS);
+        const unlessStopped = <T>(work: PromiseLike<T>) => Promise.race([work, stopped]);
+        const capture = (clinician: Person, reportId: string) => {
+          const req = lab.capture(clinician, reportId);
+          inFlight.add(req);
+          return req.then((res) => {
+            inFlight.delete(req);
+            return res;
+          });
+        };
+        let batches = 0;
+        try {
+          const clinician = await unlessStopped(lab.person('clin', ['clinician']));
+          const patientId = await unlessStopped(lab.patient(clinician));
+          for (let batch = 0; batch < RACE_BATCHES && Date.now() - started < RACE_BUDGET_MS; batch++) {
+            const reports: Awaited<ReturnType<LabPipeline['uploadedLabPdf']>>[] = [];
+            // One at a time (the upload route sheds load), seeded straight to "uploaded": the upload path is not what is under test here.
+            for (let i = 0; i < RACES_PER_BATCH; i++) reports.push(await unlessStopped(lab.uploadedLabPdf(clinician, fixturePdf('D01'), { requester: clinician, patientId })));
+            const raced = await unlessStopped(
+              Promise.all(
+                reports.map(async ({ reportId }) => ({ reportId, responses: await Promise.all(Array.from({ length: CONTENDERS }, () => capture(clinician, reportId))) })),
+              ),
+            );
+            for (const { reportId, responses } of raced) {
+              const seen = responses.map((r) => `${r.status}${r.body.error ? ` ${r.body.error.code}` : ''}`).sort();
+              expect({ batch, seen }).toEqual({ batch, seen: [...Array<string>(CONTENDERS - 1).fill('200'), '201'].sort() });
+              expect(new Set(responses.map((r) => r.body.id)).size).toBe(1);
+              expect(await unlessStopped(lab.count('report_captures', 'report_id = $1', [reportId]))).toBe(1);
+            }
+            batches = batch + 1;
           }
-          batches = batch + 1;
+          expect({ batches, enough: batches >= MIN_RACE_BATCHES }).toEqual({ batches, enough: true });
+        } finally {
+          clearTimeout(stopTimer);
+          halt('finished');
         }
-        expect({ batches, enough: batches >= MIN_RACE_BATCHES }).toEqual({ batches, enough: true });
-      } finally {
-        clearTimeout(stopTimer);
-        halt('finished');
-      }
-    }, RACE_TIMEOUT_MS);
+      },
+      RACE_TIMEOUT_MS,
+    );
 
     it('the same recorded PDF in two reports, or two tenants, never shares a capture, text object or event', async () => {
       const a = await lab.person('a', ['clinician']);
@@ -189,13 +208,29 @@ const MAX_BURNERS = 40;
       const clinician = await lab.person('clin', ['clinician']);
       const { reportId } = await lab.uploadedLabPdf(clinician, fixturePdf('D01'));
       const captured = (await lab.capture(clinician, reportId).expect(201)).body;
-      await lab.api().get(`/api/v1/captures/${captured.id}`).set(bearer((await lab.person('r', [])).token)).expect(403); // finding I04
-      await lab.api().get(`/api/v1/captures/${captured.id}`).set(bearer((await lab.person('r', ['admin'])).token)).expect(403);
+      await lab
+        .api()
+        .get(`/api/v1/captures/${captured.id}`)
+        .set(bearer((await lab.person('r', [])).token))
+        .expect(403); // finding I04
+      await lab
+        .api()
+        .get(`/api/v1/captures/${captured.id}`)
+        .set(bearer((await lab.person('r', ['admin'])).token))
+        .expect(403);
       for (const roles of [['reader'], ['clinician'], ['reviewer'], ['admin', 'reader']]) {
-        const res = await lab.api().get(`/api/v1/captures/${captured.id}`).set(bearer((await lab.person('r', roles)).token)).expect(200);
+        const res = await lab
+          .api()
+          .get(`/api/v1/captures/${captured.id}`)
+          .set(bearer((await lab.person('r', roles)).token))
+          .expect(200);
         expect(captureDtoSchema.safeParse(res.body).success).toBe(true);
       }
-      await lab.api().get(`/api/v1/captures/${captured.id}`).set(bearer((await lab.person('m', ['clinician'], 'tenant-two')).token)).expect(404);
+      await lab
+        .api()
+        .get(`/api/v1/captures/${captured.id}`)
+        .set(bearer((await lab.person('m', ['clinician'], 'tenant-two')).token))
+        .expect(404);
       await lab.api().get(`/api/v1/captures/not-a-uuid`).set(bearer(clinician.token)).expect(400);
     });
   });
@@ -209,7 +244,7 @@ const MAX_BURNERS = 40;
       return { a: a!, b: b!, c: c!, d: d!, captureId: capture.id as string, reportId: up.reportId };
     }
 
-    it('an independent reviewer can accept; the record carries the capture\'s hash and version and a note digest, never the note', async () => {
+    it("an independent reviewer can accept; the record carries the capture's hash and version and a note digest, never the note", async () => {
       const { captureId } = await scenario();
       const reviewer = await lab.person('rev', ['reviewer']);
       const res = await lab.decide(reviewer, captureId, { decision: 'accepted', note: 'Looks right against the PDF.' }).expect(201);
@@ -253,13 +288,19 @@ const MAX_BURNERS = 40;
       const { captureId } = await scenario();
       const r = await lab.person('r', ['reviewer']);
       for (const body of [
-        {}, { decision: 'maybe' }, { decision: 'accepted', textSha256: 'a'.repeat(64) }, { decision: 'accepted', popplerVersion: '1.0' },
-        { decision: 'accepted', note: '' }, { decision: 'accepted', note: 'x'.repeat(1001) }, { decision: 'accepted', note: 7 },
-      ]) await lab.decide(r, captureId, body).expect(400);
+        {},
+        { decision: 'maybe' },
+        { decision: 'accepted', textSha256: 'a'.repeat(64) },
+        { decision: 'accepted', popplerVersion: '1.0' },
+        { decision: 'accepted', note: '' },
+        { decision: 'accepted', note: 'x'.repeat(1001) },
+        { decision: 'accepted', note: 7 },
+      ])
+        await lab.decide(r, captureId, body).expect(400);
       expect(await lab.count('capture_acceptances', 'capture_id = $1', [captureId])).toBe(0);
     });
 
-    it('another tenant\'s capture, and an unknown one, are 404', async () => {
+    it("another tenant's capture, and an unknown one, are 404", async () => {
       const { captureId } = await scenario();
       await lab.decide(await lab.person('m', ['reviewer'], 'tenant-two'), captureId, { decision: 'accepted' }).expect(404);
       await lab.decide(await lab.person('r', ['reviewer']), '00000000-0000-4000-8000-000000000000', { decision: 'accepted' }).expect(404);
@@ -313,7 +354,9 @@ const MAX_BURNERS = 40;
     it('no link for a report whose file is not uploaded (409), and none for a report of another type', async () => {
       const clinician = await lab.person('clin', ['clinician']);
       const pending = await lab.uploadedLabPdf(clinician, fixturePdf('D01'), { complete: false });
-      expect((await lab.api().get(`/api/v1/reports/${pending.reportId}/download-url`).set(bearer(clinician.token)).expect(409)).body.error.details[0].reason).toBe('source-unpinned');
+      expect((await lab.api().get(`/api/v1/reports/${pending.reportId}/download-url`).set(bearer(clinician.token)).expect(409)).body.error.details[0].reason).toBe(
+        'source-unpinned',
+      );
     });
   });
 

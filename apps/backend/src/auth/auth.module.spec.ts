@@ -30,7 +30,10 @@ describe('AuthModule picks the verifier from the environment', () => {
 
   it('cognito: derives the issuer from region + pool id, and the client id from the settings', async () => {
     const verifier = await verifierFor({
-      AUTH_VERIFIER: 'cognito', COGNITO_REGION: 'us-east-2', COGNITO_USER_POOL_ID: 'us-east-2_AbCdEf123', COGNITO_APP_CLIENT_ID: 'client-abc',
+      AUTH_VERIFIER: 'cognito',
+      COGNITO_REGION: 'us-east-2',
+      COGNITO_USER_POOL_ID: 'us-east-2_AbCdEf123',
+      COGNITO_APP_CLIENT_ID: 'client-abc',
     });
     expect(verifier).toBeInstanceOf(CognitoTokenVerifier);
     expect(optionsOf(verifier)).toMatchObject({
@@ -42,7 +45,10 @@ describe('AuthModule picks the verifier from the environment', () => {
 
   it('cognito with the development overrides (fake identity provider) uses them', async () => {
     const verifier = await verifierFor({
-      AUTH_VERIFIER: 'cognito', COGNITO_APP_CLIENT_ID: 'c', COGNITO_ISSUER: 'http://127.0.0.1:4010', COGNITO_JWKS_URI: 'http://127.0.0.1:4010/keys',
+      AUTH_VERIFIER: 'cognito',
+      COGNITO_APP_CLIENT_ID: 'c',
+      COGNITO_ISSUER: 'http://127.0.0.1:4010',
+      COGNITO_JWKS_URI: 'http://127.0.0.1:4010/keys',
     });
     expect(optionsOf(verifier)).toMatchObject({ issuer: 'http://127.0.0.1:4010', jwksUri: 'http://127.0.0.1:4010/keys', clientId: 'c' });
   });
@@ -77,7 +83,7 @@ describe('AuthModule picks the capability issuer from the environment', () => {
     expect(createCapabilityIssuer(loadEnv(hmac))).toBeInstanceOf(NullCapabilityIssuer);
   });
 
-  it('with ISSUER_URL the application\'s port is the HTTP client, built from that address', async () => {
+  it("with ISSUER_URL the application's port is the HTTP client, built from that address", async () => {
     const issuer = await wiredIssuer({ ...hmac, ISSUER_URL: 'http://127.0.0.1:41234' });
     expect(issuer).toBeInstanceOf(HttpCapabilityIssuer);
     expect(issuer).not.toBeInstanceOf(NullCapabilityIssuer);

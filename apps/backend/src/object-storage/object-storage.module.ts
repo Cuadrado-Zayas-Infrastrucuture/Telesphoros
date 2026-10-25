@@ -12,10 +12,12 @@ import type { RecoveryObjectStorage } from './recovery-object-storage';
 export class ObjectStorageModule {
   static register(env: Env, recovery?: RecoveryObjectStorage): DynamicModule {
     if (env.LOCAL_STORAGE_RUN_ID) assertLocalStorage(env);
-    if (recovery) return {
-      module: ObjectStorageModule,
-      providers: [{ provide: ObjectStorage, useValue: recovery }], exports: [ObjectStorage],
-    };
+    if (recovery)
+      return {
+        module: ObjectStorageModule,
+        providers: [{ provide: ObjectStorage, useValue: recovery }],
+        exports: [ObjectStorage],
+      };
     if (env.OBJECT_STORAGE_DRIVER === 's3') {
       return {
         module: ObjectStorageModule,
@@ -25,7 +27,12 @@ export class ObjectStorageModule {
             useFactory: () =>
               new S3ObjectStorage(
                 // Credentials come from the default provider chain (an IAM role in AWS), never from our config.
-                new S3Client({ region: env.AWS_REGION, endpoint: env.S3_ENDPOINT, forcePathStyle: env.S3_FORCE_PATH_STYLE, ...(env.LOCAL_STORAGE_RUN_ID ? { credentials: { accessKeyId: 'local-synthetic', secretAccessKey: 'local-synthetic' }, maxAttempts: 1 } : {}) }),
+                new S3Client({
+                  region: env.AWS_REGION,
+                  endpoint: env.S3_ENDPOINT,
+                  forcePathStyle: env.S3_FORCE_PATH_STYLE,
+                  ...(env.LOCAL_STORAGE_RUN_ID ? { credentials: { accessKeyId: 'local-synthetic', secretAccessKey: 'local-synthetic' }, maxAttempts: 1 } : {}),
+                }),
                 env.REPORTS_BUCKET!,
               ),
           },

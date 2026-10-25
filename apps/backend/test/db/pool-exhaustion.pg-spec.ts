@@ -17,10 +17,14 @@ afterAll(async () => {
 describe('a full connection pool (audit: pool exhaustion answered 500)', () => {
   it('answers 503 with a Retry-After to the request that waits too long, and the held request is untouched', async () => {
     let release!: () => void;
-    const held = db.withTenant('alice', (c) => new Promise<string>((resolve) => {
-      release = () => resolve('held work finished');
-      void c.query('SELECT 1');
-    }));
+    const held = db.withTenant(
+      'alice',
+      (c) =>
+        new Promise<string>((resolve) => {
+          release = () => resolve('held work finished');
+          void c.query('SELECT 1');
+        }),
+    );
     await new Promise((resolve) => setTimeout(resolve, 200)); // let the first request take the only connection
     const error = await db.withTenant('alice', async () => 'never').catch((e: unknown) => e);
     expect(error).toBeInstanceOf(AppException);

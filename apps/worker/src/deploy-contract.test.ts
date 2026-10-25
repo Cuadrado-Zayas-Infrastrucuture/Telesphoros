@@ -11,7 +11,10 @@ import { shutdownDeadlineMs } from './shutdown';
  * (worker.guard.test.mjs) pins the settings; this proves the two sides still agree.
  */
 const tf = readFileSync(new URL('../../../infrastructure/terraform/worker.tf', import.meta.url), 'utf8');
-const code = tf.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+const code = tf
+  .split('\n')
+  .filter((l) => !/^\s*#/.test(l))
+  .join('\n');
 
 const PLACEHOLDERS: Record<string, string> = {
   'aws_s3_bucket.reports.bucket': 'telesphoros-staging-reports-123456789012',
@@ -39,7 +42,14 @@ describe('worker.tf and the worker agree', () => {
     const env = environment();
     expect(Object.keys(env).length).toBeGreaterThanOrEqual(8);
     const c = loadConfig({ ...env, ...LOGIN }, 'ip-10-0-0-1');
-    expect(c).toMatchObject({ databaseTls: 'require', healthHost: '127.0.0.1', healthPort: 8081, testJobs: false, reportsBucket: 'telesphoros-staging-reports-123456789012', awsRegion: 'us-east-2' });
+    expect(c).toMatchObject({
+      databaseTls: 'require',
+      healthHost: '127.0.0.1',
+      healthPort: 8081,
+      testJobs: false,
+      reportsBucket: 'telesphoros-staging-reports-123456789012',
+      awsRegion: 'us-east-2',
+    });
     // The login arrives only as the secret, never as plain environment.
     expect(env).not.toHaveProperty('DATABASE_URL');
   });
@@ -200,7 +210,12 @@ describe('the alarm patterns match the lines the worker writes', () => {
   // The two tickers are built here exactly as main.ts builds them (the names are pinned against main.ts below), and fail the way a database that does not answer does.
   const emitted = async (name: string, run: () => Promise<number>): Promise<Json[]> => {
     const out: Json[] = [];
-    await new Ticker(name, run, 60, jsonLogger((l) => out.push(JSON.parse(l) as Json))).tick();
+    await new Ticker(
+      name,
+      run,
+      60,
+      jsonLogger((l) => out.push(JSON.parse(l) as Json)),
+    ).tick();
     return out;
   };
   const refused = async (): Promise<number> => {
@@ -222,7 +237,8 @@ describe('the alarm patterns match the lines the worker writes', () => {
   it('a healthy tick, with or without work, raises neither', async () => {
     const lines_ = [...(await emitted('outbox-relay', async () => 0)), ...(await emitted('outbox-relay', async () => 3)), ...(await emitted('schedule', async () => 2))];
     expect(lines_.length).toBeGreaterThan(0); // the ones with work log "...-ran"; the silent one logs nothing
-    for (const l of lines_) for (const name of ['worker_relay_failed', 'worker_schedule_failed']) expect(matches(filterPattern(name), l), `${String(l.event)} / ${name}`).toBe(false);
+    for (const l of lines_)
+      for (const name of ['worker_relay_failed', 'worker_schedule_failed']) expect(matches(filterPattern(name), l), `${String(l.event)} / ${name}`).toBe(false);
   });
 
   it('the line a faulting worker writes raises the process-fault filter, and no other worker filter', async () => {
@@ -230,7 +246,11 @@ describe('the alarm patterns match the lines the worker writes', () => {
     const { installProcessFaultHandlers } = await import('./process-faults');
     const target = new EventEmitter();
     const out: Json[] = [];
-    installProcessFaultHandlers(target, jsonLogger((l) => out.push(JSON.parse(l) as Json)), () => undefined);
+    installProcessFaultHandlers(
+      target,
+      jsonLogger((l) => out.push(JSON.parse(l) as Json)),
+      () => undefined,
+    );
     target.emit('unhandledRejection', new Error('patient Jane Doe'));
     expect(out).toHaveLength(1);
     expect(matches(filterPattern('worker_process_fault'), out[0]!)).toBe(true);
@@ -245,7 +265,10 @@ describe('the alarm patterns match the lines the worker writes', () => {
   });
 
   it('the failure alarms need a failure in each of three consecutive minutes, and silence is healthy', () => {
-    for (const [alarm, metric] of [['worker_relay_failing', 'OutboxRelayFailures'], ['worker_schedule_failing', 'ScheduleFailures']] as const) {
+    for (const [alarm, metric] of [
+      ['worker_relay_failing', 'OutboxRelayFailures'],
+      ['worker_schedule_failing', 'ScheduleFailures'],
+    ] as const) {
       const at = code.indexOf(`resource "aws_cloudwatch_metric_alarm" "${alarm}"`);
       const block = code.slice(at, code.indexOf('\n}', at));
       expect(block).toContain(`metric_name         = "${metric}"`);

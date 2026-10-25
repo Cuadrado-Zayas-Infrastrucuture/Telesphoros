@@ -1,7 +1,7 @@
 import { runInNewContext } from 'node:vm';
 import { canonicalHash, canonicalJson, CanonicalJsonError, sha256Hex } from './canonical-json';
 
-describe('canonical JSON (the reader\'s own serialization)', () => {
+describe("canonical JSON (the reader's own serialization)", () => {
   it('sorts keys by UTF-16 code units and writes no whitespace', () => {
     expect(canonicalJson({ b: 1, a: [true, null, 'x'], '€': 2, B: 3 })).toBe('{"B":3,"a":[true,null,"x"],"b":1,"€":2}');
   });
@@ -28,7 +28,9 @@ describe('canonical JSON (the reader\'s own serialization)', () => {
     const foreign = runInNewContext('({ b: [1, { c: null }], a: "x" })') as unknown;
     expect(canonicalJson(foreign)).toBe('{"a":"x","b":[1,{"c":null}]}');
     expect(canonicalJson(Object.create(null))).toBe('{}');
-    class Box { value = 1; }
+    class Box {
+      value = 1;
+    }
     expect(() => canonicalJson(new Box())).toThrow(CanonicalJsonError);
   });
 

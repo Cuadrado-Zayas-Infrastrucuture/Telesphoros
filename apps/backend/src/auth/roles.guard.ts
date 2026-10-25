@@ -10,13 +10,13 @@ import { accessEvent } from './security-audit.interceptor';
 /** Global guard, runs after AuthGuard: enforces @Roles() when a route declares it. */
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector, private readonly audit: SecurityAuditStore) {}
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly audit: SecurityAuditStore,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const required = this.reflector.getAllAndOverride<Role[] | undefined>(ROLES_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+    const required = this.reflector.getAllAndOverride<Role[] | undefined>(ROLES_KEY, [context.getHandler(), context.getClass()]);
     if (!required || required.length === 0) return true;
 
     const req = context.switchToHttp().getRequest<Request>();

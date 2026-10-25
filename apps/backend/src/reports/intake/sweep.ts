@@ -28,7 +28,11 @@ export async function sweepTenantUploads(client: Client, tenantId: string, optio
     // The one implementation is a database function owned by the queue's definer role (migration 0024), which the scheduled job also uses; it binds the organization
     // itself, so row-level security still applies to every statement.
     await client.query('SET LOCAL ROLE telesphoros_jobs');
-    const { rows } = await client.query<{ released: number; released_bytes: string; objects_kept: number }>('SELECT * FROM uploads_sweep($1, $2, $3)', [tenantId, options.graceSeconds, options.dryRun]);
+    const { rows } = await client.query<{ released: number; released_bytes: string; objects_kept: number }>('SELECT * FROM uploads_sweep($1, $2, $3)', [
+      tenantId,
+      options.graceSeconds,
+      options.dryRun,
+    ]);
     await client.query(options.dryRun ? 'ROLLBACK' : 'COMMIT');
     return { tenantId, released: Number(rows[0]!.released), releasedBytes: Number(rows[0]!.released_bytes), objectsKept: Number(rows[0]!.objects_kept) };
   } catch (error) {
@@ -68,12 +72,18 @@ export async function runUploads(client: Client, args: string[], out: (line: str
     return 2;
   }
   const tenants = tenant ? [tenant] : (await client.query<{ id: string }>('SELECT id FROM tenants ORDER BY id')).rows.map((r) => r.id);
-  let released = 0, bytes = 0, kept = 0;
+  let released = 0,
+    bytes = 0,
+    kept = 0;
   for (const id of tenants) {
     const r = await sweepTenantUploads(client, id, { graceSeconds: grace, dryRun });
-    released += r.released; bytes += r.releasedBytes; kept += r.objectsKept;
+    released += r.released;
+    bytes += r.releasedBytes;
+    kept += r.objectsKept;
     if (r.released) out(`${dryRun ? 'would release' : 'released'}: tenant=${id} attempts=${r.released} bytes=${r.releasedBytes} objects-kept=${r.objectsKept}`);
   }
-  out(`${dryRun ? 'dry run: nothing changed. ' : ''}${dryRun ? 'would release' : 'released'} ${released} attempt(s), ${bytes} byte(s) of quota, across ${tenants.length} organization(s); ${kept} of them may have left an object in the bucket (never deleted here)`);
+  out(
+    `${dryRun ? 'dry run: nothing changed. ' : ''}${dryRun ? 'would release' : 'released'} ${released} attempt(s), ${bytes} byte(s) of quota, across ${tenants.length} organization(s); ${kept} of them may have left an object in the bucket (never deleted here)`,
+  );
   return 0;
 }

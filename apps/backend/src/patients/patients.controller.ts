@@ -28,30 +28,21 @@ export class PatientsController {
 
   @Get()
   @Roles(...CLINICAL_READ_ROLES)
-  async list(
-    @CurrentPrincipal() principal: Principal,
-    @Query(new ZodValidationPipe(patientListQuerySchema)) query: PatientListQuery,
-  ): Promise<Paginated<PatientDto>> {
+  async list(@CurrentPrincipal() principal: Principal, @Query(new ZodValidationPipe(patientListQuerySchema)) query: PatientListQuery): Promise<Paginated<PatientDto>> {
     const { items, total } = await this.service.list(principal, query);
     return { data: items.map(toPatientDto), meta: buildMeta(query.page, query.pageSize, total) };
   }
 
   @Get(':id')
   @Roles(...CLINICAL_READ_ROLES)
-  async get(
-    @CurrentPrincipal() principal: Principal,
-    @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam,
-  ): Promise<PatientDto> {
+  async get(@CurrentPrincipal() principal: Principal, @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam): Promise<PatientDto> {
     return toPatientDto(await this.service.get(principal, id));
   }
 
   @Post()
   @Roles(...CAN_WRITE)
   @HttpCode(201)
-  async create(
-    @CurrentPrincipal() principal: Principal,
-    @Body(new ZodValidationPipe(patientCreateSchema)) body: PatientCreate,
-  ): Promise<PatientDto> {
+  async create(@CurrentPrincipal() principal: Principal, @Body(new ZodValidationPipe(patientCreateSchema)) body: PatientCreate): Promise<PatientDto> {
     return toPatientDto(await this.service.create(principal, body));
   }
 
@@ -68,10 +59,7 @@ export class PatientsController {
   @Delete(':id')
   @Roles(...CAN_WRITE)
   @HttpCode(204)
-  async remove(
-    @CurrentPrincipal() principal: Principal,
-    @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam,
-  ): Promise<void> {
+  async remove(@CurrentPrincipal() principal: Principal, @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam): Promise<void> {
     await this.service.remove(principal, id);
   }
 }

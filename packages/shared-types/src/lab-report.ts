@@ -59,7 +59,10 @@ export const MAX_NOTE_LENGTH = 1000;
 export const decisionCreateSchema = z.strictObject({
   decision: z.enum(['accepted', 'rejected']),
   note: z.string().trim().min(1).max(MAX_NOTE_LENGTH).optional(),
-  requestId: z.uuid().transform((value) => value.toLowerCase()).optional(),
+  requestId: z
+    .uuid()
+    .transform((value) => value.toLowerCase())
+    .optional(),
 });
 export type DecisionCreate = z.infer<typeof decisionCreateSchema>;
 
@@ -71,7 +74,13 @@ export type EvaluationCreate = z.infer<typeof evaluationCreateSchema>;
 
 export const CORRECTION_KINDS = ['retraction', 'supersession', 'reinstatement'] as const;
 export const CORRECTION_REASON_CODES = [
-  'capture-wrong', 'wrong-patient', 'input-misread', 'knowledge-error-found', 'software-defect', 'clinical-review-disagrees', 'retraction-mistaken',
+  'capture-wrong',
+  'wrong-patient',
+  'input-misread',
+  'knowledge-error-found',
+  'software-defect',
+  'clinical-review-disagrees',
+  'retraction-mistaken',
 ] as const;
 export type CorrectionKind = (typeof CORRECTION_KINDS)[number];
 export type CorrectionReasonCode = (typeof CORRECTION_REASON_CODES)[number];
@@ -198,32 +207,53 @@ export type EvaluationDto = z.infer<typeof evaluationDtoSchema>;
 export const evaluationSummaryDtoSchema = evaluationDtoSchema.omit({ geneInputs: true });
 export type EvaluationSummaryDto = z.infer<typeof evaluationSummaryDtoSchema>;
 
-export const evaluationListQuerySchema = paginationQuerySchema.extend({
-  reportId: z.uuid().optional(),
-  patientId: z.uuid().optional(),
-  /** `current=true` keeps only the current evaluation of each report. Only the value `true` is accepted. */
-  current: z.literal('true').optional(),
-}).refine((query) => Number.isSafeInteger((query.page - 1) * query.pageSize), { path: ['page'], message: 'Page offset is too large.' });
+export const evaluationListQuerySchema = paginationQuerySchema
+  .extend({
+    reportId: z.uuid().optional(),
+    patientId: z.uuid().optional(),
+    /** `current=true` keeps only the current evaluation of each report. Only the value `true` is accepted. */
+    current: z.literal('true').optional(),
+  })
+  .refine((query) => Number.isSafeInteger((query.page - 1) * query.pageSize), { path: ['page'], message: 'Page offset is too large.' });
 export type EvaluationListQuery = z.infer<typeof evaluationListQuerySchema>;
 
 /** Read-only dispute impact listing. The cursor advances over historical candidates, including excluded file versions. */
 export const cellUsageQuerySchema = z.strictObject({
-  afterSeq: z.string().regex(/^(0|[1-9][0-9]{0,18})$/).refine((s) => /^(0|[1-9][0-9]{0,18})$/.test(s) && BigInt(s) <= 9223372036854775807n).default('0'),
-  limit: z.string().regex(/^[1-9][0-9]{0,2}$/).transform(Number).pipe(z.number().int().max(100)).default(50),
+  afterSeq: z
+    .string()
+    .regex(/^(0|[1-9][0-9]{0,18})$/)
+    .refine((s) => /^(0|[1-9][0-9]{0,18})$/.test(s) && BigInt(s) <= 9223372036854775807n)
+    .default('0'),
+  limit: z
+    .string()
+    .regex(/^[1-9][0-9]{0,2}$/)
+    .transform(Number)
+    .pipe(z.number().int().max(100))
+    .default(50),
 });
 export type CellUsageQuery = z.infer<typeof cellUsageQuerySchema>;
 export const cellUsageDtoSchema = z.strictObject({
   disputeId: z.uuid(),
-  entries: z.array(z.strictObject({
-    evaluationId: z.uuid(), reportId: z.uuid(), createdAt: timestamp,
-    state: z.enum(['active', 'retracted', 'superseded']),
-    matches: z.array(z.strictObject({
-      resultIndex: z.number().int().min(0), drug: z.string(), outcome: z.string(),
-      identity: z.enum(['exact-file', 'historical-identity-unverified']), wordingExposed: z.boolean(),
-    })),
-  })),
+  entries: z.array(
+    z.strictObject({
+      evaluationId: z.uuid(),
+      reportId: z.uuid(),
+      createdAt: timestamp,
+      state: z.enum(['active', 'retracted', 'superseded']),
+      matches: z.array(
+        z.strictObject({
+          resultIndex: z.number().int().min(0),
+          drug: z.string(),
+          outcome: z.string(),
+          identity: z.enum(['exact-file', 'historical-identity-unverified']),
+          wordingExposed: z.boolean(),
+        }),
+      ),
+    }),
+  ),
   nextAfterSeq: z.string().nullable(),
-  clinicalUse: z.literal(CLINICAL_USE), actionable: z.literal(false),
+  clinicalUse: z.literal(CLINICAL_USE),
+  actionable: z.literal(false),
 });
 export type CellUsageDto = z.infer<typeof cellUsageDtoSchema>;
 
@@ -246,7 +276,10 @@ export const disputeCreateSchema = z.strictObject({
    * Optional. Send the same one when repeating a request you cannot be sure went through, and the dispute already raised under it is returned (with its status now)
    * instead of a second one being made; the same id with another cell or note is refused with 409 `request-id-reused`.
    */
-  requestId: z.uuid().transform((value) => value.toLowerCase()).optional(),
+  requestId: z
+    .uuid()
+    .transform((value) => value.toLowerCase())
+    .optional(),
 });
 export type DisputeCreate = z.infer<typeof disputeCreateSchema>;
 
@@ -257,7 +290,8 @@ export const disputeDecisionCreateSchema = z.strictObject({
 });
 export type DisputeDecisionCreate = z.infer<typeof disputeDecisionCreateSchema>;
 
-export const disputeListQuerySchema = paginationQuerySchema.extend({ status: z.enum(DISPUTE_STATUSES).optional() })
+export const disputeListQuerySchema = paginationQuerySchema
+  .extend({ status: z.enum(DISPUTE_STATUSES).optional() })
   .refine((query) => Number.isSafeInteger((query.page - 1) * query.pageSize), { path: ['page'], message: 'Page offset is too large.' });
 export type DisputeListQuery = z.infer<typeof disputeListQuerySchema>;
 
@@ -285,9 +319,20 @@ export const ledgerVerifyQuerySchema = z.strictObject({ full: z.enum(['true', 'f
 export type LedgerVerifyQuery = z.infer<typeof ledgerVerifyQuerySchema>;
 
 export const LEDGER_FAILURE_KINDS = [
-  'seq-gap', 'prev-hash-mismatch', 'record-hash-mismatch', 'unsupported-hash-version', 'unsupported-projection-version',
-  'payload-mismatch', 'record-missing', 'record-event-mismatch', 'row-without-event', 'note-digest-mismatch', 'note-redaction-invalid',
-  'head-mismatch', 'checkpoint-mismatch', 'checkpoint-payload-mismatch',
+  'seq-gap',
+  'prev-hash-mismatch',
+  'record-hash-mismatch',
+  'unsupported-hash-version',
+  'unsupported-projection-version',
+  'payload-mismatch',
+  'record-missing',
+  'record-event-mismatch',
+  'row-without-event',
+  'note-digest-mismatch',
+  'note-redaction-invalid',
+  'head-mismatch',
+  'checkpoint-mismatch',
+  'checkpoint-payload-mismatch',
 ] as const;
 
 /**

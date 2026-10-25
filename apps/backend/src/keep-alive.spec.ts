@@ -30,7 +30,7 @@ describe('the API keeps an idle connection open longer than the load balancer do
     expect((app.getHttpServer() as { headersTimeout: number }).headersTimeout).toBe(30_000);
   });
 
-  it('detects the default (control: Node\'s own 5 s is below the balancer\'s idle timeout)', async () => {
+  it("detects the default (control: Node's own 5 s is below the balancer's idle timeout)", async () => {
     const { createServer } = await import('node:http');
     expect(createServer().keepAliveTimeout).toBeLessThan(LOAD_BALANCER_IDLE_MS);
   });

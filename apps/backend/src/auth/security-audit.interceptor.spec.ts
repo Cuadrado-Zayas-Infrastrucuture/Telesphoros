@@ -2,14 +2,20 @@ import type { CallHandler, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { lastValueFrom, of } from 'rxjs';
 import { IS_PUBLIC_KEY } from './decorators';
-import type { SecurityAuditStore} from './security-audit';
+import type { SecurityAuditStore } from './security-audit';
 import { InMemorySecurityAuditStore, type SecurityAuditEvent } from './security-audit';
 import { SecurityAuditInterceptor } from './security-audit.interceptor';
 
 class PatientsController {
-  create() { return undefined; }
-  replace() { return undefined; }
-  list() { return undefined; }
+  create() {
+    return undefined;
+  }
+  replace() {
+    return undefined;
+  }
+  list() {
+    return undefined;
+  }
 }
 
 const SUBJECT = '2e40eac9-bc8e-4d41-a319-c70775c941aa';
@@ -23,8 +29,21 @@ function context(method: string, options: { params?: Record<string, string>; pri
 
 function setup(store: SecurityAuditStore = new InMemorySecurityAuditStore()) {
   const order: string[] = [];
-  const handler: CallHandler = { handle: () => { order.push('handler'); return of('done'); } };
-  const recording = new Proxy(store, { get: (t, p, r) => (p === 'record' ? async (e: SecurityAuditEvent) => { order.push(`audit:${e.type}:${e.outcome}`); return t.record(e); } : Reflect.get(t, p, r)) });
+  const handler: CallHandler = {
+    handle: () => {
+      order.push('handler');
+      return of('done');
+    },
+  };
+  const recording = new Proxy(store, {
+    get: (t, p, r) =>
+      p === 'record'
+        ? async (e: SecurityAuditEvent) => {
+            order.push(`audit:${e.type}:${e.outcome}`);
+            return t.record(e);
+          }
+        : Reflect.get(t, p, r),
+  });
   return { interceptor: new SecurityAuditInterceptor(new Reflector(), recording), handler, order, store };
 }
 
@@ -34,7 +53,15 @@ describe('the audit interceptor on a write', () => {
     await lastValueFrom(interceptor.intercept(context(method, { params: { id: SUBJECT } }), handler));
     expect(order).toEqual(['audit:private-write:accepted', 'handler']);
     expect((store as InMemorySecurityAuditStore).events).toEqual([
-      { type: 'private-write', outcome: 'accepted', tenantId: 'tenant-a', actorSub: 'user-a', routeKey: 'PatientsController.create', subjectId: SUBJECT, requestId: 'synthetic-request-0001' },
+      {
+        type: 'private-write',
+        outcome: 'accepted',
+        tenantId: 'tenant-a',
+        actorSub: 'user-a',
+        routeKey: 'PatientsController.create',
+        subjectId: SUBJECT,
+        requestId: 'synthetic-request-0001',
+      },
     ]);
   });
 
@@ -48,14 +75,23 @@ describe('the audit interceptor on a write', () => {
   });
 
   it('does not run the handler when the audit row cannot be written (a write must not happen unrecorded)', async () => {
-    const failing: SecurityAuditStore = { record: async () => { throw new Error('audit unavailable'); } };
+    const failing: SecurityAuditStore = {
+      record: async () => {
+        throw new Error('audit unavailable');
+      },
+    };
     const { interceptor, handler, order } = setup(failing);
     await expect(lastValueFrom(interceptor.intercept(context('POST'), handler))).rejects.toThrow('audit unavailable');
     expect(order).not.toContain('handler');
   });
 
   it('records nothing for a public route, an unauthenticated request, or a method that changes nothing', async () => {
-    for (const [method, options] of [['POST', { public: true }], ['POST', { principal: false }], ['HEAD', {}], ['OPTIONS', {}]] as const) {
+    for (const [method, options] of [
+      ['POST', { public: true }],
+      ['POST', { principal: false }],
+      ['HEAD', {}],
+      ['OPTIONS', {}],
+    ] as const) {
       const { interceptor, handler, store } = setup();
       await lastValueFrom(interceptor.intercept(context(method, options), handler));
       expect({ method, options, events: (store as InMemorySecurityAuditStore).events }).toEqual({ method, options, events: [] });

@@ -8,8 +8,12 @@ export const MAX_SOURCE_SCALARS = 100000;
 export function parseRecordJson(raw: string): unknown {
   if (typeof raw !== 'string' || Buffer.byteLength(raw, 'utf8') > MAX_INPUT_BYTES) throw new Error('lookup-input-invalid');
   let at = 0;
-  const fail = (): never => { throw new Error('lookup-input-invalid'); };
-  const space = () => { while (/[ \t\r\n]/.test(raw[at] ?? 'x')) at += 1; };
+  const fail = (): never => {
+    throw new Error('lookup-input-invalid');
+  };
+  const space = () => {
+    while (/[ \t\r\n]/.test(raw[at] ?? 'x')) at += 1;
+  };
   const string = (): string => {
     const start = at++;
     while (at < raw.length) {
@@ -28,34 +32,54 @@ export function parseRecordJson(raw: string): unknown {
     space();
     if (raw[at] === '"') return string();
     if (raw[at] === '{') {
-      at += 1; space();
+      at += 1;
+      space();
       const result: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
       const seen = new Set<string>();
-      if (raw[at] === '}') { at += 1; return result; }
+      if (raw[at] === '}') {
+        at += 1;
+        return result;
+      }
       while (true) {
-        space(); if (raw[at] !== '"') return fail();
+        space();
+        if (raw[at] !== '"') return fail();
         const key = string();
         if (seen.has(key)) return fail();
-        seen.add(key); space();
+        seen.add(key);
+        space();
         if (raw[at++] !== ':') return fail();
-        result[key] = value(depth + 1); space();
+        result[key] = value(depth + 1);
+        space();
         const next = raw[at++];
         if (next === '}') return result;
         if (next !== ',') return fail();
       }
     }
     if (raw[at] === '[') {
-      at += 1; space(); const result: unknown[] = [];
-      if (raw[at] === ']') { at += 1; return result; }
+      at += 1;
+      space();
+      const result: unknown[] = [];
+      if (raw[at] === ']') {
+        at += 1;
+        return result;
+      }
       while (true) {
-        result.push(value(depth + 1)); space();
+        result.push(value(depth + 1));
+        space();
         const next = raw[at++];
         if (next === ']') return result;
         if (next !== ',') return fail();
       }
     }
-    for (const [token, result] of [['true', true], ['false', false], ['null', null]] as const) {
-      if (raw.startsWith(token, at)) { at += token.length; return result; }
+    for (const [token, result] of [
+      ['true', true],
+      ['false', false],
+      ['null', null],
+    ] as const) {
+      if (raw.startsWith(token, at)) {
+        at += token.length;
+        return result;
+      }
     }
     const match = /^-?(?:0|[1-9][0-9]*)/.exec(raw.slice(at));
     if (!match) return fail();
@@ -65,7 +89,8 @@ export function parseRecordJson(raw: string): unknown {
     if (!Number.isSafeInteger(result)) return fail();
     return result;
   };
-  const result = value(0); space();
+  const result = value(0);
+  space();
   if (at !== raw.length) return fail();
   canonicalJson(result);
   return result;

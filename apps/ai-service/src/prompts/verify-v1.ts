@@ -24,16 +24,23 @@ export function buildVerifierPrompt(input: unknown, explanation: Explanation): {
   if (!parsed.success) throw new InputRefused();
   const r = parsed.data;
   const values: Record<string, string> = {
-    drug: r.drug, strength: r.strength, genes: r.genes.map(g => `${g.gene} ${g.phenotype}`).join('; '), recommendationText: r.recommendationText,
-    implication: r.implication ?? '(none)', statements: explanation.statements.map((s, i) => `${i}. ${s.kind}: ${s.text}`).join('\n'),
+    drug: r.drug,
+    strength: r.strength,
+    genes: r.genes.map((g) => `${g.gene} ${g.phenotype}`).join('; '),
+    recommendationText: r.recommendationText,
+    implication: r.implication ?? '(none)',
+    statements: explanation.statements.map((s, i) => `${i}. ${s.kind}: ${s.text}`).join('\n'),
   };
   const segments: Segment[] = [];
   for (const part of VERIFY_TEMPLATE_V1.split(/(\{\{\w+\}\})/)) {
     const m = /^\{\{(\w+)\}\}$/.exec(part);
-    if (m === null) { if (part !== '') segments.push({ from: 'template', text: part }); continue; }
+    if (m === null) {
+      if (part !== '') segments.push({ from: 'template', text: part });
+      continue;
+    }
     const text = values[m[1]];
     if (text === undefined || text.includes('<<<') || text.includes('>>>')) throw new InputRefused();
     segments.push({ from: 'field', field: m[1], text });
   }
-  return { prompt: segments.map(s => s.text).join(''), templateDigest: verifyTemplateDigest(), segments };
+  return { prompt: segments.map((s) => s.text).join(''), templateDigest: verifyTemplateDigest(), segments };
 }

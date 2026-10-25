@@ -67,8 +67,12 @@ function withDatabase(url: string, database: string): string {
  */
 export async function restoreAndVerify(options: RestoreOptions): Promise<RestoreReport> {
   const checks: Check[] = [];
-  const record = (name: string, ok: boolean, detail: string) => { options.assertBudget?.(); checks.push({ name, ok, detail }); };
-  if (options.operationTimeoutMs !== undefined && (!Number.isSafeInteger(options.operationTimeoutMs) || options.operationTimeoutMs < 1)) throw new Error('Invalid restore operation timeout.');
+  const record = (name: string, ok: boolean, detail: string) => {
+    options.assertBudget?.();
+    checks.push({ name, ok, detail });
+  };
+  if (options.operationTimeoutMs !== undefined && (!Number.isSafeInteger(options.operationTimeoutMs) || options.operationTimeoutMs < 1))
+    throw new Error('Invalid restore operation timeout.');
 
   const database = options.targetDatabase ?? `restore_check_${randomBytes(5).toString('hex')}`;
   const keep = Boolean(options.keep || options.targetDatabase);
@@ -100,7 +104,11 @@ export async function restoreAndVerify(options: RestoreOptions): Promise<Restore
     }
   }
   if (manifest.formatVersion === 1 && !options.allowUnauthenticated) {
-    record('manifest signature', false, 'this backup is format 1: its manifest is not signed, so its checksum and role list cannot be trusted. Restore it only if you made it and kept the folder private, with --allow-unauthenticated; new backups made with --key-file are signed');
+    record(
+      'manifest signature',
+      false,
+      'this backup is format 1: its manifest is not signed, so its checksum and role list cannot be trusted. Restore it only if you made it and kept the folder private, with --allow-unauthenticated; new backups made with --key-file are signed',
+    );
     return failed();
   }
   if (manifest.formatVersion === 2) {
@@ -126,7 +134,11 @@ export async function restoreAndVerify(options: RestoreOptions): Promise<Restore
     return failed();
   }
   const actualSha = await sha256File(dumpPath);
-  record('backup file checksum', actualSha === manifest.dump.sha256, actualSha === manifest.dump.sha256 ? 'matches manifest' : 'DOES NOT match manifest (file corrupted or altered)');
+  record(
+    'backup file checksum',
+    actualSha === manifest.dump.sha256,
+    actualSha === manifest.dump.sha256 ? 'matches manifest' : 'DOES NOT match manifest (file corrupted or altered)',
+  );
   if (actualSha !== manifest.dump.sha256) return failed();
 
   // 2. Decrypt into a private temp dir (removed no matter what).
@@ -195,7 +207,7 @@ export async function restoreAndVerify(options: RestoreOptions): Promise<Restore
       await run('pg_restore', ['--exit-on-error', ...ownerFlags, `--dbname=${database}`, restoreFrom], pgEnv(options.adminUrl, database), options.operationTimeoutMs);
       record('pg_restore', true, 'completed without errors');
       await verify(restoredUrl, manifest, record, options.ledgerChainMaxEvents ?? RESTORE_CHAIN_MAX_EVENTS, options.operationTimeoutMs, options.assertBudget);
-      if (checks.every(check => check.ok)) await options.afterVerified?.(restoredUrl, manifest);
+      if (checks.every((check) => check.ok)) await options.afterVerified?.(restoredUrl, manifest);
     } catch (error) {
       record('pg_restore', false, describeRestoreFailure(error));
     } finally {
@@ -218,7 +230,14 @@ async function dropDatabase(adminUrl: string, database: string, timeoutMs?: numb
   }
 }
 
-async function verify(url: string, manifest: BackupManifest, record: (n: string, ok: boolean, d: string) => void, chainMaxEvents: number, timeoutMs?: number, assertBudget?: () => void) {
+async function verify(
+  url: string,
+  manifest: BackupManifest,
+  record: (n: string, ok: boolean, d: string) => void,
+  chainMaxEvents: number,
+  timeoutMs?: number,
+  assertBudget?: () => void,
+) {
   const db = new Client({ ...pgClientConfig(url), connectionTimeoutMillis: timeoutMs, query_timeout: timeoutMs });
   try {
     await db.connect();
@@ -257,15 +276,21 @@ async function verify(url: string, manifest: BackupManifest, record: (n: string,
     const rlsProblems = expectedNames.filter((name) => {
       const want = manifest.tables[name]!;
       const flag = flags.rows.find((f) => f.relname === name);
-      return flag?.relrowsecurity !== want.rlsEnabled || flag?.relforcerowsecurity !== want.rlsForced || (policies.rows.find((p) => p.tablename === name)?.n ?? 0) !== want.policies;
+      return (
+        flag?.relrowsecurity !== want.rlsEnabled || flag?.relforcerowsecurity !== want.rlsForced || (policies.rows.find((p) => p.tablename === name)?.n ?? 0) !== want.policies
+      );
     });
     record('row-level security settings', rlsProblems.length === 0, rlsProblems.length === 0 ? 'enabled, forced and policies intact' : `changed: ${rlsProblems.join(', ')}`);
 
     if (manifest.privileges) {
       const problems = diffPrivilegeFacts(manifest.privileges, await readPrivilegeFacts(db));
-      record('ownership and privileges', problems.length === 0,
-        problems.length === 0 ? `${manifest.privileges.ownership.length} owners and ${manifest.privileges.grants.length} privileges identical to the backup`
-          : `${problems.length} differences, e.g. ${problems.slice(0, 3).join('; ')}`);
+      record(
+        'ownership and privileges',
+        problems.length === 0,
+        problems.length === 0
+          ? `${manifest.privileges.ownership.length} owners and ${manifest.privileges.grants.length} privileges identical to the backup`
+          : `${problems.length} differences, e.g. ${problems.slice(0, 3).join('; ')}`,
+      );
     } else {
       record('ownership and privileges', true, 'not recorded in this (older) backup; restored without owners, as before');
     }
@@ -274,7 +299,11 @@ async function verify(url: string, manifest: BackupManifest, record: (n: string,
     // tables (migration 0011) have row-level security but give the application role nothing: it must not read them at all.
     const appPolicies = await db.query<{ tablename: string }>(`SELECT DISTINCT tablename FROM pg_policies WHERE schemaname = 'public' AND 'telesphoros_app' = ANY (roles::text[])`);
     const appTables = new Set(appPolicies.rows.map((r) => r.tablename));
-    await verifyIsolation(db, expectedNames.filter((name) => manifest.tables[name]!.rlsEnabled && appTables.has(name)), record);
+    await verifyIsolation(
+      db,
+      expectedNames.filter((name) => manifest.tables[name]!.rlsEnabled && appTables.has(name)),
+      record,
+    );
     await verifyLedgerChain(url, db, names, record, chainMaxEvents, timeoutMs, assertBudget);
   } finally {
     await db.end();
@@ -321,7 +350,15 @@ const RESTORE_CHAIN_MAX_EVENTS = 50_000_000;
  * Writes nothing (no checkpoint): a throwaway restore stays a throwaway. A backup from before the ledger has nothing to walk and says so;
  * a restored ledger that fails, or cannot finish, makes the restore "not ok".
  */
-async function verifyLedgerChain(url: string, db: Client, tables: string[], record: (n: string, ok: boolean, d: string) => void, maxEvents: number, timeoutMs?: number, assertBudget?: () => void) {
+async function verifyLedgerChain(
+  url: string,
+  db: Client,
+  tables: string[],
+  record: (n: string, ok: boolean, d: string) => void,
+  maxEvents: number,
+  timeoutMs?: number,
+  assertBudget?: () => void,
+) {
   const name = 'ledger chain';
   if (!tables.includes('ledger_events')) {
     record(name, true, 'not applicable: this backup predates the ledger');
@@ -347,19 +384,36 @@ async function verifyLedgerChain(url: string, db: Client, tables: string[], reco
     const problems: string[] = [];
     for (const [index, tenantId] of tenants.entries()) {
       assertBudget?.();
-      const result = await verifier.verify(tenantId, { mode: 'full', budgetMs: Math.min(timeoutMs ?? RESTORE_CHAIN_BUDGET_MS, RESTORE_CHAIN_BUDGET_MS), maxEvents, recordCheckpoint: false });
+      const result = await verifier.verify(tenantId, {
+        mode: 'full',
+        budgetMs: Math.min(timeoutMs ?? RESTORE_CHAIN_BUDGET_MS, RESTORE_CHAIN_BUDGET_MS),
+        maxEvents,
+        recordCheckpoint: false,
+      });
       assertBudget?.();
       events += result.eventsChecked;
       // Kinds and sequence numbers only: no tenant id and no value from a record reaches the report.
-      if (result.status === 'failed') problems.push(`ledger ${index + 1} of ${tenants.length} FAILED: ${[...new Set(result.failures.slice(0, 5).map((f) => `${f.kind}${f.seq === null ? '' : ` at ${f.seq}`}`))].join(', ')}`);
+      if (result.status === 'failed')
+        problems.push(
+          `ledger ${index + 1} of ${tenants.length} FAILED: ${[...new Set(result.failures.slice(0, 5).map((f) => `${f.kind}${f.seq === null ? '' : ` at ${f.seq}`}`))].join(', ')}`,
+        );
       else if (result.status === 'incomplete') problems.push(`ledger ${index + 1} of ${tenants.length} could not be walked to the end (${result.eventsChecked} events checked)`);
     }
-    record(name, problems.length === 0,
+    record(
+      name,
+      problems.length === 0,
       problems.length === 0
-        ? tenants.length === 0 ? 'no ledger events in this backup' : `${tenants.length} tenant ledger(s), ${events} events: chain, records and notes verified in full`
-        : problems.join('; '));
+        ? tenants.length === 0
+          ? 'no ledger events in this backup'
+          : `${tenants.length} tenant ledger(s), ${events} events: chain, records and notes verified in full`
+        : problems.join('; '),
+    );
   } catch (error) {
-    record(name, false, `the ledger could not be checked: ${error instanceof Error ? error.name : 'error'}${typeof (error as { code?: unknown }).code === 'string' ? ` ${(error as { code: string }).code}` : ''}`);
+    record(
+      name,
+      false,
+      `the ledger could not be checked: ${error instanceof Error ? error.name : 'error'}${typeof (error as { code?: unknown }).code === 'string' ? ` ${(error as { code: string }).code}` : ''}`,
+    );
   } finally {
     await pool.end();
   }

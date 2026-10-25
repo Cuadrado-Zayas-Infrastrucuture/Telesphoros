@@ -19,7 +19,7 @@ describe('appendEvent and the ledger gate', () => {
     expect(query).not.toHaveBeenCalled();
   });
 
-  it('asks the gate about THIS tenant: another tenant\'s contained record log does not stop the write', async () => {
+  it("asks the gate about THIS tenant: another tenant's contained record log does not stop the write", async () => {
     const status = new LedgerStatus();
     status.latch({ tenantId: 'other', kind: 'seq-gap', seq: '2', source: 'background', at: new Date(0) });
     const { client, query } = silentClient();

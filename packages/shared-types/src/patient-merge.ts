@@ -69,6 +69,9 @@ export type DuplicateCandidateDto = z.infer<typeof duplicateCandidateDtoSchema>;
 
 /** `GET /patients`: pagination plus whether merged-away patients are listed (default: no). Query strings arrive as text. */
 export const patientListQuerySchema = paginationQuerySchema.extend({
-  includeMerged: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+  includeMerged: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
 });
 export type PatientListQuery = z.infer<typeof patientListQuerySchema>;

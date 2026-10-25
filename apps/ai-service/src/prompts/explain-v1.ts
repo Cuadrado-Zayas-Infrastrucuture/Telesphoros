@@ -23,19 +23,32 @@ Implication: <<<{{implication}}>>>
 export const templateDigest = (): string => hashBytes(TEMPLATE_V1);
 
 export type Segment = { from: 'template'; text: string } | { from: 'field'; field: string; text: string };
-export class InputRefused extends Error { constructor() { super('INPUT_REFUSED'); } }
+export class InputRefused extends Error {
+  constructor() {
+    super('INPUT_REFUSED');
+  }
+}
 
 const fieldValue = (r: ExplainableResult, name: string): string => {
   switch (name) {
-    case 'drug': return r.drug;
-    case 'strength': return r.strength;
-    case 'genes': return r.genes.map(g => `${g.gene} ${g.phenotype}`).join('; ');
-    case 'guidelineId': return r.guidelineId;
-    case 'guidelineVersion': return r.guidelineVersion;
-    case 'locator': return [r.locator.table, r.locator.row, r.locator.column].filter(x => x !== null).join(', ');
-    case 'recommendationText': return r.recommendationText;
-    case 'implication': return r.implication ?? '(none)';
-    default: throw new InputRefused();
+    case 'drug':
+      return r.drug;
+    case 'strength':
+      return r.strength;
+    case 'genes':
+      return r.genes.map((g) => `${g.gene} ${g.phenotype}`).join('; ');
+    case 'guidelineId':
+      return r.guidelineId;
+    case 'guidelineVersion':
+      return r.guidelineVersion;
+    case 'locator':
+      return [r.locator.table, r.locator.row, r.locator.column].filter((x) => x !== null).join(', ');
+    case 'recommendationText':
+      return r.recommendationText;
+    case 'implication':
+      return r.implication ?? '(none)';
+    default:
+      throw new InputRefused();
   }
 };
 
@@ -47,13 +60,16 @@ export function buildPrompt(input: unknown): { prompt: string; templateDigest: s
   const segments: Segment[] = [];
   for (const part of TEMPLATE_V1.split(/(\{\{\w+\}\})/)) {
     const m = /^\{\{(\w+)\}\}$/.exec(part);
-    if (m === null) { if (part !== '') segments.push({ from: 'template', text: part }); continue; }
+    if (m === null) {
+      if (part !== '') segments.push({ from: 'template', text: part });
+      continue;
+    }
     const text = fieldValue(r, m[1]);
     // The data fences must not be escapable by the data itself.
     if (text.includes('<<<') || text.includes('>>>')) throw new InputRefused();
     segments.push({ from: 'field', field: m[1], text });
   }
-  return { prompt: segments.map(s => s.text).join(''), templateDigest: templateDigest(), segments };
+  return { prompt: segments.map((s) => s.text).join(''), templateDigest: templateDigest(), segments };
 }
 
 /** Appended to the template for the one repair attempt. It lists only fixed reason codes, never model text. */
@@ -62,12 +78,12 @@ export const REPAIR_SUFFIX_V1 = `Your previous reply was held for: {{reasons}}. 
 export const repairTemplateDigest = (): string => hashBytes(TEMPLATE_V1 + REPAIR_SUFFIX_V1);
 
 export function buildRepairPrompt(input: unknown, reasons: readonly string[]): { prompt: string; templateDigest: string; segments: Segment[] } {
-  if (reasons.length === 0 || reasons.length > 16 || reasons.some(x => !KNOWN_HOLD_REASONS.has(x))) throw new InputRefused();
+  if (reasons.length === 0 || reasons.length > 16 || reasons.some((x) => !KNOWN_HOLD_REASONS.has(x))) throw new InputRefused();
   const base = buildPrompt(input);
   const segments: Segment[] = [...base.segments];
   for (const part of REPAIR_SUFFIX_V1.split(/(\{\{\w+\}\})/)) {
     if (part === '{{reasons}}') segments.push({ from: 'field', field: 'reasons', text: [...new Set(reasons)].join(', ') });
     else if (part !== '') segments.push({ from: 'template', text: part });
   }
-  return { prompt: segments.map(s => s.text).join(''), templateDigest: repairTemplateDigest(), segments };
+  return { prompt: segments.map((s) => s.text).join(''), templateDigest: repairTemplateDigest(), segments };
 }

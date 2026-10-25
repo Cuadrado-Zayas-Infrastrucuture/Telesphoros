@@ -250,14 +250,19 @@ export function stableStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
   const record = value as Record<string, unknown>;
-  return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(',')}}`;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
+    .join(',')}}`;
 }
 
 /** HMAC-SHA-256 of the manifest with its own `mac` field left out, keyed from the master key and the backup's salt. */
 export function manifestMac(manifest: object, master: Buffer, saltHex: string): string {
   const { mac: _mac, ...body } = manifest as { mac?: unknown };
   void _mac;
-  return createHmac('sha256', macKeyOf(master, Buffer.from(saltHex, 'hex'))).update(stableStringify(body)).digest('hex');
+  return createHmac('sha256', macKeyOf(master, Buffer.from(saltHex, 'hex')))
+    .update(stableStringify(body))
+    .digest('hex');
 }
 
 export function verifyManifestMac(manifest: object, master: Buffer, saltHex: string): boolean {

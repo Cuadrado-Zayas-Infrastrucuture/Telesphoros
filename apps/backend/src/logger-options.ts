@@ -60,14 +60,42 @@ export function pinoHttpOptions(config: Pick<Env, 'LOG_LEVEL'>): Options {
  */
 export const LOG_FIELDS: ReadonlySet<string> = new Set([
   // pino-http, for every request (req is a binding and has its own serializer above)
-  'res', 'responseTime', 'route',
+  'res',
+  'responseTime',
+  'route',
   // Nest
-  'context', 'err',
+  'context',
+  'err',
   // the application's own lines
-  'event', 'message', 'requestId', 'tenantId', 'status', 'code', 'reason', 'type', 'source', 'outcome', 'mode', 'error', 'cause',
-  'eventsChecked', 'tenantsChecked', 'failures', 'containedTenants', 'globalHold', 'fullWalks', 'deferred',
+  'event',
+  'message',
+  'requestId',
+  'tenantId',
+  'status',
+  'code',
+  'reason',
+  'type',
+  'source',
+  'outcome',
+  'mode',
+  'error',
+  'cause',
+  'eventsChecked',
+  'tenantsChecked',
+  'failures',
+  'containedTenants',
+  'globalHold',
+  'fullWalks',
+  'deferred',
   // the report reader's failure line (services/report-reader)
-  'textChars', 'invalidAt', 'signal', 'durationMs', 'exitCode', 'stderrBytes', 'readerError', 'frames',
+  'textChars',
+  'invalidAt',
+  'signal',
+  'durationMs',
+  'exitCode',
+  'stderrBytes',
+  'readerError',
+  'frames',
 ]);
 
 const FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
@@ -81,7 +109,11 @@ function errorSummary(error: Error): { type: string; code?: string | number } {
 
 /** The stack's frame lines only: its first line is the message. */
 function frames(stack: string | undefined): string[] {
-  return (stack ?? '').split('\n').map((line) => line.trim()).filter((line) => line.startsWith('at ')).slice(0, MAX_FRAMES);
+  return (stack ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('at '))
+    .slice(0, MAX_FRAMES);
 }
 
 /** pino's arguments, projected: `(object, message?, ...)` with the object reduced to listed fields and no error message anywhere. */

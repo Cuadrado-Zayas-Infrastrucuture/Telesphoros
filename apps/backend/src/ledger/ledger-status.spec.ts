@@ -4,7 +4,13 @@ import type { FailureKind } from './verifier';
 
 const finding = (tenantId: string, kind: FailureKind = 'payload-mismatch'): Compromise => ({ tenantId, kind, seq: '3', source: 'startup', at: new Date(0) });
 const incident = (over: Partial<OpenIncident> & { tenantId: string | null }): OpenIncident => ({
-  id: `i-${over.tenantId ?? 'global'}`, scope: over.tenantId === null ? 'global' : 'tenant', kind: 'payload-mismatch', seq: '3', source: 'background', detectedAt: new Date(0), ...over,
+  id: `i-${over.tenantId ?? 'global'}`,
+  scope: over.tenantId === null ? 'global' : 'tenant',
+  kind: 'payload-mismatch',
+  seq: '3',
+  source: 'background',
+  detectedAt: new Date(0),
+  ...over,
 });
 
 describe('LedgerStatus', () => {
@@ -24,7 +30,7 @@ describe('LedgerStatus', () => {
     expect(status.compromised).toMatchObject({ tenantId: 't', kind: 'seq-gap' });
   });
 
-  it('has no method that clears a finding by itself: only the database\'s record of a clearance does', () => {
+  it("has no method that clears a finding by itself: only the database's record of a clearance does", () => {
     const names = Object.getOwnPropertyNames(LedgerStatus.prototype).filter((n) => n !== 'constructor');
     expect(names.filter((n) => /^(clear|reset|unlatch|release|reopen|unlock)/i.test(n))).toEqual([]);
   });

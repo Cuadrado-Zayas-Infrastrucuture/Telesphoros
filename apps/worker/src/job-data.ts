@@ -2,8 +2,12 @@ import type { Queryable } from '@telesphoros/jobs';
 import type { JobData, VerifyOutcome, VerifyTarget } from './deps';
 
 const target = (r: Record<string, unknown>): VerifyTarget => ({
-  reportId: r.report_id as string, storageKey: r.storage_key as string, objectVersion: r.object_version as string, sha256: r.sha256 as string,
-  sizeBytes: Number(r.size_bytes), contentType: r.content_type as string,
+  reportId: r.report_id as string,
+  storageKey: r.storage_key as string,
+  objectVersion: r.object_version as string,
+  sha256: r.sha256 as string,
+  sizeBytes: Number(r.size_bytes),
+  contentType: r.content_type as string,
 });
 
 /** The database side of the consumers: each call is one SQL function of migration 0024 (the worker login can call nothing else on these tables). */

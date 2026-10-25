@@ -19,7 +19,18 @@ import { type DatabaseTls, pgClientConfig } from './tls';
  * it would inherit the right to append), and the group privileges that matter are read back with `has_function_privilege`.
  */
 
-export const PRIVILEGE_GROUPS = ['telesphoros_app', 'telesphoros_ledger', 'telesphoros_redactor', 'telesphoros_ledger_verifier', 'telesphoros_ledger_operator', 'telesphoros_security_auditor', 'telesphoros_jobs', 'telesphoros_worker', 'telesphoros_capability', 'telesphoros_issuer'] as const;
+export const PRIVILEGE_GROUPS = [
+  'telesphoros_app',
+  'telesphoros_ledger',
+  'telesphoros_redactor',
+  'telesphoros_ledger_verifier',
+  'telesphoros_ledger_operator',
+  'telesphoros_security_auditor',
+  'telesphoros_jobs',
+  'telesphoros_worker',
+  'telesphoros_capability',
+  'telesphoros_issuer',
+] as const;
 
 /** The attributes the migrations give every group role (0002, 0005, 0006). A static test keeps this and those statements in agreement. */
 export const GROUP_ATTRIBUTES = 'NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS';
@@ -38,7 +49,13 @@ export interface LoginNames {
   issuer: string;
 }
 
-export const DEFAULT_LOGINS: LoginNames = { app: 'telesphoros_api', verifier: 'telesphoros_ledger_watch', migrator: 'telesphoros_migrator', worker: 'telesphoros_job_worker', issuer: 'telesphoros_session_issuer' };
+export const DEFAULT_LOGINS: LoginNames = {
+  app: 'telesphoros_api',
+  verifier: 'telesphoros_ledger_watch',
+  migrator: 'telesphoros_migrator',
+  worker: 'telesphoros_job_worker',
+  issuer: 'telesphoros_session_issuer',
+};
 
 export type LoginKind = keyof LoginNames;
 
@@ -168,15 +185,40 @@ const FUNCTION_RIGHTS: Record<'app' | 'verifier' | 'worker', Record<string, bool
 };
 
 /** The queue's functions (migrations 0023, 0024 and 0036), by who may run them. Checked only on a database that has them. */
-const WORKER_FUNCTIONS = ['job_claim', 'job_heartbeat', 'job_succeed', 'job_fail', 'job_release', 'job_schedule_tick', 'job_worker_seen', 'job_stats', 'outbox_relay', 'outbox_stats',
-  'file_verification_target', 'file_verification_stale', 'file_verification_record', 'job_uploads_sweep'];
+const WORKER_FUNCTIONS = [
+  'job_claim',
+  'job_heartbeat',
+  'job_succeed',
+  'job_fail',
+  'job_release',
+  'job_schedule_tick',
+  'job_worker_seen',
+  'job_stats',
+  'outbox_relay',
+  'outbox_stats',
+  'file_verification_target',
+  'file_verification_stale',
+  'file_verification_record',
+  'job_uploads_sweep',
+];
 const APPLICATION_FUNCTIONS = ['job_enqueue', 'outbox_append'];
 /** Queue functions a later migration added: checked only once they exist, as the capability's 0031 entries are, so a database that has not reached that migration is not called broken. */
 const LATER_QUEUE_FUNCTIONS = ['outbox_stats']; // 0036
 const OWNER_ONLY_FUNCTIONS = ['uploads_sweep', 'uploads_organization_run_id', 'job_held'];
 const JOB_TABLES = ['jobs', 'job_attempts', 'job_schedules', 'job_workers', 'outbox_events', 'outbox_routes', 'file_verifications'];
 /** Tables the worker login must not even read (it reaches data only through the queue's functions). */
-const WORKER_UNREADABLE = ['patients', 'reports', 'report_captures', 'report_upload_attempts', 'evaluations', 'ledger_events', 'tenant_memberships', 'security_events', 'tenants', 'invitations'];
+const WORKER_UNREADABLE = [
+  'patients',
+  'reports',
+  'report_captures',
+  'report_upload_attempts',
+  'evaluations',
+  'ledger_events',
+  'tenant_memberships',
+  'security_events',
+  'tenants',
+  'invitations',
+];
 
 const LEDGER_TABLES = ['ledger_events', 'ledger_heads', 'ledger_checkpoints'];
 
@@ -239,14 +281,14 @@ export async function provisionLogins(options: ProvisionOptions): Promise<Provis
     await ensureLogin('migrator');
     await makeOwner(admin, names.migrator, database);
     for (const group of ['telesphoros_ledger', 'telesphoros_redactor', 'telesphoros_jobs', 'telesphoros_capability']) {
-      const has = (await admin.query('SELECT pg_has_role($1, $2, \'SET\') AS ok', [names.migrator, group])).rows[0].ok as boolean;
+      const has = (await admin.query("SELECT pg_has_role($1, $2, 'SET') AS ok", [names.migrator, group])).rows[0].ok as boolean;
       if (!has) await admin.query(`GRANT ${q(group)} TO ${q(names.migrator)} WITH SET TRUE, INHERIT FALSE`);
     }
     const members: Array<Exclude<LoginKind, 'migrator'>> = ['app', 'verifier', 'worker', ...(options.secrets.issuer ? ['issuer' as const] : [])];
     for (const kind of members) {
       await ensureLogin(kind);
       const group = EXPECTED_GROUPS[kind][0]!;
-      const member = (await admin.query('SELECT pg_has_role($1, $2, \'MEMBER\') AS ok', [names[kind], group])).rows[0].ok as boolean;
+      const member = (await admin.query("SELECT pg_has_role($1, $2, 'MEMBER') AS ok", [names[kind], group])).rows[0].ok as boolean;
       if (!member) await admin.query(`GRANT ${q(group)} TO ${q(names[kind])}`);
     }
 
@@ -296,7 +338,7 @@ async function makeOwner(admin: Client, migrator: string, database: string): Pro
   if (owner === migrator) return;
   const q = (identifier: string) => admin.escapeIdentifier(identifier);
   // ALTER DATABASE ... OWNER needs the current owner to be able to SET ROLE to the new one; the temporary membership is removed straight afterwards.
-  const already = (await admin.query('SELECT pg_has_role(current_user, $1, \'SET\') AS ok', [migrator])).rows[0].ok as boolean;
+  const already = (await admin.query("SELECT pg_has_role(current_user, $1, 'SET') AS ok", [migrator])).rows[0].ok as boolean;
   if (!already) await admin.query(`GRANT ${q(migrator)} TO CURRENT_USER WITH SET TRUE, INHERIT FALSE`);
   try {
     await admin.query(`ALTER DATABASE ${q(database)} OWNER TO ${q(migrator)}`);
@@ -312,7 +354,7 @@ async function makeOwner(admin: Client, migrator: string, database: string): Pro
  */
 async function revokePublicTemporary(admin: Client, migrator: string, database: string): Promise<void> {
   const q = (identifier: string) => admin.escapeIdentifier(identifier);
-  const already = (await admin.query('SELECT pg_has_role(current_user, $1, \'SET\') AS ok', [migrator])).rows[0].ok as boolean;
+  const already = (await admin.query("SELECT pg_has_role(current_user, $1, 'SET') AS ok", [migrator])).rows[0].ok as boolean;
   if (!already) await admin.query(`GRANT ${q(migrator)} TO CURRENT_USER WITH SET TRUE, INHERIT FALSE`);
   try {
     await admin.query(`SET ROLE ${q(migrator)}`);
@@ -342,10 +384,23 @@ async function loginWorks(stored: string, name: string, tls: DatabaseTls): Promi
 
 /** The privilege groups exist and carry no login, superuser or other attribute the migrations did not give them. `groups` is a parameter only so a test can judge a group of its own. */
 export async function checkGroups(admin: Client, groups: readonly string[] = PRIVILEGE_GROUPS): Promise<Check> {
-  const rows = (await admin.query<{ rolname: string; ok: boolean }>(`SELECT rolname, NOT (rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolbypassrls OR rolreplication) AS ok FROM pg_roles WHERE rolname = ANY($1)`, [[...groups]])).rows;
+  const rows = (
+    await admin.query<{ rolname: string; ok: boolean }>(
+      `SELECT rolname, NOT (rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolbypassrls OR rolreplication) AS ok FROM pg_roles WHERE rolname = ANY($1)`,
+      [[...groups]],
+    )
+  ).rows;
   const bad = rows.filter((g) => !g.ok).map((g) => g.rolname);
   const ok = rows.length === groups.length && bad.length === 0;
-  return { name: 'privilege groups', ok, detail: bad.length ? `these groups have attributes the migrations did not give them: ${bad.join(', ')}` : ok ? 'all exist with no login and no extra attributes' : 'a privilege group is missing' };
+  return {
+    name: 'privilege groups',
+    ok,
+    detail: bad.length
+      ? `these groups have attributes the migrations did not give them: ${bad.join(', ')}`
+      : ok
+        ? 'all exist with no login and no extra attributes'
+        : 'a privilege group is missing',
+  };
 }
 
 async function verifyLogins(admin: Client, names: LoginNames, options: ProvisionOptions): Promise<Check[]> {
@@ -361,7 +416,11 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
     const name = names[kind];
     const row = (await admin.query('SELECT rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolbypassrls, rolreplication FROM pg_roles WHERE rolname = $1', [name])).rows[0];
     const plain = row && row.rolcanlogin && !row.rolsuper && !row.rolcreatedb && !row.rolcreaterole && !row.rolbypassrls && !row.rolreplication;
-    add(`${kind} login attributes`, Boolean(plain), plain ? 'login only: not a superuser, no CREATEDB, CREATEROLE, BYPASSRLS or REPLICATION' : 'the login is missing or has extra attributes');
+    add(
+      `${kind} login attributes`,
+      Boolean(plain),
+      plain ? 'login only: not a superuser, no CREATEDB, CREATEROLE, BYPASSRLS or REPLICATION' : 'the login is missing or has extra attributes',
+    );
 
     const memberships = (
       await admin.query<{ role: string }>(
@@ -374,37 +433,62 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
       )
     ).rows.map((r) => r.role);
     const wanted = [...EXPECTED_GROUPS[kind]].sort();
-    add(`${kind} login memberships`, JSON.stringify(memberships) === JSON.stringify(wanted), `member of ${memberships.join(', ') || 'nothing'} (expected exactly ${wanted.join(', ')})`);
+    add(
+      `${kind} login memberships`,
+      JSON.stringify(memberships) === JSON.stringify(wanted),
+      `member of ${memberships.join(', ') || 'nothing'} (expected exactly ${wanted.join(', ')})`,
+    );
   }
 
   for (const kind of judged) {
     const row = (await admin.query<{ rolconfig: string[] | null; rolconnlimit: number }>('SELECT rolconfig, rolconnlimit FROM pg_roles WHERE rolname = $1', [names[kind]])).rows[0];
     const want = LOGIN_LIMITS[kind];
     const have = new Map((row?.rolconfig ?? []).map((entry) => [entry.slice(0, entry.indexOf('=')), entry.slice(entry.indexOf('=') + 1)] as const));
-    const wrong = Object.entries(want.settings).filter(([k, v]) => have.get(k) !== v).map(([k]) => k);
+    const wrong = Object.entries(want.settings)
+      .filter(([k, v]) => have.get(k) !== v)
+      .map(([k]) => k);
     if (row?.rolconnlimit !== want.connectionLimit) wrong.push('connection limit');
-    add(`${kind} login limits`, wrong.length === 0, wrong.length ? `missing or different on the server: ${wrong.join(', ')}` : `server-side ${Object.keys(want.settings).join(', ') || 'no timeouts'} and a limit of ${want.connectionLimit} connections`);
+    add(
+      `${kind} login limits`,
+      wrong.length === 0,
+      wrong.length
+        ? `missing or different on the server: ${wrong.join(', ')}`
+        : `server-side ${Object.keys(want.settings).join(', ') || 'no timeouts'} and a limit of ${want.connectionLimit} connections`,
+    );
   }
   const temp = (await admin.query<{ ok: boolean }>("SELECT has_database_privilege('public', current_database(), 'TEMPORARY') AS ok")).rows[0]!.ok;
   add('database temporary tables', !temp, temp ? 'PUBLIC may still create temporary tables in the database' : 'PUBLIC holds no TEMPORARY right on the database');
 
   checks.push(await checkGroups(admin));
 
-  const migrated = (await admin.query("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'ledger_append' AND pronamespace = 'public'::regnamespace) AS ok")).rows[0].ok as boolean;
+  const migrated = (await admin.query("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'ledger_append' AND pronamespace = 'public'::regnamespace) AS ok")).rows[0]
+    .ok as boolean;
   if (!migrated) {
     const detail = 'the migrations have not been applied yet; run this command again after `migrate up`';
     add('group privileges', !options.requireMigrated, detail, !options.requireMigrated);
     return checks;
   }
   const hasQueue = (await admin.query("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'job_claim' AND pronamespace = 'public'::regnamespace) AS ok")).rows[0].ok as boolean;
-  const hasCapability = (await admin.query("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'tenant_capability_issue' AND pronamespace = 'public'::regnamespace) AS ok")).rows[0].ok as boolean;
-  const hasCurrent = (await admin.query("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'tenant_capability_issue_current' AND pronamespace = 'public'::regnamespace) AS ok")).rows[0].ok as boolean;
+  const hasCapability = (await admin.query("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'tenant_capability_issue' AND pronamespace = 'public'::regnamespace) AS ok"))
+    .rows[0].ok as boolean;
+  const hasCurrent = (await admin.query("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'tenant_capability_issue_current' AND pronamespace = 'public'::regnamespace) AS ok"))
+    .rows[0].ok as boolean;
   const canExecute = async (login: string, fn: string): Promise<boolean | undefined> => {
-    const rows = (await admin.query<{ ok: boolean }>(`SELECT has_function_privilege($1, p.oid, 'EXECUTE') AS ok FROM pg_proc p WHERE p.proname = $2 AND p.pronamespace = 'public'::regnamespace`, [login, fn])).rows;
+    const rows = (
+      await admin.query<{ ok: boolean }>(
+        `SELECT has_function_privilege($1, p.oid, 'EXECUTE') AS ok FROM pg_proc p WHERE p.proname = $2 AND p.pronamespace = 'public'::regnamespace`,
+        [login, fn],
+      )
+    ).rows;
     return rows.length === 0 ? undefined : rows.some((r) => r.ok);
   };
   const canWrite = async (login: string, table: string) =>
-    (await admin.query<{ ok: boolean }>(`SELECT (has_table_privilege($1, $2, 'INSERT') OR has_table_privilege($1, $2, 'UPDATE') OR has_table_privilege($1, $2, 'DELETE') OR has_table_privilege($1, $2, 'TRUNCATE')) AS ok`, [login, `public.${table}`])).rows[0].ok as boolean;
+    (
+      await admin.query<{ ok: boolean }>(
+        `SELECT (has_table_privilege($1, $2, 'INSERT') OR has_table_privilege($1, $2, 'UPDATE') OR has_table_privilege($1, $2, 'DELETE') OR has_table_privilege($1, $2, 'TRUNCATE')) AS ok`,
+        [login, `public.${table}`],
+      )
+    ).rows[0].ok as boolean;
   /** What a login must and must not be able to do with the tenant capability (migration 0028). */
   const capabilityProblems = async (login: string, kind: keyof typeof CAPABILITY_RIGHTS): Promise<string[]> => {
     const wrong: string[] = [];
@@ -445,7 +529,15 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
         if (readable) wrong.push(`${table} (CAN read)`);
       }
     }
-    add(`${kind} login privileges`, wrong.length === 0, wrong.length ? wrong.join('; ') : kind === 'worker' ? 'only the queue\'s functions; it writes no table and reads no clinical table' : 'only the functions it needs, and it writes no ledger table');
+    add(
+      `${kind} login privileges`,
+      wrong.length === 0,
+      wrong.length
+        ? wrong.join('; ')
+        : kind === 'worker'
+          ? "only the queue's functions; it writes no table and reads no clinical table"
+          : 'only the functions it needs, and it writes no ledger table',
+    );
   }
   if (withIssuer) {
     if (hasCapability) {
@@ -456,9 +548,20 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
       }
       add('issuer login privileges', wrong.length === 0, wrong.length ? wrong.join('; ') : 'only the issue functions; it reads no table');
     } else {
-      add('issuer login privileges', !options.requireMigrated, 'the tenant capability (migration 0028) is not applied yet; run this command again after `migrate up`', !options.requireMigrated);
+      add(
+        'issuer login privileges',
+        !options.requireMigrated,
+        'the tenant capability (migration 0028) is not applied yet; run this command again after `migrate up`',
+        !options.requireMigrated,
+      );
     }
   }
-  if (!hasQueue) add('queue privileges', !options.requireMigrated, 'the job queue (migrations 0023 and 0024) is not applied yet; run this command again after `migrate up`', !options.requireMigrated);
+  if (!hasQueue)
+    add(
+      'queue privileges',
+      !options.requireMigrated,
+      'the job queue (migrations 0023 and 0024) is not applied yet; run this command again after `migrate up`',
+      !options.requireMigrated,
+    );
   return checks;
 }

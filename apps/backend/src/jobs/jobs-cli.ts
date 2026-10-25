@@ -39,7 +39,14 @@ export async function runJobs(client: Client, args: string[], out: (line: string
     return 2;
   };
   if (!action || !flags) return usage();
-  const allowed: Record<string, string[]> = { status: [], list: ['tenant', 'type', 'state', 'limit'], dead: ['tenant', 'limit'], show: ['id'], retry: ['id', 'by'], cancel: ['id', 'by'] };
+  const allowed: Record<string, string[]> = {
+    status: [],
+    list: ['tenant', 'type', 'state', 'limit'],
+    dead: ['tenant', 'limit'],
+    show: ['id'],
+    retry: ['id', 'by'],
+    cancel: ['id', 'by'],
+  };
   if (!allowed[action] || [...flags.keys()].some((k) => !allowed[action]!.includes(k))) return usage();
   const refuse = (message: string) => {
     out(`refused: ${message}`);
@@ -59,7 +66,8 @@ export async function runJobs(client: Client, args: string[], out: (line: string
     await client.query('SET LOCAL ROLE telesphoros_jobs');
     if (action === 'status') {
       const { rows } = await client.query(`SELECT * FROM job_stats() ORDER BY type, state`);
-      for (const r of rows) out(`type=${r.type} state=${r.state} count=${r.n}${r.oldest_ready_seconds === null ? '' : ` oldest-ready-seconds=${Math.round(Number(r.oldest_ready_seconds))}`}`);
+      for (const r of rows)
+        out(`type=${r.type} state=${r.state} count=${r.n}${r.oldest_ready_seconds === null ? '' : ` oldest-ready-seconds=${Math.round(Number(r.oldest_ready_seconds))}`}`);
       const workers = await client.query(`SELECT count(*) FILTER (WHERE last_seen > now() - interval '2 minutes')::int AS live, count(*)::int AS known FROM job_workers`);
       out(`workers: ${workers.rows[0].live} seen in the last 2 minutes, ${workers.rows[0].known} ever`);
     } else if (action === 'list' || action === 'dead') {
@@ -73,7 +81,10 @@ export async function runJobs(client: Client, args: string[], out: (line: string
         `SELECT id, tenant_id, type, state, attempts, max_attempts, run_after, last_error_code, requested_by FROM jobs ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY seq DESC LIMIT ${limit}`,
         values,
       );
-      for (const r of rows) out(`id=${r.id} tenant=${r.tenant_id} type=${r.type} state=${r.state} attempts=${r.attempts}/${r.max_attempts} run-after=${iso(r.run_after)} error=${r.last_error_code ?? '-'} requested-by=${r.requested_by}`);
+      for (const r of rows)
+        out(
+          `id=${r.id} tenant=${r.tenant_id} type=${r.type} state=${r.state} attempts=${r.attempts}/${r.max_attempts} run-after=${iso(r.run_after)} error=${r.last_error_code ?? '-'} requested-by=${r.requested_by}`,
+        );
       out(`${rows.length} job(s)${rows.length === limit ? ` (limited to ${limit})` : ''}`);
     } else if (action === 'show') {
       const job = (await client.query(`SELECT * FROM jobs WHERE id = $1`, [id])).rows[0];
@@ -83,17 +94,29 @@ export async function runJobs(client: Client, args: string[], out: (line: string
       }
       out(`id=${job.id} tenant=${job.tenant_id} type=${job.type} state=${job.state} attempts=${job.attempts}/${job.max_attempts}`);
       out(`payload=${JSON.stringify(job.payload)} key=${job.idempotency_key} requested-by=${job.requested_by}`);
-      out(`created=${iso(job.created_at)} run-after=${iso(job.run_after)} started=${iso(job.started_at)} lease-until=${iso(job.lease_until)} locked-by=${job.locked_by ?? '-'} finished=${iso(job.finished_at)} error=${job.last_error_code ?? '-'}`);
+      out(
+        `created=${iso(job.created_at)} run-after=${iso(job.run_after)} started=${iso(job.started_at)} lease-until=${iso(job.lease_until)} locked-by=${job.locked_by ?? '-'} finished=${iso(job.finished_at)} error=${job.last_error_code ?? '-'}`,
+      );
       const attempts = (await client.query(`SELECT attempt, outcome, error_code, worker_id, started_at, finished_at FROM job_attempts WHERE job_id = $1 ORDER BY seq`, [id])).rows;
-      for (const a of attempts) out(`  attempt=${a.attempt} outcome=${a.outcome} error=${a.error_code ?? '-'} worker=${a.worker_id} started=${iso(a.started_at)} finished=${iso(a.finished_at)}`);
+      for (const a of attempts)
+        out(`  attempt=${a.attempt} outcome=${a.outcome} error=${a.error_code ?? '-'} worker=${a.worker_id} started=${iso(a.started_at)} finished=${iso(a.finished_at)}`);
     } else if (action === 'retry') {
       const dead = (await client.query(`SELECT tenant_id, attempts, started_at FROM jobs WHERE id = $1 AND state = 'dead' FOR UPDATE`, [id])).rows[0];
       if (!dead) {
         await client.query('ROLLBACK');
         return refuse('only a dead job can be retried (see "jobs show").');
       }
-      await client.query(`UPDATE jobs SET state = 'queued', attempts = 0, run_after = now(), finished_at = NULL, lease_until = NULL, locked_by = NULL, updated_at = now() WHERE id = $1`, [id]);
-      await client.query(`INSERT INTO job_attempts (job_id, tenant_id, attempt, worker_id, started_at, outcome) VALUES ($1, $2, $3, $4, $5, 'operator-requeued')`, [id, dead.tenant_id, dead.attempts, `operator:${by}`, dead.started_at]);
+      await client.query(
+        `UPDATE jobs SET state = 'queued', attempts = 0, run_after = now(), finished_at = NULL, lease_until = NULL, locked_by = NULL, updated_at = now() WHERE id = $1`,
+        [id],
+      );
+      await client.query(`INSERT INTO job_attempts (job_id, tenant_id, attempt, worker_id, started_at, outcome) VALUES ($1, $2, $3, $4, $5, 'operator-requeued')`, [
+        id,
+        dead.tenant_id,
+        dead.attempts,
+        `operator:${by}`,
+        dead.started_at,
+      ]);
       out(`requeued: id=${id} tenant=${dead.tenant_id}`);
     } else {
       const { rows } = await client.query(
@@ -104,7 +127,12 @@ export async function runJobs(client: Client, args: string[], out: (line: string
         await client.query('ROLLBACK');
         return refuse('only a job that has not started (queued or waiting to retry) can be cancelled.');
       }
-      await client.query(`INSERT INTO job_attempts (job_id, tenant_id, attempt, worker_id, outcome) VALUES ($1, $2, $3, $4, 'operator-cancelled')`, [id, rows[0].tenant_id, rows[0].attempts, `operator:${by}`]);
+      await client.query(`INSERT INTO job_attempts (job_id, tenant_id, attempt, worker_id, outcome) VALUES ($1, $2, $3, $4, 'operator-cancelled')`, [
+        id,
+        rows[0].tenant_id,
+        rows[0].attempts,
+        `operator:${by}`,
+      ]);
       out(`cancelled: id=${id} tenant=${rows[0].tenant_id}`);
     }
     await client.query('COMMIT');

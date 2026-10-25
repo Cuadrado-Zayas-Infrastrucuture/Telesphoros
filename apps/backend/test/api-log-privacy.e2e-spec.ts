@@ -68,11 +68,7 @@ it('keeps exception contents and request values out of real filter and HTTP JSON
   await app.listen(0);
   try {
     await request(app.getHttpServer()).get('/api/v1/privacy/transport').expect(200);
-    const res = await request(app.getHttpServer())
-      .get(`/api/v1/privacy/${MARKER}`)
-      .set('Authorization', `Bearer ${MARKER}`)
-      .set('Cookie', `session=${MARKER}`)
-      .expect(500);
+    const res = await request(app.getHttpServer()).get(`/api/v1/privacy/${MARKER}`).set('Authorization', `Bearer ${MARKER}`).set('Cookie', `session=${MARKER}`).expect(500);
     await request(app.getHttpServer()).get(`/api/v1/privacy/${MARKER}?secret=${MARKER}`).expect(400);
     await request(app.getHttpServer()).post('/api/v1/privacy').send({ value: MARKER }).expect(500);
     const rejected = await request(app.getHttpServer())

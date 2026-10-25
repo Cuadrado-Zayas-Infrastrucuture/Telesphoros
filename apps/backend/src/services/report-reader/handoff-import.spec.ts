@@ -19,7 +19,10 @@ function walk(dir: string): string[] {
 }
 
 const origin = JSON.parse(readFileSync(join(IMPORT_DIR, 'origin-hashes.json'), 'utf8')) as Record<string, { sha256: string; originalPath: string }>;
-const onDisk = walk(IMPORT_DIR).map((file) => posix(relative(IMPORT_DIR, file))).filter((path) => !REPO_AUTHORED.has(path)).sort();
+const onDisk = walk(IMPORT_DIR)
+  .map((file) => posix(relative(IMPORT_DIR, file)))
+  .filter((path) => !REPO_AUTHORED.has(path))
+  .sort();
 
 describe('the imported hand-off is byte-identical to what was reviewed', () => {
   it('lists exactly the files that are on disk: nothing added, nothing missing', () => {
@@ -28,7 +31,9 @@ describe('the imported hand-off is byte-identical to what was reviewed', () => {
   });
 
   it('matches the recorded SHA-256 of every file', () => {
-    const changed = Object.entries(origin).filter(([path, entry]) => sha256(join(IMPORT_DIR, path)) !== entry.sha256).map(([path]) => path);
+    const changed = Object.entries(origin)
+      .filter(([path, entry]) => sha256(join(IMPORT_DIR, path)) !== entry.sha256)
+      .map(([path]) => path);
     expect(changed).toEqual([]);
   });
 
@@ -54,7 +59,8 @@ describe('the imported hand-off is byte-identical to what was reviewed', () => {
 
 describe('the imported material is labelled and kept out of production code', () => {
   it('says TEST ONLY and records that the reviewer identity was not independently authenticated', () => {
-    for (const file of [join(IMPORT_DIR, 'ORIGIN.md'), join(IMPORT_DIR, '../README.md')]) expect(readFileSync(file, 'utf8')).toContain('TEST ONLY: not clinical content, not human-adjudicated');
+    for (const file of [join(IMPORT_DIR, 'ORIGIN.md'), join(IMPORT_DIR, '../README.md')])
+      expect(readFileSync(file, 'utf8')).toContain('TEST ONLY: not clinical content, not human-adjudicated');
     expect(readFileSync(join(IMPORT_DIR, 'ORIGIN.md'), 'utf8')).toContain('not independently authenticated');
   });
 

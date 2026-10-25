@@ -36,21 +36,35 @@ describe('size caps on the evaluation JSON (item 7)', () => {
   });
 
   it('refuses occurrences over 1 MiB, even when the text would compress', async () => {
-    const refusedBy = (over: Parameters<typeof evaluate>[0]) => evaluate(over).then(() => 'accepted', (e: { constraint?: string }) => e.constraint);
+    const refusedBy = (over: Parameters<typeof evaluate>[0]) =>
+      evaluate(over).then(
+        () => 'accepted',
+        (e: { constraint?: string }) => e.constraint,
+      );
     expect(await refusedBy({ occurrences: [{ gene: 'CYP2C19', pad: 'a'.repeat(1_100_000) }] })).toBe('evaluations_occurrences_size');
     expect(await refusedBy({ occurrences: [{ gene: 'CYP2C19', pad: randomBytes(600_000).toString('hex') }] })).toBe('evaluations_occurrences_size');
   });
 
   it('has every cap validated, so existing rows were checked too', async () => {
-    const rows = await catalog<{ conname: string; convalidated: boolean }>(`SELECT conname, convalidated FROM pg_constraint WHERE conname ~ '_size$' AND connamespace = 'public'::regnamespace`);
-    expect(rows.map((r) => r.conname).sort()).toEqual(['evaluation_results_citation_size', 'evaluation_results_gene_evidence_size', 'evaluations_binding_size', 'evaluations_gene_inputs_size', 'evaluations_occurrences_size']);
+    const rows = await catalog<{ conname: string; convalidated: boolean }>(
+      `SELECT conname, convalidated FROM pg_constraint WHERE conname ~ '_size$' AND connamespace = 'public'::regnamespace`,
+    );
+    expect(rows.map((r) => r.conname).sort()).toEqual([
+      'evaluation_results_citation_size',
+      'evaluation_results_gene_evidence_size',
+      'evaluations_binding_size',
+      'evaluations_gene_inputs_size',
+      'evaluations_occurrences_size',
+    ]);
     expect(rows.every((r) => r.convalidated)).toBe(true);
   });
 });
 
 describe('policies name their roles (item 11)', () => {
   it('no policy in the schema is TO PUBLIC, and the upload policies still hold the tenant predicate', async () => {
-    const rows = await catalog<{ tablename: string; policyname: string; roles: string[]; qual: string }>(`SELECT tablename, policyname, roles::text[] AS roles, qual FROM pg_policies WHERE schemaname = 'public'`);
+    const rows = await catalog<{ tablename: string; policyname: string; roles: string[]; qual: string }>(
+      `SELECT tablename, policyname, roles::text[] AS roles, qual FROM pg_policies WHERE schemaname = 'public'`,
+    );
     expect(rows.filter((r) => r.roles.includes('public')).map((r) => r.policyname)).toEqual([]);
     for (const name of ['upload_run_tenant', 'upload_attempt_tenant']) {
       const p = rows.find((r) => r.policyname === name)!;
@@ -81,7 +95,9 @@ describe('security_events row-level security (item 12)', () => {
   it('is enabled with an auditor policy, and the auditor still reads while the application role still has no privilege', async () => {
     const [flags] = await catalog<{ relrowsecurity: boolean }>(`SELECT relrowsecurity FROM pg_class WHERE relname = 'security_events'`);
     expect(flags!.relrowsecurity).toBe(true);
-    const policies = await catalog<{ policyname: string; roles: string[]; cmd: string }>(`SELECT policyname, roles::text[] AS roles, cmd FROM pg_policies WHERE tablename = 'security_events'`);
+    const policies = await catalog<{ policyname: string; roles: string[]; cmd: string }>(
+      `SELECT policyname, roles::text[] AS roles, cmd FROM pg_policies WHERE tablename = 'security_events'`,
+    );
     expect(policies).toEqual([{ policyname: 'security_events_auditor', roles: ['telesphoros_security_auditor'], cmd: 'SELECT' }]);
     await withAdmin(pg.auditorUrl, async (c) => expect((await c.query('SELECT count(*)::int AS n FROM security_events')).rows[0].n).toBeGreaterThanOrEqual(0));
     await withAdmin(pg.appUrl, async (c) => expect(c.query('SELECT 1 FROM security_events')).rejects.toThrow(/permission denied/));

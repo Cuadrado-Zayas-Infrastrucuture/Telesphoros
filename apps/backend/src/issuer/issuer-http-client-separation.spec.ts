@@ -20,7 +20,7 @@ const ALLOWED_PACKAGES = new Set(['@nestjs/common', 'zod']);
 const FORBIDDEN: [RegExp, string][] = [
   [/^src\/issuer\/(issuer-core|issuer-server|issuer-app|issuer-env|issuer-log|main)\.ts$/, "the issuer's own implementation"],
   [/^src\/issuer\/.*store/, "the issuer's store (the only code that calls the minting function)"],
-  [/^src\/db\//, 'a database module: the issuer\'s login is not the API\'s, and the client needs neither'],
+  [/^src\/db\//, "a database module: the issuer's login is not the API's, and the client needs neither"],
   [/^src\/config\//, "the API's settings (the client is handed its address)"],
   [/^src\/auth\/cognito-token-verifier\.ts$/, "the verifier the issuer uses to read a person's token"],
 ];
@@ -72,7 +72,7 @@ describe('mutants: the test goes red when the client reaches what it must not', 
   const real = read(CLIENT) ?? '';
   const mutants: [string, string, RegExp][] = [
     ['the issuer core', "import { IssuerCore } from './issuer-core';", /issuer-core\.ts is reachable/],
-    ['the issuer\'s store (through the core)', "import { PgCapabilityIssueStore } from './issuer-core';", /issuer-core\.ts is reachable/],
+    ["the issuer's store (through the core)", "import { PgCapabilityIssueStore } from './issuer-core';", /issuer-core\.ts is reachable/],
     ['the issuer server', "import { createIssuerServer } from './issuer-server';", /issuer-server\.ts is reachable/],
     ['the issuer entry', "import './main';", /issuer\/main\.ts is reachable/],
     ['the issuer settings', "import { loadIssuerEnv } from './issuer-env';", /issuer-env\.ts is reachable/],

@@ -33,7 +33,9 @@ class FixtureEnvironment extends NodeEnvironment {
     const building = [...registry.building];
     for (const build of building) build.abort(new Error('The test file ended while a fixture was still being built'));
     let timer;
-    const bound = new Promise((resolve) => { timer = setTimeout(resolve, SETTLE_MS, 'unsettled'); });
+    const bound = new Promise((resolve) => {
+      timer = setTimeout(resolve, SETTLE_MS, 'unsettled');
+    });
     const outcome = await Promise.race([Promise.all(building.map((build) => build.settled)).then(() => 'settled'), bound]);
     clearTimeout(timer);
     // Newest first: an application is registered after the database it was built on.
@@ -42,8 +44,10 @@ class FixtureEnvironment extends NodeEnvironment {
     registry.building.clear();
     registry.live.clear();
     const failures = closed.filter((result) => result.status === 'rejected').length;
-    process.stderr.write(`[fixture-drain] ${this.label}: ended with ${building.length} fixture build(s) unfinished (${outcome}) and ${live.length} fixture(s) unclosed; `
-      + `reclaimed${failures ? `, ${failures} failed to close` : ''}\n`);
+    process.stderr.write(
+      `[fixture-drain] ${this.label}: ended with ${building.length} fixture build(s) unfinished (${outcome}) and ${live.length} fixture(s) unclosed; ` +
+        `reclaimed${failures ? `, ${failures} failed to close` : ''}\n`,
+    );
   }
 }
 

@@ -11,7 +11,12 @@ const fresh = (): CatalogPolicy[] => structuredClone(policies);
 
 describe('record-table catalog policy assertions', () => {
   it.each([
-    [0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0],
+    [0, 1, 2],
+    [0, 2, 1],
+    [1, 0, 2],
+    [1, 2, 0],
+    [2, 0, 1],
+    [2, 1, 0],
   ])('accepts valid policies in order %s, %s, %s', (a, b, c) => {
     expect(() => expectRecordTablePolicies(table, [policies[a]!, policies[b]!, policies[c]!])).not.toThrow();
   });

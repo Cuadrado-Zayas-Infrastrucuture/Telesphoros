@@ -14,7 +14,17 @@ describe('hero composition', () => {
   it('uses the same fictional records and status wording as the capability fragments', () => {
     const { container } = render(<HeroReportCard />);
     const text = container.textContent ?? '';
-    for (const expected of ['Example patient', 'SYN-001.vcf', 'Server verified', 'SYN-002.json', 'Not complete', 'SYN-003.vcf', 'Received', 'Synthetic data only. Not for clinical use.']) expect(text).toContain(expected);
+    for (const expected of [
+      'Example patient',
+      'SYN-001.vcf',
+      'Server verified',
+      'SYN-002.json',
+      'Not complete',
+      'SYN-003.vcf',
+      'Received',
+      'Synthetic data only. Not for clinical use.',
+    ])
+      expect(text).toContain(expected);
     expect(container.querySelectorAll('.landing-report-verified')).toHaveLength(1);
   });
 

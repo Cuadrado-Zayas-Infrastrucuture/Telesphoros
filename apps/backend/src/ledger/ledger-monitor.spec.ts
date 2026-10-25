@@ -8,13 +8,35 @@ import type { VerifyOptions, VerifyResult } from './verifier';
 // can be produced on demand. The real verifier against real tampering is test/db/ledger-watch.pg-spec.ts. Synthetic data only.
 
 const config = (over: Partial<LedgerWatchConfig> = {}): LedgerWatchConfig => ({
-  production: false, startupBudgetMs: 20_000, fullIntervalMs: 0, fullBudgetMs: 900_000, onDemandBudgetMs: 30_000, fullWalkAtOrBelowEvents: 50_000, incidentPollMs: 0, ...over,
+  production: false,
+  startupBudgetMs: 20_000,
+  fullIntervalMs: 0,
+  fullBudgetMs: 900_000,
+  onDemandBudgetMs: 30_000,
+  fullWalkAtOrBelowEvents: 50_000,
+  incidentPollMs: 0,
+  ...over,
 });
 
 const outcome = (tenantId: string, over: Partial<VerifyResult> = {}): VerifyResult => ({
-  tenantId, status: 'ok', mode: 'tail', headSeq: '5', headHash: 'a'.repeat(64), eventsChecked: 5, failures: [], checkpointId: null, ...over,
+  tenantId,
+  status: 'ok',
+  mode: 'tail',
+  headSeq: '5',
+  headHash: 'a'.repeat(64),
+  eventsChecked: 5,
+  failures: [],
+  checkpointId: null,
+  ...over,
 });
-const failed = (tenantId: string): VerifyResult => outcome(tenantId, { status: 'failed', failures: [{ kind: 'payload-mismatch', seq: '9' }, { kind: 'head-mismatch', seq: '12' }] });
+const failed = (tenantId: string): VerifyResult =>
+  outcome(tenantId, {
+    status: 'failed',
+    failures: [
+      { kind: 'payload-mismatch', seq: '9' },
+      { kind: 'head-mismatch', seq: '12' },
+    ],
+  });
 
 type Answer = (tenantId: string, options: VerifyOptions) => Promise<VerifyResult> | VerifyResult;
 
@@ -29,7 +51,10 @@ class FakeVerifier implements VerifierPort {
   recorded: Array<Pick<Compromise, 'tenantId' | 'kind' | 'seq' | 'source'>> = [];
   failRecord: Error | null = null;
   failOpen: Error | null = null;
-  constructor(public tenantIds: string[], public answer: Answer = (tenantId, options) => outcome(tenantId, { mode: options.mode ?? 'tail' })) {}
+  constructor(
+    public tenantIds: string[],
+    public answer: Answer = (tenantId, options) => outcome(tenantId, { mode: options.mode ?? 'tail' }),
+  ) {}
   async tenants(): Promise<string[]> {
     if (this.failTenants) throw this.failTenants;
     return this.tenantIds;
@@ -60,12 +85,20 @@ class FakeVerifier implements VerifierPort {
   async close(): Promise<void> {
     this.closed = true;
   }
-  get tail() { return this.calls.filter((c) => c.options.mode === 'tail'); }
+  get tail() {
+    return this.calls.filter((c) => c.options.mode === 'tail');
+  }
   /** The checkpoint checks that decide the start: tail mode, no full-walk threshold. */
-  get checkpointChecks() { return this.tail.filter((c) => c.options.fullWalkAtOrBelow === undefined); }
+  get checkpointChecks() {
+    return this.tail.filter((c) => c.options.fullWalkAtOrBelow === undefined);
+  }
   /** The strengthening full walks of small chains at start: tail mode WITH the full-walk threshold. */
-  get startFullWalks() { return this.tail.filter((c) => c.options.fullWalkAtOrBelow !== undefined); }
-  get full() { return this.calls.filter((c) => c.options.mode === 'full'); }
+  get startFullWalks() {
+    return this.tail.filter((c) => c.options.fullWalkAtOrBelow !== undefined);
+  }
+  get full() {
+    return this.calls.filter((c) => c.options.mode === 'full');
+  }
 }
 
 /** Resolves once the background walk has called the verifier (bounded: it fails instead of waiting for ever). */
@@ -77,7 +110,9 @@ async function untilWalking(verifier: FakeVerifier): Promise<void> {
 /** A promise a test settles by hand. */
 function gate<T = void>() {
   let release!: (value: T) => void;
-  const promise = new Promise<T>((resolve) => { release = resolve; });
+  const promise = new Promise<T>((resolve) => {
+    release = resolve;
+  });
   return { promise, release };
 }
 
@@ -147,7 +182,11 @@ describe('LedgerMonitor: the check at start', () => {
     });
     const { monitor, status } = build(verifier);
     await monitor.onApplicationBootstrap();
-    expect(verifier.tail.map((c) => [c.tenantId, c.options.budgetMs])).toEqual([['a', 20_000], ['b', 12_000], ['c', 4_000]]);
+    expect(verifier.tail.map((c) => [c.tenantId, c.options.budgetMs])).toEqual([
+      ['a', 20_000],
+      ['b', 12_000],
+      ['c', 4_000],
+    ]);
     expect(status.tailState).toBe('incomplete');
     expect(status.readiness()).toBe('down');
     await monitor.onModuleDestroy();
@@ -316,7 +355,9 @@ describe('LedgerMonitor: full walks at start', () => {
   });
 
   it('does not walk again, in full, a chain that the checkpoint check already walked in full (no checkpoint yet)', async () => {
-    const verifier = timed(['a', 'b'], 10, 100, (tenantId, options) => (tenantId === 'a' && options.fullWalkAtOrBelow === undefined ? outcome(tenantId, { mode: 'full' }) : undefined));
+    const verifier = timed(['a', 'b'], 10, 100, (tenantId, options) =>
+      tenantId === 'a' && options.fullWalkAtOrBelow === undefined ? outcome(tenantId, { mode: 'full' }) : undefined,
+    );
     const { monitor } = build(verifier);
     await monitor.onApplicationBootstrap();
     expect(verifier.startFullWalks.map((c) => c.tenantId)).toEqual(['b']);
@@ -358,16 +399,21 @@ describe('LedgerMonitor: the background full walk', () => {
   });
 
   it('CONTAINS the failed tenant: logs the kind and sequence only, records the incident, keeps the other tenant working, and readiness says "contained"', async () => {
-    const verifier = new FakeVerifier(['a', 'b'], (tenantId, options) => (options.mode === 'full' && tenantId === 'a'
-      ? { ...failed(tenantId), failures: [{ kind: 'payload-mismatch', seq: '9', value: 'SECRET-NOTE-TEXT' } as never] }
-      : outcome(tenantId, { mode: options.mode ?? 'tail' })));
+    const verifier = new FakeVerifier(['a', 'b'], (tenantId, options) =>
+      options.mode === 'full' && tenantId === 'a'
+        ? { ...failed(tenantId), failures: [{ kind: 'payload-mismatch', seq: '9', value: 'SECRET-NOTE-TEXT' } as never] }
+        : outcome(tenantId, { mode: options.mode ?? 'tail' }),
+    );
     const { monitor, status } = await started(verifier);
     expect(status.compromised).toMatchObject({ tenantId: 'a', kind: 'payload-mismatch', seq: '9', source: 'background' });
     expect(status.readiness()).toBe('contained');
     expect(() => status.assertOpen('a')).toThrow();
     expect(() => status.assertOpen('b')).not.toThrow();
     expect(verifier.recorded).toEqual([{ tenantId: 'a', kind: 'payload-mismatch', seq: '9', source: 'background' }]);
-    expect(verifier.full.map((c) => [c.tenantId, c.options.recordCheckpoint])).toEqual([['a', true], ['b', true]]); // a checkpoint only ever follows an ok walk
+    expect(verifier.full.map((c) => [c.tenantId, c.options.recordCheckpoint])).toEqual([
+      ['a', true],
+      ['b', true],
+    ]); // a checkpoint only ever follows an ok walk
     const logged = errors.mock.calls.flat().find((c) => c?.event === 'ledger-compromised');
     expect(logged).toMatchObject({ event: 'ledger-compromised', tenantId: 'a', source: 'background', failures: [{ kind: 'payload-mismatch', seq: '9' }] });
     expect(JSON.stringify(errors.mock.calls)).not.toContain('SECRET-NOTE-TEXT');
@@ -384,7 +430,9 @@ describe('LedgerMonitor: the background full walk', () => {
   });
 
   it('names a chain that is longer than the verifier will walk, as an error, and still latches nothing', async () => {
-    const verifier = new FakeVerifier(['a'], (tenantId, options) => (options.mode === 'full' ? outcome(tenantId, { status: 'incomplete', mode: 'full', eventsChecked: 1_000_000, incompleteReason: 'size' }) : outcome(tenantId)));
+    const verifier = new FakeVerifier(['a'], (tenantId, options) =>
+      options.mode === 'full' ? outcome(tenantId, { status: 'incomplete', mode: 'full', eventsChecked: 1_000_000, incompleteReason: 'size' }) : outcome(tenantId),
+    );
     const { monitor, status } = await started(verifier);
     expect(status.readiness()).toBe('verifying');
     expect(status.compromised).toBeNull();
@@ -396,7 +444,9 @@ describe('LedgerMonitor: the background full walk', () => {
   });
 
   it('keeps running out of time as a warning, not the over-size error', async () => {
-    const verifier = new FakeVerifier(['a'], (tenantId, options) => (options.mode === 'full' ? outcome(tenantId, { status: 'incomplete', mode: 'full', incompleteReason: 'time' }) : outcome(tenantId)));
+    const verifier = new FakeVerifier(['a'], (tenantId, options) =>
+      options.mode === 'full' ? outcome(tenantId, { status: 'incomplete', mode: 'full', incompleteReason: 'time' }) : outcome(tenantId),
+    );
     const { monitor } = await started(verifier);
     expect(warnings.mock.calls.flat().some((c) => c?.event === 'ledger-verification-incomplete')).toBe(true);
     expect(errors.mock.calls.flat().some((c) => c?.event === 'ledger-chain-over-size')).toBe(false);
@@ -591,9 +641,11 @@ describe('LedgerMonitor: one verification at a time, and an admin check', () => 
 
 describe('LedgerMonitor: shutdown', () => {
   it('aborts a walk in progress instead of waiting for it, closes the verifier, and does not report the stopped walk as complete', async () => {
-    const verifier = new FakeVerifier(['a'], (tenantId, options) => (options.mode === 'full'
-      ? new Promise<VerifyResult>((resolve) => options.signal!.addEventListener('abort', () => resolve(outcome(tenantId, { status: 'incomplete', mode: 'full' }))))
-      : outcome(tenantId)));
+    const verifier = new FakeVerifier(['a'], (tenantId, options) =>
+      options.mode === 'full'
+        ? new Promise<VerifyResult>((resolve) => options.signal!.addEventListener('abort', () => resolve(outcome(tenantId, { status: 'incomplete', mode: 'full' }))))
+        : outcome(tenantId),
+    );
     const { monitor, status } = build(verifier);
     await monitor.onApplicationBootstrap();
     await untilWalking(verifier);
@@ -606,11 +658,17 @@ describe('LedgerMonitor: shutdown', () => {
 
 describe('LedgerMonitor: containment shared through the database', () => {
   const open = (tenantId: string | null, over: Partial<OpenIncident> = {}): OpenIncident => ({
-    id: `i-${tenantId ?? 'hold'}`, scope: tenantId === null ? 'global' : 'tenant', tenantId, kind: tenantId === null ? 'manual-hold' : 'payload-mismatch', seq: tenantId === null ? null : '9',
-    source: tenantId === null ? 'manual' : 'background', detectedAt: new Date(0), ...over,
+    id: `i-${tenantId ?? 'hold'}`,
+    scope: tenantId === null ? 'global' : 'tenant',
+    tenantId,
+    kind: tenantId === null ? 'manual-hold' : 'payload-mismatch',
+    seq: tenantId === null ? null : '9',
+    source: tenantId === null ? 'manual' : 'background',
+    detectedAt: new Date(0),
+    ...over,
   });
 
-  it('a sibling task\'s finding is mirrored at start: production STARTS with the tenant listed as contained, and does not re-judge it', async () => {
+  it("a sibling task's finding is mirrored at start: production STARTS with the tenant listed as contained, and does not re-judge it", async () => {
     const verifier = new FakeVerifier(['a', 'b'], (tenantId) => (tenantId === 'a' ? failed(tenantId) : outcome(tenantId)));
     verifier.incidents = [open('a')];
     const { monitor, status } = build(verifier, { production: true });
@@ -651,7 +709,9 @@ describe('LedgerMonitor: containment shared through the database', () => {
   });
 
   it('a contained tenant that still fails does not keep the instance "verifying" for ever, and does not page twice', async () => {
-    const verifier = new FakeVerifier(['a', 'b'], (tenantId, options) => (tenantId === 'a' && options.mode === 'full' ? failed(tenantId) : outcome(tenantId, { mode: options.mode ?? 'tail' })));
+    const verifier = new FakeVerifier(['a', 'b'], (tenantId, options) =>
+      tenantId === 'a' && options.mode === 'full' ? failed(tenantId) : outcome(tenantId, { mode: options.mode ?? 'tail' }),
+    );
     const { monitor, status } = await started(verifier);
     expect(errors.mock.calls.flat().filter((c) => c?.event === 'ledger-compromised')).toHaveLength(1);
     await monitor.verifyNow('a', true); // fails again while contained
@@ -687,7 +747,7 @@ describe('LedgerMonitor: containment shared through the database', () => {
     await monitor.onModuleDestroy();
   });
 
-  it('the poll picks up a sibling\'s finding and a person\'s clearance without a walk of its own', async () => {
+  it("the poll picks up a sibling's finding and a person's clearance without a walk of its own", async () => {
     jest.useFakeTimers();
     const verifier = new FakeVerifier(['a', 'b']);
     const { monitor, status } = await started(verifier, { incidentPollMs: 5_000 });

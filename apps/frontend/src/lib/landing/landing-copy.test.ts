@@ -29,9 +29,27 @@ describe('landing copy', () => {
   });
 
   it('keeps every boundary statement in both languages: synthetic only, not clinical, no medication or dose advice', () => {
-    const text = (language: 'en' | 'es') => paths(LANDING_COPY[language]).map(([, leaf]) => (typeof leaf === 'string' ? leaf : '')).join('\n').toLowerCase();
-    for (const phrase of ['synthetic data only', 'not for clinical use', 'does not recommend medications or doses', 'does not indicate clinical review', 'confirms storage, not clinical review']) expect(text('en')).toContain(phrase);
-    for (const phrase of ['solo datos sintéticos', 'no apto para uso clínico', 'no recomienda medicamentos ni dosis', 'no indica revisión clínica', 'confirma el almacenamiento, no una revisión clínica']) expect(text('es')).toContain(phrase);
+    const text = (language: 'en' | 'es') =>
+      paths(LANDING_COPY[language])
+        .map(([, leaf]) => (typeof leaf === 'string' ? leaf : ''))
+        .join('\n')
+        .toLowerCase();
+    for (const phrase of [
+      'synthetic data only',
+      'not for clinical use',
+      'does not recommend medications or doses',
+      'does not indicate clinical review',
+      'confirms storage, not clinical review',
+    ])
+      expect(text('en')).toContain(phrase);
+    for (const phrase of [
+      'solo datos sintéticos',
+      'no apto para uso clínico',
+      'no recomienda medicamentos ni dosis',
+      'no indica revisión clínica',
+      'confirma el almacenamiento, no una revisión clínica',
+    ])
+      expect(text('es')).toContain(phrase);
   });
 
   it('English is the text the landing has always carried', () => {

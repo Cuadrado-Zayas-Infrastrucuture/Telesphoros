@@ -30,9 +30,11 @@ async function appendAs(tenant: string | undefined, subject: string, options: { 
 }
 const events = (subject: string) => f.admin.query('SELECT * FROM outbox_events WHERE subject_id = $1', [subject]).then((r) => r.rows);
 const jobsFor = (subject: string) => f.admin.query(`SELECT * FROM jobs WHERE payload ->> 'reportId' = $1 ORDER BY seq`, [subject]).then((r) => r.rows);
-const drain = async () => { for (let i = 0; i < 20 && (await queue.relayOutbox(500)) > 0; i += 1); };
+const drain = async () => {
+  for (let i = 0; i < 20 && (await queue.relayOutbox(500)) > 0; i += 1);
+};
 
-describe('writing an event (the API\'s side)', () => {
+describe("writing an event (the API's side)", () => {
   it('takes the organization from the transaction; a rolled-back change leaves no event; a committed one leaves exactly one even if asked twice', async () => {
     const kept = randomUUID();
     await appendAs(TENANT_A, kept);
@@ -50,7 +52,13 @@ describe('writing an event (the API\'s side)', () => {
       const c = new Client({ connectionString: url });
       await c.connect();
       try {
-        for (const sql of [`SELECT * FROM outbox_events`, `INSERT INTO outbox_events (tenant_id, event_type, subject_id) VALUES ('${TENANT_A}', 'report.file-committed', gen_random_uuid())`, `UPDATE outbox_events SET relayed_at = now()`, `DELETE FROM outbox_events`, `SELECT * FROM outbox_routes`]) {
+        for (const sql of [
+          `SELECT * FROM outbox_events`,
+          `INSERT INTO outbox_events (tenant_id, event_type, subject_id) VALUES ('${TENANT_A}', 'report.file-committed', gen_random_uuid())`,
+          `UPDATE outbox_events SET relayed_at = now()`,
+          `DELETE FROM outbox_events`,
+          `SELECT * FROM outbox_routes`,
+        ]) {
           await expect(c.query(sql), sql).rejects.toThrow(/permission denied/);
         }
       } finally {
@@ -88,7 +96,9 @@ describe('a poisoned event', () => {
     await f.admin.query(`INSERT INTO tenants (id, display_name, status, created_by, changed_by) VALUES ($1, $1, 'active', 'worker-test', 'worker-test')`, [POISON]);
   });
   const poison = async () => {
-    await f.admin.query(`CREATE FUNCTION syn_poison_job() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id = '${POISON}' THEN RAISE EXCEPTION 'synthetic poison' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END $$`);
+    await f.admin.query(
+      `CREATE FUNCTION syn_poison_job() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id = '${POISON}' THEN RAISE EXCEPTION 'synthetic poison' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END $$`,
+    );
     await f.admin.query('CREATE TRIGGER syn_poison BEFORE INSERT ON jobs FOR EACH ROW EXECUTE FUNCTION syn_poison_job()');
   };
   const heal = async () => {
@@ -141,7 +151,15 @@ describe('the relay', () => {
     expect(event).toMatchObject({ relay_outcome: 'relayed', relayed_at: expect.any(Date) });
     const jobs = await jobsFor(subject);
     expect(jobs).toHaveLength(1);
-    expect(jobs[0]).toMatchObject({ tenant_id: TENANT_A, type: 'files.verify-stored', payload: { reportId: subject }, idempotency_key: `outbox-${event.id}`, requested_by: 'system:outbox', state: 'queued', max_attempts: 5 });
+    expect(jobs[0]).toMatchObject({
+      tenant_id: TENANT_A,
+      type: 'files.verify-stored',
+      payload: { reportId: subject },
+      idempotency_key: `outbox-${event.id}`,
+      requested_by: 'system:outbox',
+      state: 'queued',
+      max_attempts: 5,
+    });
     expect(await queue.relayOutbox(500)).toBe(0); // nothing left to do
     expect(await jobsFor(subject)).toHaveLength(1);
   });

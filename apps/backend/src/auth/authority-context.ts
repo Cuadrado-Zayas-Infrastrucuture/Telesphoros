@@ -52,8 +52,7 @@ export function bindRequestAuthority(authority: RequestAuthority): void {
     assertSessionAuthority(authority.session);
     // Own the binding: a caller mutating the original object must not remove/change the later transaction check.
     const { tenantId, handleHash, issuedAt, createdAt, expiresAt } = authority.session;
-    store.authority = Object.freeze({ sub: authority.sub, version: authority.version,
-      session: Object.freeze({ tenantId, handleHash, issuedAt, createdAt, expiresAt }) });
+    store.authority = Object.freeze({ sub: authority.sub, version: authority.version, session: Object.freeze({ tenantId, handleHash, issuedAt, createdAt, expiresAt }) });
   } else {
     store.authority = Object.freeze({ sub: authority.sub, version: authority.version });
   }

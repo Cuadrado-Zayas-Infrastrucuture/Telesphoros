@@ -4,6 +4,14 @@ import { useLandingLanguage } from '@/lib/landing/landing-language';
 export function LanguageToggle() {
   const { language, copy, setLanguage } = useLandingLanguage();
   const target = language === 'en' ? 'es' : 'en';
-  return <button type="button" lang={copy.language.switchLang} onClick={() => setLanguage(target)}
-    className="landing-language-toggle inline-flex min-h-control items-center px-2 text-sm font-medium hover:bg-muted">{copy.language.switchTo}</button>;
+  return (
+    <button
+      type="button"
+      lang={copy.language.switchLang}
+      onClick={() => setLanguage(target)}
+      className="landing-language-toggle inline-flex min-h-control items-center px-2 text-sm font-medium hover:bg-muted"
+    >
+      {copy.language.switchTo}
+    </button>
+  );
 }

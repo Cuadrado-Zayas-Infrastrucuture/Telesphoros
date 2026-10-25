@@ -13,4 +13,4 @@ export const scripted = (reply: (request: ModelRequest) => unknown): ModelPort =
  * demands; otherwise it returns the clean reply. A leak of attacker text into a prompt therefore shows up as an effect.
  */
 export const obedient = (demands: ReadonlyArray<{ marker: string; emit: unknown }>, clean: unknown): ModelPort =>
-  scripted(request => demands.find(d => request.prompt.includes(d.marker))?.emit ?? clean);
+  scripted((request) => demands.find((d) => request.prompt.includes(d.marker))?.emit ?? clean);

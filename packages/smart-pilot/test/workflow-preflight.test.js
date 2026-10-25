@@ -11,11 +11,11 @@ describe('real workflow acceptance preflight', () => {
     { TEST_S3_ENDPOINT: '' },
     { TEST_S3_ENDPOINT: 'https://s3.amazonaws.com' },
     { TEST_S3_ENDPOINT: 'http://sensitive-marker@127.0.0.1:5555' },
-  ])('refuses unsafe or absent service configuration before starting children: %j', override => {
+  ])('refuses unsafe or absent service configuration before starting children: %j', (override) => {
     const result = spawnSync(process.execPath, [command], {
-      encoding: 'utf8', timeout: 3000,
-      env: { ...process.env, NODE_ENV: 'test', TEST_DATABASE_URL: 'postgresql://test@127.0.0.1:54329/postgres',
-        TEST_S3_ENDPOINT: 'http://127.0.0.1:5555', ...override },
+      encoding: 'utf8',
+      timeout: 3000,
+      env: { ...process.env, NODE_ENV: 'test', TEST_DATABASE_URL: 'postgresql://test@127.0.0.1:54329/postgres', TEST_S3_ENDPOINT: 'http://127.0.0.1:5555', ...override },
     });
     expect(result.status).toBe(1);
     expect(result.stdout).toBe('');

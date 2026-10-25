@@ -129,7 +129,9 @@ function uploadTarget(remote: string, f: ReturnType<typeof flags>): UploadTarget
 }
 
 function printUpload(upload: { keys: string[]; warnings: string[]; etagVerified: boolean }, remote: string) {
-  out(`  uploaded ${upload.keys.length} objects to ${remote} (Object Lock on each${upload.etagVerified ? '' : '; the provider\u2019s ETag is not an MD5, so only Content-MD5 was checked'})`);
+  out(
+    `  uploaded ${upload.keys.length} objects to ${remote} (Object Lock on each${upload.etagVerified ? '' : '; the provider\u2019s ETag is not an MD5, so only Content-MD5 was checked'})`,
+  );
   for (const warning of upload.warnings) out(`  WARNING: ${warning}`);
 }
 
@@ -174,7 +176,11 @@ async function main(argv: string[]) {
     const client = new Client(pgClientConfig(required('DATABASE_MIGRATOR_URL')));
     await client.connect();
     try {
-      process.exitCode = await runMembership(new PgMembershipAdmin(client), [sub, ...rest].filter((a): a is string => a !== undefined), out);
+      process.exitCode = await runMembership(
+        new PgMembershipAdmin(client),
+        [sub, ...rest].filter((a): a is string => a !== undefined),
+        out,
+      );
     } finally {
       await client.end();
     }
@@ -203,7 +209,11 @@ async function main(argv: string[]) {
     const client = new Client(pgClientConfig(required('DATABASE_MIGRATOR_URL')));
     await client.connect();
     try {
-      process.exitCode = await runUploads(client, [sub, ...rest].filter((a): a is string => a !== undefined), out);
+      process.exitCode = await runUploads(
+        client,
+        [sub, ...rest].filter((a): a is string => a !== undefined),
+        out,
+      );
     } finally {
       await client.end();
     }
@@ -214,7 +224,11 @@ async function main(argv: string[]) {
     const client = new Client(pgClientConfig(required('DATABASE_MIGRATOR_URL')));
     await client.connect();
     try {
-      process.exitCode = await runJobs(client, [sub, ...rest].filter((a): a is string => a !== undefined), out);
+      process.exitCode = await runJobs(
+        client,
+        [sub, ...rest].filter((a): a is string => a !== undefined),
+        out,
+      );
     } finally {
       await client.end();
     }
@@ -225,7 +239,11 @@ async function main(argv: string[]) {
     const client = new Client(pgClientConfig(required('DATABASE_AUDITOR_URL')));
     await client.connect();
     try {
-      process.exitCode = await runSecurityEvents(client, [sub, ...rest].filter((a): a is string => a !== undefined), out);
+      process.exitCode = await runSecurityEvents(
+        client,
+        [sub, ...rest].filter((a): a is string => a !== undefined),
+        out,
+      );
     } finally {
       await client.end();
     }
@@ -248,7 +266,13 @@ async function main(argv: string[]) {
       adminUrl: admin.toString(),
       tls: tlsFromEnv(),
       target: { host, port },
-      secrets: { app: required('PROVISION_SECRET_APP'), verifier: required('PROVISION_SECRET_VERIFIER'), migrator: required('PROVISION_SECRET_MIGRATOR'), worker: required('PROVISION_SECRET_WORKER'), ...(process.env.PROVISION_SECRET_ISSUER ? { issuer: process.env.PROVISION_SECRET_ISSUER } : {}) },
+      secrets: {
+        app: required('PROVISION_SECRET_APP'),
+        verifier: required('PROVISION_SECRET_VERIFIER'),
+        migrator: required('PROVISION_SECRET_MIGRATOR'),
+        worker: required('PROVISION_SECRET_WORKER'),
+        ...(process.env.PROVISION_SECRET_ISSUER ? { issuer: process.env.PROVISION_SECRET_ISSUER } : {}),
+      },
       store: secretsManagerStore(),
       rotate: f.bool('rotate'),
       requireMigrated: f.bool('require-migrated'),
@@ -322,7 +346,11 @@ async function main(argv: string[]) {
       bucket: location.bucket,
       prefix: location.prefix,
       settings,
-      clients: { upload: skipCanary && !hasCredentials('upload') ? client('read') : client('upload'), read: client('read'), ...(hasCredentials('admin') ? { admin: client('admin') } : {}) },
+      clients: {
+        upload: skipCanary && !hasCredentials('upload') ? client('read') : client('upload'),
+        read: client('read'),
+        ...(hasCredentials('admin') ? { admin: client('admin') } : {}),
+      },
       maxAgeHours: maxAge === undefined ? undefined : Number(maxAge),
       skipCanary,
       canaryRetainDays: days === undefined ? undefined : Number(days),
@@ -356,7 +384,10 @@ async function main(argv: string[]) {
 
 main(process.argv.slice(2)).catch((error: unknown) => {
   // Configuration and protocol errors carry fixed, key-free messages; anything else is reported by name only.
-  const message = error instanceof Error && (error instanceof OffsiteError || !('$metadata' in error)) ? error.message : `${(error as { name?: string }).name ?? 'Error'} (the provider refused or failed the request)`;
+  const message =
+    error instanceof Error && (error instanceof OffsiteError || !('$metadata' in error))
+      ? error.message
+      : `${(error as { name?: string }).name ?? 'Error'} (the provider refused or failed the request)`;
   process.stderr.write(`${message}\n`);
   process.exit(1);
 });

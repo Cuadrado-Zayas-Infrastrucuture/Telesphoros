@@ -20,7 +20,8 @@ export function pgEnv(url: string, database?: string, tls: DatabaseTls = tlsFrom
   };
   if (tls === 'require') {
     const authority = source.DATABASE_SSL_CA || source.NODE_EXTRA_CA_CERTS;
-    if (!authority) throw new Error('DATABASE_SSL=require needs the certificate authority file for the command-line tools: set DATABASE_SSL_CA (or NODE_EXTRA_CA_CERTS) to its path.');
+    if (!authority)
+      throw new Error('DATABASE_SSL=require needs the certificate authority file for the command-line tools: set DATABASE_SSL_CA (or NODE_EXTRA_CA_CERTS) to its path.');
     env.PGSSLMODE = 'verify-full';
     env.PGSSLROOTCERT = authority;
     env.PGSSLMINPROTOCOLVERSION = 'TLSv1.2';
@@ -41,8 +42,6 @@ export function run(command: string, args: string[], env: NodeJS.ProcessEnv = { 
       if (stderr.length < 4000) stderr += chunk.toString();
     });
     child.on('error', (error) => reject(new Error(`Could not start ${command}: ${error.message}`)));
-    child.on('close', (code) =>
-      code === 0 ? resolve() : reject(new Error(`${command} exited with code ${code}: ${stderr.trim()}`)),
-    );
+    child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`${command} exited with code ${code}: ${stderr.trim()}`))));
   });
 }

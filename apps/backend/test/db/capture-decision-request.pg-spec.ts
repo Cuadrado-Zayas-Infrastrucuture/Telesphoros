@@ -14,7 +14,10 @@ let pg: EphemeralDatabase;
 let database: Database;
 let repo: PostgresLedgerRecordsRepository;
 const tenant = () => `tenant-${randomUUID()}`;
-const fingerprint = (captureId: string, decision: string, note?: string) => createHash('sha256').update(JSON.stringify([captureId, decision, note ?? null])).digest('hex');
+const fingerprint = (captureId: string, decision: string, note?: string) =>
+  createHash('sha256')
+    .update(JSON.stringify([captureId, decision, note ?? null]))
+    .digest('hex');
 
 beforeAll(async () => {
   pg = await createEphemeralDatabase();
@@ -97,7 +100,11 @@ describe('a capture decision with a retry identity', () => {
     const two = await captured(b);
     const id = randomUUID();
     const mine = await repo.insertAcceptance(a, 'syn-reviewer', acceptanceFor(one.captureId, one.capture, { request: { id, hash: fingerprint(one.captureId, 'accepted') } }));
-    const other = await repo.insertAcceptance(a, 'syn-other-reviewer', acceptanceFor(one.captureId, one.capture, { request: { id, hash: fingerprint(one.captureId, 'accepted') } }));
+    const other = await repo.insertAcceptance(
+      a,
+      'syn-other-reviewer',
+      acceptanceFor(one.captureId, one.capture, { request: { id, hash: fingerprint(one.captureId, 'accepted') } }),
+    );
     const elsewhere = await repo.insertAcceptance(b, 'syn-reviewer', acceptanceFor(two.captureId, two.capture, { request: { id, hash: fingerprint(two.captureId, 'accepted') } }));
     expect([mine.created, other.created, elsewhere.created]).toEqual([true, true, true]);
     expect(new Set([mine.record.id, other.record.id, elsewhere.record.id]).size).toBe(3);
@@ -144,9 +151,12 @@ describe('the table itself', () => {
     const request = { id: randomUUID(), hash: fingerprint(captureId, 'accepted') };
     const stored = await repo.insertAcceptance(t, 'syn-reviewer', acceptanceFor(captureId, capture, { request }));
     await withAdmin(pg.adminUrl, async (c: Client) => {
-      const insert = (id: string | null, hash: string | null, who = 'syn-reviewer') => c.query(
-        `INSERT INTO capture_acceptances (tenant_id, created_by, ledger_event_id, capture_id, decision, text_sha256, poppler_version, creation_request_id, creation_request_hash)
-         VALUES ($1, $2, gen_random_uuid(), $3, 'accepted', $4, $5, $6, $7)`, [t, who, captureId, capture.textSha256, capture.popplerVersion, id, hash]);
+      const insert = (id: string | null, hash: string | null, who = 'syn-reviewer') =>
+        c.query(
+          `INSERT INTO capture_acceptances (tenant_id, created_by, ledger_event_id, capture_id, decision, text_sha256, poppler_version, creation_request_id, creation_request_hash)
+         VALUES ($1, $2, gen_random_uuid(), $3, 'accepted', $4, $5, $6, $7)`,
+          [t, who, captureId, capture.textSha256, capture.popplerVersion, id, hash],
+        );
       await expect(insert(randomUUID(), null)).rejects.toMatchObject({ code: '23514', constraint: 'capture_acceptances_creation_request_pair' });
       await expect(insert(null, 'a'.repeat(64))).rejects.toMatchObject({ code: '23514', constraint: 'capture_acceptances_creation_request_pair' });
       await expect(insert(randomUUID(), 'not-a-hash')).rejects.toMatchObject({ code: '23514', constraint: 'capture_acceptances_creation_request_pair' });

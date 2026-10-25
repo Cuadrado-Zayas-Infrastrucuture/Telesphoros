@@ -75,14 +75,17 @@ export function checkChange(input: MembershipChange): void {
   const bad = (field: string) => new MembershipAdminError('invalid', `${field} must be 1 to ${MAX_TEXT} characters without control characters.`);
   // eslint-disable-next-line no-control-regex -- the point is to refuse control characters
   const control = /[\u0000-\u001f\u007f]/;
-  for (const [field, value] of [['tenant', input.tenantId], ['sub', input.sub], ['by', input.by]] as const) {
+  for (const [field, value] of [
+    ['tenant', input.tenantId],
+    ['sub', input.sub],
+    ['by', input.by],
+  ] as const) {
     if (!value || value.length > MAX_TEXT || control.test(value)) throw bad(field);
   }
   // A membership is a person's. The name a background job acts under can never be given one (the database refuses it too: migration 0023).
   if (isSystemActor(input.sub)) throw new MembershipAdminError('invalid', 'sub must be a person, not a system actor.');
   if ((input.reason ?? '').length > 500) throw new MembershipAdminError('invalid', 'reason must be at most 500 characters.');
 }
-
 
 export interface TenantRecord {
   id: string;

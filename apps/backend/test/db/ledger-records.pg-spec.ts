@@ -22,7 +22,11 @@ afterAll(async () => {
 });
 
 const events = (tenantId: string) =>
-  withAdmin(pg.adminUrl, async (c: Client) => (await c.query(`SELECT seq::int AS seq, event_type, subject_table, actor_sub, prev_hash, record_hash FROM ledger_events WHERE tenant_id = $1 ORDER BY seq`, [tenantId])).rows);
+  withAdmin(
+    pg.adminUrl,
+    async (c: Client) =>
+      (await c.query(`SELECT seq::int AS seq, event_type, subject_table, actor_sub, prev_hash, record_hash FROM ledger_events WHERE tenant_id = $1 ORDER BY seq`, [tenantId])).rows,
+  );
 
 async function pipeline(report: SeededReport) {
   const capture = captureFor(report);
@@ -40,7 +44,9 @@ describe('ledger records: the happy path', () => {
     expect([c.created, a.created, e.created]).toEqual([true, true, true]);
     const list = await events(t);
     expect(list.map((x) => [x.seq, x.event_type, x.subject_table])).toEqual([
-      [1, 'capture', 'report_captures'], [2, 'capture-decision', 'capture_acceptances'], [3, 'evaluation', 'evaluations'],
+      [1, 'capture', 'report_captures'],
+      [2, 'capture-decision', 'capture_acceptances'],
+      [3, 'evaluation', 'evaluations'],
     ]);
     expect(list[0]!.prev_hash).toBe('0'.repeat(64));
     expect(list[1]!.prev_hash).toBe(list[0]!.record_hash);

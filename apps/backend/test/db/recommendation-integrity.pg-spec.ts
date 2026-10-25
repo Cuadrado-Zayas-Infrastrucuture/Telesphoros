@@ -17,11 +17,21 @@ const insert = `INSERT INTO recommendations (tenant_id, created_by, patient_id, 
   VALUES ($1, 'syn-author', $2, $3, 'G', 'syn-drug', 'syn-phenotype', 'Synthetic', 'Strong', 'syn-1') RETURNING id`;
 
 async function seed(db: EphemeralDatabase) {
-  return withAdmin(db.adminUrl, async c => {
+  return withAdmin(db.adminUrl, async (c) => {
     const a = (await c.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ($1, 'syn-author', 'SYN-A') RETURNING id`, [tenant])).rows[0].id as string;
     const b = (await c.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ($1, 'syn-author', 'SYN-B') RETURNING id`, [tenant])).rows[0].id as string;
-    const report = (await c.query(`INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ($1, 'syn-author', $2, 'vcf', 'syn.vcf', 1) RETURNING id`, [tenant, a])).rows[0].id as string;
-    const otherReport = (await c.query(`INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ($1, 'syn-author', $2, 'vcf', 'syn.vcf', 1) RETURNING id`, [tenant, b])).rows[0].id as string;
+    const report = (
+      await c.query(
+        `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ($1, 'syn-author', $2, 'vcf', 'syn.vcf', 1) RETURNING id`,
+        [tenant, a],
+      )
+    ).rows[0].id as string;
+    const otherReport = (
+      await c.query(
+        `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ($1, 'syn-author', $2, 'vcf', 'syn.vcf', 1) RETURNING id`,
+        [tenant, b],
+      )
+    ).rows[0].id as string;
     return { a, b, report, otherReport };
   });
 }
@@ -30,12 +40,14 @@ async function seed(db: EphemeralDatabase) {
 async function through(db: EphemeralDatabase, version: string) {
   const dir = mkdtempSync(join(tmpdir(), 'integrity-migrations-'));
   try {
-    for (const m of loadMigrations().filter(m => m.version <= version)) {
+    for (const m of loadMigrations().filter((m) => m.version <= version)) {
       writeFileSync(join(dir, `${m.version}_${m.name}.up.sql`), m.upSql);
       writeFileSync(join(dir, `${m.version}_${m.name}.down.sql`), m.downSql);
     }
-    return await withAdmin(db.adminUrl, c => migrateUp(c, dir));
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+    return await withAdmin(db.adminUrl, (c) => migrateUp(c, dir));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 it('commits NOT VALID without changing legacy mismatches, refuses new violations, and keeps failed validation separate', async () => {
@@ -43,27 +55,31 @@ it('commits NOT VALID without changing legacy mismatches, refuses new violations
   try {
     await through(legacy, '0011');
     const old = await seed(legacy);
-    const bad = await withAdmin(legacy.adminUrl, c => c.query(insert, [tenant, old.b, old.report]));
-    const before = await withAdmin(legacy.adminUrl, c => c.query('SELECT * FROM recommendations WHERE id = $1 AND tenant_id = $2', [bad.rows[0].id, tenant]));
+    const bad = await withAdmin(legacy.adminUrl, (c) => c.query(insert, [tenant, old.b, old.report]));
+    const before = await withAdmin(legacy.adminUrl, (c) => c.query('SELECT * FROM recommendations WHERE id = $1 AND tenant_id = $2', [bad.rows[0].id, tenant]));
     expect(await through(legacy, '0012')).toEqual(['0012']);
-    const after = await withAdmin(legacy.adminUrl, c => c.query('SELECT * FROM recommendations WHERE id = $1 AND tenant_id = $2', [bad.rows[0].id, tenant]));
+    const after = await withAdmin(legacy.adminUrl, (c) => c.query('SELECT * FROM recommendations WHERE id = $1 AND tenant_id = $2', [bad.rows[0].id, tenant]));
     expect(after.rows).toEqual(before.rows);
-    expect((await withAdmin(legacy.adminUrl, c => c.query('SELECT convalidated FROM pg_constraint WHERE conname = $1', [FK]))).rows).toEqual([{ convalidated: false }]);
-    await expect(withAdmin(legacy.adminUrl, c => c.query(insert, [tenant, old.b, old.report]))).rejects.toMatchObject({ code: '23503', constraint: FK });
+    expect((await withAdmin(legacy.adminUrl, (c) => c.query('SELECT convalidated FROM pg_constraint WHERE conname = $1', [FK]))).rows).toEqual([{ convalidated: false }]);
+    await expect(withAdmin(legacy.adminUrl, (c) => c.query(insert, [tenant, old.b, old.report]))).rejects.toMatchObject({ code: '23503', constraint: FK });
     await expect(through(legacy, '0013')).rejects.toThrow(/Migration 0013 failed/);
-    expect((await withAdmin(legacy.adminUrl, c => c.query('SELECT version FROM schema_migrations ORDER BY version'))).rows.at(-1)).toEqual({ version: '0012' });
-    expect((await withAdmin(legacy.adminUrl, c => c.query('SELECT * FROM recommendations WHERE id = $1 AND tenant_id = $2', [bad.rows[0].id, tenant]))).rows).toEqual(before.rows);
+    expect((await withAdmin(legacy.adminUrl, (c) => c.query('SELECT version FROM schema_migrations ORDER BY version'))).rows.at(-1)).toEqual({ version: '0012' });
+    expect((await withAdmin(legacy.adminUrl, (c) => c.query('SELECT * FROM recommendations WHERE id = $1 AND tenant_id = $2', [bad.rows[0].id, tenant]))).rows).toEqual(
+      before.rows,
+    );
     // Fixture-only repair of a deliberately planted synthetic violation; never an operational remediation script.
-    await withAdmin(legacy.adminUrl, c => c.query('UPDATE recommendations SET report_id = $1 WHERE id = $2 AND tenant_id = $3', [old.otherReport, bad.rows[0].id, tenant]));
+    await withAdmin(legacy.adminUrl, (c) => c.query('UPDATE recommendations SET report_id = $1 WHERE id = $2 AND tenant_id = $3', [old.otherReport, bad.rows[0].id, tenant]));
     expect(await through(legacy, '0013')).toEqual(['0013']);
-    expect((await withAdmin(legacy.adminUrl, c => c.query('SELECT convalidated FROM pg_constraint WHERE conname = $1', [FK]))).rows).toEqual([{ convalidated: true }]);
-  } finally { await legacy.drop(); }
+    expect((await withAdmin(legacy.adminUrl, (c) => c.query('SELECT convalidated FROM pg_constraint WHERE conname = $1', [FK]))).rows).toEqual([{ convalidated: true }]);
+  } finally {
+    await legacy.drop();
+  }
 });
 
 it('rolls back validation to an unvalidated enforced constraint, then removes/reapplies the relationship', async () => {
   const disposable = await createEphemeralDatabase();
   try {
-    await withAdmin(disposable.adminUrl, async c => {
+    await withAdmin(disposable.adminUrl, async (c) => {
       // 0021 and 0020 hold audit records (merge and patient-link decisions), so reverting them needs the same deliberate setting as the other audit migrations.
       await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
       const aboveValidation = revertAbove('validate_recommendation_report_patient');
@@ -79,7 +95,9 @@ it('rolls back validation to an unvalidated enforced constraint, then removes/re
       expect(await migrateUp(c)).toEqual(versionsAfter('validate_recommendation_report_patient'));
       expect((await c.query('SELECT 1 FROM pg_constraint WHERE conname = $1', [FK])).rows).toEqual([]);
     });
-  } finally { await disposable.drop(); }
+  } finally {
+    await disposable.drop();
+  }
 });
 
 it('bounds lock waits and rolls back DDL while another connection holds the report table', async () => {
@@ -93,9 +111,12 @@ it('bounds lock waits and rolls back DDL while another connection holds the repo
     const start = performance.now();
     await expect(through(disposable, '0012')).rejects.toThrow(/lock timeout/);
     expect(performance.now() - start).toBeLessThan(10_000);
-    expect((await withAdmin(disposable.adminUrl, c => c.query('SELECT 1 FROM pg_constraint WHERE conname = $1', [FK]))).rowCount).toBe(0);
+    expect((await withAdmin(disposable.adminUrl, (c) => c.query('SELECT 1 FROM pg_constraint WHERE conname = $1', [FK]))).rowCount).toBe(0);
     await blocker.query('ROLLBACK');
     expect(await through(disposable, '0012')).toEqual(['0012']);
     expect(await through(disposable, '0013')).toEqual(['0013']);
-  } finally { await blocker.end(); await disposable.drop(); }
+  } finally {
+    await blocker.end();
+    await disposable.drop();
+  }
 });

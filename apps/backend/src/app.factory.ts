@@ -1,4 +1,4 @@
-import type { Request,Response,NextFunction } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import type { IncomingMessage, Server } from 'node:http';
 import { isIntakePath } from './reports/intake/raw-intake';
 import { NotFoundException, VersioningType } from '@nestjs/common';
@@ -48,12 +48,20 @@ export function configureApp(app: NestExpressApplication, options: ConfigureOpti
   app.use(noStoreMiddleware);
   // Opens the slot AuthGuard fills with the caller's membership version; the database layer reads it at commit.
   app.use(authorityContextMiddleware);
-  app.use((req:Request,res:Response,next:NextFunction)=>{
-    if(isIntakePath((req.url??'').split('?')[0]!,req.method)){
-      const socket=req.socket;const previous=socket.timeout??0;const timeout=()=>req.destroy();
-      req.setTimeout(10000,timeout);
-      const clear=()=>{req.removeListener('timeout',timeout);if(!socket.destroyed)socket.setTimeout(previous);res.removeListener('finish',clear);res.removeListener('close',clear);};
-      res.once('finish',clear);res.once('close',clear);
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (isIntakePath((req.url ?? '').split('?')[0]!, req.method)) {
+      const socket = req.socket;
+      const previous = socket.timeout ?? 0;
+      const timeout = () => req.destroy();
+      req.setTimeout(10000, timeout);
+      const clear = () => {
+        req.removeListener('timeout', timeout);
+        if (!socket.destroyed) socket.setTimeout(previous);
+        res.removeListener('finish', clear);
+        res.removeListener('close', clear);
+      };
+      res.once('finish', clear);
+      res.once('close', clear);
     }
     next();
   });
@@ -62,8 +70,7 @@ export function configureApp(app: NestExpressApplication, options: ConfigureOpti
   if (allowed.size > 0) {
     app.enableCors({
       // Exact-match allowlist: a request from any other origin gets no CORS headers, so the browser blocks it.
-      origin: (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) =>
-        callback(null, origin !== undefined && allowed.has(origin)),
+      origin: (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => callback(null, origin !== undefined && allowed.has(origin)),
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
       allowedHeaders: ['Authorization', 'Content-Type', 'X-Request-Id', 'X-Upload-Revision'],
       exposedHeaders: ['X-Request-Id'],
@@ -72,9 +79,14 @@ export function configureApp(app: NestExpressApplication, options: ConfigureOpti
     });
   }
 
-  app.useBodyParser('json', { limit: JSON_BODY_LIMIT, type: (req: IncomingMessage) => !isIntakePath((req.url ?? '').split('?')[0]!, req.method ?? '') && /^application\/json(?:;|$)/i.test(req.headers['content-type'] ?? '') });
+  app.useBodyParser('json', {
+    limit: JSON_BODY_LIMIT,
+    type: (req: IncomingMessage) => !isIntakePath((req.url ?? '').split('?')[0]!, req.method ?? '') && /^application\/json(?:;|$)/i.test(req.headers['content-type'] ?? ''),
+  });
   // Finite pre-authentication header/body lifetime; intake imposes its tighter progress deadlines after admission.
-  const server=app.getHttpServer() as Server; server.headersTimeout=30000; server.keepAliveTimeout=API_KEEP_ALIVE_TIMEOUT_MS;
+  const server = app.getHttpServer() as Server;
+  server.headersTimeout = 30000;
+  server.keepAliveTimeout = API_KEEP_ALIVE_TIMEOUT_MS;
   app.setGlobalPrefix(API_PREFIX);
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   // Every route lives under the global prefix, so a path outside it can never match one. NestJS 12 mounts its not-found handler under the

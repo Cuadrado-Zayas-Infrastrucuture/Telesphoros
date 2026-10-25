@@ -1,13 +1,5 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Res } from '@nestjs/common';
-import {
-  type AcceptanceDto,
-  type CaptureDto,
-  type DecisionCreate,
-  decisionCreateSchema,
-  type FileLinkDto,
-  type IdParam,
-  idParamSchema,
-} from '@telesphoros/shared-types';
+import { type AcceptanceDto, type CaptureDto, type DecisionCreate, decisionCreateSchema, type FileLinkDto, type IdParam, idParamSchema } from '@telesphoros/shared-types';
 import type { Response } from 'express';
 import { CLINICAL_READ_ROLES } from '../auth/clinical-read';
 import { CurrentPrincipal, Roles } from '../auth/decorators';
@@ -39,8 +31,6 @@ export class ReportCaptureController {
     res.status(created ? 201 : 200);
     return capture;
   }
-
-
 }
 
 @Controller('captures')
