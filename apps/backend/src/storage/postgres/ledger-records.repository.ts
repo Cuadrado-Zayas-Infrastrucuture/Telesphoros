@@ -8,7 +8,7 @@ import { appendEvent, newId } from '../../ledger/ledger-writer';
 import { DisputeChangedError, MergeAlreadyDecidedError, MergeRefusedError, PatientLinkUnverifiedError, StaleAcceptanceError, SourceChangedError, toLedgerError, type RecordTable } from '../../ledger/ledger-types';
 import { loadProjections } from '../../ledger/projections';
 import { canonicalHash } from '../../services/report-adapter/canonical-json';
-import { LedgerRecordsRepository } from '../ledger-records.repository';
+import { CaptureDecisionRequestReusedError, LedgerRecordsRepository } from '../ledger-records.repository';
 import type {
   AcceptanceInput, CaptureInput, CorrectionInput, DisputeDecisionInput, DisputeInput, DisputeStatus, EvaluationInput, EvaluationReadContext, EvaluationState, InsertResult, MergeDecisionInput, MergeProposalInput, MergeStatus, NoteRecord, PatientDecisionInput, PatientLinkStateValue, Projected, QuarantineEntry,
 } from '../ledger-records';
@@ -278,12 +278,25 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 
   insertAcceptance(tenantId: string, actor: string, input: AcceptanceInput): Promise<InsertResult> {
     return this.write(tenantId, actor, async (client) => {
+      if (input.request) {
+        // Repeats of one retry identity queue here, so two at once cannot both miss the look-up and the second cannot leave a note behind.
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`capture-decision-request:${tenantId}:${actor}:${input.request.id}`]);
+        const { rows } = await client.query<{ id: string; hash: string }>(
+          `SELECT id::text AS id, creation_request_hash AS hash FROM capture_acceptances WHERE tenant_id = $1 AND created_by = $2 AND creation_request_id = $3`,
+          [tenantId, actor, input.request.id],
+        );
+        if (rows[0]) {
+          if (rows[0].hash !== input.request.hash) throw new CaptureDecisionRequestReusedError();
+          return this.existing(client, tenantId, 'capture_acceptances', rows[0].id);
+        }
+      }
       const id = newId();
       const noteId = input.note === undefined ? null : await this.insertNote(client, tenantId, actor, input.note);
       await client.query(
-        `INSERT INTO capture_acceptances (id, tenant_id, created_by, ledger_event_id, capture_id, decision, text_sha256, poppler_version, note_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [id, tenantId, actor, newId(), input.captureId, input.decision, input.textSha256, input.popplerVersion, noteId],
+        `INSERT INTO capture_acceptances (id, tenant_id, created_by, ledger_event_id, capture_id, decision, text_sha256, poppler_version, note_id,
+                                          creation_request_id, creation_request_hash)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [id, tenantId, actor, newId(), input.captureId, input.decision, input.textSha256, input.popplerVersion, noteId, input.request?.id ?? null, input.request?.hash ?? null],
       );
       return this.finish(client, tenantId, 'capture_acceptances', id);
     });

@@ -5,7 +5,7 @@ import type { Principal } from '../auth/principal';
 import { AppException } from '../common/app-exception';
 import { SourceChangedError } from '../ledger/ledger-types';
 import { ObjectStorage, ObjectTooLargeError } from '../object-storage/object-storage';
-import { LedgerRecordsRepository } from '../storage/ledger-records.repository';
+import { CaptureDecisionRequestReusedError, LedgerRecordsRepository } from '../storage/ledger-records.repository';
 import type { Projected } from '../storage/ledger-records';
 import type { ReportRecord } from '../storage/records';
 import { ReportsRepository } from '../storage/reports.repository';
@@ -148,14 +148,21 @@ export class CapturesService {
         throw AppException.conflictBecause('self-review', 'You took part in uploading or capturing this report, so you cannot accept it. Another reviewer must.');
       }
     }
-    const stored = await ledger.insertAcceptance(principal.tenantId, principal.sub, {
-      captureId,
-      decision: body.decision,
-      textSha256: capture.textSha256 as string,
-      popplerVersion: capture.popplerVersion as string,
-      ...(body.note === undefined ? {} : { note: body.note }),
-    });
-    return toAcceptanceDto(stored.record);
+    try {
+      const stored = await ledger.insertAcceptance(principal.tenantId, principal.sub, {
+        captureId,
+        decision: body.decision,
+        textSha256: capture.textSha256 as string,
+        popplerVersion: capture.popplerVersion as string,
+        ...(body.note === undefined ? {} : { note: body.note }),
+        // The fingerprint of the original request: the capture, the decision and the note. A repeat with the same id and fingerprint returns the decision already stored.
+        ...(body.requestId ? { request: { id: body.requestId, hash: createHash('sha256').update(JSON.stringify([captureId.toLowerCase(), body.decision, body.note ?? null])).digest('hex') } } : {}),
+      });
+      return toAcceptanceDto(stored.record);
+    } catch (error) {
+      if (error instanceof CaptureDecisionRequestReusedError) throw AppException.conflictBecause('request-id-reused', 'That request id was already used for a different decision.');
+      throw error;
+    }
   }
 
   // ---- helpers ---------------------------------------------------------------------------------------------------------------

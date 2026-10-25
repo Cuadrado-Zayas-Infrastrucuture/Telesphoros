@@ -42,6 +42,11 @@ export interface AcceptanceInput {
   popplerVersion: string;
   /** Free text; stored in event_notes, never in the ledger. */
   note?: string;
+  /**
+   * The retry identity of this decision: set by the caller, kept with the row, never shown. `hash` fingerprints the original request (the capture, the
+   * decision and the note), so a repeat by the same reviewer with the same fingerprint returns the decision already stored and another fingerprint is refused.
+   */
+  request?: { id: string; hash: string };
 }
 
 export interface EvaluationInput {

@@ -1,9 +1,12 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Client } from 'pg';
+import { Database } from '../../src/db/database';
+import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
 import { migrateDown, migrateUp } from '../../src/db/migrator';
 import { provisionLogins, type SecretStore } from '../../src/db/provision-logins';
 import { pgClientConfig } from '../../src/db/tls';
 import { adminUrl, withAdmin } from '../helpers/database';
+import { acceptanceFor, captureFor, seedLabReport } from '../helpers/ledger-fixtures';
 import { revertAbove, revertThrough } from '../helpers/migration-history';
 
 /**
@@ -26,6 +29,8 @@ class MemoryStore implements SecretStore {
 
 interface Fixture {
   admin: string;
+  /** The application login's URL (what the API connects with). */
+  app: string;
   migrator: Client;
   drop: () => Promise<void>;
 }
@@ -58,7 +63,7 @@ async function fixture(): Promise<Fixture> {
     migrator = new Client(pgClientConfig(store.values.get('m')!, 'disable'));
     await migrator.connect();
     await migrateUp(migrator);
-    return { admin: admin.toString(), migrator, drop };
+    return { admin: admin.toString(), app: store.values.get('a')!, migrator, drop };
   } catch (error) {
     await drop();
     throw error;
@@ -80,7 +85,7 @@ interface GuardCase {
   /** The session setting that allows the drop on purpose. */
   allow: string;
   refusal: RegExp;
-  populate: (c: Client) => Promise<void>;
+  populate: (c: Client, f: Fixture) => Promise<void>;
 }
 
 const cases: GuardCase[] = [
@@ -120,11 +125,28 @@ const cases: GuardCase[] = [
       );
     },
   },
+  {
+    anchor: 'capture_decision_requests', allow: 'telesphoros.allow_capture_decision_retry_drop', refusal: /Refusing to drop populated capture decision retry identities/,
+    // A ledger record: written the way the API writes it, through the application login.
+    populate: async (_c, f) => {
+      const database = new Database({ url: f.app, ssl: 'disable' });
+      try {
+        const repo = new PostgresLedgerRecordsRepository(database);
+        const report = await seedLabReport(f.admin, tenant);
+        const capture = captureFor(report);
+        const stored = await repo.insertCapture(tenant, report.uploader, capture);
+        const hash = createHash('sha256').update('request').digest('hex');
+        await repo.insertAcceptance(tenant, 'syn-reviewer', acceptanceFor(stored.record.id, capture, { request: { id: randomUUID(), hash } }));
+      } finally {
+        await database.onModuleDestroy();
+      }
+    },
+  },
 ];
 
 /** Whether each of these tables that still exists is FORCE ROW LEVEL SECURITY (a table a rollback has removed is not asked about). */
 const stillForced = async (c: Client) => (await c.query<{ relname: string; f: boolean }>(
-  `SELECT relname, relforcerowsecurity AS f FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relname IN ('reports', 'patients', 'patient_identifiers') ORDER BY 1`,
+  `SELECT relname, relforcerowsecurity AS f FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relname IN ('reports', 'patients', 'patient_identifiers', 'capture_acceptances') ORDER BY 1`,
 )).rows;
 
 const setting = (c: Client, name: string, value: string) => c.query('SELECT set_config($1, $2, false)', [name, value]);
@@ -147,7 +169,7 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
     try {
       const me = (await f.migrator.query('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user')).rows[0];
       expect(me).toEqual({ rolsuper: false, rolbypassrls: false }); // the login under test is the restricted one
-      await withAdmin(f.admin, (c) => guard.populate(c));
+      await withAdmin(f.admin, (c) => guard.populate(c, f));
       const version = revertThrough(guard.anchor).reverted.at(-1)!;
       await revertAboveThenSwitchOff(f.migrator, guard.anchor);
 
