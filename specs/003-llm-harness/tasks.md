@@ -23,13 +23,15 @@
 
 ### Implementation
 
-- [ ] T007 `src/model-clients/` : `ModelPort` and a scripted stand-in (correct, wrong and obedient modes). No network.
+- [ ] T007 `src/model-clients/` : `ModelPort` and a scripted stand-in (correct, wrong and obedient modes). No network. The port has no tool parameter, and a test fails if one is added (LLM06).
 - [ ] T008 `src/evaluators/` : sensors S1 to S6, the glossary file with its digest, the contradiction lexicon with its digest.
 - [ ] T009 `src/prompts/` : the first template and the provenance builder. The template digest is checked by a test.
 - [ ] T010 `src/fallback.ts` : fixed text per outcome and reason code.
 - [ ] T011 `evals/run.ts` : runs the cases through the real sensors and compares to the expectation; prints counts (cases, held, released, wrongly released), never case text.
 - [ ] T012 Wire `evals/run.ts` into the existing `verify` job and add its paths to `.github/ci/scope.mjs` so a harness change selects it (D7). `test:ci-config` covers the scope rule with a broken copy.
 - [ ] T013 `docs/verification/` record: what ran, counts, what was skipped.
+- [ ] T044 [P] [US4] Test first: changing the model ID, SDK version, decoding setting or token cap in any file that holds it selects the evaluation gate (FR-013); the test goes red when that file is dropped from the scope rule. Then add those files to `.github/ci/scope.mjs` with the T012 change.
+- [ ] T045 The OWASP coverage table in spec.md is checked against the tests that exist: a row naming a test that does not exist fails review; `docs/verification/` records any row still empty.
 
 **Checkpoint**: the founder reviews the first golden cases and the sensor list before any contract change.
 
@@ -64,12 +66,14 @@
 - [ ] T027 Migration (new number, down file, lint label) for the v2 outcome and counters tables; digests and reason codes only. Run the three backend tiers.
 - [ ] T028 `src/trace.ts` : per-step trace and receipt with the pinned model ID, digests and counters (FR-009, FR-010).
 - [ ] T029 Break the caps and the scan on purpose; record the red runs.
+- [ ] T043 [P] [US6] Keyed digests (FR-009): evidence and output digests are HMAC-SHA-256; a plain SHA-256 of a known evidence value does not match the stored digest; the key comes from the secrets store and is absent from the repository (gitleaks). Written before T028 and seen failing.
 
 ## Phase 4: Slice 4, the Bedrock adapter and shadow mode (US7, US8) — needs D4 and Bedrock access
 
 ### Tests first
 
-- [ ] T030 [P] A cross-region or `global.*` profile is refused; an alias or `latest` model ID is refused (FR-010, FR-016).
+- [ ] T030 [P] A `global.*` profile is refused; a cross-region profile is refused unless a recorded allowlist entry names that exact ID and its destination regions; an alias or `latest` model ID is refused (FR-010, FR-016).
+- [ ] T042 Before this phase writes any adapter code, a read-only check in the account (founder signs in): is the chosen model offered on demand in us-east-2 or only through a profile, which destination regions, and does the organization policy allow each. The result is recorded in `docs/verification/` and the founder approves the path (FR-016).
 - [ ] T031 [P] The adapter reads usage from the provider's own report and fails closed without it.
 - [ ] T032 [P] The adapter has no destination other than the Bedrock runtime endpoint in us-east-2.
 
@@ -83,9 +87,11 @@
 ## Phase 5: Founder (no code)
 
 - [ ] T037 Mark the golden set and the shadow output as pharmacist (D5).
-- [ ] T038 Set the thresholds (D8) from the phase 1 and phase 4 numbers.
+- [ ] T038 Set the thresholds and k (D8) from the phase 1 numbers and commit them to `docs/verification/` **before the first live run** in phase 4 (SC-008); never from live results.
 - [ ] T039 Record counsel's view on the FDA clinical decision support criteria (D10).
 - [ ] T040 Execute the AWS BAA before any real data. Write `docs/clinical-validation/` for the first release.
+- [ ] T046 Specify and build the post-release monitor (releases and holds by reason code, an alert on a hold-rate change) and rehearse a rollback to the previous pinned model; its own spec if it exceeds a slice. Required by FR-012.
+- [ ] T047 Write the clinician-facing "how this explanation is produced and checked" document (FR-012); counsel reads it with the D10 question.
 - [ ] T041 Decide readiness. The readiness flag stays closed until FR-012 is entirely true.
 
 ## Dependencies & Execution Order
