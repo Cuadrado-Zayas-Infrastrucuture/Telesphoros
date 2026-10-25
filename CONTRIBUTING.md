@@ -1,7 +1,7 @@
 # Contributing
 
 - Branch every PR off `main`; never stack PRs.
-- Backend: NestJS, TypeScript on Node >=22. Workspace: pnpm. Python only under `ml/training/` and `sidecars/` (a sidecar is a small process the backend starts; today, `sidecars/report-reader/`).
+- Backend: NestJS, TypeScript on Node >=22. Workspace: pnpm; an external dependency uses one version range in every package, and a workspace package is referenced as `workspace:*` (`pnpm test` fails otherwise). Python only under `ml/training/` and `sidecars/` (a sidecar is a small process the backend starts; today, `sidecars/report-reader/`).
 - Parameterized SQL, every query tenant-scoped; no PHI in logs.
 - A promise is awaited, handled or explicitly `void`ed: `pnpm lint` checks it with types (`scripts/lint/promise-rules.mjs`). A suppression names the rule and gives its reason after `--`; one that suppresses nothing fails lint.
 - Changes to clinical logic need tests and a validation note in `docs/clinical-validation/`.
