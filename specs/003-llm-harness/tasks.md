@@ -14,23 +14,23 @@
 
 ### Tests first
 
-- [ ] T001 [P] [US1] `evals/golden/` holds at least 60 hand-written cases from the synthetic fixtures. Each has the engine result, a candidate explanation, and the expected release or hold with the reason. Seeded wrong kinds: invented drug, changed strength, flipped direction, added number, dropped caveat, wrong gene, advice beyond the guideline. The founder marks a sample before they count (D5).
-- [ ] T002 [P] [US3] `evals/attacks/` holds at least 30 attacks (hostile report fields, instructions in a phenotype string, a file name, a note, a locale value, markup, a request to reveal the prompt). A scripted model obeys every instruction it sees; the expectation is "no effect".
-- [ ] T003 [P] [US1] One unit file per sensor S1 to S6 with hand-written positive and negative cases, and a **broken copy** of each sensor that the test must catch.
-- [ ] T004 [P] [US3] The prompt-provenance test: build prompts from hostile inputs and fail if any string is not derived from the closed set of FR-001.
-- [ ] T005 [P] [US2] One test per engine outcome and reason code: no model port call and the fixed text (control: a `shown` result does call the port).
-- [ ] T006 [P] [US4] A gate test: remove one sensor's check, then change a template without its digest. Each turns the runner red.
+- [ ] T001 [P] [US1] `evals/golden/` holds at least 60 hand-written cases from the synthetic fixtures. Each has the engine result, a candidate explanation, and the expected release or hold with the reason. Seeded wrong kinds: invented drug, changed strength, flipped direction, added number, dropped caveat, wrong gene, advice beyond the guideline. The founder marks a sample before they count (D5). **First cut done (34 cases, none marked by the pharmacist); the 60 is still to reach.**
+- [ ] T002 [P] [US3] `evals/attacks/` holds at least 30 attacks (hostile report fields, instructions in a phenotype string, a file name, a note, a locale value, markup, a request to reveal the prompt). A scripted model obeys every instruction it sees; the expectation is "no effect". **First cut done (18 attacks); the 30 is still to reach.**
+- [x] T003 [P] [US1] One unit file per sensor S1 to S6 with hand-written positive and negative cases, and a **broken copy** of each sensor that the test must catch.
+- [x] T004 [P] [US3] The prompt-provenance test: build prompts from hostile inputs and fail if any string is not derived from the closed set of FR-001.
+- [x] T005 [P] [US2] One test per engine outcome and reason code: no model port call and the fixed text (control: a `shown` result does call the port).
+- [x] T006 [P] [US4] A gate test: remove one sensor's check, then change a template without its digest. Each turns the runner red.
 
 ### Implementation
 
-- [ ] T007 `src/model-clients/` : `ModelPort` and a scripted stand-in (correct, wrong and obedient modes). No network. The port has no tool parameter, and a test fails if one is added (LLM06).
-- [ ] T008 `src/evaluators/` : sensors S1 to S6, the glossary file with its digest, the contradiction lexicon with its digest.
-- [ ] T009 `src/prompts/` : the first template and the provenance builder. The template digest is checked by a test.
-- [ ] T010 `src/fallback.ts` : fixed text per outcome and reason code.
-- [ ] T011 `evals/run.ts` : runs the cases through the real sensors and compares to the expectation; prints counts (cases, held, released, wrongly released), never case text.
-- [ ] T012 Wire `evals/run.ts` into the existing `verify` job and add its paths to `.github/ci/scope.mjs` so a harness change selects it (D7). `test:ci-config` covers the scope rule with a broken copy.
-- [ ] T013 `docs/verification/` record: what ran, counts, what was skipped.
-- [ ] T044 [P] [US4] Test first: changing the model ID, SDK version, decoding setting or token cap in any file that holds it selects the evaluation gate (FR-013); the test goes red when that file is dropped from the scope rule. Then add those files to `.github/ci/scope.mjs` with the T012 change.
+- [x] T007 `src/model-clients/` : `ModelPort` and a scripted stand-in (correct, wrong and obedient modes). No network. The port has no tool parameter, and a test fails if one is added (LLM06).
+- [x] T008 `src/evaluators/` : sensors S1 to S6, the glossary file with its digest, the contradiction lexicon with its digest.
+- [x] T009 `src/prompts/` : the first template and the provenance builder. The template digest is checked by a test.
+- [x] T010 `src/fallback.ts` : fixed text per outcome and reason code.
+- [x] T011 `evals/run.ts` : runs the cases through the real sensors and compares to the expectation; prints counts (cases, held, released, wrongly released), never case text.
+- [x] T012 Wire `evals/run.ts` into the existing `verify` job and add its paths to `.github/ci/scope.mjs` so a harness change selects it (D7). `test:ci-config` covers the scope rule with a broken copy. **Done differently: no `scope.mjs` change was needed. Any non-docs change already runs `verify` in full; T044 pins that.**
+- [x] T013 `docs/verification/` record: what ran, counts, what was skipped.
+- [x] T044 [P] [US4] Test first: changing the model ID, SDK version, decoding setting or token cap in any file that holds it selects the evaluation gate (FR-013); the test goes red when that file is dropped from the scope rule. Then add those files to `.github/ci/scope.mjs` with the T012 change.
 - [ ] T045 The OWASP coverage table in spec.md is checked against the tests that exist: a row naming a test that does not exist fails review; `docs/verification/` records any row still empty.
 
 **Checkpoint**: the founder reviews the first golden cases and the sensor list before any contract change.
@@ -39,18 +39,18 @@
 
 ### Tests first
 
-- [ ] T014 [P] [US5] One test per failure reason code (timeout, invalid structure, cap, authority lost, sensor hold, verifier hold, refusal): the engine text is returned unchanged and no model-written word is.
-- [ ] T015 [P] [US7] The readiness gate: with each FR-012 condition false in turn, `liveReadiness()` stays closed.
-- [ ] T016 [P] R1 `phi` data class declared in code; a test fails when a task has no declaration or reaches a provider without a BAA; synthetic-only marker refused if absent.
-- [ ] T017 [P] R2 each output guard has a production caller; a test fails when one has none.
-- [ ] T018 [P] R4 each task's output class is declared and its listed checks match.
+- [x] T014 [P] [US5] One test per failure reason code (timeout, invalid structure, cap, authority lost, sensor hold, verifier hold, refusal): the engine text is returned unchanged and no model-written word is.
+- [x] T015 [P] [US7] The readiness gate: with each FR-012 condition false in turn, `liveReadiness()` stays closed.
+- [x] T016 [P] R1 `phi` data class declared in code; a test fails when a task has no declaration or reaches a provider without a BAA; synthetic-only marker refused if absent.
+- [x] T017 [P] R2 each output guard has a production caller; a test fails when one has none.
+- [x] T018 [P] R4 each task's output class is declared and its listed checks match.
 
 ### Implementation
 
-- [ ] T019 `src/contracts.ts` : explanation, statement (`quote`, `restate`, `gloss`) and verdict schemas; no markup, links or code (FR-003, FR-015). The v1 schemas are untouched.
-- [ ] T020 `src/explain.ts` : `runExplanation`, reusing admission, fencing, idempotency, caps and boundary checks from the kernel (FR-007).
-- [ ] T021 `src/policy.ts` : the readiness conditions; the code reads `PGX_CLINICAL_HOLD_LIFTED`, which today nothing reads.
-- [ ] T022 Break each of R1, R2 and R4 on purpose and record the red run.
+- [x] T019 `src/contracts.ts` : explanation, statement (`quote`, `restate`, `gloss`) and verdict schemas; no markup, links or code (FR-003, FR-015). The v1 schemas are untouched. **Done in `src/explain-contracts.ts` and `src/evaluators/types.ts`, not `contracts.ts`: the synthetic contracts fix `purpose` to `business-assistance`.**
+- [x] T020 `src/explain.ts` : `runExplanation`, reusing admission, fencing, idempotency, caps and boundary checks from the kernel (FR-007).
+- [x] T021 `src/policy.ts` : the readiness conditions; the code reads `PGX_CLINICAL_HOLD_LIFTED`, which today nothing reads. **Done as `readiness(conditions)` in `policy.ts`: the boundary guard bans `process` in `src`, so the flag is passed in; the env read moves to the Bedrock adapter.**
+- [x] T022 Break each of R1, R2 and R4 on purpose and record the red run.
 
 ## Phase 3: Slice 3, outcome v2, real counters, trace and receipt (US6) — needs D6; a migration
 
