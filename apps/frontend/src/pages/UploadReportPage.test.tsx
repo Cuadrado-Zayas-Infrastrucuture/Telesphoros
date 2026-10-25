@@ -237,16 +237,144 @@ it('reports a list failure, preserves selection, and retries the requested page'
   expect(patientApi.mock.calls.at(-1)?.[0]).toBe('/api/v1/patients?page=2&pageSize=20');
 });
 
-it('handles an empty patient list without creating a patient', async () => {
+it('handles an empty patient list without creating a patient on its own', async () => {
   patientApi.mockReset().mockResolvedValue(pageResponse([]));
   const user = userEvent.setup();
   render(<UploadReportPage />);
-  expect(await screen.findByText('No patients available. Ask a clinician to add a synthetic patient, then refresh the list.')).toBeInTheDocument();
+  expect(await screen.findByText('No patients yet. Add a synthetic patient to continue.')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Refresh patients' })).toBeEnabled();
   await user.click(screen.getByRole('button', { name: 'Upload report' }));
   expect(await screen.findByText('Choose an existing patient.')).toBeInTheDocument();
   expect(submitMock).not.toHaveBeenCalled();
+  // One list request and nothing else: a patient is only ever added by an explicit click on "Add patient".
   expect(patientApi).toHaveBeenCalledTimes(1);
+});
+
+const createdPatient = { id: '77777777-7777-4777-8777-777777777777', label: 'SYN-0002', createdAt: date, updatedAt: date };
+const postedBodies = () => patientApi.mock.calls.filter(([, init]) => init?.method === 'POST').map(([, init]) => JSON.parse(init.body as string));
+/** The roster is empty until a POST succeeds; after that the list holds the new patient. `post` answers each POST. */
+function rosterThatGrows(post: () => Response | Promise<Response>) {
+  let added = false;
+  patientApi.mockReset().mockImplementation(async (_path: string, init?: RequestInit) => {
+    if (init?.method === 'POST') {
+      const answer = await post();
+      if (answer.ok) added = true;
+      return answer;
+    }
+    return pageResponse(added ? [createdPatient] : []);
+  });
+}
+const createdAnswer = () => new Response(JSON.stringify(createdPatient), { status: 201 });
+
+describe('adding a synthetic patient', () => {
+  it('offers the form by itself when the roster is empty, then selects the new patient', async () => {
+    rosterThatGrows(createdAnswer);
+    const user = userEvent.setup();
+    render(<UploadReportPage />);
+    expect(await screen.findByText('No patients yet. Add a synthetic patient to continue.')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Add a synthetic patient' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText('Synthetic patient label'), 'SYN-0002');
+    await user.click(screen.getByRole('button', { name: 'Add patient' }));
+    expect(await screen.findByText('Added SYN-0002 and selected it.')).toBeInTheDocument();
+    expect(postedBodies()).toEqual([{ label: 'SYN-0002', requestId: expect.stringMatching(/^[0-9a-f-]{36}$/) }]);
+    await waitFor(() => expect(screen.getByLabelText(/synthetic patient \(required\)/i)).toHaveValue(createdPatient.id));
+    // Keyboard users carry on from the patient list once it has reloaded.
+    await waitFor(() => expect(screen.getByLabelText(/synthetic patient \(required\)/i)).toHaveFocus());
+    expect(screen.getByRole('option', { name: 'SYN-0002' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Add a synthetic patient' })).not.toBeInTheDocument();
+    expect(submitMock).not.toHaveBeenCalled();
+  });
+
+  it('adds the patient when Enter is pressed in the label field, and does not submit the upload', async () => {
+    rosterThatGrows(createdAnswer);
+    const user = userEvent.setup();
+    render(<UploadReportPage />);
+    await screen.findByText('No patients yet. Add a synthetic patient to continue.');
+    const field = screen.getByLabelText('Synthetic patient label');
+    // The property under test: Enter must not fire the upload form's own submit.
+    const uploadFormSubmitted = vi.fn();
+    field.closest('form')!.addEventListener('submit', uploadFormSubmitted);
+    await user.type(field, 'SYN-0002{Enter}');
+    expect(await screen.findByText('Added SYN-0002 and selected it.')).toBeInTheDocument();
+    expect(postedBodies()).toHaveLength(1);
+    expect(uploadFormSubmitted).not.toHaveBeenCalled();
+    expect(submitMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['Jane Doe', /letters, numbers and hyphens only/i],
+    ['', 'Enter a synthetic patient label.'],
+  ])('refuses the label %j before asking the server', async (label, message) => {
+    rosterThatGrows(createdAnswer);
+    const user = userEvent.setup();
+    render(<UploadReportPage />);
+    await screen.findByText('No patients yet. Add a synthetic patient to continue.');
+    const field = screen.getByLabelText('Synthetic patient label');
+    if (label) await user.type(field, label);
+    await user.click(screen.getByRole('button', { name: 'Add patient' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(message);
+    expect(field).toHaveAttribute('aria-invalid', 'true');
+    expect(field).toHaveValue(label);
+    expect(postedBodies()).toHaveLength(0);
+  });
+
+  it.each([
+    [409, 'A patient with that label already exists. Choose it from the list, or use a different label.'],
+    [403, 'Your role cannot add patients.'],
+  ])('answers %i in plain words, keeps what was typed and selects nobody', async (status, message) => {
+    rosterThatGrows(() => new Response(JSON.stringify({ message: 'internal detail' }), { status }));
+    const user = userEvent.setup();
+    render(<UploadReportPage />);
+    await screen.findByText('No patients yet. Add a synthetic patient to continue.');
+    await user.type(screen.getByLabelText('Synthetic patient label'), 'SYN-0001');
+    await user.click(screen.getByRole('button', { name: 'Add patient' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(message);
+    expect(screen.queryByText(/internal detail/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Synthetic patient label')).toHaveValue('SYN-0001');
+    expect(screen.getByLabelText(/synthetic patient \(required\)/i)).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Add patient' })).toBeEnabled();
+  });
+
+  it('retries a lost request with the same request id, and uses a new one for a different label', async () => {
+    let attempt = 0;
+    rosterThatGrows(() => {
+      attempt += 1;
+      if (attempt < 3) throw new TypeError('offline');
+      return createdAnswer();
+    });
+    const user = userEvent.setup();
+    render(<UploadReportPage />);
+    await screen.findByText('No patients yet. Add a synthetic patient to continue.');
+    const field = screen.getByLabelText('Synthetic patient label');
+    await user.type(field, 'SYN-0002');
+    await user.click(screen.getByRole('button', { name: 'Add patient' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('The patient could not be added. Check your connection, then retry.');
+    await user.click(screen.getByRole('button', { name: 'Add patient' }));
+    await waitFor(() => expect(postedBodies()).toHaveLength(2));
+    await user.clear(field);
+    await user.type(field, 'SYN-0003');
+    await user.click(screen.getByRole('button', { name: 'Add patient' }));
+    await waitFor(() => expect(postedBodies()).toHaveLength(3));
+    const [first, second, third] = postedBodies();
+    expect(second.requestId).toBe(first.requestId);
+    expect(third.requestId).not.toBe(first.requestId);
+    expect(third.label).toBe('SYN-0003');
+  });
+
+  it('stays one click away when patients already exist, and can be cancelled', async () => {
+    patientApi.mockReset().mockImplementation(async () => pageResponse());
+    const user = userEvent.setup();
+    const { container } = render(<UploadReportPage />);
+    await screen.findByRole('option', { name: 'SYN-0001' });
+    expect(screen.queryByRole('group', { name: 'Add a synthetic patient' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Add a synthetic patient' }));
+    expect(screen.getByRole('group', { name: 'Add a synthetic patient' })).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('group', { name: 'Add a synthetic patient' })).not.toBeInTheDocument();
+    expect(postedBodies()).toHaveLength(0);
+  });
 });
 
 it('keeps one progress object across retries and clears it when starting another report', async () => {

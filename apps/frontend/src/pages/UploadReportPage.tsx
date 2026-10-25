@@ -3,8 +3,9 @@ import { ownedStorageMode } from '@/lib/storageMode';
 import { cancelOwnedUpload, restoreProgress, retireOwnedUpload } from '@/lib/ownedStorageApi';
 import { clearRecovery, readRecovery, RECOVERY_LIFETIME_MS, type RecoveryEntry } from '@/lib/uploadRecovery';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { RefreshCw } from 'lucide-react';
+import { Plus, RefreshCw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { patientLabelSchema } from '@telesphoros/shared-types';
 import type { Paginated, PatientDto } from '@telesphoros/shared-types';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
 import { useForm, useWatch, type FieldErrors } from 'react-hook-form';
@@ -21,10 +22,11 @@ import { CardTitle } from '@/components/ui/CardTitle';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/Form';
 import { Input } from '@/components/ui/Input';
+import { Label } from '@/components/ui/Label';
 import { NativeSelect } from '@/components/ui/NativeSelect';
 import { Spinner } from '@/components/ui/Spinner';
 import { usePageTitle } from '@/hooks/usePageTitle';
-import { listPatients, SubmitError, submitReport, type UploadProgress } from '@/lib/api';
+import { createPatient, listPatients, SubmitError, submitReport, type UploadProgress } from '@/lib/api';
 import { productUploadSchema, type ProductUploadValues } from '@/lib/productUploadSchema';
 import { REPORT_TYPE_LABELS, REPORT_TYPES } from '@/types/report';
 
@@ -118,6 +120,54 @@ export default function UploadReportPage() {
     mode: guided ? 'onChange' : 'onTouched',
   });
   const { isSubmitting } = form.formState;
+
+  // Adding a synthetic patient from this page. The panel opens by itself when the roster is empty, so nobody is left without a way forward.
+  const [addOpen, setAddOpen] = useState(false);
+  const [newLabel, setNewLabel] = useState('');
+  const [labelError, setLabelError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState<string | null>(null);
+  // One request id per label being tried: a retry after a lost response replays the same patient instead of creating a second one.
+  const addRequest = useRef<{ label: string; id: string } | null>(null);
+  const focusPatientAfterLoad = useRef(false);
+  const rosterEmpty = !patientsLoading && patients?.meta.total === 0;
+  const addVisible = addOpen || rosterEmpty;
+  useEffect(() => {
+    if (patientsLoading || !focusPatientAfterLoad.current) return;
+    focusPatientAfterLoad.current = false;
+    form.setFocus('patientId');
+  }, [patientsLoading, form]);
+
+  async function addPatient() {
+    const parsed = patientLabelSchema.safeParse(newLabel);
+    if (!parsed.success) {
+      setLabelError(parsed.error.issues[0]?.message ?? 'Enter a synthetic patient label.');
+      return;
+    }
+    const label = parsed.data;
+    const request = addRequest.current?.label === label ? addRequest.current : { label, id: crypto.randomUUID() };
+    addRequest.current = request;
+    setAdding(true);
+    setLabelError(null);
+    setAdded(null);
+    try {
+      const created = await createPatient(apiFetch, label, request.id);
+      addRequest.current = null;
+      setSelectedPatient(created);
+      form.setValue('patientId', created.id, { shouldValidate: true, shouldTouch: true });
+      setNewLabel('');
+      setAddOpen(false);
+      setAdded(`Added ${created.label} and selected it.`);
+      focusPatientAfterLoad.current = true;
+      loadPatients(patients?.meta.page ?? 1);
+    } catch (error) {
+      if (error instanceof SessionEndedError) return;
+      setLabelError(error instanceof SubmitError ? error.message : 'The patient could not be added. Please retry.');
+    } finally {
+      setAdding(false);
+    }
+  }
+
   const [step, setStep] = useState(0);
   const stepHeading = useRef<HTMLHeadingElement>(null);
   const pendingField = useRef<keyof ProductUploadValues | null>(null);
@@ -344,7 +394,7 @@ export default function UploadReportPage() {
                                 ))}
                               </NativeSelect>
                             </FormControl>
-                            <FormDescription>Select an existing synthetic patient. This upload does not create a patient.</FormDescription>
+                            <FormDescription>Select a synthetic patient, or add a new one.</FormDescription>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -355,7 +405,7 @@ export default function UploadReportPage() {
                           {patientsLoading
                             ? 'Loading patients…'
                             : patients?.meta.total === 0
-                              ? 'No patients available. Ask a clinician to add a synthetic patient, then refresh the list.'
+                              ? 'No patients yet. Add a synthetic patient to continue.'
                               : patients
                                 ? `Patient page ${patients.meta.page} of ${patients.meta.totalPages}`
                                 : 'Patients unavailable.'}
@@ -399,6 +449,85 @@ export default function UploadReportPage() {
                         <p role="alert" className="text-sm text-destructive">
                           {patientError}
                         </p>
+                      )}
+                      {added && (
+                        <p role="status" className="text-sm text-muted-foreground">
+                          {added}
+                        </p>
+                      )}
+                      {addVisible ? (
+                        <div role="group" aria-labelledby="add-patient-heading" className="flex flex-col gap-3 rounded-md border border-border bg-muted/40 p-4">
+                          <p id="add-patient-heading" className="text-sm font-medium">
+                            Add a synthetic patient
+                          </p>
+                          <div className="flex flex-col gap-2">
+                            <Label htmlFor="new-patient-label">Synthetic patient label</Label>
+                            <Input
+                              id="new-patient-label"
+                              value={newLabel}
+                              autoComplete="off"
+                              spellCheck={false}
+                              readOnly={adding}
+                              aria-invalid={labelError ? true : undefined}
+                              aria-describedby={labelError ? 'new-patient-help new-patient-error' : 'new-patient-help'}
+                              onChange={(event) => {
+                                setNewLabel(event.target.value);
+                                setLabelError(null);
+                              }}
+                              onKeyDown={(event) => {
+                                // Enter adds the patient; without this it would submit the whole upload form.
+                                if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                                  event.preventDefault();
+                                  void addPatient();
+                                }
+                              }}
+                            />
+                            <p id="new-patient-help" className="text-sm text-muted-foreground">
+                              Letters, numbers and hyphens only, up to 40 characters, for example SYN-0002. Never a name or a real identifier.
+                            </p>
+                            {labelError && (
+                              <p id="new-patient-error" role="alert" className="text-sm text-destructive">
+                                {labelError}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button type="button" size="sm" disabled={adding || isSubmitting} onClick={() => void addPatient()}>
+                              {adding ? 'Adding…' : 'Add patient'}
+                            </Button>
+                            {!rosterEmpty && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={adding}
+                                onClick={() => {
+                                  setAddOpen(false);
+                                  setNewLabel('');
+                                  setLabelError(null);
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="-ml-3">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={patientsLoading || isSubmitting}
+                            onClick={() => {
+                              setAddOpen(true);
+                              setAdded(null);
+                            }}
+                          >
+                            <Plus aria-hidden="true" className="size-4 shrink-0" />
+                            Add a synthetic patient
+                          </Button>
+                        </div>
                       )}
                     </div>
 
