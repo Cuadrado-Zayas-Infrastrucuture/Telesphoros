@@ -11,7 +11,7 @@ A first job, `changes`, decides how much of the rest a run must do (next section
 
 | Job | Required | What a green result proves |
 | --- | --- | --- |
-| `verify` | yes | Typecheck and lint pass; the unit and API suites pass on the in-memory store; everything builds; the frontend stays inside its chunk budget; the real `knowledge/cpic` directory loads under **production** rules (nothing synthetic or unreviewed); the Terraform security tripwire (`pnpm test:infra`) and the CI-configuration tripwire (`pnpm test:ci-config`) pass |
+| `verify` | yes | Typecheck and lint pass; the unit and API suites pass on the in-memory store; everything builds; the frontend stays inside its chunk budget; the real `knowledge/cpic` directory loads under **production** rules (nothing synthetic or unreviewed); the Terraform security tripwire (`pnpm test:infra`), the CI-configuration tripwire (`pnpm test:ci-config`) and the agent workflow pack checker (`pnpm check:workflows`) pass |
 | `database-and-storage` | yes | Joining gate: every **expected** isolated backend profile succeeds (memory and PostgreSQL + S3 on a pull request or push; all three in the nightly and whenever the scope is in doubt), their current-checkout recovery records validate (six, or nine for three profiles), and the complete worker suite passes on a fresh PostgreSQL/Moto pair, within one shared 30-minute run-attempt budget. Native failures and missing-service notices fail the gate |
 | `service-memory`, `service-postgres`, `service-postgres-s3` | through the joining gate | The same complete backend commands as before, each on its own PostgreSQL 16, Moto and runner filesystem. The memory profile still includes database/S3 specs; PostgreSQL/S3 settings, discovery, workers and test deadlines are unchanged. `service-postgres` (the PostgreSQL store with the in-memory object store) runs in the nightly, not on pull requests |
 | `browser` | yes | The login flow and pages, driven by Chromium at 375 px and 1280 px against the fake identity provider (test only), the built API and the built frontend. On failure, traces and screenshots are kept 7 days |
@@ -30,7 +30,7 @@ GitHub Actions minutes are a budget, so a run does not repeat work whose result 
 
 - `heavy`: the service path (`service-memory`, `service-postgres`, `service-postgres-s3`, `database-and-storage`) and `browser` run,
   and `verify` runs all of its steps.
-- `guards`: `verify` runs at all. With `heavy` false it runs only `pnpm test:infra` and `pnpm test:ci-config` (below).
+- `guards`: `verify` runs at all. With `heavy` false it runs only `pnpm test:infra`, `pnpm test:ci-config` and `pnpm check:workflows` (below).
 - `terraform`: `terraform` and `terraform-lint` run.
 - `archive`: the `image` job runs (it also feeds `release-image`, so it is kept whenever the release variables are set).
 
@@ -59,11 +59,11 @@ admin, a squash merge, an API error, a missing run) the push run is the full run
 `actions: read`, the permission the four service jobs already hold; no top-level permission changes.
 
 **Documentation only (pull requests and pushes).** When every changed file is `docs/**/*.md` or a `*.md` in the repository root, `heavy`,
-`terraform` and `archive` are false and `guards` is true: `verify` still runs and reports, but only its `test:infra` and `test:ci-config`
+`terraform` and `archive` are false and `guards` is true: `verify` still runs and reports, but only its `test:infra`, `test:ci-config` and `check:workflows`
 steps (after the install, which `test:infra` needs: it loads the backend's configuration loader), and the other required checks report as skipped. The rule is that narrow on purpose, from what the repository's
 own tests read: `knowledge/lab-report-reader/v2-handoff/ORIGIN.md` is read by a backend test, and `docs/` also holds JSON results and PNG
 previews that are not documentation. The only code that reads documentation is `test:infra` (`docs/ops/break-glass.md`,
-`docs/ops/staging-plan-review.md`) and `test:ci-config` (`docs/status/`, `CLAUDE.md`), which is why those two stay. `scope.test.mjs`
+`docs/ops/staging-plan-review.md`) `test:ci-config` (`docs/status/`, `CLAUDE.md`) and `check:workflows` (`docs/engineering/workflows.md`), which is why those three stay. `scope.test.mjs`
 lists the readers it can see (literal docs paths beside a file call), so a new one turns the guard red before it can be skipped.
 The changed files come from the test merge GitHub checks out for a pull request (two parents, the second being the event's head;
 anything else runs everything) and from `before..after` for a push to `main`. Renames are listed as a delete plus an add, so moving a
@@ -128,7 +128,7 @@ job-level condition and reports success to the ruleset (see "How GitHub treats a
 
 | Check | Pull request, code | Pull request, docs only | Draft pull request | Push to `main`, tree proved | Push to `main`, not proved | Nightly / manual |
 | --- | --- | --- | --- | --- | --- | --- |
-| `verify` | all steps | install, `test:infra`, `test:ci-config` | skipped (no run) | skipped | all steps (docs only: reduced) | all steps |
+| `verify` | all steps | install, `test:infra`, `test:ci-config`, `check:workflows` | skipped (no run) | skipped | all steps (docs only: reduced) | all steps |
 | `database-and-storage` | gate over memory + PostgreSQL + S3 | skipped | skipped | skipped | gate over memory + PostgreSQL + S3 | gate over all three profiles |
 | `browser` | runs | skipped | skipped | skipped | runs | runs |
 | `terraform` | runs if infrastructure, `.tflint.hcl` or `.github/` changed, else skipped | skipped | skipped | skipped | as for a pull request | runs |
@@ -388,7 +388,7 @@ file (then re-import or edit the ruleset in the UI).
 
 ```bash
 pnpm install --frozen-lockfile && pnpm typecheck && pnpm lint && pnpm test && pnpm build
-pnpm test:infra && pnpm test:ci-config
+pnpm test:infra && pnpm test:ci-config && pnpm check:workflows
 # The database and S3 tiers: docs/database.md. The browser tests: pnpm --filter @telesphoros/frontend e2e
 ```
 

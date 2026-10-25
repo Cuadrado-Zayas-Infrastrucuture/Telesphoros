@@ -1,7 +1,7 @@
 // Decides how much of ci.yml a run must do, so a run never repeats work that an earlier run already proved.
 // The `changes` job runs this first; every other job reads its outputs and nothing else:
 //   heavy     'true'  the service path (service-memory, service-postgres, service-postgres-s3, database-and-storage) and browser run, and verify runs all of its steps
-//   guards    'true'  verify runs at all; with heavy 'false' it runs only the two guards that read documentation (test:infra, test:ci-config)
+//   guards    'true'  verify runs at all; with heavy 'false' it runs only the three guards that read documentation (test:infra, test:ci-config, check:workflows)
 //   terraform 'true'  terraform and terraform-lint run
 //   postgres  'true'  the standalone PostgreSQL profile (service-postgres) runs, and the joining gate expects all three backend profiles; 'false' expects
 //                     memory and PostgreSQL + S3 only (service-profiles.mjs reads this output, only an explicit success of `changes` with 'false' narrows it)
@@ -42,8 +42,8 @@ const documentation = (archive, reason) => ({ heavy: false, guards: true, terraf
 /**
  * A path whose change cannot alter what the heavy jobs prove. Deliberately narrow. Markdown elsewhere is read by tests
  * (knowledge/lab-report-reader/v2-handoff/ORIGIN.md by handoff-import.spec.ts), and docs/ holds JSON and PNG files that are not documentation.
- * The only code that reads documentation is test:infra (docs/ops/break-glass.md, docs/ops/staging-plan-review.md) and test:ci-config
- * (docs/status/, CLAUDE.md); scope.test.mjs lists the readers, so a new one turns the guard red.
+ * The only code that reads documentation is test:infra (docs/ops/break-glass.md, docs/ops/staging-plan-review.md), test:ci-config
+ * (docs/status/, CLAUDE.md) and check:workflows (docs/engineering/workflows.md); scope.test.mjs lists the readers, so a new one turns the guard red.
  */
 export const docsPath = p => /^docs\/(?:[^/\0]+\/)*[^/\0]+\.md$/.test(p) || /^[^/\0]+\.md$/.test(p);
 /** Paths the terraform and terraform-lint jobs can depend on (the roots, the lambda source, the lint config, the workflow itself). */

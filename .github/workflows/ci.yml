@@ -132,12 +132,15 @@ jobs:
       - name: Knowledge directory loads under production rules
         if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
         run: pnpm --filter @telesphoros/backend knowledge:verify --production
-      # The two guards below run on every pull request, including documentation-only ones: they are the only code that reads docs/ and CLAUDE.md
+      # The three guards below run on every pull request, including documentation-only ones: they are the only code that reads docs/ and CLAUDE.md
       # (scope.test.mjs lists the readers). Everything above is skipped when only documentation changed.
       - name: Terraform security tripwire
         run: pnpm test:infra
       - name: CI configuration tripwire (pinned actions, required checks match the ruleset)
         run: pnpm test:ci-config
+      # The agent workflow pack (.agents/): skill metadata, routing evaluations, and local links, including those in docs/engineering/workflows.md.
+      - name: Agent workflow pack (skills, routing, local links)
+        run: pnpm check:workflows
 
   # Complete, unchanged profiles run on separate PostgreSQL clusters and runner filesystems.
   # Every job shares the run-attempt start + 30 minutes; no new job grants a fresh budget.

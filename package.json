@@ -16,6 +16,7 @@
     "build": "node scripts/workspace-build/workspace.cjs run build",
     "test:infra": "node --test infrastructure/terraform/guard.test.mjs",
     "test:ci-config": "node --test .github/ci/*.test.mjs",
+    "check:workflows": "node .agents/scripts/check-workflows.mjs && node --test .agents/scripts/check-workflows.test.mjs",
     "status:index": "node scripts/status-index.mjs",
     "demo:review:setup": "node scripts/local-review/database.cjs setup",
     "demo:review": "node scripts/local-review/start.cjs",
