@@ -92,6 +92,24 @@ export function evaluate(skills, cases) {
   return { passed: results.filter(x => x.passed).length, total: results.length, positive_rank1: results.filter(x => x.kind === 'positive' && x.passed).length, results };
 }
 
+/**
+ * The upstream comparison covers only skills adapted from that upstream (cases with `upstream_name`). A skill from another source,
+ * such as telesphoros-domain-modeling, has no counterpart there and is left out, with any negative case it owns.
+ * Upstream name vocabulary is kept for a fair comparison; only result identities are mapped.
+ */
+export function baselineInputs(cases, upstream) {
+  const derived = cases.filter(c => c.upstream_name);
+  const aliases = new Map(derived.map(c => [c.name, c.upstream_name]));
+  const skills = derived.map(c => {
+    const source = upstream.find(s => s.name === c.upstream_name);
+    if (!source) throw new Error(`Missing baseline skill: ${c.upstream_name}`);
+    return source;
+  });
+  const baselineCases = derived.map(c => ({ ...c, name: c.upstream_name,
+    negative: c.negative.filter(n => aliases.has(n.owner)).map(n => ({ ...n, owner: aliases.get(n.owner) })) }));
+  return { skills, cases: baselineCases };
+}
+
 export function checkPack(root) {
   const skills = loadSkills(resolve(root, '.agents/skills'));
   const errors = [];
@@ -117,17 +135,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const report = checkPack(defaultRoot);
     const summary = { skills: report.skills.length, local: report.evaluation, errors: report.errors, limits: ['Lexical routing only; not an LLM behavior or safety guarantee.', 'Local links check file existence and containment, not remote URLs or heading fragments.'] };
     if (args.length) {
-      const upstream = loadSkills(resolve(args[1], 'skills'));
-      const selected = report.cases.map(c => {
-        const source = upstream.find(s => s.name === c.upstream_name);
-        if (!source) throw new Error(`Missing baseline skill: ${c.upstream_name}`);
-        return { ...source, name: c.name };
-      });
-      // Keep upstream name vocabulary for a fair comparison; map only result identities.
-      const baseline = selected.map((s, i) => ({ ...s, name: report.cases[i].upstream_name }));
-      const aliases = new Map(report.cases.map(c => [c.name, c.upstream_name]));
-      const baselineCases = report.cases.map(c => ({ ...c, name: aliases.get(c.name), negative: c.negative.map(n => ({ ...n, owner: aliases.get(n.owner) })) }));
-      summary.baseline = evaluate(baseline, baselineCases);
+      const baseline = baselineInputs(report.cases, loadSkills(resolve(args[1], 'skills')));
+      summary.baseline = evaluate(baseline.skills, baseline.cases);
     }
     console.log(JSON.stringify(summary, null, 2));
     process.exitCode = report.errors.length ? 1 : 0;

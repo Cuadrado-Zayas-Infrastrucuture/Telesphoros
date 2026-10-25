@@ -131,5 +131,23 @@
         "owner": "telesphoros-debug"
       }
     ]
+  },
+  {
+    "name": "telesphoros-domain-modeling",
+    "positive": [
+      "The code says organization but the docs say tenant; settle which term we use.",
+      "Add correction and amendment to the glossary with one canonical meaning each.",
+      "Record our choice of Cognito for identity as an ADR in docs/adr."
+    ],
+    "negative": [
+      {
+        "prompt": "Break the report listing feature into scoped tasks and dependencies.",
+        "owner": "telesphoros-plan-change"
+      },
+      {
+        "prompt": "Review this PR for tenant isolation and access-control defects.",
+        "owner": "telesphoros-review"
+      }
+    ]
   }
 ]

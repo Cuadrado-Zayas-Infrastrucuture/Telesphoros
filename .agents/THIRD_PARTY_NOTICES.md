@@ -1,5 +1,7 @@
 # Agent-skills attribution and adaptation
 
+Two upstreams: Addy Osmani's agent-skills (this section) and mattpocock/skills (next section).
+
 Upstream: [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills), revision [`aeac41d4d005999432bb7312f7ff06383a91d59d`](https://github.com/addyosmani/agent-skills/tree/aeac41d4d005999432bb7312f7ff06383a91d59d), inspected 2026-10-16. The seven local workflow skills and lexical routing evaluator are adapted from the following MIT-licensed material. They are project adaptations, not an upstream distribution or endorsement.
 
 | Local workflow | Upstream concepts/files under `skills/` |
@@ -46,3 +48,18 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## mattpocock/skills: domain modeling
+
+Upstream: [mattpocock/skills](https://github.com/mattpocock/skills), commit `5beb35b040e3` (committed 2026-10-19). The byte-for-byte reference copy and its MIT licence (Copyright (c) 2026 Matt Pocock) are in [vendor/mattpocock/](vendor/mattpocock/VENDORED.md); the licence text is in [vendor/mattpocock/LICENSE](vendor/mattpocock/LICENSE).
+
+| Local workflow | Upstream files |
+|---|---|
+| `telesphoros-domain-modeling` | `skills/engineering/domain-modeling/SKILL.md`, `GLOSSARY-FORMAT.md`, `ADR-FORMAT.md` |
+
+Deliberate differences:
+
+- One glossary at `docs/glossary.md`, not a root `GLOSSARY.md` or a multi-context map; the repository has one context.
+- ADRs follow the shape of `docs/adr/0001-repository-layout.md` (Status and Scope lines, Context, Decision), not a one-paragraph template.
+- Clinical terms are proposed only and need the founder's review; clinical content and `knowledge/` are out of scope.
+- An ADR records a decision someone with authority made; the skill does not mark one accepted on its own.

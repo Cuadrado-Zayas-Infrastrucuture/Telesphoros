@@ -1,0 +1,4 @@
+interface:
+  display_name: "Telesphoros: Domain modeling"
+  short_description: "Settle terminology, keep the glossary and record ADRs"
+  default_prompt: "Use $telesphoros-domain-modeling to settle what we mean by a correction versus an amendment."
