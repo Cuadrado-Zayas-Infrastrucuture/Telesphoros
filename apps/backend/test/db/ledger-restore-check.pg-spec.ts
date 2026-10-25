@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Client } from 'pg';
+import type { Client } from 'pg';
 import { createBackup } from '../../src/db/backup';
 import { Database } from '../../src/db/database';
 import { MIGRATIONS_DIR, migrateUp } from '../../src/db/migrator';

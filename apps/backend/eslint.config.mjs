@@ -2,6 +2,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import { promiseRules } from '../../scripts/lint/promise-rules.mjs';
+import { typeImports } from '../../scripts/lint/type-imports.mjs';
 
 export default tseslint.config(
   { ignores: ['dist', 'coverage'] },
@@ -12,6 +13,8 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.node, ...globals.jest } },
   },
   promiseRules(['src/**/*.ts', 'test/**/*.ts'], import.meta.dirname),
+  // Only on the files promiseRules gives type information: with decorator metadata on, the rule needs it to leave decorated files alone.
+  typeImports(['src/**/*.ts', 'test/**/*.ts']),
   {
     // Request paths log through pino only (redacted, structured). Never console.
     files: ['src/**/*.ts'],

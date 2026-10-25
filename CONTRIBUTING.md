@@ -4,6 +4,7 @@
 - Backend: NestJS, TypeScript on Node >=22. Workspace: pnpm; an external dependency uses one version range in every package, and a workspace package is referenced as `workspace:*` (`pnpm test` fails otherwise). Python only under `ml/training/` and `sidecars/` (a sidecar is a small process the backend starts; today, `sidecars/report-reader/`).
 - Parameterized SQL, every query tenant-scoped; no PHI in logs.
 - A promise is awaited, handled or explicitly `void`ed: `pnpm lint` checks it with types (`scripts/lint/promise-rules.mjs`). A suppression names the rule and gives its reason after `--`; one that suppresses nothing fails lint.
+- An import used only as a type is written `import type`, on its own line (`scripts/lint/type-imports.mjs`; `eslint --fix` writes it). In the backend, decorator metadata needs the runtime import, so the rule runs only with type information there; `pnpm test` fails if it does not.
 - Changes to clinical logic need tests and a validation note in `docs/clinical-validation/`.
 - Commits by agents carry a `Co-Authored-By` trailer.
 - Database changes are **new numbered migrations** with a matching down file (never edit an applied one). Run the database tier before opening a PR: see docs/database.md. From migration 0028 each `.up.sql` starts with `-- compat: expand` or `-- compat: breaking` (use `breaking` when unsure); see "Migration labels" in docs/database.md.

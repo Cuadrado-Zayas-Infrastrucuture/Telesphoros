@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { ObjectStorage, ObjectTooLargeError } from '../../src/object-storage/object-storage';
+import type { ObjectStorage} from '../../src/object-storage/object-storage';
+import { ObjectTooLargeError } from '../../src/object-storage/object-storage';
 
 export interface ContractTarget {
   /** A store whose bucket keeps versions. */

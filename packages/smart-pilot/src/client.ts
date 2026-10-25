@@ -5,11 +5,16 @@ import { z } from "zod";
 import {
   registrationSchema,
   patientSchema,
-  medicationSchema,
   bundleSchema,
   tokenSchema,
 } from "./types.js";
-import type { Registration, Flow, Context, Medication } from "./types.js";
+import type {
+  Registration,
+  Flow,
+  Context,
+  Medication,
+  medicationSchema,
+} from "./types.js";
 export const SCOPES =
   "launch openid fhirUser patient/Patient.r patient/MedicationRequest.rs";
 const ID = /^[A-Za-z0-9.-]{1,64}$/;

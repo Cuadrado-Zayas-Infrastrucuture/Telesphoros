@@ -3,6 +3,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 import jsxA11y from 'eslint-plugin-jsx-a11y';
+import { typeImports } from '../../scripts/lint/type-imports.mjs';
 
 // Tailwind arbitrary values (w-[13px], [mask-type:alpha], [&>svg]:x) bypass the design tokens
 // in src/styles/tokens.css. Ban them so every value comes from the token system.
@@ -20,6 +21,7 @@ export default tseslint.config(
     files: ['**/*.{ts,tsx,js,mjs}'],
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
   },
+  typeImports(['**/*.{ts,tsx}']),
   {
     files: ['src/**/*.{ts,tsx}'],
     ignores: ['src/**/*.test.{ts,tsx}'],

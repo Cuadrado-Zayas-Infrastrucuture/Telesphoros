@@ -2,6 +2,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import { promiseRules } from '../../scripts/lint/promise-rules.mjs';
+import { typeImports } from '../../scripts/lint/type-imports.mjs';
 
 // The queue, registry and retry rules the worker and backend share. Not linted before 2026-10-24.
 export default tseslint.config(
@@ -13,4 +14,5 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.node } },
   },
   promiseRules(['src/**/*.ts'], import.meta.dirname),
+  typeImports(['**/*.ts']),
 );

@@ -1,7 +1,7 @@
 import { cpSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Client } from 'pg';
+import type { Client } from 'pg';
 import {
   loadMigrations,
   MIGRATIONS_DIR,
