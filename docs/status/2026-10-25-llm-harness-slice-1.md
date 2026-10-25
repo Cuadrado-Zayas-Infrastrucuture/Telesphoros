@@ -1,0 +1,11 @@
+# LLM harness slice 1: the evaluation harness, sensors S1 to S6 and the gate
+
+Date: 2026-10-25
+
+**Implemented.** The offline half of the harness in `apps/ai-service`, from `specs/003-llm-harness`. No model is called anywhere and nothing is exported from the package entry (`index.ts` is unchanged). It adds the closed prompt builder and its one template (`src/prompts/explain-v1.ts`), the `ModelPort` with no tools parameter and two scripted stand-ins (`src/model-clients/`), the sensors S1 to S6 with their lexicons and a draft glossary (`src/evaluators/`), the fixed engine-text table and eligibility rule (`src/fallback.ts`), and `evals/` with 34 hand-written golden cases (8 acceptable, 26 seeded wrong), 18 attacks, and the runner. The gate runs as a test inside `pnpm test`, so the existing `verify` job runs it and no CI job or required check name changed.
+
+**Controls.** Each sensor has a broken copy that turns the gate red; so does a missing sensor, a prompt builder that leaks inbound fields, a builder that accepts a hostile shape, and a template, lexicon or glossary changed without its pinned digest. A missing sensor at run time is a hold, never a pass. The package-boundary guard (`test/boundaries.test.ts`) now scans `src` subdirectories too, by the same rules, and a planted `fetch` in `src/evaluators/` turned it red.
+
+**Not changed:** the engine, the kernel, `contracts.ts`, `policy.ts`, `index.ts`, migrations, Terraform, the AWS account, the BAA. `apps/ai-service` gains `@telesphoros/cpic-schema` as a devDependency only (three lines in `pnpm-lock.yaml`), for tests that keep the harness's narrow view of a `shown` result and its fixed-text table in step with the engine.
+
+**Not verified or still open:** every case, glossary word, lexicon entry and fixed sentence is the author's draft; none is marked by the pharmacist (D5), so `mark` is `unmarked` on all 34 cases. The counts say the sensors agree with the author's expectations, not that the expectations are clinically right. The first cut is 34 cases and 18 attacks against the spec's 60 and 30. Thresholds (D8) are not set. The spec's S6 now also holds a dropped qualifier ("nothing dropped"); `spec.md` FR-004 still describes S6 as limits only and needs that sentence. See `docs/verification/llm-harness-slice-1.md`.

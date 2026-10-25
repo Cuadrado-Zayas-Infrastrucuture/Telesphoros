@@ -311,6 +311,18 @@ test('docsPath accepts only markdown under docs/ and in the repository root', ()
     '.claude/skills/speckit-plan/SKILL.md', 'specs/002-signed-image-release/spec.md', 'packages/smart-pilot/test/fhir-ig/README.md', 'docs/a\0b.md', 'a.md\0.ts']) assert.equal(docsPath(no), false, no);
 });
 
+test('every harness path that can change what the evaluation gate measures runs the whole verify job (FR-013)', () => {
+  // The evaluation gate is a test in apps/ai-service, run by `pnpm test` inside verify. verify runs in full unless EVERY changed file is documentation,
+  // so the model ID, SDK version, decoding settings, templates, lexicons and cases must live in files that are never documentation (not .md, not under docs/).
+  for (const path of ['apps/ai-service/src/model-clients/config.ts', 'apps/ai-service/src/prompts/explain-v1.ts', 'apps/ai-service/src/evaluators/lexicons.ts', 'apps/ai-service/evals/golden/cases.ts',
+    'apps/ai-service/evals/pinned.ts', 'apps/ai-service/package.json', 'pnpm-lock.yaml']) {
+    assert.equal(docsPath(path), false, path);
+    assert.deepEqual(classify([path]), { docsOnly: false, terraform: false }, path);
+  }
+  // Control: the same change is skipped when it hides in a markdown file under docs/, which is why a model ID must never live there.
+  assert.equal(docsPath('docs/config/model-id.md'), true);
+  assert.equal(classify(['docs/config/model-id.md']).docsOnly, true);
+});
 test('classify refuses a list it cannot trust, and separates documentation, code and infrastructure', () => {
   for (const bad of [null, undefined, 'docs/a.md', [], [''], [7], ['/etc/passwd'], ['docs/../apps/a.md'], ['../outside.md']]) assert.equal(classify(bad), null, JSON.stringify(bad));
   assert.deepEqual(classify(['docs/a.md', 'README.md']), { docsOnly: true, terraform: false });
