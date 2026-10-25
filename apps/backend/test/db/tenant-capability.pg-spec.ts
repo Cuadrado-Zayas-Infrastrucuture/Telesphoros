@@ -502,7 +502,11 @@ describe('reverting 0031 and 0028', () => {
     const restoredLegacyTable = (l: string) => l.startsWith('rel recommendations ') || l.startsWith('policy recommendations.');
     expect(down.filter(restoredLegacyTable)).toHaveLength(2);
     expect(full.filter(restoredLegacyTable)).toEqual([]);
-    expect(full.filter((l) => !removed.test(l))).toEqual(down.filter((l) => !restoredLegacyTable(l)));
+    // 0046 (hardening 1) names the upload policies' roles and turns security_events row-level security on; reverting it restores the old lines, so those lines differ by design.
+    const hardened = (l: string) => /^policy report_upload_(attempts|runs)\./.test(l) || /^policy security_events\./.test(l) || l.startsWith('rel security_events ');
+    expect(down.filter((l) => /^policy report_upload_(attempts|runs)\./.test(l)).every((l) => l.endsWith('{public}'))).toBe(true);
+    expect(full.filter((l) => /^policy report_upload_(attempts|runs)\./.test(l)).some((l) => l.includes('{public}'))).toBe(false);
+    expect(full.filter((l) => !removed.test(l) && !hardened(l))).toEqual(down.filter((l) => !restoredLegacyTable(l) && !hardened(l)));
     expect(await owner((c) => migrateUp(c))).toEqual(versionsFrom('tenant_capability_issue_current'));
     expect(await owner(catalogSnapshot)).toEqual(full); // and re-applying 0043 drops the legacy table again
     // the snapshot is sensitive to the thing it guards: a grant to PUBLIC changes it

@@ -41,6 +41,22 @@ export interface LoginNames {
 export const DEFAULT_LOGINS: LoginNames = { app: 'telesphoros_api', verifier: 'telesphoros_ledger_watch', migrator: 'telesphoros_migrator', worker: 'telesphoros_job_worker', issuer: 'telesphoros_session_issuer' };
 
 export type LoginKind = keyof LoginNames;
+
+/**
+ * What the SERVER enforces on each login, whatever the client asks for. `database.ts` sets `statement_timeout` and `idle_in_transaction_session_timeout` in the
+ * pool configuration, which protects only the code that uses that pool: a second client, a script or a stolen login would run unbounded and hold connections.
+ * These are role-level defaults (the client's own, tighter values still win) plus a connection ceiling per login. The numbers are judgements, set above the
+ * client's 5 s and 10 s so they never fire first in normal use; the connection limits are ASSUMED to sit under the instance's `max_connections` and must be
+ * checked against the pool sizes of the tasks when the instance class is chosen. The migrator has no statement timeout: a migration sets its own `lock_timeout`
+ * and a long backfill is deliberate.
+ */
+export const LOGIN_LIMITS: Record<LoginKind, { settings: Record<string, string>; connectionLimit: number }> = {
+  app: { settings: { statement_timeout: '10s', idle_in_transaction_session_timeout: '15s', lock_timeout: '5s' }, connectionLimit: 50 },
+  worker: { settings: { statement_timeout: '10s', idle_in_transaction_session_timeout: '15s', lock_timeout: '5s' }, connectionLimit: 20 },
+  issuer: { settings: { statement_timeout: '10s', idle_in_transaction_session_timeout: '15s', lock_timeout: '5s' }, connectionLimit: 10 },
+  verifier: { settings: { statement_timeout: '120s', idle_in_transaction_session_timeout: '30s', lock_timeout: '5s' }, connectionLimit: 10 },
+  migrator: { settings: { idle_in_transaction_session_timeout: '60s' }, connectionLimit: 5 },
+};
 /** The logins every deployment has; the issuer is added when its secret is configured. */
 type CoreLoginKind = Exclude<LoginKind, 'issuer'>;
 
@@ -234,6 +250,10 @@ export async function provisionLogins(options: ProvisionOptions): Promise<Provis
       if (!member) await admin.query(`GRANT ${q(group)} TO ${q(names[kind])}`);
     }
 
+    // Every run, including a login whose password already works: the limits are repaired like the groups are.
+    for (const kind of ['migrator', ...members] as LoginKind[]) await applyLoginLimits(admin, names[kind], kind);
+    await revokePublicTemporary(admin, names.migrator, database);
+
     report.checks.push(...(await verifyLogins(admin, names, options)));
     report.ok = report.checks.every((c) => c.ok);
     return report;
@@ -245,6 +265,15 @@ export async function provisionLogins(options: ProvisionOptions): Promise<Provis
     }
     await admin.end();
   }
+}
+
+/** Sets the role-level defaults and the connection ceiling of a login (see LOGIN_LIMITS). Resets first, so a setting removed from the table is removed from the role. */
+async function applyLoginLimits(admin: Client, name: string, kind: LoginKind): Promise<void> {
+  const q = (identifier: string) => admin.escapeIdentifier(identifier);
+  const { settings, connectionLimit } = LOGIN_LIMITS[kind];
+  await admin.query(`ALTER ROLE ${q(name)} RESET ALL`);
+  for (const [key, value] of Object.entries(settings)) await admin.query(`ALTER ROLE ${q(name)} SET ${q(key)} = ${admin.escapeLiteral(value)}`);
+  await admin.query(`ALTER ROLE ${q(name)} CONNECTION LIMIT ${Math.trunc(connectionLimit)}`);
 }
 
 /** Creates the privilege groups the migrations expect, with exactly their attributes. A group that exists with other attributes is left alone and fails the checks. */
@@ -271,6 +300,27 @@ async function makeOwner(admin: Client, migrator: string, database: string): Pro
   if (!already) await admin.query(`GRANT ${q(migrator)} TO CURRENT_USER WITH SET TRUE, INHERIT FALSE`);
   try {
     await admin.query(`ALTER DATABASE ${q(database)} OWNER TO ${q(migrator)}`);
+  } finally {
+    if (!already) await admin.query(`REVOKE ${q(migrator)} FROM CURRENT_USER`);
+  }
+}
+
+/**
+ * Takes the TEMPORARY right on the database away from PUBLIC. Only the database's owner can: after `makeOwner` that is the migrator, not the administrator (on RDS the
+ * administrator never owns it), and a REVOKE by anyone else succeeds silently and changes nothing. So this acts as the owner, with the same temporary membership
+ * `makeOwner` uses; the `database temporary tables` check reads the result back.
+ */
+async function revokePublicTemporary(admin: Client, migrator: string, database: string): Promise<void> {
+  const q = (identifier: string) => admin.escapeIdentifier(identifier);
+  const already = (await admin.query('SELECT pg_has_role(current_user, $1, \'SET\') AS ok', [migrator])).rows[0].ok as boolean;
+  if (!already) await admin.query(`GRANT ${q(migrator)} TO CURRENT_USER WITH SET TRUE, INHERIT FALSE`);
+  try {
+    await admin.query(`SET ROLE ${q(migrator)}`);
+    try {
+      await admin.query(`REVOKE TEMPORARY ON DATABASE ${q(database)} FROM PUBLIC`);
+    } finally {
+      await admin.query('RESET ROLE');
+    }
   } finally {
     if (!already) await admin.query(`REVOKE ${q(migrator)} FROM CURRENT_USER`);
   }
@@ -326,6 +376,17 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
     const wanted = [...EXPECTED_GROUPS[kind]].sort();
     add(`${kind} login memberships`, JSON.stringify(memberships) === JSON.stringify(wanted), `member of ${memberships.join(', ') || 'nothing'} (expected exactly ${wanted.join(', ')})`);
   }
+
+  for (const kind of judged) {
+    const row = (await admin.query<{ rolconfig: string[] | null; rolconnlimit: number }>('SELECT rolconfig, rolconnlimit FROM pg_roles WHERE rolname = $1', [names[kind]])).rows[0];
+    const want = LOGIN_LIMITS[kind];
+    const have = new Map((row?.rolconfig ?? []).map((entry) => [entry.slice(0, entry.indexOf('=')), entry.slice(entry.indexOf('=') + 1)] as const));
+    const wrong = Object.entries(want.settings).filter(([k, v]) => have.get(k) !== v).map(([k]) => k);
+    if (row?.rolconnlimit !== want.connectionLimit) wrong.push('connection limit');
+    add(`${kind} login limits`, wrong.length === 0, wrong.length ? `missing or different on the server: ${wrong.join(', ')}` : `server-side ${Object.keys(want.settings).join(', ') || 'no timeouts'} and a limit of ${want.connectionLimit} connections`);
+  }
+  const temp = (await admin.query<{ ok: boolean }>("SELECT has_database_privilege('public', current_database(), 'TEMPORARY') AS ok")).rows[0]!.ok;
+  add('database temporary tables', !temp, temp ? 'PUBLIC may still create temporary tables in the database' : 'PUBLIC holds no TEMPORARY right on the database');
 
   checks.push(await checkGroups(admin));
 
