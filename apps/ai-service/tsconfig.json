@@ -20,6 +20,7 @@
     "src",
     "durable",
     "test",
+    "evals",
     "tsup.config.ts",
     "vitest.config.mts",
     "vitest.durable.config.mts"
