@@ -59,8 +59,12 @@ test('database setup runs the seed after the migrations, and no verify script pr
 test('the storage demo runtime seeds the same demo users, after its migrations', () => {
   const runtime = read('../local-storage/runtime.cjs');
   const migrate = runtime.indexOf("migrateUp(owner)");
-  const seed = runtime.indexOf("require('../local-review/seed.cjs').seedPersonas(owner)");
-  assert.ok(migrate > 0 && seed > migrate, 'runtime.cjs must call seedPersonas(owner) after migrateUp(owner), or every demo user gets "No organization is assigned"');
+  const seed = runtime.indexOf('s.seedPersonas(owner)');
+  assert.ok(migrate > 0 && seed > migrate, 'runtime.cjs must call s.seedPersonas(owner) after migrateUp(owner), or every demo user gets "No organization is assigned"');
+  const services = read('../local-storage/services.cjs');
+  assert.match(services, /const seedPersonas = \(db\) => require\('\.\.\/local-review\/seed\.cjs'\)\.seedPersonas\(db\);/, 'services.cjs provides it, loading the seed lazily');
+  assert.doesNotMatch(services, /^(?:const|let|var)\s+[\w{}, ]+=\s*require\([^)]*seed\.cjs/m, 'services.cjs must not load the seed (and the built backend) at import time');
+  assert.match(read('../local-storage/launcher-cors-fixture.cjs'), /seedPersonas: async \(\) => \{\}/, 'the launcher test replaces the services object, so it must replace the seed too');
 });
 
 function capture(fn) {
