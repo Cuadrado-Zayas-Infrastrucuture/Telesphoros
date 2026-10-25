@@ -2,7 +2,7 @@
 
 **Input**: [spec.md](spec.md), [plan.md](plan.md)
 
-**Prerequisites**: plan.md **approved by the founder**. It is not approved yet, so `/speckit-implement` must not run against this file until it is. Decisions D6 to D10 are open; each phase says which it needs.
+**Prerequisites**: plan.md **approved by the founder**. It is not approved yet, so `/speckit-implement` must not run against this file until it is. Decisions D1 to D10 were made on 2026-10-25; D8 (the numeric thresholds) is a decision to take after phase 1 produces numbers.
 
 **Tests**: Required by the spec (SC-001 to SC-008). In each phase the test tasks come first, and each must be seen failing before the implementation lands.
 

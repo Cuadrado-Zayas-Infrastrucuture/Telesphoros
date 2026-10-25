@@ -4,7 +4,7 @@
 
 **Input**: Feature specification from `specs/003-llm-harness/spec.md`
 
-**Status**: **Draft. Not approved.** The founder chose D1 to D5 on 2026-10-25. D6 to D10 are open, each with a recommendation. No slice may start until the founder approves this plan.
+**Status**: **Draft. The plan itself is not approved yet.** The founder decided D1 to D10 on 2026-10-25 (see "Founder decisions"). No slice may start until the founder approves this plan; opening the draft PR is the request for that review.
 
 ## Summary
 
@@ -127,13 +127,13 @@ Cases are hand-written from the synthetic fixtures (`GENEA` to `GENEE`, invented
 
 - **D1 scope:** explain only. **D2:** no model-driven tools. **D3:** synthetic data only. **D4:** direct Bedrock Converse in us-east-2. **D5:** the founder reviews the golden cases.
 
-**Open, with recommendations**
+**Decided 2026-10-25** (founder, verbatim): *"Approve the recommendations for D6 to D10 as written: no stored text, gate inside verify, thresholds after slice 1, English first, counsel before readiness."*
 
-- **D6 stored text.** Should the harness persist explanation text? *Recommend no in v1* (FR-014): the caller may store it under its own retention, which R5 then governs.
-- **D7 where the gate runs.** *Recommend inside the existing `verify` job, selected by path,* so the ruleset and required check names stay as they are. The alternative is a new required check, which needs a ruleset change through `gh api`.
-- **D8 thresholds.** What release rate for acceptable explanations, what hold rate is tolerable, how many trials per case. *Recommend deciding after slice 1 produces real numbers,* not before.
-- **D9 languages.** *Recommend English first.* Spanish needs its own glossary, sensors and your review; it follows as its own slice.
-- **D10 regulatory.** Whether this is non-device clinical decision support. *Recommend asking regulatory counsel before readiness,* with the product's behaviour as written here. This plan does not decide it.
+- **D6 stored text: no in v1** (FR-014). The caller may store it under its own retention, which R5 then governs.
+- **D7 where the gate runs: inside the existing `verify` job, selected by path,** so the ruleset and required check names stay as they are. (The alternative, a new required check, would need a ruleset change through `gh api`.)
+- **D8 thresholds: decided after slice 1 produces real numbers,** not before: the release rate for acceptable explanations, the tolerable hold rate, and trials per case.
+- **D9 languages: English first.** Spanish needs its own glossary, sensors and the founder's review; it follows as its own slice.
+- **D10 regulatory: counsel is asked before readiness** whether this is non-device clinical decision support, with the product's behaviour as written here. This plan does not decide it.
 
 ## Not touched by this plan or PR
 

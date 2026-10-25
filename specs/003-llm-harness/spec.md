@@ -4,11 +4,11 @@
 
 **Created**: 2026-10-25
 
-**Status**: Draft, waiting for the founder's approval of [plan.md](plan.md). On 2026-10-25 the founder chose the defaults D1 to D5: *"the model explains verified engine output only, no model-driven tools, synthetic data, direct Bedrock client, and I will review the golden cases as the pharmacist."*
+**Status**: Draft, waiting for the founder's approval of [plan.md](plan.md). On 2026-10-25 the founder decided D6 to D10 as the plan recommends (no stored text, the gate inside `verify`, thresholds after slice 1, English first, counsel before readiness) and chose the defaults D1 to D5: *"the model explains verified engine output only, no model-driven tools, synthetic data, direct Bedrock client, and I will review the golden cases as the pharmacist."*
 
 **Input**: The founder's priority (2026-10-25): the harness around the model is the most important part and must be built to best practice. Requirements R1 to R5 in [`docs/ai-safety-and-hallucination-controls.md`](../../docs/ai-safety-and-hallucination-controls.md) (#11, #47). A read-only review of `apps/ai-service` (2026-10-24). External references, read as summaries and to be confirmed at the source before they are relied on: Anthropic's [evals guide](https://anthropic.com/engineering/demystifying-evals-for-ai-agents), the [OWASP Top 10 for LLM Applications 2025](https://www.hackerone.com/ai/owasp-top-10-llms-2025), and the FDA's clinical decision support guidance as revised in January 2026.
 
-Line numbers cite `main` `9ab6bc1`.
+Line numbers cite `main` `ceac298`.
 
 ## The problem
 
