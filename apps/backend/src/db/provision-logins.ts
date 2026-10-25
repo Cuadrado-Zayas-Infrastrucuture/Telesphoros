@@ -260,6 +260,9 @@ const EXPLAIN_RECEIPT_RIGHTS: Record<'app' | 'verifier' | 'worker' | 'issuer', R
     agentic_explain_run_sweep: false,
     agentic_explain_run_purge: false,
     agentic_explain_transition_ok: false,
+    agentic_explain_run_json: false,
+    agentic_explain_run_guard: false,
+    agentic_explain_receipt_guard: false,
   },
   verifier: {
     agentic_explain_receipt_append: false,
@@ -273,6 +276,9 @@ const EXPLAIN_RECEIPT_RIGHTS: Record<'app' | 'verifier' | 'worker' | 'issuer', R
     agentic_explain_run_sweep: false,
     agentic_explain_run_purge: false,
     agentic_explain_transition_ok: false,
+    agentic_explain_run_json: false,
+    agentic_explain_run_guard: false,
+    agentic_explain_receipt_guard: false,
   },
   worker: {
     agentic_explain_receipt_append: false,
@@ -286,6 +292,9 @@ const EXPLAIN_RECEIPT_RIGHTS: Record<'app' | 'verifier' | 'worker' | 'issuer', R
     agentic_explain_run_sweep: false,
     agentic_explain_run_purge: false,
     agentic_explain_transition_ok: false,
+    agentic_explain_run_json: false,
+    agentic_explain_run_guard: false,
+    agentic_explain_receipt_guard: false,
   },
   issuer: {
     agentic_explain_receipt_append: false,
@@ -299,6 +308,9 @@ const EXPLAIN_RECEIPT_RIGHTS: Record<'app' | 'verifier' | 'worker' | 'issuer', R
     agentic_explain_run_sweep: false,
     agentic_explain_run_purge: false,
     agentic_explain_transition_ok: false,
+    agentic_explain_run_json: false,
+    agentic_explain_run_guard: false,
+    agentic_explain_receipt_guard: false,
   },
 };
 export async function provisionLogins(options: ProvisionOptions): Promise<ProvisionReport> {

@@ -345,4 +345,11 @@ describe('the stores are asynchronous and may fail: a rejection is a hold with t
     expect(o).toMatchObject({ released: false, reasonCode: 'CONTROL_HELD', engineText: avoidText });
     expect(s.store.runs.size).toBe(0);
   });
+  test('a busy run store ends the run held with a retryable cause in the receipt, and no explanation', async () => {
+    const s = explainScenario();
+    s.ports.store.admit = () => Promise.reject(new Error('RUN_STORE_BUSY'));
+    const o = await go(s);
+    expect(o).toMatchObject({ released: false, reasonCode: 'CONTROL_HELD', detail: 'RUN_STORE_BUSY', engineText: avoidText });
+    expect(o.receipt).toMatchObject({ reasonCode: 'CONTROL_HELD', detailCodes: ['RUN_STORE_BUSY'] });
+  });
 });

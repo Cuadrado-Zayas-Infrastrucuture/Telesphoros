@@ -27,7 +27,7 @@ import { buildVerifierPrompt } from './prompts/verify-v1';
 import { taskProblems, TASKS, type TaskDeclaration } from './tasks';
 
 const refusalSchema = z.strictObject({ refused: z.literal(true) });
-const FIXED_CAUSES = new Set(['STALE_FENCE', 'COMMIT_HELD', 'STORE_BINDING']);
+const FIXED_CAUSES = new Set(['STALE_FENCE', 'COMMIT_HELD', 'STORE_BINDING', 'RUN_STORE_BUSY']);
 
 function authorityCurrent(context: ExplainContext, ports: ExplainPorts): boolean {
   const a = ports.authority.current(context);

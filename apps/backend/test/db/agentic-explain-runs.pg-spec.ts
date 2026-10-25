@@ -15,6 +15,24 @@ jest.setTimeout(180_000);
 type Json = Record<string, any>;
 let db: EphemeralDatabase;
 const owner = <T>(work: (c: Client) => Promise<T>) => withAdmin(db.adminUrl, work);
+/**
+ * Back-dated and part-way rows are what only a tamperer could write, so the row guard refuses to let anyone insert them. The tests that need such a row (time passing is
+ * not something a test can wait for) switch the guard off inside one transaction, plant the row, and switch it back to ENABLE ALWAYS before committing.
+ */
+const planting = <T>(work: (c: Client) => Promise<T>): Promise<T> =>
+  owner(async (c) => {
+    await c.query('BEGIN');
+    try {
+      await c.query('ALTER TABLE public.agentic_explain_runs DISABLE TRIGGER agentic_explain_run_guard');
+      const result = await work(c);
+      await c.query('ALTER TABLE public.agentic_explain_runs ENABLE ALWAYS TRIGGER agentic_explain_run_guard');
+      await c.query('COMMIT');
+      return result;
+    } catch (error) {
+      await c.query('ROLLBACK');
+      throw error;
+    }
+  });
 const sha = (label: string) => `sha256:${createHash('sha256').update(label).digest('hex')}`;
 const HMAC = (ch: string) => `hmac-sha256:${ch.repeat(64)}`;
 const hashOf = (value: string) => createHash('sha256').update(value, 'utf8').digest();
@@ -95,7 +113,7 @@ const count = (tenant: string) =>
 const newRun = async (who: ReturnType<typeof sess>, key: string): Promise<Json> => (await who((c) => admit(c, key))).value.run;
 /** Inserts a run the way the owner can (the tests' stand-in for time passing): any state, any age. */
 const seed = (tenant: string, requester: string, key: string, state: string, opts: { admittedDaysAgo?: number; finishedDaysAgo?: number; deadlineIn?: string } = {}) =>
-  owner(async (c) => {
+  planting(async (c) => {
     const finished = TERMINAL.includes(state);
     const admitted = opts.admittedDaysAgo ?? 0;
     const finishedAgo = opts.finishedDaysAgo ?? 0;
@@ -196,7 +214,7 @@ describe('admit: one run per key, found again on a retry, and seen only by its o
     await member(t, 'run-rate-ray');
     const who = sess(t, 'run-rate-ray');
     const fill = (age: string, label: string) =>
-      owner((c) =>
+      planting((c) =>
         c.query(
           `INSERT INTO public.agentic_explain_runs (tenant_id, requester_ref, key_hash, tuple_digest, harness_version, state, mono_at, admitted_at, deadline_at, finished_at)
            SELECT $1, 'run-rate-ray', 'sha256:' || encode(sha256(($2 || g)::bytea), 'hex'), $3, $4, 'held', 1, clock_timestamp() - interval '${age}', clock_timestamp() - interval '${age}' + interval '120 seconds', clock_timestamp() - interval '${age}'
@@ -239,16 +257,21 @@ describe('advance: a compare-and-swap on state, sequence and fence, along the le
     expect((await owner((c) => c.query(`SELECT finished_at IS NOT NULL AS done FROM public.agentic_explain_runs WHERE run_id = $1`, [run.id]))).rows[0].done).toBe(true);
     for (const next of STATES) expect(await alice((c) => advance(c, run.id, expectOf(run), next))).toEqual({ kind: 'refused', code: 'INVALID_TRANSITION' }); // a final state moves nowhere
   });
-  it('allows the repair loop (reviewing > repair-pending > running > reviewing) and every in-flight state moving to held, failed, cancelled or expired', async () => {
+  it('allows the repair loop (reviewing > repair-pending > running > reviewing) and every in-flight state moving to held or failed, but not to cancelled or expired through advance', async () => {
     let run = await newRun(alice, 'k-repair');
     for (const next of ['queued', 'running', 'reviewing', 'repair-pending', 'running', 'reviewing']) run = (await alice((c) => advance(c, run.id, expectOf(run), next))).value;
     expect(run).toMatchObject({ state: 'reviewing', sequence: 6 });
     let n = 0;
     for (const from of ['admitted', 'queued', 'running', 'reviewing', 'repair-pending', 'release-pending']) {
-      for (const to of ['held', 'failed', 'cancelled', 'expired']) {
+      for (const to of ['held', 'failed']) {
         const r = await seed(TENANT_A, ALICE, `k-exit-${n++}`, from);
-        const out = await alice((c) => advance(c, r, { state: from, sequence: 0, fence: 1 }, to));
-        expect(out).toMatchObject({ kind: 'ok', value: { state: to } });
+        expect(await alice((c) => advance(c, r, { state: from, sequence: 0, fence: 1 }, to))).toMatchObject({ kind: 'ok', value: { state: to } });
+      }
+      // advance does not write what the other functions own: 'cancelled' (cancel raises the fence) and 'expired' (the deadline, not the caller, decides it).
+      for (const to of ['cancelled', 'expired']) {
+        const r = await seed(TENANT_A, ALICE, `k-exit-${n++}`, from);
+        expect(await alice((c) => advance(c, r, { state: from, sequence: 0, fence: 1 }, to))).toEqual({ kind: 'refused', code: 'INVALID_TRANSITION' });
+        expect(await alice((c) => get(c, r))).toMatchObject({ value: { state: from, sequence: 0 } });
       }
     }
   });
@@ -441,6 +464,100 @@ describe('operator functions: sweep and purge are run by the owner, never by a l
         await expect(as(url, await mint(TENANT_A, ALICE), (c) => c.query(sql))).rejects.toMatchObject({ code: '42501' });
       }
     }
+  });
+});
+
+describe("the deadline is the database's, and a caller cannot choose what the trigger decides", () => {
+  const operator = (sql: string, args: unknown[] = []) =>
+    owner(async (c) => {
+      await c.query('BEGIN');
+      await c.query('SET LOCAL ROLE telesphoros_jobs');
+      const r = (await c.query(`SELECT ${sql} AS r`, args)).rows[0].r as Json;
+      await c.query('COMMIT');
+      return r;
+    });
+  it('a move past the deadline closes the run and is refused as DEADLINE, whatever the process clock says; the expiry itself is allowed once the deadline has passed', async () => {
+    const late = await seed(TENANT_A, ALICE, 'dl-late', 'running', { admittedDaysAgo: 1 });
+    expect(await alice((c) => advance(c, late, { state: 'running', sequence: 0, fence: 1 }, 'reviewing'))).toEqual({ kind: 'refused', code: 'DEADLINE' });
+    expect(await alice((c) => get(c, late))).toMatchObject({ value: { state: 'expired', sequence: 1 } });
+    expect(await alice((c) => advance(c, late, { state: 'expired', sequence: 1, fence: 1 }, 'held'))).toEqual({ kind: 'refused', code: 'INVALID_TRANSITION' });
+    const expiring = await seed(TENANT_A, ALICE, 'dl-expiring', 'running', { admittedDaysAgo: 1 });
+    expect(await alice((c) => advance(c, expiring, { state: 'running', sequence: 0, fence: 1 }, 'expired'))).toMatchObject({ kind: 'ok', value: { state: 'expired' } });
+    // Control: a run still inside its deadline moves.
+    const fresh = await newRun(alice, 'dl-fresh');
+    expect(await alice((c) => advance(c, fresh.id, expectOf(fresh), 'queued'))).toMatchObject({ kind: 'ok', value: { state: 'queued' } });
+    // And cancel still works for a run that is not past it.
+    expect(await alice((c) => cancel(c, fresh.id))).toMatchObject({ kind: 'ok', value: { state: 'cancelled', fence: 2 } });
+  });
+  const tamper = async (superuser: boolean, work: (c: Client) => Promise<void>) =>
+    owner(async (c) => {
+      await c.query('BEGIN');
+      if (!superuser) await c.query('SET LOCAL ROLE telesphoros_jobs');
+      await work(c);
+      await c.query('ROLLBACK');
+    });
+  it.each([
+    ['a role with no superuser', false],
+    ['a superuser', true],
+  ])('as %s: an inserted run always starts admitted at sequence 0 and fence 1, now, with the deadline 120 seconds on, whatever the statement says', async (_name, superuser) => {
+    await tamper(superuser, async (c) => {
+      const row = (
+        await c.query(
+          `INSERT INTO public.agentic_explain_runs (tenant_id, requester_ref, key_hash, tuple_digest, harness_version, state, sequence, fence, mono_at, admitted_at, deadline_at, finished_at)
+           VALUES ('run-a', 'x', $1, $2, $3, 'held', 9, 4, 1, '2000-01-01', '2000-01-02', '2000-01-03')
+           RETURNING state, sequence::int AS sequence, fence::int AS fence, finished_at,
+                     extract(epoch FROM (clock_timestamp() - admitted_at)) AS age, extract(epoch FROM (deadline_at - admitted_at)) AS window`,
+          [sha(`planted-${superuser}`), HMAC('c'), sha('h')],
+        )
+      ).rows[0];
+      expect(row).toMatchObject({ state: 'admitted', sequence: 0, fence: 1, finished_at: null });
+      expect(Number(row.age)).toBeLessThan(5);
+      expect(Number(row.window)).toBe(120);
+    });
+  });
+  it('an update that finishes a run stamps the finish time itself, so a back-dated finish cannot make the run deletable', async () => {
+    const r = await seed(TENANT_A, ALICE, 'dl-stamp', 'running');
+    await owner(async (c) => {
+      await c.query('BEGIN');
+      await c.query('SET LOCAL ROLE telesphoros_jobs');
+      const done = (
+        await c.query(
+          `UPDATE public.agentic_explain_runs SET state = 'held', sequence = sequence + 1, finished_at = '2000-01-01' WHERE run_id = $1 RETURNING extract(epoch FROM (clock_timestamp() - finished_at)) AS age`,
+          [r],
+        )
+      ).rows[0];
+      expect(Number(done.age)).toBeLessThan(5);
+      await c.query('SAVEPOINT s');
+      await expect(c.query('DELETE FROM public.agentic_explain_runs WHERE run_id = $1', [r])).rejects.toMatchObject({ code: '23000' });
+      await c.query('ROLLBACK TO s');
+      await c.query('ROLLBACK');
+    });
+  });
+  it('a sweep skips a row a worker holds instead of failing, two sweeps at once neither fail nor deadlock, and the skipped row is taken by the next sweep', async () => {
+    const held = await seed(TENANT_A, ALICE, 'sw2-held', 'running', { admittedDaysAgo: 1 });
+    const free = await seed(TENANT_A, ALICE, 'sw2-free', 'queued', { admittedDaysAgo: 1 });
+    const locker = new Client({ connectionString: db.adminUrl });
+    await locker.connect();
+    try {
+      await locker.query('BEGIN');
+      await locker.query('SELECT 1 FROM public.agentic_explain_runs WHERE run_id = $1 FOR UPDATE', [held]); // a worker in the middle of an advance
+      const started = Date.now();
+      const out = await operator('public.agentic_explain_run_sweep()');
+      expect(Date.now() - started).toBeLessThan(1500); // it did not wait out the 2 s lock timeout
+      expect(out.kind).toBe('ok');
+      const states = Object.fromEntries(
+        (await owner((c) => c.query('SELECT run_id, state FROM public.agentic_explain_runs WHERE run_id = ANY($1::uuid[])', [[held, free]]))).rows.map((x) => [x.run_id, x.state]),
+      );
+      expect(states).toEqual({ [held]: 'running', [free]: 'expired' });
+    } finally {
+      await locker.query('ROLLBACK');
+      await locker.end();
+    }
+    const more = await Promise.all(Array.from({ length: 6 }, (_, i) => seed(TENANT_A, ALICE, `sw2-many-${i}`, 'running', { admittedDaysAgo: 1 })));
+    const both = await Promise.all([operator('public.agentic_explain_run_sweep()'), operator('public.agentic_explain_run_sweep()')]);
+    for (const r of both) expect(r.kind).toBe('ok');
+    const left = (await owner((c) => c.query('SELECT state FROM public.agentic_explain_runs WHERE run_id = ANY($1::uuid[])', [[held, ...more]]))).rows.map((x) => x.state);
+    expect(left.every((x) => x === 'expired')).toBe(true); // the second sweep (or the first) took the row the worker had released
   });
 });
 

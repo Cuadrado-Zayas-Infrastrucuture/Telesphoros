@@ -120,11 +120,17 @@ describe('runExplanation against the durable run store', () => {
     expect(await stateOf(o.runId!)).toMatchObject({ state: 'cancelled', fence: 2, done: true });
   });
   test('a run its process never finished is closed by the next admission of its key, and a sweep closes the rest', async () => {
+    // A back-dated, part-way run is what a crash leaves behind and what only a tamperer could insert: the row guard refuses to let anyone insert one, so the test switches it off
+    // inside one transaction to plant it, and switches it back to ENABLE ALWAYS before committing.
+    await admin.query('BEGIN');
+    await admin.query('ALTER TABLE public.agentic_explain_runs DISABLE TRIGGER agentic_explain_run_guard');
     await admin.query(
       `INSERT INTO public.agentic_explain_runs (tenant_id, requester_ref, key_hash, tuple_digest, harness_version, state, mono_at, admitted_at, deadline_at)
        VALUES ($1, $2, $3, $4, $5, 'running', 1, clock_timestamp() - interval '1 hour', clock_timestamp() - interval '58 minutes')`,
       [TENANT, ACTOR, await keyHash('k-orphan'), `hmac-sha256:${'c'.repeat(64)}`, `sha256:${'b'.repeat(64)}`],
     );
+    await admin.query('ALTER TABLE public.agentic_explain_runs ENABLE ALWAYS TRIGGER agentic_explain_run_guard');
+    await admin.query('COMMIT');
     const s = scenario('k-orphan');
     const o = await runExplanation(s.request, s.context, s.ports);
     // The stored request digest is not the scenario's, so this key reads as a conflict; the point is that the orphan is no longer in flight.

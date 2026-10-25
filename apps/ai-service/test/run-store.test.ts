@@ -84,7 +84,7 @@ describe('the durable run store adapter', () => {
     expect(sent[0].sql).toBe('SELECT public.agentic_explain_run_advance($1::uuid, $2::jsonb, $3::text) AS result');
     expect(sent[0].args).toEqual([ID, JSON.stringify({ state: 'admitted', sequence: 0, fence: 1 }), 'queued']);
   });
-  test.each(['STALE', 'INVALID_TRANSITION', 'NOT_FOUND'])('advance answers null for %s, as the port says', async (code) =>
+  test.each(['STALE', 'INVALID_TRANSITION', 'NOT_FOUND', 'DEADLINE'])('advance answers null for %s, as the port says', async (code) =>
     expect(await store(() => ({ kind: 'refused', code })).store.advance(run(), 'queued')).toBeNull(),
   );
   test.each(['NOT_AUTHORIZED', 'INVALID_INPUT'])('advance rejects for %s: that is not a lost race but a fault', async (code) => {
@@ -104,5 +104,20 @@ describe('the durable run store adapter', () => {
       { kind: 'ok', value: { kind: 'other', run: run() } },
     ];
     for (const answer of bad) await expect(store(() => answer).store.admit('k', `hmac-sha256:${'c'.repeat(64)}`, context, `sha256:${'b'.repeat(64)}`, 0, 0)).rejects.toThrow();
+  });
+  test.each([
+    ['lock_not_available', '55P03'],
+    ['serialization_failure', '40001'],
+    ['deadlock_detected', '40P01'],
+  ])('a %s from the database is a busy store that a caller may retry, on every method', async (_name, code) => {
+    const busy = Object.assign(new Error('could not obtain lock'), { code });
+    const { store: s } = store(() => busy);
+    await expect(s.admit('k', `hmac-sha256:${'c'.repeat(64)}`, context, `sha256:${'b'.repeat(64)}`, 0, 0)).rejects.toThrow('RUN_STORE_BUSY');
+    await expect(s.get(ID)).rejects.toThrow('RUN_STORE_BUSY');
+    await expect(s.advance(run(), 'queued')).rejects.toThrow('RUN_STORE_BUSY');
+  });
+  test('any other database error is not called busy', async () => {
+    const { store: s } = store(() => Object.assign(new Error('syntax error'), { code: '42601' }));
+    await expect(s.get(ID)).rejects.toThrow('syntax error');
   });
 });

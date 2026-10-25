@@ -33,8 +33,10 @@ describe('migration 0049 and the TypeScript state machine', () => {
     const list = /state text NOT NULL CHECK \(state IN \(([^)]*)\)\)/.exec(runs)![1];
     expect([...list.matchAll(/'([a-z-]+)'/g)].map((m) => m[1]).sort()).toEqual([...STATES].sort());
   });
-  test('the run deadline in SQL is the TypeScript deadline', () => {
-    expect(/clock_timestamp\(\) \+ interval '(\d+) seconds'/.exec(runs)![1]).toBe(String(EXPLAIN_LIMITS.deadlineMs / 1000));
+  test('every place the migration sets the run deadline uses the TypeScript deadline', () => {
+    const seconds = [...runs.matchAll(/\+ interval '(\d+) seconds'/g)].map((m) => m[1]);
+    expect(seconds.length).toBeGreaterThanOrEqual(2); // the admission and the row guard
+    for (const n of seconds) expect(n).toBe(String(EXPLAIN_LIMITS.deadlineMs / 1000));
   });
 });
 

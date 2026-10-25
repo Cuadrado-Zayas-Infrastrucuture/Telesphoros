@@ -10,11 +10,16 @@
 --   * The state machine is in SQL (agentic_explain_transition_ok, one explicit list of the 31 legal pairs; a test reads this file and compares the list with canTransition in
 --     apps/ai-service/src/kernel.ts) and again in a row trigger, so even a caller with table access cannot make an illegal move. advance is a compare-and-swap on state, sequence and
 --     fence under a row lock: of any number of concurrent advances from the same state exactly one wins. cancel raises the fence, so a worker that still holds the old one is stale.
---   * A run that was never finished is not left open: admit expires an existing run past its deadline (the retry then replays the engine text, as for any finished run) and
---     agentic_explain_run_sweep() expires them all. Both are the only way a run leaves an in-flight state without the process that owns it.
+--   * The deadline is the database's, not the process's: advance expires a run past its deadline and refuses (DEADLINE) instead of moving it, so a skew between the process clock
+--     and the database clock cannot extend a run. A run that was never finished is not left open: admit (a lookup that also writes, by design) expires an existing run past its deadline
+--     (the retry then replays the engine text, as for any finished run; the key stays burned for the retention period, so the client uses a new key) and agentic_explain_run_sweep()
+--     expires them all, skipping rows a worker holds so one busy run cannot fail or deadlock a sweep.
+--   * advance cannot write what the other functions own: it refuses 'cancelled' (cancel raises the fence) and 'expired' before the deadline. The row trigger also forces what a caller must
+--     not choose: an inserted run is admitted, at sequence 0 and fence 1, admitted now with the deadline 120 seconds on, and an update that finishes a run stamps finished_at itself,
+--     so a back-dated finish cannot make a run deletable before its time. mono_at is the admitting process's monotonic time and means nothing in another process.
 --   * Rows: a finished run is frozen; the identity columns never change; sequence rises by one; the fence rises only with a cancellation. A delete is refused until a finished run is 2190 days
 --     old (6 years, as the receipts; founder decision 2026-10-25), whoever asks; both triggers are ENABLE ALWAYS. The operator purge is executable by no login. An organization may admit at most
---     1000 runs an hour (RATE_LIMITED; initial value, as for receipts).
+--     1000 runs an hour (RATE_LIMITED; initial value, as for receipts; the count is not locked, so concurrent admissions can overshoot it slightly).
 --   * Not closable here, same class as 0048: the owner can disable or drop the triggers or the table, or back-date a row. The down migration's setting is the only guard against DROP TABLE.
 -- Nothing is seeded. Usage reservation and the fleet and tenant caps are the next slice (3b-2b); the TypeScript store is apps/ai-service/durable/run-store.ts.
 SET LOCAL lock_timeout = '2s';
@@ -78,6 +83,16 @@ REVOKE ALL ON FUNCTION public.agentic_explain_run_json(public.agentic_explain_ru
 
 CREATE FUNCTION public.agentic_explain_run_guard() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp AS $$
 BEGIN
+  IF TG_OP = 'INSERT' THEN
+    -- Whoever inserts, a run starts admitted: not final, not back-dated, not part-way through its states.
+    NEW.state := 'admitted';
+    NEW.sequence := 0;
+    NEW.fence := 1;
+    NEW.finished_at := NULL;
+    NEW.admitted_at := clock_timestamp();
+    NEW.deadline_at := NEW.admitted_at + interval '120 seconds';
+    RETURN NEW;
+  END IF;
   IF TG_OP = 'DELETE' THEN
     IF OLD.finished_at IS NOT NULL AND OLD.finished_at < clock_timestamp() - interval '2190 days' THEN
       RETURN OLD;
@@ -96,12 +111,16 @@ BEGIN
        OR NEW.fence NOT IN (OLD.fence, OLD.fence + 1) OR (NEW.fence = OLD.fence + 1 AND NEW.state <> 'cancelled') THEN
       RAISE EXCEPTION 'An explanation run advances by one legal step at a time.' USING ERRCODE = 'integrity_constraint_violation';
     END IF;
+    -- The time a run finished is the time it was finished, whatever the statement says: a back-dated finish would make it deletable at once.
+    IF NEW.finished_at IS NOT NULL THEN
+      NEW.finished_at := clock_timestamp();
+    END IF;
     RETURN NEW;
   END IF;
   RAISE EXCEPTION 'An explanation run cannot be truncated.' USING ERRCODE = 'integrity_constraint_violation';
 END $$;
 REVOKE ALL ON FUNCTION public.agentic_explain_run_guard() FROM PUBLIC;
-CREATE TRIGGER agentic_explain_run_guard BEFORE UPDATE OR DELETE ON public.agentic_explain_runs
+CREATE TRIGGER agentic_explain_run_guard BEFORE INSERT OR UPDATE OR DELETE ON public.agentic_explain_runs
 FOR EACH ROW EXECUTE FUNCTION public.agentic_explain_run_guard();
 CREATE TRIGGER agentic_explain_run_no_truncate BEFORE TRUNCATE ON public.agentic_explain_runs
 FOR EACH STATEMENT EXECUTE FUNCTION public.agentic_explain_run_guard();
@@ -171,7 +190,7 @@ BEGIN
   RETURN jsonb_build_object('kind','ok','value',public.agentic_explain_run_json(r));
 END $$;
 
--- Compare-and-swap: the run moves only if it is still in the state, at the sequence and under the fence the caller saw. The row lock makes concurrent callers take turns,
+-- Compare-and-swap: the run moves only if it is still in the state, at the sequence and under the fence the caller saw, and still inside its deadline. The row lock makes concurrent callers take turns,
 -- so of any number advancing from the same state exactly one succeeds and the rest see STALE.
 CREATE FUNCTION public.agentic_explain_run_advance(p_run uuid, p_expected jsonb, p_next text) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
@@ -207,7 +226,17 @@ BEGIN
   IF r.state <> p_expected->>'state' OR r.sequence <> v_seq::bigint OR r.fence <> v_fence::bigint THEN
     RETURN jsonb_build_object('kind','refused','code','STALE');
   END IF;
-  IF NOT public.agentic_explain_transition_ok(r.state, p_next) THEN
+  IF NOT public.agentic_explain_transition_ok(r.state, p_next) OR p_next = 'cancelled' THEN
+    -- 'cancelled' belongs to cancel, which raises the fence.
+    RETURN jsonb_build_object('kind','refused','code','INVALID_TRANSITION');
+  END IF;
+  -- The deadline is the database's. Past it the run is closed here and the move is refused; the only move left is the expiry itself, and that only once the deadline has passed.
+  IF r.deadline_at < clock_timestamp() THEN
+    IF p_next <> 'expired' THEN
+      UPDATE public.agentic_explain_runs SET state = 'expired', sequence = sequence + 1, finished_at = clock_timestamp() WHERE run_id = r.run_id;
+      RETURN jsonb_build_object('kind','refused','code','DEADLINE');
+    END IF;
+  ELSIF p_next = 'expired' THEN
     RETURN jsonb_build_object('kind','refused','code','INVALID_TRANSITION');
   END IF;
   UPDATE public.agentic_explain_runs
@@ -252,7 +281,9 @@ SET lock_timeout = '2s' SET statement_timeout = '60s' AS $$
 DECLARE
   v_expired bigint;
 BEGIN
-  UPDATE public.agentic_explain_runs SET state = 'expired', sequence = sequence + 1, finished_at = clock_timestamp() WHERE finished_at IS NULL AND deadline_at < clock_timestamp();
+  -- Rows a worker holds are skipped (the next sweep, or an admission of the key, takes them), and the rest are locked in one order, so a busy run cannot fail the sweep and two sweeps cannot deadlock.
+  WITH due AS (SELECT run_id FROM public.agentic_explain_runs WHERE finished_at IS NULL AND deadline_at < clock_timestamp() ORDER BY run_id FOR UPDATE SKIP LOCKED)
+  UPDATE public.agentic_explain_runs r SET state = 'expired', sequence = r.sequence + 1, finished_at = clock_timestamp() FROM due WHERE r.run_id = due.run_id;
   GET DIAGNOSTICS v_expired = ROW_COUNT;
   RETURN jsonb_build_object('kind','ok','value',jsonb_build_object('expired', v_expired));
 END $$;
