@@ -194,10 +194,10 @@ const CAPABILITY_RIGHTS: Record<'app' | 'verifier' | 'worker' | 'issuer', Record
  * applied, like the queue's functions, so a database that has 0028 and not yet 0031 still passes.
  */
 const CAPABILITY_CURRENT_RIGHTS: Record<'app' | 'verifier' | 'worker' | 'issuer', Record<string, boolean>> = {
-  app: { tenant_capability_issue_current: false, app_capability_version: true },
-  verifier: { tenant_capability_issue_current: false, app_capability_version: false },
-  worker: { tenant_capability_issue_current: false, app_capability_version: true },
-  issuer: { tenant_capability_issue_current: true, app_capability_version: false },
+  app: { tenant_capability_issue_current: false, app_capability_version: true, app_tenant_bound: true },
+  verifier: { tenant_capability_issue_current: false, app_capability_version: false, app_tenant_bound: false },
+  worker: { tenant_capability_issue_current: false, app_capability_version: true, app_tenant_bound: true },
+  issuer: { tenant_capability_issue_current: true, app_capability_version: false, app_tenant_bound: false },
 };
 
 export async function provisionLogins(options: ProvisionOptions): Promise<ProvisionReport> {
