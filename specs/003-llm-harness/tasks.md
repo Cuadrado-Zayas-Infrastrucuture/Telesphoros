@@ -1,0 +1,96 @@
+# Tasks: A harness that lets a model explain a verified engine result, and nothing else (HARN)
+
+**Input**: [spec.md](spec.md), [plan.md](plan.md)
+
+**Prerequisites**: plan.md **approved by the founder**. It is not approved yet, so `/speckit-implement` must not run against this file until it is. Decisions D6 to D10 are open; each phase says which it needs.
+
+**Tests**: Required by the spec (SC-001 to SC-008). In each phase the test tasks come first, and each must be seen failing before the implementation lands.
+
+**Organization**: One phase per slice in plan.md, one draft PR per phase off `main`, never stacked. `[P]` marks tasks that can run in parallel within a phase (different files, no dependency). Hosted CI is capped at 3 runs per PR.
+
+## Format: `[ID] [P?] [Story] Description`
+
+## Phase 1: Slice 1, the evaluation harness, the sensors and the gate (US1, US2, US3, US4) — needs D7; D8 later
+
+### Tests first
+
+- [ ] T001 [P] [US1] `evals/golden/` holds at least 60 hand-written cases from the synthetic fixtures. Each has the engine result, a candidate explanation, and the expected release or hold with the reason. Seeded wrong kinds: invented drug, changed strength, flipped direction, added number, dropped caveat, wrong gene, advice beyond the guideline. The founder marks a sample before they count (D5).
+- [ ] T002 [P] [US3] `evals/attacks/` holds at least 30 attacks (hostile report fields, instructions in a phenotype string, a file name, a note, a locale value, markup, a request to reveal the prompt). A scripted model obeys every instruction it sees; the expectation is "no effect".
+- [ ] T003 [P] [US1] One unit file per sensor S1 to S6 with hand-written positive and negative cases, and a **broken copy** of each sensor that the test must catch.
+- [ ] T004 [P] [US3] The prompt-provenance test: build prompts from hostile inputs and fail if any string is not derived from the closed set of FR-001.
+- [ ] T005 [P] [US2] One test per engine outcome and reason code: no model port call and the fixed text (control: a `shown` result does call the port).
+- [ ] T006 [P] [US4] A gate test: remove one sensor's check, then change a template without its digest. Each turns the runner red.
+
+### Implementation
+
+- [ ] T007 `src/model-clients/` : `ModelPort` and a scripted stand-in (correct, wrong and obedient modes). No network.
+- [ ] T008 `src/evaluators/` : sensors S1 to S6, the glossary file with its digest, the contradiction lexicon with its digest.
+- [ ] T009 `src/prompts/` : the first template and the provenance builder. The template digest is checked by a test.
+- [ ] T010 `src/fallback.ts` : fixed text per outcome and reason code.
+- [ ] T011 `evals/run.ts` : runs the cases through the real sensors and compares to the expectation; prints counts (cases, held, released, wrongly released), never case text.
+- [ ] T012 Wire `evals/run.ts` into the existing `verify` job and add its paths to `.github/ci/scope.mjs` so a harness change selects it (D7). `test:ci-config` covers the scope rule with a broken copy.
+- [ ] T013 `docs/verification/` record: what ran, counts, what was skipped.
+
+**Checkpoint**: the founder reviews the first golden cases and the sensor list before any contract change.
+
+## Phase 2: Slice 2, the explanation contract and the failure path (US1, US2, US5, US7)
+
+### Tests first
+
+- [ ] T014 [P] [US5] One test per failure reason code (timeout, invalid structure, cap, authority lost, sensor hold, verifier hold, refusal): the engine text is returned unchanged and no model-written word is.
+- [ ] T015 [P] [US7] The readiness gate: with each FR-012 condition false in turn, `liveReadiness()` stays closed.
+- [ ] T016 [P] R1 `phi` data class declared in code; a test fails when a task has no declaration or reaches a provider without a BAA; synthetic-only marker refused if absent.
+- [ ] T017 [P] R2 each output guard has a production caller; a test fails when one has none.
+- [ ] T018 [P] R4 each task's output class is declared and its listed checks match.
+
+### Implementation
+
+- [ ] T019 `src/contracts.ts` : explanation, statement (`quote`, `restate`, `gloss`) and verdict schemas; no markup, links or code (FR-003, FR-015). The v1 schemas are untouched.
+- [ ] T020 `src/explain.ts` : `runExplanation`, reusing admission, fencing, idempotency, caps and boundary checks from the kernel (FR-007).
+- [ ] T021 `src/policy.ts` : the readiness conditions; the code reads `PGX_CLINICAL_HOLD_LIFTED`, which today nothing reads.
+- [ ] T022 Break each of R1, R2 and R4 on purpose and record the red run.
+
+## Phase 3: Slice 3, outcome v2, real counters, trace and receipt (US6) — needs D6; a migration
+
+### Tests first
+
+- [ ] T023 [P] [US6] The scan test: no result text or phenotype string appears in any trace, receipt or log from the golden run.
+- [ ] T024 [P] [US6] Unknown usage holds the run; a provider that reports none is `USAGE_HELD`.
+- [ ] T025 [P] [US6] PostgreSQL tier: the fleet and tenant caps hold under concurrent runs; a test fails if the in-memory budget class is wired as a fleet control.
+- [ ] T026 [P] R5 conformance: no explanation text is stored (FR-014); a test fails if an outcome v2 row carries text.
+
+### Implementation
+
+- [ ] T027 Migration (new number, down file, lint label) for the v2 outcome and counters tables; digests and reason codes only. Run the three backend tiers.
+- [ ] T028 `src/trace.ts` : per-step trace and receipt with the pinned model ID, digests and counters (FR-009, FR-010).
+- [ ] T029 Break the caps and the scan on purpose; record the red runs.
+
+## Phase 4: Slice 4, the Bedrock adapter and shadow mode (US7, US8) — needs D4 and Bedrock access
+
+### Tests first
+
+- [ ] T030 [P] A cross-region or `global.*` profile is refused; an alias or `latest` model ID is refused (FR-010, FR-016).
+- [ ] T031 [P] The adapter reads usage from the provider's own report and fails closed without it.
+- [ ] T032 [P] The adapter has no destination other than the Bedrock runtime endpoint in us-east-2.
+
+### Implementation
+
+- [ ] T033 `src/model-clients/bedrock.ts` using `@aws-sdk/client-bedrock-runtime` (exact pinned version), Converse API with a response schema. Credentials from the task role, never a key.
+- [ ] T034 A manual, approval-gated live-run script. It is a report, never a required check, and refuses non-synthetic input.
+- [ ] T035 The shadow review file: for N synthetic cases, the explanation, the sensor results and the template-only control side by side, for the founder to mark.
+- [ ] T036 `docs/verification/` record of the live run with counts, cost and what was not verified.
+
+## Phase 5: Founder (no code)
+
+- [ ] T037 Mark the golden set and the shadow output as pharmacist (D5).
+- [ ] T038 Set the thresholds (D8) from the phase 1 and phase 4 numbers.
+- [ ] T039 Record counsel's view on the FDA clinical decision support criteria (D10).
+- [ ] T040 Execute the AWS BAA before any real data. Write `docs/clinical-validation/` for the first release.
+- [ ] T041 Decide readiness. The readiness flag stays closed until FR-012 is entirely true.
+
+## Dependencies & Execution Order
+
+- Phase 1 first: it creates the sensors and the gate that every later phase relies on. Phase 2 needs phase 1; phase 3 needs phase 2; phase 4 needs phase 3.
+- Within a phase, tests first, seen failing; `[P]` tasks may run together.
+- Phase 5 runs alongside phases 3 and 4 and gates enabling anything.
+- Nothing here changes the engine, the ledger, the synthetic kernel or the AWS account.
