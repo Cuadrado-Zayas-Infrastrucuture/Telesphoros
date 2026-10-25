@@ -68,12 +68,12 @@ afterAll(async () => {
 });
 
 describe('T020: every tenant-setting policy reads the capability, for every role (0032)', () => {
-  it('no policy text reads the setting any more, and exactly 48 read app_tenant() (the inventory of 0031)', async () => {
+  it('no policy text reads the setting any more, and exactly 47 read app_tenant() (the 48 of 0031, less the recommendations policy dropped in 0043)', async () => {
     const rows = await owner((c) => c.query<{ tablename: string; policyname: string; qual: string | null; with_check: string | null }>(
       `SELECT tablename, policyname, qual, with_check FROM pg_policies WHERE schemaname = 'public' AND (qual LIKE '%app.current_tenant_id%' OR with_check LIKE '%app.current_tenant_id%' OR qual LIKE '%app_tenant()%' OR with_check LIKE '%app_tenant()%')`,
     )).then((r) => r.rows);
     expect(rows.filter((r) => `${r.qual ?? ''}${r.with_check ?? ''}`.includes('app.current_tenant_id'))).toEqual([]);
-    expect(rows).toHaveLength(48);
+    expect(rows).toHaveLength(47);
     expect(rows.every((r) => /\(\s*SELECT\s+(public\.)?app_tenant\(\)/.test(`${r.qual ?? ''}${r.with_check ?? ''}`))).toBe(true);
   });
 
@@ -196,7 +196,7 @@ describe('T020 vacuity guard: every tenant-policy table is seeded here or listed
     'browser_sessions', 'capture_acceptances', 'cell_dispute_decisions', 'cell_disputes', 'corrections', 'evaluation_gene_states',
     'evaluation_results', 'evaluations', 'event_notes', 'file_verifications', 'invitations', 'job_attempts', 'jobs', 'ledger_checkpoints',
     'ledger_events', 'ledger_heads', 'patient_duplicate_flags', 'patient_identifiers', 'patient_merge_decisions', 'patient_merge_proposals',
-    'recommendations', 'report_captures', 'report_patient_decisions', 'report_upload_attempts', 'report_upload_runs', 'reports',
+    'report_captures', 'report_patient_decisions', 'report_upload_attempts', 'report_upload_runs', 'reports',
   ];
 
   it('the catalog and the two lists agree, and every seeded table holds rows', async () => {
