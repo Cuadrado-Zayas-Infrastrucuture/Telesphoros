@@ -167,7 +167,7 @@ test('main writes both outputs and a summary that names no value beyond ids', as
 
 const CONDITION = { verify: guardsCondition, 'service-memory': heavyCondition, 'service-postgres': postgresCondition, 'service-postgres-s3': heavyCondition,
   browser: heavyCondition, terraform: terraformCondition, 'terraform-lint': terraformCondition };
-/** The steps of verify that only a code change needs. The install and the two guards that read documentation (test:infra, test:ci-config) are not here and carry no condition: test:infra loads the backend's config loader, which needs zod. */
+/** The steps of verify that only a code change needs. The install and the three guards that read documentation (test:infra, test:ci-config, check:workflows) are not here and carry no condition: test:infra loads the backend's config loader, which needs zod. */
 const HEAVY_STEPS = ['Typecheck', 'Lint', 'Workspace tests', 'Production builds', 'Published FHIR Genomics IG validation (synthetic only)',
   'Frontend chunk budget', 'Knowledge directory loads under production rules', 'Demo users and verify-script reports'];
 const draftCondition = '${{ github.event.pull_request.draft != true }}';
@@ -186,7 +186,7 @@ function verifyStepProblems(text) {
     if (conditions.length && !HEAVY_STEPS.includes(name)) problems.push(`step ${name ?? st.split('\n')[0]} may not be conditional`);
     if (conditions.length > 1 || (conditions.length && conditions[0] !== `        if: ${heavyStepCondition}`)) problems.push(`step ${name} carries a condition other than the heavy step condition`);
   }
-  for (const command of ['pnpm install --frozen-lockfile', 'pnpm test:infra', 'pnpm test:ci-config']) {
+  for (const command of ['pnpm install --frozen-lockfile', 'pnpm test:infra', 'pnpm test:ci-config', 'pnpm check:workflows']) {
     const step = steps.filter(st => st.includes(`run: ${command}\n`) || st.endsWith(`run: ${command}`));
     if (step.length !== 1 || /^        (?:if|continue-on-error):/m.test(step[0])) problems.push(`${command} must run, unconditionally, in every verify run`);
   }
@@ -279,6 +279,7 @@ test('the scope structure check turns red for each way a gate could be skipped w
     'the joining gate always runs even with nothing to join (old shape)': workflow.replace(/    if: always\(\) && !\(needs\.service-memory.*\n/, '    if: always()\n'),
     'a documentation-only run skips the docs guard': workflow.replace('      - name: Terraform security tripwire\n        run: pnpm test:infra', `      - name: Terraform security tripwire\n        if: \${{ needs.changes.outputs.heavy == 'true' }}\n        run: pnpm test:infra`),
     'the CI configuration guard is skipped': workflow.replace('        run: pnpm test:ci-config', `        if: \${{ needs.changes.outputs.heavy == 'true' }}\n        run: pnpm test:ci-config`),
+    'the workflow pack checker is skipped, though it reads docs/engineering/workflows.md': workflow.replace('        run: pnpm check:workflows', `        if: \${{ needs.changes.outputs.heavy == 'true' }}\n        run: pnpm check:workflows`),
     'the install is skipped on a documentation-only change, which test:infra cannot survive': swap(verify, '      - name: Install locked dependencies\n', `      - name: Install locked dependencies\n        if: \${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}\n`),
     'typecheck is no longer skipped when only documentation changed': swap(verify, `      - name: Typecheck\n        if: \${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}\n`, '      - name: Typecheck\n'),
     'verify is skipped by the heavy output (a documentation-only change would then skip the docs guards)': swap(verify, "needs.changes.outputs.guards == 'true'", "needs.changes.outputs.heavy == 'true'"),

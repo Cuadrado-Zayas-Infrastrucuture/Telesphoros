@@ -25,6 +25,7 @@ Multi-step features are specified in `specs/NNN-slug/` with GitHub Spec Kit's Cl
 From the repository root, using the workflow's pinned Node release:
 
 ```sh
+pnpm check:workflows   # runs both commands below
 node .agents/scripts/check-workflows.mjs
 node --test .agents/scripts/check-workflows.test.mjs
 # Optional local comparison with a read-only checkout of the pinned upstream:
@@ -35,7 +36,7 @@ The checker validates skill frontmatter, local linked files, UI invocation names
 
 Routing is a stemmed lexical approximation adapted from the upstream evaluator. A high score is not evidence that an LLM follows safety or approval instructions. [Scenario rubrics](../../.agents/evals/scenarios.json) cover approval continuity, skipped tiers, failure propagation, tenant access, cost equivalence, untrusted text and release boundaries. Exercise them on synthetic artifacts and record observable outcomes. Separate manual walkthroughs from independent model evaluations; no skill authorizes subagents, paid evaluations or running a hosted agent by itself.
 
-For changes, preserve the first evaluation, repair observed gaps and record before/after results against the same prompts. Do not rewrite a failing prompt to match a description. Record evidence for this adoption in the [verification record](../verification/engineering-workflows.md). No required CI job is changed or replaced by these local checks.
+For changes, preserve the first evaluation, repair observed gaps and record before/after results against the same prompts. Do not rewrite a failing prompt to match a description. Record evidence for this adoption in the [verification record](../verification/engineering-workflows.md). The required `verify` job runs `pnpm check:workflows` on every pull request, including documentation-only ones, so a broken link or a missing routing case blocks the merge. The `--baseline` comparison stays local.
 
 ## Maintenance
 
