@@ -3,3 +3,6 @@
 
 # style: format application source with Prettier (format only), 2026-10-25
 432789909ad1859baa9761dc19d077ccbf09a825
+
+# style: format the ai-service files merged from #58 (format only), 2026-10-25
+18f257fbf18ef2fe397daab1aae9362eebd3e301
