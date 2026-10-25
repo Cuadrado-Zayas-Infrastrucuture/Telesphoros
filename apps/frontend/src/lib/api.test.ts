@@ -1,7 +1,7 @@
 import { webcrypto } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SessionEndedError } from '@/auth/AuthProvider';
-import { listPatients, reportStorageOrigins, submitReport, type UploadProgress } from './api';
+import { createPatient, listPatients, reportStorageOrigins, submitReport, SubmitError, type UploadProgress } from './api';
 import type { ProductUploadValues } from './productUploadSchema';
 
 const patientId = '11111111-1111-4111-8111-111111111111';
@@ -236,4 +236,52 @@ describe('bounded patient list', () => {
       await expect(listPatients(vi.fn().mockResolvedValue(answer.clone()), 2)).rejects.toThrow('could not be loaded');
     },
   );
+});
+
+describe('adding a synthetic patient', () => {
+  const created = { id: patientId, label: 'SYN-0002', createdAt: date, updatedAt: date };
+  const requestId = '66666666-6666-4666-8666-666666666666';
+
+  it('posts only the label and a request id, and returns the patient the server made', async () => {
+    const apiFetch = vi.fn().mockResolvedValue(response(created, 201));
+    await expect(createPatient(apiFetch, 'SYN-0002', requestId)).resolves.toMatchObject({ id: patientId, label: 'SYN-0002' });
+    const [path, init] = apiFetch.mock.calls[0]!;
+    expect(path).toBe('/api/v1/patients');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({ label: 'SYN-0002', requestId });
+  });
+
+  it.each([
+    [409, 'already exists'],
+    [403, 'cannot add patients'],
+    [400, 'not accepted'],
+    [422, 'not accepted'],
+    [429, 'Too many requests'],
+    [503, 'could not be added'],
+  ])('answers %i with a plain message and keeps the status', async (status, words) => {
+    const error = await createPatient(vi.fn().mockResolvedValue(response({ message: 'internal detail' }, status)), 'SYN-0002', requestId).catch((caught) => caught);
+    expect(error).toBeInstanceOf(SubmitError);
+    expect(error.message).toContain(words);
+    expect(error.message).not.toContain('internal detail');
+    expect(error.status).toBe(status);
+  });
+
+  it('never shows a raw transport error or a malformed answer', async () => {
+    const lost = await createPatient(vi.fn().mockRejectedValue(new TypeError('socket secret-detail')), 'SYN-0002', requestId).catch((caught) => caught);
+    expect(lost).toBeInstanceOf(SubmitError);
+    expect(lost.message).toContain('Check your connection');
+    expect(lost.message).not.toContain('secret-detail');
+    await expect(createPatient(vi.fn().mockResolvedValue(response({ id: 'not-a-uuid' }, 201)), 'SYN-0002', requestId)).rejects.toThrow('could not be added');
+  });
+
+  it('passes an ended session through untouched', async () => {
+    const ended = new SessionEndedError();
+    await expect(createPatient(vi.fn().mockRejectedValue(ended), 'SYN-0002', requestId)).rejects.toBe(ended);
+  });
+
+  it.each(['Jane Doe', '', 'x'.repeat(41), 'SYN_0002'])('refuses the label %j before any request is made', async (label) => {
+    const apiFetch = vi.fn();
+    await expect(createPatient(apiFetch, label, requestId)).rejects.toThrow();
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
 });
