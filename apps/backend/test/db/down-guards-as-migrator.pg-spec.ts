@@ -102,6 +102,18 @@ interface GuardCase {
 
 const cases: GuardCase[] = [
   {
+    anchor: 'agentic_explain_runs',
+    allow: 'telesphoros.allow_runs_drop',
+    refusal: /Refusing to drop agentic_explain_runs/,
+    populate: async (c) => {
+      await c.query(
+        `INSERT INTO public.agentic_explain_runs (tenant_id, requester_ref, key_hash, tuple_digest, harness_version, state, mono_at, deadline_at)
+         VALUES ($1, 'syn-author', $2, $3, $2, 'admitted', 1, clock_timestamp() + interval '1 minute')`,
+        [tenant, `sha256:${hash}`, `hmac-sha256:${hash}`],
+      );
+    },
+  },
+  {
     anchor: 'agentic_explain_receipts',
     allow: 'telesphoros.allow_receipts_drop',
     refusal: /Refusing to drop agentic_explain_receipts/,

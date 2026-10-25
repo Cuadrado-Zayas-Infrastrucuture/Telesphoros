@@ -48,7 +48,7 @@
 ### Implementation
 
 - [x] T019 `src/contracts.ts` : explanation, statement (`quote`, `restate`, `gloss`) and verdict schemas; no markup, links or code (FR-003, FR-015). The v1 schemas are untouched. **Done in `src/explain-contracts.ts` and `src/evaluators/types.ts`, not `contracts.ts`: the synthetic contracts fix `purpose` to `business-assistance`.**
-- [x] T020 `src/explain.ts` : `runExplanation`, reusing admission, fencing, idempotency, caps and boundary checks from the kernel (FR-007).
+- [x] T020 `src/explain.ts` : `runExplanation`, reusing admission, fencing, idempotency, caps and boundary checks from the kernel (FR-007). **The durable run store is slice 3b-2a (migration 0049, `durable/run-store.ts`); the run now awaits asynchronous store and budget ports.**
 - [x] T021 `src/policy.ts` : the readiness conditions; the code reads `PGX_CLINICAL_HOLD_LIFTED`, which today nothing reads. **Done as `readiness(conditions)` in `policy.ts`: the boundary guard bans `process` in `src`, so the flag is passed in; the env read moves to the Bedrock adapter.**
 - [x] T022 Break each of R1, R2 and R4 on purpose and record the red run.
 
@@ -58,7 +58,7 @@
 
 - [x] T023 [P] [US6] The scan test: no result text or phenotype string appears in any trace, receipt or log from the golden run.
 - [x] T024 [P] [US6] Unknown usage holds the run; a provider that reports none is `USAGE_HELD`.
-- [ ] T025 [P] [US6] PostgreSQL tier: the fleet and tenant caps hold under concurrent runs; a test fails if the in-memory budget class is wired as a fleet control.
+- [ ] T025 [P] [US6] PostgreSQL tier: the fleet and tenant caps hold under concurrent runs; a test fails if the in-memory budget class is wired as a fleet control. **Not yet: the run store (3b-2a) is done; the usage reservation and the caps are slice 3b-2b.**
 - [x] T026 [P] R5 conformance: no explanation text is stored (FR-014); a test fails if an outcome v2 row carries text. **Done for the row shape in slice 3a (the v2 schema has nowhere to put text); the database row check follows the migration in 3b.** **The database half done in 3b-1: the receipts table has no column that can hold text (catalog test) and refuses a plain digest.**
 
 ### Implementation

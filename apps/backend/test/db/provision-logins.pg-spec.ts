@@ -593,6 +593,27 @@ describe('the session issuer login (DATA-01 slice 1, migration 0028)', () => {
         `REVOKE SELECT ON agentic_explain_receipts FROM ${f.names.app}`,
         /app login privileges: .*agentic_explain_receipts \(CAN read\)/,
       ],
+      // The explanation runs (0049): the application alone runs the four capability-bound functions; no login runs the sweep or the purge; none touches the table.
+      [
+        `GRANT EXECUTE ON FUNCTION agentic_explain_run_admit(text, text, text, bigint) TO ${f.names.worker}`,
+        `REVOKE EXECUTE ON FUNCTION agentic_explain_run_admit(text, text, text, bigint) FROM ${f.names.worker}`,
+        /worker login privileges: .*agentic_explain_run_admit \(CAN execute\)/,
+      ],
+      [
+        `GRANT EXECUTE ON FUNCTION agentic_explain_run_sweep() TO ${f.names.app}`,
+        `REVOKE EXECUTE ON FUNCTION agentic_explain_run_sweep() FROM ${f.names.app}`,
+        /app login privileges: .*agentic_explain_run_sweep \(CAN execute\)/,
+      ],
+      [
+        `REVOKE EXECUTE ON FUNCTION agentic_explain_run_advance(uuid, jsonb, text) FROM telesphoros_app`,
+        `GRANT EXECUTE ON FUNCTION agentic_explain_run_advance(uuid, jsonb, text) TO telesphoros_app`,
+        /app login privileges: .*agentic_explain_run_advance \(cannot execute\)/,
+      ],
+      [
+        `GRANT SELECT ON agentic_explain_runs TO ${f.names.app}`,
+        `REVOKE SELECT ON agentic_explain_runs FROM ${f.names.app}`,
+        /app login privileges: .*agentic_explain_runs \(CAN read\)/,
+      ],
     ] as const) {
       await withAdmin(f.options.adminUrl, (c) => c.query(grant));
       const bad = await provisionLogins({ ...withIssuer(f), requireMigrated: true });

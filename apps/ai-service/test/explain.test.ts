@@ -23,15 +23,15 @@ describe('the explanation run releases only a grounded, verified explanation', (
     expect(o).toMatchObject({ reasonCode: 'RELEASED', label: EXPLANATION_LABEL, engineText: avoidText, explanation: GOOD });
     expect(o.guardsRun).toEqual(['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'VERIFIER']);
     expect(s.calls).toMatchObject({ draft: 1, repair: 0, verify: 1 });
-    expect(s.store.get(o.runId!).state).toBe('released');
-    expect(s.budgets.counters(o.runId!)).toMatchObject({ slots: 2 });
+    expect((await s.store.get(o.runId!)).state).toBe('released');
+    expect(await s.budgets.counters(o.runId!)).toMatchObject({ slots: 2 });
   });
   test('one repair attempt: a sensor hold on the first draft, a good second draft', async () => {
     const s = explainScenario({ replies: { draft: BAD_GLOSS } });
     const o = await go(s);
     expect(o.released).toBe(true);
     expect(s.calls).toMatchObject({ draft: 1, repair: 1, verify: 1 });
-    expect(s.budgets.counters(o.runId!).slots).toBe(3);
+    expect((await s.budgets.counters(o.runId!)).slots).toBe(3);
   });
   test('two bad drafts end as a sensor hold with fixed reason codes only, and the verifier is never called', async () => {
     const s = explainScenario({ replies: { draft: BAD_GLOSS, repair: BAD_GLOSS } });
@@ -243,7 +243,7 @@ describe('loop control, authority and caps carry over from the kernel (FR-007)',
     const s = explainScenario();
     s.hooks['draft-complete'] = () => s.tick(121000);
     const o = await go(s);
-    expect(s.store.get(o.runId!).state).toBe('expired');
+    expect((await s.store.get(o.runId!)).state).toBe('expired');
   });
   test('a replay of a finished run makes no model call and stores nothing new', async () => {
     const s = explainScenario();
@@ -260,7 +260,7 @@ describe('loop control, authority and caps carry over from the kernel (FR-007)',
   test('the slot cap is four: both drafts and both checks never exceed it', async () => {
     const s = explainScenario({ replies: { draft: BAD_GLOSS } });
     const o = await go(s);
-    expect(s.budgets.counters(o.runId!).slots).toBeLessThanOrEqual(EXPLAIN_LIMITS.slots);
+    expect((await s.budgets.counters(o.runId!)).slots).toBeLessThanOrEqual(EXPLAIN_LIMITS.slots);
   });
 });
 
@@ -290,5 +290,66 @@ describe('R1 at run time (FR-011): a phi task refuses rather than falls back', (
       expect(o).toMatchObject({ released: false, reasonCode: 'TASK_UNDECLARED' });
       expect(s.calls.model).toBe(0);
     }
+  });
+});
+
+describe('the stores are asynchronous and may fail: a rejection is a hold with the engine text, never an exception or a pass', () => {
+  const failing = (what: string): never => {
+    throw new Error(`${what} unavailable`);
+  };
+  test.each([
+    ['admit', (s: S) => (s.ports.store.admit = () => failing('admit'))],
+    ['get', (s: S) => (s.ports.store.get = () => failing('get'))],
+    ['advance', (s: S) => (s.ports.store.advance = () => failing('advance'))],
+    ['reserve', (s: S) => (s.ports.budgets.reserve = () => failing('reserve'))],
+    ['begin', (s: S) => (s.ports.budgets.begin = () => failing('begin'))],
+    ['observe', (s: S) => (s.ports.budgets.observe = () => failing('observe'))],
+  ])('%s rejecting ends the run held with the engine text and no explanation', async (_name, break_) => {
+    const s = explainScenario();
+    break_(s);
+    const o = await go(s);
+    expect(o.released).toBe(false);
+    expect(o.engineText).toBe(avoidText);
+    expect('explanation' in o).toBe(false);
+    expect(['CONTROL_HELD', 'USAGE_HELD', 'BUDGET_HELD']).toContain(o.reasonCode);
+  });
+  test('counters and complete rejecting do not stop a release from being reported as a hold: counters fall back to zero, usage this process saw is kept', async () => {
+    const s = explainScenario();
+    s.ports.budgets.counters = () => failing('counters');
+    const o = await go(s);
+    expect(o.counters).toMatchObject({ slots: 0, tokens: 0, modelCalls: 2, usageState: 'known' });
+  });
+  test('the request digest handed to the store is keyed (hmac-sha256:), the same request gives the same digest, a different key gives another, and it is not a plain hash', async () => {
+    const seen: string[] = [];
+    const digestOf = async (key: Uint8Array) => {
+      const s = explainScenario();
+      s.ports.digestKey = key;
+      const admit = s.ports.store.admit.bind(s.ports.store);
+      s.ports.store.admit = (k, tuple, ...rest) => {
+        seen.push(tuple);
+        return admit(k, tuple, ...rest);
+      };
+      await go(s);
+    };
+    await digestOf(new Uint8Array(32).fill(7));
+    await digestOf(new Uint8Array(32).fill(7));
+    await digestOf(new Uint8Array(32).fill(9));
+    expect(seen[0]).toMatch(/^hmac-sha256:[0-9a-f]{64}$/);
+    expect(seen[1]).toBe(seen[0]);
+    expect(seen[2]).not.toBe(seen[0]);
+  });
+  test('a short digest key cannot admit a run: the run is held and nothing is stored', async () => {
+    const s = explainScenario();
+    s.ports.digestKey = new Uint8Array(8);
+    const o = await go(s);
+    expect(o).toMatchObject({ released: false, reasonCode: 'CONTROL_HELD', engineText: avoidText });
+    expect(s.store.runs.size).toBe(0);
+  });
+  test('a busy run store ends the run held with a retryable cause in the receipt, and no explanation', async () => {
+    const s = explainScenario();
+    s.ports.store.admit = () => Promise.reject(new Error('RUN_STORE_BUSY'));
+    const o = await go(s);
+    expect(o).toMatchObject({ released: false, reasonCode: 'CONTROL_HELD', detail: 'RUN_STORE_BUSY', engineText: avoidText });
+    expect(o.receipt).toMatchObject({ reasonCode: 'CONTROL_HELD', detailCodes: ['RUN_STORE_BUSY'] });
   });
 });
