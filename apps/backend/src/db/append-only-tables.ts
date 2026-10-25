@@ -103,6 +103,13 @@ export const AGENTIC_SYNTHETIC_TABLES = [
   'agentic_synthetic_audit',
 ] as const;
 
+/**
+ * The receipts of explanation runs (migration 0048, LLM harness 3b-1), owned by the NOLOGIN role `telesphoros_jobs`. No login holds a table privilege: the application and the
+ * worker call `agentic_explain_receipt_append`, `_read` and `_purge` only, each taking its caller from a presented capability. A receipt holds digests, fixed codes and counters
+ * and no text (every text column is bound to a pattern); it is never updated, and a delete is refused until the row is 2190 days old.
+ */
+export const AGENTIC_EXPLAIN_TABLES = ['agentic_explain_receipts'] as const;
+
 export const ALL_CLASSIFIED_TABLES: readonly string[] = [
   ...Object.values(APPEND_ONLY_CLASSES).flat(),
   ...LEGACY_TABLES,
@@ -117,4 +124,5 @@ export const ALL_CLASSIFIED_TABLES: readonly string[] = [
   ...VERIFICATION_TABLES,
   ...CAPABILITY_TABLES,
   ...AGENTIC_SYNTHETIC_TABLES,
+  ...AGENTIC_EXPLAIN_TABLES,
 ];

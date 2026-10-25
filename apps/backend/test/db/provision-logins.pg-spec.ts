@@ -572,6 +572,27 @@ describe('the session issuer login (DATA-01 slice 1, migration 0028)', () => {
         `REVOKE EXECUTE ON FUNCTION app_capability_version() FROM ${f.names.issuer}`,
         /issuer login privileges: .*app_capability_version \(CAN execute\)/,
       ],
+      // The explanation receipts (0048): the application alone runs the two capability-bound functions; no login runs the operator purge; none touches the table.
+      [
+        `GRANT EXECUTE ON FUNCTION agentic_explain_receipt_append(jsonb) TO ${f.names.worker}`,
+        `REVOKE EXECUTE ON FUNCTION agentic_explain_receipt_append(jsonb) FROM ${f.names.worker}`,
+        /worker login privileges: .*agentic_explain_receipt_append \(CAN execute\)/,
+      ],
+      [
+        `GRANT EXECUTE ON FUNCTION agentic_explain_receipt_purge(text) TO ${f.names.app}`,
+        `REVOKE EXECUTE ON FUNCTION agentic_explain_receipt_purge(text) FROM ${f.names.app}`,
+        /app login privileges: .*agentic_explain_receipt_purge \(CAN execute\)/,
+      ],
+      [
+        `REVOKE EXECUTE ON FUNCTION agentic_explain_receipt_read(text) FROM telesphoros_app`,
+        `GRANT EXECUTE ON FUNCTION agentic_explain_receipt_read(text) TO telesphoros_app`,
+        /app login privileges: .*agentic_explain_receipt_read \(cannot execute\)/,
+      ],
+      [
+        `GRANT SELECT ON agentic_explain_receipts TO ${f.names.app}`,
+        `REVOKE SELECT ON agentic_explain_receipts FROM ${f.names.app}`,
+        /app login privileges: .*agentic_explain_receipts \(CAN read\)/,
+      ],
     ] as const) {
       await withAdmin(f.options.adminUrl, (c) => c.query(grant));
       const bad = await provisionLogins({ ...withIssuer(f), requireMigrated: true });
