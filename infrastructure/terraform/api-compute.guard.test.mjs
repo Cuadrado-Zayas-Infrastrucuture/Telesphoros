@@ -497,7 +497,7 @@ test('the API compute guard reports each way the text could be weakened (control
     ['the API keep-alive drops to the balancer idle timeout', { factory: appFactory.replace('API_KEEP_ALIVE_TIMEOUT_MS = 65_000', 'API_KEEP_ALIVE_TIMEOUT_MS = 60_000') }],
     ['the API keep-alive drops to Node\'s default', { factory: appFactory.replace('API_KEEP_ALIVE_TIMEOUT_MS = 65_000', 'API_KEEP_ALIVE_TIMEOUT_MS = 5_000') }],
     ['the balancer idle timeout is raised past the keep-alive', { edge: edgeTf.replace(/idle_timeout(\s*)=\s*60/, 'idle_timeout$1= 120') }],
-    ['configureApp stops applying the constant', { factory: appFactory.replace('server.keepAliveTimeout=API_KEEP_ALIVE_TIMEOUT_MS;', '') }],
+    ['configureApp stops applying the constant', { factory: appFactory.replace(/server\.keepAliveTimeout\s*=\s*API_KEEP_ALIVE_TIMEOUT_MS;/, '') }],
     ['the scan finds no idle timeout', { edge: '' }],
     ['the API stops installing the process fault handlers', { main: apiMain.replace("installProcessFaultHandlers(process, { service: 'api' });", '') }],
     ['the pause grows past the stop timeout', { shutdown: gracefulShutdown.replace('SHUTDOWN_PAUSE_MS = 5_000', 'SHUTDOWN_PAUSE_MS = 15_000') }],

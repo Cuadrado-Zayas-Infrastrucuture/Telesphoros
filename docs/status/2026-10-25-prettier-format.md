@@ -41,4 +41,8 @@ The full local loop then ran on the formatted tree; 35 test files read source as
 
 **One directive moved by the formatting, fixed in commit 3.** Prettier split a one-line `jest.isolateModules(() => { config = require(…); }); // eslint-disable-line …` across three lines, leaving the directive on the wrong line. It is now an `eslint-disable-next-line` directly above the `require`. It was the only same-line directive (`eslint-disable-line`, `@ts-expect-error`, `@ts-ignore`) that the format moved. With commit 3, a misformatted file fails `pnpm lint`; `git blame --ignore-revs-file .git-blame-ignore-revs` attributes none of `restore.ts`'s 72 reformatted lines to the format commit.
 
+**One guard control needed the same care, fixed in commit 4.** A control in `infrastructure/terraform/api-compute.guard.test.mjs` simulated a weakened `app.factory.ts` by removing the exact text `server.keepAliveTimeout=API_KEEP_ALIVE_TIMEOUT_MS;`. After formatting the line has spaces around `=`, so the removal matched nothing, and the control failed (the guard itself, a whitespace-tolerant regex, still passed). The control now uses the same tolerant pattern.
+
+To find any control the formatting had made silently toothless, every exact-text `replace()` in the Terraform, Docker and CI guard suites was instrumented to record when its text is not found. The suites ran on `main` and on this branch: 466 passed, 0 failed, and the same 15 such call sites on both, all already present on `main`.
+
 **Limits.** `apps/frontend/e2e`, `apps/ai-service/durable`, `scripts/` and configuration files are outside the scope. Widening it is a later choice, using the same hash check.
