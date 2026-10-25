@@ -37,7 +37,7 @@ describe('catalog guard: the audit tables are classified and protected as their 
     expect(tables).toHaveLength(2);for(const t of tables)expect(t).toMatchObject({relrowsecurity:true,relforcerowsecurity:true});
     const grants=await q<{table_name:string;privilege_type:string}>("SELECT table_name,privilege_type FROM information_schema.role_table_grants WHERE table_schema='public' AND grantee='telesphoros_app' AND table_name=ANY($1)",[[...MUTABLE_OPERATIONAL_TABLES]]);
     for(const table of MUTABLE_OPERATIONAL_TABLES)expect(grants.filter(g=>g.table_name===table).map(g=>g.privilege_type).sort()).toEqual(['INSERT','SELECT','UPDATE']);
-    const policies=await q<{tablename:string;qual:string;with_check:string}>("SELECT tablename,qual,with_check FROM pg_policies WHERE schemaname='public' AND tablename=ANY($1)",[[...MUTABLE_OPERATIONAL_TABLES]]);expect(policies).toHaveLength(2);for(const p of policies){expect(p.qual).toContain('app_tenant()');expect(p.with_check).toContain('app_tenant()');}
+    const policies=await q<{tablename:string;qual:string;with_check:string}>("SELECT tablename,qual,with_check FROM pg_policies WHERE schemaname='public' AND tablename=ANY($1)",[[...MUTABLE_OPERATIONAL_TABLES]]);expect(policies).toHaveLength(2);for(const p of policies){expect(p.qual).toMatch(/app_tenant(_bound)?\(\)/);expect(p.with_check).toMatch(/app_tenant(_bound)?\(\)/);}
   });
 
   it('patient identifiers have forced tenant RLS, may be read and registered by the application, and can be changed by it only to withdraw (a column grant), never deleted or truncated', async () => {
@@ -53,8 +53,8 @@ describe('catalog guard: the audit tables are classified and protected as their 
       expect(policies).toHaveLength(1);
       expect(policies[0]).toMatchObject({ cmd: 'ALL' });
       expect(policies[0]!.roles).toContain('telesphoros_app');
-      expect(policies[0]!.qual).toContain('app_tenant()');
-      expect(policies[0]!.with_check).toContain('app_tenant()');
+      expect(policies[0]!.qual).toMatch(/app_tenant(_bound)?\(\)/);
+      expect(policies[0]!.with_check).toMatch(/app_tenant(_bound)?\(\)/);
     }
   });
 
@@ -70,8 +70,8 @@ describe('catalog guard: the audit tables are classified and protected as their 
       const policies = await q<{ cmd: string; roles: string; qual: string; with_check: string }>(`SELECT cmd, roles::text, qual, with_check FROM pg_policies WHERE schemaname = 'public' AND tablename = $1`, [table]);
       expect(policies).toHaveLength(1);
       expect(policies[0]).toMatchObject({ cmd: 'ALL' });
-      expect(policies[0]!.qual).toContain('app_tenant()');
-      expect(policies[0]!.with_check).toContain('app_tenant()');
+      expect(policies[0]!.qual).toMatch(/app_tenant(_bound)?\(\)/);
+      expect(policies[0]!.with_check).toMatch(/app_tenant(_bound)?\(\)/);
       const triggers = await q<{ tgname: string }>(`SELECT t.tgname FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid WHERE c.relname = $1 AND NOT t.tgisinternal ORDER BY 1`, [table]);
       expect(triggers.map((t) => t.tgname)).toEqual(['patient_duplicate_flags_append_only', 'patient_duplicate_flags_no_truncate']);
     }
@@ -122,7 +122,7 @@ describe('catalog guard: the audit tables are classified and protected as their 
     expect(forApplication).toHaveLength(AUTHORITY_TABLES.length);
     for (const p of forApplication) {
       expect(p.cmd).toBe('SELECT');
-      expect(p.qual).toContain('app_tenant()');
+      expect(p.qual).toMatch(/app_tenant(_bound)?\(\)/);
     }
     const byKey = (a: { tablename: string; roles: string }, b: { tablename: string; roles: string }) => `${a.tablename}|${a.roles}`.localeCompare(`${b.tablename}|${b.roles}`);
     expect(policies.filter((p) => !p.roles.includes('telesphoros_app')).sort(byKey)).toEqual([
