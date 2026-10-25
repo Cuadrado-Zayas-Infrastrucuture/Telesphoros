@@ -207,6 +207,7 @@ describe('finding and downloading backups', () => {
     const paginated = reader(g, bucket);
     const send = paginated.client.send.bind(paginated.client);
     const lists: ListObjectsV2Command[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises -- the SDK types send's callback overload as void; the real method returns this promise
     jest.spyOn(paginated.client, 'send').mockImplementation((command) => {
       if (command instanceof ListObjectsV2Command) {
         command.input.MaxKeys = 1;

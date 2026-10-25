@@ -51,6 +51,7 @@ if (mode === 'app') {
   afterAll(async () => { await Promise.all(databases.map((database) => database.drop())); });
   it('a test that times out while the database is still being migrated', async () => {
     const connect = Client.prototype.connect;
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises -- pg types connect's callback overload as void; the real method returns this promise
     jest.spyOn(Client.prototype, 'connect').mockImplementation(async function (this: Client) {
       await Reflect.apply(connect, this, []);
       if (/^test_/.test((this as unknown as { database: string }).database)) await delay(SLOW_MS);
