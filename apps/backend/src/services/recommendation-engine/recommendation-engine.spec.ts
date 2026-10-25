@@ -1,13 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import {
-  CPIC_STRENGTHS,
-  type DrugResult,
-  type EvaluationResult,
-  evaluationResultSchema,
-  type GeneInput,
-  REASON_OUTCOME,
-} from '@telesphoros/cpic-schema';
+import { CPIC_STRENGTHS, type DrugResult, type EvaluationResult, evaluationResultSchema, type GeneInput, REASON_OUTCOME } from '@telesphoros/cpic-schema';
 import { RECOMMENDATION_STRENGTHS } from '@telesphoros/shared-types';
 import { loadKnowledge } from '../knowledge/knowledge-loader';
 import type { KnowledgeSet } from '../knowledge/knowledge-set';
@@ -78,14 +71,19 @@ describe('evaluate: what may be shown, checked over EVERY combination of states 
   let all: { inputs: GeneInput[]; result: EvaluationResult }[];
   let results: DrugResult[];
   beforeAll(() => {
-    allWording = knowledge.drugs().flatMap((drug) =>
-      knowledge.guidelinesForDrug(drug).flatMap((guideline) => guideline.recommendations.flatMap((row) => [row.recommendationText, ...(row.implication ? [row.implication] : [])])),
-    );
+    allWording = knowledge
+      .drugs()
+      .flatMap((drug) =>
+        knowledge
+          .guidelinesForDrug(drug)
+          .flatMap((guideline) => guideline.recommendations.flatMap((row) => [row.recommendationText, ...(row.implication ? [row.implication] : [])])),
+      );
     all = [];
-    for (const a of geneA) for (const e of geneE) {
-      const inputs = [...a, ...e];
-      all.push({ inputs, result: evaluate(knowledge, inputs) });
-    }
+    for (const a of geneA)
+      for (const e of geneE) {
+        const inputs = [...a, ...e];
+        all.push({ inputs, result: evaluate(knowledge, inputs) });
+      }
     results = all.flatMap(({ result }) => result.results);
   });
 

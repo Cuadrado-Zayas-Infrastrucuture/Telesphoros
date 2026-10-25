@@ -16,7 +16,8 @@ export interface LinkState {
  */
 export function linkState(report: ReportRecord, newest: Projected | undefined): LinkState {
   if (!newest) return { state: 'unverified', decision: null, stale: false };
-  const applies = !!report.sha256 && !!report.objectVersion && newest.reportSha256 === report.sha256 && newest.objectVersion === report.objectVersion && newest.patientId === report.patientId;
+  const applies =
+    !!report.sha256 && !!report.objectVersion && newest.reportSha256 === report.sha256 && newest.objectVersion === report.objectVersion && newest.patientId === report.patientId;
   if (!applies) return { state: 'unverified', decision: newest, stale: true };
   return { state: newest.decision === 'verified' ? 'verified' : 'rejected', decision: newest, stale: false };
 }

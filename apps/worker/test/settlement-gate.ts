@@ -14,12 +14,18 @@ export async function holdSettlements(f: Fixture) {
     if (rows[0].released !== true) throw new Error('Test settlement gate lost its lock');
     locked = false;
   };
-  const close = onceFixtureCleanup(() => disposeFixtures([
-    release,
-    async () => { if (createdTrigger) await client.query('DROP TRIGGER worker_test_hold_settlement ON public.jobs'); },
-    async () => { if (createdFunction) await client.query('DROP FUNCTION public.worker_test_hold_settlement()'); },
-    () => client.end(),
-  ]));
+  const close = onceFixtureCleanup(() =>
+    disposeFixtures([
+      release,
+      async () => {
+        if (createdTrigger) await client.query('DROP TRIGGER worker_test_hold_settlement ON public.jobs');
+      },
+      async () => {
+        if (createdFunction) await client.query('DROP FUNCTION public.worker_test_hold_settlement()');
+      },
+      () => client.end(),
+    ]),
+  );
   try {
     await client.connect();
     await client.query("SELECT set_config('lock_timeout', $1, false)", ['2s']);
@@ -41,10 +47,13 @@ export async function holdSettlements(f: Fixture) {
       release,
       close,
       async blocked(): Promise<number> {
-        const { rows } = await client.query(`SELECT count(*)::int AS n FROM pg_locks
+        const { rows } = await client.query(
+          `SELECT count(*)::int AS n FROM pg_locks
           WHERE locktype = 'advisory' AND NOT granted
             AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
-            AND classid = $1::oid AND objid = $2::oid AND objsubid = 2`, [166, 1]);
+            AND classid = $1::oid AND objid = $2::oid AND objsubid = 2`,
+          [166, 1],
+        );
         return rows[0].n as number;
       },
     };

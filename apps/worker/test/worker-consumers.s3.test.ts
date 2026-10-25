@@ -27,8 +27,16 @@ afterEach(async () => {
 
 const worker = (env: Record<string, string> = {}, options: { withoutBucket?: boolean } = {}) => {
   const w = startWorker(f.db, {
-    ...(options.withoutBucket ? {} : { REPORTS_BUCKET }), S3_ENDPOINT: process.env.TEST_S3_ENDPOINT!, S3_FORCE_PATH_STYLE: 'true', AWS_REGION: 'us-east-2', AWS_ACCESS_KEY_ID: 'synthetic', AWS_SECRET_ACCESS_KEY: 'synthetic',
-    WORKER_TEST_JOBS: 'no', WORKER_RELAY_SECONDS: '1', WORKER_SCHEDULE_TICK_SECONDS: '5', ...env,
+    ...(options.withoutBucket ? {} : { REPORTS_BUCKET }),
+    S3_ENDPOINT: process.env.TEST_S3_ENDPOINT!,
+    S3_FORCE_PATH_STYLE: 'true',
+    AWS_REGION: 'us-east-2',
+    AWS_ACCESS_KEY_ID: 'synthetic',
+    AWS_SECRET_ACCESS_KEY: 'synthetic',
+    WORKER_TEST_JOBS: 'no',
+    WORKER_RELAY_SECONDS: '1',
+    WORKER_SCHEDULE_TICK_SECONDS: '5',
+    ...env,
   });
   started.push(w);
   return w;
@@ -47,19 +55,23 @@ const commitEvent = async (tenant: string, reportId: string) => {
 };
 
 type UploadJob = { report_id: string; state: string; last_error_code: string | null };
-const jobsFor = (reportIds: string[]) => f.admin.query<UploadJob>(
-  `SELECT payload ->> 'reportId' AS report_id, state, last_error_code FROM jobs
+const jobsFor = (reportIds: string[]) =>
+  f.admin
+    .query<UploadJob>(
+      `SELECT payload ->> 'reportId' AS report_id, state, last_error_code FROM jobs
    WHERE tenant_id = $1 AND type = 'files.verify-stored' AND payload ->> 'reportId' = ANY($2::text[]) ORDER BY seq`,
-  [TENANT_A, reportIds],
-).then((r) => r.rows);
+      [TENANT_A, reportIds],
+    )
+    .then((r) => r.rows);
 // The verification row commits before the runner's separate job-settlement call.
-const finishedJobs = (read: () => Promise<UploadJob[]>) => until('both upload verification jobs to settle', async () => {
-  const jobs = await read();
-  return jobs.length === 2 && jobs.every((job) => ['succeeded', 'dead', 'cancelled'].includes(job.state)) ? jobs : undefined;
-});
+const finishedJobs = (read: () => Promise<UploadJob[]>) =>
+  until('both upload verification jobs to settle', async () => {
+    const jobs = await read();
+    return jobs.length === 2 && jobs.every((job) => ['succeeded', 'dead', 'cancelled'].includes(job.state)) ? jobs : undefined;
+  });
 
 describe('the worker process with the consumers', () => {
-  it('relays a committed upload\'s event into a job and re-checks the stored file with nothing else to start it', async () => {
+  it("relays a committed upload's event into a job and re-checks the stored file with nothing else to start it", async () => {
     const good = await seedReport(f, s3, TENANT_A);
     const bad = await seedReport(f, s3, TENANT_A, { claim: { sha256: 'f'.repeat(64) } });
     await commitEvent(TENANT_A, good.reportId);
@@ -70,10 +82,12 @@ describe('the worker process with the consumers', () => {
     expect(await rows(good.reportId)).toEqual([{ outcome: 'ok', reason: null }]);
     expect(await rows(bad.reportId)).toEqual([{ outcome: 'changed', reason: 'hash-mismatch' }]);
     const jobs = await finishedJobs(() => jobsFor([good.reportId, bad.reportId]));
-    expect(jobs).toEqual(expect.arrayContaining([
-      { report_id: good.reportId, state: 'succeeded', last_error_code: null },
-      { report_id: bad.reportId, state: 'dead', last_error_code: 'file-changed' },
-    ]));
+    expect(jobs).toEqual(
+      expect.arrayContaining([
+        { report_id: good.reportId, state: 'succeeded', last_error_code: null },
+        { report_id: bad.reportId, state: 'dead', last_error_code: 'file-changed' },
+      ]),
+    );
     expect(w.output()).not.toContain(good.key);
     expect(w.output()).not.toContain(bad.reportId);
   });
@@ -93,9 +107,15 @@ describe('the worker process with the consumers', () => {
     expect(await rows(bad.reportId)).toEqual([{ outcome: 'changed', reason: 'hash-mismatch' }]);
     await finishedJobs(() => jobsFor([good.reportId, bad.reportId]));
     // The scheduled sweep ran on this worker too (the same jobs as above, but this worker's own attempts).
-    await until('this worker to complete a sweep', async () => (await f.admin.query(
-      `SELECT count(*)::int AS n FROM job_attempts a JOIN jobs j ON j.id = a.job_id WHERE a.worker_id = 'consumers-nowhere' AND j.type = 'uploads.sweep' AND a.outcome = 'succeeded'`,
-    )).rows[0].n >= 1);
+    await until(
+      'this worker to complete a sweep',
+      async () =>
+        (
+          await f.admin.query(
+            `SELECT count(*)::int AS n FROM job_attempts a JOIN jobs j ON j.id = a.job_id WHERE a.worker_id = 'consumers-nowhere' AND j.type = 'uploads.sweep' AND a.outcome = 'succeeded'`,
+          )
+        ).rows[0].n >= 1,
+    );
     expect(w.output()).not.toMatch(/ENOENT|EROFS|EACCES|EPERM|ENOSPC/);
     expect(existsSync(nowhere)).toBe(false); // nothing created it either
   }, 40_000);
@@ -109,15 +129,19 @@ describe('the worker process with the consumers', () => {
       await commitEvent(TENANT_A, good.reportId);
       await commitEvent(TENANT_A, bad.reportId);
       worker({ WORKER_ID: 'consumers-held' });
-      await until('both terminal updates to reach the settlement gate', async () => await gate.blocked() === 2);
-      const verifications = (await f.admin.query(
-        'SELECT report_id, outcome, reason FROM file_verifications WHERE tenant_id = $1 AND report_id = ANY($2::uuid[])',
-        [TENANT_A, [good.reportId, bad.reportId]],
-      )).rows;
-      expect(verifications).toEqual(expect.arrayContaining([
-        { report_id: good.reportId, outcome: 'ok', reason: null },
-        { report_id: bad.reportId, outcome: 'changed', reason: 'hash-mismatch' },
-      ]));
+      await until('both terminal updates to reach the settlement gate', async () => (await gate.blocked()) === 2);
+      const verifications = (
+        await f.admin.query('SELECT report_id, outcome, reason FROM file_verifications WHERE tenant_id = $1 AND report_id = ANY($2::uuid[])', [
+          TENANT_A,
+          [good.reportId, bad.reportId],
+        ])
+      ).rows;
+      expect(verifications).toEqual(
+        expect.arrayContaining([
+          { report_id: good.reportId, outcome: 'ok', reason: null },
+          { report_id: bad.reportId, outcome: 'changed', reason: 'hash-mismatch' },
+        ]),
+      );
       let observedHeld = false;
       const jobs = await finishedJobs(async () => {
         const snapshot = await jobsFor([good.reportId, bad.reportId]);
@@ -146,10 +170,13 @@ describe('the worker process with the consumers', () => {
     }
   });
 
-  it('runs the scheduled sweep for every active organization from the migration\'s own schedule, once per slot', async () => {
+  it("runs the scheduled sweep for every active organization from the migration's own schedule, once per slot", async () => {
     await f.admin.query(`INSERT INTO job_schedules (type, interval_seconds) VALUES ('uploads.sweep', 3600) ON CONFLICT DO NOTHING`);
     worker({ WORKER_ID: 'consumers-2' });
-    await until('the sweeps to succeed', async () => (await f.admin.query(`SELECT count(*)::int AS n FROM jobs WHERE type = 'uploads.sweep' AND state = 'succeeded'`)).rows[0].n >= 2);
+    await until(
+      'the sweeps to succeed',
+      async () => (await f.admin.query(`SELECT count(*)::int AS n FROM jobs WHERE type = 'uploads.sweep' AND state = 'succeeded'`)).rows[0].n >= 2,
+    );
     const swept = (await f.admin.query(`SELECT tenant_id, requested_by FROM jobs WHERE type = 'uploads.sweep' ORDER BY tenant_id`)).rows;
     expect(swept.map((r) => r.requested_by)).toEqual(swept.map(() => 'system:scheduler'));
     expect(swept.map((r) => r.tenant_id)).not.toContain('worker-test-suspended');

@@ -33,7 +33,11 @@ async function as<T>(url: string, settings: Settings, work: (c: Client) => Promi
 }
 const scalar = async <T>(url: string, settings: Settings, sql: string, params: unknown[] = []): Promise<T> =>
   as(url, settings, async (c) => Object.values((await c.query(sql, params)).rows[0] as object)[0] as T);
-const code = (promise: Promise<unknown>) => promise.then(() => 'ok', (e: { code?: string }) => e.code);
+const code = (promise: Promise<unknown>) =>
+  promise.then(
+    () => 'ok',
+    (e: { code?: string }) => e.code,
+  );
 const owner = <T>(work: (c: Client) => Promise<T>) => withAdmin(db.adminUrl, work);
 
 /** Mints through the issuer login at the current membership version (0031). */
@@ -43,7 +47,8 @@ async function issueCurrent(tenant: string, sub: string) {
   await c.connect();
   try {
     const { rows } = await c.query<{ expires_at: Date | null; refusal: string | null; membership_version: string | null }>(
-      'SELECT * FROM tenant_capability_issue_current($1, $2, $3, $4, $5)', [tenant, sub, 'request', hashOf(value), 'req-binding-0001'],
+      'SELECT * FROM tenant_capability_issue_current($1, $2, $3, $4, $5)',
+      [tenant, sub, 'request', hashOf(value), 'req-binding-0001'],
     );
     return { token: value, ...rows[0]! };
   } finally {
@@ -55,10 +60,16 @@ beforeAll(async () => {
   db = await createEphemeralDatabase();
   await owner(async (c) => {
     for (const tenant of ['org-alpha', 'org-beta']) await registerTenantRow(c, tenant);
-    for (const [tenant, sub] of [['org-alpha', 'alice'], ['org-beta', 'bob']]) {
+    for (const [tenant, sub] of [
+      ['org-alpha', 'alice'],
+      ['org-beta', 'bob'],
+    ]) {
       await c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ($1, $2, 'active', ARRAY['clinician'], 'test')`, [tenant, sub]);
     }
-    for (const [tenant, n] of [['org-alpha', 4], ['org-beta', 1]] as const) {
+    for (const [tenant, n] of [
+      ['org-alpha', 4],
+      ['org-beta', 1],
+    ] as const) {
       for (let i = 0; i < n; i += 1) await c.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ($1, 'test', $2)`, [tenant, `SYN-${tenant}-${i}`]);
     }
   });
@@ -69,9 +80,11 @@ afterAll(async () => {
 
 describe('T020: every tenant-setting policy reads the capability, for every role (0032)', () => {
   it('no policy text reads the setting any more, and exactly 47 read app_tenant() (the 48 of 0031, less the recommendations policy dropped in 0043)', async () => {
-    const rows = await owner((c) => c.query<{ tablename: string; policyname: string; qual: string | null; with_check: string | null }>(
-      `SELECT tablename, policyname, qual, with_check FROM pg_policies WHERE schemaname = 'public' AND (qual LIKE '%app.current_tenant_id%' OR with_check LIKE '%app.current_tenant_id%' OR qual LIKE '%app_tenant()%' OR with_check LIKE '%app_tenant()%' OR qual LIKE '%app_tenant_bound()%' OR with_check LIKE '%app_tenant_bound()%')`,
-    )).then((r) => r.rows);
+    const rows = await owner((c) =>
+      c.query<{ tablename: string; policyname: string; qual: string | null; with_check: string | null }>(
+        `SELECT tablename, policyname, qual, with_check FROM pg_policies WHERE schemaname = 'public' AND (qual LIKE '%app.current_tenant_id%' OR with_check LIKE '%app.current_tenant_id%' OR qual LIKE '%app_tenant()%' OR with_check LIKE '%app_tenant()%' OR qual LIKE '%app_tenant_bound()%' OR with_check LIKE '%app_tenant_bound()%')`,
+      ),
+    ).then((r) => r.rows);
     expect(rows.filter((r) => `${r.qual ?? ''}${r.with_check ?? ''}`.includes('app.current_tenant_id'))).toEqual([]);
     expect(rows).toHaveLength(47);
     expect(rows.every((r) => /\(\s*SELECT\s+(public\.)?app_tenant(_bound)?\(\)/.test(`${r.qual ?? ''}${r.with_check ?? ''}`))).toBe(true);
@@ -143,12 +156,17 @@ describe('T021: definer functions bind the actor from the capability, not from t
     for (const url of logins) {
       expect(await code(as(url, {}, (c) => c.query(`SELECT tenant_capability_bind_internal('org-alpha', 'x')`)))).toBe('42501');
     }
-    const grants = await owner((c) => c.query<{ role: string; ok: boolean }>(
-      `SELECT r AS role, has_function_privilege(r, 'public.tenant_capability_bind_internal(text, text)', 'EXECUTE') AS ok FROM unnest(ARRAY['telesphoros_ledger', 'telesphoros_jobs', 'telesphoros_redactor', 'telesphoros_app', 'public']) AS r ORDER BY r`,
-    ));
+    const grants = await owner((c) =>
+      c.query<{ role: string; ok: boolean }>(
+        `SELECT r AS role, has_function_privilege(r, 'public.tenant_capability_bind_internal(text, text)', 'EXECUTE') AS ok FROM unnest(ARRAY['telesphoros_ledger', 'telesphoros_jobs', 'telesphoros_redactor', 'telesphoros_app', 'public']) AS r ORDER BY r`,
+      ),
+    );
     expect(grants.rows).toEqual([
-      { role: 'public', ok: false }, { role: 'telesphoros_app', ok: false }, { role: 'telesphoros_jobs', ok: true },
-      { role: 'telesphoros_ledger', ok: true }, { role: 'telesphoros_redactor', ok: true },
+      { role: 'public', ok: false },
+      { role: 'telesphoros_app', ok: false },
+      { role: 'telesphoros_jobs', ok: true },
+      { role: 'telesphoros_ledger', ok: true },
+      { role: 'telesphoros_redactor', ok: true },
     ]);
   });
 
@@ -171,17 +189,18 @@ describe('T021: definer functions bind the actor from the capability, not from t
   });
 
   it('the internal binding wins over a forged setting only when they agree: its own tenant reads, a foreign setting beside it reads nothing', async () => {
-    const reads = (setting: string) => owner(async (c) => {
-      await c.query('BEGIN');
-      try {
-        await c.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [setting]);
-        await c.query('SET LOCAL ROLE telesphoros_jobs');
-        await c.query(`SELECT tenant_capability_bind_internal('org-alpha', 'uploads-sweep')`);
-        return (await c.query(`SELECT public.app_tenant() AS t`)).rows[0];
-      } finally {
-        await c.query('ROLLBACK');
-      }
-    });
+    const reads = (setting: string) =>
+      owner(async (c) => {
+        await c.query('BEGIN');
+        try {
+          await c.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [setting]);
+          await c.query('SET LOCAL ROLE telesphoros_jobs');
+          await c.query(`SELECT tenant_capability_bind_internal('org-alpha', 'uploads-sweep')`);
+          return (await c.query(`SELECT public.app_tenant() AS t`)).rows[0];
+        } finally {
+          await c.query('ROLLBACK');
+        }
+      });
     expect(await reads('org-alpha')).toEqual({ t: 'org-alpha' });
     expect(await reads('org-beta')).toEqual({ t: null });
   });
@@ -196,16 +215,41 @@ describe('T021: definer functions bind the actor from the capability, not from t
 describe('T020 vacuity guard: every tenant-policy table is seeded here or listed as unseeded on purpose', () => {
   const SEEDED = ['patients', 'tenant_memberships', 'tenants'];
   const UNSEEDED = [
-    'browser_sessions', 'capture_acceptances', 'cell_dispute_decisions', 'cell_disputes', 'corrections', 'evaluation_gene_states',
-    'evaluation_results', 'evaluations', 'event_notes', 'file_verifications', 'invitations', 'job_attempts', 'jobs', 'ledger_checkpoints',
-    'ledger_events', 'ledger_heads', 'patient_duplicate_flags', 'patient_identifiers', 'patient_merge_decisions', 'patient_merge_proposals',
-    'report_captures', 'report_patient_decisions', 'report_upload_attempts', 'report_upload_runs', 'reports',
+    'browser_sessions',
+    'capture_acceptances',
+    'cell_dispute_decisions',
+    'cell_disputes',
+    'corrections',
+    'evaluation_gene_states',
+    'evaluation_results',
+    'evaluations',
+    'event_notes',
+    'file_verifications',
+    'invitations',
+    'job_attempts',
+    'jobs',
+    'ledger_checkpoints',
+    'ledger_events',
+    'ledger_heads',
+    'patient_duplicate_flags',
+    'patient_identifiers',
+    'patient_merge_decisions',
+    'patient_merge_proposals',
+    'report_captures',
+    'report_patient_decisions',
+    'report_upload_attempts',
+    'report_upload_runs',
+    'reports',
   ];
 
   it('the catalog and the two lists agree, and every seeded table holds rows', async () => {
-    const tables = (await owner((c) => c.query<{ tablename: string }>(
-      `SELECT DISTINCT tablename FROM pg_policies WHERE schemaname = 'public' AND (qual LIKE '%app_tenant()%' OR with_check LIKE '%app_tenant()%' OR qual LIKE '%app_tenant_bound()%' OR with_check LIKE '%app_tenant_bound()%') ORDER BY tablename`,
-    ))).rows.map((r) => r.tablename);
+    const tables = (
+      await owner((c) =>
+        c.query<{ tablename: string }>(
+          `SELECT DISTINCT tablename FROM pg_policies WHERE schemaname = 'public' AND (qual LIKE '%app_tenant()%' OR with_check LIKE '%app_tenant()%' OR qual LIKE '%app_tenant_bound()%' OR with_check LIKE '%app_tenant_bound()%') ORDER BY tablename`,
+        ),
+      )
+    ).rows.map((r) => r.tablename);
     const listed = [...SEEDED, ...UNSEEDED];
     expect(tables.filter((t) => !listed.includes(t))).toEqual([]); // a new table must be listed here
     expect(listed.filter((t) => !tables.includes(t))).toEqual([]); // a listed table must still exist as a policy table
@@ -223,32 +267,43 @@ describe('T020 vacuity guard: every tenant-policy table is seeded here or listed
  */
 describe('0032 catalog checks: grants, callers and the plan shape', () => {
   it('every telesphoros role that a policy calling app_tenant() applies to can execute app_tenant() and app_actor() (the verifier has an open policy and needs neither)', async () => {
-    const roles = (await owner((c) => c.query<{ grantee: string }>(
-      `SELECT DISTINCT r AS grantee FROM pg_policies p, unnest(p.roles) AS r
+    const roles = (
+      await owner((c) =>
+        c.query<{ grantee: string }>(
+          `SELECT DISTINCT r AS grantee FROM pg_policies p, unnest(p.roles) AS r
         WHERE p.schemaname = 'public' AND (p.qual LIKE '%app_tenant()%' OR p.with_check LIKE '%app_tenant()%') AND r LIKE 'telesphoros_%'
         ORDER BY 1`,
-    ))).rows.map((r) => r.grantee);
+        ),
+      )
+    ).rows.map((r) => r.grantee);
     expect(roles.length).toBeGreaterThan(0); // a control: the query finds the roles that touch the policy tables
-    const checks = await owner((c) => c.query<{ role: string; tenant: boolean; actor: boolean }>(
-      `SELECT r AS role, has_function_privilege(r, 'public.app_tenant()', 'EXECUTE') AS tenant,
+    const checks = await owner((c) =>
+      c.query<{ role: string; tenant: boolean; actor: boolean }>(
+        `SELECT r AS role, has_function_privilege(r, 'public.app_tenant()', 'EXECUTE') AS tenant,
               has_function_privilege(r, 'public.app_actor()', 'EXECUTE') AS actor
          FROM unnest($1::text[]) AS r ORDER BY r`,
-      [roles],
-    ));
+        [roles],
+      ),
+    );
     expect(checks.rows.filter((r) => !r.tenant || !r.actor)).toEqual([]);
   });
 
   it('the internal binding is called by exactly the four named class (b) functions, and by no other definition in public', async () => {
-    const callers = (await owner((c) => c.query<{ proname: string }>(
-      `SELECT DISTINCT p.proname FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.prosrc LIKE '%tenant_capability_bind_internal(%' ORDER BY 1`,
-    ))).rows.map((r) => r.proname);
+    const callers = (
+      await owner((c) =>
+        c.query<{ proname: string }>(
+          `SELECT DISTINCT p.proname FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.prosrc LIKE '%tenant_capability_bind_internal(%' ORDER BY 1`,
+        ),
+      )
+    ).rows.map((r) => r.proname);
     expect(callers).toEqual(['job_held', 'ledger_record_checkpoint', 'redact_event_note', 'uploads_sweep']);
   });
 
   it('the policy reads the capability once per statement: the plan for patients has an InitPlan for app_tenant(), with the capability presented', async () => {
     const { token: alpha } = await issueCurrent('org-alpha', 'alice');
     const plan = await as(db.appUrl, { 'app.capability': alpha }, async (c) =>
-      (await c.query<{ 'QUERY PLAN': string }>('EXPLAIN SELECT * FROM patients')).rows.map((r) => r['QUERY PLAN']).join('\n'));
+      (await c.query<{ 'QUERY PLAN': string }>('EXPLAIN SELECT * FROM patients')).rows.map((r) => r['QUERY PLAN']).join('\n'),
+    );
     expect(plan).toMatch(/InitPlan/);
   });
 });

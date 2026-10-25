@@ -48,7 +48,12 @@ const relationships: [string, string, string, string][] = [
   ['agentic_synthetic_grants_tenant_id_fkey', 'agentic_synthetic_grants', 'tenant_id', 'tenants:id'],
   ['agentic_synthetic_sources_tenant_id_fkey', 'agentic_synthetic_sources', 'tenant_id', 'tenants:id'],
   ['agentic_synthetic_grant_sources_tenant_id_grant_id_fkey', 'agentic_synthetic_grant_sources', 'tenant_id,grant_id', 'agentic_synthetic_grants:tenant_id,grant_id'],
-  ['agentic_synthetic_grant_sourc_tenant_id_source_id_source_v_fkey', 'agentic_synthetic_grant_sources', 'tenant_id,source_id,source_version', 'agentic_synthetic_sources:tenant_id,source_id,source_version'],
+  [
+    'agentic_synthetic_grant_sourc_tenant_id_source_id_source_v_fkey',
+    'agentic_synthetic_grant_sources',
+    'tenant_id,source_id,source_version',
+    'agentic_synthetic_sources:tenant_id,source_id,source_version',
+  ],
   ['agentic_synthetic_reservations_tenant_id_run_id_fkey', 'agentic_synthetic_reservations', 'tenant_id,run_id', 'agentic_synthetic_runs:tenant_id,run_id'],
   ['agentic_synthetic_invocations_tenant_id_run_id_fkey', 'agentic_synthetic_invocations', 'tenant_id,run_id', 'agentic_synthetic_runs:tenant_id,run_id'],
   ['agentic_synthetic_outcomes_tenant_id_run_id_fkey', 'agentic_synthetic_outcomes', 'tenant_id,run_id', 'agentic_synthetic_runs:tenant_id,run_id'],
@@ -56,17 +61,46 @@ const relationships: [string, string, string, string][] = [
 ];
 const primaryKeys: Record<string, string> = {
   browser_sessions: 'tenant_id, handle_hash',
-  report_upload_runs: 'run_id', report_upload_attempts: 'id',
-  patients: 'id', reports: 'id', schema_migrations: 'version',
-  ledger_heads: 'tenant_id', ledger_events: 'id', ledger_checkpoints: 'id', event_notes: 'id',
-  report_captures: 'id', capture_acceptances: 'id', evaluations: 'id', evaluation_results: 'id',
-  evaluation_gene_states: 'id', corrections: 'id', cell_disputes: 'id', cell_dispute_decisions: 'id',
-  ledger_incidents: 'id', ledger_incident_clearances: 'id', tenant_memberships: 'tenant_id, sub',
-  security_audit_events: 'id', security_events: 'id', tenants: 'id', invitations: 'id',
-  patient_identifiers: 'id', report_patient_decisions: 'id',
-  jobs: 'id', job_attempts: 'id', job_schedules: 'type', job_workers: 'worker_id', outbox_routes: 'event_type', outbox_events: 'id', file_verifications: 'id',
-  patient_duplicate_flags: 'id', patient_merge_proposals: 'id', patient_merge_decisions: 'id',
-  tenant_capabilities: 'token_hash', capability_issuance_log: 'seq', capability_purposes: 'purpose', tenant_binding_mode: 'singleton',
+  report_upload_runs: 'run_id',
+  report_upload_attempts: 'id',
+  patients: 'id',
+  reports: 'id',
+  schema_migrations: 'version',
+  ledger_heads: 'tenant_id',
+  ledger_events: 'id',
+  ledger_checkpoints: 'id',
+  event_notes: 'id',
+  report_captures: 'id',
+  capture_acceptances: 'id',
+  evaluations: 'id',
+  evaluation_results: 'id',
+  evaluation_gene_states: 'id',
+  corrections: 'id',
+  cell_disputes: 'id',
+  cell_dispute_decisions: 'id',
+  ledger_incidents: 'id',
+  ledger_incident_clearances: 'id',
+  tenant_memberships: 'tenant_id, sub',
+  security_audit_events: 'id',
+  security_events: 'id',
+  tenants: 'id',
+  invitations: 'id',
+  patient_identifiers: 'id',
+  report_patient_decisions: 'id',
+  jobs: 'id',
+  job_attempts: 'id',
+  job_schedules: 'type',
+  job_workers: 'worker_id',
+  outbox_routes: 'event_type',
+  outbox_events: 'id',
+  file_verifications: 'id',
+  patient_duplicate_flags: 'id',
+  patient_merge_proposals: 'id',
+  patient_merge_decisions: 'id',
+  tenant_capabilities: 'token_hash',
+  capability_issuance_log: 'seq',
+  capability_purposes: 'purpose',
+  tenant_binding_mode: 'singleton',
   agentic_synthetic_audit: 'tenant_id, run_id, event_sequence',
   agentic_synthetic_buckets: 'scope, scope_key, period_kind, period_start',
   agentic_synthetic_capacity: 'singleton',
@@ -79,31 +113,54 @@ const primaryKeys: Record<string, string> = {
   agentic_synthetic_sources: 'tenant_id, source_id, source_version',
 };
 const uniqueKeys: Record<string, string> = {
-  report_upload_runs_tenant_id_run_id_key: 'tenant_id, run_id', upload_attempt_request_uq: 'tenant_id, report_id, principal, request_id', upload_attempt_key_uq: 'storage_key',
-  patients_id_tenant_uq: 'id, tenant_id', reports_id_tenant_uq: 'id, tenant_id',
+  report_upload_runs_tenant_id_run_id_key: 'tenant_id, run_id',
+  upload_attempt_request_uq: 'tenant_id, report_id, principal, request_id',
+  upload_attempt_key_uq: 'storage_key',
+  patients_id_tenant_uq: 'id, tenant_id',
+  reports_id_tenant_uq: 'id, tenant_id',
   reports_creation_request_uq: 'tenant_id, created_by, creation_request_id',
   patients_creation_request_uq: 'tenant_id, created_by, creation_request_id',
   patient_identifiers_creation_request_uq: 'tenant_id, created_by, creation_request_id',
   invitations_creation_request_uq: 'tenant_id, created_by, creation_request_id',
   capture_acceptances_creation_request_uq: 'tenant_id, created_by, creation_request_id',
   cell_disputes_creation_request_uq: 'tenant_id, created_by, creation_request_id',
-  reports_id_patient_tenant_uq: 'id, patient_id, tenant_id', reports_tenant_patient_id_uq: 'tenant_id, patient_id, id',
-  ledger_events_id_tenant_uq: 'id, tenant_id', ledger_events_subject_uq: 'subject_table, subject_id',
-  ledger_events_tenant_prev_uq: 'tenant_id, prev_hash', ledger_events_tenant_seq_uq: 'tenant_id, seq',
-  ledger_checkpoints_id_tenant_uq: 'id, tenant_id', event_notes_id_tenant_uq: 'id, tenant_id',
-  report_captures_id_tenant_uq: 'id, tenant_id', report_captures_identity_uq: 'tenant_id, report_id, text_sha256, poppler_version',
-  report_captures_text_key_uq: 'text_storage_key', capture_acceptances_id_tenant_uq: 'id, tenant_id',
-  evaluations_id_tenant_report_uq: 'id, tenant_id, report_id', evaluations_id_tenant_uq: 'id, tenant_id',
-  evaluations_identity_uq: 'tenant_id, identity_key', evaluation_results_ordinal_uq: 'evaluation_id, ordinal',
-  evaluation_gene_states_gene_uq: 'evaluation_id, gene', corrections_id_eval_tenant_uq: 'id, evaluation_id, tenant_id',
-  corrections_id_tenant_uq: 'id, tenant_id', cell_disputes_id_tenant_uq: 'id, tenant_id',
-  cell_dispute_decisions_dispute_uq: 'dispute_id', cell_dispute_decisions_id_tenant_uq: 'id, tenant_id',
-  ledger_clearances_incident_uq: 'incident_id', security_events_seq_uq: 'seq',
-  patient_identifiers_id_tenant_patient_uq: 'id, tenant_id, patient_id', report_patient_decisions_id_tenant_uq: 'id, tenant_id',
-  patient_identifiers_id_tenant_uq: 'id, tenant_id', patient_duplicate_flags_pair_uq: 'tenant_id, patient_id, other_patient_id',
-  patient_merge_proposals_id_tenant_uq: 'id, tenant_id', patient_merge_decisions_proposal_uq: 'tenant_id, proposal_id', patient_merge_decisions_id_tenant_uq: 'id, tenant_id',
-  jobs_seq_uq: 'seq', jobs_idempotency_uq: 'tenant_id, type, idempotency_key', job_attempts_seq_uq: 'seq',
-  outbox_events_seq_uq: 'seq', outbox_events_subject_uq: 'tenant_id, event_type, subject_id', file_verifications_seq_uq: 'seq',
+  reports_id_patient_tenant_uq: 'id, patient_id, tenant_id',
+  reports_tenant_patient_id_uq: 'tenant_id, patient_id, id',
+  ledger_events_id_tenant_uq: 'id, tenant_id',
+  ledger_events_subject_uq: 'subject_table, subject_id',
+  ledger_events_tenant_prev_uq: 'tenant_id, prev_hash',
+  ledger_events_tenant_seq_uq: 'tenant_id, seq',
+  ledger_checkpoints_id_tenant_uq: 'id, tenant_id',
+  event_notes_id_tenant_uq: 'id, tenant_id',
+  report_captures_id_tenant_uq: 'id, tenant_id',
+  report_captures_identity_uq: 'tenant_id, report_id, text_sha256, poppler_version',
+  report_captures_text_key_uq: 'text_storage_key',
+  capture_acceptances_id_tenant_uq: 'id, tenant_id',
+  evaluations_id_tenant_report_uq: 'id, tenant_id, report_id',
+  evaluations_id_tenant_uq: 'id, tenant_id',
+  evaluations_identity_uq: 'tenant_id, identity_key',
+  evaluation_results_ordinal_uq: 'evaluation_id, ordinal',
+  evaluation_gene_states_gene_uq: 'evaluation_id, gene',
+  corrections_id_eval_tenant_uq: 'id, evaluation_id, tenant_id',
+  corrections_id_tenant_uq: 'id, tenant_id',
+  cell_disputes_id_tenant_uq: 'id, tenant_id',
+  cell_dispute_decisions_dispute_uq: 'dispute_id',
+  cell_dispute_decisions_id_tenant_uq: 'id, tenant_id',
+  ledger_clearances_incident_uq: 'incident_id',
+  security_events_seq_uq: 'seq',
+  patient_identifiers_id_tenant_patient_uq: 'id, tenant_id, patient_id',
+  report_patient_decisions_id_tenant_uq: 'id, tenant_id',
+  patient_identifiers_id_tenant_uq: 'id, tenant_id',
+  patient_duplicate_flags_pair_uq: 'tenant_id, patient_id, other_patient_id',
+  patient_merge_proposals_id_tenant_uq: 'id, tenant_id',
+  patient_merge_decisions_proposal_uq: 'tenant_id, proposal_id',
+  patient_merge_decisions_id_tenant_uq: 'id, tenant_id',
+  jobs_seq_uq: 'seq',
+  jobs_idempotency_uq: 'tenant_id, type, idempotency_key',
+  job_attempts_seq_uq: 'seq',
+  outbox_events_seq_uq: 'seq',
+  outbox_events_subject_uq: 'tenant_id, event_type, subject_id',
+  file_verifications_seq_uq: 'seq',
   agentic_synthetic_invocations_invocation_id_key: 'invocation_id',
   agentic_synthetic_outcomes_simulation_receipt_ref_key: 'simulation_receipt_ref',
   agentic_synthetic_runs_job_id_key: 'job_id',
@@ -133,7 +190,8 @@ const checkNames: Record<string, string> = {
   report_upload_attempts: 'principal_check type_check size_bytes_check content_type_check sha256_check storage_key_check state_check object_version_check',
   upload_attempt: 'committed_pin',
   patients: 'created_by_len creation_request_pair label_format tenant_id_len',
-  reports: 'created_by_len creation_request_pair filename_format lab_pdf_pinned object_version_valid pin_after_upload sha256_format size_range status_valid tenant_id_len type_valid upload_consistent upload_requested_by_len uploaded_by_len',
+  reports:
+    'created_by_len creation_request_pair filename_format lab_pdf_pinned object_version_valid pin_after_upload sha256_format size_range status_valid tenant_id_len type_valid upload_consistent upload_requested_by_len uploaded_by_len',
   report_captures: 'created_by_len hashes key_len poppler runner scalars tenant_id_len',
   capture_acceptances: 'created_by_len decision poppler tenant_id_len text_hash created_by_human creation_request_pair',
   evaluations: 'created_by_len disposition engine_version_len hash_formats hold_code hold_consistent json_shapes tenant_id_len binding_size gene_inputs_size occurrences_size',
@@ -160,10 +218,22 @@ const checkNames: Record<string, string> = {
   agentic_synthetic_invocations: 'artifact_check candidate_digest_check evidence_digest_check input_digest_check observation_check ordinal_check role_check usage_state_check',
   agentic_synthetic_outcomes: 'outcome_check outcome_digest_check',
   agentic_synthetic_reservations: 'check observed_generated_check observed_input_check reserved_cost_check reserved_tokens_check usage_state_check',
-  agentic_synthetic_runs: 'check evidence_digest_check evidence_tuple_preimage_check fence_check grant_generation_check idempotency_key_check membership_version_check profile_digest_check request_digest_check request_json_check request_tuple_preimage_check requester_ref_check sequence_check source_snapshot_check state_check task_key_check',
+  agentic_synthetic_runs:
+    'check evidence_digest_check evidence_tuple_preimage_check fence_check grant_generation_check idempotency_key_check membership_version_check profile_digest_check request_digest_check request_json_check request_tuple_preimage_check requester_ref_check sequence_check source_snapshot_check state_check task_key_check',
   agentic_synthetic_sources: 'body_check digest_check source_id_check source_version_check',
 };
-for (const table of ['report_captures', 'capture_acceptances', 'evaluations', 'corrections', 'cell_disputes', 'cell_dispute_decisions', 'report_patient_decisions', 'patient_merge_proposals', 'patient_merge_decisions', 'ledger_checkpoints']) {
+for (const table of [
+  'report_captures',
+  'capture_acceptances',
+  'evaluations',
+  'corrections',
+  'cell_disputes',
+  'cell_dispute_decisions',
+  'report_patient_decisions',
+  'patient_merge_proposals',
+  'patient_merge_decisions',
+  'ledger_checkpoints',
+]) {
   relationships.push([`${table}_event_fk`, table, 'ledger_event_id,tenant_id', 'ledger_events:id,tenant_id']);
 }
 
@@ -191,9 +261,11 @@ const queryIndexes: Record<string, string> = {
   ledger_checkpoints_tenant_seq_idx: 'INDEX ledger_checkpoints_tenant_seq_idx ON public.ledger_checkpoints USING btree (tenant_id, up_to_seq DESC)',
   ledger_incidents_tenant_idx: "INDEX ledger_incidents_tenant_idx ON public.ledger_incidents USING btree (tenant_id) WHERE (scope = 'tenant'::text)",
   security_events_tenant_time_idx: 'INDEX security_events_tenant_time_idx ON public.security_events USING btree (tenant_id, occurred_at)',
-  security_events_refusal_idx: "INDEX security_events_refusal_idx ON public.security_events USING btree (tenant_id, actor_ref, ((details ->> 'reason'::text)), occurred_at DESC) WHERE (event_type = 'access.refused'::text)",
+  security_events_refusal_idx:
+    "INDEX security_events_refusal_idx ON public.security_events USING btree (tenant_id, actor_ref, ((details ->> 'reason'::text)), occurred_at DESC) WHERE (event_type = 'access.refused'::text)",
   invitations_one_pending_uq: "UNIQUE INDEX invitations_one_pending_uq ON public.invitations USING btree (tenant_id, email_digest) WHERE (status = 'pending'::text)",
-  patient_identifiers_active_uq: "UNIQUE INDEX patient_identifiers_active_uq ON public.patient_identifiers USING btree (tenant_id, system, value_digest) WHERE (status = 'active'::text)",
+  patient_identifiers_active_uq:
+    "UNIQUE INDEX patient_identifiers_active_uq ON public.patient_identifiers USING btree (tenant_id, system, value_digest) WHERE (status = 'active'::text)",
   patient_identifiers_patient_idx: 'INDEX patient_identifiers_patient_idx ON public.patient_identifiers USING btree (tenant_id, patient_id, seq)',
   report_patient_decisions_report_idx: 'INDEX report_patient_decisions_report_idx ON public.report_patient_decisions USING btree (tenant_id, report_id, seq)',
   patient_duplicate_flags_tenant_idx: 'INDEX patient_duplicate_flags_tenant_idx ON public.patient_duplicate_flags USING btree (tenant_id, seq DESC)',
@@ -211,36 +283,59 @@ const queryIndexes: Record<string, string> = {
 
 /** Reusable acceptance gate for a migrated or restored database; counts/names alone are insufficient. */
 export async function assertSchemaAcceptance(c: Client): Promise<void> {
-  const keys = (await c.query(`SELECT conrelid::regclass::text AS table_name, conname, contype, condeferrable, pg_get_constraintdef(oid) AS definition
-    FROM pg_constraint WHERE connamespace='public'::regnamespace AND contype IN ('p','u')`)).rows;
-  expect(Object.fromEntries(keys.filter(r => r.contype === 'p').map(r => [r.table_name, r.definition]))).toEqual(
-    Object.fromEntries(Object.entries(primaryKeys).map(([table, columns]) => [table, `PRIMARY KEY (${columns})`])));
-  expect(Object.fromEntries(keys.filter(r => r.contype === 'u').map(r => [r.conname, r.definition]))).toEqual(
-    Object.fromEntries(Object.entries(uniqueKeys).map(([name, columns]) => [name, `UNIQUE (${columns})`])));
-  expect(keys.filter(r => r.condeferrable)).toEqual([]);
-  const fks = (await c.query(`SELECT conname, conrelid::regclass::text AS child, confrelid::regclass::text AS parent,
+  const keys = (
+    await c.query(`SELECT conrelid::regclass::text AS table_name, conname, contype, condeferrable, pg_get_constraintdef(oid) AS definition
+    FROM pg_constraint WHERE connamespace='public'::regnamespace AND contype IN ('p','u')`)
+  ).rows;
+  expect(Object.fromEntries(keys.filter((r) => r.contype === 'p').map((r) => [r.table_name, r.definition]))).toEqual(
+    Object.fromEntries(Object.entries(primaryKeys).map(([table, columns]) => [table, `PRIMARY KEY (${columns})`])),
+  );
+  expect(Object.fromEntries(keys.filter((r) => r.contype === 'u').map((r) => [r.conname, r.definition]))).toEqual(
+    Object.fromEntries(Object.entries(uniqueKeys).map(([name, columns]) => [name, `UNIQUE (${columns})`])),
+  );
+  expect(keys.filter((r) => r.condeferrable)).toEqual([]);
+  const fks = (
+    await c.query(`SELECT conname, conrelid::regclass::text AS child, confrelid::regclass::text AS parent,
       ARRAY(SELECT attname::text FROM unnest(conkey) WITH ORDINALITY k(n,o) JOIN pg_attribute a ON a.attrelid=conrelid AND a.attnum=k.n ORDER BY o) AS child_columns,
       ARRAY(SELECT attname::text FROM unnest(confkey) WITH ORDINALITY k(n,o) JOIN pg_attribute a ON a.attrelid=confrelid AND a.attnum=k.n ORDER BY o) AS parent_columns,
       confdeltype, confupdtype, convalidated, condeferrable, condeferred
-      FROM pg_constraint WHERE contype='f' AND connamespace='public'::regnamespace`)).rows;
-  expect(fks.map(r => r.conname).sort()).toEqual(relationships.map(r => r[0]).sort());
+      FROM pg_constraint WHERE contype='f' AND connamespace='public'::regnamespace`)
+  ).rows;
+  expect(fks.map((r) => r.conname).sort()).toEqual(relationships.map((r) => r[0]).sort());
   for (const [name, child, columns, reference] of relationships) {
     const [parent, parentColumns] = reference.split(':');
     const deferred = name.endsWith('_event_fk');
-    expect(fks.find(r => r.conname === name)).toEqual({
-      conname: name, child, parent, child_columns: columns.split(','), parent_columns: parentColumns!.split(','),
-      confdeltype: 'r', confupdtype: ['tenant_memberships_tenant_fk', 'invitations_tenant_id_fkey'].includes(name) ? 'r' : 'a',
-      convalidated: true, condeferrable: deferred, condeferred: deferred,
+    expect(fks.find((r) => r.conname === name)).toEqual({
+      conname: name,
+      child,
+      parent,
+      child_columns: columns.split(','),
+      parent_columns: parentColumns!.split(','),
+      confdeltype: 'r',
+      confupdtype: ['tenant_memberships_tenant_fk', 'invitations_tenant_id_fkey'].includes(name) ? 'r' : 'a',
+      convalidated: true,
+      condeferrable: deferred,
+      condeferred: deferred,
     });
   }
   const constraints = (await c.query(`SELECT conname, contype, convalidated FROM pg_constraint WHERE connamespace='public'::regnamespace AND contype IN ('c','f')`)).rows;
-  expect(constraints.filter(r => r.contype === 'c').map(r => r.conname).sort()).toEqual(
-    Object.entries(checkNames).flatMap(([prefix, names]) => names.split(' ').map(name => `${prefix}_${name}`)).sort());
-  expect(constraints.filter(r => !r.convalidated).map(r => r.conname)).toEqual([]);
-  const indexes = (await c.query(`SELECT ci.relname AS name, pg_get_indexdef(i.indexrelid) AS definition, i.indisvalid, i.indisready
-    FROM pg_index i JOIN pg_class ci ON ci.oid=i.indexrelid WHERE ci.relnamespace='public'::regnamespace`)).rows;
+  expect(
+    constraints
+      .filter((r) => r.contype === 'c')
+      .map((r) => r.conname)
+      .sort(),
+  ).toEqual(
+    Object.entries(checkNames)
+      .flatMap(([prefix, names]) => names.split(' ').map((name) => `${prefix}_${name}`))
+      .sort(),
+  );
+  expect(constraints.filter((r) => !r.convalidated).map((r) => r.conname)).toEqual([]);
+  const indexes = (
+    await c.query(`SELECT ci.relname AS name, pg_get_indexdef(i.indexrelid) AS definition, i.indisvalid, i.indisready
+    FROM pg_index i JOIN pg_class ci ON ci.oid=i.indexrelid WHERE ci.relnamespace='public'::regnamespace`)
+  ).rows;
   for (const [name, definition] of Object.entries(queryIndexes)) {
-    expect(indexes.find(r => r.name === name)).toEqual({ name, definition: `CREATE ${definition}`, indisvalid: true, indisready: true });
+    expect(indexes.find((r) => r.name === name)).toEqual({ name, definition: `CREATE ${definition}`, indisvalid: true, indisready: true });
   }
   expect((await c.query(`SELECT contype, condeferrable FROM pg_constraint WHERE conname='reports_tenant_patient_id_uq'`)).rows).toEqual([{ contype: 'u', condeferrable: false }]);
 }

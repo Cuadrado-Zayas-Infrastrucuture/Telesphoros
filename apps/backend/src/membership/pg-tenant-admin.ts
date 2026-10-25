@@ -12,7 +12,8 @@ const toRecord = (r: TenantRow): TenantRecord => ({ id: r.id, displayName: r.dis
 const CONTROL = /[\u0000-\u001f\u007f]/;
 
 export function checkTenantInput(id: string, displayName: string | undefined, by: string): void {
-  if (!tenantIdSchema.safeParse(id).success) throw new MembershipAdminError('invalid', 'The organization id must be lower-case letters, digits and dashes (1 to 63 characters, not starting with a dash).');
+  if (!tenantIdSchema.safeParse(id).success)
+    throw new MembershipAdminError('invalid', 'The organization id must be lower-case letters, digits and dashes (1 to 63 characters, not starting with a dash).');
   if (displayName !== undefined && (displayName.trim().length < 1 || displayName.length > MAX_TENANT_NAME || CONTROL.test(displayName))) {
     throw new MembershipAdminError('invalid', `The organization name must be 1 to ${MAX_TENANT_NAME} characters without control characters.`);
   }
@@ -35,7 +36,11 @@ export class PgTenantAdmin implements TenantAdmin {
 
   async setTenantStatus(input: { id: string; status: 'active' | 'suspended'; by: string }): Promise<TenantRecord> {
     checkTenantInput(input.id, undefined, input.by);
-    const { rows } = await this.db.query<TenantRow>(`UPDATE tenants SET status = $2, changed_by = $3 WHERE id = $1 RETURNING id, display_name, status`, [input.id, input.status, input.by]);
+    const { rows } = await this.db.query<TenantRow>(`UPDATE tenants SET status = $2, changed_by = $3 WHERE id = $1 RETURNING id, display_name, status`, [
+      input.id,
+      input.status,
+      input.by,
+    ]);
     if (!rows[0]) throw new MembershipAdminError('unknown-tenant', 'That organization is not registered.');
     return toRecord(rows[0]);
   }

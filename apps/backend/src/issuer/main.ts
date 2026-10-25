@@ -18,7 +18,10 @@ Logger.overrideLogger(new IssuerLogger());
 const logger = new Logger('IssuerProcess');
 
 /** A name or a code, never a message: an error from the network or the database layer can carry an address. */
-const describe = (error: unknown): string => (error instanceof IssuerConfigError ? error.message : `${(error as { code?: unknown })?.code ?? (error as Error)?.name ?? 'Error'}`.replace(/[^A-Za-z0-9_.:-]/g, '').slice(0, 64) || 'Error');
+const describe = (error: unknown): string =>
+  error instanceof IssuerConfigError
+    ? error.message
+    : `${(error as { code?: unknown })?.code ?? (error as Error)?.name ?? 'Error'}`.replace(/[^A-Za-z0-9_.:-]/g, '').slice(0, 64) || 'Error';
 
 async function main(): Promise<void> {
   const config = loadIssuerEnv(process.env);

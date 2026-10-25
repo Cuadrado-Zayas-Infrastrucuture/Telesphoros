@@ -8,14 +8,18 @@ describe('mapException', () => {
   it('passes our own AppException through unchanged', () => {
     const mapped = mapException(AppException.validation([{ field: 'label', message: 'Required' }]));
     expect(mapped).toEqual({
-      status: 400, code: 'VALIDATION_ERROR', message: 'The request was not valid.',
+      status: 400,
+      code: 'VALIDATION_ERROR',
+      message: 'The request was not valid.',
       details: [{ field: 'label', message: 'Required' }],
     });
   });
 
   it('replaces the message of foreign HttpExceptions with a fixed generic one', () => {
     expect(mapException(new NotFoundException('Cannot GET /secret/internal/path'))).toEqual({
-      status: 404, code: 'NOT_FOUND', message: 'Resource not found.',
+      status: 404,
+      code: 'NOT_FOUND',
+      message: 'Resource not found.',
     });
     expect(mapException(new ForbiddenException('rule x failed'))).toMatchObject({ status: 403, code: 'FORBIDDEN' });
     expect(JSON.stringify(mapException(new BadRequestException('table users')))).not.toContain('users');
@@ -72,7 +76,9 @@ describe('mapException: the pipeline error contract', () => {
 
   it('a business conflict names its reason in a stable field and keeps the shared CONFLICT code', () => {
     expect(mapException(AppException.conflictBecause('self-review', 'You cannot review your own work.'))).toEqual({
-      status: 409, code: 'CONFLICT', message: 'You cannot review your own work.',
+      status: 409,
+      code: 'CONFLICT',
+      message: 'You cannot review your own work.',
       details: [{ field: 'request', message: 'You cannot review your own work.', reason: 'self-review' }],
     });
   });

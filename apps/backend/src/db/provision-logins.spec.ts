@@ -36,7 +36,15 @@ describe('loginUrl', () => {
     const url = loginUrl('telesphoros_api', password, { host: 'db.example.test', port: 5432 }, 'telesphoros');
     expect(() => assertNoUrlTls(url)).not.toThrow();
     const parsed = new URL(url);
-    expect([parsed.protocol, parsed.username, parsed.password, parsed.hostname, parsed.port, parsed.pathname, parsed.search]).toEqual(['postgres:', 'telesphoros_api', password, 'db.example.test', '5432', '/telesphoros', '']);
+    expect([parsed.protocol, parsed.username, parsed.password, parsed.hostname, parsed.port, parsed.pathname, parsed.search]).toEqual([
+      'postgres:',
+      'telesphoros_api',
+      password,
+      'db.example.test',
+      '5432',
+      '/telesphoros',
+      '',
+    ]);
   });
 
   it('keeps a host with a dash or a long RDS name intact', () => {
@@ -49,7 +57,9 @@ describe('the groups this command creates agree with the migrations', () => {
   const dir = join(__dirname, '../../migrations');
   const statements = readdirSync(dir)
     .filter((f) => f.endsWith('.up.sql'))
-    .flatMap((f) => [...readFileSync(join(dir, f), 'utf8').matchAll(/CREATE ROLE (telesphoros_[a-z_]+) ([A-Z ]+);/g)].map((m) => ({ file: f, role: m[1]!, attributes: m[2]!.trim() })));
+    .flatMap((f) =>
+      [...readFileSync(join(dir, f), 'utf8').matchAll(/CREATE ROLE (telesphoros_[a-z_]+) ([A-Z ]+);/g)].map((m) => ({ file: f, role: m[1]!, attributes: m[2]!.trim() })),
+    );
 
   it('finds the role statements (a floor, so an empty scan cannot pass)', () => {
     expect(statements.length).toBeGreaterThanOrEqual(5);

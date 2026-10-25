@@ -40,7 +40,11 @@ async function asApp<T>(tenant: string | null, work: (q: (sql: string, params?: 
     client.release();
   }
 }
-const code = (promise: Promise<unknown>) => promise.then(() => undefined, (e: { code?: string }) => e.code);
+const code = (promise: Promise<unknown>) =>
+  promise.then(
+    () => undefined,
+    (e: { code?: string }) => e.code,
+  );
 
 describe('the application role is constrained', () => {
   it('is not a superuser, cannot bypass RLS, and does not own the tables', async () => {
@@ -92,9 +96,7 @@ describe('row-level security fails closed and isolates tenants', () => {
   });
 
   it('cannot see through a UNION / subquery / function trick: policy applies to every table scan', async () => {
-    const res = await asApp('alice', (q) =>
-      q(`SELECT tenant_id FROM patients UNION ALL SELECT tenant_id FROM reports`),
-    );
+    const res = await asApp('alice', (q) => q(`SELECT tenant_id FROM patients UNION ALL SELECT tenant_id FROM reports`));
     expect(new Set(res.rows.map((r) => r.tenant_id))).toEqual(new Set(['alice']));
   });
 

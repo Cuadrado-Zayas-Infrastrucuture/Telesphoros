@@ -9,7 +9,7 @@ it.each([{ roles: ['reader'] }, { roles: ['reviewer'] }, { roles: ['admin'] }, {
   expect(screen.queryByRole('link', { name: /Upload/ })).not.toBeInTheDocument();
   expect(screen.getAllByRole('link', { name: /Explore the workflow/ })).toHaveLength(2);
 });
-it.each(['clinician'] as const)('keeps existing upload destination for %s', async role => {
+it.each(['clinician'] as const)('keeps existing upload destination for %s', async (role) => {
   renderApp('/', { signedInAs: [role] });
   await screen.findByRole('heading', { name: /A clearer view of/ });
   for (const link of screen.getAllByRole('link', { name: 'Upload a synthetic report' })) expect(link).toHaveAttribute('href', '/reports/upload');

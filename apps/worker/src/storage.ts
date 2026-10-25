@@ -9,7 +9,10 @@ import type { InspectedFile, ObjectInspector } from './deps';
  * not read to the end.
  */
 export class S3ObjectInspector implements ObjectInspector {
-  constructor(private readonly client: S3Client, private readonly bucket: string) {}
+  constructor(
+    private readonly client: S3Client,
+    private readonly bucket: string,
+  ) {}
 
   async inspect(key: string, version: string, options: { maxBytes: number; signal?: AbortSignal }): Promise<InspectedFile | 'missing' | 'too-large'> {
     let response;

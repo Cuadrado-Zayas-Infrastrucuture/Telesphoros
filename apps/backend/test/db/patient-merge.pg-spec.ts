@@ -64,13 +64,17 @@ async function merged(t: string, source: string, target: string) {
   const p = await propose(t, 'merge', source, target);
   await decide(t, p.record.id, 'approved');
 }
-const groupOf = (t: string, patientId: string) => owner(async (c) => (await c.query<{ id: string }>(`SELECT patient_group_ids($1, $2::uuid)::text AS id`, [t, patientId])).rows.map((r) => r.id).sort());
-const mergedInto = (t: string, patientId: string) => owner(async (c) => (await c.query<{ id: string | null }>(`SELECT patient_merged_into($1, $2::uuid)::text AS id`, [t, patientId])).rows[0]?.id ?? null);
+const groupOf = (t: string, patientId: string) =>
+  owner(async (c) => (await c.query<{ id: string }>(`SELECT patient_group_ids($1, $2::uuid)::text AS id`, [t, patientId])).rows.map((r) => r.id).sort());
+const mergedInto = (t: string, patientId: string) =>
+  owner(async (c) => (await c.query<{ id: string | null }>(`SELECT patient_merged_into($1, $2::uuid)::text AS id`, [t, patientId])).rows[0]?.id ?? null);
 
 describe('patient_duplicate_flags', () => {
   const flag = (t: string, a: string, b: string, system = 'hospital-a-mrn') => {
     const [x, y] = [a, b].sort();
-    return asApplication(t, 'syn-clinician', (c) => c.query(`INSERT INTO patient_duplicate_flags (tenant_id, patient_id, other_patient_id, system, flagged_by) VALUES ($1, $2, $3, $4, 'syn-clinician')`, [t, x, y, system]));
+    return asApplication(t, 'syn-clinician', (c) =>
+      c.query(`INSERT INTO patient_duplicate_flags (tenant_id, patient_id, other_patient_id, system, flagged_by) VALUES ($1, $2, $3, $4, 'syn-clinician')`, [t, x, y, system]),
+    );
   };
 
   it('lets the application login read and add flags within its own organization, and nothing else (no update, delete or truncate)', async () => {
@@ -78,7 +82,7 @@ describe('patient_duplicate_flags', () => {
     const [a, b] = [await patient(t), await patient(t)];
     await flag(t, a, b);
     expect((await asApplication(t, 'syn-clinician', (c) => c.query('SELECT system FROM patient_duplicate_flags'))).rows).toEqual([{ system: 'hospital-a-mrn' }]);
-    for (const sql of ['UPDATE patient_duplicate_flags SET system = \'x\'', 'DELETE FROM patient_duplicate_flags', 'TRUNCATE patient_duplicate_flags']) {
+    for (const sql of ["UPDATE patient_duplicate_flags SET system = 'x'", 'DELETE FROM patient_duplicate_flags', 'TRUNCATE patient_duplicate_flags']) {
       await expect(asApplication(t, 'syn-clinician', (c) => c.query(sql))).rejects.toMatchObject({ code: '42501' });
     }
   });
@@ -98,7 +102,11 @@ describe('patient_duplicate_flags', () => {
     await flag(t, a, b);
     await expect(flag(t, b, a)).rejects.toMatchObject({ code: '23505' }); // the same pair again, written either way round
     const [lo, hi] = [a, b].sort();
-    await expect(asApplication(t, 'syn-clinician', (c) => c.query(`INSERT INTO patient_duplicate_flags (tenant_id, patient_id, other_patient_id, system, flagged_by) VALUES ($1, $2, $3, 'x', 'p')`, [t, hi, lo]))).rejects.toMatchObject({ code: '23514' });
+    await expect(
+      asApplication(t, 'syn-clinician', (c) =>
+        c.query(`INSERT INTO patient_duplicate_flags (tenant_id, patient_id, other_patient_id, system, flagged_by) VALUES ($1, $2, $3, 'x', 'p')`, [t, hi, lo]),
+      ),
+    ).rejects.toMatchObject({ code: '23514' });
     const other = tenant();
     const foreign = await patient(other);
     await expect(flag(t, a, foreign)).rejects.toMatchObject({ code: '23503' }); // a patient of another organization
@@ -109,7 +117,9 @@ describe('patient_duplicate_flags', () => {
     const [a, b] = [await patient(t), await patient(t)];
     await flag(t, a, b);
     expect((await asApplication(tenant(), 'syn-clinician', (c) => c.query('SELECT 1 FROM patient_duplicate_flags'))).rowCount).toBe(0);
-    const columns = await owner((c) => c.query<{ column_name: string }>(`SELECT column_name FROM information_schema.columns WHERE table_name = 'patient_duplicate_flags' ORDER BY ordinal_position`));
+    const columns = await owner((c) =>
+      c.query<{ column_name: string }>(`SELECT column_name FROM information_schema.columns WHERE table_name = 'patient_duplicate_flags' ORDER BY ordinal_position`),
+    );
     expect(columns.rows.map((r) => r.column_name)).toEqual(['seq', 'id', 'tenant_id', 'patient_id', 'other_patient_id', 'system', 'flagged_by', 'flagged_at']);
   });
 });
@@ -119,7 +129,14 @@ describe('merge proposals and decisions', () => {
     const t = tenant();
     const [a, b] = [await patient(t), await patient(t)];
     const p = await propose(t, 'merge', a, b);
-    expect(p.record).toMatchObject({ kind: 'patient-merge-proposal', mergeKind: 'merge', sourcePatientId: a, targetPatientId: b, reasonCode: 'entered-twice', createdBy: PROPOSER });
+    expect(p.record).toMatchObject({
+      kind: 'patient-merge-proposal',
+      mergeKind: 'merge',
+      sourcePatientId: a,
+      targetPatientId: b,
+      reasonCode: 'entered-twice',
+      createdBy: PROPOSER,
+    });
     const d = await decide(t, p.record.id, 'approved');
     expect(d.record).toMatchObject({ kind: 'patient-merge-decision', proposalId: p.record.id, decision: 'approved', createdBy: DECIDER });
     expect(await verifier.verify(t)).toMatchObject({ status: 'ok', eventsChecked: 2 });
@@ -134,7 +151,11 @@ describe('merge proposals and decisions', () => {
       owner(async (c) => {
         await c.query('BEGIN');
         try {
-          await c.query(`INSERT INTO patient_merge_decisions (tenant_id, created_by, ledger_event_id, proposal_id, decision) VALUES ($1, $2, gen_random_uuid(), $3, 'approved')`, [t, PROPOSER, p.record.id]);
+          await c.query(`INSERT INTO patient_merge_decisions (tenant_id, created_by, ledger_event_id, proposal_id, decision) VALUES ($1, $2, gen_random_uuid(), $3, 'approved')`, [
+            t,
+            PROPOSER,
+            p.record.id,
+          ]);
         } finally {
           await c.query('ROLLBACK');
         }
@@ -158,10 +179,18 @@ describe('merge proposals and decisions', () => {
     await merged(t, a, b); // so that an unmerge of a into b is possible and only its reason can be wrong
     const bad = (source: string, target: string, kind: string, reason: string) =>
       repo.insertMergeProposal(t, PROPOSER, { kind: kind as 'merge', sourcePatientId: source, targetPatientId: target, reasonCode: reason });
-    for (const [kind, reason] of [['unmerge', 'entered-twice'], ['unmerge', 'shared-identifier'], ['unmerge', 'because'], ['swap', 'merged-by-mistake']]) {
+    for (const [kind, reason] of [
+      ['unmerge', 'entered-twice'],
+      ['unmerge', 'shared-identifier'],
+      ['unmerge', 'because'],
+      ['swap', 'merged-by-mistake'],
+    ]) {
       await expect(bad(a, b, kind!, reason!)).rejects.toBeInstanceOf(LedgerIntegrityError);
     }
-    for (const [kind, reason] of [['merge', 'merged-by-mistake'], ['merge', 'because']]) {
+    for (const [kind, reason] of [
+      ['merge', 'merged-by-mistake'],
+      ['merge', 'because'],
+    ]) {
       await expect(bad(c, d, kind!, reason!)).rejects.toBeInstanceOf(LedgerIntegrityError);
     }
     await expect(propose(t, 'merge', a, a)).rejects.toMatchObject({ reason: 'same-patient' });
@@ -197,10 +226,19 @@ describe('what a merge does, and refuses', () => {
     const t = tenant();
     const r = await owner(async (c) => {
       const [a, b] = [randomUUID(), randomUUID()];
-      for (const [id, label] of [[a, 'SYN-ALPHA'], [b, 'SYN-BRAVO']]) await c.query(`INSERT INTO patients (id, tenant_id, created_by, label) VALUES ($1, $2, 'syn-registrar', $3)`, [id, t, label]);
+      for (const [id, label] of [
+        [a, 'SYN-ALPHA'],
+        [b, 'SYN-BRAVO'],
+      ])
+        await c.query(`INSERT INTO patients (id, tenant_id, created_by, label) VALUES ($1, $2, 'syn-registrar', $3)`, [id, t, label]);
       return { a: a!, b: b! };
     });
-    const fingerprint = () => owner(async (c) => createHash('sha256').update(JSON.stringify((await c.query(`SELECT * FROM patients WHERE tenant_id = $1 ORDER BY id`, [t])).rows)).digest('hex'));
+    const fingerprint = () =>
+      owner(async (c) =>
+        createHash('sha256')
+          .update(JSON.stringify((await c.query(`SELECT * FROM patients WHERE tenant_id = $1 ORDER BY id`, [t])).rows))
+          .digest('hex'),
+      );
     const before = await fingerprint();
     await merged(t, r.a, r.b);
     expect(await mergedInto(t, r.a)).toBe(r.b);
@@ -296,9 +334,15 @@ describe('what a merge does, and refuses', () => {
       await x.query('BEGIN');
       try {
         const proposalId = randomUUID();
-        await x.query(`INSERT INTO patient_merge_proposals (id, tenant_id, created_by, ledger_event_id, kind, source_patient_id, target_patient_id, reason_code) VALUES ($1, $2, 'syn-p', gen_random_uuid(), 'merge', $3, $4, 'entered-twice')`, [proposalId, t, c, a]);
+        await x.query(
+          `INSERT INTO patient_merge_proposals (id, tenant_id, created_by, ledger_event_id, kind, source_patient_id, target_patient_id, reason_code) VALUES ($1, $2, 'syn-p', gen_random_uuid(), 'merge', $3, $4, 'entered-twice')`,
+          [proposalId, t, c, a],
+        );
         await x.query('SET CONSTRAINTS patient_merge_decisions_graph IMMEDIATE');
-        await x.query(`INSERT INTO patient_merge_decisions (tenant_id, created_by, ledger_event_id, proposal_id, decision) VALUES ($1, 'syn-d', gen_random_uuid(), $2, 'approved')`, [t, proposalId]);
+        await x.query(
+          `INSERT INTO patient_merge_decisions (tenant_id, created_by, ledger_event_id, proposal_id, decision) VALUES ($1, 'syn-d', gen_random_uuid(), $2, 'approved')`,
+          [t, proposalId],
+        );
       } finally {
         await x.query('ROLLBACK');
       }
@@ -310,11 +354,15 @@ describe('what a merge does, and refuses', () => {
     const t = tenant();
     const [a, b] = [await patient(t), await patient(t)];
     await merged(t, a, b);
-    const seenByApp = await asApplication(t, 'syn-clinician', async (c) => (await c.query<{ id: string }>(`SELECT patient_group_ids($1, $2::uuid)::text AS id`, [t, a])).rows.map((r) => r.id).sort());
+    const seenByApp = await asApplication(t, 'syn-clinician', async (c) =>
+      (await c.query<{ id: string }>(`SELECT patient_group_ids($1, $2::uuid)::text AS id`, [t, a])).rows.map((r) => r.id).sort(),
+    );
     expect(seenByApp).toEqual([a, b].sort());
     // Another organization's session asking about this organization's patients sees only the patient itself: it cannot read the merge records.
     const other = tenant();
-    const seenByOther = await asApplication(other, 'syn-clinician', async (c) => (await c.query<{ id: string }>(`SELECT patient_group_ids($1, $2::uuid)::text AS id`, [t, a])).rows.map((r) => r.id));
+    const seenByOther = await asApplication(other, 'syn-clinician', async (c) =>
+      (await c.query<{ id: string }>(`SELECT patient_group_ids($1, $2::uuid)::text AS id`, [t, a])).rows.map((r) => r.id),
+    );
     expect(seenByOther).toEqual([a]);
   });
 });
@@ -322,7 +370,15 @@ describe('what a merge does, and refuses', () => {
 describe('a link verified by identifier, once patients are merged', () => {
   const digest = () => Buffer.from(randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, ''), 'hex');
   const identifierOf = (t: string, patientId: string) =>
-    owner(async (c) => (await c.query<{ id: string }>(`INSERT INTO patient_identifiers (tenant_id, patient_id, system, value_digest, created_by) VALUES ($1, $2, 'hospital-a-mrn', $3, 'syn-registrar') RETURNING id::text AS id`, [t, patientId, digest()])).rows[0]!.id);
+    owner(
+      async (c) =>
+        (
+          await c.query<{ id: string }>(
+            `INSERT INTO patient_identifiers (tenant_id, patient_id, system, value_digest, created_by) VALUES ($1, $2, 'hospital-a-mrn', $3, 'syn-registrar') RETURNING id::text AS id`,
+            [t, patientId, digest()],
+          )
+        ).rows[0]!.id,
+    );
   const match = (r: { tenantId: string; reportId: string; patientId: string; pdfSha256: string; objectVersion: string }, identifierId: string) =>
     repo.insertPatientDecision(r.tenantId, 'syn-reviewer', {
       reportId: r.reportId,
@@ -332,7 +388,7 @@ describe('a link verified by identifier, once patients are merged', () => {
       identifierId,
     });
 
-  it('accepts an identifier held by a patient of the report\'s patient\'s group, and still refuses one held by an unrelated patient', async () => {
+  it("accepts an identifier held by a patient of the report's patient's group, and still refuses one held by an unrelated patient", async () => {
     const t = tenant();
     const report = await seedLabReport(pg.adminUrl, t, 'syn-uploader');
     const root = await patient(t);
@@ -363,7 +419,9 @@ describe('the ledger learns the new record types', () => {
     await decide(t, m.record.id, 'approved', 'syn-decider-2');
     expect(await verifier.verify(t)).toMatchObject({ status: 'ok', eventsChecked: 6 });
     // The ledger's event types and subject tables are closed lists that now include the two new ones.
-    const types = await owner((x) => x.query<{ event_type: string; subject_table: string }>(`SELECT DISTINCT event_type, subject_table FROM ledger_events WHERE tenant_id = $1 ORDER BY 1`, [t]));
+    const types = await owner((x) =>
+      x.query<{ event_type: string; subject_table: string }>(`SELECT DISTINCT event_type, subject_table FROM ledger_events WHERE tenant_id = $1 ORDER BY 1`, [t]),
+    );
     expect(types.rows).toEqual([
       { event_type: 'patient-merge-decision', subject_table: 'patient_merge_decisions' },
       { event_type: 'patient-merge-proposal', subject_table: 'patient_merge_proposals' },

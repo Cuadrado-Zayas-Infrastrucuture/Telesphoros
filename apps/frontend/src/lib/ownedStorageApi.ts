@@ -16,23 +16,37 @@ const assertLiveUpload = (progress: UploadProgress) => {
   if (lifetimes.get(progress) === 'retired') throw new SessionEndedError('Upload page ended');
   if (!uploadSessionCurrent(progress)) throw new SessionEndedError('Upload session ended');
 };
-const beginUpload = (progress: UploadProgress) => { assertLiveUpload(progress); lifetimes.set(progress, 'active'); };
+const beginUpload = (progress: UploadProgress) => {
+  assertLiveUpload(progress);
+  lifetimes.set(progress, 'active');
+};
 /** Retire pending work, retaining its saved recovery entry. Idle progress has no callbacks; StrictMode may replay its initial cleanup. */
 export function retireOwnedUpload(progress: UploadProgress): void {
   if (lifetimes.has(progress)) lifetimes.set(progress, 'retired');
 }
-const liveUploadApi = (api: ApiFetch, progress: UploadProgress): ApiFetch => async (path, init) => {
+const liveUploadApi =
+  (api: ApiFetch, progress: UploadProgress): ApiFetch =>
+  async (path, init) => {
+    assertLiveUpload(progress);
+    const response = await api(path, init);
+    assertLiveUpload(progress);
+    return response;
+  };
+const save = (progress: UploadProgress) => {
   assertLiveUpload(progress);
-  const response = await api(path, init);
-  assertLiveUpload(progress);
-  return response;
+  if (remembered.has(progress)) rememberUpload(progress);
 };
-const save = (progress: UploadProgress) => { assertLiveUpload(progress); if (remembered.has(progress)) rememberUpload(progress); };
 
 /** A progress object restored from what the browser kept before a reload; the server confirms or refuses it on the first request. */
 export function restoreProgress(entry: RecoveryEntry, session: RecoverySession): UploadProgress {
-  const progress: UploadProgress = { requestId: entry.requestId, reportId: entry.reportId, facts: entry.file, restored: true,
-    ...(entry.declaration ? { declaration: entry.declaration } : {}), ...(entry.attempt ? { attempt: entry.attempt } : {}) };
+  const progress: UploadProgress = {
+    requestId: entry.requestId,
+    reportId: entry.reportId,
+    facts: entry.file,
+    restored: true,
+    ...(entry.declaration ? { declaration: entry.declaration } : {}),
+    ...(entry.attempt ? { attempt: entry.attempt } : {}),
+  };
   remembered.add(progress);
   bindRecovery(progress, session, entry);
   return progress;
@@ -41,14 +55,20 @@ async function request(api: ApiFetch, path: string, body?: unknown, revision?: s
   const response = await api(`/api/v1${path}`, {
     ...(body === undefined ? {} : { method: 'POST', body: JSON.stringify(body) }),
     signal: AbortSignal.timeout(15000),
-    redirect: 'error', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store',
+    redirect: 'error',
+    credentials: 'omit',
+    referrerPolicy: 'no-referrer',
+    cache: 'no-store',
     headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(revision ? { 'X-Upload-Revision': revision } : {}) },
   });
   if (!response.ok) {
     if ([403, 404, 429].includes(response.status)) throw refusal(response.status); // permission, missing patient or report, rate limit: said plainly
-    throw new SubmitError(response.status === 409
-      ? 'The upload needs reconciliation or a new attempt. Retry or cancel before starting over.'
-      : 'The file operation is unavailable. Your entries are kept; please retry.', response.status);
+    throw new SubmitError(
+      response.status === 409
+        ? 'The upload needs reconciliation or a new attempt. Retry or cancel before starting over.'
+        : 'The file operation is unavailable. Your entries are kept; please retry.',
+      response.status,
+    );
   }
   return response.json();
 }
@@ -72,18 +92,27 @@ export async function cancelOwnedUpload(api: ApiFetch, progress: UploadProgress)
     if (remembered.has(progress)) forgetUpload(progress); // no attempt to cancel
     return;
   }
-  const attempt = progress.attempt ?? await declare(api, progress);
+  const attempt = progress.attempt ?? (await declare(api, progress));
   const result = acceptAttempt(progress, await request(api, `/reports/${progress.reportId}/upload-attempts/${attempt.attemptId}/cancel`, {}, attempt.revision));
   if (!['cancelled', 'cleaned', 'committed'].includes(result.state)) throw new SubmitError('Cancellation is pending. Retry cancellation before starting over.');
   if (remembered.has(progress)) forgetUpload(progress); // acknowledged by the server
   if (result.state === 'committed') throw new SubmitError('The file was already stored. Check Reports before starting another upload.');
 }
-export async function submitOwnedReport(values: ProductUploadValues, api: ApiFetch, progress: UploadProgress, signal?: AbortSignal, options: { remember?: boolean; recoverySession?: RecoverySession } = {}): Promise<{ reference: string }> {
+export async function submitOwnedReport(
+  values: ProductUploadValues,
+  api: ApiFetch,
+  progress: UploadProgress,
+  signal?: AbortSignal,
+  options: { remember?: boolean; recoverySession?: RecoverySession } = {},
+): Promise<{ reference: string }> {
   beginUpload(progress);
   api = liveUploadApi(api, progress);
-  if (options.remember !== false && options.recoverySession) { bindRecovery(progress, options.recoverySession); remembered.add(progress); }
+  if (options.remember !== false && options.recoverySession) {
+    bindRecovery(progress, options.recoverySession);
+    remembered.add(progress);
+  }
   signal?.throwIfAborted();
-  const sha256 = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await values.file.arrayBuffer())), b => b.toString(16).padStart(2, '0')).join('');
+  const sha256 = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await values.file.arrayBuffer())), (b) => b.toString(16).padStart(2, '0')).join('');
   signal?.throwIfAborted();
   assertLiveUpload(progress);
   const contentType = values.reportType === 'lab-pdf' ? 'application/pdf' : values.reportType === 'structured' ? 'application/json' : 'text/x-vcf';
@@ -93,7 +122,11 @@ export async function submitOwnedReport(values: ProductUploadValues, api: ApiFet
   const restoredFile = progress.restored && !progress.identity ? progress.facts : undefined;
   const sameUpload = restoredFile ? sameFile(restoredFile, facts) : progress.identity === identity;
   if ((progress.identity || restoredFile) && !sameUpload && progress.declaration && !['cancelled', 'cleaned', 'committed'].includes(progress.attempt?.state ?? '')) {
-    throw new SubmitError(restoredFile ? 'An interrupted upload of another file is waiting. Choose that file to finish it, or cancel it first.' : 'Cancel the previous upload before changing the patient or file.');
+    throw new SubmitError(
+      restoredFile
+        ? 'An interrupted upload of another file is waiting. Choose that file to finish it, or cancel it first.'
+        : 'Cancel the previous upload before changing the patient or file.',
+    );
   }
   if (restoredFile && sameUpload) {
     progress.identity = identity; // the same file: carry on with the restored report, declaration and attempt
@@ -107,11 +140,24 @@ export async function submitOwnedReport(values: ProductUploadValues, api: ApiFet
   function report(value: unknown) {
     assertLiveUpload(progress);
     const result = reportDtoSchema.parse(value);
-    if (progress.restored && progress.reportId === result.id && result.patientId !== values.patientId) throw new SubmitError('The interrupted upload was for another patient. Choose that patient to finish it, or cancel it first.');
-    if (result.patientId !== values.patientId || result.type !== values.reportType || result.filename !== values.file.name || result.sizeBytes !== values.file.size || (progress.reportId && result.id !== progress.reportId)) throw new Error('Report mismatch');
+    if (progress.restored && progress.reportId === result.id && result.patientId !== values.patientId)
+      throw new SubmitError('The interrupted upload was for another patient. Choose that patient to finish it, or cancel it first.');
+    if (
+      result.patientId !== values.patientId ||
+      result.type !== values.reportType ||
+      result.filename !== values.file.name ||
+      result.sizeBytes !== values.file.size ||
+      (progress.reportId && result.id !== progress.reportId)
+    )
+      throw new Error('Report mismatch');
     return result;
   }
-  const register = () => request(api, '/reports', reportCreateSchema.parse({ patientId: values.patientId, type: values.reportType, filename: values.file.name, sizeBytes: values.file.size, requestId: progress.requestId }));
+  const register = () =>
+    request(
+      api,
+      '/reports',
+      reportCreateSchema.parse({ patientId: values.patientId, type: values.reportType, filename: values.file.name, sizeBytes: values.file.size, requestId: progress.requestId }),
+    );
   let existing: ReturnType<typeof report>;
   try {
     existing = report(await (progress.reportId ? request(api, `/reports/${progress.reportId}`) : register()));
@@ -146,7 +192,15 @@ export async function submitOwnedReport(values: ProductUploadValues, api: ApiFet
   if (Date.parse(attempt.expiresAt) <= Date.now() && attempt.state !== 'committed') throw new SubmitError('This attempt expired. Cancel it before starting over.');
   const path = `/reports/${existing.id}/upload-attempts/${attempt.attemptId}`;
   if (attempt.state === 'declared') {
-    const response = await api(`/api/v1${path}/bytes`, { method: 'PUT', redirect: 'error', credentials: 'omit', referrerPolicy: 'no-referrer', headers: { 'Content-Type': contentType, 'X-Upload-Revision': attempt.revision }, body: values.file, signal });
+    const response = await api(`/api/v1${path}/bytes`, {
+      method: 'PUT',
+      redirect: 'error',
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer',
+      headers: { 'Content-Type': contentType, 'X-Upload-Revision': attempt.revision },
+      body: values.file,
+      signal,
+    });
     if (!response.ok) throw new SubmitError('The server refused or interrupted the file. Retry to check its state, or cancel before starting over.');
     acceptAttempt(progress, await response.json());
   } else if (attempt.state === 'stored' || attempt.state === 'unresolved') {
@@ -154,7 +208,8 @@ export async function submitOwnedReport(values: ProductUploadValues, api: ApiFet
   } else if (attempt.state !== 'committed') {
     throw new SubmitError('This attempt is not ready. Retry later, or cancel before starting over.');
   }
-  if (!progress.attempt || progress.attempt.attemptId !== attempt.attemptId || progress.attempt.revision !== attempt.revision || progress.attempt.state !== 'committed') throw new Error('Commit not confirmed');
+  if (!progress.attempt || progress.attempt.attemptId !== attempt.attemptId || progress.attempt.revision !== attempt.revision || progress.attempt.state !== 'committed')
+    throw new Error('Commit not confirmed');
   return verified(await request(api, `/reports/${existing.id}`));
 }
 
@@ -168,9 +223,15 @@ export async function listReports(api: ApiFetch, page: number, signal?: AbortSig
     if (!response.ok) throw new Error();
     const result = paginatedSchema(reportDtoSchema).parse(await response.json());
     const { meta, data } = result;
-    if (meta.page !== query.page || meta.pageSize !== 20 || data.length > 20
-      || meta.totalPages !== Math.ceil(meta.total / 20) || data.length > meta.total
-      || data.some(report => query.patientId && report.patientId !== query.patientId)) throw new Error();
+    if (
+      meta.page !== query.page ||
+      meta.pageSize !== 20 ||
+      data.length > 20 ||
+      meta.totalPages !== Math.ceil(meta.total / 20) ||
+      data.length > meta.total ||
+      data.some((report) => query.patientId && report.patientId !== query.patientId)
+    )
+      throw new Error();
     return result;
   } catch (error) {
     if (signal?.aborted || error instanceof SessionEndedError || error instanceof NotSignedInError) throw error;
@@ -186,16 +247,30 @@ export async function downloadReport(api: ApiFetch, id: string, filename: string
     if (!origins.includes(url.origin) || url.username || url.password || url.hash || Date.parse(link.expiresAt) <= Date.now()) throw new Error();
     const response = await fetch(url, { credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer', cache: 'no-store', signal: AbortSignal.timeout(30000) });
     if (!response.ok || !response.body || sizeBytes > 10 * 1024 * 1024 || sizeBytes <= 0 || !sha256) throw new Error();
-    const reader = response.body.getReader(); const chunks: Uint8Array<ArrayBuffer>[] = []; let size = 0;
+    const reader = response.body.getReader();
+    const chunks: Uint8Array<ArrayBuffer>[] = [];
+    let size = 0;
     try {
-      while (true) { const part = await reader.read(); if (part.done) break; size += part.value.byteLength; if (size > sizeBytes) throw new Error(); chunks.push(new Uint8Array(part.value)); }
-    } finally { await reader.cancel(); }
+      while (true) {
+        const part = await reader.read();
+        if (part.done) break;
+        size += part.value.byteLength;
+        if (size > sizeBytes) throw new Error();
+        chunks.push(new Uint8Array(part.value));
+      }
+    } finally {
+      await reader.cancel();
+    }
     const blob = new Blob(chunks, { type: 'application/octet-stream' });
-    const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer())), b => b.toString(16).padStart(2, '0')).join('');
+    const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer())), (b) => b.toString(16).padStart(2, '0')).join('');
     if (size !== sizeBytes || hash !== sha256) throw new Error();
     const objectUrl = URL.createObjectURL(blob);
-    const anchor = document.createElement('a'); anchor.href = objectUrl; anchor.download = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(filename) ? filename : 'report.bin';
-    document.body.append(anchor); anchor.click(); anchor.remove();
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(filename) ? filename : 'report.bin';
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
     setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
   } catch (error) {
     if (error instanceof SessionEndedError || error instanceof NotSignedInError) throw error;

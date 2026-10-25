@@ -33,8 +33,11 @@ export function createVerifier(env: Env): TokenVerifier {
 export function createApplicationVerifier(env: Env, memberships: MembershipRepository): TokenVerifier {
   const verifier = createVerifier(env);
   if (env.STORAGE_DRIVER !== 'memory') return verifier;
-  if (env.NODE_ENV === 'production' || !(memberships instanceof InMemoryMembershipRepository)) throw new Error('Token-mirrored membership is for the in-memory development store only');
-  new Logger('Auth').warn('Development store: each verified token\'s roles are mirrored into membership, so there is no operator step. Never used with PostgreSQL or in production.');
+  if (env.NODE_ENV === 'production' || !(memberships instanceof InMemoryMembershipRepository))
+    throw new Error('Token-mirrored membership is for the in-memory development store only');
+  new Logger('Auth').warn(
+    "Development store: each verified token's roles are mirrored into membership, so there is no operator step. Never used with PostgreSQL or in production.",
+  );
   return new MirrorTokenVerifier(verifier, memberships);
 }
 

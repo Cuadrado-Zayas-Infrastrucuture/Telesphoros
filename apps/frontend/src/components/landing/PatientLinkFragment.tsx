@@ -8,9 +8,17 @@ import { useLandingLanguage } from '@/lib/landing/landing-language';
  */
 export function PatientLinkFragment() {
   const { fragments } = useLandingLanguage().copy;
-  return <div className="landing-fragment landing-fragment--link" aria-hidden="true">
-    <span className="landing-fragment-chip"><UserRound />{fragments.patient}</span>
-    <span className="landing-fragment-wire" />
-    <span className="landing-fragment-chip landing-fragment-chip--file"><FileText />SYN-001.vcf</span>
-  </div>;
+  return (
+    <div className="landing-fragment landing-fragment--link" aria-hidden="true">
+      <span className="landing-fragment-chip">
+        <UserRound />
+        {fragments.patient}
+      </span>
+      <span className="landing-fragment-wire" />
+      <span className="landing-fragment-chip landing-fragment-chip--file">
+        <FileText />
+        SYN-001.vcf
+      </span>
+    </div>
+  );
 }

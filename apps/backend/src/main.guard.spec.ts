@@ -26,7 +26,7 @@ describe('main.ts wiring', () => {
     expect(main).toMatch(/import \{ installProcessFaultHandlers \} from '\.\/common\/process-faults'/);
   });
 
-  it('stops through installGracefulShutdown after the listener is up, and no longer through Nest\'s own shutdown hooks', () => {
+  it("stops through installGracefulShutdown after the listener is up, and no longer through Nest's own shutdown hooks", () => {
     expect(main).toMatch(/import \{ installGracefulShutdown \} from '\.\/common\/graceful-shutdown'/);
     expect(main.indexOf('installGracefulShutdown(app,')).toBeGreaterThan(main.indexOf('await app.listen('));
     expect(main).not.toMatch(/enableShutdownHooks\(\)\s*;/); // the comment that explains the absence does not call it with a semicolon

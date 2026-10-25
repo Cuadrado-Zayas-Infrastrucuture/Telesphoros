@@ -22,19 +22,32 @@ Implication: <<<{{implication}}>>>
 export const templateDigest = (): string => hashBytes(TEMPLATE_V1);
 
 export type Segment = { from: 'template'; text: string } | { from: 'field'; field: string; text: string };
-export class InputRefused extends Error { constructor() { super('INPUT_REFUSED'); } }
+export class InputRefused extends Error {
+  constructor() {
+    super('INPUT_REFUSED');
+  }
+}
 
 const fieldValue = (r: ExplainableResult, name: string): string => {
   switch (name) {
-    case 'drug': return r.drug;
-    case 'strength': return r.strength;
-    case 'genes': return r.genes.map(g => `${g.gene} ${g.phenotype}`).join('; ');
-    case 'guidelineId': return r.guidelineId;
-    case 'guidelineVersion': return r.guidelineVersion;
-    case 'locator': return [r.locator.table, r.locator.row, r.locator.column].filter(x => x !== null).join(', ');
-    case 'recommendationText': return r.recommendationText;
-    case 'implication': return r.implication ?? '(none)';
-    default: throw new InputRefused();
+    case 'drug':
+      return r.drug;
+    case 'strength':
+      return r.strength;
+    case 'genes':
+      return r.genes.map((g) => `${g.gene} ${g.phenotype}`).join('; ');
+    case 'guidelineId':
+      return r.guidelineId;
+    case 'guidelineVersion':
+      return r.guidelineVersion;
+    case 'locator':
+      return [r.locator.table, r.locator.row, r.locator.column].filter((x) => x !== null).join(', ');
+    case 'recommendationText':
+      return r.recommendationText;
+    case 'implication':
+      return r.implication ?? '(none)';
+    default:
+      throw new InputRefused();
   }
 };
 
@@ -46,11 +59,14 @@ export function buildPrompt(input: unknown): { prompt: string; templateDigest: s
   const segments: Segment[] = [];
   for (const part of TEMPLATE_V1.split(/(\{\{\w+\}\})/)) {
     const m = /^\{\{(\w+)\}\}$/.exec(part);
-    if (m === null) { if (part !== '') segments.push({ from: 'template', text: part }); continue; }
+    if (m === null) {
+      if (part !== '') segments.push({ from: 'template', text: part });
+      continue;
+    }
     const text = fieldValue(r, m[1]);
     // The data fences must not be escapable by the data itself.
     if (text.includes('<<<') || text.includes('>>>')) throw new InputRefused();
     segments.push({ from: 'field', field: m[1], text });
   }
-  return { prompt: segments.map(s => s.text).join(''), templateDigest: templateDigest(), segments };
+  return { prompt: segments.map((s) => s.text).join(''), templateDigest: templateDigest(), segments };
 }

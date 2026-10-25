@@ -7,7 +7,11 @@ function setup() {
   const target = new EventEmitter();
   const lines: string[] = [];
   const exits: number[] = [];
-  installProcessFaultHandlers(target, jsonLogger((line) => lines.push(line)), (code) => exits.push(code));
+  installProcessFaultHandlers(
+    target,
+    jsonLogger((line) => lines.push(line)),
+    (code) => exits.push(code),
+  );
   return { target, lines, exits };
 }
 
@@ -45,7 +49,13 @@ describe('the worker process fault handlers', () => {
   it('still exits when logging throws', () => {
     const target = new EventEmitter();
     const exits: number[] = [];
-    installProcessFaultHandlers(target, () => { throw new Error('EPIPE'); }, (code) => exits.push(code));
+    installProcessFaultHandlers(
+      target,
+      () => {
+        throw new Error('EPIPE');
+      },
+      (code) => exits.push(code),
+    );
     target.emit('uncaughtException', new Error('x'));
     expect(exits).toEqual([1]);
   });

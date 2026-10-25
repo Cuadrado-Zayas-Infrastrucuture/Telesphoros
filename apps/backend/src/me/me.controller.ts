@@ -21,7 +21,9 @@ export class MeController {
   /** Verified caller/tenant recovery binding, never an authorization credential or a raw identity. */
   @Get('recovery-scope')
   recoveryScope(@CurrentPrincipal() principal: Principal): RecoveryScopeDto {
-    const recoveryScope = createHash('sha256').update(JSON.stringify(['telesphoros-upload-recovery-v2', principal.tenantId, principal.sub])).digest('hex');
+    const recoveryScope = createHash('sha256')
+      .update(JSON.stringify(['telesphoros-upload-recovery-v2', principal.tenantId, principal.sub]))
+      .digest('hex');
     return { recoveryScope };
   }
 

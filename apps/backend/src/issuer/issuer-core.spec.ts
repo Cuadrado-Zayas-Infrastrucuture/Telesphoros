@@ -18,7 +18,11 @@ afterAll(() => idp.stop());
 
 class RecordingStore implements CapabilityIssueStore {
   readonly calls: IssueCall[] = [];
-  outcome: { expiresAt: Date | null; refusal: string | null; membershipVersion: number | null } | Error = { expiresAt: new Date('2030-01-01T00:00:00Z'), refusal: null, membershipVersion: 7 };
+  outcome: { expiresAt: Date | null; refusal: string | null; membershipVersion: number | null } | Error = {
+    expiresAt: new Date('2030-01-01T00:00:00Z'),
+    refusal: null,
+    membershipVersion: 7,
+  };
   async issue(call: IssueCall) {
     this.calls.push(call);
     if (this.outcome instanceof Error) throw this.outcome;
@@ -35,7 +39,10 @@ const request = async (over: Partial<CapabilityIssueRequest> = {}): Promise<Capa
 });
 const sha256 = (value: string) => createHash('sha256').update(value, 'utf8').digest();
 const reasonOf = async (promise: Promise<unknown>) => {
-  const error = await promise.then(() => undefined, (e: unknown) => e);
+  const error = await promise.then(
+    () => undefined,
+    (e: unknown) => e,
+  );
   expect(error).toBeInstanceOf(CapabilityIssueError);
   return error as CapabilityIssueError;
 };
@@ -85,13 +92,16 @@ describe('IssuerCore: refuses every token the API refuses (T013)', () => {
 });
 
 describe('IssuerCore: the rest of the request', () => {
-  it.each([null, 0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])('an issued answer with a membership version of %s is a failure, not a capability', async (membershipVersion) => {
-    const store = new RecordingStore();
-    store.outcome = { expiresAt: new Date('2030-01-01T00:00:00Z'), refusal: null, membershipVersion };
-    expect((await reasonOf(new IssuerCore(verifier(), store).issue(await request()))).reason).toBe('unavailable');
-    store.outcome = { expiresAt: new Date('2030-01-01T00:00:00Z'), refusal: null, membershipVersion: 7 };
-    await expect(new IssuerCore(verifier(), store).issue(await request())).resolves.toBeDefined(); // control: a valid version issues
-  });
+  it.each([null, 0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])(
+    'an issued answer with a membership version of %s is a failure, not a capability',
+    async (membershipVersion) => {
+      const store = new RecordingStore();
+      store.outcome = { expiresAt: new Date('2030-01-01T00:00:00Z'), refusal: null, membershipVersion };
+      expect((await reasonOf(new IssuerCore(verifier(), store).issue(await request()))).reason).toBe('unavailable');
+      store.outcome = { expiresAt: new Date('2030-01-01T00:00:00Z'), refusal: null, membershipVersion: 7 };
+      await expect(new IssuerCore(verifier(), store).issue(await request())).resolves.toBeDefined(); // control: a valid version issues
+    },
+  );
 
   it('passes the database refusal on as a closed code, and returns no token', async () => {
     const store = new RecordingStore();

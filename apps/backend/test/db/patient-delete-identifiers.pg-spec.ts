@@ -36,11 +36,17 @@ async function patient(t: string): Promise<string> {
   await patients.insert({ id, tenantId: t, createdBy: 'syn-registrar', label: `SYN-${id.slice(0, 8)}`, createdAt: stamp(), updatedAt: stamp() });
   return id;
 }
-const add = (t: string, patientId: string, value = digest(), system = 'hospital-a-mrn') =>
-  identifiers.add(t, 'syn-registrar', { patientId, system, digest: value, keyVersion: 1 });
+const add = (t: string, patientId: string, value = digest(), system = 'hospital-a-mrn') => identifiers.add(t, 'syn-registrar', { patientId, system, digest: value, keyVersion: 1 });
 const states = (t: string, patientId: string) =>
-  owner(async (c) => (await c.query<{ system: string; status: string; withdrawn_by: string | null }>(
-    `SELECT system, status, withdrawn_by FROM patient_identifiers WHERE tenant_id = $1 AND patient_id = $2 ORDER BY seq`, [t, patientId])).rows);
+  owner(
+    async (c) =>
+      (
+        await c.query<{ system: string; status: string; withdrawn_by: string | null }>(
+          `SELECT system, status, withdrawn_by FROM patient_identifiers WHERE tenant_id = $1 AND patient_id = $2 ORDER BY seq`,
+          [t, patientId],
+        )
+      ).rows,
+  );
 
 describe('deleting a patient (audit: the identifiers of a deleted patient stayed active)', () => {
   it('withdraws its active identifiers, by the person who deleted it, and leaves an earlier withdrawal as it was', async () => {
@@ -103,7 +109,9 @@ describe('deleting a patient (audit: the identifiers of a deleted patient stayed
     await add(t, p, digest(), 'system-ok');
     await add(t, p, digest(), 'system-poison');
     await owner(async (c) => {
-      await c.query(`CREATE FUNCTION syn_refuse_poison() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.system = 'system-poison' THEN RAISE EXCEPTION 'synthetic refusal' USING ERRCODE = 'integrity_constraint_violation'; END IF; RETURN NEW; END $$`);
+      await c.query(
+        `CREATE FUNCTION syn_refuse_poison() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.system = 'system-poison' THEN RAISE EXCEPTION 'synthetic refusal' USING ERRCODE = 'integrity_constraint_violation'; END IF; RETURN NEW; END $$`,
+      );
       await c.query(`CREATE TRIGGER syn_refuse_poison BEFORE UPDATE ON patient_identifiers FOR EACH ROW EXECUTE FUNCTION syn_refuse_poison()`);
     });
     try {

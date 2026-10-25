@@ -19,7 +19,8 @@ const run = (args: string[]) =>
     const code = await runJobs(c, args, (l) => lines.push(l));
     return { code, text: lines.join('\n') };
   });
-const sql = <T extends Record<string, unknown> = Record<string, unknown>>(text: string, values: unknown[] = []) => withAdmin(db.adminUrl, (c) => c.query<T>(text, values).then((r) => r.rows));
+const sql = <T extends Record<string, unknown> = Record<string, unknown>>(text: string, values: unknown[] = []) =>
+  withAdmin(db.adminUrl, (c) => c.query<T>(text, values).then((r) => r.rows));
 
 async function insertJob(tenant: string, state: string, extra = ''): Promise<string> {
   const finished = ['succeeded', 'dead', 'cancelled'].includes(state);
@@ -71,8 +72,12 @@ describe('jobs operator command', () => {
     const { code, text } = await run(['retry', '--id', dead, '--by', 'ops-person']);
     expect(code).toBe(0);
     expect(text).toContain(`requeued: id=${dead}`);
-    expect(await sql(`SELECT state, attempts, finished_at, locked_by FROM jobs WHERE id = $1`, [dead])).toEqual([{ state: 'queued', attempts: 0, finished_at: null, locked_by: null }]);
-    expect(await sql(`SELECT attempt, outcome, worker_id FROM job_attempts WHERE job_id = $1`, [dead])).toEqual([{ attempt: 3, outcome: 'operator-requeued', worker_id: 'operator:ops-person' }]);
+    expect(await sql(`SELECT state, attempts, finished_at, locked_by FROM jobs WHERE id = $1`, [dead])).toEqual([
+      { state: 'queued', attempts: 0, finished_at: null, locked_by: null },
+    ]);
+    expect(await sql(`SELECT attempt, outcome, worker_id FROM job_attempts WHERE job_id = $1`, [dead])).toEqual([
+      { attempt: 3, outcome: 'operator-requeued', worker_id: 'operator:ops-person' },
+    ]);
     for (const state of ['queued', 'running', 'succeeded', 'cancelled', 'retry']) {
       const id = await insertJob('tenant-jobs-a', state);
       const refused = await run(['retry', '--id', id, '--by', 'ops-person']);
@@ -102,7 +107,15 @@ describe('jobs operator command', () => {
 
   it('refuses a malformed id, flag or name, and an unknown job, without changing anything', async () => {
     const id = await insertJob('tenant-jobs-a', 'dead');
-    for (const args of [['retry', '--id', 'not-an-id', '--by', 'x'], ['retry', '--id', id], ['retry', '--id', id, '--by', 'bad\nname'], ['show', '--id', '00000000-0000-4000-8000-000000000000'], ['list', '--state', 'nonsense'], ['list', '--limit', '0'], ['list', '--limit', '501']]) {
+    for (const args of [
+      ['retry', '--id', 'not-an-id', '--by', 'x'],
+      ['retry', '--id', id],
+      ['retry', '--id', id, '--by', 'bad\nname'],
+      ['show', '--id', '00000000-0000-4000-8000-000000000000'],
+      ['list', '--state', 'nonsense'],
+      ['list', '--limit', '0'],
+      ['list', '--limit', '501'],
+    ]) {
       expect([args.join(' '), (await run(args)).code]).toEqual([args.join(' '), 1]);
     }
     for (const args of [[], ['frobnicate'], ['list', '--bogus', 'x'], ['list', '--tenant'], ['status', '--tenant', 'x'], ['retry', '--id', id, '--id', id, '--by', 'x']]) {

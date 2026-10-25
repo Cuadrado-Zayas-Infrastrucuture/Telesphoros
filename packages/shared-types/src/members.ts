@@ -3,7 +3,11 @@ import { roleSchema } from './roles';
 
 /** A person's subject id from the identity provider, as it appears in a path. No control characters, at most 128. */
 // eslint-disable-next-line no-control-regex -- the point is to refuse control characters
-export const memberSubSchema = z.string().min(1).max(128).regex(/^[^\u0000-\u001f\u007f/?#%\\]+$/, 'Not a valid member id.');
+export const memberSubSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[^\u0000-\u001f\u007f/?#%\\]+$/, 'Not a valid member id.');
 export const memberParamSchema = z.strictObject({ sub: memberSubSchema });
 export type MemberParam = z.infer<typeof memberParamSchema>;
 
@@ -24,7 +28,10 @@ export const invitationCreateSchema = z.strictObject({
   email: z.string().trim().toLowerCase().pipe(z.email().max(254)),
   roles: z.array(roleSchema).max(4),
   /** Retry identity for this administrator in this organization. A repeat with the same id and the same body replays the invitation; without one nothing is replayed. */
-  requestId: z.uuid().transform((value) => value.toLowerCase()).optional(),
+  requestId: z
+    .uuid()
+    .transform((value) => value.toLowerCase())
+    .optional(),
 });
 export type InvitationCreate = z.infer<typeof invitationCreateSchema>;
 

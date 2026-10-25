@@ -16,7 +16,11 @@ beforeAll(async () => {
   repo = new PostgresLedgerRecordsRepository(database);
   bypassing = new PostgresLedgerRecordsRepository(admin);
 });
-afterAll(async () => { await database.onModuleDestroy(); await admin.onModuleDestroy(); await pg.drop(); });
+afterAll(async () => {
+  await database.onModuleDestroy();
+  await admin.onModuleDestroy();
+  await pg.drop();
+});
 
 async function evaluations(tenant: string, count: number) {
   const report = await seedLabReport(pg.adminUrl, tenant);
@@ -24,7 +28,8 @@ async function evaluations(tenant: string, count: number) {
   const capture = await repo.insertCapture(tenant, report.uploader, input);
   const acceptance = await repo.insertAcceptance(tenant, 'syn-reviewer', acceptanceFor(capture.record.id, input));
   const ids: string[] = [];
-  for (let i = 0; i < count; i++) ids.push((await repo.insertEvaluation(tenant, 'syn-system', evaluationFor(report, capture.record.id, acceptance.record.id, { knowledgeSetId: sha(String(i)) }))).record.id);
+  for (let i = 0; i < count; i++)
+    ids.push((await repo.insertEvaluation(tenant, 'syn-system', evaluationFor(report, capture.record.id, acceptance.record.id, { knowledgeSetId: sha(String(i)) }))).record.id);
   return { ...report, ids };
 }
 
@@ -51,10 +56,23 @@ it('pages by sequence, counts filtered matches on empty pages, and never promote
 it('filters dispute status in SQL before bounds, includes decisions, and retains the complete internal read', async () => {
   const tenant = `syn-${randomUUID()}`;
   const ids: string[] = [];
-  for (let i = 0; i < 23; i++) ids.push((await repo.raiseDispute(tenant, 'syn-reviewer', {
-    guidelineId: 'syn-guideline', guidelineVersion: '1', guidelineContentSha256: sha('syn'), locator: { table: '1', row: String(i) }, note: 'Synthetic evidence',
-  })).record.id);
-  for (const [id, decision] of [[ids[0]!, 'dismissed'], [ids[1]!, 'upheld'], [ids[22]!, 'upheld']] as const) {
+  for (let i = 0; i < 23; i++)
+    ids.push(
+      (
+        await repo.raiseDispute(tenant, 'syn-reviewer', {
+          guidelineId: 'syn-guideline',
+          guidelineVersion: '1',
+          guidelineContentSha256: sha('syn'),
+          locator: { table: '1', row: String(i) },
+          note: 'Synthetic evidence',
+        })
+      ).record.id,
+    );
+  for (const [id, decision] of [
+    [ids[0]!, 'dismissed'],
+    [ids[1]!, 'upheld'],
+    [ids[22]!, 'upheld'],
+  ] as const) {
     await repo.decideDispute(tenant, 'syn-independent', { disputeId: id, decision, evidenceNote: 'Synthetic decision' });
   }
   const first = await repo.pageDisputes(tenant, { offset: 0, limit: 20 });
@@ -70,7 +88,8 @@ it('filters dispute status in SQL before bounds, includes decisions, and retains
 });
 
 it('protects rows AND counts with explicit tenant predicates even when RLS is bypassed', async () => {
-  const a = `syn-${randomUUID()}`, b = `syn-${randomUUID()}`;
+  const a = `syn-${randomUUID()}`,
+    b = `syn-${randomUUID()}`;
   const ea = await evaluations(a, 2);
   await evaluations(b, 3);
   const input = { guidelineId: 'syn', guidelineVersion: '1', guidelineContentSha256: sha('syn'), locator: { table: '1', row: '1' }, note: 'Synthetic evidence' };

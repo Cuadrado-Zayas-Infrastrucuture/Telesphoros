@@ -58,8 +58,10 @@ export class InMemoryMembershipRepository extends MembershipRepository implement
     const roles = normalizeRoles(input.roles);
     if (!this.tenants.has(input.tenantId)) throw new MembershipAdminError('unknown-tenant', 'That organization is not registered. Register it first with `tenant create`.');
     const existing = this.rows.get(this.key(input.tenantId, input.sub));
-    if (existing?.status === 'active') throw new MembershipAdminError('already-active', 'That person is already an active member of this organization. Use set-roles to change their roles.');
-    if (this.activeElsewhere(input.tenantId, input.sub)) throw new MembershipAdminError('in-another-organization', 'That person is an active member of another organization. Remove them there first.');
+    if (existing?.status === 'active')
+      throw new MembershipAdminError('already-active', 'That person is already an active member of this organization. Use set-roles to change their roles.');
+    if (this.activeElsewhere(input.tenantId, input.sub))
+      throw new MembershipAdminError('in-another-organization', 'That person is an active member of another organization. Remove them there first.');
     const record: MembershipRecord = existing
       ? { ...existing, status: 'active', roles, tokensValidAfter: Math.max(existing.tokensValidAfter, this.instant(input)), version: existing.version + 1 }
       : { tenantId: input.tenantId, sub: input.sub, status: 'active', roles, tokensValidAfter: 0, version: 1 };
@@ -94,7 +96,8 @@ export class InMemoryMembershipRepository extends MembershipRepository implement
     const wanted = normalizeRoles(roles);
     if (!this.tenants.has(tenantId)) this.tenants.set(tenantId, { id: tenantId, displayName: tenantId, status: 'active' });
     for (const row of this.rows.values()) {
-      if (row.sub === sub && row.tenantId !== tenantId && row.status === 'active') this.rows.set(this.key(row.tenantId, sub), { ...row, status: 'removed', version: row.version + 1 });
+      if (row.sub === sub && row.tenantId !== tenantId && row.status === 'active')
+        this.rows.set(this.key(row.tenantId, sub), { ...row, status: 'removed', version: row.version + 1 });
     }
     const existing = this.rows.get(this.key(tenantId, sub));
     if (!existing) {
@@ -162,7 +165,10 @@ export class InMemoryMembershipRepository extends MembershipRepository implement
 
   async listMembers(tenantId: string, { offset, limit }: PageRequest): Promise<{ items: MemberView[]; total: number }> {
     const all = [...this.rows.values()].filter((r) => r.tenantId === tenantId && r.status === 'active').sort((a, b) => a.sub.localeCompare(b.sub));
-    return { items: all.slice(offset, offset + limit).map((r) => ({ sub: r.sub, roles: [...r.roles], changedAt: this.changedAt.get(this.key(r.tenantId, r.sub)) ?? new Date(0) })), total: all.length };
+    return {
+      items: all.slice(offset, offset + limit).map((r) => ({ sub: r.sub, roles: [...r.roles], changedAt: this.changedAt.get(this.key(r.tenantId, r.sub)) ?? new Date(0) })),
+      total: all.length,
+    };
   }
 
   /** Mirrors member_sign_out(): the caller's own active row only, and idempotent for a person with no active membership. */
@@ -206,7 +212,18 @@ export class InMemoryMembershipRepository extends MembershipRepository implement
     const live = this.invitations.filter((i) => i.tenantId === actor.tenantId && i.status === 'pending' && i.expiresAt.getTime() > now);
     if (live.length >= 100) throw new MemberAdminRuleError('invitation-limit');
     if (live.some((i) => i.digestHex === digestHex)) throw new MemberAdminRuleError('invitation-pending');
-    const made = { id: randomUUID(), emailHint: invitation.hint, roles: normalizeRoles(invitation.roles), status: 'pending' as const, expiresAt: new Date(now + 14 * 86_400_000), createdAt: new Date(now), tenantId: actor.tenantId, digestHex, createdBy: actor.sub, ...(invitation.request ? { requestId: invitation.request.id, requestHash: invitation.request.hash } : {}) };
+    const made = {
+      id: randomUUID(),
+      emailHint: invitation.hint,
+      roles: normalizeRoles(invitation.roles),
+      status: 'pending' as const,
+      expiresAt: new Date(now + 14 * 86_400_000),
+      createdAt: new Date(now),
+      tenantId: actor.tenantId,
+      digestHex,
+      createdBy: actor.sub,
+      ...(invitation.request ? { requestId: invitation.request.id, requestHash: invitation.request.hash } : {}),
+    };
     this.invitations.push(made);
     return this.viewOf(made);
   }
@@ -224,6 +241,13 @@ export class InMemoryMembershipRepository extends MembershipRepository implement
   }
 
   private viewOf(i: InvitationView & { tenantId: string; digestHex: string; createdBy: string }): InvitationView {
-    return { id: i.id, emailHint: i.emailHint, roles: [...i.roles], status: i.status === 'pending' && i.expiresAt.getTime() <= Date.now() ? 'expired' : i.status, expiresAt: i.expiresAt, createdAt: i.createdAt };
+    return {
+      id: i.id,
+      emailHint: i.emailHint,
+      roles: [...i.roles],
+      status: i.status === 'pending' && i.expiresAt.getTime() <= Date.now() ? 'expired' : i.status,
+      expiresAt: i.expiresAt,
+      createdAt: i.createdAt,
+    };
   }
 }

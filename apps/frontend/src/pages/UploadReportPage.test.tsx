@@ -12,7 +12,8 @@ const date = '2026-10-10T00:00:00.000Z';
 const patient = { id: patientId, label: 'SYN-0001', createdAt: date, updatedAt: date };
 const patientApi = vi.fn();
 let pageOwner: RecoverySession;
-const pageResponse = (data = [patient], page = 1, total = data.length) => new Response(JSON.stringify({ data, meta: { page, pageSize: 20, total, totalPages: Math.ceil(total / 20) } }));
+const pageResponse = (data = [patient], page = 1, total = data.length) =>
+  new Response(JSON.stringify({ data, meta: { page, pageSize: 20, total, totalPages: Math.ceil(total / 20) } }));
 vi.mock('@/auth/AuthProvider', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/auth/AuthProvider')>()),
   useAuth: () => ({ apiFetch: patientApi, recoverySession: pageOwner }),
@@ -28,18 +29,28 @@ vi.mock('@/lib/ownedStorageApi', async (importOriginal) => ({
 }));
 const cancelMock = vi.mocked(cancelOwnedUpload);
 const reportId = '22222222-2222-4222-8222-222222222222';
-const interruptedUpload = () => { const progress: UploadProgress = {
-  requestId: '55555555-5555-4555-8555-555555555555', reportId, facts: { reportType: 'vcf', name: 'half.vcf', sizeBytes: 2048, sha256: 'a'.repeat(64) },
-  declaration: { requestId: '66666666-6666-4666-8666-666666666666', revision: '33333333-3333-4333-8333-333333333333', contentType: 'text/x-vcf', sha256: 'a'.repeat(64) },
-  attempt: { attemptId: '44444444-4444-4444-8444-444444444444', revision: '77777777-7777-4777-8777-777777777777', state: 'declared', expiresAt: '2099-01-01T00:00:00.000Z' },
-}; bindRecovery(progress, pageOwner); rememberUpload(progress); };
+const interruptedUpload = () => {
+  const progress: UploadProgress = {
+    requestId: '55555555-5555-4555-8555-555555555555',
+    reportId,
+    facts: { reportType: 'vcf', name: 'half.vcf', sizeBytes: 2048, sha256: 'a'.repeat(64) },
+    declaration: { requestId: '66666666-6666-4666-8666-666666666666', revision: '33333333-3333-4333-8333-333333333333', contentType: 'text/x-vcf', sha256: 'a'.repeat(64) },
+    attempt: { attemptId: '44444444-4444-4444-8444-444444444444', revision: '77777777-7777-4777-8777-777777777777', state: 'declared', expiresAt: '2099-01-01T00:00:00.000Z' },
+  };
+  bindRecovery(progress, pageOwner);
+  rememberUpload(progress);
+};
 const submitMock = vi.mocked(submitReport);
 beforeEach(() => {
   endRecoverySession(pageOwner ?? null);
   window.sessionStorage.clear();
   pageOwner = startRecoverySession('a'.repeat(64));
 });
-afterEach(() => { endRecoverySession(pageOwner); vi.useRealTimers(); window.sessionStorage.clear(); });
+afterEach(() => {
+  endRecoverySession(pageOwner);
+  vi.useRealTimers();
+  window.sessionStorage.clear();
+});
 
 async function fillValidForm(user: ReturnType<typeof userEvent.setup>, fileName = 'sample.vcf') {
   await screen.findByRole('option', { name: 'SYN-0001' });
@@ -139,14 +150,18 @@ describe('UploadReportPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Cancellation is pending');
     expect(readRecovery(pageOwner)).toBeDefined();
     expect(cancelMock.mock.calls[0]![1]).toMatchObject({ reportId, restored: true, attempt: { state: 'declared' } });
-    cancelMock.mockImplementationOnce(async () => { window.sessionStorage.clear(); });
+    cancelMock.mockImplementationOnce(async () => {
+      window.sessionStorage.clear();
+    });
     await user.click(screen.getByRole('button', { name: 'Cancel upload' }));
     expect(await screen.findByText('Upload cancelled. Start a new upload when ready.')).toBeInTheDocument();
   });
 
   it('removes the banner once the interrupted upload is cancelled and starts the next one from nothing', async () => {
     interruptedUpload();
-    cancelMock.mockImplementationOnce(async () => { window.sessionStorage.clear(); });
+    cancelMock.mockImplementationOnce(async () => {
+      window.sessionStorage.clear();
+    });
     const user = userEvent.setup();
     render(<UploadReportPage />);
     await user.click(await screen.findByRole('button', { name: 'Cancel the interrupted upload' }));
@@ -187,23 +202,31 @@ describe('UploadReportPage', () => {
   });
 });
 
-
 it('paginates existing patients without losing the selected patient or creating records', async () => {
   const second = { ...patient, id: '22222222-2222-4222-8222-222222222222', label: 'SYN-0021' };
-  patientApi.mockReset().mockResolvedValueOnce(pageResponse([patient], 1, 21)).mockResolvedValueOnce(pageResponse([second], 2, 21));
-  const user = userEvent.setup(); render(<UploadReportPage />);
+  patientApi
+    .mockReset()
+    .mockResolvedValueOnce(pageResponse([patient], 1, 21))
+    .mockResolvedValueOnce(pageResponse([second], 2, 21));
+  const user = userEvent.setup();
+  render(<UploadReportPage />);
   await screen.findByRole('option', { name: 'SYN-0001' });
   await user.selectOptions(screen.getByLabelText(/synthetic patient \(required\)/i), patientId);
   await user.click(screen.getByRole('button', { name: 'Next patients' }));
   await screen.findByRole('option', { name: 'SYN-0021' });
   expect(screen.getByLabelText(/synthetic patient \(required\)/i)).toHaveValue(patientId);
   expect(screen.getByRole('option', { name: 'SYN-0001' })).toBeInTheDocument();
-  expect(patientApi.mock.calls.map(call => call[0])).toEqual(['/api/v1/patients?page=1&pageSize=20', '/api/v1/patients?page=2&pageSize=20']);
+  expect(patientApi.mock.calls.map((call) => call[0])).toEqual(['/api/v1/patients?page=1&pageSize=20', '/api/v1/patients?page=2&pageSize=20']);
 });
 
 it('reports a list failure, preserves selection, and retries the requested page', async () => {
-  patientApi.mockReset().mockResolvedValueOnce(pageResponse([patient], 1, 21)).mockRejectedValueOnce(new Error('sensitive payload')).mockResolvedValueOnce(pageResponse([patient], 2, 21));
-  const user = userEvent.setup(); render(<UploadReportPage />);
+  patientApi
+    .mockReset()
+    .mockResolvedValueOnce(pageResponse([patient], 1, 21))
+    .mockRejectedValueOnce(new Error('sensitive payload'))
+    .mockResolvedValueOnce(pageResponse([patient], 2, 21));
+  const user = userEvent.setup();
+  render(<UploadReportPage />);
   await screen.findByRole('option', { name: 'SYN-0001' });
   await user.selectOptions(screen.getByLabelText(/synthetic patient \(required\)/i), patientId);
   await user.click(screen.getByRole('button', { name: 'Next patients' }));
@@ -216,60 +239,76 @@ it('reports a list failure, preserves selection, and retries the requested page'
 
 it('handles an empty patient list without creating a patient', async () => {
   patientApi.mockReset().mockResolvedValue(pageResponse([]));
-  const user = userEvent.setup(); render(<UploadReportPage />);
+  const user = userEvent.setup();
+  render(<UploadReportPage />);
   expect(await screen.findByText('No patients available. Ask a clinician to add a synthetic patient, then refresh the list.')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Refresh patients' })).toBeEnabled();
   await user.click(screen.getByRole('button', { name: 'Upload report' }));
   expect(await screen.findByText('Choose an existing patient.')).toBeInTheDocument();
-  expect(submitMock).not.toHaveBeenCalled(); expect(patientApi).toHaveBeenCalledTimes(1);
+  expect(submitMock).not.toHaveBeenCalled();
+  expect(patientApi).toHaveBeenCalledTimes(1);
 });
 
 it('keeps one progress object across retries and clears it when starting another report', async () => {
   submitMock.mockReset().mockRejectedValueOnce(new SubmitError('Retry')).mockResolvedValue({ reference: 'verified-report-id' });
   patientApi.mockReset().mockImplementation(async () => pageResponse());
-  const user = userEvent.setup(); render(<UploadReportPage />); await fillValidForm(user);
-  await user.click(screen.getByRole('button', { name: 'Upload report' })); await screen.findByText('Retry');
+  const user = userEvent.setup();
+  render(<UploadReportPage />);
+  await fillValidForm(user);
+  await user.click(screen.getByRole('button', { name: 'Upload report' }));
+  await screen.findByText('Retry');
   const progress = submitMock.mock.calls[0]![2];
   await user.click(screen.getByRole('button', { name: 'Upload report' }));
-  await screen.findByText(/verified-report-id/); expect(submitMock.mock.calls[1]![2]).toBe(progress);
+  await screen.findByText(/verified-report-id/);
+  expect(submitMock.mock.calls[1]![2]).toBe(progress);
   expect(screen.getByText('Upload complete')).toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: 'Upload another report' })); await fillValidForm(user);
-  await user.click(screen.getByRole('button', { name: 'Upload report' })); await screen.findByText(/verified-report-id/);
+  await user.click(screen.getByRole('button', { name: 'Upload another report' }));
+  await fillValidForm(user);
+  await user.click(screen.getByRole('button', { name: 'Upload report' }));
+  await screen.findByText(/verified-report-id/);
   expect(submitMock.mock.calls[2]![2]).not.toBe(progress);
 });
 
 it('never renders raw service or transport errors', async () => {
   submitMock.mockReset().mockRejectedValue(new Error('raw token or patient payload'));
   patientApi.mockReset().mockImplementation(async () => pageResponse());
-  const user = userEvent.setup(); render(<UploadReportPage />); await fillValidForm(user);
+  const user = userEvent.setup();
+  render(<UploadReportPage />);
+  await fillValidForm(user);
   await user.click(screen.getByRole('button', { name: 'Upload report' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('The upload was interrupted.');
   expect(screen.queryByText(/raw token/)).not.toBeInTheDocument();
 });
 
-
 it('lets the user explicitly abandon a refused retry and start a new upload', async () => {
   submitMock.mockReset().mockRejectedValueOnce(new SubmitError('This upload conflicts with a stored report.')).mockResolvedValue({ reference: 'new-report' });
   patientApi.mockReset().mockImplementation(async () => pageResponse());
-  const user = userEvent.setup(); render(<UploadReportPage />); await fillValidForm(user);
-  await user.click(screen.getByRole('button', { name: 'Upload report' })); await screen.findByText(/conflicts with a stored report/);
+  const user = userEvent.setup();
+  render(<UploadReportPage />);
+  await fillValidForm(user);
+  await user.click(screen.getByRole('button', { name: 'Upload report' }));
+  await screen.findByText(/conflicts with a stored report/);
   const old = submitMock.mock.calls[0]![2];
   await user.click(screen.getByRole('button', { name: 'Start a new upload' }));
   expect(screen.getByLabelText(/synthetic patient \(required\)/i)).toHaveValue('');
   expect((screen.getByLabelText(/report file/i) as HTMLInputElement).files).toHaveLength(0);
-  await fillValidForm(user); await user.click(screen.getByRole('button', { name: 'Upload report' })); await screen.findByText(/new-report/);
+  await fillValidForm(user);
+  await user.click(screen.getByRole('button', { name: 'Upload report' }));
+  await screen.findByText(/new-report/);
   expect(submitMock.mock.calls[1]![2]).not.toBe(old);
 });
 
-
 describe('guided upload questionnaire', () => {
   beforeEach(() => {
-    window.sessionStorage.clear(); submitMock.mockReset(); cancelMock.mockReset();
+    window.sessionStorage.clear();
+    submitMock.mockReset();
+    cancelMock.mockReset();
     patientApi.mockReset().mockImplementation(async () => pageResponse());
   });
   it('validates each step, preserves the file across navigation and mode changes, and submits only after confirmation', async () => {
     submitMock.mockResolvedValue({ reference: 'SYN-GUIDED' });
-    const user = userEvent.setup(); const { container } = render(<UploadReportPage />);
+    const user = userEvent.setup();
+    const { container } = render(<UploadReportPage />);
     await screen.findByRole('option', { name: 'SYN-0001' });
     await user.click(screen.getByRole('button', { name: 'Guide me step by step' }));
     expect(screen.getByRole('progressbar', { name: 'Upload guide progress' })).toHaveAttribute('value', '1');
@@ -309,11 +348,16 @@ describe('guided upload questionnaire', () => {
 });
 
 it('removes an idle recovery banner at the fixed one-hour boundary', async () => {
-  vi.useFakeTimers(); vi.setSystemTime('2026-10-14T12:00:00Z');
+  vi.useFakeTimers();
+  vi.setSystemTime('2026-10-14T12:00:00Z');
   interruptedUpload();
-  await act(async () => { render(<UploadReportPage />); });
+  await act(async () => {
+    render(<UploadReportPage />);
+  });
   expect(screen.getByText('The file you chose earlier')).toBeVisible();
-  await act(async () => { vi.advanceTimersByTime(3600000); });
+  await act(async () => {
+    vi.advanceTimersByTime(3600000);
+  });
   expect(screen.queryByText('The file you chose earlier')).not.toBeInTheDocument();
   expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v2')).toBeNull();
 });

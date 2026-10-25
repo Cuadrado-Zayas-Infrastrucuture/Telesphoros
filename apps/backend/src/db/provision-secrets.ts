@@ -22,7 +22,8 @@ export function secretsManagerStore(client: SecretsManagerClient = new SecretsMa
         await client.send(new PutSecretValueCommand({ SecretId: id, SecretString: value }));
       } catch (error) {
         // `get` cannot tell a container with no value from an id that names nothing (both are "not found"), so a wrong id surfaces HERE, before the database is touched.
-        if (error instanceof ResourceNotFoundException) throw new Error(`The secret ${id} does not exist: Terraform creates the three containers (api-compute.tf); check the id.`, { cause: error });
+        if (error instanceof ResourceNotFoundException)
+          throw new Error(`The secret ${id} does not exist: Terraform creates the three containers (api-compute.tf); check the id.`, { cause: error });
         throw error;
       }
     },

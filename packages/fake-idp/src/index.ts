@@ -90,8 +90,7 @@ async function newSigningKey(): Promise<SigningKey> {
 
 const base64url = (buffer: Buffer) => buffer.toString('base64url');
 const pkceChallenge = (verifier: string) => base64url(createHash('sha256').update(verifier).digest());
-const escapeHtml = (value: string) =>
-  value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 async function readForm(req: IncomingMessage): Promise<URLSearchParams> {
   const chunks: Buffer[] = [];
@@ -122,9 +121,7 @@ export async function startFakeIdp(options: FakeIdpOptions = {}): Promise<FakeId
 
   async function sign(claims: Record<string, unknown>, mint: MintOptions): Promise<string> {
     const key = mint.signWith === 'foreign' ? foreign : current;
-    return new SignJWT(claims as Record<string, unknown>)
-      .setProtectedHeader({ alg: 'RS256', kid: mint.kid ?? key.kid, typ: 'JWT' })
-      .sign(key.privateKey);
+    return new SignJWT(claims as Record<string, unknown>).setProtectedHeader({ alg: 'RS256', kid: mint.kid ?? key.kid, typ: 'JWT' }).sign(key.privateKey);
   }
 
   function baseClaims(mint: MintOptions, tokenUse: 'access' | 'id', ttl: number) {
@@ -168,8 +165,7 @@ export async function startFakeIdp(options: FakeIdpOptions = {}): Promise<FakeId
     res.end(JSON.stringify(body));
   };
   const fail = (res: ServerResponse, error: string, status = 400) => json(res, status, { error });
-  const sessionSub = (req: IncomingMessage) =>
-    /(?:^|;\s*)fake_idp_session=([^;]+)/.exec(req.headers.cookie ?? '')?.[1];
+  const sessionSub = (req: IncomingMessage) => /(?:^|;\s*)fake_idp_session=([^;]+)/.exec(req.headers.cookie ?? '')?.[1];
 
   /** Validates the authorize request exactly as strictly as Cognito does for the parts we rely on. */
   function checkAuthorize(params: URLSearchParams): string | undefined {
@@ -234,10 +230,15 @@ export async function startFakeIdp(options: FakeIdpOptions = {}): Promise<FakeId
         }
         const hidden = [...url.searchParams].map(([k, v]) => `<input type="hidden" name="${escapeHtml(k)}" value="${escapeHtml(v)}">`).join('');
         const buttons = users
-          .map((u) => `<li><button type="submit" name="user" value="${escapeHtml(u.sub)}">Sign in as ${escapeHtml(u.email.split('@')[0]!)} (${escapeHtml(u.groups.join(', ') || 'no role')})</button></li>`)
+          .map(
+            (u) =>
+              `<li><button type="submit" name="user" value="${escapeHtml(u.sub)}">Sign in as ${escapeHtml(u.email.split('@')[0]!)} (${escapeHtml(u.groups.join(', ') || 'no role')})</button></li>`,
+          )
           .join('');
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-        res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Fake sign-in</title></head><body><main><h1>Fake identity provider (test only)</h1><form method="post" action="/oauth2/login">${hidden}<ul>${buttons}</ul></form></main></body></html>`);
+        res.end(
+          `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Fake sign-in</title></head><body><main><h1>Fake identity provider (test only)</h1><form method="post" action="/oauth2/login">${hidden}<ul>${buttons}</ul></form></main></body></html>`,
+        );
         return;
       }
 

@@ -78,7 +78,7 @@ describe('loadIssuerEnv: production refuses what only development may do', () =>
   });
 });
 
-describe('loadIssuerEnv: the issuer does not accept or read the application\'s other secrets', () => {
+describe("loadIssuerEnv: the issuer does not accept or read the application's other secrets", () => {
   for (const key of FORBIDDEN_IN_PRODUCTION) {
     it(`production refuses ${key} being present at all`, () => {
       expect(messageOf({ ...production, [key]: 'application-secret-sentinel-3' })).toContain(key);
@@ -89,7 +89,10 @@ describe('loadIssuerEnv: the issuer does not accept or read the application\'s o
   it('the application secrets in development are ignored: they never reach the config', () => {
     // Built at run time, one fake value per forbidden variable: a `NAME: 'literal'` pair is what the repository's secret scan reads as a credential.
     const marker = 'application-secret-sentinel';
-    const env = { ...development, ...Object.fromEntries(FORBIDDEN_IN_PRODUCTION.map((key, i) => [key, key.endsWith('URL') ? `postgres://x:${marker}-${i}@h/d` : `${marker}-${i}`])) };
+    const env = {
+      ...development,
+      ...Object.fromEntries(FORBIDDEN_IN_PRODUCTION.map((key, i) => [key, key.endsWith('URL') ? `postgres://x:${marker}-${i}@h/d` : `${marker}-${i}`])),
+    };
     expect(JSON.stringify(loadIssuerEnv(env))).not.toContain('application-secret-sentinel');
   });
 

@@ -117,9 +117,13 @@ describe('the membership table', () => {
       await c.query(`UPDATE tenant_memberships SET status = 'removed' WHERE sub = $1`, [who]);
       await insert(c, 'tenant-one-b', who); // control: allowed once the first is removed
       await expect(c.query(`UPDATE tenant_memberships SET roles = '{superuser}' WHERE sub = $1 AND tenant_id = 'tenant-one-b'`, [who])).rejects.toMatchObject({ code: '23514' });
-      await expect(c.query(`UPDATE tenant_memberships SET roles = '{reader,clinician,admin,reviewer,reader}' WHERE sub = $1 AND tenant_id = 'tenant-one-b'`, [who])).rejects.toMatchObject({ code: '23514' });
+      await expect(
+        c.query(`UPDATE tenant_memberships SET roles = '{reader,clinician,admin,reviewer,reader}' WHERE sub = $1 AND tenant_id = 'tenant-one-b'`, [who]),
+      ).rejects.toMatchObject({ code: '23514' });
       await expect(c.query(`UPDATE tenant_memberships SET status = 'suspended' WHERE sub = $1 AND tenant_id = 'tenant-one-b'`, [who])).rejects.toMatchObject({ code: '23514' });
-      await expect(c.query(`UPDATE tenant_memberships SET reason = $2 WHERE sub = $1 AND tenant_id = 'tenant-one-b'`, [who, 'x'.repeat(501)])).rejects.toMatchObject({ code: '23514' });
+      await expect(c.query(`UPDATE tenant_memberships SET reason = $2 WHERE sub = $1 AND tenant_id = 'tenant-one-b'`, [who, 'x'.repeat(501)])).rejects.toMatchObject({
+        code: '23514',
+      });
     });
   });
 
@@ -151,8 +155,7 @@ describe('the commit boundary for writes', () => {
     return { sub, version: record.version };
   }
   const label = () => `SYN-${randomUUID().slice(0, 12)}`;
-  const insertPatient = (client: Client, sub: string, name: string) =>
-    client.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ($1, $2, $3)`, [TENANT, sub, name]);
+  const insertPatient = (client: Client, sub: string, name: string) => client.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ($1, $2, $3)`, [TENANT, sub, name]);
   const exists = async (name: string) =>
     (await owner((c) => c.query(`SELECT count(*)::int AS n FROM patients WHERE tenant_id = $1 AND label = $2`, [TENANT, name]))).rows[0].n === 1;
 
@@ -170,7 +173,10 @@ describe('the commit boundary for writes', () => {
         await gate; // the request is mid-flight
       }),
     );
-    const outcome = write.then(() => 'committed', (error: { status?: number }) => `refused ${error.status}`);
+    const outcome = write.then(
+      () => 'committed',
+      (error: { status?: number }) => `refused ${error.status}`,
+    );
     await insertedSignal;
     await admin((a) => a.remove({ tenantId: TENANT, sub, ...OPERATOR })); // commits immediately: the writer holds no lock on the membership yet
     release();
@@ -238,7 +244,10 @@ describe('the commit boundary for writes', () => {
           await insertPatient(client, sub, name);
           await sleep(writerDelay);
         }),
-      ).then(() => 'committed' as const, (error: { status?: number }) => (error.status === 403 ? ('refused' as const) : Promise.reject(error)));
+      ).then(
+        () => 'committed' as const,
+        (error: { status?: number }) => (error.status === 403 ? ('refused' as const) : Promise.reject(error)),
+      );
       const removal = sleep(removalDelay).then(() => admin((a) => a.remove({ tenantId: TENANT, sub, ...OPERATOR })));
       const [outcome] = await Promise.all([write, removal]);
       expect(await exists(name)).toBe(outcome === 'committed');
@@ -289,20 +298,36 @@ describe('every kind of write a request makes passes through the commit check', 
       expect(await delta(async () => (patientId = (await api().post('/api/v1/patients').set(t).send({ label: label() }).expect(201)).body.id))).toBeGreaterThan(0);
       expect(await delta(() => api().put(`/api/v1/patients/${patientId}`).set(t).send({ label: label() }).expect(200))).toBeGreaterThan(0);
       let reportId = '';
-      expect(await delta(async () => (reportId = (await api().post('/api/v1/reports').set(t).send({ patientId, type: 'vcf', filename: 'a.vcf', sizeBytes: bytes.length }).expect(201)).body.id))).toBeGreaterThan(0);
+      expect(
+        await delta(
+          async () => (reportId = (await api().post('/api/v1/reports').set(t).send({ patientId, type: 'vcf', filename: 'a.vcf', sizeBytes: bytes.length }).expect(201)).body.id),
+        ),
+      ).toBeGreaterThan(0);
       expect(await delta(() => api().patch(`/api/v1/reports/${reportId}`).set(t).send({ filename: 'b.vcf' }).expect(200))).toBeGreaterThan(0);
 
       const revision = (await api().get(`/api/v1/reports/${reportId}/upload-state`).set(t).expect(200)).body.revision;
       let attempt: { attemptId: string; revision: string } = { attemptId: '', revision: '' };
       expect(
         await delta(async () => {
-          attempt = (await api().post(`/api/v1/reports/${reportId}/upload-attempts`).set(t).send({ requestId: randomUUID(), revision, contentType: 'text/x-vcf', sha256: createHash('sha256').update(bytes).digest('hex') }).expect(201)).body;
+          attempt = (
+            await api()
+              .post(`/api/v1/reports/${reportId}/upload-attempts`)
+              .set(t)
+              .send({ requestId: randomUUID(), revision, contentType: 'text/x-vcf', sha256: createHash('sha256').update(bytes).digest('hex') })
+              .expect(201)
+          ).body;
         }),
       ).toBeGreaterThan(0);
       // The raw-stream path: the bytes are read from the socket, then recorded.
       expect(
         await delta(() =>
-          api().put(`/api/v1/reports/${reportId}/upload-attempts/${attempt.attemptId}/bytes`).set(t).set('X-Upload-Revision', attempt.revision).set('Content-Type', 'text/x-vcf').send(bytes).expect(200),
+          api()
+            .put(`/api/v1/reports/${reportId}/upload-attempts/${attempt.attemptId}/bytes`)
+            .set(t)
+            .set('X-Upload-Revision', attempt.revision)
+            .set('Content-Type', 'text/x-vcf')
+            .send(bytes)
+            .expect(200),
         ),
       ).toBeGreaterThan(0);
 
@@ -320,26 +345,44 @@ describe('every kind of write a request makes passes through the commit check', 
   const label = () => `SYN-${randomUUID().slice(0, 12)}`;
 });
 
-describe('a removed person\'s transfer in flight', () => {
-  it('is refused at its next write, and the organization\'s reservation for it is still released', async () => {
+describe("a removed person's transfer in flight", () => {
+  it("is refused at its next write, and the organization's reservation for it is still released", async () => {
     const app = await createTestApp({ postgresUrl: db.appUrl });
     try {
       const t = await clinicianA();
       const api = () => request(app.getHttpServer());
       const malformed = Buffer.from('##fileformat=VCFv4.3\n#CHROM\tPOS\n'); // the server refuses this as a VCF once it has read it
-      const patientId = (await api().post('/api/v1/patients').set(bearer(t)).send({ label: `SYN-${randomUUID().slice(0, 12)}` }).expect(201)).body.id;
+      const patientId = (
+        await api()
+          .post('/api/v1/patients')
+          .set(bearer(t))
+          .send({ label: `SYN-${randomUUID().slice(0, 12)}` })
+          .expect(201)
+      ).body.id;
       const reportId = (await api().post('/api/v1/reports').set(bearer(t)).send({ patientId, type: 'vcf', filename: 'x.vcf', sizeBytes: malformed.length }).expect(201)).body.id;
       const revision = (await api().get(`/api/v1/reports/${reportId}/upload-state`).set(bearer(t)).expect(200)).body.revision;
-      const attempt = (await api().post(`/api/v1/reports/${reportId}/upload-attempts`).set(bearer(t)).send({ requestId: randomUUID(), revision, contentType: 'text/x-vcf', sha256: createHash('sha256').update(malformed).digest('hex') }).expect(201)).body;
+      const attempt = (
+        await api()
+          .post(`/api/v1/reports/${reportId}/upload-attempts`)
+          .set(bearer(t))
+          .send({ requestId: randomUUID(), revision, contentType: 'text/x-vcf', sha256: createHash('sha256').update(malformed).digest('hex') })
+          .expect(201)
+      ).body;
 
       // Send the first bytes, remove the person while the server is mid-transfer, then send the rest.
       const { port } = app.getHttpServer().address() as AddressInfo;
       const transfer = http.request({
-        host: '127.0.0.1', port, method: 'PUT', path: `/api/v1/reports/${reportId}/upload-attempts/${attempt.attemptId}/bytes`,
+        host: '127.0.0.1',
+        port,
+        method: 'PUT',
+        path: `/api/v1/reports/${reportId}/upload-attempts/${attempt.attemptId}/bytes`,
         headers: { Authorization: `Bearer ${t}`, 'X-Upload-Revision': attempt.revision, 'Content-Type': 'text/x-vcf', 'Content-Length': malformed.length },
       });
       const status = new Promise<number>((resolve, reject) => {
-        transfer.on('response', (res) => { res.resume(); res.on('end', () => resolve(res.statusCode!)); });
+        transfer.on('response', (res) => {
+          res.resume();
+          res.on('end', () => resolve(res.statusCode!));
+        });
         transfer.on('error', reject);
       });
       transfer.write(malformed.subarray(0, 10));

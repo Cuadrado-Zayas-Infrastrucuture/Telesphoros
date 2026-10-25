@@ -19,7 +19,10 @@ async function copyOfFixtures(): Promise<string> {
 const fixturePdf = (id: string, dir = DEFAULT_FIXTURES_DIR) => readFile(join(dir, id, 'source.pdf'));
 const fixtureText = (id: string, dir = DEFAULT_FIXTURES_DIR) => readFile(join(dir, id, 'report.txt'), 'utf8');
 const misconfigured = async (work: Promise<unknown>) => {
-  const error = await work.then(() => undefined, (e: unknown) => e);
+  const error = await work.then(
+    () => undefined,
+    (e: unknown) => e,
+  );
   expect(error).toBeInstanceOf(RunnerMisconfiguredError);
   return (error as RunnerMisconfiguredError).code;
 };

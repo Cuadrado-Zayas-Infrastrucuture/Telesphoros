@@ -1,6 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { Database } from '../../db/database';
-import { type DuplicateCandidate, IdentifierInUseError, IdentifierRequestReusedError, type IdentifierRecord, PatientIdentifiersRepository, type RegistrationRequest } from '../patient-identifiers.repository';
+import {
+  type DuplicateCandidate,
+  IdentifierInUseError,
+  IdentifierRequestReusedError,
+  type IdentifierRecord,
+  PatientIdentifiersRepository,
+  type RegistrationRequest,
+} from '../patient-identifiers.repository';
 import type { Page, PageRequest } from '../records';
 
 interface Row {
@@ -18,8 +25,16 @@ interface Row {
 
 const COLUMNS = 'id, tenant_id, patient_id, system, value_digest, key_version, status, created_by, created_at, withdrawn_at';
 const toRecord = (r: Row): IdentifierRecord => ({
-  id: r.id, tenantId: r.tenant_id, patientId: r.patient_id, system: r.system, digest: r.value_digest, keyVersion: r.key_version, status: r.status,
-  createdBy: r.created_by, createdAt: r.created_at, withdrawnAt: r.withdrawn_at,
+  id: r.id,
+  tenantId: r.tenant_id,
+  patientId: r.patient_id,
+  system: r.system,
+  digest: r.value_digest,
+  keyVersion: r.key_version,
+  status: r.status,
+  createdBy: r.created_by,
+  createdAt: r.created_at,
+  withdrawnAt: r.withdrawn_at,
 });
 
 /** Every query names `tenant_id` AND runs under row-level security. The digest is read only to compare; it is never logged. */
@@ -29,7 +44,11 @@ export class PostgresPatientIdentifiersRepository extends PatientIdentifiersRepo
     super();
   }
 
-  async add(tenantId: string, actor: string, input: { patientId: string; system: string; digest: Buffer; keyVersion: number; request?: RegistrationRequest }): Promise<IdentifierRecord> {
+  async add(
+    tenantId: string,
+    actor: string,
+    input: { patientId: string; system: string; digest: Buffer; keyVersion: number; request?: RegistrationRequest },
+  ): Promise<IdentifierRecord> {
     const result = await this.db.withTenant(
       tenantId,
       async (client): Promise<IdentifierRecord | 'in-use' | 'reused'> => {
@@ -122,7 +141,15 @@ export class PostgresPatientIdentifiersRepository extends PatientIdentifiersRepo
 
   listDuplicates(tenantId: string, { offset, limit }: PageRequest): Promise<Page<DuplicateCandidate>> {
     return this.db.withTenant(tenantId, async (client) => {
-      const { rows } = await client.query<{ patient_id: string | null; patient_label: string; other_id: string; other_label: string; system: string; flagged_at: Date; total: number }>(
+      const { rows } = await client.query<{
+        patient_id: string | null;
+        patient_label: string;
+        other_id: string;
+        other_label: string;
+        system: string;
+        flagged_at: Date;
+        total: number;
+      }>(
         `WITH edges AS MATERIALIZED (SELECT * FROM patient_alias_edges($1)),
               live AS MATERIALIZED (
                 SELECT f.seq, f.patient_id, f.other_patient_id, f.system, f.flagged_at, a.label AS patient_label, b.label AS other_label
@@ -143,7 +170,11 @@ export class PostgresPatientIdentifiersRepository extends PatientIdentifiersRepo
         [tenantId, limit, offset],
       );
       return {
-        items: rows.flatMap((r) => r.patient_id === null ? [] : [{ patientId: r.patient_id, patientLabel: r.patient_label, otherPatientId: r.other_id, otherPatientLabel: r.other_label, system: r.system, flaggedAt: r.flagged_at }]),
+        items: rows.flatMap((r) =>
+          r.patient_id === null
+            ? []
+            : [{ patientId: r.patient_id, patientLabel: r.patient_label, otherPatientId: r.other_id, otherPatientLabel: r.other_label, system: r.system, flaggedAt: r.flagged_at }],
+        ),
         total: rows[0]!.total,
       };
     });

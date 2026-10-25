@@ -8,21 +8,35 @@ const LEGACY_KEY = 'telesphoros.upload-recovery.v1';
 export const RECOVERY_LIFETIME_MS = 60 * 60 * 1000;
 /** Records saved before the file name was dropped carry `name`, which this strict schema refuses: they are removed on read. */
 const entrySchema = z.strictObject({
-  v: z.literal(2), scope: recoveryScopeSchema,
-  requestId: z.uuid(), reportId: z.uuid(),
-  declaration: declarationSchema.optional(), attempt: attemptSchema.optional(),
-  file: fileFingerprintSchema, savedAt: z.iso.datetime(),
+  v: z.literal(2),
+  scope: recoveryScopeSchema,
+  requestId: z.uuid(),
+  reportId: z.uuid(),
+  declaration: declarationSchema.optional(),
+  attempt: attemptSchema.optional(),
+  file: fileFingerprintSchema,
+  savedAt: z.iso.datetime(),
 });
 export type RecoveryEntry = z.infer<typeof entrySchema>;
 /** Created only after /me succeeds. A null scope guards in-flight work without enabling persistence. */
-export interface RecoverySession { readonly scope: string | null }
+export interface RecoverySession {
+  readonly scope: string | null;
+}
 const active = new WeakSet<RecoverySession>();
-interface Binding { session: RecoverySession; requestId?: string; savedAt?: string }
+interface Binding {
+  session: RecoverySession;
+  requestId?: string;
+  savedAt?: string;
+}
 const bindings = new WeakMap<object, Binding>();
 let expiryTimer: ReturnType<typeof setTimeout> | undefined;
 
 function store(): Storage | undefined {
-  try { return typeof window === 'undefined' ? undefined : window.sessionStorage; } catch { return undefined; }
+  try {
+    return typeof window === 'undefined' ? undefined : window.sessionStorage;
+  } catch {
+    return undefined;
+  }
 }
 const fresh = (savedAt: string) => {
   const age = Date.now() - Date.parse(savedAt);
@@ -31,15 +45,27 @@ const fresh = (savedAt: string) => {
 /** Expire stored metadata even after navigation; compare identity so an old timer cannot delete a newer upload. */
 function armExpiry(entry: RecoveryEntry): void {
   if (expiryTimer !== undefined) clearTimeout(expiryTimer);
-  expiryTimer = setTimeout(() => {
-    expiryTimer = undefined;
-    try {
-      const s = store();
-      const parsed = entrySchema.safeParse(JSON.parse(s?.getItem(KEY) ?? 'null'));
-      if (parsed.success && parsed.data.scope === entry.scope && parsed.data.requestId === entry.requestId
-        && parsed.data.reportId === entry.reportId && parsed.data.savedAt === entry.savedAt && !fresh(parsed.data.savedAt)) s?.removeItem(KEY);
-    } catch { /* blocked storage */ }
-  }, Math.max(0, Date.parse(entry.savedAt) + RECOVERY_LIFETIME_MS - Date.now()));
+  expiryTimer = setTimeout(
+    () => {
+      expiryTimer = undefined;
+      try {
+        const s = store();
+        const parsed = entrySchema.safeParse(JSON.parse(s?.getItem(KEY) ?? 'null'));
+        if (
+          parsed.success &&
+          parsed.data.scope === entry.scope &&
+          parsed.data.requestId === entry.requestId &&
+          parsed.data.reportId === entry.reportId &&
+          parsed.data.savedAt === entry.savedAt &&
+          !fresh(parsed.data.savedAt)
+        )
+          s?.removeItem(KEY);
+      } catch {
+        /* blocked storage */
+      }
+    },
+    Math.max(0, Date.parse(entry.savedAt) + RECOVERY_LIFETIME_MS - Date.now()),
+  );
 }
 export function recoverySessionActive(session: RecoverySession | null | undefined): session is RecoverySession {
   return !!session && active.has(session);
@@ -48,8 +74,15 @@ export function recoverySessionActive(session: RecoverySession | null | undefine
 export function startRecoverySession(scope?: string): RecoverySession {
   const session = Object.freeze({ scope: scope === undefined ? null : recoveryScopeSchema.parse(scope) });
   active.add(session);
-  if (session.scope === null) { clearRecovery(); return session; }
-  try { store()?.removeItem(LEGACY_KEY); } catch { /* blocked storage */ }
+  if (session.scope === null) {
+    clearRecovery();
+    return session;
+  }
+  try {
+    store()?.removeItem(LEGACY_KEY);
+  } catch {
+    /* blocked storage */
+  }
   readRecovery(session);
   return session;
 }
@@ -65,16 +98,31 @@ export function readRecovery(session?: RecoverySession | null): RecoveryEntry | 
     const raw = s.getItem(KEY);
     if (raw === null) return undefined;
     const parsed = entrySchema.safeParse(JSON.parse(raw));
-    if (parsed.success && parsed.data.scope === session.scope && fresh(parsed.data.savedAt)) { armExpiry(parsed.data); return parsed.data; }
+    if (parsed.success && parsed.data.scope === session.scope && fresh(parsed.data.savedAt)) {
+      armExpiry(parsed.data);
+      return parsed.data;
+    }
     s.removeItem(KEY);
-  } catch { try { s.removeItem(KEY); } catch { /* blocked storage */ } }
+  } catch {
+    try {
+      s.removeItem(KEY);
+    } catch {
+      /* blocked storage */
+    }
+  }
   return undefined;
 }
 /** Explicit sign-out clears both versions; retiring an expired session alone does not. */
 export function clearRecovery(): void {
   if (expiryTimer !== undefined) clearTimeout(expiryTimer);
   expiryTimer = undefined;
-  try { const s = store(); s?.removeItem(KEY); s?.removeItem(LEGACY_KEY); } catch { /* blocked storage */ }
+  try {
+    const s = store();
+    s?.removeItem(KEY);
+    s?.removeItem(LEGACY_KEY);
+  } catch {
+    /* blocked storage */
+  }
 }
 export function bindRecovery(progress: object, session: RecoverySession, entry?: RecoveryEntry): void {
   if (!recoverySessionActive(session)) throw new Error('Recovery session ended');
@@ -101,16 +149,26 @@ export function rememberUpload(progress: OwnedProgress & { requestId?: string; r
     binding.requestId = progress.requestId;
     binding.savedAt = new Date().toISOString();
   }
-  if (!binding.savedAt || !fresh(binding.savedAt)) { forgetUpload(progress); return; }
+  if (!binding.savedAt || !fresh(binding.savedAt)) {
+    forgetUpload(progress);
+    return;
+  }
   try {
     const entry: RecoveryEntry = {
-      v: 2, scope: binding.session.scope, requestId: progress.requestId, reportId: progress.reportId,
-      file: { reportType: progress.facts.reportType, sizeBytes: progress.facts.sizeBytes, sha256: progress.facts.sha256 }, savedAt: binding.savedAt,
-      ...(progress.declaration ? { declaration: progress.declaration } : {}), ...(progress.attempt ? { attempt: progress.attempt } : {}),
+      v: 2,
+      scope: binding.session.scope,
+      requestId: progress.requestId,
+      reportId: progress.reportId,
+      file: { reportType: progress.facts.reportType, sizeBytes: progress.facts.sizeBytes, sha256: progress.facts.sha256 },
+      savedAt: binding.savedAt,
+      ...(progress.declaration ? { declaration: progress.declaration } : {}),
+      ...(progress.attempt ? { attempt: progress.attempt } : {}),
     };
     store()?.setItem(KEY, JSON.stringify(entry));
     armExpiry(entry);
-  } catch { /* storage full/blocked: the upload continues without reload recovery */ }
+  } catch {
+    /* storage full/blocked: the upload continues without reload recovery */
+  }
 }
 export function sameFile(saved: FileFingerprint, facts: FileFingerprint): boolean {
   return saved.reportType === facts.reportType && saved.sizeBytes === facts.sizeBytes && saved.sha256 === facts.sha256;

@@ -39,10 +39,18 @@ export function fixtureRegistry(): FixtureRegistry {
 export function trackedBuild<T>(build: (signal: AbortSignal) => Promise<T>, outer?: AbortSignal): Promise<T> {
   const own = new AbortController();
   const promise = build(outer ? AbortSignal.any([outer, own.signal]) : own.signal);
-  const entry: PendingBuild = { abort: (reason) => own.abort(reason), settled: promise.then(() => undefined, () => undefined) };
+  const entry: PendingBuild = {
+    abort: (reason) => own.abort(reason),
+    settled: promise.then(
+      () => undefined,
+      () => undefined,
+    ),
+  };
   const { building } = fixtureRegistry();
   building.add(entry);
-  return promise.finally(() => { building.delete(entry); });
+  return promise.finally(() => {
+    building.delete(entry);
+  });
 }
 
 /** Records a fixture a caller now owns. Returns the function that forgets it once it has been closed. */
@@ -50,5 +58,7 @@ export function trackLive(close: () => Promise<unknown>): () => void {
   const entry: LiveFixture = { close };
   const { live } = fixtureRegistry();
   live.add(entry);
-  return () => { live.delete(entry); };
+  return () => {
+    live.delete(entry);
+  };
 }

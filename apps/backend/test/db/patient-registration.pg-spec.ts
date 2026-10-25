@@ -13,7 +13,11 @@ let patients: PostgresPatientsRepository;
 let otherPool: PostgresPatientsRepository;
 const tenant = 'tenant-patient-registration';
 const actor = 'syn-clinician';
-const hash = (label: string) => label.padEnd(64, 'a').replace(/[^0-9a-f]/g, 'a').slice(0, 64);
+const hash = (label: string) =>
+  label
+    .padEnd(64, 'a')
+    .replace(/[^0-9a-f]/g, 'a')
+    .slice(0, 64);
 beforeAll(async () => {
   pg = await createEphemeralDatabase();
   first = new Database({ url: pg.appUrl, ssl: 'disable' });
@@ -21,14 +25,28 @@ beforeAll(async () => {
   patients = new PostgresPatientsRepository(first);
   otherPool = new PostgresPatientsRepository(second);
 });
-afterAll(async () => { await first?.onModuleDestroy(); await second?.onModuleDestroy(); await pg?.drop(); });
+afterAll(async () => {
+  await first?.onModuleDestroy();
+  await second?.onModuleDestroy();
+  await pg?.drop();
+});
 
 function record(over: Partial<PatientRecord> = {}): PatientRecord {
   const now = new Date().toISOString();
-  return { id: randomUUID(), tenantId: tenant, createdBy: actor, label: `SYN-${randomUUID().slice(0, 12)}`, createdAt: now, updatedAt: now,
-    creationRequestId: randomUUID(), creationRequestHash: hash('a'), ...over };
+  return {
+    id: randomUUID(),
+    tenantId: tenant,
+    createdBy: actor,
+    label: `SYN-${randomUUID().slice(0, 12)}`,
+    createdAt: now,
+    updatedAt: now,
+    creationRequestId: randomUUID(),
+    creationRequestHash: hash('a'),
+    ...over,
+  };
 }
-const rowsFor = (requestId: string) => withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT id::text AS id FROM patients WHERE tenant_id = $1 AND creation_request_id = $2`, [tenant, requestId])).rows);
+const rowsFor = (requestId: string) =>
+  withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT id::text AS id FROM patients WHERE tenant_id = $1 AND creation_request_id = $2`, [tenant, requestId])).rows);
 
 describe('PostgresPatientsRepository.insertOrReplay', () => {
   it('stores one patient however many times, and from however many pools, the same request arrives at once', async () => {
@@ -51,7 +69,7 @@ describe('PostgresPatientsRepository.insertOrReplay', () => {
     await expect(patients.insertOrReplay({ ...input, id: randomUUID(), label: `${input.label}-2`, creationRequestHash: hash('b') })).rejects.toBeInstanceOf(IntegrityError);
   });
 
-  it('keeps one person\'s request ids apart from another\'s', async () => {
+  it("keeps one person's request ids apart from another's", async () => {
     const requestId = randomUUID();
     const [a, b] = await Promise.all([
       patients.insertOrReplay(record({ creationRequestId: requestId, createdBy: 'syn-a' })),
@@ -86,8 +104,14 @@ describe('the retry identity of a patient', () => {
   it('cannot be changed once stored, and a request id needs its hash and the reverse', async () => {
     const input = record();
     await patients.insertOrReplay(input);
-    await expect(withAdmin(pg.adminUrl, (c) => c.query(`UPDATE patients SET creation_request_id = gen_random_uuid() WHERE creation_request_id = $1`, [input.creationRequestId]))).rejects.toThrow(/retry identity/);
-    await expect(withAdmin(pg.adminUrl, (c) => c.query(`INSERT INTO patients (tenant_id, created_by, label, creation_request_id) VALUES ($1, $2, 'SYN-NOHASH', gen_random_uuid())`, [tenant, actor]))).rejects.toThrow(/patients_creation_request_pair/);
+    await expect(
+      withAdmin(pg.adminUrl, (c) => c.query(`UPDATE patients SET creation_request_id = gen_random_uuid() WHERE creation_request_id = $1`, [input.creationRequestId])),
+    ).rejects.toThrow(/retry identity/);
+    await expect(
+      withAdmin(pg.adminUrl, (c) =>
+        c.query(`INSERT INTO patients (tenant_id, created_by, label, creation_request_id) VALUES ($1, $2, 'SYN-NOHASH', gen_random_uuid())`, [tenant, actor]),
+      ),
+    ).rejects.toThrow(/patients_creation_request_pair/);
   });
 
   it('is not needed: a patient made without one is as before', async () => {

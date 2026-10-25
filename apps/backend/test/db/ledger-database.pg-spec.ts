@@ -33,21 +33,47 @@ async function stored(tenantId = newTenant()) {
   // One of every record table, so a table that never gets a row cannot pass the "there is something to attack" controls.
   await repo.insertCorrection(tenantId, 'syn-reviewer', { evaluationId: e.record.id, kind: 'retraction', reasonCode: 'input-misread', note: 'retracted' });
   const d = await repo.raiseDispute(tenantId, 'syn-reviewer', {
-    guidelineId: 'syn-guideline', guidelineVersion: '1', guidelineContentSha256: 'a'.repeat(64), locator: { table: 'recommendations', row: 'poor' }, note: 'disputed',
+    guidelineId: 'syn-guideline',
+    guidelineVersion: '1',
+    guidelineContentSha256: 'a'.repeat(64),
+    locator: { table: 'recommendations', row: 'poor' },
+    note: 'disputed',
   });
   await repo.decideDispute(tenantId, 'syn-reviewer-2', { disputeId: d.record.id, decision: 'upheld', evidenceNote: 'evidence' });
   await repo.insertPatientDecision(tenantId, 'syn-verifier', {
-    reportId: report.reportId, expectedReport: { patientId: report.patientId, sha256: report.pdfSha256, objectVersion: report.objectVersion },
-    decision: 'verified', method: 'person-confirmed', basisCode: 'no-identifier-on-report',
+    reportId: report.reportId,
+    expectedReport: { patientId: report.patientId, sha256: report.pdfSha256, objectVersion: report.objectVersion },
+    decision: 'verified',
+    method: 'person-confirmed',
+    basisCode: 'no-identifier-on-report',
   });
   await verifier.verify(tenantId, { recordCheckpoint: true });
   return { tenantId, report, capture, c, a, e };
 }
 const CAPTURE_INSERT = `INSERT INTO report_captures (id, tenant_id, created_by, ledger_event_id, report_id, pdf_sha256, text_storage_key, text_sha256, text_scalars, poppler_version, runner)
                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 5, '26.03.0', 'fake')`;
-const captureValues = (r: SeededReport, id: string, eventId: string, createdBy: string) => [id, r.tenantId, createdBy, eventId, r.reportId, r.pdfSha256, `text/${uuid()}`, sha(`t${id}`)];
+const captureValues = (r: SeededReport, id: string, eventId: string, createdBy: string) => [
+  id,
+  r.tenantId,
+  createdBy,
+  eventId,
+  r.reportId,
+  r.pdfSha256,
+  `text/${uuid()}`,
+  sha(`t${id}`),
+];
 
-const RECORD_TABLES = ['report_captures', 'capture_acceptances', 'evaluations', 'evaluation_results', 'evaluation_gene_states', 'corrections', 'cell_disputes', 'cell_dispute_decisions', 'report_patient_decisions'];
+const RECORD_TABLES = [
+  'report_captures',
+  'capture_acceptances',
+  'evaluations',
+  'evaluation_results',
+  'evaluation_gene_states',
+  'corrections',
+  'cell_disputes',
+  'cell_dispute_decisions',
+  'report_patient_decisions',
+];
 const APPEND_ONLY = [...RECORD_TABLES, 'ledger_events', 'ledger_checkpoints'];
 
 describe('append-only: nobody updates, deletes or truncates, the owner included', () => {
@@ -70,7 +96,7 @@ describe('append-only: nobody updates, deletes or truncates, the owner included'
     }
   });
 
-  it('the application role cannot write the ledger at all, nor read another tenant\'s', async () => {
+  it("the application role cannot write the ledger at all, nor read another tenant's", async () => {
     const { tenantId } = await stored();
     const other = newTenant();
     expect((await attempt(pg.appUrl, tenantId, 'syn-x', (c) => c.query(`INSERT INTO ledger_events SELECT * FROM ledger_events LIMIT 1`)))?.code).toBe('42501');
@@ -89,7 +115,9 @@ describe('ledger functions: who may call what', () => {
     for (const type of ['redaction', 'checkpoint']) {
       expect((await attempt(pg.appUrl, t, 'syn-x', (c) => c.query(`SELECT ledger_append($1, $2, $3, $4, $5, 1::smallint)`, args(type, 'event_notes'))))?.code).toBe('42501');
     }
-    expect((await attempt(pg.appUrl, t, 'syn-x', (c) => c.query(`SELECT ledger_append_internal($1, $2, $3, $4, $5, 1::smallint)`, args('capture', 'report_captures'))))?.code).toBe('42501');
+    expect((await attempt(pg.appUrl, t, 'syn-x', (c) => c.query(`SELECT ledger_append_internal($1, $2, $3, $4, $5, 1::smallint)`, args('capture', 'report_captures'))))?.code).toBe(
+      '42501',
+    );
     expect((await attempt(pg.appUrl, t, 'syn-x', (c) => c.query(`SELECT ledger_record_checkpoint($1, 1, $2, 'full')`, [t, 'a'.repeat(64)])))?.code).toBe('42501');
   });
 
@@ -97,16 +125,29 @@ describe('ledger functions: who may call what', () => {
     const t = newTenant();
     expect((await attempt(pg.appUrl, t, 'syn-x', (c) => c.query(`SELECT ledger_append($1, $2, $3, $4, $5, 1::smallint)`, args('capture', 'evaluations'))))?.code).toBe('23514');
     expect((await attempt(pg.appUrl, t, null, (c) => c.query(`SELECT ledger_append($1, $2, $3, $4, $5, 1::smallint)`, args('capture', 'report_captures'))))?.code).toBe('42501');
-    expect((await attempt(pg.appUrl, null, 'syn-x', (c) => c.query(`SELECT ledger_append($1, $2, $3, $4, $5, 1::smallint)`, args('capture', 'report_captures'))))?.code).toBe('42501');
+    expect((await attempt(pg.appUrl, null, 'syn-x', (c) => c.query(`SELECT ledger_append($1, $2, $3, $4, $5, 1::smallint)`, args('capture', 'report_captures'))))?.code).toBe(
+      '42501',
+    );
   });
 
   it('the verifier login can read everything and write nothing but a checkpoint', async () => {
     const { tenantId, c } = await stored();
     expect((await run(pg.verifierUrl, null, null, (x) => x.query(`SELECT count(*)::int AS n FROM report_captures`))).rows[0].n).toBeGreaterThan(0);
-    for (const sql of [`DELETE FROM ledger_events`, `INSERT INTO ledger_heads VALUES ('x', 0, repeat('0', 64))`, `UPDATE report_captures SET text_scalars = 1`, `INSERT INTO event_notes (tenant_id, created_by, body, body_sha256) VALUES ('t', 'a', 'b', repeat('a', 64))`]) {
+    for (const sql of [
+      `DELETE FROM ledger_events`,
+      `INSERT INTO ledger_heads VALUES ('x', 0, repeat('0', 64))`,
+      `UPDATE report_captures SET text_scalars = 1`,
+      `INSERT INTO event_notes (tenant_id, created_by, body, body_sha256) VALUES ('t', 'a', 'b', repeat('a', 64))`,
+    ]) {
       expect((await attempt(pg.verifierUrl, null, null, (x) => x.query(sql)))?.code).toBe('42501');
     }
-    expect((await attempt(pg.verifierUrl, tenantId, 'v', (x) => x.query(`SELECT ledger_append($1, 'capture', 'report_captures', $2, $3, 1::smallint)`, [uuid(), c.record.id, 'a'.repeat(64)])))?.code).toBe('42501');
+    expect(
+      (
+        await attempt(pg.verifierUrl, tenantId, 'v', (x) =>
+          x.query(`SELECT ledger_append($1, 'capture', 'report_captures', $2, $3, 1::smallint)`, [uuid(), c.record.id, 'a'.repeat(64)]),
+        )
+      )?.code,
+    ).toBe('42501');
     // A checkpoint that does not match the chain is refused by the function itself.
     expect((await attempt(pg.verifierUrl, null, null, (x) => x.query(`SELECT ledger_record_checkpoint($1, 1, $2, 'full')`, [tenantId, 'e'.repeat(64)])))?.code).toBe('23000');
   });
@@ -118,7 +159,8 @@ describe('ledger functions: who may call what', () => {
                 pg_has_role('telesphoros_app', 'telesphoros_ledger', 'MEMBER') AS app_in_ledger,
                 pg_has_role('telesphoros_app', 'telesphoros_redactor', 'MEMBER') AS app_in_redactor,
                 pg_has_role('telesphoros_test_app', 'telesphoros_ledger_verifier', 'MEMBER') AS applogin_in_verifier,
-                pg_has_role('telesphoros_test_operator', 'telesphoros_app', 'MEMBER') AS operator_in_app`);
+                pg_has_role('telesphoros_test_operator', 'telesphoros_app', 'MEMBER') AS operator_in_app`,
+      );
       expect(rows[0]).toEqual({ verifier_in_app: false, app_in_ledger: false, app_in_redactor: false, applogin_in_verifier: false, operator_in_app: false });
     });
   });
@@ -135,12 +177,14 @@ describe('the commit-time contract: a record and its event exist together or not
 
   it('an event with no record cannot commit', async () => {
     const t = newTenant();
-    const error = await attempt(pg.appUrl, t, 'syn-x', (c) => c.query(`SELECT ledger_append($1, 'capture', 'report_captures', $2, $3, 1::smallint)`, [uuid(), uuid(), 'a'.repeat(64)]));
+    const error = await attempt(pg.appUrl, t, 'syn-x', (c) =>
+      c.query(`SELECT ledger_append($1, 'capture', 'report_captures', $2, $3, 1::smallint)`, [uuid(), uuid(), 'a'.repeat(64)]),
+    );
     expect(error?.code).toBe('23000');
     expect(await events(t)).toBe(0);
   });
 
-  it('an event whose actor is not the record\'s author cannot commit', async () => {
+  it("an event whose actor is not the record's author cannot commit", async () => {
     const t = newTenant();
     const r = await seedLabReport(pg.adminUrl, t);
     const [id, ev] = [uuid(), uuid()];
@@ -216,8 +260,16 @@ describe('evaluations are immutable once finalized', () => {
     const addResult = `INSERT INTO evaluation_results (tenant_id, evaluation_id, ordinal, drug, genes, outcome, reason_code, gene_evidence)
                        VALUES ($1, $2, 99, 'x', '{}', 'no-guideline', 'no-guideline-for-drug', '[]')`;
     expect((await attempt(pg.appUrl, s.tenantId, 'syn-x', (c) => c.query(addResult, [s.tenantId, s.e.record.id])))?.code).toBe('23000');
-    expect((await attempt(pg.appUrl, s.tenantId, 'syn-x', (c) => c.query(
-      `INSERT INTO evaluation_gene_states (tenant_id, evaluation_id, gene, state, reason_code) VALUES ($1, $2, 'ZZZ', 'absent', 'gene-absent')`, [s.tenantId, s.e.record.id])))?.code).toBe('23000');
+    expect(
+      (
+        await attempt(pg.appUrl, s.tenantId, 'syn-x', (c) =>
+          c.query(`INSERT INTO evaluation_gene_states (tenant_id, evaluation_id, gene, state, reason_code) VALUES ($1, $2, 'ZZZ', 'absent', 'gene-absent')`, [
+            s.tenantId,
+            s.e.record.id,
+          ]),
+        )
+      )?.code,
+    ).toBe('23000');
   });
 
   it('a held evaluation is accepted only without an acceptance, and an evaluated one needs the LATEST accepted decision', async () => {
@@ -225,9 +277,19 @@ describe('evaluations are immutable once finalized', () => {
     const r = await seedLabReport(pg.adminUrl, t);
     const capture = captureFor(r);
     const c = await repo.insertCapture(t, r.uploader, capture);
-    const held = await repo.insertEvaluation(t, 'syn-system', evaluationFor(r, c.record.id, '', {
-      captureAcceptanceId: null, disposition: 'held', holdCode: 'capture-not-accepted', geneInputs: [], occurrences: [], results: [], geneStates: [],
-    }));
+    const held = await repo.insertEvaluation(
+      t,
+      'syn-system',
+      evaluationFor(r, c.record.id, '', {
+        captureAcceptanceId: null,
+        disposition: 'held',
+        holdCode: 'capture-not-accepted',
+        geneInputs: [],
+        occurrences: [],
+        results: [],
+        geneStates: [],
+      }),
+    );
     expect(held.created).toBe(true);
     const a1 = await repo.insertAcceptance(t, 'syn-reviewer', acceptanceFor(c.record.id, capture));
     await repo.insertAcceptance(t, 'syn-reviewer-2', acceptanceFor(c.record.id, capture, { decision: 'rejected' }));
@@ -249,7 +311,9 @@ describe('tenant isolation, table by table', () => {
     const a = await stored();
     const other = newTenant();
     const note = [uuid(), a.tenantId, 'syn-x', 'body', sha('body')];
-    const error = await attempt(pg.appUrl, other, 'syn-x', (c) => c.query(`INSERT INTO event_notes (id, tenant_id, created_by, body, body_sha256) VALUES ($1, $2, $3, $4, $5)`, note));
+    const error = await attempt(pg.appUrl, other, 'syn-x', (c) =>
+      c.query(`INSERT INTO event_notes (id, tenant_id, created_by, body, body_sha256) VALUES ($1, $2, $3, $4, $5)`, note),
+    );
     expect(error?.code).toBe('42501'); // row-level security: the new row violates the policy
     // And a record insert for the wrong tenant is refused too (by whichever rule fires first), leaving nothing behind.
     const before = await rows(a.tenantId, 'report_captures');
@@ -260,7 +324,10 @@ describe('tenant isolation, table by table', () => {
 
 describe('redaction of a note', () => {
   async function noteOf(tenantId: string): Promise<{ id: string; bodySha: string }> {
-    const rows = await withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT id::text AS id, body_sha256 FROM event_notes WHERE tenant_id = $1 ORDER BY seq LIMIT 1`, [tenantId])).rows);
+    const rows = await withAdmin(
+      pg.adminUrl,
+      async (c) => (await c.query(`SELECT id::text AS id, body_sha256 FROM event_notes WHERE tenant_id = $1 ORDER BY seq LIMIT 1`, [tenantId])).rows,
+    );
     return { id: rows[0].id, bodySha: rows[0].body_sha256 };
   }
   const redact = (tenantId: string, id: string, basis: string, url = pg.operatorUrl) =>
@@ -270,7 +337,10 @@ describe('redaction of a note', () => {
     const s = await stored();
     const note = await noteOf(s.tenantId);
     expect(await redact(s.tenantId, note.id, 'phi-in-note')).toBeUndefined();
-    const row = await withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT body, redacted_at IS NOT NULL AS redacted, redaction_basis_code, body_sha256 FROM event_notes WHERE id = $1`, [note.id])).rows[0]);
+    const row = await withAdmin(
+      pg.adminUrl,
+      async (c) => (await c.query(`SELECT body, redacted_at IS NOT NULL AS redacted, redaction_basis_code, body_sha256 FROM event_notes WHERE id = $1`, [note.id])).rows[0],
+    );
     expect(row).toEqual({ body: '[redacted]', redacted: true, redaction_basis_code: 'phi-in-note', body_sha256: note.bodySha });
     expect(await events(s.tenantId)).toBe(9);
     expect(await verifier.verify(s.tenantId)).toMatchObject({ status: 'ok', eventsChecked: 9 });
@@ -300,7 +370,9 @@ describe('redaction of a note', () => {
     const note = await noteOf(s.tenantId);
     expect((await attempt(pg.appUrl, s.tenantId, 'syn-x', (c) => c.query(`UPDATE event_notes SET body = 'x' WHERE id = $1`, [note.id])))?.code).toBe('42501');
     await withAdmin(pg.adminUrl, async (c) => {
-      await expect(c.query(`UPDATE event_notes SET body = '[redacted]', redacted_at = now(), redaction_basis_code = 'phi-in-note' WHERE id = $1`, [note.id])).rejects.toMatchObject({ code: '23000' });
+      await expect(c.query(`UPDATE event_notes SET body = '[redacted]', redacted_at = now(), redaction_basis_code = 'phi-in-note' WHERE id = $1`, [note.id])).rejects.toMatchObject(
+        { code: '23000' },
+      );
       await expect(c.query(`UPDATE event_notes SET body = 'other text' WHERE id = $1`, [note.id])).rejects.toMatchObject({ code: '23000' });
     });
   });

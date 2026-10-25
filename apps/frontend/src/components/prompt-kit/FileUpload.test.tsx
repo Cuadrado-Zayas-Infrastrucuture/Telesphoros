@@ -13,7 +13,8 @@ it('requires confirmation, retains metadata only, and removes it with focus reco
   fireEvent.click(screen.getByLabelText('This file contains synthetic data only'));
   fireEvent.change(input, { target: { files: [syntheticFile()] } });
   expect(screen.getByText('SYN-example.json')).toBeInTheDocument();
-  expect(fetch).not.toHaveBeenCalled(); expect(read).not.toHaveBeenCalled();
+  expect(fetch).not.toHaveBeenCalled();
+  expect(read).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Remove attachment' }));
   expect(screen.queryByText('SYN-example.json')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Choose file' })).toHaveFocus();
@@ -21,7 +22,12 @@ it('requires confirmation, retains metadata only, and removes it with focus reco
 it('rejects unsupported, empty, oversized, and multiple files through the drop path', () => {
   render(<FileUpload canAttach busy={false} />);
   fireEvent.click(screen.getByLabelText('This file contains synthetic data only'));
-  for (const files of [[new File(['x'], 'SYN.exe')], [new File([], 'SYN.json')], [new File([new Uint8Array(5 * 1024 * 1024 + 1)], 'SYN.pdf')], [syntheticFile(), syntheticFile()]]) {
+  for (const files of [
+    [new File(['x'], 'SYN.exe')],
+    [new File([], 'SYN.json')],
+    [new File([new Uint8Array(5 * 1024 * 1024 + 1)], 'SYN.pdf')],
+    [syntheticFile(), syntheticFile()],
+  ]) {
     fireEvent.drop(screen.getByRole('region', { name: 'Synthetic attachment preview' }), { dataTransfer: { files } });
     expect(screen.getByRole('alert')).toHaveTextContent('Choose one nonempty');
     expect(screen.queryByRole('button', { name: 'Remove attachment' })).not.toBeInTheDocument();

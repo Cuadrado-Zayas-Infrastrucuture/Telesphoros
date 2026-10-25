@@ -59,7 +59,15 @@ describe('the worker stop sequence', () => {
   });
 
   it('a step that throws does not stop the later steps; the exit code is 1 and the log carries a code, not the error', async () => {
-    const h = harness({ tickers: [{ stop: async () => { throw new Error('connect ECONNREFUSED 10.1.2.3:5432 password=secret'); } }] });
+    const h = harness({
+      tickers: [
+        {
+          stop: async () => {
+            throw new Error('connect ECONNREFUSED 10.1.2.3:5432 password=secret');
+          },
+        },
+      ],
+    });
     await h.run()('SIGTERM');
     expect(h.calls).toEqual(['health', 'runner', 'pool']);
     expect(h.exits).toEqual([1]);

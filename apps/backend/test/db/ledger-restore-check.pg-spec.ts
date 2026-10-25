@@ -95,7 +95,8 @@ describe('the restore check "ledger chain"', () => {
     expect(report.ok).toBe(true);
 
     // A throwaway restore stays a throwaway: no checkpoint (and so no event) was added by the check.
-    const events = (url: string) => withAdmin(url, async (c) => (await c.query(`SELECT (SELECT count(*) FROM ledger_events) AS e, (SELECT count(*) FROM ledger_checkpoints) AS k`)).rows[0]);
+    const events = (url: string) =>
+      withAdmin(url, async (c) => (await c.query(`SELECT (SELECT count(*) FROM ledger_events) AS e, (SELECT count(*) FROM ledger_checkpoints) AS k`)).rows[0]);
     expect(await events(withDb(adminUrl(), name))).toEqual(await events(pg.adminUrl));
   });
 

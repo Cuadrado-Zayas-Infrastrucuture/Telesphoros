@@ -1,7 +1,18 @@
 import { randomBytes } from 'node:crypto';
 import { Client } from 'pg';
 import { migrateDown, migrateUp } from '../../src/db/migrator';
-import { checkGroups, LOGIN_LIMITS, PRIVILEGE_GROUPS, type LoginKind, type LoginNames, type ProvisionOptions, type ProvisionReport, provisionLogins, type SecretStore, scramVerifier } from '../../src/db/provision-logins';
+import {
+  checkGroups,
+  LOGIN_LIMITS,
+  PRIVILEGE_GROUPS,
+  type LoginKind,
+  type LoginNames,
+  type ProvisionOptions,
+  type ProvisionReport,
+  provisionLogins,
+  type SecretStore,
+  scramVerifier,
+} from '../../src/db/provision-logins';
 import { pgClientConfig } from '../../src/db/tls';
 import { adminUrl, withAdmin } from '../helpers/database';
 import { revertThrough } from '../helpers/migration-history';
@@ -45,13 +56,14 @@ const base = new URL(adminUrl());
  * expects a wrong or replaced password to be REFUSED cannot mean anything there. CI's PostgreSQL service checks passwords, and CI must never skip these tests.
  */
 let passwordsChecked = false;
-const whenPasswordsAreChecked = (name: string, work: () => Promise<void>) => it(name, async () => {
-  if (!passwordsChecked) {
-    process.stderr.write(`[jest] SKIPPED on a trust-authentication cluster (passwords are not checked): ${name}\n`);
-    return;
-  }
-  await work();
-});
+const whenPasswordsAreChecked = (name: string, work: () => Promise<void>) =>
+  it(name, async () => {
+    if (!passwordsChecked) {
+      process.stderr.write(`[jest] SKIPPED on a trust-authentication cluster (passwords are not checked): ${name}\n`);
+      return;
+    }
+    await work();
+  });
 
 beforeAll(async () => {
   const probe = `prov_probe_${randomBytes(3).toString('hex')}`;
@@ -62,13 +74,18 @@ beforeAll(async () => {
   const wrong = new URL(base);
   wrong.username = probe;
   wrong.password = 'wrong-password';
-  const outcome = await asLogin(wrong.toString(), (c) => c.query('SELECT 1')).then(() => 'connected', (e: { code?: string }) => e.code);
+  const outcome = await asLogin(wrong.toString(), (c) => c.query('SELECT 1')).then(
+    () => 'connected',
+    (e: { code?: string }) => e.code,
+  );
   passwordsChecked = outcome === '28P01';
   if (process.env.CI && !passwordsChecked) throw new Error('CI must run this suite on a cluster that checks passwords (got: ' + String(outcome) + ')');
   await withAdmin(adminUrl(), async (c) => {
     await c.query('SELECT pg_advisory_lock($1)', [ROLE_LOCK]);
     for (const role of GROUPS) {
-      await c.query(`DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${role}') THEN CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS; END IF; END $$`);
+      await c.query(
+        `DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${role}') THEN CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS; END IF; END $$`,
+      );
     }
     await c.query('SELECT pg_advisory_unlock($1)', [ROLE_LOCK]);
   });
@@ -129,17 +146,30 @@ describe('provisioning on a database nothing has been applied to', () => {
     const report = await provisionLogins(f.options);
     expect(failing(report)).toEqual([]);
     expect(report.ok).toBe(true);
-    expect(report.logins.map((l) => [l.kind, l.action])).toEqual([['migrator', 'created'], ['app', 'created'], ['verifier', 'created'], ['worker', 'created']]);
+    expect(report.logins.map((l) => [l.kind, l.action])).toEqual([
+      ['migrator', 'created'],
+      ['app', 'created'],
+      ['verifier', 'created'],
+      ['worker', 'created'],
+    ]);
     expect(report.checks.find((c) => c.name === 'group privileges')).toMatchObject({ skipped: true, ok: true }); // nothing to read back before the migrations
 
     // Every stored string signs in as the login it names (a real connection, not a string check).
-    for (const [kind, user] of [['app', f.names.app], ['verifier', f.names.verifier], ['migrator', f.names.migrator], ['worker', f.names.worker]] as const) {
+    for (const [kind, user] of [
+      ['app', f.names.app],
+      ['verifier', f.names.verifier],
+      ['migrator', f.names.migrator],
+      ['worker', f.names.worker],
+    ] as const) {
       const value = f.store.values.get(f.options.secrets[kind])!;
       expect(await asLogin(value, async (c) => (await c.query('SELECT current_user AS u')).rows[0].u)).toBe(user);
     }
 
     // The real flow: the migrator, a login that is not a superuser and not CREATEROLE, applies every migration.
-    const owner = await withAdmin(f.options.adminUrl, async (c) => (await c.query('SELECT pg_get_userbyid(datdba) AS o FROM pg_database WHERE datname = current_database()')).rows[0].o);
+    const owner = await withAdmin(
+      f.options.adminUrl,
+      async (c) => (await c.query('SELECT pg_get_userbyid(datdba) AS o FROM pg_database WHERE datname = current_database()')).rows[0].o,
+    );
     expect(owner).toBe(f.names.migrator);
     await asLogin(f.store.values.get('secret-migrator')!, async (c) => {
       expect((await c.query('SELECT rolsuper, rolcreaterole FROM pg_roles WHERE rolname = current_user')).rows[0]).toEqual({ rolsuper: false, rolcreaterole: false });
@@ -150,7 +180,11 @@ describe('provisioning on a database nothing has been applied to', () => {
     const after = await provisionLogins({ ...f.options, requireMigrated: true });
     expect(failing(after)).toEqual([]);
     const privileges = after.checks.filter((c) => /login privileges$/.test(c.name));
-    expect(privileges.map((c) => [c.name, c.ok, c.skipped ?? false])).toEqual([['app login privileges', true, false], ['verifier login privileges', true, false], ['worker login privileges', true, false]]);
+    expect(privileges.map((c) => [c.name, c.ok, c.skipped ?? false])).toEqual([
+      ['app login privileges', true, false],
+      ['verifier login privileges', true, false],
+      ['worker login privileges', true, false],
+    ]);
     expect(after.logins.every((l) => l.action === 'unchanged')).toBe(true);
   });
 
@@ -159,11 +193,16 @@ describe('provisioning on a database nothing has been applied to', () => {
     const first = await provisionLogins(f.options);
     expect(failing(first)).toEqual([]);
     const kinds = ['migrator', 'app', 'verifier', 'worker'] as const satisfies readonly LoginKind[];
-    const read = (kind: LoginKind) => withAdmin(f.options.adminUrl, async (c) => (await c.query('SELECT rolconfig, rolconnlimit FROM pg_roles WHERE rolname = $1', [f.names[kind]])).rows[0]);
+    const read = (kind: LoginKind) =>
+      withAdmin(f.options.adminUrl, async (c) => (await c.query('SELECT rolconfig, rolconnlimit FROM pg_roles WHERE rolname = $1', [f.names[kind]])).rows[0]);
     for (const kind of kinds) {
       const row = await read(kind);
       expect(row.rolconnlimit).toBe(LOGIN_LIMITS[kind].connectionLimit);
-      expect([...row.rolconfig].sort()).toEqual(Object.entries(LOGIN_LIMITS[kind].settings).map(([k, v]) => `${k}=${v}`).sort());
+      expect([...row.rolconfig].sort()).toEqual(
+        Object.entries(LOGIN_LIMITS[kind].settings)
+          .map(([k, v]) => `${k}=${v}`)
+          .sort(),
+      );
     }
     // A live session of the application login really carries the timeouts (not only the catalog row).
     await asLogin(f.store.values.get('secret-app')!, async (c) => {
@@ -171,7 +210,9 @@ describe('provisioning on a database nothing has been applied to', () => {
       expect((await c.query('SHOW idle_in_transaction_session_timeout')).rows[0].idle_in_transaction_session_timeout).toBe('15s');
     });
     // PUBLIC no longer holds TEMPORARY on the database, so a login cannot create a temporary table.
-    expect(await withAdmin(f.options.adminUrl, async (c) => (await c.query("SELECT has_database_privilege('public', current_database(), 'TEMPORARY') AS ok")).rows[0].ok)).toBe(false);
+    expect(await withAdmin(f.options.adminUrl, async (c) => (await c.query("SELECT has_database_privilege('public', current_database(), 'TEMPORARY') AS ok")).rows[0].ok)).toBe(
+      false,
+    );
     await asLogin(f.store.values.get('secret-app')!, async (c) => {
       await expect(c.query('CREATE TEMPORARY TABLE zz_probe (a int)')).rejects.toMatchObject({ code: '42501' });
     });
@@ -189,29 +230,33 @@ describe('provisioning on a database nothing has been applied to', () => {
     expect((await read('app')).rolconnlimit).toBe(LOGIN_LIMITS.app.connectionLimit);
   });
 
-  whenPasswordsAreChecked('revokes TEMPORARY from PUBLIC when the administrator is NOT a superuser and does not own the database (the RDS and CI rehearsal shape), and repairs it again', async () => {
-    const f = await fixture();
-    const admin = `prov_adm_${f.database.slice(-8)}`;
-    logins.push(admin);
-    await withAdmin(adminUrl(), async (c) => {
-      await c.query(`CREATE ROLE ${admin} LOGIN NOSUPERUSER CREATEDB CREATEROLE PASSWORD 'adm-test-only'`);
-      await c.query(`ALTER DATABASE ${f.database} OWNER TO ${admin}`);
-      // The groups are cluster-wide and were made by the superuser here; on a fresh cluster the administrator creates them and so holds ADMIN on each.
-      for (const group of PRIVILEGE_GROUPS) await c.query(`GRANT ${group} TO ${admin} WITH ADMIN OPTION`);
-    });
-    const url = new URL(f.options.adminUrl);
-    url.username = admin;
-    url.password = 'adm-test-only';
-    const options = { ...f.options, adminUrl: url.toString() };
-    const temporary = () => withAdmin(f.options.adminUrl, async (c) => (await c.query("SELECT has_database_privilege('public', current_database(), 'TEMPORARY') AS ok")).rows[0].ok as boolean);
-    expect(failing(await provisionLogins(options))).toEqual([]);
-    expect(await temporary()).toBe(false);
-    // Tampered by the owner (the migrator now), then repaired by a run that is not the owner and not a superuser.
-    await withAdmin(f.options.adminUrl, (c) => c.query(`GRANT TEMPORARY ON DATABASE ${f.database} TO PUBLIC`));
-    expect(await temporary()).toBe(true);
-    expect(failing(await provisionLogins(options))).toEqual([]);
-    expect(await temporary()).toBe(false);
-  });
+  whenPasswordsAreChecked(
+    'revokes TEMPORARY from PUBLIC when the administrator is NOT a superuser and does not own the database (the RDS and CI rehearsal shape), and repairs it again',
+    async () => {
+      const f = await fixture();
+      const admin = `prov_adm_${f.database.slice(-8)}`;
+      logins.push(admin);
+      await withAdmin(adminUrl(), async (c) => {
+        await c.query(`CREATE ROLE ${admin} LOGIN NOSUPERUSER CREATEDB CREATEROLE PASSWORD 'adm-test-only'`);
+        await c.query(`ALTER DATABASE ${f.database} OWNER TO ${admin}`);
+        // The groups are cluster-wide and were made by the superuser here; on a fresh cluster the administrator creates them and so holds ADMIN on each.
+        for (const group of PRIVILEGE_GROUPS) await c.query(`GRANT ${group} TO ${admin} WITH ADMIN OPTION`);
+      });
+      const url = new URL(f.options.adminUrl);
+      url.username = admin;
+      url.password = 'adm-test-only';
+      const options = { ...f.options, adminUrl: url.toString() };
+      const temporary = () =>
+        withAdmin(f.options.adminUrl, async (c) => (await c.query("SELECT has_database_privilege('public', current_database(), 'TEMPORARY') AS ok")).rows[0].ok as boolean);
+      expect(failing(await provisionLogins(options))).toEqual([]);
+      expect(await temporary()).toBe(false);
+      // Tampered by the owner (the migrator now), then repaired by a run that is not the owner and not a superuser.
+      await withAdmin(f.options.adminUrl, (c) => c.query(`GRANT TEMPORARY ON DATABASE ${f.database} TO PUBLIC`));
+      expect(await temporary()).toBe(true);
+      expect(failing(await provisionLogins(options))).toEqual([]);
+      expect(await temporary()).toBe(false);
+    },
+  );
 
   it('the logins cannot do what the ledger forbids them (live attempts, not catalog reads)', async () => {
     const f = await fixture();
@@ -233,7 +278,7 @@ describe('provisioning on a database nothing has been applied to', () => {
     });
   });
 
-  it('the provisioned worker login can run the queue\'s functions and nothing else (live attempts)', async () => {
+  it("the provisioned worker login can run the queue's functions and nothing else (live attempts)", async () => {
     const f = await fixture();
     await provisionLogins(f.options);
     await asLogin(f.store.values.get('secret-migrator')!, (c) => migrateUp(c));
@@ -242,8 +287,17 @@ describe('provisioning on a database nothing has been applied to', () => {
       await expect(c.query('SELECT outbox_relay(1)')).resolves.toBeDefined();
       await expect(c.query('SELECT * FROM outbox_stats()')).resolves.toBeDefined();
       await expect(c.query('SELECT job_schedule_tick()')).resolves.toBeDefined();
-      for (const sql of ["INSERT INTO jobs (tenant_id, type, idempotency_key, requested_by) VALUES ('t', 'x.y', 'k', 'u')", 'SELECT * FROM patients', 'SELECT * FROM reports', 'SELECT * FROM ledger_events', 'SELECT * FROM tenants',
-        "SELECT ledger_append('00000000-0000-0000-0000-000000000000', 'x', 'y', gen_random_uuid(), 'z', 1::smallint)", "SELECT outbox_append('report.file-committed', gen_random_uuid())", 'SELECT * FROM uploads_sweep(\'t\', 0, true)', 'SET ROLE telesphoros_jobs']) {
+      for (const sql of [
+        "INSERT INTO jobs (tenant_id, type, idempotency_key, requested_by) VALUES ('t', 'x.y', 'k', 'u')",
+        'SELECT * FROM patients',
+        'SELECT * FROM reports',
+        'SELECT * FROM ledger_events',
+        'SELECT * FROM tenants',
+        "SELECT ledger_append('00000000-0000-0000-0000-000000000000', 'x', 'y', gen_random_uuid(), 'z', 1::smallint)",
+        "SELECT outbox_append('report.file-committed', gen_random_uuid())",
+        "SELECT * FROM uploads_sweep('t', 0, true)",
+        'SET ROLE telesphoros_jobs',
+      ]) {
         await expect(c.query(sql)).rejects.toMatchObject({ code: '42501' });
       }
     });
@@ -309,7 +363,12 @@ describe('what it refuses to call ready', () => {
     expect((await provisionLogins(f.options)).ok).toBe(true); // control: the same run is ready once the extra membership is gone
   });
 
-  it.each([['CREATEDB', 'NOCREATEDB'], ['CREATEROLE', 'NOCREATEROLE'], ['BYPASSRLS', 'NOBYPASSRLS'], ['REPLICATION', 'NOREPLICATION']])('a login given %s fails the check, and passes again once it is taken away', async (grant, revoke) => {
+  it.each([
+    ['CREATEDB', 'NOCREATEDB'],
+    ['CREATEROLE', 'NOCREATEROLE'],
+    ['BYPASSRLS', 'NOBYPASSRLS'],
+    ['REPLICATION', 'NOREPLICATION'],
+  ])('a login given %s fails the check, and passes again once it is taken away', async (grant, revoke) => {
     const f = await fixture();
     await provisionLogins(f.options);
     await withAdmin(f.options.adminUrl, (c) => c.query(`ALTER ROLE ${f.names.app} ${grant}`));
@@ -354,7 +413,11 @@ describe('what it refuses to call ready', () => {
     for (const [grant, revoke, expected] of [
       [`GRANT SELECT ON patients TO ${f.names.worker}`, `REVOKE SELECT ON patients FROM ${f.names.worker}`, /worker login privileges: .*patients \(CAN read\)/],
       [`GRANT INSERT ON jobs TO ${f.names.worker}`, `REVOKE INSERT ON jobs FROM ${f.names.worker}`, /worker login privileges: .*jobs \(CAN write\)/],
-      [`GRANT EXECUTE ON FUNCTION job_enqueue(text, jsonb, text, timestamptz, integer) TO ${f.names.worker}`, `REVOKE EXECUTE ON FUNCTION job_enqueue(text, jsonb, text, timestamptz, integer) FROM ${f.names.worker}`, /worker login privileges: .*job_enqueue/],
+      [
+        `GRANT EXECUTE ON FUNCTION job_enqueue(text, jsonb, text, timestamptz, integer) TO ${f.names.worker}`,
+        `REVOKE EXECUTE ON FUNCTION job_enqueue(text, jsonb, text, timestamptz, integer) FROM ${f.names.worker}`,
+        /worker login privileges: .*job_enqueue/,
+      ],
     ] as const) {
       await withAdmin(f.options.adminUrl, (c) => c.query(grant));
       const bad = await provisionLogins({ ...f.options, requireMigrated: true });
@@ -367,7 +430,12 @@ describe('what it refuses to call ready', () => {
 
   it('a secret that cannot be written stops the run before any role is created', async () => {
     const f = await fixture();
-    const broken: SecretStore = { get: async () => undefined, put: async () => { throw new Error('the secret store is down'); } };
+    const broken: SecretStore = {
+      get: async () => undefined,
+      put: async () => {
+        throw new Error('the secret store is down');
+      },
+    };
     await expect(provisionLogins({ ...f.options, store: broken })).rejects.toThrow(/secret store is down/);
     const roles = await withAdmin(f.options.adminUrl, async (c) => (await c.query('SELECT rolname FROM pg_roles WHERE rolname = ANY($1)', [Object.values(f.names)])).rows);
     expect(roles).toEqual([]); // nothing was created whose password nobody holds
@@ -405,20 +473,48 @@ describe('the session issuer login (DATA-01 slice 1, migration 0028)', () => {
       expect((await c.query(`SELECT has_function_privilege(current_user, 'tenant_capability_issue(text,text,bigint,text,bytea,text)', 'EXECUTE') AS ok`)).rows[0].ok).toBe(true);
       expect((await c.query(`SELECT has_function_privilege(current_user, 'tenant_capability_issue_current(text,text,text,bytea,text)', 'EXECUTE') AS ok`)).rows[0].ok).toBe(true);
       expect((await c.query(`SELECT has_function_privilege(current_user, 'app_capability_version()', 'EXECUTE') AS ok`)).rows[0].ok).toBe(false); // the issuer binds nothing
-      for (const sql of ['SELECT * FROM patients', 'SELECT * FROM tenant_capabilities', 'SELECT * FROM tenant_memberships', 'SELECT ledger_append(NULL, NULL, NULL, NULL, NULL, NULL)']) {
-        expect([sql, await c.query(sql).then(() => 'ok', (e: { code?: string }) => e.code)]).toEqual([sql, '42501']);
+      for (const sql of [
+        'SELECT * FROM patients',
+        'SELECT * FROM tenant_capabilities',
+        'SELECT * FROM tenant_memberships',
+        'SELECT ledger_append(NULL, NULL, NULL, NULL, NULL, NULL)',
+      ]) {
+        expect([
+          sql,
+          await c.query(sql).then(
+            () => 'ok',
+            (e: { code?: string }) => e.code,
+          ),
+        ]).toEqual([sql, '42501']);
       }
     });
     // The application, verifier and worker logins cannot mint (live attempt, not only the catalog), with either function.
     for (const kind of ['app', 'verifier', 'worker'] as const) {
-      for (const sql of [`SELECT * FROM tenant_capability_issue('t', 's', 1, 'request', sha256('x'), NULL)`, `SELECT * FROM tenant_capability_issue_current('t', 's', 'request', sha256('x'), NULL)`]) {
-        const outcome = await asLogin(f.store.values.get(f.options.secrets[kind])!, (c) => c.query(sql).then(() => 'ok', (e: { code?: string }) => e.code));
+      for (const sql of [
+        `SELECT * FROM tenant_capability_issue('t', 's', 1, 'request', sha256('x'), NULL)`,
+        `SELECT * FROM tenant_capability_issue_current('t', 's', 'request', sha256('x'), NULL)`,
+      ]) {
+        const outcome = await asLogin(f.store.values.get(f.options.secrets[kind])!, (c) =>
+          c.query(sql).then(
+            () => 'ok',
+            (e: { code?: string }) => e.code,
+          ),
+        );
         expect([kind, sql, outcome]).toEqual([kind, sql, '42501']);
       }
     }
     // The accessor goes to the roles that bind (app, worker) and not to the verifier or the issuer (positive and negative in the same run).
-    for (const [kind, expected] of [['app', 'ok'], ['worker', 'ok'], ['verifier', '42501']] as const) {
-      const outcome = await asLogin(f.store.values.get(f.options.secrets[kind])!, (c) => c.query('SELECT app_capability_version()').then(() => 'ok', (e: { code?: string }) => e.code));
+    for (const [kind, expected] of [
+      ['app', 'ok'],
+      ['worker', 'ok'],
+      ['verifier', '42501'],
+    ] as const) {
+      const outcome = await asLogin(f.store.values.get(f.options.secrets[kind])!, (c) =>
+        c.query('SELECT app_capability_version()').then(
+          () => 'ok',
+          (e: { code?: string }) => e.code,
+        ),
+      );
       expect([kind, outcome]).toEqual([kind, expected]);
     }
   });
@@ -440,14 +536,42 @@ describe('the session issuer login (DATA-01 slice 1, migration 0028)', () => {
     await asLogin(f.store.values.get('secret-migrator')!, (c) => migrateUp(c));
     expect((await provisionLogins({ ...withIssuer(f), requireMigrated: true })).ok).toBe(true); // control
     for (const [grant, revoke, expected] of [
-      [`GRANT EXECUTE ON FUNCTION tenant_capability_issue(text,text,bigint,text,bytea,text) TO ${f.names.app}`, `REVOKE EXECUTE ON FUNCTION tenant_capability_issue(text,text,bigint,text,bytea,text) FROM ${f.names.app}`, /app login privileges: .*tenant_capability_issue \(CAN execute\)/],
-      [`GRANT SELECT ON tenant_capabilities TO ${f.names.issuer}`, `REVOKE SELECT ON tenant_capabilities FROM ${f.names.issuer}`, /issuer login privileges: .*tenant_capabilities \(CAN read\)/],
-      [`GRANT EXECUTE ON FUNCTION tenant_capability_issue_current(text,text,text,bytea,text) TO ${f.names.app}`, `REVOKE EXECUTE ON FUNCTION tenant_capability_issue_current(text,text,text,bytea,text) FROM ${f.names.app}`, /app login privileges: .*tenant_capability_issue_current \(CAN execute\)/],
-      [`GRANT EXECUTE ON FUNCTION tenant_capability_issue_current(text,text,text,bytea,text) TO ${f.names.worker}`, `REVOKE EXECUTE ON FUNCTION tenant_capability_issue_current(text,text,text,bytea,text) FROM ${f.names.worker}`, /worker login privileges: .*tenant_capability_issue_current \(CAN execute\)/],
+      [
+        `GRANT EXECUTE ON FUNCTION tenant_capability_issue(text,text,bigint,text,bytea,text) TO ${f.names.app}`,
+        `REVOKE EXECUTE ON FUNCTION tenant_capability_issue(text,text,bigint,text,bytea,text) FROM ${f.names.app}`,
+        /app login privileges: .*tenant_capability_issue \(CAN execute\)/,
+      ],
+      [
+        `GRANT SELECT ON tenant_capabilities TO ${f.names.issuer}`,
+        `REVOKE SELECT ON tenant_capabilities FROM ${f.names.issuer}`,
+        /issuer login privileges: .*tenant_capabilities \(CAN read\)/,
+      ],
+      [
+        `GRANT EXECUTE ON FUNCTION tenant_capability_issue_current(text,text,text,bytea,text) TO ${f.names.app}`,
+        `REVOKE EXECUTE ON FUNCTION tenant_capability_issue_current(text,text,text,bytea,text) FROM ${f.names.app}`,
+        /app login privileges: .*tenant_capability_issue_current \(CAN execute\)/,
+      ],
+      [
+        `GRANT EXECUTE ON FUNCTION tenant_capability_issue_current(text,text,text,bytea,text) TO ${f.names.worker}`,
+        `REVOKE EXECUTE ON FUNCTION tenant_capability_issue_current(text,text,text,bytea,text) FROM ${f.names.worker}`,
+        /worker login privileges: .*tenant_capability_issue_current \(CAN execute\)/,
+      ],
       // (the app login holds app_capability_version through its group, so this one is revoked from the group)
-      [`REVOKE EXECUTE ON FUNCTION app_capability_version() FROM telesphoros_app`, `GRANT EXECUTE ON FUNCTION app_capability_version() TO telesphoros_app`, /app login privileges: .*app_capability_version \(cannot execute\)/],
-      [`GRANT EXECUTE ON FUNCTION app_capability_version() TO ${f.names.verifier}`, `REVOKE EXECUTE ON FUNCTION app_capability_version() FROM ${f.names.verifier}`, /verifier login privileges: .*app_capability_version \(CAN execute\)/],
-      [`GRANT EXECUTE ON FUNCTION app_capability_version() TO ${f.names.issuer}`, `REVOKE EXECUTE ON FUNCTION app_capability_version() FROM ${f.names.issuer}`, /issuer login privileges: .*app_capability_version \(CAN execute\)/],
+      [
+        `REVOKE EXECUTE ON FUNCTION app_capability_version() FROM telesphoros_app`,
+        `GRANT EXECUTE ON FUNCTION app_capability_version() TO telesphoros_app`,
+        /app login privileges: .*app_capability_version \(cannot execute\)/,
+      ],
+      [
+        `GRANT EXECUTE ON FUNCTION app_capability_version() TO ${f.names.verifier}`,
+        `REVOKE EXECUTE ON FUNCTION app_capability_version() FROM ${f.names.verifier}`,
+        /verifier login privileges: .*app_capability_version \(CAN execute\)/,
+      ],
+      [
+        `GRANT EXECUTE ON FUNCTION app_capability_version() TO ${f.names.issuer}`,
+        `REVOKE EXECUTE ON FUNCTION app_capability_version() FROM ${f.names.issuer}`,
+        /issuer login privileges: .*app_capability_version \(CAN execute\)/,
+      ],
     ] as const) {
       await withAdmin(f.options.adminUrl, (c) => c.query(grant));
       const bad = await provisionLogins({ ...withIssuer(f), requireMigrated: true });
@@ -467,7 +591,12 @@ describe('a database that has the capability but not yet migration 0031', () => 
     await asLogin(f.store.values.get('secret-migrator')!, (c) => migrateUp(c));
     const through = revertThrough('tenant_capability_issue_current'); // 0031 and everything above it (0032 to 0034: functions, policies and triggers only); 0028 stays
     expect(await withAdmin(f.options.adminUrl, (c) => migrateDown(c, through.steps))).toEqual(through.reverted);
-    expect(await withAdmin(f.options.adminUrl, async (c) => (await c.query(`SELECT count(*)::int AS n FROM pg_proc WHERE proname IN ('tenant_capability_issue_current', 'app_capability_version')`)).rows[0].n)).toBe(0);
+    expect(
+      await withAdmin(
+        f.options.adminUrl,
+        async (c) => (await c.query(`SELECT count(*)::int AS n FROM pg_proc WHERE proname IN ('tenant_capability_issue_current', 'app_capability_version')`)).rows[0].n,
+      ),
+    ).toBe(0);
     expect(failing(await provisionLogins(withIssuer))).toEqual([]); // no "missing" complaint about functions that do not exist yet
     await asLogin(f.store.values.get('secret-migrator')!, (c) => migrateUp(c));
     expect(failing(await provisionLogins(withIssuer))).toEqual([]);

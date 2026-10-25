@@ -154,7 +154,12 @@ export class SubprocessReportReader implements ReportReader {
         if (killReason) return finish({ ok: false, ...killReason, fields: { signal, durationMs: Date.now() - started } });
         if (code !== 0) {
           const safe = safeReaderError(errBuffer.toString('utf8'));
-          return finish({ ok: false, reason: 'worker-error', cause: 'exit', fields: { exitCode: code, signal, stderrBytes, durationMs: Date.now() - started, textChars, ...safe } });
+          return finish({
+            ok: false,
+            reason: 'worker-error',
+            cause: 'exit',
+            fields: { exitCode: code, signal, stderrBytes, durationMs: Date.now() - started, textChars, ...safe },
+          });
         }
         finish({ ok: true, stdout: Buffer.concat(out) });
       });

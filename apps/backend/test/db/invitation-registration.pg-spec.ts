@@ -41,7 +41,13 @@ async function organization(): Promise<{ tenant: string; admin: string }> {
   return { tenant, admin };
 }
 const keyed = (t: string, a: string, digest: Buffer, roles: string[], request: { id: string; hash: string } | null) =>
-  asApplication(t, a, async (c) => (await c.query('SELECT invitation_create_keyed($1, $2, $3::text[], $4, $5) AS id', [digest, 'x***@y.test', roles, request?.id ?? null, request?.hash ?? null])).rows[0].id as string);
+  asApplication(
+    t,
+    a,
+    async (c) =>
+      (await c.query('SELECT invitation_create_keyed($1, $2, $3::text[], $4, $5) AS id', [digest, 'x***@y.test', roles, request?.id ?? null, request?.hash ?? null])).rows[0]
+        .id as string,
+  );
 const hash = (c: string) => c.repeat(64);
 
 describe('invitation_create_keyed', () => {
@@ -60,7 +66,7 @@ describe('invitation_create_keyed', () => {
     await expect(keyed(tenant, admin, Buffer.alloc(32, 3), ['reader'], { id, hash: hash('b') })).rejects.toMatchObject({ message: 'request-id-reused' });
   });
 
-  it('keeps one administrator\'s ids apart from another\'s, and without an id acts as invitation_create does (an unkeyed repeat is refused as pending)', async () => {
+  it("keeps one administrator's ids apart from another's, and without an id acts as invitation_create does (an unkeyed repeat is refused as pending)", async () => {
     const { tenant, admin } = await organization();
     const second = `admin-${randomUUID().slice(0, 8)}`;
     await owner((c) => new PgMembershipAdmin(c).grant({ tenantId: tenant, sub: second, roles: ['admin'] as never, by: 'ops', reason: 'test' }));
@@ -74,12 +80,16 @@ describe('invitation_create_keyed', () => {
   it('is for an active administrator only, like the function it extends', async () => {
     const { tenant } = await organization();
     await expect(keyed(tenant, 'someone-else', Buffer.alloc(32, 5), ['reader'], { id: randomUUID(), hash: hash('a') })).rejects.toMatchObject({ message: 'not-administrator' });
-    await expect(asApplication(tenant, 'x', (c) => c.query('SELECT invitation_create_keyed($1, $2, $3::text[], $4, $5)', [Buffer.alloc(32), 'x', ['reader'], randomUUID(), 'zz']))).rejects.toThrow();
+    await expect(
+      asApplication(tenant, 'x', (c) => c.query('SELECT invitation_create_keyed($1, $2, $3::text[], $4, $5)', [Buffer.alloc(32), 'x', ['reader'], randomUUID(), 'zz'])),
+    ).rejects.toThrow();
   });
 
   it('is not callable by PUBLIC', async () => {
-    const rows = await owner((c) => c.query(`SELECT has_function_privilege('public', 'invitation_create_keyed(bytea, text, text[], uuid, text)', 'EXECUTE') AS pub,
-      has_function_privilege('telesphoros_app', 'invitation_create_keyed(bytea, text, text[], uuid, text)', 'EXECUTE') AS app`));
+    const rows = await owner((c) =>
+      c.query(`SELECT has_function_privilege('public', 'invitation_create_keyed(bytea, text, text[], uuid, text)', 'EXECUTE') AS pub,
+      has_function_privilege('telesphoros_app', 'invitation_create_keyed(bytea, text, text[], uuid, text)', 'EXECUTE') AS app`),
+    );
     expect(rows.rows[0]).toEqual({ pub: false, app: true });
   });
 });
@@ -89,7 +99,16 @@ describe('the retry identity of an invitation', () => {
     const { tenant, admin } = await organization();
     const request = { id: randomUUID(), hash: hash('c') };
     await keyed(tenant, admin, Buffer.alloc(32, 6), ['reader'], request);
-    await expect(owner((c) => c.query('UPDATE invitations SET creation_request_id = gen_random_uuid() WHERE creation_request_id = $1', [request.id]))).rejects.toThrow(/retry identity/);
-    await expect(owner((c) => c.query(`INSERT INTO invitations (tenant_id, email_digest, email_hint, expires_at, created_by, creation_request_id) VALUES ($1, $2, 'x***@y.test', now() + interval '1 day', 'ops', gen_random_uuid())`, [tenant, Buffer.alloc(32, 7)]))).rejects.toThrow(/invitations_creation_request_pair/);
+    await expect(owner((c) => c.query('UPDATE invitations SET creation_request_id = gen_random_uuid() WHERE creation_request_id = $1', [request.id]))).rejects.toThrow(
+      /retry identity/,
+    );
+    await expect(
+      owner((c) =>
+        c.query(
+          `INSERT INTO invitations (tenant_id, email_digest, email_hint, expires_at, created_by, creation_request_id) VALUES ($1, $2, 'x***@y.test', now() + interval '1 day', 'ops', gen_random_uuid())`,
+          [tenant, Buffer.alloc(32, 7)],
+        ),
+      ),
+    ).rejects.toThrow(/invitations_creation_request_pair/);
   });
 });

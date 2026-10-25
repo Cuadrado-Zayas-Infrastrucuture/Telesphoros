@@ -35,16 +35,28 @@ beforeAll(async () => {
   await withAdmin(adminUrl(), async (c) => {
     await c.query('SELECT pg_advisory_lock($1)', [ROLE_LOCK]);
     for (const role of ['telesphoros_app', ...DEFINER_ROLES, 'telesphoros_ledger_verifier', 'telesphoros_ledger_operator']) {
-      await c.query(`DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${role}') THEN CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS; END IF; END $$`);
+      await c.query(
+        `DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${role}') THEN CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS; END IF; END $$`,
+      );
     }
     for (const login of [WITH_MEMBERSHIP, WITHOUT_MEMBERSHIP]) {
-      await c.query(`DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${login}') THEN CREATE ROLE ${login} LOGIN PASSWORD '${PASSWORD}' NOSUPERUSER NOCREATEDB CREATEROLE NOBYPASSRLS; END IF; END $$`);
+      await c.query(
+        `DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${login}') THEN CREATE ROLE ${login} LOGIN PASSWORD '${PASSWORD}' NOSUPERUSER NOCREATEDB CREATEROLE NOBYPASSRLS; END IF; END $$`,
+      );
     }
     // The administrator's one-time step: let the migrator act as the definer roles (SET only; it inherits nothing from them).
-    await c.query(`DO $$ BEGIN IF NOT pg_has_role('${WITH_MEMBERSHIP}', 'telesphoros_ledger', 'SET') THEN GRANT telesphoros_ledger TO ${WITH_MEMBERSHIP} WITH SET TRUE, INHERIT FALSE; END IF; END $$`);
-    await c.query(`DO $$ BEGIN IF NOT pg_has_role('${WITH_MEMBERSHIP}', 'telesphoros_redactor', 'SET') THEN GRANT telesphoros_redactor TO ${WITH_MEMBERSHIP} WITH SET TRUE, INHERIT FALSE; END IF; END $$`);
-    await c.query(`DO $$ BEGIN IF NOT pg_has_role('${WITH_MEMBERSHIP}', 'telesphoros_jobs', 'SET') THEN GRANT telesphoros_jobs TO ${WITH_MEMBERSHIP} WITH SET TRUE, INHERIT FALSE; END IF; END $$`);
-    await c.query(`DO $$ BEGIN IF NOT pg_has_role('${WITH_MEMBERSHIP}', 'telesphoros_capability', 'SET') THEN GRANT telesphoros_capability TO ${WITH_MEMBERSHIP} WITH SET TRUE, INHERIT FALSE; END IF; END $$`);
+    await c.query(
+      `DO $$ BEGIN IF NOT pg_has_role('${WITH_MEMBERSHIP}', 'telesphoros_ledger', 'SET') THEN GRANT telesphoros_ledger TO ${WITH_MEMBERSHIP} WITH SET TRUE, INHERIT FALSE; END IF; END $$`,
+    );
+    await c.query(
+      `DO $$ BEGIN IF NOT pg_has_role('${WITH_MEMBERSHIP}', 'telesphoros_redactor', 'SET') THEN GRANT telesphoros_redactor TO ${WITH_MEMBERSHIP} WITH SET TRUE, INHERIT FALSE; END IF; END $$`,
+    );
+    await c.query(
+      `DO $$ BEGIN IF NOT pg_has_role('${WITH_MEMBERSHIP}', 'telesphoros_jobs', 'SET') THEN GRANT telesphoros_jobs TO ${WITH_MEMBERSHIP} WITH SET TRUE, INHERIT FALSE; END IF; END $$`,
+    );
+    await c.query(
+      `DO $$ BEGIN IF NOT pg_has_role('${WITH_MEMBERSHIP}', 'telesphoros_capability', 'SET') THEN GRANT telesphoros_capability TO ${WITH_MEMBERSHIP} WITH SET TRUE, INHERIT FALSE; END IF; END $$`,
+    );
     await c.query('SELECT pg_advisory_unlock($1)', [ROLE_LOCK]);
   });
 });
@@ -75,17 +87,36 @@ describe('migrations run for a migrator that is not a superuser', () => {
     await asMigrator(WITH_MEMBERSHIP, db, async (c) => {
       expect((await c.query(`SELECT rolsuper FROM pg_roles WHERE rolname = current_user`)).rows[0].rolsuper).toBe(false); // control
       await migrateUp(c);
-      const owners = (await c.query(`SELECT proname, pg_get_userbyid(proowner) AS owner FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname IN ('ledger_append', 'ledger_append_internal', 'ledger_record_checkpoint', 'redact_event_note', 'refuse_mutation')`)).rows;
+      const owners = (
+        await c.query(
+          `SELECT proname, pg_get_userbyid(proowner) AS owner FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname IN ('ledger_append', 'ledger_append_internal', 'ledger_record_checkpoint', 'redact_event_note', 'refuse_mutation')`,
+        )
+      ).rows;
       expect(Object.fromEntries(owners.map((r) => [r.proname, r.owner]))).toEqual({
-        ledger_append: 'telesphoros_ledger', ledger_append_internal: 'telesphoros_ledger', ledger_record_checkpoint: 'telesphoros_ledger',
-        redact_event_note: 'telesphoros_redactor', refuse_mutation: WITH_MEMBERSHIP,
+        ledger_append: 'telesphoros_ledger',
+        ledger_append_internal: 'telesphoros_ledger',
+        ledger_record_checkpoint: 'telesphoros_ledger',
+        redact_event_note: 'telesphoros_redactor',
+        refuse_mutation: WITH_MEMBERSHIP,
       });
-      const tables = (await c.query(`SELECT relname, pg_get_userbyid(relowner) AS owner FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relname IN ('ledger_events', 'ledger_heads', 'ledger_checkpoints', 'report_captures', 'event_notes')`)).rows;
+      const tables = (
+        await c.query(
+          `SELECT relname, pg_get_userbyid(relowner) AS owner FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relname IN ('ledger_events', 'ledger_heads', 'ledger_checkpoints', 'report_captures', 'event_notes')`,
+        )
+      ).rows;
       expect(Object.fromEntries(tables.map((r) => [r.relname, r.owner]))).toEqual({
-        ledger_events: 'telesphoros_ledger', ledger_heads: 'telesphoros_ledger', ledger_checkpoints: 'telesphoros_ledger', report_captures: WITH_MEMBERSHIP, event_notes: WITH_MEMBERSHIP,
+        ledger_events: 'telesphoros_ledger',
+        ledger_heads: 'telesphoros_ledger',
+        ledger_checkpoints: 'telesphoros_ledger',
+        report_captures: WITH_MEMBERSHIP,
+        event_notes: WITH_MEMBERSHIP,
       });
       // CREATE on the schema was only granted to the owners while a migration ran.
-      const create = (await c.query(`SELECT has_schema_privilege('telesphoros_ledger', 'public', 'CREATE') AS ledger, has_schema_privilege('telesphoros_redactor', 'public', 'CREATE') AS redactor, has_schema_privilege('telesphoros_app', 'public', 'CREATE') AS app, has_schema_privilege('telesphoros_capability', 'public', 'CREATE') AS capability`)).rows[0];
+      const create = (
+        await c.query(
+          `SELECT has_schema_privilege('telesphoros_ledger', 'public', 'CREATE') AS ledger, has_schema_privilege('telesphoros_redactor', 'public', 'CREATE') AS redactor, has_schema_privilege('telesphoros_app', 'public', 'CREATE') AS app, has_schema_privilege('telesphoros_capability', 'public', 'CREATE') AS capability`,
+        )
+      ).rows[0];
       expect(create).toEqual({ ledger: false, redactor: false, app: false, capability: false }); // 0028 and 0031 lend it to the capability owner and take it back, as this non-superuser migrator
     });
   });

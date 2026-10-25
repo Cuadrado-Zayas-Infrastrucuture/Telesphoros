@@ -20,7 +20,10 @@ const hex = (digits: number) => z.string().regex(new RegExp(`^[0-9a-f]{${digits}
 const tableFacts = z.object({ rows: count, rlsEnabled: z.boolean(), rlsForced: z.boolean(), policies: count }).strict();
 
 // A plain file name: no separators, no "..", nothing that escapes the backup directory.
-const fileName = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/).refine((name) => !name.includes('..'));
+const fileName = z
+  .string()
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/)
+  .refine((name) => !name.includes('..'));
 
 /** Who owns and who may do what (privilege-facts.ts). Optional: backups made before they were recorded do not have it. */
 const privileges = z
@@ -66,7 +69,11 @@ const manifestV2 = z
             scheme: z.literal(ENCRYPTION_SCHEME),
             keyId: hex(16),
             salt: hex(32),
-            chunkSize: z.number().int().min(64).max(2 ** 26),
+            chunkSize: z
+              .number()
+              .int()
+              .min(64)
+              .max(2 ** 26),
           })
           .strict(),
       })

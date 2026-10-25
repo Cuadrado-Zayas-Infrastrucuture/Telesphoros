@@ -9,7 +9,7 @@ import { bearer, signToken } from './helpers/tokens';
 
 let app: NestExpressApplication;
 beforeAll(async () => {
-  app = await createTestApp({organizationIntake: true});
+  app = await createTestApp({ organizationIntake: true });
 });
 afterAll(async () => {
   await app.close();
@@ -27,71 +27,173 @@ const gus = () => signToken({ sub: 'gus', tenant: globex, roles: ['clinician'] }
 
 describe('tenancy: members of one organization share its records', () => {
   it('a colleague sees, reads and changes a record someone else in the tenant created', async () => {
-    const mine = (await api().post('/api/v1/patients').set(bearer(await ann())).send({ label: label() }).expect(201)).body;
+    const mine = (
+      await api()
+        .post('/api/v1/patients')
+        .set(bearer(await ann()))
+        .send({ label: label() })
+        .expect(201)
+    ).body;
 
-    const list = await api().get('/api/v1/patients').set(bearer(await ben())).expect(200);
+    const list = await api()
+      .get('/api/v1/patients')
+      .set(bearer(await ben()))
+      .expect(200);
     expect(list.body.data.map((p: { id: string }) => p.id)).toContain(mine.id);
-    await api().get(`/api/v1/patients/${mine.id}`).set(bearer(await ben())).expect(200);
-    await api().get(`/api/v1/patients/${mine.id}`).set(bearer(await readerInAcme())).expect(200);
+    await api()
+      .get(`/api/v1/patients/${mine.id}`)
+      .set(bearer(await ben()))
+      .expect(200);
+    await api()
+      .get(`/api/v1/patients/${mine.id}`)
+      .set(bearer(await readerInAcme()))
+      .expect(200);
 
     const renamed = label();
-    await api().put(`/api/v1/patients/${mine.id}`).set(bearer(await ben())).send({ label: renamed }).expect(200);
+    await api()
+      .put(`/api/v1/patients/${mine.id}`)
+      .set(bearer(await ben()))
+      .send({ label: renamed })
+      .expect(200);
     const report = (
-      await api().post('/api/v1/reports').set(bearer(await ben())).send({ patientId: mine.id, type: 'vcf', filename: 'a.vcf', sizeBytes: 10 }).expect(201)
+      await api()
+        .post('/api/v1/reports')
+        .set(bearer(await ben()))
+        .send({ patientId: mine.id, type: 'vcf', filename: 'a.vcf', sizeBytes: 10 })
+        .expect(201)
     ).body;
-    await api().get(`/api/v1/reports/${report.id}`).set(bearer(await ann())).expect(200);
-    await api().delete(`/api/v1/reports/${report.id}`).set(bearer(await ann())).expect(204);
+    await api()
+      .get(`/api/v1/reports/${report.id}`)
+      .set(bearer(await ann()))
+      .expect(200);
+    await api()
+      .delete(`/api/v1/reports/${report.id}`)
+      .set(bearer(await ann()))
+      .expect(204);
   });
 
   it('a label is unique within a tenant, across its members, but free in another tenant', async () => {
     const shared = label();
-    await api().post('/api/v1/patients').set(bearer(await ann())).send({ label: shared }).expect(201);
-    const clash = await api().post('/api/v1/patients').set(bearer(await ben())).send({ label: shared.toLowerCase() }).expect(409);
+    await api()
+      .post('/api/v1/patients')
+      .set(bearer(await ann()))
+      .send({ label: shared })
+      .expect(201);
+    const clash = await api()
+      .post('/api/v1/patients')
+      .set(bearer(await ben()))
+      .send({ label: shared.toLowerCase() })
+      .expect(409);
     expect(clash.body.error.code).toBe('CONFLICT');
-    await api().post('/api/v1/patients').set(bearer(await gus())).send({ label: shared }).expect(201);
+    await api()
+      .post('/api/v1/patients')
+      .set(bearer(await gus()))
+      .send({ label: shared })
+      .expect(201);
   });
 });
 
 describe('tenancy: another organization sees nothing, and cannot tell what exists', () => {
   it('lists, reads, changes and deletes of another tenant’s records are all NOT_FOUND', async () => {
-    const patient = (await api().post('/api/v1/patients').set(bearer(await ann())).send({ label: label() }).expect(201)).body;
+    const patient = (
+      await api()
+        .post('/api/v1/patients')
+        .set(bearer(await ann()))
+        .send({ label: label() })
+        .expect(201)
+    ).body;
     const report = (
-      await api().post('/api/v1/reports').set(bearer(await ann())).send({ patientId: patient.id, type: 'vcf', filename: 'a.vcf', sizeBytes: 10 }).expect(201)
+      await api()
+        .post('/api/v1/reports')
+        .set(bearer(await ann()))
+        .send({ patientId: patient.id, type: 'vcf', filename: 'a.vcf', sizeBytes: 10 })
+        .expect(201)
     ).body;
 
-    const theirList = await api().get('/api/v1/patients').set(bearer(await gus())).expect(200);
+    const theirList = await api()
+      .get('/api/v1/patients')
+      .set(bearer(await gus()))
+      .expect(200);
     expect(theirList.body.data.map((p: { id: string }) => p.id)).not.toContain(patient.id);
     for (const path of [`/api/v1/patients/${patient.id}`, `/api/v1/reports/${report.id}`]) {
-      expect((await api().get(path).set(bearer(await gus())).expect(404)).body.error.code).toBe('NOT_FOUND');
+      expect(
+        (
+          await api()
+            .get(path)
+            .set(bearer(await gus()))
+            .expect(404)
+        ).body.error.code,
+      ).toBe('NOT_FOUND');
     }
-    await api().put(`/api/v1/patients/${patient.id}`).set(bearer(await gus())).send({ label: label() }).expect(404);
-    await api().delete(`/api/v1/reports/${report.id}`).set(bearer(await gus())).expect(404);
+    await api()
+      .put(`/api/v1/patients/${patient.id}`)
+      .set(bearer(await gus()))
+      .send({ label: label() })
+      .expect(404);
+    await api()
+      .delete(`/api/v1/reports/${report.id}`)
+      .set(bearer(await gus()))
+      .expect(404);
     // A report for someone else's patient is the same NOT_FOUND as for a missing one.
-    await api().post('/api/v1/reports').set(bearer(await gus())).send({ patientId: patient.id, type: 'vcf', filename: 'a.vcf', sizeBytes: 10 }).expect(404);
+    await api()
+      .post('/api/v1/reports')
+      .set(bearer(await gus()))
+      .send({ patientId: patient.id, type: 'vcf', filename: 'a.vcf', sizeBytes: 10 })
+      .expect(404);
   });
 });
 
 describe('tenancy: the individual is recorded by the server, not the client', () => {
   it('created_by is the caller’s subject (not the tenant), whatever the client sends', async () => {
-    const created = (await api().post('/api/v1/patients').set(bearer(await ann())).send({ label: label() }).expect(201)).body;
+    const created = (
+      await api()
+        .post('/api/v1/patients')
+        .set(bearer(await ann()))
+        .send({ label: label() })
+        .expect(201)
+    ).body;
     const stored = await app.get(PatientsRepository).findById(acme, created.id);
     expect(stored).toMatchObject({ tenantId: acme, createdBy: 'ann' });
 
     for (const extra of [{ createdBy: 'ben' }, { created_by: 'ben' }, { tenantId: globex }, { tenant_id: globex }, { ownerId: 'ben' }]) {
-      const res = await api().post('/api/v1/patients').set(bearer(await ann())).send({ label: label(), ...extra }).expect(400);
+      const res = await api()
+        .post('/api/v1/patients')
+        .set(bearer(await ann()))
+        .send({ label: label(), ...extra })
+        .expect(400);
       expect(res.body.error.code).toBe('VALIDATION_ERROR');
     }
 
-    const patient = (await api().post('/api/v1/patients').set(bearer(await ben())).send({ label: label() }).expect(201)).body;
+    const patient = (
+      await api()
+        .post('/api/v1/patients')
+        .set(bearer(await ben()))
+        .send({ label: label() })
+        .expect(201)
+    ).body;
     const report = (
-      await api().post('/api/v1/reports').set(bearer(await ben())).send({ patientId: patient.id, type: 'vcf', filename: 'a.vcf', sizeBytes: 10 }).expect(201)
+      await api()
+        .post('/api/v1/reports')
+        .set(bearer(await ben()))
+        .send({ patientId: patient.id, type: 'vcf', filename: 'a.vcf', sizeBytes: 10 })
+        .expect(201)
     ).body;
     expect(await app.get(ReportsRepository).findById(acme, report.id)).toMatchObject({ tenantId: acme, createdBy: 'ben' });
   });
 
   it('a colleague’s edit does not change who created the record', async () => {
-    const created = (await api().post('/api/v1/patients').set(bearer(await ann())).send({ label: label() }).expect(201)).body;
-    await api().put(`/api/v1/patients/${created.id}`).set(bearer(await ben())).send({ label: label() }).expect(200);
+    const created = (
+      await api()
+        .post('/api/v1/patients')
+        .set(bearer(await ann()))
+        .send({ label: label() })
+        .expect(201)
+    ).body;
+    await api()
+      .put(`/api/v1/patients/${created.id}`)
+      .set(bearer(await ben()))
+      .send({ label: label() })
+      .expect(200);
     expect(await app.get(PatientsRepository).findById(acme, created.id)).toMatchObject({ createdBy: 'ann' });
   });
 });
@@ -102,7 +204,11 @@ describe('tenancy: stored files are grouped by tenant, not by person', () => {
       const patient = (await api().post('/api/v1/patients').set(bearer(token)).send({ label: label() }).expect(201)).body;
       const report = (await api().post('/api/v1/reports').set(bearer(token)).send({ patientId: patient.id, type: 'vcf', filename: 'a.vcf', sizeBytes: 10 }).expect(201)).body;
       const revision = (await api().get(`/api/v1/reports/${report.id}/upload-state`).set(bearer(token)).expect(200)).body.revision;
-      await api().post(`/api/v1/reports/${report.id}/upload-attempts`).set(bearer(token)).send({ requestId: randomUUID(), revision, contentType: 'text/plain', sha256: 'a'.repeat(64) }).expect(201);
+      await api()
+        .post(`/api/v1/reports/${report.id}/upload-attempts`)
+        .set(bearer(token))
+        .send({ requestId: randomUUID(), revision, contentType: 'text/plain', sha256: 'a'.repeat(64) })
+        .expect(201);
       return (await app.get(ReportsRepository).findById(tenantId, report.id))!.storageKey!;
     };
     const [annKey, benKey, gusKey] = [await keyFor(await ann(), acme), await keyFor(await ben(), acme), await keyFor(await gus(), globex)];

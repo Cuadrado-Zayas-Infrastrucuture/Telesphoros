@@ -9,17 +9,17 @@ describe('FR-001 closed prompt', () => {
   test('every character is a template literal or one named field of the result', () => {
     for (const r of Object.values(RESULTS)) {
       const { prompt, segments } = buildPrompt(r);
-      expect(segments.map(s => s.text).join('')).toBe(prompt);
+      expect(segments.map((s) => s.text).join('')).toBe(prompt);
       for (const s of segments) if (s.from === 'template') expect(literals).toContain(s.text);
-      const fields = new Set(segments.filter(s => s.from === 'field').map(s => (s as { field: string }).field));
+      const fields = new Set(segments.filter((s) => s.from === 'field').map((s) => (s as { field: string }).field));
       expect([...fields].sort()).toEqual(['drug', 'genes', 'guidelineId', 'guidelineVersion', 'implication', 'locator', 'recommendationText', 'strength']);
     }
   });
   test('no inbound attacker value is in any prompt', () => {
-    for (const a of ATTACKS.filter(x => x.cls === 'inbound')) for (const v of Object.values(a.inbound ?? {})) expect(buildPrompt(RESULTS[a.result]).prompt).not.toContain(v);
+    for (const a of ATTACKS.filter((x) => x.cls === 'inbound')) for (const v of Object.values(a.inbound ?? {})) expect(buildPrompt(RESULTS[a.result]).prompt).not.toContain(v);
   });
   test('every hostile shape is refused before a model could be called', () => {
-    const shapes = ATTACKS.filter(x => x.cls === 'shape');
+    const shapes = ATTACKS.filter((x) => x.cls === 'shape');
     expect(shapes.length).toBeGreaterThan(0);
     for (const a of shapes) expect(() => buildPrompt(a.input), a.id).toThrow(InputRefused);
   });
@@ -29,7 +29,7 @@ describe('FR-001 closed prompt', () => {
     expect(templateDigest()).not.toBe(hashBytes(TEMPLATE_V1 + ' '));
   });
   test('the template contains no placeholder for a patient identifier or a report field', () => {
-    const names = [...TEMPLATE_V1.matchAll(/\{\{(\w+)\}\}/g)].map(m => m[1]).sort();
+    const names = [...TEMPLATE_V1.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]).sort();
     expect(names).toEqual(['drug', 'genes', 'guidelineId', 'guidelineVersion', 'implication', 'locator', 'recommendationText', 'strength']);
   });
 });

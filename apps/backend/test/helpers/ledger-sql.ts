@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { Client } from 'pg';
 
-export interface PgError { code?: string; message: string; constraint?: string }
+export interface PgError {
+  code?: string;
+  message: string;
+  constraint?: string;
+}
 
 /**
  * Runs `work` as a login (the application role by default) inside one transaction with the tenant and actor settings, then COMMITs.

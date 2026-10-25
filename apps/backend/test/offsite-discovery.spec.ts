@@ -22,7 +22,10 @@ const page = (values: Partial<ListObjectsV2CommandOutput>): ListObjectsV2Command
 const scratch = mkdtempSync(join(tmpdir(), 'discovery-test-'));
 const keyFile = join(scratch, 'backup.key');
 beforeAll(() => generateKeyFile(keyFile));
-afterAll(() => { unlinkSync(keyFile); rmdirSync(scratch); });
+afterAll(() => {
+  unlinkSync(keyFile);
+  rmdirSync(scratch);
+});
 
 function target(send: jest.Mock): ReadTarget {
   const client = new S3Client({ region: 'us-east-1', credentials: { accessKeyId: 'fixture', secretAccessKey: 'fixture' } });
@@ -30,11 +33,15 @@ function target(send: jest.Mock): ReadTarget {
   return { client, bucket: 'synthetic-backups', prefix: 'nightly' };
 }
 
-afterEach(() => { jest.restoreAllMocks(); jest.clearAllMocks(); });
+afterEach(() => {
+  jest.restoreAllMocks();
+  jest.clearAllMocks();
+});
 
 describe('complete backup discovery', () => {
   it('follows opaque continuation tokens, including an empty truncated page, and sorts all backup names', async () => {
-    const send = jest.fn()
+    const send = jest
+      .fn()
       .mockResolvedValueOnce(page({ IsTruncated: true, NextContinuationToken: 'opaque+/=', CommonPrefixes: prefixes([newer, 'readme']) }))
       .mockResolvedValueOnce(page({ IsTruncated: true, NextContinuationToken: 'next', CommonPrefixes: [] }))
       .mockResolvedValueOnce(page({ IsTruncated: false, CommonPrefixes: prefixes([older]) }));
@@ -51,11 +58,13 @@ describe('complete backup discovery', () => {
   });
 
   it('accepts a terminal page at the 1,000-page boundary', async () => {
-    const send = jest.fn().mockImplementation(async () => page({
-      IsTruncated: send.mock.calls.length < 1000,
-      NextContinuationToken: `page-${send.mock.calls.length}`,
-      CommonPrefixes: send.mock.calls.length === 1000 ? prefixes([newer]) : [],
-    }));
+    const send = jest.fn().mockImplementation(async () =>
+      page({
+        IsTruncated: send.mock.calls.length < 1000,
+        NextContinuationToken: `page-${send.mock.calls.length}`,
+        CommonPrefixes: send.mock.calls.length === 1000 ? prefixes([newer]) : [],
+      }),
+    );
     expect(await listBackups(target(send))).toEqual([newer]);
     expect(send).toHaveBeenCalledTimes(1000);
   });
@@ -87,10 +96,15 @@ describe('complete backup discovery', () => {
       const temp = jest.mocked(cleanup.makeTempDir);
       const engine = jest.mocked(restore.restoreAndVerify);
       const t = target(send);
-      await expect(restoreFromRemote({
-        adminUrl: 'postgresql://fixture:fixture@127.0.0.1:1/postgres',
-        client: t.client, location: { bucket: t.bucket, prefix: t.prefix }, latest: true, keep: true,
-      })).rejects.toMatchObject({ name: 'IncompleteBackupListingError' });
+      await expect(
+        restoreFromRemote({
+          adminUrl: 'postgresql://fixture:fixture@127.0.0.1:1/postgres',
+          client: t.client,
+          location: { bucket: t.bucket, prefix: t.prefix },
+          latest: true,
+          keep: true,
+        }),
+      ).rejects.toMatchObject({ name: 'IncompleteBackupListingError' });
       expect(send).toHaveBeenCalledTimes(expectedPages);
       expect(send.mock.calls.every(([command]) => command instanceof ListObjectsV2Command)).toBe(true);
       expect(temp).not.toHaveBeenCalled();
@@ -101,7 +115,11 @@ describe('complete backup discovery', () => {
       const send = jest.fn().mockImplementation(async () => response(send.mock.calls.length));
       const t = target(send);
       const findings = await runBackupCheck({
-        keyFile, bucket: t.bucket, prefix: t.prefix, clients: { read: t.client, upload: t.client }, skipCanary: true,
+        keyFile,
+        bucket: t.bucket,
+        prefix: t.prefix,
+        clients: { read: t.client, upload: t.client },
+        skipCanary: true,
         settings: { region: 'us-east-1', forcePathStyle: true, lockMode: 'GOVERNANCE', retainDays: 30 },
       });
       expect(findings).toContainEqual({ name: 'newest backup', status: 'FAIL', detail: expect.stringContaining('IncompleteBackupListingError') });
@@ -113,9 +131,13 @@ describe('complete backup discovery', () => {
 
   it('retains the existing failed report for an ordinary listing refusal', async () => {
     const t = target(jest.fn().mockRejectedValue(Object.assign(new Error('synthetic refusal'), { name: 'AccessDenied' })));
-    expect(await restoreFromRemote({
-      adminUrl: 'postgresql://fixture:fixture@127.0.0.1:1/postgres',
-      client: t.client, location: { bucket: t.bucket, prefix: t.prefix }, latest: true,
-    })).toMatchObject({ ok: false, checks: [{ name: 'download', ok: false }] });
+    expect(
+      await restoreFromRemote({
+        adminUrl: 'postgresql://fixture:fixture@127.0.0.1:1/postgres',
+        client: t.client,
+        location: { bucket: t.bucket, prefix: t.prefix },
+        latest: true,
+      }),
+    ).toMatchObject({ ok: false, checks: [{ name: 'download', ok: false }] });
   });
 });

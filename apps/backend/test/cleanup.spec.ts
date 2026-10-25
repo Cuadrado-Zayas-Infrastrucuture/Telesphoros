@@ -32,7 +32,10 @@ it('runs in its own temp root, not the one shared with other processes', () => {
 /** The module under test, compiled to plain CommonJS so a separate process can load it. */
 const compiled = join(scratch, 'cleanup.cjs');
 beforeAll(() => {
-  const { code } = transformFileSync(join(__dirname, '..', 'src', 'db', 'cleanup.ts'), { jsc: { parser: { syntax: 'typescript' }, target: 'es2022' }, module: { type: 'commonjs' } });
+  const { code } = transformFileSync(join(__dirname, '..', 'src', 'db', 'cleanup.ts'), {
+    jsc: { parser: { syntax: 'typescript' }, target: 'es2022' },
+    module: { type: 'commonjs' },
+  });
   writeFileSync(compiled, code);
 });
 
@@ -72,7 +75,11 @@ describe('temporary folders that hold decrypted data', () => {
     }
   });
 
-  it.each([['SIGTERM', 143], ['SIGINT', 130], ['SIGHUP', 129]] as const)('are removed when the process receives %s, and it exits with the conventional code', async (signal, code) => {
+  it.each([
+    ['SIGTERM', 143],
+    ['SIGINT', 130],
+    ['SIGHUP', 129],
+  ] as const)('are removed when the process receives %s, and it exits with the conventional code', async (signal, code) => {
     const result = await runChild('setInterval(() => {}, 1000)', signal);
     expect(result.dir).toMatch(/restore-/);
     expect(dirname(result.dir)).toBe(tmpdir());

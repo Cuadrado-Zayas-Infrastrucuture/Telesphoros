@@ -52,7 +52,14 @@ import { bearer } from './helpers/tokens';
   const resultFor = (evaluation: Json, drug: string): Json => evaluation.results.find((r: Json) => r.drug === drug);
 
   /** What a dispute names for the cell a result cited. */
-  const cellOf = (result: Json) => ({ guidelineId: result.citation.guidelineId as string, locator: { table: result.citation.locator.table as string, row: result.citation.locator.row as string, ...(result.citation.locator.column ? { column: result.citation.locator.column as string } : {}) } });
+  const cellOf = (result: Json) => ({
+    guidelineId: result.citation.guidelineId as string,
+    locator: {
+      table: result.citation.locator.table as string,
+      row: result.citation.locator.row as string,
+      ...(result.citation.locator.column ? { column: result.citation.locator.column as string } : {}),
+    },
+  });
 
   /** D01 evaluates: drugq (one-gene guideline) and drugr (two-gene guideline) are both shown. */
   async function evaluatedD01(local = lab) {
@@ -76,7 +83,11 @@ import { bearer } from './helpers/tokens';
         await decide(other, d.id, { decision: 'dismissed', evidenceNote: 'SYN dismissed filler' }).expect(201);
       }
       const target = (await raise(s.rev, { ...cellOf(resultFor(s.e, 'drugq')), note: 'SYN off-page active cell' }).expect(201)).body;
-      const get = (query = '') => lab.api().get('/api/v1/cell-disputes' + query).set(bearer(s.clin.token));
+      const get = (query = '') =>
+        lab
+          .api()
+          .get('/api/v1/cell-disputes' + query)
+          .set(bearer(s.clin.token));
       const first = await get().expect(200);
       expect(first.body.data.map((d: Json) => d.id)).toEqual(ids);
       expect(first.body.meta).toEqual({ page: 1, pageSize: 20, total: 21, totalPages: 2 });
@@ -88,7 +99,8 @@ import { bearer } from './helpers/tokens';
       const empty = await get('?status=open&page=2&pageSize=1').expect(200);
       expect(empty.body).toEqual({ data: [], meta: { page: 2, pageSize: 1, total: 1, totalPages: 1 } });
       await get('?pageSize=100').expect(200);
-      for (const bad of ['page=0', 'page=-1', 'page=1.5', 'pageSize=0', 'pageSize=101', 'page=9007199254740991&pageSize=100', 'page=1&page=2', 'unknown=1']) await get('?' + bad).expect(400);
+      for (const bad of ['page=0', 'page=-1', 'page=1.5', 'pageSize=0', 'pageSize=101', 'page=9007199254740991&pageSize=100', 'page=1&page=2', 'unknown=1'])
+        await get('?' + bad).expect(400);
       const after = (await lab.evaluate(s.clin, s.reportId, body(s)).expect(201)).body;
       expect(resultFor(after, 'drugq')).toMatchObject({ outcome: 'held', reasonCode: 'cell-disputed', recommendationText: null });
       expect(resultFor(after, 'drugr')).toEqual(resultFor(s.e, 'drugr'));
@@ -105,9 +117,13 @@ import { bearer } from './helpers/tokens';
       expect(disputeDtoSchema.safeParse(res.body).success).toBe(true);
       const guideline = knowledge.allGuidelines().find((g) => g.id === cell.guidelineId)!;
       expect(res.body).toMatchObject({
-        guidelineId: cell.guidelineId, guidelineVersion: guideline.guidelineVersion,
+        guidelineId: cell.guidelineId,
+        guidelineVersion: guideline.guidelineVersion,
         guidelineContentSha256: knowledge.files.find((f) => f.id === cell.guidelineId)!.contentSha256,
-        locator: { table: cell.locator.table, row: cell.locator.row, column: null }, status: 'open', inForce: true, decision: null,
+        locator: { table: cell.locator.table, row: cell.locator.row, column: null },
+        status: 'open',
+        inForce: true,
+        decision: null,
       });
       expect(res.body.note).toEqual({ id: expect.any(String), bodySha256: expect.stringMatching(/^[0-9a-f]{64}$/) });
       expect(JSON.stringify(res.body)).not.toMatch(/the cell looks wrong|createdBy|created_by|tenant/i);
@@ -123,7 +139,13 @@ import { bearer } from './helpers/tokens';
       for (const extra of [{ guidelineVersion: '9' }, { guidelineContentSha256: 'a'.repeat(64) }, { createdBy: 'someone-else' }]) {
         await raise(s.rev, { ...cell, note: 'SYN: x', ...extra }).expect(400);
       }
-      for (const bad of [{ ...cell }, { ...cell, note: '' }, { ...cell, note: 'x'.repeat(1001) }, { ...cell, locator: {}, note: 'x' }, { guidelineId: '', locator: cell.locator, note: 'x' }]) {
+      for (const bad of [
+        { ...cell },
+        { ...cell, note: '' },
+        { ...cell, note: 'x'.repeat(1001) },
+        { ...cell, locator: {}, note: 'x' },
+        { guidelineId: '', locator: cell.locator, note: 'x' },
+      ]) {
         await raise(s.rev, bad).expect(400);
       }
       expect(await disputes()).toBe(count);
@@ -147,7 +169,11 @@ import { bearer } from './helpers/tokens';
       const cell = cellOf(resultFor(s.e, 'drugq'));
       const count = await disputes();
       for (const roles of [['reader'], ['clinician'], ['admin']]) await raise(await lab.person('x', roles), { ...cell, note: 'SYN: x' }).expect(403);
-      await lab.api().post('/api/v1/cell-disputes').send({ ...cell, note: 'SYN: x' }).expect(401);
+      await lab
+        .api()
+        .post('/api/v1/cell-disputes')
+        .send({ ...cell, note: 'SYN: x' })
+        .expect(401);
       expect(await disputes()).toBe(count);
       await raise(await lab.person('both', ['admin', 'reviewer']), { ...cell, note: 'SYN: control' }).expect(201);
     });
@@ -192,7 +218,7 @@ import { bearer } from './helpers/tokens';
       expect(await verifier.verify(lab.tenant)).toMatchObject({ status: 'ok', failures: [] }); // the binding is inside the hashed record
     });
 
-    it("a report whose result does not use the disputed cell is evaluated exactly as without the dispute", async () => {
+    it('a report whose result does not use the disputed cell is evaluated exactly as without the dispute', async () => {
       const s = await evaluatedD01();
       await raise(s.rev, { ...cellOf(resultFor(s.e, 'drugq')), note: 'SYN: x' }).expect(201);
       const d02 = await lab.reviewedCapture(fixturePdf('D02'));
@@ -213,14 +239,18 @@ import { bearer } from './helpers/tokens';
       const unverified = knowledge.allGuidelines().flatMap((g) => g.recommendations.filter((r) => r.verification.state === 'unverified').map((r) => ({ g, r })))[0]!;
       const s = await evaluatedD01();
       const count = await disputes();
-      await raise(s.rev, { guidelineId: unverified.g.id, locator: { table: unverified.r.locator.table, row: unverified.r.locator.row, ...(unverified.r.locator.column ? { column: unverified.r.locator.column } : {}) }, note: 'SYN: x' }).expect(201);
+      await raise(s.rev, {
+        guidelineId: unverified.g.id,
+        locator: { table: unverified.r.locator.table, row: unverified.r.locator.row, ...(unverified.r.locator.column ? { column: unverified.r.locator.column } : {}) },
+        note: 'SYN: x',
+      }).expect(201);
       expect(await disputes()).toBe(count + 1);
       const replay = await lab.evaluate(s.clin, s.reportId, body(s));
       expect(replay.status).toBe(200); // the same effective knowledge, so the very same evaluation
       expect(replay.body.id).toBe(s.e.id);
     });
 
-    it('dismissing restores the file\'s own state: the next request is the original evaluation again (a replay)', async () => {
+    it("dismissing restores the file's own state: the next request is the original evaluation again (a replay)", async () => {
       const s = await evaluatedD01();
       const raised = (await raise(s.rev, { ...cellOf(resultFor(s.e, 'drugq')), note: 'SYN: x' }).expect(201)).body;
       const held = (await lab.evaluate(s.clin, s.reportId, body(s)).expect(201)).body;
@@ -261,7 +291,15 @@ import { bearer } from './helpers/tokens';
       // The first look at the disputes returns the state BEFORE the dispute, which is then raised for real: exactly the race.
       list.mockImplementationOnce(async (tenantId: string) => {
         const stale = await real(tenantId);
-        raisedId = (await ledger.raiseDispute(tenantId, 'syn-late-disputer', { ...cell, guidelineVersion: knowledge.allGuidelines().find((g) => g.id === cell.guidelineId)!.guidelineVersion, guidelineContentSha256: knowledge.files.find((f) => f.id === cell.guidelineId)!.contentSha256, locator: cell.locator, note: 'SYN: late' })).record.id;
+        raisedId = (
+          await ledger.raiseDispute(tenantId, 'syn-late-disputer', {
+            ...cell,
+            guidelineVersion: knowledge.allGuidelines().find((g) => g.id === cell.guidelineId)!.guidelineVersion,
+            guidelineContentSha256: knowledge.files.find((f) => f.id === cell.guidelineId)!.contentSha256,
+            locator: cell.locator,
+            note: 'SYN: late',
+          })
+        ).record.id;
         return stale;
       });
       try {
@@ -286,7 +324,13 @@ import { bearer } from './helpers/tokens';
       const stale = async (tenantId: string) => {
         const seen = await real(tenantId);
         if (!(await real(tenantId)).some((d) => d.dispute.createdBy === 'syn-late-disputer')) {
-          await ledger.raiseDispute(tenantId, 'syn-late-disputer', { ...cell, guidelineVersion: knowledge.allGuidelines().find((g) => g.id === cell.guidelineId)!.guidelineVersion, guidelineContentSha256: knowledge.files.find((f) => f.id === cell.guidelineId)!.contentSha256, locator: cell.locator, note: 'SYN: late' });
+          await ledger.raiseDispute(tenantId, 'syn-late-disputer', {
+            ...cell,
+            guidelineVersion: knowledge.allGuidelines().find((g) => g.id === cell.guidelineId)!.guidelineVersion,
+            guidelineContentSha256: knowledge.files.find((f) => f.id === cell.guidelineId)!.contentSha256,
+            locator: cell.locator,
+            note: 'SYN: late',
+          });
         }
         return seen.filter((d) => d.dispute.createdBy !== 'syn-late-disputer'); // always one dispute behind
       };
@@ -307,7 +351,7 @@ import { bearer } from './helpers/tokens';
   describe('deciding a dispute', () => {
     it('is final, by someone other than the raiser, with required evidence; the raiser, a second decision and a stranger are refused', async () => {
       const s = await evaluatedD01();
-      const raised = (await raise(s.rev, { ...(cellOf(resultFor(s.e, 'drugq'))), note: 'SYN: x' }).expect(201)).body;
+      const raised = (await raise(s.rev, { ...cellOf(resultFor(s.e, 'drugq')), note: 'SYN: x' }).expect(201)).body;
       const before = { events: await events(), decisions: await lab.count('cell_dispute_decisions', 'tenant_id = $1', [lab.tenant]) };
 
       const self = await decide(s.rev, raised.id, { decision: 'dismissed', evidenceNote: 'SYN: mine' }).expect(409);
@@ -333,9 +377,12 @@ import { bearer } from './helpers/tokens';
 
     it('two reviewers deciding at the same moment: exactly one decision is stored', async () => {
       const s = await evaluatedD01();
-      const raised = (await raise(s.rev, { ...(cellOf(resultFor(s.e, 'drugq'))), note: 'SYN: x' }).expect(201)).body;
+      const raised = (await raise(s.rev, { ...cellOf(resultFor(s.e, 'drugq')), note: 'SYN: x' }).expect(201)).body;
       const [a, b] = [await lab.person('rev-a', ['reviewer']), await lab.person('rev-b', ['reviewer'])];
-      const results = await Promise.all([decide(a, raised.id, { decision: 'upheld', evidenceNote: 'SYN: a' }), decide(b, raised.id, { decision: 'dismissed', evidenceNote: 'SYN: b' })]);
+      const results = await Promise.all([
+        decide(a, raised.id, { decision: 'upheld', evidenceNote: 'SYN: a' }),
+        decide(b, raised.id, { decision: 'dismissed', evidenceNote: 'SYN: b' }),
+      ]);
       expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
       expect(await lab.count('cell_dispute_decisions', 'dispute_id = $1', [raised.id])).toBe(1);
     });
@@ -344,9 +391,9 @@ import { bearer } from './helpers/tokens';
   describe('reading disputes', () => {
     it('every clinical role may list and read, an administrator or a member with no role may not; a status filter narrows; another tenant sees none of them', async () => {
       const s = await evaluatedD01();
-      const raised = (await raise(s.rev, { ...(cellOf(resultFor(s.e, 'drugq'))), note: 'SYN: x' }).expect(201)).body;
+      const raised = (await raise(s.rev, { ...cellOf(resultFor(s.e, 'drugq')), note: 'SYN: x' }).expect(201)).body;
       const other = await lab.person('rev-other', ['reviewer']);
-      const second = (await raise(s.rev, { ...(cellOf(resultFor(s.e, 'drugr'))), note: 'SYN: y' }).expect(201)).body;
+      const second = (await raise(s.rev, { ...cellOf(resultFor(s.e, 'drugr')), note: 'SYN: y' }).expect(201)).body;
       await decide(other, second.id, { decision: 'dismissed', evidenceNote: 'SYN: z' }).expect(201);
 
       const noRole = await lab.person('x', []);
@@ -379,13 +426,19 @@ import { bearer } from './helpers/tokens';
     const s = await evaluatedD01();
     const lines: string[] = [];
     const capture = new (class extends ConsoleLogger {
-      override log(...args: unknown[]) { lines.push(JSON.stringify(args)); }
-      override warn(...args: unknown[]) { lines.push(JSON.stringify(args)); }
-      override error(...args: unknown[]) { lines.push(JSON.stringify(args)); }
+      override log(...args: unknown[]) {
+        lines.push(JSON.stringify(args));
+      }
+      override warn(...args: unknown[]) {
+        lines.push(JSON.stringify(args));
+      }
+      override error(...args: unknown[]) {
+        lines.push(JSON.stringify(args));
+      }
     })();
     Logger.overrideLogger(capture);
     try {
-      const raised = (await raise(s.rev, { ...(cellOf(resultFor(s.e, 'drugq'))), note: 'SYN: zebra-91 note' }).expect(201)).body;
+      const raised = (await raise(s.rev, { ...cellOf(resultFor(s.e, 'drugq')), note: 'SYN: zebra-91 note' }).expect(201)).body;
       await decide(s.rev, raised.id, { decision: 'upheld', evidenceNote: 'SYN: zebra-91 evidence' }).expect(409); // a refusal is logged too
       await decide(await lab.person('rev-other', ['reviewer']), raised.id, { decision: 'upheld', evidenceNote: 'SYN: zebra-91 evidence' }).expect(201);
       await lab.evaluate(s.clin, s.reportId, body(s)).expect(201);

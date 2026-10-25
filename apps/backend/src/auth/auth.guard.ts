@@ -21,16 +21,12 @@ export class AuthGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [context.getHandler(), context.getClass()]);
     if (isPublic) return true;
 
     const req = context.switchToHttp().getRequest<Request>();
     const routeKey = `${context.getClass().name}.${context.getHandler().name}`;
-    const refused = () => this.audit.record({ type: 'api-auth', outcome: 'refused', tenantId: null, actorSub: null,
-      routeKey, subjectId: null, requestId: String(req.id) });
+    const refused = () => this.audit.record({ type: 'api-auth', outcome: 'refused', tenantId: null, actorSub: null, routeKey, subjectId: null, requestId: String(req.id) });
     const [scheme, token, ...rest] = (req.headers.authorization ?? '').split(' ');
     if (scheme?.toLowerCase() !== 'bearer' || !token || rest.length > 0) {
       await refused();

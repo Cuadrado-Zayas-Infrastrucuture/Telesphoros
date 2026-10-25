@@ -183,7 +183,11 @@ describe('knowledge locate', () => {
     const repo = await newRepo();
     expect((await locate(repo, 'not-an-id')).code).toBe(2);
     expect((await locate(repo, 'a'.repeat(64), '--limit', '0')).code).toBe(2);
-    for (const extra of [['--dir', '../elsewhere'], ['--dir', '/etc'], ['--dir', 'a//b']]) {
+    for (const extra of [
+      ['--dir', '../elsewhere'],
+      ['--dir', '/etc'],
+      ['--dir', 'a//b'],
+    ]) {
       const refused = await locate(repo, 'a'.repeat(64), ...extra);
       expect([extra.join(' '), refused.code]).toEqual([extra.join(' '), 1]);
       expect(refused.text).not.toMatch(/\bat \S+:\d+|ENOENT|Error:|\/etc/);

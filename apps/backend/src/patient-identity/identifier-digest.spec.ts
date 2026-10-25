@@ -18,7 +18,8 @@ describe('the identifier digest', () => {
     expect(hex(subject.digest('tenant-b', 'hospital-a-mrn', 'mrn-0001'))).toBe('aeead09444afaba57981e923da89f117d47efc2f341dd525d3028dee33e50543');
     expect(hex(subject.digest('tenant-a', 'hospital-b-mrn', 'mrn-0001'))).toBe('6eab31a80b0606eb492ad2067c798559e26565cfcb75bbc5c864ffed9b37ddae');
     expect(hex(new IdentifierDigest('ab'.repeat(32)).digest('tenant-a', 'hospital-a-mrn', 'mrn-0001'))).toBe('f8b9ff957b56eda985e657aa97e9ca3a2b0e1769de2a235860ce3b9b182c6cb8');
-    for (const other of [subject.digest('tenant-b', 'hospital-a-mrn', 'mrn-0001'), subject.digest('tenant-a', 'hospital-b-mrn', 'mrn-0001')]) expect(other.equals(base)).toBe(false);
+    for (const other of [subject.digest('tenant-b', 'hospital-a-mrn', 'mrn-0001'), subject.digest('tenant-a', 'hospital-b-mrn', 'mrn-0001')])
+      expect(other.equals(base)).toBe(false);
   });
 
   it('ignores white space and letter case, and nothing else (matching is exact: a false match verifies a report against the wrong person)', () => {

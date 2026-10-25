@@ -1,14 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import {
-  buildMeta,
-  type InvitationCreate,
-  type InvitationDto,
-  type MemberDto,
-  type MemberRolesInput,
-  type Paginated,
-  type PaginationQuery,
-} from '@telesphoros/shared-types';
+import { buildMeta, type InvitationCreate, type InvitationDto, type MemberDto, type MemberRolesInput, type Paginated, type PaginationQuery } from '@telesphoros/shared-types';
 import type { Principal } from '../auth/principal';
 import { AppException } from '../common/app-exception';
 import { ENV, type Env } from '../config/env';
@@ -16,7 +8,14 @@ import { type InvitationView, MemberAdminRepository, MemberAdminRuleError, type 
 import { InvitationDigest } from './invitation-digest';
 
 const toMember = (m: MemberView): MemberDto => ({ sub: m.sub, roles: m.roles, changedAt: m.changedAt.toISOString() });
-const toInvitation = (i: InvitationView): InvitationDto => ({ id: i.id, emailHint: i.emailHint, roles: i.roles, status: i.status, expiresAt: i.expiresAt.toISOString(), createdAt: i.createdAt.toISOString() });
+const toInvitation = (i: InvitationView): InvitationDto => ({
+  id: i.id,
+  emailHint: i.emailHint,
+  roles: i.roles,
+  status: i.status,
+  expiresAt: i.expiresAt.toISOString(),
+  createdAt: i.createdAt.toISOString(),
+});
 
 /** A rule the store raised, as the answer the caller gets. The store never says which part of an organization's membership it looked at. */
 function refusal(error: unknown): never {
@@ -73,9 +72,16 @@ export class MembersService {
     const digest = this.digest.digest(input.email);
     // The fingerprint of the original request: the address's keyed digest and the roles (as a set, so their order does not matter), never the address.
     const request = input.requestId
-      ? { id: input.requestId, hash: createHash('sha256').update(JSON.stringify([digest.toString('hex'), [...new Set(input.roles)].sort()])).digest('hex') }
+      ? {
+          id: input.requestId,
+          hash: createHash('sha256')
+            .update(JSON.stringify([digest.toString('hex'), [...new Set(input.roles)].sort()]))
+            .digest('hex'),
+        }
       : undefined;
-    const made = await this.members.createInvitation(principal, { digest, hint: this.digest.hint(input.email), roles: input.roles, ...(request ? { request } : {}) }).catch(refusal);
+    const made = await this.members
+      .createInvitation(principal, { digest, hint: this.digest.hint(input.email), roles: input.roles, ...(request ? { request } : {}) })
+      .catch(refusal);
     return toInvitation(made);
   }
 

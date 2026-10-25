@@ -19,9 +19,15 @@ let app: NestExpressApplication;
 const api = (target: NestExpressApplication = app) => request(target.getHttpServer());
 const sub = () => `person-${randomUUID().slice(0, 8)}`;
 const token = (person: string, options: Parameters<typeof signToken>[0] = {}) => signToken({ sub: person, tenant: TENANT, ...options });
-const me = async (person: string, options: Parameters<typeof signToken>[0] = {}, target = app) => api(target).get('/api/v1/me').set(bearer(await token(person, options)));
+const me = async (person: string, options: Parameters<typeof signToken>[0] = {}, target = app) =>
+  api(target)
+    .get('/api/v1/me')
+    .set(bearer(await token(person, options)));
 const createPatient = async (person: string, options: Parameters<typeof signToken>[0] = {}, target = app) =>
-  api(target).post('/api/v1/patients').set(bearer(await token(person, options))).send({ label: `SYN-${randomUUID().slice(0, 8)}` });
+  api(target)
+    .post('/api/v1/patients')
+    .set(bearer(await token(person, options)))
+    .send({ label: `SYN-${randomUUID().slice(0, 8)}` });
 
 beforeAll(async () => {
   app = await createTestApp({ membershipFromTokens: false });
@@ -79,9 +85,23 @@ describe('removal and role changes take effect on the very next request, with th
     const admin = membershipOf(app);
     await admin.grant({ tenantId: TENANT, sub: person, roles: ['clinician'], ...OPERATOR });
     const t = await token(person);
-    expect((await api().post('/api/v1/patients').set(bearer(t)).send({ label: `SYN-${randomUUID().slice(0, 8)}` })).status).toBe(201);
+    expect(
+      (
+        await api()
+          .post('/api/v1/patients')
+          .set(bearer(t))
+          .send({ label: `SYN-${randomUUID().slice(0, 8)}` })
+      ).status,
+    ).toBe(201);
     await admin.setRoles({ tenantId: TENANT, sub: person, roles: ['reader'], ...OPERATOR });
-    expect((await api().post('/api/v1/patients').set(bearer(t)).send({ label: `SYN-${randomUUID().slice(0, 8)}` })).status).toBe(403);
+    expect(
+      (
+        await api()
+          .post('/api/v1/patients')
+          .set(bearer(t))
+          .send({ label: `SYN-${randomUUID().slice(0, 8)}` })
+      ).status,
+    ).toBe(403);
     expect((await api().get('/api/v1/patients').set(bearer(t))).status).toBe(200);
   });
 

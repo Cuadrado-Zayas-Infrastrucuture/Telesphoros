@@ -43,12 +43,22 @@ export class PatientIdentityService {
         digest,
         keyVersion: CURRENT_KEY_VERSION,
         // The fingerprint of the original request: the patient, the system and the keyed digest, never the value.
-        ...(body.requestId ? { request: { id: body.requestId, hash: createHash('sha256').update(JSON.stringify([patientId.toLowerCase(), body.system, digest.toString('hex')])).digest('hex') } } : {}),
+        ...(body.requestId
+          ? {
+              request: {
+                id: body.requestId,
+                hash: createHash('sha256')
+                  .update(JSON.stringify([patientId.toLowerCase(), body.system, digest.toString('hex')]))
+                  .digest('hex'),
+              },
+            }
+          : {}),
       });
       return toIdentifierDto(stored);
     } catch (error) {
       if (error instanceof IdentifierRequestReusedError) throw AppException.conflictBecause('request-id-reused', 'That request id was already used for a different identifier.');
-      if (error instanceof IdentifierInUseError) throw AppException.conflictBecause('identifier-in-use', 'That identifier is already registered to a patient of this organization.');
+      if (error instanceof IdentifierInUseError)
+        throw AppException.conflictBecause('identifier-in-use', 'That identifier is already registered to a patient of this organization.');
       throw error;
     }
   }

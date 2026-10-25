@@ -1,12 +1,14 @@
-import type { CorrectionHistory } from "./correction-history.js";
-import { z } from "zod";
-import { pgxVersionsSchema, type PgxFhirBundle } from "./pgx-fhir.js";
+import type { CorrectionHistory } from './correction-history.js';
+import { z } from 'zod';
+import { pgxVersionsSchema, type PgxFhirBundle } from './pgx-fhir.js';
 export const storedPatientSchema = z.strictObject({
-  patientId: z.uuid(), label: z.string().regex(/^SYN-[A-Za-z0-9-]{1,36}$/), evaluationId: z.uuid(),
+  patientId: z.uuid(),
+  label: z.string().regex(/^SYN-[A-Za-z0-9-]{1,36}$/),
+  evaluationId: z.uuid(),
 });
 export type StoredPatient = z.infer<typeof storedPatientSchema>;
 export const registrationSchema = z.object({
-  tenantId: z.literal("synthetic-office"),
+  tenantId: z.literal('synthetic-office'),
   clientId: z.string().min(1),
   issuer: z.string(),
   authorizationEndpoint: z.string(),
@@ -23,9 +25,7 @@ export const registrationSchema = z.object({
         stored: storedPatientSchema.optional(),
         consent: z.boolean(),
         interpretable: z.boolean(),
-        profile: z
-          .array(z.object({ gene: z.string(), result: z.string() }))
-          .optional(),
+        profile: z.array(z.object({ gene: z.string(), result: z.string() })).optional(),
       }),
     )
     .min(1),
@@ -48,7 +48,7 @@ export interface Context {
 }
 export type Session = Context & { registration: Registration };
 export interface Diagnostic {
-  stage: "callback" | "evidence";
+  stage: 'callback' | 'evidence';
   code: string;
   status: number | null;
 }
@@ -73,12 +73,12 @@ export interface Evidence {
   uncertainMedicationCount: number;
   unmappedMedicationCount: number;
   profile: { gene: string; result: string }[];
-  evidenceSource: "static-synthetic" | "stored-synthetic";
+  evidenceSource: 'static-synthetic' | 'stored-synthetic';
   pgxFhirPreview: PgxFhirBundle | null;
   evidence: string;
 }
 export const patientSchema = z.object({
-  resourceType: z.literal("Patient"),
+  resourceType: z.literal('Patient'),
   id: z.string(),
   meta: z
     .object({
@@ -92,14 +92,10 @@ export const patientSchema = z.object({
         .optional(),
     })
     .optional(),
-  identifier: z
-    .array(
-      z.object({ system: z.string().optional(), value: z.string().optional() }),
-    )
-    .optional(),
+  identifier: z.array(z.object({ system: z.string().optional(), value: z.string().optional() })).optional(),
 });
 export const medicationSchema = z.object({
-  resourceType: z.literal("MedicationRequest"),
+  resourceType: z.literal('MedicationRequest'),
   id: z.string().optional(),
   status: z.string().optional(),
   subject: z.object({ reference: z.string() }),
@@ -119,8 +115,8 @@ export const medicationSchema = z.object({
     .optional(),
 });
 export const bundleSchema = z.object({
-  resourceType: z.literal("Bundle"),
-  type: z.enum(["searchset", "collection"]),
+  resourceType: z.literal('Bundle'),
+  type: z.enum(['searchset', 'collection']),
   entry: z.array(z.object({ resource: medicationSchema })).optional(),
   link: z.array(z.object({ relation: z.string(), url: z.string() })).optional(),
 });

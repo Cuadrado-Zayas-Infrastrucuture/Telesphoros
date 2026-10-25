@@ -19,21 +19,40 @@ export function SiteHeader() {
     { to: '/', label: 'Overview', end: true, show: !landing },
     { to: '/reports', label: 'Reports', end: true, show: ownedStorageMode() && roles.length > 0 },
     ...(import.meta.env.DEV && location.hostname === '127.0.0.1' && ownedStorageMode() && roles.length > 0 && pathname !== '/reports'
-      ? [{ to: '/local-interpretation', label: 'AI preview', end: true, show: true }] : []),
+      ? [{ to: '/local-interpretation', label: 'AI preview', end: true, show: true }]
+      : []),
     { to: '/reports/upload', label: 'Upload report', end: false, show: !ownedStorageMode() && roles.some((r) => WRITER_ROLES.includes(r)) },
   ].filter((link) => link.show);
 
   return (
-    <header className={cn("border-b border-divider bg-background", landing && "landing-site-header")}>
+    <header className={cn('border-b border-divider bg-background', landing && 'landing-site-header')}>
       <div className="mx-auto flex max-w-page flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4 py-4 sm:px-6">
         <NavLink to="/" className="inline-flex min-h-control min-w-0 max-w-full items-center gap-3 rounded-sm text-foreground">
-          <img src={productMark} alt={h.logoAlt} width="64" height="66" loading="eager" className="h-auto w-16 shrink-0" /><span className="flex min-w-0 flex-col wrap-anywhere"><span className="font-heading text-2xl font-semibold tracking-tight">Telesphoros</span>
-          <span className="text-xs text-muted-foreground">{h.byline}</span></span>
+          <img src={productMark} alt={h.logoAlt} width="64" height="66" loading="eager" className="h-auto w-16 shrink-0" />
+          <span className="flex min-w-0 flex-col wrap-anywhere">
+            <span className="font-heading text-2xl font-semibold tracking-tight">Telesphoros</span>
+            <span className="text-xs text-muted-foreground">{h.byline}</span>
+          </span>
         </NavLink>
         <nav aria-label={h.nav}>
           <ul className="flex flex-wrap items-center gap-1">
-            {landing && [['#platform', h.workspace], ['#workflow', h.workflow], ['#questions', h.faq]].map(([href, label]) => <li key={href}><a href={href} className="inline-flex min-h-control items-center px-2 text-sm font-medium hover:bg-muted">{label}</a></li>)}
-            {landing && <li><LanguageToggle /></li>}
+            {landing &&
+              [
+                ['#platform', h.workspace],
+                ['#workflow', h.workflow],
+                ['#questions', h.faq],
+              ].map(([href, label]) => (
+                <li key={href}>
+                  <a href={href} className="inline-flex min-h-control items-center px-2 text-sm font-medium hover:bg-muted">
+                    {label}
+                  </a>
+                </li>
+              ))}
+            {landing && (
+              <li>
+                <LanguageToggle />
+              </li>
+            )}
             {links.map((link) => (
               <li key={link.to}>
                 <NavLink
@@ -50,7 +69,25 @@ export function SiteHeader() {
                 </NavLink>
               </li>
             ))}
-            {import.meta.env.DEV && location.hostname === '127.0.0.1' && ownedStorageMode() && roles.length > 0 && pathname === '/reports' && <li><a href="#ai-assistant" className="inline-flex min-h-control items-center border-b-2 border-transparent px-2 text-sm font-medium text-foreground hover:bg-muted" onClick={event => { const panel = document.getElementById('ai-assistant') as HTMLDetailsElement | null; if (panel) { event.preventDefault(); panel.open = true; panel.scrollIntoView?.({ block: 'start' }); panel.querySelector('summary')?.focus({ preventScroll: true }); } }}>AI preview</a></li>}
+            {import.meta.env.DEV && location.hostname === '127.0.0.1' && ownedStorageMode() && roles.length > 0 && pathname === '/reports' && (
+              <li>
+                <a
+                  href="#ai-assistant"
+                  className="inline-flex min-h-control items-center border-b-2 border-transparent px-2 text-sm font-medium text-foreground hover:bg-muted"
+                  onClick={(event) => {
+                    const panel = document.getElementById('ai-assistant') as HTMLDetailsElement | null;
+                    if (panel) {
+                      event.preventDefault();
+                      panel.open = true;
+                      panel.scrollIntoView?.({ block: 'start' });
+                      panel.querySelector('summary')?.focus({ preventScroll: true });
+                    }
+                  }}
+                >
+                  AI preview
+                </a>
+              </li>
+            )}
           </ul>
         </nav>
         <AccountMenu />

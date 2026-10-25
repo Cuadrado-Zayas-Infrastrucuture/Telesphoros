@@ -19,7 +19,11 @@ let db: EphemeralDatabase;
 
 const token = () => randomBytes(32).toString('base64url');
 const hashOf = (value: string) => createHash('sha256').update(value, 'utf8').digest();
-const code = (promise: Promise<unknown>) => promise.then(() => 'ok', (e: { code?: string }) => e.code);
+const code = (promise: Promise<unknown>) =>
+  promise.then(
+    () => 'ok',
+    (e: { code?: string }) => e.code,
+  );
 
 /** Runs `work` on its own connection as `url`, inside one transaction with these transaction-local settings, then rolls back. */
 async function as<T>(url: string, settings: Settings, work: (c: Client) => Promise<T>): Promise<T> {
@@ -45,7 +49,12 @@ async function issue(input: { tenant?: string; sub?: string; version?: number; p
   await c.connect();
   try {
     const { rows } = await c.query<{ expires_at: Date | null; refusal: string | null }>('SELECT * FROM tenant_capability_issue($1, $2, $3, $4, $5, $6)', [
-      input.tenant ?? 'org-alpha', input.sub ?? 'alice', input.version ?? 1, input.purpose ?? 'request', input.hash ?? hashOf(value), input.request === undefined ? 'req-00000001' : input.request,
+      input.tenant ?? 'org-alpha',
+      input.sub ?? 'alice',
+      input.version ?? 1,
+      input.purpose ?? 'request',
+      input.hash ?? hashOf(value),
+      input.request === undefined ? 'req-00000001' : input.request,
     ]);
     return { token: value, ...rows[0]! };
   } finally {
@@ -61,8 +70,13 @@ async function issueCurrent(input: { tenant?: string | null; sub?: string | null
   try {
     const { rows } = await c.query<{ expires_at: Date | null; refusal: string | null; membership_version: string | null }>(
       'SELECT * FROM tenant_capability_issue_current($1, $2, $3, $4, $5)',
-      [input.tenant === undefined ? 'org-alpha' : input.tenant, input.sub === undefined ? 'alice' : input.sub, input.purpose ?? 'request',
-        input.hash === undefined ? hashOf(value) : input.hash, input.request === undefined ? 'req-00000002' : input.request],
+      [
+        input.tenant === undefined ? 'org-alpha' : input.tenant,
+        input.sub === undefined ? 'alice' : input.sub,
+        input.purpose ?? 'request',
+        input.hash === undefined ? hashOf(value) : input.hash,
+        input.request === undefined ? 'req-00000002' : input.request,
+      ],
     );
     return { token: value, ...rows[0]! };
   } finally {
@@ -75,10 +89,18 @@ beforeAll(async () => {
   await owner(async (c) => {
     for (const tenant of ['org-alpha', 'org-beta', 'org-gamma']) await registerTenantRow(c, tenant);
     await c.query(`UPDATE tenants SET status = 'suspended', changed_by = 'test' WHERE id = 'org-gamma'`);
-    for (const [tenant, sub, status] of [['org-alpha', 'alice', 'active'], ['org-beta', 'bob', 'active'], ['org-alpha', 'carol', 'removed'], ['org-gamma', 'gina', 'active']]) {
+    for (const [tenant, sub, status] of [
+      ['org-alpha', 'alice', 'active'],
+      ['org-beta', 'bob', 'active'],
+      ['org-alpha', 'carol', 'removed'],
+      ['org-gamma', 'gina', 'active'],
+    ]) {
       await c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ($1, $2, $3, ARRAY['clinician'], 'test')`, [tenant, sub, status]);
     }
-    for (const [tenant, n] of [['org-alpha', 4], ['org-beta', 1]] as const) {
+    for (const [tenant, n] of [
+      ['org-alpha', 4],
+      ['org-beta', 1],
+    ] as const) {
       for (let i = 0; i < n; i += 1) await c.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ($1, 'test', $2)`, [tenant, `SYN-${tenant}-${i}`]);
     }
   });
@@ -89,7 +111,12 @@ afterAll(async () => {
 
 describe('the login under test is the application, not a superuser', () => {
   it('has no superuser or BYPASSRLS, and is a member of telesphoros_app', async () => {
-    const row = await as(db.appUrl, {}, async (c) => (await c.query(`SELECT rolsuper, rolbypassrls, pg_has_role(current_user, 'telesphoros_app', 'MEMBER') AS app FROM pg_roles WHERE rolname = current_user`)).rows[0]);
+    const row = await as(
+      db.appUrl,
+      {},
+      async (c) =>
+        (await c.query(`SELECT rolsuper, rolbypassrls, pg_has_role(current_user, 'telesphoros_app', 'MEMBER') AS app FROM pg_roles WHERE rolname = current_user`)).rows[0],
+    );
     expect(row).toEqual({ rolsuper: false, rolbypassrls: false, app: true });
   });
 });
@@ -118,7 +145,14 @@ describe('DATA-01 slice 3 PR B (migration 0032): dual mode, the policies read ap
 });
 
 describe('only the issuer can mint, and nobody else can read or change the capability tables', () => {
-  const others = () => [['app', db.appUrl], ['worker', db.workerUrl], ['verifier', db.verifierUrl], ['operator', db.operatorUrl], ['auditor', db.auditorUrl]] as const;
+  const others = () =>
+    [
+      ['app', db.appUrl],
+      ['worker', db.workerUrl],
+      ['verifier', db.verifierUrl],
+      ['operator', db.operatorUrl],
+      ['auditor', db.auditorUrl],
+    ] as const;
   const statements = [
     'SELECT * FROM tenant_capabilities',
     `INSERT INTO tenant_capabilities (token_hash, tenant_id, sub, membership_version, purpose, issued_at, expires_at) VALUES (sha256('x'), 'org-alpha', 'alice', 1, 'request', now(), now() + interval '1 hour')`,
@@ -136,7 +170,13 @@ describe('only the issuer can mint, and nobody else can read or change the capab
   });
 
   it('the issuer cannot read what it writes, or any clinical table', async () => {
-    for (const sql of ['SELECT * FROM tenant_capabilities', 'SELECT * FROM capability_issuance_log', 'SELECT * FROM tenant_binding_mode', 'SELECT * FROM patients', 'SELECT * FROM tenant_memberships']) {
+    for (const sql of [
+      'SELECT * FROM tenant_capabilities',
+      'SELECT * FROM capability_issuance_log',
+      'SELECT * FROM tenant_binding_mode',
+      'SELECT * FROM patients',
+      'SELECT * FROM tenant_memberships',
+    ]) {
       expect([sql, await code(as(db.issuerUrl, {}, (c) => c.query(sql)))]).toEqual([sql, '42501']);
     }
   });
@@ -153,7 +193,9 @@ describe('issuing', () => {
     const before = await owner(async (c) => (await c.query<{ t: Date }>('SELECT clock_timestamp() AS t')).rows[0]!.t);
     const result = await issue({ request: 'req-clock-01' });
     const after = await owner(async (c) => (await c.query<{ t: Date }>('SELECT clock_timestamp() AS t')).rows[0]!.t);
-    const row = await owner(async (c) => (await c.query(`SELECT *, row_to_json(c)::text AS whole FROM tenant_capabilities c WHERE token_hash = $1`, [hashOf(result.token)])).rows[0]);
+    const row = await owner(
+      async (c) => (await c.query(`SELECT *, row_to_json(c)::text AS whole FROM tenant_capabilities c WHERE token_hash = $1`, [hashOf(result.token)])).rows[0],
+    );
     expect(row).toMatchObject({ tenant_id: 'org-alpha', sub: 'alice', membership_version: '1', purpose: 'request', request_id: 'req-clock-01', revoked_at: null });
     expect(row.issued_at.getTime()).toBeGreaterThanOrEqual(before.getTime());
     expect(row.issued_at.getTime()).toBeLessThanOrEqual(after.getTime());
@@ -185,7 +227,9 @@ describe('issuing', () => {
     const request = `req-${randomBytes(6).toString('hex')}`;
     await issue({ request });
     await owner(async (c) => {
-      expect((await c.query('SELECT outcome, reason, tenant_id, sub FROM capability_issuance_log WHERE request_id = $1', [request])).rows).toEqual([{ outcome: 'issued', reason: null, tenant_id: 'org-alpha', sub: 'alice' }]);
+      expect((await c.query('SELECT outcome, reason, tenant_id, sub FROM capability_issuance_log WHERE request_id = $1', [request])).rows).toEqual([
+        { outcome: 'issued', reason: null, tenant_id: 'org-alpha', sub: 'alice' },
+      ]);
       expect(await code(c.query('UPDATE capability_issuance_log SET outcome = $1 WHERE request_id = $2', ['refused', request]))).not.toBe('ok');
       expect(await code(c.query('DELETE FROM capability_issuance_log WHERE request_id = $1', [request]))).not.toBe('ok');
     });
@@ -231,7 +275,11 @@ describe('resolving a capability: app_tenant() and app_actor()', () => {
     expect(await resolve({ ...setting, 'app.capability': token() })).toEqual({ tenant: null, actor: null });
     expect(await resolve({ ...setting, 'app.capability': 'x'.repeat(200) })).toEqual({ tenant: null, actor: null });
     const expired = await issue();
-    await owner((c) => c.query(`UPDATE tenant_capabilities SET issued_at = issued_at - interval '2 minutes', expires_at = expires_at - interval '2 minutes' WHERE token_hash = $1`, [hashOf(expired.token)]));
+    await owner((c) =>
+      c.query(`UPDATE tenant_capabilities SET issued_at = issued_at - interval '2 minutes', expires_at = expires_at - interval '2 minutes' WHERE token_hash = $1`, [
+        hashOf(expired.token),
+      ]),
+    );
     expect(await resolve({ ...setting, 'app.capability': expired.token })).toEqual({ tenant: null, actor: null });
     const revoked = await issue();
     await owner((c) => c.query('UPDATE tenant_capabilities SET revoked_at = clock_timestamp() WHERE token_hash = $1', [hashOf(revoked.token)]));
@@ -273,20 +321,30 @@ describe('sweeping expired capabilities', () => {
   it('removes rows past their expiry plus grace, keeps live ones, and only the jobs role may run it', async () => {
     const live = await issue();
     const old = await issue();
-    await owner((c) => c.query(`UPDATE tenant_capabilities SET issued_at = issued_at - interval '1 hour', expires_at = expires_at - interval '1 hour' WHERE token_hash = $1`, [hashOf(old.token)]));
+    await owner((c) =>
+      c.query(`UPDATE tenant_capabilities SET issued_at = issued_at - interval '1 hour', expires_at = expires_at - interval '1 hour' WHERE token_hash = $1`, [hashOf(old.token)]),
+    );
     const removed = await owner(async (c) => (await c.query('SELECT tenant_capabilities_sweep(1000) AS n')).rows[0].n);
     expect(removed).toBeGreaterThanOrEqual(1);
-    const left = await owner(async (c) => (await c.query('SELECT token_hash FROM tenant_capabilities WHERE token_hash = ANY($1)', [[hashOf(live.token), hashOf(old.token)]])).rows.map((r) => r.token_hash.toString('hex')));
+    const left = await owner(async (c) =>
+      (await c.query('SELECT token_hash FROM tenant_capabilities WHERE token_hash = ANY($1)', [[hashOf(live.token), hashOf(old.token)]])).rows.map((r) =>
+        r.token_hash.toString('hex'),
+      ),
+    );
     expect(left).toEqual([hashOf(live.token).toString('hex')]);
-    expect(await owner(async (c) => (await c.query(`SELECT has_function_privilege('telesphoros_jobs', 'tenant_capabilities_sweep(integer)', 'EXECUTE') AS ok`)).rows[0].ok)).toBe(true);
+    expect(await owner(async (c) => (await c.query(`SELECT has_function_privilege('telesphoros_jobs', 'tenant_capabilities_sweep(integer)', 'EXECUTE') AS ok`)).rows[0].ok)).toBe(
+      true,
+    );
   });
 });
 
 describe('issuing at the CURRENT membership version (migration 0031, DATA-01 slice 3 PR A)', () => {
   const sub = 'dora';
   const request = () => `req-${randomBytes(6).toString('hex')}`;
-  const versionOf = (who: string, tenant = 'org-alpha') => owner(async (c) => (await c.query<{ version: string }>('SELECT version FROM tenant_memberships WHERE tenant_id = $1 AND sub = $2', [tenant, who])).rows[0]!.version);
-  const logFor = (id: string) => owner(async (c) => (await c.query('SELECT outcome, reason, membership_version, tenant_id, sub FROM capability_issuance_log WHERE request_id = $1', [id])).rows);
+  const versionOf = (who: string, tenant = 'org-alpha') =>
+    owner(async (c) => (await c.query<{ version: string }>('SELECT version FROM tenant_memberships WHERE tenant_id = $1 AND sub = $2', [tenant, who])).rows[0]!.version);
+  const logFor = (id: string) =>
+    owner(async (c) => (await c.query('SELECT outcome, reason, membership_version, tenant_id, sub FROM capability_issuance_log WHERE request_id = $1', [id])).rows);
   const mintedFor = (id: string) => owner(async (c) => (await c.query('SELECT count(*)::int AS n FROM tenant_capabilities WHERE request_id = $1', [id])).rows[0].n as number);
 
   beforeAll(async () => {
@@ -306,7 +364,9 @@ describe('issuing at the CURRENT membership version (migration 0031, DATA-01 sli
     expect(result.refusal).toBeNull();
     expect(result.expires_at).toBeInstanceOf(Date);
     expect(result.membership_version).toBe(current);
-    const row = await owner(async (c) => (await c.query('SELECT membership_version, tenant_id, sub, purpose FROM tenant_capabilities WHERE token_hash = $1', [hashOf(result.token)])).rows[0]);
+    const row = await owner(
+      async (c) => (await c.query('SELECT membership_version, tenant_id, sub, purpose FROM tenant_capabilities WHERE token_hash = $1', [hashOf(result.token)])).rows[0],
+    );
     expect(row).toEqual({ membership_version: current, tenant_id: 'org-alpha', sub, purpose: 'request' });
     expect(await logFor(id)).toEqual([{ outcome: 'issued', reason: null, membership_version: current, tenant_id: 'org-alpha', sub }]);
   });
@@ -317,7 +377,14 @@ describe('issuing at the CURRENT membership version (migration 0031, DATA-01 sli
     const after = await issueCurrent({ sub });
     expect(Number(after.membership_version)).toBe(Number(before.membership_version) + 1);
     expect(after.membership_version).toBe(await versionOf(sub));
-    const stored = await owner(async (c) => (await c.query('SELECT token_hash, membership_version FROM tenant_capabilities WHERE token_hash = ANY($1) ORDER BY issued_at', [[hashOf(before.token), hashOf(after.token)]])).rows);
+    const stored = await owner(
+      async (c) =>
+        (
+          await c.query('SELECT token_hash, membership_version FROM tenant_capabilities WHERE token_hash = ANY($1) ORDER BY issued_at', [
+            [hashOf(before.token), hashOf(after.token)],
+          ])
+        ).rows,
+    );
     expect(stored.map((r) => r.membership_version)).toEqual([before.membership_version, after.membership_version]);
   });
 
@@ -374,7 +441,11 @@ describe('issuing at the CURRENT membership version (migration 0031, DATA-01 sli
     await owner((c) => c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ('org-beta', 'sam', 'active', ARRAY['reader'], 'test')`));
     await owner((c) => c.query(`UPDATE capability_purposes SET burst_limit = 2, enforce_limits = true WHERE purpose = 'request'`));
     try {
-      const results = [await issueCurrent({ tenant: 'org-beta', sub: 'sam' }), await issueCurrent({ tenant: 'org-beta', sub: 'sam' }), await issueCurrent({ tenant: 'org-beta', sub: 'sam' })];
+      const results = [
+        await issueCurrent({ tenant: 'org-beta', sub: 'sam' }),
+        await issueCurrent({ tenant: 'org-beta', sub: 'sam' }),
+        await issueCurrent({ tenant: 'org-beta', sub: 'sam' }),
+      ];
       expect(results.map((r) => r.refusal)).toEqual([null, null, 'rate-limited']);
     } finally {
       await owner((c) => c.query(`UPDATE capability_purposes SET burst_limit = 120, enforce_limits = false WHERE purpose = 'request'`));
@@ -384,16 +455,27 @@ describe('issuing at the CURRENT membership version (migration 0031, DATA-01 sli
   it('only the issuer login may call it: every other login is refused, and the issuer succeeds in the same run', async () => {
     const sql = `SELECT * FROM tenant_capability_issue_current('org-beta', 'bob', 'request', sha256('x'), NULL)`;
     expect(await code(as(db.issuerUrl, {}, (c) => c.query(sql)))).toBe('ok'); // control
-    for (const [name, url] of [['app', db.appUrl], ['worker', db.workerUrl], ['verifier', db.verifierUrl], ['operator', db.operatorUrl], ['auditor', db.auditorUrl]] as const) {
+    for (const [name, url] of [
+      ['app', db.appUrl],
+      ['worker', db.workerUrl],
+      ['verifier', db.verifierUrl],
+      ['operator', db.operatorUrl],
+      ['auditor', db.auditorUrl],
+    ] as const) {
       expect([name, await code(as(url, {}, (c) => c.query(sql)))]).toEqual([name, '42501']);
     }
   });
 
   it('is a definer owned by the capability owner, with a fixed search path, and EXECUTE for the issuer group only (not PUBLIC)', async () => {
-    const facts = await owner(async (c) => (await c.query(`
+    const facts = await owner(
+      async (c) =>
+        (
+          await c.query(`
       SELECT pg_get_userbyid(p.proowner) AS owner, p.prosecdef AS definer, p.proconfig AS config,
              (SELECT array_agg((CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(a.grantee)::text END) ORDER BY a.grantee) FROM aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a WHERE a.privilege_type = 'EXECUTE' AND a.grantee <> p.proowner) AS grantees
-        FROM pg_proc p WHERE p.proname = 'tenant_capability_issue_current' AND p.pronamespace = 'public'::regnamespace`)).rows);
+        FROM pg_proc p WHERE p.proname = 'tenant_capability_issue_current' AND p.pronamespace = 'public'::regnamespace`)
+        ).rows,
+    );
     expect(facts).toEqual([{ owner: 'telesphoros_capability', definer: true, config: ['search_path=pg_catalog, pg_temp'], grantees: ['telesphoros_issuer'] }]);
   });
 });
@@ -406,10 +488,12 @@ describe('app_capability_version() (migration 0031): the version a presented cap
     await owner((c) => c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ('org-alpha', 'frank', 'active', ARRAY['reader'], 'test')`));
   });
 
-  it('positive control: a valid capability answers the version it was issued at, not the membership\'s current one', async () => {
+  it("positive control: a valid capability answers the version it was issued at, not the membership's current one", async () => {
     const issued = await issueCurrent({ sub: 'frank' });
     await owner((c) => c.query(`UPDATE tenant_memberships SET roles = ARRAY['reader', 'clinician'], changed_by = 'test' WHERE tenant_id = 'org-alpha' AND sub = 'frank'`));
-    const now = await owner(async (c) => (await c.query<{ version: string }>(`SELECT version FROM tenant_memberships WHERE tenant_id = 'org-alpha' AND sub = 'frank'`)).rows[0]!.version);
+    const now = await owner(
+      async (c) => (await c.query<{ version: string }>(`SELECT version FROM tenant_memberships WHERE tenant_id = 'org-alpha' AND sub = 'frank'`)).rows[0]!.version,
+    );
     expect(Number(now)).toBeGreaterThan(Number(issued.membership_version));
     expect(await versionFor({ 'app.capability': issued.token })).toBe(issued.membership_version);
     expect(await versionFor({ 'app.capability': issued.token, ...setting })).toBe(issued.membership_version);
@@ -424,7 +508,11 @@ describe('app_capability_version() (migration 0031): the version a presented cap
     expect(await versionFor(setting)).toBeNull(); // the old setting alone carries no version
     expect(await versionFor({})).toBeNull();
     const expired = await issueCurrent();
-    await owner((c) => c.query(`UPDATE tenant_capabilities SET issued_at = issued_at - interval '2 minutes', expires_at = expires_at - interval '2 minutes' WHERE token_hash = $1`, [hashOf(expired.token)]));
+    await owner((c) =>
+      c.query(`UPDATE tenant_capabilities SET issued_at = issued_at - interval '2 minutes', expires_at = expires_at - interval '2 minutes' WHERE token_hash = $1`, [
+        hashOf(expired.token),
+      ]),
+    );
     expect(await versionFor({ 'app.capability': expired.token })).toBeNull();
     const revoked = await issueCurrent();
     expect(await versionFor({ 'app.capability': revoked.token })).toBe(revoked.membership_version); // control just before revoking
@@ -445,11 +533,18 @@ describe('app_capability_version() (migration 0031): the version a presented cap
     }
   });
 
-  it('the expiry is the database\'s statement clock, the same rule app_tenant() applies (they agree on every state above)', async () => {
+  it("the expiry is the database's statement clock, the same rule app_tenant() applies (they agree on every state above)", async () => {
     const live = await issueCurrent();
     const old = await issueCurrent();
-    await owner((c) => c.query(`UPDATE tenant_capabilities SET issued_at = issued_at - interval '2 minutes', expires_at = expires_at - interval '2 minutes' WHERE token_hash = $1`, [hashOf(old.token)]));
-    for (const [who, expected] of [[live, 'org-alpha'], [old, null]] as const) {
+    await owner((c) =>
+      c.query(`UPDATE tenant_capabilities SET issued_at = issued_at - interval '2 minutes', expires_at = expires_at - interval '2 minutes' WHERE token_hash = $1`, [
+        hashOf(old.token),
+      ]),
+    );
+    for (const [who, expected] of [
+      [live, 'org-alpha'],
+      [old, null],
+    ] as const) {
       const both = await as(db.appUrl, { 'app.capability': who.token }, async (c) => (await c.query('SELECT app_tenant() AS t, app_capability_version() AS v')).rows[0]);
       expect([both.t, both.v === null]).toEqual([expected, expected === null]);
     }
@@ -457,13 +552,30 @@ describe('app_capability_version() (migration 0031): the version a presented cap
 
   it('EXECUTE goes to the roles that already bind through app_tenant(), and never to PUBLIC: the verifier, operator, auditor and issuer logins are refused', async () => {
     const sql = 'SELECT app_capability_version()';
-    for (const [name, url] of [['app', db.appUrl], ['worker', db.workerUrl]] as const) expect([name, await code(as(url, {}, (c) => c.query(sql)))]).toEqual([name, 'ok']); // controls
-    for (const [name, url] of [['verifier', db.verifierUrl], ['operator', db.operatorUrl], ['auditor', db.auditorUrl], ['issuer', db.issuerUrl]] as const) {
+    for (const [name, url] of [
+      ['app', db.appUrl],
+      ['worker', db.workerUrl],
+    ] as const)
+      expect([name, await code(as(url, {}, (c) => c.query(sql)))]).toEqual([name, 'ok']); // controls
+    for (const [name, url] of [
+      ['verifier', db.verifierUrl],
+      ['operator', db.operatorUrl],
+      ['auditor', db.auditorUrl],
+      ['issuer', db.issuerUrl],
+    ] as const) {
       expect([name, await code(as(url, {}, (c) => c.query(sql)))]).toEqual([name, '42501']);
     }
-    const grantees = (fn: string) => owner(async (c) => (await c.query<{ who: string }>(`
+    const grantees = (fn: string) =>
+      owner(async (c) =>
+        (
+          await c.query<{ who: string }>(
+            `
       SELECT (CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(a.grantee) END) AS who FROM pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
-       WHERE p.proname = $1 AND p.pronamespace = 'public'::regnamespace AND a.privilege_type = 'EXECUTE' AND a.grantee <> p.proowner ORDER BY 1`, [fn])).rows.map((r) => r.who));
+       WHERE p.proname = $1 AND p.pronamespace = 'public'::regnamespace AND a.privilege_type = 'EXECUTE' AND a.grantee <> p.proowner ORDER BY 1`,
+            [fn],
+          )
+        ).rows.map((r) => r.who),
+      );
     expect(await grantees('app_capability_version')).toEqual(await grantees('app_tenant'));
     expect(await grantees('app_capability_version')).not.toContain('PUBLIC');
     // the detector can see a PUBLIC grant: a function created without a REVOKE reports it
@@ -496,7 +608,8 @@ describe('reverting 0031 and 0028', () => {
     expect(await owner((c) => migrateDown(c, through.steps))).toEqual(through.reverted);
     const down = await owner(catalogSnapshot);
     // 0032 to 0043 sit above 0031 and go with it (0043's drop is undone, see below): 0032's internal binding, 0033's member_sign_out, 0034's two patient-delete guards, 0036's outbox_stats and 0039's patient, 0040's identifier and 0041's invitation retry-identity guards (and its keyed create function) and 0042's three-argument outbox_append are the other functions this revert removes
-    const removed = /tenant_capability_issue_current|app_tenant_bound|app_capability_version|tenant_capability_bind_internal|member_sign_out|patient_merge_decisions_hold|patients_guard_delete|outbox_stats|patients_creation_request_guard|patient_identifiers_creation_request_guard|invitations_creation_request_guard|invitation_create_keyed|outbox_append\(text,uuid,text\)/;
+    const removed =
+      /tenant_capability_issue_current|app_tenant_bound|app_capability_version|tenant_capability_bind_internal|member_sign_out|patient_merge_decisions_hold|patients_guard_delete|outbox_stats|patients_creation_request_guard|patient_identifiers_creation_request_guard|invitations_creation_request_guard|invitation_create_keyed|outbox_append\(text,uuid,text\)/;
     expect(down.filter((l) => removed.test(l))).toEqual([]);
     // Reverting 0043 puts the dropped legacy table back (with its policy), so the reverted catalog has those two lines the head catalog lacks; nothing else moved.
     const restoredLegacyTable = (l: string) => l.startsWith('rel recommendations ') || l.startsWith('policy recommendations.');
@@ -522,11 +635,22 @@ describe('reverting 0031 and 0028', () => {
     expect(await owner((c) => migrateDown(c, aboveCapability.steps))).toEqual(aboveCapability.reverted);
     await expect(owner((c) => migrateDown(c, 1))).rejects.toThrow(/Refusing to drop the capability issuance log/);
     expect(await owner(async (c) => (await c.query(`SELECT to_regclass('public.tenant_capabilities') IS NOT NULL AS ok`)).rows[0].ok)).toBe(true);
-    expect(await owner(async (c) => {
-      await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
-      return migrateDown(c, 1);
-    })).toEqual(['0028']);
-    expect(await owner(async (c) => (await c.query(`SELECT count(*)::int AS n FROM pg_proc WHERE proname IN ('app_tenant', 'app_actor', 'app_capability_version', 'tenant_capability_issue', 'tenant_capability_issue_current', 'tenant_capabilities_sweep')`)).rows[0].n)).toBe(0);
+    expect(
+      await owner(async (c) => {
+        await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
+        return migrateDown(c, 1);
+      }),
+    ).toEqual(['0028']);
+    expect(
+      await owner(
+        async (c) =>
+          (
+            await c.query(
+              `SELECT count(*)::int AS n FROM pg_proc WHERE proname IN ('app_tenant', 'app_actor', 'app_capability_version', 'tenant_capability_issue', 'tenant_capability_issue_current', 'tenant_capabilities_sweep')`,
+            )
+          ).rows[0].n,
+      ),
+    ).toBe(0);
     expect(await owner((c) => migrateUp(c))).toEqual(versionsFrom('tenant_capability')); // control: they apply again
   });
 });

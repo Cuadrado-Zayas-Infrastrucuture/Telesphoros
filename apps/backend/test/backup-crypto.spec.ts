@@ -180,7 +180,7 @@ describe('known answer (an independent implementation wrote this file)', () => {
   const golden =
     '5450424b0206101112131415161718191a1b1c1d1e1fa0a1a2a3a4a5a6e46548cf7823060a458fe0442bc490f2676b7e72539952a85096228696f1740e33be56e5443845ce809c787d007396df08ceabef8175454ac0ca022f0a024fe95aa7e496c2bca252a3525e79f8175a185bb4f387a159922d99b2769a9ee6e43f5dbf33aeb7be8e701ac907a63eaf9b529a98115ab9570ad0b54b8dcf4aac8b7213461d91f9b6a20f7a2311943e89a7fecd8f31be9f79e78e7dabf2295278119220d6d9a894193bdb4663bebcae83221618ed2c9b6a411a0395cbf829a9dacb7272c6e6eb768da54bbec1c4ccd5cd';
 
-  it('produces exactly the independent implementation\'s bytes', async () => {
+  it("produces exactly the independent implementation's bytes", async () => {
     const input = path('kat-in');
     const output = path('kat-out');
     writeFileSync(input, plain);
@@ -189,7 +189,7 @@ describe('known answer (an independent implementation wrote this file)', () => {
     expect(keyIdHex(master)).toBe('e46548cf7823060a');
   });
 
-  it('reads the independent implementation\'s file', async () => {
+  it("reads the independent implementation's file", async () => {
     const input = path('kat-file');
     const output = path('kat-plain');
     writeFileSync(input, Buffer.from(golden, 'hex'));
@@ -207,7 +207,9 @@ describe('known answer (an independent implementation wrote this file)', () => {
       const piece = file.subarray(at, Math.min(at + 80, file.length));
       const last = at + 80 >= file.length;
       const nonce = Buffer.concat([header.subarray(22, 29), Buffer.from([0, 0, 0, i, last ? 1 : 0])]);
-      const decipher = createDecipheriv('aes-256-gcm', key, nonce).setAAD(header).setAuthTag(piece.subarray(piece.length - TAG));
+      const decipher = createDecipheriv('aes-256-gcm', key, nonce)
+        .setAAD(header)
+        .setAuthTag(piece.subarray(piece.length - TAG));
       out += Buffer.concat([decipher.update(piece.subarray(0, piece.length - TAG)), decipher.final()]).toString();
     }
     expect(out).toBe(plain);
@@ -237,7 +239,19 @@ describe('the key file', () => {
       return file;
     };
     expect((await readKeyFile(write(`  ${good.toUpperCase()}\r\n`))).toString('hex')).toBe(good);
-    const bad = ['', '   ', 'zz'.repeat(32), good.slice(2), `${good}00`, `${good}\n${good}`, '00'.repeat(32), 'ff'.repeat(32), 'ab'.repeat(32), '0123'.repeat(16), 'hunter2hunter2hunter2'];
+    const bad = [
+      '',
+      '   ',
+      'zz'.repeat(32),
+      good.slice(2),
+      `${good}00`,
+      `${good}\n${good}`,
+      '00'.repeat(32),
+      'ff'.repeat(32),
+      'ab'.repeat(32),
+      '0123'.repeat(16),
+      'hunter2hunter2hunter2',
+    ];
     for (const content of bad) await expect(readKeyFile(write(content))).rejects.toMatchObject({ code: 'bad-key-file' });
     await expect(readKeyFile(path('absent'))).rejects.toThrow();
   });

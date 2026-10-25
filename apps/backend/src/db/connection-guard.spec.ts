@@ -43,8 +43,20 @@ describe('every database connection goes through the TLS contract', () => {
 
   it('the scan found the application source (a floor, so an empty read cannot pass) including every known connection site', () => {
     expect(files.length).toBeGreaterThan(40);
-    const constructing = files.filter((f) => /new\s+(Pool|Client)\s*\(/.test(f.text)).map((f) => f.file).sort();
-    expect(constructing).toEqual(['db/backup.ts', 'db/cli.ts', 'db/database.ts', 'db/evidence-inventory.ts', 'db/provision-logins.ts', 'db/restore.ts', 'issuer/issuer-core.ts', 'ledger/verifier.ts']);
+    const constructing = files
+      .filter((f) => /new\s+(Pool|Client)\s*\(/.test(f.text))
+      .map((f) => f.file)
+      .sort();
+    expect(constructing).toEqual([
+      'db/backup.ts',
+      'db/cli.ts',
+      'db/database.ts',
+      'db/evidence-inventory.ts',
+      'db/provision-logins.ts',
+      'db/restore.ts',
+      'issuer/issuer-core.ts',
+      'ledger/verifier.ts',
+    ]);
   });
 
   it('no file bypasses pgClientConfig', () => {
@@ -53,20 +65,20 @@ describe('every database connection goes through the TLS contract', () => {
 
   it('flags each way a connection could bypass it (controls)', () => {
     const bad: Array<[string, string]> = [
-      ['a bare connection string', "const c = new Client({ connectionString: url });"],
-      ['a pool with an explicit ssl object and the URL', "const p = new Pool({ connectionString: url, ssl: { rejectUnauthorized: true } });"],
+      ['a bare connection string', 'const c = new Client({ connectionString: url });'],
+      ['a pool with an explicit ssl object and the URL', 'const p = new Pool({ connectionString: url, ssl: { rejectUnauthorized: true } });'],
       ['a pool built from other settings', "const p = new Pool({ host: 'h', max: 2 });"],
       ['reading sslmode', "const mode = new URL(u).searchParams.get('sslmode');"],
       ['a client built after a clean one on the same line', "const a = new Client(pgClientConfig(x)); const b = new Client({ host: 'h' });"],
     ];
     for (const [, text] of bad) expect(connectionViolations('x/y.ts', text).length).toBeGreaterThan(0);
     const good = [
-      "const c = new Client(pgClientConfig(url));",
-      "const p = new Pool({ ...pgClientConfig(url), max: 2 });",
-      "// a comment may mention connectionString and sslmode\nconst c = new Client(pgClientConfig(url));",
+      'const c = new Client(pgClientConfig(url));',
+      'const p = new Pool({ ...pgClientConfig(url), max: 2 });',
+      '// a comment may mention connectionString and sslmode\nconst c = new Client(pgClientConfig(url));',
       'const x = 1;',
     ];
     for (const text of good) expect(connectionViolations('x/y.ts', text)).toEqual([]);
-    expect(connectionViolations('db/tls.ts', "const s = { connectionString: url }; // sslmode")).toEqual([]);
+    expect(connectionViolations('db/tls.ts', 'const s = { connectionString: url }; // sslmode')).toEqual([]);
   });
 });

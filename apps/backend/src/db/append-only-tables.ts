@@ -5,7 +5,17 @@
  */
 export const APPEND_ONLY_CLASSES = {
   /** One row per fact, with its own ledger event (`ledger_event_id`, `created_by`, `seq`). Insert-only for everyone. */
-  record: ['report_captures', 'capture_acceptances', 'evaluations', 'corrections', 'cell_disputes', 'cell_dispute_decisions', 'report_patient_decisions', 'patient_merge_proposals', 'patient_merge_decisions'],
+  record: [
+    'report_captures',
+    'capture_acceptances',
+    'evaluations',
+    'corrections',
+    'cell_disputes',
+    'cell_dispute_decisions',
+    'report_patient_decisions',
+    'patient_merge_proposals',
+    'patient_merge_decisions',
+  ],
   /** Parts of a record, covered by the parent's event. Insert-only; frozen once the parent's event is visible. */
   child: ['evaluation_results', 'evaluation_gene_states'],
   /** The chain itself. Written only by the ledger functions. */
@@ -24,7 +34,7 @@ export const APPEND_ONLY_CLASSES = {
 export const LEGACY_TABLES = ['patients', 'reports', 'schema_migrations'] as const;
 
 // Local operational state advances under CAS/identity guards; it is not a clinical append-only fact.
-export const MUTABLE_OPERATIONAL_TABLES = ['report_upload_runs','report_upload_attempts'] as const;
+export const MUTABLE_OPERATIONAL_TABLES = ['report_upload_runs', 'report_upload_attempts'] as const;
 
 /**
  * Authority state (migration 0017): who belongs to which organization with which roles. Written only by the operator command (the table's
@@ -80,6 +90,31 @@ export const CAPABILITY_TABLES = ['tenant_capabilities', 'capability_issuance_lo
  * worker call the narrow `agentic_synthetic_*` functions only. Admission, run, reservation and bucket rows advance under those functions' guards; `agentic_synthetic_outcomes`,
  * `agentic_synthetic_audit` and the source rows are immutable. Seeded only by test owners; nothing here is clinical data or a ledger record.
  */
-export const AGENTIC_SYNTHETIC_TABLES = ['agentic_synthetic_capacity', 'agentic_synthetic_grants', 'agentic_synthetic_sources', 'agentic_synthetic_grant_sources', 'agentic_synthetic_runs', 'agentic_synthetic_reservations', 'agentic_synthetic_buckets', 'agentic_synthetic_invocations', 'agentic_synthetic_outcomes', 'agentic_synthetic_audit'] as const;
+export const AGENTIC_SYNTHETIC_TABLES = [
+  'agentic_synthetic_capacity',
+  'agentic_synthetic_grants',
+  'agentic_synthetic_sources',
+  'agentic_synthetic_grant_sources',
+  'agentic_synthetic_runs',
+  'agentic_synthetic_reservations',
+  'agentic_synthetic_buckets',
+  'agentic_synthetic_invocations',
+  'agentic_synthetic_outcomes',
+  'agentic_synthetic_audit',
+] as const;
 
-export const ALL_CLASSIFIED_TABLES: readonly string[] = [...Object.values(APPEND_ONLY_CLASSES).flat(), ...LEGACY_TABLES, ...MUTABLE_OPERATIONAL_TABLES, ...AUTHORITY_TABLES, ...BROWSER_SESSION_TABLES, ...PATIENT_IDENTITY_TABLES, ...PATIENT_DUPLICATE_TABLES, ...SECURITY_AUDIT_TABLES, ...JOB_TABLES, ...OUTBOX_TABLES, ...VERIFICATION_TABLES, ...CAPABILITY_TABLES, ...AGENTIC_SYNTHETIC_TABLES];
+export const ALL_CLASSIFIED_TABLES: readonly string[] = [
+  ...Object.values(APPEND_ONLY_CLASSES).flat(),
+  ...LEGACY_TABLES,
+  ...MUTABLE_OPERATIONAL_TABLES,
+  ...AUTHORITY_TABLES,
+  ...BROWSER_SESSION_TABLES,
+  ...PATIENT_IDENTITY_TABLES,
+  ...PATIENT_DUPLICATE_TABLES,
+  ...SECURITY_AUDIT_TABLES,
+  ...JOB_TABLES,
+  ...OUTBOX_TABLES,
+  ...VERIFICATION_TABLES,
+  ...CAPABILITY_TABLES,
+  ...AGENTIC_SYNTHETIC_TABLES,
+];

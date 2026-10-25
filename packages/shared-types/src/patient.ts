@@ -21,7 +21,10 @@ export type PatientInput = z.infer<typeof patientInputSchema>;
  * same id with a different label is refused. Without an id nothing is replayed, as before. The replacement body (PUT) takes no retry id.
  */
 export const patientCreateSchema = patientInputSchema.extend({
-  requestId: z.uuid().transform((value) => value.toLowerCase()).optional(),
+  requestId: z
+    .uuid()
+    .transform((value) => value.toLowerCase())
+    .optional(),
 });
 export type PatientCreate = z.infer<typeof patientCreateSchema>;
 

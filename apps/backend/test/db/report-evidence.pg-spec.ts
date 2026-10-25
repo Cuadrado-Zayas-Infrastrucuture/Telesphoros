@@ -35,8 +35,7 @@ const asApp = (report: SeededReport, sql: string, values: unknown[] = []): Promi
     await c.query(sql, values);
   });
 const update = (report: SeededReport, set: string, values: unknown[] = []) => asApp(report, `UPDATE reports SET ${set} WHERE id = '${report.reportId}'`, values);
-const reportRow = (report: SeededReport) =>
-  withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT * FROM reports WHERE id = $1`, [report.reportId])).rows[0]);
+const reportRow = (report: SeededReport) => withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT * FROM reports WHERE id = $1`, [report.reportId])).rows[0]);
 
 describe('the columns that pin a lab PDF', () => {
   it('requires a version and a named uploader once a lab PDF is uploaded, and refuses the storage layer\'s literal "null" version', async () => {
@@ -51,7 +50,10 @@ describe('the columns that pin a lab PDF', () => {
            VALUES ($1, 'syn', $2, $3, 'syn.pdf', 10, 'application/pdf', $4, $5, $6, $7, $8)`,
           [t, patientId, row.type, sha(randomUUID()), `k/${randomUUID()}`, row.uploaded_at, row.object_version, row.uploaded_by],
         );
-      }).then(() => undefined, (error: PgError) => error);
+      }).then(
+        () => undefined,
+        (error: PgError) => error,
+      );
     expect(await insert({})).toBeUndefined(); // control
     expect((await insert({ object_version: null }))?.constraint).toBe('reports_lab_pdf_pinned');
     expect((await insert({ uploaded_by: null }))?.constraint).toBe('reports_lab_pdf_pinned');
@@ -95,7 +97,11 @@ describe('once uploaded, the stored file cannot change', () => {
       const patientId = randomUUID();
       const id = randomUUID();
       await c.query(`INSERT INTO patients (id, tenant_id, created_by, label) VALUES ($1, $2, 'syn', $3)`, [patientId, t, `SYN-${randomUUID().slice(0, 8)}`]);
-      await c.query(`INSERT INTO reports (id, tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ($1, $2, 'syn', $3, 'lab-pdf', 'syn.pdf', 10)`, [id, t, patientId]);
+      await c.query(`INSERT INTO reports (id, tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ($1, $2, 'syn', $3, 'lab-pdf', 'syn.pdf', 10)`, [
+        id,
+        t,
+        patientId,
+      ]);
       return id;
     });
     const complete = (version: string) =>
@@ -119,7 +125,11 @@ describe('once uploaded, the stored file cannot change', () => {
       const patientId = randomUUID();
       const id = randomUUID();
       await c.query(`INSERT INTO patients (id, tenant_id, created_by, label) VALUES ($1, $2, 'syn', $3)`, [patientId, t, `SYN-${randomUUID().slice(0, 8)}`]);
-      await c.query(`INSERT INTO reports (id, tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ($1, $2, 'syn', $3, 'lab-pdf', 'syn.pdf', 10)`, [id, t, patientId]);
+      await c.query(`INSERT INTO reports (id, tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ($1, $2, 'syn', $3, 'lab-pdf', 'syn.pdf', 10)`, [
+        id,
+        t,
+        patientId,
+      ]);
       return id;
     });
     const set = (who: string) => attempt(pg.appUrl, t, 'syn', async (c) => void (await c.query(`UPDATE reports SET upload_requested_by = $2 WHERE id = $1`, [open, who])));
@@ -182,10 +192,18 @@ describe('a capture needs a live, pinned lab PDF with the same hash', () => {
     const t = tenant();
     const report = await seedLabReport(pg.adminUrl, t);
     expect((await update(report, `type = 'vcf'`))?.code).toBe(INTEGRITY); // uploaded type is now frozen before capture
-    const foreign = await seedLabReport(pg.adminUrl,t);
-    const vcfId=newId(),vcfKey=`vcf/${randomUUID()}`;
-    await withAdmin(pg.adminUrl,c=>c.query(`INSERT INTO reports(id,tenant_id,created_by,patient_id,type,original_filename,size_bytes,storage_key,sha256,content_type,uploaded_at,object_version,uploaded_by) VALUES($1,$2,'syn-up',$3,'vcf','inert.vcf',10,$4,$5,'text/x-vcf',now(),'syn-v','syn-up')`,[vcfId,t,foreign.patientId,vcfKey,report.pdfSha256]));
-    report.reportId=vcfId;report.storageKey=vcfKey;report.objectVersion='syn-v';
+    const foreign = await seedLabReport(pg.adminUrl, t);
+    const vcfId = newId(),
+      vcfKey = `vcf/${randomUUID()}`;
+    await withAdmin(pg.adminUrl, (c) =>
+      c.query(
+        `INSERT INTO reports(id,tenant_id,created_by,patient_id,type,original_filename,size_bytes,storage_key,sha256,content_type,uploaded_at,object_version,uploaded_by) VALUES($1,$2,'syn-up',$3,'vcf','inert.vcf',10,$4,$5,'text/x-vcf',now(),'syn-v','syn-up')`,
+        [vcfId, t, foreign.patientId, vcfKey, report.pdfSha256],
+      ),
+    );
+    report.reportId = vcfId;
+    report.storageKey = vcfKey;
+    report.objectVersion = 'syn-v';
     expect((await rawCapture(report))?.code).toBe(INTEGRITY);
     await expect(repo.insertCapture(t, 'syn-capturer', captureFor(report))).rejects.toBeInstanceOf(SourceChangedError);
   });
@@ -195,7 +213,7 @@ describe('a capture needs a live, pinned lab PDF with the same hash', () => {
     ['file hash', (r: SeededReport) => ({ expectedReport: { patientId: r.patientId, sha256: sha('other'), objectVersion: r.objectVersion, storageKey: r.storageKey } })],
     ['object version', (r: SeededReport) => ({ expectedReport: { patientId: r.patientId, sha256: r.pdfSha256, objectVersion: 'another-version', storageKey: r.storageKey } })],
     ['storage key', (r: SeededReport) => ({ expectedReport: { patientId: r.patientId, sha256: r.pdfSha256, objectVersion: r.objectVersion, storageKey: 'k/other' } })],
-  ])('the repository refuses when the report\'s %s is not what the caller relied on, and writes nothing', async (_name, over) => {
+  ])("the repository refuses when the report's %s is not what the caller relied on, and writes nothing", async (_name, over) => {
     const t = tenant();
     const report = await seedLabReport(pg.adminUrl, t);
     await expect(repo.insertCapture(t, 'syn-capturer', captureFor(report, 'text', over(report)))).rejects.toBeInstanceOf(SourceChangedError);
@@ -266,9 +284,7 @@ describe('a capture racing a change to the same report (decided by the lock queu
     expect((await reportRow(report)).deleted_at).toBeNull(); // the capture describes a report that still stands
   });
 
-  it.each([
-    ['soft-delete', `deleted_at = now()`],
-  ])('report change (%s) commits first: the waiting capture is refused and nothing of it remains', async (_name, set) => {
+  it.each([['soft-delete', `deleted_at = now()`]])('report change (%s) commits first: the waiting capture is refused and nothing of it remains', async (_name, set) => {
     const t = tenant();
     const report = await seedLabReport(pg.adminUrl, t);
     const unrelated = await seedLabReport(pg.adminUrl, t);
@@ -311,7 +327,9 @@ describe('reverting 0010', () => {
         await expect(migrateDown(c, 1)).rejects.toThrow(/Refusing to drop report evidence/);
         await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
         expect(await migrateDown(c, 1)).toEqual(['0010']);
-        const columns = await c.query(`SELECT column_name FROM information_schema.columns WHERE table_name = 'reports' AND column_name IN ('object_version', 'uploaded_by', 'upload_requested_by')`);
+        const columns = await c.query(
+          `SELECT column_name FROM information_schema.columns WHERE table_name = 'reports' AND column_name IN ('object_version', 'uploaded_by', 'upload_requested_by')`,
+        );
         expect(columns.rows).toEqual([]);
         const triggers = await c.query(`SELECT 1 FROM pg_trigger WHERE tgname = 'reports_evidence_guard'`);
         expect(triggers.rowCount).toBe(0);

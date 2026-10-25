@@ -133,13 +133,24 @@ function splitTopLevel(text: string): string[] {
   return parts.map((p) => p.trim()).filter((p) => p.length > 0);
 }
 
-const objectName = (text: string) => text.replace(/\(.*$/s, '').trim().toLowerCase().replace(/^public\./, '');
+const objectName = (text: string) =>
+  text
+    .replace(/\(.*$/s, '')
+    .trim()
+    .toLowerCase()
+    .replace(/^public\./, '');
 
 /** `GRANT`/`REVOKE <privileges> ON [kind] <objects> TO|FROM <roles>`; undefined for a role membership or anything it cannot read. */
 function parsePrivilegeStatement(body: string, direction: 'TO' | 'FROM'): PrivilegeStatement | undefined {
-  const match = new RegExp(`^\\s*(?:GRANT\\s+OPTION\\s+FOR\\s+)?(.+?)\\s+ON\\s+(?:(FUNCTION|TABLE|SCHEMA|SEQUENCE)\\s+)?(.+?)\\s+${direction}\\s+(.+?)\\s*(?:CASCADE|RESTRICT)?\\s*$`, 'is').exec(body);
+  const match = new RegExp(
+    `^\\s*(?:GRANT\\s+OPTION\\s+FOR\\s+)?(.+?)\\s+ON\\s+(?:(FUNCTION|TABLE|SCHEMA|SEQUENCE)\\s+)?(.+?)\\s+${direction}\\s+(.+?)\\s*(?:CASCADE|RESTRICT)?\\s*$`,
+    'is',
+  ).exec(body);
   if (!match) return undefined;
-  const privileges = splitTopLevel(match[1]!.replace(/\bPRIVILEGES\b/i, '')).map((p) => p.replace(/\s+/g, ' ').toUpperCase()).sort().join(',');
+  const privileges = splitTopLevel(match[1]!.replace(/\bPRIVILEGES\b/i, ''))
+    .map((p) => p.replace(/\s+/g, ' ').toUpperCase())
+    .sort()
+    .join(',');
   const objects = splitTopLevel(match[3]!).map(objectName);
   if (objects.some((o) => !/^[a-z_][a-z0-9_]*$/.test(o))) return undefined; // ALL TABLES IN SCHEMA, a quoted name: not something to exempt
   const roles = splitTopLevel(match[4]!.replace(/\bWITH\s+GRANT\s+OPTION\b/i, '')).map((r) => r.toLowerCase());
@@ -160,8 +171,7 @@ function undoingRevokes(code: string, earlierSql: string | undefined): Set<numbe
   const earlier = blankCommentsAndStrings(earlierSql);
   if (earlier === undefined) return exempt;
   const namedEarlier = (name: string) => new RegExp(`\\b${name}\\b`, 'i').test(earlier);
-  const createdBefore = (pattern: RegExp, index: number) =>
-    new Set([...code.slice(0, index).matchAll(pattern)].map((m) => m[1]!.toLowerCase().replace(/^public\./, '')));
+  const createdBefore = (pattern: RegExp, index: number) => new Set([...code.slice(0, index).matchAll(pattern)].map((m) => m[1]!.toLowerCase().replace(/^public\./, '')));
   /** What the earlier migrations did, in order, with the privileges the exemption below cares about. */
   const earlierEvents: Array<{ verb: 'GRANT' | 'REVOKE'; statement: PrivilegeStatement }> = [];
   for (const m of earlier.matchAll(/\b(GRANT|REVOKE)\b([^;]*)/gi)) {
@@ -171,7 +181,9 @@ function undoingRevokes(code: string, earlierSql: string | undefined): Set<numbe
   }
   const sameObjects = (a: PrivilegeStatement, b: PrivilegeStatement) => JSON.stringify([...a.objects].sort()) === JSON.stringify([...b.objects].sort());
   const lastEarlierWordWasRevoke = (revoke: PrivilegeStatement, role: string) => {
-    const last = [...earlierEvents].reverse().find((e) => e.statement.kind === revoke.kind && e.statement.privileges === revoke.privileges && sameObjects(e.statement, revoke) && e.statement.roles.includes(role));
+    const last = [...earlierEvents]
+      .reverse()
+      .find((e) => e.statement.kind === revoke.kind && e.statement.privileges === revoke.privileges && sameObjects(e.statement, revoke) && e.statement.roles.includes(role));
     return last?.verb === 'REVOKE';
   };
   const grants: Array<{ index: number; statement: PrivilegeStatement }> = [];
@@ -187,12 +199,16 @@ function undoingRevokes(code: string, earlierSql: string | undefined): Set<numbe
     const tables = createdBefore(/\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?((?:public\.)?[a-z_][a-z0-9_]*)/gi, at);
     const roles = createdBefore(/\bCREATE\s+ROLE\s+([a-z_][a-z0-9_]*)/gi, at);
     const created = revoke.kind === 'FUNCTION' ? functions : revoke.kind === 'TABLE' ? tables : new Set<string>();
-    const defaultPrivilege = revoke.roles.length === 1 && revoke.roles[0] === 'public'
-      && revoke.objects.every((o) => created.has(o) && !namedEarlier(o));
-    const reversesGrantMade = grants.some(({ index, statement }) => index < at && statement.kind === revoke.kind && statement.privileges === revoke.privileges
-      && sameObjects(statement, revoke) && revoke.roles.every((r) => statement.roles.includes(r)));
-    const reversesGrant = reversesGrantMade
-      && (revoke.roles.every((r) => roles.has(r) && !namedEarlier(r)) || revoke.roles.every((r) => lastEarlierWordWasRevoke(revoke, r)));
+    const defaultPrivilege = revoke.roles.length === 1 && revoke.roles[0] === 'public' && revoke.objects.every((o) => created.has(o) && !namedEarlier(o));
+    const reversesGrantMade = grants.some(
+      ({ index, statement }) =>
+        index < at &&
+        statement.kind === revoke.kind &&
+        statement.privileges === revoke.privileges &&
+        sameObjects(statement, revoke) &&
+        revoke.roles.every((r) => statement.roles.includes(r)),
+    );
+    const reversesGrant = reversesGrantMade && (revoke.roles.every((r) => roles.has(r) && !namedEarlier(r)) || revoke.roles.every((r) => lastEarlierWordWasRevoke(revoke, r)));
     if (defaultPrivilege || reversesGrant) exempt.add(at);
   }
   return exempt;
@@ -204,7 +220,11 @@ function blankDollarBodies(code: string): string {
 }
 
 const TABLE = String.raw`((?:"?\w+"?\.)?"?\w+"?)`;
-const tableName = (raw: string) => raw.replace(/"/g, '').toLowerCase().replace(/^public\./, '');
+const tableName = (raw: string) =>
+  raw
+    .replace(/"/g, '')
+    .toLowerCase()
+    .replace(/^public\./, '');
 
 interface DisciplineFinding {
   rule: DisciplineRule;
@@ -326,9 +346,7 @@ export function lintMigration(version: string, upSql: string, context: LintConte
   const undoing = undoingRevokes(code, context.earlier);
   for (const rule of EXPAND_RULES) {
     // A REVOKE that only undoes what this migration created is skipped; the first one that is not is reported.
-    const match = rule.id === 'revoke'
-      ? [...code.matchAll(new RegExp(rule.pattern.source, 'gi'))].find((m) => !undoing.has(m.index!))
-      : rule.pattern.exec(code);
+    const match = rule.id === 'revoke' ? [...code.matchAll(new RegExp(rule.pattern.source, 'gi'))].find((m) => !undoing.has(m.index!)) : rule.pattern.exec(code);
     if (match) say(`labelled expand but line ${lineOf(code, match.index!)} uses ${match[0].replace(/\s+/g, ' ').toUpperCase()}, which ${rule.why}. Label it breaking.`);
   }
   for (const line of addColumnNotNullWithoutDefault(code)) {
@@ -341,5 +359,11 @@ export function lintMigration(version: string, upSql: string, context: LintConte
 export function lintMigrations(dir: string = MIGRATIONS_DIR): string[] {
   const migrations = loadMigrations(dir);
   return migrations.flatMap((migration, i) =>
-    lintMigration(migration.version, migration.upSql, { earlier: migrations.slice(0, i).map((m) => m.upSql).join('\n') }));
+    lintMigration(migration.version, migration.upSql, {
+      earlier: migrations
+        .slice(0, i)
+        .map((m) => m.upSql)
+        .join('\n'),
+    }),
+  );
 }

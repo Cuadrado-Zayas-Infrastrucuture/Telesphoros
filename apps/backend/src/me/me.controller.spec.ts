@@ -29,7 +29,7 @@ it('preserves the roles-only response that old clients strictly parse', () => {
   expect(me.me({ ...principal, roles: [] })).toEqual({ roles: [] });
 });
 
-it('sign-out ends only the caller\'s own sessions, passing the verified principal and nothing from the request', async () => {
+it("sign-out ends only the caller's own sessions, passing the verified principal and nothing from the request", async () => {
   const signOut = jest.fn(async () => undefined);
   const me = new MeController({ signOut } as unknown as MemberAdminRepository);
   await expect(me.signOut(principal)).resolves.toBeUndefined();

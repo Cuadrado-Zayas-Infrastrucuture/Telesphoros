@@ -48,7 +48,15 @@ export function inspectPacket(text: string, result: ReaderResult): PacketInspect
     for (const c of packet.candidates) {
       if (c.start >= c.end || c.end > scalars.length || scalars.slice(c.start, c.end).join('') !== c.text) return INVALID;
       if (c.contentId !== canonicalHash(['pgx-span-content/1', packet.sourceRef.sourceHash, c.kind, c.start, c.end])) return INVALID;
-      const build = canonicalHash(['pgx-span-build/3', c.contentId, packet.generatorVersion, packet.generatorCodeHash, packet.grammarHash, packet.offsetContractHash, packet.fieldBoundaryPolicyHash]);
+      const build = canonicalHash([
+        'pgx-span-build/3',
+        c.contentId,
+        packet.generatorVersion,
+        packet.generatorCodeHash,
+        packet.grammarHash,
+        packet.offsetContractHash,
+        packet.fieldBoundaryPolicyHash,
+      ]);
       if (c.candidateId !== build || candidates.has(c.candidateId)) return INVALID;
       candidates.set(c.candidateId, c);
     }
@@ -68,7 +76,8 @@ export function inspectPacket(text: string, result: ReaderResult): PacketInspect
 
     // 4. The edges are exactly the allowed values, with the evidence of the value itself.
     const expectedEdges = new Set<string>();
-    for (const f of packet.frames) for (const role of ['diplotype', 'reportedResult'] as const) for (const id of f.allowed[role]) expectedEdges.add(JSON.stringify([f.frameId, id, role]));
+    for (const f of packet.frames)
+      for (const role of ['diplotype', 'reportedResult'] as const) for (const id of f.allowed[role]) expectedEdges.add(JSON.stringify([f.frameId, id, role]));
     const seenEdges = new Set<string>();
     for (const e of packet.allowedEdges) {
       const key = JSON.stringify([e.frameId, e.valueCandidateId, e.role]);
@@ -101,15 +110,23 @@ export function inspectPacket(text: string, result: ReaderResult): PacketInspect
     }
     if (packet.frameSetState === 'ambiguous') {
       const evidence = (projection.provenance as { unassociatedEvidence?: unknown }).unassociatedEvidence;
-      if (projection.status !== 'source-abstained' || projection.reason !== 'registered-source-ambiguity' || packet.frames.length > 0 || packet.ambiguityEvidence.length === 0) return INVALID;
+      if (projection.status !== 'source-abstained' || projection.reason !== 'registered-source-ambiguity' || packet.frames.length > 0 || packet.ambiguityEvidence.length === 0)
+        return INVALID;
       if (JSON.stringify(projection.payload) !== JSON.stringify({ spans: [], abstain: true })) return INVALID;
-      if (!Array.isArray(evidence) || evidence.length !== packet.candidates.length || !evidence.every((e: { candidateId?: string }) => typeof e?.candidateId === 'string' && candidates.has(e.candidateId))) return INVALID;
+      if (
+        !Array.isArray(evidence) ||
+        evidence.length !== packet.candidates.length ||
+        !evidence.every((e: { candidateId?: string }) => typeof e?.candidateId === 'string' && candidates.has(e.candidateId))
+      )
+        return INVALID;
       const genes = [...new Set(packet.candidates.filter((c) => c.kind === 'gene').map((c) => c.text))];
       return { ok: true, kind: 'abstained', genes };
     }
     if (packet.frameSetState !== 'resolved' || packet.frames.length === 0) return INVALID;
     if (packet.frames.some((f) => f.allowed.diplotype.length > 1 || f.allowed.reportedResult.length > 1)) {
-      return projection.status === 'held' && projection.reason === 'selector-quarantined' && projection.payload === null ? { ok: true, kind: 'reader-held', reason: projection.reason } : INVALID;
+      return projection.status === 'held' && projection.reason === 'selector-quarantined' && projection.payload === null
+        ? { ok: true, kind: 'reader-held', reason: projection.reason }
+        : INVALID;
     }
 
     // Re-derive the projection from the packet and compare.
@@ -139,7 +156,14 @@ export function inspectPacket(text: string, result: ReaderResult): PacketInspect
       });
     }
     const got = projection.payload?.spans.map(spanKey).sort(byKey);
-    if (projection.status !== 'projected' || projection.payload === null || projection.payload.abstain || !got || JSON.stringify(got) !== JSON.stringify(derived.map(spanKey).sort(byKey))) return INVALID;
+    if (
+      projection.status !== 'projected' ||
+      projection.payload === null ||
+      projection.payload.abstain ||
+      !got ||
+      JSON.stringify(got) !== JSON.stringify(derived.map(spanKey).sort(byKey))
+    )
+      return INVALID;
     return { ok: true, kind: 'projected', occurrences };
   } catch {
     // Anything unexpected while checking is a failed check, never an exception for the caller.

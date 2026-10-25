@@ -41,9 +41,7 @@ const controllers: Type[] = [
 ];
 const routes = controllers.flatMap((controller) =>
   Object.getOwnPropertyNames(controller.prototype)
-    .filter(
-      (name) => name !== 'constructor' && typeof controller.prototype[name] === 'function' && Reflect.hasMetadata(PATH_METADATA, controller.prototype[name]),
-    )
+    .filter((name) => name !== 'constructor' && typeof controller.prototype[name] === 'function' && Reflect.hasMetadata(PATH_METADATA, controller.prototype[name]))
     .map((name) => ({
       controller,
       name,
@@ -78,30 +76,27 @@ it('inventories every registered production controller and strict input pipe', (
   }
 });
 
-it.each(routes.map((r) => [r.controller.name + '.' + r.name, r] as const))(
-  '%s refuses undeclared input before invoking the handler',
-  (_label, { controller, name, handler }) => {
-    const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, controller, name) ?? {};
-    const consumes = (kind: RouteParamtypes) => Object.keys(args).some((key) => key.startsWith(`${kind}:`));
-    const next = { handle: jest.fn(() => of(null)) } as CallHandler;
-    if (!consumes(RouteParamtypes.BODY)) {
-      for (const body of [{ ignored: 'SYNTHETIC-PRIVATE' }, [], null, 'value', 1]) {
-        expect(() => interceptor.intercept(context(controller, handler, body, {}), next)).toThrow('The request was not valid.');
-      }
-      expect(next.handle).not.toHaveBeenCalled();
+it.each(routes.map((r) => [r.controller.name + '.' + r.name, r] as const))('%s refuses undeclared input before invoking the handler', (_label, { controller, name, handler }) => {
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, controller, name) ?? {};
+  const consumes = (kind: RouteParamtypes) => Object.keys(args).some((key) => key.startsWith(`${kind}:`));
+  const next = { handle: jest.fn(() => of(null)) } as CallHandler;
+  if (!consumes(RouteParamtypes.BODY)) {
+    for (const body of [{ ignored: 'SYNTHETIC-PRIVATE' }, [], null, 'value', 1]) {
+      expect(() => interceptor.intercept(context(controller, handler, body, {}), next)).toThrow('The request was not valid.');
     }
-    if (!consumes(RouteParamtypes.QUERY)) {
-      expect(() =>
-        interceptor.intercept(
-          context(controller, handler, undefined, {
-            ignored: 'SYNTHETIC-PRIVATE',
-          }),
-          next,
-        ),
-      ).toThrow('The request was not valid.');
-      expect(next.handle).not.toHaveBeenCalled();
-    }
-    interceptor.intercept(context(controller, handler, {}, {}), next);
-    expect(next.handle).toHaveBeenCalledTimes(1);
-  },
-);
+    expect(next.handle).not.toHaveBeenCalled();
+  }
+  if (!consumes(RouteParamtypes.QUERY)) {
+    expect(() =>
+      interceptor.intercept(
+        context(controller, handler, undefined, {
+          ignored: 'SYNTHETIC-PRIVATE',
+        }),
+        next,
+      ),
+    ).toThrow('The request was not valid.');
+    expect(next.handle).not.toHaveBeenCalled();
+  }
+  interceptor.intercept(context(controller, handler, {}, {}), next);
+  expect(next.handle).toHaveBeenCalledTimes(1);
+});

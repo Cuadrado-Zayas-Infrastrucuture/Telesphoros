@@ -12,15 +12,18 @@ export function useLandingMotion(root: RefObject<HTMLElement | null>) {
     const element = root.current;
     if (!element || typeof IntersectionObserver === 'undefined') return;
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
-    const targets = Array.from(element.querySelectorAll<HTMLElement>('*')).filter(node => 'reveal' in node.dataset);
-    const observer = new IntersectionObserver(entries => {
-      for (const entry of entries) {
-        if (entry.isIntersecting || entry.boundingClientRect.top < 0) {
-          entry.target.classList.add('is-revealed');
-          observer.unobserve(entry.target);
+    const targets = Array.from(element.querySelectorAll<HTMLElement>('*')).filter((node) => 'reveal' in node.dataset);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting || entry.boundingClientRect.top < 0) {
+            entry.target.classList.add('is-revealed');
+            observer.unobserve(entry.target);
+          }
         }
-      }
-    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+      },
+      { threshold: 0.12, rootMargin: '0px 0px -8% 0px' },
+    );
     element.classList.add('is-motion');
     for (const target of targets) observer.observe(target);
     return () => {

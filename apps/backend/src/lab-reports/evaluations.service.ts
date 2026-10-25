@@ -1,5 +1,13 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
-import { buildMeta, type Paginated, type EvaluationCreate, type EvaluationDto, type EvaluationListQuery, type EvaluationSummaryDto, PIPELINE_SCOPE } from '@telesphoros/shared-types';
+import {
+  buildMeta,
+  type Paginated,
+  type EvaluationCreate,
+  type EvaluationDto,
+  type EvaluationListQuery,
+  type EvaluationSummaryDto,
+  PIPELINE_SCOPE,
+} from '@telesphoros/shared-types';
 import type { Principal } from '../auth/principal';
 import { AppException } from '../common/app-exception';
 import { ENV, type Env } from '../config/env';
@@ -125,8 +133,15 @@ export class EvaluationsService {
   async list(principal: Principal, query: EvaluationListQuery): Promise<Paginated<EvaluationSummaryDto>> {
     const ledger = this.need(this.ledger);
     const { current, page, pageSize, ...filter } = query;
-    const { items: records, total } = await ledger.listEvaluations(principal.tenantId, { ...filter, current: current === 'true' }, { offset: (page - 1) * pageSize, limit: pageSize });
-    const contexts = await ledger.evaluationContexts(principal.tenantId, records.map((r) => r.id));
+    const { items: records, total } = await ledger.listEvaluations(
+      principal.tenantId,
+      { ...filter, current: current === 'true' },
+      { offset: (page - 1) * pageSize, limit: pageSize },
+    );
+    const contexts = await ledger.evaluationContexts(
+      principal.tenantId,
+      records.map((r) => r.id),
+    );
     const disputes = await this.activeDisputes(principal.tenantId);
     const reportIds = [...new Set(records.map((r) => r.reportId as string))];
     const currentIds = await ledger.currentEvaluationIds(principal.tenantId, reportIds);
@@ -135,7 +150,14 @@ export class EvaluationsService {
     for (const record of records) {
       const context = contexts.get(record.id);
       if (!context) throw AppException.pipelineMisconfigured();
-      out.push(toEvaluationSummaryDto(record, { ...context, current: currentIds.get(record.reportId as string) === record.id, activeDisputes: disputes, patientLink: links.get(record.reportId as string) ?? 'unverified' }));
+      out.push(
+        toEvaluationSummaryDto(record, {
+          ...context,
+          current: currentIds.get(record.reportId as string) === record.id,
+          activeDisputes: disputes,
+          patientLink: links.get(record.reportId as string) ?? 'unverified',
+        }),
+      );
     }
     return { data: out, meta: buildMeta(page, pageSize, total) };
   }
@@ -161,28 +183,50 @@ export class EvaluationsService {
   }
 
   private build(
-    patientId: string, reportId: string, captureId: string, adapted: AdapterResult, knowledge: KnowledgeSet, runner: TextCaptureRunner, active: DisputeStatus[],
+    patientId: string,
+    reportId: string,
+    captureId: string,
+    adapted: AdapterResult,
+    knowledge: KnowledgeSet,
+    runner: TextCaptureRunner,
+    active: DisputeStatus[],
   ): EvaluationInput {
     // The scope and what the substitute runner can answer for are part of the stored binding, hence of the ledger event.
     const binding: Record<string, unknown> = { ...adapted.binding, scope: PIPELINE_SCOPE, recordingsSha256: runner.manifestSha256 };
     // Bind the actual base files into the immutable, ledger-hashed record; an overlay changes verification, never file identity.
     binding.cellProvenance = {
       version: 'cell-provenance/1',
-      files: knowledge.allGuidelines().map((g) => {
-        const file = knowledge.files.find((f) => f.kind === 'guideline' && f.id === g.id);
-        if (!file) throw AppException.pipelineMisconfigured();
-        return { guidelineId: g.id, guidelineVersion: g.guidelineVersion, contentSha256: file.contentSha256 };
-      }).sort((a, b) => a.guidelineId < b.guidelineId ? -1 : a.guidelineId > b.guidelineId ? 1 : 0),
+      files: knowledge
+        .allGuidelines()
+        .map((g) => {
+          const file = knowledge.files.find((f) => f.kind === 'guideline' && f.id === g.id);
+          if (!file) throw AppException.pipelineMisconfigured();
+          return { guidelineId: g.id, guidelineVersion: g.guidelineVersion, contentSha256: file.contentSha256 };
+        })
+        .sort((a, b) => (a.guidelineId < b.guidelineId ? -1 : a.guidelineId > b.guidelineId ? 1 : 0)),
     };
     if (adapted.disposition === 'held') {
       // A held evaluation shows no result, so no cell and no dispute matters to it.
       return {
-        patientId, reportId, captureId, captureAcceptanceId: adapted.binding.captureAcceptanceId, disposition: 'held', holdCode: adapted.code, binding,
-        knowledgeSetId: knowledge.id, engineVersion: this.env.BUILD_VERSION!, geneInputs: [], occurrences: [], results: [], geneStates: [],
+        patientId,
+        reportId,
+        captureId,
+        captureAcceptanceId: adapted.binding.captureAcceptanceId,
+        disposition: 'held',
+        holdCode: adapted.code,
+        binding,
+        knowledgeSetId: knowledge.id,
+        engineVersion: this.env.BUILD_VERSION!,
+        geneInputs: [],
+        occurrences: [],
+        results: [],
+        geneStates: [],
       };
     }
     const disputed: DisputedCell[] = active.map(({ dispute: d }) => ({
-      guidelineId: d.guidelineId as string, guidelineVersion: d.guidelineVersion as string, guidelineContentSha256: d.guidelineContentSha256 as string,
+      guidelineId: d.guidelineId as string,
+      guidelineVersion: d.guidelineVersion as string,
+      guidelineContentSha256: d.guidelineContentSha256 as string,
       locator: { table: d.locatorTable as string, row: d.locatorRow as string, column: (d.locatorColumn as string | null) ?? null },
     }));
     const overlay: OverlayResult = applyDisputeOverlay(knowledge, disputed);
@@ -190,9 +234,20 @@ export class EvaluationsService {
     if (overlay.cellKeys.length > 0) binding.overlay = { version: OVERLAY_VERSION, baseKnowledgeSetId: knowledge.id, cellKeys: overlay.cellKeys };
     const engine = evaluate(overlay.knowledge, adapted.geneInputs);
     return {
-      patientId, reportId, captureId, captureAcceptanceId: adapted.binding.captureAcceptanceId, disposition: 'evaluated', holdCode: null, binding,
-      knowledgeSetId: engine.knowledgeSetId, engineVersion: this.env.BUILD_VERSION!, geneInputs: adapted.geneInputs, occurrences: adapted.occurrences,
-      results: engine.results, geneStates: engine.geneStates, disputeBasis: active.map(({ dispute }) => dispute.id),
+      patientId,
+      reportId,
+      captureId,
+      captureAcceptanceId: adapted.binding.captureAcceptanceId,
+      disposition: 'evaluated',
+      holdCode: null,
+      binding,
+      knowledgeSetId: engine.knowledgeSetId,
+      engineVersion: this.env.BUILD_VERSION!,
+      geneInputs: adapted.geneInputs,
+      occurrences: adapted.occurrences,
+      results: engine.results,
+      geneStates: engine.geneStates,
+      disputeBasis: active.map(({ dispute }) => dispute.id),
     };
   }
 

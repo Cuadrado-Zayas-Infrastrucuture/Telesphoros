@@ -21,9 +21,23 @@ async function setup(storage: ObjectStorage = new InMemoryObjectStorage()) {
   const reports = new InMemoryReportsRepository();
   const now = new Date().toISOString();
   const report: ReportRecord = {
-    id: randomUUID(), tenantId: 'tenant-unit', createdBy: 'syn-creator', patientId: randomUUID(), type: 'lab-pdf', filename: 'a.pdf', sizeBytes: 10, status: 'received',
-    storageKey: 'reports/x/k', contentType: 'application/pdf', sha256: 'a'.repeat(64), uploadedAt: now, objectVersion: 'v1', uploadRequestedBy: 'syn-creator', uploadedBy: 'syn-creator',
-    createdAt: now, updatedAt: now,
+    id: randomUUID(),
+    tenantId: 'tenant-unit',
+    createdBy: 'syn-creator',
+    patientId: randomUUID(),
+    type: 'lab-pdf',
+    filename: 'a.pdf',
+    sizeBytes: 10,
+    status: 'received',
+    storageKey: 'reports/x/k',
+    contentType: 'application/pdf',
+    sha256: 'a'.repeat(64),
+    uploadedAt: now,
+    objectVersion: 'v1',
+    uploadRequestedBy: 'syn-creator',
+    uploadedBy: 'syn-creator',
+    createdAt: now,
+    updatedAt: now,
   };
   await reports.insert(report);
   const ledger = { findCaptureByIdentity: jest.fn(), insertCapture: jest.fn(), latestAcceptance: jest.fn() } as unknown as jest.Mocked<LedgerRecordsRepository>;
@@ -40,7 +54,7 @@ class WrongBytesStorage extends InMemoryObjectStorage {
 }
 
 describe('CapturesService: the retrieved object must be the verified one', () => {
-  it('refuses bytes whose hash is not the report\'s, even when the store answers for the pinned version (no capture, no text written)', async () => {
+  it("refuses bytes whose hash is not the report's, even when the store answers for the pinned version (no capture, no text written)", async () => {
     const storage = new WrongBytesStorage({ sha256: 'b'.repeat(64) });
     const put = jest.spyOn(storage, 'putObject');
     const { service, report, ledger } = await setup(storage);

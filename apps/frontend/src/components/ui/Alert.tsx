@@ -14,20 +14,12 @@ const alertVariants = cva('rounded-md border p-4 text-sm', {
   defaultVariants: { variant: 'info' },
 });
 
-export interface AlertProps
-  extends HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof alertVariants> {}
+export interface AlertProps extends HTMLAttributes<HTMLDivElement>, VariantProps<typeof alertVariants> {}
 
 /**
  * Errors use role="alert" (announced immediately); everything else role="status"
  * (announced politely) so screen-reader users hear outcomes without losing their place.
  */
 export function Alert({ className, variant, ...props }: AlertProps) {
-  return (
-    <div
-      role={variant === 'destructive' ? 'alert' : 'status'}
-      className={cn(alertVariants({ variant }), className)}
-      {...props}
-    />
-  );
+  return <div role={variant === 'destructive' ? 'alert' : 'status'} className={cn(alertVariants({ variant }), className)} {...props} />;
 }

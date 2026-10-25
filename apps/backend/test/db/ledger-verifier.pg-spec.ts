@@ -33,7 +33,11 @@ async function chain(): Promise<{ tenantId: string; report: SeededReport; ids: R
   const e = await repo.insertEvaluation(tenantId, 'syn-system', evaluationFor(report, c.record.id, a.record.id));
   const k = await repo.insertCorrection(tenantId, 'syn-reviewer', { evaluationId: e.record.id, kind: 'retraction', reasonCode: 'input-misread', note: 'misread' });
   const d = await repo.raiseDispute(tenantId, 'syn-reviewer', {
-    guidelineId: 'syn-guideline', guidelineVersion: '1', guidelineContentSha256: 'a'.repeat(64), locator: { table: 'recommendations', row: 'poor' }, note: 'cell looks wrong',
+    guidelineId: 'syn-guideline',
+    guidelineVersion: '1',
+    guidelineContentSha256: 'a'.repeat(64),
+    locator: { table: 'recommendations', row: 'poor' },
+    note: 'cell looks wrong',
   });
   return { tenantId, report, ids: { capture: c.record.id, acceptance: a.record.id, evaluation: e.record.id, correction: k.record.id, dispute: d.record.id } };
 }
@@ -123,28 +127,73 @@ describe('ledger verifier: an intact chain', () => {
 describe('ledger verifier: tampering by someone who can bypass every trigger', () => {
   const cases: Array<[string, FailureKind, (c: Client, t: { tenantId: string; ids: Record<string, string> }) => Promise<unknown>]> = [
     ['an edited record field', 'payload-mismatch', (c, t) => c.query(`UPDATE report_captures SET text_scalars = text_scalars + 1 WHERE id = $1`, [t.ids.capture])],
-    ['an edited evaluation result', 'payload-mismatch', (c, t) => c.query(`UPDATE evaluation_results SET drug = 'other' WHERE evaluation_id = $1 AND ordinal = 0`, [t.ids.evaluation])],
-    ['an edited call source on a stored gene input', 'payload-mismatch', (c, t) => c.query(`UPDATE evaluations SET gene_inputs = jsonb_set(gene_inputs, '{0,callSource}', '"edited"') WHERE id = $1`, [t.ids.evaluation])],
-    ['a call source removed from a stored gene input', 'payload-mismatch', (c, t) => c.query(`UPDATE evaluations SET gene_inputs = gene_inputs #- '{0,callSource}' WHERE id = $1`, [t.ids.evaluation])],
-    ['an edited gene state', 'payload-mismatch', (c, t) => c.query(`UPDATE evaluation_gene_states SET phenotype = 'Normal Metabolizer' WHERE evaluation_id = $1 AND gene = 'CYP2C19'`, [t.ids.evaluation])],
-    ['an extra result row added to an evaluation', 'payload-mismatch', (c, t) => c.query(
-      `INSERT INTO evaluation_results (tenant_id, evaluation_id, ordinal, drug, genes, outcome, reason_code, gene_evidence)
-       VALUES ($1, $2, 9, 'x', '{}', 'no-guideline', 'no-guideline-for-drug', '[]')`, [t.tenantId, t.ids.evaluation])],
-    ['an edited event payload', 'record-hash-mismatch', (c, t) => c.query(`UPDATE ledger_events SET payload_sha256 = repeat('b', 64) WHERE tenant_id = $1 AND seq = 2`, [t.tenantId])],
+    [
+      'an edited evaluation result',
+      'payload-mismatch',
+      (c, t) => c.query(`UPDATE evaluation_results SET drug = 'other' WHERE evaluation_id = $1 AND ordinal = 0`, [t.ids.evaluation]),
+    ],
+    [
+      'an edited call source on a stored gene input',
+      'payload-mismatch',
+      (c, t) => c.query(`UPDATE evaluations SET gene_inputs = jsonb_set(gene_inputs, '{0,callSource}', '"edited"') WHERE id = $1`, [t.ids.evaluation]),
+    ],
+    [
+      'a call source removed from a stored gene input',
+      'payload-mismatch',
+      (c, t) => c.query(`UPDATE evaluations SET gene_inputs = gene_inputs #- '{0,callSource}' WHERE id = $1`, [t.ids.evaluation]),
+    ],
+    [
+      'an edited gene state',
+      'payload-mismatch',
+      (c, t) => c.query(`UPDATE evaluation_gene_states SET phenotype = 'Normal Metabolizer' WHERE evaluation_id = $1 AND gene = 'CYP2C19'`, [t.ids.evaluation]),
+    ],
+    [
+      'an extra result row added to an evaluation',
+      'payload-mismatch',
+      (c, t) =>
+        c.query(
+          `INSERT INTO evaluation_results (tenant_id, evaluation_id, ordinal, drug, genes, outcome, reason_code, gene_evidence)
+       VALUES ($1, $2, 9, 'x', '{}', 'no-guideline', 'no-guideline-for-drug', '[]')`,
+          [t.tenantId, t.ids.evaluation],
+        ),
+    ],
+    [
+      'an edited event payload',
+      'record-hash-mismatch',
+      (c, t) => c.query(`UPDATE ledger_events SET payload_sha256 = repeat('b', 64) WHERE tenant_id = $1 AND seq = 2`, [t.tenantId]),
+    ],
     ['an edited event actor', 'record-hash-mismatch', (c, t) => c.query(`UPDATE ledger_events SET actor_sub = 'someone-else' WHERE tenant_id = $1 AND seq = 2`, [t.tenantId])],
     ['a deleted middle event', 'seq-gap', (c, t) => c.query(`DELETE FROM ledger_events WHERE tenant_id = $1 AND seq = 3`, [t.tenantId])],
     ['a deleted last event', 'head-mismatch', (c, t) => c.query(`DELETE FROM ledger_events WHERE tenant_id = $1 AND seq = 5`, [t.tenantId])],
     ['a forged prev_hash', 'prev-hash-mismatch', (c, t) => c.query(`UPDATE ledger_events SET prev_hash = repeat('c', 64) WHERE tenant_id = $1 AND seq = 4`, [t.tenantId])],
     ['a moved head', 'head-mismatch', (c, t) => c.query(`UPDATE ledger_heads SET record_hash = repeat('d', 64) WHERE tenant_id = $1`, [t.tenantId])],
     ['a deleted record whose event remains', 'record-missing', (c, t) => c.query(`DELETE FROM report_captures WHERE id = $1`, [t.ids.capture])],
-    ['a record inserted without an event', 'row-without-event', (c, t) => c.query(
-      `INSERT INTO cell_disputes (tenant_id, created_by, ledger_event_id, guideline_id, guideline_version, guideline_content_sha256, locator_table, locator_row, note_id)
-       SELECT tenant_id, 'x', gen_random_uuid(), 'g', '1', repeat('e', 64), 't', 'r', note_id FROM cell_disputes WHERE id = $1`, [t.ids.dispute])],
-    ['an event pointing at a different record', 'record-event-mismatch', (c, t) => c.query(`UPDATE report_captures SET ledger_event_id = $2 WHERE id = $1`, [t.ids.capture,
-      '00000000-0000-0000-0000-000000000000'])],
-    ['an edited note body', 'note-digest-mismatch', (c, t) => c.query(`UPDATE event_notes SET body = 'rewritten' WHERE tenant_id = $1 AND body = 'cell looks wrong'`, [t.tenantId])],
-    ['a note tombstoned without a redaction event', 'note-redaction-invalid', (c, t) => c.query(
-      `UPDATE event_notes SET body = '[redacted]', redacted_at = now(), redaction_basis_code = 'other-approved' WHERE tenant_id = $1 AND body = 'misread'`, [t.tenantId])],
+    [
+      'a record inserted without an event',
+      'row-without-event',
+      (c, t) =>
+        c.query(
+          `INSERT INTO cell_disputes (tenant_id, created_by, ledger_event_id, guideline_id, guideline_version, guideline_content_sha256, locator_table, locator_row, note_id)
+       SELECT tenant_id, 'x', gen_random_uuid(), 'g', '1', repeat('e', 64), 't', 'r', note_id FROM cell_disputes WHERE id = $1`,
+          [t.ids.dispute],
+        ),
+    ],
+    [
+      'an event pointing at a different record',
+      'record-event-mismatch',
+      (c, t) => c.query(`UPDATE report_captures SET ledger_event_id = $2 WHERE id = $1`, [t.ids.capture, '00000000-0000-0000-0000-000000000000']),
+    ],
+    [
+      'an edited note body',
+      'note-digest-mismatch',
+      (c, t) => c.query(`UPDATE event_notes SET body = 'rewritten' WHERE tenant_id = $1 AND body = 'cell looks wrong'`, [t.tenantId]),
+    ],
+    [
+      'a note tombstoned without a redaction event',
+      'note-redaction-invalid',
+      (c, t) =>
+        c.query(`UPDATE event_notes SET body = '[redacted]', redacted_at = now(), redaction_basis_code = 'other-approved' WHERE tenant_id = $1 AND body = 'misread'`, [t.tenantId]),
+    ],
   ];
 
   it.each(cases)('detects %s as %s', async (_name, kind, attack) => {
@@ -183,9 +232,19 @@ describe('ledger verifier: tampering by someone who can bypass every trigger', (
     const t = await chain();
     await verifier.verify(t.tenantId, { recordCheckpoint: true });
     // The chain above holds an open dispute, which blocks a NEW evaluation that shows results (5B-3.2b); a held one shows none and is not blocked.
-    const e = await repo.insertEvaluation(t.tenantId, 'syn-system', evaluationFor(t.report, t.ids.capture, t.ids.acceptance, {
-      engineVersion: 'syn-2', disposition: 'held', holdCode: 'unsupported-layout', geneInputs: [], occurrences: [], results: [], geneStates: [],
-    }));
+    const e = await repo.insertEvaluation(
+      t.tenantId,
+      'syn-system',
+      evaluationFor(t.report, t.ids.capture, t.ids.acceptance, {
+        engineVersion: 'syn-2',
+        disposition: 'held',
+        holdCode: 'unsupported-layout',
+        geneInputs: [],
+        occurrences: [],
+        results: [],
+        geneStates: [],
+      }),
+    );
     expect((await verifier.verify(t.tenantId, { mode: 'tail' })).status).toBe('ok');
     await tamper((c) => c.query(`UPDATE evaluations SET engine_version = 'forged' WHERE id = $1`, [e.record.id]).then(() => undefined));
     expect(kinds(await verifier.verify(t.tenantId, { mode: 'tail' }))).toContain('payload-mismatch');

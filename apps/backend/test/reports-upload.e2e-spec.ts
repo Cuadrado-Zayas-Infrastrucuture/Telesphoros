@@ -23,12 +23,21 @@ const VCF = Buffer.from('##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\t
 const VCF_TYPE = 'text/x-vcf';
 
 async function newReport(token: string, sizeBytes = VCF.length) {
-  const patientId = (await api().post('/api/v1/patients').set(bearer(token)).send({ label: `SYN-${randomUUID().slice(0, 8)}` }).expect(201)).body.id;
+  const patientId = (
+    await api()
+      .post('/api/v1/patients')
+      .set(bearer(token))
+      .send({ label: `SYN-${randomUUID().slice(0, 8)}` })
+      .expect(201)
+  ).body.id;
   return (await api().post('/api/v1/reports').set(bearer(token)).send({ patientId, type: 'vcf', filename: 'sample.vcf', sizeBytes }).expect(201)).body.id as string;
 }
 const stateOf = async (token: string, id: string) => (await api().get(`/api/v1/reports/${id}/upload-state`).set(bearer(token)).expect(200)).body.revision as string;
 const declareReq = async (token: string, id: string, body: object = { contentType: VCF_TYPE, sha256: sha(VCF) }) =>
-  api().post(`/api/v1/reports/${id}/upload-attempts`).set(bearer(token)).send({ requestId: randomUUID(), revision: await stateOf(token, id), ...body });
+  api()
+    .post(`/api/v1/reports/${id}/upload-attempts`)
+    .set(bearer(token))
+    .send({ requestId: randomUUID(), revision: await stateOf(token, id), ...body });
 const sendBytes = (token: string, id: string, a: { attemptId: string; revision: string }, bytes = VCF) =>
   api().put(`/api/v1/reports/${id}/upload-attempts/${a.attemptId}/bytes`).set(bearer(token)).set('X-Upload-Revision', a.revision).set('Content-Type', VCF_TYPE).send(bytes);
 async function upload(token: string, id: string, bytes = VCF, declared = bytes) {
@@ -50,9 +59,19 @@ describe('report upload through the validated intake: the happy path', () => {
     expect(done.body).toMatchObject({ fileUploaded: true, sha256: sha(VCF), contentType: VCF_TYPE, status: 'received' });
 
     // The public shape never reveals where the file lives or who owns it.
-    expect(Object.keys(done.body).sort()).toEqual(
-      ['contentType', 'createdAt', 'fileUploaded', 'filename', 'id', 'patientId', 'sha256', 'sizeBytes', 'status', 'type', 'updatedAt'],
-    );
+    expect(Object.keys(done.body).sort()).toEqual([
+      'contentType',
+      'createdAt',
+      'fileUploaded',
+      'filename',
+      'id',
+      'patientId',
+      'sha256',
+      'sizeBytes',
+      'status',
+      'type',
+      'updatedAt',
+    ]);
     expect(JSON.stringify(done.body)).not.toMatch(/owner|tenant|created_?by|user-a|reports\//);
   });
 
@@ -143,7 +162,10 @@ describe('the direct-upload routes are gone (M2.2b)', () => {
     const a = await clinicianA();
     const id = await newReport(a);
     for (const token of [a, undefined]) {
-      for (const [path, body] of [[`/api/v1/reports/${id}/upload-url`, { contentType: VCF_TYPE, sha256: sha(VCF) }], [`/api/v1/reports/${id}/complete`, {}]] as const) {
+      for (const [path, body] of [
+        [`/api/v1/reports/${id}/upload-url`, { contentType: VCF_TYPE, sha256: sha(VCF) }],
+        [`/api/v1/reports/${id}/complete`, {}],
+      ] as const) {
         const req = api().post(path);
         const res = await (token ? req.set(bearer(token)) : req).send(body);
         expect(res.status).toBe(404);

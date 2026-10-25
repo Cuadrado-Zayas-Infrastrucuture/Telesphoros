@@ -50,7 +50,13 @@ export function adaptOccurrence(facts: OccurrenceFacts, knowledge: AdapterKnowle
     if (result.state === 'empty') return { emitted: [unresolvedOther(gene)], note: 'empty-field' };
     if (canonical!.includes(result.text)) {
       if (result.text === mapping.phenotype) return { emitted: [{ gene, state: 'diplotype', diplotype: text }], note: 'corroborated' };
-      return { emitted: [{ gene, state: 'diplotype', diplotype: text }, { gene, state: 'canonical', phenotype: result.text }], note: 'conflict' };
+      return {
+        emitted: [
+          { gene, state: 'diplotype', diplotype: text },
+          { gene, state: 'canonical', phenotype: result.text },
+        ],
+        note: 'conflict',
+      };
     }
     return { emitted: [unresolvedOther(gene)], note: 'result-untrusted' };
   }
@@ -66,7 +72,9 @@ export function adaptOccurrence(facts: OccurrenceFacts, knowledge: AdapterKnowle
   if (canonical === null) {
     // No definition for the gene: the engine reports that precisely, unless the value cannot even be expressed.
     if (isUnavailableValue(text)) return { emitted: [nullInput(gene)], note: 'unavailable' };
-    return text.length > MAX_VALUE_LENGTH ? { emitted: [unresolvedOther(gene)], note: 'result-untrusted' } : { emitted: [{ gene, state: 'canonical', phenotype: text }], note: null };
+    return text.length > MAX_VALUE_LENGTH
+      ? { emitted: [unresolvedOther(gene)], note: 'result-untrusted' }
+      : { emitted: [{ gene, state: 'canonical', phenotype: text }], note: null };
   }
   if (canonical.includes(text)) return { emitted: [{ gene, state: 'canonical', phenotype: text }], note: null };
   if (isUnavailableValue(text)) return { emitted: [nullInput(gene)], note: 'unavailable' };

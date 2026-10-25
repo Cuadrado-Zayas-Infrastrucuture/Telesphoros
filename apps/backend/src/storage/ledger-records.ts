@@ -99,7 +99,7 @@ export interface PatientDecisionInput {
 
 export type CorrectionKind = 'retraction' | 'supersession' | 'reinstatement';
 export type CorrectionReasonCode =
-  | 'capture-wrong' | 'wrong-patient' | 'input-misread' | 'knowledge-error-found' | 'software-defect' | 'clinical-review-disagrees' | 'retraction-mistaken';
+  'capture-wrong' | 'wrong-patient' | 'input-misread' | 'knowledge-error-found' | 'software-defect' | 'clinical-review-disagrees' | 'retraction-mistaken';
 
 export interface CorrectionInput {
   evaluationId: string;

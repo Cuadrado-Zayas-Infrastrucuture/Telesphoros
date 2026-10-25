@@ -23,10 +23,27 @@ export async function declareUpload(
   const revision = input.expectedRevision ?? current.uploadRevision!;
   const id = randomUUID();
   const attempt: UploadAttempt = {
-    id, requestId: randomUUID(), runId: organizationRunId(report.tenantId), tenantId: report.tenantId, reportId: report.id, patientId: report.patientId,
-    principal: input.principal, revision, declarationRevision: revision, type: report.type, sizeBytes: report.sizeBytes, contentType: input.contentType,
-    sha256: input.sha256, key: input.key ?? `reports/test/${report.id}/intake/${id}`, cancelRequested: false, validated: false, state: 'declared', version: null,
-    leaseUntil: new Date(Date.now() + 3_600_000).toISOString(), writer: null, createdAt: new Date().toISOString(),
+    id,
+    requestId: randomUUID(),
+    runId: organizationRunId(report.tenantId),
+    tenantId: report.tenantId,
+    reportId: report.id,
+    patientId: report.patientId,
+    principal: input.principal,
+    revision,
+    declarationRevision: revision,
+    type: report.type,
+    sizeBytes: report.sizeBytes,
+    contentType: input.contentType,
+    sha256: input.sha256,
+    key: input.key ?? `reports/test/${report.id}/intake/${id}`,
+    cancelRequested: false,
+    validated: false,
+    state: 'declared',
+    version: null,
+    leaseUntil: new Date(Date.now() + 3_600_000).toISOString(),
+    writer: null,
+    createdAt: new Date().toISOString(),
   };
   const declared = await reports.declareAttempt(attempt, revision);
   if (!declared) return undefined;

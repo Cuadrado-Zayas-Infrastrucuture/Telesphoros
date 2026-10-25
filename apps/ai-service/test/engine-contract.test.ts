@@ -7,15 +7,25 @@ import { explainableResultSchema } from '../src/evaluators/types';
 test('a real `shown` DrugResult carries every field the explainable view needs, with matching values', () => {
   const r = RESULTS.dose;
   const shown = drugResultSchema.parse({
-    outcome: 'shown', drug: r.drug, genes: ['GENEB'], geneStates: [{ gene: 'GENEB', state: 'canonical', phenotype: r.genes[0].phenotype, reasonCode: null }],
-    strength: r.strength, recommendationText: r.recommendationText, implication: r.implication,
+    outcome: 'shown',
+    drug: r.drug,
+    genes: ['GENEB'],
+    geneStates: [{ gene: 'GENEB', state: 'canonical', phenotype: r.genes[0].phenotype, reasonCode: null }],
+    strength: r.strength,
+    recommendationText: r.recommendationText,
+    implication: r.implication,
     citation: { guidelineId: r.guidelineId, guidelineVersion: r.guidelineVersion, sourceUrl: 'https://example.invalid/synthetic', locator: r.locator, verification: 'verified' },
   });
   if (shown.outcome !== 'shown') throw new Error('not shown');
   const view = explainableResultSchema.parse({
-    drug: shown.drug, strength: shown.strength, genes: shown.geneStates.map(g => ({ gene: g.gene, phenotype: g.phenotype })),
-    guidelineId: shown.citation.guidelineId, guidelineVersion: shown.citation.guidelineVersion, locator: shown.citation.locator,
-    recommendationText: shown.recommendationText, implication: shown.implication,
+    drug: shown.drug,
+    strength: shown.strength,
+    genes: shown.geneStates.map((g) => ({ gene: g.gene, phenotype: g.phenotype })),
+    guidelineId: shown.citation.guidelineId,
+    guidelineVersion: shown.citation.guidelineVersion,
+    locator: shown.citation.locator,
+    recommendationText: shown.recommendationText,
+    implication: shown.implication,
   });
   expect(view).toEqual(r);
 });

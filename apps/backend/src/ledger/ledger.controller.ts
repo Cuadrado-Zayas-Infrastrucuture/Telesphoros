@@ -24,8 +24,13 @@ export class LedgerController {
   async verify(@CurrentPrincipal() principal: Principal, @Query(new ZodValidationPipe(ledgerVerifyQuerySchema)) query: LedgerVerifyQuery): Promise<LedgerVerifyResult> {
     const result = await this.monitor.verifyNow(principal.tenantId, query.full === 'true');
     return {
-      status: result.status, mode: result.mode, headSeq: result.headSeq, headHash: result.headHash, eventsChecked: result.eventsChecked,
-      failures: result.failures.map(({ kind, seq }) => ({ kind, seq })), checkpointId: result.checkpointId,
+      status: result.status,
+      mode: result.mode,
+      headSeq: result.headSeq,
+      headHash: result.headHash,
+      eventsChecked: result.eventsChecked,
+      failures: result.failures.map(({ kind, seq }) => ({ kind, seq })),
+      checkpointId: result.checkpointId,
     };
   }
 }

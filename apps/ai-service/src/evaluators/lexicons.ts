@@ -1,16 +1,142 @@
 import { hashBytes } from '../evidence';
 
 /** Function words that carry no clinical meaning. Allowed anywhere in a restatement or gloss. */
-export const FRAME: ReadonlySet<string> = new Set(['the', 'a', 'an', 'and', 'or', 'of', 'for', 'with', 'in', 'on', 'to', 'is', 'are', 'was', 'were', 'be', 'been', 'has', 'have', 'had', 'as', 'this', 'that', 'these', 'those', 'it', 'its', 'by', 'from', 'at', 'than', 'then', 'also', 'both', 'each', 'per', 'if', 'so', 'such', 'into', 'there', 'their', 'they', 'them', 'which', 'who', 'whose', 'when', 'where', 'while', 'because', 'since', 'after', 'before', 'during', 'under', 'over', 'about', 'between']);
+export const FRAME: ReadonlySet<string> = new Set([
+  'the',
+  'a',
+  'an',
+  'and',
+  'or',
+  'of',
+  'for',
+  'with',
+  'in',
+  'on',
+  'to',
+  'is',
+  'are',
+  'was',
+  'were',
+  'be',
+  'been',
+  'has',
+  'have',
+  'had',
+  'as',
+  'this',
+  'that',
+  'these',
+  'those',
+  'it',
+  'its',
+  'by',
+  'from',
+  'at',
+  'than',
+  'then',
+  'also',
+  'both',
+  'each',
+  'per',
+  'if',
+  'so',
+  'such',
+  'into',
+  'there',
+  'their',
+  'they',
+  'them',
+  'which',
+  'who',
+  'whose',
+  'when',
+  'where',
+  'while',
+  'because',
+  'since',
+  'after',
+  'before',
+  'during',
+  'under',
+  'over',
+  'about',
+  'between',
+]);
 
 /** Words a restatement may add around the result's own names. */
-export const RESTATE_FRAME: ReadonlySet<string> = new Set(['guideline', 'guidelines', 'recommendation', 'gives', 'give', 'shows', 'states', 'lists', 'published', 'strength', 'phenotype', 'gene', 'genes', 'drug', 'patient', 'patients', 'result', 'results']);
+export const RESTATE_FRAME: ReadonlySet<string> = new Set([
+  'guideline',
+  'guidelines',
+  'recommendation',
+  'gives',
+  'give',
+  'shows',
+  'states',
+  'lists',
+  'published',
+  'strength',
+  'phenotype',
+  'gene',
+  'genes',
+  'drug',
+  'patient',
+  'patients',
+  'result',
+  'results',
+]);
 
 /**
  * Plain-language words a gloss may use that the result does not contain. DRAFT: not yet reviewed by the pharmacist (D5).
  * None of them carries a direction, a strength or a number; those words are governed by DIRECTIVE and by the numeral rule.
  */
-export const GLOSSARY: ReadonlySet<string> = new Set(['body', 'blood', 'enzyme', 'enzymes', 'function', 'works', 'work', 'clears', 'clear', 'clearance', 'process', 'processes', 'breaks', 'break', 'down', 'medicine', 'medication', 'medicines', 'amount', 'level', 'levels', 'exposure', 'response', 'effect', 'effects', 'side', 'patient', 'patients', 'person', 'people', 'gene', 'genes', 'genetic', 'variant', 'result', 'guideline', 'metabolizer', 'metabolizers', 'metabolize', 'metabolized', 'dose', 'doses', 'dosing', 'therapy', 'agent', 'treatment']);
+export const GLOSSARY: ReadonlySet<string> = new Set([
+  'body',
+  'blood',
+  'enzyme',
+  'enzymes',
+  'function',
+  'works',
+  'work',
+  'clears',
+  'clear',
+  'clearance',
+  'process',
+  'processes',
+  'breaks',
+  'break',
+  'down',
+  'medicine',
+  'medication',
+  'medicines',
+  'amount',
+  'level',
+  'levels',
+  'exposure',
+  'response',
+  'effect',
+  'effects',
+  'side',
+  'patient',
+  'patients',
+  'person',
+  'people',
+  'gene',
+  'genes',
+  'genetic',
+  'variant',
+  'result',
+  'guideline',
+  'metabolizer',
+  'metabolizers',
+  'metabolize',
+  'metabolized',
+  'dose',
+  'doses',
+  'dosing',
+  'therapy',
+  'agent',
+  'treatment',
+]);
 
 /**
  * Words that carry a direction, a modal strength or a negation. Grouped by family so "reduce" and "reduced" are the same
@@ -52,9 +178,41 @@ export const familyOf = (token: string): string | undefined => familyIndex.get(t
 export const QUALIFIERS: ReadonlySet<string> = new Set(['unless', 'except', 'however', 'although', 'caution', 'monitor', 'monitoring', 'only', 'but', 'if']);
 
 /** Words no explanation may contain, whatever the result says: addressing a person, asking, or talking about the harness. */
-export const ALWAYS_BANNED: ReadonlySet<string> = new Set(['you', 'your', 'yours', 'we', 'our', 'ours', 'me', 'my', 'please', 'ignore', 'instruction', 'instructions', 'prompt', 'system', 'assistant', 'override', 'jailbreak', 'password', 'secret', 'token', 'http', 'https', 'www', 'script']);
+export const ALWAYS_BANNED: ReadonlySet<string> = new Set([
+  'you',
+  'your',
+  'yours',
+  'we',
+  'our',
+  'ours',
+  'me',
+  'my',
+  'please',
+  'ignore',
+  'instruction',
+  'instructions',
+  'prompt',
+  'system',
+  'assistant',
+  'override',
+  'jailbreak',
+  'password',
+  'secret',
+  'token',
+  'http',
+  'https',
+  'www',
+  'script',
+]);
 
-export const lexiconDigest = (): string => hashBytes(JSON.stringify({
-  frame: [...FRAME].sort(), restate: [...RESTATE_FRAME].sort(), directive: DIRECTIVE_FAMILIES, qualifiers: [...QUALIFIERS].sort(), banned: [...ALWAYS_BANNED].sort(),
-}));
+export const lexiconDigest = (): string =>
+  hashBytes(
+    JSON.stringify({
+      frame: [...FRAME].sort(),
+      restate: [...RESTATE_FRAME].sort(),
+      directive: DIRECTIVE_FAMILIES,
+      qualifiers: [...QUALIFIERS].sort(),
+      banned: [...ALWAYS_BANNED].sort(),
+    }),
+  );
 export const glossaryDigest = (): string => hashBytes(JSON.stringify([...GLOSSARY].sort()));

@@ -21,26 +21,17 @@ describe('uploadReportSchema', () => {
   it('rejects an empty submission with a message per field', () => {
     const result = messages({ patientLabel: '', reportType: '', file: undefined, syntheticConfirmed: false });
     expect(result).toEqual(
-      expect.arrayContaining([
-        'Enter a synthetic patient label.',
-        'Choose a report type.',
-        'Choose a report file.',
-        'Confirm that this file contains synthetic data only.',
-      ]),
+      expect.arrayContaining(['Enter a synthetic patient label.', 'Choose a report type.', 'Choose a report file.', 'Confirm that this file contains synthetic data only.']),
     );
   });
 
   it('rejects labels that look like names or real identifiers', () => {
-    expect(messages({ ...valid, patientLabel: 'Jane Doe' })).toContain(
-      'Use letters, numbers and hyphens only (no names or real identifiers).',
-    );
+    expect(messages({ ...valid, patientLabel: 'Jane Doe' })).toContain('Use letters, numbers and hyphens only (no names or real identifiers).');
   });
 
   it('rejects oversize files and wrong extensions', () => {
     const big = new File([new Uint8Array(MAX_REPORT_BYTES + 1)], 'big.vcf');
     expect(messages({ ...valid, file: big })).toContain('The file is larger than 10 MB.');
-    expect(messages({ ...valid, file: new File(['x'], 'report.exe') })).toContain(
-      'Only .vcf and .json files are accepted.',
-    );
+    expect(messages({ ...valid, file: new File(['x'], 'report.exe') })).toContain('Only .vcf and .json files are accepted.');
   });
 });

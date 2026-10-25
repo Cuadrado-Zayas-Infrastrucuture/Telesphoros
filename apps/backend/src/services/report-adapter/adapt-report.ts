@@ -24,7 +24,8 @@ export interface AdaptReportDeps {
 }
 
 const summarize = (input: GeneInput): EmittedSummary => ({ state: input.state, reasonCode: input.state === 'unresolved' ? input.reasonCode : null });
-const spanRef = (span: { start: number; end: number; text: string } | null): SpanRef | null => (span ? { start: span.start, end: span.end, textSha256: sha256Hex(span.text) } : null);
+const spanRef = (span: { start: number; end: number; text: string } | null): SpanRef | null =>
+  span ? { start: span.start, end: span.end, textSha256: sha256Hex(span.text) } : null;
 
 /**
  * The report adapter (docs/design/report-adapter-spec.md): turns what the reader found into the engine's existing input
@@ -84,7 +85,13 @@ export async function adaptReport(input: AdaptReportInput, deps: AdaptReportDeps
   if (inspection.kind === 'abstained') {
     // Genes listed with values that nothing ties to them: each listed gene is abstained, once. The values are dropped.
     const geneInputs = inspection.genes.map((gene): GeneInput => ({ gene, state: 'unresolved', reasonCode: 'association-abstained' }));
-    const occurrences = geneInputs.map((emitted): AdapterOccurrence => ({ gene: emitted.gene, occurrenceIndex: 0, roles: { diplotype: null, reportedResult: null, emptyRoles: [] }, emitted: [summarize(emitted)], note: 'abstained' }));
+    const occurrences = geneInputs.map((emitted): AdapterOccurrence => ({
+      gene: emitted.gene,
+      occurrenceIndex: 0,
+      roles: { diplotype: null, reportedResult: null, emptyRoles: [] },
+      emitted: [summarize(emitted)],
+      note: 'abstained',
+    }));
     return finish(geneInputs, occurrences);
   }
 
@@ -97,7 +104,10 @@ export async function adaptReport(input: AdaptReportInput, deps: AdaptReportDeps
   for (const [gene, list] of byGene) {
     const roles = (o: ParsedOccurrence) => ({ diplotype: spanRef(o.diplotypeSpan), reportedResult: spanRef(o.resultSpan), emptyRoles: o.emptyRoles });
     if (list.length > 1) {
-      const duplicate = duplicateInput(gene, list.map((o) => o.facts));
+      const duplicate = duplicateInput(
+        gene,
+        list.map((o) => o.facts),
+      );
       geneInputs.push(duplicate.input);
       for (const o of list) occurrences.push({ gene, occurrenceIndex: o.occurrenceIndex, roles: roles(o), emitted: [], note: duplicate.note });
       continue;

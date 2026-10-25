@@ -3,7 +3,22 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { PERSON, REPORTS_BUCKET, TENANT_A, TENANT_B, attemptsOf, createFixture, effectDir, enqueueAs, jobRow, s3Client, startWorker, until, type Fixture, type WorkerProcess } from './support';
+import {
+  PERSON,
+  REPORTS_BUCKET,
+  TENANT_A,
+  TENANT_B,
+  attemptsOf,
+  createFixture,
+  effectDir,
+  enqueueAs,
+  jobRow,
+  s3Client,
+  startWorker,
+  until,
+  type Fixture,
+  type WorkerProcess,
+} from './support';
 
 let f: Fixture;
 let effects: Awaited<ReturnType<typeof effectDir>>;
@@ -63,10 +78,17 @@ describe('several worker processes', () => {
     // Jobs that take a moment, enqueued once every process is polling, so the work cannot all be done by whichever process started first.
     const ids: string[] = [];
     for (let i = 0; i < 45; i += 1) ids.push(await enqueue('test.slow', { ms: 150 }, i % 3 === 0 ? TENANT_B : TENANT_A));
-    await until('all jobs to succeed', async () => (await f.admin.query(`SELECT count(*)::int AS n FROM jobs WHERE id = ANY($1) AND state = 'succeeded'`, [ids])).rows[0].n === ids.length, 30_000);
+    await until(
+      'all jobs to succeed',
+      async () => (await f.admin.query(`SELECT count(*)::int AS n FROM jobs WHERE id = ANY($1) AND state = 'succeeded'`, [ids])).rows[0].n === ids.length,
+      30_000,
+    );
     const files = await effects.files();
     for (const id of ids) {
-      expect(files.filter((x) => x.startsWith(`${id}.run-`)), id).toHaveLength(1);
+      expect(
+        files.filter((x) => x.startsWith(`${id}.run-`)),
+        id,
+      ).toHaveLength(1);
       expect(files).toContain(`${id}.done`);
       expect((await attemptsOf(f.admin, id)).map((a) => a.outcome)).toEqual(['succeeded']);
     }
@@ -169,7 +191,9 @@ describe('health', () => {
     await until('the job to start', async () => (await effects.files()).includes(`${id}.started`));
     expect((await get()).status).toBe(200);
     let acknowledged = false;
-    const stopping = requestShutdown(w).then(() => { acknowledged = true; });
+    const stopping = requestShutdown(w).then(() => {
+      acknowledged = true;
+    });
     // The original promise is joined in finally; observe rejection while checking the gate.
     void stopping.catch(() => undefined);
     try {
@@ -192,10 +216,16 @@ describe('health', () => {
   it('accepts only stopped readiness or known closed connections, and propagates unrelated errors', async () => {
     await expectStoppedReadiness(async () => ({ status: 503, body: JSON.stringify({ status: 'unavailable', running: 1, stopping: true }) }));
     for (const code of ['ECONNREFUSED', 'ECONNRESET', 'UND_ERR_SOCKET']) {
-      await expectStoppedReadiness(async () => { throw new TypeError('fetch failed', { cause: { code } }); });
+      await expectStoppedReadiness(async () => {
+        throw new TypeError('fetch failed', { cause: { code } });
+      });
     }
     for (const unrelated of [new TypeError('fetch failed', { cause: { code: 'EACCES' } }), new Error('unrelated request failure'), null]) {
-      await expect(expectStoppedReadiness(async () => { throw unrelated; })).rejects.toBe(unrelated);
+      await expect(
+        expectStoppedReadiness(async () => {
+          throw unrelated;
+        }),
+      ).rejects.toBe(unrelated);
     }
     for (const response of [
       { status: 200, body: '{}' },
@@ -211,9 +241,22 @@ describe('queue statistics', () => {
   it('logs the depth and the age of the oldest ready job as one line, which is what the alarms read', async () => {
     await begin();
     const w = worker({ WORKER_ID: 'stats', WORKER_STATS_SECONDS: '10' });
-    const line = await until('a queue-stats line', async () => w.output().split('\n').find((l) => l.includes('"event":"queue-stats"')));
+    const line = await until('a queue-stats line', async () =>
+      w
+        .output()
+        .split('\n')
+        .find((l) => l.includes('"event":"queue-stats"')),
+    );
     const parsed = JSON.parse(line) as Record<string, unknown>;
-    expect(parsed).toMatchObject({ event: 'queue-stats', level: 'info', service: 'worker', count: expect.any(Number), running: expect.any(Number), dead: expect.any(Number), ageSeconds: expect.any(Number) });
+    expect(parsed).toMatchObject({
+      event: 'queue-stats',
+      level: 'info',
+      service: 'worker',
+      count: expect.any(Number),
+      running: expect.any(Number),
+      dead: expect.any(Number),
+      ageSeconds: expect.any(Number),
+    });
     w.child.kill('SIGTERM');
     expect(await w.exited).toEqual({ code: 0, signal: null });
   });
@@ -225,7 +268,14 @@ describe('start-up refusals', () => {
 
   it('refuses a missing database setting, a URL with TLS parameters, and test jobs in production, without echoing a value', () => {
     const secret = 'postgres://telesphoros_worker:hunter2-password@db.example:5432/app';
-    const cases: Record<string, string>[] = [{}, { DATABASE_URL: `${secret}?sslmode=disable` }, { DATABASE_URL: secret, NODE_ENV: 'production', WORKER_TEST_JOBS: 'yes', WORKER_TEST_EFFECT_DIR: '/tmp/x', DATABASE_SSL: 'require' }, { DATABASE_URL: secret, NODE_ENV: 'production' }, { DATABASE_URL: secret, WORKER_CONCURRENCY: '0' }, { DATABASE_URL: secret, WORKER_TEST_JOBS: 'yes' }];
+    const cases: Record<string, string>[] = [
+      {},
+      { DATABASE_URL: `${secret}?sslmode=disable` },
+      { DATABASE_URL: secret, NODE_ENV: 'production', WORKER_TEST_JOBS: 'yes', WORKER_TEST_EFFECT_DIR: '/tmp/x', DATABASE_SSL: 'require' },
+      { DATABASE_URL: secret, NODE_ENV: 'production' },
+      { DATABASE_URL: secret, WORKER_CONCURRENCY: '0' },
+      { DATABASE_URL: secret, WORKER_TEST_JOBS: 'yes' },
+    ];
     for (const env of cases) {
       const r = run(env);
       expect(r.status, JSON.stringify(Object.keys(env))).toBe(1);

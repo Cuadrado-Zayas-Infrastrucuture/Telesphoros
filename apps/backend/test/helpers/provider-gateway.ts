@@ -76,7 +76,8 @@ export async function startGateway(upstream: string, options: GatewayOptions): P
     const url = new URL(req.url ?? '/', 'http://gateway');
     const op = classify(req.method ?? 'GET', url);
     const accessKeyId = accessKeyOf(req.headers);
-    const record = (status: number) => requests.push({ method: req.method ?? '', path: url.pathname + url.search, op, accessKeyId, headers: { ...req.headers, authorization: undefined }, status });
+    const record = (status: number) =>
+      requests.push({ method: req.method ?? '', path: url.pathname + url.search, op, accessKeyId, headers: { ...req.headers, authorization: undefined }, status });
     const done = (status: number, code: string, message: string) => {
       record(status);
       req.resume(); // the body is not wanted; drain it

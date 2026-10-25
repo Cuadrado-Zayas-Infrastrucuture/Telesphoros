@@ -51,12 +51,15 @@ export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthPr
   const [recoverySession, setRecoverySession] = useState<RecoverySession | null>(null);
   const [status, setStatus] = useState<AuthStatus>('signedOut');
   const [roles, setRoles] = useState<Role[]>([]);
-  useEffect(() => () => {
-    epoch.current += 1;
-    endRecoverySession(recovery.current);
-    recovery.current = null;
-    token.current = null;
-  }, []);
+  useEffect(
+    () => () => {
+      epoch.current += 1;
+      endRecoverySession(recovery.current);
+      recovery.current = null;
+      token.current = null;
+    },
+    [],
+  );
 
   const clear = useCallback(() => {
     epoch.current += 1;
@@ -87,12 +90,15 @@ export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthPr
     [apiBaseUrl, fetchImpl],
   );
 
-  const endSessionAndSignInAgain = useCallback(async (message: string): Promise<never> => {
-    clear();
-    setStatus('signedOut');
-    await client.signIn(currentPath());
-    throw new SessionEndedError(message);
-  }, [clear, client]);
+  const endSessionAndSignInAgain = useCallback(
+    async (message: string): Promise<never> => {
+      clear();
+      setStatus('signedOut');
+      await client.signIn(currentPath());
+      throw new SessionEndedError(message);
+    },
+    [clear, client],
+  );
 
   const apiFetch = useCallback(
     async (path: string, init: RequestInit = {}) => {

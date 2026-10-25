@@ -19,7 +19,11 @@ export type UploadProgress = OwnedProgress & { identity?: string; requestId?: st
 const experiment = new WeakMap<object, { file: File; label: string; type: string; patientId?: string }>();
 
 /** Local experiment only. Retry identifiers stay in component memory. Registers a synthetic patient by label, then uploads through the validated intake. */
-export async function submitReport(values: Omit<UploadReportValues, 'reportType'> & { reportType: 'structured' | 'vcf' | 'lab-pdf' }, apiFetch: ApiFetch, progress: UploadProgress): Promise<{ reference: string }> {
+export async function submitReport(
+  values: Omit<UploadReportValues, 'reportType'> & { reportType: 'structured' | 'vcf' | 'lab-pdf' },
+  apiFetch: ApiFetch,
+  progress: UploadProgress,
+): Promise<{ reference: string }> {
   if (!values.syntheticConfirmed) throw new SubmitError('Confirm synthetic data before uploading.');
   if (!import.meta.env.DEV || window.location.hostname !== '127.0.0.1') throw new SubmitError('This upload experiment is local only.');
   let known = experiment.get(progress);
@@ -31,8 +35,19 @@ export async function submitReport(values: Omit<UploadReportValues, 'reportType'
   reportCreateSchema.parse({ patientId: '11111111-1111-4111-8111-111111111111', type: values.reportType, filename: values.file.name, sizeBytes: values.file.size });
   if (!known.patientId) {
     const response = await apiFetch('/api/v1/patients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label: values.patientLabel }) });
-    if (!response.ok) throw new SubmitError(response.status === 409 ? 'A record conflicts with this request. Use a new synthetic label for a new upload.' : `Upload step failed (${response.status}). Your entries are kept.`);
+    if (!response.ok)
+      throw new SubmitError(
+        response.status === 409
+          ? 'A record conflicts with this request. Use a new synthetic label for a new upload.'
+          : `Upload step failed (${response.status}). Your entries are kept.`,
+      );
     known.patientId = patientDtoSchema.parse(await response.json()).id;
   }
-  return submitOwnedReport({ patientId: known.patientId, reportType: values.reportType, file: values.file, syntheticConfirmed: values.syntheticConfirmed }, apiFetch, progress, undefined, { remember: false });
+  return submitOwnedReport(
+    { patientId: known.patientId, reportType: values.reportType, file: values.file, syntheticConfirmed: values.syntheticConfirmed },
+    apiFetch,
+    progress,
+    undefined,
+    { remember: false },
+  );
 }

@@ -48,7 +48,13 @@ export class LabPipeline {
   }
 
   async patient(who: Person): Promise<string> {
-    return (await this.api().post('/api/v1/patients').set(bearer(who.token)).send({ label: `SYN-${randomUUID().slice(0, 8)}` }).expect(201)).body.id as string;
+    return (
+      await this.api()
+        .post('/api/v1/patients')
+        .set(bearer(who.token))
+        .send({ label: `SYN-${randomUUID().slice(0, 8)}` })
+        .expect(201)
+    ).body.id as string;
   }
 
   /** Writes bytes at a key in the report store, as a person with write access to the bucket could (a newer version). Returns the version the store assigned. */
@@ -71,12 +77,20 @@ export class LabPipeline {
     ).body.id as string;
     const state = (await this.api().get(`/api/v1/reports/${reportId}/upload-state`).set(bearer(creator.token)).expect(200)).body;
     const attempt = (
-      await this.api().post(`/api/v1/reports/${reportId}/upload-attempts`).set(bearer(creator.token))
-        .send({ requestId: randomUUID(), revision: state.revision, contentType: 'application/pdf', sha256: sha(bytes) }).expect(201)
+      await this.api()
+        .post(`/api/v1/reports/${reportId}/upload-attempts`)
+        .set(bearer(creator.token))
+        .send({ requestId: randomUUID(), revision: state.revision, contentType: 'application/pdf', sha256: sha(bytes) })
+        .expect(201)
     ).body as { attemptId: string; revision: string };
     if (options.complete !== false) {
-      await this.api().put(`/api/v1/reports/${reportId}/upload-attempts/${attempt.attemptId}/bytes`).set(bearer(creator.token))
-        .set('X-Upload-Revision', attempt.revision).set('Content-Type', 'application/pdf').send(bytes).expect(200);
+      await this.api()
+        .put(`/api/v1/reports/${reportId}/upload-attempts/${attempt.attemptId}/bytes`)
+        .set(bearer(creator.token))
+        .set('X-Upload-Revision', attempt.revision)
+        .set('Content-Type', 'application/pdf')
+        .send(bytes)
+        .expect(200);
     }
     const [row] = await this.row<{ storage_key: string; object_version: string | null }>('SELECT storage_key, object_version FROM reports WHERE id = $1', [reportId]);
     return { reportId, patientId, target: { key: row!.storage_key }, version: row!.object_version ?? undefined, pdfSha256: sha(bytes) };
@@ -97,7 +111,13 @@ export class LabPipeline {
     const key = `reports/seeded/${reportId}/${randomUUID()}`;
     const target = { key };
     if (options.complete === false) {
-      await this.row('UPDATE reports SET storage_key = $2, content_type = $3, sha256 = $4, upload_requested_by = $5 WHERE id = $1', [reportId, key, 'application/pdf', sha(bytes), requester.sub]);
+      await this.row('UPDATE reports SET storage_key = $2, content_type = $3, sha256 = $4, upload_requested_by = $5 WHERE id = $1', [
+        reportId,
+        key,
+        'application/pdf',
+        sha(bytes),
+        requester.sub,
+      ]);
       return { reportId, patientId, target, version: undefined as string | undefined, pdfSha256: sha(bytes) };
     }
     const version = await this.put(target, bytes);
@@ -134,7 +154,7 @@ export class LabPipeline {
     return this.decideLink(who, reportId, { decision: 'verified', method: 'person-confirmed', basisCode: 'documented-clinic-procedure' });
   }
 
-    /**
+  /**
    * The whole run up to an evaluation, by different people: a clinician uploads and captures, an independent reviewer accepts.
    * Then (unless `verified: false`) the reviewer, who took no part in registering or uploading it, verifies the report's patient link.
    * Returns the ids an evaluation request names.

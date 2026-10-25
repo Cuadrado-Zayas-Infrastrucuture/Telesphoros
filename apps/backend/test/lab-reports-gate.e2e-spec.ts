@@ -104,7 +104,9 @@ describe('with the pipeline switched off', () => {
   const send = (route: Route, token?: string) => {
     const call = request(app.getHttpServer())[route.method.toLowerCase() as 'get' | 'post'](route.path);
     const withAuth = token ? call.set(bearer(token)) : call;
-    return route.method === 'POST' ? withAuth.send(route.path.endsWith('/decision') ? { decision: 'accepted' } : route.path.endsWith('/evaluations') ? { captureId: ID, acceptanceId: ID } : {}) : withAuth;
+    return route.method === 'POST'
+      ? withAuth.send(route.path.endsWith('/decision') ? { decision: 'accepted' } : route.path.endsWith('/evaluations') ? { captureId: ID, acceptanceId: ID } : {})
+      : withAuth;
   };
   const tokenWith = (roles: string[]) => signToken({ sub: 'someone', roles, tenant: 'tenant-gate' });
 

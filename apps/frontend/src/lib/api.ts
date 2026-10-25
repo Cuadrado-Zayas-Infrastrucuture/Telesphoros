@@ -8,24 +8,34 @@ import type { RecoverySession } from './uploadRecovery';
 
 export class SubmitError extends Error {
   /** The HTTP status that caused it, when one did (the recovery of a reloaded upload tells a missing report from other failures). */
-  constructor(message: string, readonly status?: number) { super(message); }
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+  }
 }
 export type ApiFetch = (path: string, init?: RequestInit) => Promise<Response>;
-export interface UploadProgress extends OwnedProgress { identity?: string; requestId?: string; reportId?: string }
+export interface UploadProgress extends OwnedProgress {
+  identity?: string;
+  requestId?: string;
+  reportId?: string;
+}
 
 /** Explicit configuration of the object-storage origins a signed DOWNLOAD link may point at (uploads no longer touch storage from the browser); never derive a trusted origin from an API response. */
 export function reportStorageOrigins(): string[] {
   const setting = import.meta.env.VITE_REPORT_STORAGE_ORIGINS;
   if (typeof setting !== 'string' || !setting.trim()) throw new SubmitError('File storage is not configured. Contact the administrator.');
-  const origins = setting.split(',').map(value => value.trim());
+  const origins = setting.split(',').map((value) => value.trim());
   try {
     for (const value of origins) {
       const url = new URL(value);
-      const local = import.meta.env.MODE !== 'production' && window.location.hostname === '127.0.0.1'
-        && url.protocol === 'http:' && url.hostname === '127.0.0.1';
+      const local = import.meta.env.MODE !== 'production' && window.location.hostname === '127.0.0.1' && url.protocol === 'http:' && url.hostname === '127.0.0.1';
       if (url.origin !== value || url.username || url.password || (url.protocol !== 'https:' && !local)) throw new Error();
     }
-  } catch { throw new SubmitError('File storage configuration is invalid. Contact the administrator.'); }
+  } catch {
+    throw new SubmitError('File storage configuration is invalid. Contact the administrator.');
+  }
   return origins;
 }
 
@@ -54,7 +64,13 @@ export async function listPatients(apiFetch: ApiFetch, page: number, signal?: Ab
  * The one way a report file is uploaded (M2.2b): the validated server intake. Declare an attempt, send the bytes through the API, and the server checks
  * their structure, size and checksum before anything reaches storage. Scoped, time-bounded reload recovery holds no token or file bytes.
  */
-export async function submitReport(values: ProductUploadValues, apiFetch: ApiFetch, progress: UploadProgress, signal?: AbortSignal, recoverySession?: RecoverySession): Promise<{ reference: string }> {
+export async function submitReport(
+  values: ProductUploadValues,
+  apiFetch: ApiFetch,
+  progress: UploadProgress,
+  signal?: AbortSignal,
+  recoverySession?: RecoverySession,
+): Promise<{ reference: string }> {
   try {
     productUploadSchema.parse(values);
     return await submitOwnedReport(values, apiFetch, progress, signal, { recoverySession });

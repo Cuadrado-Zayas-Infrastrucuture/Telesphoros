@@ -4,7 +4,12 @@ import { Pool } from 'pg';
 import { InvalidTokenError, NoTenantError, type TokenVerifier } from '../auth/token-verifier';
 import { pgClientConfig } from '../db/tls';
 import {
-  CAPABILITY_TOKEN_PATTERN, CapabilityIssueError, type CapabilityIssueRequest, CapabilityIssuerPort, type IssuedCapability, REQUEST_PURPOSE,
+  CAPABILITY_TOKEN_PATTERN,
+  CapabilityIssueError,
+  type CapabilityIssueRequest,
+  CapabilityIssuerPort,
+  type IssuedCapability,
+  REQUEST_PURPOSE,
 } from './capability-issuer.port';
 
 /** What the issuer asks of the database: `tenant_capability_issue_current` (migration 0031), with the token already hashed. It names no membership version: the database reads the current one. */
@@ -63,9 +68,12 @@ export class IssuerCore extends CapabilityIssuerPort {
     let outcome;
     try {
       outcome = await this.store.issue({
-        tenant: identity.tenantId, sub: identity.sub, purpose: REQUEST_PURPOSE,
+        tenant: identity.tenantId,
+        sub: identity.sub,
+        purpose: REQUEST_PURPOSE,
         // The database hashes the TEXT it is later given in app.capability, so the hash is of the text.
-        tokenHash: createHash('sha256').update(token, 'utf8').digest(), requestId: request.requestId,
+        tokenHash: createHash('sha256').update(token, 'utf8').digest(),
+        requestId: request.requestId,
       });
     } catch (error) {
       this.logger.warn(`Capability not issued: unavailable (${(error as Error).name})`);

@@ -16,8 +16,10 @@ let db: EphemeralDatabase | undefined;
 const api = () => request(app.getHttpServer());
 const tenantOf = () => `org-${randomUUID().slice(0, 8)}`;
 const as = async (tenant: string, roles: string[], sub = `person-${randomUUID().slice(0, 6)}`) => bearer(await signToken({ sub, roles, tenant }));
-const newPatient = async (headers: Record<string, string>, label = `SYN-${randomUUID().slice(0, 8)}`) => (await api().post('/api/v1/patients').set(headers).send({ label }).expect(201)).body.id as string;
-const register = (headers: Record<string, string>, patientId: string, system: string, value: string) => api().post(`/api/v1/patients/${patientId}/identifiers`).set(headers).send({ system, value });
+const newPatient = async (headers: Record<string, string>, label = `SYN-${randomUUID().slice(0, 8)}`) =>
+  (await api().post('/api/v1/patients').set(headers).send({ label }).expect(201)).body.id as string;
+const register = (headers: Record<string, string>, patientId: string, system: string, value: string) =>
+  api().post(`/api/v1/patients/${patientId}/identifiers`).set(headers).send({ system, value });
 const secretNumber = () => `ZQX-${randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase()}`;
 const duplicates = (headers: Record<string, string>) => api().get('/api/v1/patient-duplicates').set(headers);
 
@@ -239,9 +241,11 @@ describe('who may propose and decide a merge', () => {
   it('makes a patient filter mean the whole group on reports, and an unmerge restores them exactly', async () => {
     const { c1, c2 } = await organization();
     const [a, b] = [await lab.patient(c1), await lab.patient(c1)];
-    const make = async (patientId: string) => (await lab.api().post('/api/v1/reports').set(bearer(c1.token)).send({ patientId, type: 'vcf', filename: 'x.vcf', sizeBytes: 10 }).expect(201)).body.id as string;
+    const make = async (patientId: string) =>
+      (await lab.api().post('/api/v1/reports').set(bearer(c1.token)).send({ patientId, type: 'vcf', filename: 'x.vcf', sizeBytes: 10 }).expect(201)).body.id as string;
     const [ra, rb] = [await make(a), await make(b)];
-    const reportsOf = async (patientId: string) => ((await lab.api().get(`/api/v1/reports?patientId=${patientId}`).set(bearer(c1.token)).expect(200)).body.data as { id: string; patientId: string }[]).map((r) => r.id).sort();
+    const reportsOf = async (patientId: string) =>
+      ((await lab.api().get(`/api/v1/reports?patientId=${patientId}`).set(bearer(c1.token)).expect(200)).body.data as { id: string; patientId: string }[]).map((r) => r.id).sort();
     expect(await reportsOf(a)).toEqual([ra]);
     expect(await reportsOf(b)).toEqual([rb]);
 
@@ -286,12 +290,14 @@ describe('who may propose and decide a merge', () => {
     const acceptance = (await lab.decide(reviewer, capture.id, { decision: 'accepted' }).expect(201)).body;
     await lab.verifyLink(reviewer, up.reportId).expect(201);
     const evaluation = (await lab.evaluate(c1, up.reportId, { captureId: capture.id, acceptanceId: acceptance.id }).expect(201)).body;
-    const ids = async (patientId: string) => ((await lab.api().get(`/api/v1/evaluations?patientId=${patientId}`).set(bearer(c1.token)).expect(200)).body.data as { id: string }[]).map((e) => e.id);
+    const ids = async (patientId: string) =>
+      ((await lab.api().get(`/api/v1/evaluations?patientId=${patientId}`).set(bearer(c1.token)).expect(200)).body.data as { id: string }[]).map((e) => e.id);
     // The whole stored record of the evaluation and of its report, byte for byte, before and after a merge and its unmerge.
-    const snapshot = async () => JSON.stringify([
-      (await lab.api().get(`/api/v1/evaluations/${evaluation.id}`).set(bearer(c1.token)).expect(200)).body,
-      (await lab.api().get(`/api/v1/reports/${up.reportId}`).set(bearer(c1.token)).expect(200)).body,
-    ]);
+    const snapshot = async () =>
+      JSON.stringify([
+        (await lab.api().get(`/api/v1/evaluations/${evaluation.id}`).set(bearer(c1.token)).expect(200)).body,
+        (await lab.api().get(`/api/v1/reports/${up.reportId}`).set(bearer(c1.token)).expect(200)).body,
+      ]);
     const before = await snapshot();
     expect(await ids(a)).toEqual([evaluation.id]);
     expect(await ids(b)).toEqual([]);
@@ -317,7 +323,10 @@ describe('who may propose and decide a merge', () => {
       await lab.api().post(`/api/v1/patients/${y}/identifiers`).set(bearer(c1.token)).send({ system: 'hospital-a-mrn', value }).expect(409);
       return value;
     };
-    const listed = async () => ((await lab.api().get('/api/v1/patient-duplicates').set(bearer(c1.token)).expect(200)).body.data as { patientId: string; otherPatientId: string }[]).map((p) => [p.patientId, p.otherPatientId].sort().join('|'));
+    const listed = async () =>
+      ((await lab.api().get('/api/v1/patient-duplicates').set(bearer(c1.token)).expect(200)).body.data as { patientId: string; otherPatientId: string }[]).map((p) =>
+        [p.patientId, p.otherPatientId].sort().join('|'),
+      );
     const key = (x: string, y: string) => [x, y].sort().join('|');
     await collide(a, b);
     await collide(c, d);
@@ -405,7 +414,10 @@ describe('who may propose and decide a merge', () => {
       const tables = (await c.query(`SELECT tablename FROM pg_tables WHERE schemaname = 'public'`)).rows.map((r) => r.tablename as string);
       const hits: string[] = [];
       for (const table of tables) {
-        for (const [what, needle] of [['number', value], ['digest', digest]] as const) {
+        for (const [what, needle] of [
+          ['number', value],
+          ['digest', digest],
+        ] as const) {
           // bytea renders as \x<hex> in the row text; a digest could therefore only show up as its hex.
           const { rows } = await c.query(`SELECT count(*)::int AS n FROM "${table}" t WHERE t::text ILIKE $1`, [`%${needle}%`]);
           if (rows[0].n > 0 && !(table === 'patient_identifiers' && what === 'digest')) hits.push(`${table}: ${what}`);

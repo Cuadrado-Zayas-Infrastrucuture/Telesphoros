@@ -37,17 +37,40 @@ async function newReport(tenantId: string): Promise<ReportRecord> {
   const now = new Date().toISOString();
   const p = { id: randomUUID(), tenantId, createdBy: 'syn-actor', label: `SYN-${randomUUID().slice(0, 8)}`, createdAt: now, updatedAt: now };
   await patients.insert(p);
-  const r: ReportRecord = { id: randomUUID(), tenantId, createdBy: 'syn-actor', patientId: p.id, type: 'vcf', filename: 'a.vcf', sizeBytes: 1000, status: 'received',
-    storageKey: null, contentType: null, sha256: null, uploadedAt: null, objectVersion: null, uploadRequestedBy: null, uploadedBy: null, createdAt: now, updatedAt: now };
+  const r: ReportRecord = {
+    id: randomUUID(),
+    tenantId,
+    createdBy: 'syn-actor',
+    patientId: p.id,
+    type: 'vcf',
+    filename: 'a.vcf',
+    sizeBytes: 1000,
+    status: 'received',
+    storageKey: null,
+    contentType: null,
+    sha256: null,
+    uploadedAt: null,
+    objectVersion: null,
+    uploadRequestedBy: null,
+    uploadedBy: null,
+    createdAt: now,
+    updatedAt: now,
+  };
   await reports.insert(r);
   return r;
 }
 /** Runs `work` the way a request does: inside the per-request slot the API opens, with the id the request middleware set. */
 const inRequest = <T>(requestId: string | undefined, work: () => Promise<T>): Promise<T> =>
-  new Promise<T>((resolve, reject) => authorityContextMiddleware({ id: requestId } as unknown as Request, {} as Response, () => { void work().then(resolve, reject); }));
-const eventOf = (reportId: string) => owner(async (c) => (await c.query<{ request_id: string | null }>('SELECT request_id FROM outbox_events WHERE subject_id = $1', [reportId])).rows[0]);
+  new Promise<T>((resolve, reject) =>
+    authorityContextMiddleware({ id: requestId } as unknown as Request, {} as Response, () => {
+      void work().then(resolve, reject);
+    }),
+  );
+const eventOf = (reportId: string) =>
+  owner(async (c) => (await c.query<{ request_id: string | null }>('SELECT request_id FROM outbox_events WHERE subject_id = $1', [reportId])).rows[0]);
 const relay = () => owner((c) => c.query('SELECT outbox_relay(500)'));
-const payloadOf = (reportId: string) => owner(async (c) => (await c.query<{ payload: Record<string, unknown> }>(`SELECT payload FROM jobs WHERE payload ->> 'reportId' = $1`, [reportId])).rows[0]?.payload);
+const payloadOf = (reportId: string) =>
+  owner(async (c) => (await c.query<{ payload: Record<string, unknown> }>(`SELECT payload FROM jobs WHERE payload ->> 'reportId' = $1`, [reportId])).rows[0]?.payload);
 const REQUEST = '7b9c1d2e-4f5a-4b6c-8d7e-9f0a1b2c3d4e';
 
 describe('the upload commit carries the request id into the outbox event and the job', () => {
@@ -103,8 +126,8 @@ describe('outbox_append', () => {
       await c.query('SELECT outbox_append($1, $2)', ['report.file-committed', a]);
       await c.query('SELECT outbox_append($1, $2, $3)', ['report.file-committed', b, REQUEST]);
     });
-    expect((await eventOf(a))).toEqual({ request_id: null });
-    expect((await eventOf(b))).toEqual({ request_id: REQUEST });
+    expect(await eventOf(a)).toEqual({ request_id: null });
+    expect(await eventOf(b)).toEqual({ request_id: REQUEST });
     const client = new (await import('pg')).Client({ connectionString: db.appUrl });
     await client.connect();
     try {
@@ -115,9 +138,11 @@ describe('outbox_append', () => {
   });
 
   it('can be called by the application role and by no one else (PUBLIC and the worker cannot)', async () => {
-    const rows = await owner((c) => c.query(`SELECT has_function_privilege('public', 'outbox_append(text, uuid, text)', 'EXECUTE') AS pub,
+    const rows = await owner((c) =>
+      c.query(`SELECT has_function_privilege('public', 'outbox_append(text, uuid, text)', 'EXECUTE') AS pub,
       has_function_privilege('telesphoros_app', 'outbox_append(text, uuid, text)', 'EXECUTE') AS app,
-      has_function_privilege('telesphoros_worker', 'outbox_append(text, uuid, text)', 'EXECUTE') AS worker`));
+      has_function_privilege('telesphoros_worker', 'outbox_append(text, uuid, text)', 'EXECUTE') AS worker`),
+    );
     expect(rows.rows[0]).toEqual({ pub: false, app: true, worker: false });
   });
 

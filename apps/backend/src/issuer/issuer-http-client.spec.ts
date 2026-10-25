@@ -4,13 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { Logger } from '@nestjs/common';
 import { issuerUrlProblem } from '../config/env';
 import { CAPABILITY_TOKEN_PATTERN, CapabilityIssueError, type CapabilityIssueFailure, type CapabilityIssueRequest, type IssuedCapability } from './capability-issuer.port';
-import {
-  checkIssuerBaseUrl,
-  HttpCapabilityIssuer,
-  ISSUER_CLIENT_TIMEOUT_MS,
-  MAX_ISSUER_RESPONSE_BYTES,
-  type HttpCapabilityIssuerOptions,
-} from './issuer-http-client';
+import { checkIssuerBaseUrl, HttpCapabilityIssuer, ISSUER_CLIENT_TIMEOUT_MS, MAX_ISSUER_RESPONSE_BYTES, type HttpCapabilityIssuerOptions } from './issuer-http-client';
 import { CAPABILITY_ISSUE_TIMEOUT_MS } from './request-capabilities';
 
 /**
@@ -68,7 +62,10 @@ const json = (res: ServerResponse, status: number, payload: unknown, headers: Re
   res.writeHead(status, { 'content-type': 'application/json', connection: 'close', ...headers });
   res.end(typeof payload === 'string' ? payload : JSON.stringify(payload));
 };
-const issued = (token = newToken(), expiresAt = new Date(Date.now() + 60_000).toISOString(), membershipVersion = VERSION): Handler => (_req, res) => json(res, 200, { token, expiresAt, membershipVersion });
+const issued =
+  (token = newToken(), expiresAt = new Date(Date.now() + 60_000).toISOString(), membershipVersion = VERSION): Handler =>
+  (_req, res) =>
+    json(res, 200, { token, expiresAt, membershipVersion });
 
 const fakes: Fake[] = [];
 const fake = async (handler: Handler): Promise<Fake> => {
@@ -181,8 +178,15 @@ describe('the status table, exactly as issuer-server.ts writes it', () => {
 
   it('a status and an error field that do not belong together are unavailable, not whichever the body says', async () => {
     const mismatched: [number, unknown][] = [
-      [401, { error: 'no-tenant' }], [401, { error: 'refused' }], [403, { error: 'invalid-token' }], [400, { error: 'refused' }],
-      [503, { error: 'invalid-token' }], [200, { error: 'unavailable' }], [403, { error: 'something-new' }], [403, {}], [403, { detail: 'x' }],
+      [401, { error: 'no-tenant' }],
+      [401, { error: 'refused' }],
+      [403, { error: 'invalid-token' }],
+      [400, { error: 'refused' }],
+      [503, { error: 'invalid-token' }],
+      [200, { error: 'unavailable' }],
+      [403, { error: 'something-new' }],
+      [403, {}],
+      [403, { detail: 'x' }],
     ];
     for (const [status, body] of mismatched) {
       const f = await fake((_req, res) => json(res, status, body));
@@ -239,7 +243,12 @@ describe('the one retry', () => {
   });
 
   it('a refusal is never retried: 400, 401 and both 403s are one call each, and the retry cannot turn a refusal into an issuance', async () => {
-    const answers: [number, unknown][] = [[400, { error: 'invalid-request' }], [401, { error: 'invalid-token' }], [403, { error: 'no-tenant' }], [403, { error: 'refused', detail: 'rate-limited' }]];
+    const answers: [number, unknown][] = [
+      [400, { error: 'invalid-request' }],
+      [401, { error: 'invalid-token' }],
+      [403, { error: 'no-tenant' }],
+      [403, { error: 'refused', detail: 'rate-limited' }],
+    ];
     for (const [status, body] of answers) {
       const counted = countingFetch();
       const f = await fake((_req, res) => json(res, status, body));
@@ -284,7 +293,7 @@ describe('the deadline', () => {
     expect(Date.now() - started).toBeLessThan(1500);
   });
 
-  it('the default budget sits under the guard\'s wait and the server\'s own 10 s request timeout (D4\'s real p95 budget is still to be measured)', () => {
+  it("the default budget sits under the guard's wait and the server's own 10 s request timeout (D4's real p95 budget is still to be measured)", () => {
     expect(ISSUER_CLIENT_TIMEOUT_MS).toBe(2500);
     expect(ISSUER_CLIENT_TIMEOUT_MS).toBeLessThan(CAPABILITY_ISSUE_TIMEOUT_MS);
     expect(ISSUER_CLIENT_TIMEOUT_MS).toBeLessThan(10_000);
@@ -407,8 +416,26 @@ describe('nothing sensitive is logged or put in an error', () => {
 describe('the base URL', () => {
   const accepted = ['http://session-issuer:8082', 'http://session-issuer:8082/', 'https://issuer.internal', 'http://127.0.0.1:1234', 'http://[::1]:8082'];
   const refused = [
-    '', ' ', 'session-issuer:8082', 'not a url', 'ftp://issuer', 'file:///etc/passwd', 'javascript:alert(1)', 'http://', 'http://user@issuer', 'http://user:pw@issuer', 'http://:pw@issuer',
-    'http://issuer/?a=1', 'http://issuer?', 'http://issuer/#frag', 'http://issuer#', 'http://issuer/prefix', 'http://issuer//', ' http://issuer', 'http://issuer ', 'http://issuer\n',
+    '',
+    ' ',
+    'session-issuer:8082',
+    'not a url',
+    'ftp://issuer',
+    'file:///etc/passwd',
+    'javascript:alert(1)',
+    'http://',
+    'http://user@issuer',
+    'http://user:pw@issuer',
+    'http://:pw@issuer',
+    'http://issuer/?a=1',
+    'http://issuer?',
+    'http://issuer/#frag',
+    'http://issuer#',
+    'http://issuer/prefix',
+    'http://issuer//',
+    ' http://issuer',
+    'http://issuer ',
+    'http://issuer\n',
   ];
   it('the client and the environment loader accept and refuse exactly the same values', () => {
     for (const value of accepted) expect([value, checkIssuerBaseUrl(value), issuerUrlProblem(value)]).toEqual([value, undefined, undefined]);

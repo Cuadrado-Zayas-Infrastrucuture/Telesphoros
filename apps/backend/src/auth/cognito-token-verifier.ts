@@ -17,7 +17,6 @@ export interface CognitoVerifierOptions {
   cooldownMs?: number;
 }
 
-
 /**
  * Verifies Amazon Cognito ACCESS tokens (the API never accepts ID tokens).
  *

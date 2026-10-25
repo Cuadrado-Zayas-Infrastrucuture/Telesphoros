@@ -24,7 +24,7 @@ class ScriptedIssuer extends CapabilityIssuerPort {
   /** The issuer login's URL when the app runs on PostgreSQL. Then the default answer is a real row minted through the database's own function. */
   issuerUrl?: string;
   behave: (request: CapabilityIssueRequest) => Promise<IssuedCapability | undefined> = async (request) =>
-    (this.issuerUrl ? this.mint(request, this.issuerUrl) : { token: CAPABILITY, expiresAt: new Date(Date.now() + 60_000), membershipVersion: 1 });
+    this.issuerUrl ? this.mint(request, this.issuerUrl) : { token: CAPABILITY, expiresAt: new Date(Date.now() + 60_000), membershipVersion: 1 };
   async issue(r: CapabilityIssueRequest): Promise<IssuedCapability | undefined> {
     this.asked.push(r);
     this.trace.push('issue');
@@ -59,7 +59,10 @@ const issuer = new ScriptedIssuer();
 let defaultBehave: ScriptedIssuer['behave'];
 const api = () => request(app.getHttpServer());
 const reasons = async (sub: string) => (await securityEventsOf(app)).filter((e) => e.eventType === 'access.refused' && e.subjectRef === sub).map((e) => e.details.reason);
-const me = async (sub: string, options: Parameters<typeof signToken>[0] = {}) => api().get('/api/v1/me').set(bearer(await token(sub, options)));
+const me = async (sub: string, options: Parameters<typeof signToken>[0] = {}) =>
+  api()
+    .get('/api/v1/me')
+    .set(bearer(await token(sub, options)));
 const refuse = (detail: string) => async () => {
   throw new CapabilityIssueError('refused', detail);
 };
@@ -87,7 +90,10 @@ describe('the order', () => {
   it('the issuer is asked before the membership is read, once, with the access token and the request id only', async () => {
     const sub = person();
     await membershipOf(app).grant({ tenantId: TENANT, sub, roles: ['reader'], ...OPERATOR });
-    const res = await api().get('/api/v1/me').set(bearer(await token(sub))).set('X-Request-Id', 'req-order-0001');
+    const res = await api()
+      .get('/api/v1/me')
+      .set(bearer(await token(sub)))
+      .set('X-Request-Id', 'req-order-0001');
     expect(res.status).toBe(200);
     expect(issuer.trace).toEqual(['issue', 'find']);
     expect(issuer.asked).toHaveLength(1);
@@ -110,7 +116,7 @@ describe('the order', () => {
   });
 });
 
-describe('refusal records (decision D1=(i)): the issuer\'s log row stands in only for what it recorded', () => {
+describe("refusal records (decision D1=(i)): the issuer's log row stands in only for what it recorded", () => {
   const withBehaviour = async (behave: ScriptedIssuer['behave'], run: () => Promise<void>) => {
     issuer.behave = behave;
     try {
@@ -161,20 +167,26 @@ describe('refusal records (decision D1=(i)): the issuer\'s log row stands in onl
     ['refused', 'malformed'],
   ] as const)('an issuer answer of %s %s did not record the refusal, so the event is still written', async (reason, detail) => {
     const sub = person();
-    await withBehaviour(async () => {
-      throw new CapabilityIssueError(reason, detail);
-    }, async () => {
-      expect((await me(sub)).status).toBe(403); // no membership
-      expect(await reasons(sub)).toEqual(['no-membership']);
-    });
+    await withBehaviour(
+      async () => {
+        throw new CapabilityIssueError(reason, detail);
+      },
+      async () => {
+        expect((await me(sub)).status).toBe(403); // no membership
+        expect(await reasons(sub)).toEqual(['no-membership']);
+      },
+    );
   });
 
   it('no issuer configured: the event is written, exactly as before', async () => {
     const sub = person();
-    await withBehaviour(async () => undefined, async () => {
-      expect((await me(sub)).status).toBe(403);
-      expect(await reasons(sub)).toEqual(['no-membership']);
-    });
+    await withBehaviour(
+      async () => undefined,
+      async () => {
+        expect((await me(sub)).status).toBe(403);
+        expect(await reasons(sub)).toEqual(['no-membership']);
+      },
+    );
   });
 
   it('a revoked token is still recorded when the issuer issued: that person holds a valid capability', async () => {

@@ -56,17 +56,27 @@ export function separationProblems(closure: ImportClosure): string[] {
 
 const read = (path: string) => readFileSync(join(BACKEND_ROOT, path), 'utf8');
 /** The real sources, with `main.ts` replaced by `main` (a mutant). */
-const withEntry = (main: string) => (path: string) => (path === ENTRY ? main : (() => { try { return read(path); } catch { return undefined; } })());
+const withEntry = (main: string) => (path: string) =>
+  path === ENTRY
+    ? main
+    : (() => {
+        try {
+          return read(path);
+        } catch {
+          return undefined;
+        }
+      })();
 
 describe('the issuer entry loads only what it should', () => {
   it('has an entry, and the walk from it finds the whole chain (positive control: the core, the verifier and the TLS helper are reached)', () => {
     const closure = importClosure(ENTRY);
-    for (const expected of ['src/issuer/issuer-core.ts', 'src/auth/cognito-token-verifier.ts', 'src/db/tls.ts', 'src/issuer/issuer-server.ts']) expect(closure.files).toContain(expected);
+    for (const expected of ['src/issuer/issuer-core.ts', 'src/auth/cognito-token-verifier.ts', 'src/db/tls.ts', 'src/issuer/issuer-server.ts'])
+      expect(closure.files).toContain(expected);
     expect(closure.packages).toContain('pg');
     expect(closure.packages).toContain('jose');
   });
 
-  it('reaches no module that holds the application\'s pool, the worker or another credential, and nothing off the exact list', () => {
+  it("reaches no module that holds the application's pool, the worker or another credential, and nothing off the exact list", () => {
     expect(separationProblems(importClosure(ENTRY))).toEqual([]);
   });
 
@@ -74,11 +84,13 @@ describe('the issuer entry loads only what it should', () => {
     expect([...ALLOWED_FILES].filter((f) => !importClosure(ENTRY).files.has(f))).toEqual([]);
   });
 
-  it('only main.ts reads process.env in the issuer\'s own sources; the rest are handed their settings', () => {
+  it("only main.ts reads process.env in the issuer's own sources; the rest are handed their settings", () => {
     const own = readdirSync(join(BACKEND_ROOT, 'src/issuer')).filter((f) => f.endsWith('.ts') && !f.endsWith('.spec.ts'));
     expect(own).toContain('main.ts');
     for (const file of own) {
-      const text = read(`src/issuer/${file}`).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      const text = read(`src/issuer/${file}`)
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
       if (file === 'main.ts') expect(text).toContain('process.env');
       else expect([file, /process\.env/.test(text)]).toEqual([file, false]);
     }
@@ -118,9 +130,17 @@ describe('mutants: the test goes red when the entry reaches what it must not', (
 
   it('the import reader sees every statement form', () => {
     const text = [
-      "import a from 'pkg-a';", "import { b } from './local-b';", "import 'side-effect';", "export * from './local-c';", "export { d } from 'pkg-d';",
-      "import {\n  e,\n  f,\n} from '../multi-line';", "const g = require('pkg-g');", "const h = await import('./dyn-h');", "import type { Skip } from './skip-type';",
-      "// import { z } from './commented';", "/* import { y } from './block-commented'; */",
+      "import a from 'pkg-a';",
+      "import { b } from './local-b';",
+      "import 'side-effect';",
+      "export * from './local-c';",
+      "export { d } from 'pkg-d';",
+      "import {\n  e,\n  f,\n} from '../multi-line';",
+      "const g = require('pkg-g');",
+      "const h = await import('./dyn-h');",
+      "import type { Skip } from './skip-type';",
+      "// import { z } from './commented';",
+      "/* import { y } from './block-commented'; */",
     ].join('\n');
     expect(specifiersOf(text).sort()).toEqual(['../multi-line', './dyn-h', './local-b', './local-c', 'pkg-a', 'pkg-d', 'pkg-g', 'side-effect']);
   });

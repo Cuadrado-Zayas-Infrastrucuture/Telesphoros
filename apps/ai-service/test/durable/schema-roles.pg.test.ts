@@ -8,14 +8,29 @@ import type { EphemeralDatabase } from '../../../backend/test/helpers/database';
 
 let fixture: EphemeralDatabase;
 let owner: Client;
-const h = durableHarness(() => fixture, () => owner);
+const h = durableHarness(
+  () => fixture,
+  () => owner,
+);
 const migrations = resolve(import.meta.dirname, '../../../backend/migrations');
-const TABLES = ['agentic_synthetic_capacity', 'agentic_synthetic_grants', 'agentic_synthetic_sources', 'agentic_synthetic_grant_sources',
-  'agentic_synthetic_runs', 'agentic_synthetic_reservations', 'agentic_synthetic_buckets', 'agentic_synthetic_invocations',
-  'agentic_synthetic_outcomes', 'agentic_synthetic_audit'];
-const connect = async (url: string) => { const c = new Client({ connectionString: url }); await c.connect(); return c; };
-const logins = () => ({ app: fixture.appUrl, worker: fixture.workerUrl, verifier: fixture.verifierUrl,
-  operator: fixture.operatorUrl, auditor: fixture.auditorUrl });
+const TABLES = [
+  'agentic_synthetic_capacity',
+  'agentic_synthetic_grants',
+  'agentic_synthetic_sources',
+  'agentic_synthetic_grant_sources',
+  'agentic_synthetic_runs',
+  'agentic_synthetic_reservations',
+  'agentic_synthetic_buckets',
+  'agentic_synthetic_invocations',
+  'agentic_synthetic_outcomes',
+  'agentic_synthetic_audit',
+];
+const connect = async (url: string) => {
+  const c = new Client({ connectionString: url });
+  await c.connect();
+  return c;
+};
+const logins = () => ({ app: fixture.appUrl, worker: fixture.workerUrl, verifier: fixture.verifierUrl, operator: fixture.operatorUrl, auditor: fixture.auditorUrl });
 
 /** Every catalog fact a migration could change in the public schema, as one sorted list of stable strings. */
 async function catalog(db: Client): Promise<string[]> {
@@ -38,7 +53,7 @@ async function catalog(db: Client): Promise<string[]> {
     UNION ALL SELECT 'con ' || conname || ' on ' || conrelid::regclass::text || ' ' || md5(pg_get_constraintdef(oid))
       FROM pg_constraint WHERE connamespace = 'public'::regnamespace
     UNION ALL SELECT 'schema public acl=' || coalesce(nspacl::text,'-') FROM pg_namespace WHERE nspname = 'public'`);
-  return rows.map(r => r.f as string).sort();
+  return rows.map((r) => r.f as string).sort();
 }
 const synthetic = (fact: string) => /agentic_synthetic_/.test(fact);
 
@@ -47,7 +62,10 @@ describe('owned PostgreSQL synthetic schema, roles and reversibility', () => {
     fixture = await ownedPostgresFixture();
     owner = await connect(fixture.adminUrl);
   }, 180_000);
-  afterAll(async () => { await owner?.end(); await fixture?.drop(); }, 60_000);
+  afterAll(async () => {
+    await owner?.end();
+    await fixture?.drop();
+  }, 60_000);
   afterEach(() => h.releaseAllPermits());
 
   // First: the down migration refuses any data, so this runs before any fixture row exists.
@@ -62,27 +80,36 @@ describe('owned PostgreSQL synthetic schema, roles and reversibility', () => {
       expect(before.filter(synthetic)).toEqual([]);
       // Every shared fact is byte-identical with and without 0029, except one documented grant: the synthetic
       // definer functions run as telesphoros_jobs and call the shared membership check.
-      const shared = migrated.filter(f => !synthetic(f));
-      const added = shared.filter(f => !before.includes(f));
-      const removed = before.filter(f => !shared.includes(f));
-      expect(added.map(f => f.replace(/ src=.*/, ''))).toEqual([expect.stringMatching(
-        /^fn membership_assert_current\(p_sub text, p_version bigint\) .*telesphoros_jobs=X\//)]);
-      expect(removed.map(f => f.replace(/,?telesphoros_jobs=X\/[a-z0-9_]+/, ''))).toEqual(added.map(f => f.replace(/,?telesphoros_jobs=X\/[a-z0-9_]+/, '')));
+      const shared = migrated.filter((f) => !synthetic(f));
+      const added = shared.filter((f) => !before.includes(f));
+      const removed = before.filter((f) => !shared.includes(f));
+      expect(added.map((f) => f.replace(/ src=.*/, ''))).toEqual([expect.stringMatching(/^fn membership_assert_current\(p_sub text, p_version bigint\) .*telesphoros_jobs=X\//)]);
+      expect(removed.map((f) => f.replace(/,?telesphoros_jobs=X\/[a-z0-9_]+/, ''))).toEqual(added.map((f) => f.replace(/,?telesphoros_jobs=X\/[a-z0-9_]+/, '')));
       await owner.query(readFileSync(resolve(migrations, '0029_agentic_synthetic.up.sql'), 'utf8'));
       await owner.query(readFileSync(resolve(migrations, '0030_agentic_synthetic_identity.up.sql'), 'utf8'));
       expect(await catalog(owner)).toEqual(migrated);
-    } finally { await owner.query('ROLLBACK'); }
+    } finally {
+      await owner.query('ROLLBACK');
+    }
     expect(await catalog(owner)).toEqual(migrated); // the rolled-back transaction left nothing behind
     // No schedule or job of the synthetic type exists after migration.
-    expect(await h.row(`SELECT (SELECT count(*)::int FROM public.job_schedules WHERE type LIKE '%synthetic%') AS schedules,
-      (SELECT count(*)::int FROM public.jobs WHERE type LIKE '%synthetic%') AS jobs`, [])).toEqual({ schedules: 0, jobs: 0 });
+    expect(
+      await h.row(
+        `SELECT (SELECT count(*)::int FROM public.job_schedules WHERE type LIKE '%synthetic%') AS schedules,
+      (SELECT count(*)::int FROM public.jobs WHERE type LIKE '%synthetic%') AS jobs`,
+        [],
+      ),
+    ).toEqual({ schedules: 0, jobs: 0 });
   });
 
   test('P2-29 no login is superuser or bypasses RLS, none owns or can read or write a synthetic table', async () => {
     await owner.query(`INSERT INTO public.agentic_synthetic_capacity(singleton,tenant_day_units,fleet_month_units)
       VALUES (1,5000000,300000000) ON CONFLICT DO NOTHING`);
-    const owners = await owner.query(`SELECT DISTINCT pg_get_userbyid(c.relowner) AS o, r.rolcanlogin
-      FROM pg_class c JOIN pg_roles r ON r.oid = c.relowner WHERE c.relname = ANY($1::text[])`, [TABLES]);
+    const owners = await owner.query(
+      `SELECT DISTINCT pg_get_userbyid(c.relowner) AS o, r.rolcanlogin
+      FROM pg_class c JOIN pg_roles r ON r.oid = c.relowner WHERE c.relname = ANY($1::text[])`,
+      [TABLES],
+    );
     expect(owners.rows).toEqual([{ o: 'telesphoros_jobs', rolcanlogin: false }]);
     expect((await owner.query('SELECT count(*)::int AS n FROM public.agentic_synthetic_capacity')).rows[0].n).toBe(1); // positive control
     for (const [name, url] of Object.entries(logins())) {
@@ -92,15 +119,22 @@ describe('owned PostgreSQL synthetic schema, roles and reversibility', () => {
         expect.soft({ name, me }).toEqual({ name, me: { rolsuper: false, rolbypassrls: false, rolcreaterole: false, rolcreatedb: false } });
         for (const table of TABLES) {
           for (const sql of [`SELECT 1 FROM public.${table} LIMIT 1`, `DELETE FROM public.${table}`]) {
-            const code = await db.query(sql).then(() => 'allowed', (e: { code?: string }) => e.code);
+            const code = await db.query(sql).then(
+              () => 'allowed',
+              (e: { code?: string }) => e.code,
+            );
             expect.soft({ name, sql, code }).toEqual({ name, sql, code: '42501' });
           }
         }
         // Only the app and worker hold synthetic entry points; the other logins hold none.
-        const fns = (await db.query(`SELECT count(*)::int AS n FROM pg_proc WHERE proname LIKE 'agentic_synthetic_%'
-          AND has_function_privilege(current_user, oid, 'EXECUTE')`)).rows[0].n;
+        const fns = (
+          await db.query(`SELECT count(*)::int AS n FROM pg_proc WHERE proname LIKE 'agentic_synthetic_%'
+          AND has_function_privilege(current_user, oid, 'EXECUTE')`)
+        ).rows[0].n;
         expect.soft({ name, fns }).toEqual({ name, fns: { app: 3, worker: 8 }[name as 'app' | 'worker'] ?? 0 });
-      } finally { await db.end(); }
+      } finally {
+        await db.end();
+      }
     }
   });
 
@@ -121,29 +155,45 @@ describe('owned PostgreSQL synthetic schema, roles and reversibility', () => {
       expect(loaded).toMatchObject({ kind: 'ok', value: { state: 'queued', runId: real.runId } });
       // The membership helper restored the caller's own setting afterwards.
       expect((await worker.query(`SELECT current_setting('app.current_tenant_id') AS t`)).rows[0].t).toBe('attacker-tenant');
-    } finally { await worker.end(); }
+    } finally {
+      await worker.end();
+    }
     // App-side spoofing: a GUC tenant or actor that disagrees with the caller is refused. (No capability is bound here, so after 0030 these are refused
     // for that reason first; the cases that bind a capability and forge the settings are in apps/backend/test/db/agentic-identity.pg-spec.ts, in all modes.)
-    for (const [tenant, actor] of [['attacker-tenant', caller.requesterRef], [caller.tenantId, 'someone-else']]) {
+    for (const [tenant, actor] of [
+      ['attacker-tenant', caller.requesterRef],
+      [caller.tenantId, 'someone-else'],
+    ]) {
       const app = await connect(fixture.appUrl);
       try {
         await app.query('BEGIN');
         await app.query(`SELECT set_config('app.current_tenant_id',$1,true), set_config('app.current_actor',$2,true)`, [tenant, actor]);
-        const r = (await app.query('SELECT public.agentic_synthetic_admit($1::jsonb,$2::jsonb) AS r', [JSON.stringify({
-          schemaVersion: 'agentic.request.v1', taskKey: 'business.sop-draft.v1', locale: 'en', question: 'spoof', idempotencyKey: 'spoof/1' }),
-        JSON.stringify(caller)])).rows[0].r;
+        const r = (
+          await app.query('SELECT public.agentic_synthetic_admit($1::jsonb,$2::jsonb) AS r', [
+            JSON.stringify({
+              schemaVersion: 'agentic.request.v1',
+              taskKey: 'business.sop-draft.v1',
+              locale: 'en',
+              question: 'spoof',
+              idempotencyKey: 'spoof/1',
+            }),
+            JSON.stringify(caller),
+          ])
+        ).rows[0].r;
         expect.soft({ tenant, actor, r }).toEqual({ tenant, actor, r: { kind: 'refused', code: 'NOT_AUTHORIZED' } });
-      } finally { await app.query('ROLLBACK'); await app.end(); }
+      } finally {
+        await app.query('ROLLBACK');
+        await app.end();
+      }
     }
   });
 
   test('P2-30 every synthetic function body schema-qualifies the functions and tables it uses', async () => {
     const { rows } = await owner.query(`SELECT proname, prosrc FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname LIKE 'agentic_synthetic_%'`);
-    const tables = (await owner.query(`SELECT relname FROM pg_class WHERE relnamespace='public'::regnamespace AND relkind IN ('r','p','v')`))
-      .rows.map(r => r.relname as string);
+    const tables = (await owner.query(`SELECT relname FROM pg_class WHERE relnamespace='public'::regnamespace AND relkind IN ('r','p','v')`)).rows.map((r) => r.relname as string);
     const unqualified = (src: string) => [
-      ...[...src.matchAll(/(?<![.\w])(agentic_synthetic_\w+|job_\w+|membership_assert_current)\s*\(/g)].map(m => m[1]),
-      ...[...src.matchAll(/\b(?:FROM|JOIN|UPDATE|INTO|TABLE)\s+(?!public\.)([a-z_]+)/gi)].map(m => m[1]!).filter(n => tables.includes(n)),
+      ...[...src.matchAll(/(?<![.\w])(agentic_synthetic_\w+|job_\w+|membership_assert_current)\s*\(/g)].map((m) => m[1]),
+      ...[...src.matchAll(/\b(?:FROM|JOIN|UPDATE|INTO|TABLE)\s+(?!public\.)([a-z_]+)/gi)].map((m) => m[1]!).filter((n) => tables.includes(n)),
     ];
     expect(rows.length).toBeGreaterThan(30);
     for (const r of rows) expect.soft({ fn: r.proname, unqualified: unqualified(r.prosrc) }).toEqual({ fn: r.proname, unqualified: [] });

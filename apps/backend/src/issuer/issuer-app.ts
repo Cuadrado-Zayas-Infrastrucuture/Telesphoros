@@ -22,7 +22,11 @@ export interface RunningIssuer {
  * the settings it is handed and reads nothing from the environment (a test pins that). `options` is for tests: a free port and a loopback address.
  */
 export async function startIssuer(config: IssuerConfig, options: { host?: string; port?: number } = {}): Promise<RunningIssuer> {
-  const verifier = new CognitoTokenVerifier({ issuer: config.cognito.issuer, clientId: config.cognito.clientId, ...(config.cognito.jwksUri ? { jwksUri: config.cognito.jwksUri } : {}) });
+  const verifier = new CognitoTokenVerifier({
+    issuer: config.cognito.issuer,
+    clientId: config.cognito.clientId,
+    ...(config.cognito.jwksUri ? { jwksUri: config.cognito.jwksUri } : {}),
+  });
   const store = new PgCapabilityIssueStore({ url: config.databaseUrl, ssl: config.databaseTls });
   const server: Server = createIssuerServer(new IssuerCore(verifier, store));
   try {

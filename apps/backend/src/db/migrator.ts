@@ -100,9 +100,7 @@ async function ensureTable(db: Queryable) {
   )`);
   // Added in place, not by a numbered migration: the migrator owns this table. Checked first because ALTER TABLE takes an exclusive lock
   // even when the column exists, and /ready reads this table. Rows applied before the column existed stay NULL, which means `breaking`.
-  const { rows } = await db.query(
-    `SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'schema_migrations' AND column_name = 'compat'`,
-  );
+  const { rows } = await db.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'schema_migrations' AND column_name = 'compat'`);
   if (rows.length === 0) {
     // No CHECK constraint: readiness trusts only the exact text 'expand', so any other value already reads as breaking.
     await db.query('ALTER TABLE schema_migrations ADD COLUMN compat text');
@@ -143,15 +141,10 @@ export async function pendingMigrations(db: Queryable, dir?: string): Promise<st
 }
 
 async function readCompat(db: Queryable, versions: string[]): Promise<Map<string, string | null>> {
-  const column = await db.query(
-    `SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'schema_migrations' AND column_name = 'compat'`,
-  );
+  const column = await db.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'schema_migrations' AND column_name = 'compat'`);
   // No column: only an older migrator has touched this database, so nothing newer than this code was recorded with a label.
   if (column.rows.length === 0) return new Map();
-  const { rows } = await db.query<{ version: string; compat: string | null }>(
-    'SELECT version, compat FROM schema_migrations WHERE version = ANY($1::text[])',
-    [versions],
-  );
+  const { rows } = await db.query<{ version: string; compat: string | null }>('SELECT version, compat FROM schema_migrations WHERE version = ANY($1::text[])', [versions]);
   return new Map(rows.map((row) => [row.version, row.compat]));
 }
 
@@ -191,7 +184,10 @@ export async function migrationReadiness(db: Queryable, dir?: string): Promise<M
       const expected = String(known.length + index + 1).padStart(4, '0');
       if (row.version !== expected) throw new MigrationError(`Database history after ${known.length} is not contiguous (found ${row.version})`);
     });
-    const labels = await readCompat(db, newer.map((row) => row.version));
+    const labels = await readCompat(
+      db,
+      newer.map((row) => row.version),
+    );
     const blocked = newer.filter((row) => labels.get(row.version) !== 'expand');
     if (blocked.length > 0) {
       throw new MigrationError(`Database has migration ${blocked[0]!.version} that this code does not know and that is not declared expand`);

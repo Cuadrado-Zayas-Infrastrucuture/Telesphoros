@@ -7,7 +7,13 @@ export const SECURITY_EVENTS_USAGE = `  security-events list --tenant ID [--sinc
 `;
 
 export const EVENT_TYPES = [
-  'membership.granted', 'membership.reinstated', 'membership.roles-changed', 'membership.removed', 'membership.sessions-revoked', 'access.refused', 'intake.rejected',
+  'membership.granted',
+  'membership.reinstated',
+  'membership.roles-changed',
+  'membership.removed',
+  'membership.sessions-revoked',
+  'access.refused',
+  'intake.rejected',
 ] as const;
 
 const MAX_LIMIT = 500;
@@ -60,10 +66,20 @@ export async function runSecurityEvents(client: Queryable, args: string[], out: 
       [tenant, type ?? null, since ?? null, limit],
     );
     for (const r of rows) {
-      out(JSON.stringify({
-        seq: Number(r.seq), at: r.occurred_at.toISOString(), tenant: r.tenant_id, type: r.event_type, outcome: r.outcome, actor: `${r.actor_kind}:${r.actor_ref}`,
-        subject: `${r.subject_kind}:${r.subject_ref}`, requestId: r.request_id, details: r.details, dbUser: r.db_user,
-      }));
+      out(
+        JSON.stringify({
+          seq: Number(r.seq),
+          at: r.occurred_at.toISOString(),
+          tenant: r.tenant_id,
+          type: r.event_type,
+          outcome: r.outcome,
+          actor: `${r.actor_kind}:${r.actor_ref}`,
+          subject: `${r.subject_kind}:${r.subject_ref}`,
+          requestId: r.request_id,
+          details: r.details,
+          dbUser: r.db_user,
+        }),
+      );
     }
     out(`${rows.length} event${rows.length === 1 ? '' : 's'}`);
     return 0;

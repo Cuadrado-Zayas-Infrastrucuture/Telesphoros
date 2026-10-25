@@ -12,27 +12,33 @@ COPY patients, line 1: "1\t27dd3760-aebe-48ad-b364-ea6af77c716e\ttenant-leakmark
 describe('describeRestoreFailure', () => {
   it('names the table of a failed data load and withholds the database message (the key and the row)', () => {
     const text = describeRestoreFailure(failure(COPY_FAILURE));
-    expect(text).toBe(`pg_restore exited with code 1: failed while loading data for table "patients"; the database's message is withheld because it can quote row values (the target server's log has it)`);
+    expect(text).toBe(
+      `pg_restore exited with code 1: failed while loading data for table "patients"; the database's message is withheld because it can quote row values (the target server's log has it)`,
+    );
     expect(noValues(text)).toBe(true);
   });
 
   it('treats a TABLE DATA entry that fails with a query error (INSERT form) the same way, naming the table from the entry', () => {
-    const text = describeRestoreFailure(failure(`pg_restore: while PROCESSING TOC:
+    const text = describeRestoreFailure(
+      failure(`pg_restore: while PROCESSING TOC:
 pg_restore: from TOC entry 3290; 0 17234 TABLE DATA patients telesphoros_owner
 pg_restore: error: could not execute query: ERROR:  invalid input syntax for type uuid: "tenant-leakmark"
-Command was: INSERT INTO public.patients VALUES ('tenant-leakmark', 'SYN-LEAKMARK-4242');`));
+Command was: INSERT INTO public.patients VALUES ('tenant-leakmark', 'SYN-LEAKMARK-4242');`),
+    );
     expect(text).toContain('failed while loading data for table "patients"');
     expect(noValues(text)).toBe(true);
     expect(text).not.toMatch(/Command was|INSERT|invalid input/);
   });
 
   it('keeps only the first error line of a failure while creating objects', () => {
-    const text = describeRestoreFailure(failure(`pg_restore: while PROCESSING TOC:
+    const text = describeRestoreFailure(
+      failure(`pg_restore: while PROCESSING TOC:
 pg_restore: from TOC entry 217; 1259 16397 TABLE patients postgres
 pg_restore: error: could not execute query: ERROR:  relation "patients" already exists
 Command was: CREATE TABLE public.patients (
     id uuid NOT NULL
-);`));
+);`),
+    );
     expect(text).toBe('pg_restore exited with code 1: could not execute query: ERROR:  relation "patients" already exists');
   });
 

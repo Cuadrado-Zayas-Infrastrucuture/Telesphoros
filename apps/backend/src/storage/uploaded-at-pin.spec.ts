@@ -4,9 +4,16 @@ import { join, relative } from 'node:path';
 // M2.2b: a report's file is "uploaded" (and pinned to an object version) only when a validated intake attempt commits. The direct-upload routes that used to
 // set it are gone; this pins that nothing else in the application's source can write it, the way the evaluation gate is pinned for evaluations.
 const SRC = join(__dirname, '..');
-const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(join(dir, e.name)) : e.name.endsWith('.ts') && !e.name.endsWith('.spec.ts') ? [join(dir, e.name)] : []));
+const files = (dir: string): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? files(join(dir, e.name)) : e.name.endsWith('.ts') && !e.name.endsWith('.spec.ts') ? [join(dir, e.name)] : [],
+  );
 const sources = files(SRC).map((f) => ({ path: relative(SRC, f), text: readFileSync(f, 'utf8') }));
-const where = (re: RegExp) => sources.filter((s) => re.test(s.text)).map((s) => s.path).sort();
+const where = (re: RegExp) =>
+  sources
+    .filter((s) => re.test(s.text))
+    .map((s) => s.path)
+    .sort();
 
 describe('who can mark a report uploaded', () => {
   it('only a committed attempt sets uploaded_at in SQL', () => {
@@ -34,6 +41,7 @@ describe('who can mark a report uploaded', () => {
   });
 
   it('the removed direct-upload entry points do not exist anywhere in the source', () => {
-    for (const name of ['createUploadTarget', 'recordUploadRequest', 'markUploaded', 'createUploadUrl', 'completeUpload', 'upload-url']) expect(where(new RegExp(`\\b${name}\\b`))).toEqual([]);
+    for (const name of ['createUploadTarget', 'recordUploadRequest', 'markUploaded', 'createUploadUrl', 'completeUpload', 'upload-url'])
+      expect(where(new RegExp(`\\b${name}\\b`))).toEqual([]);
   });
 });

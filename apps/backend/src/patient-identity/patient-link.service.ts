@@ -1,5 +1,13 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import { buildMeta, type Paginated, type PaginationQuery, type PatientLinkDecisionCreate, type PatientLinkDecisionDto, type PatientLinkDto, type QuarantineEntryDto } from '@telesphoros/shared-types';
+import {
+  buildMeta,
+  type Paginated,
+  type PaginationQuery,
+  type PatientLinkDecisionCreate,
+  type PatientLinkDecisionDto,
+  type PatientLinkDto,
+  type QuarantineEntryDto,
+} from '@telesphoros/shared-types';
 import type { Principal } from '../auth/principal';
 import { AppException } from '../common/app-exception';
 import { ENV, type Env } from '../config/env';
@@ -46,7 +54,10 @@ export class PatientLinkService {
    */
   async quarantine(principal: Principal, { page, pageSize }: PaginationQuery): Promise<Paginated<QuarantineEntryDto>> {
     const { items, total } = await this.need(this.ledger).pageQuarantine(principal.tenantId, { offset: (page - 1) * pageSize, limit: pageSize });
-    return { data: items.map((e) => ({ reportId: e.reportId, patientId: e.patientId, basisCode: e.basisCode, rejectedAt: e.rejectedAt, activeEvaluationIds: e.activeEvaluationIds })), meta: buildMeta(page, pageSize, total) };
+    return {
+      data: items.map((e) => ({ reportId: e.reportId, patientId: e.patientId, basisCode: e.basisCode, rejectedAt: e.rejectedAt, activeEvaluationIds: e.activeEvaluationIds })),
+      meta: buildMeta(page, pageSize, total),
+    };
   }
 
   async get(principal: Principal, reportId: string): Promise<PatientLinkDto> {
@@ -88,7 +99,8 @@ export class PatientLinkService {
       });
       return { decision: toDecisionDto(stored.record), created: stored.created };
     } catch (error) {
-      if (error instanceof SourceChangedError) throw AppException.conflictBecause('source-changed', 'The report changed while you were deciding. Nothing was recorded; look at it again.');
+      if (error instanceof SourceChangedError)
+        throw AppException.conflictBecause('source-changed', 'The report changed while you were deciding. Nothing was recorded; look at it again.');
       throw error;
     }
   }

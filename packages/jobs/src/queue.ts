@@ -43,8 +43,14 @@ export class JobQueue {
   async claim(workerId: string, options: ClaimOptions): Promise<ClaimedJob[]> {
     const { rows } = await this.db.query('SELECT * FROM job_claim($1, $2::text[], $3, $4, $5)', [workerId, options.types, options.batch, options.tenantCap, options.leaseSeconds]);
     return rows.map((r) => ({
-      id: r.id as string, tenantId: r.tenant_id as string, type: r.type as string, payload: r.payload as Record<string, unknown>, attempt: Number(r.attempt),
-      maxAttempts: Number(r.max_attempts), leaseUntil: r.lease_until as Date, requestedBy: r.requested_by as string,
+      id: r.id as string,
+      tenantId: r.tenant_id as string,
+      type: r.type as string,
+      payload: r.payload as Record<string, unknown>,
+      attempt: Number(r.attempt),
+      maxAttempts: Number(r.max_attempts),
+      leaseUntil: r.lease_until as Date,
+      requestedBy: r.requested_by as string,
     }));
   }
 
@@ -83,7 +89,12 @@ export class JobQueue {
 
   async stats(): Promise<JobStat[]> {
     const { rows } = await this.db.query('SELECT * FROM job_stats()');
-    return rows.map((r) => ({ type: r.type as string, state: r.state as string, count: Number(r.n), oldestReadySeconds: r.oldest_ready_seconds === null ? null : Number(r.oldest_ready_seconds) }));
+    return rows.map((r) => ({
+      type: r.type as string,
+      state: r.state as string,
+      count: Number(r.n),
+      oldestReadySeconds: r.oldest_ready_seconds === null ? null : Number(r.oldest_ready_seconds),
+    }));
   }
 
   /** Pending outbox events and the age of the oldest: one that keeps failing to become a job stays pending, so its age is how it shows (migration 0036). */
@@ -115,7 +126,11 @@ export async function enqueueJob(db: Queryable, definition: JobDefinition, paylo
   const parsed = definition.payload.parse(payload);
   assertFlatPayload(parsed);
   const { rows } = await db.query('SELECT job_id, created FROM job_enqueue($1, $2::jsonb, $3, $4, $5)', [
-    definition.type, JSON.stringify(parsed), options.idempotencyKey, options.runAfter ?? new Date(), options.maxAttempts ?? definition.maxAttempts,
+    definition.type,
+    JSON.stringify(parsed),
+    options.idempotencyKey,
+    options.runAfter ?? new Date(),
+    options.maxAttempts ?? definition.maxAttempts,
   ]);
   return { jobId: rows[0]!.job_id as string, created: rows[0]!.created === true };
 }

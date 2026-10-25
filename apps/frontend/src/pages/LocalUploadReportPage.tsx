@@ -12,15 +12,7 @@ import { CardDescription } from '@/components/ui/CardDescription';
 import { CardHeader } from '@/components/ui/CardHeader';
 import { CardTitle } from '@/components/ui/CardTitle';
 import { Checkbox } from '@/components/ui/Checkbox';
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/Form';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/Form';
 import { Input } from '@/components/ui/Input';
 import { NativeSelect } from '@/components/ui/NativeSelect';
 import { Spinner } from '@/components/ui/Spinner';
@@ -157,14 +149,7 @@ export default function LocalUploadReportPage() {
                     <FormItem>
                       <FormLabel>Report file (required)</FormLabel>
                       <FormControl>
-                        <Input
-                          type="file"
-                          accept=".vcf,.json"
-                          name={name}
-                          ref={ref}
-                          onBlur={onBlur}
-                          onChange={(event) => onChange(event.target.files?.[0])}
-                        />
+                        <Input type="file" accept=".vcf,.json" name={name} ref={ref} onBlur={onBlur} onChange={(event) => onChange(event.target.files?.[0])} />
                       </FormControl>
                       <FormDescription>.vcf or .json, up to 10 MB.</FormDescription>
                       <FormMessage />
@@ -179,17 +164,9 @@ export default function LocalUploadReportPage() {
                     <FormItem>
                       <div className="flex items-start gap-3">
                         <FormControl>
-                          <Checkbox
-                            name={name}
-                            ref={ref}
-                            checked={value}
-                            onBlur={onBlur}
-                            onChange={(event) => onChange(event.target.checked)}
-                          />
+                          <Checkbox name={name} ref={ref} checked={value} onBlur={onBlur} onChange={(event) => onChange(event.target.checked)} />
                         </FormControl>
-                        <FormLabel className="flex min-h-control items-center leading-normal">
-                          I confirm this file contains synthetic data only (required)
-                        </FormLabel>
+                        <FormLabel className="flex min-h-control items-center leading-normal">I confirm this file contains synthetic data only (required)</FormLabel>
                       </div>
                       <FormMessage />
                     </FormItem>

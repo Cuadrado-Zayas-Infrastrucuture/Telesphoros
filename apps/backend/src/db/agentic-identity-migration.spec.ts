@@ -37,8 +37,10 @@ const md5 = (text: string) => createHash('md5').update(text, 'utf8').digest('hex
 const DECLARE_OLD = "  v_tenant text := nullif(current_setting('app.current_tenant_id', true), '');\n  v_actor text := nullif(current_setting('app.current_actor', true), '');\n";
 const DECLARE_NEW = '  v_tenant text;\n  v_actor text;\n';
 const BEGIN_NEW = '\nBEGIN\n  SELECT i.tenant_id, i.actor INTO v_tenant, v_actor FROM public.agentic_synthetic_identity() i;\n';
-const ENQUEUE_GUARD = "  IF v_job_id IS NULL OR NOT v_job_created THEN\n    RAISE EXCEPTION 'Synthetic enqueue invariant failed.' USING ERRCODE = 'integrity_constraint_violation';\n  END IF;\n";
-const IDENTITY_GUARD = "  IF NOT EXISTS (SELECT 1 FROM public.jobs j WHERE j.id = v_job_id AND j.tenant_id = v_tenant AND j.requested_by = v_actor) THEN\n    RAISE EXCEPTION 'Synthetic enqueue identity mismatch.' USING ERRCODE = 'integrity_constraint_violation';\n  END IF;\n";
+const ENQUEUE_GUARD =
+  "  IF v_job_id IS NULL OR NOT v_job_created THEN\n    RAISE EXCEPTION 'Synthetic enqueue invariant failed.' USING ERRCODE = 'integrity_constraint_violation';\n  END IF;\n";
+const IDENTITY_GUARD =
+  "  IF NOT EXISTS (SELECT 1 FROM public.jobs j WHERE j.id = v_job_id AND j.tenant_id = v_tenant AND j.requested_by = v_actor) THEN\n    RAISE EXCEPTION 'Synthetic enqueue identity mismatch.' USING ERRCODE = 'integrity_constraint_violation';\n  END IF;\n";
 
 const occurrences = (text: string, part: string) => text.split(part).length - 1;
 
@@ -53,8 +55,10 @@ describe('migration 0030: the three entry points are the 0029 bodies plus exactl
     const original = functionText(up0029, name, 'CREATE FUNCTION');
     const replaced = functionText(up0030, name, 'CREATE OR REPLACE FUNCTION');
     // The edit list, applied to the 0029 text. Each part must occur exactly once, or the edit would be ambiguous.
-    for (const part of [DECLARE_OLD, '\nBEGIN\n', `CREATE FUNCTION public.${name}(`]) expect([name, part.slice(0, 30), occurrences(original, part)]).toEqual([name, part.slice(0, 30), 1]);
-    let expected = original.replace(`CREATE FUNCTION public.${name}(`, `CREATE OR REPLACE FUNCTION public.${name}(`)
+    for (const part of [DECLARE_OLD, '\nBEGIN\n', `CREATE FUNCTION public.${name}(`])
+      expect([name, part.slice(0, 30), occurrences(original, part)]).toEqual([name, part.slice(0, 30), 1]);
+    let expected = original
+      .replace(`CREATE FUNCTION public.${name}(`, `CREATE OR REPLACE FUNCTION public.${name}(`)
       .replace(DECLARE_OLD, DECLARE_NEW)
       .replace('\nBEGIN\n', BEGIN_NEW);
     if (name === 'agentic_synthetic_admit') {

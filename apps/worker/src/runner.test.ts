@@ -4,7 +4,8 @@ import { defineJob, fatal, retryable, type ClaimedJob, type JobQueue } from '@te
 import { claimBackoffMs, Runner, type Handler } from './runner';
 import { silentLogger } from './log';
 
-const def = (type: string, extra: Partial<Parameters<typeof defineJob>[0]> = {}) => defineJob({ type, payload: z.strictObject({}), maxAttempts: 3, leaseSeconds: 5, timeoutSeconds: 30, ...extra });
+const def = (type: string, extra: Partial<Parameters<typeof defineJob>[0]> = {}) =>
+  defineJob({ type, payload: z.strictObject({}), maxAttempts: 3, leaseSeconds: 5, timeoutSeconds: 30, ...extra });
 
 class FakeQueue {
   pending: ClaimedJob[] = [];
@@ -35,9 +36,27 @@ class FakeQueue {
   }
   async workerSeen() {}
 }
-const job = (id: string, type: string, payload: Record<string, unknown> = {}): ClaimedJob => ({ id, tenantId: 't', type, payload, attempt: 1, maxAttempts: 3, leaseUntil: new Date(), requestedBy: 'u' });
+const job = (id: string, type: string, payload: Record<string, unknown> = {}): ClaimedJob => ({
+  id,
+  tenantId: 't',
+  type,
+  payload,
+  attempt: 1,
+  maxAttempts: 3,
+  leaseUntil: new Date(),
+  requestedBy: 'u',
+});
 const make = (queue: FakeQueue, handlers: Record<string, { handler: Handler; extra?: Partial<Parameters<typeof defineJob>[0]> }>, drainSeconds = 1) =>
-  new Runner({ workerId: 'w', queue: queue as unknown as JobQueue, jobs: Object.entries(handlers).map(([type, h]) => ({ definition: def(type, h.extra), handler: h.handler })), concurrency: 3, tenantCap: 2, pollMs: 20, drainSeconds, log: silentLogger });
+  new Runner({
+    workerId: 'w',
+    queue: queue as unknown as JobQueue,
+    jobs: Object.entries(handlers).map(([type, h]) => ({ definition: def(type, h.extra), handler: h.handler })),
+    concurrency: 3,
+    tenantCap: 2,
+    pollMs: 20,
+    drainSeconds,
+    log: silentLogger,
+  });
 const until = async (check: () => boolean) => {
   for (let i = 0; i < 400 && !check(); i += 1) await new Promise((r) => setTimeout(r, 10));
   expect(check()).toBe(true);
@@ -87,7 +106,10 @@ describe('Runner', () => {
     q.pending.push(job('1', 'test.unknown'), job('2', 'test.a', { extra: 1 }));
     runner.start();
     await until(() => q.failed.length === 2);
-    expect(q.failed.sort((a, b) => a.id.localeCompare(b.id))).toEqual([{ id: '1', code: 'unknown-job-type', retryable: false }, { id: '2', code: 'invalid-payload', retryable: false }]);
+    expect(q.failed.sort((a, b) => a.id.localeCompare(b.id))).toEqual([
+      { id: '1', code: 'unknown-job-type', retryable: false },
+      { id: '2', code: 'invalid-payload', retryable: false },
+    ]);
     expect(handler).not.toHaveBeenCalled();
   });
 
@@ -115,10 +137,14 @@ describe('Runner', () => {
   it('stops claiming on stop, waits for running jobs within the drain, and releases the rest', async () => {
     const q = new FakeQueue();
     let finish: () => void = () => undefined;
-    runner = make(q, {
-      'test.quick': { handler: () => new Promise<void>((resolve) => (finish = resolve)) },
-      'test.stuck': { handler: ({ signal }) => new Promise<void>((_, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')))) },
-    }, 0.2);
+    runner = make(
+      q,
+      {
+        'test.quick': { handler: () => new Promise<void>((resolve) => (finish = resolve)) },
+        'test.stuck': { handler: ({ signal }) => new Promise<void>((_, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')))) },
+      },
+      0.2,
+    );
     q.pending.push(job('1', 'test.stuck'));
     runner.start();
     await until(() => runner!.activeCount === 1);

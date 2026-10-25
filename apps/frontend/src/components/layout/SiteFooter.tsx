@@ -12,7 +12,21 @@ export function SiteFooter() {
         <div className="flex min-w-0 flex-col gap-2 text-xs sm:text-sm">
           <p className="font-semibold">Cuadrado Zayas Infrastructure LLC · San Juan, Puerto Rico</p>
           <p className="text-muted-foreground">
-            {landing ? <>{footer.lead}<strong>{footer.strong}</strong>{footer.tail}</> : ownedStorageMode() ? <>File storage and retrieval only. Clinical processing is disabled. Use <strong>synthetic data only</strong>.</> : <>Clinical decision support only. It does not prescribe or replace clinician judgment. This environment is for <strong>synthetic data only</strong>.</>}
+            {landing ? (
+              <>
+                {footer.lead}
+                <strong>{footer.strong}</strong>
+                {footer.tail}
+              </>
+            ) : ownedStorageMode() ? (
+              <>
+                File storage and retrieval only. Clinical processing is disabled. Use <strong>synthetic data only</strong>.
+              </>
+            ) : (
+              <>
+                Clinical decision support only. It does not prescribe or replace clinician judgment. This environment is for <strong>synthetic data only</strong>.
+              </>
+            )}
           </p>
         </div>
       </div>

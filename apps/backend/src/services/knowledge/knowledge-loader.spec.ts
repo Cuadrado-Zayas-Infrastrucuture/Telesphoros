@@ -272,7 +272,10 @@ describe('loadKnowledge: a combined table replacing narrower ones (supersedes)',
 
   it('refuses to supersede a guideline whose genes are not a smaller subset', async () => {
     const text = await variant(async (dir, c) => {
-      await extra(dir, 'drugv-geneb', { genes: ['GENEB'], recommendations: [{ ...(await readJson(join(dir, 'guidelines/drugy-geneb.json')) as GuidelineFile).recommendations[0]!, when: { GENEB: 'Synthetic Low' } }] });
+      await extra(dir, 'drugv-geneb', {
+        genes: ['GENEB'],
+        recommendations: [{ ...((await readJson(join(dir, 'guidelines/drugy-geneb.json'))) as GuidelineFile).recommendations[0]!, when: { GENEB: 'Synthetic Low' } }],
+      });
       c.supersedes = ['drugv-geneb'];
     });
     expect(text).toContain('whose genes are not a smaller subset');
@@ -280,7 +283,10 @@ describe('loadKnowledge: a combined table replacing narrower ones (supersedes)',
 
   it('refuses a chain: a superseded guideline may not itself supersede others', async () => {
     const text = await variant(async (dir) => {
-      const row = { ...(await readJson(join(dir, 'guidelines/drugv-genea-genee.json')) as GuidelineFile).recommendations[0]!, when: { GENEA: 'Synthetic Normal', GENEC: 'Synthetic Alpha', GENEE: 'Synthetic Fast' } };
+      const row = {
+        ...((await readJson(join(dir, 'guidelines/drugv-genea-genee.json'))) as GuidelineFile).recommendations[0]!,
+        when: { GENEA: 'Synthetic Normal', GENEC: 'Synthetic Alpha', GENEE: 'Synthetic Fast' },
+      };
       await extra(dir, 'drugv-three-genes', { genes: ['GENEA', 'GENEC', 'GENEE'], supersedes: ['drugv-genea-genee'], recommendations: [row] });
     });
     expect(text).toContain('which itself supersedes others (chains are not allowed)');
@@ -288,7 +294,10 @@ describe('loadKnowledge: a combined table replacing narrower ones (supersedes)',
 
   it('refuses a guideline that two different tables both claim to replace', async () => {
     const text = await variant(async (dir) => {
-      const row = { ...(await readJson(join(dir, 'guidelines/drugv-genea-genee.json')) as GuidelineFile).recommendations[0]!, when: { GENEA: 'Synthetic Normal', GENEC: 'Synthetic Alpha' } };
+      const row = {
+        ...((await readJson(join(dir, 'guidelines/drugv-genea-genee.json'))) as GuidelineFile).recommendations[0]!,
+        when: { GENEA: 'Synthetic Normal', GENEC: 'Synthetic Alpha' },
+      };
       await extra(dir, 'drugv-genea-genec', { genes: ['GENEA', 'GENEC'], supersedes: ['drugv-genea'], recommendations: [row] });
     });
     expect(text).toContain('is already superseded by');

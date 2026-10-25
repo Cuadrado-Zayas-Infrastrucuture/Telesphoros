@@ -80,7 +80,14 @@ export async function fakeBackup(key: Buffer, options: { when?: Date; plainBytes
     migrations: [],
     tables: {},
     schema: { constraints: 0, indexes: 0, triggers: 0 },
-    dump: { file: 'db.dump.enc', bytes: options.claimBytes ?? statSync(dump).size, sha256: await sha256File(dump), plaintextSha256: await sha256File(plainFile), encrypted: true, encryption },
+    dump: {
+      file: 'db.dump.enc',
+      bytes: options.claimBytes ?? statSync(dump).size,
+      sha256: await sha256File(dump),
+      plaintextSha256: await sha256File(plainFile),
+      encrypted: true,
+      encryption,
+    },
   };
   const manifest: BackupManifestV2 = { ...unsigned, mac: manifestMac(unsigned, key, encryption.salt) };
   writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest), { mode: 0o600 });

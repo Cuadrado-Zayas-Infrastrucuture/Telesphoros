@@ -33,8 +33,10 @@ const apiLines = () => issuerLines.filter((l) => /\[(IssuerClient|RequestCapabil
 const owner = <T>(work: (c: Client) => Promise<T>) => withAdmin(db.adminUrl, work);
 const user = (name: string) => idp.users.find((u) => u.email.startsWith(name))!;
 const versionOf = (sub: string) => owner(async (c) => Number((await c.query('SELECT version FROM tenant_memberships WHERE sub = $1', [sub])).rows[0].version));
-const logRows = (requestId: string) => owner(async (c) => (await c.query('SELECT outcome, reason, tenant_id FROM capability_issuance_log WHERE request_id = $1 ORDER BY seq', [requestId])).rows);
-const capabilityRows = (requestId: string) => owner(async (c) => Number((await c.query('SELECT count(*) AS n FROM tenant_capabilities WHERE request_id = $1', [requestId])).rows[0].n));
+const logRows = (requestId: string) =>
+  owner(async (c) => (await c.query('SELECT outcome, reason, tenant_id FROM capability_issuance_log WHERE request_id = $1 ORDER BY seq', [requestId])).rows);
+const capabilityRows = (requestId: string) =>
+  owner(async (c) => Number((await c.query('SELECT count(*) AS n FROM tenant_capabilities WHERE request_id = $1', [requestId])).rows[0].n));
 const appTenantFor = async (token: string) => {
   const c = new Client({ connectionString: db.appUrl });
   await c.connect();
@@ -48,7 +50,11 @@ const appTenantFor = async (token: string) => {
   }
 };
 const envFor = (databaseUrl: string) => ({
-  NODE_ENV: 'development', DATABASE_URL: databaseUrl, DATABASE_SSL: 'disable', COGNITO_ISSUER: idp.issuer, COGNITO_APP_CLIENT_ID: 'app-client',
+  NODE_ENV: 'development',
+  DATABASE_URL: databaseUrl,
+  DATABASE_SSL: 'disable',
+  COGNITO_ISSUER: idp.issuer,
+  COGNITO_APP_CLIENT_ID: 'app-client',
 });
 const clientTo = (running: RunningIssuer, over: { timeoutMs?: number } = {}) => new HttpCapabilityIssuer({ baseUrl: `http://127.0.0.1:${running.port}`, retryPauseMs: 5, ...over });
 async function present(who: string, options: { signWith?: 'foreign' } = {}) {
@@ -78,7 +84,11 @@ beforeAll(async () => {
   idp = await startFakeIdp({ clientId: 'app-client' });
   await owner(async (c) => {
     for (const tenant of ['alpha', 'beta']) await registerTenantRow(c, tenant);
-    for (const [tenant, name, status] of [['alpha', 'alice', 'active'], ['beta', 'bob', 'active'], ['alpha', 'carol', 'removed']] as const) {
+    for (const [tenant, name, status] of [
+      ['alpha', 'alice', 'active'],
+      ['beta', 'bob', 'active'],
+      ['alpha', 'carol', 'removed'],
+    ] as const) {
       await c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ($1, $2, $3, ARRAY['clinician'], 'test')`, [tenant, user(name).sub, status]);
     }
   });
@@ -94,7 +104,7 @@ afterAll(async () => {
 });
 
 describe('the positive control: the client asks the real issuer and gets a capability the database honours', () => {
-  it('issues for two real people, each capability resolves to their own organization through the application login, and a stranger\'s token resolves to nobody', async () => {
+  it("issues for two real people, each capability resolves to their own organization through the application login, and a stranger's token resolves to nobody", async () => {
     const client = clientTo(issuer!);
     const alice = await ask(client, 'req-cli-ok-01');
     expect(alice!.token).toMatch(CAPABILITY_TOKEN_PATTERN);
@@ -108,7 +118,7 @@ describe('the positive control: the client asks the real issuer and gets a capab
     expect(await appTenantFor(bob!.token)).toBe('beta');
   });
 
-  it('through RequestCapabilities, the way the guard calls it: the request\'s slot holds the capability and nothing is recorded as absent', async () => {
+  it("through RequestCapabilities, the way the guard calls it: the request's slot holds the capability and nothing is recorded as absent", async () => {
     const capabilities = new RequestCapabilities(clientTo(issuer!));
     const access = await present('alice');
     const version = await versionOf(user('alice').sub);
@@ -136,12 +146,12 @@ describe('the positive control: the client asks the real issuer and gets a capab
 });
 
 describe('refusals reach the caller as the same closed reasons, each followed by the control', () => {
-  it('a removed member is refused with the database\'s code, and no capability exists', async () => {
+  it("a removed member is refused with the database's code, and no capability exists", async () => {
     const client = clientTo(issuer!);
     const error = await refusal(client, 'req-cli-refused-01', { who: 'carol' });
     expect([error.reason, error.detail]).toEqual(['refused', 'membership-not-current']);
     expect(await capabilityRows('req-cli-refused-01')).toBe(0);
-    expect((await logRows('req-cli-refused-01'))).toEqual([{ outcome: 'refused', reason: 'membership-not-current', tenant_id: 'alpha' }]);
+    expect(await logRows('req-cli-refused-01')).toEqual([{ outcome: 'refused', reason: 'membership-not-current', tenant_id: 'alpha' }]);
     expect(await ask(client, 'req-cli-refused-02')).toBeDefined();
   });
 
@@ -214,7 +224,7 @@ describe('the issuer fails closed when its database does, and the client says so
 });
 
 describe('no token anywhere on the API side', () => {
-  it('no API-side line (the client\'s and RequestCapabilities\') carries the alarm phrase, a capability or an access token', async () => {
+  it("no API-side line (the client's and RequestCapabilities') carries the alarm phrase, a capability or an access token", async () => {
     expect(minted.length).toBeGreaterThanOrEqual(6);
     expect(presented.length).toBeGreaterThanOrEqual(8);
     expect(issuerLines.some((l) => l.includes('Capability not issued'))).toBe(true); // control: the capture saw the issuer's lines

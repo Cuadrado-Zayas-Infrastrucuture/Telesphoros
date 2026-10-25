@@ -11,7 +11,7 @@ const exec = promisify(execFile);
 
 /** Restore owns a database, not cluster roles; preserve PostgreSQL's existing built-in roles. */
 export async function prepareRecoveryRoles(url: string, roles: string[]) {
-  await withAdmin(url, async client => {
+  await withAdmin(url, async (client) => {
     for (const role of roles) {
       const exists = await client.query('SELECT 1 FROM pg_roles WHERE rolname=$1', [role]);
       if (!exists.rowCount) await client.query(`CREATE ROLE ${quoteIdent(role)} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS`);
@@ -39,18 +39,28 @@ export async function recoveryTarget() {
   try {
     const version = (await exec(join(bin, 'postgres'), ['--version'])).stdout;
     if (!/ 16\./.test(version)) throw new Error('Recovery rehearsal requires PostgreSQL 16 server tools (set PGBIN).');
-    await exec(join(bin, 'initdb'), ['-D', data, '-U', 'postgres', '--encoding=UTF8', '--locale=C', '--auth-host=scram-sha-256', '--auth-local=trust', `--pwfile=${pw}`], { timeout: 30000 });
+    await exec(join(bin, 'initdb'), ['-D', data, '-U', 'postgres', '--encoding=UTF8', '--locale=C', '--auth-host=scram-sha-256', '--auth-local=trust', `--pwfile=${pw}`], {
+      timeout: 30000,
+    });
     const probe = createServer();
-    await new Promise<void>((resolve, reject) => { probe.once('error', reject); probe.listen(0, '127.0.0.1', resolve); });
+    await new Promise<void>((resolve, reject) => {
+      probe.once('error', reject);
+      probe.listen(0, '127.0.0.1', resolve);
+    });
     const port = (probe.address() as { port: number }).port;
-    await new Promise<void>((resolve, reject) => probe.close(error => error ? reject(error) : resolve()));
+    await new Promise<void>((resolve, reject) => probe.close((error) => (error ? reject(error) : resolve())));
     // pg_ctl owns the background process and waits for readiness; generated log output stays in the fixture directory.
     await exec(join(bin, 'pg_ctl'), ['-D', data, '-l', join(root, 'postgres.log'), '-w', '-o', `-p ${port} -h 127.0.0.1 -k ${sockets}`, 'start'], { timeout: 30000 });
     started = true;
     return { url: `postgresql://postgres:rehearsal-only-password@127.0.0.1:${port}/postgres`, stop };
   } catch {
     // pg_ctl may have started before its wait timed out. Probe ownership via this data directory before cleanup.
-    try { await exec(join(bin, 'pg_ctl'), ['-D', data, 'status']); started = true; } catch { /* not running */ }
+    try {
+      await exec(join(bin, 'pg_ctl'), ['-D', data, 'status']);
+      started = true;
+    } catch {
+      /* not running */
+    }
     await stop();
     throw new Error('Could not initialize the isolated recovery target; check PostgreSQL 16 server tools and loopback access.');
   }

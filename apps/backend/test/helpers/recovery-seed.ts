@@ -11,9 +11,18 @@ import { commitUpload } from './uploads';
 
 export const GENERATOR = { tenants: 3, coreRowsPerTenant: 100, uploadedPdfsPerTenant: 2, evaluationsPerCapture: 4, pdfBytes: 262144 };
 export const EXPECTED_ROWS: Record<string, number> = {
-  patients: 306, reports: 306, report_captures: 6, capture_acceptances: 6,
-  evaluations: 24, evaluation_results: 72, evaluation_gene_states: 48, corrections: 12,
-  cell_disputes: 6, cell_dispute_decisions: 3, ledger_checkpoints: 3, ledger_events: 60,
+  patients: 306,
+  reports: 306,
+  report_captures: 6,
+  capture_acceptances: 6,
+  evaluations: 24,
+  evaluation_results: 72,
+  evaluation_gene_states: 48,
+  corrections: 12,
+  cell_disputes: 6,
+  cell_dispute_decisions: 3,
+  ledger_checkpoints: 3,
+  ledger_events: 60,
   security_audit_events: 1,
 };
 
@@ -23,17 +32,25 @@ function syntheticPdf(index: number): Buffer {
   const offsets = [0];
   const stream = `BT /F1 12 Tf 50 700 Td (Synthetic recovery fixture ${index}) Tj ET\n`;
   const objects = [
-    '<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
     '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', `<< /Length ${stream.length} >>\nstream\n${stream}endstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${stream.length} >>\nstream\n${stream}endstream`,
   ];
-  objects.forEach((object, i) => { offsets.push(body.length); body += `${i + 1} 0 obj\n${object}\nendobj\n`; });
+  objects.forEach((object, i) => {
+    offsets.push(body.length);
+    body += `${i + 1} 0 obj\n${object}\nendobj\n`;
+  });
   // Fixed-width xref offset keeps the exact dataset size independent of object offsets.
   const trailerSize = 9 + 6 * 20 + '\ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'.length + 10 + '\n%%EOF\n'.length;
   body += '%' + 'x'.repeat(GENERATOR.pdfBytes - body.length - trailerSize - 2) + '\n';
   const xref = body.length;
   body += 'xref\n0 6\n0000000000 65535 f \n';
-  body += offsets.slice(1).map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('');
+  body += offsets
+    .slice(1)
+    .map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`)
+    .join('');
   body += `\ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${String(xref).padStart(10, '0')}\n%%EOF\n`;
   const bytes = Buffer.from(body, 'ascii');
   expect(bytes.length).toBe(GENERATOR.pdfBytes);
@@ -51,25 +68,44 @@ export async function seedRecovery(pg: EphemeralDatabase, storage: S3ObjectStora
       const tenant = `syn-recovery-${t}`;
       const disputeBasis: string[] = [];
       // Bulk core fixture; no uploaded bytes are claimed for these received metadata-only reports.
-      await withAdmin(pg.adminUrl, async c => {
+      await withAdmin(pg.adminUrl, async (c) => {
         // A tenant binds through its capability row, which needs the tenant row (0032): register the organization, as the application does on first use.
         await c.query("INSERT INTO tenants (id, display_name, created_by, changed_by) VALUES ($1, $1, 'test-helper', 'test-helper') ON CONFLICT (id) DO NOTHING", [tenant]);
         for (let i = 0; i < GENERATOR.coreRowsPerTenant; i++) {
-          const patient = randomUUID(); const report = randomUUID();
+          const patient = randomUUID();
+          const report = randomUUID();
           await c.query('INSERT INTO patients (id,tenant_id,created_by,label) VALUES ($1,$2,$3,$4)', [patient, tenant, 'syn-uploader', `SYN-CORE-${i}`]);
           const requestId = i === 0 ? '3d100000-0000-4000-8000-000000000001' : null;
           const requestHash = requestId ? sha(JSON.stringify([patient, 'vcf', 'synthetic.vcf', 100])) : null;
-          await c.query(`INSERT INTO reports (id,tenant_id,created_by,patient_id,type,original_filename,size_bytes,creation_request_id,creation_request_hash)
-            VALUES ($1,$2,$3,$4,'vcf','synthetic.vcf',100,$5,$6)`, [report, tenant, 'syn-uploader', patient, requestId, requestHash]);
+          await c.query(
+            `INSERT INTO reports (id,tenant_id,created_by,patient_id,type,original_filename,size_bytes,creation_request_id,creation_request_hash)
+            VALUES ($1,$2,$3,$4,'vcf','synthetic.vcf',100,$5,$6)`,
+            [report, tenant, 'syn-uploader', patient, requestId, requestHash],
+          );
         }
       });
       for (let p = 0; p < GENERATOR.uploadedPdfsPerTenant; p++) {
         const index = t * GENERATOR.uploadedPdfsPerTenant + p;
-        const bytes = syntheticPdf(index); const hash = createHash('sha256').update(bytes).digest('hex');
-        const patientId = randomUUID(); const reportId = randomUUID(); const key = `rehearsal/pdf-${index}.pdf`;
-        await withAdmin(pg.adminUrl, c => c.query('INSERT INTO patients (id,tenant_id,created_by,label) VALUES ($1,$2,$3,$4)', [patientId, tenant, 'syn-uploader', `SYN-PDF-${p}`]));
-        const record: ReportRecord = { id: reportId, tenantId: tenant, patientId, createdBy: 'syn-uploader', type: 'lab-pdf',
-          filename: 'synthetic.pdf', sizeBytes: bytes.length, status: 'received', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+        const bytes = syntheticPdf(index);
+        const hash = createHash('sha256').update(bytes).digest('hex');
+        const patientId = randomUUID();
+        const reportId = randomUUID();
+        const key = `rehearsal/pdf-${index}.pdf`;
+        await withAdmin(pg.adminUrl, (c) =>
+          c.query('INSERT INTO patients (id,tenant_id,created_by,label) VALUES ($1,$2,$3,$4)', [patientId, tenant, 'syn-uploader', `SYN-PDF-${p}`]),
+        );
+        const record: ReportRecord = {
+          id: reportId,
+          tenantId: tenant,
+          patientId,
+          createdBy: 'syn-uploader',
+          type: 'lab-pdf',
+          filename: 'synthetic.pdf',
+          sizeBytes: bytes.length,
+          status: 'received',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
         await reports.insert(record);
         const uploaded = await storage.putObject(key, bytes, 'application/pdf');
         expect(uploaded.version).toBeTruthy();
@@ -88,18 +124,39 @@ export async function seedRecovery(pg: EphemeralDatabase, storage: S3ObjectStora
           const evaluation = await repo.insertEvaluation(tenant, 'syn-system', evaluationFor(r, c.record.id, a.record.id, { knowledgeSetId: sha(`knowledge-${e}`), disputeBasis }));
           if (e === 0) {
             const correction = await repo.insertCorrection(tenant, 'syn-reviewer', { evaluationId: evaluation.record.id, kind: 'retraction', reasonCode: 'input-misread' });
-            await repo.insertCorrection(tenant, 'syn-independent', { evaluationId: evaluation.record.id, kind: 'reinstatement', reasonCode: 'retraction-mistaken', previousCorrectionId: correction.record.id });
+            await repo.insertCorrection(tenant, 'syn-independent', {
+              evaluationId: evaluation.record.id,
+              kind: 'reinstatement',
+              reasonCode: 'retraction-mistaken',
+              previousCorrectionId: correction.record.id,
+            });
           }
         }
-        const dispute = await repo.raiseDispute(tenant, 'syn-reviewer', { guidelineId: `syn-guideline-${index}`, guidelineVersion: '1', guidelineContentSha256: sha(`guideline-${index}`), locator: { table: 'synthetic', row: '1' }, note: 'Synthetic dispute' });
+        const dispute = await repo.raiseDispute(tenant, 'syn-reviewer', {
+          guidelineId: `syn-guideline-${index}`,
+          guidelineVersion: '1',
+          guidelineContentSha256: sha(`guideline-${index}`),
+          locator: { table: 'synthetic', row: '1' },
+          note: 'Synthetic dispute',
+        });
         disputeBasis.push(dispute.record.id);
         if (p === 0) await repo.decideDispute(tenant, 'syn-independent', { disputeId: dispute.record.id, decision: 'upheld', evidenceNote: 'Synthetic evidence' });
       }
       expect(await verifier.verify(tenant, { mode: 'full', recordCheckpoint: true })).toMatchObject({ status: 'ok' });
     }
     // A protected synthetic access event proves recovery carries the new audit table's data, not only its schema.
-    await database.recordSecurityEvent({ type: 'api-auth', outcome: 'accepted', tenantId: firstCapture!.tenant,
-      actorSub: 'syn-reviewer', routeKey: 'ReportCaptureController.get', subjectId: null, requestId: randomUUID() });
+    await database.recordSecurityEvent({
+      type: 'api-auth',
+      outcome: 'accepted',
+      tenantId: firstCapture!.tenant,
+      actorSub: 'syn-reviewer',
+      routeKey: 'ReportCaptureController.get',
+      subjectId: null,
+      requestId: randomUUID(),
+    });
     return firstCapture!;
-  } finally { await verifier.close(); await database.onModuleDestroy(); }
+  } finally {
+    await verifier.close();
+    await database.onModuleDestroy();
+  }
 }

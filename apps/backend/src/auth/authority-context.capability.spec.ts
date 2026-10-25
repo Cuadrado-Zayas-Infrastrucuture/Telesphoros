@@ -1,7 +1,14 @@
 import type { Request, Response } from 'express';
 import {
-  asOrganizationWork, authorityContextMiddleware, bindRequestAuthority, bindRequestCapability, currentRequestAuthority, currentRequestCapability,
-  currentRequestId, noteCapabilityAbsent, capabilityAbsentReason,
+  asOrganizationWork,
+  authorityContextMiddleware,
+  bindRequestAuthority,
+  bindRequestCapability,
+  currentRequestAuthority,
+  currentRequestCapability,
+  currentRequestId,
+  noteCapabilityAbsent,
+  capabilityAbsentReason,
 } from './authority-context';
 import * as authorityContext from './authority-context';
 
@@ -50,12 +57,15 @@ describe('the request capability slot', () => {
     });
   });
 
-  it.each(['', 'short', 'A'.repeat(42), 'A'.repeat(44), `${'A'.repeat(42)}=`, `${'A'.repeat(42)} `, `${'A'.repeat(42)}'`])('refuses a token that is not 43 URL-safe characters: %j', (token) => {
-    inRequest(() => {
-      expect(() => bindRequestCapability({ token, expiresAt: new Date(), membershipVersion: 3 })).toThrow(/capability/i);
-      expect(currentRequestCapability()).toBeUndefined();
-    });
-  });
+  it.each(['', 'short', 'A'.repeat(42), 'A'.repeat(44), `${'A'.repeat(42)}=`, `${'A'.repeat(42)} `, `${'A'.repeat(42)}'`])(
+    'refuses a token that is not 43 URL-safe characters: %j',
+    (token) => {
+      inRequest(() => {
+        expect(() => bindRequestCapability({ token, expiresAt: new Date(), membershipVersion: 3 })).toThrow(/capability/i);
+        expect(currentRequestCapability()).toBeUndefined();
+      });
+    },
+  );
 
   it('binds once: a second binding in the same request is refused, so a request cannot swap its proof', () => {
     inRequest(() => {

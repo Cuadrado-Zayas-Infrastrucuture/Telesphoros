@@ -21,16 +21,7 @@ export function OptimizedPicture({ picture, alt, sizes, className }: OptimizedPi
       {Object.entries(picture.sources).map(([format, srcSet]) => (
         <source key={format} type={`image/${format}`} srcSet={srcSet} sizes={sizes} />
       ))}
-      <img
-        src={picture.img.src}
-        width={picture.img.w}
-        height={picture.img.h}
-        alt={alt}
-        sizes={sizes}
-        loading="lazy"
-        decoding="async"
-        className={className}
-      />
+      <img src={picture.img.src} width={picture.img.w} height={picture.img.h} alt={alt} sizes={sizes} loading="lazy" decoding="async" className={className} />
     </picture>
   );
 }

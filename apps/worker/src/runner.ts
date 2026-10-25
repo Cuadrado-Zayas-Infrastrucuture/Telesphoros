@@ -191,21 +191,24 @@ export class Runner {
         });
         const leaseMs = this.leaseSeconds * 1000;
         let lastOk = Date.now();
-        const beat = setInterval(() => {
-          void (async () => {
-            try {
-              if (await queue.heartbeat(job.id, workerId, this.leaseSeconds)) {
-                lastOk = Date.now();
-                return;
+        const beat = setInterval(
+          () => {
+            void (async () => {
+              try {
+                if (await queue.heartbeat(job.id, workerId, this.leaseSeconds)) {
+                  lastOk = Date.now();
+                  return;
+                }
+                log('warn', 'lease-lost', fields);
+                abort.abort(new Error('lease-lost'));
+              } catch {
+                log('warn', 'heartbeat-failed', { ...fields, code: 'queue-unavailable' });
+                if (Date.now() - lastOk > leaseMs) abort.abort(new Error('lease-lost'));
               }
-              log('warn', 'lease-lost', fields);
-              abort.abort(new Error('lease-lost'));
-            } catch {
-              log('warn', 'heartbeat-failed', { ...fields, code: 'queue-unavailable' });
-              if (Date.now() - lastOk > leaseMs) abort.abort(new Error('lease-lost'));
-            }
-          })();
-        }, Math.max(1000, (leaseMs / 3) | 0));
+            })();
+          },
+          Math.max(1000, (leaseMs / 3) | 0),
+        );
         entry.stopTimers = () => {
           clearTimeout(timer);
           clearInterval(beat);

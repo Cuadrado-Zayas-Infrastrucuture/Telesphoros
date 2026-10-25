@@ -38,10 +38,22 @@ async function patient(t: string): Promise<string> {
 }
 function report(t: string, patientId: string): ReportRecord {
   const now = new Date().toISOString();
-  return { id: randomUUID(), tenantId: t, createdBy: 'syn-registrar', patientId, type: 'vcf', filename: 'synthetic.vcf', sizeBytes: 100, status: 'received', createdAt: now, updatedAt: now };
+  return {
+    id: randomUUID(),
+    tenantId: t,
+    createdBy: 'syn-registrar',
+    patientId,
+    type: 'vcf',
+    filename: 'synthetic.vcf',
+    sizeBytes: 100,
+    status: 'received',
+    createdAt: now,
+    updatedAt: now,
+  };
 }
 const isDeleted = (id: string) => owner(async (c) => (await c.query<{ gone: boolean }>(`SELECT deleted_at IS NOT NULL AS gone FROM patients WHERE id = $1`, [id])).rows[0]!.gone);
-const liveReports = (id: string) => owner(async (c) => (await c.query<{ n: number }>(`SELECT count(*)::int AS n FROM reports WHERE patient_id = $1 AND deleted_at IS NULL`, [id])).rows[0]!.n);
+const liveReports = (id: string) =>
+  owner(async (c) => (await c.query<{ n: number }>(`SELECT count(*)::int AS n FROM reports WHERE patient_id = $1 AND deleted_at IS NULL`, [id])).rows[0]!.n);
 const sleep = (ms: number) => new Promise<'timer'>((resolve) => setTimeout(() => resolve('timer'), ms));
 /** Pauses the next unit of work after it has done everything except commit, and resumes when the returned function is called. */
 function pauseBeforeCommit() {
@@ -83,9 +95,15 @@ describe('registering a report while its patient is deleted', () => {
     const t = tenant();
     const p = await patient(t);
     const hold = pauseBeforeCommit();
-    const registering = reports.insert(report(t, p)).then(() => 'registered' as const, (error: unknown) => error);
+    const registering = reports.insert(report(t, p)).then(
+      () => 'registered' as const,
+      (error: unknown) => error,
+    );
     await hold.arrived; // the row is inserted, the registration has not committed
-    const deleting = patients.delete(t, p, 'syn-actor').then(() => 'deleted' as const, (error: unknown) => error);
+    const deleting = patients.delete(t, p, 'syn-actor').then(
+      () => 'deleted' as const,
+      (error: unknown) => error,
+    );
     await Promise.race([deleting, sleep(1500)]); // before the fix the delete commits here; after it, it waits for the registration
     hold.release();
     const [registration, deletion] = await Promise.all([registering, deleting]);
@@ -99,9 +117,15 @@ describe('registering a report while its patient is deleted', () => {
     const t = tenant();
     const p = await patient(t);
     const hold = pauseBeforeCommit();
-    const deleting = patients.delete(t, p, 'syn-actor').then(() => 'deleted' as const, (error: unknown) => error);
+    const deleting = patients.delete(t, p, 'syn-actor').then(
+      () => 'deleted' as const,
+      (error: unknown) => error,
+    );
     await hold.arrived; // the patient row is updated, the delete has not committed
-    const registering = reports.insert(report(t, p)).then(() => 'registered' as const, (error: unknown) => error);
+    const registering = reports.insert(report(t, p)).then(
+      () => 'registered' as const,
+      (error: unknown) => error,
+    );
     await Promise.race([registering, sleep(1500)]); // before the fix the registration commits here; after it, it waits for the delete
     hold.release();
     const [deletion, registration] = await Promise.all([deleting, registering]);
@@ -115,9 +139,15 @@ describe('registering a report while its patient is deleted', () => {
     const t = tenant();
     const p = await patient(t);
     const hold = pauseBeforeCommit();
-    const registering = reports.insertOrReplay({ ...report(t, p), creationRequestId: randomUUID(), creationRequestHash: 'a'.repeat(64) }).then(() => 'registered' as const, (error: unknown) => error);
+    const registering = reports.insertOrReplay({ ...report(t, p), creationRequestId: randomUUID(), creationRequestHash: 'a'.repeat(64) }).then(
+      () => 'registered' as const,
+      (error: unknown) => error,
+    );
     await hold.arrived;
-    const deleting = patients.delete(t, p, 'syn-actor').then(() => 'deleted' as const, (error: unknown) => error);
+    const deleting = patients.delete(t, p, 'syn-actor').then(
+      () => 'deleted' as const,
+      (error: unknown) => error,
+    );
     await Promise.race([deleting, sleep(1500)]);
     hold.release();
     const [registration, deletion] = await Promise.all([registering, deleting]);

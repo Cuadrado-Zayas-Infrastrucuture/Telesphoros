@@ -62,7 +62,10 @@ export const envSchema = z
     JWT_ISSUER: z.string().min(1).default('telesphoros-dev'),
     JWT_AUDIENCE: z.string().min(1).default('telesphoros-api'),
     COGNITO_REGION: z.string().min(1).optional(),
-    COGNITO_USER_POOL_ID: z.string().regex(/^[\w-]+_[0-9A-Za-z]+$/, 'must look like us-east-2_AbCdEfGhI').optional(),
+    COGNITO_USER_POOL_ID: z
+      .string()
+      .regex(/^[\w-]+_[0-9A-Za-z]+$/, 'must look like us-east-2_AbCdEfGhI')
+      .optional(),
     COGNITO_APP_CLIENT_ID: z.string().min(1).optional(),
     /** Local development against the fake identity provider ONLY. Refused in production. */
     COGNITO_ISSUER: z.url().optional(),
@@ -72,7 +75,12 @@ export const envSchema = z
     CORS_ALLOWED_ORIGINS: z
       .string()
       .default('')
-      .transform((value) => value.split(',').map((origin) => origin.trim()).filter(Boolean))
+      .transform((value) =>
+        value
+          .split(',')
+          .map((origin) => origin.trim())
+          .filter(Boolean),
+      )
       .refine((origins) => origins.every(isOrigin), 'each entry must be an origin like https://app.example.com (no path, no trailing slash)'),
 
     /** `memory` keeps data in process (tests, quick demos). `postgres` is the real store. */
@@ -102,7 +110,10 @@ export const envSchema = z
     /** The knowledge directory the pipeline evaluates against (loaded once at start, under the non-production rules). Required when enabled. */
     KNOWLEDGE_DIR: z.string().min(1).optional(),
     /** Stored with every evaluation as the code that produced it. Required when enabled. */
-    BUILD_VERSION: z.string().regex(/^[A-Za-z0-9._+-]{1,64}$/, 'must be 1 to 64 letters, digits or . _ + -').optional(),
+    BUILD_VERSION: z
+      .string()
+      .regex(/^[A-Za-z0-9._+-]{1,64}$/, 'must be 1 to 64 letters, digits or . _ + -')
+      .optional(),
     /** How many reads of report text may run at once in THIS process (not deployment-wide). Over the limit: 503 PIPELINE_BUSY. */
     LAB_REPORT_MAX_CONCURRENT_READS: z.coerce.number().int().min(1).max(16).default(2),
 
@@ -149,14 +160,20 @@ export const envSchema = z
      * masked hint; the operator command that fulfils it needs the same key. Required in production; development and tests use a fixed key that
      * is not secret.
      */
-    INVITATION_DIGEST_KEY: z.string().regex(/^[0-9a-f]{64}$/, 'must be 64 lower-case hex characters').optional(),
+    INVITATION_DIGEST_KEY: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/, 'must be 64 lower-case hex characters')
+      .optional(),
 
     /**
      * The master secret for the digests of patient identifiers (64 hex characters = 256 bits). A key per organization is derived from it
      * (HKDF, keyed by the organization's id), so no secret is created per clinic. Required in production; development and tests use a fixed key that is
      * not secret. Raw identifiers are never stored, so replacing this key orphans every stored identifier (docs/design/plans/m2-1b-identifiers-and-patient-link.md).
      */
-    IDENTIFIER_DIGEST_KEY: z.string().regex(/^[0-9a-f]{64}$/, 'must be 64 lower-case hex characters').optional(),
+    IDENTIFIER_DIGEST_KEY: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/, 'must be 64 lower-case hex characters')
+      .optional(),
   })
   .superRefine((env, ctx) => {
     const problem = (path: string, message: string) => ctx.addIssue({ code: 'custom', path: [path], message });
@@ -179,20 +196,25 @@ export const envSchema = z
     // The watch needs the database and its own login; the production and pipeline requirements are checked next to each of those.
     if (env.LEDGER_VERIFIER_DATABASE_URL !== undefined) {
       if (env.STORAGE_DRIVER !== 'postgres') problem('LEDGER_VERIFIER_DATABASE_URL', 'can only be set with STORAGE_DRIVER=postgres (the ledger has no in-memory version)');
-      if (env.LEDGER_VERIFIER_DATABASE_URL === env.DATABASE_URL) problem('LEDGER_VERIFIER_DATABASE_URL', 'must be the ledger verifier login, not the application login (DATABASE_URL)');
+      if (env.LEDGER_VERIFIER_DATABASE_URL === env.DATABASE_URL)
+        problem('LEDGER_VERIFIER_DATABASE_URL', 'must be the ledger verifier login, not the application login (DATABASE_URL)');
     }
 
     if (env.LAB_REPORT_PIPELINE === 'enabled') {
-      if (!env.LEDGER_VERIFIER_DATABASE_URL) problem('LEDGER_VERIFIER_DATABASE_URL', 'is required when LAB_REPORT_PIPELINE=enabled (the record log must be watched while it is written)');
+      if (!env.LEDGER_VERIFIER_DATABASE_URL)
+        problem('LEDGER_VERIFIER_DATABASE_URL', 'is required when LAB_REPORT_PIPELINE=enabled (the record log must be watched while it is written)');
       // The pipeline's records are a database guarantee (no in-memory ledger exists), and its evidence is pinned to object versions.
       if (env.STORAGE_DRIVER !== 'postgres') problem('LAB_REPORT_PIPELINE', 'can only be enabled with STORAGE_DRIVER=postgres (the ledger has no in-memory version)');
       if (!env.KNOWLEDGE_DIR) problem('KNOWLEDGE_DIR', 'is required when LAB_REPORT_PIPELINE=enabled');
       if (!env.BUILD_VERSION) problem('BUILD_VERSION', 'is required when LAB_REPORT_PIPELINE=enabled (it is stored with every evaluation)');
-      if (!env.LAB_REPORT_FIXTURES_DIR) problem('LAB_REPORT_FIXTURES_DIR', 'is required when LAB_REPORT_PIPELINE=enabled (the directory of recorded PDFs for the test-only text runner)');
-      if (env.NODE_ENV === 'production') problem('LAB_REPORT_PIPELINE', 'is refused in production: it is a synthetic, non-production integration (test-only text runner and development knowledge)');
+      if (!env.LAB_REPORT_FIXTURES_DIR)
+        problem('LAB_REPORT_FIXTURES_DIR', 'is required when LAB_REPORT_PIPELINE=enabled (the directory of recorded PDFs for the test-only text runner)');
+      if (env.NODE_ENV === 'production')
+        problem('LAB_REPORT_PIPELINE', 'is refused in production: it is a synthetic, non-production integration (test-only text runner and development knowledge)');
     }
 
-    if (env.LOCAL_UPLOAD_CLEANUP_GRACE_SECONDS < 86400 && (!env.LOCAL_STORAGE_RUN_ID || env.NODE_ENV === 'production' || env.LAB_REPORT_PIPELINE !== 'disabled')) problem('LOCAL_UPLOAD_CLEANUP_GRACE_SECONDS', 'shortened grace requires a disposable local run with processing disabled');
+    if (env.LOCAL_UPLOAD_CLEANUP_GRACE_SECONDS < 86400 && (!env.LOCAL_STORAGE_RUN_ID || env.NODE_ENV === 'production' || env.LAB_REPORT_PIPELINE !== 'disabled'))
+      problem('LOCAL_UPLOAD_CLEANUP_GRACE_SECONDS', 'shortened grace requires a disposable local run with processing disabled');
 
     // Production fails closed: anything that is only fit for development is refused outright.
     if (Boolean(env.TLS_CERT_PEM) !== Boolean(env.TLS_KEY_PEM)) problem('TLS_KEY_PEM', 'must be set together with TLS_CERT_PEM');
@@ -205,9 +227,14 @@ export const envSchema = z
       if (env.DATABASE_SSL !== 'require') problem('DATABASE_SSL', 'must be require in production');
       if (!env.INVITATION_DIGEST_KEY) problem('INVITATION_DIGEST_KEY', 'is required in production (invitations store only a keyed digest of the address)');
       if (!env.IDENTIFIER_DIGEST_KEY) problem('IDENTIFIER_DIGEST_KEY', 'is required in production (patient identifiers are stored only as keyed digests)');
-      if (!env.LEDGER_VERIFIER_DATABASE_URL) problem('LEDGER_VERIFIER_DATABASE_URL', 'is required in production (the record log is verified at start and re-verified while running)');
+      if (!env.LEDGER_VERIFIER_DATABASE_URL)
+        problem('LEDGER_VERIFIER_DATABASE_URL', 'is required in production (the record log is verified at start and re-verified while running)');
       if (!env.RATE_LIMIT_ENABLED) problem('RATE_LIMIT_ENABLED', 'must be true in production');
-      if (env.TRUST_PROXY_HOPS === undefined) problem('TRUST_PROXY_HOPS', 'must be set explicitly in production (0 if nothing sits in front, 1 behind one load balancer): a wrong value defeats or poisons the address limit');
+      if (env.TRUST_PROXY_HOPS === undefined)
+        problem(
+          'TRUST_PROXY_HOPS',
+          'must be set explicitly in production (0 if nothing sits in front, 1 behind one load balancer): a wrong value defeats or poisons the address limit',
+        );
       if (env.CORS_ALLOWED_ORIGINS.some((origin) => !origin.startsWith('https://'))) problem('CORS_ALLOWED_ORIGINS', 'must all be https:// origins in production');
     }
   });

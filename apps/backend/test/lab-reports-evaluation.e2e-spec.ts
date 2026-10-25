@@ -64,8 +64,12 @@ const golden = (JSON.parse(readFileSync(join(REPO_ROOT, 'tests/report_adapter/go
       expect(response.status).toBe(201);
       expect(evaluationDtoSchema.safeParse(response.body).success).toBe(true);
       expect(response.body.disposition).toBe(expected.disposition);
-      const stored = (await lab.row<{ gene_inputs: GeneInput[]; occurrences: Array<{ note: string | null }>; hold_code: string | null }>(
-        `SELECT gene_inputs, occurrences, hold_code FROM evaluations WHERE id = $1`, [evaluationId]))[0]!;
+      const stored = (
+        await lab.row<{ gene_inputs: GeneInput[]; occurrences: Array<{ note: string | null }>; hold_code: string | null }>(
+          `SELECT gene_inputs, occurrences, hold_code FROM evaluations WHERE id = $1`,
+          [evaluationId],
+        )
+      )[0]!;
       if (expected.disposition === 'held') {
         expect(stored.hold_code).toBe(expected.holdCode);
         expect(response.body.holdCode).toBe(expected.holdCode);
@@ -76,7 +80,13 @@ const golden = (JSON.parse(readFileSync(join(REPO_ROOT, 'tests/report_adapter/go
       }
       expect(stored.hold_code).toBeNull();
       // The hand-written expectation names genes and states; the source is checked beside it: stored, and shown in the detail.
-      expect(stored.gene_inputs.map((input) => { const copy: Record<string, unknown> = { ...input }; delete copy.callSource; return copy; })).toEqual(expected.geneInputs);
+      expect(
+        stored.gene_inputs.map((input) => {
+          const copy: Record<string, unknown> = { ...input };
+          delete copy.callSource;
+          return copy;
+        }),
+      ).toEqual(expected.geneInputs);
       expect([...new Set(stored.gene_inputs.map((input) => input.callSource))]).toEqual(['lab-report']);
       expect(response.body.geneInputs).toEqual(stored.gene_inputs);
       expect(stored.occurrences.map((o) => o.note)).toEqual(expected.notes);
@@ -85,40 +95,77 @@ const golden = (JSON.parse(readFileSync(join(REPO_ROOT, 'tests/report_adapter/go
     it('shows, for each test drug, the outcome, reason, strength and wording the expectation says', () => {
       if (expected.disposition === 'held') return;
       expect(response.body.results.map((r: { drug: string }) => r.drug)).toEqual(['drugq', 'drugr']);
-      for (const result of response.body.results as Array<{ drug: string; outcome: string; reasonCode: string | null; strength: string | null; recommendationText: string | null }>) {
+      for (const result of response.body.results as Array<{
+        drug: string;
+        outcome: string;
+        reasonCode: string | null;
+        strength: string | null;
+        recommendationText: string | null;
+      }>) {
         const want = expected.engine![result.drug]!;
-        expect({ outcome: result.outcome, reasonCode: result.reasonCode ?? undefined, strength: result.strength ?? undefined, recommendationText: result.recommendationText ?? undefined }).toEqual({
-          outcome: want.outcome, reasonCode: want.reasonCode, strength: want.strength, recommendationText: want.recommendationText,
+        expect({
+          outcome: result.outcome,
+          reasonCode: result.reasonCode ?? undefined,
+          strength: result.strength ?? undefined,
+          recommendationText: result.recommendationText ?? undefined,
+        }).toEqual({
+          outcome: want.outcome,
+          reasonCode: want.reasonCode,
+          strength: want.strength,
+          recommendationText: want.recommendationText,
         });
       }
     });
 
     it('records what it relied on: the knowledge, the build, the scope, the recordings, the decision; and says it is not approved for clinical use', async () => {
       expect(response.body).toMatchObject({
-        clinicalUse: CLINICAL_USE, scope: PIPELINE_SCOPE, actionable: false, state: 'active', engineVersion: 'test-build-1', knowledgeSetId: knowledge.id,
-        captureId: setup.captureId, reportId: setup.reportId, acceptance: { id: setup.acceptanceId, decision: 'accepted', current: true }, advisory: { activeDisputes: 0 },
+        clinicalUse: CLINICAL_USE,
+        scope: PIPELINE_SCOPE,
+        actionable: false,
+        state: 'active',
+        engineVersion: 'test-build-1',
+        knowledgeSetId: knowledge.id,
+        captureId: setup.captureId,
+        reportId: setup.reportId,
+        acceptance: { id: setup.acceptanceId, decision: 'accepted', current: true },
+        advisory: { activeDisputes: 0 },
       });
       const binding = (await lab.row<{ binding: Record<string, unknown> }>(`SELECT binding FROM evaluations WHERE id = $1`, [evaluationId]))[0]!.binding;
-      expect(binding).toMatchObject({ scope: PIPELINE_SCOPE, recordingsSha256: expect.stringMatching(/^[0-9a-f]{64}$/), captureAcceptanceId: setup.acceptanceId, popplerVersion: '26.03.0' });
+      expect(binding).toMatchObject({
+        scope: PIPELINE_SCOPE,
+        recordingsSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+        captureAcceptanceId: setup.acceptanceId,
+        popplerVersion: '26.03.0',
+      });
     });
 
     it('persistence-consistency (NOT the oracle): re-running the engine on the stored inputs gives the stored results', async () => {
       if (expected.disposition === 'held') return;
       const stored = (await lab.row<{ gene_inputs: GeneInput[] }>(`SELECT gene_inputs FROM evaluations WHERE id = $1`, [evaluationId]))[0]!.gene_inputs;
       const again = evaluate(knowledge, stored);
-      const shape = (r: { drug: string; outcome: string; reasonCode?: string | null; strength?: string | null; recommendationText?: string | null }) =>
-        ({ drug: r.drug, outcome: r.outcome, reasonCode: r.reasonCode ?? null, strength: r.strength ?? null, recommendationText: r.recommendationText ?? null });
+      const shape = (r: { drug: string; outcome: string; reasonCode?: string | null; strength?: string | null; recommendationText?: string | null }) => ({
+        drug: r.drug,
+        outcome: r.outcome,
+        reasonCode: r.reasonCode ?? null,
+        strength: r.strength ?? null,
+        recommendationText: r.recommendationText ?? null,
+      });
       expect(response.body.results.map(shape)).toEqual((again.results as DrugResult[]).map((r) => shape(r as never)));
     });
 
     it('shows no text from the report', () => {
       const shown = JSON.stringify(response.body);
-      for (const line of fixtureText(id).split('\n').map((l) => l.trim()).filter((l) => l.length > 12).slice(0, 8)) expect(shown).not.toContain(line);
+      for (const line of fixtureText(id)
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.length > 12)
+        .slice(0, 8))
+        expect(shown).not.toContain(line);
       expect(shown).not.toMatch(/reports\/|storageKey|createdBy/);
     });
   });
 
-  it('the tenant\'s ledger chain verifies after all twelve (every record has its event, in order, with nothing missing)', async () => {
+  it("the tenant's ledger chain verifies after all twelve (every record has its event, in order, with nothing missing)", async () => {
     const result = await verifier.verify(lab.tenant, { mode: 'full' });
     expect(result.failures).toEqual([]);
     expect(result.status).toBe('ok');
@@ -126,7 +173,7 @@ const golden = (JSON.parse(readFileSync(join(REPO_ROOT, 'tests/report_adapter/go
   });
 
   it('reads are open to every clinical role (and refused to an administrator and to a member with none), are tenant-scoped, and list without the engine inputs', async () => {
-    const ids = (await lab.row<{ id: string; report_id: string }>(`SELECT id, report_id FROM evaluations WHERE tenant_id = $1 ORDER BY seq`, [lab.tenant]));
+    const ids = await lab.row<{ id: string; report_id: string }>(`SELECT id, report_id FROM evaluations WHERE tenant_id = $1 ORDER BY seq`, [lab.tenant]);
     expect(ids).toHaveLength(12);
     const noRole = await lab.person('r', []);
     await lab.api().get('/api/v1/evaluations').set(bearer(noRole.token)).expect(403); // finding I04
@@ -144,7 +191,11 @@ const golden = (JSON.parse(readFileSync(join(REPO_ROOT, 'tests/report_adapter/go
       const one = await lab.api().get(`/api/v1/evaluations/${ids[0]!.id}`).set(bearer(who.token)).expect(200);
       expect(one.body).toHaveProperty('geneInputs');
     }
-    const filtered = await lab.api().get(`/api/v1/evaluations?reportId=${ids[3]!.report_id}`).set(bearer((await lab.person('r', ['reader'])).token)).expect(200);
+    const filtered = await lab
+      .api()
+      .get(`/api/v1/evaluations?reportId=${ids[3]!.report_id}`)
+      .set(bearer((await lab.person('r', ['reader'])).token))
+      .expect(200);
     expect(filtered.body.data.map((e: { id: string }) => e.id)).toEqual([ids[3]!.id]);
     const stranger = await lab.person('m', ['clinician'], 'tenant-two');
     expect((await lab.api().get('/api/v1/evaluations').set(bearer(stranger.token)).expect(200)).body.data).toEqual([]);
@@ -155,7 +206,9 @@ const golden = (JSON.parse(readFileSync(join(REPO_ROOT, 'tests/report_adapter/go
 
   it('pages evaluation summaries in stable order with exact filtered totals and strict bounds', async () => {
     const who = await lab.person('pagination-reader', ['reader']);
-    const rows = await lab.row<{ id: string; report_id: string; patient_id: string }>('SELECT id, report_id, patient_id FROM evaluations WHERE tenant_id = $1 ORDER BY seq', [lab.tenant]);
+    const rows = await lab.row<{ id: string; report_id: string; patient_id: string }>('SELECT id, report_id, patient_id FROM evaluations WHERE tenant_id = $1 ORDER BY seq', [
+      lab.tenant,
+    ]);
     const get = (query: string) => lab.api().get(`/api/v1/evaluations?${query}`).set(bearer(who.token));
     const all: string[] = [];
     for (let page = 1; page <= 3; page++) {
@@ -172,6 +225,7 @@ const golden = (JSON.parse(readFileSync(join(REPO_ROOT, 'tests/report_adapter/go
       expect(filtered.body).toEqual({ data: [], meta: { page: 2, pageSize: 1, total: 1, totalPages: 1 } });
     }
     await get('pageSize=100').expect(200);
-    for (const bad of ['page=0', 'page=-1', 'page=1.5', 'pageSize=0', 'pageSize=101', 'page=9007199254740991&pageSize=100', 'page=1&page=2', 'pageSize=nope']) await get(bad).expect(400);
+    for (const bad of ['page=0', 'page=-1', 'page=1.5', 'pageSize=0', 'pageSize=101', 'page=9007199254740991&pageSize=100', 'page=1&page=2', 'pageSize=nope'])
+      await get(bad).expect(400);
   });
 });

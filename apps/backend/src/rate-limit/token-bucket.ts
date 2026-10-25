@@ -43,9 +43,7 @@ export class TokenBucketLimiter {
     const known = this.buckets.get(key);
     // Map keeps insertion order: delete and re-insert on every use, so the FIRST key is always the least recently used.
     this.buckets.delete(key);
-    const bucket: Bucket = known
-      ? { tokens: Math.min(capacity, known.tokens + ((now - known.at) / 1000) * refillPerSecond), at: now }
-      : { tokens: capacity, at: now };
+    const bucket: Bucket = known ? { tokens: Math.min(capacity, known.tokens + ((now - known.at) / 1000) * refillPerSecond), at: now } : { tokens: capacity, at: now };
     this.buckets.set(key, bucket);
     if (this.buckets.size > maxKeys) {
       const oldest = this.buckets.keys().next().value;

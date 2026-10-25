@@ -17,7 +17,9 @@ beforeAll(() => Logger.overrideLogger(false));
 
 const gate = <T = void>() => {
   let release!: (value: T) => void;
-  const promise = new Promise<T>((resolve) => { release = resolve; });
+  const promise = new Promise<T>((resolve) => {
+    release = resolve;
+  });
   return { promise, release };
 };
 
@@ -33,15 +35,22 @@ class ControlledVerifier implements VerifierPort {
     return this.inner.tenants();
   }
   async verify(tenantId: string, options?: VerifyOptions) {
-    if (this.holdVerify && options?.budgetMs === 30_000) { // only the admin endpoint's own request (its budget) is held, never the background walk
+    if (this.holdVerify && options?.budgetMs === 30_000) {
+      // only the admin endpoint's own request (its budget) is held, never the background walk
       this.holdVerify.entered();
       await this.holdVerify.until;
     }
     return this.inner.verify(tenantId, options);
   }
-  recordIncident(finding: Parameters<LedgerVerifier['recordIncident']>[0]) { return this.inner.recordIncident(finding); }
-  openIncidents() { return this.inner.openIncidents(); }
-  close() { return this.inner.close(); }
+  recordIncident(finding: Parameters<LedgerVerifier['recordIncident']>[0]) {
+    return this.inner.recordIncident(finding);
+  }
+  openIncidents() {
+    return this.inner.openIncidents();
+  }
+  close() {
+    return this.inner.close();
+  }
 }
 
 (usingPostgres() ? describe : describe.skip)('the ledger watch over HTTP', () => {
@@ -87,7 +96,7 @@ class ControlledVerifier implements VerifierPort {
       await verify(admin.token).expect(200);
     });
 
-    it('checks the caller\'s OWN tenant: an answer in the documented shape, from the checkpoint by default and the whole chain with full=true, recording a checkpoint', async () => {
+    it("checks the caller's OWN tenant: an answer in the documented shape, from the checkpoint by default and the whole chain with full=true, recording a checkpoint", async () => {
       const clin = await lab.person('clin', ['clinician']);
       await lab.reviewedCapture(fixturePdf('D01'), { clinician: clin });
       const admin = await lab.person('adm', ['admin']);
@@ -145,7 +154,7 @@ class ControlledVerifier implements VerifierPort {
       await verify(admin.token).expect(200);
     });
 
-    it('checks only the caller\'s tenant: damage in another tenant is not reported to this admin, and latches nothing', async () => {
+    it("checks only the caller's tenant: damage in another tenant is not reported to this admin, and latches nothing", async () => {
       const damaged = new LabPipeline(app, db.adminUrl);
       const clin = await damaged.person('clin', ['clinician']);
       await damaged.reviewedCapture(fixturePdf('D01'), { clinician: clin });
@@ -209,7 +218,12 @@ class ControlledVerifier implements VerifierPort {
 
       // One structured line for an alarm to match on: the event, the tenant, the kinds and sequence numbers. Never a value.
       const line = logged.mock.calls.flat().find((c) => c?.event === 'ledger-compromised');
-      expect(line).toMatchObject({ event: 'ledger-compromised', source: 'on-demand', tenantId: lab.tenant, failures: expect.arrayContaining([{ kind: 'payload-mismatch', seq: expect.any(String) }]) });
+      expect(line).toMatchObject({
+        event: 'ledger-compromised',
+        source: 'on-demand',
+        tenantId: lab.tenant,
+        failures: expect.arrayContaining([{ kind: 'payload-mismatch', seq: expect.any(String) }]),
+      });
       expect(JSON.stringify(logged.mock.calls)).not.toMatch(/text_scalars|sample\.pdf|SYN-/);
 
       const rows = async () => [await lab.count('report_captures'), await lab.count('evaluations'), await lab.count('capture_acceptances'), await lab.count('ledger_events')];
@@ -238,7 +252,9 @@ class ControlledVerifier implements VerifierPort {
       await lab.api().get('/api/v1/health').expect(200);
 
       // The finding is in the DATABASE, so a task that never walked this tenant is stopped too.
-      expect(await withAdmin(db.adminUrl, async (c) => (await c.query(`SELECT tenant_id, scope FROM ledger_incidents`)).rows)).toEqual([{ tenant_id: lab.tenant, scope: 'tenant' }]);
+      expect(await withAdmin(db.adminUrl, async (c) => (await c.query(`SELECT tenant_id, scope FROM ledger_incidents`)).rows)).toEqual([
+        { tenant_id: lab.tenant, scope: 'tenant' },
+      ]);
 
       // Another tenant is not affected.
       const neighbour = new LabPipeline(app, db.adminUrl);

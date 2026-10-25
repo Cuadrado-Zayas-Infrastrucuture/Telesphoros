@@ -29,7 +29,7 @@ export function installProcessFaultHandlers(target: ProcessFaultTarget, options:
     target.on(kind, (error: unknown) => {
       if (faulted) return;
       faulted = true;
-      const name = error instanceof Error ? error.constructor?.name ?? error.name : undefined;
+      const name = error instanceof Error ? (error.constructor?.name ?? error.name) : undefined;
       const code = (error as { code?: unknown } | null | undefined)?.code;
       const line = JSON.stringify({
         level: 'fatal',

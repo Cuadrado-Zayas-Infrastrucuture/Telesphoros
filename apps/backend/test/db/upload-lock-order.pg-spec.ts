@@ -37,13 +37,32 @@ const owner = <T>(work: (c: Client) => Promise<T>) => withAdmin(pg.adminUrl, wor
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const SHA = 'a'.repeat(64);
 
-interface Fixture { tenant: string; reportId: string; patientId: string; revision: string; run: string }
+interface Fixture {
+  tenant: string;
+  reportId: string;
+  patientId: string;
+  revision: string;
+  run: string;
+}
 async function fixture(): Promise<Fixture> {
   const tenant = `tenant-${randomUUID().slice(0, 8)}`;
   const patientId = randomUUID();
-  await owner((c) => c.query(`INSERT INTO patients (id, tenant_id, created_by, label) VALUES ($1, $2, 'syn-registrar', $3)`, [patientId, tenant, `SYN-${randomUUID().slice(0, 8)}`]));
+  await owner((c) =>
+    c.query(`INSERT INTO patients (id, tenant_id, created_by, label) VALUES ($1, $2, 'syn-registrar', $3)`, [patientId, tenant, `SYN-${randomUUID().slice(0, 8)}`]),
+  );
   const now = new Date().toISOString();
-  const record: ReportRecord = { id: randomUUID(), tenantId: tenant, createdBy: 'syn-registrar', patientId, type: 'vcf', filename: 'synthetic.vcf', sizeBytes: 100, status: 'received', createdAt: now, updatedAt: now };
+  const record: ReportRecord = {
+    id: randomUUID(),
+    tenantId: tenant,
+    createdBy: 'syn-registrar',
+    patientId,
+    type: 'vcf',
+    filename: 'synthetic.vcf',
+    sizeBytes: 100,
+    status: 'received',
+    createdAt: now,
+    updatedAt: now,
+  };
   await reports.insert(record);
   const revision = await owner(async (c) => (await c.query<{ r: string }>(`SELECT upload_revision::text AS r FROM reports WHERE id = $1`, [record.id])).rows[0]!.r);
   return { tenant, reportId: record.id, patientId, revision, run: randomUUID() };
@@ -51,9 +70,27 @@ async function fixture(): Promise<Fixture> {
 function attempt(f: Fixture): UploadAttempt {
   const id = randomUUID();
   return {
-    id, requestId: randomUUID(), runId: f.run, tenantId: f.tenant, reportId: f.reportId, patientId: f.patientId, principal: 'syn-registrar', revision: f.revision, declarationRevision: f.revision,
-    type: 'vcf', sizeBytes: 100, contentType: 'text/plain', sha256: SHA, key: `reports/${f.tenant}/${f.reportId}/${id}`, cancelRequested: false, validated: false, state: 'declared',
-    version: null, leaseUntil: new Date(Date.now() + 3_600_000).toISOString(), writer: null, createdAt: new Date().toISOString(),
+    id,
+    requestId: randomUUID(),
+    runId: f.run,
+    tenantId: f.tenant,
+    reportId: f.reportId,
+    patientId: f.patientId,
+    principal: 'syn-registrar',
+    revision: f.revision,
+    declarationRevision: f.revision,
+    type: 'vcf',
+    sizeBytes: 100,
+    contentType: 'text/plain',
+    sha256: SHA,
+    key: `reports/${f.tenant}/${f.reportId}/${id}`,
+    cancelRequested: false,
+    validated: false,
+    state: 'declared',
+    version: null,
+    leaseUntil: new Date(Date.now() + 3_600_000).toISOString(),
+    writer: null,
+    createdAt: new Date().toISOString(),
   };
 }
 const identity = (a: UploadAttempt): AttemptIdentity => ({ tenantId: a.tenantId, reportId: a.reportId, id: a.id, principal: a.principal, revision: a.revision });
@@ -72,13 +109,19 @@ async function storedAttempt(f: Fixture): Promise<UploadAttempt> {
 
 describe('a declaration and a commit for the same report', () => {
   // The retry would hide a deadlock, so these tests run without it: they prove the lock ORDER prevents the deadlock, not that a retry recovers from it.
-  beforeEach(() => { retryMock.mockImplementation((work: () => Promise<unknown>) => work()); });
-  afterEach(() => { retryMock.mockImplementation(realRetry); });
+  beforeEach(() => {
+    retryMock.mockImplementation((work: () => Promise<unknown>) => work());
+  });
+  afterEach(() => {
+    retryMock.mockImplementation(realRetry);
+  });
 
   beforeAll(async () => {
     // Holds the run row for half a second after a declaration reserves bytes in it, before the declaration goes on to the report row.
     await owner(async (c) => {
-      await c.query(`CREATE FUNCTION syn_slow_run() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.reserved_bytes > OLD.reserved_bytes THEN PERFORM pg_sleep(0.5); END IF; RETURN NEW; END $$`);
+      await c.query(
+        `CREATE FUNCTION syn_slow_run() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.reserved_bytes > OLD.reserved_bytes THEN PERFORM pg_sleep(0.5); END IF; RETURN NEW; END $$`,
+      );
       await c.query(`CREATE TRIGGER syn_slow_run AFTER UPDATE ON report_upload_runs FOR EACH ROW EXECUTE FUNCTION syn_slow_run()`);
     });
   });
@@ -91,7 +134,13 @@ describe('a declaration and a commit for the same report', () => {
     await sleep(150);
     const commit = reports.commitAttempt(identity(first)); // takes the report row, then wants the run row
     const [d, c] = await Promise.allSettled([declare, commit]);
-    expect([d.status, c.status].map((s, n) => [n === 0 ? 'declare' : 'commit', s, (n === 0 ? d : c).status === 'rejected' ? ((n === 0 ? d : c) as PromiseRejectedResult).reason?.code : undefined])).toEqual([
+    expect(
+      [d.status, c.status].map((s, n) => [
+        n === 0 ? 'declare' : 'commit',
+        s,
+        (n === 0 ? d : c).status === 'rejected' ? ((n === 0 ? d : c) as PromiseRejectedResult).reason?.code : undefined,
+      ]),
+    ).toEqual([
       ['declare', 'fulfilled', undefined],
       ['commit', 'fulfilled', undefined],
     ]);
@@ -127,7 +176,10 @@ describe('a deadlock the order does not prevent is retried once', () => {
     const real = Database.prototype.withTenant;
     let failing = 0;
     jest.spyOn(Database.prototype, 'withTenant').mockImplementation(function (this: Database, ...args: Parameters<Database['withTenant']>) {
-      if (failing > 0) { failing -= 1; return Promise.reject(conflict()); }
+      if (failing > 0) {
+        failing -= 1;
+        return Promise.reject(conflict());
+      }
       return real.apply(this, args);
     });
     failing = 1;
@@ -140,7 +192,10 @@ describe('a deadlock the order does not prevent is retried once', () => {
     await reports.validateAttempt(i, writer);
     await reports.settleAttempt(i, writer, 'stored', 'version-1');
     jest.spyOn(Database.prototype, 'withTenant').mockImplementation(function (this: Database, ...args: Parameters<Database['withTenant']>) {
-      if (failing > 0) { failing -= 1; return Promise.reject(conflict()); }
+      if (failing > 0) {
+        failing -= 1;
+        return Promise.reject(conflict());
+      }
       return real.apply(this, args);
     });
     failing = 1;

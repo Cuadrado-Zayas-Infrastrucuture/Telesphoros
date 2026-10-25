@@ -30,10 +30,34 @@ afterAll(async () => {
 
 const tenant = () => `syn-sweep-${randomUUID().slice(0, 8)}`;
 async function newReport(tenantId: string, size = 1000): Promise<ReportRecord> {
-  const p = { id: randomUUID(), tenantId, createdBy: 'syn-actor', label: `SYN-${randomUUID().slice(0, 8)}`, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  const p = {
+    id: randomUUID(),
+    tenantId,
+    createdBy: 'syn-actor',
+    label: `SYN-${randomUUID().slice(0, 8)}`,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
   await patients.insert(p);
-  const r: ReportRecord = { id: randomUUID(), tenantId, createdBy: 'syn-actor', patientId: p.id, type: 'vcf', filename: 'a.vcf', sizeBytes: size, status: 'received',
-    storageKey: null, contentType: null, sha256: null, uploadedAt: null, objectVersion: null, uploadRequestedBy: null, uploadedBy: null, createdAt: p.createdAt, updatedAt: p.createdAt };
+  const r: ReportRecord = {
+    id: randomUUID(),
+    tenantId,
+    createdBy: 'syn-actor',
+    patientId: p.id,
+    type: 'vcf',
+    filename: 'a.vcf',
+    sizeBytes: size,
+    status: 'received',
+    storageKey: null,
+    contentType: null,
+    sha256: null,
+    uploadedAt: null,
+    objectVersion: null,
+    uploadRequestedBy: null,
+    uploadedBy: null,
+    createdAt: p.createdAt,
+    updatedAt: p.createdAt,
+  };
   await reports.insert(r);
   return r;
 }
@@ -46,10 +70,17 @@ const sweepRegistered = async (c: Client, tenantId: string, options: Parameters<
 const asApp = async <T>(work: (c: Client) => Promise<T>) => {
   const c = new Client({ connectionString: db.appUrl });
   await c.connect();
-  try { return await work(c); } finally { await c.end(); }
+  try {
+    return await work(c);
+  } finally {
+    await c.end();
+  }
 };
 const stateOf = (id: string) => owner(async (c) => (await c.query('SELECT state FROM report_upload_attempts WHERE id = $1', [id])).rows[0]?.state as string);
-const reserved = (t: string) => owner(async (c) => Number((await c.query('SELECT reserved_bytes FROM report_upload_runs WHERE tenant_id = $1 AND run_id = $2', [t, organizationRunId(t)])).rows[0]?.reserved_bytes ?? 0));
+const reserved = (t: string) =>
+  owner(async (c) =>
+    Number((await c.query('SELECT reserved_bytes FROM report_upload_runs WHERE tenant_id = $1 AND run_id = $2', [t, organizationRunId(t)])).rows[0]?.reserved_bytes ?? 0),
+  );
 const age = (id: string, seconds: number) => owner((c) => c.query(`UPDATE report_upload_attempts SET lease_until = now() - $2 * interval '1 second' WHERE id = $1`, [id, seconds]));
 
 describe('closing abandoned attempts', () => {
@@ -81,7 +112,12 @@ describe('closing abandoned attempts', () => {
     expect(await reserved(t)).toBe(4000 + 16000);
     // Running it again finds nothing (idempotent), and the report whose attempt was closed can declare again.
     expect(await owner((c) => sweepRegistered(c, t, { graceSeconds: 86400, dryRun: false }))).toMatchObject({ released: 0 });
-    const again = await declareUpload(reports, old, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf', expectedRevision: (await reports.findById(t, old.id))!.uploadRevision });
+    const again = await declareUpload(reports, old, {
+      principal: 'p',
+      sha256: HASH,
+      contentType: 'text/x-vcf',
+      expectedRevision: (await reports.findById(t, old.id))!.uploadRevision,
+    });
     expect(again).toBeDefined();
   });
 
@@ -89,7 +125,9 @@ describe('closing abandoned attempts', () => {
     const t = tenant();
     const r = await newReport(t, 900);
     const h = (await declareUpload(reports, r, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!;
-    await owner((c) => c.query(`UPDATE report_upload_attempts SET state = 'cancelled', writer = $2, lease_until = now() + interval '1 hour' WHERE id = $1`, [h.attempt.id, randomUUID()]));
+    await owner((c) =>
+      c.query(`UPDATE report_upload_attempts SET state = 'cancelled', writer = $2, lease_until = now() + interval '1 hour' WHERE id = $1`, [h.attempt.id, randomUUID()]),
+    );
     expect(await owner((c) => sweepRegistered(c, t, { graceSeconds: 0, dryRun: false }))).toMatchObject({ released: 0 });
     expect(await stateOf(h.attempt.id)).toBe('cancelled');
     await owner((c) => c.query(`UPDATE report_upload_attempts SET writer = NULL WHERE id = $1`, [h.attempt.id]));
@@ -112,7 +150,7 @@ describe('closing abandoned attempts', () => {
     expect(await reserved(t)).toBe(0);
   });
 
-  it('sweeps only the organization it is given, refuses the application login, and never touches another organization\'s attempts', async () => {
+  it("sweeps only the organization it is given, refuses the application login, and never touches another organization's attempts", async () => {
     const [t1, t2] = [tenant(), tenant()];
     const [r1, r2] = await Promise.all([newReport(t1, 100), newReport(t2, 200)]);
     const h1 = (await declareUpload(reports, r1, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!;
@@ -167,16 +205,33 @@ describe('the uploads sweep command', () => {
   it('is the same sweep the scheduled job runs: the job closes exactly what the operator command would, for its own organization only', async () => {
     const [t1, t2] = [tenant(), tenant()];
     const [r1, r2, r3] = await Promise.all([newReport(t1, 100), newReport(t1, 250), newReport(t2, 400)]);
-    const [h1, h2, h3] = [(await declareUpload(reports, r1, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!, (await declareUpload(reports, r2, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!, (await declareUpload(reports, r3, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!];
+    const [h1, h2, h3] = [
+      (await declareUpload(reports, r1, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!,
+      (await declareUpload(reports, r2, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!,
+      (await declareUpload(reports, r3, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!,
+    ];
     await age(h1.attempt.id, 3 * 86400);
     await age(h3.attempt.id, 3 * 86400);
     // t2 is in the registry and has a job; t1 is the one swept.
-    await owner(async (c) => { for (const t of [t1, t2]) await c.query(`INSERT INTO tenants (id, display_name, created_by, changed_by) VALUES ($1, $1, 'syn', 'syn') ON CONFLICT DO NOTHING`, [t]); });
+    await owner(async (c) => {
+      for (const t of [t1, t2]) await c.query(`INSERT INTO tenants (id, display_name, created_by, changed_by) VALUES ($1, $1, 'syn', 'syn') ON CONFLICT DO NOTHING`, [t]);
+    });
     const dry = await owner((c) => sweepRegistered(c, t1, { graceSeconds: 86400, dryRun: true })); // what the operator command would close
-    const jobId = (await owner((c) => c.query(`INSERT INTO jobs (tenant_id, type, payload, idempotency_key, requested_by, state, attempts, locked_by, lease_until, started_at)
-      VALUES ($1, 'uploads.sweep', '{}', 'sweep-parity', 'system:scheduler', 'running', 1, 'w1', now() + interval '5 minutes', now()) RETURNING id`, [t1]))).rows[0].id as string;
+    const jobId = (
+      await owner((c) =>
+        c.query(
+          `INSERT INTO jobs (tenant_id, type, payload, idempotency_key, requested_by, state, attempts, locked_by, lease_until, started_at)
+      VALUES ($1, 'uploads.sweep', '{}', 'sweep-parity', 'system:scheduler', 'running', 1, 'w1', now() + interval '5 minutes', now()) RETURNING id`,
+          [t1],
+        ),
+      )
+    ).rows[0].id as string;
     const viaJob = await withAdmin(db.workerUrl, async (c) => (await c.query('SELECT * FROM job_uploads_sweep($1, $2)', [jobId, 'w1'])).rows[0]);
-    expect({ released: viaJob.released, releasedBytes: Number(viaJob.released_bytes), objectsKept: viaJob.objects_kept }).toEqual({ released: dry.released, releasedBytes: dry.releasedBytes, objectsKept: dry.objectsKept });
+    expect({ released: viaJob.released, releasedBytes: Number(viaJob.released_bytes), objectsKept: viaJob.objects_kept }).toEqual({
+      released: dry.released,
+      releasedBytes: dry.releasedBytes,
+      objectsKept: dry.objectsKept,
+    });
     expect(await stateOf(h1.attempt.id)).toBe('cleaned');
     expect(await stateOf(h2.attempt.id)).toBe('declared');
     expect(await stateOf(h3.attempt.id)).toBe('declared'); // another organization's old attempt is not this job's
@@ -185,11 +240,10 @@ describe('the uploads sweep command', () => {
     await expect(withAdmin(db.workerUrl, (c) => c.query('SELECT * FROM job_uploads_sweep($1, $2)', [jobId, 'someone-else']))).rejects.toThrow(/does not hold that job/);
   });
 
-  it('computes an organization\'s scope id exactly as the application does', async () => {
+  it("computes an organization's scope id exactly as the application does", async () => {
     const ids = ['syn-a', 'acme-pharmacy', 'x', 'a'.repeat(63), 'tenant-ünï', '', 'with space'];
     for (const t of ids) {
       expect([t, (await owner((c) => c.query('SELECT uploads_organization_run_id($1) AS id', [t]))).rows[0].id]).toEqual([t, organizationRunId(t)]);
     }
   });
 });
-

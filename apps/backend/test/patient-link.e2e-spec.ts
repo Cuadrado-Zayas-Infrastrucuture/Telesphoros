@@ -85,7 +85,7 @@ import { bearer } from './helpers/tokens';
       await lab.verifyLink(await lab.person('both', ['admin', 'reviewer']), s.reportId).expect(201); // control: administration plus a deciding role
     });
 
-    it('answers 404 for another organization\'s report and 401 without a token', async () => {
+    it("answers 404 for another organization's report and 401 without a token", async () => {
       const s = await uploaded();
       expect((await lab.verifyLink(await lab.person('x', ['clinician'], 'another-organization'), s.reportId)).status).toBe(404);
       await lab.api().post(`/api/v1/reports/${s.reportId}/patient-link/decisions`).send(attest).expect(401);
@@ -100,11 +100,13 @@ import { bearer } from './helpers/tokens';
   });
 
   describe('verifying by an identifier', () => {
-    it('verifies when the identifier read off the report matches one registered for the report\'s patient (any letter case or spacing), and shows it as the stronger method', async () => {
+    it("verifies when the identifier read off the report matches one registered for the report's patient (any letter case or spacing), and shows it as the stronger method", async () => {
       const s = await uploaded();
       const value = secretNumber();
       await registerIdentifier(s.creator, s.patientId, 'hospital-a-mrn', value).expect(201);
-      const res = await lab.decideLink(s.decider, s.reportId, { decision: 'verified', method: 'identifier-match', system: 'hospital-a-mrn', value: `  ${value.toLowerCase()} ` }).expect(201);
+      const res = await lab
+        .decideLink(s.decider, s.reportId, { decision: 'verified', method: 'identifier-match', system: 'hospital-a-mrn', value: `  ${value.toLowerCase()} ` })
+        .expect(201);
       expect(patientLinkDecisionDtoSchema.safeParse(res.body).success).toBe(true);
       expect(res.body).toMatchObject({ decision: 'verified', method: 'identifier-match', basisCode: null });
       expect(JSON.stringify(res.body)).not.toContain(value);
@@ -112,7 +114,7 @@ import { bearer } from './helpers/tokens';
       expect(link).toMatchObject({ state: 'verified', staleDecision: false, decision: { id: res.body.id, method: 'identifier-match' } });
     });
 
-    it('does not verify, and records NOTHING, for a wrong value, another system, another patient\'s identifier or a withdrawn one (409 identifier-mismatch)', async () => {
+    it("does not verify, and records NOTHING, for a wrong value, another system, another patient's identifier or a withdrawn one (409 identifier-mismatch)", async () => {
       const s = await uploaded();
       const other = await lab.patient(s.creator);
       const mine = secretNumber();
@@ -156,7 +158,9 @@ import { bearer } from './helpers/tokens';
       const verified = await lab.decideLink(s.decider, s.reportId, attest).expect(201);
       expect(verified.body).toMatchObject({ decision: 'verified', method: 'person-confirmed', basisCode: 'no-identifier-on-report' });
       expect((await lab.patientLink(s.decider, s.reportId)).body.state).toBe('verified');
-      const rejected = await lab.decideLink(await lab.person('rev2', ['reviewer']), s.reportId, { decision: 'rejected', method: 'person-confirmed', basisCode: 'different-person' }).expect(201);
+      const rejected = await lab
+        .decideLink(await lab.person('rev2', ['reviewer']), s.reportId, { decision: 'rejected', method: 'person-confirmed', basisCode: 'different-person' })
+        .expect(201);
       expect(rejected.body).toMatchObject({ decision: 'rejected', basisCode: 'different-person' });
       const link = (await lab.patientLink(s.decider, s.reportId)).body;
       expect(link).toMatchObject({ state: 'rejected', decision: { id: rejected.body.id }, staleDecision: false });
@@ -211,7 +215,11 @@ import { bearer } from './helpers/tokens';
       const before = await events();
       await lab.decideLink(s.decider, s.reportId, { decision: 'verified', method: 'identifier-match', system: 'hospital-a-mrn', value }).expect(201);
       expect(await events()).toBe(before + 1);
-      const event = (await lab.row(`SELECT event_type, subject_table, actor_sub FROM ledger_events WHERE tenant_id = $1 AND event_type = 'patient-link-decision' ORDER BY seq DESC LIMIT 1`, [lab.tenant]))[0];
+      const event = (
+        await lab.row(`SELECT event_type, subject_table, actor_sub FROM ledger_events WHERE tenant_id = $1 AND event_type = 'patient-link-decision' ORDER BY seq DESC LIMIT 1`, [
+          lab.tenant,
+        ])
+      )[0];
       expect(event).toEqual({ event_type: 'patient-link-decision', subject_table: 'report_patient_decisions', actor_sub: s.decider.sub });
       await withAdmin(db.adminUrl, async (c) => {
         const tables = (await c.query(`SELECT tablename FROM pg_tables WHERE schemaname = 'public'`)).rows.map((r) => r.tablename as string);

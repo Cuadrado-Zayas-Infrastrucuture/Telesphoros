@@ -72,10 +72,10 @@ beforeAll(async () => {
   for (const owner of ['alice', 'bob']) {
     const patient = await admin.query(`INSERT INTO patients (owner_id, label) VALUES ($1, $2) RETURNING id`, [owner, `SYN-${owner}`]);
     ids[owner] = patient.rows[0].id;
-    const report = await admin.query(
-      `INSERT INTO reports (owner_id, patient_id, type, original_filename, size_bytes) VALUES ($1, $2, 'vcf', 'a.vcf', 5) RETURNING id`,
-      [owner, patient.rows[0].id],
-    );
+    const report = await admin.query(`INSERT INTO reports (owner_id, patient_id, type, original_filename, size_bytes) VALUES ($1, $2, 'vcf', 'a.vcf', 5) RETURNING id`, [
+      owner,
+      patient.rows[0].id,
+    ]);
     await admin.query(
       `INSERT INTO recommendations (owner_id, patient_id, report_id, gene, drug, phenotype, summary, strength, guideline_version)
        VALUES ($1, $2, $3, 'G', 'd', 'p', 's', 'Strong', 'v0')`,
@@ -95,10 +95,12 @@ afterAll(async () => {
 });
 
 const snapshot = async () =>
-  (await admin.query(`SELECT 'patients' AS t, id, created_at, updated_at, deleted_at FROM patients
+  (
+    await admin.query(`SELECT 'patients' AS t, id, created_at, updated_at, deleted_at FROM patients
                       UNION ALL SELECT 'reports', id, created_at, updated_at, deleted_at FROM reports
                       UNION ALL SELECT 'recommendations', id, created_at, updated_at, deleted_at FROM recommendations
-                      ORDER BY 1, 2`)).rows;
+                      ORDER BY 1, 2`)
+  ).rows;
 const asApp = async <T>(settings: Record<string, string>, work: (c: Client) => Promise<T>) => {
   const c = new Client({ connectionString: urlFor(name) });
   await c.connect();
@@ -124,7 +126,10 @@ describe('migration 0003 on a database that already holds owner-era data', () =>
 
     // Every former owner is now a tenant of one, and the creator is backfilled with the same value.
     const rows = (await admin.query(`SELECT tenant_id, created_by FROM patients ORDER BY tenant_id`)).rows;
-    expect(rows).toEqual([{ tenant_id: 'alice', created_by: 'alice' }, { tenant_id: 'bob', created_by: 'bob' }]);
+    expect(rows).toEqual([
+      { tenant_id: 'alice', created_by: 'alice' },
+      { tenant_id: 'bob', created_by: 'bob' },
+    ]);
     for (const table of ['reports', 'recommendations']) {
       const sample = (await admin.query(`SELECT count(*)::int AS n FROM ${table} WHERE created_by = tenant_id AND tenant_id IN ('alice','bob')`)).rows[0];
       expect({ table, n: sample.n }).toEqual({ table, n: 2 });
@@ -134,7 +139,9 @@ describe('migration 0003 on a database that already holds owner-era data', () =>
   });
 
   it('row-level security is still ENFORCED for the table owner afterwards (the temporary lift was undone)', async () => {
-    const flags = (await admin.query(`SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname IN ('patients','reports','recommendations') ORDER BY relname`)).rows;
+    const flags = (
+      await admin.query(`SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname IN ('patients','reports','recommendations') ORDER BY relname`)
+    ).rows;
     expect(flags).toEqual([
       { relname: 'patients', relrowsecurity: true, relforcerowsecurity: true },
       { relname: 'recommendations', relrowsecurity: true, relforcerowsecurity: true },
@@ -145,7 +152,9 @@ describe('migration 0003 on a database that already holds owner-era data', () =>
   });
 
   it('the policies bind on the tenant setting; the old owner setting finds nothing and fails closed', async () => {
-    const policies = (await admin.query(`SELECT tablename, policyname FROM pg_policies WHERE schemaname = 'public' AND tablename IN ('patients','reports','recommendations') ORDER BY tablename`)).rows;
+    const policies = (
+      await admin.query(`SELECT tablename, policyname FROM pg_policies WHERE schemaname = 'public' AND tablename IN ('patients','reports','recommendations') ORDER BY tablename`)
+    ).rows;
     expect(policies).toEqual([
       { tablename: 'patients', policyname: 'patients_tenant' },
       { tablename: 'recommendations', policyname: 'recommendations_tenant' },

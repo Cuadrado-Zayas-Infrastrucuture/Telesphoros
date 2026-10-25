@@ -21,13 +21,17 @@ describe('health (liveness) and ready (readiness)', () => {
     const requestId = 'health-readiness-redaction';
     const app = await createTestApp({
       readinessChecks: [
-        { name: 'database', check: async () => { throw new Error('connection refused to db.internal:5432'); } },
+        {
+          name: 'database',
+          check: async () => {
+            throw new Error('connection refused to db.internal:5432');
+          },
+        },
         { name: 'cache', check: async () => undefined },
       ],
     });
     try {
-      const res = await request(app.getHttpServer()).get('/api/v1/ready')
-        .set('x-request-id', requestId).expect(503);
+      const res = await request(app.getHttpServer()).get('/api/v1/ready').set('x-request-id', requestId).expect(503);
       expect(errorResponseSchema.safeParse(res.body).success).toBe(true);
       expect(res.headers['x-request-id']).toBe(requestId);
       expect(res.body.error.requestId).toBe(requestId);
@@ -43,11 +47,17 @@ describe('health (liveness) and ready (readiness)', () => {
   it.each(['db.internal', '5432', 'refused'])('redacts %s while preserving a valid request ID containing 5432', async (reason) => {
     const requestId = '12345678-5432-4234-8234-123456789abc';
     const app = await createTestApp({
-      readinessChecks: [{ name: 'database', check: async () => { throw new Error(reason); } }],
+      readinessChecks: [
+        {
+          name: 'database',
+          check: async () => {
+            throw new Error(reason);
+          },
+        },
+      ],
     });
     try {
-      const res = await request(app.getHttpServer()).get('/api/v1/ready')
-        .set('x-request-id', requestId).expect(503);
+      const res = await request(app.getHttpServer()).get('/api/v1/ready').set('x-request-id', requestId).expect(503);
       expect(errorResponseSchema.safeParse(res.body).success).toBe(true);
       expect(res.headers['x-request-id']).toBe(requestId);
       // Exact equality rejects leaked messages, details and extra fields while
@@ -72,7 +82,12 @@ describe('health (liveness) and ready (readiness)', () => {
   ])('ready returns 503 while a dependency is down, but health stays 200 ($label)', async ({ suppliedId }) => {
     const app = await createTestApp({
       readinessChecks: [
-        { name: 'database', check: async () => { throw new Error('connection refused to db.internal:5432'); } },
+        {
+          name: 'database',
+          check: async () => {
+            throw new Error('connection refused to db.internal:5432');
+          },
+        },
         { name: 'cache', check: async () => undefined },
       ],
     });

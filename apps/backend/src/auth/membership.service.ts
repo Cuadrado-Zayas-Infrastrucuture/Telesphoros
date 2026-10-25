@@ -47,7 +47,10 @@ export class MembershipService {
       membership = await this.memberships.find(identity.tenantId, identity.sub);
     } catch (error) {
       // Operators need to know the authority store is the problem; callers learn only that the service is unavailable.
-      this.logger.error({ event: 'membership-lookup-failed', tenantId: identity.tenantId, error: (error as Error).name }, 'Could not establish who the caller is allowed to be; refusing the request');
+      this.logger.error(
+        { event: 'membership-lookup-failed', tenantId: identity.tenantId, error: (error as Error).name },
+        'Could not establish who the caller is allowed to be; refusing the request',
+      );
       throw AppException.unavailable('The service is temporarily unavailable. Nothing was done; try again shortly.');
     }
     if (!membership || membership.status !== 'active') {

@@ -29,7 +29,9 @@ describe('the retired /recommendations route', () => {
     ['PATCH', () => api().patch(`${BASE}/${randomUUID()}`)],
     ['DELETE', () => api().delete(`${BASE}/${randomUUID()}`)],
   ])('%s answers 404 NOT_FOUND for a signed-in clinician', async (_name, call) => {
-    const res = await call().set(bearer(await clinicianA())).send({ gene: 'X' });
+    const res = await call()
+      .set(bearer(await clinicianA()))
+      .send({ gene: 'X' });
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
   });

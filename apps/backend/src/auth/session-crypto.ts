@@ -17,7 +17,10 @@ export const MAX_ACCESS_TOKEN_BYTES = 8192;
 export class SessionCrypto {
   readonly #keys = new Map<string, Buffer>();
 
-  constructor(private readonly activeKeyId: string, keys: ReadonlyMap<string, Buffer>) {
+  constructor(
+    private readonly activeKeyId: string,
+    keys: ReadonlyMap<string, Buffer>,
+  ) {
     if (!keyId.test(activeKeyId) || keys.size < 1 || keys.size > 8 || !keys.has(activeKeyId)) throw new SessionCustodyError('invalid');
     for (const [id, key] of keys) {
       if (!keyId.test(id) || !Buffer.isBuffer(key) || key.length !== 32) throw new SessionCustodyError('invalid');
@@ -25,7 +28,9 @@ export class SessionCrypto {
     }
   }
 
-  newHandle(): string { return randomBytes(32).toString('base64url'); }
+  newHandle(): string {
+    return randomBytes(32).toString('base64url');
+  }
 
   hashHandle(handle: string): string {
     this.decode(handle, 32);
@@ -45,7 +50,9 @@ export class SessionCrypto {
       const locator = locatorSchema.parse(JSON.parse(this.open('locator', '', value, 1024)));
       this.decode(locator.handle, 32);
       return locator;
-    } catch { return undefined; }
+    } catch {
+      return undefined;
+    }
   }
 
   sealCredential(token: string, context: string): string {
@@ -88,7 +95,9 @@ export class SessionCrypto {
       decipher.setAAD(Buffer.from(JSON.stringify(['m51a', purpose, id, context])));
       decipher.setAuthTag(this.decode(tag, 16));
       return Buffer.concat([decipher.update(this.decode(body)), decipher.final()]).toString('utf8');
-    } catch { throw new SessionCustodyError('invalid'); }
+    } catch {
+      throw new SessionCustodyError('invalid');
+    }
   }
 
   private decode(value: string, length?: number): Buffer {

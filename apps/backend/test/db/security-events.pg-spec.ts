@@ -48,7 +48,10 @@ describe('the table cannot be changed, and only the auditor can read it', () => 
   it('refuses update, delete and truncate even to the owner', async () => {
     const ref = person();
     await owner(async (c) => {
-      await c.query(`INSERT INTO security_events (tenant_id, event_type, outcome, actor_kind, actor_ref, subject_kind, subject_ref) VALUES ($1, 'access.refused', 'refused', 'system', 'x', 'person', $2)`, [TENANT, ref]);
+      await c.query(
+        `INSERT INTO security_events (tenant_id, event_type, outcome, actor_kind, actor_ref, subject_kind, subject_ref) VALUES ($1, 'access.refused', 'refused', 'system', 'x', 'person', $2)`,
+        [TENANT, ref],
+      );
       await expect(c.query(`UPDATE security_events SET outcome = 'succeeded' WHERE subject_ref = $1`, [ref])).rejects.toMatchObject({ code: '23000' });
       await expect(c.query(`DELETE FROM security_events WHERE subject_ref = $1`, [ref])).rejects.toMatchObject({ code: '23000' });
       await expect(c.query('TRUNCATE security_events')).rejects.toMatchObject({ code: '23000' });
@@ -68,7 +71,12 @@ describe('the table cannot be changed, and only the auditor can read it', () => 
     }
     await as(db.auditorUrl, async (c) => {
       await expect(c.query('SELECT count(*) FROM security_events')).resolves.toBeDefined();
-      for (const statement of [`INSERT INTO security_events (event_type, outcome, actor_kind, actor_ref, subject_kind, subject_ref) VALUES ('access.refused', 'refused', 'system', 'x', 'person', 'y')`, 'DELETE FROM security_events', 'SELECT * FROM tenant_memberships', 'SELECT * FROM patients']) {
+      for (const statement of [
+        `INSERT INTO security_events (event_type, outcome, actor_kind, actor_ref, subject_kind, subject_ref) VALUES ('access.refused', 'refused', 'system', 'x', 'person', 'y')`,
+        'DELETE FROM security_events',
+        'SELECT * FROM tenant_memberships',
+        'SELECT * FROM patients',
+      ]) {
         await expect(c.query(statement)).rejects.toMatchObject({ code: '42501' });
       }
     });
@@ -79,8 +87,22 @@ describe('the table cannot be changed, and only the auditor can read it', () => 
   });
 
   it('has no file-link event type at all, even for the owner', async () => {
-    await expect(owner((c) => c.query(`INSERT INTO security_events (tenant_id, event_type, outcome, actor_kind, actor_ref, subject_kind, subject_ref) VALUES ($1, 'file.link.issued', 'succeeded', 'person', 'x', 'person', 'y')`, [TENANT]))).rejects.toMatchObject({ code: '23514' });
-    await expect(owner((c) => c.query(`INSERT INTO security_events (tenant_id, event_type, outcome, actor_kind, actor_ref, subject_kind, subject_ref) VALUES ($1, 'access.refused', 'refused', 'person', 'x', 'report', 'y')`, [TENANT]))).rejects.toMatchObject({ code: '23514' });
+    await expect(
+      owner((c) =>
+        c.query(
+          `INSERT INTO security_events (tenant_id, event_type, outcome, actor_kind, actor_ref, subject_kind, subject_ref) VALUES ($1, 'file.link.issued', 'succeeded', 'person', 'x', 'person', 'y')`,
+          [TENANT],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: '23514' });
+    await expect(
+      owner((c) =>
+        c.query(
+          `INSERT INTO security_events (tenant_id, event_type, outcome, actor_kind, actor_ref, subject_kind, subject_ref) VALUES ($1, 'access.refused', 'refused', 'person', 'x', 'report', 'y')`,
+          [TENANT],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: '23514' });
   });
 
   it('keeps the application function callable by the application role only', async () => {
@@ -98,7 +120,16 @@ describe('what the application may write, and as whom', () => {
     const ref = randomUUID();
     await asApplication((c) => append(c, 'access.refused', 'refused', 'person', ref, { reason: 'no-membership' }, 'req-1'), 'tenant-a', 'person-a');
     const [row] = await events('subject_ref = $1', [ref]);
-    expect(row).toMatchObject({ tenant_id: 'tenant-a', actor_kind: 'person', actor_ref: 'person-a', event_type: 'access.refused', outcome: 'refused', subject_kind: 'person', request_id: 'req-1', details: { reason: 'no-membership' } });
+    expect(row).toMatchObject({
+      tenant_id: 'tenant-a',
+      actor_kind: 'person',
+      actor_ref: 'person-a',
+      event_type: 'access.refused',
+      outcome: 'refused',
+      subject_kind: 'person',
+      request_id: 'req-1',
+      details: { reason: 'no-membership' },
+    });
     expect(row.db_user).toBe('telesphoros_test_app');
   });
 
@@ -117,12 +148,24 @@ describe('what the application may write, and as whom', () => {
   it('refuses details that could carry a secret: unknown keys, URLs, dotted or spaced strings, long strings, nesting past the allowlist, oversize', async () => {
     const ref = randomUUID();
     const bad: unknown[] = [
-      { url: 'x' }, { reason: 'https://example.test/file?X-Amz-Signature=abc' }, { reason: 'eyJhbGciOiJIUzI1NiJ9.e30.sig' }, { reason: 'has space' }, { reason: 'a'.repeat(65) },
-      { reason: 'name.pdf' }, { roles: ['clinician', 'x/y'] }, { before: { nested: 'https://x.test' } }, { reason: 'ok', extra: 'no' }, { reportId: 'abc' }, { ttlSeconds: 1 }, [],
+      { url: 'x' },
+      { reason: 'https://example.test/file?X-Amz-Signature=abc' },
+      { reason: 'eyJhbGciOiJIUzI1NiJ9.e30.sig' },
+      { reason: 'has space' },
+      { reason: 'a'.repeat(65) },
+      { reason: 'name.pdf' },
+      { roles: ['clinician', 'x/y'] },
+      { before: { nested: 'https://x.test' } },
+      { reason: 'ok', extra: 'no' },
+      { reportId: 'abc' },
+      { ttlSeconds: 1 },
+      [],
       { roles: Array.from({ length: 400 }, () => 'abcdefghij') },
     ];
     for (const details of bad) {
-      await expect(asApplication((c) => append(c, 'access.refused', 'refused', 'person', ref, details))).rejects.toMatchObject({ code: expect.stringMatching(/^(23514|22023|42501)$/) });
+      await expect(asApplication((c) => append(c, 'access.refused', 'refused', 'person', ref, details))).rejects.toMatchObject({
+        code: expect.stringMatching(/^(23514|22023|42501)$/),
+      });
     }
     // Controls: values of the allowed shape are accepted.
     await asApplication((c) => append(c, 'access.refused', 'refused', 'person', ref, { reason: 'no-membership' }));
@@ -138,11 +181,21 @@ describe('what the application may write, and as whom', () => {
     await refuse('removed', 'tenant-other');
     await refuse('removed', TENANT, `${who}-2`);
     const rows = await events(`actor_ref IN ($1, $2)`, [who, `${who}-2`]);
-    expect(rows.map((r) => `${r.tenant_id}/${r.actor_ref}/${r.details.reason}`)).toEqual([`${TENANT}/${who}/removed`, `${TENANT}/${who}/token-revoked`, `tenant-other/${who}/removed`, `${TENANT}/${who}-2/removed`]);
+    expect(rows.map((r) => `${r.tenant_id}/${r.actor_ref}/${r.details.reason}`)).toEqual([
+      `${TENANT}/${who}/removed`,
+      `${TENANT}/${who}/token-revoked`,
+      `tenant-other/${who}/removed`,
+      `${TENANT}/${who}-2/removed`,
+    ]);
     // After the minute the same refusal is recorded again (control: the throttle is a window, not a permanent mute).
     const old = person();
-    await owner((c) => c.query(`INSERT INTO security_events (occurred_at, tenant_id, event_type, outcome, actor_kind, actor_ref, subject_kind, subject_ref, details)
-      VALUES (clock_timestamp() - interval '2 minutes', $1, 'access.refused', 'refused', 'person', $2, 'person', $2, '{"reason":"removed"}')`, [TENANT, old]));
+    await owner((c) =>
+      c.query(
+        `INSERT INTO security_events (occurred_at, tenant_id, event_type, outcome, actor_kind, actor_ref, subject_kind, subject_ref, details)
+      VALUES (clock_timestamp() - interval '2 minutes', $1, 'access.refused', 'refused', 'person', $2, 'person', $2, '{"reason":"removed"}')`,
+        [TENANT, old],
+      ),
+    );
     await refuse('removed', TENANT, old);
     expect(await events('actor_ref = $1', [old])).toHaveLength(2);
   });
@@ -162,7 +215,9 @@ describe('a refused file is recorded (0022)', () => {
     // A fresh person each time, so the throttle (which answers before the table's checks) cannot be what refuses.
     for (const details of [{ filename: 'x' }, { reason: 'report.pdf' }, { reason: 'has space' }, { reason: 'a'.repeat(65) }, { reason: 'structure', sha256: 'abc' }]) {
       const fresh = person();
-      await expect(asApplication((c) => append(c, 'intake.rejected', 'refused', 'person', fresh, details), TENANT, fresh)).rejects.toMatchObject({ code: expect.stringMatching(/^(23514|22023)$/) });
+      await expect(asApplication((c) => append(c, 'intake.rejected', 'refused', 'person', fresh, details), TENANT, fresh)).rejects.toMatchObject({
+        code: expect.stringMatching(/^(23514|22023)$/),
+      });
     }
     await expect(asApplication((c) => append(c, 'intake.rejected', 'refused', 'person', who, { reason: 'size' }), null, who)).rejects.toMatchObject({ code: '42501' });
   });
@@ -170,17 +225,23 @@ describe('a refused file is recorded (0022)', () => {
   it('reverts only with the deliberate setting once a rejection is recorded, and then forgets the type', async () => {
     const disposable = await createEphemeralDatabase();
     try {
-      const asApp = async (work: (c: Client) => Promise<unknown>) => as(disposable.appUrl, async (c) => {
-        await c.query(`SELECT set_config('app.current_tenant_id', 'tenant-rev', false)`);
-        await c.query(`SELECT set_config('app.current_actor', 'person-rev', false)`);
-        return work(c);
-      });
+      const asApp = async (work: (c: Client) => Promise<unknown>) =>
+        as(disposable.appUrl, async (c) => {
+          await c.query(`SELECT set_config('app.current_tenant_id', 'tenant-rev', false)`);
+          await c.query(`SELECT set_config('app.current_actor', 'person-rev', false)`);
+          return work(c);
+        });
       await asApp((c) => append(c, 'intake.rejected', 'refused', 'person', 'person-rev', { reason: 'structure' }));
       const aboveRejections = revertAbove('intake_rejected_event');
       expect(await withAdmin(disposable.adminUrl, (c) => migrateDown(c, aboveRejections.steps))).toEqual(aboveRejections.reverted); // the job queue (nothing recorded) is not what is being tested
       await expect(withAdmin(disposable.adminUrl, (c) => migrateDown(c, 1))).rejects.toThrow(/Refusing to drop recorded intake rejections/);
       expect((await withAdmin(disposable.adminUrl, (c) => c.query(`SELECT 1 FROM security_events WHERE event_type = 'intake.rejected'`))).rowCount).toBe(1);
-      expect(await withAdmin(disposable.adminUrl, async (c) => { await c.query(`SET telesphoros.allow_audit_drop = 'yes'`); return migrateDown(c, 1); })).toEqual(['0022']);
+      expect(
+        await withAdmin(disposable.adminUrl, async (c) => {
+          await c.query(`SET telesphoros.allow_audit_drop = 'yes'`);
+          return migrateDown(c, 1);
+        }),
+      ).toEqual(['0022']);
       await expect(asApp((c) => append(c, 'intake.rejected', 'refused', 'person', 'person-rev', { reason: 'structure' }))).rejects.toMatchObject({ code: '42501' });
       await asApp((c) => append(c, 'access.refused', 'refused', 'person', 'person-rev', { reason: 'removed' })); // control: the older type still works
       expect(await withAdmin(disposable.adminUrl, (c) => migrateUp(c))).toEqual(versionsFrom('intake_rejected_event'));
@@ -211,7 +272,8 @@ describe('membership changes are recorded by the database, in the same transacti
       ['membership.removed', { before: ['clinician', 'reviewer'] }],
       ['membership.reinstated', { after: ['admin'] }],
     ]);
-    for (const r of rows) expect(r).toMatchObject({ tenant_id: TENANT, outcome: 'succeeded', actor_kind: 'operator', actor_ref: 'ops-person', subject_kind: 'person', db_user: expect.any(String) });
+    for (const r of rows)
+      expect(r).toMatchObject({ tenant_id: TENANT, outcome: 'succeeded', actor_kind: 'operator', actor_ref: 'ops-person', subject_kind: 'person', db_user: expect.any(String) });
     expect(JSON.stringify(rows)).not.toMatch(/someone@example|reason with spaces/); // the free-text reason stays on the row, not in the event
   });
 
@@ -271,7 +333,10 @@ describe('the application records what happens to its callers', () => {
           await gate;
         }),
       );
-      const outcome = write.then(() => 'committed', (e: { status?: number }) => `refused ${e.status}`);
+      const outcome = write.then(
+        () => 'committed',
+        (e: { status?: number }) => `refused ${e.status}`,
+      );
       await insertedSignal;
       await owner((c) => registeringAdmin(c).remove({ tenantId: TENANT, sub, ...OPERATOR }));
       release();
@@ -285,7 +350,7 @@ describe('the application records what happens to its callers', () => {
 });
 
 describe('the auditor command', () => {
-  it('lists an organization\'s events newest first with only the stored fields, filters them, and refuses bad input', async () => {
+  it("lists an organization's events newest first with only the stored fields, filters them, and refuses bad input", async () => {
     const tenant = `tenant-cli-${randomUUID().slice(0, 6)}`;
     const who = person();
     await owner(async (c) => {
@@ -305,14 +370,30 @@ describe('the auditor command', () => {
     expect(lines.filter((l) => l.startsWith('{'))).toHaveLength(1);
     lines.length = 0;
     // The auditor can ask for refused files by type (the filter knows every type the table holds).
-    await owner(async (c) => { await c.query(`SELECT set_config('app.current_tenant_id', $1, false)`, [tenant]); await c.query(`SELECT set_config('app.current_actor', $1, false)`, [who]); await append(c, 'intake.rejected', 'refused', 'person', who, { reason: 'structure' }); });
+    await owner(async (c) => {
+      await c.query(`SELECT set_config('app.current_tenant_id', $1, false)`, [tenant]);
+      await c.query(`SELECT set_config('app.current_actor', $1, false)`, [who]);
+      await append(c, 'intake.rejected', 'refused', 'person', who, { reason: 'structure' });
+    });
     lines.length = 0;
     expect(await run(['list', '--tenant', tenant, '--type', 'intake.rejected'])).toBe(0);
-    expect(lines.filter((l) => l.startsWith('{')).map((l) => JSON.parse(l)).map((e) => [e.type, e.details])).toEqual([['intake.rejected', { reason: 'structure' }]]);
+    expect(
+      lines
+        .filter((l) => l.startsWith('{'))
+        .map((l) => JSON.parse(l))
+        .map((e) => [e.type, e.details]),
+    ).toEqual([['intake.rejected', { reason: 'structure' }]]);
     lines.length = 0;
     expect(await run(['list', '--tenant', tenant, '--since', '2999-01-01T00:00:00Z'])).toBe(0);
     expect(lines).toEqual(['0 events']);
-    for (const bad of [['list'], ['list', '--tenant', tenant, '--type', 'nope'], ['list', '--tenant', tenant, '--limit', '0'], ['list', '--tenant', tenant, '--limit', '501'], ['list', '--tenant', tenant, '--since', 'yesterday'], ['delete', '--tenant', tenant]]) {
+    for (const bad of [
+      ['list'],
+      ['list', '--tenant', tenant, '--type', 'nope'],
+      ['list', '--tenant', tenant, '--limit', '0'],
+      ['list', '--tenant', tenant, '--limit', '501'],
+      ['list', '--tenant', tenant, '--since', 'yesterday'],
+      ['delete', '--tenant', tenant],
+    ]) {
       expect([bad, await run(bad)]).toEqual([bad, 1]);
     }
     // The application login cannot use the command at all.

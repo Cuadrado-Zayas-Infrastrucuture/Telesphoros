@@ -29,7 +29,14 @@ const enabled = (env: Env) => env.LAB_REPORT_PIPELINE === 'enabled';
 @Global()
 @Module({
   controllers: [
-    ReportCaptureController, CapturesController, ReportEvaluationController, EvaluationsController, EvaluationCorrectionsController, NotesController, DisputesController, LedgerController,
+    ReportCaptureController,
+    CapturesController,
+    ReportEvaluationController,
+    EvaluationsController,
+    EvaluationCorrectionsController,
+    NotesController,
+    DisputesController,
+    LedgerController,
   ],
   providers: [
     PipelineSwitch,

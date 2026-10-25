@@ -59,19 +59,21 @@ describe('the Jest coverage configuration dependency boundary', () => {
 
   it('loads YAML aliases, inherited configuration and package defaults through the actual caller', async () => {
     writeFileSync(join(cwd, 'base.yaml'), 'reporter: [text, lcov]\ncheck-coverage: true\nbranches: 91\n');
-    writeFileSync(join(cwd, '.nycrc.yaml'), [
-      'extends: ./base.yaml',
-      'all: true',
-      'include: ["src/**/*.ts"]',
-      'exclude: &excluded ["**/*.spec.ts"]',
-      'labels: *excluded',
-      'require: ./instrument.cjs',
-      '',
-    ].join('\n'));
+    writeFileSync(
+      join(cwd, '.nycrc.yaml'),
+      ['extends: ./base.yaml', 'all: true', 'include: ["src/**/*.ts"]', 'exclude: &excluded ["**/*.spec.ts"]', 'labels: *excluded', 'require: ./instrument.cjs', ''].join('\n'),
+    );
     expect(await loadNycConfig({ cwd })).toEqual({
-      cwd, extension: ['.ts'], all: true, include: ['src/**/*.ts'],
-      exclude: ['**/*.spec.ts'], labels: ['**/*.spec.ts'], require: ['./instrument.cjs'],
-      reporter: ['text', 'lcov'], checkCoverage: true, branches: 91,
+      cwd,
+      extension: ['.ts'],
+      all: true,
+      include: ['src/**/*.ts'],
+      exclude: ['**/*.spec.ts'],
+      labels: ['**/*.spec.ts'],
+      require: ['./instrument.cjs'],
+      reporter: ['text', 'lcov'],
+      checkCoverage: true,
+      branches: 91,
     });
     expect(isLoading()).toBe(false);
   });

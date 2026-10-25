@@ -41,7 +41,11 @@ try {
 }
 `;
 
-interface Front { port: number; sslRequests: () => number; close: () => Promise<void> }
+interface Front {
+  port: number;
+  sslRequests: () => number;
+  close: () => Promise<void>;
+}
 
 function startTlsFront(certPem: string, keyPem: string): Promise<Front> {
   let sslRequests = 0;
@@ -57,16 +61,31 @@ function startTlsFront(certPem: string, keyPem: string): Promise<Front> {
       client.write('S');
       const secure = new tls.TLSSocket(client, { isServer: true, key: keyPem, cert: certPem });
       const db = net.connect(Number(upstream.port || 5432), upstream.hostname);
-      const end = () => { secure.destroy(); db.destroy(); };
-      secure.on('error', end); db.on('error', end); secure.on('close', end); db.on('close', end);
-      secure.pipe(db); db.pipe(secure);
+      const end = () => {
+        secure.destroy();
+        db.destroy();
+      };
+      secure.on('error', end);
+      db.on('error', end);
+      secure.on('close', end);
+      db.on('close', end);
+      secure.pipe(db);
+      db.pipe(secure);
     });
   });
-  return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({
-    port: (server.address() as net.AddressInfo).port,
-    sslRequests: () => sslRequests,
-    close: () => new Promise<void>((done) => { for (const s of sockets) s.destroy(); server.close(() => done()); }),
-  })));
+  return new Promise((resolve) =>
+    server.listen(0, '127.0.0.1', () =>
+      resolve({
+        port: (server.address() as net.AddressInfo).port,
+        sslRequests: () => sslRequests,
+        close: () =>
+          new Promise<void>((done) => {
+            for (const s of sockets) s.destroy();
+            server.close(() => done());
+          }),
+      }),
+    ),
+  );
 }
 
 let dir: string;
@@ -87,8 +106,25 @@ function issue(name: string, san: string): { cert: string; key: string } {
 
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), 'tls-contract-'));
-  openssl('req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', 'ca.key', '-out', 'ca.pem', '-days', '2', '-subj', '/CN=telesphoros-test-authority',
-    '-addext', 'basicConstraints=critical,CA:TRUE', '-addext', 'keyUsage=critical,keyCertSign,cRLSign');
+  openssl(
+    'req',
+    '-x509',
+    '-newkey',
+    'rsa:2048',
+    '-nodes',
+    '-keyout',
+    'ca.key',
+    '-out',
+    'ca.pem',
+    '-days',
+    '2',
+    '-subj',
+    '/CN=telesphoros-test-authority',
+    '-addext',
+    'basicConstraints=critical,CA:TRUE',
+    '-addext',
+    'keyUsage=critical,keyCertSign,cRLSign',
+  );
   caPath = join(dir, 'ca.pem');
   const good = issue('good', 'IP:127.0.0.1');
   const wrong = issue('wrong', 'DNS:other.example');
@@ -103,7 +139,13 @@ afterAll(async () => {
   if (dir) rmSync(dir, { recursive: true, force: true });
 });
 
-interface Outcome { ok: boolean; encrypted?: boolean; one?: number; code?: string | null; message?: string }
+interface Outcome {
+  ok: boolean;
+  encrypted?: boolean;
+  one?: number;
+  code?: string | null;
+  message?: string;
+}
 
 async function connectAsApplication(front: Front, opts: { trustAuthority: boolean; insecure?: boolean; urlQuery?: string }): Promise<Outcome> {
   const url = new URL(process.env.TEST_DATABASE_URL!);

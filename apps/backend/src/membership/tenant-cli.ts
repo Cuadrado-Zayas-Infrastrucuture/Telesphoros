@@ -74,7 +74,8 @@ export async function runInvite(admin: PgInvitationAdmin, args: string[], out: (
     };
     switch (action) {
       case 'list':
-        for (const i of await admin.list(need('tenant'))) out(`id=${i.id} for=${i.emailHint} roles=${i.roles.join(',') || '(none)'} status=${i.status} expires=${i.expiresAt.toISOString()} by=${i.createdBy}`);
+        for (const i of await admin.list(need('tenant')))
+          out(`id=${i.id} for=${i.emailHint} roles=${i.roles.join(',') || '(none)'} status=${i.status} expires=${i.expiresAt.toISOString()} by=${i.createdBy}`);
         return 0;
       case 'fulfil': {
         const m = await admin.fulfil({ id: need('id'), email: need('email'), sub: need('sub'), by: need('by') });
@@ -92,4 +93,3 @@ export async function runInvite(admin: PgInvitationAdmin, args: string[], out: (
     throw error;
   }
 }
-

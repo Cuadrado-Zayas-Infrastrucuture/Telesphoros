@@ -59,7 +59,10 @@ describe('no route is open to a person with no role, except /me', () => {
   it('every protected route declares the roles it needs', () => {
     const all = routes();
     expect(all.length).toBeGreaterThan(25); // the walk found the real route table
-    const open = all.filter((r) => !r.isPublic && !(Array.isArray(r.roles) && r.roles.length > 0)).map((r) => r.key).sort();
+    const open = all
+      .filter((r) => !r.isPublic && !(Array.isArray(r.roles) && r.roles.length > 0))
+      .map((r) => r.key)
+      .sort();
     expect(open).toEqual([...ALLOWED_WITHOUT_A_ROLE].sort());
   });
 
@@ -81,7 +84,10 @@ describe('the clinical reads', () => {
   ];
   // These sit behind the lab-report pipeline switch, which is off here: a person who may read gets that answer, never 403.
   const PIPELINE_READS = ['/api/v1/evaluations', `/api/v1/evaluations/${id}`, '/api/v1/cell-disputes', `/api/v1/cell-disputes/${id}`, `/api/v1/captures/${id}`];
-  const get = async (path: string, roles?: string[]) => request(app.getHttpServer()).get(path).set(bearer(await signToken({ sub: 'user-a', ...(roles ? { roles } : {}) })));
+  const get = async (path: string, roles?: string[]) =>
+    request(app.getHttpServer())
+      .get(path)
+      .set(bearer(await signToken({ sub: 'user-a', ...(roles ? { roles } : {}) })));
 
   it.each([...READS.map(([p]) => p), ...PIPELINE_READS])('GET %s is 403 for a member with no role', async (path) => {
     for (const roles of [undefined, []] as const) {
@@ -116,8 +122,10 @@ describe('the clinical reads', () => {
     await request(app.getHttpServer()).get('/api/v1/health').expect(200);
   });
 
-  it('the refusal does not depend on the record existing: another tenant\'s id is 403 for them, not 404', async () => {
-    const res = await request(app.getHttpServer()).get(`/api/v1/patients/${id}`).set(bearer(await signToken({ sub: 'user-b' })));
+  it("the refusal does not depend on the record existing: another tenant's id is 403 for them, not 404", async () => {
+    const res = await request(app.getHttpServer())
+      .get(`/api/v1/patients/${id}`)
+      .set(bearer(await signToken({ sub: 'user-b' })));
     expect(res.status).toBe(403);
   });
 });

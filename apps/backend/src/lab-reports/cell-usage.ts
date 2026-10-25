@@ -7,7 +7,8 @@ const provenanceSchema = z.strictObject({
   files: z.array(z.strictObject({ guidelineId: z.string(), guidelineVersion: z.string(), contentSha256: z.string().regex(/^[0-9a-f]{64}$/) })),
 });
 const citationSchema = z.looseObject({
-  guidelineId: z.string(), guidelineVersion: z.string(),
+  guidelineId: z.string(),
+  guidelineVersion: z.string(),
   locator: z.looseObject({ table: z.string(), row: z.string(), column: z.string().nullable().optional() }),
 });
 const resultSchema = z.looseObject({ drug: z.string(), outcome: z.string(), citation: citationSchema });
@@ -27,11 +28,18 @@ export function cellMatches(record: Projected, cell: DisputeInput): CellUsageDto
     if (!parsed.success) return;
     const r = parsed.data;
     const c = r.citation;
-    if (c.guidelineId !== cell.guidelineId || c.guidelineVersion !== cell.guidelineVersion
-      || c.locator.table !== cell.locator.table || c.locator.row !== cell.locator.row
-      || (c.locator.column ?? null) !== (cell.locator.column ?? null)) return;
+    if (
+      c.guidelineId !== cell.guidelineId ||
+      c.guidelineVersion !== cell.guidelineVersion ||
+      c.locator.table !== cell.locator.table ||
+      c.locator.row !== cell.locator.row ||
+      (c.locator.column ?? null) !== (cell.locator.column ?? null)
+    )
+      return;
     matches.push({
-      resultIndex, drug: r.drug, outcome: r.outcome,
+      resultIndex,
+      drug: r.drug,
+      outcome: r.outcome,
       identity: hash === undefined ? 'historical-identity-unverified' : 'exact-file',
       wordingExposed: (r.outcome === 'shown' || r.outcome === 'no-published-recommendation') && typeof r.recommendationText === 'string',
     });

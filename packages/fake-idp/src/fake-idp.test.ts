@@ -15,16 +15,28 @@ const verifier = () => randomBytes(32).toString('base64url');
 const challenge = (v: string) => createHash('sha256').update(v).digest('base64url');
 const authorize = (extra: Record<string, string> = {}, cookie?: string) => {
   const params = new URLSearchParams({
-    client_id: 'test-client', redirect_uri: REDIRECT, response_type: 'code', scope: 'openid email', state: 's1',
-    code_challenge: challenge('x'), code_challenge_method: 'S256', ...extra,
+    client_id: 'test-client',
+    redirect_uri: REDIRECT,
+    response_type: 'code',
+    scope: 'openid email',
+    state: 's1',
+    code_challenge: challenge('x'),
+    code_challenge_method: 'S256',
+    ...extra,
   });
   return fetch(`${idp.issuer}/oauth2/authorize?${params}`, { redirect: 'manual', headers: cookie ? { cookie } : {} });
 };
 async function loginAndGetCode(codeVerifier: string) {
   const params = { code_challenge: challenge(codeVerifier) };
   const form = new URLSearchParams({
-    client_id: 'test-client', redirect_uri: REDIRECT, response_type: 'code', scope: 'openid email', state: 's1',
-    code_challenge: params.code_challenge, code_challenge_method: 'S256', user: idp.users[0]!.sub,
+    client_id: 'test-client',
+    redirect_uri: REDIRECT,
+    response_type: 'code',
+    scope: 'openid email',
+    state: 's1',
+    code_challenge: params.code_challenge,
+    code_challenge_method: 'S256',
+    user: idp.users[0]!.sub,
   });
   const login = await fetch(`${idp.issuer}/oauth2/login`, { method: 'POST', body: form, redirect: 'manual' });
   const cookie = login.headers.get('set-cookie')!.split(';')[0]!;
@@ -32,7 +44,10 @@ async function loginAndGetCode(codeVerifier: string) {
   return { code: new URL(back.headers.get('location')!).searchParams.get('code')!, cookie };
 }
 const exchange = (body: Record<string, string>) =>
-  fetch(`${idp.issuer}/oauth2/token`, { method: 'POST', body: new URLSearchParams({ grant_type: 'authorization_code', client_id: 'test-client', redirect_uri: REDIRECT, ...body }) });
+  fetch(`${idp.issuer}/oauth2/token`, {
+    method: 'POST',
+    body: new URLSearchParams({ grant_type: 'authorization_code', client_id: 'test-client', redirect_uri: REDIRECT, ...body }),
+  });
 
 describe('fake IdP behaves like a strict OIDC provider', () => {
   it('publishes discovery and keys, and its tokens verify against them', async () => {
@@ -69,8 +84,15 @@ describe('fake IdP behaves like a strict OIDC provider', () => {
   it('echoes the nonce from the authorize request into the ID token', async () => {
     const v = verifier();
     const form = new URLSearchParams({
-      client_id: 'test-client', redirect_uri: REDIRECT, response_type: 'code', scope: 'openid email', state: 's1',
-      code_challenge: challenge(v), code_challenge_method: 'S256', nonce: 'n-0S6_WzA2Mj', user: idp.users[0]!.sub,
+      client_id: 'test-client',
+      redirect_uri: REDIRECT,
+      response_type: 'code',
+      scope: 'openid email',
+      state: 's1',
+      code_challenge: challenge(v),
+      code_challenge_method: 'S256',
+      nonce: 'n-0S6_WzA2Mj',
+      user: idp.users[0]!.sub,
     });
     const login = await fetch(`${idp.issuer}/oauth2/login`, { method: 'POST', body: form, redirect: 'manual' });
     const cookie = login.headers.get('set-cookie')!.split(';')[0]!;

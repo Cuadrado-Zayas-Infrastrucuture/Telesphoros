@@ -8,10 +8,23 @@ import { comparisonCopy, isUnavailableValue, UNAVAILABLE_TOKENS } from '../repor
 import { bindingMismatches, PINNED_POPPLER_VERSION } from '../report-reader/pinned-reader';
 import { readerResultSchema } from '../report-reader/reader-result';
 import {
-  contextSchema, lookupInputSchema, policySchema, recordSchema, scopeSchema, snapshotSchema, GENES,
-  type AdmissionStage, type EvidenceRef, type GeneState, type LookupPorts, type LookupReason,
-  type OfflineLookupResult, type SourceRecord, type TrustedProcessingScope,
-  type ValidatedBindings, type ValidatedRecord,
+  contextSchema,
+  lookupInputSchema,
+  policySchema,
+  recordSchema,
+  scopeSchema,
+  snapshotSchema,
+  GENES,
+  type AdmissionStage,
+  type EvidenceRef,
+  type GeneState,
+  type LookupPorts,
+  type LookupReason,
+  type OfflineLookupResult,
+  type SourceRecord,
+  type TrustedProcessingScope,
+  type ValidatedBindings,
+  type ValidatedRecord,
 } from './contracts';
 import { artifactHash, boundedScalars, parseRecordJson, recordHash } from './strict-json';
 import { routeAdmitted, validatePolicyKnowledge } from './routing';
@@ -29,10 +42,16 @@ async function operation<T>(action: (signal: AbortSignal) => Promise<T>): Promis
     return await Promise.race([
       action(controller.signal),
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => { controller.abort(); reject(new Error('evidence-operation-failed')); }, OPERATION_MS);
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error('evidence-operation-failed'));
+        }, OPERATION_MS);
       }),
     ]);
-  } finally { if (timer !== undefined) clearTimeout(timer); controller.abort(); }
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    controller.abort();
+  }
 }
 
 function currentRecord(snapshot: z.infer<typeof snapshotSchema>, id: string): ValidatedRecord | null {
@@ -43,8 +62,13 @@ function currentRecord(snapshot: z.infer<typeof snapshotSchema>, id: string): Va
   if (!parsed.success) return null;
   const payload = parsed.data;
   const recordSha256 = wrappers[0]!.recordSha256;
-  if (recordHash(payload) !== recordSha256 || payload.review.decision !== 'accepted'
-      || latest[0]!.reviewId !== payload.review.id || latest[0]!.sequence !== payload.review.sequence) return null;
+  if (
+    recordHash(payload) !== recordSha256 ||
+    payload.review.decision !== 'accepted' ||
+    latest[0]!.reviewId !== payload.review.id ||
+    latest[0]!.sequence !== payload.review.sequence
+  )
+    return null;
   return payload;
 }
 
@@ -59,21 +83,28 @@ function exactRef(ref: EvidenceRef, sources: ReadonlyMap<string, string>): boole
 }
 function recordId(state: GeneState): string {
   switch (state.state) {
-    case 'canonical': return state.derivationRecordId;
-    case 'absent': return state.coverageRecordId;
-    case 'approved-unavailable': return state.reviewRecordId;
-    case 'empty': return state.emptyFieldRecordId;
-    default: return state.evidenceRecordId;
+    case 'canonical':
+      return state.derivationRecordId;
+    case 'absent':
+      return state.coverageRecordId;
+    case 'approved-unavailable':
+      return state.reviewRecordId;
+    case 'empty':
+      return state.emptyFieldRecordId;
+    default:
+      return state.evidenceRecordId;
   }
 }
 
 /** Offline, opt-in boundary. No controller imports this. Trusted stores and authenticated scope are separate from payload. */
-export async function lookupOffline(
-  rawInput: string, scopeInput: TrustedProcessingScope, ports: LookupPorts, knowledge: KnowledgeSet,
-): Promise<OfflineLookupResult> {
+export async function lookupOffline(rawInput: string, scopeInput: TrustedProcessingScope, ports: LookupPorts, knowledge: KnowledgeSet): Promise<OfflineLookupResult> {
   const bindings: ValidatedBindings = {
-    inputRecordSha256: null, textSha256: null, packetHash: null,
-    contextRecordSha256: null, policySha256: null, captureAcceptanceId: null,
+    inputRecordSha256: null,
+    textSha256: null,
+    packetHash: null,
+    contextRecordSha256: null,
+    policySha256: null,
+    captureAcceptanceId: null,
   };
   const diagnostics: OfflineLookupResult['diagnostics'] = [];
   let snapshotVersion: string | null = null;
@@ -89,8 +120,8 @@ export async function lookupOffline(
     const shell = z.object({ captureAcceptanceId: z.string().min(1).max(128) }).safeParse(raw);
     if (!shell.success) return hold('input', 'lookup-input-invalid');
     const scope = scopeSchema.safeParse(scopeInput);
-    if (!scope.success || !ports || typeof ports.readSnapshot !== 'function' || typeof ports.currentVersion !== 'function'
-        || typeof ports.replaySource !== 'function') return hold('capture', 'capture-not-accepted');
+    if (!scope.success || !ports || typeof ports.readSnapshot !== 'function' || typeof ports.currentVersion !== 'function' || typeof ports.replaySource !== 'function')
+      return hold('capture', 'capture-not-accepted');
     stage = 'capture';
     const parsed = snapshotSchema.safeParse(parseRecordJson(await operation((signal) => ports.readSnapshot(scope.data, signal))));
     if (!parsed.success) return hold(stage, 'lookup-input-invalid');
@@ -98,12 +129,23 @@ export async function lookupOffline(
     const snapshot = parsed.data;
     snapshotVersion = snapshot.version;
     const capture = snapshot.capture;
-    if (!scoped(capture, scope.data) || !scoped(capture.acceptance, scope.data) || capture.acceptance.decision !== 'accepted'
-        || capture.acceptance.id !== shell.data.captureAcceptanceId || capture.createdBy === capture.acceptance.reviewerId) return hold(stage, 'capture-not-accepted');
+    if (
+      !scoped(capture, scope.data) ||
+      !scoped(capture.acceptance, scope.data) ||
+      capture.acceptance.decision !== 'accepted' ||
+      capture.acceptance.id !== shell.data.captureAcceptanceId ||
+      capture.createdBy === capture.acceptance.reviewerId
+    )
+      return hold(stage, 'capture-not-accepted');
     boundedScalars(capture.text);
-    if (artifactHash(capture.text) !== capture.textSha256 || capture.acceptance.textSha256 !== capture.textSha256
-        || capture.acceptance.pdfSha256 !== capture.pdfSha256 || capture.acceptance.objectVersion !== capture.objectVersion
-        || capture.acceptance.popplerVersion !== capture.popplerVersion) return hold(stage, 'capture-hash-mismatch');
+    if (
+      artifactHash(capture.text) !== capture.textSha256 ||
+      capture.acceptance.textSha256 !== capture.textSha256 ||
+      capture.acceptance.pdfSha256 !== capture.pdfSha256 ||
+      capture.acceptance.objectVersion !== capture.objectVersion ||
+      capture.acceptance.popplerVersion !== capture.popplerVersion
+    )
+      return hold(stage, 'capture-hash-mismatch');
     bindings.textSha256 = capture.textSha256;
     bindings.captureAcceptanceId = capture.acceptance.id;
     if (capture.popplerVersion !== PINNED_POPPLER_VERSION) return hold(stage, 'poppler-version-mismatch');
@@ -128,15 +170,27 @@ export async function lookupOffline(
     bindings.packetHash = reader.packet.packetHash;
     stage = 'association';
     if (inspection.kind === 'reader-held') return hold(stage, 'reader-held');
-    if (inspection.kind === 'abstained') return finish({
-      schema: 'report-lookup-abstention/1', reasonCode: 'association-abstained', bindings: { ...bindings }, selectedRow: null,
-    });
+    if (inspection.kind === 'abstained')
+      return finish({
+        schema: 'report-lookup-abstention/1',
+        reasonCode: 'association-abstained',
+        bindings: { ...bindings },
+        selectedRow: null,
+      });
     const occurrences = inspection.occurrences;
     const groups = new Map<string, ParsedOccurrence[]>();
     for (const occurrence of occurrences) groups.set(occurrence.facts.gene, [...(groups.get(occurrence.facts.gene) ?? []), occurrence]);
-    if ([...groups.keys()].some((g) => !GENES.includes(g as typeof GENES[number]))) return hold(stage, 'lookup-input-invalid');
+    if ([...groups.keys()].some((g) => !GENES.includes(g as (typeof GENES)[number]))) return hold(stage, 'lookup-input-invalid');
     // Keep every discovered duplicate/empty fact; primary reason follows fixed gate order and source occurrence order.
-    for (const [g, list] of groups) if (list.length > 1) diagnostics.push({ stage: 'duplicate', reasonCode: duplicateInput(g, list.map((o) => o.facts)).note });
+    for (const [g, list] of groups)
+      if (list.length > 1)
+        diagnostics.push({
+          stage: 'duplicate',
+          reasonCode: duplicateInput(
+            g,
+            list.map((o) => o.facts),
+          ).note,
+        });
     for (const o of occurrences) if (o.emptyRoles.length > 0) diagnostics.push({ stage: 'field', reasonCode: 'reported-field-empty' });
     if (diagnostics.length > 0) return hold(diagnostics[0]!.stage, diagnostics[0]!.reasonCode);
 
@@ -147,18 +201,35 @@ export async function lookupOffline(
     stage = 'reconciliation';
     for (const state of [...states].sort((a, b) => (groups.get(a.gene)?.[0]?.resultSpan?.start ?? 100001) - (groups.get(b.gene)?.[0]?.resultSpan?.start ?? 100001))) {
       const record = currentRecord(snapshot, recordId(state));
-      if (!record || !('gene' in record) || !scoped(record, scope.data) || record.gene !== state.gene
-          || record.textSha256 !== capture.textSha256 || record.packetHash !== reader.packet.packetHash
-          || record.generatorCodeHash !== reader.packet.generatorCodeHash || record.evidence.some((ref) => !exactRef(ref, sources))) return hold(stage, 'lookup-input-invalid');
+      if (
+        !record ||
+        !('gene' in record) ||
+        !scoped(record, scope.data) ||
+        record.gene !== state.gene ||
+        record.textSha256 !== capture.textSha256 ||
+        record.packetHash !== reader.packet.packetHash ||
+        record.generatorCodeHash !== reader.packet.generatorCodeHash ||
+        record.evidence.some((ref) => !exactRef(ref, sources))
+      )
+        return hold(stage, 'lookup-input-invalid');
       dependencyRecords.push({ id: record.id, recordSha256: recordHash(record) });
       const list = groups.get(state.gene) ?? [];
       if (state.state === 'absent') {
         const regions = z.array(z.strictObject({ start: z.number().int().min(0), end: z.number().int().min(0) })).safeParse(reader.packet.reportRegions);
-        if (record.type !== 'coverage' || list.length !== 0 || record.occurrenceIndex !== null || record.frameId !== null
-            || record.evidence.length !== 0 || record.anchorPolicySha256 !== reader.packet.grammarHash
-            || record.regionRuleId !== 'pinned-report-region/1' || !regions.success
-            || !regions.data.some((r) => same(r, record.region)) || record.region.start >= record.region.end
-            || record.region.end > boundedScalars(capture.text).length) return hold(stage, 'lookup-input-invalid');
+        if (
+          record.type !== 'coverage' ||
+          list.length !== 0 ||
+          record.occurrenceIndex !== null ||
+          record.frameId !== null ||
+          record.evidence.length !== 0 ||
+          record.anchorPolicySha256 !== reader.packet.grammarHash ||
+          record.regionRuleId !== 'pinned-report-region/1' ||
+          !regions.success ||
+          !regions.data.some((r) => same(r, record.region)) ||
+          record.region.start >= record.region.end ||
+          record.region.end > boundedScalars(capture.text).length
+        )
+          return hold(stage, 'lookup-input-invalid');
         continue;
       }
       if (list.length !== 1 || record.type === 'coverage') return hold(stage, 'lookup-input-invalid');
@@ -166,11 +237,24 @@ export async function lookupOffline(
       const frame = reader.packet.frames.find((f) => f.frameId === record.frameId);
       const geneCandidate = frame && reader.packet.candidates.find((c) => c.candidateId === frame.geneCandidateId);
       const candidates = [geneCandidate, occurrence.diplotypeSpan, occurrence.resultSpan].filter((c) => c !== null && c !== undefined);
-      if (!frame || !geneCandidate || geneCandidate.text !== state.gene || record.occurrenceIndex !== occurrence.occurrenceIndex
-          || !same(frame.allowed.diplotype, occurrence.diplotypeSpan ? [occurrence.diplotypeSpan.candidateId] : [])
-          || !same(frame.allowed.reportedResult, occurrence.resultSpan ? [occurrence.resultSpan.candidateId] : [])
-          || !same(record.facts, occurrence.facts) || !same(record.candidateIds, candidates.map((c) => c.candidateId))
-          || !same(record.evidence, candidates.map((c) => refFor(capture.textSha256, c)))) return hold(stage, 'lookup-input-invalid');
+      if (
+        !frame ||
+        !geneCandidate ||
+        geneCandidate.text !== state.gene ||
+        record.occurrenceIndex !== occurrence.occurrenceIndex ||
+        !same(frame.allowed.diplotype, occurrence.diplotypeSpan ? [occurrence.diplotypeSpan.candidateId] : []) ||
+        !same(frame.allowed.reportedResult, occurrence.resultSpan ? [occurrence.resultSpan.candidateId] : []) ||
+        !same(record.facts, occurrence.facts) ||
+        !same(
+          record.candidateIds,
+          candidates.map((c) => c.candidateId),
+        ) ||
+        !same(
+          record.evidence,
+          candidates.map((c) => refFor(capture.textSha256, c)),
+        )
+      )
+        return hold(stage, 'lookup-input-invalid');
       const { diplotype, result } = occurrence.facts;
       const map = knowledge.gene(state.gene);
       let reconciled: string | null = null;
@@ -183,26 +267,52 @@ export async function lookupOffline(
       } else if (result.state === 'present' && map?.phenotypes.includes(result.text)) reconciled = result.text;
       if (state.state === 'canonical') {
         const file = map && knowledge.files.find((f) => f.id === map.id && f.kind === 'gene-phenotype-map');
-        if (record.type !== 'derivation' || reconciled !== state.phenotype || record.phenotype !== state.phenotype
-            || record.knowledgeSetId !== knowledge.id || !map || !file || file.reviewStatus !== 'reviewed'
-            || map.review.status !== 'reviewed' || map.review.contentSha256 !== contentSha256(map) || file.contentSha256 !== contentSha256(map)
-            || record.mappingFileId !== map.id || record.mappingContentSha256 !== file.contentSha256) return hold(stage, 'lookup-input-invalid');
+        if (
+          record.type !== 'derivation' ||
+          reconciled !== state.phenotype ||
+          record.phenotype !== state.phenotype ||
+          record.knowledgeSetId !== knowledge.id ||
+          !map ||
+          !file ||
+          file.reviewStatus !== 'reviewed' ||
+          map.review.status !== 'reviewed' ||
+          map.review.contentSha256 !== contentSha256(map) ||
+          file.contentSha256 !== contentSha256(map) ||
+          record.mappingFileId !== map.id ||
+          record.mappingContentSha256 !== file.contentSha256
+        )
+          return hold(stage, 'lookup-input-invalid');
       } else if (state.state === 'approved-unavailable') {
-        if (snapshot.matcherPolicyBytes === null || record.type !== 'unavailable' || diplotype.state !== 'missing' || result.state !== 'present'
-            || !isUnavailableValue(result.text) || !occurrence.resultSpan || !same(state.valueEvidence, refFor(capture.textSha256, occurrence.resultSpan))
-            || !same(record.valueEvidence, state.valueEvidence) || record.matcherPolicySha256 !== state.matcherPolicySha256
-            || record.routingPolicySha256 !== (raw as Record<string, unknown>).policySha256
-            || artifactHash(snapshot.matcherPolicyBytes) !== state.matcherPolicySha256) return hold(stage, 'lookup-input-invalid');
+        if (
+          snapshot.matcherPolicyBytes === null ||
+          record.type !== 'unavailable' ||
+          diplotype.state !== 'missing' ||
+          result.state !== 'present' ||
+          !isUnavailableValue(result.text) ||
+          !occurrence.resultSpan ||
+          !same(state.valueEvidence, refFor(capture.textSha256, occurrence.resultSpan)) ||
+          !same(record.valueEvidence, state.valueEvidence) ||
+          record.matcherPolicySha256 !== state.matcherPolicySha256 ||
+          record.routingPolicySha256 !== (raw as Record<string, unknown>).policySha256 ||
+          artifactHash(snapshot.matcherPolicyBytes) !== state.matcherPolicySha256
+        )
+          return hold(stage, 'lookup-input-invalid');
         const matcher = parseRecordJson(snapshot.matcherPolicyBytes);
         if (!same(matcher, { schema: 'unavailable-matcher-policy/1', unicode: '16.0', algorithm: 'r06/1', tokens: UNAVAILABLE_TOKENS })) return hold(stage, 'lookup-input-invalid');
       } else if (state.state === 'sentinel') {
-        if (record.type !== 'sentinel' || result.state !== 'present' || !['no result', 'sin resultado'].includes(comparisonCopy(result.text))
-            || !occurrence.resultSpan || !same(state.valueEvidence, refFor(capture.textSha256, occurrence.resultSpan))
-            || !same(record.valueEvidence, state.valueEvidence)) return hold(stage, 'lookup-input-invalid');
+        if (
+          record.type !== 'sentinel' ||
+          result.state !== 'present' ||
+          !['no result', 'sin resultado'].includes(comparisonCopy(result.text)) ||
+          !occurrence.resultSpan ||
+          !same(state.valueEvidence, refFor(capture.textSha256, occurrence.resultSpan)) ||
+          !same(record.valueEvidence, state.valueEvidence)
+        )
+          return hold(stage, 'lookup-input-invalid');
         return hold(stage, 'sentinel-literal-in-source');
       } else if (state.state === 'unresolved') {
-        if (record.type !== 'unresolved' || reconciled !== null || state.reasonCode !== 'other-gene-unresolved'
-            || record.reasonCode !== state.reasonCode) return hold(stage, 'lookup-input-invalid');
+        if (record.type !== 'unresolved' || reconciled !== null || state.reasonCode !== 'other-gene-unresolved' || record.reasonCode !== state.reasonCode)
+          return hold(stage, 'lookup-input-invalid');
         return hold(stage, state.reasonCode);
       } else return hold('field', 'reported-field-empty');
     }
@@ -215,12 +325,18 @@ export async function lookupOffline(
     const contextReview = currentRecord(snapshot, context.reviewRecordId);
     if (!contextReview || contextReview.type !== 'context-review' || !scoped(contextReview, scope.data)) return hold(stage, 'lookup-context-invalid');
     const contextHash = recordHash(context);
-    if (contextReview.contextRecordSha256 !== contextHash || contextReview.sourceArtifactSha256 !== context.sourceArtifactSha256
-        || (context.sourceKind === 'report' && context.sourceArtifactSha256 !== capture.textSha256)
-        || context.drugEvidence.sourceArtifactSha256 !== context.sourceArtifactSha256
-        || context.populationEvidence.sourceArtifactSha256 !== context.sourceArtifactSha256
-        || !same(contextReview.drugEvidence, context.drugEvidence) || !same(contextReview.populationEvidence, context.populationEvidence)
-        || !exactRef(context.drugEvidence, sources) || !exactRef(context.populationEvidence, sources)) return hold(stage, 'lookup-context-source-mismatch');
+    if (
+      contextReview.contextRecordSha256 !== contextHash ||
+      contextReview.sourceArtifactSha256 !== context.sourceArtifactSha256 ||
+      (context.sourceKind === 'report' && context.sourceArtifactSha256 !== capture.textSha256) ||
+      context.drugEvidence.sourceArtifactSha256 !== context.sourceArtifactSha256 ||
+      context.populationEvidence.sourceArtifactSha256 !== context.sourceArtifactSha256 ||
+      !same(contextReview.drugEvidence, context.drugEvidence) ||
+      !same(contextReview.populationEvidence, context.populationEvidence) ||
+      !exactRef(context.drugEvidence, sources) ||
+      !exactRef(context.populationEvidence, sources)
+    )
+      return hold(stage, 'lookup-context-source-mismatch');
     bindings.contextRecordSha256 = contextHash;
     dependencyRecords.push({ id: contextReview.id, recordSha256: recordHash(contextReview) });
     stage = 'policy';
@@ -230,10 +346,18 @@ export async function lookupOffline(
     const policy = policyParsed.data;
     const policyHash = artifactHash(snapshot.policyBytes);
     const policyReview = currentRecord(snapshot, policy.reviewRecordId);
-    if (!policyReview || policyReview.type !== 'policy-review' || policyReview.policySha256 !== policyHash
-        || policyReview.knowledgeSetId !== knowledge.id || !same(policyReview.reviewedRows, policy.reviewedRows)
-        || snapshot.knowledgeSetId !== knowledge.id || policy.knowledgeSetId !== knowledge.id
-        || policy.id !== (raw as Record<string, unknown>).policyId || policyHash !== (raw as Record<string, unknown>).policySha256) return hold(stage, 'lookup-policy-invalid');
+    if (
+      !policyReview ||
+      policyReview.type !== 'policy-review' ||
+      policyReview.policySha256 !== policyHash ||
+      policyReview.knowledgeSetId !== knowledge.id ||
+      !same(policyReview.reviewedRows, policy.reviewedRows) ||
+      snapshot.knowledgeSetId !== knowledge.id ||
+      policy.knowledgeSetId !== knowledge.id ||
+      policy.id !== (raw as Record<string, unknown>).policyId ||
+      policyHash !== (raw as Record<string, unknown>).policySha256
+    )
+      return hold(stage, 'lookup-policy-invalid');
     const policyCheck = validatePolicyKnowledge(policy, knowledge, snapshot.disputedRows);
     if (!policyCheck.ok) return hold(stage, policyCheck.reasonCode);
     bindings.policySha256 = policyHash;
@@ -242,16 +366,20 @@ export async function lookupOffline(
     const input = lookupInputSchema.safeParse(raw);
     if (!input.success || input.data.textSha256 !== bindings.textSha256 || input.data.packetHash !== bindings.packetHash) return hold(stage, 'lookup-input-invalid');
     bindings.inputRecordSha256 = recordHash(input.data);
-    if (await operation((signal) => ports.currentVersion(scope.data, signal)) !== snapshot.version) return hold('capture', 'snapshot-changed');
+    if ((await operation((signal) => ports.currentVersion(scope.data, signal))) !== snapshot.version) return hold('capture', 'snapshot-changed');
     return finish({
-      schema: 'report-lookup-decision/1', inputRecordSha256: bindings.inputRecordSha256,
-      policySha256: policyHash, contextRecordSha256: contextHash,
+      schema: 'report-lookup-decision/1',
+      inputRecordSha256: bindings.inputRecordSha256,
+      policySha256: policyHash,
+      contextRecordSha256: contextHash,
       decision: routeAdmitted(states, policy, knowledge),
     });
   } catch {
     // Deliberately never expose exception text, source text or protected identifiers.
-    return hold(stage, stage === 'input' ? 'lookup-input-invalid' : stage === 'context' ? 'lookup-context-invalid'
-      : stage === 'policy' ? 'lookup-policy-invalid' : 'evidence-operation-failed');
+    return hold(
+      stage,
+      stage === 'input' ? 'lookup-input-invalid' : stage === 'context' ? 'lookup-context-invalid' : stage === 'policy' ? 'lookup-policy-invalid' : 'evidence-operation-failed',
+    );
   }
 }
 

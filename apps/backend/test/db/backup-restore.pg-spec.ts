@@ -72,7 +72,8 @@ async function seededDatabase(): Promise<EphemeralDatabase> {
   await withAdmin(db.adminUrl, async (c) => {
     for (const tenant of ['alice', 'bob', 'carol']) {
       const live = (await c.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ($1, $1, $2) RETURNING id`, [tenant, `SYN-${tenant}-1`])).rows[0].id;
-      const dead = (await c.query(`INSERT INTO patients (tenant_id, created_by, label, deleted_at) VALUES ($1, $1, $2, now()) RETURNING id`, [tenant, `SYN-${tenant}-gone`])).rows[0].id;
+      const dead = (await c.query(`INSERT INTO patients (tenant_id, created_by, label, deleted_at) VALUES ($1, $1, $2, now()) RETURNING id`, [tenant, `SYN-${tenant}-gone`]))
+        .rows[0].id;
       expect(dead).toBeDefined();
       await c.query(
         `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes, content_type, sha256, storage_key, uploaded_at)
@@ -84,8 +85,7 @@ async function seededDatabase(): Promise<EphemeralDatabase> {
   return db;
 }
 
-const throwawayDatabases = async () =>
-  (await withAdmin(clusterAdmin(), (c) => c.query(`SELECT datname FROM pg_database WHERE datname LIKE 'restore_check_%'`))).rows.length;
+const throwawayDatabases = async () => (await withAdmin(clusterAdmin(), (c) => c.query(`SELECT datname FROM pg_database WHERE datname LIKE 'restore_check_%'`))).rows.length;
 const byName = <T extends { name: string }>(checks: T[], name: string) => checks.find((c) => c.name === name);
 
 it('runs in its own temp root, not the one shared with other processes', () => {
@@ -100,7 +100,12 @@ describe('backup', () => {
     expect(manifest.serverVersion).toMatch(/^16\./); // which PostgreSQL made this backup
     // Every migration the repository ships, in order: a rule, so adding a migration never breaks this test (an independent
     // hand-kept list lives in migrations.pg-spec.ts, which is where a forgotten migration is caught).
-    expect(manifest.migrations).toEqual(readdirSync(join(__dirname, '..', '..', 'migrations')).filter((f) => f.endsWith('.up.sql')).map((f) => f.slice(0, 4)).sort());
+    expect(manifest.migrations).toEqual(
+      readdirSync(join(__dirname, '..', '..', 'migrations'))
+        .filter((f) => f.endsWith('.up.sql'))
+        .map((f) => f.slice(0, 4))
+        .sort(),
+    );
     expect(manifest.tables.patients).toMatchObject({ rows: 6, rlsEnabled: true, rlsForced: true, policies: 1 });
     expect(manifest.tables.reports!.rows).toBe(3);
     expect(manifest.schema.constraints).toBeGreaterThan(10);
@@ -391,7 +396,7 @@ describe('a stored backup cannot be altered without restore noticing (format 2)'
     expect(report.checks.at(-1)!.detail).toMatch(/altered/);
   });
 
-  it('a correctly re-signed manifest that points at ANOTHER backup\'s dump is refused: the file header must agree with the manifest', async () => {
+  it("a correctly re-signed manifest that points at ANOTHER backup's dump is refused: the file header must agree with the manifest", async () => {
     const one = await signedBackup();
     // A second backup under the SAME key, so only the salt separates the two.
     const sameKeyDb = await seededDatabase();

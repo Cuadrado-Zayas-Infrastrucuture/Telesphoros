@@ -86,7 +86,9 @@ describe('describeRestoreFailure on the real pg_restore', () => {
       const dumped = spawnSync('pg_dump', ['--format=custom', `--file=${dump}`], { env: pgEnv(adminUrl(), source), encoding: 'utf8' });
       expect(dumped.status).toBe(0);
       return await run('pg_restore', ['--exit-on-error', ...extra, `--dbname=${target}`, dump], pgEnv(adminUrl(), target)).then(
-        () => { throw new Error('the restore was expected to fail'); },
+        () => {
+          throw new Error('the restore was expected to fail');
+        },
         (error: Error) => error,
       );
     } finally {

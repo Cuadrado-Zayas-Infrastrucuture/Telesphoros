@@ -45,10 +45,17 @@ async function start(): Promise<{ app: NestExpressApplication; base: string; ser
   return { app, base: `http://127.0.0.1:${(server.address() as { port: number }).port}`, server };
 }
 
-const get = (url: string) => fetch(url, { headers: { connection: 'close' } }).then(async (r) => ({ status: r.status, body: await r.text() }), (error: Error) => ({ status: 0, body: error.message }));
+const get = (url: string) =>
+  fetch(url, { headers: { connection: 'close' } }).then(
+    async (r) => ({ status: r.status, body: await r.text() }),
+    (error: Error) => ({ status: 0, body: error.message }),
+  );
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-beforeEach(() => { events.length = 0; hangMs = 300; });
+beforeEach(() => {
+  events.length = 0;
+  hangMs = 300;
+});
 
 describe('what closing the app does to a request in flight', () => {
   it('(control) app.close() alone ends the pool under a running request, so the request fails', async () => {
@@ -69,7 +76,9 @@ describe('installGracefulShutdown', () => {
     installGracefulShutdown(app, server, { pauseMs: 0, drainMs: 2000, deadlineMs: 5000, ...options, target, exit: (code) => exits.push(code), write: (line) => lines.push(line) });
     return { target, exits, lines };
   }
-  const settled = async (exits: number[]) => { for (let i = 0; i < 200 && exits.length === 0; i++) await pause(20); };
+  const settled = async (exits: number[]) => {
+    for (let i = 0; i < 200 && exits.length === 0; i++) await pause(20);
+  };
 
   it('lets a request in flight finish, and ends the pool only after it', async () => {
     const { app, base, server } = await start();
@@ -127,7 +136,14 @@ describe('installGracefulShutdown', () => {
     const target = new EventEmitter();
     const exits: number[] = [];
     const lines: string[] = [];
-    installGracefulShutdown(stuck, new (await import('node:http')).Server(), { pauseMs: 0, drainMs: 50, deadlineMs: 200, target, exit: (code) => exits.push(code), write: (line) => lines.push(line) });
+    installGracefulShutdown(stuck, new (await import('node:http')).Server(), {
+      pauseMs: 0,
+      drainMs: 50,
+      deadlineMs: 200,
+      target,
+      exit: (code) => exits.push(code),
+      write: (line) => lines.push(line),
+    });
     target.emit('SIGTERM');
     await settled(exits);
     expect(exits).toEqual([1]);

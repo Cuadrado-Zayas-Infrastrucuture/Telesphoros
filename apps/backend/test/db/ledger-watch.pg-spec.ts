@@ -15,7 +15,14 @@ import { acceptanceFor, captureFor, evaluationFor, type SeededReport, seedLabRep
 // it. The decisions themselves (budgets, queueing, timers) are in src/ledger/ledger-monitor.spec.ts with a fake verifier. Synthetic data only.
 
 const config = (over: Partial<LedgerWatchConfig> = {}): LedgerWatchConfig => ({
-  production: false, startupBudgetMs: 20_000, fullIntervalMs: 0, fullBudgetMs: 60_000, onDemandBudgetMs: 30_000, fullWalkAtOrBelowEvents: 50_000, incidentPollMs: 0, ...over,
+  production: false,
+  startupBudgetMs: 20_000,
+  fullIntervalMs: 0,
+  fullBudgetMs: 60_000,
+  onDemandBudgetMs: 30_000,
+  fullWalkAtOrBelowEvents: 50_000,
+  incidentPollMs: 0,
+  ...over,
 });
 
 /** The real verifier, recording what it was asked and what it found. */
@@ -28,7 +35,9 @@ class RecordingVerifier implements VerifierPort {
   readonly results: Array<{ options: VerifyOptions; result: VerifyResult }> = [];
   readonly incidents: IncidentRecording[] = [];
   constructor(private readonly inner: LedgerVerifier) {}
-  tenants() { return this.inner.tenants(); }
+  tenants() {
+    return this.inner.tenants();
+  }
   async verify(tenantId: string, options: VerifyOptions = {}) {
     const result = await this.inner.verify(tenantId, options);
     this.results.push({ options, result });
@@ -46,8 +55,12 @@ class RecordingVerifier implements VerifierPort {
       throw error;
     }
   }
-  openIncidents() { return this.inner.openIncidents(); }
-  close() { return this.inner.close(); }
+  openIncidents() {
+    return this.inner.openIncidents();
+  }
+  close() {
+    return this.inner.close();
+  }
 }
 
 // Failures are asserted on through spies below; the console copy of each would only bury the test output.
@@ -77,15 +90,20 @@ async function chain(): Promise<{ tenantId: string; report: SeededReport; ids: R
   const e = await repo.insertEvaluation(tenantId, 'syn-system', evaluationFor(report, c.record.id, a.record.id));
   const k = await repo.insertCorrection(tenantId, 'syn-reviewer', { evaluationId: e.record.id, kind: 'retraction', reasonCode: 'input-misread', note: 'misread' });
   const d = await repo.raiseDispute(tenantId, 'syn-reviewer', {
-    guidelineId: 'syn-guideline', guidelineVersion: '1', guidelineContentSha256: 'a'.repeat(64), locator: { table: 'recommendations', row: 'poor' }, note: 'cell looks wrong',
+    guidelineId: 'syn-guideline',
+    guidelineVersion: '1',
+    guidelineContentSha256: 'a'.repeat(64),
+    locator: { table: 'recommendations', row: 'poor' },
+    note: 'cell looks wrong',
   });
   return { tenantId, report, ids: { capture: c.record.id, acceptance: a.record.id, evaluation: e.record.id, correction: k.record.id, dispute: d.record.id } };
 }
 
-const tamper = (work: (c: Client) => Promise<unknown>) => withAdmin(pg.adminUrl, async (c) => {
-  await c.query(`SET session_replication_role = replica`);
-  await work(c);
-});
+const tamper = (work: (c: Client) => Promise<unknown>) =>
+  withAdmin(pg.adminUrl, async (c) => {
+    await c.query(`SET session_replication_role = replica`);
+    await work(c);
+  });
 
 function watch(over: Partial<LedgerWatchConfig> = {}, status = new LedgerStatus()) {
   const verifier = new RecordingVerifier(LedgerVerifier.connect(pg.verifierUrl));
@@ -111,8 +129,12 @@ async function waitForScheduledIncident(watcher: ReturnType<typeof watch>, tenan
   if (outcome.status === 'failed') throw outcome.error;
 }
 
-const openIncidentTenants = () => withAdmin(pg.adminUrl, async (c) => (await c.query(
-  `SELECT tenant_id FROM ledger_incidents i WHERE NOT EXISTS (SELECT 1 FROM ledger_incident_clearances c WHERE c.incident_id = i.id) ORDER BY i.seq`)).rows.map((r) => r.tenant_id as string));
+const openIncidentTenants = () =>
+  withAdmin(pg.adminUrl, async (c) =>
+    (await c.query(`SELECT tenant_id FROM ledger_incidents i WHERE NOT EXISTS (SELECT 1 FROM ledger_incident_clearances c WHERE c.incident_id = i.id) ORDER BY i.seq`)).rows.map(
+      (r) => r.tenant_id as string,
+    ),
+  );
 
 /** What a person does after an investigation: the operator login clears every open incident. */
 async function clearIncidentsAsOperator(basis: string): Promise<void> {
@@ -126,7 +148,8 @@ async function clearIncidentsAsOperator(basis: string): Promise<void> {
   }
 }
 
-const count = (table: string, tenantId: string) => withAdmin(pg.adminUrl, async (c) => Number((await c.query(`SELECT count(*) AS n FROM ${table} WHERE tenant_id = $1`, [tenantId])).rows[0].n));
+const count = (table: string, tenantId: string) =>
+  withAdmin(pg.adminUrl, async (c) => Number((await c.query(`SELECT count(*) AS n FROM ${table} WHERE tenant_id = $1`, [tenantId])).rows[0].n));
 
 describe('ledger watch: an intact log', () => {
   beforeAll(fresh, 60_000);
@@ -187,14 +210,23 @@ describe('ledger watch: a tampered log', () => {
   const attacks: Array<[string, Attack]> = [
     ['an edited record', (c, t) => c.query(`UPDATE report_captures SET text_scalars = text_scalars + 1 WHERE id = $1`, [t.ids.capture])],
     ['a deleted event', (c, t) => c.query(`DELETE FROM ledger_events WHERE tenant_id = $1 AND seq = 3`, [t.tenantId])],
-    ['two events swapped', async (c, t) => {
-      await c.query(`UPDATE ledger_events SET seq = 1000 WHERE tenant_id = $1 AND seq = 2`, [t.tenantId]);
-      await c.query(`UPDATE ledger_events SET seq = 2 WHERE tenant_id = $1 AND seq = 3`, [t.tenantId]);
-      await c.query(`UPDATE ledger_events SET seq = 3 WHERE tenant_id = $1 AND seq = 1000`, [t.tenantId]);
-    }],
-    ['a child row added to an evaluation after the fact', (c, t) => c.query(
-      `INSERT INTO evaluation_results (tenant_id, evaluation_id, ordinal, drug, genes, outcome, reason_code, gene_evidence)
-       VALUES ($1, $2, 9, 'x', '{}', 'no-guideline', 'no-guideline-for-drug', '[]')`, [t.tenantId, t.ids.evaluation])],
+    [
+      'two events swapped',
+      async (c, t) => {
+        await c.query(`UPDATE ledger_events SET seq = 1000 WHERE tenant_id = $1 AND seq = 2`, [t.tenantId]);
+        await c.query(`UPDATE ledger_events SET seq = 2 WHERE tenant_id = $1 AND seq = 3`, [t.tenantId]);
+        await c.query(`UPDATE ledger_events SET seq = 3 WHERE tenant_id = $1 AND seq = 1000`, [t.tenantId]);
+      },
+    ],
+    [
+      'a child row added to an evaluation after the fact',
+      (c, t) =>
+        c.query(
+          `INSERT INTO evaluation_results (tenant_id, evaluation_id, ordinal, drug, genes, outcome, reason_code, gene_evidence)
+       VALUES ($1, $2, 9, 'x', '{}', 'no-guideline', 'no-guideline-for-drug', '[]')`,
+          [t.tenantId, t.ids.evaluation],
+        ),
+    ],
     ['an edited note', (c, t) => c.query(`UPDATE event_notes SET body = 'rewritten' WHERE tenant_id = $1 AND body = 'cell looks wrong'`, [t.tenantId])],
   ];
 
@@ -350,7 +382,14 @@ describe('ledger watch: observing scheduled incident recording', () => {
       expect(await openIncidentTenants()).toEqual([]);
       let settled = false;
       waiting = waitForScheduledIncident(watcher, t.tenantId);
-      void waiting.then(() => { settled = true; }, () => { settled = true; });
+      void waiting.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
       // One event-loop turn lets a local-only wait resolve; it cannot finish the locked SQL call.
       await new Promise<void>((resolve) => setImmediate(resolve));
       expect(settled).toBe(false);

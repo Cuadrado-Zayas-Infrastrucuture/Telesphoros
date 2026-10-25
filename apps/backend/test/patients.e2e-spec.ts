@@ -14,12 +14,15 @@ afterAll(async () => {
 
 const api = () => request(app.getHttpServer());
 const BASE = '/api/v1/patients';
-const makePatient = async (token: string, label: string) =>
-  (await api().post(BASE).set(bearer(token)).send({ label }).expect(201)).body as { id: string; label: string };
+const makePatient = async (token: string, label: string) => (await api().post(BASE).set(bearer(token)).send({ label }).expect(201)).body as { id: string; label: string };
 
 describe('patients: roles and shape', () => {
   it('lets a clinician create a patient and returns exactly the public fields', async () => {
-    const res = await api().post(BASE).set(bearer(await clinicianA())).send({ label: 'SYN-0001' }).expect(201);
+    const res = await api()
+      .post(BASE)
+      .set(bearer(await clinicianA()))
+      .send({ label: 'SYN-0001' })
+      .expect(201);
     expect(Object.keys(res.body).sort()).toEqual(['createdAt', 'id', 'label', 'mergedInto', 'updatedAt']);
     expect(res.body.mergedInto).toBeNull();
     expect(patientDtoSchema.safeParse(res.body).success).toBe(true);
@@ -31,8 +34,14 @@ describe('patients: roles and shape', () => {
       const res = await api().post(BASE).set(bearer(token)).send({ label: 'SYN-9999' }).expect(403);
       expect(res.body.error.code).toBe('FORBIDDEN');
     }
-    await api().get(BASE).set(bearer(await readerA())).expect(200);
-    const refused = await api().get(BASE).set(bearer(await noRolesA())).expect(403); // finding I04: belonging to an organization is not permission to read its records
+    await api()
+      .get(BASE)
+      .set(bearer(await readerA()))
+      .expect(200);
+    const refused = await api()
+      .get(BASE)
+      .set(bearer(await noRolesA()))
+      .expect(403); // finding I04: belonging to an organization is not permission to read its records
     expect(refused.body.error.code).toBe('FORBIDDEN');
   });
 });
@@ -76,24 +85,40 @@ describe('patients: validation (rejected before any business logic)', () => {
     ['wrong type', { label: 12345 }],
     ['array instead of object', []],
   ])('returns 400 VALIDATION_ERROR for %s', async (_name, body) => {
-    const res = await api().post(BASE).set(bearer(await clinicianA())).send(body as object).expect(400);
+    const res = await api()
+      .post(BASE)
+      .set(bearer(await clinicianA()))
+      .send(body as object)
+      .expect(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
     expect(res.body.error.details.length).toBeGreaterThan(0);
   });
 
   it('names the failing field and never echoes the submitted value', async () => {
-    const res = await api().post(BASE).set(bearer(await clinicianA())).send({ label: 'Jane Doe' }).expect(400);
+    const res = await api()
+      .post(BASE)
+      .set(bearer(await clinicianA()))
+      .send({ label: 'Jane Doe' })
+      .expect(400);
     expect(res.body.error.details[0].field).toBe('label');
     expect(JSON.stringify(res.body)).not.toContain('Jane Doe');
   });
 
   it('rejects a malformed id before touching storage', async () => {
-    const res = await api().get(`${BASE}/not-a-uuid`).set(bearer(await clinicianA())).expect(400);
+    const res = await api()
+      .get(`${BASE}/not-a-uuid`)
+      .set(bearer(await clinicianA()))
+      .expect(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
   });
 
   it('rejects a non-JSON body', async () => {
-    await api().post(BASE).set(bearer(await clinicianA())).set('Content-Type', 'text/plain').send('label=SYN-3').expect(400);
+    await api()
+      .post(BASE)
+      .set(bearer(await clinicianA()))
+      .set('Content-Type', 'text/plain')
+      .send('label=SYN-3')
+      .expect(400);
   });
 });
 
@@ -110,10 +135,7 @@ describe('patients: update, delete, conflicts', () => {
     const a = await clinicianA();
     await makePatient(a, 'SYN-DUP-1');
     const other = await makePatient(a, 'SYN-DUP-2');
-    for (const res of [
-      await api().post(BASE).set(bearer(a)).send({ label: 'syn-dup-1' }),
-      await api().put(`${BASE}/${other.id}`).set(bearer(a)).send({ label: 'SYN-DUP-1' }),
-    ]) {
+    for (const res of [await api().post(BASE).set(bearer(a)).send({ label: 'syn-dup-1' }), await api().put(`${BASE}/${other.id}`).set(bearer(a)).send({ label: 'SYN-DUP-1' })]) {
       expect(res.status).toBe(409);
       expect(res.body.error.code).toBe('CONFLICT');
     }
@@ -130,11 +152,7 @@ describe('patients: update, delete, conflicts', () => {
   it('refuses to delete a patient that still has reports (mirrors the Phase 3 foreign key)', async () => {
     const a = await clinicianA();
     const p = await makePatient(a, 'SYN-FK-1');
-    const report = await api()
-      .post('/api/v1/reports')
-      .set(bearer(a))
-      .send({ patientId: p.id, type: 'vcf', filename: 'x.vcf', sizeBytes: 10 })
-      .expect(201);
+    const report = await api().post('/api/v1/reports').set(bearer(a)).send({ patientId: p.id, type: 'vcf', filename: 'x.vcf', sizeBytes: 10 }).expect(201);
     const res = await api().delete(`${BASE}/${p.id}`).set(bearer(a)).expect(409);
     expect(res.body.error.code).toBe('CONFLICT');
 
@@ -170,18 +188,21 @@ describe('patients: pagination envelope', () => {
   });
 
   it('defaults to page 1 of 20', async () => {
-    const res = await api().get(BASE).set(bearer(await clinicianA())).expect(200);
+    const res = await api()
+      .get(BASE)
+      .set(bearer(await clinicianA()))
+      .expect(200);
     expect(res.body.meta.page).toBe(1);
     expect(res.body.meta.pageSize).toBe(20);
   });
 
-  it.each(['pageSize=101', 'pageSize=0', 'page=0', 'page=abc', 'pageSize=-5', 'sort=label'])(
-    'rejects ?%s (page size is capped, unknown params are refused)',
-    async (query) => {
-      const res = await api().get(`${BASE}?${query}`).set(bearer(await clinicianA())).expect(400);
-      expect(res.body.error.code).toBe('VALIDATION_ERROR');
-    },
-  );
+  it.each(['pageSize=101', 'pageSize=0', 'page=0', 'page=abc', 'pageSize=-5', 'sort=label'])('rejects ?%s (page size is capped, unknown params are refused)', async (query) => {
+    const res = await api()
+      .get(`${BASE}?${query}`)
+      .set(bearer(await clinicianA()))
+      .expect(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
 });
 
 describe('patients: a retried create (audit item 25)', () => {
@@ -203,7 +224,11 @@ describe('patients: a retried create (audit item 25)', () => {
     await api().post(BASE).set(bearer(token)).send({ label: 'SYN-RETRY-2', requestId: id }).expect(201);
     const changed = await api().post(BASE).set(bearer(token)).send({ label: 'SYN-RETRY-2B', requestId: id }).expect(409);
     expect(changed.body.error.details?.[0]?.reason).toBe('request-id-reused');
-    const other = await api().post(BASE).set(bearer(await clinicianB())).send({ label: 'SYN-RETRY-2', requestId: id }).expect(201); // another organization: its own
+    const other = await api()
+      .post(BASE)
+      .set(bearer(await clinicianB()))
+      .send({ label: 'SYN-RETRY-2', requestId: id })
+      .expect(201); // another organization: its own
     expect(other.body.label).toBe('SYN-RETRY-2');
   });
 

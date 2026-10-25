@@ -37,7 +37,16 @@ async function patient(t: string): Promise<string> {
 const propose = (t: string, by: string, source: string, target: string) =>
   repo.insertMergeProposal(t, by, { kind: 'merge', sourcePatientId: source, targetPatientId: target, reasonCode: 'entered-twice' });
 const proposalCount = (t: string, source: string, target: string) =>
-  owner(async (c) => (await c.query<{ n: number }>(`SELECT count(*)::int AS n FROM patient_merge_proposals WHERE tenant_id = $1 AND source_patient_id = $2 AND target_patient_id = $3`, [t, source, target])).rows[0]!.n);
+  owner(
+    async (c) =>
+      (
+        await c.query<{ n: number }>(`SELECT count(*)::int AS n FROM patient_merge_proposals WHERE tenant_id = $1 AND source_patient_id = $2 AND target_patient_id = $3`, [
+          t,
+          source,
+          target,
+        ])
+      ).rows[0]!.n,
+  );
 
 describe('two proposals for the same pair at the same time', () => {
   it('lets one in and refuses the other as pending', async () => {

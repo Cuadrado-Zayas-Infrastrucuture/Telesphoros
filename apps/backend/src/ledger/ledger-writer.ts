@@ -16,7 +16,14 @@ import { loadProjections, projectionHash, type Queryable } from './projections';
  * further record: the transaction rolls back and the caller gets a 503, while reads continue. The gate is a fast path: `ledger_append`
  * itself refuses a contained tenant inside the database (migration 0011), so a task that has not heard of an incident yet is stopped too.
  */
-export async function appendEvent(gate: LedgerGate, tenantId: string, client: Queryable, table: RecordTable, recordId: string, eventId: string): Promise<{ seq: string; payloadSha256: string }> {
+export async function appendEvent(
+  gate: LedgerGate,
+  tenantId: string,
+  client: Queryable,
+  table: RecordTable,
+  recordId: string,
+  eventId: string,
+): Promise<{ seq: string; payloadSha256: string }> {
   gate.assertOpen(tenantId);
   const projections = await loadProjections(client, table, [recordId]);
   const projection = projections.get(recordId);
@@ -24,7 +31,12 @@ export async function appendEvent(gate: LedgerGate, tenantId: string, client: Qu
   const payloadSha256 = projectionHash(projection);
   try {
     const { rows } = await client.query<{ seq: string }>(`SELECT ledger_append($1::uuid, $2, $3, $4::uuid, $5, $6::smallint)::text AS seq`, [
-      eventId, EVENT_TYPE_FOR_TABLE[table], table, recordId, payloadSha256, PROJECTION_VERSION,
+      eventId,
+      EVENT_TYPE_FOR_TABLE[table],
+      table,
+      recordId,
+      payloadSha256,
+      PROJECTION_VERSION,
     ]);
     return { seq: rows[0]!.seq, payloadSha256 };
   } catch (error) {

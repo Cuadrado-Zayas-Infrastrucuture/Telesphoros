@@ -17,23 +17,31 @@ import type { EphemeralDatabase } from '../../../backend/test/helpers/database';
 let fixture: EphemeralDatabase;
 let owner: Client;
 let worker: Client;
-const h = durableHarness(() => fixture, () => owner);
+const h = durableHarness(
+  () => fixture,
+  () => owner,
+);
 const until = async (check: () => Promise<boolean>, ms = 10_000) => {
-  for (const end = Date.now() + ms; Date.now() < end; await new Promise(r => setTimeout(r, 25))) if (await check()) return;
+  for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 25))) if (await check()) return;
   throw new Error('UNTIL_TIMEOUT');
 };
 const jobState = async (id: string) => (await h.row('SELECT state FROM public.jobs WHERE id=$1', [id])).state as string;
 /** Test-only teardown after evidence: an unknown dispatch holds its fleet permit forever by design. */
-const releaseHeldPermit = (runId: string) =>
-  owner.query('UPDATE public.agentic_synthetic_reservations SET in_flight=false WHERE run_id=$1 AND NOT settled', [runId]);
+const releaseHeldPermit = (runId: string) => owner.query('UPDATE public.agentic_synthetic_reservations SET in_flight=false WHERE run_id=$1 AND NOT settled', [runId]);
 
 function crashChild(mode: 'before-begin' | 'after-begin' | 'after-finish') {
-  const child = spawn(process.execPath, [resolve(import.meta.dirname, 'fixtures/crash-child.mjs'), mode],
-    { env: { P2_CHILD_WORKER_URL: fixture.workerUrl, PATH: process.env.PATH ?? '' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [resolve(import.meta.dirname, 'fixtures/crash-child.mjs'), mode], {
+    env: { P2_CHILD_WORKER_URL: fixture.workerUrl, PATH: process.env.PATH ?? '' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
   let out = '';
-  child.stdout.on('data', b => { out += b; });
-  child.stderr.on('data', b => { out += b; });
-  const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(r => child.once('exit', (code, signal) => r({ code, signal })));
+  child.stdout.on('data', (b) => {
+    out += b;
+  });
+  child.stderr.on('data', (b) => {
+    out += b;
+  });
+  const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((r) => child.once('exit', (code, signal) => r({ code, signal })));
   return {
     async killAtReady() {
       await until(async () => out.includes('READY') || child.exitCode !== null, 20_000);
@@ -47,16 +55,21 @@ function crashChild(mode: 'before-begin' | 'after-begin' | 'after-finish') {
 /** Lets the kernel run to its final decision but withholds the commit, so the test owns that transaction. */
 function withheldFinish(store: DurableSyntheticStore) {
   const captured: { args: Parameters<DurableSyntheticStore['finish']> | null } = { args: null };
-  const proxy = new Proxy(store, { get(target, key, receiver) {
-    if (key === 'finish') return async (...args: Parameters<DurableSyntheticStore['finish']>) => {
-      captured.args = args; return { kind: 'refused', code: 'STORAGE_UNAVAILABLE' } as const; };
-    const value = Reflect.get(target, key, receiver);
-    return typeof value === 'function' ? value.bind(target) : value;
-  } });
+  const proxy = new Proxy(store, {
+    get(target, key, receiver) {
+      if (key === 'finish')
+        return async (...args: Parameters<DurableSyntheticStore['finish']>) => {
+          captured.args = args;
+          return { kind: 'refused', code: 'STORAGE_UNAVAILABLE' } as const;
+        };
+      const value = Reflect.get(target, key, receiver);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
   return { proxy, captured };
 }
 const finishSql = 'SELECT public.agentic_synthetic_finish($1::jsonb,$2::jsonb,$3::jsonb) AS r';
-const finishParams = (args: Parameters<DurableSyntheticStore['finish']>) => args.map(a => JSON.stringify(a));
+const finishParams = (args: Parameters<DurableSyntheticStore['finish']>) => args.map((a) => JSON.stringify(a));
 
 describe('owned PostgreSQL synthetic recovery: Runner, crashes, rollback and ambiguous commit', () => {
   beforeAll(async () => {
@@ -68,25 +81,43 @@ describe('owned PostgreSQL synthetic recovery: Runner, crashes, rollback and amb
     await owner.query(`INSERT INTO public.agentic_synthetic_capacity(singleton,tenant_day_units,fleet_month_units)
       VALUES (1,5000000,300000000)`);
   }, 180_000);
-  afterAll(async () => { await worker?.end(); await owner?.end(); await fixture?.drop(); }, 60_000);
+  afterAll(async () => {
+    await worker?.end();
+    await owner?.end();
+    await fixture?.drop();
+  }, 60_000);
 
   test('P2-12: the existing Runner claims, heartbeats, runs and acknowledges through the fenced wrapper', async () => {
-    expect(PRODUCTION_JOBS.map(j => j.type)).not.toContain(SYNTHETIC_JOB_TYPE);
+    expect(PRODUCTION_JOBS.map((j) => j.type)).not.toContain(SYNTHETIC_JOB_TYPE);
     const { tenant, caller } = await h.seedTenant();
     const store = new PostgresSyntheticStore(worker, h.app);
     const queue = new SyntheticJobQueue(worker);
     const trace: string[] = [];
     const lines: string[] = [];
-    const runner = new Runner({ workerId: 'runner-p2', queue, jobs: [syntheticTestJob(queue, store, scriptedActors(['accept'], trace))],
-      concurrency: 1, tenantCap: 1, pollMs: 50, drainSeconds: 2, log: jsonLogger(line => lines.push(line)) });
+    const runner = new Runner({
+      workerId: 'runner-p2',
+      queue,
+      jobs: [syntheticTestJob(queue, store, scriptedActors(['accept'], trace))],
+      concurrency: 1,
+      tenantCap: 1,
+      pollMs: 50,
+      drainSeconds: 2,
+      log: jsonLogger((line) => lines.push(line)),
+    });
     const admitted = await h.admit(store, caller);
     runner.start();
-    try { await until(async () => (await jobState(admitted.jobId)) === 'succeeded'); }
-    finally { await runner.stop(); }
+    try {
+      await until(async () => (await jobState(admitted.jobId)) === 'succeeded');
+    } finally {
+      await runner.stop();
+    }
     expect(trace).toEqual([`${admitted.runId}:draft:1`, `${admitted.runId}:director:1`]);
     expect(await h.accounts(tenant, admitted.runId)).toMatchObject({ run_state: 'released', settled: true, in_flight: false, outcomes: 1 });
-    const job = await h.row(`SELECT requested_by, (SELECT array_agg(outcome || ':' || worker_id ORDER BY seq)
-      FROM public.job_attempts a WHERE a.job_id=j.id) AS attempts FROM public.jobs j WHERE j.id=$1`, [admitted.jobId]);
+    const job = await h.row(
+      `SELECT requested_by, (SELECT array_agg(outcome || ':' || worker_id ORDER BY seq)
+      FROM public.job_attempts a WHERE a.job_id=j.id) AS attempts FROM public.jobs j WHERE j.id=$1`,
+      [admitted.jobId],
+    );
     // The requester stays the person; the Runner's system actor never becomes the requester.
     expect(job).toEqual({ requested_by: caller.requesterRef, attempts: ['succeeded:runner-p2'] });
     const logged = lines.join('\n');
@@ -99,14 +130,33 @@ describe('owned PostgreSQL synthetic recovery: Runner, crashes, rollback and amb
     let drafts = 0;
     let entered!: () => void;
     let unblock!: () => void;
-    const inDraft = new Promise<void>(r => { entered = r; });
-    const gate = new Promise<void>(r => { unblock = r; });
+    const inDraft = new Promise<void>((r) => {
+      entered = r;
+    });
+    const gate = new Promise<void>((r) => {
+      unblock = r;
+    });
     const base = scriptedActors(['accept']);
-    const blocking: ScriptedActors = { ...base, async draft(sources, attemptId) {
-      drafts++; entered(); await gate; return base.draft(sources, attemptId); } };
+    const blocking: ScriptedActors = {
+      ...base,
+      async draft(sources, attemptId) {
+        drafts++;
+        entered();
+        await gate;
+        return base.draft(sources, attemptId);
+      },
+    };
     const q1 = new SyntheticJobQueue(worker);
-    const r1 = new Runner({ workerId: 'runner-a', queue: q1, jobs: [syntheticTestJob(q1, store, blocking)],
-      concurrency: 1, tenantCap: 1, pollMs: 50, drainSeconds: 0.1, log: jsonLogger(() => undefined) });
+    const r1 = new Runner({
+      workerId: 'runner-a',
+      queue: q1,
+      jobs: [syntheticTestJob(q1, store, blocking)],
+      concurrency: 1,
+      tenantCap: 1,
+      pollMs: 50,
+      drainSeconds: 0.1,
+      log: jsonLogger(() => undefined),
+    });
     const admitted = await h.admit(store, caller);
     r1.start();
     await inDraft;
@@ -114,15 +164,34 @@ describe('owned PostgreSQL synthetic recovery: Runner, crashes, rollback and amb
     unblock();
     expect(await jobState(admitted.jobId)).toBe('queued');
     const q2 = new SyntheticJobQueue(worker);
-    const r2 = new Runner({ workerId: 'runner-b', queue: q2, jobs: [syntheticTestJob(q2, store, blocking)],
-      concurrency: 1, tenantCap: 1, pollMs: 50, drainSeconds: 2, log: jsonLogger(() => undefined) });
+    const r2 = new Runner({
+      workerId: 'runner-b',
+      queue: q2,
+      jobs: [syntheticTestJob(q2, store, blocking)],
+      concurrency: 1,
+      tenantCap: 1,
+      pollMs: 50,
+      drainSeconds: 2,
+      log: jsonLogger(() => undefined),
+    });
     r2.start();
-    try { await until(async () => (await h.accounts(tenant, admitted.runId)).outcomes === 1); }
-    finally { await r2.stop(); }
+    try {
+      await until(async () => (await h.accounts(tenant, admitted.runId)).outcomes === 1);
+    } finally {
+      await r2.stop();
+    }
     expect(drafts).toBe(1);
     expect(await jobState(admitted.jobId)).toBe('dead');
-    expect(await h.accounts(tenant, admitted.runId)).toMatchObject({ run_state: 'held', slots: 1, unknown_slots: 1,
-      settled: false, in_flight: true, usage_state: 'unknown', tenant_reserved: '250000', tenant_consumed: '0' });
+    expect(await h.accounts(tenant, admitted.runId)).toMatchObject({
+      run_state: 'held',
+      slots: 1,
+      unknown_slots: 1,
+      settled: false,
+      in_flight: true,
+      usage_state: 'unknown',
+      tenant_reserved: '250000',
+      tenant_consumed: '0',
+    });
     const outcome = await h.row('SELECT outcome FROM public.agentic_synthetic_outcomes WHERE run_id=$1', [admitted.runId]);
     expect(outcome.outcome).toMatchObject({ reasonCode: 'QUEUE_DEAD', counters: { usageState: 'unknown', logicalSlots: 1 } });
     await releaseHeldPermit(admitted.runId);
@@ -138,8 +207,15 @@ describe('owned PostgreSQL synthetic recovery: Runner, crashes, rollback and amb
     await h.expireLease(admitted.jobId);
     expect(await new SyntheticJobQueue(worker).claim('recoverer', claimOptions)).toEqual([]);
     expect(await jobState(admitted.jobId)).toBe('dead');
-    expect(await h.accounts(tenant, admitted.runId)).toMatchObject({ run_state: 'held', slots: 1, unknown_slots: 1,
-      settled: false, in_flight: true, usage_state: 'unknown', tenant_reserved: '250000' });
+    expect(await h.accounts(tenant, admitted.runId)).toMatchObject({
+      run_state: 'held',
+      slots: 1,
+      unknown_slots: 1,
+      settled: false,
+      in_flight: true,
+      usage_state: 'unknown',
+      tenant_reserved: '250000',
+    });
     await releaseHeldPermit(admitted.runId);
   });
 
@@ -151,8 +227,15 @@ describe('owned PostgreSQL synthetic recovery: Runner, crashes, rollback and amb
     expect(await h.accounts(tenant, admitted.runId)).toMatchObject({ run_state: 'running', slots: 0, outcomes: 0 });
     await h.expireLease(admitted.jobId);
     expect(await new SyntheticJobQueue(worker).claim('recoverer', claimOptions)).toEqual([]);
-    expect(await h.accounts(tenant, admitted.runId)).toMatchObject({ run_state: 'held', slots: 0, settled: true,
-      in_flight: false, tenant_reserved: '0', tenant_consumed: '250000', outcomes: 1 });
+    expect(await h.accounts(tenant, admitted.runId)).toMatchObject({
+      run_state: 'held',
+      slots: 0,
+      settled: true,
+      in_flight: false,
+      tenant_reserved: '0',
+      tenant_consumed: '250000',
+      outcomes: 1,
+    });
   });
 
   test('P2-18: a crash after the committed outcome but before queue ack keeps one readable outcome and no replay', async () => {
@@ -169,20 +252,23 @@ describe('owned PostgreSQL synthetic recovery: Runner, crashes, rollback and amb
     expect(await jobState(admitted.jobId)).toBe('dead'); // queue dead is not proof of a missing business outcome
     expect(await store.read(admitted.runId, caller)).toEqual(before);
     expect(await h.accounts(tenant, admitted.runId)).toMatchObject({ outcomes: 1, slots: 2, settled: true, tenant_consumed: '250000' });
-    expect((await h.row('SELECT outcome_digest FROM public.agentic_synthetic_outcomes WHERE run_id=$1', [admitted.runId])).outcome_digest)
-      .toBe(digestBefore);
+    expect((await h.row('SELECT outcome_digest FROM public.agentic_synthetic_outcomes WHERE run_id=$1', [admitted.runId])).outcome_digest).toBe(digestBefore);
   });
 
   test('P2-24: a checked error or dropped connection before COMMIT leaves no partial outcome, audit or settlement', async () => {
     const { tenant, caller } = await h.seedTenant();
     const run = await h.admitAndClaim(worker, caller);
     const { proxy, captured } = withheldFinish(run.store);
-    expect(await runDurableSynthetic(run.stamp, run.expected, proxy, scriptedActors(['accept']), new AbortController().signal))
-      .toEqual({ kind: 'refused', code: 'STORAGE_UNAVAILABLE' });
+    expect(await runDurableSynthetic(run.stamp, run.expected, proxy, scriptedActors(['accept']), new AbortController().signal)).toEqual({
+      kind: 'refused',
+      code: 'STORAGE_UNAVAILABLE',
+    });
     const args = captured.args!;
     const auditBefore = await h.row('SELECT max(event_sequence)::int AS n FROM public.agentic_synthetic_audit WHERE run_id=$1', [run.runId]);
-    const snapshot = async () => ({ ...(await h.accounts(tenant, run.runId)),
-      ...(await h.row('SELECT max(event_sequence)::int AS n FROM public.agentic_synthetic_audit WHERE run_id=$1', [run.runId])) });
+    const snapshot = async () => ({
+      ...(await h.accounts(tenant, run.runId)),
+      ...(await h.row('SELECT max(event_sequence)::int AS n FROM public.agentic_synthetic_audit WHERE run_id=$1', [run.runId])),
+    });
     const clean = { run_state: 'release-pending', outcomes: 0, settled: false, in_flight: true, tenant_reserved: '250000', n: auditBefore.n };
 
     const tx = new Client({ connectionString: fixture.workerUrl });
@@ -215,8 +301,16 @@ describe('owned PostgreSQL synthetic recovery: Runner, crashes, rollback and amb
     const { proxy, captured } = withheldFinish(run.store);
     let actorCalls = 0;
     const counted = scriptedActors(['accept']);
-    const actorsCounted: ScriptedActors = { draft: (...a) => { actorCalls++; return counted.draft(...a); },
-      director: (...a) => { actorCalls++; return counted.director(...a); } };
+    const actorsCounted: ScriptedActors = {
+      draft: (...a) => {
+        actorCalls++;
+        return counted.draft(...a);
+      },
+      director: (...a) => {
+        actorCalls++;
+        return counted.director(...a);
+      },
+    };
     await runDurableSynthetic(run.stamp, run.expected, proxy, actorsCounted, new AbortController().signal);
     const args = captured.args!;
     const tx = new Client({ connectionString: fixture.workerUrl });
@@ -226,10 +320,21 @@ describe('owned PostgreSQL synthetic recovery: Runner, crashes, rollback and amb
     await tx.query(finishSql, finishParams(args));
     const commit = tx.query('COMMIT');
     (tx as unknown as { connection: { stream: { destroy(): void } } }).connection.stream.destroy();
-    const seen = await commit.then(() => 'response', () => 'lost');
+    const seen = await commit.then(
+      () => 'response',
+      () => 'lost',
+    );
     expect(seen).toBe('lost'); // the caller cannot tell whether COMMIT happened
-    await until(async () => !(await h.row(`SELECT count(*)::int AS n FROM pg_stat_activity
-      WHERE usename='telesphoros_test_worker' AND state <> 'idle' AND query LIKE '%agentic_synthetic_finish%'`, [])).n);
+    await until(
+      async () =>
+        !(
+          await h.row(
+            `SELECT count(*)::int AS n FROM pg_stat_activity
+      WHERE usename='telesphoros_test_worker' AND state <> 'idle' AND query LIKE '%agentic_synthetic_finish%'`,
+            [],
+          )
+        ).n,
+    );
     const readback = await run.store.read(run.runId, caller);
     expect(readback.kind).toBe('ok');
     const retried = await run.store.finish(...args); // reconcile: same decision, same claim

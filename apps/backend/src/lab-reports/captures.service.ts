@@ -104,7 +104,8 @@ export class CapturesService {
       });
       return { capture: await this.present(principal, stored.record), created: stored.created };
     } catch (error) {
-      if (error instanceof SourceChangedError) throw AppException.conflictBecause('source-changed', 'The report changed while it was being captured. Nothing was saved; capture it again.');
+      if (error instanceof SourceChangedError)
+        throw AppException.conflictBecause('source-changed', 'The report changed while it was being captured. Nothing was saved; capture it again.');
       throw error;
     }
   }
@@ -156,7 +157,16 @@ export class CapturesService {
         popplerVersion: capture.popplerVersion as string,
         ...(body.note === undefined ? {} : { note: body.note }),
         // The fingerprint of the original request: the capture, the decision and the note. A repeat with the same id and fingerprint returns the decision already stored.
-        ...(body.requestId ? { request: { id: body.requestId, hash: createHash('sha256').update(JSON.stringify([captureId.toLowerCase(), body.decision, body.note ?? null])).digest('hex') } } : {}),
+        ...(body.requestId
+          ? {
+              request: {
+                id: body.requestId,
+                hash: createHash('sha256')
+                  .update(JSON.stringify([captureId.toLowerCase(), body.decision, body.note ?? null]))
+                  .digest('hex'),
+              },
+            }
+          : {}),
       });
       return toAcceptanceDto(stored.record);
     } catch (error) {

@@ -56,7 +56,8 @@ const target = (g: Gateway, bucket: string, prefix = 'nightly', overrides: Parti
   ...overrides,
 });
 const reader = (g: Gateway, bucket: string, prefix = 'nightly') => ({ client: clientFor(g.url, RD), bucket, prefix });
-const objectBytes = async (bucket: string, key: string) => Buffer.from(await (await emulator().send(new GetObjectCommand({ Bucket: bucket, Key: key }))).Body!.transformToByteArray());
+const objectBytes = async (bucket: string, key: string) =>
+  Buffer.from(await (await emulator().send(new GetObjectCommand({ Bucket: bucket, Key: key }))).Body!.transformToByteArray());
 
 describe('uploading a backup to the second provider', () => {
   it('writes the dump, then the manifest last, each locked, checksummed and with no server-side encryption header', async () => {
@@ -93,7 +94,7 @@ describe('uploading a backup to the second provider', () => {
     await expect(uploadBackup(backup.dir, backup.manifest, target(g, bucket), master)).resolves.toBeDefined();
   });
 
-  it('never sends the application\'s AWS credentials to the other provider', async () => {
+  it("never sends the application's AWS credentials to the other provider", async () => {
     const saved = { id: process.env.AWS_ACCESS_KEY_ID, secret: process.env.AWS_SECRET_ACCESS_KEY, profile: process.env.AWS_PROFILE };
     process.env.AWS_ACCESS_KEY_ID = 'AKIAAPPLICATIONPRIMARY';
     process.env.AWS_SECRET_ACCESS_KEY = 'primary-account-secret';
@@ -109,7 +110,11 @@ describe('uploading a backup to the second provider', () => {
       expect(() => loadCredentials('upload', {})).toThrow(/BACKUP_S3_UPLOAD_ACCESS_KEY_ID/);
       expect(() => loadCredentials('upload', { AWS_ACCESS_KEY_ID: 'AKIAAPPLICATIONPRIMARY', AWS_SECRET_ACCESS_KEY: 'x' })).toThrow(/deliberately not used/);
     } finally {
-      for (const [name, value] of [['AWS_ACCESS_KEY_ID', saved.id], ['AWS_SECRET_ACCESS_KEY', saved.secret], ['AWS_PROFILE', saved.profile]] as const) {
+      for (const [name, value] of [
+        ['AWS_ACCESS_KEY_ID', saved.id],
+        ['AWS_SECRET_ACCESS_KEY', saved.secret],
+        ['AWS_PROFILE', saved.profile],
+      ] as const) {
         if (value === undefined) delete process.env[name];
         else process.env[name] = value;
       }
@@ -135,15 +140,31 @@ describe('uploading a backup to the second provider', () => {
 
     const readOnly = await gateway();
     const before = readOnly.requests.length;
-    await expect(uploadBackup(backup.dir, backup.manifest, { ...target(readOnly, bucket), client: clientFor(readOnly.url, RD) }, master)).rejects.toMatchObject({ name: 'AccessDenied' });
+    await expect(uploadBackup(backup.dir, backup.manifest, { ...target(readOnly, bucket), client: clientFor(readOnly.url, RD) }, master)).rejects.toMatchObject({
+      name: 'AccessDenied',
+    });
     expect(readOnly.requests.length - before).toBe(1); // asked once
     let calls = 0;
-    await expect(withRetry(async () => { calls++; throw Object.assign(new Error('x'), { $metadata: { httpStatusCode: 403 } }); }, 3, 1)).rejects.toThrow();
+    await expect(
+      withRetry(
+        async () => {
+          calls++;
+          throw Object.assign(new Error('x'), { $metadata: { httpStatusCode: 403 } });
+        },
+        3,
+        1,
+      ),
+    ).rejects.toThrow();
     expect(calls).toBe(1);
   });
 
   it('verifies the upload whatever the ETag looks like: quoted, upper-case, not an MD5, or wrong', async () => {
-    for (const [etag, expectation] of [['as-is', 'verified'], ['upper-unquoted', 'verified'], ['not-md5', 'unverifiable'], ['wrong-md5', 'refused']] as const) {
+    for (const [etag, expectation] of [
+      ['as-is', 'verified'],
+      ['upper-unquoted', 'verified'],
+      ['not-md5', 'unverifiable'],
+      ['wrong-md5', 'refused'],
+    ] as const) {
       const g = await gateway({ etag });
       const bucket = await newBucket();
       const backup = await fakeBackup(master);
@@ -241,7 +262,10 @@ describe('finding and downloading backups', () => {
     await decryptFile(join(dest, 'db.dump.enc'), join(tempDir(), 'plain'), master);
 
     const original = readFileSync(join(backup.dir, 'db.dump.enc'));
-    for (const [, bytes, message] of [['longer', Buffer.concat([original, Buffer.from('extra')]), /larger than its manifest/], ['shorter', original.subarray(0, original.length - 5), /shorter than its manifest/]] as const) {
+    for (const [, bytes, message] of [
+      ['longer', Buffer.concat([original, Buffer.from('extra')]), /larger than its manifest/],
+      ['shorter', original.subarray(0, original.length - 5), /shorter than its manifest/],
+    ] as const) {
       await emulator().send(new PutObjectCommand({ Bucket: bucket, Key: `nightly/${backup.name}/db.dump.enc`, Body: bytes }));
       await expect(downloadBackup(reader(g, bucket), backup.name, tempDir())).rejects.toThrow(message);
     }
@@ -297,8 +321,18 @@ describe('backup-check: is the set-up right?', () => {
     for (const put of backupPuts) expect(Date.parse(String(put.headers['x-amz-object-lock-retain-until-date'])) - Date.now()).toBeGreaterThan(29 * DAY);
 
     // The probes really were refused by the provider (not skipped): the upload key tried list/read/delete and the read key tried write/delete.
-    expect(g.requests.filter((r) => r.accessKeyId === UP && r.status === 403).map((r) => r.op).sort()).toEqual(['delete', 'get', 'list']);
-    expect(g.requests.filter((r) => r.accessKeyId === RD && r.status === 403).map((r) => r.op).sort()).toEqual(['delete', 'put']);
+    expect(
+      g.requests
+        .filter((r) => r.accessKeyId === UP && r.status === 403)
+        .map((r) => r.op)
+        .sort(),
+    ).toEqual(['delete', 'get', 'list']);
+    expect(
+      g.requests
+        .filter((r) => r.accessKeyId === RD && r.status === 403)
+        .map((r) => r.op)
+        .sort(),
+    ).toEqual(['delete', 'put']);
     expect(JSON.stringify(findings)).not.toContain('secret-of-'); // no credential in any output
   });
 
@@ -416,9 +450,20 @@ describe('configuration', () => {
     expect(loadOffsiteSettings({ BACKUP_S3_ENDPOINT: 'http://127.0.0.1:5555' }).endpoint).toBe('http://127.0.0.1:5555');
     expect(() => loadOffsiteSettings({ BACKUP_S3_ENDPOINT: 'http://127.0.0.1.evil.com' })).toThrow(/https/);
     expect(loadOffsiteSettings({})).toMatchObject({ lockMode: 'GOVERNANCE', retainDays: 30, sse: undefined, region: 'us-east-1' });
-    expect(loadOffsiteSettings({ BACKUP_LOCK_MODE: 'COMPLIANCE', BACKUP_RETAIN_DAYS: '90', BACKUP_S3_SSE: 'AES256' })).toMatchObject({ lockMode: 'COMPLIANCE', retainDays: 90, sse: 'AES256' });
+    expect(loadOffsiteSettings({ BACKUP_LOCK_MODE: 'COMPLIANCE', BACKUP_RETAIN_DAYS: '90', BACKUP_S3_SSE: 'AES256' })).toMatchObject({
+      lockMode: 'COMPLIANCE',
+      retainDays: 90,
+      sse: 'AES256',
+    });
     expect(loadOffsiteSettings({ BACKUP_S3_SSE: 'none' }).sse).toBeUndefined();
-    for (const bad of [{ BACKUP_LOCK_MODE: 'OFF' }, { BACKUP_RETAIN_DAYS: '0' }, { BACKUP_RETAIN_DAYS: '1.5' }, { BACKUP_RETAIN_DAYS: '99999' }, { BACKUP_RETAIN_DAYS: 'abc' }, { BACKUP_S3_SSE: 'weird' }]) {
+    for (const bad of [
+      { BACKUP_LOCK_MODE: 'OFF' },
+      { BACKUP_RETAIN_DAYS: '0' },
+      { BACKUP_RETAIN_DAYS: '1.5' },
+      { BACKUP_RETAIN_DAYS: '99999' },
+      { BACKUP_RETAIN_DAYS: 'abc' },
+      { BACKUP_S3_SSE: 'weird' },
+    ]) {
       expect(() => loadOffsiteSettings(bad)).toThrow(OffsiteError);
     }
   });
@@ -427,7 +472,10 @@ describe('configuration', () => {
     const dir = tempDir();
     writeFileSync(join(dir, 'id'), 'AKFROMFILE\n');
     writeFileSync(join(dir, 'secret'), 'the-secret-in-a-file\n');
-    expect(loadCredentials('read', { BACKUP_S3_READ_ACCESS_KEY_ID_FILE: join(dir, 'id'), BACKUP_S3_READ_SECRET_ACCESS_KEY_FILE: join(dir, 'secret') })).toEqual({ accessKeyId: 'AKFROMFILE', secretAccessKey: 'the-secret-in-a-file' });
+    expect(loadCredentials('read', { BACKUP_S3_READ_ACCESS_KEY_ID_FILE: join(dir, 'id'), BACKUP_S3_READ_SECRET_ACCESS_KEY_FILE: join(dir, 'secret') })).toEqual({
+      accessKeyId: 'AKFROMFILE',
+      secretAccessKey: 'the-secret-in-a-file',
+    });
     expect(loadCredentials('upload', { BACKUP_S3_UPLOAD_ACCESS_KEY_ID: 'a', BACKUP_S3_UPLOAD_SECRET_ACCESS_KEY: 'b' })).toEqual({ accessKeyId: 'a', secretAccessKey: 'b' });
     // A role's key is not another role's key.
     expect(() => loadCredentials('read', { BACKUP_S3_UPLOAD_ACCESS_KEY_ID: 'a', BACKUP_S3_UPLOAD_SECRET_ACCESS_KEY: 'b' })).toThrow(/BACKUP_S3_READ_/);

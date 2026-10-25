@@ -32,8 +32,7 @@ export function fakeClient(session: Partial<Session> = {}): FakeClient {
 export function fakeFetch(answer: { roles?: unknown; status?: number; recoveryScope?: unknown } = { roles: ['clinician'] }) {
   return vi.fn<typeof fetch>(async (input) => {
     if (String(input).includes('/api/v1/patients')) return new Response(JSON.stringify({ data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } }));
-    const body = String(input).endsWith('/api/v1/me/recovery-scope')
-      ? { recoveryScope: answer.recoveryScope ?? RECOVERY_SCOPE } : { roles: answer.roles ?? [] };
+    const body = String(input).endsWith('/api/v1/me/recovery-scope') ? { recoveryScope: answer.recoveryScope ?? RECOVERY_SCOPE } : { roles: answer.roles ?? [] };
     return new Response(JSON.stringify(body), {
       status: answer.status ?? 200,
       headers: { 'Content-Type': 'application/json' },

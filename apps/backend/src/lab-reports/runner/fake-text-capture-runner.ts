@@ -44,7 +44,10 @@ export class FakeTextCaptureRunner extends TextCaptureRunner {
   static async open(directory: string): Promise<FakeTextCaptureRunner> {
     let names: string[];
     try {
-      names = (await readdir(directory, { withFileTypes: true })).filter((d) => d.isDirectory()).map((d) => d.name).sort();
+      names = (await readdir(directory, { withFileTypes: true }))
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name)
+        .sort();
     } catch {
       throw new RunnerMisconfiguredError('fixtures-unreadable');
     }
@@ -66,7 +69,10 @@ export class FakeTextCaptureRunner extends TextCaptureRunner {
       await FakeTextCaptureRunner.readText(entry); // fails now if the text is missing or not the recorded one
       entries.set(entry.pdfSha256, entry);
     }
-    const manifest = [...entries.values()].map((e) => `${e.pdfSha256}:${e.textSha256}:${e.popplerVersion}`).sort().join('\n');
+    const manifest = [...entries.values()]
+      .map((e) => `${e.pdfSha256}:${e.textSha256}:${e.popplerVersion}`)
+      .sort()
+      .join('\n');
     return new FakeTextCaptureRunner(entries, sha256(manifest));
   }
 

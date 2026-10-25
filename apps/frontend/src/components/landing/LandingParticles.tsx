@@ -15,7 +15,7 @@ const round = (value: number) => Math.round(value * 10) / 10;
 function layout(count: number, area: Area, tones: Particle['tone'][]): Particle[] {
   return Array.from({ length: count }, (_, index) => ({
     x: round(area.left + area.width * fraction(0.5 + index * 0.7548776662)),
-    y: round(area.top + area.height * fraction(0.5 + index * 0.5698402910)),
+    y: round(area.top + area.height * fraction(0.5 + index * 0.569840291)),
     size: index % 5 === 0 ? 'lg' : index % 3 === 0 ? 'md' : 'sm',
     tone: tones[index % tones.length],
     depth: round(0.4 + 0.6 * fraction(index * 0.6180339887)),
@@ -33,11 +33,19 @@ export const landingParticles: Record<ParticlePlacement, Particle[]> = {
  * hidden from assistive technology, never interactive, and still (not hidden) under reduced motion.
  */
 export function LandingParticles({ placement }: { placement: ParticlePlacement }) {
-  return <div className={`landing-particles landing-particles--${placement}`} aria-hidden="true">
-    {landingParticles[placement].map(particle => <span
-      key={`${particle.x}-${particle.y}`}
-      className={`landing-particle landing-particle--${particle.size} landing-particle--${particle.tone}`}
-      style={{ '--particle-x': `${particle.x}%`, '--particle-y': `${particle.y}%`, '--particle-depth': particle.depth, '--particle-delay': `${particle.delay}s` } as CSSProperties}
-    ><span /></span>)}
-  </div>;
+  return (
+    <div className={`landing-particles landing-particles--${placement}`} aria-hidden="true">
+      {landingParticles[placement].map((particle) => (
+        <span
+          key={`${particle.x}-${particle.y}`}
+          className={`landing-particle landing-particle--${particle.size} landing-particle--${particle.tone}`}
+          style={
+            { '--particle-x': `${particle.x}%`, '--particle-y': `${particle.y}%`, '--particle-depth': particle.depth, '--particle-delay': `${particle.delay}s` } as CSSProperties
+          }
+        >
+          <span />
+        </span>
+      ))}
+    </div>
+  );
 }

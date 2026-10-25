@@ -23,16 +23,20 @@ let gated: PostgresLedgerRecordsRepository;
 class PausableDatabase extends Database {
   pause?: { reached: () => void; release: Promise<void> };
   override async withTenant<T>(tenantId: string, work: (client: PoolClient) => Promise<T>, options?: { actor?: string }): Promise<T> {
-    return super.withTenant(tenantId, async (client) => {
-      const result = await work(client);
-      const pause = this.pause;
-      if (pause) {
-        this.pause = undefined; // only the first transaction after the test asks for it
-        pause.reached();
-        await pause.release;
-      }
-      return result;
-    }, options);
+    return super.withTenant(
+      tenantId,
+      async (client) => {
+        const result = await work(client);
+        const pause = this.pause;
+        if (pause) {
+          this.pause = undefined; // only the first transaction after the test asks for it
+          pause.reached();
+          await pause.release;
+        }
+        return result;
+      },
+      options,
+    );
   }
 }
 let pausable: PausableDatabase;
@@ -80,8 +84,18 @@ const open = async (name: string, t: string, actor: string) => {
 afterEach(async () => {
   await Promise.all(sessions.splice(0).map((s) => s.close()));
 });
-const settle = <T>(work: Promise<T>) => work.then((value) => ({ value, error: undefined }), (error: unknown) => ({ value: undefined, error }));
-const dispute = { guidelineId: 'syn-guideline', guidelineVersion: '1', guidelineContentSha256: 'c'.repeat(64), locator: { table: 'recommendations', row: 'poor' }, note: 'a disputed cell' };
+const settle = <T>(work: Promise<T>) =>
+  work.then(
+    (value) => ({ value, error: undefined }),
+    (error: unknown) => ({ value: undefined, error }),
+  );
+const dispute = {
+  guidelineId: 'syn-guideline',
+  guidelineVersion: '1',
+  guidelineContentSha256: 'c'.repeat(64),
+  locator: { table: 'recommendations', row: 'poor' },
+  note: 'a disputed cell',
+};
 
 describe('acceptance freshness at the ledger boundary', () => {
   it.each(['accepted', 'rejected'] as const)('superseding %s decision commits first: no evaluation or event survives', async (decision) => {
@@ -172,7 +186,9 @@ describe('a dispute and an evaluation racing for the same tenant (decided by the
 
     expect(await evaluations(t)).toBe(1);
     expect(await activeIds(t)).toHaveLength(1);
-    const events = await withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT event_type FROM ledger_events WHERE tenant_id = $1 ORDER BY seq`, [t])).rows.map((r) => r.event_type));
+    const events = await withAdmin(pg.adminUrl, async (c) =>
+      (await c.query(`SELECT event_type FROM ledger_events WHERE tenant_id = $1 ORDER BY seq`, [t])).rows.map((r) => r.event_type),
+    );
     expect(events.slice(-2)).toEqual(['evaluation', 'dispute']); // the dispute is ordered AFTER the evaluation it could not have been known to
   });
 
@@ -255,7 +271,11 @@ describe('which disputes the basis must cover', () => {
   it('a held evaluation shows no drug result and needs no basis: a dispute does not block it', async () => {
     const { t, evaluation } = await ready();
     await repo.raiseDispute(t, 'syn-disputer', dispute);
-    const held = await repo.insertEvaluation(t, 'syn-system', evaluation({ disposition: 'held', holdCode: 'unsupported-layout', geneInputs: [], occurrences: [], results: [], geneStates: [] }));
+    const held = await repo.insertEvaluation(
+      t,
+      'syn-system',
+      evaluation({ disposition: 'held', holdCode: 'unsupported-layout', geneInputs: [], occurrences: [], results: [], geneStates: [] }),
+    );
     expect(held.created).toBe(true);
     expect(held.record.disposition).toBe('held');
   });
@@ -263,7 +283,9 @@ describe('which disputes the basis must cover', () => {
 
 describe('why the check is sound, asserted rather than assumed', () => {
   it('runs under READ COMMITTED, so a statement issued after the lock takes a fresh snapshot', async () => {
-    const level = await database.withTenant(tenant(), async (client) => (await client.query(`SHOW transaction_isolation`)).rows[0].transaction_isolation as string, { actor: 'syn' });
+    const level = await database.withTenant(tenant(), async (client) => (await client.query(`SHOW transaction_isolation`)).rows[0].transaction_isolation as string, {
+      actor: 'syn',
+    });
     expect(level).toBe('read committed');
   });
 
@@ -289,7 +311,7 @@ describe('why the check is sound, asserted rather than assumed', () => {
   it('is a separate statement after the append: the source keeps the check out of the statement that appends, and after it', () => {
     const source = readFileSync(join(__dirname, '../../src/storage/postgres/ledger-records.repository.ts'), 'utf8');
     const insertEvaluation = source.slice(source.indexOf('insertEvaluation(tenantId'), source.indexOf('/** The ids of the disputes in force'));
-    const finishAt = insertEvaluation.indexOf('await this.finish(client, tenantId, \'evaluations\'');
+    const finishAt = insertEvaluation.indexOf("await this.finish(client, tenantId, 'evaluations'");
     const checkAt = insertEvaluation.indexOf('await this.assertDisputeBasis(');
     expect(finishAt).toBeGreaterThan(0);
     expect(checkAt).toBeGreaterThan(finishAt); // the check comes after the append, never before it

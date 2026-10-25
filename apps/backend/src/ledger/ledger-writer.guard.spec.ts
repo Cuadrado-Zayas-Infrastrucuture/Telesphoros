@@ -48,7 +48,7 @@ describe('ledger append guard', () => {
     expect(source).not.toMatch(/\bredact_event_note\s*\(/);
   });
 
-  it('appendEvent is called from one place only (the Postgres ledger repository), and every call passes the ledger watch\'s gate first', () => {
+  it("appendEvent is called from one place only (the Postgres ledger repository), and every call passes the ledger watch's gate first", () => {
     expect(callers(/\bawait appendEvent\(/)).toEqual(['storage/postgres/ledger-records.repository.ts']);
     const source = readFileSync(join(SRC, 'storage/postgres/ledger-records.repository.ts'), 'utf8');
     const calls = source.match(/appendEvent\(/g) ?? [];

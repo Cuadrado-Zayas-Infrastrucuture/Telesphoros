@@ -5,7 +5,8 @@ import { durableScenario } from './helpers/durable-memory';
 const signal = new AbortController().signal;
 
 test('a durable begin must succeed before any scripted actor runs', async () => {
-  const s = durableScenario(); s.denyAt('begin:draft:1', 'NOT_AUTHORIZED');
+  const s = durableScenario();
+  s.denyAt('begin:draft:1', 'NOT_AUTHORIZED');
   expect(await runDurableSynthetic(s.stamp, s.initial, s.store, s.actors, signal)).toEqual({ kind: 'refused', code: 'NOT_AUTHORIZED' });
   expect(s.counts).toEqual({ draft: 0, director: 0 });
   expect(s.trace).not.toContain('actor:draft');
@@ -23,7 +24,8 @@ test('first acceptance uses only two slots and an SQL-validated finish', async (
 });
 
 test('repair is bounded to one second attempt and rechecked by durable begin', async () => {
-  const s = durableScenario(); let reviews = 0;
+  const s = durableScenario();
+  let reviews = 0;
   const original = s.actors.director;
   s.actors.director = async (...args) => {
     const result = await original(...args);
@@ -38,7 +40,8 @@ test('repair is bounded to one second attempt and rechecked by durable begin', a
 });
 
 test('an unknown prior dispatch cannot replay any actor', async () => {
-  const s = durableScenario(); s.setUnknown();
+  const s = durableScenario();
+  s.setUnknown();
   expect(await runDurableSynthetic(s.stamp, s.initial, s.store, s.actors, signal)).toEqual({ kind: 'refused', code: 'USAGE_UNKNOWN' });
   expect(s.counts).toEqual({ draft: 0, director: 0 });
 });

@@ -77,10 +77,20 @@ export async function locateKnowledgeSet(options: LocateOptions): Promise<Locate
   if (!directory) throw new Error('directory');
   const root = (await git(options.repo, ['rev-parse', '--show-toplevel'])).trim();
   const listed = await git(root, ['log', `--max-count=${options.limit + 1}`, '--format=%H%x1f%cI%x1f%s', options.allRefs ? '--all' : 'HEAD', '--', directory]);
-  const commits = listed.split('\n').filter(Boolean).map((line) => {
-    const [commit = '', date = '', subject = ''] = line.split('\x1f');
-    return { commit, date, subject: [...subject].map((char) => (char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 ? ' ' : char)).join('').slice(0, 100) };
-  });
+  const commits = listed
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const [commit = '', date = '', subject = ''] = line.split('\x1f');
+      return {
+        commit,
+        date,
+        subject: [...subject]
+          .map((char) => (char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 ? ' ' : char))
+          .join('')
+          .slice(0, 100),
+      };
+    });
   const truncated = commits.length > options.limit;
   const examined = commits.slice(0, options.limit);
 

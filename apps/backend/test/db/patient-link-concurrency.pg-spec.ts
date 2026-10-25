@@ -77,10 +77,9 @@ describe('patient-link decisions that overlap', () => {
   it('control: different decisions made at once are all recorded, in some order (the lock serialises them, it does not swallow a change)', async () => {
     const t = tenant();
     const report = await seedLabReport(pg.adminUrl, t);
-    const results = await withSlowInsert(() => Promise.all([
-      repo.insertPatientDecision(t, 'syn-verifier', decision(report, 'verified')),
-      repo.insertPatientDecision(t, 'syn-other', decision(report, 'rejected')),
-    ]));
+    const results = await withSlowInsert(() =>
+      Promise.all([repo.insertPatientDecision(t, 'syn-verifier', decision(report, 'verified')), repo.insertPatientDecision(t, 'syn-other', decision(report, 'rejected'))]),
+    );
     expect(results.every((r) => r.created)).toBe(true);
     expect(await rows(t)).toBe(2);
     expect(results.map((r) => r.record.id)).toContain((await repo.latestPatientDecision(t, report.reportId))?.id);
@@ -90,10 +89,9 @@ describe('patient-link decisions that overlap', () => {
     const t = tenant();
     const one = await seedLabReport(pg.adminUrl, t);
     const two = await seedLabReport(pg.adminUrl, t);
-    const results = await withSlowInsert(() => Promise.all([
-      repo.insertPatientDecision(t, 'syn-verifier', decision(one, 'rejected')),
-      repo.insertPatientDecision(t, 'syn-verifier', decision(two, 'rejected')),
-    ]));
+    const results = await withSlowInsert(() =>
+      Promise.all([repo.insertPatientDecision(t, 'syn-verifier', decision(one, 'rejected')), repo.insertPatientDecision(t, 'syn-verifier', decision(two, 'rejected'))]),
+    );
     expect(results.every((r) => r.created)).toBe(true);
     expect(await rows(t)).toBe(2);
   });

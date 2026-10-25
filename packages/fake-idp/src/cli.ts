@@ -6,8 +6,7 @@ function arg(name: string, fallback?: string): string | undefined {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 ? process.argv[index + 1] : fallback;
 }
-const all = (name: string) =>
-  process.argv.flatMap((value, index) => (value === `--${name}` && process.argv[index + 1] ? [process.argv[index + 1]!] : []));
+const all = (name: string) => process.argv.flatMap((value, index) => (value === `--${name}` && process.argv[index + 1] ? [process.argv[index + 1]!] : []));
 
 const idp = await startFakeIdp({
   port: Number(arg('port', '4010')),

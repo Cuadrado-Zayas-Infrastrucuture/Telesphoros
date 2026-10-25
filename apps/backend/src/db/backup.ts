@@ -36,10 +36,7 @@ export async function sha256File(path: string): Promise<string> {
 
 /** Format 1 only: kept so old backups can still be read. New backups never use it. */
 export async function opensslEncrypt(input: string, output: string, passphraseFile: string, decrypt = false) {
-  await run('openssl', [
-    'enc', decrypt ? '-d' : '-e', '-aes-256-cbc', '-pbkdf2', '-iter', '600000', '-salt',
-    '-in', input, '-out', output, '-pass', `file:${passphraseFile}`,
-  ]);
+  await run('openssl', ['enc', decrypt ? '-d' : '-e', '-aes-256-cbc', '-pbkdf2', '-iter', '600000', '-salt', '-in', input, '-out', output, '-pass', `file:${passphraseFile}`]);
 }
 
 /**
@@ -62,9 +59,7 @@ export async function createBackup(options: BackupOptions): Promise<{ dir: strin
   await client.connect();
   let manifest: BackupManifest;
   try {
-    const who = await client.query<{ ok: boolean }>(
-      'SELECT (rolsuper OR rolbypassrls) AS ok FROM pg_roles WHERE rolname = current_user',
-    );
+    const who = await client.query<{ ok: boolean }>('SELECT (rolsuper OR rolbypassrls) AS ok FROM pg_roles WHERE rolname = current_user');
     if (!who.rows[0]?.ok) {
       throw new Error('The backup role must be a superuser or have BYPASSRLS; otherwise row-level security would silently hide rows from the backup.');
     }
@@ -151,9 +146,7 @@ async function readFacts(client: Client) {
   const flags = await client.query<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>(
     `SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relkind = 'r'`,
   );
-  const policies = await client.query<{ tablename: string; n: number }>(
-    `SELECT tablename, count(*)::int AS n FROM pg_policies WHERE schemaname = 'public' GROUP BY tablename`,
-  );
+  const policies = await client.query<{ tablename: string; n: number }>(`SELECT tablename, count(*)::int AS n FROM pg_policies WHERE schemaname = 'public' GROUP BY tablename`);
 
   const tables: Record<string, TableFacts> = {};
   for (const name of tableNames) {
@@ -171,9 +164,7 @@ async function readFacts(client: Client) {
   const schema = {
     constraints: await count(`SELECT count(*) AS n FROM pg_constraint WHERE connamespace = 'public'::regnamespace`),
     indexes: await count(`SELECT count(*) AS n FROM pg_indexes WHERE schemaname = 'public'`),
-    triggers: await count(
-      `SELECT count(*) AS n FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid WHERE c.relnamespace = 'public'::regnamespace AND NOT t.tgisinternal`,
-    ),
+    triggers: await count(`SELECT count(*) AS n FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid WHERE c.relnamespace = 'public'::regnamespace AND NOT t.tgisinternal`),
   };
   const privileges = await readPrivilegeFacts(client);
   return { serverVersion: version, database, migrations, tables, schema, privileges };

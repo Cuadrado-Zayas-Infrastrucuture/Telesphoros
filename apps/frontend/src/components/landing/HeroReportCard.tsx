@@ -10,14 +10,27 @@ import { useLandingLanguage } from '@/lib/landing/landing-language';
  */
 export function HeroReportCard() {
   const { card, statuses } = useLandingLanguage().copy;
-  return <div className="landing-report-card" aria-hidden="true">
-    <div className="landing-report-head"><span><UserRound />{card.patient}</span><span>{card.label}</span></div>
-    <div className="landing-report-body">
-      {statusRows.map(row => <span key={row.name} className="landing-report-row">
-        <span><FileText />{row.name}</span>
-        <span className={row.status === 'verified' ? 'landing-report-verified' : undefined}>{statuses[row.status]}</span>
-      </span>)}
+  return (
+    <div className="landing-report-card" aria-hidden="true">
+      <div className="landing-report-head">
+        <span>
+          <UserRound />
+          {card.patient}
+        </span>
+        <span>{card.label}</span>
+      </div>
+      <div className="landing-report-body">
+        {statusRows.map((row) => (
+          <span key={row.name} className="landing-report-row">
+            <span>
+              <FileText />
+              {row.name}
+            </span>
+            <span className={row.status === 'verified' ? 'landing-report-verified' : undefined}>{statuses[row.status]}</span>
+          </span>
+        ))}
+      </div>
+      <p className="landing-report-foot">{card.foot}</p>
     </div>
-    <p className="landing-report-foot">{card.foot}</p>
-  </div>;
+  );
 }

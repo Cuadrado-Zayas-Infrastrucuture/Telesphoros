@@ -61,7 +61,7 @@ const cutOff = (tenant: string, sub: string) =>
   });
 
 describe('a person can end only their own sessions', () => {
-  it('cuts off the caller\'s older tokens in their own organization, and no one else\'s', async () => {
+  it("cuts off the caller's older tokens in their own organization, and no one else's", async () => {
     const { tenant, admin, member } = await organization();
     const adminBefore = await cutOff(tenant, admin);
     const memberBefore = await cutOff(tenant, member);
@@ -102,8 +102,8 @@ describe('a person can end only their own sessions', () => {
 
   it('the application login cannot move the cut-off itself, only through the function', async () => {
     const { tenant, member } = await organization();
-    await expect(
-      asApplication(tenant, member, (c) => c.query(`UPDATE tenant_memberships SET tokens_valid_after = now() WHERE sub = $1`, [member])),
-    ).rejects.toMatchObject({ code: '42501' });
+    await expect(asApplication(tenant, member, (c) => c.query(`UPDATE tenant_memberships SET tokens_valid_after = now() WHERE sub = $1`, [member]))).rejects.toMatchObject({
+      code: '42501',
+    });
   });
 });
