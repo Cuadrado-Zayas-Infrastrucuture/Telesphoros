@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { Database } from '../../src/db/database';
 import { IntegrityError } from '../../src/storage/errors';
-import { InMemoryPatientsRepository, PatientsRepository } from '../../src/storage/patients.repository';
+import type { PatientsRepository } from '../../src/storage/patients.repository';
+import { InMemoryPatientsRepository } from '../../src/storage/patients.repository';
 import { PostgresPatientsRepository } from '../../src/storage/postgres/patients.repository';
 import { PostgresReportsRepository } from '../../src/storage/postgres/reports.repository';
 import type { PatientRecord, ReportRecord } from '../../src/storage/records';
-import { InMemoryReportsRepository, ReportsRepository } from '../../src/storage/reports.repository';
+import type { ReportsRepository } from '../../src/storage/reports.repository';
+import { InMemoryReportsRepository } from '../../src/storage/reports.repository';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { declareUpload, finishUpload } from '../helpers/uploads';
 

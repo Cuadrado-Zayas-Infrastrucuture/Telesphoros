@@ -1,5 +1,5 @@
 import type { CaptureAcceptance, CaptureAcceptanceStore, NewCaptureAcceptance } from '../services/report-adapter';
-import { LedgerRecordsRepository } from '../storage/ledger-records.repository';
+import type { LedgerRecordsRepository } from '../storage/ledger-records.repository';
 
 /**
  * The adapter's view of a person's decision, read from the database. Acceptances are created only by the decision endpoint (with the

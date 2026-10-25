@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Client } from 'pg';
+import type { Client } from 'pg';
 import { Database } from '../../src/db/database';
 import { LedgerIntegrityError } from '../../src/ledger/ledger-types';
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';

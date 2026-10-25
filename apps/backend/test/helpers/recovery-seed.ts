@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Database } from '../../src/db/database';
 import { LedgerVerifier } from '../../src/ledger/verifier';
-import { S3ObjectStorage } from '../../src/object-storage/s3-object-storage';
+import type { S3ObjectStorage } from '../../src/object-storage/s3-object-storage';
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
 import { PostgresReportsRepository } from '../../src/storage/postgres/reports.repository';
 import type { ReportRecord } from '../../src/storage/records';

@@ -1,7 +1,8 @@
 import { tenantIdSchema } from '@telesphoros/shared-types';
-import { BrowserSessionRepository, type BrowserSessionRecord, SessionCustodyError } from '../storage/browser-session.repository';
+import type { BrowserSessionRepository} from '../storage/browser-session.repository';
+import { type BrowserSessionRecord, SessionCustodyError } from '../storage/browser-session.repository';
 import { subjectClaim, type TokenIdentity } from './token-verifier';
-import { SessionCrypto } from './session-crypto';
+import type { SessionCrypto } from './session-crypto';
 
 export const MAX_BROWSER_SESSION_MS = 15 * 60 * 1000;
 

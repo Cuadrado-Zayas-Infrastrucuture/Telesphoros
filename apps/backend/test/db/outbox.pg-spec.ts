@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Client } from 'pg';
+import type { Client } from 'pg';
 import { Database } from '../../src/db/database';
 import { PostgresPatientsRepository } from '../../src/storage/postgres/patients.repository';
 import { PostgresReportsRepository } from '../../src/storage/postgres/reports.repository';

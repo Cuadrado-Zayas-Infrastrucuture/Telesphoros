@@ -2,6 +2,7 @@ import js from "@eslint/js";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 import { promiseRules } from "../../scripts/lint/promise-rules.mjs";
+import { typeImports } from "../../scripts/lint/type-imports.mjs";
 export default tseslint.config(
   { ignores: ["dist/**", "dist-ui/**", "openemr/.runtime/**"] },
   js.configs.recommended,
@@ -21,4 +22,5 @@ export default tseslint.config(
   },
   // test/*.test.tsx are outside tsconfig.json (tsc does not check them either), so they get the rules above without types.
   promiseRules(["src/**/*.{ts,tsx}", "ui/**/*.{ts,tsx}"], import.meta.dirname),
+  typeImports(["**/*.{ts,tsx}"]),
 );

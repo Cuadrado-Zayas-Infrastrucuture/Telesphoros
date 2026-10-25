@@ -1,5 +1,5 @@
 import { MembershipAdminError, type TenantAdmin } from './membership';
-import { PgInvitationAdmin } from './pg-invitation-admin';
+import type { PgInvitationAdmin } from './pg-invitation-admin';
 
 export const TENANT_USAGE = `  tenant create --id ID --name NAME --by NAME
   tenant list

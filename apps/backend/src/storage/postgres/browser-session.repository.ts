@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import { tenantIdSchema } from '@telesphoros/shared-types';
-import { Database } from '../../db/database';
+import type { Database } from '../../db/database';
 import { BrowserSessionRepository, type BrowserSessionRecord, SessionCustodyError } from '../browser-session.repository';
 
 interface SessionRow {

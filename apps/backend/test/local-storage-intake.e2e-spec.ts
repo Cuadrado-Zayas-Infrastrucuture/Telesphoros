@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import { ObjectStorage } from '../src/object-storage/object-storage';
-import { InMemoryObjectStorage } from '../src/object-storage/in-memory-object-storage';
+import type { InMemoryObjectStorage } from '../src/object-storage/in-memory-object-storage';
 import { ReportsRepository } from '../src/storage/reports.repository';
 import { LAB_KNOWLEDGE, LAB_READER } from '../src/lab-reports/evaluations.service';
 import { TextCaptureRunner } from '../src/lab-reports/runner/text-capture-runner';

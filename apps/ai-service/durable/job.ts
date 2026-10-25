@@ -2,7 +2,7 @@ import { defineJob, fatal, systemActor, type ClaimedJob } from '@telesphoros/job
 import { z } from 'zod';
 import { SYNTHETIC_JOB_TYPE, type DurableSyntheticStore } from './contracts';
 import { runDurableSynthetic, type ScriptedActors } from './kernel';
-import { SyntheticJobQueue } from './queue';
+import type { SyntheticJobQueue } from './queue';
 
 const payload = z.strictObject({ runId: z.uuid() });
 const definition = defineJob({ type: SYNTHETIC_JOB_TYPE, payload,

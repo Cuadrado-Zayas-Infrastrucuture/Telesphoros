@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import type { S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 import type { InspectedFile, ObjectInspector } from './deps';
 
 /**

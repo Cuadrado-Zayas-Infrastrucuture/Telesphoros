@@ -2,7 +2,8 @@ import type { CallHandler, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { lastValueFrom, of } from 'rxjs';
 import { IS_PUBLIC_KEY } from './decorators';
-import { InMemorySecurityAuditStore, SecurityAuditStore, type SecurityAuditEvent } from './security-audit';
+import type { SecurityAuditStore} from './security-audit';
+import { InMemorySecurityAuditStore, type SecurityAuditEvent } from './security-audit';
 import { SecurityAuditInterceptor } from './security-audit.interceptor';
 
 class PatientsController {
