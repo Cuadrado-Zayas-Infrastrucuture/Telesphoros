@@ -230,5 +230,32 @@
         "owner": "telesphoros-review"
       }
     ]
+  },
+  {
+    "name": "telesphoros-triage",
+    "positive": [
+      "Triage these incoming issues: recommend a category, missing information and next owner without changing the tracker.",
+      "Assess this issue intake and draft a local triage brief with evidence and open questions.",
+      "Sort this issue backlog into triage recommendations, duplicates and items needing more information.",
+      "Resume triage for this issue using the reporter's new answers; keep labels unchanged."
+    ],
+    "negative": [
+      {
+        "prompt": "Review this PR for tenant isolation and access-control defects.",
+        "owner": "telesphoros-review"
+      },
+      {
+        "prompt": "The worker exits successfully but the expected output is stale.",
+        "owner": "telesphoros-debug"
+      },
+      {
+        "prompt": "Turn these reviewed architecture findings into local ticket drafts with acceptance criteria and blockers.",
+        "owner": "telesphoros-to-tickets"
+      },
+      {
+        "prompt": "Break the report listing feature into scoped tasks and dependencies.",
+        "owner": "telesphoros-plan-change"
+      }
+    ]
   }
 ]

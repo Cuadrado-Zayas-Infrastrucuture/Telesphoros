@@ -49,7 +49,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-## mattpocock/skills: domain modeling, architecture and ticket drafting
+## mattpocock/skills: domain modeling, architecture, ticket drafting and triage
 
 Upstream: [mattpocock/skills](https://github.com/mattpocock/skills), commit `5beb35b040e3` (committed 2026-10-19). The byte-for-byte reference copy and its MIT licence (Copyright (c) 2026 Matt Pocock) are in [vendor/mattpocock/](vendor/mattpocock/VENDORED.md); the licence text is in [vendor/mattpocock/LICENSE](vendor/mattpocock/LICENSE).
 
@@ -59,6 +59,7 @@ Upstream: [mattpocock/skills](https://github.com/mattpocock/skills), commit `5be
 | `telesphoros-codebase-design` | `skills/engineering/codebase-design/SKILL.md`, `DEEPENING.md`, `DESIGN-IT-TWICE.md` |
 | `telesphoros-improve-architecture` | `skills/engineering/improve-codebase-architecture/SKILL.md`, `HTML-REPORT.md` |
 | `telesphoros-to-tickets` | `skills/engineering/to-tickets/SKILL.md`, `agents/openai.yaml` |
+| `telesphoros-triage` | `skills/engineering/triage/SKILL.md`, `AGENT-BRIEF.md`, `OUT-OF-SCOPE.md`, `agents/openai.yaml` |
 
 Deliberate differences:
 
@@ -88,3 +89,10 @@ Ticket-drafting adaptation differences:
 - Slices cover affected layers and genuine prerequisites, rather than mandatory schema/API/UI work or automatic prefactoring. Blockers must exist and remain acyclic; unresolved dependencies stay explicit.
 - Independently green PRs off main replace the upstream integration-branch fallback. A sequencing conflict returns for design instead of bypassing the repository workflow.
 - Normal repository discovery is retained; the pinned source remains unchanged. Discovery is not permission to publish, implement or run additional models.
+
+Triage adaptation differences:
+
+- Local recommendations and AI-attributed Draft briefs replace automatic comments, state transitions, labels, closures and ready-for-agent handoffs. Existing labels are inspected; upstream category/state pairs and absent mappings are not imposed.
+- Supplied claims, actual reproduction and missing evidence remain distinct. Equivalent behavior is checked before recommending duplicates or already-implemented outcomes; prior rejection, deferral and related requests remain separate.
+- Existing glossary, ADRs, issue history and planning artifacts replace setup/grilling dependencies, inline decision edits and a new `.out-of-scope/` knowledge base. Source/revision references remain useful evidence; a brief is not an authoritative execution contract.
+- Named PRs are considered regardless of author; discovery filters require an actual scope. Contributor code is not executed as an intake shortcut. Native discovery remains enabled, and private vulnerability handling follows the repository security policy.
