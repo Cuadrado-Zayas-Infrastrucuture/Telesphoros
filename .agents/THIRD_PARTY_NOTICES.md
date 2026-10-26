@@ -49,7 +49,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-## mattpocock/skills: domain modeling, architecture, ticket drafting and triage
+## mattpocock/skills: domain modeling, architecture, ticket drafting, triage and TDD
 
 Upstream: [mattpocock/skills](https://github.com/mattpocock/skills), commit `5beb35b040e3` (committed 2026-10-19). The byte-for-byte reference copy and its MIT licence (Copyright (c) 2026 Matt Pocock) are in [vendor/mattpocock/](vendor/mattpocock/VENDORED.md); the licence text is in [vendor/mattpocock/LICENSE](vendor/mattpocock/LICENSE).
 
@@ -60,6 +60,7 @@ Upstream: [mattpocock/skills](https://github.com/mattpocock/skills), commit `5be
 | `telesphoros-improve-architecture` | `skills/engineering/improve-codebase-architecture/SKILL.md`, `HTML-REPORT.md` |
 | `telesphoros-to-tickets` | `skills/engineering/to-tickets/SKILL.md`, `agents/openai.yaml` |
 | `telesphoros-triage` | `skills/engineering/triage/SKILL.md`, `AGENT-BRIEF.md`, `OUT-OF-SCOPE.md`, `agents/openai.yaml` |
+| `telesphoros-tdd` | `skills/engineering/tdd/SKILL.md`, `tests.md`, `mocking.md`, `agents/openai.yaml` |
 
 Deliberate differences:
 
@@ -96,3 +97,10 @@ Triage adaptation differences:
 - Supplied claims, actual reproduction and missing evidence remain distinct. Equivalent behavior is checked before recommending duplicates or already-implemented outcomes; prior rejection, deferral and related requests remain separate.
 - Existing glossary, ADRs, issue history and planning artifacts replace setup/grilling dependencies, inline decision edits and a new `.out-of-scope/` knowledge base. Source/revision references remain useful evidence; a brief is not an authoritative execution contract.
 - Named PRs are considered regardless of author; discovery filters require an actual scope. Contributor code is not executed as an intake shortcut. Native discovery remains enabled, and private vulnerability handling follows the repository security policy.
+
+TDD adaptation differences:
+
+- The focused test-first method complements the existing implementation/debug/verification workflows; it does not replace their scope, branching or acceptance gates. Independent oracles and actual assertion failures distinguish meaningful red/green from tautology or setup failure.
+- Existing approval and contracts can settle the tested boundary; no universal per-test seam approval, generic root glossary or automatic module redesign is added.
+- Independent database/catalog, application-role ACL/RLS, transaction, recovery and exact-version evidence is retained. Direct persistence observations and contract-required ordering/effects are legitimate controls; API-only tests or doubles cannot automatically replace them.
+- One behavior per cycle is guidance rather than a one-assertion quota. Approved refactors receive characterization controls; small green cleanup remains within scope, while static edits use appropriate existing checks rather than artificial product tests.

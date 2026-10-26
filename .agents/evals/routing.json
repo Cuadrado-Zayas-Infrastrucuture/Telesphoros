@@ -257,5 +257,32 @@
         "owner": "telesphoros-plan-change"
       }
     ]
+  },
+  {
+    "name": "telesphoros-tdd",
+    "positive": [
+      "Use test-driven development for the approved bounded-list change: one red test, then green.",
+      "Implement this approved behavior test-first with independent expected values and a red-green cycle.",
+      "Use TDD to add a focused regression at the existing interface before the minimal fix.",
+      "Work through red-green-refactor for this approved feature without inventing new test seams."
+    ],
+    "negative": [
+      {
+        "prompt": "Build the approved report pagination change in one small slice.",
+        "owner": "telesphoros-implement-slice"
+      },
+      {
+        "prompt": "The worker exits successfully but the expected output is stale.",
+        "owner": "telesphoros-debug"
+      },
+      {
+        "prompt": "Run the database and S3 checks and tell me which acceptance claims they prove.",
+        "owner": "telesphoros-verify"
+      },
+      {
+        "prompt": "Compare alternative interfaces for the report storage module and choose where its seam belongs.",
+        "owner": "telesphoros-codebase-design"
+      }
+    ]
   }
 ]
