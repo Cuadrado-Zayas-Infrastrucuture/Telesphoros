@@ -13,7 +13,7 @@ This folder is a pinned reference copy. It sits outside `.agents/skills/` on pur
 | `improve-codebase-architecture` | `skills/engineering/improve-codebase-architecture` | Architecture review; visual report; adopted as [`telesphoros-improve-architecture`](../../skills/telesphoros-improve-architecture/SKILL.md) |
 | `tdd` | `skills/engineering/tdd` | Test-first feature and bug work |
 | `to-tickets` | `skills/engineering/to-tickets` | Turns findings into tickets; adopted as [`telesphoros-to-tickets`](../../skills/telesphoros-to-tickets/SKILL.md) |
-| `triage` | `skills/engineering/triage` | Issue triage vocabulary |
+| `triage` | `skills/engineering/triage` | Issue triage vocabulary; adopted as [`telesphoros-triage`](../../skills/telesphoros-triage/SKILL.md) |
 | `git-guardrails-claude-code` | `skills/misc/git-guardrails-claude-code` | Blocks destructive git commands; hook not active |
 | `domain-modeling` | `skills/engineering/domain-modeling` | `GLOSSARY.md` and ADR formats; adopted as [`telesphoros-domain-modeling`](../../skills/telesphoros-domain-modeling/SKILL.md) |
 | `codebase-design` | `skills/engineering/codebase-design` | Shared module-design vocabulary; adopted as [`telesphoros-codebase-design`](../../skills/telesphoros-codebase-design/SKILL.md) |

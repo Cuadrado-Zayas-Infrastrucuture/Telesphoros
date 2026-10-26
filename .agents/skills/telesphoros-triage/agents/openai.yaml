@@ -1,0 +1,4 @@
+interface:
+  display_name: "Telesphoros: Triage issues"
+  short_description: "Recommend issue disposition and draft local briefs"
+  default_prompt: "Use $telesphoros-triage to assess these incoming issues, identify evidence gaps and draft local recommendations; leave the tracker unchanged."
