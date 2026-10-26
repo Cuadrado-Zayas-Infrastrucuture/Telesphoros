@@ -17,6 +17,12 @@ export default function HomePage() {
         <h1 className="text-3xl font-bold">Synthetic report storage</h1>
         <p>Upload and retrieve synthetic PDF, VCF and JSON files. The server verifies file storage; clinical processing is disabled.</p>
         <p>Use synthetic records only. No clinical interpretation or recommendations are produced.</p>
+        {import.meta.env.VITE_SYNTHETIC_PGX_DEMO === 'true' && location.hostname === '127.0.0.1' && (
+          <p>
+            This build includes fixed PGx examples. Upload the bundled D01 or D08 PDF, open it in Reports, then choose the sample result or held view. File contents are not
+            analyzed.
+          </p>
+        )}
         <div className="flex flex-wrap gap-4">
           {canUpload && (
             <Button asChild>

@@ -1,4 +1,5 @@
 import type { ReportDto } from '@telesphoros/shared-types';
+import { SyntheticReportDemo } from '@/components/SyntheticReportDemo';
 import { Button } from '@/components/ui/Button';
 import { REPORT_TYPE_LABELS } from '@/types/report';
 import { Check, Download, FileText, Minus } from 'lucide-react';
@@ -93,6 +94,7 @@ export function ReportDetails({
         </div>
       </dl>
       {!compact && downloadAction}
+      {!compact && import.meta.env.VITE_SYNTHETIC_PGX_DEMO === 'true' && <SyntheticReportDemo key={`${report.id}:${report.sha256}`} report={report} />}
       {downloadError && (
         <p role="alert" className="text-sm text-destructive">
           {downloadError}

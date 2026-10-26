@@ -32,7 +32,9 @@
     "test:storage-ops": "node --test scripts/local-storage/operations.test.cjs",
     "test:launcher-cors": "node --test scripts/local-storage/launcher-cors.test.cjs",
     "test:storage-rehearsal": "node scripts/local-storage/rehearse.cjs",
-    "test:storage-recovery": "node scripts/local-storage/recovery.cjs"
+    "test:storage-recovery": "node scripts/local-storage/recovery.cjs",
+    "demo:product:build": "VITE_SYNTHETIC_PGX_DEMO=true pnpm demo:storage:build",
+    "test:product-demo": "pnpm --filter @telesphoros/frontend exec playwright test --config playwright.product-demo.config.ts"
   },
   "devDependencies": {
     "prettier": "3.9.10"

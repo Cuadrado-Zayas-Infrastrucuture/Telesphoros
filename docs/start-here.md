@@ -90,3 +90,5 @@ The default test command explicitly skips database and S3 suites without their s
 - **Looking for the full report-review flow:** [the lab-report pipeline](lab-report-reader.md) has additional reader and clinical gates. `demo:review` requires reader captures absent from this public checkout; use the storage demo for onboarding.
 
 Continue with the [documentation map](README.md), [architecture](architecture.md) and [glossary](glossary.md).
+
+For a rehearsable upload-to-fixed-result journey while engine work is deferred, see the [fixture-backed product walkthrough](fixture-product-demo.md).
