@@ -4,6 +4,7 @@ import request from 'supertest';
 import { createTestApp, membershipOf } from '../helpers/app';
 import { bearer, signToken } from '../helpers/tokens';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
+import { createReadinessPhaseTrace } from '../helpers/readiness-phase-trace';
 import { pendingMigrations, MigrationError } from '../../src/db/migrator';
 
 const apps: NestExpressApplication[] = [];
@@ -171,17 +172,18 @@ describe('readiness against a real database', () => {
   });
 
   it('turns NOT ready when the database disappears, without leaking why, and health stays 200', async () => {
-    const db = await createEphemeralDatabase();
+    const trace = createReadinessPhaseTrace();
+    const db = await trace('fixture-create', () => createEphemeralDatabase());
     dbs.push(db);
-    const app = await boot(db);
-    await request(app.getHttpServer()).get('/api/v1/ready').expect(200);
+    const app = await trace('app-start', () => boot(db));
+    await trace('healthy-ready', async () => request(app.getHttpServer()).get('/api/v1/ready').expect(200));
 
-    await db.drop(); // forcibly disconnects the app's pooled connections too
+    await trace('database-drop', () => db.drop()); // forcibly disconnects the app's pooled connections too
 
-    const res = await request(app.getHttpServer()).get('/api/v1/ready').expect(503);
+    const res = await trace('failed-ready', async () => request(app.getHttpServer()).get('/api/v1/ready').expect(503));
     expect(res.body.error.details.map((d: { field: string }) => d.field)).toContain('database');
     expect(JSON.stringify(res.body)).not.toMatch(/ECONNREFUSED|does not exist|test_[0-9a-f]{12}|postgres:/);
-    await request(app.getHttpServer()).get('/api/v1/health').expect(200);
+    await trace('health', async () => request(app.getHttpServer()).get('/api/v1/health').expect(200));
   });
 
   it('private API calls fail closed (503 in the standard envelope, no database details) while the database is down, before any work is done', async () => {
