@@ -10,7 +10,7 @@ This folder is a pinned reference copy. It sits outside `.agents/skills/` on pur
 
 | Skill | Upstream path | Why |
 |---|---|---|
-| `improve-codebase-architecture` | `skills/engineering/improve-codebase-architecture` | Architecture review; visual report |
+| `improve-codebase-architecture` | `skills/engineering/improve-codebase-architecture` | Architecture review; visual report; adopted as [`telesphoros-improve-architecture`](../../skills/telesphoros-improve-architecture/SKILL.md) |
 | `tdd` | `skills/engineering/tdd` | Test-first feature and bug work |
 | `to-tickets` | `skills/engineering/to-tickets` | Turns findings into tickets |
 | `triage` | `skills/engineering/triage` | Issue triage vocabulary |

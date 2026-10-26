@@ -1,0 +1,4 @@
+interface:
+  display_name: "Telesphoros: Improve architecture"
+  short_description: "Find architecture friction and rank evidence-backed candidates"
+  default_prompt: "Use $telesphoros-improve-architecture to scan a subsystem for architectural friction and return an HTML shortlist; leave code unchanged."
