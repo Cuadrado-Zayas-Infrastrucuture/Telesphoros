@@ -149,5 +149,32 @@
         "owner": "telesphoros-review"
       }
     ]
+  },
+  {
+    "name": "telesphoros-codebase-design",
+    "positive": [
+      "Compare alternative interfaces for the report storage module and choose where its seam belongs.",
+      "This module exposes too many methods; deepen it behind a smaller interface while keeping the caller contract.",
+      "Design an adapter at the queue seam so the module can be tested without leaking its internals.",
+      "Make the patient identifier module more testable by separating its interface from its implementation."
+    ],
+    "negative": [
+      {
+        "prompt": "Add correction and amendment to the glossary with one canonical meaning each.",
+        "owner": "telesphoros-domain-modeling"
+      },
+      {
+        "prompt": "Review this PR for tenant isolation and access-control defects.",
+        "owner": "telesphoros-review"
+      },
+      {
+        "prompt": "Build the approved report pagination change in one small slice.",
+        "owner": "telesphoros-implement-slice"
+      },
+      {
+        "prompt": "Before we change upload ownership, lay out requirements and acceptance criteria.",
+        "owner": "telesphoros-plan-change"
+      }
+    ]
   }
 ]

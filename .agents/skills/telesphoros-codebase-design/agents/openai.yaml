@@ -1,0 +1,4 @@
+interface:
+  display_name: "Telesphoros: Codebase design"
+  short_description: "Design module interfaces, seams and adapters"
+  default_prompt: "Use $telesphoros-codebase-design to compare interfaces for the report storage module; keep this design-only."

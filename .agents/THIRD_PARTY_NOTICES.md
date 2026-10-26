@@ -49,13 +49,14 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-## mattpocock/skills: domain modeling
+## mattpocock/skills: domain modeling and codebase design
 
 Upstream: [mattpocock/skills](https://github.com/mattpocock/skills), commit `5beb35b040e3` (committed 2026-10-19). The byte-for-byte reference copy and its MIT licence (Copyright (c) 2026 Matt Pocock) are in [vendor/mattpocock/](vendor/mattpocock/VENDORED.md); the licence text is in [vendor/mattpocock/LICENSE](vendor/mattpocock/LICENSE).
 
 | Local workflow | Upstream files |
 |---|---|
 | `telesphoros-domain-modeling` | `skills/engineering/domain-modeling/SKILL.md`, `GLOSSARY-FORMAT.md`, `ADR-FORMAT.md` |
+| `telesphoros-codebase-design` | `skills/engineering/codebase-design/SKILL.md`, `DEEPENING.md`, `DESIGN-IT-TWICE.md` |
 
 Deliberate differences:
 
@@ -63,3 +64,10 @@ Deliberate differences:
 - ADRs follow the shape of `docs/adr/0001-repository-layout.md` (Status and Scope lines, Context, Decision), not a one-paragraph template.
 - Clinical terms are proposed only and need the founder's review; clinical content and `knowledge/` are out of scope.
 - An ADR records a decision someone with authority made; the skill does not mark one accepted on its own.
+
+Codebase-design adaptation differences:
+
+- Module vocabulary is scoped to design reasoning; product glossary terms, HTTP APIs, services, the report adapter and security boundaries retain their existing meanings.
+- Depth and the deletion thought experiment guide investigation rather than impose line/method counts or a mandatory two-adapter threshold. A single-adapter seam can still protect ownership or authority.
+- Side effects remain explicit when required by the ledger/transaction contract. Real PostgreSQL restricted-role, migration, recovery and fault evidence is retained; interface tests and substitutes cannot automatically replace it.
+- Alternative interfaces are compared linearly by default. Upstream's automatic parallel-agent step is removed; existing user opt-in and execution/approval boundaries govern delegation and implementation.
