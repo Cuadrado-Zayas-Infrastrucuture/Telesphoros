@@ -1,0 +1,4 @@
+interface:
+  display_name: "Telesphoros: Test first"
+  short_description: "Test approved behavior with a red-green cycle"
+  default_prompt: "Use $telesphoros-tdd to implement this approved behavior test-first, with an independent oracle and meaningful red/green evidence at the existing boundary."
