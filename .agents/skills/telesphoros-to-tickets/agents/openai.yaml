@@ -1,0 +1,4 @@
+interface:
+  display_name: "Telesphoros: Draft tickets"
+  short_description: "Draft local tickets with acceptance criteria and blockers"
+  default_prompt: "Use $telesphoros-to-tickets to turn these approved findings into local ticket drafts with acceptance criteria and blockers; leave the tracker unchanged."
