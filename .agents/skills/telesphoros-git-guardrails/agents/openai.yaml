@@ -1,0 +1,4 @@
+interface:
+  display_name: "Telesphoros: Git safeguards"
+  short_description: "Audit Git guardrail policies before activation"
+  default_prompt: "Use $telesphoros-git-guardrails to audit this Git safety-hook proposal with offline allow/block controls while preserving existing settings and leaving activation separate."
