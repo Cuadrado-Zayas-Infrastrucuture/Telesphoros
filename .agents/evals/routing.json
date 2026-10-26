@@ -176,5 +176,32 @@
         "owner": "telesphoros-plan-change"
       }
     ]
+  },
+  {
+    "name": "telesphoros-improve-architecture",
+    "positive": [
+      "Explore the codebase's recent hot spots and rank deepening opportunities in an HTML architecture report.",
+      "Scan the worker subsystem for architectural friction and present before-and-after candidates.",
+      "Which clusters of shallow modules deserve a refactor? Give me a visual report with evidence and a top recommendation.",
+      "Look across the report-storage subsystem for coupling and navigation friction before we choose what to change."
+    ],
+    "negative": [
+      {
+        "prompt": "Compare alternative interfaces for the report storage module and choose where its seam belongs.",
+        "owner": "telesphoros-codebase-design"
+      },
+      {
+        "prompt": "Review this PR for tenant isolation and access-control defects.",
+        "owner": "telesphoros-review"
+      },
+      {
+        "prompt": "Before we change upload ownership, lay out requirements and acceptance criteria.",
+        "owner": "telesphoros-plan-change"
+      },
+      {
+        "prompt": "The code says organization but the docs say tenant; settle which term we use.",
+        "owner": "telesphoros-domain-modeling"
+      }
+    ]
   }
 ]

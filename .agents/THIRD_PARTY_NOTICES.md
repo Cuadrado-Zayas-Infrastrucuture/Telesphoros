@@ -49,7 +49,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-## mattpocock/skills: domain modeling and codebase design
+## mattpocock/skills: domain modeling and architecture
 
 Upstream: [mattpocock/skills](https://github.com/mattpocock/skills), commit `5beb35b040e3` (committed 2026-10-19). The byte-for-byte reference copy and its MIT licence (Copyright (c) 2026 Matt Pocock) are in [vendor/mattpocock/](vendor/mattpocock/VENDORED.md); the licence text is in [vendor/mattpocock/LICENSE](vendor/mattpocock/LICENSE).
 
@@ -57,6 +57,7 @@ Upstream: [mattpocock/skills](https://github.com/mattpocock/skills), commit `5be
 |---|---|
 | `telesphoros-domain-modeling` | `skills/engineering/domain-modeling/SKILL.md`, `GLOSSARY-FORMAT.md`, `ADR-FORMAT.md` |
 | `telesphoros-codebase-design` | `skills/engineering/codebase-design/SKILL.md`, `DEEPENING.md`, `DESIGN-IT-TWICE.md` |
+| `telesphoros-improve-architecture` | `skills/engineering/improve-codebase-architecture/SKILL.md`, `HTML-REPORT.md` |
 
 Deliberate differences:
 
@@ -71,3 +72,10 @@ Codebase-design adaptation differences:
 - Depth and the deletion thought experiment guide investigation rather than impose line/method counts or a mandatory two-adapter threshold. A single-adapter seam can still protect ownership or authority.
 - Side effects remain explicit when required by the ledger/transaction contract. Real PostgreSQL restricted-role, migration, recovery and fault evidence is retained; interface tests and substitutes cannot automatically replace it.
 - Alternative interfaces are compared linearly by default. Upstream's automatic parallel-agent step is removed; existing user opt-in and execution/approval boundaries govern delegation and implementation.
+
+Architecture-scan adaptation differences:
+
+- Bounded source/history inspection produces candidates, including a valid zero-candidate result. Selected-module design and specific-diff review keep their existing workflows.
+- Existing glossary/ADR locations and authority boundaries replace root-level conventions; a conflicting ADR is surfaced for a decision, never silently replaced.
+- Linear inspection replaces automatic subagents and the unavailable interview skill. Selecting a candidate carries existing approvals into codebase design; no automatic code, glossary or ADR edits follow.
+- Self-contained static HTML with escaped source text replaces CDN scripts, loose Mermaid security, badges and automatic OS browser launch. A local artifact or supported native preview is sufficient.
