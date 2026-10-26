@@ -203,5 +203,32 @@
         "owner": "telesphoros-domain-modeling"
       }
     ]
+  },
+  {
+    "name": "telesphoros-to-tickets",
+    "positive": [
+      "Turn these reviewed architecture findings into local ticket drafts with acceptance criteria and blockers.",
+      "Write one ticket file per vertical slice from this approved plan; keep the backlog unpublished.",
+      "Convert the agreed spec into a numbered ticket backlog in dependency order.",
+      "Prepare draft issues from these accepted findings without publishing to GitHub."
+    ],
+    "negative": [
+      {
+        "prompt": "Break the report listing feature into scoped tasks and dependencies.",
+        "owner": "telesphoros-plan-change"
+      },
+      {
+        "prompt": "Explore the codebase's recent hot spots and rank deepening opportunities in an HTML architecture report.",
+        "owner": "telesphoros-improve-architecture"
+      },
+      {
+        "prompt": "Build the approved report pagination change in one small slice.",
+        "owner": "telesphoros-implement-slice"
+      },
+      {
+        "prompt": "Review this PR for tenant isolation and access-control defects.",
+        "owner": "telesphoros-review"
+      }
+    ]
   }
 ]

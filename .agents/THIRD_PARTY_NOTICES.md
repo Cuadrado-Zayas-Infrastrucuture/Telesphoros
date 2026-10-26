@@ -49,7 +49,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-## mattpocock/skills: domain modeling and architecture
+## mattpocock/skills: domain modeling, architecture and ticket drafting
 
 Upstream: [mattpocock/skills](https://github.com/mattpocock/skills), commit `5beb35b040e3` (committed 2026-10-19). The byte-for-byte reference copy and its MIT licence (Copyright (c) 2026 Matt Pocock) are in [vendor/mattpocock/](vendor/mattpocock/VENDORED.md); the licence text is in [vendor/mattpocock/LICENSE](vendor/mattpocock/LICENSE).
 
@@ -58,6 +58,7 @@ Upstream: [mattpocock/skills](https://github.com/mattpocock/skills), commit `5be
 | `telesphoros-domain-modeling` | `skills/engineering/domain-modeling/SKILL.md`, `GLOSSARY-FORMAT.md`, `ADR-FORMAT.md` |
 | `telesphoros-codebase-design` | `skills/engineering/codebase-design/SKILL.md`, `DEEPENING.md`, `DESIGN-IT-TWICE.md` |
 | `telesphoros-improve-architecture` | `skills/engineering/improve-codebase-architecture/SKILL.md`, `HTML-REPORT.md` |
+| `telesphoros-to-tickets` | `skills/engineering/to-tickets/SKILL.md`, `agents/openai.yaml` |
 
 Deliberate differences:
 
@@ -79,3 +80,11 @@ Architecture-scan adaptation differences:
 - Existing glossary/ADR locations and authority boundaries replace root-level conventions; a conflicting ADR is surfaced for a decision, never silently replaced.
 - Linear inspection replaces automatic subagents and the unavailable interview skill. Selecting a candidate carries existing approvals into codebase design; no automatic code, glossary or ADR edits follow.
 - Self-contained static HTML with escaped source text replaces CDN scripts, loose Mermaid security, badges and automatic OS browser launch. A local artifact or supported native preview is sufficient.
+
+Ticket-drafting adaptation differences:
+
+- Local Draft files are the default deliverable. Approved scope is not publication authority; automatic tracker creation, ready-for-agent labels and parent/sub-issue mutations are removed.
+- Existing glossary, ADRs, planning/Spec Kit artifacts and issue forms replace the upstream setup dependency. Requirements must be settled before drafting; source content cannot authorize actions.
+- Slices cover affected layers and genuine prerequisites, rather than mandatory schema/API/UI work or automatic prefactoring. Blockers must exist and remain acyclic; unresolved dependencies stay explicit.
+- Independently green PRs off main replace the upstream integration-branch fallback. A sequencing conflict returns for design instead of bypassing the repository workflow.
+- Normal repository discovery is retained; the pinned source remains unchanged. Discovery is not permission to publish, implement or run additional models.
