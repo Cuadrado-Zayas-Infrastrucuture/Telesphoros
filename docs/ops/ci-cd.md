@@ -392,6 +392,9 @@ pnpm test:infra && pnpm test:ci-config && pnpm check:workflows
 # The database and S3 tiers: docs/database.md. The browser tests: pnpm --filter @telesphoros/frontend e2e
 ```
 
+CI does not run the 20 backend spec files that need the private report-reader engine: every hosted run skips them (`[jest] ENGINE ABSENT`).
+Where they run, how to run them, and their last result: `docs/lab-report-reader.md`, "Where the 20 run".
+
 
 ## API image and rehearsal (FD-4b)
 
