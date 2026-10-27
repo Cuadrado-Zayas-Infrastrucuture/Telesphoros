@@ -5,8 +5,14 @@ const URL = 'postgres://telesphoros_worker:hunter2-password@db.example:5432/app'
 
 describe('worker configuration', () => {
   it('has safe defaults and names the worker after its host and process', () => {
-    const c = loadConfig({ DATABASE_URL: URL }, 'host-1', 42);
-    expect(c).toMatchObject({ workerId: 'host-1:42', concurrency: 4, tenantCap: 2, drainSeconds: 30, testJobs: false, databaseTls: 'disable', healthHost: '127.0.0.1' });
+    const c = loadConfig({ DATABASE_URL: URL }, 'host-1', 42, 'a1b2c3d4');
+    expect(c).toMatchObject({ workerId: 'host-1:42:a1b2c3d4', concurrency: 4, tenantCap: 2, drainSeconds: 30, testJobs: false, databaseTls: 'disable', healthHost: '127.0.0.1' });
+  });
+  it('gives two containers (both PID 1, same host name, no WORKER_ID) different ids: the lease fence matches on it', () => {
+    const a = loadConfig({ DATABASE_URL: URL }, undefined, 1).workerId;
+    const b = loadConfig({ DATABASE_URL: URL }, undefined, 1).workerId;
+    expect(a).not.toBe(b);
+    expect(a.length).toBeLessThanOrEqual(128);
   });
   it('refuses bad values by setting name, never echoing the value', () => {
     for (const env of [

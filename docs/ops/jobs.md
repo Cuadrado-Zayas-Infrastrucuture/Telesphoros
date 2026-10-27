@@ -44,7 +44,7 @@ Environment (all validated at start; a refusal names the setting, never a value)
 | --- | --- | --- |
 | `DATABASE_URL` | required | The worker login (member of `telesphoros_worker` only). No TLS parameters in the URL |
 | `DATABASE_SSL` | `disable` | `require` in production (production refuses `disable`) |
-| `WORKER_ID` | `<host>:<pid>` | Short code recorded on leases and attempts |
+| `WORKER_ID` | `worker:<pid>:<random 8 hex>` | Short code recorded on leases and attempts. The random part keeps it unique per process: every container runs node as PID 1 |
 | `WORKER_CONCURRENCY` | 4 | Jobs run at once (1 to 50) |
 | `WORKER_TENANT_CAP` | 2 | Running jobs per organization, across all workers |
 | `WORKER_POLL_MS` | 2000 | Idle wait between claims |
