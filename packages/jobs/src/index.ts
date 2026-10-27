@@ -4,3 +4,5 @@ export * from './definitions';
 export * from './errors';
 export * from './queue';
 export * from './registry';
+export * from './log';
+export * from './runner';
