@@ -19,7 +19,7 @@ import type { KnowledgeSet } from '../services/knowledge/knowledge-set';
 import { DisputeChangedError, PatientLinkUnverifiedError } from '../ledger/ledger-types';
 import { linkState } from '../patient-identity/link-state';
 import { type ReaderResult } from '../services/report-reader/reader-result';
-import type { ReportReader } from '../services/report-reader/report-reader';
+import type { ReadOptions, ReportReader } from '../services/report-reader/report-reader';
 import { LedgerRecordsRepository } from '../storage/ledger-records.repository';
 import type { DisputeStatus, EvaluationInput, Projected } from '../storage/ledger-records';
 import { ReportsRepository } from '../storage/reports.repository';
@@ -68,7 +68,7 @@ export class EvaluationsService {
    * Evaluates an accepted capture (plan section 6). Everything that can be refused is refused BEFORE the reader runs, and nothing is
    * stored by a refusal. The reader and the engine run outside any database transaction; one transaction stores the result.
    */
-  async create(principal: Principal, reportId: string, body: EvaluationCreate): Promise<EvaluationOutcome> {
+  async create(principal: Principal, reportId: string, body: EvaluationCreate, options: ReadOptions = {}): Promise<EvaluationOutcome> {
     const ledger = this.need(this.ledger);
     const runner = this.need(this.runner);
     const knowledge = this.need(this.knowledge);
@@ -105,7 +105,11 @@ export class EvaluationsService {
     if (stored.sha256 !== capture.textSha256) throw AppException.conflictBecause('text-hash-mismatch', 'The stored text is not the text that was captured.');
     const text = stored.bytes.toString('utf8');
 
-    const read = await this.limiter.run(() => reader.read(text));
+    // A cancelled evaluation takes no reader slot, and stores nothing even if a reader ignored the signal and answered after it.
+    const { signal } = options;
+    signal?.throwIfAborted();
+    const read = await this.limiter.run(() => reader.read(text, { signal }));
+    signal?.throwIfAborted();
     this.failIfOperational(read);
 
     const adapted = await adaptReport(

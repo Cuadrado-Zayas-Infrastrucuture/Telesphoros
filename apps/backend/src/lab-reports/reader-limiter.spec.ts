@@ -63,6 +63,21 @@ describe('ReaderLimiter', () => {
     10_000,
   );
 
+  it('holds the slot until a cancelled read has stopped its process, then frees it', async () => {
+    const limiter = new ReaderLimiter(1);
+    const reader = new SubprocessReportReader({ mode: 'non-production', command: ['sh', '-c', "trap '' TERM; while :; do sleep 1; done"], deadlineMs: 30_000, killGraceMs: 600 });
+    const controller = new AbortController();
+    const read = limiter.run(() => reader.read('some text', { signal: controller.signal }));
+    read.catch(() => undefined); // asserted below; this only keeps the rejection from being reported as unhandled while we wait
+    await new Promise((r) => setTimeout(r, 100));
+    controller.abort();
+    await new Promise((r) => setTimeout(r, 200)); // inside the kill grace: the process ignores SIGTERM and has not exited yet
+    expect(limiter.active).toBe(1);
+    await expect(read).rejects.toMatchObject({ name: 'AbortError' });
+    expect(limiter.active).toBe(0);
+    expect(await limiter.run(async () => 'ok')).toBe('ok');
+  }, 10_000);
+
   it('refuses a cap that is not a positive whole number', () => {
     for (const bad of [0, -1, 1.5, Number.NaN]) expect(() => new ReaderLimiter(bad)).toThrow(RangeError);
   });

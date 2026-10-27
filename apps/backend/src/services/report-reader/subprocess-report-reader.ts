@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 import { type ReaderBindings, readerBindingsSchema, type ReaderResult, readerResultSchema, failureResult, type ProcessingFailureReason } from './reader-result';
 import { bindingMismatches } from './pinned-reader';
-import { ReaderNotApprovedError, type ReaderLogger, type ReportReader } from './report-reader';
+import { type ReadOptions, ReaderNotApprovedError, type ReaderLogger, type ReportReader } from './report-reader';
 
 const REPO_ROOT = resolve(__dirname, '../../../../..');
 export const DEFAULT_ENGINE_DIR = resolve(REPO_ROOT, 'knowledge/lab-report-reader/v2-handoff/engine');
@@ -30,7 +30,8 @@ export interface SubprocessReportReaderOptions {
   logger?: ReaderLogger;
 }
 
-type RunOutcome = { ok: true; stdout: Buffer } | { ok: false; reason: ProcessingFailureReason; cause: string; fields: Record<string, unknown> };
+type RunOutcome =
+  { ok: true; stdout: Buffer } | { ok: false; reason: ProcessingFailureReason; cause: string; fields: Record<string, unknown> } | { ok: false; cancelled: true; reason: unknown };
 
 /** Runs the sidecar as a child process: no shell, a minimal environment, bounded input, output and time. */
 export class SubprocessReportReader implements ReportReader {
@@ -51,13 +52,16 @@ export class SubprocessReportReader implements ReportReader {
     this.commandOverride = options.command;
   }
 
-  async read(text: string): Promise<ReaderResult> {
+  async read(text: string, options: ReadOptions = {}): Promise<ReaderResult> {
     if (typeof text !== 'string') throw new TypeError('text must be a string');
+    // A read cancelled before it starts never spawns.
+    options.signal?.throwIfAborted();
     // Bounded before anything is allocated or spawned. The engine applies the exact limit in Unicode scalars.
     if (text.length > MAX_TEXT_UTF16_UNITS) return failureResult('source-limit');
 
     // JSON.stringify escapes lone surrogates, so invalid text reaches the engine intact and is refused there.
-    const outcome = await this.run('process', JSON.stringify({ text }), text.length);
+    const outcome = await this.run('process', JSON.stringify({ text }), text.length, options.signal);
+    if (!outcome.ok && 'cancelled' in outcome) throw outcome.reason;
     if (!outcome.ok) return this.failed(outcome, text.length);
 
     let parsed: unknown;
@@ -78,7 +82,7 @@ export class SubprocessReportReader implements ReportReader {
   /** The build bindings of the engine this reader runs, for comparison with PINNED_READER at startup. */
   async bindings(): Promise<ReaderBindings> {
     const outcome = await this.run('bindings', '', 0);
-    if (!outcome.ok) throw new Error(`The reader could not report its bindings (${outcome.cause}).`);
+    if (!outcome.ok) throw new Error(`The reader could not report its bindings (${'cause' in outcome ? outcome.cause : 'cancelled'}).`);
     return readerBindingsSchema.parse(JSON.parse(outcome.stdout.toString('utf8')));
   }
 
@@ -87,12 +91,12 @@ export class SubprocessReportReader implements ReportReader {
     return bindingMismatches(await this.bindings());
   }
 
-  private failed(outcome: Extract<RunOutcome, { ok: false }>, textChars: number): ReaderResult {
+  private failed(outcome: Extract<RunOutcome, { cause: string }>, textChars: number): ReaderResult {
     this.logger?.warn({ event: 'report-reader-failure', reason: outcome.reason, cause: outcome.cause, textChars, ...outcome.fields }, 'Report reader did not return a result');
     return failureResult(outcome.reason);
   }
 
-  private run(command: 'process' | 'bindings', input: string, textChars: number): Promise<RunOutcome> {
+  private run(command: 'process' | 'bindings', input: string, textChars: number, signal?: AbortSignal): Promise<RunOutcome> {
     const [file, ...args] = this.commandOverride ?? ['python3', '-I', '-B', DEFAULT_CLI_PATH, this.engineDir, command];
     const started = Date.now();
     return new Promise((resolveOutcome) => {
@@ -128,13 +132,21 @@ export class SubprocessReportReader implements ReportReader {
       };
 
       const deadline = setTimeout(() => terminate('source-time-budget', 'deadline'), this.deadlineMs);
+      // Cancelling stops the group the same way as the deadline; the read settles on 'close', so never before the process has exited.
+      let cancelled = false;
+      const onAbort = () => {
+        cancelled = true;
+        terminate('worker-error', 'cancelled');
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
 
       const finish = (outcome: RunOutcome) => {
         if (settled) return;
         settled = true;
         clearTimeout(deadline);
         if (killTimer) clearTimeout(killTimer);
-        resolveOutcome(outcome);
+        signal?.removeEventListener('abort', onAbort);
+        resolveOutcome(cancelled ? { ok: false, cancelled: true, reason: signal!.reason } : outcome);
       };
 
       child.stdout.on('data', (chunk: Buffer) => {
