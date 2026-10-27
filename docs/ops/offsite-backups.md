@@ -23,6 +23,7 @@ setup to inspect the bucket. The AWS credentials that run the application are ne
 | `BACKUP_S3_REGION` | Default `us-east-1`. |
 | `BACKUP_S3_FORCE_PATH_STYLE` | `true` for providers that need `endpoint/bucket/key` addressing. |
 | `BACKUP_S3_SSE` | Default none: the file is already encrypted on our side. `AES256` or `aws:kms` only if the target insists. |
+| `BACKUP_S3_KMS_KEY_ID` | Sent with `BACKUP_S3_SSE=aws:kms`. The Terraform backups bucket encrypts with the backup key by default, so leave both unset there; its policy refuses `AES256`, any other key, and `aws:kms` named without this key id (S3 would use the AWS-managed key). |
 | `BACKUP_LOCK_MODE` / `--lock-mode` | `GOVERNANCE` (default) or `COMPLIANCE`. |
 | `BACKUP_RETAIN_DAYS` / `--retain-days` | Default 30. Applied to **every object** at upload. |
 | `BACKUP_S3_<ROLE>_ACCESS_KEY_ID`, `…_SECRET_ACCESS_KEY` | For each role `UPLOAD`, `READ`, `ADMIN`. Each also accepts the same name ending `_FILE` (path to a file holding the value), which is the preferred way on a server. Never pass keys on the command line. |
