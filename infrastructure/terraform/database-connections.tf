@@ -6,6 +6,8 @@
 #   worker task    WORKER_CONCURRENCY + 3 (apps/worker/src/main.ts)
 #   issuer task    4 (apps/backend/src/issuer/issuer-core.ts)
 #   migration task 1, while it runs
+# A deploy starts each service's new tasks before it stops the old ones (deployment_maximum_percent = 200 on all three), so the services are
+# counted at that peak; the migration task runs once, before the deploy.
 # database-connections.guard.test.mjs keeps these numbers in agreement with the code.
 
 variable "api_db_pool_max" {
@@ -43,15 +45,19 @@ locals {
   }
   connection_budget = var.db_connection_budget != null ? var.db_connection_budget : lookup(local.connection_estimates, local.db_instance_class, null)
 
+  connection_deploy_peak_percent = 200
+
   connection_demand = (
-    local.api_service_count * var.api_desired_count * (var.api_db_pool_max + 3)
-    + local.api_service_count * var.worker_desired_count * (local.worker_concurrency + 3)
-    + local.issuer_service_count * var.issuer_desired_count * 4
+    ceil((
+      local.api_service_count * var.api_desired_count * (var.api_db_pool_max + 3)
+      + local.api_service_count * var.worker_desired_count * (local.worker_concurrency + 3)
+      + local.issuer_service_count * var.issuer_desired_count * 4
+    ) * local.connection_deploy_peak_percent / 100)
     + local.api_service_count * 1
   )
 }
 
 output "db_connection_demand" {
-  description = "The most connections the hosted services can open together, and the budget they are checked against (an estimate unless db_connection_budget is set)."
+  description = "The most connections the hosted services can open together during a deploy, and the budget they are checked against (an estimate unless db_connection_budget is set)."
   value       = { demand = local.connection_demand, budget = local.connection_budget, budget_is_estimate = var.db_connection_budget == null }
 }
