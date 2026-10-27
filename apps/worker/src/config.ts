@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { assertNoUrlTls, tlsFromEnv, type DatabaseTls } from '../../backend/src/db/tls';
 
@@ -63,7 +64,7 @@ export interface WorkerConfig {
 }
 
 /** Reads the environment. Every refusal names the setting, never its value. */
-export function loadConfig(env: NodeJS.ProcessEnv = process.env, hostname = 'worker', pid = process.pid): WorkerConfig {
+export function loadConfig(env: NodeJS.ProcessEnv = process.env, hostname = 'worker', pid = process.pid, instance = randomUUID().slice(0, 8)): WorkerConfig {
   const parsed = schema.safeParse(env);
   if (!parsed.success) throw new Error(`Worker settings are invalid: ${[...new Set(parsed.error.issues.map((i) => i.path.join('.') || 'environment'))].join(', ')}.`);
   const c = parsed.data;
@@ -78,7 +79,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, hostname = 'wor
   return {
     databaseUrl: c.DATABASE_URL,
     databaseTls,
-    workerId: c.WORKER_ID ?? `${hostname}:${pid}`,
+    // PID 1 in every container and a shared host name would give every task the same id, and the lease fence matches on it.
+    workerId: c.WORKER_ID ?? `${hostname}:${pid}:${instance}`,
     concurrency: c.WORKER_CONCURRENCY,
     tenantCap: c.WORKER_TENANT_CAP,
     pollMs: c.WORKER_POLL_MS,
