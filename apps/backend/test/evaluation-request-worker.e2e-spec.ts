@@ -16,6 +16,7 @@ import { createTestApp, usingPostgres } from './helpers/app';
 import { createEphemeralDatabase, type EphemeralDatabase } from './helpers/database';
 import { fixturePdf, LabPipeline, sha } from './helpers/lab-pipeline';
 import { StandInReportReader } from './helpers/stand-in-reader';
+import { bearer } from './helpers/tokens';
 
 // H3: the evaluation-request consumer, on the real stack (migrations, roles, row-level security, the real queue functions, ledger and storage) with the public
 // synthetic fixture D01. The reader is the test stand-in, wrapped so a test can act while it reads. Everything is asserted through the queue, the request's
@@ -68,9 +69,9 @@ class WatchedReader implements ReportReader {
   const admissions = (requestProfile = profile) => new EvaluationRequestsService(new EvaluationRequestsRepository(app.get(Database)), requestProfile);
 
   /** A reviewed, linked D01 report and an admitted request for it; returns the request and who asked. */
-  async function admitted(requestProfile = profile) {
-    const setup = await lab.reviewedCapture(fixturePdf('D01'));
-    const principal = { tenantId: lab.tenant, sub: setup.clinician.sub, roles: ['clinician' as const] };
+  async function admitted(requestProfile = profile, local = lab) {
+    const setup = await local.reviewedCapture(fixturePdf('D01'));
+    const principal = { tenantId: local.tenant, sub: setup.clinician.sub, roles: ['clinician' as const] };
     const { request } = await admissions(requestProfile).admit(principal, {
       requestId: randomUUID(),
       reportId: setup.reportId,
@@ -254,6 +255,36 @@ class WatchedReader implements ReportReader {
     expect(await stored(setup.reportId, request.id)).toEqual({ evaluations: 1, completions: 1 });
     const [job] = await lab.row<{ state: string }>('SELECT state FROM jobs WHERE id = $1', [request.jobId]);
     expect(job!.state).toBe('succeeded');
+  }, 60_000);
+
+  it('reads a request completed under an active dispute as completed: the overlay changes the effective set, not the base set it pinned', async () => {
+    // Its own organization: a dispute applies to every later evaluation in the organization that raised it.
+    const disputed = new LabPipeline(app, db.adminUrl);
+    const first = await disputed.reviewedCapture(fixturePdf('D01'));
+    const shown = (await disputed.evaluate(first.clinician, first.reportId, { captureId: first.captureId, acceptanceId: first.acceptanceId }).expect(201)).body;
+    const cited = shown.results.find((r: { drug: string }) => r.drug === 'drugq').citation;
+    const cell = {
+      guidelineId: cited.guidelineId,
+      locator: { table: cited.locator.table, row: cited.locator.row, ...(cited.locator.column ? { column: cited.locator.column } : {}) },
+    };
+    await disputed
+      .api()
+      .post('/api/v1/cell-disputes')
+      .set(bearer(first.reviewer.token))
+      .send({ ...cell, note: 'SYN: x' })
+      .expect(201);
+    const { principal, request } = await admitted(profile, disputed);
+
+    await run(await claim('w-overlay', request.jobId), 'w-overlay');
+
+    const [evaluation] = await lab.row<{ id: string; knowledge_set_id: string; base: string }>(
+      `SELECT e.id::text, e.knowledge_set_id, e.binding -> 'overlay' ->> 'baseKnowledgeSetId' AS base
+         FROM evaluation_request_completions c JOIN evaluations e ON e.id = c.evaluation_id WHERE c.request_id = $1`,
+      [request.id],
+    );
+    expect(evaluation!.knowledge_set_id).not.toBe(profile.knowledgeSetId); // control: the overlay really applied
+    expect(evaluation!.base).toBe(profile.knowledgeSetId);
+    expect(await admissions().get(principal, request.id)).toMatchObject({ state: 'completed', evaluationId: evaluation!.id });
   }, 60_000);
 
   describe('the database fence on a completion, for any caller', () => {
