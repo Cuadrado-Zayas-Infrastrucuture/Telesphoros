@@ -21,6 +21,8 @@ import { InMemorySecurityEvents, SecurityEvents } from '../../src/security-event
 import { InMemoryMembershipRepository, MembershipRepository } from '../../src/storage/membership.repository';
 import { loadEnv } from '../../src/config/env';
 import { READINESS_CHECKS, type ReadinessCheck } from '../../src/health/readiness.service';
+import { LEDGER_WATCH_CONFIG } from '../../src/ledger/ledger-monitor';
+import { ledgerWatchConfig } from '../../src/ledger/ledger.module';
 import { createEphemeralDatabase, ownerUrlFor, verifierUrlFor } from './database';
 import { PgMembershipMirror, RegisteringMembershipAdmin } from './membership';
 import { LAB_READER } from '../../src/lab-reports/evaluations.service';
@@ -219,6 +221,9 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
       controllers: options.controllers ?? [],
     });
     if (options.readinessChecks) builder = builder.overrideProvider(READINESS_CHECKS).useValue(options.readinessChecks);
+    // The production boot walk waits a random delay of up to a minute (BOOT_PASS_JITTER_MS) so tasks started together do not walk at once.
+    // A spec cannot wait that long: the test application walks the ledger as soon as it starts.
+    builder = builder.overrideProvider(LEDGER_WATCH_CONFIG).useValue({ ...ledgerWatchConfig(env), bootPassJitterMs: 0 });
     builder = builder.overrideProvider(TokenVerifier).useFactory({
       inject: [MembershipRepository],
       factory: (memberships: MembershipRepository) => {
