@@ -49,7 +49,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-## mattpocock/skills: domain modeling, architecture, ticket drafting, triage and TDD
+## mattpocock/skills: domain modeling, architecture, ticket drafting, triage, TDD and Git safeguards
 
 Upstream: [mattpocock/skills](https://github.com/mattpocock/skills), commit `5beb35b040e3` (committed 2026-10-19). The byte-for-byte reference copy and its MIT licence (Copyright (c) 2026 Matt Pocock) are in [vendor/mattpocock/](vendor/mattpocock/VENDORED.md); the licence text is in [vendor/mattpocock/LICENSE](vendor/mattpocock/LICENSE).
 
@@ -61,6 +61,7 @@ Upstream: [mattpocock/skills](https://github.com/mattpocock/skills), commit `5be
 | `telesphoros-to-tickets` | `skills/engineering/to-tickets/SKILL.md`, `agents/openai.yaml` |
 | `telesphoros-triage` | `skills/engineering/triage/SKILL.md`, `AGENT-BRIEF.md`, `OUT-OF-SCOPE.md`, `agents/openai.yaml` |
 | `telesphoros-tdd` | `skills/engineering/tdd/SKILL.md`, `tests.md`, `mocking.md`, `agents/openai.yaml` |
+| `telesphoros-git-guardrails` | `skills/misc/git-guardrails-claude-code/SKILL.md`, `scripts/block-dangerous-git.sh`, `agents/openai.yaml` |
 
 Deliberate differences:
 
@@ -104,3 +105,9 @@ TDD adaptation differences:
 - Existing approval and contracts can settle the tested boundary; no universal per-test seam approval, generic root glossary or automatic module redesign is added.
 - Independent database/catalog, application-role ACL/RLS, transaction, recovery and exact-version evidence is retained. Direct persistence observations and contract-required ordering/effects are legitimate controls; API-only tests or doubles cannot automatically replace them.
 - One behavior per cycle is guidance rather than a one-assertion quota. Approved refactors receive characterization controls; small green cleanup remains within scope, while static edits use appropriate existing checks rather than artificial product tests.
+
+Git-guardrails adaptation differences:
+
+- Audit/policy preparation replaces automatic project/global installation. No settings, hooks, Git configuration or tool interception is changed; approved ordinary delivery keeps its existing authority.
+- The reference script remains pinned and inactive. A fixed offline audit reports its bypasses, false positives and malformed-input/missing-dependency fail-open behavior; it does not implement a replacement shell parser or prove exhaustive enforcement.
+- Claude Code Bash interception is distinguished from Git hooks, Codex and other execution paths. Existing personal hook configuration is preserved; activation and any stronger runtime design need their own explicit scope.

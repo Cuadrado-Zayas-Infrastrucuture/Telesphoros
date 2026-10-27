@@ -284,5 +284,32 @@
         "owner": "telesphoros-codebase-design"
       }
     ]
+  },
+  {
+    "name": "telesphoros-git-guardrails",
+    "positive": [
+      "Audit Git safety hooks against dangerous-command bypasses and harmless commands before activation.",
+      "Prepare an inactive Git guardrails policy and offline allow/block tests for review.",
+      "Review the Claude Code Git hook coverage and preserve my existing settings without installing it.",
+      "Assess fail-open behavior in the pinned Git safety hook and draft a bounded activation decision."
+    ],
+    "negative": [
+      {
+        "prompt": "Push the approved branch and open its draft pull request.",
+        "owner": "telesphoros-implement-slice"
+      },
+      {
+        "prompt": "Review this pull request for tenant security defects without changing code.",
+        "owner": "telesphoros-review"
+      },
+      {
+        "prompt": "The worker exits successfully but the expected output is stale.",
+        "owner": "telesphoros-debug"
+      },
+      {
+        "prompt": "Run the database and S3 checks and tell me which acceptance claims they prove.",
+        "owner": "telesphoros-verify"
+      }
+    ]
   }
 ]
