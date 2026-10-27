@@ -2,7 +2,7 @@
 
 **Branch**: `docs/data-products-d00` (this plan) | **Date**: 2026-10-27 | **Spec**: [spec.md](spec.md)
 
-**Status**: **Awaiting founder approval.** No code, migration or script has been written. `tasks.md` is written from this plan once it is approved (spec-driven workflow, step 3).
+**Status**: **D1 to D5, D7 and D8 approved by the founder on 2026-10-27; D6 (vocabulary `cdr-v1`) held for the founder's edits.** Founder's words: *"Approve D1-D5, D7, D8, but I want to edit the cdr-v1 codes before D01b. Start D01a only."* D01a is authorized; D01b waits for the edited `cdr-v1` and its own refreshed plan check. [tasks.md](tasks.md) covers D01a only.
 
 ## Summary
 
