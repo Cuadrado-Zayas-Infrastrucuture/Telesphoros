@@ -5,6 +5,7 @@ import type {
   DisputeDecisionInput,
   DisputeInput,
   DisputeStatus,
+  EvaluationCompletion,
   EvaluationInput,
   EvaluationReadContext,
   EvaluationState,
@@ -95,7 +96,8 @@ export abstract class LedgerRecordsRepository {
    * implementation). A held evaluation shows nothing and is not blocked.
    * A new evaluation naming an acceptance also rechecks that decision after the lock; supersession throws StaleAcceptanceError.
    */
-  abstract insertEvaluation(tenantId: string, actor: string, input: EvaluationInput): Promise<InsertResult>;
+  /** With `completion`, also completes that evaluation request in the same transaction, or stores nothing (see EvaluationCompletion). */
+  abstract insertEvaluation(tenantId: string, actor: string, input: EvaluationInput, completion?: EvaluationCompletion): Promise<InsertResult>;
   abstract findEvaluation(tenantId: string, id: string): Promise<Projected | undefined>;
   /** `current` keeps only the current evaluation of each report: its newest, if active (specification 4.5, amended in section 22); the other filters narrow the result further. */
   abstract listEvaluations(tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }, page: PageRequest): Promise<Page<Projected>>;

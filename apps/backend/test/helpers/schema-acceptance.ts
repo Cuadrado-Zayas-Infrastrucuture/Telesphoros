@@ -186,6 +186,7 @@ const uniqueKeys: Record<string, string> = {
 // Complete CHECK inventory; semantic refusal/control tests remain in the existing behavior suites.
 const checkNames: Record<string, string> = {
   evaluation_requests: 'requested_by_check fingerprint_check basis_check execution_profile_check',
+  evaluation_request_completions: 'worker_len',
   browser_sessions: 'handle_hash_shape issued_at_range lifetime created_at_bound credential_shape revoked_at_bound',
   patient_identifiers: 'tenant_id_len created_by_len system_shape digest_len key_version status withdrawal_shape withdrawn_by_len created_by_human creation_request_pair',
   report_patient_decisions: 'tenant_id_len created_by_len hash version_len decision method shape created_by_human',

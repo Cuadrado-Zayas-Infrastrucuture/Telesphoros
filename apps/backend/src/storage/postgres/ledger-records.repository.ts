@@ -25,6 +25,7 @@ import type {
   DisputeDecisionInput,
   DisputeInput,
   DisputeStatus,
+  EvaluationCompletion,
   EvaluationInput,
   EvaluationReadContext,
   EvaluationState,
@@ -408,79 +409,96 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
     });
   }
 
-  insertEvaluation(tenantId: string, actor: string, input: EvaluationInput): Promise<InsertResult> {
-    const identityKey = evaluationIdentityKey(input);
+  insertEvaluation(tenantId: string, actor: string, input: EvaluationInput, completion?: EvaluationCompletion): Promise<InsertResult> {
     return this.write(tenantId, actor, async (client) => {
-      const existing = await client.query<{ id: string }>(`SELECT id::text AS id FROM evaluations WHERE tenant_id = $1 AND identity_key = $2`, [tenantId, identityKey]);
-      if (existing.rows[0]) return this.existing(client, tenantId, 'evaluations', existing.rows[0].id);
-      const id = newId();
-      const inserted = await client.query(
-        `INSERT INTO evaluations (id, tenant_id, created_by, ledger_event_id, patient_id, report_id, capture_id, capture_acceptance_id, disposition, hold_code,
+      // H3: the worker must hold the request's job before anything is written. The lock this takes on the job keeps another worker from claiming it again
+      // until COMMIT, and the completion's own check (migration 0051) asks again; a refusal (EJ001) rolls the evaluation back with it.
+      if (completion) await client.query('SELECT evaluation_job_fence($1, $2)', [completion.jobId, completion.workerId]);
+      const result = await this.storeEvaluation(client, tenantId, actor, input);
+      if (completion) {
+        await client.query(`INSERT INTO evaluation_request_completions (request_id, tenant_id, evaluation_id, job_id, worker_id) VALUES ($1, $2, $3, $4, $5)`, [
+          completion.requestId,
+          tenantId,
+          result.record.id,
+          completion.jobId,
+          completion.workerId,
+        ]);
+      }
+      return result;
+    });
+  }
+
+  private async storeEvaluation(client: PoolClient, tenantId: string, actor: string, input: EvaluationInput): Promise<InsertResult> {
+    const identityKey = evaluationIdentityKey(input);
+    const existing = await client.query<{ id: string }>(`SELECT id::text AS id FROM evaluations WHERE tenant_id = $1 AND identity_key = $2`, [tenantId, identityKey]);
+    if (existing.rows[0]) return this.existing(client, tenantId, 'evaluations', existing.rows[0].id);
+    const id = newId();
+    const inserted = await client.query(
+      `INSERT INTO evaluations (id, tenant_id, created_by, ledger_event_id, patient_id, report_id, capture_id, capture_acceptance_id, disposition, hold_code,
                                   binding, knowledge_set_id, engine_version, gene_inputs, occurrences, identity_key)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14::jsonb, $15::jsonb, $16)
          ON CONFLICT ON CONSTRAINT evaluations_identity_uq DO NOTHING RETURNING id`,
-        [
-          id,
-          tenantId,
-          actor,
-          newId(),
-          input.patientId,
-          input.reportId,
-          input.captureId,
-          input.captureAcceptanceId,
-          input.disposition,
-          input.holdCode,
-          JSON.stringify(input.binding),
-          input.knowledgeSetId,
-          input.engineVersion,
-          JSON.stringify(input.geneInputs),
-          JSON.stringify(input.occurrences),
-          identityKey,
-        ],
-      );
-      if (inserted.rowCount === 0) return this.raced(client, tenantId, 'evaluations', 'evaluations_identity_uq', undefined, identityKey);
-      let ordinal = 0;
-      for (const result of input.results) {
-        const citation = 'citation' in result ? result.citation : null;
-        await client.query(
-          `INSERT INTO evaluation_results (tenant_id, evaluation_id, ordinal, drug, genes, outcome, reason_code, strength, citation, guideline_id, guideline_version,
+      [
+        id,
+        tenantId,
+        actor,
+        newId(),
+        input.patientId,
+        input.reportId,
+        input.captureId,
+        input.captureAcceptanceId,
+        input.disposition,
+        input.holdCode,
+        JSON.stringify(input.binding),
+        input.knowledgeSetId,
+        input.engineVersion,
+        JSON.stringify(input.geneInputs),
+        JSON.stringify(input.occurrences),
+        identityKey,
+      ],
+    );
+    if (inserted.rowCount === 0) return this.raced(client, tenantId, 'evaluations', 'evaluations_identity_uq', undefined, identityKey);
+    let ordinal = 0;
+    for (const result of input.results) {
+      const citation = 'citation' in result ? result.citation : null;
+      await client.query(
+        `INSERT INTO evaluation_results (tenant_id, evaluation_id, ordinal, drug, genes, outcome, reason_code, strength, citation, guideline_id, guideline_version,
                                            recommendation_text, implication, gene_evidence)
            VALUES ($1, $2, $3, $4, $5::text[], $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14::jsonb)`,
-          [
-            tenantId,
-            id,
-            ordinal++,
-            result.drug,
-            result.genes,
-            result.outcome,
-            'reasonCode' in result ? result.reasonCode : null,
-            'strength' in result ? result.strength : null,
-            citation ? JSON.stringify(citation) : null,
-            citation?.guidelineId ?? null,
-            citation?.guidelineVersion ?? null,
-            'recommendationText' in result ? result.recommendationText : null,
-            'implication' in result ? result.implication : null,
-            JSON.stringify(result.geneStates),
-          ],
-        );
-      }
-      for (const state of input.geneStates) {
-        await client.query(
-          `INSERT INTO evaluation_gene_states (tenant_id, evaluation_id, gene, state, phenotype, diplotype, activity_score, reason_code)
+        [
+          tenantId,
+          id,
+          ordinal++,
+          result.drug,
+          result.genes,
+          result.outcome,
+          'reasonCode' in result ? result.reasonCode : null,
+          'strength' in result ? result.strength : null,
+          citation ? JSON.stringify(citation) : null,
+          citation?.guidelineId ?? null,
+          citation?.guidelineVersion ?? null,
+          'recommendationText' in result ? result.recommendationText : null,
+          'implication' in result ? result.implication : null,
+          JSON.stringify(result.geneStates),
+        ],
+      );
+    }
+    for (const state of input.geneStates) {
+      await client.query(
+        `INSERT INTO evaluation_gene_states (tenant_id, evaluation_id, gene, state, phenotype, diplotype, activity_score, reason_code)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [tenantId, id, state.gene, state.state, state.phenotype, state.diplotype, state.activityScore, state.reasonCode],
-        );
-      }
-      const stored = await this.finish(client, tenantId, 'evaluations', id);
-      // Capture decisions append under this same lock. A fresh statement sees any decision committed before we acquired it.
-      if (input.captureAcceptanceId !== null) await this.assertCurrentAcceptance(client, tenantId, input.captureId, input.captureAcceptanceId);
-      if (input.patientLinkDecisionId !== undefined) await this.assertVerifiedLink(client, tenantId, input.reportId, input.patientLinkDecisionId);
-      // The append above took the tenant's ledger head lock and keeps it until COMMIT. Raising or deciding a dispute also appends, so it
-      // needs the same lock: every dispute change is either committed before we got the lock (and this separate statement, a new
-      // snapshot under READ COMMITTED, sees it) or queued behind us (and is ordered after this evaluation).
-      if (input.disposition === 'evaluated') await this.assertDisputeBasis(client, tenantId, input.disputeBasis ?? []);
-      return stored;
-    });
+        [tenantId, id, state.gene, state.state, state.phenotype, state.diplotype, state.activityScore, state.reasonCode],
+      );
+    }
+    const stored = await this.finish(client, tenantId, 'evaluations', id);
+    // Capture decisions append under this same lock. A fresh statement sees any decision committed before we acquired it.
+    if (input.captureAcceptanceId !== null) await this.assertCurrentAcceptance(client, tenantId, input.captureId, input.captureAcceptanceId);
+    if (input.patientLinkDecisionId !== undefined) await this.assertVerifiedLink(client, tenantId, input.reportId, input.patientLinkDecisionId);
+    // The append above took the tenant's ledger head lock and keeps it until COMMIT. Raising or deciding a dispute also appends, so it
+    // needs the same lock: every dispute change is either committed before we got the lock (and this separate statement, a new
+    // snapshot under READ COMMITTED, sees it) or queued behind us (and is ordered after this evaluation).
+    if (input.disposition === 'evaluated') await this.assertDisputeBasis(client, tenantId, input.disputeBasis ?? []);
+    return stored;
   }
 
   /** The ids of the disputes in force (open, or decided `upheld`) in the tenant. */

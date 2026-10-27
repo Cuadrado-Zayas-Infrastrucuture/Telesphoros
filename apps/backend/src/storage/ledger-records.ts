@@ -49,6 +49,16 @@ export interface AcceptanceInput {
   request?: { id: string; hash: string };
 }
 
+/**
+ * H3: the admitted evaluation request this evaluation answers, and the worker holding its job. Stored with the evaluation in the same transaction, and
+ * the database accepts it only while that worker holds the job (migration 0051), so a worker whose lease ran out stores neither.
+ */
+export interface EvaluationCompletion {
+  requestId: string;
+  jobId: string;
+  workerId: string;
+}
+
 export interface EvaluationInput {
   patientId: string;
   reportId: string;
