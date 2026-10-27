@@ -16,6 +16,22 @@ import {
 import { LedgerStatus } from './ledger-status';
 import { LedgerVerifier } from './verifier';
 
+/** The watch's settings for an environment. Exported so the test application can override the boot jitter and start its walk at once. */
+export function ledgerWatchConfig(env: Env): LedgerWatchConfig {
+  return {
+    production: env.NODE_ENV === 'production',
+    startupBudgetMs: env.LEDGER_STARTUP_BUDGET_MS,
+    fullIntervalMs: env.LEDGER_FULL_VERIFY_INTERVAL_HOURS * 3_600_000,
+    fullBudgetMs: FULL_BUDGET_MS,
+    onDemandBudgetMs: ON_DEMAND_BUDGET_MS,
+    fullWalkAtOrBelowEvents: FULL_WALK_AT_OR_BELOW_EVENTS,
+    incidentPollMs: INCIDENT_POLL_MS,
+    bootPassJitterMs: BOOT_PASS_JITTER_MS,
+    passLockWaitMs: PASS_LOCK_WAIT_MS,
+    passLockRetryMs: PASS_LOCK_RETRY_MS,
+  };
+}
+
 /**
  * The ledger watch: the shared status (the repository's append gate and the readiness check read it) and the monitor that keeps it current.
  * The admin route, `GET /ledger/verify`, belongs to the lab-report module with the other pipeline routes, so it is gated with them. This
@@ -28,18 +44,7 @@ import { LedgerVerifier } from './verifier';
     {
       provide: LEDGER_WATCH_CONFIG,
       inject: [ENV],
-      useFactory: (env: Env): LedgerWatchConfig => ({
-        production: env.NODE_ENV === 'production',
-        startupBudgetMs: env.LEDGER_STARTUP_BUDGET_MS,
-        fullIntervalMs: env.LEDGER_FULL_VERIFY_INTERVAL_HOURS * 3_600_000,
-        fullBudgetMs: FULL_BUDGET_MS,
-        onDemandBudgetMs: ON_DEMAND_BUDGET_MS,
-        fullWalkAtOrBelowEvents: FULL_WALK_AT_OR_BELOW_EVENTS,
-        incidentPollMs: INCIDENT_POLL_MS,
-        bootPassJitterMs: BOOT_PASS_JITTER_MS,
-        passLockWaitMs: PASS_LOCK_WAIT_MS,
-        passLockRetryMs: PASS_LOCK_RETRY_MS,
-      }),
+      useFactory: ledgerWatchConfig,
     },
     // The verifier has its own pool and its own login; the monitor closes it when the application shuts down.
     {
