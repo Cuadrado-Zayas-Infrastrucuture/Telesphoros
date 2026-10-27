@@ -847,9 +847,14 @@ run "connection_budget_counts_every_pool" {
   }
 
   assert {
-    # 3 API tasks x (5 + 3 verifier) + 2 workers x (4 + 3) + 2 issuers x 4 + 1 migration task
-    condition     = output.db_connection_demand.demand == 3 * (5 + 3) + 2 * (4 + 3) + 2 * 4 + 1 && output.db_connection_demand.budget == 100 && !output.db_connection_demand.budget_is_estimate
-    error_message = "the demand adds every pool at its largest count, and a given budget is not an estimate"
+    # Twice (the deploy peak) 3 API tasks x (5 + 3 verifier) + 2 workers x (4 + 3) + 2 issuers x 4, plus 1 migration task
+    condition     = output.db_connection_demand.demand == 2 * (3 * (5 + 3) + 2 * (4 + 3) + 2 * 4) + 1 && output.db_connection_demand.budget == 100 && !output.db_connection_demand.budget_is_estimate
+    error_message = "the demand adds every pool at its deploy peak, and a given budget is not an estimate"
+  }
+
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.database_connections_high.threshold == 80
+    error_message = "the connections alarm fires at 80% of the budget"
   }
 }
 
@@ -876,6 +881,30 @@ run "connection_budget_refuses_more_than_it_allows" {
   expect_failures = [aws_db_instance.main]
 }
 
+# 3 x 13 + 1 x 7 + 1 = 47 at the usual count fits 60; the deploy peak, 2 x 46 + 1 = 93, does not.
+run "connection_budget_refuses_a_deploy_peak_over_the_budget" {
+  command = plan
+
+  variables {
+    environment                = "production"
+    db_multi_az                = true
+    audit_lock_mode            = "COMPLIANCE"
+    aws_baa_executed           = true
+    enable_api_hosting         = true
+    api_domain                 = "api.example.test"
+    public_subnet_ids          = ["subnet-pub1111", "subnet-pub2222"]
+    api_image                  = "123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    api_cors_origins           = ["https://staging.example.test"]
+    github_repository          = "example-org/example-repo"
+    github_repository_id       = "100000001"
+    github_repository_owner_id = "200000002"
+    api_desired_count          = 3
+    db_connection_budget       = 60
+  }
+
+  expect_failures = [aws_db_instance.main]
+}
+
 run "connection_budget_estimate_off_production" {
   command = plan
 
@@ -890,8 +919,13 @@ run "connection_budget_estimate_off_production" {
   }
 
   assert {
-    condition     = output.db_connection_demand.budget == 68 && output.db_connection_demand.budget_is_estimate && output.db_connection_demand.demand == 1 * (10 + 3) + 1 * (4 + 3) + 1
-    error_message = "a synthetic plan without a reading uses the db.t4g.micro estimate, labelled as one, and counts the default pools"
+    condition     = output.db_connection_demand.budget == 68 && output.db_connection_demand.budget_is_estimate && output.db_connection_demand.demand == 2 * (1 * (10 + 3) + 1 * (4 + 3)) + 1
+    error_message = "a synthetic plan without a reading uses the db.t4g.micro estimate, labelled as one, and counts the default pools at their deploy peak"
+  }
+
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.database_connections_high.threshold == 54
+    error_message = "the connections alarm fires at 80% of the db.t4g.micro estimate"
   }
 }
 

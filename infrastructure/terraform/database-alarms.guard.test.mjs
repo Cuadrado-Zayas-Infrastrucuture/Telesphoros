@@ -31,7 +31,7 @@ function blocks(text, header) {
 const EXPECTED = {
   database_low_storage: { metric: 'FreeStorageSpace', statistic: 'Minimum', operator: 'LessThanThreshold', threshold: '4294967296', period: '300', evaluation: '3', missing: 'breaching' },
   database_cpu_high: { metric: 'CPUUtilization', statistic: 'Average', operator: 'GreaterThanThreshold', threshold: '80', period: '300', evaluation: '3', missing: 'notBreaching' },
-  database_connections_high: { metric: 'DatabaseConnections', statistic: 'Maximum', operator: 'GreaterThanThreshold', threshold: '80', period: '300', evaluation: '1', missing: 'notBreaching' },
+  database_connections_high: { metric: 'DatabaseConnections', statistic: 'Maximum', operator: 'GreaterThanThreshold', threshold: 'floor(coalesce(local.connection_budget, 0) * 0.8)', period: '300', evaluation: '1', missing: 'notBreaching' },
 };
 
 export function databaseAlarmProblems(text, databaseText = database) {
@@ -47,7 +47,7 @@ export function databaseAlarmProblems(text, databaseText = database) {
     need(b !== '', `${name} is missing`);
     need(has(b, 'namespace = "AWS/RDS"') && has(b, `metric_name = "${e.metric}"`) && has(b, `statistic = "${e.statistic}"`), `${name} must read ${e.metric} (${e.statistic}) in AWS/RDS`);
     // Whole lines, not substrings: `threshold = 800` must not satisfy `threshold = 80`.
-    const line = (key, value) => new RegExp(`^\\s*${key}\\s*=\\s*${value}\\s*$`, 'm').test(code(b));
+    const line = (key, value) => new RegExp(`^\\s*${key}\\s*=\\s*${value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'm').test(code(b));
     need(line('period', e.period) && line('evaluation_periods', e.evaluation) && line('threshold', e.threshold) && line('comparison_operator', `"${e.operator}"`), `${name} has the wrong period, evaluation count, threshold or direction`);
     need(has(b, `treat_missing_data = "${e.missing}"`), `${name} must treat missing data as ${e.missing}`);
     need(has(b, 'alarm_actions = [aws_sns_topic.audit_alarms.arn]'), `${name} must notify the audit topic`);
@@ -69,6 +69,8 @@ test('the database alarms guard reports each way the text could be weakened (con
     ['the storage alarm fires on one period', 'evaluation_periods  = 3\n  datapoints_to_alarm = 3\n  threshold           = 4294967296', 'evaluation_periods  = 1\n  datapoints_to_alarm = 1\n  threshold           = 4294967296'],
     ['the CPU alarm reads a different metric', 'metric_name         = "CPUUtilization"', 'metric_name         = "CPUCreditBalance"'],
     ['the CPU threshold raised to never fire', 'threshold           = 80\n  comparison_operator = "GreaterThanThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  dimensions = {\n    DBInstanceIdentifier = aws_db_instance.main.identifier\n  }\n}\n\n# Connections', 'threshold           = 800\n  comparison_operator = "GreaterThanThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  dimensions = {\n    DBInstanceIdentifier = aws_db_instance.main.identifier\n  }\n}\n\n# Connections'],
+    ['the connections threshold fixed again', 'threshold           = floor(coalesce(local.connection_budget, 0) * 0.8)', 'threshold           = 80'],
+    ['the connections threshold at the whole budget', 'threshold           = floor(coalesce(local.connection_budget, 0) * 0.8)', 'threshold           = floor(coalesce(local.connection_budget, 0) * 1)'],
     ['the connections alarm is removed', 'resource "aws_cloudwatch_metric_alarm" "database_connections_high" {', 'resource "aws_cloudwatch_metric_alarm" "database_connections_high_x" {'],
     ['an alarm tells nobody', 'resource "aws_cloudwatch_metric_alarm" "database_cpu_high" {\n  alarm_name          = "${local.name}-database-cpu-high"\n  alarm_description   = "Database CPU has averaged over 80% for 15 minutes. Look for a runaway query or a deploy surge before resizing the instance."\n  namespace           = "AWS/RDS"\n  metric_name         = "CPUUtilization"\n  statistic           = "Average"\n  period              = 300\n  evaluation_periods  = 3\n  datapoints_to_alarm = 3\n  threshold           = 80\n  comparison_operator = "GreaterThanThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]', 'resource "aws_cloudwatch_metric_alarm" "database_cpu_high" {\n  alarm_name          = "${local.name}-database-cpu-high"\n  alarm_description   = "Database CPU has averaged over 80% for 15 minutes. Look for a runaway query or a deploy surge before resizing the instance."\n  namespace           = "AWS/RDS"\n  metric_name         = "CPUUtilization"\n  statistic           = "Average"\n  period              = 300\n  evaluation_periods  = 3\n  datapoints_to_alarm = 3\n  threshold           = 80\n  comparison_operator = "GreaterThanThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = []'],
     ['an alarm watches no instance', 'DBInstanceIdentifier = aws_db_instance.main.identifier', 'DBInstanceIdentifier = "elsewhere"'],

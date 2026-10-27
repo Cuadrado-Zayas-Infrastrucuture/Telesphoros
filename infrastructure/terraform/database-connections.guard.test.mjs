@@ -18,6 +18,7 @@ const real = {
   workerMain: read('../../apps/worker/src/main.ts'),
   issuerCore: read('../../apps/backend/src/issuer/issuer-core.ts'),
   issuerApp: read('../../apps/backend/src/issuer/issuer-app.ts'),
+  issuer: read('./issuer.tf'),
 };
 
 const squash = (s) => s.replace(/\s+/g, ' ');
@@ -43,6 +44,15 @@ export function connectionProblems(t = real) {
   need(!/new PgCapabilityIssueStore\(\{[^}]*\bmax:/.test(t.issuerApp), 'the issuer service must use the store default pool size (or the budget must read its setting)');
   need(issuerMax !== undefined && tf.includes(`var.issuer_desired_count * ${issuerMax}`), 'each issuer task must count the pool the issuer store opens');
   need(/local\.api_service_count \* 1\b/.test(tf), 'the migration task must be counted');
+
+  // A deploy starts the new tasks before it stops the old ones, so each service peaks at deployment_maximum_percent of its count.
+  const peak = /connection_deploy_peak_percent = (\d+)\b/.exec(tf)?.[1];
+  need(peak !== undefined, 'the deploy peak percent must be stated');
+  for (const [key, service] of [['api', 'api'], ['worker', 'worker'], ['issuer', 'issuer']]) {
+    const percent = new RegExp(`resource "aws_ecs_service" "${service}" \\{[\\s\\S]*?deployment_maximum_percent\\s*=\\s*(\\d+)`).exec(code(t[key]))?.[1];
+    need(percent !== undefined && percent === peak, `the ${service} service's deployment_maximum_percent must equal connection_deploy_peak_percent`);
+  }
+  need(/ceil\(\( local\.api_service_count \* var\.api_desired_count [^)]*\)[\s\S]*\) \* local\.connection_deploy_peak_percent \/ 100\) \+ local\.api_service_count \* 1 \)/.test(tf), 'the services must be counted at their deploy peak (the migration task once)');
   need(/WORKER_CONCURRENCY\s*=\s*tostring\(local\.worker_concurrency\)/.test(t.worker), 'the worker task must take WORKER_CONCURRENCY from local.worker_concurrency');
   need(/DATABASE_POOL_MAX\s*=\s*tostring\(var\.api_db_pool_max\)/.test(t.api), 'the API task must take DATABASE_POOL_MAX from api_db_pool_max');
 
@@ -86,6 +96,10 @@ test('the connection budget guard reports each way the texts could drift (contro
     ['connections', 'ESTIMATES, NOT READINGS', 'Defaults', 'labelled as estimates'],
     ['database', 'var.environment != "production" || var.db_connection_budget != null', 'true', 'production must refuse'],
     ['database', 'local.connection_demand <= coalesce(local.connection_budget, 0)', 'true', 'refused above the budget'],
+    ['worker', 'deployment_maximum_percent         = 200', 'deployment_maximum_percent         = 300', "worker service's deployment_maximum_percent"],
+    ['issuer', 'deployment_maximum_percent         = 200', 'deployment_maximum_percent         = 150', "issuer service's deployment_maximum_percent"],
+    ['api', 'deployment_maximum_percent         = 200', 'deployment_maximum_percent         = 250', "api service's deployment_maximum_percent"],
+    ['connections', ') * local.connection_deploy_peak_percent / 100)', '))', 'deploy peak'],
   ];
   for (const [key, from, to, expected] of cases) {
     const problems = broken(key, from, to);
