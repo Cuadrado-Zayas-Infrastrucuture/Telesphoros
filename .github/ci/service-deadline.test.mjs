@@ -119,7 +119,8 @@ test('watchdog interrupts an unwrapped action and an orphaned detached child, pr
   const baseline = scopedRead(), owner = baseline.get(ownerChild.process.pid);
   const actionMarker = join(dir, 'action-completed'), orphanMarker = join(dir, 'orphan-completed'), orphanPid = join(dir, 'orphan-pid');
   const action = child(t, `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(actionMarker)}, 'late'), 2200);`); allowed.add(action.process.pid);
-  const launcher = child(t, `const {spawn}=require('node:child_process'); const fs=require('node:fs'); const c=spawn(process.execPath,['-e',${JSON.stringify("setTimeout(() => { require('node:fs').writeFileSync(" + JSON.stringify(orphanMarker) + ", 'late'); process.exit(0); }, 2200);")}],{detached:true,stdio:'ignore',env:{PATH:process.env.PATH}}); fs.writeFileSync(${JSON.stringify(orphanPid)}, String(c.pid)); c.unref(); setTimeout(() => process.exit(0), 30);`);
+  // The PID file is published by rename: the reader waits only for it to exist, and a file seen between create and write reads as PID 0.
+  const launcher = child(t, `const {spawn}=require('node:child_process'); const fs=require('node:fs'); const c=spawn(process.execPath,['-e',${JSON.stringify("setTimeout(() => { require('node:fs').writeFileSync(" + JSON.stringify(orphanMarker) + ", 'late'); process.exit(0); }, 2200);")}],{detached:true,stdio:'ignore',env:{PATH:process.env.PATH}}); fs.writeFileSync(${JSON.stringify(orphanPid + '.tmp')}, String(c.pid)); fs.renameSync(${JSON.stringify(orphanPid + '.tmp')}, ${JSON.stringify(orphanPid)}); c.unref(); setTimeout(() => process.exit(0), 30);`);
   allowed.add(launcher.process.pid); await waitFor(() => existsSync(orphanPid));
   const detachedPid = Number(readFileSync(orphanPid)); allowed.add(detachedPid); await launcher.exited;
   assert.ok(readProcess(detachedPid));
