@@ -3,7 +3,7 @@ import { Client } from 'pg';
 import { migrateDown } from '../../src/db/migrator';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { registerTenantRow } from '../helpers/membership';
-import { revertThrough } from '../helpers/migration-history';
+import { revertAbove, revertThrough } from '../helpers/migration-history';
 
 /**
  * Migration 0049 (LLM harness 3b-2a): the durable run of an explanation. Every hostile case sits next to a positive control that succeeds in the same state; the immutability
@@ -661,6 +661,10 @@ describe('the down migration', () => {
   it('refuses to drop a populated table unless the exact setting is given, and the refusal rolls back whole', async () => {
     const fresh = await createEphemeralDatabase();
     try {
+      // Isolate 0049 before its refusal checks: migrateDown commits each version,
+      // so a later empty migration must not be expected again after a refusal.
+      const above = revertAbove('agentic_explain_runs');
+      expect(await withAdmin(fresh.adminUrl, (c) => migrateDown(c, above.steps))).toEqual(above.reverted);
       await withAdmin(fresh.adminUrl, (c) =>
         c.query(
           `INSERT INTO public.agentic_explain_runs (tenant_id, requester_ref, key_hash, tuple_digest, harness_version, state, mono_at, deadline_at)
@@ -668,14 +672,13 @@ describe('the down migration', () => {
           [sha('down'), HMAC('c'), sha('h')],
         ),
       );
-      const undo = revertThrough('agentic_explain_runs');
       await withAdmin(fresh.adminUrl, async (c) => {
-        await expect(migrateDown(c, undo.steps)).rejects.toThrow(/Refusing to drop agentic_explain_runs/);
+        await expect(migrateDown(c, 1)).rejects.toThrow(/Refusing to drop agentic_explain_runs/);
         expect((await c.query(`SELECT to_regclass('public.agentic_explain_runs') AS t`)).rows[0].t).not.toBeNull();
         await c.query(`SET telesphoros.allow_runs_drop = 'Yes'`);
-        await expect(migrateDown(c, undo.steps)).rejects.toThrow(/Refusing to drop agentic_explain_runs/);
+        await expect(migrateDown(c, 1)).rejects.toThrow(/Refusing to drop agentic_explain_runs/);
         await c.query(`SET telesphoros.allow_runs_drop = 'yes'`);
-        expect(await migrateDown(c, undo.steps)).toEqual(undo.reverted);
+        expect(await migrateDown(c, 1)).toEqual(['0049']);
       });
     } finally {
       await fresh.drop();

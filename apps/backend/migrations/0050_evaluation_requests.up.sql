@@ -6,7 +6,11 @@ SET LOCAL statement_timeout = '30s';
 
 -- Like the ledger's parent keys, the jobs key belongs to its NOLOGIN owner. The migrator needs this narrow DDL privilege for the new foreign key.
 SET LOCAL ROLE telesphoros_jobs;
-DO $$ BEGIN EXECUTE format('GRANT REFERENCES (id) ON public.jobs TO %I', session_user); END $$;
+DO $$ BEGIN
+  IF NOT has_column_privilege(session_user, 'public.jobs', 'id', 'REFERENCES') THEN
+    EXECUTE format('GRANT REFERENCES (id) ON public.jobs TO %I', session_user);
+  END IF;
+END $$;
 RESET ROLE;
 
 -- The existing membership lock is SECURITY DEFINER. With a non-superuser migration
@@ -14,8 +18,11 @@ RESET ROLE;
 -- the capability-present branch. Grant to the function owner, never a runtime role.
 SET LOCAL ROLE telesphoros_capability;
 DO $$ DECLARE owner_name text; BEGIN
-  SELECT pg_get_userbyid(proowner) INTO owner_name FROM pg_proc WHERE oid = 'public.membership_assert_current(text,bigint)'::regprocedure;
-  EXECUTE format('GRANT EXECUTE ON FUNCTION public.app_tenant_bound(), public.app_actor(), public.app_capability_version() TO %I', owner_name);
+  SELECT r.rolname INTO owner_name FROM pg_proc p JOIN pg_roles r ON r.oid=p.proowner
+    WHERE p.oid = 'public.membership_assert_current(text,bigint)'::regprocedure AND NOT r.rolsuper;
+  IF owner_name IS NOT NULL THEN
+    EXECUTE format('GRANT EXECUTE ON FUNCTION public.app_tenant_bound(), public.app_actor(), public.app_capability_version() TO %I', owner_name);
+  END IF;
 END $$;
 RESET ROLE;
 
@@ -166,9 +173,9 @@ ALTER TABLE evaluation_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE evaluation_requests FORCE ROW LEVEL SECURITY;
 ALTER TABLE evaluation_request_completions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE evaluation_request_completions FORCE ROW LEVEL SECURITY;
-CREATE POLICY evaluation_requests_read ON evaluation_requests FOR SELECT TO telesphoros_app USING (tenant_id = app_tenant());
-CREATE POLICY evaluation_requests_insert ON evaluation_requests FOR INSERT TO telesphoros_app WITH CHECK (tenant_id = app_tenant());
-CREATE POLICY evaluation_completions_read ON evaluation_request_completions FOR SELECT TO telesphoros_app USING (tenant_id = app_tenant());
+CREATE POLICY evaluation_requests_read ON evaluation_requests FOR SELECT TO telesphoros_app USING (tenant_id = (SELECT app_tenant()));
+CREATE POLICY evaluation_requests_insert ON evaluation_requests FOR INSERT TO telesphoros_app WITH CHECK (tenant_id = (SELECT app_tenant()));
+CREATE POLICY evaluation_completions_read ON evaluation_request_completions FOR SELECT TO telesphoros_app USING (tenant_id = (SELECT app_tenant()));
 REVOKE ALL ON evaluation_requests, evaluation_request_completions FROM PUBLIC;
 GRANT SELECT, INSERT ON evaluation_requests TO telesphoros_app;
 GRANT SELECT ON evaluation_request_completions TO telesphoros_app;

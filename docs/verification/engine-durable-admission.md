@@ -18,6 +18,10 @@ The first full service profile exposed gaps hidden by admin-owned migration fixt
 
 One targeted run exceeded the existing five-second migration-contention test deadline. Its unchanged isolated control passed in 3.2 seconds; native PostgreSQL samples observed the intended lock wait at about two seconds. The transient broader-run timeout remains recorded, with no timeout or assertion relaxation and no claimed root cause. Final full profiles remain required.
 
+The next full profile caught integration with the existing protection catalogs. H1 metadata now has an explicit immutable operational classification, the complete tenant-policy inventory includes its three accessor policies, and historical rollback tests isolate their own version before checking a refusal. The catalog still detects unknown tables, missing protection and unexpected grants. Unnecessary explicit grants to an already privileged superuser owner are avoided; real restricted-owner controls remain required.
+
+A separate full-profile deadline failure coincided with native host sleep/wake timestamps spanning 259 seconds. Filesystem wall time exceeded the producer monotonic time by 258.9 seconds. Subsequent local service verification uses a temporary process-bound `caffeinate -i` assertion; no system setting, SQL/Jest deadline or assertion is changed.
+
 The existing independent schema gate also caught missing explicit ON DELETE RESTRICT clauses. Those clauses were added, and the hand-reviewed schema inventory now includes every new H1 key, relationship, CHECK and query index without removing prior expectations.
 
 The queue-progress harness initially shared retained jobs from earlier cases. The real queue correctly claimed older work. Isolating only that lifecycle case in its own existing ephemeral database preserved its assertions and queue behavior. No production guard, ordering rule or timeout was weakened.
