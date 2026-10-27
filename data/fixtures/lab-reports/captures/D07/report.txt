@@ -1,0 +1,6 @@
+SYNTHETIC PHARMACOGENOMIC REPORT - TEST ONLY
+Written for this repository. Not a laboratory report and not clinical content.
+Report: D07 | Specimen: synthetic
+Gene: CYP2C19 | Diplotype: *1/*2 | Result: Intermediate Metabolizer
+Gene: CYP2C19 | Diplotype: *1/*1 | Result: Normal Metabolizer
+End of synthetic report.

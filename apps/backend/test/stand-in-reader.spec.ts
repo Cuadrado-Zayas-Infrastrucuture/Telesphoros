@@ -20,7 +20,7 @@ import { StandInReportReader, standInRead } from './helpers/stand-in-reader';
 // hand-written oracle. TEST ONLY. This file must run with or without the imported reader engine.
 const REPO_ROOT = resolve(__dirname, '../../..');
 const PUBLIC_FIXTURES = join(REPO_ROOT, 'data/fixtures/lab-reports/captures');
-const IDS = ['D01', 'D02', 'D08'] as const;
+const IDS = ['D01', 'D02', 'D03', 'D04', 'D05', 'D06', 'D07', 'D08', 'D09', 'D10', 'D11', 'D12'] as const;
 interface GoldenCase {
   id: string;
   disposition: 'evaluated' | 'held';
@@ -170,6 +170,42 @@ describe('the stand-in reader through the real adapter and engine', () => {
 
     it('a packet read from other text is refused as invalid', async () => {
       expect(await adapt(text('D01'), standInRead(text('D02')))).toMatchObject({ disposition: 'held', code: 'packet-invalid' });
+    });
+
+    describe('the unassociated-values layout (D10, D11)', () => {
+      it('is accepted unmodified and abstains for every listed gene (positive control)', async () => {
+        expect(await adapt(text('D10'), standInRead(text('D10')))).toMatchObject({ disposition: 'evaluated' });
+      });
+
+      it('a resealed packet that drops one candidate from the unassociated evidence is refused as invalid', async () => {
+        const edited = forge(text('D10'), (_packet, result) => {
+          result.projection.provenance.unassociatedEvidence.pop();
+        });
+        expect(await adapt(text('D10'), edited)).toMatchObject({ disposition: 'held', code: 'packet-invalid' });
+      });
+
+      it('a resealed packet that claims the ambiguous set is resolved is refused as invalid', async () => {
+        const edited = forge(text('D10'), (packet) => {
+          packet.frameSetState = 'resolved';
+        });
+        expect(await adapt(text('D10'), edited)).toMatchObject({ disposition: 'held', code: 'packet-invalid' });
+      });
+
+      it('a resealed packet that keeps the abstention but gives up its ambiguity evidence is refused as invalid', async () => {
+        const edited = forge(text('D10'), (packet) => {
+          packet.ambiguityEvidence = [];
+        });
+        expect(await adapt(text('D10'), edited)).toMatchObject({ disposition: 'held', code: 'packet-invalid' });
+      });
+
+      it('a gene line or an empty listed value in the list layout is held, not read in part', () => {
+        expect(standInRead('Layout: unassociated-values\nGenes: CYP2C19\nGene: CYP2C19 | Diplotype: *1/*2\n').projection).toMatchObject({
+          status: 'held',
+          reason: 'unaccounted-text',
+        });
+        expect(standInRead('Layout: unassociated-values\nGenes: CYP2C19 | \n').projection).toMatchObject({ status: 'held', reason: 'unaccounted-text' });
+        expect(standInRead('Layout: unassociated-values\nDiplotypes: *1/*2\n').projection).toMatchObject({ status: 'held', reason: 'unaccounted-text' });
+      });
     });
 
     it('text it does not understand is held with a named reader reason, not guessed', () => {

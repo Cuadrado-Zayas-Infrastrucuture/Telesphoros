@@ -6,12 +6,9 @@ import { LEDGER_VERIFIER, LedgerMonitor, type VerifierPort } from '../src/ledger
 import { LedgerVerifier, type VerifyOptions } from '../src/ledger/verifier';
 import { createTestApp, usingPostgres } from './helpers/app';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from './helpers/database';
-import { engineFixtures, LabPipeline } from './helpers/lab-pipeline';
+import { fixturePdf, LabPipeline } from './helpers/lab-pipeline';
 
 import { bearer } from './helpers/tokens';
-
-// This spec runs the private engine on its own captures (spec 004 slice 3 moves it to public fixtures).
-const { fixturePdf } = engineFixtures;
 
 // The ledger watch over HTTP (slice 5B-3.3c): readiness shows the record log, an admin can check their own tenant's log now, and a log found
 // damaged stops every record write while reads and everything else carry on. Synthetic data only.
@@ -68,7 +65,7 @@ class ControlledVerifier implements VerifierPort {
       db = await createEphemeralDatabase();
       controlled = new ControlledVerifier(LedgerVerifier.connect(db.verifierUrl));
       controlled.holdTenantsOnCall = { call: 2, until: startWalk.promise }; // call 1 is the check at start; call 2 is the full walk after it
-      app = await createTestApp({ labReportPipeline: true, readerEngine: true, postgresUrl: db.appUrl, overrides: [{ provide: LEDGER_VERIFIER, useValue: controlled }] });
+      app = await createTestApp({ labReportPipeline: true, postgresUrl: db.appUrl, overrides: [{ provide: LEDGER_VERIFIER, useValue: controlled }] });
       lab = new LabPipeline(app, db.adminUrl);
     }, 60_000);
     afterAll(async () => {
@@ -185,7 +182,7 @@ class ControlledVerifier implements VerifierPort {
     let lab: LabPipeline;
     beforeAll(async () => {
       db = await createEphemeralDatabase();
-      app = await createTestApp({ labReportPipeline: true, readerEngine: true, postgresUrl: db.appUrl });
+      app = await createTestApp({ labReportPipeline: true, postgresUrl: db.appUrl });
       lab = new LabPipeline(app, db.adminUrl);
     }, 60_000);
     afterAll(async () => {
