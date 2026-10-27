@@ -45,6 +45,28 @@ function fetcher(
 }
 const heading = () => screen.findByRole('heading', { level: 1, name: 'Reports' });
 describe('reports page with real auth and route guards', () => {
+  it('connects a stored fixture to an explicitly fixed synthetic result without processing requests', async () => {
+    vi.stubEnv('VITE_SYNTHETIC_PGX_DEMO', 'true');
+    vi.stubGlobal('location', { hostname: '127.0.0.1' });
+    const stored = {
+      ...row(),
+      type: 'lab-pdf',
+      filename: 'renamed-example.pdf',
+      contentType: 'application/pdf',
+      sha256: 'fd2b6475143803a2add6446de753cbbe61879b567fa016b10434d7b5d38aac14',
+    };
+    const api = fetcher(['clinician'], async () => json({ data: [stored], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } }));
+    renderApp('/reports', { signedInAs: ['clinician'], fetchImpl: api });
+    await heading();
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Open renamed-example.pdf' }));
+    const before = api.mock.calls.length;
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Show fixed sample result' }));
+    expect(screen.getByRole('heading', { name: 'Sample result' })).toBeVisible();
+    expect(screen.getByText('Q intermediate.')).toBeVisible();
+    expect(screen.getByText('Fixed synthetic data. No reader, rules engine or model has run on this upload.')).toBeVisible();
+    expect(api).toHaveBeenCalledTimes(before);
+  });
+
   // An administrator is not listed: administration is not clinical access, so the page refuses them (see the test of that name below).
   it.each([['clinician'], ['reviewer'], ['reader']] as Role[][])(
     'keeps chat navigation separate and opens role-aware report details in a drawer for %j',
