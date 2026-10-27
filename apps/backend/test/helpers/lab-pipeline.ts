@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -11,14 +11,22 @@ import { bearer, signToken } from './tokens';
 
 export const TEST_KNOWLEDGE = resolve(__dirname, '../../../../data/fixtures/knowledge/test-only-reader');
 export const REPO_ROOT = resolve(__dirname, '../../../..');
-const ENGINE_FIXTURES = resolve(__dirname, '../../../../knowledge/lab-report-reader/v2-handoff/fixtures/captures');
-// Without the imported reader engine (the public repository has none) the pipeline specs use the public synthetic fixtures (D01, D02, D08; see
-// data/fixtures/lab-reports/README.md), whose ids match the same hand-written oracle, and the test stand-in reader (see app.ts).
-const PUBLIC_FIXTURES = resolve(__dirname, '../../../../data/fixtures/lab-reports/captures');
-export const FIXTURES = existsSync(ENGINE_FIXTURES) ? ENGINE_FIXTURES : PUBLIC_FIXTURES;
-export const fixturePdf = (id: string) => readFileSync(join(FIXTURES, id, 'source.pdf'));
-export const fixtureText = (id: string) => readFileSync(join(FIXTURES, id, 'report.txt'), 'utf8');
-export const fixtureManifest = (id: string) => JSON.parse(readFileSync(join(FIXTURES, id, 'capture.json'), 'utf8')) as { source_pdf_sha256: string; stored_text_sha256: string };
+// The public synthetic fixtures (D01, D02, D08; see data/fixtures/lab-reports/README.md), whose ids match the hand-written oracle. Every pipeline spec
+// reads these with the test stand-in reader (see app.ts), whether or not the engine is in the checkout.
+export const PUBLIC_FIXTURES = resolve(__dirname, '../../../../data/fixtures/lab-reports/captures');
+// The private engine's own captures. Only specs that run the engine read them, and they say so (`readerEngine: true` in createTestApp); those specs are
+// on the list in reader-engine-specs.json, so a checkout without the engine skips them. Never chosen by checking whether the engine is present.
+export const ENGINE_FIXTURES = resolve(__dirname, '../../../../knowledge/lab-report-reader/v2-handoff/fixtures/captures');
+export function fixtureSet(dir: string) {
+  return {
+    dir,
+    fixturePdf: (id: string) => readFileSync(join(dir, id, 'source.pdf')),
+    fixtureText: (id: string) => readFileSync(join(dir, id, 'report.txt'), 'utf8'),
+    fixtureManifest: (id: string) => JSON.parse(readFileSync(join(dir, id, 'capture.json'), 'utf8')) as { source_pdf_sha256: string; stored_text_sha256: string },
+  };
+}
+export const { fixturePdf, fixtureText, fixtureManifest } = fixtureSet(PUBLIC_FIXTURES);
+export const engineFixtures = fixtureSet(ENGINE_FIXTURES);
 export const sha = (bytes: Buffer | string) => createHash('sha256').update(bytes).digest('hex');
 export const DOCUMENT_IDS = Array.from({ length: 12 }, (_, i) => `D${String(i + 1).padStart(2, '0')}`);
 

@@ -8,7 +8,10 @@ import { ObjectStorage } from '../src/object-storage/object-storage';
 import { createTestApp, usingPostgres } from './helpers/app';
 import { createEphemeralDatabase, type EphemeralDatabase } from './helpers/database';
 import { bearer } from './helpers/tokens';
-import { DOCUMENT_IDS, FIXTURES, fixtureManifest, fixturePdf, fixtureText, LabPipeline, type Person, sha } from './helpers/lab-pipeline';
+import { DOCUMENT_IDS, ENGINE_FIXTURES, engineFixtures, LabPipeline, type Person, sha } from './helpers/lab-pipeline';
+
+// This spec runs the private engine on its own captures (spec 004 slice 3 moves it to public fixtures).
+const { fixtureManifest, fixturePdf, fixtureText } = engineFixtures;
 
 // Capture, decision and file links over HTTP (slice 5B-3.2b-1), on the real database and, in the S3 tier, the S3 protocol.
 // Synthetic data only. The text runner is a recorded-text substitute (see fake-text-capture-runner.ts).
@@ -34,7 +37,7 @@ const MAX_BURNERS = 40;
   let lab: LabPipeline;
   beforeAll(async () => {
     db = await createEphemeralDatabase();
-    app = await createTestApp({ labReportPipeline: true, postgresUrl: db.appUrl });
+    app = await createTestApp({ labReportPipeline: true, readerEngine: true, postgresUrl: db.appUrl });
     lab = new LabPipeline(app, db.adminUrl);
   });
   afterAll(async () => {
@@ -364,9 +367,9 @@ const MAX_BURNERS = 40;
     it('refuses to start on a missing, empty or corrupt fixture directory, and answers 500 PIPELINE_MISCONFIGURED when an entry is damaged later', async () => {
       const broken = await mkdtemp(join(tmpdir(), 'fixtures-'));
       try {
-        await expect(createTestApp({ labReportPipeline: true, postgresUrl: db.appUrl, fixturesDir: join(tmpdir(), 'no-such-dir') })).rejects.toThrow();
-        await cp(FIXTURES, broken, { recursive: true });
-        const damaged = await createTestApp({ labReportPipeline: true, postgresUrl: db.appUrl, fixturesDir: broken });
+        await expect(createTestApp({ labReportPipeline: true, readerEngine: true, postgresUrl: db.appUrl, fixturesDir: join(tmpdir(), 'no-such-dir') })).rejects.toThrow();
+        await cp(ENGINE_FIXTURES, broken, { recursive: true });
+        const damaged = await createTestApp({ labReportPipeline: true, readerEngine: true, postgresUrl: db.appUrl, fixturesDir: broken });
         try {
           const lab2 = new LabPipeline(damaged, db.adminUrl);
           const clinician = await lab2.person('clin', ['clinician']);
@@ -396,10 +399,10 @@ const MAX_BURNERS = 40;
   });
 
   it('refuses to start when the knowledge directory is missing or holds nothing it can load (a fault stops the start, it is not skipped)', async () => {
-    await expect(createTestApp({ labReportPipeline: true, postgresUrl: db.appUrl, knowledgeDir: join(tmpdir(), 'no-such-knowledge-dir') })).rejects.toThrow();
+    await expect(createTestApp({ labReportPipeline: true, readerEngine: true, postgresUrl: db.appUrl, knowledgeDir: join(tmpdir(), 'no-such-knowledge-dir') })).rejects.toThrow();
     const empty = await mkdtemp(join(tmpdir(), 'knowledge-'));
     try {
-      const app = await createTestApp({ labReportPipeline: true, postgresUrl: db.appUrl, knowledgeDir: empty }).catch((e: unknown) => e);
+      const app = await createTestApp({ labReportPipeline: true, readerEngine: true, postgresUrl: db.appUrl, knowledgeDir: empty }).catch((e: unknown) => e);
       if (app instanceof Error) return; // refused: the strict answer
       await (app as NestExpressApplication).close(); // an empty directory may load as "no guidelines": then it must still be a started, working app
     } finally {

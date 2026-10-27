@@ -8,8 +8,12 @@ import { IntakeService } from '../src/reports/intake/intake.service';
 import { ReportsRepository } from '../src/storage/reports.repository';
 import { createTestApp, securityEventsOf, usingPostgres, usingS3 } from './helpers/app';
 import { createEphemeralDatabase, type EphemeralDatabase } from './helpers/database';
-import { DOCUMENT_IDS, fixturePdf, LabPipeline } from './helpers/lab-pipeline';
+import { DOCUMENT_IDS, engineFixtures, LabPipeline } from './helpers/lab-pipeline';
+
 import { bearer, clinicianA, clinicianB, readerA, signToken } from './helpers/tokens';
+
+// This spec runs the private engine on its own captures (spec 004 slice 3 moves it to public fixtures).
+const { fixturePdf } = engineFixtures;
 
 // The validated intake in the organization's own scope (M2.2a): no disposable run, keys under the report, a per-organization quota and a refused file recorded as
 // a security event. Synthetic data only. Runs on memory, PostgreSQL and PostgreSQL plus S3.
@@ -259,7 +263,7 @@ describe('validated intake in the organization scope', () => {
   let pipelineApp: NestExpressApplication;
   beforeAll(async () => {
     db = await createEphemeralDatabase();
-    pipelineApp = await createTestApp({ labReportPipeline: true, postgresUrl: db.appUrl });
+    pipelineApp = await createTestApp({ labReportPipeline: true, readerEngine: true, postgresUrl: db.appUrl });
     lab = new LabPipeline(pipelineApp, db.adminUrl);
   });
   afterAll(async () => {
