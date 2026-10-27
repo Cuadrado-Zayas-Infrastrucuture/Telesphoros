@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-27
 
-**Status**: Draft, **awaiting founder approval of [plan.md](plan.md)** (decisions D1 to D8). Nothing here is implemented.
+**Status**: Draft, **awaiting founder approval of [plan.md](plan.md)** (decisions D1 to D8, revised 2026-10-27 after the founder's review of D2 to D6). Nothing here is implemented.
 
 **Input**: *Telesphoros data product architecture and Claude Code implementation report* (founder, 2026-10-27), read in full as requirements data. Mapping against `main` `704d5c4`: [research.md](research.md). Data model: [data-model.md](data-model.md). Contracts: [contracts/clinician-decisions.md](contracts/clinician-decisions.md).
 
@@ -12,12 +12,13 @@
 
 The long-term direction is **one longitudinal evidence model with product-specific analytical views**, sold only as **aggregate analyses** of what the decision-and-outcome record shows. Its value rests on provenance, valid denominators, follow-up and reproducibility. The record must keep six facts apart: what was known at decision time; what the deterministic engine produced; what a clinician saw and decided; what treatment was ordered, dispensed, administered or taken; what was observed later, including missing follow-up; and which records may contribute to which analysis and release.
 
-**This spec covers only the first link**: a stable reference to an existing engine result (D01a) and a synthetic clinician decision about that exact result, with its history (D01b). Every later slice in the report's roadmap (D02 to D11) needs its own plan.
+**This spec covers only the first link**: a stable reference to an existing engine result (D01a) and a synthetic clinician decision about that exact result, with its history (D01b). Every later slice in the report's roadmap (D02 to D11) needs its own plan. **Capture limitations accepted for this slice:** no proxy entry (the author is the decision-maker); no retrospective documentation once the basis is no longer eligible; full timestamps only; intended modifications are coded by kind, not by drug or dose value.
 
 ## User journeys (synthetic)
 
 1. **A clinician records a response to a shown result.** They open an active, current evaluation, choose one result, and record `accepted`, `modified`, `rejected`, `deferred` or `clarification-requested`, with reason codes when it is not `accepted`, an optional note and the clinical time if it differs from now. A retry after a network failure returns the same record.
-2. **A clinician revises their record.** Later they record a new decision that names the one it follows. The earlier one stays in the history.
+2. **The plan changes, or the record was wrong.** If new information changes the plan, a clinician records a new `decision`. If the entry was mis-documented, its author records an `amendment`. If it was made on the wrong result, its author records `entered-in-error`. Every entry stays in the history, attributed.
+2a. **Two clinicians disagree.** A later `decision` by another clinician becomes the team's current decision; the earlier one stays, attributed to its author.
 3. **Anyone with clinical read access reads the history** of a result: every decision oldest first, which one is current, and what the source evaluation's status is *now* (still active, retracted, superseded, disputed, or quarantined).
 4. **A reviewer retracts the evaluation after a decision.** The decision remains a historical fact, and its history shows the basis is now retracted. A decision attempted after the retraction is refused.
 
@@ -39,15 +40,34 @@ The long-term direction is **one longitudinal evidence model with product-specif
 - **FR-002** `POST /evaluation-results/:id/clinician-decisions` stores one decision about that exact result. Tenant, author and patient come from the server (the token and the result's own evaluation), never from the body.
 - **FR-003** The body must also name the `evaluationId` and `patientId` the caller is looking at. A mismatch with the stored relationship is refused (409, nothing stored). Another tenant's result reads as 404.
 - **FR-004** The database itself refuses a decision row whose result, evaluation, patient and tenant do not belong together (composite foreign keys), whatever the service does.
-- **FR-005** Only the `clinician` role may record a decision. `reader`, `reviewer` and `admin` without `clinician` are refused (403). A person holding both `clinician` and `reviewer` may record one.
+- **FR-005** Only a person whose **live membership** holds `clinician` may write. This is checked by the route and again by the database trigger, which copies the roles and membership version onto the row. `reader`, `reviewer` and `admin` without `clinician` are refused (403). The author is both decision-maker and recorder; proxy entry is not supported.
 - **FR-006** At commit, under the tenant's ledger lock, the basis is re-checked: the evaluation is active and current, its report is not quarantined, the result's outcome is `shown`, and the result's cited cell has no open or upheld dispute. Otherwise 409 `decision-basis-unavailable`, nothing stored.
-- **FR-007** A decision is append-only and ledgered in the same transaction as its row. A later decision names `previousDecisionId`, which must be the current head for that result; a stale head is 409 `decision-stale`.
-- **FR-008** `requestId` (optional UUID) makes a write retryable. A replay with the same payload returns the original (200); the same id with a different payload is 409 `request-id-reused`; concurrent identical requests store exactly one row.
-- **FR-009** `response` other than `accepted` requires at least one reason code from a fixed list; `other-documented` also requires a note. A note is stored as an existing event note: only its id and hash reach the ledger, and it is read through `GET /notes/:id`.
-- **FR-010** `occurredAt` is optional (default: the commit time). It must be no earlier than the evaluation's `createdAt` and no later than the commit time.
+- **FR-007** Entries are append-only and ledgered in the same transaction as their row. Each names the result's current head (`previousEntryId`); a stale head is 409 `decision-stale`. `entryKind` is `decision`, `amendment` (same author, documentation fix) or `entered-in-error` (same author, withdrawal). Another clinician's entry can be followed only by a new `decision`.
+- **FR-008** `requestId` (UUID) is **required**. A replay with the same canonical request returns the original (200) before any eligibility check. The same id with a different request is 409 `request-id-reused`. Concurrent identical requests store exactly one row. Server-set values never enter the fingerprint.
+- **FR-009** Detail codes come from vocabulary `cdr-v1`, which is stored with its version. Each response has its own allowed and required set: `modified` needs what kind of change is intended, `rejected` a reason, `deferred` what is pending (with an optional review date), `clarification-requested` a topic, and `accepted` nothing. Every `-other` code needs a note. A note is an existing event note: only its id and hash reach the ledger, and it is read through `GET /notes/:id`.
+- **FR-010** `createdAt` (database clock) is the recorded time and the only clock for timeliness. `occurredAt` is optional (omitted = `createdAt`, `occurredAtSource: recorded`) and must lie between the evaluation's `createdAt` and `createdAt`. Neither clock affects eligibility.
 - **FR-011** `GET /evaluation-results/:id/clinician-decisions` returns the history oldest first, the current head, and the basis status now. A decision committed before a later retraction stays readable.
 - **FR-012** Nothing in this feature changes a recommendation's wording, an engine outcome, a hold, a correction or a capture decision, and no decision ever changes `actionable` (still literally `false`).
 - **FR-013** The routes are behind the existing lab-report pipeline switch: synthetic only, refused in production.
+
+## Metric contract: result-level decision documentation within W days
+
+A definition for D07 to implement. It is **not computed in this spec**, and the H1 40% outcome target is not transferred to it.
+
+| Element | Definition |
+| --- | --- |
+| Name | Result-level decision documentation within W days (synthetic until real data is authorized) |
+| Counting unit | Distinct `evaluation_results.id`. Several entries, revisions or retries on a result count once. |
+| Start time | The result's evaluation `createdAt`: under `cdr-eligibility-v1` a `shown` result on an active, current, unquarantined evaluation is eligible from creation. A result that becomes eligible later, which is not possible under v1, would need a stored start time. |
+| Eligible results | `shown`, eligible under the named policy version at start time |
+| Numerator | Eligible results with at least one `decision` entry whose `createdAt` ≤ start + W and that was not withdrawn by `entered-in-error` before the cutoff T |
+| Denominator | Eligible results with start + W ≤ T (mature window) |
+| Reported alongside | Pending results (immature window); distinct results, patients and decision entries; response distribution; entries recorded after W; results whose source was later retracted, superseded or quarantined, reported separately and **kept** in the cohort |
+| Missing | "No decision documented": never read as rejection, deferral, implementation or outcome |
+| Re-evaluations | A new evaluation has new result ids, so the metric is result-level until opportunity grouping (D02) exists |
+| Versioning | The metric definition, eligibility policy and vocabulary versions are all named in every output |
+
+Engine `shown` is not evidence that anyone saw the result; this counts documentation, not review.
 
 ## Success criteria
 

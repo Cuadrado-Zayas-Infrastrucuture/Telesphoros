@@ -26,7 +26,7 @@ D01b depends on D01a only for the public `id`. It does not depend on its code, s
   - `LabPipeline.reviewedCapture` with public fixture D01 and the stand-in reader (`test/helpers/lab-pipeline.ts:170`)
   - `Session`/`untilBlocked` barriers (`test/helpers/barrier.ts`)
   - the restore suites
-- **In flight**: PR #94 edits `ledger-records.repository.ts`. D01b therefore puts its SQL in a **new** repository file and adds only its type to the shared ledger lists.
+- **In flight**: PR #94 edits `ledger-records.repository.ts`, its own spec and a status note (file list read 2026-10-27). It does not touch `ledger-types.ts`, `projections.ts` or the catalog tests. D01b puts its SQL in a **new** repository file and adds only its type to the shared ledger lists. A new file does not remove overlap through shared transactions, so the overlap is re-checked against `main` when D01b starts.
 
 ## Constitution check
 
@@ -42,18 +42,20 @@ No exception to a standing rule.
 
 ## Founder decisions (only the founder can make these)
 
+Revised 2026-10-27 after the founder's review of D2 to D6 (an outside review supplied in chat).
+
 | # | Decision | Recommendation |
 | --- | --- | --- |
-| D1 | Split into D01a then D01b, two draft PRs | **Yes.** D01a is small and safe; D01b carries the ledger migration. |
-| D2 | Who may record a decision | **`clinician` only.** Reviewer-only and admin users are refused. A person with both roles may record one. |
-| D3 | Which basis is eligible, checked at commit under the ledger lock | **Evaluation active and current, report not quarantined, result outcome `shown`, no dispute in force on its cited cell** (same guideline id, version, file hash and locator). `no-published-recommendation`, held, abstained and no-guideline results are not decision opportunities in this slice. A decision committed before a later retraction stays as history. |
-| D4 | Revision rule | **One linear history per result, across clinicians.** A new decision must name the current head (`previousDecisionId`); a stale head is 409 `decision-stale`. The alternative, one history per clinician per result, makes "the current decision" ambiguous for later metrics. |
-| D5 | `occurredAt` window | **Between the evaluation's `createdAt` and the commit time.** No future times; no date-only precision in this slice. |
-| D6 | Reason codes and note | **The eight codes in [data-model.md](data-model.md#2-new-table-clinician_result_decisions-migration-0052)**, required unless `accepted`. A note is optional, except for `other-documented`. You validate the list as clinical owner; changing it later is a new migration. |
-| D7 | Name and response values | **"Clinician result decision"** with `response` ∈ accepted, modified, rejected, deferred, clarification-requested. `disposition` is taken by the engine. |
-| D8 | Roadmap metric | Record now that the H1 "outcome recorded" gate is **not** computed from decisions. Until D03/D04 exist, report it only as "decision recorded on N of M shown results" (synthetic). |
+| D1 | Split into D01a then D01b, two draft PRs | **Yes.** D01a ships first with consumer compatibility tests. D01b is re-planned against `main` when it starts: refresh the overlap with #94 and confirm the migration number. |
+| D2 | Who may record an entry | **`clinician` only, as the live membership says**: checked by `@Roles` and again by the insert trigger from `tenant_memberships`, which copies the roles and membership version onto the row. The author is both decision-maker and recorder. Entry on someone else's behalf (a scribe, a pharmacist entering a physician's verbal decision) is **not supported** in this slice. It would add a separate `decided_by` and its own authorization rule. |
+| D3 | Eligibility for a **new** entry, checked at commit under the tenant ledger lock | **Policy `cdr-eligibility-v1`:** the evaluation is active and current; its report is not quarantined; the result's outcome is `shown`; and no dispute is in force on the cited cell (guideline id, version, file hash, locator). The version is stored on the row. Separately: **history** is always readable whatever happens later, and **analytic inclusion** is defined by D8, not by this rule. **Retrospective documentation is out of scope.** A decision made while the result was eligible but documented after a retraction cannot be entered. This is recorded as a capture limitation, and a later path would need its own policy and label. `occurredAt` never affects eligibility. |
+| D4 | History semantics | **One shared history per result: the care team's decisions, every entry attributed.** `entryKind` is `decision`, `amendment` or `entered-in-error`. A `decision` is a clinical decision, and a later one means the plan changed. A decision by another clinician is disagreement or a team change, shown as such; it never rewrites the earlier one. An `amendment` corrects the documentation of the previous entry. An `entered-in-error` entry withdraws the previous entry, for example when it was recorded on the wrong result; the right decision is then entered on the right result. Both are allowed **only for that entry's own author**. Every write names the current head (409 `decision-stale` otherwise). The current decision is derived as in data-model section 4. A later evaluation correction never changes an entry; reads show the basis now. |
+| D5 | Time | **Two clocks.** `createdAt` is the database's recorded time and is used for every timeliness measure. `occurredAt` is the reported clinical time, from the evaluation's `createdAt` up to `createdAt`. Omitting it means "now", so client clock skew cannot cause a refusal. `occurredAtSource` says whether it was reported. Full timestamps only; approximate times are a capture limitation. |
+| D6 | Response detail | **Vocabulary `cdr-v1`** ([data-model 2.1](data-model.md#21-vocabulary-cdr-v1-proposed-the-clinical-owner-validates-every-code-and-definition-d6)), stored with its version: `accepted` needs nothing; `modified` needs what kind of change is intended (drug, dose, schedule, monitoring, other); `rejected` needs a reason (9 codes); `deferred` needs what is pending (5 codes), with an optional review date; `clarification-requested` needs a topic (5 codes). Every `-other` code needs a note. **You validate each code and definition**; a change later is a new vocabulary version. Drug and dose values wait for D03. |
+| D7 | Name, response values and retry identity | **"Clinician result decision"**: a recorded response to one exact result, never evidence of treatment. `requestId` is **required** on this new route (scope: tenant, author, operation). The fingerprint covers request fields only. |
+| D8 | Roadmap metric | **Adopt the metric contract in [spec.md](spec.md#metric-contract-result-level-decision-documentation-within-w-days) as the definition, not code.** The H1 40% outcome target is not transferred to it. You set a separate operational target, and W, when the metric is first computed (D07). |
 
-Out of scope and **not** asked here: PharmCAT versus the in-house engine (the roadmap conflicts with D1 = A on record; [spec](spec.md#alignment-with-the-company-roadmap-founder-document-2026-10-24)), consent design (D05), any UI.
+Out of scope and **not** asked here: PharmCAT versus the in-house engine. The in-house engine stays authoritative under D1 = A unless you change that decision separately; record provenance (call source, translator, engine version, knowledge set) already lets a later engine be named without making engines interchangeable. Also out of scope: consent design (D05) and any UI.
 
 ## Slice D01a: result reference
 
@@ -78,10 +80,11 @@ Out of scope and **not** asked here: PharmCAT versus the in-house engine (the ro
 - Two reads return the same ids.
 - Another tenant's evaluation is 404.
 - **T24**: the ledger verifies over evaluations created before the change (the ledger golden SQL spec is unchanged).
+- **Consumer compatibility**: the frontend pages parse a real detail response with the new fields; the SMART pilot's stored-context assembly (`packages/smart-pilot/src/stored-pgx.ts`) completes without `stored_context_changed` across its closing re-read; and the strict schema refuses a result missing `id`, which proves the schema is still strict. Each of these is run once with the mapper change reverted, to show it fails.
 
 ## Slice D01b: clinician result decisions
 
-**Migration `0052_clinician_result_decisions`** (`-- compat: breaking`, `lock_timeout 2s`, `statement_timeout 30s`):
+**Migration `0052_clinician_result_decisions`** (number provisional: re-read `apps/backend/migrations` when the branch is cut; a branch scan reserves nothing) (`-- compat: breaking`, `lock_timeout 2s`, `statement_timeout 30s`):
 - the table and keys in [data-model.md](data-model.md)
 - `UNIQUE (id, evaluation_id, tenant_id)` on `evaluation_results` and `UNIQUE (id, tenant_id, patient_id)` on `evaluations`
 - a BEFORE INSERT check binding `app_tenant()`/`app_actor()`, the evaluation time window and the note rule
@@ -126,13 +129,19 @@ Out of scope and **not** asked here: PharmCAT versus the in-house engine (the ro
 | T05a | Retraction commits first, then a decision | 409 `decision-basis-unavailable`, no row |
 | T05b | Decision holds the ledger lock, a retraction waits (`untilBlocked`), then both commit | Decision stored; history shows `basis: ["retracted"]`; the decision row is unchanged |
 | T05c | Same two orderings for a dispute raised on the cited cell and for a patient-link rejection | Same pattern |
+| T05e | A replay of an entry stored before a retraction, sent after it | 200 with the original entry; nothing new stored |
 | T05d | A `held` result, a superseded evaluation, a non-current evaluation | 409 `decision-basis-unavailable` each |
 | T06 | A capture accepted, an evaluation made, no decision | History is empty and `currentDecisionId` is null |
 | T07, T08 | Engine `shown` and an `accepted` decision | No presentation, order or implementation field exists in any response (contract test on the DTO keys) |
 | T09 | A retried POST after a dropped response | One row (same as T02, sequential) |
-| Chain | Two concurrent revisions of one head | One stored, the other 409 `decision-stale`; a revision naming a decision on another result is refused by the FK |
-| Rules | `rejected` with no reason; `other-documented` with no note; `occurredAt` before the evaluation or in the future; duplicate codes; unknown code | 400 each; control: valid forms store |
-| Roles | reader, reviewer-only, admin-only | 403; clinician and clinician+reviewer store |
+| Chain | Two concurrent writes on one head | One stored, the other 409 `decision-stale`; an entry naming an entry on another result is refused by the FK |
+| Disagreement | Clinician A records `accepted`; clinician B then records `rejected` | Both entries kept, each with its author; current decision is B's; A's entry unchanged |
+| Plan change vs correction | A: `accepted`, then A: `decision` `modified` (plan changed); separately A: `accepted`, then A: `entered-in-error` | First history counts two decisions and current = `modified`; second has no current decision and counts zero plan changes |
+| Author-only amendment | B sends `amendment` or `entered-in-error` on A's entry | 403 `not-entry-author`, nothing stored; control: A succeeds |
+| Backdating | Entry recorded today with `occurredAt` yesterday | Stored with both times; `createdAt` is today (database clock) and `occurredAtSource` = `reported`; a retracted basis still refuses it (backdating never bypasses D3) |
+| requestId | Missing `requestId` | 400, nothing stored |
+| Rules | per response: `modified` with no what-code, `rejected` with no reason, `deferred` with no pending code, `clarification-requested` with no topic, a code from another response's set, `accepted` with codes, `reviewBy` on a non-deferred entry, a `-other` code with no note, `occurredAt` before the evaluation or after the database time, duplicate or unknown codes | 400 each; control: one valid form per response stores |
+| Roles | reader, reviewer-only, admin-only; a token still claiming `clinician` after the membership row dropped it; a direct app-role INSERT for a non-clinician actor | 403; 403; trigger refuses. Control: clinician and clinician+reviewer store, and `authorRoles` matches the membership row |
 | Notes | A note is readable by a clinician and a reviewer through `GET /notes/:id`, not by a reader; the ledger event holds only its hash | as stated |
 | T24 | Migrate 0051 → 0052 on a database with ledgered evaluations; verify the whole ledger | Verifies; projections of old rows are unchanged |
 | T25 | Backup and restore with decisions present, restored under the restricted roles | Rows, grants, policies and the ledger chain survive; the restore ledger check passes |
@@ -147,6 +156,8 @@ Out of scope and **not** asked here: PharmCAT versus the in-house engine (the ro
 - the chain unique index
 - the `occurred_at` CHECK
 - the BEFORE INSERT actor binding
+- the membership-role check in the trigger
+- the author-only rule for `amendment` and `entered-in-error`
 
 ## Verification and rollout
 
