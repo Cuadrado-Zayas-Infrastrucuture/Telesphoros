@@ -656,6 +656,13 @@ jobs:
           TEST_STORAGE=postgres pnpm --filter @telesphoros/backend test 2>&1 | tee tier2.log
           ! grep -F "[jest] NOT RUNNING" tier2.log
           PROFILE
+      # The tier above runs every spec the list does not name, so one that needs the engine fails there. This step checks the other half: each
+      # listed spec still fails without the engine (a file that passes must leave the list), and the partialSkip counts still match (spec 004).
+      - name: The reader-engine skip list still matches a run without the engine
+        run: |
+          node .github/ci/service-budget.mjs run <<'BUDGET'
+          TEST_STORAGE=postgres scripts/check-without-reader.sh --measure --listed
+          BUDGET
       - name: PostgreSQL fixture lifecycle regressions
         run: |
           node .github/ci/service-budget.mjs run <<'BUDGET'
