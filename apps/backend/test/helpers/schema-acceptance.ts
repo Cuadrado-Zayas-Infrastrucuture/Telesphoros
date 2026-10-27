@@ -3,6 +3,14 @@ import type { Client } from 'pg';
 // Hand-reviewed against the relationship design and original SQL, not generated from the live catalog.
 // Global containment clearances intentionally lack tenant-composite FKs: their functions check scope.
 const relationships: [string, string, string, string][] = [
+  // H1 (0050): immutable admission/source binding and inactive completion identity.
+  ['evaluation_requests_tenant_id_fkey', 'evaluation_requests', 'tenant_id', 'tenants:id'],
+  ['evaluation_requests_job_id_fkey', 'evaluation_requests', 'job_id', 'jobs:id'],
+  ['evaluation_requests_report_id_tenant_id_fkey', 'evaluation_requests', 'report_id,tenant_id', 'reports:id,tenant_id'],
+  ['evaluation_requests_capture_id_tenant_id_fkey', 'evaluation_requests', 'capture_id,tenant_id', 'report_captures:id,tenant_id'],
+  ['evaluation_requests_acceptance_id_tenant_id_fkey', 'evaluation_requests', 'acceptance_id,tenant_id', 'capture_acceptances:id,tenant_id'],
+  ['evaluation_request_completions_request_id_tenant_id_fkey', 'evaluation_request_completions', 'request_id,tenant_id', 'evaluation_requests:id,tenant_id'],
+  ['evaluation_request_completions_evaluation_id_tenant_id_fkey', 'evaluation_request_completions', 'evaluation_id,tenant_id', 'evaluations:id,tenant_id'],
   ['browser_sessions_membership_fk', 'browser_sessions', 'tenant_id,sub', 'tenant_memberships:tenant_id,sub'],
   ['tenant_memberships_tenant_fk', 'tenant_memberships', 'tenant_id', 'tenants:id'],
   ['invitations_tenant_id_fkey', 'invitations', 'tenant_id', 'tenants:id'],
@@ -60,6 +68,8 @@ const relationships: [string, string, string, string][] = [
   ['agentic_synthetic_audit_tenant_id_run_id_fkey', 'agentic_synthetic_audit', 'tenant_id,run_id', 'agentic_synthetic_runs:tenant_id,run_id'],
 ];
 const primaryKeys: Record<string, string> = {
+  evaluation_requests: 'id',
+  evaluation_request_completions: 'request_id',
   browser_sessions: 'tenant_id, handle_hash',
   report_upload_runs: 'run_id',
   report_upload_attempts: 'id',
@@ -115,6 +125,9 @@ const primaryKeys: Record<string, string> = {
   agentic_synthetic_sources: 'tenant_id, source_id, source_version',
 };
 const uniqueKeys: Record<string, string> = {
+  evaluation_requests_tenant_id_requested_by_creation_request_key: 'tenant_id, requested_by, creation_request_id',
+  evaluation_requests_id_tenant_id_key: 'id, tenant_id',
+  evaluation_requests_job_id_key: 'job_id',
   report_upload_runs_tenant_id_run_id_key: 'tenant_id, run_id',
   upload_attempt_request_uq: 'tenant_id, report_id, principal, request_id',
   upload_attempt_key_uq: 'storage_key',
@@ -172,6 +185,7 @@ const uniqueKeys: Record<string, string> = {
 };
 // Complete CHECK inventory; semantic refusal/control tests remain in the existing behavior suites.
 const checkNames: Record<string, string> = {
+  evaluation_requests: 'requested_by_check fingerprint_check basis_check execution_profile_check',
   browser_sessions: 'handle_hash_shape issued_at_range lifetime created_at_bound credential_shape revoked_at_bound',
   patient_identifiers: 'tenant_id_len created_by_len system_shape digest_len key_version status withdrawal_shape withdrawn_by_len created_by_human creation_request_pair',
   report_patient_decisions: 'tenant_id_len created_by_len hash version_len decision method shape created_by_human',
@@ -246,6 +260,7 @@ for (const table of [
 
 // Query-facing definitions. Constraint-backed indexes and internal append-only guards are also covered by ledger-catalog/behavior suites.
 const queryIndexes: Record<string, string> = {
+  evaluation_requests_tenant_report: 'INDEX evaluation_requests_tenant_report ON public.evaluation_requests USING btree (tenant_id, report_id)',
   browser_sessions_expiry_idx: 'INDEX browser_sessions_expiry_idx ON public.browser_sessions USING btree (tenant_id, expires_at, handle_hash)',
   upload_attempt_run_idx: 'INDEX upload_attempt_run_idx ON public.report_upload_attempts USING btree (tenant_id, run_id, state)',
   patients_tenant_label_uq: 'UNIQUE INDEX patients_tenant_label_uq ON public.patients USING btree (tenant_id, lower(label)) WHERE (deleted_at IS NULL)',

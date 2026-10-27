@@ -10,6 +10,7 @@ import {
   PATIENT_DUPLICATE_TABLES,
   PATIENT_IDENTITY_TABLES,
   SECURITY_AUDIT_TABLES,
+  EVALUATION_REQUEST_TABLES,
 } from '../../src/db/append-only-tables';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { expectRecordTablePolicies, type CatalogPolicy } from '../helpers/catalog-policy-assertions';
@@ -28,6 +29,27 @@ const TENANT_POLICIED = [...APPEND_ONLY_CLASSES.record, ...APPEND_ONLY_CLASSES.c
 const FORCED = [...APPEND_ONLY_CLASSES.record, ...APPEND_ONLY_CLASSES.child, ...APPEND_ONLY_CLASSES.notes];
 
 describe('catalog guard: the audit tables are classified and protected as their class requires', () => {
+  it('H1 operational metadata is forced tenant-RLS and immutable, with request admission but no completion writer or worker rights', async () => {
+    const rows = await q<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean; app_insert: boolean; worker_read: boolean; worker_insert: boolean }>(
+      `SELECT relname,relrowsecurity,relforcerowsecurity,
+       has_table_privilege('telesphoros_app',oid,'INSERT') AS app_insert,
+       has_table_privilege('telesphoros_worker',oid,'SELECT') AS worker_read,
+       has_table_privilege('telesphoros_worker',oid,'INSERT') AS worker_insert
+       FROM pg_class WHERE relnamespace='public'::regnamespace AND relname=ANY($1) ORDER BY relname`,
+      [[...EVALUATION_REQUEST_TABLES]],
+    );
+    expect(rows.map((r) => r.relname)).toEqual([...EVALUATION_REQUEST_TABLES].sort());
+    for (const row of rows) {
+      expect(row).toMatchObject({ relrowsecurity: true, relforcerowsecurity: true, app_insert: row.relname === 'evaluation_requests', worker_read: false, worker_insert: false });
+      const guards = await q<{ mask: number }>(
+        `SELECT tgtype::int AS mask FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid WHERE tgrelid=$1::regclass AND p.proname='refuse_mutation'`,
+        [row.relname],
+      );
+      expect(guards.some((t) => (t.mask & 8) !== 0 && (t.mask & 16) !== 0)).toBe(true);
+      expect(guards.some((t) => (t.mask & 32) !== 0)).toBe(true);
+    }
+  });
+
   it('every table in the public schema is classified, and every classified table exists (a floor on both sides)', async () => {
     const actual = (await q<{ tablename: string }>(`SELECT tablename FROM pg_tables WHERE schemaname = 'public'`)).map((r) => r.tablename).sort();
     expect(ALL_CLASSIFIED_TABLES.length).toBeGreaterThanOrEqual(16);

@@ -22,3 +22,12 @@ export const filesVerifyStored = defineJob({
 export const filesVerifyStale = defineJob({ type: 'files.verify-stale', payload: z.strictObject({}), maxAttempts: 3, leaseSeconds: 60, timeoutSeconds: 1800 });
 
 export const PRODUCTION_JOBS = [uploadsSweep, filesVerifyStored, filesVerifyStale] as const;
+
+/** Inactive H1 definition: not in PRODUCTION_JOBS and not registered by any worker. Exact execution policy is reviewed before H3 activation. */
+export const evaluationRequest = defineJob({
+  type: 'evaluations.request',
+  payload: z.strictObject({ requestId: z.string().uuid() }),
+  maxAttempts: 5,
+  leaseSeconds: 60,
+  timeoutSeconds: 120,
+});

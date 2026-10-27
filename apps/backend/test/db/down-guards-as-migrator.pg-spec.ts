@@ -1,6 +1,9 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Client } from 'pg';
+import { enqueueJob, evaluationRequest } from '@telesphoros/jobs';
 import { Database } from '../../src/db/database';
+import { EvaluationRequestsService } from '../../src/lab-reports/evaluation-requests.service';
+import { EvaluationRequestsRepository } from '../../src/storage/postgres/evaluation-requests.repository';
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
 import { migrateDown, migrateUp } from '../../src/db/migrator';
 import { provisionLogins, type SecretStore } from '../../src/db/provision-logins';
@@ -242,6 +245,87 @@ async function revertAboveThenSwitchOff(c: Client, anchor: string): Promise<void
 }
 
 describe('down-migration guards, run as the migrator login (owner of the tables, no BYPASSRLS)', () => {
+  it('round-trips empty H1 storage as the restricted migration login', async () => {
+    const f = await fixture();
+    try {
+      expect((await f.migrator.query('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user')).rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });
+      expect(await migrateDown(f.migrator, 1)).toEqual(['0050']);
+      expect(await migrateUp(f.migrator)).toEqual(['0050']);
+      expect((await stillForced(f.migrator)).every((t) => t.f)).toBe(true);
+    } finally {
+      await f.drop();
+    }
+  });
+
+  it.each(['request', 'orphan job'] as const)('refuses H1 %s data as the restricted migrator and restores forced RLS', async (kind) => {
+    const f = await fixture();
+    const connection = new Database({ url: f.app, ssl: 'disable' });
+    try {
+      const report = await seedLabReport(f.admin, tenant);
+      const actor = 'syn-h1-clinician';
+      const ledger = new PostgresLedgerRecordsRepository(connection);
+      await withAdmin(f.admin, (c) =>
+        c.query(`INSERT INTO tenant_memberships (tenant_id,sub,status,roles,changed_by) VALUES ($1,$2,'active',ARRAY['clinician'],'syn-test')`, [tenant, actor]),
+      );
+      if (kind === 'request') {
+        const capture = captureFor(report);
+        const stored = await ledger.insertCapture(tenant, report.uploader, capture);
+        const acceptance = await ledger.insertAcceptance(tenant, 'syn-reviewer', acceptanceFor(stored.record.id, capture));
+        await ledger.insertPatientDecision(tenant, 'syn-verifier', {
+          reportId: report.reportId,
+          expectedReport: { patientId: report.patientId, sha256: report.pdfSha256, objectVersion: report.objectVersion },
+          decision: 'verified',
+          method: 'person-confirmed',
+          basisCode: 'no-identifier-on-report',
+        });
+        const service = new EvaluationRequestsService(new EvaluationRequestsRepository(connection), {
+          version: 'evaluation-execution-profile/1',
+          codeArtifactSha256: hash,
+          executionManifestSha256: hash,
+          knowledgeSetId: hash,
+          recordingsSha256: hash,
+        });
+        const principal = { tenantId: tenant, sub: actor, roles: ['clinician' as const] };
+        const token = randomBytes(32).toString('hex');
+        await withAdmin(f.admin, async (c) => {
+          const issued = (await c.query("SELECT * FROM tenant_capability_issue_current($1,$2,'request',$3,NULL)", [tenant, actor, createHash('sha256').update(token).digest()]))
+            .rows[0];
+          expect(issued.refusal).toBeNull();
+        });
+        // Exercise the existing membership lock's capability-present dependencies
+        // under its actual non-superuser definer, not an admin-owned test schema.
+        await connection.withTenant(
+          tenant,
+          async (c) => {
+            await c.query("SELECT set_config('app.capability',$1,true)", [token]);
+            const basis = (await c.query('SELECT evaluation_request_basis($1,$2,$3) AS basis', [report.reportId, stored.record.id, acceptance.record.id])).rows[0].basis;
+            expect(basis.patientId).toBe(report.patientId);
+          },
+          { actor },
+        );
+        const admitted = await service.admit(principal, { reportId: report.reportId, captureId: stored.record.id, acceptanceId: acceptance.record.id, requestId: randomUUID() });
+        await expect(migrateDown(f.migrator, 1)).rejects.toThrow('Durable evaluation work must be preserved');
+        expect(await service.get(principal, admitted.request.id)).toEqual(admitted.request);
+      } else {
+        await connection.withTenant(tenant, (c) => enqueueJob(c, evaluationRequest, { requestId: randomUUID() }, { idempotencyKey: `evaluation-request:${randomUUID()}` }), {
+          actor,
+        });
+        await expect(migrateDown(f.migrator, 1)).rejects.toThrow('Durable evaluation work must be preserved');
+      }
+      expect((await f.migrator.query("SELECT version FROM schema_migrations WHERE version='0050'")).rowCount).toBe(1);
+      const forced = (
+        await f.migrator.query("SELECT relforcerowsecurity AS forced FROM pg_class WHERE oid IN ('evaluation_requests'::regclass,'evaluation_request_completions'::regclass)")
+      ).rows;
+      expect(forced).toEqual([{ forced: true }, { forced: true }]);
+      await withAdmin(f.admin, async (c) => {
+        expect((await c.query("SELECT count(*)::int AS n FROM jobs WHERE tenant_id=$1 AND type='evaluations.request'", [tenant])).rows[0].n).toBe(1);
+      });
+    } finally {
+      await connection.onModuleDestroy();
+      await f.drop();
+    }
+  });
+
   it.each(cases)('$anchor: a populated table is refused, the refusal rolls back whole, and the setting that allows it still works', async (guard) => {
     const f = await fixture();
     try {
