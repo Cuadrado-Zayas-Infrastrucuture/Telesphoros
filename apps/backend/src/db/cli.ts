@@ -12,6 +12,7 @@ import { runSecurityEvents, SECURITY_EVENTS_USAGE } from '../security-events/sec
 import { createBackup } from './backup';
 import { generateKeyFile, readKeyFile } from './backup-crypto';
 import { parseManifest } from './backup-manifest';
+import { CONNECTION_LIMITS_USAGE, runConnectionLimits } from './connection-limits';
 import { MIGRATIONS_DIR, migrateDown, migrateUp, migrationStatus } from './migrator';
 import {
   createOffsiteClient,
@@ -48,7 +49,7 @@ const USAGE = `Usage: node dist/db/cli.js <command>
 
 ${MEMBERSHIP_USAGE}
 ${TENANT_USAGE}
-${SECURITY_EVENTS_USAGE}${UPLOADS_USAGE}${JOBS_USAGE}
+${SECURITY_EVENTS_USAGE}${UPLOADS_USAGE}${JOBS_USAGE}${CONNECTION_LIMITS_USAGE}
   keygen  --out FILE            create a new random backup key (64 hex characters, owner-only; never overwrites).
                                 KEEP COPIES OFFLINE: without this key no backup made with it can ever be restored.
 
@@ -225,6 +226,21 @@ async function main(argv: string[]) {
     await client.connect();
     try {
       process.exitCode = await runJobs(
+        client,
+        [sub, ...rest].filter((a): a is string => a !== undefined),
+        out,
+      );
+    } finally {
+      await client.end();
+    }
+    return;
+  }
+
+  if (command === 'connection-limits') {
+    const client = new Client(pgClientConfig(required('DATABASE_MIGRATOR_URL')));
+    await client.connect();
+    try {
+      process.exitCode = await runConnectionLimits(
         client,
         [sub, ...rest].filter((a): a is string => a !== undefined),
         out,
