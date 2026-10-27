@@ -41,7 +41,7 @@ describe('the skip list for a checkout without the reader engine', () => {
   });
 
   // A spec that names the engine's paths or its fixture helpers, and is not on the list, would pass here and fail in a checkout without
-  // the engine. The two that remain were measured: they mention the names but do not run the engine.
+  // the engine. Each one below was measured: it mentions the names but does not run the engine.
   const MENTIONS_BUT_NEEDS_NOTHING = new Set([
     'src/config/env.spec.ts', // the name of the LAB_REPORT_FIXTURES_DIR variable only
     'src/services/report-lookup/strict-json.spec.ts', // imports the lookup helper but never starts the engine
@@ -50,6 +50,13 @@ describe('the skip list for a checkout without the reader engine', () => {
     'test/evaluation-request-worker.e2e-spec.ts', // public fixture D01 and its own wrapper around the test stand-in reader
     'test/lab-reports-evaluation-cancel.e2e-spec.ts', // public fixture D01 and its own wrapper around the test stand-in reader
     'test/stand-in-reader.spec.ts', // tests that stand-in and those fixtures
+    // Re-measured 2026-10-27 (spec 004, slice 1): these pass on the public fixtures and the test stand-in reader in all three backend tiers.
+    'test/cell-usage.e2e-spec.ts',
+    'test/db/stored-pgx-preview.pg-spec.ts',
+    'test/lab-reports-disputes.e2e-spec.ts',
+    'test/patient-link.e2e-spec.ts',
+    'test/patient-merge.e2e-spec.ts',
+    'test/patient-quarantine.e2e-spec.ts',
   ]);
   const walk = (dir: string): string[] =>
     readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
