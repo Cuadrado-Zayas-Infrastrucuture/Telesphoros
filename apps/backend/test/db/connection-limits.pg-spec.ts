@@ -36,9 +36,30 @@ it('prints the reading, the budget to set and each login limit, and no connectio
   expect(text).toContain('rds.rds_superuser_reserved_connections: not set');
   expect(text).toContain(`db_connection_budget = ${limits.budget}`);
   expect(text).toMatch(new RegExp(`^  ${login} +7$`, 'm'));
-  const url = new URL(adminUrl());
   expect(text).not.toMatch(/postgres(ql)?:\/\//);
-  if (url.password) expect(text).not.toContain(decodeURIComponent(url.password));
+});
+
+// An allowlist of what may be printed, not "the password is not in it": CI's test password is `postgres`, which is also a role name the command
+// rightly lists. Every line is a setting, a login role that pg_roles holds with its limit, or the budget; anything else (a password, a host) fails.
+it('prints nothing but settings, login roles and the budget', async () => {
+  const roles = await withAdmin(adminUrl(), (c) =>
+    c.query<{ rolname: string }>('SELECT rolname FROM pg_roles WHERE rolcanlogin').then((r) => new Set(r.rows.map((row) => row.rolname))),
+  );
+  const shapes = [
+    /^max_connections: \d+$/,
+    /^superuser_reserved_connections: \d+$/,
+    /^reserved_connections: (\d+|not set)$/,
+    /^rds\.rds_superuser_reserved_connections: (\d+|not set)$/,
+    /^budget \(max_connections less the reserved slots\): -?\d+$/,
+    /^login connection limits \(-1: no limit of its own\):$/,
+    /^Set in Terraform from this reading: db_connection_budget = -?\d+$/,
+  ];
+  const { text } = await run();
+  const unexpected = text.split('\n').filter((line) => {
+    const role = /^ {2}(\S+) +(-?\d+)$/.exec(line);
+    return role ? !roles.has(role[1]!) : !shapes.some((shape) => shape.test(line));
+  });
+  expect(unexpected).toEqual([]);
 });
 
 it('takes no arguments', async () => {
