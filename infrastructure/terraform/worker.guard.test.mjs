@@ -11,7 +11,8 @@ import { test } from 'node:test';
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const worker = read('./worker.tf');
 const iam = read('./iam.tf');
-const runnerSource = read('../../apps/worker/src/runner.ts');
+// The claim loop the worker runs lives in the shared jobs package (apps/worker/src/runner.ts only re-exports it).
+const runnerSource = read('../../packages/jobs/src/runner.ts');
 const filesVerifySource = read('../../apps/worker/src/handlers/files-verify.ts');
 const mainSource = read('../../apps/worker/src/main.ts');
 const schedulerSource = read('../../apps/worker/src/scheduler.ts');

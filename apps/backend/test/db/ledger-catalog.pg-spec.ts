@@ -29,7 +29,7 @@ const TENANT_POLICIED = [...APPEND_ONLY_CLASSES.record, ...APPEND_ONLY_CLASSES.c
 const FORCED = [...APPEND_ONLY_CLASSES.record, ...APPEND_ONLY_CLASSES.child, ...APPEND_ONLY_CLASSES.notes];
 
 describe('catalog guard: the audit tables are classified and protected as their class requires', () => {
-  it('H1 operational metadata is forced tenant-RLS and immutable, with request admission but no completion writer or worker rights', async () => {
+  it('H1 operational metadata is forced tenant-RLS and immutable, with request admission, a completion writer only behind its H3 check, and no worker rights', async () => {
     const rows = await q<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean; app_insert: boolean; worker_read: boolean; worker_insert: boolean }>(
       `SELECT relname,relrowsecurity,relforcerowsecurity,
        has_table_privilege('telesphoros_app',oid,'INSERT') AS app_insert,
@@ -40,7 +40,15 @@ describe('catalog guard: the audit tables are classified and protected as their 
     );
     expect(rows.map((r) => r.relname)).toEqual([...EVALUATION_REQUEST_TABLES].sort());
     for (const row of rows) {
-      expect(row).toMatchObject({ relrowsecurity: true, relforcerowsecurity: true, app_insert: row.relname === 'evaluation_requests', worker_read: false, worker_insert: false });
+      expect(row).toMatchObject({ relrowsecurity: true, relforcerowsecurity: true, app_insert: true, worker_read: false, worker_insert: false });
+      if (row.relname === 'evaluation_request_completions') {
+        // H3 (0051): the application may insert a completion only through this check, which asks for the job holder (evaluation-request-worker.e2e-spec).
+        const checks = await q<{ name: string }>(
+          `SELECT p.proname AS name FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid WHERE t.tgrelid=$1::regclass AND NOT t.tgisinternal`,
+          [row.relname],
+        );
+        expect(checks.map((c) => c.name)).toContain('evaluation_completion_check');
+      }
       const guards = await q<{ mask: number }>(
         `SELECT tgtype::int AS mask FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid WHERE tgrelid=$1::regclass AND p.proname='refuse_mutation'`,
         [row.relname],
