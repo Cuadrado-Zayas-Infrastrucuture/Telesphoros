@@ -29,7 +29,7 @@ export class StorageModule {
     if (env.STORAGE_DRIVER === 'postgres') {
       const providers: Provider[] = [
         // useFactory, so the pool is created (and later closed) by Nest's lifecycle.
-        { provide: Database, useFactory: () => new Database({ url: env.DATABASE_URL!, ssl: env.DATABASE_SSL }) },
+        { provide: Database, useFactory: () => new Database({ url: env.DATABASE_URL!, ssl: env.DATABASE_SSL, max: env.DATABASE_POOL_MAX }) },
         { provide: SecurityAuditStore, useClass: PostgresSecurityAuditStore },
         { provide: PatientsRepository, useClass: PostgresPatientsRepository },
         { provide: PatientIdentifiersRepository, useClass: PostgresPatientIdentifiersRepository },

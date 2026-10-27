@@ -18,6 +18,12 @@ describe('loadEnv', () => {
     expect(() => loadEnv({ ...base, PORT: 'abc' })).toThrow(/PORT/);
   });
 
+  it('sizes the application database pool from DATABASE_POOL_MAX: 10 by default, bounded, named when refused', () => {
+    expect(loadEnv({ ...base }).DATABASE_POOL_MAX).toBe(10);
+    expect(loadEnv({ ...base, DATABASE_POOL_MAX: '4' }).DATABASE_POOL_MAX).toBe(4);
+    for (const bad of ['0', '51', '2.5', 'ten']) expect(() => loadEnv({ ...base, DATABASE_POOL_MAX: bad })).toThrow(/DATABASE_POOL_MAX/);
+  });
+
   it('refuses to start without a secret, and names the variable', () => {
     expect(() => loadEnv({})).toThrow(/JWT_SECRET/);
   });

@@ -50,6 +50,7 @@ function blocks(text, header) {
 
 const PLACEHOLDERS = {
   'tostring(local.api_port)': '3000',
+  'tostring(var.api_db_pool_max)': '10', // database-connections.tf; its default, which the backend's own loader must accept
   'var.region': 'us-east-2',
   'aws_cognito_user_pool.main.id': 'us-east-2_AbCdEfGhI',
   'aws_cognito_user_pool_client.spa.id': 'client-id',

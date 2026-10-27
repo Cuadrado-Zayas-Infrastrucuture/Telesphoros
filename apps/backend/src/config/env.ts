@@ -88,6 +88,11 @@ export const envSchema = z
     /** Connection string for the APPLICATION role (a member of telesphoros_app), never the owner. */
     DATABASE_URL: z.string().min(1).optional(),
     DATABASE_SSL: z.enum(['disable', 'require']).default('disable'),
+    /**
+     * The most connections one API process holds as the application login. Every API task multiplies it: Terraform adds it up against the
+     * database's limit (infrastructure/terraform/database-connections.tf), so change it there, not only here.
+     */
+    DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(50).default(10),
 
     /** Where report files live. `s3` also covers S3-compatible servers (MinIO) via S3_ENDPOINT. */
     OBJECT_STORAGE_DRIVER: z.enum(['memory', 's3']).default('memory'),

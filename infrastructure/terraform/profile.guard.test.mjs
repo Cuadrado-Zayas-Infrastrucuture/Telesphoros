@@ -47,6 +47,8 @@ const RELAXING = /local\.(synthetic|synthetic_network|network_count|offsite_coun
  */
 export const EXPECTED_USES = {
   'api-compute.tf': { 'assign_public_ip = local.tasks_public_ip': 1, 'value = var.enable_api_hosting ? local.tasks_public_ip : null': 1, 'deletion_window_in_days = local.kms_deletion_days': 1, 'recovery_window_in_days = local.secret_recovery_days': 7 },
+  // The budget follows the class the profile picks; it can only refuse a plan, never relax a protection.
+  'database-connections.tf': { 'connection_budget = var.db_connection_budget != null ? var.db_connection_budget : lookup(local.connection_estimates, local.db_instance_class, null)': 1 },
   'audit.tf': { 'days = local.audit_lock_days': 1, 'deletion_window_in_days = local.kms_deletion_days': 1, 'force_destroy = local.synthetic': 1, 'is_multi_region_trail = !local.synthetic': 1 },
   'cognito.tf': { 'deletion_protection = local.cognito_protection': 1 },
   'database.tf': {

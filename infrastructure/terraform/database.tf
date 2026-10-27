@@ -95,6 +95,19 @@ resource "aws_db_instance" "main" {
   performance_insights_retention_period = local.db_performance_insights ? 7 : null
 
   lifecycle {
+    # database-connections.tf: every hosted service at its largest count must fit what the instance accepts.
+    precondition {
+      condition     = var.environment != "production" || var.db_connection_budget != null
+      error_message = "Production requires db_connection_budget from a live SHOW max_connections reading, not the class estimate."
+    }
+    precondition {
+      condition     = local.connection_budget != null
+      error_message = "There is no connection estimate for this db_instance_class: set db_connection_budget from SHOW max_connections."
+    }
+    precondition {
+      condition     = local.connection_budget == null || local.connection_demand <= coalesce(local.connection_budget, 0)
+      error_message = "The hosted services could open more database connections than db_connection_budget allows (see the db_connection_demand output): lower a desired count or api_db_pool_max, or raise the budget from a live reading."
+    }
     precondition {
       condition     = length(var.app_security_group_ids) >= 1 || var.enable_api_hosting
       error_message = "Name at least one application security group (app_security_group_ids), or enable_api_hosting so the API tasks' group is the one allowed."
