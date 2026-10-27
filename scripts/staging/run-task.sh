@@ -10,6 +10,7 @@
 #   migrate-status                                       migrate status (read-only)
 #   tenant-create --id ID --name NAME --by NAME          register an organization
 #   tenant-list                                          list organizations (read-only)
+#   connection-limits                                    max_connections, the reserved slots and each login's limit (read-only)
 #   membership-grant --tenant ID --sub SUB --roles LIST --by NAME [--reason TEXT]
 #   membership-show --tenant ID --sub SUB                show one membership (read-only)
 # Deliberately absent: migrate down, tenant suspend, membership remove, and anything that rotates or deletes. Do those by hand, knowingly.
@@ -104,6 +105,10 @@ case "$step" in
     family="$MIGRATE_TASK_FAMILY"; container="migrate"; stream_prefix="migrate"
     [[ ${#args[@]} -eq 0 ]] || die "tenant-list takes no arguments"
     cli=(tenant list) ;;
+  connection-limits)
+    family="$MIGRATE_TASK_FAMILY"; container="migrate"; stream_prefix="migrate"
+    [[ ${#args[@]} -eq 0 ]] || die "connection-limits takes no arguments"
+    cli=(connection-limits) ;;
   tenant-create)
     family="$MIGRATE_TASK_FAMILY"; container="migrate"; stream_prefix="migrate"
     parse_flags "id name by" "${args[@]+"${args[@]}"}"
