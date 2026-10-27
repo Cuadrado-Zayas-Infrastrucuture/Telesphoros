@@ -2,7 +2,7 @@
 
 **Input**: [spec.md](spec.md), [plan.md](plan.md)
 
-**Prerequisites**: plan.md **approved by the founder**. It is not approved yet, so `/speckit-implement` must not run against this file until it is.
+**Prerequisites**: plan.md **approved by the founder** on 2026-10-27 (D1 to D4 as recommended).
 
 **Tests**: Required (SC-001 to SC-005). In each phase the check is seen failing before the change that makes it pass.
 

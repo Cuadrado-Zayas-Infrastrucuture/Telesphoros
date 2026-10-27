@@ -2,7 +2,7 @@
 
 **Branch**: `docs/spec-004-reader-stand-in-coverage` | **Date**: 2026-10-27 | **Spec**: [spec.md](spec.md)
 
-**Status**: Draft, waiting for the founder's approval. Nothing here is built yet.
+**Status**: Approved by the founder on 2026-10-27, with D1 to D4 as recommended: *"Approve spec 004 plan.md with D1-D4 as recommended. Start slice 1 on its own local branch."*
 
 ## Summary
 

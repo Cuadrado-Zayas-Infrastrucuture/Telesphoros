@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-27
 
-**Status**: Draft, waiting for the founder's approval of [plan.md](plan.md). On 2026-10-27 the founder chose route B (a stand-in reader plus public synthetic fixtures) over a scheduled run on a maintainer's machine (C) and over fetching the private engine into hosted CI (A).
+**Status**: Approved 2026-10-27 ([plan.md](plan.md), D1 to D4 as recommended). On 2026-10-27 the founder chose route B (a stand-in reader plus public synthetic fixtures) over a scheduled run on a maintainer's machine (C) and over fetching the private engine into hosted CI (A).
 
 **Input**: The 2026-10-27 audit of public `main` found that the 20 backend spec files listed in `apps/backend/test/helpers/reader-engine-specs.json` are skipped by every hosted CI run (`[jest] ENGINE ABSENT`) and had run nowhere since the engine left the public repository on 2026-10-23. A run with the engine, the same day, found a regression in one of them that had merged unseen (#32; fixed on `fix/ledger-watch-boot-jitter`). Where they run today is recorded in `docs/lab-report-reader.md` ("Where the 20 run").
 
