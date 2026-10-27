@@ -6,7 +6,7 @@ Date: 2026-10-24
 
 **Start-up check.** The worker asks S3 once, for a key under `reports/`, and refuses to start (exit 1, `REPORTS_BUCKET names a bucket that does not exist.`, no value printed) only if S3 answers `NoSuchBucket`. It does not use `HeadBucket`, which needs `s3:ListBucket`, and the worker's role has none by design; no IAM change. NoSuchKey, AccessDenied, an outage and a five-second silence all let it start.
 
-**Real S3, one read.** A signed `GetObject` on a random bucket name that cannot exist, through the `czi-rotation` profile (account 756118984120), returned HTTP 404 with `<Code>NoSuchBucket</Code>`, so the old code would have recorded it as missing and the check looks for the right answer. Nothing in the account was read or changed.
+**Real S3, one read.** A signed `GetObject` on a random bucket name that cannot exist, through the `<profile>` profile (account <account>), returned HTTP 404 with `<Code>NoSuchBucket</Code>`, so the old code would have recorded it as missing and the check looks for the right answer. Nothing in the account was read or changed.
 
 **Tests, written first.** `src/storage.test.ts`: red on the old code (`NoSuchBucket` and an unnamed 404 both came back `'missing'`); `bucketIsMissing` cases; a Moto test through the real SDK (`test/bucket-check.s3.test.ts`); and two process tests (`processes.pg.test.ts`): a worker with a bucket that is not there exits 1 without printing the value, and one with a real bucket starts. Disabling the check in `main.ts` turns the first red.
 
