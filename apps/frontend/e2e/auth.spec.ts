@@ -134,8 +134,9 @@ test.describe('the keyboard', () => {
 });
 
 
-test('reports remains unavailable without the owned-storage opt-in', async ({ page }) => {
+// Since 2026-10-27 the published build has Reports (only file download needs the owned-storage opt-in); it stays behind sign-in.
+test('reports asks an anonymous visitor to sign in, and offers no Reports link before sign-in', async ({ page }) => {
   await page.goto('/reports');
-  await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Reports', exact: true })).toHaveCount(0);
 });
