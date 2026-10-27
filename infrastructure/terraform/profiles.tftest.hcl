@@ -842,6 +842,7 @@ run "connection_budget_counts_every_pool" {
     worker_desired_count       = 2
     enable_issuer              = true
     issuer_desired_count       = 2
+    issuer_tls_ca_arn          = "arn:aws:acm-pca:us-east-2:123456789012:certificate-authority/00000000-0000-0000-0000-000000000000" # production encrypts the issuer connection
     db_connection_budget       = 100
   }
 
