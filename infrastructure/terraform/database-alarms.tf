@@ -41,18 +41,19 @@ resource "aws_cloudwatch_metric_alarm" "database_cpu_high" {
   }
 }
 
-# Connections. PostgreSQL's default limit is a function of the instance's memory (the formula AWS documents for Aurora PostgreSQL is DBInstanceClassMemory / 9531392; RDS PostgreSQL's
-# row was not read), roughly 100 on db.t4g.micro and 200 on db.t4g.small. 80 is under the smaller of those and above what the pilot's task counts open: each API task holds a pool, and so does
-# each worker. If it fires, count the tasks times their pool sizes before raising it. One five-minute period is enough: a deploy surge doubles the tasks for a few minutes.
+# Connections. The threshold is 80% of the connection budget (database-connections.tf): the live SHOW max_connections reading once
+# db_connection_budget is set, the class estimate until then (54 on db.t4g.micro). The plan already refuses task counts whose deploy peak exceeds the
+# budget, so this fires on connections the sum does not explain (a leak, a stuck deploy, a manual session) or a peak close to the limit.
+# If it fires, compare db_connection_demand with the metric before raising anything. One five-minute period is enough: a deploy lasts a few minutes.
 resource "aws_cloudwatch_metric_alarm" "database_connections_high" {
   alarm_name          = "${local.name}-database-connections-high"
-  alarm_description   = "The database has had more than 80 connections open. The limit depends on the instance class; tasks times pool sizes, doubled in a deploy surge, may be reaching it."
+  alarm_description   = "The database has had more than ${floor(coalesce(local.connection_budget, 0) * 0.8)} connections open, 80% of the connection budget of ${coalesce(local.connection_budget, 0)}. Compare with the db_connection_demand output: a leak, a stuck deploy or a manual session may be holding connections."
   namespace           = "AWS/RDS"
   metric_name         = "DatabaseConnections"
   statistic           = "Maximum"
   period              = 300
   evaluation_periods  = 1
-  threshold           = 80
+  threshold           = floor(coalesce(local.connection_budget, 0) * 0.8)
   comparison_operator = "GreaterThanThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
