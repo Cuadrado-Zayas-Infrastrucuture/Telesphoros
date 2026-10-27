@@ -1,5 +1,5 @@
 {
-  "note": "Measured 2026-10-23 by running all three backend tiers with knowledge/lab-report-reader and sidecars/report-reader removed. Regenerate with scripts/check-without-reader.sh --list-failures. Files in partialSkip also hold tests that pass without the engine; splitting them is the follow-up that brings in fresh public fixtures.",
+  "note": "Measured 2026-10-23 with knowledge/lab-report-reader and sidecars/report-reader removed; re-measured 2026-10-27 (spec 004, slice 1) with the test stand-in reader and the public fixtures, all three backend tiers, nothing skipped: the 8 files that passed were removed. scripts/check-without-reader.sh --measure cannot re-measure this list in a checkout without the engine (it requires the engine directories, and READER_ENGINE=measure turns the stand-in off); spec 004 slice 4 replaces it. Files in partialSkip also hold tests that pass without the engine.",
   "specs": [
     "src/lab-reports/runner/fake-text-capture-runner.spec.ts",
     "src/services/report-adapter/adapt-report.spec.ts",
@@ -7,27 +7,17 @@
     "src/services/report-reader/handoff-import.spec.ts",
     "src/services/report-reader/reader-checkpoint.spec.ts",
     "src/services/report-reader/subprocess-report-reader.spec.ts",
-    "test/cell-usage.e2e-spec.ts",
-    "test/db/evaluation-context.pg-spec.ts",
-    "test/db/stored-pgx-preview.pg-spec.ts",
-    "test/lab-pdf-reports.e2e-spec.ts",
     "test/lab-reports-capture.e2e-spec.ts",
     "test/lab-reports-corrections.e2e-spec.ts",
-    "test/lab-reports-disputes.e2e-spec.ts",
     "test/lab-reports-evaluation-negative.e2e-spec.ts",
     "test/lab-reports-evaluation.e2e-spec.ts",
     "test/ledger-watch.e2e-spec.ts",
-    "test/patient-link.e2e-spec.ts",
-    "test/patient-merge.e2e-spec.ts",
-    "test/patient-quarantine.e2e-spec.ts",
     "test/reports-intake-organization.e2e-spec.ts"
   ],
   "partialSkip": {
     "test/reports-intake-organization.e2e-spec.ts": "13 of 17 tests do not need the engine",
-    "test/lab-pdf-reports.e2e-spec.ts": "13 of 21 tests do not need the engine",
     "src/services/report-reader/subprocess-report-reader.spec.ts": "11 of 57 tests do not need the engine",
     "test/lab-reports-capture.e2e-spec.ts": "1 of 35 tests do not need the engine",
-    "test/patient-merge.e2e-spec.ts": "1 of 19 tests do not need the engine",
     "src/lab-reports/runner/fake-text-capture-runner.spec.ts": "1 of 25 tests do not need the engine"
   }
 }
