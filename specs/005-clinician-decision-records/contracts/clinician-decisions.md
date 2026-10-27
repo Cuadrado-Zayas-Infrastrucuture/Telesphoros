@@ -28,9 +28,9 @@ Role: `clinician` (checked by `@Roles` and again in the database from the live m
   "entryKind": "decision",            // decision | amendment | entered-in-error
   "previousEntryId": null,            // the current head; null only for a result's first entry
   "response": "deferred",             // required unless entryKind is entered-in-error
-  "detailCodes": ["pending-test-result"], // vocabulary cdr-v1; the response decides which are allowed and required
+  "detailCodes": ["information-needed"], // vocabulary cdr-v1; the response decides which are allowed and required
   "reviewBy": "2026-11-10",           // deferred only, optional
-  "note": "optional, 1-1000 chars",   // required with any *-other code
+  "note": "optional, 1-1000 chars",   // required with change-other or other
   "occurredAt": "2026-10-27T14:05:00.000Z" // optional; omit to mean "now" (then occurredAtSource = recorded)
 }
 ```
@@ -73,7 +73,7 @@ Roles: `CLINICAL_READ_ROLES` (reader, clinician, reviewer).
 {
   "id": "uuid", "resultId": "uuid", "evaluationId": "uuid", "patientId": "uuid",
   "entryKind": "decision", "previousEntryId": "uuid|null",
-  "response": "deferred", "detailCodes": ["pending-test-result"], "reviewBy": "2026-11-10",
+  "response": "deferred", "detailCodes": ["information-needed"], "reviewBy": "2026-11-10",
   "vocabularyVersion": "cdr-v1", "eligibilityPolicy": "cdr-eligibility-v1",
   "note": { "id": "uuid", "bodySha256": "64 hex" },   // or null; body via GET /notes/:id
   "occurredAt": "timestamp", "occurredAtSource": "reported", "createdAt": "timestamp",

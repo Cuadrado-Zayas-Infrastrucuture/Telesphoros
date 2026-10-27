@@ -28,9 +28,9 @@ One row = one entry in a result's shared decision history: a clinician's decisio
 | History | `entry_kind` | text | `decision` (a clinical decision; a later one means the plan changed) · `amendment` (corrects how the previous entry was documented, same author, same clinical decision) · `entered-in-error` (withdraws the previous entry, same author, no clinical content) |
 | | `previous_entry_id` | uuid null | FK `(previous_entry_id, result_id, tenant_id)` → this table. Null only for the first entry. Must be the current head. |
 | Meaning | `response` | text null | `accepted`, `modified`, `rejected`, `deferred`, `clarification-requested`. Required for `decision` and `amendment`; null for `entered-in-error` |
-| | `detail_codes` | text[] | Codes from vocabulary `cdr-v1` (section 2.1). The response decides which codes are allowed and which are required. No duplicates; at most 8. |
+| | `detail_codes` | text[] | Codes from vocabulary `cdr-v1` (section 2.1). The response decides which lists are allowed and required. No duplicates; at most 8. |
 | | `review_by` | date null | `deferred` only, optional: when the clinician intends to reassess |
-| | `note_id` | uuid null | FK `(note_id, tenant_id)` → `event_notes`; required when a code ending in `-other` is present |
+| | `note_id` | uuid null | FK `(note_id, tenant_id)` → `event_notes`; required when `change-other` or `other` is present |
 | | `vocabulary_version` | text | `cdr-v1` (CHECK) |
 | Time | `occurred_at` | timestamptz | When the clinician says the decision was made. `>= evaluations.created_at` and `<= created_at` |
 | | `occurred_at_source` | text | `recorded` (not given: equal to `created_at`) or `reported` (given by the clinician) |
@@ -50,17 +50,41 @@ Shape rules (CHECK): `amendment` and `entered-in-error` need `previous_entry_id`
 
 **Grants and policies**: as `0021:196-210` (app SELECT, INSERT; ledger SELECT; verifier SELECT). No UPDATE or DELETE for any role.
 
-### 2.1 Vocabulary `cdr-v1` (proposed; the clinical owner validates every code and definition, D6)
+### 2.1 Vocabulary `cdr-v1`: simplified proposal (2026-10-27; D6 held for the founder's edits)
 
-| Response | Required | Allowed codes (definition) |
-| --- | --- | --- |
-| `accepted` | none | none. The response refers to the exact result's verbatim recommendation; a note is optional. |
-| `modified` | at least one **what** code | What the intended plan changes, relative to the recommendation: `modify-drug` (a different drug than recommended), `modify-dose` (a different dose or dose adjustment), `modify-schedule` (frequency, timing or duration), `modify-monitoring` (added or changed monitoring, e.g. levels, labs, follow-up), `modify-other` (note required). Optionally, why: any rejection reason below. |
-| `rejected` | at least one reason | `reason-not-applicable` (the result does not apply to this patient's indication or situation), `reason-contraindication` (a contraindication to the recommended action), `reason-competing-context` (other clinical factors outweigh it, e.g. comorbidity, interacting drugs, organ function), `reason-prior-response` (documented prior good response or failure on the drug in question), `reason-patient-preference` (the patient declined after discussion), `reason-access` (cost, coverage or availability), `reason-source-doubt` (the clinician doubts the source report or capture; does not retract it), `reason-guideline-disagreement` (clinical disagreement with the guideline recommendation itself), `reason-other` (note required) |
-| `deferred` | at least one pending code | `pending-test-result` (another result is awaited), `pending-specialist` (specialist input awaited), `pending-patient-discussion` (to be discussed with the patient), `pending-medication-review` (full medication review first), `pending-other` (note required). `review_by` optional. |
-| `clarification-requested` | at least one topic | `clarify-genotype-phenotype` (the reported genotype or phenotype seems wrong or incomplete), `clarify-source-report` (the report or its capture is unclear), `clarify-applicability` (whether the guideline applies to this patient), `clarify-interactions` (interacting medications may change the phenotype), `clarify-other` (note required) |
+The founder asked for a simpler vocabulary. This replaces the first draft (24 codes in four response-specific lists) with **11 codes in two lists**. One reason list is shared by every response that departs from the recommendation.
 
-A `modified` decision records the **intended** change only. It is never evidence that a drug was ordered, changed, dispensed or taken; that is D03. Structured detail (which drug, which dose) waits for D03's terminology and product model, so the codes say *what kind* of change, not its values.
+**What kind of change** (`modified` only; at least one):
+
+| Code | Meaning |
+| --- | --- |
+| `change-drug` | A different drug than recommended |
+| `change-dose` | A different dose, frequency or duration |
+| `change-monitoring` | Added or changed monitoring (levels, labs, follow-up) |
+| `change-other` | Anything else; note required |
+
+**Why** (shared: at least one for `rejected`, `deferred` and `clarification-requested`; optional for `modified`; none for `accepted`):
+
+| Code | Meaning |
+| --- | --- |
+| `not-applicable` | The result does not fit this patient's indication or situation |
+| `clinical-context` | Contraindication, comorbidity, interacting drugs or prior response outweigh it |
+| `disagree-with-guideline` | Clinical disagreement with the guideline recommendation itself |
+| `patient-preference` | The patient declined after discussion |
+| `access` | Cost, coverage or availability |
+| `information-needed` | Something is needed first: another result, specialist input, or a clearer or corrected report |
+| `other` | Anything else; note required |
+
+`deferred` keeps the optional `review_by` date. The response itself carries the rest of the meaning: `deferred` plus `information-needed` means waiting for something, and `clarification-requested` plus `information-needed` means the clinician asked a question.
+
+**What the simplification gives up**, so you can decide whether it matters:
+- Contraindication, competing context and prior response are no longer separate; all three are `clinical-context`.
+- Doubt about the source report is folded into `information-needed`. A reader cannot tell it from "waiting for a test".
+- Schedule changes are folded into `change-dose`.
+
+Splitting a code later is a new vocabulary version (`cdr-v2`), and old rows keep `cdr-v1`. So starting coarse is reversible for new data, but not for data already collected.
+
+A `modified` decision records the **intended** change only. It is never evidence that a drug was ordered, changed, dispensed or taken; that is D03.
 
 ## 3. Temporal semantics
 
