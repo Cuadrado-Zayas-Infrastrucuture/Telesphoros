@@ -14,6 +14,7 @@ import { ReportListSkeleton } from '@/components/ReportListSkeleton';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { listPatients, SubmitError } from '@/lib/api';
 import { downloadReport, listReports } from '@/lib/ownedStorageApi';
+import { ownedStorageMode } from '@/lib/storageMode';
 
 const REPORT_PAGE_SIZE = 20;
 
@@ -31,7 +32,9 @@ export default function ReportsPage() {
   const [selected, setSelected] = useState<ReportDto | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<{ id: string; message: string } | null>(null);
-  const canDownload = roles.some((role) => ['clinician', 'reviewer'].includes(role));
+  const downloadRole = roles.some((role) => ['clinician', 'reviewer'].includes(role));
+  // Signed file links need explicitly configured storage origins, which only the owned-storage build has (the publish script refuses them).
+  const canDownload = downloadRole && ownedStorageMode();
   const [reportError, setReportError] = useState<string | null>(null);
   const [patientRequest, setPatientRequest] = useState({ page: 1, attempt: 0 });
   const [patients, setPatients] = useState<Paginated<PatientDto> | null>(null);
@@ -170,7 +173,8 @@ export default function ReportsPage() {
       <p className="rounded-lg border border-divider bg-muted px-4 py-3 text-sm">
         <strong>Synthetic data only.</strong> Clinical use not approved. Clinical processing is disabled. Storage verification does not indicate clinical review.
       </p>
-      {!canDownload && <p className="text-sm text-muted-foreground">Your role can view report metadata only.</p>}
+      {!downloadRole && <p className="text-sm text-muted-foreground">Your role can view report metadata only.</p>}
+      {downloadRole && !canDownload && <p className="text-sm text-muted-foreground">File downloads are not available in this build.</p>}
       <div className="min-w-0">
         <section aria-labelledby="reports-heading" className="min-w-0 rounded-lg border border-divider bg-panel">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-divider px-4 py-3 sm:px-5">

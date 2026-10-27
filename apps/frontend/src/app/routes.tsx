@@ -13,6 +13,9 @@ import { RouteError } from '@/components/RouteError';
  * Public: overview, sign-in, the sign-in callback, signed-out, not-found.
  * Signed-in only: everything under <ProtectedRoute>; and by role: under <RequireRole>.
  */
+// Read once at start-up so an invalid owned-storage setting fails here, before anything renders, rather than being taken for "off".
+ownedStorageMode();
+
 export const routes: RouteObject[] = [
   {
     element: <AppLayout />,
@@ -25,14 +28,11 @@ export const routes: RouteObject[] = [
       {
         element: <ProtectedRoute />,
         children: [
-          ...(ownedStorageMode()
-            ? [
-                {
-                  element: <RequireRole anyOf={CLINICAL_READ_ROLES} />,
-                  children: [{ path: 'reports', lazy: async () => ({ Component: (await import('@/pages/ReportsPage')).default }) }],
-                },
-              ]
-            : []),
+          // Every build: the API authorizes each read. Only file download is owned-storage only (ReportsPage).
+          {
+            element: <RequireRole anyOf={CLINICAL_READ_ROLES} />,
+            children: [{ path: 'reports', lazy: async () => ({ Component: (await import('@/pages/ReportsPage')).default }) }],
+          },
           ...(import.meta.env.DEV
             ? [
                 { path: 'local-interpretation', lazy: async () => ({ Component: (await import('@/pages/LocalInterpretationPage')).default }) },

@@ -14,7 +14,7 @@ Reloading, leaving the page, or signing out loses this in-memory retry state. Ab
 
 ## Reports and downloads
 
-The owned-mode `/reports` page reuses tenant-bound pagination (20 rows) in the API's existing creation order. Clinicians can upload; clinicians and reviewers can download verified files. An administrator alone is refused the page (administration is not clinical access). Readers can see their tenant's metadata only. The server remains authoritative for all access decisions.
+The `/reports` page is in every build since 2026-10-27; only file download is owned-mode only, because signed links need the storage origins this mode configures and the publish script refuses. It reuses tenant-bound pagination (20 rows) in the API's existing creation order. Clinicians can upload; clinicians and reviewers can download verified files. An administrator alone is refused the page (administration is not clinical access). Readers can see their tenant's metadata only. The server remains authoritative for all access decisions.
 
 Downloads obtain a fresh signed attachment link, validate its contract, expiry and explicit allowed origin, and fetch with no cookies, API bearer, referrer or redirects. The client bounds the received bytes and verifies size/SHA-256 against the listed metadata before saving an opaque attachment. Temporary object URLs are revoked; no file is rendered and signed URLs are not persisted. A changed or unavailable file produces a safe retry message. Signed links remain bearer credentials until expiry; logout cannot revoke already issued links.
 

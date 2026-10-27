@@ -6,11 +6,13 @@ afterEach(() => {
   vi.resetModules();
 });
 
-it.each([undefined, 'false', 'true'])('keeps reports behind the existing owned-storage setting %s', async (setting) => {
+// The published build has no owned-storage setting, and clinicians need the report list there too; only file download stays with the owned build.
+it.each([undefined, 'false', 'true'])('registers reports whatever the owned-storage setting (%s)', async (setting) => {
   vi.resetModules();
   vi.stubEnv('VITE_LOCAL_STORAGE_INTAKE', setting);
   const { routes } = await import('./routes');
-  expect(paths(routes).includes('reports')).toBe(setting === 'true');
+  expect(paths(routes).includes('reports')).toBe(true);
+  expect(paths(routes).includes('reports/upload')).toBe(true);
 });
 it('refuses an invalid storage setting instead of broadening access', async () => {
   vi.resetModules();

@@ -4,7 +4,6 @@ import { FileText, Home, Menu, MessageSquare, Upload, X } from 'lucide-react';
 import productMark from '@/assets/telesphoros-shield-rx.png';
 import { useAuth } from '@/auth/AuthProvider';
 import { CLINICAL_READ_ROLES, WRITER_ROLES } from '@/auth/roles';
-import { ownedStorageMode } from '@/lib/storageMode';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { AccountMenu } from './AccountMenu';
@@ -15,7 +14,7 @@ export function WorkspaceSidebar() {
   const toggle = useRef<HTMLButtonElement>(null);
   const links = [
     ...(import.meta.env.DEV && location.hostname === '127.0.0.1' ? [{ to: '/local-interpretation', label: 'Chat preview', icon: MessageSquare, show: true }] : []),
-    { to: '/reports', label: 'Reports', icon: FileText, show: ownedStorageMode() && roles.some((role) => CLINICAL_READ_ROLES.includes(role)) },
+    { to: '/reports', label: 'Reports', icon: FileText, show: roles.some((role) => CLINICAL_READ_ROLES.includes(role)) },
     { to: '/reports/upload', label: 'Upload report', icon: Upload, show: roles.some((role) => WRITER_ROLES.includes(role)) },
     { to: '/', label: 'Overview', icon: Home, show: true },
   ].filter((link) => link.show);

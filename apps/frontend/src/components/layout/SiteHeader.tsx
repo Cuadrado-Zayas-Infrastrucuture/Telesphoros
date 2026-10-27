@@ -17,7 +17,7 @@ export function SiteHeader() {
   // Links to pages the user cannot use are simply not shown. The pages are guarded as well.
   const links = [
     { to: '/', label: 'Overview', end: true, show: !landing },
-    { to: '/reports', label: 'Reports', end: true, show: ownedStorageMode() && roles.length > 0 },
+    { to: '/reports', label: 'Reports', end: true, show: roles.length > 0 },
     ...(import.meta.env.DEV && location.hostname === '127.0.0.1' && ownedStorageMode() && roles.length > 0 && pathname !== '/reports'
       ? [{ to: '/local-interpretation', label: 'AI preview', end: true, show: true }]
       : []),

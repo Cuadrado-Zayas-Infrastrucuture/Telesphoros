@@ -42,10 +42,11 @@ test('wide Prompt Kit conversation keeps evidence in a keyboard-accessible drawe
   await page.addStyleTag({ content: 'html { font-size: 200%; }' });
   await accessible(page);
 });
-test('report navigation stays hidden when owned storage is not enabled', async ({ page }) => {
+// Since 2026-10-27 Reports is in every build; only file download needs owned storage.
+test('report navigation is offered without owned storage, beside the local previews', async ({ page }) => {
   await signInAs(page, 'alice', '/local-interpretation');
   await openWorkspaceNavigation(page);
-  await expect(page.getByRole('link', { name: 'Reports', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Reports', exact: true })).toHaveAttribute('href', '/reports');
   await expect(page.getByRole('link', { name: 'Chat preview', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Upload report', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Upload report', exact: true })).toBeVisible();
