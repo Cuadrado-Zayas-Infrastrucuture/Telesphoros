@@ -5,13 +5,10 @@ import { correctionDtoSchema, evaluationDtoSchema, evaluationSummaryDtoSchema, n
 import { LedgerVerifier } from '../src/ledger/verifier';
 import { createTestApp, usingPostgres } from './helpers/app';
 import { createEphemeralDatabase, type EphemeralDatabase } from './helpers/database';
-import { engineFixtures, LabPipeline, type Person, sha } from './helpers/lab-pipeline';
+import { fixturePdf, LabPipeline, type Person, sha } from './helpers/lab-pipeline';
 
 import { attempt } from './helpers/ledger-sql';
 import { bearer } from './helpers/tokens';
-
-// This spec runs the private engine on its own captures (spec 004 slice 3 moves it to public fixtures).
-const { fixturePdf } = engineFixtures;
 
 // Corrections of stored evaluations over HTTP (slice 5B-3.3a): retraction, reinstatement and supersession by reviewers; the history and the
 // derived state; "current"; notes. Every refusal is asserted to have stored NOTHING and each has a control that succeeds. Synthetic data only.
@@ -22,7 +19,7 @@ const { fixturePdf } = engineFixtures;
   let verifier: LedgerVerifier;
   beforeAll(async () => {
     db = await createEphemeralDatabase();
-    app = await createTestApp({ labReportPipeline: true, readerEngine: true, postgresUrl: db.appUrl });
+    app = await createTestApp({ labReportPipeline: true, postgresUrl: db.appUrl });
     lab = new LabPipeline(app, db.adminUrl);
     verifier = LedgerVerifier.connect(db.verifierUrl);
   }, 60_000);

@@ -1,0 +1,8 @@
+SYNTHETIC PHARMACOGENOMIC REPORT - TEST ONLY
+Written for this repository. Not a laboratory report and not clinical content.
+Report: D10 | Specimen: synthetic
+Layout: unassociated-values
+Genes: CYP2C19 | CYP2B6
+Diplotypes: *1/*2 | *1/*1
+Results: Intermediate Metabolizer | Normal Metabolizer
+End of synthetic report.

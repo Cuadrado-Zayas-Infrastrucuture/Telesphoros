@@ -5,18 +5,16 @@ import { LAB_READER } from '../src/lab-reports/evaluations.service';
 import { ObjectStorage } from '../src/object-storage/object-storage';
 import type { ReportReader } from '../src/services/report-reader/report-reader';
 import { failureResult, type ReaderResult } from '../src/services/report-reader/reader-result';
-import { SubprocessReportReader } from '../src/services/report-reader/subprocess-report-reader';
 import { createTestApp, usingPostgres } from './helpers/app';
+import { StandInReportReader } from './helpers/stand-in-reader';
 import { createEphemeralDatabase, type EphemeralDatabase } from './helpers/database';
 import { bearer } from './helpers/tokens';
-import { engineFixtures, LabPipeline, sha } from './helpers/lab-pipeline';
-
-// This spec runs the private engine on its own captures (spec 004 slice 3 moves it to public fixtures).
-const { fixturePdf, fixtureText } = engineFixtures;
+import { fixturePdf, fixtureText, LabPipeline, sha } from './helpers/lab-pipeline';
 
 // What the evaluation endpoint refuses, how it behaves when the reader fails or is busy, and that it is idempotent. Every refusal is
 // asserted to have stored NOTHING, and each has a control that must succeed. Synthetic data only.
-const real = new SubprocessReportReader({ mode: 'non-production' });
+// The limiter tests below gate a reader that delegates to the test stand-in: they test the limit and the abort, not the reader.
+const real = new StandInReportReader();
 
 (usingPostgres() ? describe : describe.skip)('lab-report evaluation: refusals, failures and idempotency', () => {
   let db: EphemeralDatabase;
@@ -25,7 +23,7 @@ const real = new SubprocessReportReader({ mode: 'non-production' });
   const extraApps: NestExpressApplication[] = [];
   beforeAll(async () => {
     db = await createEphemeralDatabase();
-    app = await createTestApp({ labReportPipeline: true, readerEngine: true, postgresUrl: db.appUrl });
+    app = await createTestApp({ labReportPipeline: true, postgresUrl: db.appUrl });
     lab = new LabPipeline(app, db.adminUrl);
   }, 60_000);
   afterAll(async () => {
@@ -39,7 +37,7 @@ const real = new SubprocessReportReader({ mode: 'non-production' });
   const other = async (options: NonNullable<Parameters<typeof createTestApp>[0]>) => {
     // Every extra app shares the first app's object storage, so the files and text it wrote are visible (in memory or over S3 alike).
     const overrides = [{ provide: ObjectStorage, useValue: app.get(ObjectStorage) }, ...(options.overrides ?? [])];
-    const extra = await createTestApp({ labReportPipeline: true, readerEngine: true, postgresUrl: db.appUrl, ...options, overrides });
+    const extra = await createTestApp({ labReportPipeline: true, postgresUrl: db.appUrl, ...options, overrides });
     extraApps.push(extra);
     return new LabPipeline(extra, db.adminUrl, lab.tenant);
   };

@@ -40,23 +40,13 @@ describe('the skip list for a checkout without the reader engine', () => {
     expect(list.specs).not.toContain('src/services/report-reader/reader-engine.spec.ts');
   });
 
-  // A spec that names the engine's paths or its fixture helpers, and is not on the list, would pass here and fail in a checkout without
-  // the engine. Each one below was measured: it mentions the names but does not run the engine.
+  // A spec that names the engine's paths or its lookup helper, and is not on the list, would pass here and fail in a checkout without the engine.
+  // Each one below was measured: it mentions the names but does not run the engine. (Importing test/helpers/lab-pipeline no longer counts: since
+  // spec 004 slice 2 a spec gets the engine only by asking for it, which the next test checks.)
   const MENTIONS_BUT_NEEDS_NOTHING = new Set([
     'src/config/env.spec.ts', // the name of the LAB_REPORT_FIXTURES_DIR variable only
     'src/services/report-lookup/strict-json.spec.ts', // imports the lookup helper but never starts the engine
     'src/services/report-reader/reader-engine.spec.ts', // this file
-    'test/db/application-recovery.pg-spec.ts', // runs on the public synthetic fixtures and the test stand-in reader (the evidence gate needs its metric)
-    'test/evaluation-request-worker.e2e-spec.ts', // public fixture D01 and its own wrapper around the test stand-in reader
-    'test/lab-reports-evaluation-cancel.e2e-spec.ts', // public fixture D01 and its own wrapper around the test stand-in reader
-    'test/stand-in-reader.spec.ts', // tests that stand-in and those fixtures
-    // Re-measured 2026-10-27 (spec 004, slice 1): these pass on the public fixtures and the test stand-in reader in all three backend tiers.
-    'test/cell-usage.e2e-spec.ts',
-    'test/db/stored-pgx-preview.pg-spec.ts',
-    'test/lab-reports-disputes.e2e-spec.ts',
-    'test/patient-link.e2e-spec.ts',
-    'test/patient-merge.e2e-spec.ts',
-    'test/patient-quarantine.e2e-spec.ts',
   ]);
   const walk = (dir: string): string[] =>
     readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
@@ -64,8 +54,8 @@ describe('the skip list for a checkout without the reader engine', () => {
     );
   const specFiles = [...walk(join(BACKEND, 'src')), ...walk(join(BACKEND, 'test'))].filter((file) => /\.(spec|e2e-spec|pg-spec|s3-spec)\.ts$/.test(file));
 
-  it('covers every spec that names the engine paths or the fixture helpers', () => {
-    const naming = /v2-handoff|reader_cli|DEFAULT_ENGINE_DIR|DEFAULT_CLI_PATH|helpers\/lab-pipeline|helpers\/report-lookup|LAB_REPORT_FIXTURES_DIR/;
+  it('covers every spec that names the engine paths or the lookup helper', () => {
+    const naming = /v2-handoff|reader_cli|DEFAULT_ENGINE_DIR|DEFAULT_CLI_PATH|helpers\/report-lookup|LAB_REPORT_FIXTURES_DIR/;
     const unlisted = specFiles
       .map((file) => file.slice(BACKEND.length + 1))
       .filter((spec) => naming.test(readFileSync(join(BACKEND, spec), 'utf8')) && !list.specs.includes(spec) && !MENTIONS_BUT_NEEDS_NOTHING.has(spec));

@@ -1,0 +1,8 @@
+SYNTHETIC PHARMACOGENOMIC REPORT - TEST ONLY
+Written for this repository. Not a laboratory report and not clinical content.
+Report: D09 | Specimen: synthetic
+Method: synthetic panel, no assay
+Gene: CYP2C19 | Diplotype: *1/*2 | Result: Intermediate Metabolizer
+Comment: none
+Gene: CYP2B6 | Diplotype: *1/*1 | Result: Normal Metabolizer
+End of synthetic report.

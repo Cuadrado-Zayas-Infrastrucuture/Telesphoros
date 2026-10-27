@@ -17,6 +17,10 @@ import type { ReportReader } from '../../src/services/report-reader/report-reade
  *   Gene: CYP2C19 | Diplotype: *1/*2 | Result: Intermediate Metabolizer
  * Anything else is ignored, except: `Layout: unaligned-columns` holds the report (alignment-unsupported), a `Gene:` line that does not parse holds it
  * (unaccounted-text), and a report with no gene line holds it (unsupported-layout).
+ *
+ * `Layout: unassociated-values` is a second, list-based layout: values are listed with nothing that ties one to a gene, so the reader abstains
+ * (registered-source-ambiguity) and lists every candidate as unassociated evidence. Its lines are `Genes:`, `Diplotypes:` and `Results:`, each a
+ * " | "-separated list; a `Gene:` line, or no `Genes:` line, holds the report (unaccounted-text).
  */
 export class StandInReportReader implements ReportReader {
   async read(text: string): Promise<ReaderResult> {
@@ -95,7 +99,67 @@ function parseGeneLine(line: string, lineStart: number): { fields: Found[]; empt
   return { fields, empty };
 }
 
+const LIST_LABELS = { 'Genes:': 'gene', 'Diplotypes:': 'diplotype', 'Results:': 'reportedResult' } as const;
+
+/** The list layout: every listed value is a candidate, no frame ties any of them to a gene, and the projection abstains. */
+function unassociatedRead(text: string): ReaderResult {
+  const base = baseFields(text);
+  const candidates: Candidate[] = [];
+  let offset = 0;
+  for (const line of text.split('\n')) {
+    const lineStart = offset;
+    offset += Array.from(line).length + 1;
+    if (line.startsWith('Gene:')) return held(text, 'unaccounted-text');
+    const label = (Object.keys(LIST_LABELS) as Array<keyof typeof LIST_LABELS>).find((l) => line.startsWith(l));
+    if (!label) continue;
+    let cursor = label.length;
+    for (const part of line.slice(label.length).split(' | ')) {
+      const at = line.indexOf(part, cursor);
+      cursor = at + part.length;
+      const value = part.trim();
+      if (value === '') return held(text, 'unaccounted-text');
+      const start = lineStart + scalarIndex(line, at + part.indexOf(value));
+      const found = { role: LIST_LABELS[label], start, end: start + Array.from(value).length, text: value };
+      const contentId = canonicalHash(['pgx-span-content/1', base.sourceRef.sourceHash, found.role, found.start, found.end]);
+      const candidateId = canonicalHash([
+        'pgx-span-build/3',
+        contentId,
+        base.generatorVersion,
+        base.generatorCodeHash,
+        base.grammarHash,
+        base.offsetContractHash,
+        base.fieldBoundaryPolicyHash,
+      ]);
+      candidates.push({ contentId, candidateId, kind: found.role, start: found.start, end: found.end, text: found.text });
+    }
+  }
+  if (!candidates.some((c) => c.kind === 'gene')) return held(text, 'unaccounted-text');
+  const rest = {
+    schema: 'pgx-span-candidates/3-draft' as const,
+    status: 'ready' as const,
+    reason: null,
+    frameSetState: 'ambiguous' as const,
+    ...base,
+    candidates,
+    frames: [],
+    allowedEdges: [],
+    diagnostics: [],
+    ambiguityEvidence: [{ kind: 'unassociated-values', candidateIds: candidates.map((c) => c.candidateId) }],
+  };
+  const packetHash = canonicalHash(rest);
+  return {
+    packet: { ...rest, packetHash },
+    projection: {
+      status: 'source-abstained',
+      reason: 'registered-source-ambiguity',
+      payload: { spans: [], abstain: true },
+      provenance: { packetHash, unassociatedEvidence: candidates.map((c) => ({ candidateId: c.candidateId })) },
+    },
+  };
+}
+
 export function standInRead(text: string): ReaderResult {
+  if (text.split('\n').some((line) => line.startsWith('Layout:') && line.slice('Layout:'.length).trim() === 'unassociated-values')) return unassociatedRead(text);
   const base = baseFields(text);
   const candidates: Candidate[] = [];
   const frames: Array<{ frameId: string; geneCandidateId: string; sourceAnchor: number; ruleId: string; allowed: { diplotype: string[]; reportedResult: string[] } }> = [];

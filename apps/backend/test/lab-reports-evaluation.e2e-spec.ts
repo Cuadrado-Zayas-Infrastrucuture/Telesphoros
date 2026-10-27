@@ -11,10 +11,7 @@ import { REPORT_HOLD_MESSAGES, type ReportHoldCode } from '../src/services/repor
 import { createTestApp, usingPostgres } from './helpers/app';
 import { createEphemeralDatabase, type EphemeralDatabase } from './helpers/database';
 import { bearer } from './helpers/tokens';
-import { DOCUMENT_IDS, engineFixtures, LabPipeline, REPO_ROOT, TEST_KNOWLEDGE } from './helpers/lab-pipeline';
-
-// This spec runs the private engine on its own captures (spec 004 slice 3 moves it to public fixtures).
-const { fixturePdf, fixtureText } = engineFixtures;
+import { DOCUMENT_IDS, fixturePdf, fixtureText, LabPipeline, REPO_ROOT, TEST_KNOWLEDGE } from './helpers/lab-pipeline';
 
 // The headline proof of slice 5B-3.2: each of the twelve development reports goes through the REAL stack over HTTP (presigned upload,
 // complete, capture, decision by a second person, evaluation with the real reader, the adapter and the engine, stored with its ledger
@@ -38,7 +35,7 @@ const golden = (JSON.parse(readFileSync(join(REPO_ROOT, 'tests/report_adapter/go
   let verifier: LedgerVerifier;
   beforeAll(async () => {
     db = await createEphemeralDatabase();
-    app = await createTestApp({ labReportPipeline: true, readerEngine: true, postgresUrl: db.appUrl });
+    app = await createTestApp({ labReportPipeline: true, postgresUrl: db.appUrl });
     lab = new LabPipeline(app, db.adminUrl);
     knowledge = await loadKnowledge({ directory: TEST_KNOWLEDGE, mode: 'non-production' });
     verifier = LedgerVerifier.connect(db.verifierUrl);
