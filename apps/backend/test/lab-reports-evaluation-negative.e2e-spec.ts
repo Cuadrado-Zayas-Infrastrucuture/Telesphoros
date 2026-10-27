@@ -9,7 +9,10 @@ import { SubprocessReportReader } from '../src/services/report-reader/subprocess
 import { createTestApp, usingPostgres } from './helpers/app';
 import { createEphemeralDatabase, type EphemeralDatabase } from './helpers/database';
 import { bearer } from './helpers/tokens';
-import { fixturePdf, fixtureText, LabPipeline, sha } from './helpers/lab-pipeline';
+import { engineFixtures, LabPipeline, sha } from './helpers/lab-pipeline';
+
+// This spec runs the private engine on its own captures (spec 004 slice 3 moves it to public fixtures).
+const { fixturePdf, fixtureText } = engineFixtures;
 
 // What the evaluation endpoint refuses, how it behaves when the reader fails or is busy, and that it is idempotent. Every refusal is
 // asserted to have stored NOTHING, and each has a control that must succeed. Synthetic data only.
@@ -22,7 +25,7 @@ const real = new SubprocessReportReader({ mode: 'non-production' });
   const extraApps: NestExpressApplication[] = [];
   beforeAll(async () => {
     db = await createEphemeralDatabase();
-    app = await createTestApp({ labReportPipeline: true, postgresUrl: db.appUrl });
+    app = await createTestApp({ labReportPipeline: true, readerEngine: true, postgresUrl: db.appUrl });
     lab = new LabPipeline(app, db.adminUrl);
   }, 60_000);
   afterAll(async () => {
@@ -36,7 +39,7 @@ const real = new SubprocessReportReader({ mode: 'non-production' });
   const other = async (options: NonNullable<Parameters<typeof createTestApp>[0]>) => {
     // Every extra app shares the first app's object storage, so the files and text it wrote are visible (in memory or over S3 alike).
     const overrides = [{ provide: ObjectStorage, useValue: app.get(ObjectStorage) }, ...(options.overrides ?? [])];
-    const extra = await createTestApp({ labReportPipeline: true, postgresUrl: db.appUrl, ...options, overrides });
+    const extra = await createTestApp({ labReportPipeline: true, readerEngine: true, postgresUrl: db.appUrl, ...options, overrides });
     extraApps.push(extra);
     return new LabPipeline(extra, db.adminUrl, lab.tenant);
   };

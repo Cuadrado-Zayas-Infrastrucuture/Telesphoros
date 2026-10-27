@@ -72,6 +72,24 @@ describe('the skip list for a checkout without the reader engine', () => {
     expect(unlisted).toEqual([]);
   });
 
+  // Spec 004 (FR-002): a spec asks for the engine and its captures by name, and nothing picks them because the engine happens to be in the checkout.
+  // Otherwise a run with the engine is not a superset of a run without it (a public-fixture spec read the engine's captures and failed).
+  it('lists every spec that asks for the engine or its captures', () => {
+    const asking = /readerEngine: true|engineFixtures|ENGINE_FIXTURES/;
+    const unlisted = specFiles
+      .map((file) => file.slice(BACKEND.length + 1))
+      .filter((spec) => spec !== 'src/services/report-reader/reader-engine.spec.ts') // this file names the pattern
+      .filter((spec) => asking.test(readFileSync(join(BACKEND, spec), 'utf8')) && !list.specs.includes(spec));
+    expect(unlisted).toEqual([]);
+  });
+
+  it('leaves the choice of reader and fixtures to the spec, not to whether the engine is present', () => {
+    const helpers = walk(join(BACKEND, 'test/helpers')).filter((file) => !file.endsWith('reader-engine.cjs'));
+    expect(helpers.filter((file) => /readerEnginePresent|existsSync\(ENGINE_FIXTURES\)/.test(readFileSync(file, 'utf8'))).map((file) => file.slice(BACKEND.length + 1))).toEqual(
+      [],
+    );
+  });
+
   describe('jest.config.js', () => {
     const configFor = (readerEngine: string | undefined) => {
       const previous = process.env.READER_ENGINE;

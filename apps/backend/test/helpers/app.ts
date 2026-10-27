@@ -26,10 +26,8 @@ import { ledgerWatchConfig } from '../../src/ledger/ledger.module';
 import { createEphemeralDatabase, ownerUrlFor, verifierUrlFor } from './database';
 import { PgMembershipMirror, RegisteringMembershipAdmin } from './membership';
 import { LAB_READER } from '../../src/lab-reports/evaluations.service';
-import { FIXTURES, TEST_KNOWLEDGE } from './lab-pipeline';
+import { ENGINE_FIXTURES, PUBLIC_FIXTURES, TEST_KNOWLEDGE } from './lab-pipeline';
 import { StandInReportReader } from './stand-in-reader';
-// eslint-disable-next-line @typescript-eslint/no-require-imports -- plain CommonJS shared with jest.config.js
-const { readerEnginePresent } = require('./reader-engine.cjs') as { readerEnginePresent: () => boolean };
 import { TEST_AUDIENCE, TEST_ISSUER, TEST_SECRET } from './env';
 import type { TestingModule } from '@nestjs/testing';
 import { disposeFixtures, onceFixtureCleanup } from './fixture-cleanup';
@@ -57,7 +55,12 @@ export interface TestAppOptions {
   corsOrigins?: string[];
   /** Turn the lab-report pipeline switch on. Needs the PostgreSQL store (the ledger has no in-memory version). */
   labReportPipeline?: boolean;
-  /** Where the test-only text runner finds its recorded PDFs (default: the imported hand-off captures). */
+  /**
+   * Read reports with the private report-reader engine and its own captures, instead of the test stand-in and the public fixtures. Only specs on the
+   * list in reader-engine-specs.json pass it: the app refuses to start without the engine.
+   */
+  readerEngine?: boolean;
+  /** Where the test-only text runner finds its recorded PDFs (default: the public fixtures, or the engine's captures with `readerEngine`). */
   fixturesDir?: string;
   /** The knowledge the pipeline evaluates against (default: the test-only knowledge for the twelve development reports). */
   knowledgeDir?: string;
@@ -191,7 +194,7 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
       ...(options.labReportPipeline ? { LAB_REPORT_PIPELINE: 'enabled' } : {}),
       ...(options.labReportPipeline
         ? {
-            LAB_REPORT_FIXTURES_DIR: options.fixturesDir ?? FIXTURES,
+            LAB_REPORT_FIXTURES_DIR: options.fixturesDir ?? (options.readerEngine ? ENGINE_FIXTURES : PUBLIC_FIXTURES),
             KNOWLEDGE_DIR: options.knowledgeDir ?? TEST_KNOWLEDGE,
             BUILD_VERSION: options.buildVersion ?? 'test-build-1',
             ...(options.maxConcurrentReads ? { LAB_REPORT_MAX_CONCURRENT_READS: String(options.maxConcurrentReads) } : {}),
@@ -233,8 +236,8 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
       },
     });
     const overrides = [...(options.overrides ?? [])];
-    // Without the imported reader engine the pipeline reads reports with the test stand-in, unless the spec supplies its own reader.
-    if (options.labReportPipeline && !readerEnginePresent() && !overrides.some((o) => o.provide === LAB_READER))
+    // The pipeline reads reports with the test stand-in unless the spec asks for the engine or supplies its own reader.
+    if (options.labReportPipeline && !options.readerEngine && !overrides.some((o) => o.provide === LAB_READER))
       overrides.push({ provide: LAB_READER, useValue: new StandInReportReader() });
     for (const override of overrides) builder = builder.overrideProvider(override.provide).useValue(override.useValue);
     moduleRef = await builder.compile();
