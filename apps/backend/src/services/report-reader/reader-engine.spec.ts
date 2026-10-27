@@ -47,6 +47,7 @@ describe('the skip list for a checkout without the reader engine', () => {
     'src/services/report-lookup/strict-json.spec.ts', // imports the lookup helper but never starts the engine
     'src/services/report-reader/reader-engine.spec.ts', // this file
     'test/db/application-recovery.pg-spec.ts', // runs on the public synthetic fixtures and the test stand-in reader (the evidence gate needs its metric)
+    'test/lab-reports-evaluation-cancel.e2e-spec.ts', // public fixture D01 and its own wrapper around the test stand-in reader
     'test/stand-in-reader.spec.ts', // tests that stand-in and those fixtures
   ]);
   const walk = (dir: string): string[] =>
