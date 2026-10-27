@@ -11,7 +11,7 @@ import { bearer, signToken } from './tokens';
 
 export const TEST_KNOWLEDGE = resolve(__dirname, '../../../../data/fixtures/knowledge/test-only-reader');
 export const REPO_ROOT = resolve(__dirname, '../../../..');
-// The public synthetic fixtures (D01, D02, D08; see data/fixtures/lab-reports/README.md), whose ids match the hand-written oracle. Every pipeline spec
+// The public synthetic fixtures (D01 to D12; see data/fixtures/lab-reports/README.md), whose ids match the hand-written oracle. Every pipeline spec
 // reads these with the test stand-in reader (see app.ts), whether or not the engine is in the checkout.
 export const PUBLIC_FIXTURES = resolve(__dirname, '../../../../data/fixtures/lab-reports/captures');
 // The private engine's own captures. Only specs that run the engine read them, and they say so (`readerEngine: true` in createTestApp); those specs are

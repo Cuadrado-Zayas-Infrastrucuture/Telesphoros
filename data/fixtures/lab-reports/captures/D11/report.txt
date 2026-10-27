@@ -1,0 +1,7 @@
+SYNTHETIC PHARMACOGENOMIC REPORT - TEST ONLY
+Written for this repository. Not a laboratory report and not clinical content.
+Report: D11 | Specimen: synthetic
+Layout: unassociated-values
+Genes: CYP2C19 | CYP2B6
+Diplotypes: *1/*1 | *1/*2
+End of synthetic report.

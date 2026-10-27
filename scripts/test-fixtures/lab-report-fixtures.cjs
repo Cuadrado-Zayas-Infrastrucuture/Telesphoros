@@ -4,7 +4,7 @@
 //   node scripts/test-fixtures/lab-report-fixtures.cjs --check   exit 1 if what is on disk differs from what this script builds
 //
 // These are original, synthetic documents written for this repository. They are not copies of, and not derived from, any laboratory report
-// or from the files of the imported reader engine. Their ids (D01, D02, D08) match the hand-written expectations in
+// or from the files of the imported reader engine. Their ids (D01 to D12) match the hand-written expectations in
 // tests/report_adapter/golden.json on purpose, so the same oracle serves the engine's twelve development reports (kept private) and these.
 // The bytes are deterministic: no dates, no random ids, so the generated hashes never change unless the content here does.
 const { createHash } = require('node:crypto');
@@ -34,12 +34,85 @@ const REPORTS = {
     'Gene: CYP2C19 | Diplotype: *1/*Z | Result: Normal Metabolizer',
     'End of synthetic report.',
   ],
+  // A mappable diplotype with a reported result that is not one of the tables' terms: the result is not trusted and the gene is unresolved.
+  D03: [
+    ...HEADER,
+    'Report: D03 | Specimen: synthetic',
+    'Gene: CYP2C19 | Diplotype: *1/*2 | Result: Slow Processor',
+    'End of synthetic report.',
+  ],
+  // A mappable diplotype and no reported result: the diplotype alone never assigns a phenotype.
+  D04: [
+    ...HEADER,
+    'Report: D04 | Specimen: synthetic',
+    'Gene: CYP2C19 | Diplotype: *1/*2',
+    'End of synthetic report.',
+  ],
+  // A diplotype field that is present and empty, and no result: nothing is stated for the gene.
+  D05: [
+    ...HEADER,
+    'Report: D05 | Specimen: synthetic',
+    'Gene: CYP2C19 | Diplotype:',
+    'End of synthetic report.',
+  ],
+  // The same gene line twice, word for word.
+  D06: [
+    ...HEADER,
+    'Report: D06 | Specimen: synthetic',
+    'Gene: CYP2C19 | Diplotype: *1/*2 | Result: Intermediate Metabolizer',
+    'Gene: CYP2C19 | Diplotype: *1/*2 | Result: Intermediate Metabolizer',
+    'End of synthetic report.',
+  ],
+  // The same gene twice with different diplotypes.
+  D07: [
+    ...HEADER,
+    'Report: D07 | Specimen: synthetic',
+    'Gene: CYP2C19 | Diplotype: *1/*2 | Result: Intermediate Metabolizer',
+    'Gene: CYP2C19 | Diplotype: *1/*1 | Result: Normal Metabolizer',
+    'End of synthetic report.',
+  ],
   // A column table the reader cannot align: the whole report is held, with a named reason.
   D08: [
     ...HEADER,
     'Report: D08 | Specimen: synthetic',
     'Layout: unaligned-columns',
     'Gene: CYP2C19 | Diplotype: *1/*2 | Result: Intermediate Metabolizer',
+    'End of synthetic report.',
+  ],
+  // The same two genes and results as D01, among lines the reader has no use for.
+  D09: [
+    ...HEADER,
+    'Report: D09 | Specimen: synthetic',
+    'Method: synthetic panel, no assay',
+    'Gene: CYP2C19 | Diplotype: *1/*2 | Result: Intermediate Metabolizer',
+    'Comment: none',
+    'Gene: CYP2B6 | Diplotype: *1/*1 | Result: Normal Metabolizer',
+    'End of synthetic report.',
+  ],
+  // Genes and values listed with nothing that ties a value to a gene: the reader abstains and every listed gene is unresolved.
+  D10: [
+    ...HEADER,
+    'Report: D10 | Specimen: synthetic',
+    'Layout: unassociated-values',
+    'Genes: CYP2C19 | CYP2B6',
+    'Diplotypes: *1/*2 | *1/*1',
+    'Results: Intermediate Metabolizer | Normal Metabolizer',
+    'End of synthetic report.',
+  ],
+  // As D10, with the values in another order and no results: still nothing ties them to a gene.
+  D11: [
+    ...HEADER,
+    'Report: D11 | Specimen: synthetic',
+    'Layout: unassociated-values',
+    'Genes: CYP2C19 | CYP2B6',
+    'Diplotypes: *1/*1 | *1/*2',
+    'End of synthetic report.',
+  ],
+  // A gene line with a field the reader does not know: the report is held rather than read in part.
+  D12: [
+    ...HEADER,
+    'Report: D12 | Specimen: synthetic',
+    'Gene: CYP2C19 | Genotype: *1/*2 | Result: Intermediate Metabolizer',
     'End of synthetic report.',
   ],
 };

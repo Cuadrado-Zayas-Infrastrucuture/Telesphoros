@@ -1,8 +1,7 @@
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-// The engine's own captures: this spec is on the list in reader-engine-specs.json (spec 004 slice 3 moves it to public fixtures).
-import { ENGINE_FIXTURES as DEFAULT_FIXTURES_DIR } from '../../../test/helpers/lab-pipeline';
+import { PUBLIC_FIXTURES as DEFAULT_FIXTURES_DIR } from '../../../test/helpers/lab-pipeline';
 import { FakeTextCaptureRunner } from './fake-text-capture-runner';
 import { RunnerMisconfiguredError, UnsupportedSourceError } from './text-capture-runner';
 
