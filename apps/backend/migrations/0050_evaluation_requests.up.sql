@@ -4,6 +4,21 @@
 SET LOCAL lock_timeout = '2s';
 SET LOCAL statement_timeout = '30s';
 
+-- Like the ledger's parent keys, the jobs key belongs to its NOLOGIN owner. The migrator needs this narrow DDL privilege for the new foreign key.
+SET LOCAL ROLE telesphoros_jobs;
+DO $$ BEGIN EXECUTE format('GRANT REFERENCES (id) ON public.jobs TO %I', session_user); END $$;
+RESET ROLE;
+
+-- The existing membership lock is SECURITY DEFINER. With a non-superuser migration
+-- owner, its identity-accessor dependencies need EXECUTE for that owner, including
+-- the capability-present branch. Grant to the function owner, never a runtime role.
+SET LOCAL ROLE telesphoros_capability;
+DO $$ DECLARE owner_name text; BEGIN
+  SELECT pg_get_userbyid(proowner) INTO owner_name FROM pg_proc WHERE oid = 'public.membership_assert_current(text,bigint)'::regprocedure;
+  EXECUTE format('GRANT EXECUTE ON FUNCTION public.app_tenant_bound(), public.app_actor(), public.app_capability_version() TO %I', owner_name);
+END $$;
+RESET ROLE;
+
 -- Only this narrow helper runs as the existing ledger owner. It locks/checks its OWN tenant's head; it grants the application no ledger DML.
 GRANT CREATE ON SCHEMA public TO telesphoros_ledger;
 SET LOCAL ROLE telesphoros_ledger;
@@ -93,7 +108,7 @@ GRANT EXECUTE ON FUNCTION evaluation_request_profile_valid(jsonb), evaluation_re
 
 CREATE TABLE evaluation_requests (
   id uuid PRIMARY KEY,
-  tenant_id text NOT NULL REFERENCES tenants(id),
+  tenant_id text NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   requested_by text NOT NULL CHECK (length(requested_by) BETWEEN 1 AND 128),
   creation_request_id uuid NOT NULL,
   fingerprint text NOT NULL DEFAULT repeat('0',64) CHECK (fingerprint ~ '^[0-9a-f]{64}$'),
@@ -102,13 +117,13 @@ CREATE TABLE evaluation_requests (
   acceptance_id uuid NOT NULL,
   basis jsonb NOT NULL CHECK (jsonb_typeof(basis) = 'object'),
   execution_profile jsonb NOT NULL CHECK (evaluation_request_profile_valid(execution_profile)),
-  job_id uuid NOT NULL UNIQUE REFERENCES jobs(id),
+  job_id uuid NOT NULL UNIQUE REFERENCES jobs(id) ON DELETE RESTRICT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   UNIQUE (tenant_id, requested_by, creation_request_id),
   UNIQUE (id, tenant_id),
-  FOREIGN KEY (report_id, tenant_id) REFERENCES reports(id,tenant_id),
-  FOREIGN KEY (capture_id, tenant_id) REFERENCES report_captures(id,tenant_id),
-  FOREIGN KEY (acceptance_id, tenant_id) REFERENCES capture_acceptances(id,tenant_id)
+  FOREIGN KEY (report_id, tenant_id) REFERENCES reports(id,tenant_id) ON DELETE RESTRICT,
+  FOREIGN KEY (capture_id, tenant_id) REFERENCES report_captures(id,tenant_id) ON DELETE RESTRICT,
+  FOREIGN KEY (acceptance_id, tenant_id) REFERENCES capture_acceptances(id,tenant_id) ON DELETE RESTRICT
 );
 CREATE INDEX evaluation_requests_tenant_report ON evaluation_requests(tenant_id,report_id);
 
@@ -118,8 +133,8 @@ CREATE TABLE evaluation_request_completions (
   tenant_id text NOT NULL,
   evaluation_id uuid NOT NULL,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  FOREIGN KEY (request_id,tenant_id) REFERENCES evaluation_requests(id,tenant_id),
-  FOREIGN KEY (evaluation_id,tenant_id) REFERENCES evaluations(id,tenant_id)
+  FOREIGN KEY (request_id,tenant_id) REFERENCES evaluation_requests(id,tenant_id) ON DELETE RESTRICT,
+  FOREIGN KEY (evaluation_id,tenant_id) REFERENCES evaluations(id,tenant_id) ON DELETE RESTRICT
 );
 
 CREATE FUNCTION evaluation_request_check() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp AS $$

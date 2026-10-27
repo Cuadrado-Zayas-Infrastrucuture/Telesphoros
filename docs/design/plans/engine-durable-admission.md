@@ -32,7 +32,9 @@ The receipt table has no runtime INSERT grant in H1. Actual clinical execution, 
 
 Migration 0050 creates new objects and leaves existing clinical records and projections unchanged. It is conservatively labelled `breaking` because append-only TRUNCATE guards fail the existing expand lint. Older images do not tolerate a newer breaking history; this is not permission to apply it to a running environment.
 
-The down migration refuses nonempty request/receipt data and even an orphan evaluation queue job. `row_security=off` makes an RLS-filtered guard fail rather than mistake invisible rows for empty history. No destructive recovery or live migration is authorized.
+The new foreign keys explicitly restrict deletion. The migration grants only the migration login the queue-key REFERENCES privilege, and grants the existing membership-lock function owner its identity-accessor dependencies. No application or worker privilege on an existing table is broadened.
+
+The down migration locks its new tables before inspecting them, temporarily lifts forced RLS as their owner inside the migration transaction, and refuses nonempty request/receipt data. A refusal restores forced RLS through rollback. It checks orphan evaluation jobs under the existing queue owner and its all-row policy, with a SHARE lock preventing concurrent enqueue. Empty rollback works for the actual non-superuser migration login; nonempty work has no bypass setting. No destructive recovery or live migration is authorized.
 
 `EvaluationRequestsService` is constructed only by controlled tests. It is absent from Nest modules/controllers. `evaluations.request` is absent from `PRODUCTION_JOBS`, worker consumers, schedules and outbox routes. Public synchronous evaluation, fixed demo, clinical rules, model clients, infrastructure and CI policy stay unchanged.
 

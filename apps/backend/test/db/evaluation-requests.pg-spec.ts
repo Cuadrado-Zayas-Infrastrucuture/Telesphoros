@@ -411,6 +411,24 @@ it('reads a valid completion receipt before queue ACK, and refuses a mismatched 
   await expect(service().get(x.principal, other.request.id)).rejects.toMatchObject({ status: 503 });
 });
 
+it('refuses a completion receipt for the same source evaluated with a different knowledge set', async () => {
+  const x = await eligible();
+  const admitted = await service().admit(x.principal, x.input);
+  const evaluation = await x.ledger.insertEvaluation(
+    x.principal.tenantId,
+    'syn-system',
+    evaluationFor(x.report, x.input.captureId, x.input.acceptanceId, { patientLinkDecisionId: x.linked.record.id, knowledgeSetId: sha('other knowledge') }),
+  );
+  await withAdmin(pg.adminUrl, (client) =>
+    client.query('INSERT INTO evaluation_request_completions (request_id,tenant_id,evaluation_id) VALUES ($1,$2,$3)', [
+      admitted.request.id,
+      x.principal.tenantId,
+      evaluation.record.id,
+    ]),
+  );
+  await expect(service().get(x.principal, admitted.request.id)).rejects.toMatchObject({ status: 503 });
+});
+
 it('enforces forced RLS, immutable requests and no worker/completion-write privileges under real restricted logins', async () => {
   const x = await eligible();
   const { request } = await service().admit(x.principal, x.input);

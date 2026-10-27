@@ -84,6 +84,7 @@ export class EvaluationRequestsRepository {
        LEFT JOIN evaluations e ON e.id=c.evaluation_id AND e.tenant_id=r.tenant_id AND e.report_id=r.report_id
          AND e.capture_id=r.capture_id AND e.capture_acceptance_id=r.acceptance_id
          AND e.patient_id::text=r.basis->>'patientId' AND e.binding->>'textSha256'=r.basis->>'textSha256'
+         AND e.knowledge_set_id=r.execution_profile->>'knowledgeSetId'
        WHERE r.tenant_id=$1 AND r.id=$2`,
       [tenantId, id],
     );

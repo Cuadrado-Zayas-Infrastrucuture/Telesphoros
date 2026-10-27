@@ -11,20 +11,27 @@ Scope: [inactive H1 foundation](../design/plans/engine-durable-admission.md). Sy
 - Direct SQL accepted a numeric value formatted as a 64-digit digest. Explicit JSON string-type checks made the same invalid-profile control fail closed while its valid-profile control remained green.
 - A direct SQL caller could supply a future admission timestamp. Assigning the timestamp inside the validation trigger made the same database-clock oracle pass.
 - Status omitted the queue idempotency-key check. A deliberately drifted binding was initially reported queued; the unchanged control now receives refusal.
+- A completion receipt using the same source but a different knowledge set was initially accepted. Matching the evaluation knowledge identity against the pinned profile makes the unchanged mismatch control refuse, while a matching receipt still completes before ACK.
 - A contained ledger initially mapped to a generic unavailable code. The same incident fixture now receives the established `LEDGER_COMPROMISED` refusal, with another organization still able to admit.
+
+The first full service profile exposed gaps hidden by admin-owned migration fixtures: the migration login lacked queue-key REFERENCES, empty rollback could not inspect forced-RLS tables, and the existing membership-lock definer lacked its identity-accessor dependencies. Targeted repairs stay in new migration 0050. New controls exercise empty down/up, retained admitted work and orphan jobs through the real non-superuser/non-bypass migrator, plus a capability-bound admission.
+
+One targeted run exceeded the existing five-second migration-contention test deadline. Its unchanged isolated control passed in 3.2 seconds; native PostgreSQL samples observed the intended lock wait at about two seconds. The transient broader-run timeout remains recorded, with no timeout or assertion relaxation and no claimed root cause. Final full profiles remain required.
+
+The existing independent schema gate also caught missing explicit ON DELETE RESTRICT clauses. Those clauses were added, and the hand-reviewed schema inventory now includes every new H1 key, relationship, CHECK and query index without removing prior expectations.
 
 The queue-progress harness initially shared retained jobs from earlier cases. The real queue correctly claimed older work. Isolating only that lifecycle case in its own existing ephemeral database preserved its assertions and queue behavior. No production guard, ordering rule or timeout was weakened.
 
 ## Focused evidence
 
-The two new suites currently cover 29 controls, including:
+The two new suites cover admission/status and inactive registration controls, including:
 
 - Concurrent same-key admission, changed-manifest conflict, same-client rollback after enqueue, and reconciliation when real COMMIT succeeds but its response is lost.
 - Actual database membership over spoofed caller roles; foreign/unknown IDs; read-only roles; preservation of organization work after requester removal; suspended-organization refusal.
 - Observed native database lock waits for both admission/review orders. Capture or patient-link rejection committed first prevents admission; a later rejection leaves history intact and refuses stale replay.
 - Missing capture/acceptance/report, unverified patient link, direct substitutions of report hash/object version/text hash, and immutable profile copies with no client-selected provider fields.
 - Forced tenant RLS, a non-superuser/non-bypass application login, actual denied update/delete/TRUNCATE/completion writes, and no worker table/lock-helper rights.
-- Queued/running/retry/dead status, queue success without a clinical receipt, valid completion before ACK, and refusal of mismatched receipts or job bindings.
+- Queued/running/retry/dead status, queue success without a clinical receipt, valid completion before ACK, and refusal of mismatched source/knowledge receipts or job bindings.
 - Empty migration down/up, nonempty history/job rollback refusal, and source-level absence of runtime API/consumer registration.
 
 Typecheck, lint and the focused suites passed after targeted formatting. These working-tree results are not a claim that broader service profiles or hosted CI passed.
