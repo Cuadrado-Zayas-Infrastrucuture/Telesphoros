@@ -839,17 +839,23 @@ run "connection_budget_counts_every_pool" {
     github_repository_owner_id = "200000002"
     api_desired_count          = 3
     api_db_pool_max            = 5
-    worker_desired_count       = 2
+    worker_desired_count       = 1
     enable_issuer              = true
-    issuer_desired_count       = 2
+    issuer_desired_count       = 1
     issuer_tls_ca_arn          = "arn:aws:acm-pca:us-east-2:123456789012:certificate-authority/00000000-0000-0000-0000-000000000000" # production encrypts the issuer connection
     db_connection_budget       = 100
   }
 
   assert {
-    # Twice (the deploy peak) 3 API tasks x (5 + 3 verifier) + 2 workers x (4 + 3) + 2 issuers x 4, plus 1 migration task
-    condition     = output.db_connection_demand.demand == 2 * (3 * (5 + 3) + 2 * (4 + 3) + 2 * 4) + 1 && output.db_connection_demand.budget == 100 && !output.db_connection_demand.budget_is_estimate
+    # Twice (the deploy peak) 3 API tasks x (5 + 3 verifier) + 1 worker x (4 + 3) + 1 issuer x 4, plus 1 migration task
+    condition     = output.db_connection_demand.demand == 2 * (3 * (5 + 3) + 1 * (4 + 3) + 1 * 4) + 1 && output.db_connection_demand.budget == 100 && !output.db_connection_demand.budget_is_estimate
     error_message = "the demand adds every pool at its deploy peak, and a given budget is not an estimate"
+  }
+
+  assert {
+    # Each login at the deploy peak, all within their own limits (app 50, verifier 20, worker 20, issuer 10, migrator 5)
+    condition     = output.db_connection_demand.per_login.app == 2 * 3 * 5 && output.db_connection_demand.per_login.verifier == 2 * 3 * 3 && output.db_connection_demand.per_login.worker == 2 * 1 * 7 && output.db_connection_demand.per_login.issuer == 2 * 1 * 4 && output.db_connection_demand.per_login.migrator == 1
+    error_message = "each login counts its own pools at the deploy peak"
   }
 
   assert {
@@ -858,6 +864,7 @@ run "connection_budget_counts_every_pool" {
   }
 }
 
+# 2 x 13 + 1 x 7 + 1 = 34 at the usual count is over 30; every login stays within its own limit.
 run "connection_budget_refuses_more_than_it_allows" {
   command = plan
 
@@ -874,14 +881,14 @@ run "connection_budget_refuses_more_than_it_allows" {
     github_repository          = "example-org/example-repo"
     github_repository_id       = "100000001"
     github_repository_owner_id = "200000002"
-    api_desired_count          = 10
-    db_connection_budget       = 100
+    api_desired_count          = 2
+    db_connection_budget       = 30
   }
 
   expect_failures = [aws_db_instance.main]
 }
 
-# 3 x 13 + 1 x 7 + 1 = 47 at the usual count fits 60; the deploy peak, 2 x 46 + 1 = 93, does not.
+# 2 x 13 + 1 x 7 + 1 = 34 at the usual count fits 40; the deploy peak, 2 x 33 + 1 = 67, does not. Every login stays within its own limit.
 run "connection_budget_refuses_a_deploy_peak_over_the_budget" {
   command = plan
 
@@ -898,8 +905,110 @@ run "connection_budget_refuses_a_deploy_peak_over_the_budget" {
     github_repository          = "example-org/example-repo"
     github_repository_id       = "100000001"
     github_repository_owner_id = "200000002"
-    api_desired_count          = 3
-    db_connection_budget       = 60
+    api_desired_count          = 2
+    db_connection_budget       = 40
+  }
+
+  expect_failures = [aws_db_instance.main]
+}
+
+# A login over its own CONNECTION LIMIT is refused at a budget the sum fits: the app login: 2 x 2 tasks x 15 = 60 is over 50 (the verifier's 12 and the worker's 14 fit, and so does the budget).
+run "connection_budget_refuses_the_app_login_over_its_limit" {
+  command = plan
+
+  variables {
+    environment                = "production"
+    db_multi_az                = true
+    audit_lock_mode            = "COMPLIANCE"
+    aws_baa_executed           = true
+    enable_api_hosting         = true
+    api_domain                 = "api.example.test"
+    public_subnet_ids          = ["subnet-pub1111", "subnet-pub2222"]
+    api_image                  = "123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    api_cors_origins           = ["https://staging.example.test"]
+    github_repository          = "example-org/example-repo"
+    github_repository_id       = "100000001"
+    github_repository_owner_id = "200000002"
+    api_desired_count          = 2
+    api_db_pool_max            = 15
+    db_connection_budget       = 1000
+  }
+
+  expect_failures = [aws_db_instance.main]
+}
+
+# A login over its own CONNECTION LIMIT is refused at a budget the sum fits: the verifier login: 2 x 4 tasks x 3 = 24 is over 20 (the app login's 40 and the worker's 14 fit, and so does the budget).
+run "connection_budget_refuses_the_verifier_login_over_its_limit" {
+  command = plan
+
+  variables {
+    environment                = "production"
+    db_multi_az                = true
+    audit_lock_mode            = "COMPLIANCE"
+    aws_baa_executed           = true
+    enable_api_hosting         = true
+    api_domain                 = "api.example.test"
+    public_subnet_ids          = ["subnet-pub1111", "subnet-pub2222"]
+    api_image                  = "123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    api_cors_origins           = ["https://staging.example.test"]
+    github_repository          = "example-org/example-repo"
+    github_repository_id       = "100000001"
+    github_repository_owner_id = "200000002"
+    api_desired_count          = 4
+    api_db_pool_max            = 5
+    db_connection_budget       = 1000
+  }
+
+  expect_failures = [aws_db_instance.main]
+}
+
+# A login over its own CONNECTION LIMIT is refused at a budget the sum fits: the worker login: 2 x 2 workers x 7 = 28 is over 20 (the app login's 40 and the verifier's 12 fit, and so does the budget).
+run "connection_budget_refuses_the_worker_login_over_its_limit" {
+  command = plan
+
+  variables {
+    environment                = "production"
+    db_multi_az                = true
+    audit_lock_mode            = "COMPLIANCE"
+    aws_baa_executed           = true
+    enable_api_hosting         = true
+    api_domain                 = "api.example.test"
+    public_subnet_ids          = ["subnet-pub1111", "subnet-pub2222"]
+    api_image                  = "123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    api_cors_origins           = ["https://staging.example.test"]
+    github_repository          = "example-org/example-repo"
+    github_repository_id       = "100000001"
+    github_repository_owner_id = "200000002"
+    api_desired_count          = 2
+    worker_desired_count       = 2
+    db_connection_budget       = 1000
+  }
+
+  expect_failures = [aws_db_instance.main]
+}
+
+# A login over its own CONNECTION LIMIT is refused at a budget the sum fits: the issuer login: 2 x 2 issuers x 4 = 16 is over 10 (the other logins fit, and so does the budget).
+run "connection_budget_refuses_the_issuer_login_over_its_limit" {
+  command = plan
+
+  variables {
+    environment                = "production"
+    db_multi_az                = true
+    audit_lock_mode            = "COMPLIANCE"
+    aws_baa_executed           = true
+    enable_api_hosting         = true
+    api_domain                 = "api.example.test"
+    public_subnet_ids          = ["subnet-pub1111", "subnet-pub2222"]
+    api_image                  = "123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    api_cors_origins           = ["https://staging.example.test"]
+    github_repository          = "example-org/example-repo"
+    github_repository_id       = "100000001"
+    github_repository_owner_id = "200000002"
+    api_desired_count          = 2
+    enable_issuer              = true
+    issuer_desired_count       = 2
+    issuer_tls_ca_arn          = "arn:aws:acm-pca:us-east-2:123456789012:certificate-authority/00000000-0000-0000-0000-000000000000"
+    db_connection_budget       = 1000
   }
 
   expect_failures = [aws_db_instance.main]

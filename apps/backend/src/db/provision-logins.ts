@@ -71,7 +71,9 @@ export const LOGIN_LIMITS: Record<LoginKind, { settings: Record<string, string>;
   app: { settings: { statement_timeout: '10s', idle_in_transaction_session_timeout: '15s', lock_timeout: '5s' }, connectionLimit: 50 },
   worker: { settings: { statement_timeout: '10s', idle_in_transaction_session_timeout: '15s', lock_timeout: '5s' }, connectionLimit: 20 },
   issuer: { settings: { statement_timeout: '10s', idle_in_transaction_session_timeout: '15s', lock_timeout: '5s' }, connectionLimit: 10 },
-  verifier: { settings: { statement_timeout: '120s', idle_in_transaction_session_timeout: '30s', lock_timeout: '5s' }, connectionLimit: 10 },
+  // 20, not 10: every API task holds a verifier pool of 3, production runs at least two tasks, and a deploy doubles them (12; up to 3 tasks fit).
+  // infrastructure/terraform/database-connections.tf refuses a plan whose logins exceed these limits.
+  verifier: { settings: { statement_timeout: '120s', idle_in_transaction_session_timeout: '30s', lock_timeout: '5s' }, connectionLimit: 20 },
   migrator: { settings: { idle_in_transaction_session_timeout: '60s' }, connectionLimit: 5 },
 };
 /** The logins every deployment has; the issuer is added when its secret is configured. */
