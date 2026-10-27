@@ -43,6 +43,8 @@ export interface TestAppOptions {
   organizationIntake?: boolean;
   controllers?: Type<unknown>[];
   readinessChecks?: ReadinessCheck[];
+  /** DATABASE_POOL_MAX, the application pool's size (default: the real default). */
+  databasePoolMax?: number;
   /** Force the PostgreSQL store against this application-role URL (managed by the caller). */
   postgresUrl?: string;
   /** The owner (superuser) URL of that same database, when it is not on the default test cluster (a rig that restores into its own server). */
@@ -182,6 +184,7 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
       JWT_AUDIENCE: TEST_AUDIENCE,
       STORAGE_DRIVER: database || options.postgresUrl ? 'postgres' : 'memory',
       ...(database || options.postgresUrl ? { DATABASE_URL: options.postgresUrl ?? database!.appUrl } : {}),
+      ...(options.databasePoolMax === undefined ? {} : { DATABASE_POOL_MAX: String(options.databasePoolMax) }),
       ...(realIssuer ? { ISSUER_URL: realIssuer.url } : {}),
       ...(options.labReportPipeline ? { LAB_REPORT_PIPELINE: 'enabled' } : {}),
       ...(options.labReportPipeline

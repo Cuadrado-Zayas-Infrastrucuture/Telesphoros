@@ -18,6 +18,7 @@ import './issuer.guard.test.mjs';
 import './entrypoint.guard.test.mjs';
 import './logs.guard.test.mjs';
 import './database-alarms.guard.test.mjs';
+import './database-connections.guard.test.mjs';
 import './signing.guard.test.mjs';
 import './reports-cors.guard.test.mjs';
 import '../../scripts/staging/publish-frontend.test.mjs';

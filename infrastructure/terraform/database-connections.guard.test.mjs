@@ -1,0 +1,94 @@
+// Guards for the database connection budget (database-connections.tf). Imported by guard.test.mjs, so `pnpm test:infra` runs it.
+// The budget is only as good as the pool sizes it adds up, and those live in code: this keeps the Terraform numbers in agreement with the
+// code that opens the pools, the estimates in agreement with AWS's formula, and the refusals in place. `connectionProblems` returns what is
+// wrong with copies of the texts; the tests run it on the real files and on broken copies, so every rule has been seen to fail.
+// It reads TEXT: the arithmetic and the refusals themselves are planned by the runs in profiles.tftest.hcl.
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { test } from 'node:test';
+
+const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+const real = {
+  connections: read('./database-connections.tf'),
+  database: read('./database.tf'),
+  api: read('./api-compute.tf'),
+  worker: read('./worker.tf'),
+  env: read('../../apps/backend/src/config/env.ts'),
+  verifier: read('../../apps/backend/src/ledger/verifier.ts'),
+  workerMain: read('../../apps/worker/src/main.ts'),
+  issuerCore: read('../../apps/backend/src/issuer/issuer-core.ts'),
+  issuerApp: read('../../apps/backend/src/issuer/issuer-app.ts'),
+};
+
+const squash = (s) => s.replace(/\s+/g, ' ');
+const code = (text) => text.split('\n').filter((line) => !/^\s*#/.test(line)).join('\n');
+const GIB = 1024 ** 3;
+
+export function connectionProblems(t = real) {
+  const problems = [];
+  const need = (ok, message) => {
+    if (!ok) problems.push(message);
+  };
+  const tf = squash(code(t.connections));
+
+  // The pool sizes the sum uses are the ones the code opens.
+  need(/DATABASE_POOL_MAX: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(50\)\.default\(10\)/.test(t.env), 'the backend DATABASE_POOL_MAX must be 1 to 50, default 10');
+  need(/variable "api_db_pool_max" \{[^}]*default = 10\b/.test(tf), 'api_db_pool_max must default to the backend default, 10');
+  need(/var\.api_db_pool_max >= 1 && var\.api_db_pool_max <= 50/.test(tf), 'api_db_pool_max must have the backend bounds, 1 to 50');
+  const verifierMax = /\bmax: (\d+),/.exec(t.verifier)?.[1];
+  need(verifierMax !== undefined && tf.includes(`(var.api_db_pool_max + ${verifierMax})`), 'each API task must count the ledger verifier pool the code opens');
+  const workerExtra = /max: config\.concurrency \+ (\d+)/.exec(t.workerMain)?.[1];
+  need(workerExtra !== undefined && tf.includes(`(local.worker_concurrency + ${workerExtra})`), 'each worker task must count WORKER_CONCURRENCY plus the extra connections the worker opens');
+  const issuerMax = /max: options\.max \?\? (\d+),/.exec(t.issuerCore)?.[1];
+  need(!/new PgCapabilityIssueStore\(\{[^}]*\bmax:/.test(t.issuerApp), 'the issuer service must use the store default pool size (or the budget must read its setting)');
+  need(issuerMax !== undefined && tf.includes(`var.issuer_desired_count * ${issuerMax}`), 'each issuer task must count the pool the issuer store opens');
+  need(/local\.api_service_count \* 1\b/.test(tf), 'the migration task must be counted');
+  need(/WORKER_CONCURRENCY\s*=\s*tostring\(local\.worker_concurrency\)/.test(t.worker), 'the worker task must take WORKER_CONCURRENCY from local.worker_concurrency');
+  need(/DATABASE_POOL_MAX\s*=\s*tostring\(var\.api_db_pool_max\)/.test(t.api), 'the API task must take DATABASE_POOL_MAX from api_db_pool_max');
+
+  // The estimates follow the formula the file states, and are labelled as estimates.
+  need(/ESTIMATES, NOT READINGS/.test(t.connections), 'the estimates must be labelled as estimates');
+  const table = /connection_estimates = \{([^}]*)\}/.exec(tf)?.[1] ?? '';
+  const entries = [...table.matchAll(/"(db\.t4g\.(\w+))" = (\d+)/g)];
+  need(entries.length >= 2, 'the estimates table must list the classes in use');
+  const memory = { micro: 1, small: 2, medium: 4, large: 8 };
+  for (const [, cls, size, value] of entries) {
+    const expected = Math.floor(((memory[size] ?? NaN) * GIB) / 9531392 * 0.65) - 5;
+    need(Number(value) === expected, `${cls}: the estimate must be floor(listed bytes / 9531392 x 0.65) - 5 = ${expected}`);
+  }
+
+  // The refusals.
+  const db = squash(code(t.database));
+  need(db.includes('condition = var.environment != "production" || var.db_connection_budget != null'), 'production must refuse an estimated budget');
+  need(db.includes('condition = local.connection_budget != null'), 'a class with no estimate must need a reading');
+  need(db.includes('condition = local.connection_budget == null || local.connection_demand <= coalesce(local.connection_budget, 0)'), 'the demand must be refused above the budget');
+  return problems;
+}
+
+test('the connection budget text has no problems (and the scan found the files)', () => {
+  assert.ok(real.connections.length > 500 && real.verifier.includes('max:') && real.workerMain.includes('concurrency'));
+  assert.deepEqual(connectionProblems(), []);
+});
+
+test('the connection budget guard reports each way the texts could drift (controls)', () => {
+  const broken = (key, from, to) => {
+    assert.ok(real[key].includes(from), `the control's text must exist: ${from}`);
+    return connectionProblems({ ...real, [key]: real[key].replace(from, to) });
+  };
+  const cases = [
+    ['verifier', 'max: 3,', 'max: 4,', 'ledger verifier'],
+    ['workerMain', 'max: config.concurrency + 3', 'max: config.concurrency + 5', 'WORKER_CONCURRENCY plus'],
+    ['issuerCore', 'max: options.max ?? 4,', 'max: options.max ?? 6,', 'issuer store opens'],
+    ['env', '.default(10)', '.default(20)', 'backend DATABASE_POOL_MAX'],
+    ['worker', 'tostring(local.worker_concurrency)', '"4"', 'local.worker_concurrency'],
+    ['api', 'DATABASE_POOL_MAX                 = tostring(var.api_db_pool_max)', '', 'api_db_pool_max'],
+    ['connections', '"db.t4g.small"  = 141', '"db.t4g.small"  = 160', 'db.t4g.small'],
+    ['connections', 'ESTIMATES, NOT READINGS', 'Defaults', 'labelled as estimates'],
+    ['database', 'var.environment != "production" || var.db_connection_budget != null', 'true', 'production must refuse'],
+    ['database', 'local.connection_demand <= coalesce(local.connection_budget, 0)', 'true', 'refused above the budget'],
+  ];
+  for (const [key, from, to, expected] of cases) {
+    const problems = broken(key, from, to);
+    assert.ok(problems.some((p) => p.includes(expected)), `${key}: "${from}" -> "${to}" must report "${expected}", got ${JSON.stringify(problems)}`);
+  }
+});

@@ -16,10 +16,17 @@ const code = tf
   .filter((l) => !/^\s*#/.test(l))
   .join('\n');
 
+// The worker's concurrency is defined beside the database connection budget that counts it; the loader checks the real value.
+const workerConcurrency = /^\s*worker_concurrency\s*=\s*(\d+)\s*$/m.exec(
+  readFileSync(new URL('../../../infrastructure/terraform/database-connections.tf', import.meta.url), 'utf8'),
+)?.[1];
+if (workerConcurrency === undefined) throw new Error('database-connections.tf: local.worker_concurrency is missing');
+
 const PLACEHOLDERS: Record<string, string> = {
   'aws_s3_bucket.reports.bucket': 'telesphoros-staging-reports-123456789012',
   'var.region': 'us-east-2',
   'tostring(local.worker_health)': '8081',
+  'tostring(local.worker_concurrency)': workerConcurrency,
 };
 
 function environment(): Record<string, string> {

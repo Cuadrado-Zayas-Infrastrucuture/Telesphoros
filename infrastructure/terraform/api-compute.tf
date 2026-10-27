@@ -98,6 +98,7 @@ locals {
     REPORTS_BUCKET                    = aws_s3_bucket.reports.bucket
     AWS_REGION                        = var.region
     DATABASE_SSL                      = "require"
+    DATABASE_POOL_MAX                 = tostring(var.api_db_pool_max)
     CORS_ALLOWED_ORIGINS              = join(",", var.api_cors_origins)
     RATE_LIMIT_ENABLED                = "true"
     TRUST_PROXY_HOPS                  = "1"

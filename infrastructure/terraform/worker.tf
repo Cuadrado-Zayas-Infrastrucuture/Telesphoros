@@ -37,7 +37,7 @@ locals {
     DATABASE_SSL         = "require"
     REPORTS_BUCKET       = aws_s3_bucket.reports.bucket
     AWS_REGION           = var.region
-    WORKER_CONCURRENCY   = "4"
+    WORKER_CONCURRENCY   = tostring(local.worker_concurrency)
     WORKER_TENANT_CAP    = "2"
     WORKER_DRAIN_SECONDS = "30"
     WORKER_HEALTH_HOST   = "127.0.0.1"

@@ -45,6 +45,8 @@ variables {
   cognito_domain_prefix  = "profile-test"
   ses_from_email         = "no-reply@example.test"
   alarm_email            = "ops@example.test"
+  # A reading, as production requires (database-connections.tf). The runs about the budget itself set their own.
+  db_connection_budget = 200
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -814,4 +816,106 @@ run "refuses_production_hosting_without_the_signed_release_path" {
   }
 
   expect_failures = [aws_ecr_repository.api]
+}
+
+# ------------------------------------------------------------------------------------------------
+# The database connection budget (database-connections.tf): every hosted service at its largest count must fit what the instance accepts.
+# ------------------------------------------------------------------------------------------------
+run "connection_budget_counts_every_pool" {
+  command = plan
+
+  variables {
+    environment                = "production"
+    db_multi_az                = true
+    audit_lock_mode            = "COMPLIANCE"
+    aws_baa_executed           = true
+    enable_api_hosting         = true
+    api_domain                 = "api.example.test"
+    public_subnet_ids          = ["subnet-pub1111", "subnet-pub2222"]
+    api_image                  = "123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    api_cors_origins           = ["https://staging.example.test"]
+    github_repository          = "example-org/example-repo"
+    github_repository_id       = "100000001"
+    github_repository_owner_id = "200000002"
+    api_desired_count          = 3
+    api_db_pool_max            = 5
+    worker_desired_count       = 2
+    enable_issuer              = true
+    issuer_desired_count       = 2
+    issuer_tls_ca_arn          = "arn:aws:acm-pca:us-east-2:123456789012:certificate-authority/00000000-0000-0000-0000-000000000000" # production encrypts the issuer connection
+    db_connection_budget       = 100
+  }
+
+  assert {
+    # 3 API tasks x (5 + 3 verifier) + 2 workers x (4 + 3) + 2 issuers x 4 + 1 migration task
+    condition     = output.db_connection_demand.demand == 3 * (5 + 3) + 2 * (4 + 3) + 2 * 4 + 1 && output.db_connection_demand.budget == 100 && !output.db_connection_demand.budget_is_estimate
+    error_message = "the demand adds every pool at its largest count, and a given budget is not an estimate"
+  }
+}
+
+run "connection_budget_refuses_more_than_it_allows" {
+  command = plan
+
+  variables {
+    environment                = "production"
+    db_multi_az                = true
+    audit_lock_mode            = "COMPLIANCE"
+    aws_baa_executed           = true
+    enable_api_hosting         = true
+    api_domain                 = "api.example.test"
+    public_subnet_ids          = ["subnet-pub1111", "subnet-pub2222"]
+    api_image                  = "123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    api_cors_origins           = ["https://staging.example.test"]
+    github_repository          = "example-org/example-repo"
+    github_repository_id       = "100000001"
+    github_repository_owner_id = "200000002"
+    api_desired_count          = 10
+    db_connection_budget       = 100
+  }
+
+  expect_failures = [aws_db_instance.main]
+}
+
+run "connection_budget_estimate_off_production" {
+  command = plan
+
+  variables {
+    deployment_profile   = "synthetic"
+    enable_api_hosting   = true
+    api_domain           = "api.example.test"
+    public_subnet_ids    = ["subnet-pub1111", "subnet-pub2222"]
+    api_image            = "123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    api_cors_origins     = ["https://staging.example.test"]
+    db_connection_budget = null
+  }
+
+  assert {
+    condition     = output.db_connection_demand.budget == 68 && output.db_connection_demand.budget_is_estimate && output.db_connection_demand.demand == 1 * (10 + 3) + 1 * (4 + 3) + 1
+    error_message = "a synthetic plan without a reading uses the db.t4g.micro estimate, labelled as one, and counts the default pools"
+  }
+}
+
+run "connection_budget_estimate_refused_in_production" {
+  command = plan
+
+  variables {
+    environment          = "production"
+    db_multi_az          = true
+    audit_lock_mode      = "COMPLIANCE"
+    aws_baa_executed     = true
+    db_connection_budget = null
+  }
+
+  expect_failures = [aws_db_instance.main]
+}
+
+run "connection_budget_needs_a_reading_for_an_unlisted_class" {
+  command = plan
+
+  variables {
+    db_instance_class    = "db.r7g.large"
+    db_connection_budget = null
+  }
+
+  expect_failures = [aws_db_instance.main]
 }
