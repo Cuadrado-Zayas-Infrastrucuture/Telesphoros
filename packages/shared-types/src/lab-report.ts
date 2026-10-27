@@ -138,6 +138,10 @@ export const noteDtoSchema = z.strictObject({
 export type NoteDto = z.infer<typeof noteDtoSchema>;
 
 const evaluationResultDtoSchema = z.strictObject({
+  /** The stored result row (`evaluation_results.id`): stable, and already part of the evaluation's ledger record. A later record names a result by this. */
+  id: z.uuid(),
+  /** The result's position within its evaluation, from 0 (the stored `ordinal`). */
+  ordinal: z.number().int().min(0),
   drug: z.string(),
   genes: z.array(z.string()),
   outcome: z.string(),

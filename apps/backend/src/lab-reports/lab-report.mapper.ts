@@ -95,6 +95,8 @@ export function toEvaluationDto(record: Projected, context: EvaluationContext): 
   const derived = stateFromCorrections(context.corrections);
   const binding = (record.binding ?? {}) as Record<string, unknown>;
   const results = (record.results as Array<Record<string, unknown>>).map((r) => ({
+    id: r.id,
+    ordinal: r.ordinal,
     drug: r.drug,
     genes: r.genes,
     outcome: r.outcome,
