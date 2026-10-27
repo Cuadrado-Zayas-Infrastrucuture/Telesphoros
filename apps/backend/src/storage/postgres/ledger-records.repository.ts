@@ -387,6 +387,9 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
           return this.existing(client, tenantId, 'capture_acceptances', rows[0].id);
         }
       }
+      // Decisions on one capture queue here, BEFORE the row takes its seq: "newest by seq" then means "last in the ledger", because this lock
+      // is held until commit and the head lock is taken after it.
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`capture-decision:${tenantId}:${input.captureId}`]);
       const id = newId();
       const noteId = input.note === undefined ? null : await this.insertNote(client, tenantId, actor, input.note);
       await client.query(
