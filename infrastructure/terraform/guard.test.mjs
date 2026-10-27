@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import './backend.guard.test.mjs';
 import './api-compute.guard.test.mjs';
+import './api-autoscaling.guard.test.mjs';
 import './api.guard.test.mjs';
 import './audit.guard.test.mjs';
 import './profile.guard.test.mjs';

@@ -106,11 +106,11 @@ resource "aws_db_instance" "main" {
     }
     precondition {
       condition     = local.connection_budget == null || local.connection_demand <= coalesce(local.connection_budget, 0)
-      error_message = "The hosted services could open more database connections than db_connection_budget allows (see the db_connection_demand output): lower a desired count or api_db_pool_max, or raise the budget from a live reading."
+      error_message = "The hosted services could open more database connections than db_connection_budget allows (see the db_connection_demand output): lower a desired count, api_max_count or api_db_pool_max, or raise the budget from a live reading."
     }
     precondition {
       condition     = length(local.logins_over_limit) == 0
-      error_message = "These logins could open more connections at the deploy peak than their own CONNECTION LIMIT (LOGIN_LIMITS in provision-logins.ts) allows: ${join(", ", local.logins_over_limit)}. Lower a desired count or api_db_pool_max, or raise that login's limit on purpose."
+      error_message = "These logins could open more connections at the deploy peak than their own CONNECTION LIMIT (LOGIN_LIMITS in provision-logins.ts) allows: ${join(", ", local.logins_over_limit)}. Lower a desired count, api_max_count or api_db_pool_max, or raise that login's limit on purpose."
     }
     precondition {
       condition     = length(var.app_security_group_ids) >= 1 || var.enable_api_hosting

@@ -53,7 +53,7 @@ export function connectionProblems(t = real) {
     const percent = new RegExp(`resource "aws_ecs_service" "${service}" \\{[\\s\\S]*?deployment_maximum_percent\\s*=\\s*(\\d+)`).exec(code(t[key]))?.[1];
     need(percent !== undefined && percent === peak, `the ${service} service's deployment_maximum_percent must equal connection_deploy_peak_percent`);
   }
-  need(/ceil\(\( local\.api_service_count \* var\.api_desired_count [^)]*\)[\s\S]*\) \* local\.connection_deploy_peak_percent \/ 100\) \+ local\.api_service_count \* 1 \)/.test(tf), 'the services must be counted at their deploy peak (the migration task once)');
+  need(/ceil\(\( local\.api_service_count \* local\.api_max_tasks [^)]*\)[\s\S]*\) \* local\.connection_deploy_peak_percent \/ 100\) \+ local\.api_service_count \* 1 \)/.test(tf), 'the services must be counted at their deploy peak (the migration task once)');
   need(/WORKER_CONCURRENCY\s*=\s*tostring\(local\.worker_concurrency\)/.test(t.worker), 'the worker task must take WORKER_CONCURRENCY from local.worker_concurrency');
   need(/DATABASE_POOL_MAX\s*=\s*tostring\(var\.api_db_pool_max\)/.test(t.api), 'the API task must take DATABASE_POOL_MAX from api_db_pool_max');
 
@@ -64,8 +64,8 @@ export function connectionProblems(t = real) {
   const sorted = (o) => JSON.stringify(Object.entries(o).sort(([a], [b]) => a.localeCompare(b)));
   need(sorted(tfLimits) === sorted(codeLimits), `login_connection_limits must equal LOGIN_LIMITS in provision-logins.ts (${JSON.stringify(codeLimits)})`);
   const peakOf = (expression) => `ceil(${expression} * local.connection_deploy_peak_percent / 100)`;
-  need(tf.includes(`app = ${peakOf('local.api_service_count * var.api_desired_count * var.api_db_pool_max')}`), 'the app login must count every API task\'s pool at the deploy peak');
-  need(verifierMax !== undefined && tf.includes(`verifier = ${peakOf(`local.api_service_count * var.api_desired_count * ${verifierMax}`)}`), 'the verifier login must count every API task\'s verifier pool at the deploy peak');
+  need(tf.includes(`app = ${peakOf('local.api_service_count * local.api_max_tasks * var.api_db_pool_max')}`), 'the app login must count every API task\'s pool, at the autoscaling ceiling, at the deploy peak');
+  need(verifierMax !== undefined && tf.includes(`verifier = ${peakOf(`local.api_service_count * local.api_max_tasks * ${verifierMax}`)}`), 'the verifier login must count every API task\'s verifier pool, at the autoscaling ceiling, at the deploy peak');
   need(workerExtra !== undefined && tf.includes(`worker = ${peakOf(`local.api_service_count * var.worker_desired_count * (local.worker_concurrency + ${workerExtra})`)}`), 'the worker login must count every worker\'s pool at the deploy peak');
   need(issuerMax !== undefined && tf.includes(`issuer = ${peakOf(`local.issuer_service_count * var.issuer_desired_count * ${issuerMax}`)}`), 'the issuer login must count every issuer\'s pool at the deploy peak');
   need(tf.includes('migrator = local.api_service_count * 1'), 'the migrator login must count the migration task');
@@ -118,8 +118,8 @@ test('the connection budget guard reports each way the texts could drift (contro
     ['connections', ') * local.connection_deploy_peak_percent / 100)', '))', 'deploy peak'],
     ['provisionLogins', "lock_timeout: '5s' }, connectionLimit: 20 },\n  migrator", "lock_timeout: '5s' }, connectionLimit: 25 },\n  migrator", 'LOGIN_LIMITS'],
     ['connections', 'verifier = 20', 'verifier = 30', 'LOGIN_LIMITS'],
-    ['connections', 'var.api_desired_count * 3 * local', 'var.api_desired_count * 2 * local', 'verifier login'],
-    ['connections', 'var.api_desired_count * var.api_db_pool_max * local', 'var.api_db_pool_max * local', 'app login'],
+    ['connections', 'local.api_max_tasks * 3 * local', 'local.api_max_tasks * 2 * local', 'verifier login'],
+    ['connections', 'local.api_max_tasks * var.api_db_pool_max * local', 'var.api_db_pool_max * local', 'app login'],
     ['connections', 'if demand > local.login_connection_limits[login]', 'if demand > 9999', 'logins over their limit'],
     ['database', 'condition     = length(local.logins_over_limit) == 0', 'condition     = true', 'own connection limit'],
   ];

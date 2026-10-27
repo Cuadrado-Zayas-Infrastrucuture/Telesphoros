@@ -32,6 +32,8 @@ It does **not** create: the VPC and subnets, the image itself (the registry that
 **F3a optional API edge:** `api-edge.tf` adds an ACM certificate, an HTTPS-only load balancer, a firewall (WAF) and exact security
 groups when `enable_api_hosting = true` (default false). **F3b compute** (`api-compute.tf`, same switch): ECS Fargate cluster and service, task and
 migration task definitions, roles, secret containers (never values), a log group, and four alarms; the task definitions and service also need `api_image`.
+**Autoscaling** (`api-autoscaling.tf`, with the service): a scalable target between `api_desired_count` and `api_max_count` (null: no scaling)
+and, above the floor, a CPU target-tracking policy.
 See [api-hosting.md](../../docs/ops/api-hosting.md).
 
 **H1 optional frontend:** `web.tf` now adds a private public-code S3 bucket, CloudFront/OAC and an ACM certificate

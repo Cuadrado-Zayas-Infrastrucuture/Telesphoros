@@ -956,7 +956,7 @@ run "connection_budget_refuses_the_verifier_login_over_its_limit" {
     github_repository_owner_id = "200000002"
     api_desired_count          = 4
     api_db_pool_max            = 5
-    db_connection_budget       = 1000
+    db_connection_budget       = 500
   }
 
   expect_failures = [aws_db_instance.main]
@@ -1058,6 +1058,158 @@ run "connection_budget_needs_a_reading_for_an_unlisted_class" {
   variables {
     db_instance_class    = "db.r7g.large"
     db_connection_budget = null
+  }
+
+  expect_failures = [aws_db_instance.main]
+}
+
+# ------------------------------------------------------------------------------------------------
+# API autoscaling (api-autoscaling.tf): a scalable target always holds the count; a CPU policy only above the floor.
+# ------------------------------------------------------------------------------------------------
+run "api_autoscaling_off_by_default" {
+  command = plan
+
+  variables {
+    deployment_profile = "synthetic"
+    vpc_id             = ""
+    private_subnet_ids = []
+    enable_api_hosting = true
+    api_domain         = "api.example.test"
+    api_image          = "123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    api_cors_origins   = ["https://staging.example.test"]
+  }
+
+  assert {
+    condition     = length(aws_appautoscaling_target.api) == 1 && aws_appautoscaling_target.api[0].min_capacity == 1 && aws_appautoscaling_target.api[0].max_capacity == 1
+    error_message = "with api_max_count null the target holds the service at api_desired_count"
+  }
+  assert {
+    condition     = aws_appautoscaling_target.api[0].resource_id == "service/telesphoros-staging-api/telesphoros-staging-api" && aws_appautoscaling_target.api[0].scalable_dimension == "ecs:service:DesiredCount"
+    error_message = "the target scales this cluster's API service"
+  }
+  assert {
+    condition     = length(aws_appautoscaling_policy.api_cpu) == 0
+    error_message = "no scaling policy without a ceiling above the floor"
+  }
+}
+
+run "api_autoscaling_on" {
+  command = plan
+
+  variables {
+    deployment_profile = "synthetic"
+    vpc_id             = ""
+    private_subnet_ids = []
+    enable_api_hosting = true
+    api_domain         = "api.example.test"
+    api_image          = "123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    api_cors_origins   = ["https://staging.example.test"]
+    api_max_count      = 2
+  }
+
+  assert {
+    condition     = aws_appautoscaling_target.api[0].min_capacity == 1 && aws_appautoscaling_target.api[0].max_capacity == 2
+    error_message = "the target scales between api_desired_count and api_max_count"
+  }
+  assert {
+    condition     = output.db_connection_demand.per_login.app == 2 * 2 * 10 && output.db_connection_demand.per_login.verifier == 2 * 2 * 3
+    error_message = "each login's demand counts the API at api_max_count, not api_desired_count"
+  }
+  assert {
+    condition     = length(aws_appautoscaling_policy.api_cpu) == 1 && aws_appautoscaling_policy.api_cpu[0].policy_type == "TargetTrackingScaling"
+    error_message = "a ceiling above the floor adds the target-tracking policy"
+  }
+  assert {
+    condition = (
+      one(aws_appautoscaling_policy.api_cpu[0].target_tracking_scaling_policy_configuration).target_value == 60
+      && one(one(aws_appautoscaling_policy.api_cpu[0].target_tracking_scaling_policy_configuration).predefined_metric_specification).predefined_metric_type == "ECSServiceAverageCPUUtilization"
+      && one(aws_appautoscaling_policy.api_cpu[0].target_tracking_scaling_policy_configuration).disable_scale_in == false
+    )
+    error_message = "the policy holds the service's average CPU at api_scale_cpu_target and scales back in"
+  }
+}
+
+run "api_autoscaling_refuses_a_ceiling_below_the_floor" {
+  command = plan
+
+  variables {
+    api_desired_count = 3
+    api_max_count     = 2
+  }
+
+  expect_failures = [var.api_max_count]
+}
+
+# At pool 10 a ceiling of 3 needs 2 x 3 x 10 = 60 app connections, over the app login's limit of 50, so it is refused. The budget is set high
+# so that only the per-login limit can refuse it; api_autoscaling_on is the same plan at a ceiling of 2, which fits.
+run "login_limit_refuses_an_api_ceiling_over_it" {
+  command = plan
+
+  variables {
+    deployment_profile   = "synthetic"
+    vpc_id               = ""
+    private_subnet_ids   = []
+    enable_api_hosting   = true
+    api_domain           = "api.example.test"
+    api_image            = "123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    api_cors_origins     = ["https://staging.example.test"]
+    api_max_count        = 3
+    db_connection_budget = 500
+  }
+
+  expect_failures = [aws_db_instance.main]
+}
+
+# The budget counts the API at its ceiling: twice (3 x (5 + 3) + 1 worker x (4 + 3)) + 1 = 63.
+run "connection_budget_counts_the_api_ceiling" {
+  command = plan
+
+  variables {
+    environment                = "production"
+    db_multi_az                = true
+    audit_lock_mode            = "COMPLIANCE"
+    aws_baa_executed           = true
+    enable_api_hosting         = true
+    api_domain                 = "api.example.test"
+    public_subnet_ids          = ["subnet-pub1111", "subnet-pub2222"]
+    api_image                  = "123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    api_cors_origins           = ["https://staging.example.test"]
+    github_repository          = "example-org/example-repo"
+    github_repository_id       = "100000001"
+    github_repository_owner_id = "200000002"
+    api_desired_count          = 2
+    api_max_count              = 3
+    api_db_pool_max            = 5
+    db_connection_budget       = 200
+  }
+
+  assert {
+    condition     = output.db_connection_demand.demand == 2 * (3 * (5 + 3) + 1 * (4 + 3)) + 1 && output.db_connection_demand.per_login.app == 2 * 3 * 5
+    error_message = "the API is counted at api_max_count, not api_desired_count"
+  }
+}
+
+# At the floor the same plan needs 2 x (2 x 8 + 7) + 1 = 47 and would fit 50; at the ceiling it needs 63, so it is refused.
+run "connection_budget_refuses_an_api_ceiling_over_the_budget" {
+  command = plan
+
+  variables {
+    environment                = "production"
+    db_multi_az                = true
+    audit_lock_mode            = "COMPLIANCE"
+    aws_baa_executed           = true
+    enable_api_hosting         = true
+    api_domain                 = "api.example.test"
+    public_subnet_ids          = ["subnet-pub1111", "subnet-pub2222"]
+    api_image                  = "123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    api_cors_origins           = ["https://staging.example.test"]
+    github_repository          = "example-org/example-repo"
+    github_repository_id       = "100000001"
+    github_repository_owner_id = "200000002"
+    api_desired_count          = 2
+    api_max_count              = 3
+    api_db_pool_max            = 5
+    db_connection_budget       = 50
   }
 
   expect_failures = [aws_db_instance.main]
