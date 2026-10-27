@@ -6,6 +6,7 @@
     "prebuild": "node ../../scripts/workspace-build/workspace.cjs prepare shared-types cpic-schema jobs",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
+    "start:evaluation-worker": "node dist/evaluation-worker.js",
     "pretypecheck": "node ../../scripts/workspace-build/workspace.cjs prepare shared-types cpic-schema fake-idp jobs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

@@ -6,6 +6,15 @@ import type { Principal } from '../../auth/principal';
 import { AppException } from '../../common/app-exception';
 import type { Database } from '../../db/database';
 
+export interface EvaluationRequestForJob {
+  requestedBy: string;
+  reportId: string;
+  captureId: string;
+  acceptanceId: string;
+  executionProfile: EvaluationExecutionProfile;
+  completed: boolean;
+}
+
 export class EvaluationRequestsRepository {
   constructor(private readonly database: Database) {}
 
@@ -40,6 +49,42 @@ export class EvaluationRequestsRepository {
     return this.access(principal, async (client) => {
       await client.query('SELECT evaluation_request_authorize(false)');
       return this.read(client, principal.tenantId, id);
+    });
+  }
+
+  /**
+   * H3, for the worker holding `jobId`: what the request names, and whether it is already complete. Refused with EJ001 unless the caller holds the job
+   * (migration 0051), so a worker whose lease ran out learns it before it reads anything. Read as the organization only: nobody is acting yet.
+   */
+  forJob(tenantId: string, requestId: string, jobId: string, workerId: string): Promise<EvaluationRequestForJob> {
+    return this.database.withTenant(tenantId, async (client) => {
+      const held = await client.query<{ request: string }>('SELECT evaluation_job_fence($1,$2)::text AS request', [jobId, workerId]);
+      const { rows } = await client.query<{
+        requested_by: string;
+        report_id: string;
+        capture_id: string;
+        acceptance_id: string;
+        job_id: string;
+        execution_profile: EvaluationExecutionProfile;
+        completed: boolean;
+      }>(
+        `SELECT r.requested_by,r.report_id::text,r.capture_id::text,r.acceptance_id::text,r.job_id::text,r.execution_profile,
+           EXISTS (SELECT 1 FROM evaluation_request_completions c WHERE c.tenant_id=r.tenant_id AND c.request_id=r.id) AS completed
+         FROM evaluation_requests r WHERE r.tenant_id=$1 AND r.id=$2`,
+        [tenantId, requestId],
+      );
+      const row = rows[0];
+      // The fence names the request its job was admitted with; anything else is a queue row that does not belong to this request.
+      if (!row || held.rows[0]?.request !== requestId || row.job_id !== jobId)
+        throw AppException.conflictBecause('request-job-mismatch', 'That job does not belong to this evaluation request.');
+      return {
+        requestedBy: row.requested_by,
+        reportId: row.report_id,
+        captureId: row.capture_id,
+        acceptanceId: row.acceptance_id,
+        executionProfile: row.execution_profile,
+        completed: row.completed,
+      };
     });
   }
 

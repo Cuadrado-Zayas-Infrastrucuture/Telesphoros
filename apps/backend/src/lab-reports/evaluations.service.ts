@@ -21,7 +21,7 @@ import { linkState } from '../patient-identity/link-state';
 import { type ReaderResult } from '../services/report-reader/reader-result';
 import type { ReadOptions, ReportReader } from '../services/report-reader/report-reader';
 import { LedgerRecordsRepository } from '../storage/ledger-records.repository';
-import type { DisputeStatus, EvaluationInput, Projected } from '../storage/ledger-records';
+import type { DisputeStatus, EvaluationCompletion, EvaluationInput, Projected } from '../storage/ledger-records';
 import { ReportsRepository } from '../storage/reports.repository';
 import { DatabaseCaptureAcceptanceStore } from './acceptance-store';
 import { type EvaluationContext, toEvaluationDto, toEvaluationSummaryDto } from './lab-report.mapper';
@@ -36,6 +36,11 @@ export const LAB_READER = Symbol('LAB_READER');
 const MAX_TEXT_BYTES = 400_000;
 /** The reader failing to RUN (as opposed to a fact about this text) is operational: nothing is stored and no key is consumed. */
 const OPERATIONAL_READER_FAILURES = new Set(['source-time-budget', 'worker-error']);
+
+export interface EvaluationCreateOptions extends ReadOptions {
+  /** H3: the admitted request this evaluation completes, stored with it or not at all (EvaluationCompletion). Only the request consumer passes it. */
+  completion?: EvaluationCompletion;
+}
 
 export interface EvaluationOutcome {
   evaluation: EvaluationDto;
@@ -68,7 +73,7 @@ export class EvaluationsService {
    * Evaluates an accepted capture (plan section 6). Everything that can be refused is refused BEFORE the reader runs, and nothing is
    * stored by a refusal. The reader and the engine run outside any database transaction; one transaction stores the result.
    */
-  async create(principal: Principal, reportId: string, body: EvaluationCreate, options: ReadOptions = {}): Promise<EvaluationOutcome> {
+  async create(principal: Principal, reportId: string, body: EvaluationCreate, options: EvaluationCreateOptions = {}): Promise<EvaluationOutcome> {
     const ledger = this.need(this.ledger);
     const runner = this.need(this.runner);
     const knowledge = this.need(this.knowledge);
@@ -124,7 +129,7 @@ export class EvaluationsService {
       const active = (await ledger.listDisputes(principal.tenantId)).filter((d) => d.status !== 'dismissed');
       const input = { ...this.build(report.patientId, report.id, capture.id, adapted, knowledge, runner, active), patientLinkDecisionId: link.decision!.id };
       try {
-        const result = await ledger.insertEvaluation(principal.tenantId, principal.sub, input);
+        const result = await ledger.insertEvaluation(principal.tenantId, principal.sub, input, options.completion);
         return { evaluation: await this.present(principal.tenantId, result.record), created: result.created };
       } catch (error) {
         if (error instanceof PatientLinkUnverifiedError) throw this.unverified();

@@ -9,7 +9,7 @@ import { migrateDown, migrateUp } from '../../src/db/migrator';
 import { provisionLogins, type SecretStore } from '../../src/db/provision-logins';
 import { pgClientConfig } from '../../src/db/tls';
 import { adminUrl, withAdmin } from '../helpers/database';
-import { acceptanceFor, captureFor, seedLabReport } from '../helpers/ledger-fixtures';
+import { acceptanceFor, captureFor, evaluationFor, seedLabReport } from '../helpers/ledger-fixtures';
 import { revertAbove, revertThrough } from '../helpers/migration-history';
 
 /**
@@ -249,8 +249,8 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
     const f = await fixture();
     try {
       expect((await f.migrator.query('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user')).rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });
-      expect(await migrateDown(f.migrator, 1)).toEqual(['0050']);
-      expect(await migrateUp(f.migrator)).toEqual(['0050']);
+      expect(await migrateDown(f.migrator, 2)).toEqual(['0051', '0050']);
+      expect(await migrateUp(f.migrator)).toEqual(['0050', '0051']);
       expect((await stillForced(f.migrator)).every((t) => t.f)).toBe(true);
     } finally {
       await f.drop();
@@ -304,12 +304,14 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
           { actor },
         );
         const admitted = await service.admit(principal, { reportId: report.reportId, captureId: stored.record.id, acceptanceId: acceptance.record.id, requestId: randomUUID() });
+        expect(await migrateDown(f.migrator, 1)).toEqual(['0051']); // H3 holds no completion yet, so it reverts; then 0050's own guard is under test
         await expect(migrateDown(f.migrator, 1)).rejects.toThrow('Durable evaluation work must be preserved');
         expect(await service.get(principal, admitted.request.id)).toEqual(admitted.request);
       } else {
         await connection.withTenant(tenant, (c) => enqueueJob(c, evaluationRequest, { requestId: randomUUID() }, { idempotencyKey: `evaluation-request:${randomUUID()}` }), {
           actor,
         });
+        expect(await migrateDown(f.migrator, 1)).toEqual(['0051']);
         await expect(migrateDown(f.migrator, 1)).rejects.toThrow('Durable evaluation work must be preserved');
       }
       expect((await f.migrator.query("SELECT version FROM schema_migrations WHERE version='0050'")).rowCount).toBe(1);
@@ -319,6 +321,66 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
       expect(forced).toEqual([{ forced: true }, { forced: true }]);
       await withAdmin(f.admin, async (c) => {
         expect((await c.query("SELECT count(*)::int AS n FROM jobs WHERE tenant_id=$1 AND type='evaluations.request'", [tenant])).rows[0].n).toBe(1);
+      });
+    } finally {
+      await connection.onModuleDestroy();
+      await f.drop();
+    }
+  });
+
+  it('refuses to revert H3 while a completion exists, as the restricted migrator, and restores forced RLS', async () => {
+    const f = await fixture();
+    const connection = new Database({ url: f.app, ssl: 'disable' });
+    try {
+      const report = await seedLabReport(f.admin, tenant);
+      const actor = 'syn-h3-clinician';
+      const ledger = new PostgresLedgerRecordsRepository(connection);
+      await withAdmin(f.admin, (c) =>
+        c.query(`INSERT INTO tenant_memberships (tenant_id,sub,status,roles,changed_by) VALUES ($1,$2,'active',ARRAY['clinician'],'syn-test')`, [tenant, actor]),
+      );
+      const capture = captureFor(report);
+      const stored = await ledger.insertCapture(tenant, report.uploader, capture);
+      const acceptance = await ledger.insertAcceptance(tenant, 'syn-reviewer', acceptanceFor(stored.record.id, capture));
+      const linked = await ledger.insertPatientDecision(tenant, 'syn-verifier', {
+        reportId: report.reportId,
+        expectedReport: { patientId: report.patientId, sha256: report.pdfSha256, objectVersion: report.objectVersion },
+        decision: 'verified',
+        method: 'person-confirmed',
+        basisCode: 'no-identifier-on-report',
+      });
+      const evaluation = await ledger.insertEvaluation(tenant, actor, evaluationFor(report, stored.record.id, acceptance.record.id, { patientLinkDecisionId: linked.record.id }));
+      const service = new EvaluationRequestsService(new EvaluationRequestsRepository(connection), {
+        version: 'evaluation-execution-profile/1',
+        codeArtifactSha256: hash,
+        executionManifestSha256: hash,
+        knowledgeSetId: hash,
+        recordingsSha256: hash,
+      });
+      const { request } = await service.admit(
+        { tenantId: tenant, sub: actor, roles: ['clinician'] },
+        { reportId: report.reportId, captureId: stored.record.id, acceptanceId: acceptance.record.id, requestId: randomUUID() },
+      );
+      // Written past the table's own check, as only the owner could: what is under test is the down migration's refusal, not how the row got there.
+      await withAdmin(f.admin, async (c) => {
+        await c.query('BEGIN');
+        await c.query('SET LOCAL session_replication_role = replica');
+        await c.query('INSERT INTO evaluation_request_completions (request_id,tenant_id,evaluation_id,job_id,worker_id) VALUES ($1,$2,$3,$4,$5)', [
+          request.id,
+          tenant,
+          evaluation.record.id,
+          request.jobId,
+          'syn-worker',
+        ]);
+        await c.query('COMMIT');
+      });
+      expect((await f.migrator.query('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user')).rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });
+
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow('Durable evaluation work must be preserved');
+
+      expect((await f.migrator.query("SELECT version FROM schema_migrations WHERE version='0051'")).rowCount).toBe(1);
+      expect((await f.migrator.query("SELECT relforcerowsecurity AS forced FROM pg_class WHERE oid='evaluation_request_completions'::regclass")).rows).toEqual([{ forced: true }]);
+      await withAdmin(f.admin, async (c) => {
+        expect((await c.query('SELECT count(*)::int AS n FROM evaluation_request_completions WHERE tenant_id=$1', [tenant])).rows[0].n).toBe(1);
       });
     } finally {
       await connection.onModuleDestroy();

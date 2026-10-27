@@ -54,6 +54,7 @@ describe('every database connection goes through the TLS contract', () => {
       'db/evidence-inventory.ts',
       'db/provision-logins.ts',
       'db/restore.ts',
+      'evaluation-worker.ts',
       'issuer/issuer-core.ts',
       'ledger/verifier.ts',
     ]);

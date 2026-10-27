@@ -16,6 +16,19 @@ it('keeps H1 out of runtime API registration and the production consumer set', (
   expect(readFileSync(join(root, 'apps/worker/src/main.ts'), 'utf8')).not.toMatch(/evaluationRequest|evaluations\.request/);
 });
 
+it('keeps the H3 consumer in its own switched-off entry point: not in the API process and not in any deployment', () => {
+  expect(readFileSync(join(root, 'apps/backend/src/main.ts'), 'utf8')).not.toMatch(/evaluation-worker|EvaluationRequestConsumer/);
+  expect(readFileSync(join(root, 'apps/backend/src/evaluation-worker.ts'), 'utf8')).toMatch(/loadEvaluationWorkerConfig\(env\)/);
+  const deployment = ['infrastructure', '.github/workflows'].flatMap((dir) =>
+    readdirSync(join(root, dir), { withFileTypes: true, recursive: true })
+      .filter((entry) => entry.isFile() && !/node_modules|\.terraform/.test(entry.parentPath))
+      .map((entry) => join(entry.parentPath, entry.name)),
+  );
+  expect(deployment.length).toBeGreaterThan(10);
+  const naming = deployment.filter((file) => /evaluation-worker|EVALUATION_WORKER/.test(readFileSync(file, 'latin1')));
+  expect(naming).toEqual([]);
+});
+
 it('keeps inference-provider configuration out of the strict queue payload', () => {
   const requestId = '11111111-1111-4111-8111-111111111111';
   expect(evaluationRequest.payload.parse({ requestId })).toEqual({ requestId });

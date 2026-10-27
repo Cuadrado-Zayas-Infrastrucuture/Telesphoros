@@ -373,6 +373,23 @@ it('reports queue progress without fabricating a clinical completion or hold', a
   }
 });
 
+/**
+ * A receipt written straight into the table, as only the database owner could, for the read-side checks below. Since H3 (migration 0051) the table's own
+ * check refuses such a row from anyone not holding the job, and this asserts that first; the planted row then stands for a damaged or legacy receipt, which
+ * the status read must still refuse to present as a completion.
+ */
+async function plantedReceipt(request: { id: string; jobId: string }, tenantId: string, evaluationId: string): Promise<void> {
+  const insert = 'INSERT INTO evaluation_request_completions (request_id,tenant_id,evaluation_id,job_id,worker_id) VALUES ($1,$2,$3,$4,$5)';
+  const values = [request.id, tenantId, evaluationId, request.jobId, 'syn-planted'];
+  await withAdmin(pg.adminUrl, async (client) => {
+    await expect(client.query(insert, values)).rejects.toMatchObject({ code: '42501' });
+    await client.query('BEGIN');
+    await client.query('SET LOCAL session_replication_role = replica');
+    await client.query(insert, values);
+    await client.query('COMMIT');
+  });
+}
+
 it('reads a valid completion receipt before queue ACK, and refuses a mismatched evaluation receipt', async () => {
   const x = await eligible();
   const admitted = await service().admit(x.principal, x.input);
@@ -381,13 +398,7 @@ it('reads a valid completion receipt before queue ACK, and refuses a mismatched 
     'syn-system',
     evaluationFor(x.report, x.input.captureId, x.input.acceptanceId, { patientLinkDecisionId: x.linked.record.id }),
   );
-  await withAdmin(pg.adminUrl, async (client) => {
-    await client.query('INSERT INTO evaluation_request_completions (request_id,tenant_id,evaluation_id) VALUES ($1,$2,$3)', [
-      admitted.request.id,
-      x.principal.tenantId,
-      evaluation.record.id,
-    ]);
-  });
+  await plantedReceipt(admitted.request, x.principal.tenantId, evaluation.record.id);
   expect(await service().get(x.principal, admitted.request.id)).toMatchObject({ state: 'completed', evaluationId: evaluation.record.id });
   expect(
     await database.withTenant(
@@ -401,13 +412,7 @@ it('reads a valid completion receipt before queue ACK, and refuses a mismatched 
   const c = await x.ledger.insertCapture(x.principal.tenantId, report.uploader, capture);
   const a = await x.ledger.insertAcceptance(x.principal.tenantId, 'syn-reviewer', acceptanceFor(c.record.id, capture));
   const foreignContext = await x.ledger.insertEvaluation(x.principal.tenantId, 'syn-system', evaluationFor(report, c.record.id, a.record.id));
-  await withAdmin(pg.adminUrl, async (client) => {
-    await client.query('INSERT INTO evaluation_request_completions (request_id,tenant_id,evaluation_id) VALUES ($1,$2,$3)', [
-      other.request.id,
-      x.principal.tenantId,
-      foreignContext.record.id,
-    ]);
-  });
+  await plantedReceipt(other.request, x.principal.tenantId, foreignContext.record.id);
   await expect(service().get(x.principal, other.request.id)).rejects.toMatchObject({ status: 503 });
 });
 
@@ -419,17 +424,11 @@ it('refuses a completion receipt for the same source evaluated with a different 
     'syn-system',
     evaluationFor(x.report, x.input.captureId, x.input.acceptanceId, { patientLinkDecisionId: x.linked.record.id, knowledgeSetId: sha('other knowledge') }),
   );
-  await withAdmin(pg.adminUrl, (client) =>
-    client.query('INSERT INTO evaluation_request_completions (request_id,tenant_id,evaluation_id) VALUES ($1,$2,$3)', [
-      admitted.request.id,
-      x.principal.tenantId,
-      evaluation.record.id,
-    ]),
-  );
+  await plantedReceipt(admitted.request, x.principal.tenantId, evaluation.record.id);
   await expect(service().get(x.principal, admitted.request.id)).rejects.toMatchObject({ status: 503 });
 });
 
-it('enforces forced RLS, immutable requests and no worker/completion-write privileges under real restricted logins', async () => {
+it('enforces forced RLS, immutable requests, no worker privileges, and a completion grant only behind the H3 check, under real restricted logins', async () => {
   const x = await eligible();
   const { request } = await service().admit(x.principal, x.input);
   const flags = await database.withTenant(
@@ -450,7 +449,7 @@ it('enforces forced RLS, immutable requests and no worker/completion-write privi
     can_update: false,
     can_delete: false,
     can_truncate: false,
-    can_complete: false,
+    can_complete: true, // H3 (0051): granted, and refused by the table's own check unless the caller holds the job (evaluation-request-worker.e2e-spec)
     rolsuper: false,
     rolbypassrls: false,
   });
@@ -583,26 +582,48 @@ it('copies/freezes the trusted profile and excludes caller-selected model/provid
 });
 
 it('refuses rollback of admitted durable work and leaves its row/job readable', async () => {
-  const x = await eligible();
-  const admitted = await service().admit(x.principal, x.input);
-  await expect(withAdmin(pg.adminUrl, (client) => migrateDown(client))).rejects.toThrow('Durable evaluation work must be preserved');
-  expect(await service().get(x.principal, admitted.request.id)).toEqual(admitted.request);
-  expect(await counts(x.principal.tenantId)).toEqual({ requests: 1, jobs: 1 });
+  // Its own database: reverting 0051 (H3, above this migration) first must not change the schema the other tests share.
+  const isolated = await createEphemeralDatabase();
+  const connection = new Database({ url: isolated.appUrl, ssl: 'disable' });
+  try {
+    const x = await eligible({ pg: isolated, database: connection });
+    const admitted = await service(connection).admit(x.principal, x.input);
+    expect(await withAdmin(isolated.adminUrl, (client) => migrateDown(client))).toEqual(['0051']); // nothing completed yet, so H3 reverts
+    await expect(withAdmin(isolated.adminUrl, (client) => migrateDown(client))).rejects.toThrow('Durable evaluation work must be preserved');
+    expect(await withAdmin(isolated.adminUrl, (client) => migrateUp(client))).toEqual(['0051']);
+    expect(await service(connection).get(x.principal, admitted.request.id)).toEqual(admitted.request);
+    const kept = await connection.withTenant(
+      x.principal.tenantId,
+      async (client) =>
+        (
+          await client.query(
+            `SELECT (SELECT count(*)::int FROM evaluation_requests WHERE tenant_id=$1) AS requests,
+            (SELECT count(*)::int FROM jobs WHERE tenant_id=$1 AND type='evaluations.request') AS jobs`,
+            [x.principal.tenantId],
+          )
+        ).rows[0],
+    );
+    expect(kept).toEqual({ requests: 1, jobs: 1 });
+  } finally {
+    await connection.onModuleDestroy();
+    await isolated.drop();
+  }
 });
 
 it('round-trips an empty migration and refuses to orphan an existing evaluation queue job', async () => {
   const isolated = await createEphemeralDatabase();
   const connection = new Database({ url: isolated.appUrl, ssl: 'disable' });
   try {
-    expect(await withAdmin(isolated.adminUrl, (client) => migrateDown(client))).toEqual(['0050']);
+    expect(await withAdmin(isolated.adminUrl, (client) => migrateDown(client, 2))).toEqual(['0051', '0050']);
     expect(await withAdmin(isolated.adminUrl, async (client) => (await client.query("SELECT to_regclass('public.evaluation_requests') AS requests")).rows[0].requests)).toBeNull();
-    expect(await withAdmin(isolated.adminUrl, (client) => migrateUp(client))).toEqual(['0050']);
+    expect(await withAdmin(isolated.adminUrl, (client) => migrateUp(client))).toEqual(['0050', '0051']);
     const report = await seedLabReport(isolated.adminUrl, `syn-${randomUUID()}`);
     await connection.withTenant(
       report.tenantId,
       (client) => enqueueJob(client, evaluationRequest, { requestId: randomUUID() }, { idempotencyKey: `evaluation-request:${randomUUID()}` }),
       { actor: report.uploader },
     );
+    expect(await withAdmin(isolated.adminUrl, (client) => migrateDown(client))).toEqual(['0051']);
     await expect(withAdmin(isolated.adminUrl, (client) => migrateDown(client))).rejects.toThrow('Durable evaluation work must be preserved');
   } finally {
     await connection.onModuleDestroy();
