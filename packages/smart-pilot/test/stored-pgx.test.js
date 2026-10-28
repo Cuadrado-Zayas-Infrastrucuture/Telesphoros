@@ -104,6 +104,8 @@ const capture = () => records[`/captures/${uuid(4)}`];
 test('maps authorized stored DTOs through the common R4 builder without fabricated bytes, versions or recommendation text', async () => {
   evaluation().results = [
     {
+      id: uuid(9),
+      ordinal: 0,
       drug: 'synthetic-drug',
       genes: ['CYP2C19'],
       outcome: 'shown',
@@ -129,6 +131,7 @@ test('maps authorized stored DTOs through the common R4 builder without fabricat
   expect(resources.find((r) => r.resourceType === 'DiagnosticReport').identifier[0].value).toBe(uuid(3));
   expect(resources.find((r) => r.resourceType === 'DiagnosticReport').extension.map((e) => e.valueString)).toContain(uuid(4));
   expect(JSON.stringify(result)).not.toContain('DO NOT EXPORT THIS');
+  expect(JSON.stringify(result.bundle)).not.toContain(uuid(9)); // the stored result reference (spec 006 D01a) is not exported either
   expect(JSON.stringify(result)).not.toContain(config.readers[0].token);
   expect(calls).toHaveLength(9);
   expect(calls.every((c) => c.options.token === config.readers[0].token && !c.options.form)).toBe(true);
