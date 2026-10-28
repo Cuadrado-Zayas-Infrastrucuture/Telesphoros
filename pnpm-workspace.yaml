@@ -18,3 +18,6 @@ overrides:
   # Express release carries them; drop these two lines then.
   body-parser: 2.4.0
   multer: 2.5.0
+  # .npmrc sets engine-strict and Node stays at 22.22.0 (Unicode 16.0, which the lab-report matcher requires). jsdom 30
+  # needs Node >=22.22.2, whose Unicode is 17.0, so hold every jsdom, including vitest's optional peer, on 29.
+  jsdom: ^29.1.1

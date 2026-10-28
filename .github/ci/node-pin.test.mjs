@@ -1,7 +1,8 @@
 // Run with: node --test .github/ci/node-pin.test.mjs   (pnpm test:ci-config)
 // One Node version everywhere. The lab-report matcher refuses a runtime whose Unicode version differs from the one it was
 // built for (apps/backend/src/services/report-adapter/unavailable-matcher.ts), so a developer on another major sees dozens
-// of suites fail at import. .nvmrc is the source of truth; CI, the image, and the engines range must agree with it.
+// of suites fail at import. .nvmrc is the source of truth; CI, the image, and the engines range must agree with it, and
+// .npmrc's engine-strict makes pnpm refuse to install on a Node outside that range.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -9,7 +10,7 @@ import { test } from 'node:test';
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 
 /** Every place that pins Node, compared with .nvmrc. Returns a list of problems; empty means they agree. */
-export function nodePinProblems({ nvmrc, workflows, dockerfile, packageJson }) {
+export function nodePinProblems({ nvmrc, workflows, dockerfile, packageJson, npmrc }) {
   const problems = [];
   const pinned = nvmrc.trim();
   if (!/^\d+\.\d+\.\d+$/.test(pinned)) return ['.nvmrc must hold one exact version, such as 22.22.0'];
@@ -22,6 +23,8 @@ export function nodePinProblems({ nvmrc, workflows, dockerfile, packageJson }) {
   const [major] = pinned.split('.');
   const engines = JSON.parse(packageJson).engines?.node;
   if (engines !== `>=${pinned} <${Number(major) + 1}`) problems.push(`package.json: engines.node must be ">=${pinned} <${Number(major) + 1}" (found ${JSON.stringify(engines)})`);
+  const strict = [...(npmrc ?? '').matchAll(/^\s*engine-strict\s*=\s*(\S*)\s*$/gm)].map((m) => m[1]);
+  if (strict.length !== 1 || strict[0] !== 'true') problems.push(`.npmrc: must set engine-strict=true exactly once (found ${JSON.stringify(strict)})`);
   return problems;
 }
 
@@ -30,9 +33,10 @@ const current = () => ({
   workflows: { 'ci.yml': read('../workflows/ci.yml'), 'rescan.yml': read('../workflows/rescan.yml') },
   dockerfile: read('../../infrastructure/docker/api.Dockerfile'),
   packageJson: read('../../package.json'),
+  npmrc: read('../../.npmrc'),
 });
 
-test('.nvmrc, both workflows, the API image and the engines range pin the same Node', () => {
+test('.nvmrc, both workflows, the API image and the engines range pin the same Node, and .npmrc enforces it', () => {
   assert.deepEqual(nodePinProblems(current()), []);
 });
 
@@ -45,6 +49,9 @@ test('the pin check reports each kind of drift', () => {
     { ...base, dockerfile: base.dockerfile.replace(`node:${pinned}-`, `node:${other}-`) },
     { ...base, packageJson: base.packageJson.replace(/"node": "[^"]*"/, '"node": ">=22"') },
     { ...base, nvmrc: other },
+    { ...base, npmrc: '' },
+    { ...base, npmrc: base.npmrc.replace('engine-strict=true', 'engine-strict=false') },
+    { ...base, npmrc: `${base.npmrc}engine-strict=false\n` },
   ];
   for (const input of drift) assert.notDeepEqual(nodePinProblems(input), [], 'drift went unreported');
 });
