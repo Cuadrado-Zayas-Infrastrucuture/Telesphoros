@@ -50,8 +50,10 @@ resource "aws_iam_policy" "app_runtime" {
 data "aws_iam_policy_document" "backup_job" {
   count = local.offsite_count
   statement {
+    # Every upload sets Object Lock retention, which S3 authorizes as s3:PutObjectRetention on top of s3:PutObject (audit 2026-10-27, I2).
+    # Never s3:BypassGovernanceRetention: the job can set a lock, not shorten one.
     sid       = "UploadBackups"
-    actions   = ["s3:PutObject"]
+    actions   = ["s3:PutObject", "s3:PutObjectRetention"]
     resources = ["${aws_s3_bucket.backups[0].arn}/*"]
   }
   statement {
