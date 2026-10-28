@@ -165,7 +165,7 @@ signed business associate agreement first. Until then backups contain synthetic 
 | You have | Do |
 | --- | --- |
 | Docker | `docker compose -f infrastructure/docker/docker-compose.yml up -d` (PostgreSQL 16 + MinIO) |
-| No Docker | `apps/backend/scripts/dev-postgres.sh start` (a throwaway local PostgreSQL; trust auth, 127.0.0.1 only) |
+| No Docker | `apps/backend/scripts/dev-postgres.sh start` (a throwaway local PostgreSQL; password `postgres` checked with scram-sha-256 as in CI, 127.0.0.1 only; a cluster made before 2026-10-28 used trust and must be `reset`) |
 
 ## Tests
 
