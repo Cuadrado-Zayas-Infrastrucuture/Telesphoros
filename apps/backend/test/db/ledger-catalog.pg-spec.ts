@@ -49,6 +49,14 @@ describe('catalog guard: the audit tables are classified and protected as their 
         );
         expect(checks.map((c) => c.name)).toContain('evaluation_completion_check');
       }
+      if (row.relname === 'evaluation_request_cancellations') {
+        // H4 (0054): the application may insert a cancellation only through this check, which cancels the job if it has not started (evaluation-request-cancel.e2e-spec).
+        const checks = await q<{ name: string }>(
+          `SELECT p.proname AS name FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid WHERE t.tgrelid=$1::regclass AND NOT t.tgisinternal`,
+          [row.relname],
+        );
+        expect(checks.map((c) => c.name)).toContain('evaluation_cancellation_check');
+      }
       const guards = await q<{ mask: number }>(
         `SELECT tgtype::int AS mask FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid WHERE tgrelid=$1::regclass AND p.proname='refuse_mutation'`,
         [row.relname],
