@@ -168,8 +168,8 @@ test('main writes both outputs and a summary that names no value beyond ids', as
 const CONDITION = { verify: guardsCondition, 'service-memory': heavyCondition, 'service-postgres': postgresCondition, 'service-postgres-s3': heavyCondition,
   browser: heavyCondition, terraform: terraformCondition, 'terraform-lint': terraformCondition };
 /** The steps of verify that only a code change needs. The install and the three guards that read documentation (test:infra, test:ci-config, check:workflows) are not here and carry no condition: test:infra loads the backend's config loader, which needs zod. */
-const HEAVY_STEPS = ['Typecheck', 'Lint', 'Workspace tests', 'Production builds', 'Published FHIR Genomics IG validation (synthetic only)',
-  'Frontend chunk budget', 'Knowledge directory loads under production rules', 'Demo users and verify-script reports'];
+const HEAVY_STEPS = ['Typecheck', 'Lint', 'Workspace tests', 'Production builds', 'Cache the FHIR validator, the IG and its packages',
+  'Published FHIR Genomics IG validation (synthetic only)', 'Frontend chunk budget', 'Knowledge directory loads under production rules', 'Demo users and verify-script reports'];
 const draftCondition = '${{ github.event.pull_request.draft != true }}';
 const secretScanCondition = "${{ !cancelled() && needs.changes.result != 'skipped' }}";
 const lines = (block, key) => block.match(new RegExp(`^    ${key}:.*$`, 'gm')) ?? [];
