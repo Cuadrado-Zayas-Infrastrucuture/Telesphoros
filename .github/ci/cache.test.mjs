@@ -22,6 +22,12 @@ function cacheProblems(text, image, pin = gitleaksPin) {
   }
   const browser = job(text, 'browser');
   if (!browser.includes('key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright-version.outputs.version }}')) problems.push('browser cache follows installed Playwright and architecture');
+  const verify = job(text, 'verify');
+  const fhirCache = verify.indexOf('- name: Cache the FHIR validator, the IG and its packages');
+  const fhirRun = verify.indexOf('FHIR_ARTIFACT_DIR="$HOME/.cache/telesphoros-fhir-ig" pnpm --filter @telesphoros/smart-pilot test:ig');
+  if (!verify.includes("key: fhir-ig-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/smart-pilot/test/fhir-ig/validate.mjs') }}")) problems.push('FHIR IG cache follows the script that pins its artifacts, and architecture');
+  if (!/path: \|\n\s+~\/\.fhir\/packages\n\s+~\/\.cache\/telesphoros-fhir-ig\n/.test(verify)) problems.push('FHIR IG cache holds the validator packages and the pinned downloads');
+  if (fhirCache < 0 || fhirRun < fhirCache) problems.push('the IG validation reads its artifacts from the cache restored before it');
   const build = job(text, 'image');
   if (!build.includes('cache-from: type=gha,scope=api-amd64-v1,timeout=2m') || !build.includes('cache-to: type=gha,scope=api-amd64-v1,mode=max,ignore-error=true,timeout=2m')) problems.push('bounded scoped image cache');
   const positions = ['COPY pnpm-lock.yaml pnpm-workspace.yaml ./', 'RUN pnpm fetch --frozen-lockfile', 'COPY . .', 'RUN pnpm install --frozen-lockfile --offline'].map(s => image.indexOf(s));
@@ -69,6 +75,9 @@ test('cache controls reject stale browser keys, optional scanning and invalid la
   for (const [text, image] of [
     [workflow.replace('cache: true', 'cache: false'), dockerfile],
     [workflow.replace('steps.playwright-version.outputs.version', "hashFiles('pnpm-lock.yaml')"), dockerfile],
+    [workflow.replace("hashFiles('packages/smart-pilot/test/fhir-ig/validate.mjs')", "hashFiles('pnpm-lock.yaml')"), dockerfile],
+    [workflow.replace('            ~/.fhir/packages\n', ''), dockerfile],
+    [workflow.replace('FHIR_ARTIFACT_DIR="$HOME/.cache/telesphoros-fhir-ig" ', ''), dockerfile],
     [workflow.replace('- name: Scan the full history\n', '- name: Scan the full history\n        if: false\n'), dockerfile],
     [workflow.replace('- name: Install gitleaks v8.30.1\n', '- name: Install gitleaks v8.30.1\n        if: false\n'), dockerfile],
     [workflow.replace('timeout=2m', 'timeout=20m'), dockerfile],
