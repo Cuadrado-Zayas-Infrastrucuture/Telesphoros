@@ -22,6 +22,9 @@
 .chat-workspace .chat-surface { display: flex; flex-direction: column; height: var(--size-chat-workspace); min-height: var(--size-chat-min); }
 .chat-workspace .preview-conversation { height: auto; min-height: 0; flex: 1; }
 .chat-workspace .preview-conversation > div { max-width: var(--size-prose); margin-inline: auto; }
+/* The non-scrolling frame holds the top blur edge; messages start below it, so nothing rests under blur. */
+.chat-workspace .conversation-frame { position: relative; display: flex; flex: 1; flex-direction: column; min-height: 0; --progressive-blur-ground: var(--panel); }
+.chat-workspace .conversation-frame > .preview-conversation { padding-top: var(--size-blur-edge); }
 .chat-workspace .chat-surface > div:last-child { flex-shrink: 0; }
 .chat-workspace .mascot-welcome--assistant { padding-block: 2rem; }
 .chat-workspace .context-drawer .preview-conversation { height: auto; }

@@ -23,3 +23,18 @@ The same pinned upstream was inspected for `tool`, `chain-of-thought`, `steps`, 
 The workspace now composes the existing Prompt Kit Reasoning, ThinkingBar, SystemMessage and Source adapters in the conversation. Each completed exchange has a collapsed explanation summary, with distinct matched-example and fallback descriptions. SourceTrigger opens the existing drawer directly to its expanded fixture source; the toolbar still opens general report context. The three preparation phases are explicitly simulated, use the existing SDK stage events, and disappear on Stop/error/completion. The visible System message is a UI notice; model prompts and transport are unchanged.
 
 The upstream docs again returned 403; the four pinned official source components were inspected directly. Native disclosure, local source details, project tokens, 44px controls and reduced-motion styles are retained. No dependencies, remote favicons, model calls or clinical citations were added.
+
+## Registry items deliberately not adopted (2026-10-27)
+
+Checked against the 23 items in `https://prompt-kit.com/c/registry.json` (spec 005, slice 3). Each one below was left out for a reason, not overlooked:
+
+| Item | Why not |
+| --- | --- |
+| `chat-container` | `SyntheticAssistant` already follows the newest message, stops following when the reader scrolls up, and offers ScrollButton. Upstream would add `use-stick-to-bottom` to replace working code. |
+| `response-stream` | A typing animation adds motion and delays reading. Synthetic answers arrive whole. |
+| `markdown`, `code-block` | Removed earlier with the HTML/markdown renderer. Answers render as text. |
+| `jsx-preview` | Renders JSX it is given. Model or user text must never become markup. |
+| `chain-of-thought` | Tool and Steps show simulated process status, never private reasoning (above). |
+| `chatbot`, `tool-calling` | Full blocks with server routes and a live model. A live transport needs its own privacy, clinical and evaluation approval. |
+
+The full chat workspace now fades messages under `ProgressiveBlur` at the conversation's top edge (`components/motion-primitives`). The embedded assistant has no edge: at 5 to 7rem tall, a 3rem edge would cover half of it.
