@@ -390,9 +390,11 @@ data "aws_iam_policy_document" "backups_bucket" {
       values   = ["false"]
     }
   }
-  # Backups must be encrypted with OUR key; an upload that omits or changes that is refused.
+  # Backups are encrypted only with OUR key. The uploader sends no encryption header by default and relies on the bucket default (the
+  # backup key), so, as on the reports bucket, each deny pairs "the header is present" (Null = false) with "and it is wrong": a bare
+  # StringNotEquals would refuse every header-less upload, which is every upload the backup job makes by default (audit 2026-10-27, I1).
   statement {
-    sid       = "DenyUnencryptedUploads"
+    sid       = "DenyOtherEncryption"
     effect    = "Deny"
     actions   = ["s3:PutObject"]
     resources = ["${aws_s3_bucket.backups[0].arn}/*"]
@@ -401,9 +403,71 @@ data "aws_iam_policy_document" "backups_bucket" {
       identifiers = ["*"]
     }
     condition {
+      test     = "Null"
+      variable = "s3:x-amz-server-side-encryption"
+      values   = ["false"]
+    }
+    condition {
       test     = "StringNotEquals"
       variable = "s3:x-amz-server-side-encryption"
       values   = ["aws:kms"]
+    }
+  }
+  statement {
+    sid       = "DenyOtherKey"
+    effect    = "Deny"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.backups[0].arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Null"
+      variable = "s3:x-amz-server-side-encryption-aws-kms-key-id"
+      values   = ["false"]
+    }
+    condition {
+      test     = "StringNotEquals"
+      variable = "s3:x-amz-server-side-encryption-aws-kms-key-id"
+      values   = [aws_kms_key.backup[0].arn]
+    }
+  }
+  # Naming aws:kms WITHOUT a key id makes S3 use the AWS-managed key, not the bucket default: refused, so BACKUP_S3_SSE=aws:kms needs
+  # BACKUP_S3_KMS_KEY_ID set to the backup key (I3).
+  statement {
+    sid       = "DenyManagedKey"
+    effect    = "Deny"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.backups[0].arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "s3:x-amz-server-side-encryption"
+      values   = ["aws:kms"]
+    }
+    condition {
+      test     = "Null"
+      variable = "s3:x-amz-server-side-encryption-aws-kms-key-id"
+      values   = ["true"]
+    }
+  }
+  statement {
+    sid       = "DenyCustomerKeys"
+    effect    = "Deny"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.backups[0].arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Null"
+      variable = "s3:x-amz-server-side-encryption-customer-algorithm"
+      values   = ["false"]
     }
   }
 }
