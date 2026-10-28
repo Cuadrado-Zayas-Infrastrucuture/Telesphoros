@@ -2,7 +2,7 @@
 
 **Branch**: `docs/spec-006-async-evaluation` | **Date**: 2026-10-27 | **Spec**: [spec.md](spec.md)
 
-**Status**: Draft, awaiting the founder's approval with D1 to D5. `tasks.md` is written from this plan once it is approved.
+**Status**: Approved by the founder on 2026-10-27, with D1 to D5 as recommended: *"Approve spec 006 plan.md with D1-D5 as recommended. Write tasks.md, then start slice 1 on its own local branch."*
 
 ## Summary
 

@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-27
 
-**Status**: Draft, awaiting the founder's approval of [plan.md](plan.md). Scope set by the founder on 2026-10-27: *"write spec 006 for H4 behind a flag that is off by default and refused in production; the worker binding stays a separate decision"*.
+**Status**: Approved 2026-10-27 ([plan.md](plan.md), D1 to D5 as recommended). Scope set by the founder on 2026-10-27: *"write spec 006 for H4 behind a flag that is off by default and refused in production; the worker binding stays a separate decision"*.
 
 **Input**: H4 of the engine harness sequence ([H1 plan](../../docs/design/plans/engine-durable-admission.md), "Next scopes"). H1 (PR 80, migration 0050) stores an evaluation request and its queue job. H2 (PR 81) makes a read cancellable through an `AbortSignal`. H3 (PR 82, migration 0051) adds a fenced worker that completes requests. None of them is reachable from the API or the UI.
 
