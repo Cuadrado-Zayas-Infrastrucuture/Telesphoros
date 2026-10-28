@@ -29,12 +29,12 @@ export function accessEvent(context: ExecutionContext, req: Request, outcome: 's
   return routeEvent(context, req, download ? 'download-link' : 'private-read', outcome);
 }
 
-/** A write is recorded before it runs: who asked to change what (the route and the id in its path), never what the change was. */
-export function writeEvent(context: ExecutionContext, req: Request): SecurityAuditEvent {
-  return routeEvent(context, req, 'private-write', 'accepted');
+/** A write is recorded before it runs: who asked to change what (the route and the id in its path), never what the change was. RolesGuard records one it refuses. */
+export function writeEvent(context: ExecutionContext, req: Request, outcome: 'accepted' | 'refused' = 'accepted'): SecurityAuditEvent {
+  return routeEvent(context, req, 'private-write', outcome);
 }
 
-const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+export const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 @Injectable()
 export class SecurityAuditInterceptor implements NestInterceptor {

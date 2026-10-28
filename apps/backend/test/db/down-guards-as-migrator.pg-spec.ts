@@ -249,8 +249,9 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
     const f = await fixture();
     try {
       expect((await f.migrator.query('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user')).rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });
-      expect(await migrateDown(f.migrator, 2)).toEqual(['0051', '0050']);
-      expect(await migrateUp(f.migrator)).toEqual(['0050', '0051']);
+      const through = revertThrough('evaluation_requests');
+      expect(await migrateDown(f.migrator, through.steps)).toEqual(through.reverted);
+      expect(await migrateUp(f.migrator)).toEqual([...through.reverted].reverse());
       expect((await stillForced(f.migrator)).every((t) => t.f)).toBe(true);
     } finally {
       await f.drop();
@@ -304,14 +305,16 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
           { actor },
         );
         const admitted = await service.admit(principal, { reportId: report.reportId, captureId: stored.record.id, acceptanceId: acceptance.record.id, requestId: randomUUID() });
-        expect(await migrateDown(f.migrator, 1)).toEqual(['0051']); // H3 holds no completion yet, so it reverts; then 0050's own guard is under test
+        const above = revertAbove('evaluation_requests');
+        expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted); // H3 holds no completion yet, so it reverts with the newer ones; then 0050's own guard is under test
         await expect(migrateDown(f.migrator, 1)).rejects.toThrow('Durable evaluation work must be preserved');
         expect(await service.get(principal, admitted.request.id)).toEqual(admitted.request);
       } else {
         await connection.withTenant(tenant, (c) => enqueueJob(c, evaluationRequest, { requestId: randomUUID() }, { idempotencyKey: `evaluation-request:${randomUUID()}` }), {
           actor,
         });
-        expect(await migrateDown(f.migrator, 1)).toEqual(['0051']);
+        const above = revertAbove('evaluation_requests');
+        expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted);
         await expect(migrateDown(f.migrator, 1)).rejects.toThrow('Durable evaluation work must be preserved');
       }
       expect((await f.migrator.query("SELECT version FROM schema_migrations WHERE version='0050'")).rowCount).toBe(1);
@@ -375,6 +378,8 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
       });
       expect((await f.migrator.query('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user')).rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });
 
+      const above = revertAbove('evaluation_request_completion');
+      expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted);
       await expect(migrateDown(f.migrator, 1)).rejects.toThrow('Durable evaluation work must be preserved');
 
       expect((await f.migrator.query("SELECT version FROM schema_migrations WHERE version='0051'")).rowCount).toBe(1);
