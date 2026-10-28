@@ -81,6 +81,15 @@ export class PostgresMemberAdminRepository extends MemberAdminRepository {
     }
   }
 
+  /** Row-level security (tenants_own) shows the application role only its own organization; the id filter states the intent too. */
+  organizationName(actor: Principal): Promise<string> {
+    return this.db.withTenant(actor.tenantId, async (client) => {
+      const { rows } = await client.query<{ display_name: string }>('SELECT display_name FROM tenants WHERE id = $1', [actor.tenantId]);
+      if (!rows[0]) throw new Error('The caller’s organization is not visible to this connection.');
+      return rows[0].display_name;
+    });
+  }
+
   createInvitation(actor: Principal, invitation: { digest: Buffer; hint: string; roles: Role[]; request?: { id: string; hash: string } }): Promise<InvitationView> {
     return this.run(actor, async (client) => {
       // With a retry id the keyed function is used; without one, the function that images before it also call.

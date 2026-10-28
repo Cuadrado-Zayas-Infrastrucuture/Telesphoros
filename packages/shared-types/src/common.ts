@@ -23,3 +23,6 @@ export type MeDto = z.infer<typeof meDtoSchema>;
 /** Separate authenticated capability; older backends return 404 for this endpoint. */
 export const recoveryScopeDtoSchema = z.strictObject({ recoveryScope: recoveryScopeSchema });
 export type RecoveryScopeDto = z.infer<typeof recoveryScopeDtoSchema>;
+/** `GET /me/profile`: the caller's own organization, for display. Separate from `/me`; older backends return 404 for it. */
+export const meProfileDtoSchema = z.strictObject({ organization: z.strictObject({ name: z.string().min(1).max(120) }) });
+export type MeProfileDto = z.infer<typeof meProfileDtoSchema>;

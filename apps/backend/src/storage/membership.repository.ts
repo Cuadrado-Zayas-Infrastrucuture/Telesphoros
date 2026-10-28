@@ -178,6 +178,13 @@ export class InMemoryMembershipRepository extends MembershipRepository implement
     this.store({ ...existing, tokensValidAfter: Math.max(existing.tokensValidAfter, nowSeconds()), version: existing.version + 1 });
   }
 
+  /** Mirrors the tenants_own policy: only the actor's own organization is readable. */
+  async organizationName(actor: Principal): Promise<string> {
+    const tenant = this.tenants.get(actor.tenantId);
+    if (!tenant) throw new Error('The caller’s organization is not registered.');
+    return tenant.displayName;
+  }
+
   async changeRoles(actor: Principal, sub: string, roles: Role[]): Promise<void> {
     this.context(actor);
     if (sub === actor.sub) throw new MemberAdminRuleError('member-self');

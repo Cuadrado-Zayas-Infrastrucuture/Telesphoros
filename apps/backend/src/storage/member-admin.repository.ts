@@ -51,6 +51,8 @@ export abstract class MemberAdminRepository {
   abstract removeMember(actor: Principal, sub: string): Promise<void>;
   /** The caller's own sessions in this organization end: tokens issued before now are refused on their next request. */
   abstract signOut(actor: Principal): Promise<void>;
+  /** The display name of the caller's own organization, for Settings. Takes no organization argument: it is always the actor's. */
+  abstract organizationName(actor: Principal): Promise<string>;
   /**
    * Records an invitation. With `request`, a repeat by the same administrator with the same fingerprint returns the invitation already stored under it (whatever its
    * status is now) and a different fingerprint throws the rule `request-id-reused`.
