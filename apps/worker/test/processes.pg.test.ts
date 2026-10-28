@@ -12,6 +12,7 @@ import {
   createFixture,
   effectDir,
   enqueueAs,
+  heldBy,
   jobRow,
   s3Client,
   startWorker,
@@ -106,7 +107,7 @@ describe('a worker that dies', () => {
     await until('the job to start on the doomed worker', async () => (await effects.files()).includes(`${id}.started`));
     doomed.child.kill('SIGKILL');
     await doomed.exited;
-    expect(await jobRow(f.admin, id)).toMatchObject({ state: 'running', locked_by: 'doomed' });
+    expect(await jobRow(f.admin, id)).toMatchObject({ state: 'running', locked_by: expect.stringMatching(heldBy('doomed')) });
     // Nothing else holds a worker: wait for the lease (5 seconds) to run out for real, then start a second worker.
     const rescuer = worker({ WORKER_ID: 'rescuer' });
     await ready(rescuer);
@@ -114,8 +115,8 @@ describe('a worker that dies', () => {
     expect((await effects.files()).filter((x) => x === `${id}.done`)).toHaveLength(1);
     expect((await effects.files()).filter((x) => x.startsWith(`${id}.run-`)).length).toBe(2); // it ran twice: at-least-once, one effect
     expect(await attemptsOf(f.admin, id)).toEqual([
-      { attempt: 1, outcome: 'lease-expired', error_code: 'lease-expired', worker_id: 'doomed' },
-      { attempt: 2, outcome: 'succeeded', error_code: null, worker_id: 'rescuer' },
+      { attempt: 1, outcome: 'lease-expired', error_code: 'lease-expired', worker_id: expect.stringMatching(heldBy('doomed')) },
+      { attempt: 2, outcome: 'succeeded', error_code: null, worker_id: expect.stringMatching(heldBy('rescuer')) },
     ]);
   }, 60_000);
 });
@@ -145,7 +146,7 @@ describe('stopping', () => {
     expect(await jobRow(f.admin, id)).toMatchObject({ state: 'queued', attempts: 0 });
     const next = worker({ WORKER_ID: 'next' });
     await ready(next);
-    await until('the second worker to claim it', async () => (await jobRow(f.admin, id)).locked_by === 'next');
+    await until('the second worker to claim it', async () => heldBy('next').test(String((await jobRow(f.admin, id)).locked_by)));
     expect(await jobRow(f.admin, id)).toMatchObject({ attempts: 1 });
   });
 });
