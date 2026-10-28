@@ -58,7 +58,8 @@ orchestrator would restart healthy processes in a loop.
   (`client_id` and `token_use=access` checked; ID tokens, HS256 and `alg: none` refused; an unreachable key set answers 401,
   never 500); **`hmac`** (development and tests only): a shared secret.
 - **Production fails closed:** `NODE_ENV=production` starts only with the Cognito verifier, no development overrides, PostgreSQL
-  with SSL, S3, and https CORS origins. Details: [docs/auth.md](../../docs/auth.md).
+  with SSL, S3, and https CORS origins. `NODE_ENV` has no default: the API refuses to start without it, so a missing setting cannot
+  mean development. Details: [docs/auth.md](../../docs/auth.md).
 - **CORS** is an exact-match allowlist (`CORS_ALLOWED_ORIGINS`); empty means no cross-origin access. No cookies are used.
 
 ## Configuration
