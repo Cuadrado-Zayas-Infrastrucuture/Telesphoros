@@ -79,7 +79,7 @@ Owner: **F** founder (clinical, product, policy), **E** engineering, **C** couns
 
 ## 4. Historical plans: what is superseded
 
-`docs/design/plans/pgx-data-model-and-data-products.md` (2026-10-19, `ccd4499`, draft) and `pgx-build-prompt-gap-analysis.md` (same snapshot) are kept unchanged. Spec 005 supersedes these assumptions, and only these:
+`docs/design/plans/pgx-data-model-and-data-products.md` (2026-10-19, `ccd4499`, draft) and `pgx-build-prompt-gap-analysis.md` (same snapshot) are kept unchanged. Spec 006 supersedes these assumptions, and only these:
 
 | Historical statement | Current reading |
 | --- | --- |
