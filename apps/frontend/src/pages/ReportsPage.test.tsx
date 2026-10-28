@@ -33,6 +33,8 @@ function fetcher(
   roles: Role[],
   reports: (url: URL) => Promise<Response> = async (url) =>
     json({ data: [row(url.searchParams.get('patientId') || p1)], meta: { page: Number(url.searchParams.get('page')), pageSize: 20, total: 21, totalPages: 2 } }),
+  // The stage count pages the same list at 100 a page; by default it finds nothing to count.
+  stages: (url: URL) => Promise<Response> = async (url) => json({ data: [], meta: { page: Number(url.searchParams.get('page')), pageSize: 100, total: 0, totalPages: 0 } }),
 ) {
   return vi.fn<typeof fetch>(async (input) => {
     const url = new URL(String(input));
@@ -40,6 +42,7 @@ function fetcher(
     if (url.pathname.endsWith('/me/recovery-scope')) return json({ recoveryScope: RECOVERY_SCOPE });
     if (url.pathname.endsWith('/patients'))
       return json({ data: [p1, p2].map((id, i) => ({ id, label: `SYN-${i + 1}`, createdAt: date, updatedAt: date })), meta: { page: 1, pageSize: 20, total: 2, totalPages: 1 } });
+    if (url.searchParams.get('pageSize') === '100') return stages(url);
     return reports(url);
   });
 }
@@ -241,7 +244,7 @@ describe('reports page with real auth and route guards', () => {
     expect(screen.getByLabelText('Filter by patient')).toHaveValue('');
     expect(table).toHaveAttribute('aria-busy', 'false');
     finish(json({ data: [row(p2, false)], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } }));
-    await waitFor(() => expect(api.mock.calls.filter(([url]) => String(url).includes('/reports?'))).toHaveLength(3));
+    await waitFor(() => expect(api.mock.calls.filter(([url]) => String(url).includes('/reports?') && String(url).includes('pageSize=20'))).toHaveLength(3));
     expect(screen.queryByText('Not complete')).not.toBeInTheDocument();
   });
   it.each([
@@ -416,4 +419,70 @@ it('filters only loaded records, clears stale details and restores records witho
   await user.click(screen.getByRole('button', { name: 'Next report page' }));
   await waitFor(() => expect(screen.getByLabelText('Filename on this page')).toHaveValue(''));
   expect(screen.getByLabelText('Storage upload')).toHaveValue('all');
+});
+
+describe('report stages', () => {
+  const stageRows = (patientId = p1) => [
+    { ...row(patientId, false), status: 'received' },
+    { ...row(patientId, true), status: 'processed' },
+    { ...row(patientId, true), status: 'received' },
+    { ...row(patientId, true), status: 'failed' },
+  ];
+  const stagePage = (rows: unknown[]) => async (url: URL) =>
+    json({ data: rows, meta: { page: Number(url.searchParams.get('page')), pageSize: 100, total: rows.length, totalPages: rows.length ? 1 : 0 } });
+  const stageCalls = (api: ReturnType<typeof fetcher>) => api.mock.calls.map(([url]) => new URL(String(url))).filter((url) => url.searchParams.get('pageSize') === '100');
+  const stageValue = (label: string) => within(screen.getByRole('region', { name: 'Report stages' })).getByText(label).nextElementSibling;
+
+  it('counts Registered, File uploaded and Read for the filter, with Failed as a word beside them', async () => {
+    vi.stubGlobal('location', { hostname: '127.0.0.1' });
+    const api = fetcher(['reviewer'], undefined, stagePage(stageRows()));
+    const { container } = renderApp('/reports', { signedInAs: ['reviewer'], fetchImpl: api });
+    await heading();
+    const stages = await screen.findByRole('region', { name: 'Report stages' });
+    await within(stages).findByText('Registered');
+    expect(stageValue('Registered')).toHaveTextContent('4 100%');
+    expect(stageValue('File uploaded')).toHaveTextContent('3 75%');
+    expect(stageValue('Read')).toHaveTextContent('1 25%');
+    expect(within(stages).getByText('Failed').parentElement).toHaveTextContent('Failed 1');
+    expect(within(stages).getByText(/not clinical review/)).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('recounts when the patient filter changes or Refresh is pressed, not when the table pages', async () => {
+    vi.stubGlobal('location', { hostname: '127.0.0.1' });
+    const api = fetcher(['reviewer'], undefined, async (url) => stagePage(stageRows(url.searchParams.get('patientId') || p1))(url));
+    renderApp('/reports', { signedInAs: ['reviewer'], fetchImpl: api });
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: 'Open synthetic.vcf' });
+    await waitFor(() => expect(stageCalls(api)).toHaveLength(1));
+    await user.click(screen.getByRole('button', { name: 'Next report page' }));
+    await waitFor(() => expect(api.mock.calls.some(([url]) => String(url).includes('page=2&pageSize=20'))).toBe(true));
+    expect(stageCalls(api)).toHaveLength(1);
+    await user.selectOptions(await screen.findByLabelText('Filter by patient'), p2);
+    await waitFor(() => expect(stageCalls(api)).toHaveLength(2));
+    expect(stageCalls(api)[1].searchParams.get('patientId')).toBe(p2);
+    await user.click(screen.getByRole('button', { name: 'Refresh reports' }));
+    await waitFor(() => expect(stageCalls(api)).toHaveLength(3));
+  });
+
+  it('says when a count fails, without the server message, and retries on request', async () => {
+    vi.stubGlobal('location', { hostname: '127.0.0.1' });
+    let attempts = 0;
+    const api = fetcher(['reviewer'], undefined, async (url) => (++attempts === 1 ? json({ message: 'do-not-display' }, 503) : stagePage(stageRows())(url)));
+    renderApp('/reports', { signedInAs: ['reviewer'], fetchImpl: api });
+    const stages = await screen.findByRole('region', { name: 'Report stages' });
+    expect(await within(stages).findByRole('alert')).toHaveTextContent('Report stages could not be counted');
+    expect(screen.queryByText('do-not-display')).not.toBeInTheDocument();
+    await userEvent.setup().click(within(stages).getByRole('button', { name: 'Retry count' }));
+    await within(stages).findByText('Registered');
+    expect(stageValue('Registered')).toHaveTextContent('4 100%');
+  });
+
+  it('says there is nothing to count rather than drawing an empty funnel', async () => {
+    vi.stubGlobal('location', { hostname: '127.0.0.1' });
+    renderApp('/reports', { signedInAs: ['reviewer'], fetchImpl: fetcher(['reviewer']) });
+    const stages = await screen.findByRole('region', { name: 'Report stages' });
+    expect(await within(stages).findByText('No reports to count yet.')).toBeInTheDocument();
+    expect(stages.querySelector('svg')).toBeNull();
+  });
 });
