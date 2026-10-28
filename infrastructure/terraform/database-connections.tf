@@ -1,7 +1,8 @@
 # The database connection budget. NOT APPLIED. Nothing here changes the database: it refuses a plan whose services could open more
 # connections than the instance accepts.
 #
-# Every process that connects, at its largest count (desired_count is the most tasks a service runs until autoscaling is added):
+# Every process that connects, at its largest count (the API at local.api_max_tasks, its autoscaling ceiling in api-autoscaling.tf; the worker
+# and the issuer at their desired_count, since neither scales):
 #   API task       DATABASE_POOL_MAX (api_db_pool_max) application connections + 3 for the ledger verifier (apps/backend/src/ledger/verifier.ts)
 #   worker task    WORKER_CONCURRENCY + 3 (apps/worker/src/main.ts)
 #   issuer task    4 (apps/backend/src/issuer/issuer-core.ts)
@@ -53,7 +54,7 @@ locals {
 
   connection_demand = (
     ceil((
-      local.api_service_count * var.api_desired_count * (var.api_db_pool_max + 3)
+      local.api_service_count * local.api_max_tasks * (var.api_db_pool_max + 3)
       + local.api_service_count * var.worker_desired_count * (local.worker_concurrency + 3)
       + local.issuer_service_count * var.issuer_desired_count * 4
     ) * local.connection_deploy_peak_percent / 100)
@@ -69,10 +70,10 @@ locals {
   }
 
   login_connection_demand = {
-    app      = ceil(local.api_service_count * var.api_desired_count * var.api_db_pool_max * local.connection_deploy_peak_percent / 100)
+    app      = ceil(local.api_service_count * local.api_max_tasks * var.api_db_pool_max * local.connection_deploy_peak_percent / 100)
     worker   = ceil(local.api_service_count * var.worker_desired_count * (local.worker_concurrency + 3) * local.connection_deploy_peak_percent / 100)
     issuer   = ceil(local.issuer_service_count * var.issuer_desired_count * 4 * local.connection_deploy_peak_percent / 100)
-    verifier = ceil(local.api_service_count * var.api_desired_count * 3 * local.connection_deploy_peak_percent / 100)
+    verifier = ceil(local.api_service_count * local.api_max_tasks * 3 * local.connection_deploy_peak_percent / 100)
     migrator = local.api_service_count * 1
   }
 
