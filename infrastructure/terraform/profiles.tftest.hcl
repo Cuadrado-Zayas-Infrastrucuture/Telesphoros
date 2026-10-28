@@ -841,20 +841,20 @@ run "connection_budget_counts_every_pool" {
     api_db_pool_max            = 5
     worker_desired_count       = 1
     enable_issuer              = true
-    issuer_desired_count       = 1
+    issuer_desired_count       = 2
     issuer_tls_ca_arn          = "arn:aws:acm-pca:us-east-2:123456789012:certificate-authority/00000000-0000-0000-0000-000000000000" # production encrypts the issuer connection
     db_connection_budget       = 100
   }
 
   assert {
-    # Twice (the deploy peak) 3 API tasks x (5 + 3 verifier) + 1 worker x (4 + 3) + 1 issuer x 4, plus 1 migration task
-    condition     = output.db_connection_demand.demand == 2 * (3 * (5 + 3) + 1 * (4 + 3) + 1 * 4) + 1 && output.db_connection_demand.budget == 100 && !output.db_connection_demand.budget_is_estimate
+    # Twice (the deploy peak) 3 API tasks x (5 + 3 verifier) + 1 worker x (4 + 3) + 2 issuers x 4 (production's minimum), plus 1 migration task
+    condition     = output.db_connection_demand.demand == 2 * (3 * (5 + 3) + 1 * (4 + 3) + 2 * 4) + 1 && output.db_connection_demand.budget == 100 && !output.db_connection_demand.budget_is_estimate
     error_message = "the demand adds every pool at its deploy peak, and a given budget is not an estimate"
   }
 
   assert {
-    # Each login at the deploy peak, all within their own limits (app 50, verifier 20, worker 20, issuer 10, migrator 5)
-    condition     = output.db_connection_demand.per_login.app == 2 * 3 * 5 && output.db_connection_demand.per_login.verifier == 2 * 3 * 3 && output.db_connection_demand.per_login.worker == 2 * 1 * 7 && output.db_connection_demand.per_login.issuer == 2 * 1 * 4 && output.db_connection_demand.per_login.migrator == 1
+    # Each login at the deploy peak, all within their own limits (app 50, verifier 20, worker 20, issuer 20, migrator 5)
+    condition     = output.db_connection_demand.per_login.app == 2 * 3 * 5 && output.db_connection_demand.per_login.verifier == 2 * 3 * 3 && output.db_connection_demand.per_login.worker == 2 * 1 * 7 && output.db_connection_demand.per_login.issuer == 2 * 2 * 4 && output.db_connection_demand.per_login.migrator == 1
     error_message = "each login counts its own pools at the deploy peak"
   }
 
@@ -987,7 +987,7 @@ run "connection_budget_refuses_the_worker_login_over_its_limit" {
   expect_failures = [aws_db_instance.main]
 }
 
-# A login over its own CONNECTION LIMIT is refused at a budget the sum fits: the issuer login: 2 x 2 issuers x 4 = 16 is over 10 (the other logins fit, and so does the budget).
+# A login over its own CONNECTION LIMIT is refused at a budget the sum fits: the issuer login: 2 x 3 issuers x 4 = 24 is over 20 (production needs two; the other logins fit, and so does the budget).
 run "connection_budget_refuses_the_issuer_login_over_its_limit" {
   command = plan
 
@@ -1006,7 +1006,7 @@ run "connection_budget_refuses_the_issuer_login_over_its_limit" {
     github_repository_owner_id = "200000002"
     api_desired_count          = 2
     enable_issuer              = true
-    issuer_desired_count       = 2
+    issuer_desired_count       = 3
     issuer_tls_ca_arn          = "arn:aws:acm-pca:us-east-2:123456789012:certificate-authority/00000000-0000-0000-0000-000000000000"
     db_connection_budget       = 1000
   }

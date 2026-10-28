@@ -70,7 +70,8 @@ export type LoginKind = keyof LoginNames;
 export const LOGIN_LIMITS: Record<LoginKind, { settings: Record<string, string>; connectionLimit: number }> = {
   app: { settings: { statement_timeout: '10s', idle_in_transaction_session_timeout: '15s', lock_timeout: '5s' }, connectionLimit: 50 },
   worker: { settings: { statement_timeout: '10s', idle_in_transaction_session_timeout: '15s', lock_timeout: '5s' }, connectionLimit: 20 },
-  issuer: { settings: { statement_timeout: '10s', idle_in_transaction_session_timeout: '15s', lock_timeout: '5s' }, connectionLimit: 10 },
+  // 20, not 10: production runs at least two issuer tasks, each with a pool of 4, and a deploy doubles them (16).
+  issuer: { settings: { statement_timeout: '10s', idle_in_transaction_session_timeout: '15s', lock_timeout: '5s' }, connectionLimit: 20 },
   // 20, not 10: every API task holds a verifier pool of 3, production runs at least two tasks, and a deploy doubles them (12; up to 3 tasks fit).
   // infrastructure/terraform/database-connections.tf refuses a plan whose logins exceed these limits.
   verifier: { settings: { statement_timeout: '120s', idle_in_transaction_session_timeout: '30s', lock_timeout: '5s' }, connectionLimit: 20 },
