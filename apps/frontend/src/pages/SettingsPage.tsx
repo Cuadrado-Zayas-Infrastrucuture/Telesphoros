@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
+import { ADMIN_ROLES } from '@/auth/roles';
 import { AppearanceChoice } from '@/components/settings/AppearanceChoice';
 import { OrganizationValue } from '@/components/settings/OrganizationValue';
 import { SettingsRow } from '@/components/settings/SettingsRow';
@@ -54,6 +56,14 @@ export default function SettingsPage() {
           </dl>
         )}
       </SettingsSection>
+
+      {roles.some((role) => ADMIN_ROLES.includes(role)) && (
+        <SettingsSection id="settings-administration" title="Administration" description="For administrators of this organization.">
+          <Button asChild variant="outline">
+            <Link to="/usage">See usage</Link>
+          </Button>
+        </SettingsSection>
+      )}
 
       <SettingsSection id="settings-appearance" title="Appearance">
         <AppearanceChoice />
