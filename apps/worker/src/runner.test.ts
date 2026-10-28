@@ -159,6 +159,60 @@ describe('Runner', () => {
   });
 });
 
+describe('a stop that finds a job reporting its outcome, or cannot release one (audit W3, W4)', () => {
+  class FlakyQueue extends FakeQueue {
+    succeedFailures = 0;
+    releaseFails = false;
+    succeedCalls = 0;
+    override async succeed(id: string) {
+      this.succeedCalls += 1;
+      if (this.succeedFailures > 0) {
+        this.succeedFailures -= 1;
+        throw new Error('db down');
+      }
+      return super.succeed(id);
+    }
+    override async release(id: string) {
+      if (this.releaseFails) throw new Error('db down');
+      return super.release(id);
+    }
+  }
+
+  it('does not release a job whose handler finished and whose outcome is being retried, and lets the outcome land', async () => {
+    const q = new FlakyQueue();
+    q.succeedFailures = 1; // the first report fails; the retry 500 ms later lands
+    runner = make(q, { 'test.a': { handler: async () => undefined } }, 0.05);
+    q.pending.push(job('1', 'test.a'));
+    runner.start();
+    await until(() => q.succeedCalls === 1);
+    await runner.stop();
+    expect(q.released).toEqual([]); // released, it would run again with its attempt not counted
+    expect(q.succeeded).toEqual(['1']);
+  });
+
+  it('fails the stop when an outcome never lands, so the process does not exit 0', { timeout: 15_000 }, async () => {
+    const q = new FlakyQueue();
+    q.succeedFailures = 99;
+    const r = make(q, { 'test.a': { handler: async () => undefined } }, 0.05);
+    q.pending.push(job('1', 'test.a'));
+    r.start();
+    await until(() => q.succeedCalls === 1);
+    await expect(r.stop()).rejects.toThrow('shutdown-incomplete');
+    expect(q.released).toEqual([]);
+  });
+
+  it('fails the stop when a release fails, so the process does not exit 0', async () => {
+    const q = new FlakyQueue();
+    q.releaseFails = true;
+    const r = make(q, { 'test.stuck': { handler: ({ signal }) => new Promise<void>((_, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')))) } }, 0.05);
+    q.pending.push(job('1', 'test.stuck'));
+    r.start();
+    await until(() => r.activeCount === 1);
+    await expect(r.stop()).rejects.toThrow('shutdown-incomplete');
+    expect(q.failed).toEqual([]);
+  });
+});
+
 describe('the pause after a failed claim (audit item 28: workers recovering from one outage all came back in step)', () => {
   it('doubles from twice the poll interval, with up to 20% either way, and never passes 30 seconds', () => {
     expect([1, 2, 3].map((f) => claimBackoffMs(f, 1000, 0.5))).toEqual([2000, 4000, 8000]); // no jitter at the middle of the range
