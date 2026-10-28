@@ -25,6 +25,7 @@ import { Image } from '@/components/prompt-kit/Image';
 import { DEMO_QUESTIONS } from '@/lib/interpretationDemo';
 import { ownedStorageMode } from '@/lib/storageMode';
 import { useSyntheticChat } from '@/hooks/useSyntheticChat';
+import { ProgressiveBlur } from '@/components/motion-primitives/ProgressiveBlur';
 import '@/styles/interpretation-preview.css';
 
 const STAGES = ['Starting sample preview…', 'Preparing sample preview…', 'Finishing sample preview…'];
@@ -167,115 +168,119 @@ export function SyntheticAssistant({ embedded = false, workspace = false }: { em
               </Button>
             </div>
           )}
-          <div
-            ref={conversation}
-            role="region"
-            aria-label="Explanation conversation"
-            tabIndex={0}
-            className={`preview-conversation ${embedded ? 'p-2' : 'p-4 sm:p-6'}`}
-            onScroll={(event) => {
-              const el = event.currentTarget;
-              const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 32;
-              followLatest.current = !hasExchange.current || atBottom;
-              setShowLatest(hasExchange.current && !atBottom);
-            }}
-          >
-            <div ref={content}>
-              {!turns.length && !pending && !error && (
-                <MascotWelcome context="assistant">
-                  {!embedded && !workspace && <p className="text-xs font-semibold text-muted-foreground">TELESPHOROS</p>}
-                  <h3 className={embedded ? 'text-sm' : 'mt-2 text-2xl tracking-tight'}>Understand the evidence.</h3>
-                  <p className={embedded ? 'mt-1 text-xs text-muted-foreground' : 'mt-3 max-w-prose text-sm leading-relaxed text-muted-foreground'}>
-                    {workspace
-                      ? 'Start with a sample question to explore the interface.'
-                      : embedded
-                        ? 'Choose a sample question.'
-                        : 'Explore a finding, inspect its sources, and see what is still missing. Start with a sample question below.'}
-                  </p>
-                  {!embedded && !workspace && (
-                    <div className="mt-6 flex items-center gap-2 text-xs text-muted-foreground">
-                      <BookOpen aria-hidden="true" className="size-4" />
-                      Explanations support review; they do not establish approval.
-                    </div>
-                  )}
-                </MascotWelcome>
-              )}
-              <ol className="space-y-7" aria-label="Sample exchanges">
-                {turns.map((turn) => (
-                  <li key={turn.id}>
-                    <Message className="mb-5 justify-end">
-                      <MessageContent className="max-w-prose bg-background">
-                        <p className="mb-1 text-xs font-semibold text-muted-foreground">You · sample question</p>
-                        <p>{turn.question}</p>
+          {/* The full chat fades messages under a fixed top edge; the small embedded preview has no room for one. */}
+          <div className={workspace ? 'conversation-frame' : 'contents'}>
+            <div
+              ref={conversation}
+              role="region"
+              aria-label="Explanation conversation"
+              tabIndex={0}
+              className={`preview-conversation ${embedded ? 'p-2' : 'p-4 sm:p-6'}`}
+              onScroll={(event) => {
+                const el = event.currentTarget;
+                const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 32;
+                followLatest.current = !hasExchange.current || atBottom;
+                setShowLatest(hasExchange.current && !atBottom);
+              }}
+            >
+              <div ref={content}>
+                {!turns.length && !pending && !error && (
+                  <MascotWelcome context="assistant">
+                    {!embedded && !workspace && <p className="text-xs font-semibold text-muted-foreground">TELESPHOROS</p>}
+                    <h3 className={embedded ? 'text-sm' : 'mt-2 text-2xl tracking-tight'}>Understand the evidence.</h3>
+                    <p className={embedded ? 'mt-1 text-xs text-muted-foreground' : 'mt-3 max-w-prose text-sm leading-relaxed text-muted-foreground'}>
+                      {workspace
+                        ? 'Start with a sample question to explore the interface.'
+                        : embedded
+                          ? 'Choose a sample question.'
+                          : 'Explore a finding, inspect its sources, and see what is still missing. Start with a sample question below.'}
+                    </p>
+                    {!embedded && !workspace && (
+                      <div className="mt-6 flex items-center gap-2 text-xs text-muted-foreground">
+                        <BookOpen aria-hidden="true" className="size-4" />
+                        Explanations support review; they do not establish approval.
+                      </div>
+                    )}
+                  </MascotWelcome>
+                )}
+                <ol className="space-y-7" aria-label="Sample exchanges">
+                  {turns.map((turn) => (
+                    <li key={turn.id}>
+                      <Message className="mb-5 justify-end">
+                        <MessageContent className="max-w-prose bg-background">
+                          <p className="mb-1 text-xs font-semibold text-muted-foreground">You · sample question</p>
+                          <p>{turn.question}</p>
+                        </MessageContent>
+                      </Message>
+                      <Message>
+                        <div className="min-w-0 w-full">
+                          <p className="mb-3 border-l-2 border-primary pl-3 text-sm font-semibold">
+                            Telesphoros <span className="ml-2 font-normal text-muted-foreground">/ sample explanation</span>
+                          </p>
+                          {workspace ? <ResponseBasis question={turn.question} /> : <Tool toolPart={{ state: 'output-available', stage: 3 }} />}
+                          <div className="py-4 text-sm leading-relaxed">
+                            <p>{turn.answer}</p>
+                            <p className="mt-3 text-xs text-muted-foreground">Fixed demonstration copy · not model output</p>
+                          </div>
+                          {workspace ? (
+                            <SourceTrigger
+                              onClick={() => {
+                                setSourceRequested(true);
+                                setEvidenceOpen(true);
+                              }}
+                            />
+                          ) : (
+                            <>
+                              <Reasoning>
+                                This response was selected from a fixed sample using the question label. No uploaded content or clinical evidence was assessed, and no model
+                                reasoning occurred.
+                              </Reasoning>
+                              <Source />
+                            </>
+                          )}
+                          <FeedbackBar value={turn.feedback} onChange={(value) => markFeedback(turn.id, value)} />
+                        </div>
+                      </Message>
+                    </li>
+                  ))}
+                </ol>
+                {pending && (
+                  <div className="mt-5 space-y-4" aria-busy="true">
+                    <Message className="justify-end">
+                      <MessageContent className="bg-background">
+                        <p className="mb-1 text-xs font-semibold">You · sample question</p>
+                        <p>{pending}</p>
                       </MessageContent>
                     </Message>
-                    <Message>
-                      <div className="min-w-0 w-full">
-                        <p className="mb-3 border-l-2 border-primary pl-3 text-sm font-semibold">
-                          Telesphoros <span className="ml-2 font-normal text-muted-foreground">/ sample explanation</span>
-                        </p>
-                        {workspace ? <ResponseBasis question={turn.question} /> : <Tool toolPart={{ state: 'output-available', stage: 3 }} />}
-                        <div className="py-4 text-sm leading-relaxed">
-                          <p>{turn.answer}</p>
-                          <p className="mt-3 text-xs text-muted-foreground">Fixed demonstration copy · not model output</p>
-                        </div>
-                        {workspace ? (
-                          <SourceTrigger
-                            onClick={() => {
-                              setSourceRequested(true);
-                              setEvidenceOpen(true);
-                            }}
-                          />
-                        ) : (
-                          <>
-                            <Reasoning>
-                              This response was selected from a fixed sample using the question label. No uploaded content or clinical evidence was assessed, and no model reasoning
-                              occurred.
-                            </Reasoning>
-                            <Source />
-                          </>
-                        )}
-                        <FeedbackBar value={turn.feedback} onChange={(value) => markFeedback(turn.id, value)} />
-                      </div>
-                    </Message>
-                  </li>
-                ))}
-              </ol>
-              {pending && (
-                <div className="mt-5 space-y-4" aria-busy="true">
-                  <Message className="justify-end">
-                    <MessageContent className="bg-background">
-                      <p className="mb-1 text-xs font-semibold">You · sample question</p>
-                      <p>{pending}</p>
-                    </MessageContent>
-                  </Message>
-                  <ThinkingBar text={STAGES[stage]} stage={stage} onStop={cancel} />
-                  {!workspace && <Tool key="pending-tool" toolPart={{ state: stage === 0 ? 'input-streaming' : 'input-available', stage }} defaultOpen />}
-                  <div aria-hidden="true" className="space-y-3 py-2 motion-safe:animate-pulse">
-                    <div className="h-2 w-3/4 rounded-sm bg-divider" />
-                    <div className="h-2 w-full rounded-sm bg-divider" />
+                    <ThinkingBar text={STAGES[stage]} stage={stage} onStop={cancel} />
+                    {!workspace && <Tool key="pending-tool" toolPart={{ state: stage === 0 ? 'input-streaming' : 'input-available', stage }} defaultOpen />}
+                    <div aria-hidden="true" className="space-y-3 py-2 motion-safe:animate-pulse">
+                      <div className="h-2 w-3/4 rounded-sm bg-divider" />
+                      <div className="h-2 w-full rounded-sm bg-divider" />
+                    </div>
                   </div>
-                </div>
-              )}
-              {error && (
-                <div className="mt-4 space-y-3">
-                  <SystemMessage error>{error}</SystemMessage>
-                  <Tool toolPart={{ state: 'output-error', stage }} />
-                  <Button
-                    variant="outline"
-                    className="h-auto min-h-control max-w-full whitespace-normal"
-                    onClick={() => {
-                      followLatest.current = true;
-                      void retry();
-                      focusInput();
-                    }}
-                  >
-                    Retry sample response
-                  </Button>
-                </div>
-              )}
-              <div ref={latest} role="group" tabIndex={-1} aria-label="End of conversation" className="mt-2" />
+                )}
+                {error && (
+                  <div className="mt-4 space-y-3">
+                    <SystemMessage error>{error}</SystemMessage>
+                    <Tool toolPart={{ state: 'output-error', stage }} />
+                    <Button
+                      variant="outline"
+                      className="h-auto min-h-control max-w-full whitespace-normal"
+                      onClick={() => {
+                        followLatest.current = true;
+                        void retry();
+                        focusInput();
+                      }}
+                    >
+                      Retry sample response
+                    </Button>
+                  </div>
+                )}
+                <div ref={latest} role="group" tabIndex={-1} aria-label="End of conversation" className="mt-2" />
+              </div>
             </div>
+            {workspace && <ProgressiveBlur edge="top" />}
           </div>
           {embedded || workspace ? (
             <div className="assistant-footer border-t border-divider bg-panel pt-2">

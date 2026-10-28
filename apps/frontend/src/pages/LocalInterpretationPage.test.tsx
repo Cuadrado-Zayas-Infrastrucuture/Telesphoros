@@ -225,3 +225,28 @@ it('stopping later work preserves completed messages and their feedback', async 
   expect(screen.queryByText(/^This example has no accepted/)).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Helpful' })).toHaveAttribute('aria-pressed', 'true');
 });
+
+it('fades the conversation under a top blur edge that never scrolls and is hidden from assistive technology', () => {
+  open();
+  const region = screen.getByRole('region', { name: 'Explanation conversation' });
+  const frame = region.parentElement as HTMLElement;
+  expect(frame.classList).toContain('conversation-frame');
+  const edge = frame.querySelector(':scope > .progressive-blur') as HTMLElement;
+  expect(edge).not.toBeNull();
+  expect(edge.dataset.edge).toBe('top');
+  expect(edge.getAttribute('aria-hidden')).toBe('true');
+  // The edge is the region's sibling, so it stays put while the messages scroll beneath it.
+  expect(region.contains(edge)).toBe(false);
+});
+
+it('keeps the small embedded assistant free of the blur edge', async () => {
+  const { SyntheticAssistant } = await import('@/components/SyntheticAssistant');
+  const { container } = render(
+    <MemoryRouter>
+      <SyntheticAssistant embedded />
+    </MemoryRouter>,
+  );
+  expect(screen.getByRole('region', { name: 'Explanation conversation' })).toBeInTheDocument();
+  expect(container.querySelector('.progressive-blur')).toBeNull();
+  expect(container.querySelector('.conversation-frame')).toBeNull();
+});
