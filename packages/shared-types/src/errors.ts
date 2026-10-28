@@ -17,6 +17,8 @@ export const ErrorCode = {
   SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
   /** The lab-report pipeline is switched off (503, no Retry-After: only an operator can change that). */
   PIPELINE_DISABLED: 'PIPELINE_DISABLED',
+  /** Queued evaluation requests are switched off (503, no Retry-After: only an operator can change that). H4. */
+  EVALUATION_REQUESTS_DISABLED: 'EVALUATION_REQUESTS_DISABLED',
   /** The reader's capacity is full (503 + Retry-After). Nothing was queued. */
   PIPELINE_BUSY: 'PIPELINE_BUSY',
   /** The reader failed to run or ran out of time (503 + Retry-After). Nothing was stored. */
