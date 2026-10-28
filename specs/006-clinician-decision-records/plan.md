@@ -84,7 +84,7 @@ Out of scope and **not** asked here: PharmCAT versus the in-house engine. The in
 
 ## Slice D01b: clinician result decisions
 
-**Migration `0052_clinician_result_decisions`** (number provisional: re-read `apps/backend/migrations` when the branch is cut; a branch scan reserves nothing) (`-- compat: breaking`, `lock_timeout 2s`, `statement_timeout 30s`):
+**Migration `0052_clinician_result_decisions`** (number provisional: re-read `apps/backend/migrations` when the branch is cut; a branch scan reserves nothing) (`-- compat: breaking`, `lock_timeout 2s`, `statement_timeout 30s`): **2026-10-28:** `main` now holds 0052 and 0053 (`security_audit_refused_write`), so this takes 0054 or later; the numbers below are rewritten when D01b's plan is refreshed.
 - the table and keys in [data-model.md](data-model.md)
 - `UNIQUE (id, evaluation_id, tenant_id)` on `evaluation_results` and `UNIQUE (id, tenant_id, patient_id)` on `evaluations`
 - a BEFORE INSERT check binding `app_tenant()`/`app_actor()`, the evaluation time window and the note rule

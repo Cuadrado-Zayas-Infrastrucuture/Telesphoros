@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-27
 
-**Status**: Draft, **awaiting founder approval of [plan.md](plan.md)** (decisions D1 to D8, revised 2026-10-27 after the founder's review of D2 to D6). Nothing here is implemented.
+**Status**: [plan.md](plan.md) D1 to D5, D7 and D8 approved by the founder on 2026-10-27; D6 (vocabulary `cdr-v1`) held. Slice D01a (result reference) merged as PR #109 (2026-10-28). D01b (clinician result decisions) is not implemented.
 
 **Input**: *Telesphoros data product architecture and Claude Code implementation report* (founder, 2026-10-27), read in full as requirements data. Mapping against `main` `704d5c4`: [research.md](research.md). Data model: [data-model.md](data-model.md). Contracts: [contracts/clinician-decisions.md](contracts/clinician-decisions.md).
 

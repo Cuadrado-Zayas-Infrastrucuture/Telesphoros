@@ -1,5 +1,7 @@
 # Tasks: spec 006, slice D01a (result reference) only
 
+**Done:** all eight tasks, merged as PR #109 (`b5efec1`, 2026-10-28); evidence in `docs/verification/evaluation-result-reference.md`.
+
 Derived from the approved [plan.md](plan.md) (D1 to D5, D7, D8 approved 2026-10-27). D01b tasks are written once the founder has edited vocabulary `cdr-v1` (D6).
 
 | # | Task | Requirement | Done when |

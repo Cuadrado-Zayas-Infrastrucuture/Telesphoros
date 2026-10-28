@@ -11,7 +11,7 @@
 | Note | `event_notes` | One free-text body (1 to 1000 chars), redactable | Optional narrative; only `{id, bodySha256}` reaches the ledger |
 | Ledger | `ledger_events`, `ledger_heads` | One event per record row, hash-chained per tenant | New event type `clinician-result-decision` |
 
-## 2. New table `clinician_result_decisions` (migration 0052, number provisional until the branch is cut)
+## 2. New table `clinician_result_decisions` (migration 0054 or later: 0052 and 0053 are taken on `main`; provisional until the branch is cut)
 
 One row = one entry in a result's shared decision history: a clinician's decision, an amendment of how that decision was documented, or a withdrawal of an entry made in error. Append-only (the `refuse_mutation` and no-truncate triggers), FORCE row-level security, ledgered.
 
