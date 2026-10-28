@@ -48,10 +48,14 @@ async function main(): Promise<void> {
   const stop = async () => {
     if (stopping) return;
     stopping = true;
-    await runner.stop();
+    // A stop that left a job to lease expiry (a failed release, an outcome not recorded) exits 1 after closing the rest, so it is not read as a clean stop (audit W3).
+    let failed = false;
+    await runner.stop().catch(() => {
+      failed = true;
+    });
     await pool.end().catch(() => undefined);
     await app.close();
-    process.exit(0);
+    process.exit(failed ? 1 : 0);
   };
   process.on('SIGTERM', () => void stop());
   process.on('SIGINT', () => void stop());
