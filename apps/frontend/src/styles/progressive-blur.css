@@ -14,18 +14,19 @@
   backdrop-filter: blur(var(--progressive-blur-radius));
 }
 
-/* No blur for readers who ask for less transparency, or where the browser cannot: an opaque fade instead. */
+/* No blur for readers who ask for less transparency, or where the browser cannot: an opaque fade instead,
+   to the surface beneath (a container sets --progressive-blur-ground; the page background otherwise). */
 @media (prefers-reduced-transparency: reduce) {
   .progressive-blur-layer { display: none; }
-  .progressive-blur[data-edge='top'] { background: linear-gradient(to top, transparent, var(--background)); }
-  .progressive-blur[data-edge='bottom'] { background: linear-gradient(to bottom, transparent, var(--background)); }
-  .progressive-blur[data-edge='left'] { background: linear-gradient(to left, transparent, var(--background)); }
-  .progressive-blur[data-edge='right'] { background: linear-gradient(to right, transparent, var(--background)); }
+  .progressive-blur[data-edge='top'] { background: linear-gradient(to top, transparent, var(--progressive-blur-ground, var(--background))); }
+  .progressive-blur[data-edge='bottom'] { background: linear-gradient(to bottom, transparent, var(--progressive-blur-ground, var(--background))); }
+  .progressive-blur[data-edge='left'] { background: linear-gradient(to left, transparent, var(--progressive-blur-ground, var(--background))); }
+  .progressive-blur[data-edge='right'] { background: linear-gradient(to right, transparent, var(--progressive-blur-ground, var(--background))); }
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .progressive-blur-layer { display: none; }
-  .progressive-blur[data-edge='top'] { background: linear-gradient(to top, transparent, var(--background)); }
-  .progressive-blur[data-edge='bottom'] { background: linear-gradient(to bottom, transparent, var(--background)); }
-  .progressive-blur[data-edge='left'] { background: linear-gradient(to left, transparent, var(--background)); }
-  .progressive-blur[data-edge='right'] { background: linear-gradient(to right, transparent, var(--background)); }
+  .progressive-blur[data-edge='top'] { background: linear-gradient(to top, transparent, var(--progressive-blur-ground, var(--background))); }
+  .progressive-blur[data-edge='bottom'] { background: linear-gradient(to bottom, transparent, var(--progressive-blur-ground, var(--background))); }
+  .progressive-blur[data-edge='left'] { background: linear-gradient(to left, transparent, var(--progressive-blur-ground, var(--background))); }
+  .progressive-blur[data-edge='right'] { background: linear-gradient(to right, transparent, var(--progressive-blur-ground, var(--background))); }
 }
