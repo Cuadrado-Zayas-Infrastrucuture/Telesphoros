@@ -3,7 +3,7 @@ import { JobQueue } from '@telesphoros/jobs';
 import { jsonLogger } from '../src/log';
 import { Runner } from '../src/runner';
 import { testJobs } from '../src/handlers/test-jobs';
-import { PERSON, TENANT_A, TENANT_B, attemptsOf, createFixture, effectDir, enqueueAs, jobRow, until, type Fixture } from './support';
+import { PERSON, TENANT_A, TENANT_B, attemptsOf, createFixture, effectDir, enqueueAs, heldBy, jobRow, until, type Fixture } from './support';
 
 let f: Fixture;
 let queue: JobQueue;
@@ -56,7 +56,7 @@ describe('the claim loop', () => {
     await start();
     await settled(id, ['succeeded']);
     expect(await effects.files()).toEqual(expect.arrayContaining([`${id}.done`]));
-    expect(await attemptsOf(f.admin, id)).toEqual([{ attempt: 1, outcome: 'succeeded', error_code: null, worker_id: 'runner-1' }]);
+    expect(await attemptsOf(f.admin, id)).toEqual([{ attempt: 1, outcome: 'succeeded', error_code: null, worker_id: expect.stringMatching(heldBy('runner-1')) }]);
     expect(await jobRow(f.admin, id)).toMatchObject({ locked_by: null, lease_until: null, last_error_code: null });
   });
 
@@ -111,7 +111,7 @@ describe('the claim loop', () => {
     await settled(id, ['succeeded']);
     const runs = (await effects.files()).filter((x) => x.startsWith(`${id}.run-`));
     expect(runs).toHaveLength(1);
-    expect(await attemptsOf(f.admin, id)).toEqual([{ attempt: 1, outcome: 'succeeded', error_code: null, worker_id: 'holder' }]);
+    expect(await attemptsOf(f.admin, id)).toEqual([{ attempt: 1, outcome: 'succeeded', error_code: null, worker_id: expect.stringMatching(heldBy('holder')) }]);
   }, 30_000);
 
   it('never runs more jobs at once than its concurrency, and holds an organization to the cap', async () => {
@@ -145,6 +145,31 @@ describe('the claim loop', () => {
   });
 });
 
+describe('a job its own worker claims again (audit W2)', () => {
+  it('fences the old attempt off when the same worker reclaims its expired job', async () => {
+    await begin();
+    const id = await enqueue('test.slow', { ms: 4_000 });
+    await start({ id: 'same' });
+    await until('the job to start', async () => (await effects.files()).includes(`${id}.started`));
+    // A database outage about as long as the lease: the lease runs out while the handler still runs, and this worker's own loop claims the job again.
+    await f.admin.query(`UPDATE jobs SET lease_until = now() - interval '1 second' WHERE id = $1`, [id]);
+    const expired = await until('the old attempt to be recorded as expired', async () => (await attemptsOf(f.admin, id)).find((a) => a.outcome === 'lease-expired'));
+    const row = await jobRow(f.admin, id);
+    expect(row).toMatchObject({ state: 'running', attempts: 2 });
+    expect(expired.worker_id).toMatch(heldBy('same'));
+    expect(row.locked_by).toMatch(heldBy('same'));
+    expect(row.locked_by).not.toBe(expired.worker_id);
+    // The old attempt's holder no longer passes any fence: it can neither keep the lease nor settle the new attempt.
+    expect(await queue.heartbeat(id, expired.worker_id, 5)).toBe(false);
+    expect(await queue.succeed(id, expired.worker_id)).toBe(false);
+    await settled(id, ['succeeded']);
+    expect((await attemptsOf(f.admin, id)).map((a) => [a.attempt, a.outcome, a.worker_id])).toEqual([
+      [1, 'lease-expired', expired.worker_id],
+      [2, 'succeeded', row.locked_by],
+    ]);
+  }, 30_000);
+});
+
 describe('shutdown', () => {
   it('lets a running job finish when the drain allows it, then stops claiming', async () => {
     await begin();
@@ -168,7 +193,7 @@ describe('shutdown', () => {
     expect((await attemptsOf(f.admin, id)).map((a) => a.outcome)).toEqual(['released']);
     // Another worker picks it up as a first attempt.
     await start({ id: 'second' });
-    await until('the second worker to claim it', async () => (await jobRow(f.admin, id)).locked_by === 'second');
+    await until('the second worker to claim it', async () => heldBy('second').test(String((await jobRow(f.admin, id)).locked_by)));
     expect(await jobRow(f.admin, id)).toMatchObject({ attempts: 1 });
   });
 });
