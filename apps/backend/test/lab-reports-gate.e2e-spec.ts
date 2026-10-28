@@ -59,6 +59,7 @@ describe('the lab-report pipeline routes', () => {
       'POST /api/v1/captures/:id/decision',
       'POST /api/v1/cell-disputes',
       'POST /api/v1/cell-disputes/:id/decision',
+      'POST /api/v1/evaluation-requests/:id/cancel',
       'POST /api/v1/evaluations/:id/corrections',
       'POST /api/v1/reports/:id/capture',
       'POST /api/v1/reports/:id/evaluation-requests',

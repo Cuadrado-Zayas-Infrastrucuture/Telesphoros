@@ -175,6 +175,20 @@ started while the pipeline is off, and every route then answers 503 `PIPELINE_DI
 The text runner is a **recorded-text substitute**: it recognises only the twelve development PDFs by the SHA-256 of their retrieved bytes and
 returns their stored text. It says nothing about real PDF extraction, which needs the pinned Poppler binary and is a separate slice.
 
+## Queued evaluation requests (H4; synthetic, non-production)
+
+The queued path is [spec 007](../specs/007-async-evaluation/spec.md). It is behind `EVALUATION_REQUESTS=enabled`, which needs the pipeline and an `EVALUATION_EXECUTION_PROFILE`, and which production refuses. It adds three routes beside the synchronous one. A separate worker process answers the requests (`start:evaluation-worker`, H3), and nothing deploys or schedules it.
+
+| Route | Who | What |
+| --- | --- | --- |
+| `POST /reports/:id/evaluation-requests` `{captureId, acceptanceId, requestId}` | clinician, reviewer | Queues an evaluation of an accepted capture. 202 for a new request; 200 when the same person sends the same `requestId` for the same evaluation; 409 `idempotency-conflict` when that `requestId` was used for a different one |
+| `GET /evaluation-requests/:id` | everyone with a clinical-read role | The request and its state: `queued`, `running`, `retry`, `dead`, `completed` (with `evaluationId`), `completion-missing` or `cancelled` |
+| `POST /evaluation-requests/:id/cancel` | the person who queued it | Withdraws a request no worker has started. 200 `cancelled`; 409 `not-cancellable` once a worker has started it or it has finished; 403 for anyone else. The person is recorded in `evaluation_request_cancellations` |
+
+While the switch is off, all three answer 503 `EVALUATION_REQUESTS_DISABLED`. A state is operational: `dead` and `completion-missing` are not results and not holds. The local review page offers "Queue synthetic evaluation". It checks again after 1, 2 and 4 seconds, then every 10 seconds, and stops after five minutes without inferring anything.
+
+**Not proved:** the worker running as its own process, a deployed worker, how a background worker acts (it acts for the requesting person; capability mode is a separate decision required before any real data), and cancelling a read that has started.
+
 ## Known limits
 
 - The reader's registry names two genes, CYP2C19 and CYP2B6. A report that mentions anything else is held (`unaccounted-text`).
