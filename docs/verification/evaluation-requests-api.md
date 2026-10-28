@@ -2,7 +2,7 @@
 
 Date: 2026-10-27
 
-Scope: [spec 006](../../specs/006-async-evaluation/spec.md) slice 1. Synthetic fixtures only (public D01 through the test stand-in reader); real restricted-role PostgreSQL 16 and an S3 emulator for the storage tier. Every run below is on the committed candidate with a clean tree, Node 22.22.0 and pnpm 10.28.0 from a frozen offline install.
+Scope: [spec 007](../../specs/007-async-evaluation/spec.md) slice 1. Synthetic fixtures only (public D01 through the test stand-in reader); real restricted-role PostgreSQL 16 and an S3 emulator for the storage tier. Every run below is on the committed candidate with a clean tree, Node 22.22.0 and pnpm 10.28.0 from a frozen offline install.
 
 ## Seen failing first
 

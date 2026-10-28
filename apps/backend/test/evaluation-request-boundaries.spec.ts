@@ -8,7 +8,7 @@ const runtimeFiles = (dir: string): string[] =>
     entry.isDirectory() ? runtimeFiles(join(dir, entry.name)) : /\.(module|controller)\.ts$/.test(entry.name) ? [join(dir, entry.name)] : [],
   );
 
-// H4 (spec 006, founder decision D1): admission and status are reachable through one controller, registered by the lab-reports module and answered
+// H4 (spec 007, founder decision D1): admission and status are reachable through one controller, registered by the lab-reports module and answered
 // only while EVALUATION_REQUESTS is enabled (refused in production; test/evaluation-requests-api.e2e-spec.ts proves the service is absent while it is
 // off). No other module or controller names them, and none names the H3 consumer or its entry point.
 it('keeps admission behind its one controller, and the consumer out of every module and controller and of the production consumer set', () => {
