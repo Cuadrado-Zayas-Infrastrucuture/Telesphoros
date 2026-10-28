@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { systemActor } from './actor';
 import { JobError, UNEXPECTED_ERROR_CODE } from './errors';
 import type { Logger } from './log';
@@ -16,7 +17,7 @@ export interface HandlerContext {
   job: ClaimedJob;
   /** `system:<job type>`: what the job records as `created_by`. Never a person (see packages/jobs/src/actor.ts). */
   actor: string;
-  /** The worker holding the job: the database asks for it, with the job id, before it lets a handler act. */
+  /** The holder of this attempt (`<worker id>#<8 hex>`, new on every claim): the database asks for it, with the job id, before it lets a handler act. */
   workerId: string;
   /** Aborted when the job times out, its lease is lost, or the worker is shutting down. A handler stops promptly when it is. */
   signal: AbortSignal;
@@ -42,6 +43,8 @@ export interface RunnerOptions {
 
 interface Running {
   job: ClaimedJob;
+  /** Who the database recorded as holding this attempt; a later claim of the same job has another, so this attempt's calls are refused once it is reclaimed. */
+  holder: string;
   abort: AbortController;
   stopTimers: () => void;
   released: boolean;
@@ -103,7 +106,7 @@ export class Runner {
       r.stopTimers();
       r.abort.abort(new Error('shutdown'));
       try {
-        const ok = await this.options.queue.release(r.job.id, this.options.workerId);
+        const ok = await this.options.queue.release(r.job.id, r.holder);
         log('info', 'job-released', { jobId: r.job.id, jobType: r.job.type, attempt: r.job.attempt, outcome: ok ? 'released' : 'not-held' });
       } catch {
         log('error', 'job-release-failed', { jobId: r.job.id, jobType: r.job.type, code: 'release-failed' });
@@ -138,9 +141,12 @@ export class Runner {
           this.lastSeenAt = Date.now();
         }
         if (free > 0) {
-          const jobs = await queue.claim(workerId, { types: this.types, batch: Math.min(free, 50), tenantCap, leaseSeconds: this.leaseSeconds });
+          // A holder per claim, not the bare worker id: when this worker claims its own expired job again, the database tells the two attempts apart (audit W2).
+          // The worker id stays the prefix, so `jobs show` and the attempt log still name the worker.
+          const holder = `${workerId}#${randomUUID().slice(0, 8)}`;
+          const jobs = await queue.claim(holder, { types: this.types, batch: Math.min(free, 50), tenantCap, leaseSeconds: this.leaseSeconds });
           claimed = jobs.length;
-          for (const job of jobs) this.launch(job);
+          for (const job of jobs) this.launch(job, holder);
         }
         failures = 0;
       } catch {
@@ -155,21 +161,27 @@ export class Runner {
     }
   }
 
-  private launch(job: ClaimedJob): void {
+  private launch(job: ClaimedJob, holder: string): void {
     const registered = this.byType.get(job.type);
+    // This worker claimed a job it still runs (its lease ran out first): the old attempt is no longer held, so stop it rather than let both run.
+    const previous = this.running.get(job.id);
+    if (previous) {
+      previous.stopTimers();
+      previous.abort.abort(new Error('lease-lost'));
+    }
     const abort = new AbortController();
-    const entry: Running = { job, abort, stopTimers: () => undefined, released: false, done: Promise.resolve() };
+    const entry: Running = { job, holder, abort, stopTimers: () => undefined, released: false, done: Promise.resolve() };
     this.running.set(job.id, entry);
     entry.done = this.execute(entry, registered).finally(() => {
       entry.stopTimers();
-      this.running.delete(job.id);
+      if (this.running.get(job.id) === entry) this.running.delete(job.id);
       this.wake?.();
     });
   }
 
   private async execute(entry: Running, registered: RegisteredJob | undefined): Promise<void> {
-    const { queue, workerId, log } = this.options;
-    const { job, abort } = entry;
+    const { queue, log } = this.options;
+    const { job, holder, abort } = entry;
     const fields = { jobId: job.id, jobType: job.type, attempt: job.attempt };
     log('info', 'job-started', fields);
 
@@ -198,7 +210,7 @@ export class Runner {
           () => {
             void (async () => {
               try {
-                if (await queue.heartbeat(job.id, workerId, this.leaseSeconds)) {
+                if (await queue.heartbeat(job.id, holder, this.leaseSeconds)) {
                   lastOk = Date.now();
                   return;
                 }
@@ -216,7 +228,7 @@ export class Runner {
           clearTimeout(timer);
           clearInterval(beat);
         };
-        const handling = Promise.resolve().then(() => registered.handler({ job, actor: systemActor(job.type), workerId, signal: abort.signal }));
+        const handling = Promise.resolve().then(() => registered.handler({ job, actor: systemActor(job.type), workerId: holder, signal: abort.signal }));
         handling.catch(() => undefined); // an abandoned handler's late failure is not an unhandled rejection
         try {
           await Promise.race([handling, timeout.then(() => Promise.reject(new Error('timeout')))]);
@@ -232,20 +244,20 @@ export class Runner {
     }
 
     if (entry.released) return; // shutdown released it; the result belongs to whoever runs it next
-    await this.settle(job, result);
+    await this.settle(job, holder, result);
   }
 
   /** Reports the outcome, retrying a few times if the database is briefly unavailable (the lease protects the job if it stays so). */
-  private async settle(job: ClaimedJob, result: { ok: true } | { ok: false; code: string; retryable: boolean }): Promise<void> {
-    const { queue, workerId, log } = this.options;
+  private async settle(job: ClaimedJob, holder: string, result: { ok: true } | { ok: false; code: string; retryable: boolean }): Promise<void> {
+    const { queue, log } = this.options;
     const fields = { jobId: job.id, jobType: job.type, attempt: job.attempt };
     for (let tryNumber = 0; tryNumber < 4; tryNumber += 1) {
       try {
         if (result.ok) {
-          const held = await queue.succeed(job.id, workerId);
+          const held = await queue.succeed(job.id, holder);
           log(held ? 'info' : 'warn', 'job-finished', { ...fields, outcome: held ? 'succeeded' : 'not-held' });
         } else {
-          const state = await queue.fail(job.id, workerId, result.code, result.retryable);
+          const state = await queue.fail(job.id, holder, result.code, result.retryable);
           log(state === 'dead' ? 'error' : 'warn', 'job-finished', { ...fields, outcome: state ?? 'not-held', code: result.code });
         }
         return;

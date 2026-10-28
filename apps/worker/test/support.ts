@@ -81,6 +81,9 @@ export async function enqueueAs(
   }
 }
 
+/** What a runner records as holding a job: its worker id and a part new on every claim (audit W2). */
+export const heldBy = (workerId: string) => new RegExp(`^${workerId.replace(/[.]/g, '\\.')}#[0-9a-f]{8}$`);
+
 export async function jobRow(admin: Pool, id: string): Promise<Record<string, unknown>> {
   return (await admin.query('SELECT * FROM jobs WHERE id = $1', [id])).rows[0];
 }

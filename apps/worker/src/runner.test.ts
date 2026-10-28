@@ -184,3 +184,62 @@ describe('the pause after a failed claim (audit item 28: workers recovering from
     expect(delays.slice(0, 3)).toEqual([32, 64, 128]); // pollMs is 20: base 40, 80, 160, each at 80% (random 0)
   });
 });
+
+describe('a job reclaimed by the worker that already runs it (audit W2)', () => {
+  class HolderQueue extends FakeQueue {
+    claimedAs: string[] = [];
+    succeededAs: string[] = [];
+    heartbeatAs: string[] = [];
+    override async claim(...args: unknown[]): Promise<ClaimedJob[]> {
+      this.claimedAs.push(args[0] as string);
+      return super.claim();
+    }
+    override async heartbeat(...args: unknown[]) {
+      this.heartbeatAs.push(args[1] as string);
+      return true;
+    }
+    override async succeed(id: string, ...rest: unknown[]) {
+      this.succeededAs.push(rest[0] as string);
+      return super.succeed(id);
+    }
+  }
+
+  it('claims as a holder unique to each claim, and runs, heartbeats and settles the job as that holder', async () => {
+    const q = new HolderQueue();
+    const seen: string[] = [];
+    runner = make(q, { 'test.a': { handler: async ({ workerId }) => void seen.push(workerId) } });
+    q.pending.push(job('1', 'test.a'));
+    runner.start();
+    await until(() => q.succeeded.length === 1 && q.claimedAs.length >= 2);
+    expect(q.claimedAs[0]).toMatch(/^w#[0-9a-f]{8}$/);
+    expect(new Set(q.claimedAs).size).toBe(q.claimedAs.length);
+    expect(seen).toEqual([q.claimedAs[0]]);
+    expect(q.succeededAs).toEqual([q.claimedAs[0]]);
+  });
+
+  it('stops the old attempt when the same job is claimed again, and keeps the new one in its running set', async () => {
+    const q = new HolderQueue();
+    const signals: AbortSignal[] = [];
+    let finishSecond!: () => void;
+    runner = make(q, {
+      'test.a': {
+        handler: ({ signal }) => {
+          signals.push(signal);
+          if (signals.length === 1) return new Promise<void>((_, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
+          return new Promise<void>((resolve) => (finishSecond = resolve));
+        },
+      },
+    });
+    q.pending.push(job('1', 'test.a'));
+    runner.start();
+    await until(() => signals.length === 1);
+    q.pending.push(job('1', 'test.a')); // its lease ran out and this worker claimed it again
+    await until(() => signals.length === 2);
+    await until(() => signals[0]!.aborted);
+    await until(() => q.failed.length === 1); // the old attempt settled (the database refuses it: another holder)
+    expect(signals[1]!.aborted).toBe(false);
+    expect(runner.activeCount).toBe(1); // the old attempt's cleanup did not remove the new one
+    finishSecond();
+    await until(() => q.succeeded.length === 1 && runner!.activeCount === 0);
+  });
+});
