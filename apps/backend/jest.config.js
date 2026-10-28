@@ -16,7 +16,10 @@ if (!process.env.TEST_S3_ENDPOINT) skipped.push('test/object-storage (set TEST_S
 const { readerEnginePresent, SPECS_NEEDING_ENGINE } = require('./test/helpers/reader-engine.cjs');
 const withoutEngine = readerEnginePresent() ? [] : SPECS_NEEDING_ENGINE;
 if (skipped.length > 0) process.stderr.write(`[jest] NOT RUNNING: ${skipped.join('; ')}\n`);
-if (withoutEngine.length > 0) process.stderr.write(`[jest] ENGINE ABSENT: skipping ${withoutEngine.length} specs that need the report-reader engine (knowledge/lab-report-reader, sidecars/report-reader; list in test/helpers/reader-engine-specs.json)\n`);
+if (withoutEngine.length > 0)
+  process.stderr.write(
+    `[jest] ENGINE ABSENT: skipping ${withoutEngine.length} specs that need the report-reader engine (knowledge/lab-report-reader, sidecars/report-reader; list in test/helpers/reader-engine-specs.json)\n`,
+  );
 
 module.exports = {
   rootDir: '.',
@@ -31,6 +34,8 @@ module.exports = {
   // oversubscribe that service during concurrent migrations/restores/checkpoints. Keep
   // suites sequential; concurrency exercised inside a suite and all deadlines stay intact.
   ...(process.env.TEST_DATABASE_URL ? { maxWorkers: 1 } : {}),
+  // Database fixtures are copies of one migrated template; build it once, before the first spec's deadline starts (test/helpers/database.ts).
+  ...(process.env.TEST_DATABASE_URL ? { globalSetup: '<rootDir>/test/helpers/global-setup.ts' } : {}),
   testRegex: '(src|test)/.*\\.(spec|e2e-spec|pg-spec|s3-spec)\\.ts$',
   testPathIgnorePatterns: [
     '/node_modules/',
