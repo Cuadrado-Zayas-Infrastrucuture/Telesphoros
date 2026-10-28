@@ -1,8 +1,8 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { Client } from 'pg';
 import { disposeFixtures, onceFixtureCleanup } from './fixture-cleanup';
 import { trackedBuild, trackLive } from './fixture-registry';
-import { migrateUp } from '../../src/db/migrator';
+import { loadMigrations, type Migration, migrateUp } from '../../src/db/migrator';
 
 /** Admin (superuser) URL of a disposable PostgreSQL. Start one with scripts/dev-postgres.sh. */
 export function adminUrl(): string {
@@ -77,9 +77,84 @@ export interface EphemeralDatabase {
   drop(): Promise<void>;
 }
 
+/** Creates the cluster-wide roles every fixture needs, once, under the role lock. */
+async function ensureRoles(admin: Client): Promise<void> {
+  await admin.query('SELECT pg_advisory_lock($1)', [ROLE_LOCK]);
+  await admin.query(`DO $$ BEGIN
+      IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'telesphoros_app') THEN
+        CREATE ROLE telesphoros_app NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+      END IF;
+      IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${APP_LOGIN}') THEN
+        CREATE ROLE ${APP_LOGIN} LOGIN PASSWORD '${APP_LOGIN_PASSWORD}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS IN ROLE telesphoros_app;
+      END IF;
+    END $$`);
+  for (const role of PRIVILEGE_ROLES) {
+    await admin.query(
+      `DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${role}') THEN CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS; END IF; END $$`,
+    );
+  }
+  for (const [login, group] of [
+    [VERIFIER_LOGIN, 'telesphoros_ledger_verifier'],
+    [OPERATOR_LOGIN, 'telesphoros_ledger_operator'],
+    [AUDITOR_LOGIN, 'telesphoros_security_auditor'],
+    [WORKER_LOGIN, 'telesphoros_worker'],
+    [ISSUER_LOGIN, 'telesphoros_issuer'],
+  ] as const) {
+    await admin.query(`DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${login}') THEN
+        CREATE ROLE ${login} LOGIN PASSWORD '${APP_LOGIN_PASSWORD}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS IN ROLE ${group}; END IF; END $$`);
+  }
+  await admin.query('SELECT pg_advisory_unlock($1)', [ROLE_LOCK]);
+}
+
+const TEMPLATE_LOCK = 4243;
+/** Not `test_`: the fixture-construction control counts `test_` databases as leaked fixtures. */
+const TEMPLATE_PREFIX = 'tpl_migrated_';
+const TEMPLATE_BUILD_PREFIX = 'tplbuild_';
+
+/** The template's name: a hash of every migration's version and checksum, so adding, editing or removing a migration names a new template. */
+export function migratedTemplateName(migrations: ReadonlyArray<Pick<Migration, 'version' | 'checksum'>> = loadMigrations()): string {
+  const hash = createHash('sha256');
+  for (const migration of migrations) hash.update(`${migration.version}:${migration.checksum}\n`);
+  return `${TEMPLATE_PREFIX}${hash.digest('hex').slice(0, 16)}`;
+}
+
 /**
- * A fresh, fully migrated database on the real test cluster. Roles are cluster-wide, so they are
- * created once under an advisory lock (parallel Jest workers would otherwise race to create them).
+ * A database with every migration applied, kept as a template that accepts no connections; fixtures are copies of it. Running every
+ * migration for each fixture took 4 of a test's 5 seconds on a loaded CI runner (#107); a copy costs about a third of a migration locally.
+ * Built once per migration set, under its own lock, under a temporary name that is renamed only when complete, so no copy is ever taken
+ * from a half-built template. Building one drops the templates of other migration sets and any build a crash left behind.
+ */
+export async function ensureMigratedTemplate(base: string = adminUrl(), signal?: AbortSignal): Promise<string> {
+  const template = migratedTemplateName();
+  await withAdmin(base, async (admin) => {
+    signal?.throwIfAborted();
+    await admin.query('SELECT pg_advisory_lock($1)', [TEMPLATE_LOCK]); // closing the session releases the lock
+    if ((await admin.query('SELECT 1 FROM pg_database WHERE datname = $1 AND datistemplate', [template])).rows.length > 0) return;
+    await ensureRoles(admin);
+    const stale = await admin.query<{ datname: string }>('SELECT datname FROM pg_database WHERE starts_with(datname, $1) OR starts_with(datname, $2)', [
+      TEMPLATE_PREFIX,
+      TEMPLATE_BUILD_PREFIX,
+    ]);
+    for (const { datname } of stale.rows) {
+      await admin.query(`ALTER DATABASE ${datname} IS_TEMPLATE false`);
+      await admin.query(`DROP DATABASE ${datname} WITH (FORCE)`);
+    }
+    const build = `${TEMPLATE_BUILD_PREFIX}${randomBytes(6).toString('hex')}`;
+    await admin.query(`CREATE DATABASE ${build}`);
+    await withAdmin(withDatabase(base, build), async (migrator) => {
+      signal?.throwIfAborted();
+      await migrateUp(migrator);
+    });
+    signal?.throwIfAborted();
+    await admin.query(`ALTER DATABASE ${build} RENAME TO ${template}`);
+    await admin.query(`ALTER DATABASE ${template} WITH IS_TEMPLATE true ALLOW_CONNECTIONS false`);
+  });
+  return template;
+}
+
+/**
+ * A fresh database on the real test cluster: a copy of the migrated template (see ensureMigratedTemplate), or with `migrate: false` an
+ * empty one. Roles are cluster-wide, so they are created once under an advisory lock (parallel Jest workers would otherwise race to create them).
  */
 /**
  * The database, or the failure that unwound it. Registered like createTestApp's application: a caller whose hook timed out never receives
@@ -110,43 +185,19 @@ async function buildEphemeralDatabase(options: { migrate?: boolean; signal?: Abo
     options.signal?.throwIfAborted();
     await withAdmin(base, async (admin) => {
       options.signal?.throwIfAborted();
-      await admin.query('SELECT pg_advisory_lock($1)', [ROLE_LOCK]);
-      await admin.query(`DO $$ BEGIN
-        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'telesphoros_app') THEN
-          CREATE ROLE telesphoros_app NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
-        END IF;
-        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${APP_LOGIN}') THEN
-          CREATE ROLE ${APP_LOGIN} LOGIN PASSWORD '${APP_LOGIN_PASSWORD}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS IN ROLE telesphoros_app;
-        END IF;
-      END $$`);
-      for (const role of PRIVILEGE_ROLES) {
-        await admin.query(
-          `DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${role}') THEN CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS; END IF; END $$`,
-        );
+      await ensureRoles(admin);
+      if (options.migrate === false) await admin.query(`CREATE DATABASE ${name}`);
+      else {
+        const template = await ensureMigratedTemplate(base, options.signal);
+        options.signal?.throwIfAborted();
+        // WAL_LOG is PostgreSQL 16's default, named so it cannot drift: FILE_COPY forces a checkpoint, and one forced checkpoint on a CI
+        // runner has taken 4.9 s (docs/verification/backup-restore-fixture-lifetime.md).
+        await admin.query(`CREATE DATABASE ${name} TEMPLATE ${template} STRATEGY wal_log`);
       }
-      for (const [login, group] of [
-        [VERIFIER_LOGIN, 'telesphoros_ledger_verifier'],
-        [OPERATOR_LOGIN, 'telesphoros_ledger_operator'],
-        [AUDITOR_LOGIN, 'telesphoros_security_auditor'],
-        [WORKER_LOGIN, 'telesphoros_worker'],
-        [ISSUER_LOGIN, 'telesphoros_issuer'],
-      ] as const) {
-        await admin.query(`DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${login}') THEN
-          CREATE ROLE ${login} LOGIN PASSWORD '${APP_LOGIN_PASSWORD}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS IN ROLE ${group}; END IF; END $$`);
-      }
-      await admin.query('SELECT pg_advisory_unlock($1)', [ROLE_LOCK]);
-      await admin.query(`CREATE DATABASE ${name}`);
       created = true;
     });
     options.signal?.throwIfAborted();
     const url = withDatabase(base, name);
-    if (options.migrate !== false) {
-      await withAdmin(url, async (migrator) => {
-        options.signal?.throwIfAborted();
-        await migrateUp(migrator);
-        options.signal?.throwIfAborted();
-      });
-    }
 
     return {
       name,
