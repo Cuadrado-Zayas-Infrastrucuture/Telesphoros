@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { evaluationExecutionProfileSchema, type EvaluationExecutionProfile } from '@telesphoros/shared-types';
 import type { Env } from '../config/env';
@@ -38,7 +39,13 @@ export interface EvaluationWorkerConfig {
  * enabled (which the application already refuses in production: it is a synthetic integration), and the queue login is not the application login.
  * Every refusal names the setting, never its value.
  */
-export function loadEvaluationWorkerConfig(env: Env, source: NodeJS.ProcessEnv = process.env, hostname = 'evaluation-worker', pid = process.pid): EvaluationWorkerConfig {
+export function loadEvaluationWorkerConfig(
+  env: Env,
+  source: NodeJS.ProcessEnv = process.env,
+  hostname = 'evaluation-worker',
+  pid = process.pid,
+  instance = randomUUID().slice(0, 8),
+): EvaluationWorkerConfig {
   const parsed = schema.safeParse(source);
   if (!parsed.success) throw new Error(`Evaluation worker settings are invalid: ${[...new Set(parsed.error.issues.map((i) => i.path.join('.') || 'environment'))].join(', ')}.`);
   const c = parsed.data;
@@ -57,7 +64,8 @@ export function loadEvaluationWorkerConfig(env: Env, source: NodeJS.ProcessEnv =
   return {
     queueDatabaseUrl: c.EVALUATION_WORKER_DATABASE_URL,
     profile,
-    workerId: c.WORKER_ID ?? `${hostname}:${pid}`,
+    // PID 1 in every container and a shared host name would give every task the same id (and one job_workers row), as in apps/worker/src/config.ts.
+    workerId: c.WORKER_ID ?? `${hostname}:${pid}:${instance}`,
     concurrency: c.EVALUATION_WORKER_CONCURRENCY,
     tenantCap: c.EVALUATION_WORKER_TENANT_CAP,
     pollMs: c.EVALUATION_WORKER_POLL_MS,

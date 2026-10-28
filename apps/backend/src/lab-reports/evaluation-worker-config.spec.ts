@@ -50,6 +50,19 @@ describe('the evaluation worker settings', () => {
     expect(error?.message).not.toMatch(/invalid\/db|bedrock/);
   });
 
+  it('gives two containers with the same host name and PID 1 different ids when WORKER_ID is not set', () => {
+    const unset = { ...source, WORKER_ID: undefined };
+    const a = loadEvaluationWorkerConfig(env, unset, 'evaluation-worker', 1).workerId;
+    const b = loadEvaluationWorkerConfig(env, unset, 'evaluation-worker', 1).workerId;
+    expect(a).toMatch(/^evaluation-worker:1:[0-9a-f]{8}$/);
+    expect(b).toMatch(/^evaluation-worker:1:[0-9a-f]{8}$/);
+    expect(a).not.toBe(b);
+  });
+
+  it('uses WORKER_ID exactly as given when it is set (control)', () => {
+    expect(loadEvaluationWorkerConfig(env, source, 'evaluation-worker', 1).workerId).toBe('evaluation-1');
+  });
+
   it('refuses to start while the lab-report pipeline it runs is disabled', () => {
     expect(() => load({}, { ...env, LAB_REPORT_PIPELINE: 'disabled' })).toThrow(/needs LAB_REPORT_PIPELINE=enabled/);
   });
