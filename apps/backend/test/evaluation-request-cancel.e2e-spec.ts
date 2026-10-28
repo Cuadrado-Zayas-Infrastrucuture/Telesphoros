@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Pool } from 'pg';
 import { evaluationRequest, JobQueue, type ClaimedJob } from '@telesphoros/jobs';
-import type { EvaluationExecutionProfile } from '@telesphoros/shared-types';
+import { evaluationRequestDtoSchema, type EvaluationExecutionProfile } from '@telesphoros/shared-types';
 import { AppException } from '../src/common/app-exception';
 import { Database } from '../src/db/database';
 import { EvaluationRequestConsumer } from '../src/lab-reports/evaluation-request-consumer';
@@ -102,6 +102,8 @@ import { bearer } from './helpers/tokens';
     const cancelled = await service.cancel(principal, request.id);
 
     expect(cancelled).toMatchObject({ id: request.id, state: 'cancelled', evaluationId: null });
+    // The shared response schema (slice 1) accepts the state, so the review page can read it.
+    expect(evaluationRequestDtoSchema.parse(cancelled)).toEqual(cancelled);
     expect(await jobState(request.jobId)).toBe('cancelled');
     const [record] = await lab.row<{ cancelled_by: string; tenant_id: string }>('SELECT cancelled_by, tenant_id FROM evaluation_request_cancellations WHERE request_id = $1', [
       request.id,

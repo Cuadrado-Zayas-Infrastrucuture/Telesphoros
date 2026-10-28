@@ -20,24 +20,15 @@ export const evaluationRequestCreateSchema = z.strictObject({
 });
 export type EvaluationRequestCreate = z.infer<typeof evaluationRequestCreateSchema>;
 
-export interface EvaluationRequestDto {
-  id: string;
-  reportId: string;
-  captureId: string;
-  acceptanceId: string;
-  jobId: string;
-  requestedBy: string;
-  createdAt: string;
-  /** `cancelled`: withdrawn before a worker started it, by its requester (H4) or an operator (the jobs CLI). */
-  state: 'queued' | 'running' | 'retry' | 'dead' | 'completed' | 'completion-missing' | 'cancelled';
-  evaluationId: string | null;
-}
 /** `POST /reports/:id/evaluation-requests` (H4): the report comes from the path; no profile, provider or model is accepted from a caller. */
 export const evaluationRequestBodySchema = evaluationRequestCreateSchema.omit({ reportId: true });
 export type EvaluationRequestBody = z.infer<typeof evaluationRequestBodySchema>;
 
-/** Operational states of a queued request. Only `completed` names an evaluation; none of them is a clinical result or a hold. */
-export const evaluationRequestStates = ['queued', 'running', 'retry', 'dead', 'completed', 'completion-missing'] as const;
+/**
+ * Operational states of a queued request. Only `completed` names an evaluation; none of them is a clinical result or a hold. `cancelled`: withdrawn before
+ * a worker started it, by its requester (H4) or an operator (the jobs CLI).
+ */
+export const evaluationRequestStates = ['queued', 'running', 'retry', 'dead', 'completed', 'completion-missing', 'cancelled'] as const;
 
 export const evaluationRequestDtoSchema = z.strictObject({
   id: z.string().uuid(),
