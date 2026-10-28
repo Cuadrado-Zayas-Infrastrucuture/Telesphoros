@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '@/auth/AuthProvider';
+import { AppearanceChoice } from '@/components/settings/AppearanceChoice';
 import { OrganizationValue } from '@/components/settings/OrganizationValue';
 import { SettingsRow } from '@/components/settings/SettingsRow';
 import { SettingsSection } from '@/components/settings/SettingsSection';
@@ -52,6 +53,10 @@ export default function SettingsPage() {
             ))}
           </dl>
         )}
+      </SettingsSection>
+
+      <SettingsSection id="settings-appearance" title="Appearance">
+        <AppearanceChoice />
       </SettingsSection>
 
       <SettingsSection id="settings-session" title="Session and privacy">

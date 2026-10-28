@@ -164,3 +164,23 @@ test('rejects a deeper or missing blur edge', () => {
   rejects(input => { input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--size-blur-edge: 3rem;', '--size-blur-edge: 12rem;'); }, /--size-blur-edge/);
   rejects(input => { input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--size-blur-edge: 3rem;', ''); }, /--size-blur-edge/);
 });
+test('rejects a changed dark color without touching the light one', () => rejects(input => {
+  input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--panel: #152529;', '--panel: #1a2b2f;');
+}, /dark --panel must be #152529/));
+test('dark values never replace the light pins', () => {
+  const input = copy();
+  assert.equal(findBrandViolations(input).filter(error => /--background must be/.test(error)).length, 0);
+  assert.match(input.textFiles[tokenPath], /--background: #0E1B1F;/);
+});
+test('rejects a missing or duplicated dark block', () => {
+  rejects(input => { input.textFiles[tokenPath] = input.textFiles[tokenPath].replace(":root[data-theme='dark']", ':root[data-theme="dim"]'); }, /exactly one :root\[data-theme='dark'\] block/);
+  rejects(input => { input.textFiles[tokenPath] += "\n:root[data-theme='dark'] { --panel: #152529; }"; }, /exactly one/);
+});
+test('rejects a dark theme that changes anything but approved colors', () => rejects(input => {
+  input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--mark-plate: #DCEBE7;', '--mark-plate: #DCEBE7;\n  --size-control: 2rem;');
+}, /dark theme may not set --size-control/));
+test('rejects poor contrast in the dark theme alone', () => rejects(input => {
+  input.policy.darkTokens['muted-foreground'] = '#4a5f63';
+  input.policy.allowedColorLiterals.push('#4a5f63');
+  input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--muted-foreground: #A3BCBF;', '--muted-foreground: #4a5f63;');
+}, /contrast \(dark\): muted-foreground\/panel/));
