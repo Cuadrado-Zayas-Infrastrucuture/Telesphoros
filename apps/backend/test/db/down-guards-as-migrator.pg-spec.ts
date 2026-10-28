@@ -393,6 +393,55 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
     }
   });
 
+  it('refuses to revert H4 cancellations while one exists, as the restricted migrator, and restores forced RLS', async () => {
+    const f = await fixture();
+    const connection = new Database({ url: f.app, ssl: 'disable' });
+    try {
+      const report = await seedLabReport(f.admin, tenant);
+      const actor = 'syn-h4-clinician';
+      const ledger = new PostgresLedgerRecordsRepository(connection);
+      await withAdmin(f.admin, (c) =>
+        c.query(`INSERT INTO tenant_memberships (tenant_id,sub,status,roles,changed_by) VALUES ($1,$2,'active',ARRAY['clinician'],'syn-test')`, [tenant, actor]),
+      );
+      const capture = captureFor(report);
+      const stored = await ledger.insertCapture(tenant, report.uploader, capture);
+      const acceptance = await ledger.insertAcceptance(tenant, 'syn-reviewer', acceptanceFor(stored.record.id, capture));
+      await ledger.insertPatientDecision(tenant, 'syn-verifier', {
+        reportId: report.reportId,
+        expectedReport: { patientId: report.patientId, sha256: report.pdfSha256, objectVersion: report.objectVersion },
+        decision: 'verified',
+        method: 'person-confirmed',
+        basisCode: 'no-identifier-on-report',
+      });
+      const service = new EvaluationRequestsService(new EvaluationRequestsRepository(connection), {
+        version: 'evaluation-execution-profile/1',
+        codeArtifactSha256: hash,
+        executionManifestSha256: hash,
+        knowledgeSetId: hash,
+        recordingsSha256: hash,
+      });
+      const principal = { tenantId: tenant, sub: actor, roles: ['clinician' as const] };
+      const { request } = await service.admit(principal, { reportId: report.reportId, captureId: stored.record.id, acceptanceId: acceptance.record.id, requestId: randomUUID() });
+      await service.cancel(principal, request.id);
+      expect((await f.migrator.query('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user')).rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });
+
+      const above = revertAbove('evaluation_request_cancellations');
+      expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted);
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow('Durable evaluation work must be preserved');
+
+      expect((await f.migrator.query("SELECT version FROM schema_migrations WHERE version='0054'")).rowCount).toBe(1);
+      expect((await f.migrator.query("SELECT relforcerowsecurity AS forced FROM pg_class WHERE oid='evaluation_request_cancellations'::regclass")).rows).toEqual([
+        { forced: true },
+      ]);
+      await withAdmin(f.admin, async (c) => {
+        expect((await c.query('SELECT count(*)::int AS n FROM evaluation_request_cancellations WHERE tenant_id=$1', [tenant])).rows[0].n).toBe(1);
+      });
+    } finally {
+      await connection.onModuleDestroy();
+      await f.drop();
+    }
+  });
+
   it.each(cases)('$anchor: a populated table is refused, the refusal rolls back whole, and the setting that allows it still works', async (guard) => {
     const f = await fixture();
     try {

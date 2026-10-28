@@ -12,8 +12,12 @@ updates:
         update-types: [minor, patch]
     # NestJS packages move together: a lone @nestjs/* major (platform-express 12 on 11 siblings, ESM-only) fails typecheck.
     # Upgrade them in one deliberate migration PR; minor and patch updates still arrive.
+    # jsdom 30 needs Node >=22.22.2, whose Unicode 17.0 the lab-report matcher refuses, and .npmrc's engine-strict makes pnpm refuse
+    # to install it on the pinned 22.22.0. A workspace override holds it on 29; minor and patch updates of 29 still arrive.
     ignore:
       - dependency-name: "@nestjs/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "jsdom"
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions

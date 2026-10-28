@@ -1,23 +1,12 @@
-import { createRequire } from 'node:module';
 import { expect, test, type Page } from '@playwright/test';
-import { signInAs, signInWithPatient } from './helpers';
+import { axeViolations, signInAs, signInWithPatient } from './helpers';
 
-const require = createRequire(import.meta.url);
 // The upload page needs a signed-in clinician, so those tests sign in first (through the real flow).
 const PAGES = [
   { path: '/', name: 'overview', auth: false },
   { path: '/reports/upload', name: 'upload', auth: true },
 ];
 const open = (page: Page, path: string, auth: boolean) => (auth ? signInAs(page, 'alice', path) : page.goto(path).then(() => undefined));
-
-async function axeViolations(page: Page) {
-  await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
-  return page.evaluate(async () => {
-    // @ts-expect-error axe is injected into the page above
-    const results = await window.axe.run(document, { runOnly: ['wcag2a', 'wcag2aa', 'wcag21aa'] });
-    return results.violations.map((v: { id: string; nodes: unknown[] }) => `${v.id} (${v.nodes.length})`);
-  });
-}
 
 for (const { path, name, auth } of PAGES) {
   test.describe(`${name} page`, () => {

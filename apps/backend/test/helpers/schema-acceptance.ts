@@ -11,6 +11,8 @@ const relationships: [string, string, string, string][] = [
   ['evaluation_requests_acceptance_id_tenant_id_fkey', 'evaluation_requests', 'acceptance_id,tenant_id', 'capture_acceptances:id,tenant_id'],
   ['evaluation_request_completions_request_id_tenant_id_fkey', 'evaluation_request_completions', 'request_id,tenant_id', 'evaluation_requests:id,tenant_id'],
   ['evaluation_request_completions_evaluation_id_tenant_id_fkey', 'evaluation_request_completions', 'evaluation_id,tenant_id', 'evaluations:id,tenant_id'],
+  // H4 (0054): a cancellation names its request; the job is the request's own.
+  ['evaluation_request_cancellations_request_id_tenant_id_fkey', 'evaluation_request_cancellations', 'request_id,tenant_id', 'evaluation_requests:id,tenant_id'],
   ['browser_sessions_membership_fk', 'browser_sessions', 'tenant_id,sub', 'tenant_memberships:tenant_id,sub'],
   ['tenant_memberships_tenant_fk', 'tenant_memberships', 'tenant_id', 'tenants:id'],
   ['invitations_tenant_id_fkey', 'invitations', 'tenant_id', 'tenants:id'],
@@ -70,6 +72,7 @@ const relationships: [string, string, string, string][] = [
 const primaryKeys: Record<string, string> = {
   evaluation_requests: 'id',
   evaluation_request_completions: 'request_id',
+  evaluation_request_cancellations: 'request_id',
   browser_sessions: 'tenant_id, handle_hash',
   report_upload_runs: 'run_id',
   report_upload_attempts: 'id',
@@ -187,6 +190,7 @@ const uniqueKeys: Record<string, string> = {
 const checkNames: Record<string, string> = {
   evaluation_requests: 'requested_by_check fingerprint_check basis_check execution_profile_check',
   evaluation_request_completions: 'worker_len',
+  evaluation_request_cancellations: 'by_len',
   browser_sessions: 'handle_hash_shape issued_at_range lifetime created_at_bound credential_shape revoked_at_bound',
   patient_identifiers: 'tenant_id_len created_by_len system_shape digest_len key_version status withdrawal_shape withdrawn_by_len created_by_human creation_request_pair',
   report_patient_decisions: 'tenant_id_len created_by_len hash version_len decision method shape created_by_human',
