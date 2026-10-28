@@ -607,9 +607,9 @@ describe('reverting 0031 and 0028', () => {
     const through = revertThrough('tenant_capability_issue_current'); // this migration and anything above it
     expect(await owner((c) => migrateDown(c, through.steps))).toEqual(through.reverted);
     const down = await owner(catalogSnapshot);
-    // 0032 through H3 (0051) go with 0031. H1 and H3 remove their request/receipt tables, policies and helpers; 0043's drop is undone below.
+    // 0032 through H4 (0054) go with 0031. H1, H3 and H4 remove their request/receipt/cancellation tables, policies and helpers; 0043's drop is undone below.
     const removed =
-      /tenant_capability_issue_current|app_tenant_bound|app_capability_version|tenant_capability_bind_internal|member_sign_out|patient_merge_decisions_hold|patients_guard_delete|outbox_stats|patients_creation_request_guard|patient_identifiers_creation_request_guard|invitations_creation_request_guard|invitation_create_keyed|outbox_append\(text,uuid,text\)|agentic_explain_receipt|agentic_explain_identity|agentic_explain_run|agentic_explain_transition|evaluation_request|evaluation_job_fence|evaluation_completion_check/;
+      /tenant_capability_issue_current|app_tenant_bound|app_capability_version|tenant_capability_bind_internal|member_sign_out|patient_merge_decisions_hold|patients_guard_delete|outbox_stats|patients_creation_request_guard|patient_identifiers_creation_request_guard|invitations_creation_request_guard|invitation_create_keyed|outbox_append\(text,uuid,text\)|agentic_explain_receipt|agentic_explain_identity|agentic_explain_run|agentic_explain_transition|evaluation_request|evaluation_job_fence|evaluation_job_cancel|evaluation_cancellation_check|evaluation_completion_check/;
     expect(down.filter((l) => removed.test(l))).toEqual([]);
     // Reverting 0043 puts the dropped legacy table back (with its policy), so the reverted catalog has those two lines the head catalog lacks; nothing else moved.
     const restoredLegacyTable = (l: string) => l.startsWith('rel recommendations ') || l.startsWith('policy recommendations.');

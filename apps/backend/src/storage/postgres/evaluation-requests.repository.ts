@@ -45,6 +45,17 @@ export class EvaluationRequestsRepository {
     });
   }
 
+  /**
+   * H4: the requester withdraws a request no worker has started. One insert: migration 0054's trigger checks who is acting, cancels the job under its row
+   * lock (EC001 once it has started) and records the person, or does neither.
+   */
+  cancel(principal: Principal, id: string): Promise<EvaluationRequestDto> {
+    return this.access(principal, async (client) => {
+      await client.query('INSERT INTO evaluation_request_cancellations (request_id, tenant_id, cancelled_by) VALUES ($1, $2, $3)', [id, principal.tenantId, principal.sub]);
+      return this.mustRead(client, principal.tenantId, id);
+    });
+  }
+
   get(principal: Principal, id: string): Promise<EvaluationRequestDto | undefined> {
     return this.access(principal, async (client) => {
       await client.query('SELECT evaluation_request_authorize(false)');
@@ -96,6 +107,8 @@ export class EvaluationRequestsRepository {
       if (code === '42501') throw AppException.forbidden();
       if (code === 'ER001') throw AppException.conflictBecause('evaluation-basis-unavailable', 'Current accepted evaluation evidence is unavailable.');
       if (code === 'LC001') throw AppException.ledgerCompromised();
+      if (code === 'EC001') throw AppException.conflictBecause('not-cancellable', 'Only a request that has not started can be cancelled.');
+      if (code === 'P0002') throw AppException.notFound('Evaluation request not found.');
       throw error;
     }
   }
@@ -140,7 +153,8 @@ export class EvaluationRequestsRepository {
     let state: EvaluationRequestDto['state'];
     if (row.receipt_id) state = 'completed';
     else if (row.job_state === 'succeeded') state = 'completion-missing';
-    else if (row.job_state === 'queued' || row.job_state === 'running' || row.job_state === 'retry' || row.job_state === 'dead') state = row.job_state;
+    else if (row.job_state === 'queued' || row.job_state === 'running' || row.job_state === 'retry' || row.job_state === 'dead' || row.job_state === 'cancelled')
+      state = row.job_state;
     else throw AppException.unavailable('Evaluation request status is unavailable.');
     return {
       id: row.id,
