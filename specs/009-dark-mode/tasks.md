@@ -7,4 +7,4 @@
 - [x] T005 Appearance section in Settings (DRK-5)
 - [x] T006 Logo plate (D5)
 - [x] T007 Unit and browser tests, including axe in dark with a positive control
-- [ ] T008 Gates and screenshots
+- [x] T008 Gates and screenshots
