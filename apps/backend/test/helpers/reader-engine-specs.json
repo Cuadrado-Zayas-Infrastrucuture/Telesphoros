@@ -1,5 +1,5 @@
 {
-  "note": "Measured 2026-10-23 with knowledge/lab-report-reader and sidecars/report-reader removed; re-measured 2026-10-27 (spec 004, slice 1) with the test stand-in reader and the public fixtures, all three backend tiers, nothing skipped: the 8 files that passed were removed. Spec 004 slice 3 added public fixtures D03 to D07 and D09 to D12 and moved 7 more files onto them. What remains tests the engine itself. scripts/check-without-reader.sh --measure cannot re-measure this list in a checkout without the engine (it requires the engine directories, and READER_ENGINE=measure turns the stand-in off); spec 004 slice 4 replaces it. Files in partialSkip also hold tests that pass without the engine.",
+  "note": "Measured 2026-10-23 with knowledge/lab-report-reader and sidecars/report-reader removed; re-measured 2026-10-27 (spec 004, slice 1) with the test stand-in reader and the public fixtures, all three backend tiers, nothing skipped: the 8 files that passed were removed. Spec 004 slice 3 added public fixtures D03 to D07 and D09 to D12 and moved 7 more files onto them. What remains tests the engine itself. CI re-measures it after the PostgreSQL tier (scripts/check-without-reader.sh --measure --listed): every listed file must still fail without the engine, and the partialSkip counts must match; spec 004 slice 4 also moved the 11 engine-free tests of subprocess-report-reader.spec.ts into their own file. Files in partialSkip also hold tests that pass without the engine.",
   "specs": [
     "src/services/report-adapter/adapt-report.spec.ts",
     "src/services/report-lookup/lookup.spec.ts",
@@ -7,7 +7,5 @@
     "src/services/report-reader/reader-checkpoint.spec.ts",
     "src/services/report-reader/subprocess-report-reader.spec.ts"
   ],
-  "partialSkip": {
-    "src/services/report-reader/subprocess-report-reader.spec.ts": "11 of 57 tests do not need the engine"
-  }
+  "partialSkip": {}
 }
