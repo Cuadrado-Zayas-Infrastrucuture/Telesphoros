@@ -50,6 +50,8 @@ import { bearer } from './helpers/tokens';
   const evaluationsOf = (reportId: string) => lab.count('evaluations', 'report_id = $1', [reportId]);
   const body = (s: { captureId: string; acceptanceId: string }) => ({ captureId: s.captureId, acceptanceId: s.acceptanceId });
   const resultFor = (evaluation: Json, drug: string): Json => evaluation.results.find((r: Json) => r.drug === drug);
+  /** A result without its row id: a new evaluation stores new result rows (spec 006 D01a), so "as before" compares everything else. */
+  const contentOf = ({ id: _id, ...rest }: Json): Json => rest; // eslint-disable-line @typescript-eslint/no-unused-vars
 
   /** What a dispute names for the cell a result cited. */
   const cellOf = (result: Json) => ({
@@ -103,7 +105,8 @@ import { bearer } from './helpers/tokens';
         await get('?' + bad).expect(400);
       const after = (await lab.evaluate(s.clin, s.reportId, body(s)).expect(201)).body;
       expect(resultFor(after, 'drugq')).toMatchObject({ outcome: 'held', reasonCode: 'cell-disputed', recommendationText: null });
-      expect(resultFor(after, 'drugr')).toEqual(resultFor(s.e, 'drugr'));
+      expect(contentOf(resultFor(after, 'drugr'))).toEqual(contentOf(resultFor(s.e, 'drugr')));
+      expect(resultFor(after, 'drugr').id).not.toBe(resultFor(s.e, 'drugr').id); // its own stored row
       expect(after.advisory.activeDisputes).toBe(1);
       const history = await lab.api().get('/api/v1/evaluations?pageSize=1').set(bearer(s.clin.token)).expect(200);
       expect(history.body.data[0].advisory.activeDisputes).toBe(1);
@@ -192,7 +195,8 @@ import { bearer } from './helpers/tokens';
       expect(resultFor(after.body, 'drugq').recommendationText).toBeNull();
       expect(resultFor(after.body, 'drugq').strength).toBeNull();
       expect(JSON.stringify(resultFor(after.body, 'drugq'))).not.toContain('Q intermediate.');
-      expect(resultFor(after.body, 'drugr')).toEqual(resultFor(s.e, 'drugr')); // an unrelated drug is exactly as before
+      expect(contentOf(resultFor(after.body, 'drugr'))).toEqual(contentOf(resultFor(s.e, 'drugr'))); // an unrelated drug is exactly as before
+      expect(resultFor(after.body, 'drugr').id).not.toBe(resultFor(s.e, 'drugr').id); // in its own stored row
       expect(after.body.geneStates).toEqual(s.e.geneStates);
       expect(after.body.knowledgeSetId).not.toBe(knowledge.id);
 
