@@ -51,6 +51,9 @@ export class AppException extends HttpException {
   static pipelineDisabled() {
     return new AppException(503, ErrorCode.PIPELINE_DISABLED, 'Lab report processing is switched off.');
   }
+  static evaluationRequestsDisabled() {
+    return new AppException(503, ErrorCode.EVALUATION_REQUESTS_DISABLED, 'Queued evaluation requests are switched off.');
+  }
   static pipelineBusy() {
     return new AppException(503, ErrorCode.PIPELINE_BUSY, 'The reader is busy. Try again shortly.', undefined, 5);
   }

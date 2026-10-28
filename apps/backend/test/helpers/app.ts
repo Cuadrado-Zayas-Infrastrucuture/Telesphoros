@@ -55,6 +55,8 @@ export interface TestAppOptions {
   corsOrigins?: string[];
   /** Turn the lab-report pipeline switch on. Needs the PostgreSQL store (the ledger has no in-memory version). */
   labReportPipeline?: boolean;
+  /** Turn queued evaluation requests on (EVALUATION_REQUESTS, H4) with this execution profile, as JSON. Needs `labReportPipeline`. */
+  evaluationRequests?: string;
   /**
    * Read reports with the private report-reader engine and its own captures, instead of the test stand-in and the public fixtures. Only specs on the
    * list in reader-engine-specs.json pass it: the app refuses to start without the engine.
@@ -192,6 +194,7 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
       ...(options.databasePoolMax === undefined ? {} : { DATABASE_POOL_MAX: String(options.databasePoolMax) }),
       ...(realIssuer ? { ISSUER_URL: realIssuer.url } : {}),
       ...(options.labReportPipeline ? { LAB_REPORT_PIPELINE: 'enabled' } : {}),
+      ...(options.evaluationRequests === undefined ? {} : { EVALUATION_REQUESTS: 'enabled', EVALUATION_EXECUTION_PROFILE: options.evaluationRequests }),
       ...(options.labReportPipeline
         ? {
             LAB_REPORT_FIXTURES_DIR: options.fixturesDir ?? (options.readerEngine ? ENGINE_FIXTURES : PUBLIC_FIXTURES),

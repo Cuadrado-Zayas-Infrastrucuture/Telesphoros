@@ -32,3 +32,22 @@ export interface EvaluationRequestDto {
   state: 'queued' | 'running' | 'retry' | 'dead' | 'completed' | 'completion-missing' | 'cancelled';
   evaluationId: string | null;
 }
+/** `POST /reports/:id/evaluation-requests` (H4): the report comes from the path; no profile, provider or model is accepted from a caller. */
+export const evaluationRequestBodySchema = evaluationRequestCreateSchema.omit({ reportId: true });
+export type EvaluationRequestBody = z.infer<typeof evaluationRequestBodySchema>;
+
+/** Operational states of a queued request. Only `completed` names an evaluation; none of them is a clinical result or a hold. */
+export const evaluationRequestStates = ['queued', 'running', 'retry', 'dead', 'completed', 'completion-missing'] as const;
+
+export const evaluationRequestDtoSchema = z.strictObject({
+  id: z.string().uuid(),
+  reportId: z.string().uuid(),
+  captureId: z.string().uuid(),
+  acceptanceId: z.string().uuid(),
+  jobId: z.string().uuid(),
+  requestedBy: z.string().min(1),
+  createdAt: z.string().min(1),
+  state: z.enum(evaluationRequestStates),
+  evaluationId: z.string().uuid().nullable(),
+});
+export type EvaluationRequestDto = z.infer<typeof evaluationRequestDtoSchema>;

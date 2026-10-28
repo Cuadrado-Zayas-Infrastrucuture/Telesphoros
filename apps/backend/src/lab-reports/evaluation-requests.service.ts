@@ -5,7 +5,10 @@ import type { Principal } from '../auth/principal';
 import { AppException } from '../common/app-exception';
 import type { EvaluationRequestsRepository } from '../storage/postgres/evaluation-requests.repository';
 
-/** Internal/inactive foundation: deliberately absent from Nest modules, controllers and production consumers. */
+/**
+ * Admission and status (H1). Reachable only through EvaluationRequestsController while EVALUATION_REQUESTS is on (H4, refused in production);
+ * built by evaluationRequestsFactory, never by the production consumer set.
+ */
 export class EvaluationRequestsService {
   private readonly profile: Readonly<EvaluationExecutionProfile>;
   constructor(

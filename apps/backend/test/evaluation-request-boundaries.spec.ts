@@ -8,10 +8,15 @@ const runtimeFiles = (dir: string): string[] =>
     entry.isDirectory() ? runtimeFiles(join(dir, entry.name)) : /\.(module|controller)\.ts$/.test(entry.name) ? [join(dir, entry.name)] : [],
   );
 
-it('keeps H1 out of runtime API registration and the production consumer set', () => {
+// H4 (spec 007, founder decision D1): admission and status are reachable through one controller, registered by the lab-reports module and answered
+// only while EVALUATION_REQUESTS is enabled (refused in production; test/evaluation-requests-api.e2e-spec.ts proves the service is absent while it is
+// off). No other module or controller names them, and none names the H3 consumer or its entry point.
+it('keeps admission behind its one controller, and the consumer out of every module and controller and of the production consumer set', () => {
   const files = runtimeFiles(join(root, 'apps/backend/src'));
-  expect(files.length).toBeGreaterThan(0);
-  for (const file of files) expect(readFileSync(file, 'utf8')).not.toMatch(/evaluation-requests|EvaluationRequestsService/);
+  expect(files.length).toBeGreaterThan(10);
+  const naming = files.filter((file) => /evaluation-requests|EvaluationRequestsService/.test(readFileSync(file, 'utf8'))).map((file) => file.slice(root.length + 1));
+  expect(naming.sort()).toEqual(['apps/backend/src/lab-reports/evaluation-requests.controller.ts', 'apps/backend/src/lab-reports/lab-reports.module.ts']);
+  for (const file of files) expect(readFileSync(file, 'utf8')).not.toMatch(/EvaluationRequestConsumer|evaluation-request-consumer|evaluation-worker/);
   expect(PRODUCTION_JOBS.some((job) => job.type === evaluationRequest.type)).toBe(false);
   expect(readFileSync(join(root, 'apps/worker/src/main.ts'), 'utf8')).not.toMatch(/evaluationRequest|evaluations\.request/);
 });

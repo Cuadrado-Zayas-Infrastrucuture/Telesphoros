@@ -48,10 +48,17 @@ interface Running {
   abort: AbortController;
   stopTimers: () => void;
   released: boolean;
+  /** Past its handler and reporting the outcome: shutdown waits for it rather than release it (a released finished job would run again, its attempt not counted). */
+  settling: boolean;
+  /** The outcome was never recorded: `settle()` gave up, and lease expiry will recover the job. */
+  unsettled: boolean;
   done: Promise<void>;
 }
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** How long a stop waits for outcomes still being reported: longer than `settle()`'s retries (7.5 seconds), within the shutdown grace (apps/worker/src/shutdown.ts). */
+const SETTLE_WAIT_MS = 8000;
 
 /**
  * The claim loop. It claims up to its free capacity from the queue, runs each job's handler with a heartbeat that keeps the lease, and reports the outcome:
@@ -91,7 +98,10 @@ export class Runner {
     this.loopDone = this.loop();
   }
 
-  /** Stops claiming, lets running jobs finish for `drainSeconds`, then releases whatever is left (an attempt not made is not counted). */
+  /**
+   * Stops claiming, lets running jobs finish for `drainSeconds`, then releases whatever is left (an attempt not made is not counted) and waits for outcomes still being
+   * reported. Throws `shutdown-incomplete` when a release failed or an outcome was not recorded, so the process exits 1: lease expiry recovers those jobs, as after a crash.
+   */
   async stop(): Promise<void> {
     if (this.stopping) return;
     this.stopping = true;
@@ -101,7 +111,9 @@ export class Runner {
     log('info', 'worker-draining', { workerId: this.options.workerId, running: this.running.size });
     await Promise.race([Promise.allSettled([...this.running.values()].map((r) => r.done)), wait(this.options.drainSeconds * 1000)]);
     const left = [...this.running.values()];
+    let incomplete = 0;
     for (const r of left) {
+      if (r.settling) continue;
       r.released = true;
       r.stopTimers();
       r.abort.abort(new Error('shutdown'));
@@ -109,11 +121,14 @@ export class Runner {
         const ok = await this.options.queue.release(r.job.id, r.holder);
         log('info', 'job-released', { jobId: r.job.id, jobType: r.job.type, attempt: r.job.attempt, outcome: ok ? 'released' : 'not-held' });
       } catch {
+        incomplete += 1;
         log('error', 'job-release-failed', { jobId: r.job.id, jobType: r.job.type, code: 'release-failed' });
       }
     }
-    await Promise.race([Promise.allSettled(left.map((r) => r.done)), wait(2000)]);
-    log('info', 'worker-stopped', { workerId: this.options.workerId });
+    await Promise.race([Promise.allSettled(left.map((r) => r.done)), wait(left.some((r) => r.settling) ? SETTLE_WAIT_MS : 2000)]);
+    incomplete += left.filter((r) => r.settling && (r.unsettled || this.running.get(r.job.id) === r)).length;
+    log(incomplete ? 'error' : 'info', 'worker-stopped', { workerId: this.options.workerId, ...(incomplete ? { count: incomplete } : {}) });
+    if (incomplete) throw new Error('shutdown-incomplete');
   }
 
   private sleep(ms: number): Promise<void> {
@@ -170,7 +185,7 @@ export class Runner {
       previous.abort.abort(new Error('lease-lost'));
     }
     const abort = new AbortController();
-    const entry: Running = { job, holder, abort, stopTimers: () => undefined, released: false, done: Promise.resolve() };
+    const entry: Running = { job, holder, abort, stopTimers: () => undefined, released: false, settling: false, unsettled: false, done: Promise.resolve() };
     this.running.set(job.id, entry);
     entry.done = this.execute(entry, registered).finally(() => {
       entry.stopTimers();
@@ -244,11 +259,12 @@ export class Runner {
     }
 
     if (entry.released) return; // shutdown released it; the result belongs to whoever runs it next
-    await this.settle(job, holder, result);
+    entry.settling = true;
+    entry.unsettled = !(await this.settle(job, holder, result));
   }
 
   /** Reports the outcome, retrying a few times if the database is briefly unavailable (the lease protects the job if it stays so). */
-  private async settle(job: ClaimedJob, holder: string, result: { ok: true } | { ok: false; code: string; retryable: boolean }): Promise<void> {
+  private async settle(job: ClaimedJob, holder: string, result: { ok: true } | { ok: false; code: string; retryable: boolean }): Promise<boolean> {
     const { queue, log } = this.options;
     const fields = { jobId: job.id, jobType: job.type, attempt: job.attempt };
     for (let tryNumber = 0; tryNumber < 4; tryNumber += 1) {
@@ -260,11 +276,12 @@ export class Runner {
           const state = await queue.fail(job.id, holder, result.code, result.retryable);
           log(state === 'dead' ? 'error' : 'warn', 'job-finished', { ...fields, outcome: state ?? 'not-held', code: result.code });
         }
-        return;
+        return true;
       } catch {
         log('error', 'job-report-failed', { ...fields, code: 'queue-unavailable', count: tryNumber + 1 });
         await wait(500 * 2 ** tryNumber);
       }
     }
+    return false;
   }
 }

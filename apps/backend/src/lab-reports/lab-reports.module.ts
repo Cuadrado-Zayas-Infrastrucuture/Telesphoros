@@ -1,5 +1,6 @@
 import { Logger, Global, Module } from '@nestjs/common';
 import { ENV, type Env } from '../config/env';
+import { Database } from '../db/database';
 import { loadKnowledge } from '../services/knowledge/knowledge-loader';
 import type { KnowledgeSet } from '../services/knowledge/knowledge-set';
 import { assertReaderEnginePresent } from '../services/report-reader/engine-presence';
@@ -11,6 +12,8 @@ import { EvaluationCorrectionsController, NotesController } from './corrections.
 import { CorrectionsService } from './corrections.service';
 import { DisputesController } from './disputes.controller';
 import { DisputesService } from './disputes.service';
+import { EvaluationRequestsController } from './evaluation-requests.controller';
+import { EVALUATION_REQUESTS_SERVICE, EvaluationRequestsGateGuard, evaluationRequestsFactory, EvaluationRequestsSwitch } from './evaluation-requests-switch';
 import { EvaluationsController, ReportEvaluationController } from './evaluations.controller';
 import { EvaluationsService, LAB_KNOWLEDGE, LAB_READER } from './evaluations.service';
 import { LedgerController } from '../ledger/ledger.controller';
@@ -55,6 +58,7 @@ export const labReaderFactory = async (env: Env): Promise<ReportReader | undefin
     NotesController,
     DisputesController,
     LedgerController,
+    EvaluationRequestsController,
   ],
   providers: [
     PipelineSwitch,
@@ -72,6 +76,14 @@ export const labReaderFactory = async (env: Env): Promise<ReportReader | undefin
     },
     { provide: LAB_KNOWLEDGE, inject: [ENV], useFactory: labKnowledgeFactory },
     { provide: LAB_READER, inject: [ENV], useFactory: labReaderFactory },
+    EvaluationRequestsSwitch,
+    EvaluationRequestsGateGuard,
+    // Undefined unless EVALUATION_REQUESTS=enabled (H4); the database is absent with the in-memory store, which configuration refuses for the pipeline.
+    {
+      provide: EVALUATION_REQUESTS_SERVICE,
+      inject: [ENV, { token: Database, optional: true }, LAB_KNOWLEDGE, TextCaptureRunner],
+      useFactory: evaluationRequestsFactory,
+    },
   ],
   exports: [PipelineSwitch, PipelineGateGuard],
 })

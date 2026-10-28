@@ -51,6 +51,7 @@ describe('the lab-report pipeline routes', () => {
       'GET /api/v1/cell-disputes',
       'GET /api/v1/cell-disputes/:id',
       'GET /api/v1/cell-disputes/:id/evaluations',
+      'GET /api/v1/evaluation-requests/:id',
       'GET /api/v1/evaluations',
       'GET /api/v1/evaluations/:id',
       'GET /api/v1/ledger/verify',
@@ -60,6 +61,7 @@ describe('the lab-report pipeline routes', () => {
       'POST /api/v1/cell-disputes/:id/decision',
       'POST /api/v1/evaluations/:id/corrections',
       'POST /api/v1/reports/:id/capture',
+      'POST /api/v1/reports/:id/evaluation-requests',
       'POST /api/v1/reports/:id/evaluations',
     ]);
     expect(moduleControllers).toEqual(expect.arrayContaining([ReportCaptureController, CapturesController]));
