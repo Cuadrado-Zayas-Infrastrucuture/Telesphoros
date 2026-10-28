@@ -53,7 +53,21 @@ export function ReportStages({ patientId }: { patientId: string }) {
           <p role="status" className="sr-only">
             Counting report stages…
           </p>
+          {/* Shaped like the counted result (funnel, three label/value pairs, note), so nothing jumps when counts arrive. */}
           <Skeleton className="h-16 w-full" />
+          <div aria-hidden="true" className="grid w-full grid-cols-3 gap-x-2 text-sm">
+            {[0, 1, 2].map((index) => (
+              <div key={index} className="flex flex-col">
+                <span className="flex h-5 items-center">
+                  <Skeleton className="h-3 w-2/3" />
+                </span>
+                <span className="flex h-5 items-center">
+                  <Skeleton className="h-3 w-1/2" />
+                </span>
+              </div>
+            ))}
+          </div>
+          <ReadNote />
         </>
       )}
       {state.status === 'error' && (
@@ -81,21 +95,28 @@ function StageSummary({ counts }: { counts: ReportStageCounts }) {
   return (
     <>
       <FunnelChart stages={stages} className="h-16" />
-      {/* Three equal columns, so each label sits under its own funnel segment. */}
+      {/* Three equal columns under the funnel segments; labels share one row and values the next, so a wrapped label never pushes its value out of line. */}
       <dl className="grid w-full grid-cols-3 gap-x-2 text-sm">
         {stages.map((stage) => (
-          <div key={stage.label} className="flex min-w-0 flex-col">
-            <dt className="text-muted-foreground">{stage.label}</dt>
-            <dd className="font-semibold">
+          <div key={stage.label} className="contents">
+            <dt className="row-start-1 min-w-0 self-end text-muted-foreground">{stage.label}</dt>
+            <dd className="row-start-2 min-w-0 font-semibold">
               {number(stage.value)} <span className="font-normal text-muted-foreground">{share(stage.value, counts.registered)}</span>
             </dd>
           </div>
         ))}
       </dl>
-      <p className="text-xs text-muted-foreground">
-        Read means the system processed the record; it is not clinical review.
-        {counts.capped && ` Counted from the first ${number(counts.registered)} of ${number(counts.total)} reports.`}
-      </p>
+      <ReadNote cap={counts.capped ? ` Counted from the first ${number(counts.registered)} of ${number(counts.total)} reports.` : undefined} />
     </>
+  );
+}
+
+/** Fixed copy, shown while counting too: it explains a stage, and it keeps the section's height steady. */
+function ReadNote({ cap }: { cap?: string }) {
+  return (
+    <p className="text-xs text-muted-foreground">
+      Read means the system processed the record; it is not clinical review.
+      {cap}
+    </p>
   );
 }

@@ -52,6 +52,10 @@ export function FunnelChart({ stages, width = 600, height = 120, gap = 4, classN
           <g key={stage.label} transform={`translate(${index * (segW + gap)} 0)`}>
             <path data-part="halo" fill="var(--brand-accent)" fillOpacity={0.18} d={segmentPath(start, end, segW, height, HALO_SCALE)} />
             <path data-part="core" fill="var(--primary)" d={segmentPath(start, end, segW, height, CORE_SCALE)} />
+            {/* A segment that starts empty has nothing to draw; a hairline says "none" instead of leaving a gap. */}
+            {start === 0 && (
+              <line data-part="baseline" x1={0} x2={segW} y1={height / 2} y2={height / 2} stroke="var(--divider)" strokeWidth={2} vectorEffect="non-scaling-stroke" />
+            )}
           </g>
         );
       })}

@@ -60,3 +60,32 @@ describe('FunnelChart', () => {
     expect(render(<FunnelChart stages={[]} />).container.querySelector('svg')).toBeNull();
   });
 });
+
+describe('FunnelChart empty segments', () => {
+  it('draws a divider baseline where a segment has nothing, so an empty stage does not read as a gap', () => {
+    const { container } = render(
+      <FunnelChart
+        stages={[
+          { label: 'Registered', value: 2 },
+          { label: 'File uploaded', value: 2 },
+          { label: 'Read', value: 0 },
+        ]}
+      />,
+    );
+    const baselines = [...container.querySelectorAll<SVGLineElement>('line[data-part="baseline"]')];
+    expect(baselines).toHaveLength(1);
+    expect(baselines[0].getAttribute('stroke')).toBe('var(--divider)');
+  });
+
+  it('draws no baseline when every stage has something', () => {
+    const { container } = render(
+      <FunnelChart
+        stages={[
+          { label: 'A', value: 3 },
+          { label: 'B', value: 1 },
+        ]}
+      />,
+    );
+    expect(container.querySelectorAll('line[data-part="baseline"]')).toHaveLength(0);
+  });
+});
