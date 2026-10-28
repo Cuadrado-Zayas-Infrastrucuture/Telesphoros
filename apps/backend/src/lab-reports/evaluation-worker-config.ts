@@ -74,11 +74,11 @@ export function loadEvaluationWorkerConfig(
 }
 
 /**
- * The profile a worker is configured with must be what it actually loaded: the knowledge set and the recordings are checked here, at start-up, because
+ * The profile a process is configured with (the worker, H3; the API's queued requests, H4) must be what it actually loaded: the knowledge set and the recordings are checked here, at start-up, because
  * the database would otherwise refuse every completion one at a time (migration 0051). The code artifact and execution manifest digests are taken as
  * configured: nothing in this process can recompute them yet.
  */
 export function assertRunsProfile(profile: EvaluationExecutionProfile, loaded: { knowledgeSetId: string; recordingsSha256: string }): void {
-  if (profile.knowledgeSetId !== loaded.knowledgeSetId) throw new Error('EVALUATION_EXECUTION_PROFILE names a knowledge set this worker did not load.');
-  if (profile.recordingsSha256 !== loaded.recordingsSha256) throw new Error('EVALUATION_EXECUTION_PROFILE names recordings this worker did not load.');
+  if (profile.knowledgeSetId !== loaded.knowledgeSetId) throw new Error('EVALUATION_EXECUTION_PROFILE names a knowledge set this process did not load.');
+  if (profile.recordingsSha256 !== loaded.recordingsSha256) throw new Error('EVALUATION_EXECUTION_PROFILE names recordings this process did not load.');
 }

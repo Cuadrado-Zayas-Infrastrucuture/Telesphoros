@@ -1,6 +1,13 @@
 import { loadEnv } from './env';
 
 const base = { NODE_ENV: 'development', JWT_SECRET: 'a-test-secret-that-is-comfortably-over-32-chars' };
+const SYNTHETIC_PROFILE = JSON.stringify({
+  version: 'evaluation-execution-profile/1',
+  codeArtifactSha256: 'a'.repeat(64),
+  executionManifestSha256: 'b'.repeat(64),
+  knowledgeSetId: 'c'.repeat(64),
+  recordingsSha256: 'd'.repeat(64),
+});
 
 describe('loadEnv', () => {
   it('applies safe defaults', () => {
@@ -138,6 +145,8 @@ describe('loadEnv', () => {
       ['no listener certificate (the load balancer would reach the task in clear text)', { TLS_CERT_PEM: undefined, TLS_KEY_PEM: undefined }, /TLS_CERT_PEM.*production/],
       ['a listener certificate without its key', { TLS_KEY_PEM: undefined }, /TLS_KEY_PEM/],
       ['a missing ledger verifier login', { LEDGER_VERIFIER_DATABASE_URL: undefined }, /LEDGER_VERIFIER_DATABASE_URL.*production/],
+      // Refused on its own, not only because it needs the pipeline: the pipeline is off here, and the message names production.
+      ['queued evaluation requests (H4)', { EVALUATION_REQUESTS: 'enabled', EVALUATION_EXECUTION_PROFILE: SYNTHETIC_PROFILE }, /EVALUATION_REQUESTS.*production/],
       [
         'the synthetic lab-report pipeline',
         { LAB_REPORT_PIPELINE: 'enabled', LAB_REPORT_FIXTURES_DIR: '/some/recorded/pdfs', KNOWLEDGE_DIR: '/k', BUILD_VERSION: 'b1' },
@@ -182,6 +191,40 @@ describe('loadEnv', () => {
 
     it.each(['yes', 'true', 'ENABLED', '1', ''])('rejects the value %j instead of guessing', (value) => {
       expect(() => loadEnv({ ...base, ...database, ...fixtures, LAB_REPORT_PIPELINE: value })).toThrow(/LAB_REPORT_PIPELINE/);
+    });
+
+    describe('queued evaluation requests (EVALUATION_REQUESTS, H4)', () => {
+      const pipeline = { ...base, ...database, ...fixtures, LAB_REPORT_PIPELINE: 'enabled' };
+
+      it('is off by default, and needs no profile while off', () => {
+        expect(loadEnv({ ...base }).EVALUATION_REQUESTS).toBe('disabled');
+        expect(loadEnv({ ...pipeline }).EVALUATION_REQUESTS).toBe('disabled');
+      });
+
+      it('can be enabled outside production with the pipeline on and a valid execution profile', () => {
+        expect(loadEnv({ ...pipeline, EVALUATION_REQUESTS: 'enabled', EVALUATION_EXECUTION_PROFILE: SYNTHETIC_PROFILE }).EVALUATION_REQUESTS).toBe('enabled');
+      });
+
+      it('needs the lab-report pipeline', () => {
+        expect(() => loadEnv({ ...base, ...database, EVALUATION_REQUESTS: 'enabled', EVALUATION_EXECUTION_PROFILE: SYNTHETIC_PROFILE })).toThrow(
+          /EVALUATION_REQUESTS.*LAB_REPORT_PIPELINE=enabled/,
+        );
+      });
+
+      it.each([
+        ['missing', undefined],
+        ['not JSON', 'not-json-synthetic'],
+        ['not a profile', JSON.stringify({ version: 'evaluation-execution-profile/1' })],
+        ['carrying a provider setting', JSON.stringify({ ...JSON.parse(SYNTHETIC_PROFILE), provider: 'bedrock' })],
+      ])('refuses an execution profile that is %s, and never echoes it', (_name, value) => {
+        const attempt = () => loadEnv({ ...pipeline, EVALUATION_REQUESTS: 'enabled', EVALUATION_EXECUTION_PROFILE: value });
+        expect(attempt).toThrow(/EVALUATION_EXECUTION_PROFILE/);
+        if (value) expect(attempt).not.toThrow(/not-json-synthetic|bedrock|c{64}/);
+      });
+
+      it.each(['yes', 'true', 'ENABLED', '1', ''])('rejects the value %j instead of guessing', (value) => {
+        expect(() => loadEnv({ ...pipeline, EVALUATION_REQUESTS: value, EVALUATION_EXECUTION_PROFILE: SYNTHETIC_PROFILE })).toThrow(/EVALUATION_REQUESTS/);
+      });
     });
 
     it('bounds the download link lifetime to 60 to 600 seconds, default 120', () => {
