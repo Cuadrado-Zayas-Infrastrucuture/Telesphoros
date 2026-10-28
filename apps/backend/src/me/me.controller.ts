@@ -1,6 +1,6 @@
 import { Controller, Get, HttpCode, Post } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import type { MeDto, RecoveryScopeDto } from '@telesphoros/shared-types';
+import type { MeDto, MeProfileDto, RecoveryScopeDto } from '@telesphoros/shared-types';
 import { CurrentPrincipal } from '../auth/decorators';
 import type { Principal } from '../auth/principal';
 import { MemberAdminRepository } from '../storage/member-admin.repository';
@@ -16,6 +16,12 @@ export class MeController {
   @Get()
   me(@CurrentPrincipal() principal: Principal): MeDto {
     return { roles: principal.roles };
+  }
+
+  /** The caller's own organization, for display (Settings). A separate endpoint so `/me` stays as old clients parse it. */
+  @Get('profile')
+  async profile(@CurrentPrincipal() principal: Principal): Promise<MeProfileDto> {
+    return { organization: { name: await this.members.organizationName(principal) } };
   }
 
   /** Verified caller/tenant recovery binding, never an authorization credential or a raw identity. */

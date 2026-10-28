@@ -8,7 +8,8 @@ import { createTestApp } from './helpers/app';
 import { bearer, signToken } from './helpers/tokens';
 
 /**
- * A member with NO role may call only the sign-in permission, the recovery-capability endpoint and sign-out; none exposes clinical records,
+ * A member with NO role may call only the sign-in permission, their own organization's display name (Settings), the recovery-capability endpoint and sign-out;
+ * none exposes clinical records,
  * and sign-out changes only the caller's own membership row (AUTH-03), so a person without a role can still end their own sessions.
  * The route table is walked from the real application, so a new route that forgets @Roles() fails here instead of being open by default.
  */
@@ -20,7 +21,7 @@ afterAll(async () => {
   await app.close();
 });
 
-const ALLOWED_WITHOUT_A_ROLE = new Set(['GET /api/v1/me', 'GET /api/v1/me/recovery-scope', 'POST /api/v1/me/sign-out']);
+const ALLOWED_WITHOUT_A_ROLE = new Set(['GET /api/v1/me', 'GET /api/v1/me/profile', 'GET /api/v1/me/recovery-scope', 'POST /api/v1/me/sign-out']);
 const HTTP = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'ALL', 'OPTIONS', 'HEAD'];
 
 interface Route {

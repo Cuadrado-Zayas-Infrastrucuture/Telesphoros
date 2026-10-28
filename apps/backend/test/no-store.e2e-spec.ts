@@ -22,7 +22,7 @@ const api = () => request(app.getHttpServer());
 describe('Cache-Control on authenticated and refused responses', () => {
   it('marks successful authenticated reads private and no-store', async () => {
     const token = await clinicianA();
-    for (const path of ['/api/v1/patients', '/api/v1/reports', '/api/v1/me']) {
+    for (const path of ['/api/v1/patients', '/api/v1/reports', '/api/v1/me', '/api/v1/me/profile']) {
       const res = await api().get(path).set(bearer(token)).expect(200);
       expect([path, res.headers['cache-control']]).toEqual([path, NO_STORE]);
     }
