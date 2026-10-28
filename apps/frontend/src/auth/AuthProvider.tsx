@@ -17,6 +17,8 @@ export class AccountNotReadyError extends Error {}
 export interface AuthContextValue {
   status: AuthStatus;
   roles: Role[];
+  /** The signed-in person's email, from the ID token at sign-in. In memory only and shown only in Settings; never sent to the API. */
+  email: string | null;
   recoverySession: RecoverySession | null;
   signIn(returnTo?: string): Promise<void>;
   /** Finishes the redirect back from sign-in. Resolves with where to go next. */
@@ -42,7 +44,8 @@ interface AuthProviderProps {
  * Holds the signed-in state. The access token lives in a ref: in memory only, never in React state
  * that could be logged or serialised, and never in any browser storage. The roles come from the API
  * (`GET /me`), not from decoding the token here: the UI uses them to decide what to SHOW, while the
- * server enforces what is allowed.
+ * server enforces what is allowed. The email is display data the auth client copied from the validated ID token; it is cleared with
+ * everything else.
  */
 export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthProviderProps) {
   const token = useRef<{ accessToken: string; expiresAt: number } | null>(null);
@@ -51,6 +54,7 @@ export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthPr
   const [recoverySession, setRecoverySession] = useState<RecoverySession | null>(null);
   const [status, setStatus] = useState<AuthStatus>('signedOut');
   const [roles, setRoles] = useState<Role[]>([]);
+  const [email, setEmail] = useState<string | null>(null);
   useEffect(
     () => () => {
       epoch.current += 1;
@@ -68,6 +72,7 @@ export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthPr
     setRecoverySession(null);
     token.current = null;
     setRoles([]);
+    setEmail(null);
   }, []);
 
   const currentPath = () => `${window.location.pathname}${window.location.search}`;
@@ -144,6 +149,7 @@ export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthPr
       recovery.current = owner;
       setRecoverySession(owner);
       setRoles(me.roles);
+      setEmail(session.email ?? null);
       setStatus('signedIn');
       return session.returnTo;
     } catch (error) {
@@ -166,8 +172,8 @@ export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthPr
   }, [clear, client, send]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, roles, recoverySession, signIn, completeSignIn, signOut, apiFetch }),
-    [status, roles, recoverySession, signIn, completeSignIn, signOut, apiFetch],
+    () => ({ status, roles, email, recoverySession, signIn, completeSignIn, signOut, apiFetch }),
+    [status, roles, email, recoverySession, signIn, completeSignIn, signOut, apiFetch],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

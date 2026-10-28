@@ -28,6 +28,8 @@ export const routes: RouteObject[] = [
       {
         element: <ProtectedRoute />,
         children: [
+          // Every signed-in member, including one with no role: it shows their own account, roles and session, nothing clinical.
+          { path: 'settings', lazy: async () => ({ Component: (await import('@/pages/SettingsPage')).default }) },
           // Every build: the API authorizes each read. Only file download is owned-storage only (ReportsPage).
           {
             element: <RequireRole anyOf={CLINICAL_READ_ROLES} />,
