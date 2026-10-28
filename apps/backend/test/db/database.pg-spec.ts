@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { Request, Response } from 'express';
 import { Client, type Pool } from 'pg';
 import { asOrganizationWork, authorityContextMiddleware, bindRequestAuthority, bindRequestCapability, noteCapabilityAbsent } from '../../src/auth/authority-context';
+import { AppException } from '../../src/common/app-exception';
 import { Database } from '../../src/db/database';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { registerTenantRow } from '../helpers/membership';
@@ -261,15 +262,22 @@ describe('Database.withTenant and the request capability', () => {
       expect(db.capabilityStats().byReason['not-configured']! - before).toBe(1);
     });
 
-    it('an expired capability is still set (the database decides, and fails closed once slice 3 reads it) but counted as missing', async () => {
+    it('an expired capability fails closed: the transaction is refused with 503 before it opens, and counted as missing (audit A3)', async () => {
       const db = singleConnection();
       const cap = await mint();
+      const connects = jest.spyOn(rawPool(db), 'connect');
       const before = db.capabilityStats();
+      // The database would resolve no organization for it, and row-level security would answer with no rows rather than an error.
       const seen = await asyncRequest(async () => {
         bindRequestCapability({ token: cap.token, expiresAt: new Date(Date.now() - 1000), membershipVersion: 1 });
         return db.withTenant(TENANT, (c) => settingOf(c));
-      });
-      expect(seen).toBe(cap.token);
+      }).then(
+        () => 'ran',
+        (error: unknown) => (error instanceof AppException ? error.getStatus() : 'other'),
+      );
+      expect(seen).toBe(503);
+      expect(connects).not.toHaveBeenCalled();
+      connects.mockRestore();
       const after = db.capabilityStats();
       expect(after.missing - before.missing).toBe(1);
       expect((after.byReason['expired'] ?? 0) - (before.byReason['expired'] ?? 0)).toBe(1);
@@ -349,16 +357,6 @@ describe('every withTenant call is counted: nothing is exempt', () => {
       },
     ],
     [
-      'in a request with an expired capability',
-      async (calls) => {
-        const cap = await mintFor();
-        return inRequest(async () => {
-          bindRequestCapability({ ...cap, expiresAt: new Date(Date.now() - 1000) });
-          return calls();
-        });
-      },
-    ],
-    [
       'in organization work of a request with a capability',
       async (calls) => {
         const cap = await mintFor();
@@ -379,7 +377,7 @@ describe('every withTenant call is counted: nothing is exempt', () => {
     ],
   ];
 
-  it.each([0, 1, 2, 3, 4, 5, 6, 7, 8])("context %i: N withTenant calls move bound + missing by exactly N, measured against the pool's own connection count", async (index) => {
+  it.each([0, 1, 2, 3, 4, 5, 6, 7])("context %i: N withTenant calls move bound + missing by exactly N, measured against the pool's own connection count", async (index) => {
     const [name, run] = contexts()[index]!;
     const db = singleConnection();
     const connects = jest.spyOn(rawPool(db), 'connect');
@@ -394,6 +392,33 @@ describe('every withTenant call is counted: nothing is exempt', () => {
     const transactions = connects.mock.calls.length; // what the pool really handed out: independent of the counter
     expect([name, transactions]).toEqual([name, 3]); // control: the measurement itself sees all three
     expect([name, after.bound - before.bound + (after.missing - before.missing)]).toEqual([name, 3]);
+    connects.mockRestore();
+  });
+
+  it('in a request with an expired capability, each call is refused before it takes a connection, and each is counted (audit A3)', async () => {
+    const db = singleConnection();
+    const connects = jest.spyOn(rawPool(db), 'connect');
+    const before = db.capabilityStats();
+    const cap = await mintFor();
+    const refused = await inRequest(async () => {
+      bindRequestCapability({ ...cap, expiresAt: new Date(Date.now() - 1000) });
+      const outcomes: unknown[] = [];
+      for (const options of [{}, { actor: SUB }, {}]) {
+        outcomes.push(
+          await db
+            .withTenant(TENANT, (c) => c.query('SELECT 1'), options)
+            .then(
+              () => 'ran',
+              (error: unknown) => (error instanceof AppException ? error.getStatus() : 'other'),
+            ),
+        );
+      }
+      return outcomes;
+    });
+    expect(refused).toEqual([503, 503, 503]);
+    expect(connects).not.toHaveBeenCalled();
+    const after = db.capabilityStats();
+    expect([after.missing - before.missing, (after.byReason['expired'] ?? 0) - (before.byReason['expired'] ?? 0), after.bound - before.bound]).toEqual([3, 3, 0]);
     connects.mockRestore();
   });
 
