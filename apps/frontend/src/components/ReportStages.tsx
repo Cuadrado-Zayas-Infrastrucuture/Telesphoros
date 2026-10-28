@@ -1,15 +1,13 @@
 import { useEffect, useState } from 'react';
 import { NotSignedInError, SessionEndedError, useAuth } from '@/auth/AuthProvider';
-import { FunnelChart } from '@/components/bklit/FunnelChart';
 import { Button } from '@/components/ui/Button';
+import { ReportStageNote } from '@/components/ReportStageNote';
+import { ReportStageSummary } from '@/components/ReportStageSummary';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { SubmitError } from '@/lib/api';
-import { countReportStages, type ReportStageCounts } from '@/lib/reportStages';
+import { countReportStages, formatCount, type ReportStageCounts } from '@/lib/reportStages';
 
 type StagesState = { status: 'loading' } | { status: 'ready'; counts: ReportStageCounts } | { status: 'error'; message: string };
-
-const number = (value: number) => value.toLocaleString('en-US');
-const share = (value: number, of: number) => (of > 0 ? `${Math.round((value / of) * 100)}%` : '0%');
 
 /** Report stages for the current patient filter. Remount (key) to recount; the parent keys it on filter and Refresh. */
 export function ReportStages({ patientId }: { patientId: string }) {
@@ -44,7 +42,7 @@ export function ReportStages({ patientId }: { patientId: string }) {
         </h3>
         {state.status === 'ready' && state.counts.registered > 0 && (
           <p className="text-sm">
-            <span className={state.counts.failed > 0 ? 'font-semibold text-destructive' : 'text-muted-foreground'}>Failed</span> {number(state.counts.failed)}
+            <span className={state.counts.failed > 0 ? 'font-semibold text-destructive' : 'text-muted-foreground'}>Failed</span> {formatCount(state.counts.failed)}
           </p>
         )}
       </div>
@@ -67,7 +65,7 @@ export function ReportStages({ patientId }: { patientId: string }) {
               </div>
             ))}
           </div>
-          <ReadNote />
+          <ReportStageNote />
         </>
       )}
       {state.status === 'error' && (
@@ -80,43 +78,7 @@ export function ReportStages({ patientId }: { patientId: string }) {
           </Button>
         </div>
       )}
-      {state.status === 'ready' && <StageSummary counts={state.counts} />}
+      {state.status === 'ready' && <ReportStageSummary counts={state.counts} />}
     </section>
-  );
-}
-
-function StageSummary({ counts }: { counts: ReportStageCounts }) {
-  if (counts.registered === 0) return <p className="text-sm text-muted-foreground">No reports to count yet.</p>;
-  const stages = [
-    { label: 'Registered', value: counts.registered },
-    { label: 'File uploaded', value: counts.uploaded },
-    { label: 'Read', value: counts.read },
-  ];
-  return (
-    <>
-      <FunnelChart stages={stages} className="h-16" />
-      {/* Three equal columns under the funnel segments; labels share one row and values the next, so a wrapped label never pushes its value out of line. */}
-      <dl className="grid w-full grid-cols-3 gap-x-2 text-sm">
-        {stages.map((stage) => (
-          <div key={stage.label} className="contents">
-            <dt className="row-start-1 min-w-0 self-end text-muted-foreground">{stage.label}</dt>
-            <dd className="row-start-2 min-w-0 font-semibold">
-              {number(stage.value)} <span className="font-normal text-muted-foreground">{share(stage.value, counts.registered)}</span>
-            </dd>
-          </div>
-        ))}
-      </dl>
-      <ReadNote cap={counts.capped ? ` Counted from the first ${number(counts.registered)} of ${number(counts.total)} reports.` : undefined} />
-    </>
-  );
-}
-
-/** Fixed copy, shown while counting too: it explains a stage, and it keeps the section's height steady. */
-function ReadNote({ cap }: { cap?: string }) {
-  return (
-    <p className="text-xs text-muted-foreground">
-      Read means the system processed the record; it is not clinical review.
-      {cap}
-    </p>
   );
 }

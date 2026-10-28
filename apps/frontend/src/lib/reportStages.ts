@@ -6,6 +6,10 @@ import { SubmitError, type ApiFetch } from './api';
 export const REPORT_STAGE_PAGE_SIZE = 100;
 export const REPORT_STAGE_MAX_PAGES = 10;
 
+/** A count as the page shows it (1,000 not 1000), and its share of a total as a whole percent. */
+export const formatCount = (value: number) => value.toLocaleString('en-US');
+export const formatShare = (value: number, of: number) => (of > 0 ? `${Math.round((value / of) * 100)}%` : '0%');
+
 export interface ReportStageCounts {
   /** Reports counted: every listed record, up to the cap. */
   registered: number;
