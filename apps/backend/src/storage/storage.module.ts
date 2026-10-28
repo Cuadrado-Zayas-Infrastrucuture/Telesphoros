@@ -15,6 +15,8 @@ import { PostgresPatientsRepository } from './postgres/patients.repository';
 import { InMemoryPatientIdentifiersRepository, PatientIdentifiersRepository } from './patient-identifiers.repository';
 import { PostgresReportsRepository } from './postgres/reports.repository';
 import { InMemoryReportsRepository, ReportsRepository } from './reports.repository';
+import { PostgresUsageRepository } from './postgres/usage.repository';
+import { InMemoryUsageRepository, UsageRepository } from './usage.repository';
 
 /**
  * The one place that decides which persistence backs the repositories. Controllers and services
@@ -24,7 +26,7 @@ import { InMemoryReportsRepository, ReportsRepository } from './reports.reposito
 @Module({})
 export class StorageModule {
   static register(env: Env): DynamicModule {
-    const repositories = [PatientsRepository, PatientIdentifiersRepository, ReportsRepository, MembershipRepository, MemberAdminRepository, SecurityEvents];
+    const repositories = [PatientsRepository, PatientIdentifiersRepository, ReportsRepository, MembershipRepository, MemberAdminRepository, SecurityEvents, UsageRepository];
 
     if (env.STORAGE_DRIVER === 'postgres') {
       const providers: Provider[] = [
@@ -37,6 +39,7 @@ export class StorageModule {
         { provide: MembershipRepository, useClass: PostgresMembershipRepository },
         { provide: MemberAdminRepository, useClass: PostgresMemberAdminRepository },
         { provide: SecurityEvents, useClass: PostgresSecurityEvents },
+        { provide: UsageRepository, useClass: PostgresUsageRepository },
         // The ledger's guarantees are database guarantees: there is deliberately no in-memory version.
         { provide: LedgerRecordsRepository, useClass: PostgresLedgerRecordsRepository },
       ];
@@ -53,6 +56,8 @@ export class StorageModule {
         { provide: MembershipRepository, useClass: InMemoryMembershipRepository },
         { provide: MemberAdminRepository, useExisting: MembershipRepository },
         { provide: SecurityEvents, useClass: InMemorySecurityEvents },
+        // Reads the same in-memory report rows the reports routes write.
+        { provide: UsageRepository, useFactory: (reports: InMemoryReportsRepository) => new InMemoryUsageRepository(reports), inject: [ReportsRepository] },
       ],
       exports: [SecurityAuditStore, ...repositories],
     };
