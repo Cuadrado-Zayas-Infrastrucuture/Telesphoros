@@ -176,6 +176,86 @@ test('the report-lock guard reports each way the text could be weakened (control
   assert.deepEqual(reportsLockProblems(storage, variables), []); // control: the unchanged text is clean
 });
 
+/**
+ * What would stop, or weaken, the backup job's upload to the off-site bucket, as a list of sentences (audit 2026-10-27, I1-I3).
+ * The uploader sends NO encryption header by default (docs/ops/offsite-backups.md) and relies on the bucket default (the backup key), so
+ * every deny on a request header must be guarded by "the header is present". Every upload also sets Object Lock retention, which S3
+ * authorizes as s3:PutObjectRetention on top of s3:PutObject.
+ */
+export function backupUploadProblems(storageText, iamText) {
+  const problems = [];
+  const need = (condition, why) => {
+    if (!condition) problems.push(why);
+  };
+  const contains = (text, fragment) => squash(text).includes(squash(fragment));
+  const s = code(storageText);
+  const [sse = ''] = blocks(s, 'resource "aws_s3_bucket_server_side_encryption_configuration" "backups"');
+  need(contains(sse, 'kms_master_key_id = aws_kms_key.backup[0].arn'), 'the backups bucket must encrypt by default with the backup key (a header-less upload relies on it)');
+  const [policy = ''] = blocks(s, 'data "aws_iam_policy_document" "backups_bucket"');
+  const statements = blocks(policy, 'statement ');
+  const statement = (sid) => statements.find((st) => contains(st, `sid = "${sid}"`)) ?? '';
+  const nullIs = (st, variableName, value) =>
+    blocks(st, 'condition').some((c) => contains(c, 'test = "Null"') && contains(c, `variable = "${variableName}"`) && contains(c, `values = ["${value}"]`));
+  for (const st of statements) {
+    for (const c of blocks(st, 'condition')) {
+      const header = /variable\s*=\s*"(s3:x-amz-[^"]+)"/.exec(c)?.[1];
+      if (header && contains(c, 'test = "StringNotEquals"'))
+        need(nullIs(st, header, 'false'), `a deny on ${header} must apply only when the header is present (Null = false), or it refuses every header-less upload`);
+    }
+  }
+  const deny = (sid) => contains(statement(sid), 'effect = "Deny"') && contains(statement(sid), 'actions = ["s3:PutObject"]');
+  need(deny('DenyOtherEncryption') && contains(statement('DenyOtherEncryption'), 'values = ["aws:kms"]'), 'DenyOtherEncryption must refuse any encryption but aws:kms');
+  need(
+    deny('DenyOtherKey') && nullIs(statement('DenyOtherKey'), 's3:x-amz-server-side-encryption-aws-kms-key-id', 'false') && contains(statement('DenyOtherKey'), 'values = [aws_kms_key.backup[0].arn]'),
+    'DenyOtherKey must refuse any named key but the backup key',
+  );
+  const managed = statement('DenyManagedKey');
+  need(
+    deny('DenyManagedKey') &&
+      contains(managed, 'test = "StringEquals"') &&
+      contains(managed, 'values = ["aws:kms"]') &&
+      nullIs(managed, 's3:x-amz-server-side-encryption-aws-kms-key-id', 'true'),
+    'DenyManagedKey must refuse aws:kms named without a key id (S3 would use the AWS-managed key, not ours)',
+  );
+  need(deny('DenyCustomerKeys') && nullIs(statement('DenyCustomerKeys'), 's3:x-amz-server-side-encryption-customer-algorithm', 'false'), 'customer-supplied keys (SSE-C) must be refused');
+  const [job = ''] = blocks(code(iamText), 'data "aws_iam_policy_document" "backup_job"');
+  const upload = blocks(job, 'statement').find((st) => contains(st, 'sid = "UploadBackups"')) ?? '';
+  need(contains(upload, '"s3:PutObject"') && contains(upload, '"s3:PutObjectRetention"'), 'the backup job must hold s3:PutObjectRetention: every upload sets Object Lock retention');
+  need(!/BypassGovernanceRetention|s3:Get|s3:List|s3:Delete|"s3:\*"/.test(job), 'the backup job stays write-only and cannot bypass a lock');
+  return problems;
+}
+
+test('the backup job can upload to the off-site bucket, encrypted only with the backup key', () => {
+  assert.deepEqual(backupUploadProblems(storage, iam), []);
+});
+
+test('the backup-upload guard reports each way the text could be weakened (controls)', () => {
+  const weakened = [
+    // Anchored on the backups resource: the reports bucket has the same condition text, and String.replace changes only the first match.
+    [
+      'wrong-encryption deny unguarded (refuses every header-less upload)',
+      [
+        'storage',
+        'resources = ["${aws_s3_bucket.backups[0].arn}/*"]\n    principals {\n      type        = "*"\n      identifiers = ["*"]\n    }\n    condition {\n      test     = "Null"\n      variable = "s3:x-amz-server-side-encryption"\n',
+        'resources = ["${aws_s3_bucket.backups[0].arn}/*"]\n    principals {\n      type        = "*"\n      identifiers = ["*"]\n    }\n    condition {\n      test     = "Bool"\n      variable = "s3:x-amz-server-side-encryption"\n',
+      ],
+    ],
+    ['bucket default not the backup key', ['storage', 'kms_master_key_id = aws_kms_key.backup[0].arn', 'kms_master_key_id = aws_kms_key.data.arn']],
+    ['any named key accepted', ['storage', 'values   = [aws_kms_key.backup[0].arn]', 'values   = ["*"]']],
+    ['aws:kms without a key id allowed', ['storage', 'sid       = "DenyManagedKey"\n    effect    = "Deny"', 'sid       = "DenyManagedKey"\n    effect    = "Allow"']],
+    ['customer keys allowed', ['storage', 'sid       = "DenyCustomerKeys"\n    effect    = "Deny"\n    actions   = ["s3:PutObject"]\n    resources = ["${aws_s3_bucket.backups[0].arn}/*"]', 'sid       = "DenyCustomerKeys"\n    effect    = "Allow"\n    actions   = ["s3:PutObject"]\n    resources = ["${aws_s3_bucket.backups[0].arn}/*"]']],
+    ['retention permission dropped', ['iam', '["s3:PutObject", "s3:PutObjectRetention"]', '["s3:PutObject"]']],
+    ['lock bypass granted', ['iam', '["s3:PutObject", "s3:PutObjectRetention"]', '["s3:PutObject", "s3:PutObjectRetention", "s3:BypassGovernanceRetention"]']],
+  ];
+  for (const [name, [which, from, to]] of weakened) {
+    const source = which === 'storage' ? storage : iam;
+    assert.ok(source.includes(from), `the control for "${name}" must match the real text (it does not: fix the control)`);
+    const [s, i] = which === 'storage' ? [storage.replace(from, to), iam] : [storage, iam.replace(from, to)];
+    assert.ok(backupUploadProblems(s, i).length > 0, `a weakened text must be reported: ${name}`);
+  }
+  assert.deepEqual(backupUploadProblems(storage, iam), []); // control: the unchanged text is clean
+});
+
 test('the application may list a report\'s intake prefix (versions and multipart uploads) and only under reports/', () => {
   const [inventory] = blocks(code(iam), 'statement').filter((s) => /sid\s*=\s*"ReportIntakeInventory"/.test(s));
   assert.ok(inventory, 'the validated intake needs a listing statement');

@@ -130,3 +130,37 @@ test('does not confuse a class variant named outline with an inline CSS declarat
   input.textFiles['apps/frontend/src/components/NewPanel.tsx'] = "const variants = { outline: 'border-border bg-panel text-primary' }; export function NewPanel() { return <p className={variants.outline}>Report</p>; }";
   assert.deepEqual(findBrandViolations(input), []);
 });
+
+// Blur is allowed only as the progressive scroll edge (specs/005-progressive-blur-edge).
+const blurComponent = 'apps/frontend/src/components/motion-primitives/ProgressiveBlur.tsx';
+const blurStyles = 'apps/frontend/src/styles/progressive-blur.css';
+test('rejects blur in a stylesheet outside the scroll-edge component', () => {
+  for (const css of ['.panel { backdrop-filter: blur(8px); }', '.panel { -webkit-backdrop-filter: blur(8px); }', '.panel { filter: blur(2px); }', '.panel { @apply backdrop-blur-md; }']) rejects(input => {
+    input.textFiles['apps/frontend/src/styles/new-panel.css'] = css;
+  }, /blur is only allowed/);
+});
+test('rejects Tailwind blur utilities outside the scroll-edge component', () => {
+  for (const value of ['rounded-lg backdrop-blur-md', 'blur-sm', 'hover:backdrop-blur', 'blur']) rejects(input => {
+    input.textFiles['apps/frontend/src/components/NewPanel.tsx'] = `export function NewPanel() { return <p className="${value}">Report</p>; }`;
+  }, /blur is only allowed/);
+});
+test('rejects inline backdrop and blur filters outside the scroll-edge component', () => {
+  for (const style of ["{ backdropFilter: 'blur(4px)' }", "{ WebkitBackdropFilter: 'blur(4px)' }", "{ filter: 'blur(1px)' }"]) rejects(input => {
+    input.textFiles['apps/frontend/src/components/NewPanel.tsx'] = `export function NewPanel() { return <p style={${style}}>Report</p>; }`;
+  }, /blur is only allowed/);
+});
+test('allows blur inside the scroll-edge component and its stylesheet', () => {
+  const input = copy();
+  input.textFiles[blurComponent] = "export function ProgressiveBlur() { return <div aria-hidden=\"true\" style={{ backdropFilter: 'blur(1px)' }} />; }";
+  input.textFiles[blurStyles] = '@supports not (backdrop-filter: blur(1px)) { .progressive-blur-layer { display: none; } }';
+  assert.deepEqual(findBrandViolations(input).filter(error => /blur/.test(error)), []);
+});
+test('does not mistake a blur event for a blur style', () => {
+  const input = copy();
+  input.textFiles['apps/frontend/src/components/NewPanel.tsx'] = "export function NewPanel({ onLeave }: { onLeave: () => void }) { window.addEventListener('blur', onLeave); return <input onBlur={onLeave} aria-label=\"Patient\" />; }";
+  assert.deepEqual(findBrandViolations(input), []);
+});
+test('rejects a deeper or missing blur edge', () => {
+  rejects(input => { input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--size-blur-edge: 3rem;', '--size-blur-edge: 12rem;'); }, /--size-blur-edge/);
+  rejects(input => { input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--size-blur-edge: 3rem;', ''); }, /--size-blur-edge/);
+});

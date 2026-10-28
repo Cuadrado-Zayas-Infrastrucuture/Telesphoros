@@ -26,6 +26,7 @@
     "font-family-sans": "Inter, Arial, sans-serif",
     "font-family-ui-heading": "var(--font-family-sans)",
     "size-control": "2.75rem",
+    "size-blur-edge": "3rem",
     "font-family-mono": "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
     "dashboard-foreground": "#173E47",
     "dashboard-muted-foreground": "#36515A"

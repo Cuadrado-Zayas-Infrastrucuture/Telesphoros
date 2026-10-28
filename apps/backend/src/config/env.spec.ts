@@ -1,6 +1,6 @@
 import { loadEnv } from './env';
 
-const base = { JWT_SECRET: 'a-test-secret-that-is-comfortably-over-32-chars' };
+const base = { NODE_ENV: 'development', JWT_SECRET: 'a-test-secret-that-is-comfortably-over-32-chars' };
 
 describe('loadEnv', () => {
   it('applies safe defaults', () => {
@@ -24,8 +24,13 @@ describe('loadEnv', () => {
     for (const bad of ['0', '51', '2.5', 'ten']) expect(() => loadEnv({ ...base, DATABASE_POOL_MAX: bad })).toThrow(/DATABASE_POOL_MAX/);
   });
 
+  it('refuses to start without NODE_ENV, and names it: a missing setting must not mean development (audit 2026-10-27, A1)', () => {
+    expect(() => loadEnv({ ...base, NODE_ENV: undefined })).toThrow(/NODE_ENV/);
+    expect(loadEnv(base).NODE_ENV).toBe('development'); // control: stated explicitly, it loads
+  });
+
   it('refuses to start without a secret, and names the variable', () => {
-    expect(() => loadEnv({})).toThrow(/JWT_SECRET/);
+    expect(() => loadEnv({ NODE_ENV: 'development' })).toThrow(/JWT_SECRET/);
   });
 
   it('rejects a short secret WITHOUT echoing it back', () => {
@@ -46,10 +51,16 @@ describe('loadEnv', () => {
   });
 
   describe('authentication settings', () => {
-    const cognito = { AUTH_VERIFIER: 'cognito', COGNITO_REGION: 'us-east-2', COGNITO_USER_POOL_ID: 'us-east-2_AbCdEf123', COGNITO_APP_CLIENT_ID: 'client123' };
+    const cognito = {
+      NODE_ENV: 'development',
+      AUTH_VERIFIER: 'cognito',
+      COGNITO_REGION: 'us-east-2',
+      COGNITO_USER_POOL_ID: 'us-east-2_AbCdEf123',
+      COGNITO_APP_CLIENT_ID: 'client123',
+    };
 
     it('hmac needs a secret; cognito needs a client id plus region and pool', () => {
-      expect(() => loadEnv({ AUTH_VERIFIER: 'hmac' })).toThrow(/JWT_SECRET/);
+      expect(() => loadEnv({ NODE_ENV: 'development', AUTH_VERIFIER: 'hmac' })).toThrow(/JWT_SECRET/);
       expect(loadEnv(cognito).AUTH_VERIFIER).toBe('cognito');
       expect(() => loadEnv({ ...cognito, COGNITO_APP_CLIENT_ID: undefined })).toThrow(/COGNITO_APP_CLIENT_ID/);
       expect(() => loadEnv({ ...cognito, COGNITO_REGION: undefined })).toThrow(/COGNITO_REGION/);
@@ -57,7 +68,9 @@ describe('loadEnv', () => {
     });
 
     it('accepts a development issuer override instead of region and pool', () => {
-      expect(loadEnv({ AUTH_VERIFIER: 'cognito', COGNITO_APP_CLIENT_ID: 'c', COGNITO_ISSUER: 'http://127.0.0.1:4010' }).COGNITO_ISSUER).toBe('http://127.0.0.1:4010');
+      expect(loadEnv({ NODE_ENV: 'development', AUTH_VERIFIER: 'cognito', COGNITO_APP_CLIENT_ID: 'c', COGNITO_ISSUER: 'http://127.0.0.1:4010' }).COGNITO_ISSUER).toBe(
+        'http://127.0.0.1:4010',
+      );
     });
   });
 

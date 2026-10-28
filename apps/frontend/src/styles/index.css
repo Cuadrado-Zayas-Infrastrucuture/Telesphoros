@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import './tokens.css';
 @import './workspace.css';
+@import './progressive-blur.css';
 
 /* Remove Tailwind's default palette/radii so utilities can only resolve to our tokens. */
 @theme inline {

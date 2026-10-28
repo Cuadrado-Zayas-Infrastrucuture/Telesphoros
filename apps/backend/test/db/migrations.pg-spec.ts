@@ -71,7 +71,7 @@ describe('migration runner', () => {
     await run(db, (c) => migrateUp(c));
     expect(await down(db, 1)).toEqual([SHIPPED[SHIPPED.length - 1]]);
     expect((await run(db, (c) => migrationStatus(c))).pending.map((m) => m.version)).toEqual([SHIPPED[SHIPPED.length - 1]]);
-    expect(await down(db, 50)).toEqual(SHIPPED.slice(0, -1).reverse());
+    expect(await down(db, SHIPPED.length)).toEqual(SHIPPED.slice(0, -1).reverse());
     const tables = await run(db, (c) => c.query(`SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> 'schema_migrations'`));
     expect(tables.rows).toEqual([]);
     // Functions go too (roles are cluster-wide and stay, like telesphoros_app).
