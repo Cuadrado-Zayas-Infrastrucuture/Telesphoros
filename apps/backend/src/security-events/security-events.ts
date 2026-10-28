@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { asOrganizationWork, currentRequestId } from '../auth/authority-context';
+import { asOrganizationWork, currentRequestId, withoutExpiredCapability } from '../auth/authority-context';
 import { Database } from '../db/database';
 
 /** Why a caller with a valid token was refused (the membership checks of M1.5). */
@@ -85,10 +85,12 @@ export class PostgresSecurityEvents extends SecurityEvents {
   private async write(tenantId: string, sub: string, row: ReturnType<typeof eventRow>): Promise<void> {
     const requestId = currentRequestId(); // read before leaving the request's context below
     try {
-      // Organization work: the person was refused, so their own authority must not decide whether the refusal is written.
-      await asOrganizationWork(() => this.append(tenantId, sub, row, requestId));
+      // Organization work: the person was refused, so their own authority must not decide whether the refusal is written. Nor may an expired
+      // capability: a refusal made late in a long request (a slow upload) is still recorded (audit A3).
+      await asOrganizationWork(() => withoutExpiredCapability(() => this.append(tenantId, sub, row, requestId)));
     } catch (error) {
-      this.logger.warn({ event: 'security-event-not-recorded', type: row.eventType, error: (error as Error).name }, 'A security event could not be recorded');
+      // An event that is lost must be findable: this is the only trace of it.
+      this.logger.error({ event: 'security-event-not-recorded', type: row.eventType, error: (error as Error).name }, 'A security event could not be recorded');
     }
   }
 
