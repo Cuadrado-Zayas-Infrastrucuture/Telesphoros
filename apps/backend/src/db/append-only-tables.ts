@@ -111,8 +111,11 @@ export const AGENTIC_SYNTHETIC_TABLES = [
  */
 export const AGENTIC_EXPLAIN_TABLES = ['agentic_explain_receipts', 'agentic_explain_runs'] as const;
 
-/** H1 (0050): immutable operational admission and completion metadata, not clinical ledger facts. Forced tenant RLS; the app admits requests and reads both tables, with no completion writer in H1. */
-export const EVALUATION_REQUEST_TABLES = ['evaluation_requests', 'evaluation_request_completions'] as const;
+/**
+ * H1 (0050): immutable operational admission and completion metadata, not clinical ledger facts. Forced tenant RLS; the app admits requests and reads both tables, with no
+ * completion writer in H1. H4 (0054) adds the requester's cancellations, written only through their check, which cancels the job that has not started.
+ */
+export const EVALUATION_REQUEST_TABLES = ['evaluation_requests', 'evaluation_request_completions', 'evaluation_request_cancellations'] as const;
 
 export const ALL_CLASSIFIED_TABLES: readonly string[] = [
   ...Object.values(APPEND_ONLY_CLASSES).flat(),

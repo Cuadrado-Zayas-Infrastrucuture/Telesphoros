@@ -28,6 +28,7 @@ export interface EvaluationRequestDto {
   jobId: string;
   requestedBy: string;
   createdAt: string;
-  state: 'queued' | 'running' | 'retry' | 'dead' | 'completed' | 'completion-missing';
+  /** `cancelled`: withdrawn before a worker started it, by its requester (H4) or an operator (the jobs CLI). */
+  state: 'queued' | 'running' | 'retry' | 'dead' | 'completed' | 'completion-missing' | 'cancelled';
   evaluationId: string | null;
 }
