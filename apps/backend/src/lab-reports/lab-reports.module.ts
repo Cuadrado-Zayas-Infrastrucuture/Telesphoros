@@ -8,6 +8,8 @@ import type { ReportReader } from '../services/report-reader/report-reader';
 import { SubprocessReportReader } from '../services/report-reader/subprocess-report-reader';
 import { CapturesController, ReportCaptureController } from './captures.controller';
 import { CapturesService } from './captures.service';
+import { ClinicianDecisionsController } from './clinician-decisions.controller';
+import { ClinicianDecisionsService } from './clinician-decisions.service';
 import { EvaluationCorrectionsController, NotesController } from './corrections.controller';
 import { CorrectionsService } from './corrections.service';
 import { DisputesController } from './disputes.controller';
@@ -57,6 +59,7 @@ export const labReaderFactory = async (env: Env): Promise<ReportReader | undefin
     EvaluationCorrectionsController,
     NotesController,
     DisputesController,
+    ClinicianDecisionsController,
     LedgerController,
     EvaluationRequestsController,
   ],
@@ -68,6 +71,7 @@ export const labReaderFactory = async (env: Env): Promise<ReportReader | undefin
     EvaluationsService,
     CorrectionsService,
     DisputesService,
+    ClinicianDecisionsService,
     { provide: ReaderLimiter, inject: [ENV], useFactory: (env: Env) => new ReaderLimiter(env.LAB_REPORT_MAX_CONCURRENT_READS) },
     {
       provide: TextCaptureRunner,

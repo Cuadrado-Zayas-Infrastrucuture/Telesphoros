@@ -689,3 +689,28 @@ database, where `ledger_append` already takes the tenant's head-row lock. The pl
   already-contained tenant is listed in the log and not re-judged at start. Readiness is `contained` (still ready) for tenant incidents and not ready
   for a global hold or an unverified start. The first finding logs `ledger-compromised` (the alarm); later failures of a contained tenant log a warning.
 - **Not built.** Two-person approval of a clearance or hold (FD-8). Anchoring the head outside the database (6.9). Anything proved in AWS.
+
+## 24. Amendment made while building spec 006 D01b: clinician result decisions (this adds a record kind; it changes nothing above)
+
+A clinician records what they decided about one evaluation result. Spec: [specs/006-clinician-decision-records](../../specs/006-clinician-decision-records/spec.md).
+Migration 0055 adds the table, the event type `clinician-result-decision` and two keys on existing tables.
+
+- **The record.** `clinician_result_decisions`, one row per entry in a result's history: a `decision`, an `amendment` (corrects how the previous entry
+  was documented) or `entered-in-error` (withdraws it). Append-only and ledgered like every record of section 6. The note is free text in
+  `event_notes`; the projection carries `{id, bodySha256}` only, and the retry identity is not projected (as 0044).
+- **Binding.** Composite keys tie the row to one result of one evaluation of one patient, so a wrong-chart row cannot exist. Chain keys allow one first
+  entry per result and one successor per entry, so a result's history is a single line and two writers on one head cannot both commit.
+- **Who.** Only a `clinician`, by the live membership row: a BEFORE INSERT trigger binds the row to the transaction's organization and person, copies
+  the author's roles and membership version, and refuses an amendment or withdrawal of another author's entry. SQLSTATEs `CD001` (not a current
+  clinician), `CD002` (not the entry's author), `CD003` (a withdrawal of a withdrawal), `CD004` (clinical time outside the evaluation-to-now window).
+- **The basis rule** (`cdr-eligibility-v1`): the result's evaluation is the current one of its report (4.5, section 22), the report is not quarantined,
+  no dispute is in force on the result's cited cell, and the result is not held. It is read after the row's event is appended, in its own statement,
+  so it is conclusive under the ledger lock exactly as the evaluation's own dispute and acceptance checks are. A later retraction or dispute does not touch a
+  stored decision; reads show the basis as it is now.
+- **Time.** `created_at` is the database's clock and is what every timeliness measure uses; `occurred_at` is the clinician's reported time (or the
+  recorded time when not given), never later than `created_at` and never before the evaluation.
+- **Rollback.** The down migration refuses while any decision exists. There is no override: the ledger's type CHECK cannot be restored while an event of
+  the type exists, so a populated database is repaired forward.
+- **Vocabulary.** The detail codes are `cdr-v1`, 13 codes, decided by the founder on 2026-10-28 (D6; the spec's data model, section 2.1). The
+  shared-types lists and the database function `clinician_decision_codes_valid` must change together, and a test compares them exactly. A code never
+  changes once data exists: a split or rename is `cdr-v2`.
