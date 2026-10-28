@@ -8,6 +8,10 @@
 #   migration task 1, while it runs
 # A deploy starts each service's new tasks before it stops the old ones (deployment_maximum_percent = 200 on all three), so the services are
 # counted at that peak; the migration task runs once, before the deploy.
+# Each login also has its own CONNECTION LIMIT, set by provision-logins (LOGIN_LIMITS in apps/backend/src/db/provision-logins.ts): a login over it
+# is refused ("too many connections for role") however much room the server has, so each login's connections at the deploy peak are checked too.
+# The limits are judgements kept low on purpose (2026-10-27): the worker fits one task, the issuer two, the verifier three API tasks and the app login
+# two at the default pool, so production's minimums (two API tasks, two issuers) fit. Scaling past that means raising a limit there, deliberately.
 # database-connections.guard.test.mjs keeps these numbers in agreement with the code.
 
 variable "api_db_pool_max" {
@@ -55,9 +59,27 @@ locals {
     ) * local.connection_deploy_peak_percent / 100)
     + local.api_service_count * 1
   )
+
+  login_connection_limits = {
+    app      = 50
+    worker   = 20
+    issuer   = 20
+    verifier = 20
+    migrator = 5
+  }
+
+  login_connection_demand = {
+    app      = ceil(local.api_service_count * var.api_desired_count * var.api_db_pool_max * local.connection_deploy_peak_percent / 100)
+    worker   = ceil(local.api_service_count * var.worker_desired_count * (local.worker_concurrency + 3) * local.connection_deploy_peak_percent / 100)
+    issuer   = ceil(local.issuer_service_count * var.issuer_desired_count * 4 * local.connection_deploy_peak_percent / 100)
+    verifier = ceil(local.api_service_count * var.api_desired_count * 3 * local.connection_deploy_peak_percent / 100)
+    migrator = local.api_service_count * 1
+  }
+
+  logins_over_limit = [for login, demand in local.login_connection_demand : login if demand > local.login_connection_limits[login]]
 }
 
 output "db_connection_demand" {
-  description = "The most connections the hosted services can open together during a deploy, and the budget they are checked against (an estimate unless db_connection_budget is set)."
-  value       = { demand = local.connection_demand, budget = local.connection_budget, budget_is_estimate = var.db_connection_budget == null }
+  description = "The most connections the hosted services can open together during a deploy, and per login, and the budget they are checked against (an estimate unless db_connection_budget is set)."
+  value       = { demand = local.connection_demand, budget = local.connection_budget, budget_is_estimate = var.db_connection_budget == null, per_login = local.login_connection_demand }
 }
