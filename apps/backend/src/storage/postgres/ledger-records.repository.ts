@@ -289,6 +289,16 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 
   insertMergeDecision(tenantId: string, actor: string, input: MergeDecisionInput): Promise<InsertResult> {
     return this.write(tenantId, actor, async (client) => {
+      // Decisions on one source patient queue here, BEFORE the row takes its seq: patient_alias_edges keeps each source's newest decision by
+      // seq, and the head lock that orders the ledger is taken only at the end. Held to commit, this makes "newest by seq" the last in the ledger.
+      // A proposal is append-only, so its source cannot change under us; an unknown proposal takes no lock and is refused below as before.
+      const proposal = await client.query<{ source: string }>(`SELECT source_patient_id::text AS source FROM patient_merge_proposals WHERE tenant_id = $1 AND id = $2`, [
+        tenantId,
+        input.proposalId,
+      ]);
+      if (proposal.rows[0]) {
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`merge-decision-source:${tenantId}:${proposal.rows[0].source}`]);
+      }
       const existing = await client.query<{ id: string; decision: string }>(
         `SELECT id::text AS id, decision FROM patient_merge_decisions WHERE tenant_id = $1 AND proposal_id = $2`,
         [tenantId, input.proposalId],
