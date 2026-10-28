@@ -122,6 +122,44 @@ const JOBS = `type = '${evaluationRequest.type}'`;
       60_000,
     );
 
+    const cancel = (token: string, id: string) => lab.api().post(`/api/v1/evaluation-requests/${id}/cancel`).set(bearer(token)).send({});
+
+    it('lets the requester cancel a queued request (200, cancelled), and refuses a second cancel (409 not-cancellable)', async () => {
+      const { setup, body } = await reviewed();
+      const { body: created } = await admit(setup.clinician.token, setup.reportId, body).expect(202);
+
+      const cancelled = await cancel(setup.clinician.token, created.id).expect(200);
+      expect(evaluationRequestDtoSchema.parse(cancelled.body)).toMatchObject({ id: created.id, state: 'cancelled', evaluationId: null });
+      expect((await status(setup.clinician.token, created.id).expect(200)).body.state).toBe('cancelled');
+
+      const again = await cancel(setup.clinician.token, created.id).expect(409);
+      expect(again.body.error.details).toEqual(expect.arrayContaining([expect.objectContaining({ reason: 'not-cancellable' })]));
+    }, 60_000);
+
+    it('refuses a colleague (403) and a reader (403), keeps the request queued, then lets the requester cancel (control)', async () => {
+      const { setup, body } = await reviewed();
+      const { body: created } = await admit(setup.clinician.token, setup.reportId, body).expect(202);
+      const colleague = await lab.person('colleague', ['clinician']);
+      const reader = await lab.person('reader', ['reader']);
+
+      await cancel(colleague.token, created.id).expect(403);
+      await cancel(reader.token, created.id).expect(403);
+      expect((await status(setup.clinician.token, created.id).expect(200)).body.state).toBe('queued');
+
+      await cancel(setup.clinician.token, created.id).expect(200);
+    }, 60_000);
+
+    it('answers 404 to another organization and 400 to a malformed id, and changes nothing', async () => {
+      const { setup, body } = await reviewed();
+      const { body: created } = await admit(setup.clinician.token, setup.reportId, body).expect(202);
+      const outsider = await lab.person('clin', ['clinician'], `tenant-${randomUUID().slice(0, 8)}`);
+
+      await cancel(outsider.token, created.id).expect(404);
+      await cancel(setup.clinician.token, 'not-a-uuid').expect(400);
+      await lab.api().post(`/api/v1/evaluation-requests/${created.id}/cancel`).set(bearer(setup.clinician.token)).send({ reason: 'changed my mind' }).expect(400);
+      expect((await status(setup.clinician.token, created.id).expect(200)).body.state).toBe('queued');
+    }, 60_000);
+
     it('reads as completed once the H3 worker answers it, and the evaluation it names can be read', async () => {
       const { setup, body } = await reviewed();
       const { body: created } = await admit(setup.clinician.token, setup.reportId, body).expect(202);
@@ -168,6 +206,8 @@ const JOBS = `type = '${evaluationRequest.type}'`;
       expect(post.body.error.code).toBe('EVALUATION_REQUESTS_DISABLED');
       const get = await lab.api().get(`/api/v1/evaluation-requests/${randomUUID()}`).set(bearer(setup.clinician.token)).expect(503);
       expect(get.body.error.code).toBe('EVALUATION_REQUESTS_DISABLED');
+      const cancelled = await lab.api().post(`/api/v1/evaluation-requests/${randomUUID()}/cancel`).set(bearer(setup.clinician.token)).send({}).expect(503);
+      expect(cancelled.body.error.code).toBe('EVALUATION_REQUESTS_DISABLED');
       // The gate answers before the body is read: an invalid body still hears 503, not 400 (the controller's own fallback could not tell these apart).
       const invalid = await lab.api().post(`/api/v1/reports/${setup.reportId}/evaluation-requests`).set(bearer(setup.clinician.token)).send({ bad: true }).expect(503);
       expect(invalid.body.error.code).toBe('EVALUATION_REQUESTS_DISABLED');

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Param, Post, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Param, Post, Res } from '@nestjs/common';
 import { type EvaluationRequestBody, evaluationRequestBodySchema, type EvaluationRequestDto, type IdParam, idParamSchema } from '@telesphoros/shared-types';
 import type { Response } from 'express';
 import { CLINICAL_READ_ROLES } from '../auth/clinical-read';
@@ -40,6 +40,14 @@ export class EvaluationRequestsController {
     const { request, created } = await this.requests().admit(principal, { ...body, reportId: id });
     res.status(created ? 202 : 200);
     return request;
+  }
+
+  /** H4 slice 3: the requester withdraws a request no worker has started (migration 0054). 409 once one has, 403 for anyone else. Takes no body. */
+  @Post('evaluation-requests/:id/cancel')
+  @HttpCode(200)
+  @Roles(...CAN_EVALUATE)
+  cancel(@CurrentPrincipal() principal: Principal, @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam): Promise<EvaluationRequestDto> {
+    return this.requests().cancel(principal, id);
   }
 
   @Get('evaluation-requests/:id')
