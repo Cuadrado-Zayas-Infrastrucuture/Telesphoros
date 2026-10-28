@@ -46,7 +46,8 @@ export function issuerUrlProblem(value: string): string | undefined {
 
 export const envSchema = z
   .object({
-    NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+    // No default: a missing setting must not mean development, which skips every production refusal below (audit 2026-10-27, A1).
+    NODE_ENV: z.enum(['development', 'test', 'production']),
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     // The API's own certificate and key (PEM), so the load balancer reaches the task over TLS (audit FE-02). Both or neither; required in production.
     TLS_CERT_PEM: z.string().min(1).optional(),

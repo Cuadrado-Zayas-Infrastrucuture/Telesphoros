@@ -90,8 +90,10 @@
   --size-image-dialog: 44rem;
   --size-source-image-zoom: 76.5rem;
   --duration-preview-shimmer: 3s;
+  /* Deepest progressive blur at a scroll edge; the container pads its content by the same. */
+  --size-blur-edge: 3rem;
 
-  /* Subtle depth on opaque surfaces; no blur over operational data. */
+  /* Subtle depth on opaque surfaces. Blur only as the progressive scroll edge, never over resting content. */
   --elevation-panel: 0 2px 8px #22556008;
   --shadow-button: 0 1px 2px #22556024, inset 0 1px 0 #ffffff24;
   --shadow-button-pressed: inset 0 1px 3px #173e4724;

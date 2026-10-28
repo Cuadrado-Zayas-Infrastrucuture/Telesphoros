@@ -21,6 +21,24 @@ import { TextCaptureRunner } from './runner/text-capture-runner';
 
 const enabled = (env: Env) => env.LAB_REPORT_PIPELINE === 'enabled';
 
+// loadEnv refuses the pipeline in production. The knowledge loader and the reader still take their mode from NODE_ENV, so their own production
+// rules are a second line rather than switched off: in production the reader refuses and the loader refuses synthetic content (audit A1).
+const modeOf = (env: Env) => (env.NODE_ENV === 'production' ? 'production' : 'non-production');
+
+export const labKnowledgeFactory = async (env: Env): Promise<KnowledgeSet | undefined> =>
+  enabled(env) ? loadKnowledge({ directory: env.KNOWLEDGE_DIR!, mode: modeOf(env) }) : undefined;
+
+export const labReaderFactory = async (env: Env): Promise<ReportReader | undefined> => {
+  if (!enabled(env)) return undefined;
+  const logger = new Logger('ReportReader');
+  // Constructed first: its production refusal is policy and comes before any check of what is installed.
+  const reader = new SubprocessReportReader({ mode: modeOf(env), logger: { warn: (fields, message) => logger.warn({ ...fields, message }) } });
+  assertReaderEnginePresent();
+  const mismatches = await reader.verifyPinned();
+  if (mismatches.length > 0) throw new Error(`The report reader is not the pinned build (differs in: ${mismatches.join(', ')}).`);
+  return reader;
+};
+
 /**
  * The lab-report pipeline: the switch, its route guard, the startup check, and the capture, decision and evaluation routes. The routes are
  * always registered, so a switched-off pipeline answers 503 and not 404; what they need to work (the text runner, the knowledge, the
@@ -52,25 +70,8 @@ const enabled = (env: Env) => env.LAB_REPORT_PIPELINE === 'enabled';
       inject: [ENV],
       useFactory: async (env: Env): Promise<TextCaptureRunner | undefined> => (enabled(env) ? FakeTextCaptureRunner.open(env.LAB_REPORT_FIXTURES_DIR!) : undefined),
     },
-    {
-      provide: LAB_KNOWLEDGE,
-      inject: [ENV],
-      // The pipeline is refused in production, so the knowledge is always loaded under the non-production rules (synthetic content allowed).
-      useFactory: async (env: Env): Promise<KnowledgeSet | undefined> => (enabled(env) ? loadKnowledge({ directory: env.KNOWLEDGE_DIR!, mode: 'non-production' }) : undefined),
-    },
-    {
-      provide: LAB_READER,
-      inject: [ENV],
-      useFactory: async (env: Env): Promise<ReportReader | undefined> => {
-        if (!enabled(env)) return undefined;
-        assertReaderEnginePresent();
-        const logger = new Logger('ReportReader');
-        const reader = new SubprocessReportReader({ mode: 'non-production', logger: { warn: (fields, message) => logger.warn({ ...fields, message }) } });
-        const mismatches = await reader.verifyPinned();
-        if (mismatches.length > 0) throw new Error(`The report reader is not the pinned build (differs in: ${mismatches.join(', ')}).`);
-        return reader;
-      },
-    },
+    { provide: LAB_KNOWLEDGE, inject: [ENV], useFactory: labKnowledgeFactory },
+    { provide: LAB_READER, inject: [ENV], useFactory: labReaderFactory },
   ],
   exports: [PipelineSwitch, PipelineGateGuard],
 })

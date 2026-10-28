@@ -13,6 +13,13 @@ const namedColor = /\b(?:white|black|red|orange|yellow|green|blue|purple|pink|te
 const foreignUtility = /(?:^|\s|:)(?:text|bg|border|ring|fill|stroke|from|via|to)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black)(?:-\d+)?\b/;
 const arbitraryUtility = /(?:^|\s)(?:[a-z0-9:!&>_*-]+-)?\[[^\]\s]+\]/i;
 const commentsRemoved = text => text.replace(/\/\*[\s\S]*?\*\//g, '');
+// Blur exists only as the progressive scroll edge (specs/005-progressive-blur-edge); everything else is rejected.
+const blurAllowed = new Set(['apps/frontend/src/components/motion-primitives/ProgressiveBlur.tsx', 'apps/frontend/src/styles/progressive-blur.css']);
+const blurError = path => `${path}: blur is only allowed as the progressive scroll edge (components/motion-primitives/ProgressiveBlur)`;
+const cssBlur = /backdrop-filter|\bblur\s*\(|@apply[^;]*\bblur\b/i;
+const blurValue = /\bblur\s*\(/i;
+const blurClass = /^(?:[\w-]+:)*!?(?:backdrop-blur|blur-)/;
+const bareBlurClass = /^(?:[\w-]+:)*!?blur$/;
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 function walk(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)]);
@@ -73,9 +80,11 @@ export function findBrandViolations({ policy, textFiles, assetHashes, fileHashes
   }
   for (const [path, text] of Object.entries(textFiles)) {
     if (path.endsWith('vite.config.ts')) continue;
+    const blurOk = blurAllowed.has(path);
     if (path.endsWith('.css')) {
       const css = commentsRemoved(text);
       if (/@import\s+(?:url\s*\()?['"]?(?:https?:|\/\/)/i.test(css)) errors.push(`${path}: external styles/fonts are not allowed`);
+      if (!blurOk && cssBlur.test(css)) errors.push(blurError(path));
       if (path !== tokenPath) {
         if (rawColor.test(css)) errors.push(`${path}: literal colors must live in tokens.css`);
         for (const match of css.matchAll(/--([\w-]+)\s*:\s*([^;{}]+);/g)) {
@@ -111,11 +120,23 @@ export function findBrandViolations({ policy, textFiles, assetHashes, fileHashes
         }
         return false;
       }
+      // A bare `blur` is a class only where class names are written; elsewhere it is an event name.
+      function inClassContext(node) {
+        for (let parent = node.parent; parent; parent = parent.parent) {
+          if (ts.isJsxAttribute(parent)) return parent.name.getText(ast) === 'className';
+          if (ts.isCallExpression(parent) && /^(?:cn|cva|clsx|twMerge)$/.test(parent.expression.getText(ast))) return true;
+        }
+        return false;
+      }
       function visit(node) {
         if (ts.isStringLiteralLike(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) {
           if (foreignUtility.test(node.text) || arbitraryUtility.test(node.text)) errors.push(`${path}: unapproved utility ${node.text}`);
           if (rawColor.test(node.text)) errors.push(`${path}: literal colors must use tokens`);
+          const classes = node.text.split(/\s+/).filter(Boolean);
+          const blurUtility = classes.some(name => blurClass.test(name) || (bareBlurClass.test(name) && (classes.length > 1 || inClassContext(node))));
+          if (!blurOk && (blurValue.test(node.text) || blurUtility)) errors.push(blurError(path));
         }
+        if (!blurOk && ts.isPropertyAssignment(node) && /^(?:webkit)?backdrop-?filter$/i.test(node.name.getText(ast).replace(/['"]/g, ''))) errors.push(blurError(path));
         if (ts.isPropertyAssignment(node) && isStyle(node)) {
           const name = node.name.getText(ast).replace(/['"]/g, '');
           if (name.startsWith('--') && Object.hasOwn(policy.tokens, name.slice(2))) errors.push(`${path}: cannot override locked ${name} inline`);

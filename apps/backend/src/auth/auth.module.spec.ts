@@ -12,7 +12,7 @@ import { HmacTokenVerifier, TokenVerifier } from './token-verifier';
 
 // The e2e harness replaces the verifier, so THIS is what proves production wiring picks the right one.
 async function wiredVerifier(source: Record<string, string>) {
-  const env = loadEnv(source);
+  const env = loadEnv({ NODE_ENV: 'development', ...source });
   const module = await Test.createTestingModule({ imports: [ConfigModule.forRoot(env), StorageModule.register(env), AuthModule] }).compile();
   return module.get(TokenVerifier);
 }
@@ -55,14 +55,14 @@ describe('AuthModule picks the verifier from the environment', () => {
 
   it('the in-memory development store mirrors the token into membership; PostgreSQL (and so production) never does', async () => {
     expect(await wiredVerifier({ JWT_SECRET: 'x'.repeat(40) })).toBeInstanceOf(MirrorTokenVerifier);
-    const postgres = loadEnv({ JWT_SECRET: 'x'.repeat(40), STORAGE_DRIVER: 'postgres', DATABASE_URL: 'postgres://app@127.0.0.1:1/none' });
+    const postgres = loadEnv({ NODE_ENV: 'development', JWT_SECRET: 'x'.repeat(40), STORAGE_DRIVER: 'postgres', DATABASE_URL: 'postgres://app@127.0.0.1:1/none' });
     const database = createApplicationVerifier(postgres, { find: async () => undefined } as MembershipRepository);
     expect(database).toBeInstanceOf(HmacTokenVerifier);
     expect(database).not.toBeInstanceOf(MirrorTokenVerifier);
   });
 
   it('refuses to mirror anywhere but the in-memory store, even if the wiring is misconfigured', () => {
-    const memory = loadEnv({ JWT_SECRET: 'x'.repeat(40) });
+    const memory = loadEnv({ NODE_ENV: 'development', JWT_SECRET: 'x'.repeat(40) });
     expect(() => createApplicationVerifier(memory, { find: async () => undefined } as MembershipRepository)).toThrow(/in-memory development store only/);
     expect(createApplicationVerifier(memory, new InMemoryMembershipRepository())).toBeInstanceOf(MirrorTokenVerifier);
     // loadEnv already refuses the in-memory store when NODE_ENV=production; the factory refuses it too, independently.
@@ -72,11 +72,11 @@ describe('AuthModule picks the verifier from the environment', () => {
 
 describe('AuthModule picks the capability issuer from the environment', () => {
   async function wiredIssuer(source: Record<string, string>) {
-    const env = loadEnv(source);
+    const env = loadEnv({ NODE_ENV: 'development', ...source });
     const module = await Test.createTestingModule({ imports: [ConfigModule.forRoot(env), StorageModule.register(env), AuthModule] }).compile();
     return module.get(CapabilityIssuerPort);
   }
-  const hmac = { JWT_SECRET: 'x'.repeat(40) };
+  const hmac = { NODE_ENV: 'development', JWT_SECRET: 'x'.repeat(40) };
 
   it('no ISSUER_URL: no issuer is asked, exactly as before this setting existed', async () => {
     expect(await wiredIssuer(hmac)).toBeInstanceOf(NullCapabilityIssuer);
