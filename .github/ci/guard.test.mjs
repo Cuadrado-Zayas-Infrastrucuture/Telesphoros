@@ -309,12 +309,13 @@ test('dependabot watches every ecosystem the repository uses', () => {
   for (const eco of ['npm', 'github-actions', 'terraform', 'pip', 'docker-compose']) assert.match(dependabot, new RegExp(`package-ecosystem: ${eco}\\b`));
 });
 
-/** Dependencies Dependabot must not bump alone: @nestjs/* majors (they move together) and every Node base-image update (an exact pin held in many files). */
+/** Dependencies Dependabot must not bump alone: @nestjs/* majors (they move together), jsdom majors (30 needs a Node the Unicode pin rules out), and
+ *  every Node base-image update (an exact pin held in many files). */
 export function missingIgnores(config) {
   const block = (eco) => config.split(/^  - package-ecosystem: /m).find((b) => b.startsWith(`${eco}\n`)) ?? '';
-  const nest = (entries) => entries.some((e) => e.name === '@nestjs/*' && e.next.trim() === 'update-types: ["version-update:semver-major"]');
+  const majors = (name) => (entries) => entries.some((e) => e.name === name && e.next.trim() === 'update-types: ["version-update:semver-major"]');
   const node = (entries) => entries.some((e) => e.name === 'node' && !/^\s*update-types/.test(e.next)); // no update-types: every update is ignored
-  return [['npm', '@nestjs/*', nest], ['docker', 'node', node]].filter(([eco, , ok]) => !ok(ignoreEntries(block(eco)))).map(([eco, name]) => `${eco}: ${name}`);
+  return [['npm', '@nestjs/*', majors('@nestjs/*')], ['npm', 'jsdom', majors('jsdom')], ['docker', 'node', node]].filter(([eco, , ok]) => !ok(ignoreEntries(block(eco)))).map(([eco, name]) => `${eco}: ${name}`);
 }
 /** The `- dependency-name:` entries of a block's `ignore:` list, each with the line that follows it. Read line by line: linear in the file, whatever it contains. */
 function ignoreEntries(block) {
@@ -331,9 +332,11 @@ function ignoreEntries(block) {
   }
   return entries;
 }
-test('dependabot ignores @nestjs/* majors and every update of the node base image (planned migrations only)', () => {
+test('dependabot ignores @nestjs/* and jsdom majors and every update of the node base image (planned migrations only)', () => {
   assert.deepEqual(missingIgnores(dependabot), []);
   assert.deepEqual(missingIgnores(dependabot.replace('"@nestjs/*"', '"@nestjs/core"')), ['npm: @nestjs/*']); // controls: each fails when removed
+  assert.deepEqual(missingIgnores(dependabot.replace('dependency-name: "jsdom"', 'dependency-name: "jsdomx"')), ['npm: jsdom']);
+  assert.deepEqual(missingIgnores(dependabot.replace('dependency-name: "jsdom"\n        update-types: ["version-update:semver-major"]\n', 'dependency-name: "jsdom"\n')), ['npm: jsdom']); // without update-types the whole package would be frozen
   assert.deepEqual(missingIgnores(dependabot.replace('dependency-name: "node"', 'dependency-name: "nodex"')), ['docker: node']);
   assert.deepEqual(missingIgnores(dependabot.replace('dependency-name: "node"\n', 'dependency-name: "node"\n        update-types: ["version-update:semver-major"]\n')), ['docker: node']); // majors only is not enough
 });

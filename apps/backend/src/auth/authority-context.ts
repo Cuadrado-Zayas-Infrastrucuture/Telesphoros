@@ -100,3 +100,14 @@ export function asOrganizationWork<T>(work: () => T): T {
   const kept = store?.capability || store?.capabilityAbsent ? { capability: store.capability, capabilityAbsent: store.capabilityAbsent } : undefined;
   return storage.exit(() => (kept ? storage.run(kept, work) : work()));
 }
+
+/**
+ * Runs `work` without the request's capability if that has expired, and as before otherwise. Only for recording a security event (audit A3): a refusal
+ * made after the request outlived its capability must still be written, and with an expired capability the database resolves no organization. Without
+ * one, the guc and dual modes bind the organization `withTenant` names, as for other work without a capability; the capability-only mode resolves none.
+ */
+export function withoutExpiredCapability<T>(work: () => T): T {
+  const store = storage.getStore();
+  if (!store?.capability || store.capability.expiresAt.getTime() > Date.now()) return work();
+  return storage.run({ authority: store.authority, requestId: store.requestId, capabilityAbsent: 'expired' }, work);
+}
