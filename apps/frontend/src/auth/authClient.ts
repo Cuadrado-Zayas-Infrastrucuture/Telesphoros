@@ -7,6 +7,8 @@ export interface Session {
   /** Epoch seconds. */
   expiresAt: number;
   returnTo: string;
+  /** The `email` claim of the ID token the library has just validated, for display in Settings. Absent when the provider sent none. */
+  email?: string;
 }
 
 /** The three things the app needs from the identity provider. Tests substitute a fake. */
@@ -24,7 +26,9 @@ export interface AuthClient {
  *    out locally; the identity provider's own session then makes the next sign-in instant.
  *  - The short-lived PKCE verifier and `state`: in sessionStorage, because they must survive the redirect to
  *    the sign-in page and back. They are not tokens and the library deletes them when the callback completes.
- *  - After the callback we keep ONLY the access token. The ID token and refresh token are discarded.
+ *  - After the callback we keep the access token and ONE claim of the ID token, `email`, so the person can see who they are signed in
+ *    as (Settings). The ID token and refresh token themselves are discarded. The email stays in memory: it is never stored, sent to the
+ *    API or logged.
  */
 export function createAuthClient(
   config: AuthConfig,
@@ -58,10 +62,12 @@ export function createAuthClient(
       if (existing) return existing;
       const attempt = (async () => {
         const user = await manager.signinRedirectCallback();
+        const email = typeof user.profile?.email === 'string' && user.profile.email.length > 0 ? user.profile.email : undefined;
         const session: Session = {
           accessToken: user.access_token,
           expiresAt: user.expires_at ?? Math.floor(Date.now() / 1000) + 60,
           returnTo: safeReturnTo((user.state as { returnTo?: unknown } | undefined)?.returnTo),
+          ...(email ? { email } : {}),
         };
         await manager.removeUser(); // drop the ID and refresh tokens the library holds in memory
         return session;

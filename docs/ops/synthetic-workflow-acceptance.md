@@ -9,7 +9,7 @@ Use the repository's pinned Node/pnpm versions. Install dependencies and Playwri
 Stop your own standalone `demo:smart` process so port 8767 is free; leave OpenEMR on 8301. The test owns its pilot listener and closes it afterward. It never kills a process occupying that port or edits your runtime registration/stored-reader files.
 
 ```sh
-TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:54329/postgres \
+TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54329/postgres \
 TEST_S3_ENDPOINT=http://127.0.0.1:5555 \
 pnpm --filter @telesphoros/smart-pilot test:workflow
 ```

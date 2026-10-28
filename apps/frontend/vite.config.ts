@@ -19,8 +19,17 @@ export default defineConfig({
     manifest: true,
     sourcemap: true,
     // Keep shared, framework-free styling utilities separate when new route imports change automatic chunk grouping.
+    // React Router likewise: adding the lazy Settings route moved its core from a shared chunk into the entry file (+29 kB gzip there,
+    // +45 bytes in what the page loads at start, since both files were preloaded together). Its own group keeps the split stable.
     rolldownOptions: {
-      output: { codeSplitting: { groups: [{ name: 'ui-utilities', test: /\/node_modules\/(tailwind-merge|class-variance-authority|clsx)\// }] } },
+      output: {
+        codeSplitting: {
+          groups: [
+            { name: 'ui-utilities', test: /\/node_modules\/(tailwind-merge|class-variance-authority|clsx)\// },
+            { name: 'router', test: /\/node_modules\/react-router(-dom)?\// },
+          ],
+        },
+      },
     },
   },
   test: {
