@@ -12,3 +12,5 @@ MIT © 2024 ibelick. License retained beside these components. The registry entr
 - The overlay is bounded to `--size-blur-edge` (3rem). With `prefers-reduced-transparency: reduce`, or without `backdrop-filter` support, it draws an opaque fade in `--background` instead.
 
 Use it inside a `relative` scroll container (or its non-scrolling wrapper), on the edge where content leaves. Pad the scrolling content by `--size-blur-edge` on that side, so nothing is under blur at rest. Never use it over a panel, card, dialog or image as glass.
+
+The opaque fallback fades to `--progressive-blur-ground`, which defaults to `--background`. A container on another surface sets it to that surface, as the chat frame does with `--panel`, so the fade never draws a grey band on white.
