@@ -1,8 +1,10 @@
 # Implementation Plan: Asynchronous evaluation requests through the API and the local review page (H4)
 
-**Branch**: `docs/spec-006-async-evaluation` | **Date**: 2026-10-27 | **Spec**: [spec.md](spec.md)
+**Branch**: `docs/spec-007-async-evaluation` | **Date**: 2026-10-27 | **Spec**: [spec.md](spec.md)
 
-**Status**: Approved by the founder on 2026-10-27, with D1 to D5 as recommended: *"Approve spec 006 plan.md with D1-D5 as recommended. Write tasks.md, then start slice 1 on its own local branch."*
+**Status**: Approved by the founder on 2026-10-27, with D1 to D5 as recommended: *"Approve spec 006 plan.md with D1-D5 as recommended. Write tasks.md, then start slice 1 on its own local branch."* Renumbered from 006 on 2026-10-28 at the founder's choice: open PR #109 already names the clinician-decision-records spec "spec 006"; quotations keep the founder's words as given.
+
+**Amended 2026-10-28 (founder's choice):** slice 2 is cut off `main` without the cancel route, so it does not stack on the unmerged slice 1; the route `POST /evaluation-requests/:id/cancel` moves into slice 3 with the page's Cancel button.
 
 ## Summary
 
@@ -136,8 +138,8 @@ Three slices, each one PR off `main`. Slice 1 opens admission and status through
 
 ## Notes for whoever builds it
 
-- `specs/005-clinician-decision-records` on the unpushed branch `docs/data-products-d00` already collides with `005-progressive-blur-edge` on `main`. It will need a new number, and it must not take 006.
-- Re-read `apps/backend/migrations/` for the next number when slice 2 starts. 0052 is held by PR 105.
+- The clinician-decision-records spec took 006 (open PR #109 names it), so this spec is 007.
+- Re-read `apps/backend/migrations/` for the next number when slice 2 starts. On 2026-10-28 `main` ends at 0053, so slice 2 takes 0054; the clinician spec's D01b also plans one at 0054 or later, so whichever lands second renumbers.
 
 ## Complexity Tracking
 

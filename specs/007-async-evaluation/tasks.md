@@ -25,11 +25,12 @@
 
 ## Phase 2: cancel a request that has not started (slice 2)
 
+Cut off `main` without the route (founder, 2026-10-28): the route needs slice 1's controller and moves to phase 3 (T034).
+
 - [ ] T020 Re-read `apps/backend/migrations/` for the next number
 - [ ] T021 [US2] pg spec first: cancel `queued` and `retry` succeeds; `running`, `completed`, `dead`, `cancelled` give 409; a non-requester gets 403 with a requester control; another tenant 404; cancel then consumer run stores nothing (SC-003); concurrent cancel and claim, exactly one winner per run
 - [ ] T022 [US2] Migration: `evaluation_request_cancellations` (append-only, forced RLS) and `evaluation_request_cancel(uuid)`, definer owned by the queue's owner role; down refuses while any cancellation exists, run as the restricted migrator
 - [ ] T023 [US2] Status read maps job `cancelled` to state `cancelled`; `EvaluationRequestDto['state']` gains it; `cancel` on the service and repository
-- [ ] T024 [US2] `POST /evaluation-requests/:id/cancel` and its e2e cases
 - [ ] T025 Mutations on each guard in the function; full local loop; status note and verification record
 
 ## Phase 3: the local review page (slice 3)
@@ -37,4 +38,5 @@
 - [ ] T030 [P] [US1] Component tests first, with a scripted fetch: each state's text, backoff stops at a final state and after 5 minutes, unmount stops polling, a double click replays one `requestId`, the 503 text
 - [ ] T031 [US1] "Queue synthetic evaluation" in `apps/frontend/src/pages/LocalReviewPage.tsx`: post, poll, show the state, fetch and show the evaluation on `completed`
 - [ ] T032 [US2] Cancel while `queued` or `retry`
+- [ ] T034 [US2] `POST /evaluation-requests/:id/cancel` (roles `clinician` and `reviewer`, requester only through the database function) and its e2e cases: 200 with `cancelled`, 409 for a started or finished request, 403 for a non-requester with a requester control, 404 for another organization
 - [ ] T033 Full local loop including the browser tier; status note; `docs/lab-report-reader.md` and the H1 plan's "Next scopes" say what H4 adds and does not prove (FR-009)
