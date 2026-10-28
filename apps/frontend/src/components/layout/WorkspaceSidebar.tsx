@@ -1,6 +1,6 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
 import { NavLink } from 'react-router-dom';
-import { FileText, Home, Menu, MessageSquare, Upload, X } from 'lucide-react';
+import { FileText, Home, Menu, MessageSquare, Settings, Upload, X } from 'lucide-react';
 import productMark from '@/assets/telesphoros-shield-rx.png';
 import { useAuth } from '@/auth/AuthProvider';
 import { CLINICAL_READ_ROLES, WRITER_ROLES } from '@/auth/roles';
@@ -9,13 +9,14 @@ import { Button } from '@/components/ui/Button';
 import { AccountMenu } from './AccountMenu';
 
 export function WorkspaceSidebar() {
-  const { roles } = useAuth();
+  const { status, roles } = useAuth();
   const [open, setOpen] = useState(false);
   const toggle = useRef<HTMLButtonElement>(null);
   const links = [
     ...(import.meta.env.DEV && location.hostname === '127.0.0.1' ? [{ to: '/local-interpretation', label: 'Chat preview', icon: MessageSquare, show: true }] : []),
     { to: '/reports', label: 'Reports', icon: FileText, show: roles.some((role) => CLINICAL_READ_ROLES.includes(role)) },
     { to: '/reports/upload', label: 'Upload report', icon: Upload, show: roles.some((role) => WRITER_ROLES.includes(role)) },
+    { to: '/settings', label: 'Settings', icon: Settings, show: status === 'signedIn' },
     { to: '/', label: 'Overview', icon: Home, show: true },
   ].filter((link) => link.show);
   function dismiss(event: KeyboardEvent<HTMLElement>) {

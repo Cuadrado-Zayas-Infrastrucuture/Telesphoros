@@ -76,6 +76,27 @@ describe('createAuthClient: signing in', () => {
     expect(manager.removeUser).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the ID token’s email claim and nothing else from it; the ID token itself is still dropped', async () => {
+    manager.signinRedirectCallback.mockResolvedValue({
+      ...user({ returnTo: '/settings' }),
+      profile: { sub: 'person-1', email: 'alice@example.test', email_verified: true, 'cognito:username': 'person-1', aud: 'client-1' },
+    });
+    const session = await createAuthClient(config).completeSignIn();
+    expect(session).toEqual({ accessToken: 'access-1', expiresAt: 1_900_000_000, returnTo: '/settings', email: 'alice@example.test' });
+    expect(JSON.stringify(session)).not.toMatch(/id-1|refresh-1|person-1|cognito/);
+    expect(manager.removeUser).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['no email claim', { sub: 'person-1' }],
+    ['an empty email', { sub: 'person-1', email: '' }],
+    ['a non-string email', { sub: 'person-1', email: ['alice@example.test'] }],
+  ])('holds no email when the ID token has %s', async (_name, profile) => {
+    manager.signinRedirectCallback.mockResolvedValue({ ...user({ returnTo: '/' }), profile });
+    const session = await createAuthClient(config).completeSignIn();
+    expect(session).not.toHaveProperty('email');
+  });
+
   it.each([
     ['an external URL', 'https://evil.example.com'],
     ['a missing state', undefined],

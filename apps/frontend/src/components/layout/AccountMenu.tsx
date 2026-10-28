@@ -4,7 +4,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
 import { useShellCopy } from '@/lib/landing/landing-language';
 
-/** Who is signed in (by role only: no name or email is held) and the way out. */
+/** Who is signed in (by role; the email is shown only in Settings) and the way out. */
 export function AccountMenu() {
   const { status, roles, signOut } = useAuth();
   const { header } = useShellCopy();

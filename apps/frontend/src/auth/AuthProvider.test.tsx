@@ -160,6 +160,17 @@ describe('AuthProvider', () => {
     expect(result.current.roles).toEqual([]);
   });
 
+  it('holds the email from the sign-in only while signed in, and keeps it out of browser storage', async () => {
+    const { result } = setup({ client: fakeClient({ returnTo: '/settings', email: 'alice@example.test' }) });
+    expect(result.current.email).toBeNull();
+    await act(async () => void (await result.current.completeSignIn()));
+    expect(result.current.email).toBe('alice@example.test');
+    const stored = [window.localStorage, window.sessionStorage].flatMap((store) => Object.keys(store).map((key) => store.getItem(key)));
+    expect(JSON.stringify(stored)).not.toContain('alice@example.test');
+    await act(async () => void (await result.current.signOut()));
+    expect(result.current.email).toBeNull();
+  });
+
   it('sign out forgets a scoped interrupted upload', async () => {
     const { result } = setup();
     await act(async () => void (await result.current.completeSignIn()));

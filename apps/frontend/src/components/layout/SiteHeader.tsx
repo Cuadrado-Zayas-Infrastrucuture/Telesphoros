@@ -11,7 +11,7 @@ import { LanguageToggle } from '@/components/landing/LanguageToggle';
 export function SiteHeader() {
   const pathname = useLocation().pathname;
   const landing = useLandingRoute();
-  const { roles } = useAuth();
+  const { status, roles } = useAuth();
   // The shell is Spanish only while the landing shows and Spanish is chosen; every other page stays English.
   const { header: h } = useShellCopy();
   // Links to pages the user cannot use are simply not shown. The pages are guarded as well.
@@ -22,6 +22,7 @@ export function SiteHeader() {
       ? [{ to: '/local-interpretation', label: 'AI preview', end: true, show: true }]
       : []),
     { to: '/reports/upload', label: 'Upload report', end: false, show: !ownedStorageMode() && roles.some((r) => WRITER_ROLES.includes(r)) },
+    { to: '/settings', label: 'Settings', end: true, show: !landing && status === 'signedIn' },
   ].filter((link) => link.show);
 
   return (
