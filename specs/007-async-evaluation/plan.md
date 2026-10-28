@@ -94,7 +94,7 @@ Three slices, each one PR off `main`. Slice 1 opens admission and status through
   - writes the cancellation record (D4).
 - **Serializing with a claim.** A worker's claim takes the row `FOR UPDATE … SKIP LOCKED` (`0023_jobs.up.sql:188`). While a cancel holds the lock, the claim skips the job and then finds it cancelled; while a claim holds it, the cancel waits and then finds it `running` (409). Which one wins is decided by the lock, never by timing. A concurrent test runs both many times and checks that every run has exactly one winner.
 - **Status.** The status read maps job `cancelled` to the new state `cancelled` instead of 503, and `EvaluationRequestDto['state']` gains it. The down migration refuses while any cancellation exists, run as the restricted migrator login, as 0050 and 0051 do.
-- **The route.** `POST /evaluation-requests/:id/cancel`, roles `clinician` and `reviewer`, returns the request.
+- **The route** (moved to slice 3 on 2026-10-28). `POST /evaluation-requests/:id/cancel`, roles `clinician` and `reviewer`, returns the request.
 - **Tests.**
   - Cancel then running the consumer stores nothing (SC-003).
   - Running, completed, dead or already-cancelled requests give 409.
