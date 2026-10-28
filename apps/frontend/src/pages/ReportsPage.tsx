@@ -11,6 +11,7 @@ import { PaginationControls } from '@/components/PaginationControls';
 import { ContextDrawer } from '@/components/ui/ContextDrawer';
 import { ReportDetails } from '@/components/ReportDetails';
 import { ReportListSkeleton } from '@/components/ReportListSkeleton';
+import { ReportStages } from '@/components/ReportStages';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { listPatients, SubmitError } from '@/lib/api';
 import { downloadReport, listReports } from '@/lib/ownedStorageApi';
@@ -27,6 +28,8 @@ export default function ReportsPage() {
   const [reports, setReports] = useState<Paginated<ReportDto> | null>(null);
   const [reportMeta, setReportMeta] = useState(EMPTY_META);
   const [reportsLoading, setReportsLoading] = useState(true);
+  // Stage counts follow the patient filter and Refresh, not table pagination.
+  const [stagesRefresh, setStagesRefresh] = useState(0);
   const [searchText, setSearchText] = useState('');
   const [uploadFilter, setUploadFilter] = useState('all');
   const [selected, setSelected] = useState<ReportDto | null>(null);
@@ -187,7 +190,9 @@ export default function ReportsPage() {
               aria-label="Refresh reports"
               aria-disabled={reportsLoading}
               onClick={() => {
-                if (!reportsLoading) loadReports(reports && reports.data.length === 0 ? 1 : request.page);
+                if (reportsLoading) return;
+                setStagesRefresh((current) => current + 1);
+                loadReports(reports && reports.data.length === 0 ? 1 : request.page);
               }}
             >
               <RefreshCw aria-hidden="true" className="size-4 shrink-0" />
@@ -279,6 +284,7 @@ export default function ReportsPage() {
               />
             )}
           </div>
+          <ReportStages key={`${request.patientId}:${stagesRefresh}`} patientId={request.patientId} />
           {reportError && (
             <p role="alert" className="border-t border-divider bg-destructive-surface px-5 py-3 text-sm text-destructive">
               {reportError}
