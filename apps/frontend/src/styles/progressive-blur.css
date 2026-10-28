@@ -1,0 +1,31 @@
+/* The progressive scroll edge (components/motion-primitives/ProgressiveBlur). The only stylesheet that may blur. */
+.progressive-blur { position: absolute; z-index: 1; pointer-events: none; border-radius: inherit; }
+.progressive-blur[data-edge='top'] { inset: 0 0 auto; height: var(--size-blur-edge); }
+.progressive-blur[data-edge='bottom'] { inset: auto 0 0; height: var(--size-blur-edge); }
+.progressive-blur[data-edge='left'] { inset: 0 auto 0 0; width: var(--size-blur-edge); }
+.progressive-blur[data-edge='right'] { inset: 0 0 0 auto; width: var(--size-blur-edge); }
+.progressive-blur-layer {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  -webkit-mask-image: var(--progressive-blur-mask);
+  mask-image: var(--progressive-blur-mask);
+  -webkit-backdrop-filter: blur(var(--progressive-blur-radius));
+  backdrop-filter: blur(var(--progressive-blur-radius));
+}
+
+/* No blur for readers who ask for less transparency, or where the browser cannot: an opaque fade instead. */
+@media (prefers-reduced-transparency: reduce) {
+  .progressive-blur-layer { display: none; }
+  .progressive-blur[data-edge='top'] { background: linear-gradient(to top, transparent, var(--background)); }
+  .progressive-blur[data-edge='bottom'] { background: linear-gradient(to bottom, transparent, var(--background)); }
+  .progressive-blur[data-edge='left'] { background: linear-gradient(to left, transparent, var(--background)); }
+  .progressive-blur[data-edge='right'] { background: linear-gradient(to right, transparent, var(--background)); }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .progressive-blur-layer { display: none; }
+  .progressive-blur[data-edge='top'] { background: linear-gradient(to top, transparent, var(--background)); }
+  .progressive-blur[data-edge='bottom'] { background: linear-gradient(to bottom, transparent, var(--background)); }
+  .progressive-blur[data-edge='left'] { background: linear-gradient(to left, transparent, var(--background)); }
+  .progressive-blur[data-edge='right'] { background: linear-gradient(to right, transparent, var(--background)); }
+}
