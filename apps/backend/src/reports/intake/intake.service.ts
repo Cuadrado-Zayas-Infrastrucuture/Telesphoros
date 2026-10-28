@@ -157,10 +157,12 @@ export class IntakeService {
     const writer = randomUUID();
     this.active.set(a.id, control);
     let staged: StagedFile | undefined;
+    let began = false;
     let attemptedWrite = false;
     let safelyQuiesced = false;
     try {
       if (!(await this.reports.beginAttempt(i, writer))) throw conflict();
+      began = true;
       staged = await stage(source, a.type, a.sizeBytes, a.sha256, control.signal, a.runId);
       if (!(await this.reports.validateAttempt(i, writer))) throw conflict();
       if (control.signal.aborted) throw new IntakeRejectedError('cancelled');
@@ -193,6 +195,9 @@ export class IntakeService {
         // still runs if they were removed mid-transfer (otherwise their reservation would sit until the lease expires).
         const attempt = a;
         safelyQuiesced = await asOrganizationWork(async () => {
+          // Only the request that began the attempt closes it out. One that lost the begin to another API task (both read it as declared) would
+          // otherwise cancel the winner's transfer: cancelAttempt is not tied to a writer, so that the person's own cancel reaches a running one (audit U1).
+          if (!began) return false;
           if (!attemptedWrite) await this.reports.cancelAttempt(i);
           return (
             (await this.reports.settleAttempt(
