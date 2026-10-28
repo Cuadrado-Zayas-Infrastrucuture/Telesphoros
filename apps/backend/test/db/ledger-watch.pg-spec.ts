@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Logger } from '@nestjs/common';
+import { ErrorCode } from '@telesphoros/shared-types';
 import { Client } from 'pg';
+import { AppException } from '../../src/common/app-exception';
 import { Database } from '../../src/db/database';
 import { LedgerMonitor, type LedgerWatchConfig, type VerifierPort } from '../../src/ledger/ledger-monitor';
 import { LedgerStatus } from '../../src/ledger/ledger-status';
@@ -116,6 +118,23 @@ async function until(condition: () => boolean, ms = 10_000): Promise<void> {
   const deadline = Date.now() + ms;
   while (!condition() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));
   if (!condition()) throw new Error('the condition did not become true in time');
+}
+
+/**
+ * An admin's check while the watch's own timer is running. The monitor refuses a check while a walk holds its slot (the API answers 503
+ * "try again shortly"), and a timer firing every 200 ms can hold it whenever the steps before the call take longer than that (a slow runner).
+ * So the check is asked again, as a person would, until the slot is free: bounded, and only for that refusal.
+ */
+async function verifyWhenFree(monitor: LedgerMonitor, tenantId: string, full: boolean, ms = 10_000): Promise<VerifyResult> {
+  const deadline = Date.now() + ms;
+  for (;;) {
+    try {
+      return await monitor.verifyNow(tenantId, full);
+    } catch (error) {
+      if (!(error instanceof AppException) || error.code !== ErrorCode.PIPELINE_BUSY || Date.now() >= deadline) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  }
 }
 
 async function waitForScheduledIncident(watcher: ReturnType<typeof watch>, tenantId: string): Promise<void> {
@@ -332,7 +351,7 @@ describe('ledger watch: damage that appears while it is running', () => {
 
       // Repairing the data does not reopen the writes, and neither does a restart: a person decides, with a full walk as evidence.
       await tamper((c) => c.query(`UPDATE report_captures SET text_scalars = text_scalars - 1 WHERE id = $1`, [t.ids.capture]));
-      await expect(monitor.verifyNow(t.tenantId, true)).resolves.toMatchObject({ status: 'ok', mode: 'full', checkpointId: expect.any(String) });
+      await expect(verifyWhenFree(monitor, t.tenantId, true)).resolves.toMatchObject({ status: 'ok', mode: 'full', checkpointId: expect.any(String) });
       await expect(guarded.insertCapture(t.tenantId, report.uploader, captureFor(report))).rejects.toBeInstanceOf(LedgerCompromisedError);
       const restarted = watch({ production: true });
       try {

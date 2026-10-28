@@ -112,7 +112,7 @@ describe('the worker process with the consumers', () => {
       async () =>
         (
           await f.admin.query(
-            `SELECT count(*)::int AS n FROM job_attempts a JOIN jobs j ON j.id = a.job_id WHERE a.worker_id = 'consumers-nowhere' AND j.type = 'uploads.sweep' AND a.outcome = 'succeeded'`,
+            `SELECT count(*)::int AS n FROM job_attempts a JOIN jobs j ON j.id = a.job_id WHERE a.worker_id LIKE 'consumers-nowhere#%' AND j.type = 'uploads.sweep' AND a.outcome = 'succeeded'`,
           )
         ).rows[0].n >= 1,
     );
