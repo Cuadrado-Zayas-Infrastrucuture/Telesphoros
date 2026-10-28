@@ -14,14 +14,14 @@ The updated product/company identity uses Inter for readable editorial and appli
 | Controls | Existing components and approved fills; minimum shared target 2.75rem (44px at the default root size) |
 | Status | Semantic success/warning/error tokens, expressed as words; never decorative badges |
 | Artwork | Exact approved company/product logos, unchanged mascot and bundled fonts. The watermarked DNA image is retired and must not ship |
-| Data surfaces | Opaque, with clear borders and restrained depth; no blur over operational information |
+| Data surfaces | Opaque, with clear borders and restrained depth. Blur only as the progressive scroll edge (`ProgressiveBlur`, at most `--size-blur-edge` deep and 3.5px, opaque fade under reduced transparency); never glass, frosted panels or blur over resting content |
 | Accessibility | Visible focus, readable text and role/state labels; verify reflow and keyboard behavior |
 
 The canonical values live in `apps/frontend/src/styles/tokens.css`. The reviewed policy in `apps/frontend/scripts/branding-policy.json` pins the core palette, font roles, minimum control token, required component/asset references and artwork/font SHA-256 hashes. An asset replacement requires deliberate founder review; hashes must not be regenerated as a workaround.
 
 ## Enforcement
 
-`pnpm --filter @telesphoros/frontend check:brand` checks both frontend and SMART UI sources. It rejects token drift, changed assets, page-local font loading, literal colors outside tokens, external CSS/font imports, unapproved inline font/color declarations, foreign palette utilities, arbitrary Tailwind utilities, poor key contrast pairs, missing dashboard typography and removal of either build gate. The mascot selector cannot acquire animation or filters. Every shipped file of any type is hashed, and `retiredAssets` in the policy rejects retired artwork (the watermarked DNA image, since 2026-10-16) under any filename.
+`pnpm --filter @telesphoros/frontend check:brand` checks both frontend and SMART UI sources. It rejects token drift, changed assets, page-local font loading, literal colors outside tokens, external CSS/font imports, unapproved inline font/color declarations, foreign palette utilities, arbitrary Tailwind utilities, poor key contrast pairs, missing dashboard typography, removal of either build gate and blur anywhere except the progressive scroll edge (`components/motion-primitives/ProgressiveBlur.tsx` and `styles/progressive-blur.css`, whose depth `--size-blur-edge` is pinned). The mascot selector cannot acquire animation or filters. Every shipped file of any type is hashed, and `retiredAssets` in the policy rejects retired artwork (the watermarked DNA image, since 2026-10-16) under any filename.
 
 The `telesphoros-branding` Vite plugin runs this check in `buildStart`. Both frontend and SMART pilot configurations include it, so normal builds and direct `vite build --mode …` invocations are gated. Root workspace builds and CI already use those configurations. Backend-only builds do not produce a UI and do not need visual rules.
 
