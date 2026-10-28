@@ -8,6 +8,7 @@ import { PatientsController } from '../patients/patients.controller';
 import { ReportsController } from '../reports/reports.controller';
 import { CapturesController, ReportCaptureController } from '../lab-reports/captures.controller';
 import { EvaluationsController, ReportEvaluationController } from '../lab-reports/evaluations.controller';
+import { EvaluationRequestsController } from '../lab-reports/evaluation-requests.controller';
 import { NotesController, EvaluationCorrectionsController } from '../lab-reports/corrections.controller';
 import { DisputesController } from '../lab-reports/disputes.controller';
 import { LedgerController } from '../ledger/ledger.controller';
@@ -30,6 +31,7 @@ const controllers: Type[] = [
   EvaluationCorrectionsController,
   DisputesController,
   LedgerController,
+  EvaluationRequestsController,
   HealthController,
   MeController,
   MembersController,
@@ -64,7 +66,7 @@ it('inventories every registered production controller and strict input pipe', (
     .filter((file) => String(file).endsWith('.controller.ts'))
     .flatMap((file) => [...readFileSync(resolve(source, String(file)), 'utf8').matchAll(/export class (\w+Controller)\b/g)].map((match) => match[1]));
   expect(controllers.map((c) => c.name).sort()).toEqual(declared.sort());
-  expect(controllers).toHaveLength(18);
+  expect(controllers).toHaveLength(19);
   expect(routes.length).toBeGreaterThan(30);
   for (const { controller, name } of routes) {
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, controller, name) ?? {};

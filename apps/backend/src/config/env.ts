@@ -1,8 +1,18 @@
 import { z } from 'zod';
+import { evaluationExecutionProfileSchema } from '@telesphoros/shared-types';
 
 export const ENV = Symbol('ENV');
 
 const booleanString = z.enum(['true', 'false']).transform((value) => value === 'true');
+
+/** True for a JSON execution profile (H1's strict schema). The value is never put in a message. */
+const isExecutionProfile = (value: string | undefined) => {
+  try {
+    return value !== undefined && evaluationExecutionProfileSchema.safeParse(JSON.parse(value)).success;
+  } catch {
+    return false;
+  }
+};
 
 const isOrigin = (value: string) => {
   try {
@@ -122,6 +132,13 @@ export const envSchema = z
       .optional(),
     /** How many reads of report text may run at once in THIS process (not deployment-wide). Over the limit: 503 PIPELINE_BUSY. */
     LAB_REPORT_MAX_CONCURRENT_READS: z.coerce.number().int().min(1).max(16).default(2),
+    /**
+     * Queued evaluation requests (H4): the routes that admit an evaluation to the queue and read its status. Off unless switched on here, and only with
+     * the pipeline. Refused in production (see below). While `disabled` the routes answer 503 EVALUATION_REQUESTS_DISABLED and nothing is queued.
+     */
+    EVALUATION_REQUESTS: z.enum(['disabled', 'enabled']).default('disabled'),
+    /** The one execution profile requests are admitted under, as JSON (the evaluation worker reads the same setting). Required when they are enabled. */
+    EVALUATION_EXECUTION_PROFILE: z.string().min(1).optional(),
 
     /**
      * The ledger watch (docs/ops/ledger-watch.md). The verifier's OWN login (a member of telesphoros_ledger_verifier and of nothing else,
@@ -217,6 +234,14 @@ export const envSchema = z
         problem('LAB_REPORT_FIXTURES_DIR', 'is required when LAB_REPORT_PIPELINE=enabled (the directory of recorded PDFs for the test-only text runner)');
       if (env.NODE_ENV === 'production')
         problem('LAB_REPORT_PIPELINE', 'is refused in production: it is a synthetic, non-production integration (test-only text runner and development knowledge)');
+    }
+
+    // Checked on its own, not only through the pipeline: production refuses the queued path even with the pipeline off.
+    if (env.EVALUATION_REQUESTS === 'enabled') {
+      if (env.LAB_REPORT_PIPELINE !== 'enabled') problem('EVALUATION_REQUESTS', 'needs LAB_REPORT_PIPELINE=enabled (a request is evaluated by the pipeline)');
+      if (!isExecutionProfile(env.EVALUATION_EXECUTION_PROFILE))
+        problem('EVALUATION_EXECUTION_PROFILE', 'is required when EVALUATION_REQUESTS=enabled, as an execution profile in JSON');
+      if (env.NODE_ENV === 'production') problem('EVALUATION_REQUESTS', 'is refused in production: queued evaluation is part of the synthetic, non-production pipeline');
     }
 
     if (env.LOCAL_UPLOAD_CLEANUP_GRACE_SECONDS < 86400 && (!env.LOCAL_STORAGE_RUN_ID || env.NODE_ENV === 'production' || env.LAB_REPORT_PIPELINE !== 'disabled'))

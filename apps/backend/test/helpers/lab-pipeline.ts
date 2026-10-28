@@ -6,6 +6,8 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import { InMemoryObjectStorage } from '../../src/object-storage/in-memory-object-storage';
 import { ObjectStorage } from '../../src/object-storage/object-storage';
+import { FakeTextCaptureRunner } from '../../src/lab-reports/runner/fake-text-capture-runner';
+import { loadKnowledge } from '../../src/services/knowledge/knowledge-loader';
 import { withAdmin } from './database';
 import { bearer, signToken } from './tokens';
 
@@ -28,6 +30,21 @@ export function fixtureSet(dir: string) {
 export const { fixturePdf, fixtureText, fixtureManifest } = fixtureSet(PUBLIC_FIXTURES);
 export const engineFixtures = fixtureSet(ENGINE_FIXTURES);
 export const sha = (bytes: Buffer | string) => createHash('sha256').update(bytes).digest('hex');
+
+/**
+ * A synthetic execution profile (H1) naming what a test app loads from these directories, so the API's start-up check (H4) and the worker's (H3)
+ * accept it. The code artifact and execution manifest digests are synthetic: nothing recomputes them yet.
+ */
+export async function syntheticExecutionProfile(fixturesDir = PUBLIC_FIXTURES, knowledgeDir = TEST_KNOWLEDGE) {
+  const [knowledge, runner] = await Promise.all([loadKnowledge({ directory: knowledgeDir, mode: 'non-production' }), FakeTextCaptureRunner.open(fixturesDir)]);
+  return {
+    version: 'evaluation-execution-profile/1' as const,
+    codeArtifactSha256: sha('synthetic code artifact'),
+    executionManifestSha256: sha('synthetic self-hosted manifest'),
+    knowledgeSetId: knowledge.id,
+    recordingsSha256: runner.manifestSha256,
+  };
+}
 export const DOCUMENT_IDS = Array.from({ length: 12 }, (_, i) => `D${String(i + 1).padStart(2, '0')}`);
 
 export interface Person {
