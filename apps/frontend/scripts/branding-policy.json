@@ -29,29 +29,74 @@
     "size-blur-edge": "3rem",
     "font-family-mono": "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
     "dashboard-foreground": "#173E47",
-    "dashboard-muted-foreground": "#36515A"
+    "dashboard-muted-foreground": "#36515A",
+    "mark-plate": "transparent"
+  },
+  "darkTokens": {
+    "background": "#0E1B1F",
+    "panel": "#152529",
+    "foreground": "#DCEBE7",
+    "surface": "#1C3035",
+    "muted": "#1E3A3B",
+    "muted-foreground": "#A3BCBF",
+    "dashboard-foreground": "#E6F1EE",
+    "dashboard-muted-foreground": "#B3C8CB",
+    "border": "#7A979C",
+    "divider": "#2A4247",
+    "primary": "#86C7D2",
+    "primary-hover": "#A3D6DE",
+    "primary-foreground": "#0E1B1F",
+    "destructive": "#F49A93",
+    "destructive-foreground": "#1C0C0B",
+    "destructive-surface": "#3A1B1A",
+    "success": "#7FD3A0",
+    "success-surface": "#12301F",
+    "warning": "#F1BE6E",
+    "warning-surface": "#38290F",
+    "ring": "#86C7D2",
+    "brand-accent": "#5FB3C4",
+    "mark-plate": "#DCEBE7"
   },
   "allowedColorLiterals": [
     "#041a2440",
     "#081e25",
+    "#0e1b1f",
+    "#12301f",
     "#123c47",
+    "#152529",
     "#166534",
     "#173e47",
     "#173e4724",
+    "#1c0c0b",
+    "#1c3035",
+    "#1e3a3b",
     "#225560",
     "#22556008",
     "#22556024",
+    "#2a4247",
     "#36515a",
     "#368798",
+    "#38290f",
+    "#3a1b1a",
     "#46616a",
     "#59777e",
+    "#5fb3c4",
+    "#7a979c",
+    "#7fd3a0",
+    "#86c7d2",
     "#92400e",
+    "#a3bcbf",
+    "#a3d6de",
+    "#b3c8cb",
     "#b91c1c",
     "#c5dcd9",
     "#cadbdc",
     "#dcebe7",
+    "#e6f1ee",
     "#e8e7e2",
     "#f0fdf4",
+    "#f1be6e",
+    "#f49a93",
     "#f5f6f7",
     "#fef2f2",
     "#fffbeb",
@@ -113,6 +158,66 @@
       "foreground": "dashboard-muted-foreground",
       "background": "panel",
       "minimum": 4.5
+    },
+    {
+      "foreground": "foreground",
+      "background": "panel",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "foreground",
+      "background": "surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "foreground",
+      "background": "muted",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "muted-foreground",
+      "background": "background",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "muted-foreground",
+      "background": "surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "destructive-foreground",
+      "background": "destructive",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "destructive",
+      "background": "destructive-surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "success",
+      "background": "success-surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "warning",
+      "background": "warning-surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "ring",
+      "background": "panel",
+      "minimum": 3
+    },
+    {
+      "foreground": "primary",
+      "background": "panel",
+      "minimum": 3
+    },
+    {
+      "foreground": "brand-accent",
+      "background": "panel",
+      "minimum": 3
     }
   ],
   "references": {

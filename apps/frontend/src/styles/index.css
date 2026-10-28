@@ -55,6 +55,14 @@
   .button-raised:not(:disabled):not([aria-disabled='true']):active {
     box-shadow: var(--shadow-button-pressed);
   }
+  /* Logo images keep their approved bytes; in the dark theme they sit on a light plate so the dark teal stays visible. */
+  .brand-mark {
+    background-color: var(--mark-plate);
+    border-radius: var(--radius-2);
+  }
+  :root[data-theme='dark'] .brand-mark {
+    padding: calc(var(--space-unit) * 1);
+  }
 }
 
 @layer base {

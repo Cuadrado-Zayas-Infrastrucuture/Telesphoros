@@ -22,6 +22,11 @@ export class EvaluationRequestsService {
     return this.repository.admit(principal, evaluationRequestCreateSchema.parse(input), this.profile);
   }
 
+  /** H4: the requester withdraws a request no worker has started (409 once one has, 403 for anyone else). */
+  cancel(principal: Principal, id: string): Promise<EvaluationRequestDto> {
+    return this.repository.cancel(principal, z.string().uuid().parse(id));
+  }
+
   async get(principal: Principal, id: string): Promise<EvaluationRequestDto> {
     const request = await this.repository.get(principal, z.string().uuid().parse(id));
     if (!request) throw AppException.notFound('Evaluation request not found.');

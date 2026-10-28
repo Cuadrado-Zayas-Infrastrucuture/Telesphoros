@@ -1,4 +1,7 @@
+import { createRequire } from 'node:module';
 import { expect, type Page } from '@playwright/test';
+
+const require = createRequire(import.meta.url);
 
 export type Persona = 'alice' | 'bob' | 'carol' | 'dave' | 'gina';
 export const ROLE: Record<Persona, string> = { alice: 'clinician', bob: 'reader', carol: 'admin', dave: 'no role', gina: 'reviewer' };
@@ -74,4 +77,14 @@ export async function openWorkspaceNavigation(page: Page) {
   const menu = page.getByRole('button', { name: 'Workspace navigation', exact: true });
   if (await menu.isVisible() && await menu.getAttribute('aria-expanded') !== 'true') await menu.click();
   await expect(page.getByRole('navigation', { name: 'Primary', exact: true })).toBeVisible();
+}
+
+/** WCAG 2.0/2.1 A and AA violations on the current page, colour contrast included, as "rule (count)" strings. */
+export async function axeViolations(page: Page) {
+  await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
+  return page.evaluate(async () => {
+    // @ts-expect-error axe is injected into the page above
+    const results = await window.axe.run(document, { runOnly: ['wcag2a', 'wcag2aa', 'wcag21aa'] });
+    return results.violations.map((v: { id: string; nodes: unknown[] }) => `${v.id} (${v.nodes.length})`);
+  });
 }

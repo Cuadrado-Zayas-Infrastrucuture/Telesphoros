@@ -98,6 +98,40 @@
   --shadow-button: 0 1px 2px #22556024, inset 0 1px 0 #ffffff24;
   --shadow-button-pressed: inset 0 1px 3px #173e4724;
   --button-sheen: linear-gradient(180deg, #ffffff0d, #ffffff00);
+
+  /* Behind the logo images: nothing in light; a seafoam plate in dark, where the dark teal marks would vanish. */
+  --mark-plate: transparent;
+}
+
+/*
+ * Dark theme (specs/009-dark-mode), approved 2026-10-28. Colors only: type, spacing and sizes never change with the theme.
+ * Set by src/lib/theme.ts on <html> outside the landing page; every pair in branding-policy.json "contrast" is checked here too.
+ */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --background: #0E1B1F;
+  --panel: #152529;
+  --foreground: #DCEBE7;
+  --surface: #1C3035;
+  --muted: #1E3A3B;
+  --muted-foreground: #A3BCBF;
+  --dashboard-foreground: #E6F1EE;
+  --dashboard-muted-foreground: #B3C8CB;
+  --border: #7A979C;
+  --divider: #2A4247;
+  --primary: #86C7D2;
+  --primary-hover: #A3D6DE;
+  --primary-foreground: #0E1B1F;
+  --destructive: #F49A93;
+  --destructive-foreground: #1C0C0B;
+  --destructive-surface: #3A1B1A;
+  --success: #7FD3A0;
+  --success-surface: #12301F;
+  --warning: #F1BE6E;
+  --warning-surface: #38290F;
+  --ring: #86C7D2;
+  --brand-accent: #5FB3C4;
+  --mark-plate: #DCEBE7;
 }
 
 /* Product landing: decorative depth, kept separate from operational surfaces. */
