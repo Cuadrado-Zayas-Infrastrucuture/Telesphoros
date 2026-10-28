@@ -677,12 +677,14 @@ clinician, reviewer and admin only; `dispute-active` is **tenant-wide** until th
 ## Running things locally
 
 ```
+nvm use                                                     # Node 22.22.0, from .nvmrc (the lab-report matcher refuses another Unicode version)
 pnpm install
 pnpm typecheck && pnpm lint && pnpm build && pnpm test:infra && pnpm test:ci-config
-apps/backend/scripts/dev-postgres.sh start                 # a disposable PostgreSQL on 127.0.0.1:54329
+apps/backend/scripts/dev-postgres.sh start                 # a disposable PostgreSQL on 127.0.0.1:54329 that checks passwords, as CI's does
+                                                            # (macOS: PGBIN=/opt/homebrew/opt/postgresql@16/bin first)
 pip install -r .github/ci/requirements.txt                  # moto, the S3 emulator CI uses
 moto_server -p 5555 &                                       # then:
-export TEST_DATABASE_URL=postgres://postgres@127.0.0.1:54329/postgres TEST_S3_ENDPOINT=http://127.0.0.1:5555
+export TEST_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:54329/postgres TEST_S3_ENDPOINT=http://127.0.0.1:5555
 cd apps/backend
 pnpm test                                                   # tier 1 (+ the database and S3 specs when the variables are set)
 TEST_STORAGE=postgres pnpm test                             # tier 2: the whole API suite on PostgreSQL
