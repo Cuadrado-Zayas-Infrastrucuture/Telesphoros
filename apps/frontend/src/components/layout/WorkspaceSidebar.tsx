@@ -29,7 +29,7 @@ export function WorkspaceSidebar() {
     <header className="workspace-navigation">
       <div className="workspace-brand-row">
         <NavLink to="/" onClick={() => setOpen(false)} className="workspace-brand inline-flex min-w-0 items-center gap-2 rounded-sm">
-          <img src={productMark} alt="Telesphoros shield and Rx logo" width="64" height="66" loading="eager" className="h-auto w-16 shrink-0" />
+          <img src={productMark} alt="Telesphoros shield and Rx logo" width="64" height="66" loading="eager" className="brand-mark h-auto w-16 shrink-0" />
           <span className="min-w-0">
             <span className="font-heading text-xl font-semibold tracking-tight">Telesphoros</span>
             <span className="block text-xs text-muted-foreground">by Cuadrado Zayas Infrastructure</span>

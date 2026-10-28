@@ -45,9 +45,21 @@ function luminance(hex) {
 export function findBrandViolations({ policy, textFiles, assetHashes, fileHashes = {} }) {
   const errors = [];
   const tokens = commentsRemoved(textFiles[tokenPath] ?? '');
-  const definitions = Object.fromEntries([...tokens.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map(match => [match[1].slice(2), match[2].trim()]));
+  const parse = css => Object.fromEntries([...css.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map(match => [match[1].slice(2), match[2].trim()]));
+  // The dark block is read on its own; read with the rest, its values would silently replace the light ones.
+  const darkBlocks = [...tokens.matchAll(/:root\[data-theme=(['"])dark\1\]\s*\{([^}]*)\}/g)];
+  const definitions = parse(darkBlocks.reduce((css, match) => css.replace(match[0], ''), tokens));
   for (const [name, expected] of Object.entries(policy.tokens)) {
     if (definitions[name] !== expected) errors.push(`${tokenPath}: --${name} must be ${expected}`);
+  }
+  if (darkBlocks.length !== 1) errors.push(`${tokenPath}: exactly one :root[data-theme='dark'] block is required`);
+  const dark = parse(darkBlocks[0]?.[2] ?? '');
+  for (const [name, expected] of Object.entries(policy.darkTokens)) {
+    if (!Object.hasOwn(policy.tokens, name)) errors.push(`${policyPath}: dark --${name} has no light token`);
+    if (dark[name] !== expected) errors.push(`${tokenPath}: dark --${name} must be ${expected}`);
+  }
+  for (const name of Object.keys(dark)) {
+    if (!Object.hasOwn(policy.darkTokens, name)) errors.push(`${tokenPath}: dark theme may not set --${name}`);
   }
   for (const literal of tokens.match(/#[\da-f]{3,8}\b/gi) ?? []) {
     if (!policy.allowedColorLiterals.includes(literal.toLowerCase())) errors.push(`${tokenPath}: unapproved color ${literal}`);
@@ -71,12 +83,15 @@ export function findBrandViolations({ policy, textFiles, assetHashes, fileHashes
   for (const [family, weight, asset] of [['Inter', '100 900', 'InterVariable.woff2'], ['Poppins', '600', 'Poppins-SemiBold.ttf'], ['Poppins', '400', 'Poppins-Regular.ttf']]) {
     if (!allFaces.some(face => face.includes(`'${family}'`) && face.includes(`url('../assets/fonts/${asset}')`) && face.includes(`font-weight: ${weight};`))) errors.push(`${tokenPath}: missing shared ${family} ${weight} font face`);
   }
-  for (const pair of policy.contrast) {
-    const foreground = definitions[pair.foreground], background = definitions[pair.background];
-    if (!/^#[\da-f]{6}$/i.test(foreground ?? '') || !/^#[\da-f]{6}$/i.test(background ?? '')) { errors.push(`contrast: ${pair.foreground}/${pair.background} must be opaque hex tokens`); continue; }
-    const a = luminance(foreground), b = luminance(background);
-    const ratio = (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
-    if (ratio < pair.minimum) errors.push(`contrast: ${pair.foreground}/${pair.background} is ${ratio.toFixed(2)}:1; requires ${pair.minimum}:1`);
+  for (const [theme, values] of [['light', definitions], ['dark', { ...definitions, ...dark }]]) {
+    const label = theme === 'light' ? 'contrast' : 'contrast (dark)';
+    for (const pair of policy.contrast) {
+      const foreground = values[pair.foreground], background = values[pair.background];
+      if (!/^#[\da-f]{6}$/i.test(foreground ?? '') || !/^#[\da-f]{6}$/i.test(background ?? '')) { errors.push(`${label}: ${pair.foreground}/${pair.background} must be opaque hex tokens`); continue; }
+      const a = luminance(foreground), b = luminance(background);
+      const ratio = (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
+      if (ratio < pair.minimum) errors.push(`${label}: ${pair.foreground}/${pair.background} is ${ratio.toFixed(2)}:1; requires ${pair.minimum}:1`);
+    }
   }
   for (const [path, text] of Object.entries(textFiles)) {
     if (path.endsWith('vite.config.ts')) continue;

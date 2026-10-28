@@ -1,7 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Role } from '@telesphoros/shared-types';
-import { describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fakeClient, RECOVERY_SCOPE, renderApp } from '@/test/authTestUtils';
 
 const EMAIL = 'alice@example.test';
@@ -105,5 +106,64 @@ describe('Settings', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/signin'));
     expect(router.state.location.state).toEqual({ returnTo: '/settings' });
     expect(screen.queryByRole('region', { name: 'Account' })).not.toBeInTheDocument();
+  });
+});
+
+describe('Appearance', () => {
+  const page = () => document.documentElement;
+  /** A device whose dark setting the test can flip, as the operating system would. */
+  function device(dark: boolean) {
+    const listeners = new Set<(event: MediaQueryListEvent) => void>();
+    const query = {
+      matches: dark,
+      addEventListener: (_: string, fn: (event: MediaQueryListEvent) => void) => listeners.add(fn),
+      removeEventListener: (_: string, fn: (event: MediaQueryListEvent) => void) => listeners.delete(fn),
+    };
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => query),
+    );
+    return (next: boolean) => act(() => listeners.forEach((fn) => fn({ matches: next } as MediaQueryListEvent)));
+  }
+  afterEach(() => {
+    window.localStorage.clear();
+    delete page().dataset.theme;
+    vi.unstubAllGlobals();
+  });
+
+  it('switches the page to dark and back, and remembers the choice for this browser', async () => {
+    open(['reader'], api(['reader'], organization));
+    const appearance = await section('Appearance');
+    expect(within(appearance).getByRole('radio', { name: /Match this device/ })).toBeChecked();
+    expect(page().dataset.theme).toBeUndefined();
+    await userEvent.click(within(appearance).getByRole('radio', { name: /^Dark/ }));
+    expect(page().dataset.theme).toBe('dark');
+    expect(window.localStorage.getItem('telesphoros.theme')).toBe('dark');
+    await userEvent.click(within(appearance).getByRole('radio', { name: /^Light/ }));
+    expect(page().dataset.theme).toBeUndefined();
+    expect(window.localStorage.getItem('telesphoros.theme')).toBe('light');
+  });
+
+  it('opens in the saved theme', async () => {
+    window.localStorage.setItem('telesphoros.theme', 'dark');
+    open(['reader'], api(['reader'], organization));
+    expect(within(await section('Appearance')).getByRole('radio', { name: /^Dark/ })).toBeChecked();
+    expect(page().dataset.theme).toBe('dark');
+  });
+
+  it("follows the device's setting live while set to match it", async () => {
+    const flip = device(true);
+    open(['reader'], api(['reader'], organization));
+    await section('Appearance');
+    expect(page().dataset.theme).toBe('dark');
+    flip(false);
+    expect(page().dataset.theme).toBeUndefined();
+  });
+
+  it('keeps the public home page light even when dark is chosen', async () => {
+    window.localStorage.setItem('telesphoros.theme', 'dark');
+    renderApp('/');
+    await screen.findByRole('main');
+    expect(page().dataset.theme).toBeUndefined();
   });
 });
