@@ -82,6 +82,13 @@ export class Database {
     if (!tenantId || tenantId.length > MAX_TENANT_ID_LENGTH) throw new Error('Invalid tenant id');
     const { actor } = options;
     if (actor !== undefined && (!actor || actor.length > MAX_ACTOR_LENGTH || CONTROL_CHARACTERS.test(actor))) throw new Error('Invalid actor');
+    // A request that outlived its capability is refused, never run: the database would resolve no organization, and row-level security answers that with
+    // no rows rather than an error, so a slow read would look empty (audit A3). The caller retries as a new request, which is issued a new capability.
+    const capability = currentRequestCapability();
+    if (capability && capability.expiresAt.getTime() <= Date.now()) {
+      this.capabilities.recordMissing('expired');
+      throw AppException.unavailable('This request took too long. Try again.');
+    }
     const client = await this.pool.connect().catch((error) => {
       if (currentRequestAuthority()?.session) throw AppException.unavailable('Access checks are unavailable.');
       // Pool full past the 2 s limit, or the database not answering: busy, not a fault in the request. The driver's message can carry the host.
@@ -118,7 +125,7 @@ export class Database {
 
   /**
    * The request's capability, if it has one, goes in after BEGIN with is_local = true, so the next transaction on this pooled connection cannot see it.
-   * An expired one is still set (the database decides, and from slice 3 fails closed) but counted as missing. EVERY call is counted, the guard's own
+   * One that expired before the transaction was refused above; one that expires in between is still set (the database then resolves nothing) and counted as missing. EVERY call is counted, the guard's own
    * membership lookup included: it runs under the capability, which the guard now asks for first.
    */
   private async bindCapability(client: PoolClient): Promise<void> {
