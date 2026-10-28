@@ -11,6 +11,7 @@ import { EvaluationRequestsRepository } from '../../src/storage/postgres/evaluat
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { acceptanceFor, captureFor, evaluationFor, seedLabReport, sha } from '../helpers/ledger-fixtures';
+import { revertAbove, revertThrough } from '../helpers/migration-history';
 
 let pg: EphemeralDatabase;
 let database: Database;
@@ -588,9 +589,10 @@ it('refuses rollback of admitted durable work and leaves its row/job readable', 
   try {
     const x = await eligible({ pg: isolated, database: connection });
     const admitted = await service(connection).admit(x.principal, x.input);
-    expect(await withAdmin(isolated.adminUrl, (client) => migrateDown(client))).toEqual(['0051']); // nothing completed yet, so H3 reverts
+    const above = revertAbove('evaluation_requests');
+    expect(await withAdmin(isolated.adminUrl, (client) => migrateDown(client, above.steps))).toEqual(above.reverted); // nothing completed yet, so H3 reverts with the newer ones
     await expect(withAdmin(isolated.adminUrl, (client) => migrateDown(client))).rejects.toThrow('Durable evaluation work must be preserved');
-    expect(await withAdmin(isolated.adminUrl, (client) => migrateUp(client))).toEqual(['0051']);
+    expect(await withAdmin(isolated.adminUrl, (client) => migrateUp(client))).toEqual([...above.reverted].reverse());
     expect(await service(connection).get(x.principal, admitted.request.id)).toEqual(admitted.request);
     const kept = await connection.withTenant(
       x.principal.tenantId,
@@ -614,16 +616,18 @@ it('round-trips an empty migration and refuses to orphan an existing evaluation 
   const isolated = await createEphemeralDatabase();
   const connection = new Database({ url: isolated.appUrl, ssl: 'disable' });
   try {
-    expect(await withAdmin(isolated.adminUrl, (client) => migrateDown(client, 2))).toEqual(['0051', '0050']);
+    const through = revertThrough('evaluation_requests');
+    expect(await withAdmin(isolated.adminUrl, (client) => migrateDown(client, through.steps))).toEqual(through.reverted);
     expect(await withAdmin(isolated.adminUrl, async (client) => (await client.query("SELECT to_regclass('public.evaluation_requests') AS requests")).rows[0].requests)).toBeNull();
-    expect(await withAdmin(isolated.adminUrl, (client) => migrateUp(client))).toEqual(['0050', '0051']);
+    expect(await withAdmin(isolated.adminUrl, (client) => migrateUp(client))).toEqual([...through.reverted].reverse());
     const report = await seedLabReport(isolated.adminUrl, `syn-${randomUUID()}`);
     await connection.withTenant(
       report.tenantId,
       (client) => enqueueJob(client, evaluationRequest, { requestId: randomUUID() }, { idempotencyKey: `evaluation-request:${randomUUID()}` }),
       { actor: report.uploader },
     );
-    expect(await withAdmin(isolated.adminUrl, (client) => migrateDown(client))).toEqual(['0051']);
+    const above = revertAbove('evaluation_requests');
+    expect(await withAdmin(isolated.adminUrl, (client) => migrateDown(client, above.steps))).toEqual(above.reverted);
     await expect(withAdmin(isolated.adminUrl, (client) => migrateDown(client))).rejects.toThrow('Durable evaluation work must be preserved');
   } finally {
     await connection.onModuleDestroy();

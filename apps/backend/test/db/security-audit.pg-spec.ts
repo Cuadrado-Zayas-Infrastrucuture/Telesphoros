@@ -5,7 +5,7 @@ import request from 'supertest';
 import { migrateDown, migrateUp } from '../../src/db/migrator';
 import { createTestApp } from '../helpers/app';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
-import { revertThrough } from '../helpers/migration-history';
+import { revertThrough, versionsAfter } from '../helpers/migration-history';
 import { bearer, clinicianA, readerA } from '../helpers/tokens';
 
 let pg: EphemeralDatabase;
@@ -244,7 +244,33 @@ it('does not perform a write whose audit row cannot be stored', async () => {
   await api().post('/api/v1/patients').set(bearer(token)).send({ label }).expect(201);
 });
 
-it('allows the new event type only as an accepted write, and the constraint is validated', async () => {
+it('records a write refused for its role, with the route and the id in the path, and answers 403', async () => {
+  const token = await readerA();
+  const createId = 'synthetic-audit-write-refused-001';
+  await api().post('/api/v1/patients').set(bearer(token)).set('X-Request-Id', createId).send({ label: 'SYN-REFUSED' }).expect(403);
+  expect(await events(createId)).toEqual([
+    expect.objectContaining({ event_type: 'api-auth', outcome: 'accepted' }),
+    expect.objectContaining({
+      event_type: 'private-write',
+      outcome: 'refused',
+      tenant_id: 'tenant-user-a',
+      actor_sub: 'user-a',
+      route_key: 'PatientsController.create',
+      subject_id: null,
+      request_id: createId,
+    }),
+  ]);
+  const patientId = randomUUID();
+  const removeId = 'synthetic-audit-write-refused-002';
+  await api().delete(`/api/v1/patients/${patientId}`).set(bearer(token)).set('X-Request-Id', removeId).expect(403);
+  expect((await events(removeId)).map((row) => [row.event_type, row.outcome, row.route_key, row.subject_id])).toEqual([
+    ['api-auth', 'accepted', 'PatientsController.remove', null],
+    ['private-write', 'refused', 'PatientsController.remove', patientId],
+  ]);
+  expect(JSON.stringify(await events(createId))).not.toContain('SYN-REFUSED');
+});
+
+it('allows the new event type only as an accepted or refused write, and the constraint is validated', async () => {
   const appClient = new Client({ connectionString: pg.appUrl });
   await appClient.connect();
   try {
@@ -260,9 +286,10 @@ it('allows the new event type only as an accepted write, and the constraint is v
       ]);
     await call('private-write', 'accepted', randomUUID());
     await call('private-write', 'accepted', null);
+    await call('private-write', 'refused', randomUUID());
+    await call('private-write', 'refused', null);
     for (const [type, outcome] of [
       ['private-write', 'succeeded'],
-      ['private-write', 'refused'],
       ['api-auth', 'succeeded'],
       ['private-edit', 'accepted'],
     ]) {
@@ -275,4 +302,28 @@ it('allows the new event type only as an accepted write, and the constraint is v
     const row = (await c.query("SELECT convalidated FROM pg_constraint WHERE conname = 'security_audit_kind' AND conrelid = 'public.security_audit_events'::regclass")).rows;
     expect(row).toEqual([{ convalidated: true }]);
   });
+});
+
+it('refuses to narrow the CHECK again while refused-write evidence exists, and reverts only when told to', async () => {
+  const refused = async () =>
+    withAdmin(
+      pg.adminUrl,
+      async (c) => (await c.query("SELECT count(*)::int AS n FROM security_audit_events WHERE event_type='private-write' AND outcome='refused'")).rows[0].n as number,
+    );
+  const before = await refused();
+  expect(before).toBeGreaterThan(0);
+  const { steps, reverted } = revertThrough('security_audit_refused_write');
+  await expect(withAdmin(pg.adminUrl, (c) => migrateDown(c, steps))).rejects.toThrow(/Refusing to narrow the access-audit CHECK while refused private-write evidence exists/);
+  expect(await refused()).toBe(before);
+  // Each version reverts in its own transaction: the ones above 0052 (0053's down is a no-op) went before 0052 refused. Put them back.
+  expect(await withAdmin(pg.adminUrl, (c) => migrateUp(c))).toEqual(versionsAfter('security_audit_refused_write'));
+  await withAdmin(pg.adminUrl, async (c) => {
+    await c.query("SET telesphoros.allow_audit_drop = 'yes'");
+    expect(await migrateDown(c, steps)).toEqual(reverted);
+    // The old CHECK is back for new rows; the refused rows stay as evidence, so it is left NOT VALID.
+    const row = (await c.query("SELECT convalidated FROM pg_constraint WHERE conname = 'security_audit_kind' AND conrelid = 'public.security_audit_events'::regclass")).rows;
+    expect(row).toEqual([{ convalidated: false }]);
+    expect(await migrateUp(c)).toEqual([...reverted].reverse());
+  });
+  expect(await refused()).toBe(before);
 });
