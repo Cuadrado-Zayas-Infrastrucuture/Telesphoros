@@ -26,6 +26,14 @@ for (const page of PAGES) {
   if (html.includes(chunk.file)) failures.push(`${page}: preloaded by index.html (${chunk.file})`);
 }
 
+// Test-only pages (mounted under `import.meta.env.MODE === 'e2e'`) must not exist in this, the production, build: no chunk and no route path.
+const TEST_ONLY_PAGES = [{ page: 'ResultAcknowledgementsTestPage', path: 'e2e/result-acknowledgements' }];
+const builtJs = entries.filter((chunk) => chunk.file.endsWith('.js')).map((chunk) => readFileSync(`dist/${chunk.file}`, 'utf8'));
+for (const { page, path } of TEST_ONLY_PAGES) {
+  if (Object.keys(manifest).some((k) => k.endsWith(`pages/${page}.tsx`))) failures.push(`${page}: test-only page is in the production build`);
+  if (builtJs.some((code) => code.includes(path))) failures.push(`${page}: its route path "${path}" is in the production build`);
+}
+
 const dynamicCount = entries.filter((c) => c.isDynamicEntry).length;
 if (dynamicCount < PAGES.length) failures.push(`expected >= ${PAGES.length} dynamic chunks, found ${dynamicCount}`);
 

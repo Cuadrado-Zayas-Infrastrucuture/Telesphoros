@@ -514,6 +514,51 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
     }
   });
 
+  // Spec 019 D02a: as D01b, no override exists (the ledger's type CHECK cannot be restored while an acknowledgement event exists); the empty case
+  // reverts in the last test below.
+  it('result_acknowledgements: a populated table is refused as the migrator, the refusal rolls back whole, and FORCE is restored', async () => {
+    const f = await fixture();
+    const connection = new Database({ url: f.app, ssl: 'disable' });
+    try {
+      const repo = new PostgresLedgerRecordsRepository(connection);
+      const report = await seedLabReport(f.admin, tenant);
+      const capture = captureFor(report);
+      const stored = await repo.insertCapture(tenant, report.uploader, capture);
+      const acceptance = await repo.insertAcceptance(tenant, 'syn-reviewer', acceptanceFor(stored.record.id, capture));
+      await repo.insertPatientDecision(tenant, 'syn-verifier', {
+        reportId: report.reportId,
+        expectedReport: { patientId: report.patientId, sha256: report.pdfSha256, objectVersion: report.objectVersion },
+        decision: 'verified',
+        method: 'person-confirmed',
+        basisCode: 'no-identifier-on-report',
+      });
+      const evaluation = (await repo.insertEvaluation(tenant, 'syn-system', evaluationFor(report, stored.record.id, acceptance.record.id))).record;
+      const actor = 'syn-ack-clinician';
+      const shown = await withAdmin(f.admin, async (c) => {
+        await c.query(`INSERT INTO tenant_memberships (tenant_id,sub,status,roles,changed_by) VALUES ($1,$2,'active',ARRAY['clinician'],'syn-test')`, [tenant, actor]);
+        return (await c.query<{ id: string }>(`SELECT id::text AS id FROM evaluation_results WHERE evaluation_id = $1 AND outcome = 'shown'`, [evaluation.id])).rows[0]!.id;
+      });
+      await repo.insertResultAcknowledgement(tenant, actor, {
+        resultId: shown,
+        patientId: report.patientId,
+        kind: 'review',
+        reviewTask: 'result-review',
+        displayedBasis: ['active'],
+        request: { id: randomUUID(), hash },
+      });
+      const version = revertThrough('result_acknowledgements').reverted.at(-1)!;
+      await revertAboveThenSwitchOff(f.migrator, 'result_acknowledgements');
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated result acknowledgements/);
+      await setting(f.migrator, AUDIT, 'yes'); // no setting allows it: the audit one does not either
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated result acknowledgements/);
+      expect((await f.migrator.query('SELECT 1 FROM schema_migrations WHERE version = $1', [version])).rowCount).toBe(1);
+      expect((await f.migrator.query(`SELECT relforcerowsecurity AS f FROM pg_class WHERE oid = 'result_acknowledgements'::regclass`)).rows).toEqual([{ f: true }]);
+    } finally {
+      await connection.onModuleDestroy();
+      await f.drop();
+    }
+  });
+
   it('refuses to revert the worker job capability (spec 012) while an issuance record of one exists, as the restricted migrator', async () => {
     const f = await fixture();
     try {

@@ -184,6 +184,26 @@ const LOADERS: Record<Exclude<RecordTable, 'evaluations'>, Loader> = {
       note: note(r.note_id, r.note_digest),
     }),
   },
+  // Spec 019 D02a. Every column as stored except the retry identity (as clinician decisions).
+  result_acknowledgements: {
+    sql: `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
+                 result_id::text AS result_id, evaluation_id::text AS evaluation_id, patient_id::text AS patient_id, author_roles,
+                 membership_version::text AS membership_version, kind, review_task, basis, basis_rule
+            FROM result_acknowledgements WHERE id = ANY($1::uuid[])`,
+    project: (r) => ({
+      kind: 'result-acknowledgement',
+      ...common(r),
+      resultId: r.result_id,
+      evaluationId: r.evaluation_id,
+      patientId: r.patient_id,
+      authorRoles: r.author_roles,
+      membershipVersion: r.membership_version,
+      acknowledgementKind: r.kind,
+      reviewTask: r.review_task,
+      basis: r.basis,
+      basisRule: r.basis_rule,
+    }),
+  },
 };
 
 const EVALUATION_SQL = `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,

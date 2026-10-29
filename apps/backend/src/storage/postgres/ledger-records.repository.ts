@@ -20,6 +20,8 @@ import { canonicalHash } from '../../services/report-adapter/canonical-json';
 import { CaptureDecisionRequestReusedError, DisputeRequestReusedError, LedgerRecordsRepository } from '../ledger-records.repository';
 import type { ClinicianDecisionInput, ResultBasis } from '../clinician-decisions';
 import { assertDecisionBasis, clinicianDecisionError, insertDecisionRow, resultBasis } from './clinician-decisions';
+import type { ResultAcknowledgementInput } from '../result-acknowledgements';
+import { assertAcknowledgementBasis, insertAcknowledgementRow, resultAcknowledgementError } from './result-acknowledgements';
 import type {
   AcceptanceInput,
   CaptureInput,
@@ -835,6 +837,43 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
           client,
           tenantId,
           'clinician_result_decisions',
+          rows.map((r) => r.id),
+        ),
+      };
+    });
+  }
+
+  // ---- result acknowledgements (spec 019 D02a; the SQL and the write order are in result-acknowledgements.ts) -------------------------------
+
+  async insertResultAcknowledgement(tenantId: string, actor: string, input: ResultAcknowledgementInput): Promise<InsertResult> {
+    try {
+      return await this.write(tenantId, actor, async (client) => {
+        const row = await insertAcknowledgementRow(client, tenantId, actor, input);
+        if ('replayOf' in row) return this.existing(client, tenantId, 'result_acknowledgements', row.replayOf);
+        const stored = await this.finish(client, tenantId, 'result_acknowledgements', row.inserted);
+        // The append above holds the tenant's head lock until COMMIT; this separate statement sees every basis change committed before it.
+        await assertAcknowledgementBasis(client, tenantId, input);
+        return stored;
+      });
+    } catch (error) {
+      throw resultAcknowledgementError(error);
+    }
+  }
+
+  resultAcknowledgements(tenantId: string, resultId: string): Promise<{ basis: ResultBasis; entries: Projected[] } | undefined> {
+    return this.read(tenantId, async (client) => {
+      const basis = await resultBasis(client, tenantId, resultId);
+      if (!basis) return undefined;
+      const { rows } = await client.query<{ id: string }>(`SELECT id::text AS id FROM result_acknowledgements WHERE tenant_id = $1 AND result_id = $2 ORDER BY seq`, [
+        tenantId,
+        resultId,
+      ]);
+      return {
+        basis,
+        entries: await this.many(
+          client,
+          tenantId,
+          'result_acknowledgements',
           rows.map((r) => r.id),
         ),
       };
