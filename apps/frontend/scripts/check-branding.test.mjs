@@ -176,6 +176,10 @@ test('rejects a missing or duplicated dark block', () => {
   rejects(input => { input.textFiles[tokenPath] = input.textFiles[tokenPath].replace(":root[data-theme='dark']", ':root[data-theme="dim"]'); }, /exactly one :root\[data-theme='dark'\] block/);
   rejects(input => { input.textFiles[tokenPath] += "\n:root[data-theme='dark'] { --panel: #222628; }"; }, /exactly one/);
 });
+test('rejects an Appearance preview color that drifts from its token', () => {
+  rejects(input => { input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--theme-preview-dark-panel: #222628;', '--theme-preview-dark-panel: #FFFFFF;'); }, /--theme-preview-dark-panel must equal the dark --panel/);
+  rejects(input => { input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--theme-preview-light-primary: #1F5A64;', '--theme-preview-light-primary: #74A9AB;'); }, /--theme-preview-light-primary must equal the light --primary/);
+});
 test('rejects a dark theme that changes anything but approved colors', () => rejects(input => {
   input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--mark-plate: #DCEBE7;', '--mark-plate: #DCEBE7;\n  --size-control: 2rem;');
 }, /dark theme may not set --size-control/));

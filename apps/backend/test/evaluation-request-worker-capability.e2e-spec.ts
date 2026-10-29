@@ -253,6 +253,29 @@ class CountingClient implements JobCapabilityClient {
     90_000,
   );
 
+  // Limits are only counted today (0028 `enforce_limits`). Once enforced, a requester issued many capabilities lately is refused `rate-limited`: that says
+  // nothing about whether they may have this one, so the job is retried, not ended for good.
+  it('retries the job, storing nothing, when the issuer refuses a transaction as rate-limited, and completes once the limit allows', async () => {
+    const { lab, setup, request } = await admitted();
+    const job = await claim('w-limited', request.jobId);
+    const [before] = await lab.row<{ burst_limit: number; enforce_limits: boolean }>(
+      `SELECT burst_limit, enforce_limits FROM capability_purposes WHERE purpose = 'evaluation-job'`,
+    );
+    await lab.row(`UPDATE capability_purposes SET burst_limit = 1, enforce_limits = true WHERE purpose = 'evaluation-job'`);
+    try {
+      expect(await failure(run(realClient(), job, 'w-limited'))).toEqual({ code: 'issuer-rate-limited', retryable: true });
+      expect(await stored(lab, setup.reportId, request.id)).toEqual({ evaluations: 0, completions: 0 });
+      const log = await issuances(lab, request.jobId);
+      expect(log[0]).toEqual(expect.objectContaining({ outcome: 'issued' })); // the first transaction was within the limit
+      expect(log.at(-1)).toEqual(expect.objectContaining({ outcome: 'refused', reason: 'rate-limited' }));
+    } finally {
+      await lab.row(`UPDATE capability_purposes SET burst_limit = $1, enforce_limits = $2 WHERE purpose = 'evaluation-job'`, [before!.burst_limit, before!.enforce_limits]);
+    }
+
+    await run(realClient(), job, 'w-limited'); // the same worker still holds the job, as a retry would
+    expect(await stored(lab, setup.reportId, request.id)).toEqual({ evaluations: 1, completions: 1 });
+  }, 90_000);
+
   it('keeps refusing a worker without the issuer settings beside an API that uses the issuer (the guard, FR-006)', () => {
     const appEnv = { LAB_REPORT_PIPELINE: 'enabled', DATABASE_URL: db.appUrl, ISSUER_URL: issuerUrl() } as Env;
     const source = {
