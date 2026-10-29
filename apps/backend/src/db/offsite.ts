@@ -83,6 +83,9 @@ const keyFor = (prefix: string, ...rest: string[]) => [prefix, ...rest].filter((
 type Env = Record<string, string | undefined>;
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']);
 
+/** A KMS key named by its full ARN, in any partition; never a bare key id or an alias. */
+const KMS_KEY_ARN = /^arn:aws[a-z-]*:kms:[a-z0-9-]+:\d{12}:key\/[a-z0-9-]+$/;
+
 /** Reads BACKUP_S3_* settings. `overrides` are command-line values, which win. */
 export function loadOffsiteSettings(env: Env = process.env, overrides: Partial<Pick<OffsiteSettings, 'lockMode' | 'retainDays' | 'sse' | 'kmsKeyId'>> = {}): OffsiteSettings {
   const endpoint = env.BACKUP_S3_ENDPOINT || undefined;
@@ -104,12 +107,18 @@ export function loadOffsiteSettings(env: Env = process.env, overrides: Partial<P
   if (!Number.isInteger(retainDays) || retainDays < 1 || retainDays > 3650) throw new OffsiteError('The retention must be a whole number of days from 1 to 3650.');
   const sse = overrides.sse ?? (env.BACKUP_S3_SSE && env.BACKUP_S3_SSE !== 'none' ? env.BACKUP_S3_SSE : undefined);
   if (sse !== undefined && sse !== 'aws:kms' && sse !== 'AES256') throw new OffsiteError('BACKUP_S3_SSE must be aws:kms, AES256 or none.');
+  const kmsKeyId = overrides.kmsKeyId ?? (env.BACKUP_S3_KMS_KEY_ID || undefined);
+  // The backups bucket policy refuses both before S3 encrypts anything (docs/verification/bucket-policy-simulation.md): aws:kms with no key id would use
+  // the AWS-managed key (DenyManagedKey), and its key condition compares the full ARN (DenyOtherKey). Refused here, a backup stops before the dump.
+  if (sse === 'aws:kms' && !kmsKeyId) throw new OffsiteError('BACKUP_S3_SSE=aws:kms needs BACKUP_S3_KMS_KEY_ID, the backup key, or leave both unset for the bucket default.');
+  if (sse === 'aws:kms' && !KMS_KEY_ARN.test(kmsKeyId!))
+    throw new OffsiteError('BACKUP_S3_KMS_KEY_ID must be the full key ARN (arn:aws:kms:<region>:<account>:key/<id>), not a key id or an alias.');
   return {
     endpoint,
     region: env.BACKUP_S3_REGION || 'us-east-1',
     forcePathStyle: env.BACKUP_S3_FORCE_PATH_STYLE === 'true',
     sse,
-    kmsKeyId: overrides.kmsKeyId ?? (env.BACKUP_S3_KMS_KEY_ID || undefined),
+    kmsKeyId,
     lockMode,
     retainDays,
   };
