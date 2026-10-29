@@ -225,6 +225,17 @@ describe('loadEnv', () => {
       it.each(['yes', 'true', 'ENABLED', '1', ''])('rejects the value %j instead of guessing', (value) => {
         expect(() => loadEnv({ ...pipeline, EVALUATION_REQUESTS: value, EVALUATION_EXECUTION_PROFILE: SYNTHETIC_PROFILE })).toThrow(/EVALUATION_REQUESTS/);
       });
+
+      // No worker can act for the requester under an issuer capability yet: a request queued while the API uses one would be answered with less proof.
+      it('is refused while the session issuer is in use, and never echoes its address', () => {
+        const attempt = () => loadEnv({ ...pipeline, EVALUATION_REQUESTS: 'enabled', EVALUATION_EXECUTION_PROFILE: SYNTHETIC_PROFILE, ISSUER_URL: 'http://session-issuer:8082' });
+        expect(attempt).toThrow(/EVALUATION_REQUESTS.*ISSUER_URL/);
+        expect(attempt).not.toThrow(/session-issuer|8082/);
+      });
+
+      it('leaves the issuer alone while queued evaluation is off (control)', () => {
+        expect(loadEnv({ ...pipeline, ISSUER_URL: 'http://session-issuer:8082' }).ISSUER_URL).toBe('http://session-issuer:8082');
+      });
     });
 
     it('bounds the download link lifetime to 60 to 600 seconds, default 120', () => {
