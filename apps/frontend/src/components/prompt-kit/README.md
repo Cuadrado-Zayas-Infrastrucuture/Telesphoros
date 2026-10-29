@@ -38,3 +38,13 @@ Checked against the 23 items in `https://prompt-kit.com/c/registry.json` (spec 0
 | `chatbot`, `tool-calling` | Full blocks with server routes and a live model. A live transport needs its own privacy, clinical and evaluation approval. |
 
 The full chat workspace now fades messages under `ProgressiveBlur` at the conversation's top edge (`components/motion-primitives`). The embedded assistant has no edge: at 5 to 7rem tall, a 3rem edge would cover half of it.
+
+## Reuse in the one-screen workspace (specs/021, 2026-10-29)
+
+`/local-workspace` now composes these adapters too. Three gained optional props, and each default keeps the chat preview unchanged (covered by `kitDefaults.test.tsx`):
+
+- `Steps`: `labels`, `words`, `label` and `colored`. The workspace passes the real upload's steps, from `lib/uploadSteps.ts`.
+- `Source`: `title` and `description`. A caller must say plainly what the answer did not read. The workspace says the sample engine did not read the attached report.
+- `PromptInput`: `label` and `allowEmpty`, so a file can be sent without a question. The caller still validates.
+
+`FileUpload` stays display-only and is not used there. The workspace keeps the real, validated intake.
