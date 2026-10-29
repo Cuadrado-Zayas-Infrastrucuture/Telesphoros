@@ -110,6 +110,19 @@
   --mark-plate: transparent;
   /* The faint highlight that sweeps across a loading placeholder. */
   --skeleton-highlight: #ffffffb3;
+
+  /* Settings > Appearance draws a small light and dark screen side by side, whatever the current theme. These stay fixed
+     across themes, and scripts/check-branding.mjs requires each to equal the light or dark token it is named after. */
+  --theme-preview-light-background: #F5F7F7;
+  --theme-preview-light-panel: #FFFFFF;
+  --theme-preview-light-divider: #DDE3E4;
+  --theme-preview-light-foreground: #2C3438;
+  --theme-preview-light-primary: #1F5A64;
+  --theme-preview-dark-background: #1B1E20;
+  --theme-preview-dark-panel: #222628;
+  --theme-preview-dark-divider: #30363A;
+  --theme-preview-dark-foreground: #D4D9DB;
+  --theme-preview-dark-primary: #74A9AB;
 }
 
 /*
