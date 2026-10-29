@@ -60,6 +60,8 @@ Two consequences stand out:
 
 **Decided 2026-10-19 (founder): a**, and VCF uploads stay as they are (accepted, not interpreted) until counsel answers questions 2 and 4. The list of supported lab layouts has not been named. VCF validation and PharmCAT are device-pathway work and are off the build list.
 
+**Amended 2026-10-28 (founder):** *"we will not store raw data, for research purposes a curated database has way more value."* This replaces "VCF uploads stay as they are": a VCF is no longer accepted or stored at all. The report types are `lab-pdf` and `structured`, where `structured` is a curated JSON report that is stored only and never interpreted. A database CHECK, the intake validator and the upload schemas refuse VCF. A database that already holds a VCF report refuses the migration, because no row is rewritten. This keeps the product further from Criterion 1 (VCF files are named as "patterns" on page 8; example 17 on page 24). The research brief of 2026-10-28, checked against the guidance, is recorded in spec 014's research notes.
+
 ### I3. How a recommendation is shown
 
 | Option | What it is | For | Against |
