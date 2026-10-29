@@ -7,7 +7,7 @@ export function MascotWelcome({ context, children, alt = 'Telesphoros mascot in 
   const variant = context === 'landing' ? 'companion' : 'centered';
   return (
     <div className={`mascot-welcome mascot-welcome--${context} mascot-welcome--${variant}`} data-mascot-context={context} data-mascot-variant={variant}>
-      <img className="mascot-welcome-image" src={mascot} width="162" height="192" alt={alt} loading={context === 'landing' ? 'lazy' : 'eager'} decoding="async" />
+      <img className="mascot-welcome-image mascot-plate" src={mascot} width="162" height="192" alt={alt} loading={context === 'landing' ? 'lazy' : 'eager'} decoding="async" />
       <div className="mascot-welcome-content">{children}</div>
     </div>
   );
