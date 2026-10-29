@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-28
 
-**Status**: for the founder's review. The founder chose the two event kinds on 2026-10-28: *"rendered and acknowledged"*. Decisions P1 to P7 are in [plan.md](plan.md). Nothing is built.
+**Status**: approved. The founder chose the two event kinds on 2026-10-28 (*"rendered and acknowledged"*) and accepted decisions P2 to P7 in [plan.md](plan.md) as recommended on 2026-10-29. Slice D02a is authorized first, then D02b ([tasks.md](tasks.md)). Nothing is built yet.
 
 **Input**:
 - Spec 006: research row R12 (*engine `shown` is not presentation*); the success-criteria note that *"a decision … does not prove review before action, or that every shown result was seen. That needs D02 presentation events."*; and the founder's review: *"Engine `shown` is not evidence that a clinician saw the recommendation. Presentation and review need separate instrumentation"*, and *"minimal D02 instrumentation"*.
