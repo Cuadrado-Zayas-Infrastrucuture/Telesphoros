@@ -45,6 +45,6 @@ With `DenyManagedKey` removed from the rendered reports policy, the I3 case came
 
 ## Not verified
 
-- The simulator evaluates IAM policy logic, not S3 itself: it does not show which key S3 actually uses for an upload with no header (the bucket default), or for `aws:kms` with no key id. A `PutObject` against a non-production bucket would.
+- The simulator evaluates IAM policy logic, not S3 itself: it does not show which key S3 actually uses for an upload with no header (the bucket default), or for `aws:kms` with no key id. Checked in S3 on 2026-10-29 ([s3-default-key-check.md](s3-default-key-check.md)), which also found that S3 refuses the I3 case even without `DenyManagedKey`, where the simulator allowed it.
 - The access-logs and audit buckets were not simulated; the audit bucket has no encryption denies, which is a separate review.
 - Nothing is deployed, so no live bucket was checked.
