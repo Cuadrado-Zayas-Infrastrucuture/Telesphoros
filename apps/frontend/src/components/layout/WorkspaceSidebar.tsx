@@ -1,6 +1,6 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
 import { NavLink } from 'react-router-dom';
-import { ChartColumn, FileText, Home, LogOut, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, Settings, Upload, X } from 'lucide-react';
+import { ChartColumn, FileText, Home, LogOut, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, Settings, Sparkles, Upload, X } from 'lucide-react';
 import productMark from '@/assets/telesphoros-shield-rx.png';
 import { useAuth } from '@/auth/AuthProvider';
 import { ADMIN_ROLES, CLINICAL_READ_ROLES, primaryRole, WRITER_ROLES } from '@/auth/roles';
@@ -24,7 +24,12 @@ export function WorkspaceSidebar() {
   }
   const toggle = useRef<HTMLButtonElement>(null);
   const links = [
-    ...(import.meta.env.DEV && location.hostname === '127.0.0.1' ? [{ to: '/local-interpretation', label: 'Chat preview', icon: MessageSquare, show: true }] : []),
+    ...(import.meta.env.DEV && location.hostname === '127.0.0.1'
+      ? [
+          { to: '/local-workspace', label: 'Workspace preview', icon: Sparkles, show: true },
+          { to: '/local-interpretation', label: 'Chat preview', icon: MessageSquare, show: true },
+        ]
+      : []),
     { to: '/reports', label: 'Reports', icon: FileText, show: roles.some((role) => CLINICAL_READ_ROLES.includes(role)) },
     { to: '/reports/upload', label: 'Upload report', icon: Upload, show: roles.some((role) => WRITER_ROLES.includes(role)) },
     { to: '/usage', label: 'Usage', icon: ChartColumn, show: roles.some((role) => ADMIN_ROLES.includes(role)) },
