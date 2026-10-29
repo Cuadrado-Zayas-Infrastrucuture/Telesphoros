@@ -24,6 +24,7 @@ export const EVENT_TYPE_FOR_TABLE = {
   report_patient_decisions: 'patient-link-decision',
   patient_merge_proposals: 'patient-merge-proposal',
   patient_merge_decisions: 'patient-merge-decision',
+  clinician_result_decisions: 'clinician-result-decision',
 } as const;
 export type RecordTable = keyof typeof EVENT_TYPE_FOR_TABLE;
 export const RECORD_TABLES = Object.keys(EVENT_TYPE_FOR_TABLE) as RecordTable[];

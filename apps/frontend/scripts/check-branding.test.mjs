@@ -13,7 +13,7 @@ function rejects(change, expected) {
 const tokenPath = 'apps/frontend/src/styles/tokens.css';
 test('reviewed repository satisfies the brand contract', () => assert.deepEqual(findBrandViolations(approved), []));
 test('rejects lighter foreground text', () => rejects(input => {
-  input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--foreground: #225560;', '--foreground: #368798;');
+  input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--foreground: #2C3438;', '--foreground: #368798;');
 }, /--foreground/));
 test('rejects silent button-fill and status changes', () => {
   for (const token of ['primary', 'success', 'warning', 'destructive']) rejects(input => {
@@ -49,7 +49,7 @@ test('rejects changed or missing original artwork and fonts', () => {
 });
 test('rejects poor text contrast independently of color pins', () => rejects(input => {
   input.policy.tokens.foreground = '#DCEBE7';
-  input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--foreground: #225560;', '--foreground: #DCEBE7;');
+  input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--foreground: #2C3438;', '--foreground: #DCEBE7;');
 }, /contrast: foreground\/background/));
 test('rejects reduced control targets', () => rejects(input => {
   input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--size-control: 2.75rem;', '--size-control: 2rem;');
@@ -165,16 +165,16 @@ test('rejects a deeper or missing blur edge', () => {
   rejects(input => { input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--size-blur-edge: 3rem;', ''); }, /--size-blur-edge/);
 });
 test('rejects a changed dark color without touching the light one', () => rejects(input => {
-  input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--panel: #152529;', '--panel: #1a2b2f;');
-}, /dark --panel must be #152529/));
+  input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--panel: #222628;', '--panel: #1a2b2f;');
+}, /dark --panel must be #222628/));
 test('dark values never replace the light pins', () => {
   const input = copy();
   assert.equal(findBrandViolations(input).filter(error => /--background must be/.test(error)).length, 0);
-  assert.match(input.textFiles[tokenPath], /--background: #0E1B1F;/);
+  assert.match(input.textFiles[tokenPath], /--background: #1B1E20;/);
 });
 test('rejects a missing or duplicated dark block', () => {
   rejects(input => { input.textFiles[tokenPath] = input.textFiles[tokenPath].replace(":root[data-theme='dark']", ':root[data-theme="dim"]'); }, /exactly one :root\[data-theme='dark'\] block/);
-  rejects(input => { input.textFiles[tokenPath] += "\n:root[data-theme='dark'] { --panel: #152529; }"; }, /exactly one/);
+  rejects(input => { input.textFiles[tokenPath] += "\n:root[data-theme='dark'] { --panel: #222628; }"; }, /exactly one/);
 });
 test('rejects a dark theme that changes anything but approved colors', () => rejects(input => {
   input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--mark-plate: #DCEBE7;', '--mark-plate: #DCEBE7;\n  --size-control: 2rem;');
@@ -182,5 +182,5 @@ test('rejects a dark theme that changes anything but approved colors', () => rej
 test('rejects poor contrast in the dark theme alone', () => rejects(input => {
   input.policy.darkTokens['muted-foreground'] = '#4a5f63';
   input.policy.allowedColorLiterals.push('#4a5f63');
-  input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--muted-foreground: #A3BCBF;', '--muted-foreground: #4a5f63;');
+  input.textFiles[tokenPath] = input.textFiles[tokenPath].replace('--muted-foreground: #9CA4A8;', '--muted-foreground: #4a5f63;');
 }, /contrast \(dark\): muted-foreground\/panel/));

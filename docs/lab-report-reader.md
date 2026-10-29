@@ -187,6 +187,8 @@ The queued path is [spec 007](../specs/007-async-evaluation/spec.md). It is behi
 
 While the switch is off, all three answer 503 `EVALUATION_REQUESTS_DISABLED`. A state is operational: `dead` and `completion-missing` are not results and not holds. The local review page offers "Queue synthetic evaluation". It checks again after 1, 2 and 4 seconds, then every 10 seconds, and stops after five minutes without inferring anything.
 
+While `ISSUER_URL` is set, `EVALUATION_REQUESTS=enabled` is refused at start-up, and so is the evaluation worker. The worker has no sign-in token and is issued no capability, so it would answer a queued request with less proof than the API gives the same request made directly. The database does check again when the result is stored that the requester is still an active clinician or reviewer (migration 0051), but for the person the worker names, which no issuer has proved.
+
 **Not proved:** the worker running as its own process, a deployed worker, how a background worker acts (it acts for the requesting person; capability mode is a separate decision required before any real data), and cancelling a read that has started.
 
 ## Known limits
