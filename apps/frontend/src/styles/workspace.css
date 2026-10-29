@@ -63,8 +63,22 @@
 .context-drawer::backdrop { background: color-mix(in srgb, var(--foreground) 22%, transparent); }
 .context-drawer-body { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 1.25rem; }
 .context-drawer .workspace-shell { display: contents; }
+/* Collapsed to icons (desktop only): names stay readable to assistive technology and appear as tooltips. */
+.workspace-account-compact { display: none; }
+@media (min-width: 64rem) {
+  .workspace-layout:has(.workspace-navigation.is-collapsed) { grid-template-columns: var(--size-sidebar-collapsed) minmax(0, 1fr); }
+  .workspace-navigation.is-collapsed { padding-inline: .75rem; align-items: center; }
+  .workspace-navigation.is-collapsed .workspace-brand img { width: 2.75rem; }
+  .workspace-navigation.is-collapsed :is(.workspace-brand-text, .workspace-group-label) { display: none; }
+  .workspace-navigation.is-collapsed .workspace-link-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .workspace-navigation.is-collapsed nav a { justify-content: center; padding-inline: 0; }
+  .workspace-navigation.is-collapsed .workspace-account { align-items: center; }
+  .workspace-navigation.is-collapsed .workspace-account-full { display: none; }
+  .workspace-navigation.is-collapsed .workspace-account-compact { display: inline-flex; }
+}
 @media (max-width: 63.99rem) {
   .workspace-layout { display: block; }
+  .workspace-collapse-toggle { display: none; }
   .workspace-navigation { position: static; width: 100%; height: auto; padding: 1rem; border-right: 0; border-bottom: 1px solid var(--divider); }
   .workspace-navigation .workspace-menu-toggle { display: inline-flex; }
   .workspace-navigation-content { display: none; padding-top: 1.5rem; }

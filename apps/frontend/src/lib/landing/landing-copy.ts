@@ -16,8 +16,7 @@ const en = {
     byline: 'by Cuadrado Zayas Infrastructure',
     logoAlt: 'Telesphoros shield and Rx logo',
     signIn: 'Sign in',
-    signedInAs: 'Signed in as ',
-    signOut: 'Sign out',
+    openWorkspace: 'Open workspace',
     skip: 'Skip to main content',
   },
   footer: {
@@ -199,8 +198,7 @@ const es: LandingCopy = {
     byline: 'de Cuadrado Zayas Infrastructure',
     logoAlt: 'Logotipo de Telesphoros: escudo y Rx',
     signIn: 'Iniciar sesión',
-    signedInAs: 'Sesión iniciada como ',
-    signOut: 'Cerrar sesión',
+    openWorkspace: 'Abrir el espacio de trabajo',
     skip: 'Saltar al contenido principal',
   },
   footer: {

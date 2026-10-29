@@ -1,29 +1,27 @@
 import { Link } from 'react-router-dom';
-import { primaryRole } from '@/auth/roles';
+import type { Role } from '@telesphoros/shared-types';
+import { ADMIN_ROLES, CLINICAL_READ_ROLES } from '@/auth/roles';
 import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
 import { useShellCopy } from '@/lib/landing/landing-language';
 
-/** Who is signed in (by role; the email is shown only in Settings) and the way out. */
+/** Where "Open workspace" goes: the first page this person can use. */
+function workspaceHome(roles: readonly Role[]): string {
+  if (roles.some((role) => CLINICAL_READ_ROLES.includes(role))) return '/reports';
+  if (roles.some((role) => ADMIN_ROLES.includes(role))) return '/usage';
+  return '/settings';
+}
+
+/**
+ * The site header's account control: Sign in, or, once signed in, the way back into the workspace. Signing out lives in the workspace
+ * sidebar and in Settings (specs/018-unified-sidebar), not in the header.
+ */
 export function AccountMenu() {
-  const { status, roles, signOut } = useAuth();
+  const { status, roles } = useAuth();
   const { header } = useShellCopy();
-  if (status !== 'signedIn') {
-    return (
-      <Button asChild variant="outline">
-        <Link to="/signin">{header.signIn}</Link>
-      </Button>
-    );
-  }
   return (
-    <div className="flex items-center gap-2 sm:gap-3">
-      <span className="text-xs text-muted-foreground sm:text-sm">
-        <span className="hidden sm:inline">{header.signedInAs}</span>
-        <strong className="text-foreground">{primaryRole(roles) ?? 'user with no role'}</strong>
-      </span>
-      <Button variant="outline" className="text-sm" onClick={() => void signOut()}>
-        {header.signOut}
-      </Button>
-    </div>
+    <Button asChild variant="outline">
+      {status === 'signedIn' ? <Link to={workspaceHome(roles)}>{header.openWorkspace}</Link> : <Link to="/signin">{header.signIn}</Link>}
+    </Button>
   );
 }

@@ -10,12 +10,15 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useRouteFocus } from '@/hooks/useRouteFocus';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 
+const SIGN_IN_FLOW = ['/signin', '/auth/callback', '/signed-out'];
+
 export function AppLayout() {
   const { pathname } = useLocation();
   const landing = pathname === '/' && !ownedStorageMode();
-  const workspace = pathname.startsWith('/reports') || pathname.startsWith('/local-') || (pathname === '/' && ownedStorageMode());
   const { status } = useAuth();
-  const sidebar = workspace && status === 'signedIn';
+  // One frame for every signed-in page (specs/018-unified-sidebar); the public landing and the sign-in flow keep the site header.
+  const sidebar = status === 'signedIn' && !landing && !SIGN_IN_FLOW.includes(pathname);
+  const workspace = sidebar || pathname.startsWith('/reports') || pathname.startsWith('/local-') || (pathname === '/' && ownedStorageMode());
   const mainRef = useRef<HTMLElement>(null);
   const navigation = useNavigation();
   useRouteFocus(mainRef, landing);
