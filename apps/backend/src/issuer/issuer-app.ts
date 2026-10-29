@@ -1,7 +1,7 @@
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { CognitoTokenVerifier } from '../auth/cognito-token-verifier';
-import { IssuerCore, PgCapabilityIssueStore } from './issuer-core';
+import { IssuerCore, JobIssuerCore, PgCapabilityIssueStore } from './issuer-core';
 import type { IssuerConfig } from './issuer-env';
 import { createIssuerServer, drainServer } from './issuer-server';
 
@@ -28,7 +28,9 @@ export async function startIssuer(config: IssuerConfig, options: { host?: string
     ...(config.cognito.jwksUri ? { jwksUri: config.cognito.jwksUri } : {}),
   });
   const store = new PgCapabilityIssueStore({ url: config.databaseUrl, ssl: config.databaseTls });
-  const server: Server = createIssuerServer(new IssuerCore(verifier, store));
+  // The job route exists only with a worker key (spec 012); the same pool serves both routes.
+  const jobs = config.workerKey ? { key: config.workerKey, issuer: new JobIssuerCore(store) } : undefined;
+  const server: Server = createIssuerServer(new IssuerCore(verifier, store), {}, jobs);
   try {
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject);
