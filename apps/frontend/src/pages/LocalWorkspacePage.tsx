@@ -49,7 +49,7 @@ interface Sent {
  * place, ask. Development preview only; uploads go through the same validated intake as the Upload page, and answers come from the synthetic engine.
  */
 export default function LocalWorkspacePage() {
-  usePageTitle('Workspace preview');
+  usePageTitle('Workspace');
   const { roles, apiFetch, recoverySession } = useAuth();
   const allowed = import.meta.env.DEV && location.hostname === '127.0.0.1';
   const chat = useSyntheticChat(allowed);
@@ -359,7 +359,7 @@ export default function LocalWorkspacePage() {
       ) : (
         <>
           <div className="one-screen-column flex flex-1 flex-col gap-5 py-6" aria-live="polite">
-            <h1 className="sr-only">Workspace preview</h1>
+            <h1 className="sr-only">Workspace</h1>
             {sent.map((item) => (
               <div key={item.id} className="flex flex-col gap-2 self-end">
                 <span className="inline-flex items-center gap-2 self-end rounded-lg border border-divider bg-panel px-3 py-1.5 text-sm">

@@ -4,6 +4,7 @@ import { ChartColumn, FileText, Home, LogOut, Menu, MessageSquare, PanelLeftClos
 import productMark from '@/assets/telesphoros-shield-rx.png';
 import { useAuth } from '@/auth/AuthProvider';
 import { ADMIN_ROLES, CLINICAL_READ_ROLES, primaryRole, WRITER_ROLES } from '@/auth/roles';
+import { LOCAL_WORKSPACE_PATH, localWorkspaceAvailable } from '@/lib/localWorkspace';
 import { readSidebarCollapsed, writeSidebarCollapsed } from '@/lib/sidebarPreference';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
@@ -24,9 +25,9 @@ export function WorkspaceSidebar() {
   }
   const toggle = useRef<HTMLButtonElement>(null);
   const links = [
-    ...(import.meta.env.DEV && location.hostname === '127.0.0.1'
+    ...(localWorkspaceAvailable()
       ? [
-          { to: '/local-workspace', label: 'Workspace preview', icon: Sparkles, show: true },
+          { to: LOCAL_WORKSPACE_PATH, label: 'Workspace', icon: Sparkles, show: true },
           { to: '/local-interpretation', label: 'Chat preview', icon: MessageSquare, show: true },
         ]
       : []),

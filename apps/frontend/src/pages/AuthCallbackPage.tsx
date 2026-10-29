@@ -7,6 +7,7 @@ import { AlertTitle } from '@/components/ui/AlertTitle';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { landingAfterSignIn } from '@/lib/localWorkspace';
 
 /** The address the sign-in page sends the browser back to. Redeems the one-time code, then moves on. */
 export default function AuthCallbackPage() {
@@ -19,7 +20,7 @@ export default function AuthCallbackPage() {
     let cancelled = false;
     completeSignIn().then(
       // `replace`: the one-time code in this URL must not stay in the browser history.
-      (returnTo) => !cancelled && navigate(returnTo, { replace: true }),
+      (returnTo) => !cancelled && navigate(landingAfterSignIn(returnTo), { replace: true }),
       (error: unknown) => {
         // The one-time code and state must not stay in the address bar or history after a failure either.
         window.history.replaceState(window.history.state, '', window.location.pathname);
