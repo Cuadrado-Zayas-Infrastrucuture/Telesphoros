@@ -26,35 +26,38 @@
  * Design tokens — the ONE place colors, fonts, spacing and control sizes are defined.
  * index.css maps these into the Tailwind theme; ESLint bans arbitrary values so nothing
  * else can introduce a one-off style.
- * All foreground/background pairs meet WCAG AA (4.5:1) for body text.
+ * All foreground/background pairs meet WCAG AA (4.5:1) for body text. Light values: specs/013-eye-friendly-palette (white cards, slate ink,
+ * body text near 11-13:1 rather than higher, teal only on what can be acted on).
  */
 :root {
   /* Color */
-  --background: #F5F6F7;
-  --panel: #ffffff;
-  --foreground: #225560;
-  --surface: #E8E7E2;
-  --muted: #DCEBE7;
-  --muted-foreground: #46616a;
+  --background: #F5F7F7;
+  --panel: #FFFFFF;
+  --foreground: #2C3438;
+  --surface: #ECF0F0;
+  --muted: #E2EDEB;
+  --muted-foreground: #56626A;
   /* Approved stronger dashboard text; fills and statuses keep their shared colors. */
-  --dashboard-foreground: #173E47;
-  --dashboard-muted-foreground: #36515A;
-  --border: #59777e; /* Control boundary; decorative dividers are separate. */
-  --divider: #cadbdc; /* decorative teal-tinted separators only */
-  --primary: #225560;
-  --primary-hover: #173e47;
-  --primary-foreground: #F5F6F7;
-  --destructive: #b91c1c;
-  --destructive-foreground: #ffffff;
-  --destructive-surface: #fef2f2;
-  --success: #166534;
-  --success-surface: #f0fdf4;
-  --warning: #92400e;
-  --warning-surface: #fffbeb;
-  --ring: #225560;
+  --dashboard-foreground: #263034;
+  --dashboard-muted-foreground: #4E5A61;
+  --border: #7F8B91; /* Control boundary; decorative dividers are separate. */
+  --divider: #DDE3E4; /* decorative teal-tinted separators only */
+  --primary: #1F5A64;
+  --primary-hover: #174751;
+  --primary-foreground: #FFFFFF;
+  --destructive: #AE3A2E;
+  --destructive-foreground: #FFFFFF;
+  --destructive-surface: #FBEAE7;
+  --success: #2A6B42;
+  --success-surface: #E6F2EA;
+  --warning: #8A5A12;
+  --warning-surface: #F8EFDC;
+  --ring: #1F5A64;
+  /* The frame around the page (header, sidebar, footer): one step darker than the page, so the content reads as the centre. */
+  --band: #EDF1F1;
 
   /* Brand graphics only: not body text, success, or warning. */
-  --brand-accent: #368798;
+  --brand-accent: #2F7685;
 
   /* Type */
   --font-family-heading: Poppins, Arial, sans-serif;
@@ -104,33 +107,34 @@
 }
 
 /*
- * Dark theme (specs/009-dark-mode), approved 2026-10-28. Colors only: type, spacing and sizes never change with the theme.
+ * Dark theme (specs/009-dark-mode; graphite values from specs/013-eye-friendly-palette, approved 2026-10-28). Colors only: type, spacing and sizes never change with the theme.
  * Set by src/lib/theme.ts on <html> outside the landing page; every pair in branding-policy.json "contrast" is checked here too.
  */
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --background: #0E1B1F;
-  --panel: #152529;
-  --foreground: #DCEBE7;
-  --surface: #1C3035;
-  --muted: #1E3A3B;
-  --muted-foreground: #A3BCBF;
-  --dashboard-foreground: #E6F1EE;
-  --dashboard-muted-foreground: #B3C8CB;
-  --border: #7A979C;
-  --divider: #2A4247;
-  --primary: #86C7D2;
-  --primary-hover: #A3D6DE;
-  --primary-foreground: #0E1B1F;
-  --destructive: #F49A93;
-  --destructive-foreground: #1C0C0B;
-  --destructive-surface: #3A1B1A;
-  --success: #7FD3A0;
-  --success-surface: #12301F;
-  --warning: #F1BE6E;
-  --warning-surface: #38290F;
-  --ring: #86C7D2;
-  --brand-accent: #5FB3C4;
+  --background: #1B1E20;
+  --panel: #222628;
+  --foreground: #D4D9DB;
+  --surface: #292E31;
+  --muted: #24302F;
+  --muted-foreground: #9CA4A8;
+  --dashboard-foreground: #DCE1E3;
+  --dashboard-muted-foreground: #A8B0B4;
+  --border: #737C81;
+  --divider: #30363A;
+  --primary: #74A9AB;
+  --primary-hover: #86B9BB;
+  --primary-foreground: #141618;
+  --destructive: #E79C91;
+  --destructive-foreground: #141618;
+  --destructive-surface: #3B2526;
+  --success: #8CC6A0;
+  --success-surface: #1C2E23;
+  --warning: #DDB672;
+  --warning-surface: #352C1C;
+  --ring: #8FC2C4;
+  --brand-accent: #6FAFBD;
+  --band: #151719;
   --mark-plate: #DCEBE7;
 }
 

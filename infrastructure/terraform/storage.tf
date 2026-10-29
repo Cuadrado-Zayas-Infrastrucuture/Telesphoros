@@ -171,6 +171,28 @@ data "aws_iam_policy_document" "reports_bucket" {
       values   = [aws_kms_key.data.arn]
     }
   }
+  # Naming aws:kms WITHOUT a key id makes S3 use the AWS-managed key, not the bucket default: refused, as on the backups bucket (audit
+  # 2026-10-27, I3). The application sends no header, so this refuses none of its uploads.
+  statement {
+    sid       = "DenyManagedKey"
+    effect    = "Deny"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.reports.arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "s3:x-amz-server-side-encryption"
+      values   = ["aws:kms"]
+    }
+    condition {
+      test     = "Null"
+      variable = "s3:x-amz-server-side-encryption-aws-kms-key-id"
+      values   = ["true"]
+    }
+  }
   statement {
     sid       = "DenyCustomerKeys"
     effect    = "Deny"

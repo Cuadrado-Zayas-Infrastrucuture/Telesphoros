@@ -6,10 +6,37 @@ import { FieldError } from '@/components/ui/FieldError';
 import d01Preview from '@/assets/local-D01.svg';
 import { Link } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
-import { captureDtoSchema, fileLinkDtoSchema, evaluationDtoSchema, type CaptureDto } from '@telesphoros/shared-types';
+import { captureDtoSchema, fileLinkDtoSchema, evaluationDtoSchema, evaluationRequestDtoSchema, type CaptureDto, type EvaluationRequestDto } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { submitReport, localStorageOrigin, type UploadProgress } from '@/lib/localReportApi';
+
+/** A refusal from the API, with its status and stable code, so a caller can tell "switched off" from "refused". */
+class Refused extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string | undefined,
+  ) {
+    super(`Request refused (${status}). No approval is inferred.`);
+  }
+}
+
+/** H4: how long the page keeps asking about a queued evaluation, and how often (1, 2 and 4 seconds, then every 10). */
+const POLL_DELAYS_MS = [1000, 2000, 4000];
+const POLL_EVERY_MS = 10_000;
+const POLL_FOR_MS = 5 * 60_000;
+const WAITING: ReadonlyArray<EvaluationRequestDto['state']> = ['queued', 'running', 'retry'];
+const CANCELLABLE: ReadonlyArray<EvaluationRequestDto['state']> = ['queued', 'retry'];
+/** Operational words only: none of these is a clinical result or a hold. */
+const STATE_WORDS: Record<EvaluationRequestDto['state'], string> = {
+  queued: 'queued.',
+  running: 'running.',
+  retry: 'waiting to retry.',
+  dead: 'stopped. The worker gave up; there is no result.',
+  completed: 'completed.',
+  'completion-missing': 'finished without a stored result. Nothing is inferred.',
+  cancelled: 'cancelled.',
+};
 
 export default function LocalReviewPage() {
   usePageTitle('Local synthetic PDF review');
@@ -28,6 +55,19 @@ export default function LocalReviewPage() {
   const [busy, setBusy] = useState(false);
   const [fields, setFields] = useState<Record<string, string>>({});
   const locked = useRef(false);
+  const [queued, setQueued] = useState<EvaluationRequestDto>();
+  const [queueNote, setQueueNote] = useState('');
+  // One retry identity per capture decision: asking again replays the same request instead of queueing a second one.
+  const retryIdentity = useRef<{ decision: string; requestId: string }>(undefined);
+  const poll = useRef<{ timer?: ReturnType<typeof setTimeout>; startedAt: number; round: number; live: boolean }>({ startedAt: 0, round: 0, live: true });
+  useEffect(() => {
+    const state = poll.current;
+    state.live = true;
+    return () => {
+      state.live = false;
+      clearTimeout(state.timer);
+    };
+  }, []);
   useEffect(() => {
     if (!busy) {
       const first = Object.keys(fields)[0];
@@ -53,7 +93,10 @@ export default function LocalReviewPage() {
             body: JSON.stringify(body),
           },
     );
-    if (!r.ok) throw new Error(`Request refused (${r.status}). No approval is inferred.`);
+    if (!r.ok) {
+      const detail = (await r.json().catch(() => undefined)) as { error?: { code?: string } } | undefined;
+      throw new Refused(r.status, detail?.error?.code);
+    }
     return r.json();
   }
   async function link(path: string) {
@@ -61,7 +104,14 @@ export default function LocalReviewPage() {
     if (new URL(value.url).origin !== localStorageOrigin()) throw new Error('File destination is not the local emulator.');
     return value.url;
   }
+  function stopPolling() {
+    clearTimeout(poll.current.timer);
+    poll.current.timer = undefined;
+  }
   async function load(id: string) {
+    stopPolling();
+    setQueued(undefined);
+    setQueueNote('');
     setCapture(undefined);
     setPdf('');
     setText('');
@@ -139,6 +189,57 @@ export default function LocalReviewPage() {
       }),
     );
     setResult(JSON.stringify(e, null, 2));
+  }
+  /** Shows a request's state; fetches its evaluation once completed; keeps asking only while it waits. */
+  async function show(request: EvaluationRequestDto) {
+    if (!poll.current.live) return;
+    setQueued(request);
+    if (request.state === 'completed' && request.evaluationId) {
+      setResult(JSON.stringify(evaluationDtoSchema.parse(await json('/evaluations/' + request.evaluationId)), null, 2));
+      return;
+    }
+    if (!WAITING.includes(request.state)) return;
+    const elapsed = Date.now() - poll.current.startedAt;
+    if (elapsed >= POLL_FOR_MS) {
+      setQueueNote('No result yet; a worker may not be running. Nothing is inferred.');
+      return;
+    }
+    const delay = POLL_DELAYS_MS[poll.current.round] ?? POLL_EVERY_MS;
+    poll.current.round++;
+    poll.current.timer = setTimeout(() => {
+      poll.current.timer = undefined;
+      json('/evaluation-requests/' + request.id)
+        .then((next) => show(evaluationRequestDtoSchema.parse(next)))
+        .catch((e: unknown) => poll.current.live && setError(e instanceof Error ? e.message : 'Status could not be read.'));
+    }, delay);
+  }
+  async function queueEvaluation() {
+    if (!capture || capture.latestDecision?.decision !== 'accepted') throw new Error('Current accepted capture required.');
+    const decision = capture.latestDecision.id;
+    if (retryIdentity.current?.decision !== decision) retryIdentity.current = { decision, requestId: crypto.randomUUID() };
+    stopPolling();
+    setQueueNote('');
+    setResult('');
+    let admitted: EvaluationRequestDto;
+    try {
+      admitted = evaluationRequestDtoSchema.parse(
+        await json('/reports/' + capture.reportId + '/evaluation-requests', { captureId: capture.id, acceptanceId: decision, requestId: retryIdentity.current.requestId }),
+      );
+    } catch (e) {
+      if (e instanceof Refused && e.code === 'EVALUATION_REQUESTS_DISABLED') {
+        setQueueNote('Queued evaluation is turned off here.');
+        return;
+      }
+      throw e;
+    }
+    poll.current.startedAt = Date.now();
+    poll.current.round = 0;
+    await show(admitted);
+  }
+  async function cancelQueued() {
+    if (!queued) return;
+    stopPolling();
+    await show(evaluationRequestDtoSchema.parse(await json('/evaluation-requests/' + queued.id + '/cancel', {})));
   }
   return (
     <div className="min-w-0 space-y-6">
@@ -251,13 +352,24 @@ export default function LocalReviewPage() {
           </p>
           <Button disabled={busy || capture.latestDecision?.decision !== 'accepted'} onClick={() => void act(evaluate)}>
             Run synthetic evaluation
+          </Button>{' '}
+          <Button variant="outline" disabled={busy || capture.latestDecision?.decision !== 'accepted'} onClick={() => void act(queueEvaluation)}>
+            Queue synthetic evaluation
           </Button>
+          {queued && CANCELLABLE.includes(queued.state) && (
+            <Button variant="outline" disabled={busy} onClick={() => void act(cancelQueued)}>
+              Cancel queued evaluation
+            </Button>
+          )}
+          {queued && <p role="status">Queued evaluation: {STATE_WORDS[queued.state]}</p>}
+          {queueNote && <p role="status">{queueNote}</p>}
+          <p>A queued evaluation is answered by a separate worker process, if one is running. Its state is operational, not a clinical result.</p>
         </section>
       )}
       {error && <p role="alert">{error}</p>}
       {busy && <p role="status">Working locally…</p>}
       {result && (
-        <pre role="region" aria-label="Stored report text" tabIndex={0} className="max-w-full overflow-auto rounded-md border border-border p-3">
+        <pre role="region" aria-label="Evaluation result" tabIndex={0} className="max-w-full overflow-auto rounded-md border border-border p-3">
           {result}
         </pre>
       )}

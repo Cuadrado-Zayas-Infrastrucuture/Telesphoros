@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import './backend.guard.test.mjs';
 import './api-compute.guard.test.mjs';
+import './api-autoscaling.guard.test.mjs';
 import './api.guard.test.mjs';
 import './audit.guard.test.mjs';
 import './profile.guard.test.mjs';
@@ -150,6 +151,15 @@ export function reportsLockProblems(storageText, variablesText) {
   }
   const ssec = statement('DenyCustomerKeys');
   need(contains(ssec, 'effect = "Deny"') && guarded(ssec, 's3:x-amz-server-side-encryption-customer-algorithm'), 'customer-supplied keys (SSE-C) must be refused');
+  // aws:kms named without a key id makes S3 use the AWS-managed key, not the data key (audit 2026-10-27, I3; the backups bucket has the same deny).
+  const managed = statement('DenyManagedKey');
+  need(
+    contains(managed, 'effect = "Deny"') &&
+      contains(managed, 'actions = ["s3:PutObject"]') &&
+      blocks(managed, 'condition').some((c) => contains(c, 'test = "StringEquals"') && contains(c, 'variable = "s3:x-amz-server-side-encryption"') && contains(c, 'values = ["aws:kms"]')) &&
+      blocks(managed, 'condition').some((c) => contains(c, 'test = "Null"') && contains(c, 'variable = "s3:x-amz-server-side-encryption-aws-kms-key-id"') && contains(c, 'values = ["true"]')),
+    'DenyManagedKey must refuse aws:kms named without a key id (S3 would use the AWS-managed key, not the data key)',
+  );
   return problems;
 }
 
@@ -166,6 +176,7 @@ test('the report-lock guard reports each way the text could be weakened (control
     ['wrong-encryption deny unguarded (would refuse every upload)', ['storage', 'test     = "Null"\n      variable = "s3:x-amz-server-side-encryption"\n', 'test     = "Bool"\n      variable = "s3:x-amz-server-side-encryption"\n']],
     ['wrong-key deny accepts any key', ['storage', 'values   = [aws_kms_key.data.arn]', 'values   = ["*"]']],
     ['customer keys allowed', ['storage', 'sid       = "DenyCustomerKeys"\n    effect    = "Deny"', 'sid       = "DenyCustomerKeys"\n    effect    = "Allow"']],
+    ['aws:kms without a key id allowed', ['storage', 'resources = ["${aws_s3_bucket.reports.arn}/*"]\n    principals {\n      type        = "*"\n      identifiers = ["*"]\n    }\n    condition {\n      test     = "StringEquals"', 'resources = ["${aws_s3_bucket.reports.arn}/*"]\n    principals {\n      type        = "*"\n      identifiers = ["*"]\n    }\n    condition {\n      test     = "StringLike"']],
   ];
   for (const [name, [which, from, to]] of weakened) {
     const source = which === 'storage' ? storage : variables;
@@ -242,7 +253,15 @@ test('the backup-upload guard reports each way the text could be weakened (contr
     ],
     ['bucket default not the backup key', ['storage', 'kms_master_key_id = aws_kms_key.backup[0].arn', 'kms_master_key_id = aws_kms_key.data.arn']],
     ['any named key accepted', ['storage', 'values   = [aws_kms_key.backup[0].arn]', 'values   = ["*"]']],
-    ['aws:kms without a key id allowed', ['storage', 'sid       = "DenyManagedKey"\n    effect    = "Deny"', 'sid       = "DenyManagedKey"\n    effect    = "Allow"']],
+    // The backups statement, not the first DenyManagedKey in the file (the reports bucket has one too).
+    [
+      'aws:kms without a key id allowed',
+      [
+        'storage',
+        'sid       = "DenyManagedKey"\n    effect    = "Deny"\n    actions   = ["s3:PutObject"]\n    resources = ["${aws_s3_bucket.backups[0].arn}/*"]',
+        'sid       = "DenyManagedKey"\n    effect    = "Allow"\n    actions   = ["s3:PutObject"]\n    resources = ["${aws_s3_bucket.backups[0].arn}/*"]',
+      ],
+    ],
     ['customer keys allowed', ['storage', 'sid       = "DenyCustomerKeys"\n    effect    = "Deny"\n    actions   = ["s3:PutObject"]\n    resources = ["${aws_s3_bucket.backups[0].arn}/*"]', 'sid       = "DenyCustomerKeys"\n    effect    = "Allow"\n    actions   = ["s3:PutObject"]\n    resources = ["${aws_s3_bucket.backups[0].arn}/*"]']],
     ['retention permission dropped', ['iam', '["s3:PutObject", "s3:PutObjectRetention"]', '["s3:PutObject"]']],
     ['lock bypass granted', ['iam', '["s3:PutObject", "s3:PutObjectRetention"]', '["s3:PutObject", "s3:PutObjectRetention", "s3:BypassGovernanceRetention"]']],

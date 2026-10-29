@@ -75,16 +75,17 @@ describe('authenticated recovery storage, explicit activation only', () => {
     const storage = await RecoveryObjectStorage.open(f.options);
     f.target.put(f.destinationKey, Buffer.from('newer substitute'), 'application/pdf');
     const object = await storage.getObject(f.item.reference.key, { version: 'mem-v1', maxBytes: 100 });
-    expect(object.bytes).toEqual(f.bytes);
-    expect(object.version).toBe('mem-v1');
+    expect(object!.bytes).toEqual(f.bytes);
+    expect(object!.version).toBe('mem-v1');
     expect(await storage.createDownloadUrl(f.item.reference.key, 'mem-v1', 60)).toContain('versionId=' + f.version);
-    await expect(storage.getObject(f.item.reference.key, { version: f.version, maxBytes: 100 })).rejects.toMatchObject({ code: 'missing' });
+    // The installed version id is not a logical pin: like any store, a version that does not exist is not found.
+    expect(await storage.getObject(f.item.reference.key, { version: f.version, maxBytes: 100 })).toBeUndefined();
     await expect(storage.getObject(f.item.reference.key, { maxBytes: 1 })).rejects.toMatchObject({ name: 'ObjectTooLargeError' });
   });
   it('resolves a completed standard report without a DB pin to its verified observed identity', async () => {
     const f = await fixture('vcf');
     const storage = await RecoveryObjectStorage.open(f.options);
-    expect((await storage.inspect(f.item.reference.key)).version).toBe(f.item.observedVersion);
+    expect((await storage.inspect(f.item.reference.key))!.version).toBe(f.item.observedVersion);
   });
   it('honors the native original-key/version contract without claiming provider replication', async () => {
     const f = await fixture('lab-pdf', 'native');
@@ -109,6 +110,17 @@ describe('authenticated recovery storage, explicit activation only', () => {
     f.target.deleteVersion(f.destinationKey, f.version);
     await expect(RecoveryObjectStorage.open(f.options)).rejects.toMatchObject({ code: 'missing' });
     await expect(storage.createDownloadUrl(f.item.reference.key, 'mem-v1', 60)).rejects.toMatchObject({ code: 'missing' });
+    // A catalogued copy that vanished after startup verified it is a broken restore, not an ordinary missing file: it stays an error.
+    await expect(storage.getObject(f.item.reference.key, { version: 'mem-v1', maxBytes: 100 })).rejects.toMatchObject({ code: 'missing' });
+    await expect(storage.inspect(f.item.reference.key, { version: 'mem-v1' })).rejects.toMatchObject({ code: 'missing' });
+  });
+  it('answers "not found" for an object the restore does not contain, as every store does (audit O1), and still never signs one', async () => {
+    const f = await fixture();
+    const storage = await RecoveryObjectStorage.open(f.options);
+    expect(await storage.getObject('reports/absent', { maxBytes: 100 })).toBeUndefined();
+    expect(await storage.inspect('reports/absent')).toBeUndefined();
+    expect(await storage.inspect(f.item.reference.key, { version: 'absent-pin' })).toBeUndefined();
+    await expect(storage.createDownloadUrl('reports/absent', 'mem-v1', 60)).rejects.toMatchObject({ code: 'missing' });
   });
   it('checks actual bytes even if a storage port lies about the hash; refuses writes and excessive link lifetime', async () => {
     const f = await fixture();

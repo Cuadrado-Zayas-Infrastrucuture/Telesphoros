@@ -20,6 +20,7 @@ import type {
   QuarantineEntry,
 } from './ledger-records';
 import type { DisputeStatusValue } from '@telesphoros/shared-types';
+import type { ClinicianDecisionInput, ResultBasis } from './clinician-decisions';
 import type { Page, PageRequest } from './records';
 
 /** The same retry id came with a different decision or note (or for another capture) than the one stored under it. */
@@ -121,4 +122,9 @@ export abstract class LedgerRecordsRepository {
 
   /** A note's text (or its tombstone). Notes are free text kept out of the ledger; this is the only read of their body. */
   abstract findNote(tenantId: string, id: string): Promise<NoteRecord | undefined>;
+
+  /** Spec 006 D01b. Raises the refusals in clinician-decisions.ts; a replay of a stored request returns it with `created: false`. */
+  abstract insertClinicianDecision(tenantId: string, actor: string, input: ClinicianDecisionInput): Promise<InsertResult>;
+  /** The result's whole history, oldest first, and its basis now; undefined when the tenant has no such result. */
+  abstract clinicianDecisionHistory(tenantId: string, resultId: string): Promise<{ basis: ResultBasis; entries: Projected[] } | undefined>;
 }

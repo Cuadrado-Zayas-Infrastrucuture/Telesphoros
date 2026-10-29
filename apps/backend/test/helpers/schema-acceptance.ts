@@ -36,6 +36,11 @@ const relationships: [string, string, string, string][] = [
   ['report_captures_report_fk', 'report_captures', 'report_id,tenant_id', 'reports:id,tenant_id'],
   ['capture_acceptances_capture_fk', 'capture_acceptances', 'capture_id,tenant_id', 'report_captures:id,tenant_id'],
   ['capture_acceptances_note_fk', 'capture_acceptances', 'note_id,tenant_id', 'event_notes:id,tenant_id'],
+  // Spec 006 D01b (clinician result decisions): the result, its evaluation and patient, the previous entry, the note.
+  ['clinician_result_decisions_result_fk', 'clinician_result_decisions', 'result_id,evaluation_id,tenant_id', 'evaluation_results:id,evaluation_id,tenant_id'],
+  ['clinician_result_decisions_evaluation_fk', 'clinician_result_decisions', 'evaluation_id,tenant_id,patient_id', 'evaluations:id,tenant_id,patient_id'],
+  ['clinician_result_decisions_previous_fk', 'clinician_result_decisions', 'previous_entry_id,result_id,tenant_id', 'clinician_result_decisions:id,result_id,tenant_id'],
+  ['clinician_result_decisions_note_fk', 'clinician_result_decisions', 'note_id,tenant_id', 'event_notes:id,tenant_id'],
   ['evaluations_patient_fk', 'evaluations', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   ['evaluations_report_fk', 'evaluations', 'report_id,patient_id,tenant_id', 'reports:id,patient_id,tenant_id'],
   ['evaluations_capture_fk', 'evaluations', 'capture_id,tenant_id', 'report_captures:id,tenant_id'],
@@ -85,6 +90,7 @@ const primaryKeys: Record<string, string> = {
   event_notes: 'id',
   report_captures: 'id',
   capture_acceptances: 'id',
+  clinician_result_decisions: 'id',
   evaluations: 'id',
   evaluation_results: 'id',
   evaluation_gene_states: 'id',
@@ -154,6 +160,11 @@ const uniqueKeys: Record<string, string> = {
   report_captures_identity_uq: 'tenant_id, report_id, text_sha256, poppler_version',
   report_captures_text_key_uq: 'text_storage_key',
   capture_acceptances_id_tenant_uq: 'id, tenant_id',
+  clinician_result_decisions_creation_request_uq: 'tenant_id, created_by, creation_request_id',
+  clinician_result_decisions_id_tenant_uq: 'id, tenant_id',
+  clinician_result_decisions_id_result_tenant_uq: 'id, result_id, tenant_id',
+  evaluation_results_id_evaluation_tenant_uq: 'id, evaluation_id, tenant_id',
+  evaluations_id_tenant_patient_uq: 'id, tenant_id, patient_id',
   evaluations_id_tenant_report_uq: 'id, tenant_id, report_id',
   evaluations_id_tenant_uq: 'id, tenant_id',
   evaluations_identity_uq: 'tenant_id, identity_key',
@@ -216,6 +227,8 @@ const checkNames: Record<string, string> = {
     'created_by_len creation_request_pair filename_format lab_pdf_pinned object_version_valid pin_after_upload sha256_format size_range status_valid tenant_id_len type_valid upload_consistent upload_requested_by_len uploaded_by_len',
   report_captures: 'created_by_len hashes key_len poppler runner scalars tenant_id_len',
   capture_acceptances: 'created_by_len decision poppler tenant_id_len text_hash created_by_human creation_request_pair',
+  clinician_result_decisions:
+    'tenant_id_len created_by_len created_by_human author_roles entry_kind chain_shape response codes vocabulary policy occurred_source occurred_at request_hash',
   evaluations: 'created_by_len disposition engine_version_len hash_formats hold_code hold_consistent json_shapes tenant_id_len binding_size gene_inputs_size occurrences_size',
   evaluation_results: 'citation_ids citation_size gene_evidence_size json ordinal outcome reason shape strength',
   evaluation_gene_states: 'gene reason shape state',
@@ -258,6 +271,7 @@ for (const table of [
   'report_patient_decisions',
   'patient_merge_proposals',
   'patient_merge_decisions',
+  'clinician_result_decisions',
   'ledger_checkpoints',
 ]) {
   relationships.push([`${table}_event_fk`, table, 'ledger_event_id,tenant_id', 'ledger_events:id,tenant_id']);
@@ -276,6 +290,11 @@ const queryIndexes: Record<string, string> = {
   reports_tenant_patient_id_uq: 'UNIQUE INDEX reports_tenant_patient_id_uq ON public.reports USING btree (tenant_id, patient_id, id)',
   report_captures_tenant_report_idx: 'INDEX report_captures_tenant_report_idx ON public.report_captures USING btree (tenant_id, report_id, seq)',
   capture_acceptances_tenant_capture_idx: 'INDEX capture_acceptances_tenant_capture_idx ON public.capture_acceptances USING btree (tenant_id, capture_id, seq)',
+  clinician_result_decisions_first_uq:
+    'UNIQUE INDEX clinician_result_decisions_first_uq ON public.clinician_result_decisions USING btree (tenant_id, result_id) WHERE (previous_entry_id IS NULL)',
+  clinician_result_decisions_successor_uq:
+    'UNIQUE INDEX clinician_result_decisions_successor_uq ON public.clinician_result_decisions USING btree (previous_entry_id) WHERE (previous_entry_id IS NOT NULL)',
+  clinician_result_decisions_result_idx: 'INDEX clinician_result_decisions_result_idx ON public.clinician_result_decisions USING btree (tenant_id, result_id, seq)',
   evaluations_tenant_report_idx: 'INDEX evaluations_tenant_report_idx ON public.evaluations USING btree (tenant_id, report_id, seq)',
   evaluations_tenant_patient_idx: 'INDEX evaluations_tenant_patient_idx ON public.evaluations USING btree (tenant_id, patient_id, seq)',
   evaluation_results_tenant_evaluation_idx: 'INDEX evaluation_results_tenant_evaluation_idx ON public.evaluation_results USING btree (tenant_id, evaluation_id, ordinal)',

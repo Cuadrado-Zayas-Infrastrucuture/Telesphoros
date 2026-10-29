@@ -101,7 +101,7 @@ Check: aliases are `app.<web_domain>`, `<web_domain>` and `www.<web_domain>`; th
 
 ## What plan C adds (9)
 
-2 services (API and worker, `desired_count = 1` each), 4 task definitions (API, migration, provisioning, worker), the image-gated API alarms (running tasks, unhealthy targets, 5xx), **plus the four repository-only policy updates above**. The worker's four alarms and other API/worker foundations are already gated by API hosting; inventory all actual alarms rather than using the earlier resource totals as a current bill of materials.
+2 services (API and worker, `desired_count = 1` each), 4 task definitions (API, migration, provisioning, worker), the image-gated API alarms (running tasks, unhealthy targets, 5xx), the API's scalable target (held at the desired count; no scaling policy while `api_max_count` is null), **plus the four repository-only policy updates above**. The worker's four alarms and other API/worker foundations are already gated by API hosting; inventory all actual alarms rather than using the earlier resource totals as a current bill of materials.
 Check in every task definition: the image is `...@sha256:<64 hex>` (never a tag), `readonlyRootFilesystem = true`, user `10001`, `DATABASE_SSL = require`, no secret in `environment` (secrets come from `secrets` with ARNs), and the migration task has **no task role**.
 Tasks and services get a **public address** here (`assign_public_ip = true`) because the synthetic network has no NAT; that is expected in the synthetic profile only.
 **Setting `api_image` starts the services at once**, before the logins and the schema exist, so they will fail until the one-off steps are done: that is expected and described in [staging-rehearsal.md](staging-rehearsal.md).

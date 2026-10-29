@@ -50,9 +50,9 @@ Shape rules (CHECK): `amendment` and `entered-in-error` need `previous_entry_id`
 
 **Grants and policies**: as `0021:196-210` (app SELECT, INSERT; ledger SELECT; verifier SELECT). No UPDATE or DELETE for any role.
 
-### 2.1 Vocabulary `cdr-v1`: simplified proposal (2026-10-27; D6 held for the founder's edits)
+### 2.1 Vocabulary `cdr-v1`: decided (D6, 2026-10-28)
 
-The founder asked for a simpler vocabulary. This replaces the first draft (24 codes in four response-specific lists) with **11 codes in two lists**. One reason list is shared by every response that departs from the recommendation.
+The founder asked for a simpler vocabulary, and the first draft (24 codes in four response-specific lists) became an 11-code proposal. On 2026-10-28 the founder accepted the recommended change to it: `drug-interaction` is split out of `clinical-context`, and `report-doubt` is split out of `information-needed`. The result is **13 codes in two lists**. One reason list is shared by every response that departs from the recommendation. The display labels are `CDR_CODE_LABELS` in shared-types; changing a label is not a new version.
 
 **What kind of change** (`modified` only; at least one):
 
@@ -68,19 +68,21 @@ The founder asked for a simpler vocabulary. This replaces the first draft (24 co
 | Code | Meaning |
 | --- | --- |
 | `not-applicable` | The result does not fit this patient's indication or situation |
-| `clinical-context` | Contraindication, comorbidity, interacting drugs or prior response outweigh it |
+| `drug-interaction` | A co-medication outweighs or changes the result (an interaction, or a phenotype changed by an inhibiting or inducing drug) |
+| `clinical-context` | Another clinical reason: a contraindication, a comorbidity or a prior response |
 | `disagree-with-guideline` | Clinical disagreement with the guideline recommendation itself |
 | `patient-preference` | The patient declined after discussion |
 | `access` | Cost, coverage or availability |
-| `information-needed` | Something is needed first: another result, specialist input, or a clearer or corrected report |
+| `information-needed` | Something is needed first: another result or specialist input |
+| `report-doubt` | Doubt about the source report itself (a quality signal about the lab or the capture, not about the patient) |
 | `other` | Anything else; note required |
 
 `deferred` keeps the optional `review_by` date. The response itself carries the rest of the meaning: `deferred` plus `information-needed` means waiting for something, and `clarification-requested` plus `information-needed` means the clinician asked a question.
 
-**What the simplification gives up**, so you can decide whether it matters:
-- Contraindication, competing context and prior response are no longer separate; all three are `clinical-context`.
-- Doubt about the source report is folded into `information-needed`. A reader cannot tell it from "waiting for a test".
-- Schedule changes are folded into `change-dose`.
+**What the vocabulary still folds together**, accepted on purpose:
+- A contraindication, a comorbidity and a prior response are all `clinical-context`.
+- A schedule change is `change-dose`.
+- Coverage and availability are both `access`.
 
 Splitting a code later is a new vocabulary version (`cdr-v2`), and old rows keep `cdr-v1`. So starting coarse is reversible for new data, but not for data already collected.
 

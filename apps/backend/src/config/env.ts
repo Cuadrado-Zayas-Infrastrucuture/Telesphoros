@@ -242,6 +242,9 @@ export const envSchema = z
       if (!isExecutionProfile(env.EVALUATION_EXECUTION_PROFILE))
         problem('EVALUATION_EXECUTION_PROFILE', 'is required when EVALUATION_REQUESTS=enabled, as an execution profile in JSON');
       if (env.NODE_ENV === 'production') problem('EVALUATION_REQUESTS', 'is refused in production: queued evaluation is part of the synthetic, non-production pipeline');
+      // The worker that answers a request has no sign-in token and is issued no capability; while the API uses one, a queued request would be answered
+      // with less proof than the same request made directly. How a background worker acts under a capability is a separate founder decision.
+      if (env.ISSUER_URL) problem('EVALUATION_REQUESTS', 'is refused while ISSUER_URL is set: no worker can yet act for the requester under an issuer capability');
     }
 
     if (env.LOCAL_UPLOAD_CLEANUP_GRACE_SECONDS < 86400 && (!env.LOCAL_STORAGE_RUN_ID || env.NODE_ENV === 'production' || env.LAB_REPORT_PIPELINE !== 'disabled'))

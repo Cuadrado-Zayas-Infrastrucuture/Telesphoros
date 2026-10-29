@@ -635,6 +635,10 @@ resource "aws_ecs_service" "api" {
   }
 
   lifecycle {
+    # The scalable target (api-autoscaling.tf) owns the running count once the service exists; without this an apply would set it back to
+    # api_desired_count in the middle of a scale-out.
+    ignore_changes = [desired_count]
+
     precondition {
       condition     = var.environment != "production" || var.api_desired_count >= 2
       error_message = "Production runs at least two API tasks (api_desired_count >= 2)."

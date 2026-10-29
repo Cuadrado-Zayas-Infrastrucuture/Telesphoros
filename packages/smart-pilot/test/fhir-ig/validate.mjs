@@ -10,8 +10,11 @@ import { mapPgxToFhir, buildPgxCollection } from '../../dist/pgx-fhir.js';
 import { terminologyIssues } from './terminology.js';
 const here = dirname(fileURLToPath(import.meta.url));
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
+// FHIR_ARTIFACT_DIR lets CI keep the pinned downloads in a cache; the checksum below is verified on every load either way.
+const artifactDir = process.env.FHIR_ARTIFACT_DIR ? resolve(process.env.FHIR_ARTIFACT_DIR) : tmpdir();
+mkdirSync(artifactDir, { recursive: true });
 async function artifact(name, url, expected, override) {
-  const path = override || join(tmpdir(), name);
+  const path = override || join(artifactDir, name);
   if (!existsSync(path)) {
     const r = await fetch(url, { signal: AbortSignal.timeout(180000) });
     assert.ok(r.ok, `download failed: ${name}`);
@@ -108,12 +111,17 @@ function validate(name, bundles, expectErrors) {
   // Only this generated outcome is replaced; stale results must never satisfy a new run.
   rmSync(resultFile, { force: true });
   const java = process.env.JAVA_HOME ? join(process.env.JAVA_HOME, 'bin/java') : 'java';
+  const started = Date.now();
   const result = spawnSync(java, ['-Xmx2g', '-jar', jar, ...files, '-version', '4.0.1', '-ig', ig, '-ig', join(here, 'definitions'), '-tx', 'n/a', '-output', resultFile], {
     encoding: 'utf8',
     timeout: 360000,
     maxBuffer: 16 * 1024 * 1024,
   });
-  writeFileSync(join(output, `${name}.log`), `${result.stdout || ''}\n${result.stderr || ''}`);
+  const log = `${result.stdout || ''}\n${result.stderr || ''}`;
+  writeFileSync(join(output, `${name}.log`), log);
+  console.log(`${name}: validator ran ${Math.round((Date.now() - started) / 1000)} s`);
+  // The evidence directory is gone when CI fails, so a failed run prints the end of the validator's own log (synthetic input only).
+  if (result.error || result.status !== 0) console.error(`${name} validator log (last 40 lines):\n${log.trimEnd().split('\n').slice(-40).join('\n')}`);
   assert.ifError(result.error);
   assert.ok(existsSync(resultFile), `validator did not produce ${name} outcome; see ${output}`);
   const report = JSON.parse(readFileSync(resultFile, 'utf8'));

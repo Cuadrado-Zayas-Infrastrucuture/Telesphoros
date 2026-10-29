@@ -11,3 +11,5 @@ export * from './report';
 export * from './roles';
 export * from './tenant';
 export * from './evaluation-request';
+export * from './usage';
+export * from './clinician-decisions';

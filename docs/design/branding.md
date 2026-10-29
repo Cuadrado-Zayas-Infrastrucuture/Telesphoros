@@ -1,6 +1,6 @@
 # Shared brand contract
 
-The updated product/company identity uses Inter for readable editorial and application content, Poppins for existing wordmarks, dark teal text, seafoam surfaces and restrained component borders. Operational screens use a compact type hierarchy and opaque data surfaces.
+The product/company identity uses Inter for readable editorial and application content and Poppins for existing wordmarks. Since 2026-10-28 ([spec 012](../../specs/013-eye-friendly-palette/spec.md)) the operational screens use white cards on a near-white page in light mode and graphite in dark mode, slate ink rather than teal body text, and teal only on what can be acted on. The header, sidebar and footer sit on a darker `--band`, so the content reads as the centre. Operational screens use a compact type hierarchy and opaque data surfaces.
 
 ## Required choices
 
@@ -10,7 +10,7 @@ The updated product/company identity uses Inter for readable editorial and appli
 | Dashboard headings | `--font-family-ui-heading`, compact 500-weight hierarchy |
 | Wordmarks | Existing Poppins `--font-family-heading` |
 | Landing content | Existing Inter `--font-family-landing`; landing layout remains independent |
-| Text | Reports use approved `--dashboard-foreground` (#173E47) and `--dashboard-muted-foreground` (#36515A); other surfaces use shared dark teal text. Decorative accent is not body text |
+| Text | Body text is slate `--foreground` (#2C3438; dark #D4D9DB), about 11 to 13:1 rather than higher, to avoid glare. Reports use `--dashboard-foreground` (#263034) and `--dashboard-muted-foreground` (#4E5A61). Decorative accent is not body text |
 | Controls | Existing components and approved fills; minimum shared target 2.75rem (44px at the default root size) |
 | Status | Semantic success/warning/error tokens, expressed as words; never decorative badges |
 | Artwork | Exact approved company/product logos, unchanged mascot and bundled fonts. The watermarked DNA image is retired and must not ship |

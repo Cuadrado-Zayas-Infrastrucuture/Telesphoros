@@ -2,7 +2,7 @@ import { ownedStorageMode } from '@/lib/storageMode';
 import type { RouteObject } from 'react-router-dom';
 import { ProtectedRoute } from '@/auth/ProtectedRoute';
 import { RequireRole } from '@/auth/RequireRole';
-import { CLINICAL_READ_ROLES, WRITER_ROLES } from '@/auth/roles';
+import { ADMIN_ROLES, CLINICAL_READ_ROLES, WRITER_ROLES } from '@/auth/roles';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { RouteError } from '@/components/RouteError';
 
@@ -34,6 +34,11 @@ export const routes: RouteObject[] = [
           {
             element: <RequireRole anyOf={CLINICAL_READ_ROLES} />,
             children: [{ path: 'reports', lazy: async () => ({ Component: (await import('@/pages/ReportsPage')).default }) }],
+          },
+          // Administrators only: the organization's own counts. Nothing clinical, so admin needs no clinical role for it.
+          {
+            element: <RequireRole anyOf={ADMIN_ROLES} />,
+            children: [{ path: 'usage', lazy: async () => ({ Component: (await import('@/pages/UsagePage')).default }) }],
           },
           ...(import.meta.env.DEV
             ? [

@@ -5,4 +5,6 @@ export * from './errors';
 export * from './queue';
 export * from './registry';
 export * from './log';
+export * from './pool-limits';
 export * from './runner';
+export * from './shutdown';
