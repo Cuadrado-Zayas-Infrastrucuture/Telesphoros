@@ -2,7 +2,7 @@
 
 **Spec**: [spec.md](spec.md)
 
-**Status**: Draft. Nothing below is built until the founder approves this plan and decides D1 to D5.
+**Status**: Approved by the founder on 2026-10-28, D1 to D5 as recommended.
 
 Line numbers cite `main` `c0de882`.
 
