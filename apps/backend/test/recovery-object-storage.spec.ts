@@ -3,7 +3,7 @@ import { byteDigest, encryptDocument, sourceIdentity, type EvidenceCatalogue, ty
 import { InMemoryObjectStorage } from '../src/object-storage/in-memory-object-storage';
 import { RecoveryObjectStorage } from '../src/object-storage/recovery-object-storage';
 
-async function fixture(kind: 'lab-pdf' | 'vcf' = 'lab-pdf', mode: 'translated' | 'native' = 'translated') {
+async function fixture(kind: 'lab-pdf' | 'structured' = 'lab-pdf', mode: 'translated' | 'native' = 'translated') {
   class ApplicationBucket extends InMemoryObjectStorage {
     readonly bucket = 'synthetic-app';
   }
@@ -83,7 +83,7 @@ describe('authenticated recovery storage, explicit activation only', () => {
     await expect(storage.getObject(f.item.reference.key, { maxBytes: 1 })).rejects.toMatchObject({ name: 'ObjectTooLargeError' });
   });
   it('resolves a completed standard report without a DB pin to its verified observed identity', async () => {
-    const f = await fixture('vcf');
+    const f = await fixture('structured');
     const storage = await RecoveryObjectStorage.open(f.options);
     expect((await storage.inspect(f.item.reference.key))!.version).toBe(f.item.observedVersion);
   });

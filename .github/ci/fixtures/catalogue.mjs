@@ -3,7 +3,7 @@ export function catalogueMetricControl() {
   const volume = bytes => ({ bytes, GB: bytes / 1e9, GiB: bytes / 1024 ** 3 });
   const metric = { format: 1, references: 5, uniqueObjects: 5, uncompletedRegistrations: 0, orphanTextObjects: 1,
     copiedObjectsVerified: 5, copiedBytesVerified: 40,
-    requiredByKind: Object.fromEntries(['lab-pdf', 'vcf', 'structured', 'text'].map(kind => [kind, { objects: kind === 'lab-pdf' ? 2 : 1, ...volume(10) }])),
+    requiredByKind: Object.fromEntries(['lab-pdf', 'structured', 'text'].map(kind => [kind, { objects: kind === 'lab-pdf' || kind === 'structured' ? 2 : 1, ...volume(kind === 'structured' ? 20 : 10) }])),
     volumes: Object.fromEntries(['restoredDatabase', 'archive', 'catalogue', 'requiredObjects', 'read', 'writeAttempted'].map(k => [k, volume(40)])),
     seconds: { restoreAndInventory: 1, resolve: 1, copyAndVerify: 1, publish: 1, total: 4 }, concurrency: 1,
     independentBytesRecovered: false, applicationRecoveryComplete: false };

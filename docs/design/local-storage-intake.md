@@ -1,6 +1,6 @@
 # Owned local synthetic storage API — L1
 
-L1 accepts opaque PDF, VCF and JSON bytes with clinical processing disabled. It does not extract genomic values, run PDF content, invoke OCR/knowledge/evaluations or establish production readiness. L2 browser transport is available in owned mode. L3 provides a separate [owned setup, reconciliation and teardown entry point](../ops/local-storage-operations.md).
+L1 accepts opaque PDF and JSON bytes (VCF is refused since migration 0057: no raw genomic data is stored, founder decision 2026-10-28) with clinical processing disabled. It does not extract genomic values, run PDF content, invoke OCR/knowledge/evaluations or establish production readiness. L2 browser transport is available in owned mode. L3 provides a separate [owned setup, reconciliation and teardown entry point](../ops/local-storage-operations.md).
 
 ## Organization scope (M2.2a)
 
@@ -34,7 +34,7 @@ Clinician/admin alone may declare/intake/resume/cancel. Clinical endpoints keep 
 - 60-second absolute monotonic body deadline, 10-second inactivity/socket timeout, five-second startup allowance, then 256 KiB/s per five-second progress window. Staging backpressure has its own five-second stall budget. HTTP header timeout is 30 seconds; unrelated route body policies remain unchanged. Route timeout listeners are removed and the prior socket timeout restored.
 - Private 0700 staging directory, exclusive 0600 file and fsynced ownership receipt. Hash and syntax validation stream into that file. Only complete valid files stream into S3; malformed/partial/rejected bodies cause zero storage writes. Exact owned files are disposed before freeing reservations. Interrupted staging requires a trusted owned receipt, matching filesystem identity and a dead writer; unexpected files/symlinks/live writers are retained.
 - PDF: `%PDF-1.0`–`1.7` or `2.0` at byte zero, newline, final `%%EOF` followed only by whitespace. Nine-byte prefix and 1 KiB tail retained. These checks do not certify malware-free or clinically valid content.
-- VCF: strict UTF-8, first-line versions 4.1–4.5, all eight fixed columns in order; additional columns require FORMAT and sample names. 256 KiB header, 64 KiB line limits, measured in bytes. Rows remain opaque. No gzip/BCF.
+- VCF: refused before a byte is read, by the schema, the structural validator and the database CHECK (0057).
 - JSON: strict UTF-8, no BOM/trailing syntax, maximum depth 64, string token 65,536 characters, number token 128 characters and finite numeric values. Incremental syntax only; no document string or object tree.
 - Tests enforce a 96 MiB RSS-increase ceiling for two simultaneous 10 MiB bodies and a 256 KiB maximum concatenation; observations include the test client, API, SDK and read-back. These local measurements do not establish a production capacity or RTO.
 

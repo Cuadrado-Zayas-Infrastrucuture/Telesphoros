@@ -20,7 +20,7 @@ const experiment = new WeakMap<object, { file: File; label: string; type: string
 
 /** Local experiment only. Retry identifiers stay in component memory. Registers a synthetic patient by label, then uploads through the validated intake. */
 export async function submitReport(
-  values: Omit<UploadReportValues, 'reportType'> & { reportType: 'structured' | 'vcf' | 'lab-pdf' },
+  values: Omit<UploadReportValues, 'reportType'> & { reportType: 'structured' | 'lab-pdf' },
   apiFetch: ApiFetch,
   progress: UploadProgress,
 ): Promise<{ reference: string }> {

@@ -4,7 +4,7 @@ Every report file reaches storage through the **validated server intake** ([desi
 
 ## How a file is uploaded
 
-The signed-in clinician screen at `/reports/upload` uploads VCF or structured JSON (and lab PDFs where the pipeline is on). Select an existing synthetic patient from bounded pages of 20; it never creates patients. If none exist, someone with a clinician role must add one through the existing API.
+The signed-in clinician screen at `/reports/upload` uploads structured JSON (and lab PDFs where the pipeline is on). Select an existing synthetic patient from bounded pages of 20; it never creates patients. If none exist, someone with a clinician role must add one through the existing API.
 
 The browser validates patient UUID, type/extension, filename, nonempty file and 10 MiB limit, computes SHA-256 and registers metadata with a UUID requestId (`POST /reports`). It then reads the report's upload revision (`GET /reports/:id/upload-state`), **declares an attempt** (`POST /reports/:id/upload-attempts` with the content type and SHA-256), and **sends the bytes to the API** (`PUT /reports/:id/upload-attempts/:attemptId/bytes`, raw, the declared content type, `X-Upload-Revision`). The server stages them privately, checks size, SHA-256 and bounded structure, and only then writes them to the reports bucket under `reports/<tenant hash>/<report id>/intake/<attempt id>`, pins the stored version and marks the report uploaded. The page shows success only when the attempt is `committed` and the report read back names the same patient, type, file name, size, SHA-256 and content type. A file the server refuses is never stored; the refusal is recorded as a security event ([security-events](security-events.md)).
 

@@ -7,7 +7,7 @@ import { MAX_REPORT_BYTES, uploadReportSchema } from './uploadReportSchema';
 export const productUploadSchema = uploadReportSchema
   .omit({ patientLabel: true })
   .extend({
-    reportType: z.enum(['vcf', 'structured', 'lab-pdf'], { error: 'Choose a report type.' }),
+    reportType: z.enum(['structured', 'lab-pdf'], { error: 'Choose a report type.' }),
     file: z
       .custom<File>((value) => value instanceof File, { error: 'Choose a report file.' })
       .refine((file) => !(file instanceof File) || file.size <= MAX_REPORT_BYTES, { error: 'The file is larger than 10 MB.' }),

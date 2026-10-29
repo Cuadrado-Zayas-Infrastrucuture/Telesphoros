@@ -107,7 +107,7 @@ if (!both) process.stderr.write('[jest] NOT RUNNING: test/db/application-recover
       const soft = await other.uploadedLabPdf(await other.person('synthetic-soft', ['clinician']), fixturePdf('D02'));
       await withAdmin(pg.adminUrl, (c) => c.query('UPDATE reports SET deleted_at=now() WHERE tenant_id=$1 AND id=$2', [other.tenant, soft.reportId]));
       for (const [kind, text, contentType] of [
-        ['vcf', '##fileformat=VCFv4.2\n', 'text/x-vcf'],
+        ['structured', '{"synthetic":"second"}', 'application/json'], // formerly a vcf row: two standard reports, so the count below is unchanged
         ['structured', '{"synthetic":true}', 'application/json'],
       ]) {
         const patient = await lab.patient(await lab.person('synthetic-standard', ['clinician']));

@@ -43,8 +43,8 @@ async function record(): Promise<ReportRecord> {
     tenantId: tenant,
     createdBy: actor,
     patientId: patient.rows[0].id,
-    type: 'vcf',
-    filename: 'synthetic.vcf',
+    type: 'structured',
+    filename: 'synthetic.json',
     sizeBytes: 100,
     status: 'received',
     createdAt: now,
@@ -72,7 +72,7 @@ it('deduplicates concurrent creates across independent restricted-role pools', a
 
 it('admits one winner and rejects a different original payload when requests race', async () => {
   const input = await record();
-  const changed = { ...input, id: randomUUID(), filename: 'different.vcf', creationRequestHash: 'b'.repeat(64) };
+  const changed = { ...input, id: randomUUID(), filename: 'different.json', creationRequestHash: 'b'.repeat(64) };
   const results = await Promise.allSettled([reports.insertOrReplay(input), otherPool.insertOrReplay(changed)]);
   const won = results.filter((result) => result.status === 'fulfilled');
   const lost = results.filter((result) => result.status === 'rejected');
@@ -90,8 +90,8 @@ it('retains retry identity after pool recreation, correction and soft deletion',
   const fresh = new Database({ url: pg.appUrl, ssl: 'disable' });
   try {
     const repository = new PostgresReportsRepository(fresh);
-    await repository.update({ ...created, filename: 'corrected.vcf' });
-    expect(await repository.insertOrReplay(input)).toMatchObject({ id: created.id, filename: 'corrected.vcf', creationRequestHash: hash });
+    await repository.update({ ...created, filename: 'corrected.json' });
+    expect(await repository.insertOrReplay(input)).toMatchObject({ id: created.id, filename: 'corrected.json', creationRequestHash: hash });
     await repository.delete(tenant, created.id);
     await expect(repository.insertOrReplay(input)).rejects.toMatchObject({ constraint: 'reports_creation_request_uq' });
     expect(await repository.findById(tenant, created.id)).toBeUndefined();
@@ -126,8 +126,8 @@ it('enforces pair validity and immutable identity in PostgreSQL; ordinary metada
       ),
     ),
   ).rejects.toMatchObject({ code: '23000' });
-  await reports.update({ ...input, filename: 'corrected.vcf' });
-  expect(await reports.insertOrReplay(input)).toMatchObject({ filename: 'corrected.vcf', creationRequestHash: hash });
+  await reports.update({ ...input, filename: 'corrected.json' });
+  expect(await reports.insertOrReplay(input)).toMatchObject({ filename: 'corrected.json', creationRequestHash: hash });
 });
 
 it('upgrades legacy rows unchanged and guards populated rollback before explicit fixture-only opt-in', async () => {
@@ -143,7 +143,7 @@ it('upgrades legacy rows unchanged and guards populated rollback before explicit
       const row = (
         await c.query(
           `INSERT INTO reports (tenant_id,created_by,patient_id,type,original_filename,size_bytes)
-        VALUES ($1,$2,$3,'vcf','legacy.vcf',100) RETURNING *`,
+        VALUES ($1,$2,$3,'structured','legacy.json',100) RETURNING *`,
           [tenant, actor, p],
         )
       ).rows[0];
@@ -160,7 +160,7 @@ it('upgrades legacy rows unchanged and guards populated rollback before explicit
       const key = randomUUID();
       await c.query(
         `INSERT INTO reports (tenant_id,created_by,patient_id,type,original_filename,size_bytes,creation_request_id,creation_request_hash)
-        VALUES ($1,$2,$3,'vcf','keyed.vcf',100,$4,$5)`,
+        VALUES ($1,$2,$3,'structured','keyed.json',100,$4,$5)`,
         [tenant, actor, p, key, hash],
       );
       for (const setting of ['', 'true', 'YES']) {

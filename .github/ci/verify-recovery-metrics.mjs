@@ -30,7 +30,7 @@ export function verifyRecoveryMetrics(value) {
   for (const metric of value.measurements) {
     keys(metric, ['format', 'databaseRecoveryVerified', 'independentBytesRecovered', 'applicationRecoveryComplete', 'identityMode', 'references', 'recoveredObjects', 'requiredByKind', 'volumes', 'seconds', 'concurrency']);
     if (metric.format !== 1 || metric.databaseRecoveryVerified !== true || metric.independentBytesRecovered !== true || metric.applicationRecoveryComplete !== false || metric.identityMode !== 'translated-test-only' || metric.references !== 5 || metric.recoveredObjects !== 5 || metric.concurrency !== 1) refuse();
-    keys(metric.requiredByKind, ['lab-pdf', 'vcf', 'structured', 'text']);
+    keys(metric.requiredByKind, ['lab-pdf', 'structured', 'text']);
     let bytes = 0; let objects = 0;
     for (const value of Object.values(metric.requiredByKind)) { volume(value, true); if (!value.bytes || !value.objects) refuse(); bytes += value.bytes; objects += value.objects; }
     if (objects !== metric.recoveredObjects) refuse();

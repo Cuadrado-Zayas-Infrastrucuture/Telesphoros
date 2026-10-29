@@ -428,7 +428,7 @@ async function boundApi() {
     const app = await createTestApp({ postgresUrl: pg.appUrl, ownerUrl: pg.adminUrl, membershipFromTokens: false });
     const token = await signToken({ sub: made.authority.sub, tenant: TENANT });
     const api = () => request(app.getHttpServer());
-    const bytes = Buffer.from('##fileformat=VCFv4.3\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n');
+    const bytes = Buffer.from('{"synthetic":true}');
     const patientId = (
       await api()
         .post('/api/v1/patients')
@@ -436,14 +436,14 @@ async function boundApi() {
         .send({ label: `SYN-${randomUUID()}` })
         .expect(201)
     ).body.id;
-    const reportId = (await api().post('/api/v1/reports').set(bearer(token)).send({ patientId, type: 'vcf', filename: 'session.vcf', sizeBytes: bytes.length }).expect(201)).body
-      .id;
+    const reportId = (await api().post('/api/v1/reports').set(bearer(token)).send({ patientId, type: 'structured', filename: 'session.json', sizeBytes: bytes.length }).expect(201))
+      .body.id;
     const revision = (await api().get(`/api/v1/reports/${reportId}/upload-state`).set(bearer(token)).expect(200)).body.revision;
     const attempt = (
       await api()
         .post(`/api/v1/reports/${reportId}/upload-attempts`)
         .set(bearer(token))
-        .send({ requestId: randomUUID(), revision, contentType: 'text/x-vcf', sha256: createHash('sha256').update(bytes).digest('hex') })
+        .send({ requestId: randomUUID(), revision, contentType: 'application/json', sha256: createHash('sha256').update(bytes).digest('hex') })
         .expect(201)
     ).body as { attemptId: string; revision: string };
     return {
@@ -491,8 +491,8 @@ it('control: the real HTTP intake commits a version while session authority is c
       .put(`/api/v1/reports/${rig.reportId}/upload-attempts/${rig.attempt.attemptId}/bytes`)
       .set(bearer(rig.token))
       .set('X-Upload-Revision', rig.attempt.revision)
-      .set('Content-Type', 'text/x-vcf')
-      .send(rig.bytes)
+      .set('Content-Type', 'application/json')
+      .send(rig.bytes.toString('utf8'))
       .expect(200);
     const row = await storedState(rig.reportId, rig.attempt.attemptId);
     expect(row.state).toBe('committed');
@@ -511,7 +511,7 @@ it('revocation during raw HTTP intake refuses its next protected write while emp
     port,
     method: 'PUT',
     path: `/api/v1/reports/${rig.reportId}/upload-attempts/${rig.attempt.attemptId}/bytes`,
-    headers: { Authorization: `Bearer ${rig.token}`, 'X-Upload-Revision': rig.attempt.revision, 'Content-Type': 'text/x-vcf', 'Content-Length': rig.bytes.length },
+    headers: { Authorization: `Bearer ${rig.token}`, 'X-Upload-Revision': rig.attempt.revision, 'Content-Type': 'application/json', 'Content-Length': rig.bytes.length },
   });
   const status = new Promise<number>((resolve, reject) => {
     transfer.on('response', (res) => {
@@ -564,8 +564,8 @@ it('revocation after object storage succeeds refuses the report pin and retains 
     .put(`/api/v1/reports/${rig.reportId}/upload-attempts/${rig.attempt.attemptId}/bytes`)
     .set(bearer(rig.token))
     .set('X-Upload-Revision', rig.attempt.revision)
-    .set('Content-Type', 'text/x-vcf')
-    .send(rig.bytes)
+    .set('Content-Type', 'application/json')
+    .send(rig.bytes.toString('utf8'))
     .then((res) => res.status);
   try {
     await ready;

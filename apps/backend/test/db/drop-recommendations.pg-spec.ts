@@ -39,7 +39,7 @@ const parents = (db: EphemeralDatabase) =>
     const patient = (await c.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ('syn-drop', 'syn-author', 'SYN-DROP') RETURNING id`)).rows[0].id as string;
     const report = (
       await c.query(
-        `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ('syn-drop', 'syn-author', $1, 'vcf', 'syn.vcf', 1) RETURNING id`,
+        `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ('syn-drop', 'syn-author', $1, 'structured', 'syn.json', 1) RETURNING id`,
         [patient],
       )
     ).rows[0].id as string;

@@ -8,8 +8,8 @@ import { bearer, clinicianA } from './helpers/tokens';
 
 // Audit U1: two API tasks receive the same upload at once. Each task keeps its own set of active uploads, so only the database decides who writes; the request that
 // loses must not cancel the attempt the winner began. Two applications on one database stand for two tasks. Synthetic data only.
-const vcf = Buffer.from('##fileformat=VCFv4.3\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n1\t100\t.\tA\tG\t.\t.\t.\n');
-const MIME = 'text/x-vcf';
+const sample = Buffer.from('{"synthetic":true,"values":[1,2,3]}');
+const MIME = 'application/json';
 const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
 
 (usingPostgres() ? describe : describe.skip)('a duplicate upload on another API task (audit U1)', () => {
@@ -44,14 +44,14 @@ const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
         .expect(201)
     ).body.id as string;
     const reportId = (
-      await api(first).post('/api/v1/reports').set(bearer(token)).send({ patientId: patient, type: 'vcf', filename: 'sample.vcf', sizeBytes: vcf.length }).expect(201)
+      await api(first).post('/api/v1/reports').set(bearer(token)).send({ patientId: patient, type: 'structured', filename: 'sample.json', sizeBytes: sample.length }).expect(201)
     ).body.id as string;
     const state = (await api(first).get(`/api/v1/reports/${reportId}/upload-state`).set(bearer(token)).expect(200)).body;
     const attempt = (
       await api(first)
         .post(`/api/v1/reports/${reportId}/upload-attempts`)
         .set(bearer(token))
-        .send({ requestId: randomUUID(), revision: state.revision, contentType: MIME, sha256: sha(vcf) })
+        .send({ requestId: randomUUID(), revision: state.revision, contentType: MIME, sha256: sha(sample) })
         .expect(201)
     ).body as { attemptId: string; revision: string };
     const put = (app: NestExpressApplication) =>
@@ -60,11 +60,11 @@ const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
         .set(bearer(token))
         .set('X-Upload-Revision', attempt.revision)
         .set('Content-Type', MIME)
-        .set('Content-Length', String(vcf.length));
+        .set('Content-Length', String(sample.length));
 
     // The winner begins and is still receiving its bytes.
     const winner = put(first);
-    winner.write(vcf.subarray(0, 10));
+    winner.write(sample.subarray(0, 10));
     for (let i = 0; i < 200 && (await attemptRow(attempt.attemptId)).state !== 'intaking'; i += 1) await new Promise((r) => setTimeout(r, 25));
     expect(await attemptRow(attempt.attemptId)).toEqual({ state: 'intaking', cancel_requested: false, held: true });
 
@@ -75,10 +75,10 @@ const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
       const found = await read(identity);
       return found && { ...found, state: 'declared' };
     });
-    await put(second).send(vcf).expect(409);
+    await put(second).send(sample.toString('utf8')).expect(409);
     expect(await attemptRow(attempt.attemptId)).toEqual({ state: 'intaking', cancel_requested: false, held: true });
 
-    winner.write(vcf.subarray(10));
+    winner.write(sample.subarray(10));
     const res = await new Promise<request.Response>((resolve, reject) => {
       winner.end((error, response) => (response ? resolve(response) : reject(error as Error)));
     });

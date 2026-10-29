@@ -1,6 +1,7 @@
-import { StructuralValidator } from './structural-validator';
+import type { ReportType } from '@telesphoros/shared-types';
+import { InvalidStructureError, StructuralValidator } from './structural-validator';
 import { IntakeProgress } from './stage';
-const validate = (type: 'structured' | 'vcf' | 'lab-pdf', input: string | Buffer) => {
+const validate = (type: ReportType, input: string | Buffer) => {
   const v = new StructuralValidator(type);
   const b = Buffer.isBuffer(input) ? input : Buffer.from(input);
   for (const byte of b) v.feed(Buffer.from([byte]));
@@ -37,9 +38,9 @@ it('checks PDF prefix and final EOF without retaining the payload', () => {
   expect(() => validate('lab-pdf', '%PDF-1.7\ninert\n%%EOF\n')).not.toThrow();
   for (const s of ['x%PDF-1.7\n%%EOF', '%PDF-9.0\n%%EOF', '%PDF-1.7\n', '%PDF-1.7\n%%EOF\nextra']) expect(() => validate('lab-pdf', s)).toThrow();
 });
-it('requires supported VCF first line and all eight fixed columns', () => {
-  expect(() => validate('vcf', '##fileformat=VCFv4.3\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n')).not.toThrow();
-  for (const s of ['##fileformat=VCFv4.3\n#CHROM\tPOS\n', '##fileformat=VCFv9.1\n', '<html>']) expect(() => validate('vcf', s)).toThrow();
+it('refuses a VCF, or any type but the two accepted ones, before reading a byte (no raw genomic data is stored)', () => {
+  for (const type of ['vcf', 'VCF', 'pdf', '']) expect(() => new StructuralValidator(type as ReportType)).toThrow(InvalidStructureError);
+  for (const type of ['structured', 'lab-pdf'] as const) expect(() => new StructuralValidator(type)).not.toThrow(); // control
 });
 it('uses monotonic idle, progress and absolute deadlines', () => {
   let time = 0;

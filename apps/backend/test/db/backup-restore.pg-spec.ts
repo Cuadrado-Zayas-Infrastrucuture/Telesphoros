@@ -77,7 +77,7 @@ async function seededDatabase(): Promise<EphemeralDatabase> {
       expect(dead).toBeDefined();
       await c.query(
         `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes, content_type, sha256, storage_key, uploaded_at)
-         VALUES ($1, $1, $2, 'vcf', 'a.vcf', 100, 'text/plain', $3, $4, now())`,
+         VALUES ($1, $1, $2, 'structured', 'a.json', 100, 'text/plain', $3, $4, now())`,
         [tenant, live, 'a'.repeat(64), `reports/${tenant}/1`],
       );
     }

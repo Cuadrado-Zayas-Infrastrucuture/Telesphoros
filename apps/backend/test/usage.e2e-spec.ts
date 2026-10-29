@@ -34,7 +34,7 @@ async function uploadedReport(tenant: string, sizeBytes: number): Promise<string
       .send({ label: `SYN-${randomUUID().slice(0, 8)}` })
       .expect(201)
   ).body.id as string;
-  const id = (await api().post('/api/v1/reports').set(clinician).send({ patientId, type: 'vcf', filename: 'usage.vcf', sizeBytes }).expect(201)).body.id as string;
+  const id = (await api().post('/api/v1/reports').set(clinician).send({ patientId, type: 'structured', filename: 'usage.json', sizeBytes }).expect(201)).body.id as string;
   const reports = app.get(ReportsRepository);
   const record = (await reports.findById(tenant, id))!;
   await commitUpload(reports, record, { principal: 'syn-uploader', sha256: 'a'.repeat(64), contentType: 'text/plain', version: `syn-${id.slice(0, 8)}` });

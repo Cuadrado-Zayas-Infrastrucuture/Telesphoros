@@ -15,7 +15,7 @@ afterAll(async () => {
 const api = () => request(app.getHttpServer());
 const BASE = '/api/v1/reports';
 const newPatient = async (token: string, label: string) => (await api().post('/api/v1/patients').set(bearer(token)).send({ label }).expect(201)).body.id as string;
-const validBody = (patientId: string) => ({ patientId, type: 'vcf', filename: 'sample.vcf', sizeBytes: 1024 });
+const validBody = (patientId: string) => ({ patientId, type: 'structured', filename: 'sample.json', sizeBytes: 1024 });
 
 describe('reports', () => {
   it('registers report metadata for the caller’s own patient, always with status "received"', async () => {
@@ -54,7 +54,7 @@ describe('reports', () => {
 
   it.each([
     ['client-supplied status', (id: string) => ({ ...validBody(id), status: 'processed' })],
-    ['path traversal filename', (id: string) => ({ ...validBody(id), filename: '../../etc/passwd.vcf' })],
+    ['path traversal filename', (id: string) => ({ ...validBody(id), filename: '../../etc/passwd.json' })],
     ['disallowed extension', (id: string) => ({ ...validBody(id), filename: 'malware.exe' })],
     ['oversize file', (id: string) => ({ ...validBody(id), sizeBytes: MAX_REPORT_BYTES + 1 })],
     ['zero size', (id: string) => ({ ...validBody(id), sizeBytes: 0 })],
@@ -76,8 +76,8 @@ describe('reports', () => {
         .send(validBody(await newPatient(a, 'SYN-P-1')))
         .expect(201)
     ).body;
-    const ok = await api().patch(`${BASE}/${created.id}`).set(bearer(a)).send({ type: 'structured', filename: 'fixed.json' }).expect(200);
-    expect(ok.body).toMatchObject({ type: 'structured', filename: 'fixed.json', status: 'received' });
+    const ok = await api().patch(`${BASE}/${created.id}`).set(bearer(a)).send({ type: 'lab-pdf', filename: 'fixed.pdf' }).expect(200);
+    expect(ok.body).toMatchObject({ type: 'lab-pdf', filename: 'fixed.pdf', status: 'received' });
     await api().patch(`${BASE}/${created.id}`).set(bearer(a)).send({}).expect(400);
     await api().patch(`${BASE}/${created.id}`).set(bearer(a)).send({ status: 'processed' }).expect(400);
   });

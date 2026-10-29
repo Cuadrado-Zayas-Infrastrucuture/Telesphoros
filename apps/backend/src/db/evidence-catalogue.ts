@@ -64,7 +64,7 @@ export const referenceSchema = z
     tenantId: z.string().min(1).max(128),
     reportId: z.string().uuid(),
     captureId: z.string().uuid().nullable(),
-    kind: z.enum(['lab-pdf', 'vcf', 'structured', 'text']),
+    kind: z.enum(['lab-pdf', 'structured', 'text']),
     key: bounded,
     dbVersion: bounded.nullable(),
     sha256: hash,
