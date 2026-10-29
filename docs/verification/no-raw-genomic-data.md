@@ -1,10 +1,10 @@
 # Verification: no raw genomic data (VCF uploads removed)
 
-Date: 2026-10-28 to 2026-10-29. Branch `feat/remove-vcf-uploads`, built on `main` `fefcb31` and re-verified after rebasing onto `main` `828f8b3` (migration renumbered 0056 to 0057, because spec 012's 0056 merged first). Local only, not pushed. Status: [2026-10-28-no-raw-genomic-data.md](../status/2026-10-28-no-raw-genomic-data.md).
+Date: 2026-10-28 to 2026-10-29. Branch `feat/remove-vcf-uploads`, built on `main` `fefcb31` and re-verified after rebasing onto `main` `828f8b3` (migration renumbered twice, to 0058, because spec 012's 0056 and 0057 merged first). Local only, not pushed. Status: [2026-10-28-no-raw-genomic-data.md](../status/2026-10-28-no-raw-genomic-data.md).
 
 **What was claimed:**
 - `vcf` is no longer a report type anywhere: shared schema, structural validator, frontend choices, database CHECKs.
-- Migration 0057 refuses to run, and changes nothing, on a database holding a VCF report or upload attempt; it never rewrites a row.
+- Migration 0058 refuses to run, and changes nothing, on a database holding a VCF report or upload attempt; it never rewrites a row.
 - Evidence catalogues and recovery checks count three kinds: `lab-pdf`, `structured`, `text`.
 - `structured` (the curated JSON report) and `lab-pdf` keep working.
 
@@ -14,7 +14,7 @@ Date: 2026-10-28 to 2026-10-29. Branch `feat/remove-vcf-uploads`, built on `main
 
 - `apps/backend/test/db/no-raw-genomic-data.pg-spec.ts` (new, 2):
   - at head, a `vcf` report is refused with SQLSTATE 23514 on `reports_type_valid`, and a `vcf` upload attempt on `report_upload_attempts_type_check`; `structured` and `lab-pdf` rows are accepted (positive controls);
-  - a database migrated through 0056 that holds a VCF report refuses `migrateUp`: 0057 is not recorded, the row is still `vcf`, and the old CHECK still lists `vcf`. An empty database applies 0057.
+  - a database migrated through 0057 that holds a VCF report refuses `migrateUp`: 0058 is not recorded, the row is still `vcf`, and the old CHECK still lists `vcf`. An empty database applies 0058.
 - `structural-validator.spec.ts`: the constructor refuses `vcf`, `VCF`, `pdf` and `''`; `structured` and `lab-pdf` still build.
 - `lab-pdf-reports.e2e-spec.ts`: `POST` with a `vcf` report answers 400; a structured report still answers 201.
 - `shared-types.test.ts`, `productUploadSchema.test.ts`, `uploadReportSchema.test.ts`, `types/report.test.ts`: `vcf` and `.vcf` refused in create, patch and DTO; no `text/x-vcf` content type; structured accepted.
@@ -27,8 +27,8 @@ Date: 2026-10-28 to 2026-10-29. Branch `feat/remove-vcf-uploads`, built on `main
 | Mutation | Test | Result |
 | --- | --- | --- |
 | Remove the validator's constructor guard | `structural-validator.spec.ts` | red |
-| 0057 keeps `vcf` in `reports_type_valid` | `no-raw-genomic-data.pg-spec.ts` | red |
-| 0057 keeps `vcf` in `report_upload_attempts_type_check` | `no-raw-genomic-data.pg-spec.ts` | red |
+| 0058 keeps `vcf` in `reports_type_valid` | `no-raw-genomic-data.pg-spec.ts` | red |
+| 0058 keeps `vcf` in `report_upload_attempts_type_check` | `no-raw-genomic-data.pg-spec.ts` | red |
 | Shared `REPORT_TYPES` offers `vcf` | shared-types tests | red |
 | Frontend `REPORT_TYPES` offers `vcf` | `types/report.test.ts` | red |
 | Application recovery accepts 6 objects (the old per-kind counts) | `.github/ci/guard.test.mjs` | red |
@@ -60,4 +60,4 @@ Every other step above was rerun on `828f8b3` after a fresh `install --frozen-lo
 
 - Hosted CI.
 - The rehearsal on the baseline.
-- Migration 0057 against a database that already holds real VCF rows outside tests: none exist (synthetic data only).
+- Migration 0058 against a database that already holds real VCF rows outside tests: none exist (synthetic data only).

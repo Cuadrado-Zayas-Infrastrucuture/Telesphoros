@@ -9,7 +9,7 @@ Date: 2026-10-28
 A VCF upload had been accepted and stored but never interpreted (M0.1 plan, I2).
 
 **What changed.**
-- **Database:** migration 0057 (`-- compat: breaking`) removes `vcf` from `reports_type_valid` and `report_upload_attempts_type_check`. A database that holds a VCF report or upload attempt refuses the migration and is left unchanged; no row is ever rewritten.
+- **Database:** migration 0058 (`-- compat: breaking`) removes `vcf` from `reports_type_valid` and `report_upload_attempts_type_check`. A database that holds a VCF report or upload attempt refuses the migration and is left unchanged; no row is ever rewritten.
 - **API:** the shared schema refuses `vcf` and `.vcf`. The structural validator refuses any type other than the two before reading a byte.
 - **Frontend:** the upload screens offer structured JSON (and lab PDF in owned local-storage mode), and the copy says raw genomic files are not accepted.
 - **Evidence and recovery:** the catalogues and recovery checks count three kinds, `lab-pdf`, `structured` and `text`, and the CI fixtures were updated to match.

@@ -5,7 +5,7 @@ import { createEphemeralDatabase, withAdmin } from '../helpers/database';
 import { seedLabReport } from '../helpers/ledger-fixtures';
 import { migrationsThrough } from '../helpers/migrations-through';
 
-// The product stores no raw genomic data (founder decision, 2026-10-28). Migration 0057 removes the `vcf` report type from both CHECKs. These tests
+// The product stores no raw genomic data (founder decision, 2026-10-28). Migration 0058 removes the `vcf` report type from both CHECKs. These tests
 // prove, on a real database, that (1) the database itself refuses a VCF report or upload attempt at head, with a positive control for the types that
 // stay, and (2) the migration refuses, and rewrites nothing, when a VCF row already exists. Synthetic rows only.
 const usingPostgres = process.env.TEST_STORAGE === 'postgres';
@@ -29,7 +29,7 @@ async function insertReport(c: Client, tenantId: string, type: string, extension
   return { patientId, reportId };
 }
 
-(usingPostgres ? describe : describe.skip)('no raw genomic data (migration 0057)', () => {
+(usingPostgres ? describe : describe.skip)('no raw genomic data (migration 0058)', () => {
   it('at head, the database refuses a vcf report and a vcf upload attempt; structured and lab-pdf are still accepted (control)', async () => {
     const db = await createEphemeralDatabase();
     try {
@@ -75,7 +75,7 @@ async function insertReport(c: Client, tenantId: string, type: string, extension
     const populated = await createEphemeralDatabase({ migrate: false });
     const empty = await createEphemeralDatabase({ migrate: false });
     try {
-      const throughPrevious = migrationsThrough('0056');
+      const throughPrevious = migrationsThrough('0057');
       let vcfReport = '';
       await withAdmin(populated.adminUrl, async (c) => {
         await migrateUp(c, throughPrevious);
@@ -83,14 +83,14 @@ async function insertReport(c: Client, tenantId: string, type: string, extension
       });
       await withAdmin(populated.adminUrl, async (c) => {
         await expect(migrateUp(c)).rejects.toThrow(/Refusing to remove the vcf report type/);
-        expect((await c.query(`SELECT 1 FROM schema_migrations WHERE version = '0057'`)).rowCount).toBe(0);
+        expect((await c.query(`SELECT 1 FROM schema_migrations WHERE version = '0058'`)).rowCount).toBe(0);
         expect((await c.query(`SELECT type FROM reports WHERE id = $1`, [vcfReport])).rows).toEqual([{ type: 'vcf' }]); // never rewritten
         const definition = (await c.query(`SELECT pg_get_constraintdef(oid) AS d FROM pg_constraint WHERE conname = 'reports_type_valid'`)).rows[0].d as string;
         expect(definition).toContain("'vcf'"); // the old CHECK is still in place
       });
       await withAdmin(empty.adminUrl, async (c) => {
         await migrateUp(c, throughPrevious);
-        expect(await migrateUp(c)).toContain('0057');
+        expect(await migrateUp(c)).toContain('0058');
       });
     } finally {
       await populated.drop();
