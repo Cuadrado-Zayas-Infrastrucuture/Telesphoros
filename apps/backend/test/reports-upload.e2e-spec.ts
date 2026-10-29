@@ -19,10 +19,11 @@ afterAll(async () => {
 
 const api = () => request(app.getHttpServer());
 const sha = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
-const VCF = Buffer.from('##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n1\t100\t.\tA\tG\t.\t.\t.\n');
-const VCF_TYPE = 'text/x-vcf';
+// Ends in a digit so the tamper test below (flip the second-to-last byte) still sends well-formed JSON and is refused on its checksum.
+const SAMPLE = Buffer.from('{"synthetic":true,"values":[1,2,3],"n":7}');
+const SAMPLE_TYPE = 'application/json';
 
-async function newReport(token: string, sizeBytes = VCF.length) {
+async function newReport(token: string, sizeBytes = SAMPLE.length) {
   const patientId = (
     await api()
       .post('/api/v1/patients')
@@ -30,18 +31,23 @@ async function newReport(token: string, sizeBytes = VCF.length) {
       .send({ label: `SYN-${randomUUID().slice(0, 8)}` })
       .expect(201)
   ).body.id;
-  return (await api().post('/api/v1/reports').set(bearer(token)).send({ patientId, type: 'vcf', filename: 'sample.vcf', sizeBytes }).expect(201)).body.id as string;
+  return (await api().post('/api/v1/reports').set(bearer(token)).send({ patientId, type: 'structured', filename: 'sample.json', sizeBytes }).expect(201)).body.id as string;
 }
 const stateOf = async (token: string, id: string) => (await api().get(`/api/v1/reports/${id}/upload-state`).set(bearer(token)).expect(200)).body.revision as string;
-const declareReq = async (token: string, id: string, body: object = { contentType: VCF_TYPE, sha256: sha(VCF) }) =>
+const declareReq = async (token: string, id: string, body: object = { contentType: SAMPLE_TYPE, sha256: sha(SAMPLE) }) =>
   api()
     .post(`/api/v1/reports/${id}/upload-attempts`)
     .set(bearer(token))
     .send({ requestId: randomUUID(), revision: await stateOf(token, id), ...body });
-const sendBytes = (token: string, id: string, a: { attemptId: string; revision: string }, bytes = VCF) =>
-  api().put(`/api/v1/reports/${id}/upload-attempts/${a.attemptId}/bytes`).set(bearer(token)).set('X-Upload-Revision', a.revision).set('Content-Type', VCF_TYPE).send(bytes);
-async function upload(token: string, id: string, bytes = VCF, declared = bytes) {
-  const a = (await (await declareReq(token, id, { contentType: VCF_TYPE, sha256: sha(declared) })).body) as { attemptId: string; revision: string };
+const sendBytes = (token: string, id: string, a: { attemptId: string; revision: string }, bytes = SAMPLE) =>
+  api()
+    .put(`/api/v1/reports/${id}/upload-attempts/${a.attemptId}/bytes`)
+    .set(bearer(token))
+    .set('X-Upload-Revision', a.revision)
+    .set('Content-Type', SAMPLE_TYPE)
+    .send(bytes.toString('utf8'));
+async function upload(token: string, id: string, bytes = SAMPLE, declared = bytes) {
+  const a = (await (await declareReq(token, id, { contentType: SAMPLE_TYPE, sha256: sha(declared) })).body) as { attemptId: string; revision: string };
   return { a, res: await sendBytes(token, id, a, bytes) };
 }
 
@@ -56,7 +62,7 @@ describe('report upload through the validated intake: the happy path', () => {
     expect(res.body.state).toBe('committed');
     const done = await api().get(`/api/v1/reports/${id}`).set(bearer(a)).expect(200);
     expect(reportDtoSchema.safeParse(done.body).success).toBe(true);
-    expect(done.body).toMatchObject({ fileUploaded: true, sha256: sha(VCF), contentType: VCF_TYPE, status: 'received' });
+    expect(done.body).toMatchObject({ fileUploaded: true, sha256: sha(SAMPLE), contentType: SAMPLE_TYPE, status: 'received' });
 
     // The public shape never reveals where the file lives or who owns it.
     expect(Object.keys(done.body).sort()).toEqual([
@@ -104,16 +110,16 @@ describe('report upload through the validated intake: the server does not take t
   it('rejects a file whose checksum differs from the declared one (same size, different bytes) and stores nothing', async () => {
     const a = await clinicianA();
     const id = await newReport(a);
-    const tampered = Buffer.from(VCF);
+    const tampered = Buffer.from(SAMPLE);
     tampered[tampered.length - 2] = tampered[tampered.length - 2]! ^ 0x01;
-    const { res } = await upload(a, id, tampered, VCF);
+    const { res } = await upload(a, id, tampered, SAMPLE);
     expect(res.status).toBe(400);
     expect((await api().get(`/api/v1/reports/${id}`).set(bearer(a))).body.fileUploaded).toBe(false);
   });
 
   it('rejects a file whose size differs from the declared one', async () => {
     const a = await clinicianA();
-    const id = await newReport(a, VCF.length + 50);
+    const id = await newReport(a, SAMPLE.length + 50);
     const { res } = await upload(a, id);
     expect(res.status).toBe(400);
     expect((await api().get(`/api/v1/reports/${id}`).set(bearer(a))).body.fileUploaded).toBe(false);
@@ -130,12 +136,12 @@ describe('report upload through the validated intake: validation, roles and owne
   it('rejects a content type that does not suit the report type, a bad checksum, and unknown fields', async () => {
     const a = await clinicianA();
     const id = await newReport(a);
-    const wrongType = await declareReq(a, id, { contentType: 'application/json', sha256: sha(VCF) });
+    const wrongType = await declareReq(a, id, { contentType: 'application/pdf', sha256: sha(SAMPLE) });
     expect(wrongType.status).toBe(400);
     expect(wrongType.body.error.details[0].field).toBe('contentType');
-    expect((await declareReq(a, id, { contentType: VCF_TYPE, sha256: sha(VCF).toUpperCase() })).status).toBe(400);
-    expect((await declareReq(a, id, { contentType: VCF_TYPE, sha256: 'abc' })).status).toBe(400);
-    expect((await declareReq(a, id, { contentType: VCF_TYPE, sha256: sha(VCF), storageKey: 'reports/x' })).status).toBe(400);
+    expect((await declareReq(a, id, { contentType: SAMPLE_TYPE, sha256: sha(SAMPLE).toUpperCase() })).status).toBe(400);
+    expect((await declareReq(a, id, { contentType: SAMPLE_TYPE, sha256: 'abc' })).status).toBe(400);
+    expect((await declareReq(a, id, { contentType: SAMPLE_TYPE, sha256: sha(SAMPLE), storageKey: 'reports/x' })).status).toBe(400);
     expect((await declareReq(a, id, { contentType: undefined, sha256: undefined })).status).toBe(400);
     expect((await declareReq(a, id)).status).toBe(201); // control
   });
@@ -143,7 +149,7 @@ describe('report upload through the validated intake: validation, roles and owne
   it('forbids a reader, and hides another organization’s report (404) on the intake routes', async () => {
     const a = await clinicianA();
     const id = await newReport(a);
-    const body = { requestId: randomUUID(), revision: await stateOf(a, id), contentType: VCF_TYPE, sha256: sha(VCF) };
+    const body = { requestId: randomUUID(), revision: await stateOf(a, id), contentType: SAMPLE_TYPE, sha256: sha(SAMPLE) };
     const declare = (token: string, target = id) => api().post(`/api/v1/reports/${target}/upload-attempts`).set(bearer(token)).send(body);
     expect((await declare(await readerA())).status).toBe(403);
     expect((await declare(await clinicianB())).status).toBe(404);
@@ -163,7 +169,7 @@ describe('the direct-upload routes are gone (M2.2b)', () => {
     const id = await newReport(a);
     for (const token of [a, undefined]) {
       for (const [path, body] of [
-        [`/api/v1/reports/${id}/upload-url`, { contentType: VCF_TYPE, sha256: sha(VCF) }],
+        [`/api/v1/reports/${id}/upload-url`, { contentType: SAMPLE_TYPE, sha256: sha(SAMPLE) }],
         [`/api/v1/reports/${id}/complete`, {}],
       ] as const) {
         const req = api().post(path);

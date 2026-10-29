@@ -20,6 +20,7 @@ import { PatientMergeModule } from './patient-merge/patient-merge.module';
 import { PatientsModule } from './patients/patients.module';
 import { ReportsModule } from './reports/reports.module';
 import { StorageModule } from './storage/storage.module';
+import { UsageModule } from './usage/usage.module';
 
 @Module({})
 export class AppModule {
@@ -46,6 +47,7 @@ export class AppModule {
         HealthModule,
         MeModule,
         MembersModule,
+        UsageModule,
       ],
       providers: [
         { provide: APP_FILTER, useClass: AllExceptionsFilter },

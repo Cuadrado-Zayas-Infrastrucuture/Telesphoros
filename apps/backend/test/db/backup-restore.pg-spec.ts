@@ -77,7 +77,7 @@ async function seededDatabase(): Promise<EphemeralDatabase> {
       expect(dead).toBeDefined();
       await c.query(
         `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes, content_type, sha256, storage_key, uploaded_at)
-         VALUES ($1, $1, $2, 'vcf', 'a.vcf', 100, 'text/plain', $3, $4, now())`,
+         VALUES ($1, $1, $2, 'structured', 'a.json', 100, 'text/plain', $3, $4, now())`,
         [tenant, live, 'a'.repeat(64), `reports/${tenant}/1`],
       );
     }
@@ -192,7 +192,8 @@ describe('restore (the one-command procedure, actually executed)', () => {
     // 9 seeded rows, one history row per migration, the 3 rows migration 0024 seeds (one outbox route, two schedules) and the 2 rows 0028 seeds
     // (the 'request' capability purpose and the binding mode)
     // Migration 0032 seeds one more row: the 'internal' capability purpose (DATA-01 slice 3, the binding of the class (b) functions).
-    const manifestRows = 9 + 3 + 2 + 1 + readdirSync(join(__dirname, '..', '..', 'migrations')).filter((f) => f.endsWith('.up.sql')).length;
+    // Migration 0056 seeds one more: the 'evaluation-job' capability purpose (spec 012).
+    const manifestRows = 9 + 3 + 2 + 1 + 1 + readdirSync(join(__dirname, '..', '..', 'migrations')).filter((f) => f.endsWith('.up.sql')).length;
     expect(byName(report.checks, 'row counts')!.detail).toMatch(new RegExp(`^all \\d+ tables match \\(${manifestRows} rows\\)$`));
     expect(await throwawayDatabases()).toBe(before); // the throwaway was dropped
   });

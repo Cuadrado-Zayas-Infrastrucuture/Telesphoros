@@ -90,7 +90,7 @@ const patient = async (c: Client, withRequest = false) =>
 const report = async (c: Client, patientId: string, columns = '', values: unknown[] = []) =>
   (
     await c.query(
-      `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes${columns}) VALUES ($1, 'syn-author', $2, 'vcf', 'p.vcf', 1${values.map((_, i) => `, $${i + 3}`).join('')}) RETURNING id`,
+      `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes${columns}) VALUES ($1, 'syn-author', $2, 'structured', 'p.json', 1${values.map((_, i) => `, $${i + 3}`).join('')}) RETURNING id`,
       [tenant, patientId, ...values],
     )
   ).rows[0].id as string;
@@ -155,7 +155,7 @@ const cases: GuardCase[] = [
       await c.query('INSERT INTO report_upload_runs (run_id, tenant_id) VALUES ($1, $2)', [run, tenant]);
       await c.query(
         `INSERT INTO report_upload_attempts (request_id, run_id, tenant_id, report_id, patient_id, principal, revision, declaration_revision, type, size_bytes, content_type, sha256, storage_key, state, lease_until)
-         VALUES ($1, $2, $3, $4, $5, 'syn-author', $6, $7, 'vcf', 1, 'text/x-vcf', $8, $9, 'declared', now() + interval '1 hour')`,
+         VALUES ($1, $2, $3, $4, $5, 'syn-author', $6, $7, 'structured', 1, 'application/json', $8, $9, 'declared', now() + interval '1 hour')`,
         [randomUUID(), run, tenant, reportId, patientId, randomUUID(), randomUUID(), 'b'.repeat(64), `k/${randomUUID()}`],
       );
     },
@@ -461,6 +461,72 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
       await setting(f.migrator, guard.allow, 'yes');
       expect(await migrateDown(f.migrator, 1)).toEqual([version]);
       expect((await stillForced(f.migrator)).every((t) => t.f)).toBe(true); // lifting FORCE for the check did not outlive the migration
+    } finally {
+      await f.drop();
+    }
+  });
+
+  // Spec 006 D01b: no override exists (the ledger's type CHECK cannot be restored while a decision event exists), so a populated table is refused
+  // outright; the empty case reverts in the test below.
+  it('clinician_result_decisions: a populated table is refused as the migrator, the refusal rolls back whole, and FORCE is restored', async () => {
+    const f = await fixture();
+    const connection = new Database({ url: f.app, ssl: 'disable' });
+    try {
+      const repo = new PostgresLedgerRecordsRepository(connection);
+      const report = await seedLabReport(f.admin, tenant);
+      const capture = captureFor(report);
+      const stored = await repo.insertCapture(tenant, report.uploader, capture);
+      const acceptance = await repo.insertAcceptance(tenant, 'syn-reviewer', acceptanceFor(stored.record.id, capture));
+      await repo.insertPatientDecision(tenant, 'syn-verifier', {
+        reportId: report.reportId,
+        expectedReport: { patientId: report.patientId, sha256: report.pdfSha256, objectVersion: report.objectVersion },
+        decision: 'verified',
+        method: 'person-confirmed',
+        basisCode: 'no-identifier-on-report',
+      });
+      const evaluation = (await repo.insertEvaluation(tenant, 'syn-system', evaluationFor(report, stored.record.id, acceptance.record.id))).record;
+      const actor = 'syn-cdr-clinician';
+      const shown = await withAdmin(f.admin, async (c) => {
+        await c.query(`INSERT INTO tenant_memberships (tenant_id,sub,status,roles,changed_by) VALUES ($1,$2,'active',ARRAY['clinician'],'syn-test')`, [tenant, actor]);
+        return (await c.query<{ id: string }>(`SELECT id::text AS id FROM evaluation_results WHERE evaluation_id = $1 AND outcome = 'shown'`, [evaluation.id])).rows[0]!.id;
+      });
+      await repo.insertClinicianDecision(tenant, actor, {
+        resultId: shown,
+        evaluationId: evaluation.id as string,
+        patientId: report.patientId,
+        entryKind: 'decision',
+        previousEntryId: null,
+        response: 'accepted',
+        detailCodes: [],
+        reviewBy: null,
+        request: { id: randomUUID(), hash },
+      });
+      const version = revertThrough('clinician_result_decisions').reverted.at(-1)!;
+      await revertAboveThenSwitchOff(f.migrator, 'clinician_result_decisions');
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated clinician decisions/);
+      await setting(f.migrator, AUDIT, 'yes'); // no setting allows it: the audit one does not either
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated clinician decisions/);
+      expect((await f.migrator.query('SELECT 1 FROM schema_migrations WHERE version = $1', [version])).rowCount).toBe(1);
+      expect((await f.migrator.query(`SELECT relforcerowsecurity AS f FROM pg_class WHERE oid = 'clinician_result_decisions'::regclass`)).rows).toEqual([{ f: true }]);
+    } finally {
+      await connection.onModuleDestroy();
+      await f.drop();
+    }
+  });
+
+  it('refuses to revert the worker job capability (spec 012) while an issuance record of one exists, as the restricted migrator', async () => {
+    const f = await fixture();
+    try {
+      const above = revertAbove('worker_job_capability');
+      expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted);
+      await withAdmin(f.admin, (c) =>
+        c.query(`INSERT INTO capability_issuance_log (occurred_at, purpose, request_id, outcome, reason) VALUES (now(), 'evaluation-job', $1, 'refused', 'job-not-held')`, [
+          randomUUID(),
+        ]),
+      );
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow('Capability issuance records must be preserved');
+      const version = revertThrough('worker_job_capability').reverted.at(-1)!;
+      expect((await f.migrator.query('SELECT 1 FROM schema_migrations WHERE version = $1', [version])).rowCount).toBe(1);
     } finally {
       await f.drop();
     }

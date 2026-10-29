@@ -167,15 +167,15 @@ export async function seedReport(
 ): Promise<SeededReport> {
   const reportId = randomUUID();
   const patientId = randomUUID();
-  const bytes = options.bytes ?? Buffer.from(`##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n${randomUUID()}\n`);
-  const contentType = options.contentType ?? 'text/x-vcf';
+  const bytes = options.bytes ?? Buffer.from(JSON.stringify({ synthetic: true, nonce: randomUUID() }));
+  const contentType = options.contentType ?? 'application/json';
   const key = `reports/${tenant}/${reportId}/file`;
   const put = await s3.send(new PutObjectCommand({ Bucket: REPORTS_BUCKET, Key: key, Body: bytes, ContentType: contentType }));
   const version = options.pinVersion ?? put.VersionId!;
   await f.admin.query(`INSERT INTO patients (id, tenant_id, created_by, label) VALUES ($1, $2, 'worker-test', $3)`, [patientId, tenant, `SYN-${patientId.slice(0, 8)}`]);
   await f.admin.query(
     `INSERT INTO reports (id, tenant_id, created_by, patient_id, type, original_filename, size_bytes, status, content_type, sha256, storage_key, uploaded_at, object_version, upload_requested_by, uploaded_by)
-     VALUES ($1, $2, 'worker-test', $3, 'vcf', 'synthetic.vcf', $4, 'received', $5, $6, $7, now(), $8, 'worker-test', 'worker-test')`,
+     VALUES ($1, $2, 'worker-test', $3, 'structured', 'synthetic.json', $4, 'received', $5, $6, $7, now(), $8, 'worker-test', 'worker-test')`,
     [
       reportId,
       tenant,

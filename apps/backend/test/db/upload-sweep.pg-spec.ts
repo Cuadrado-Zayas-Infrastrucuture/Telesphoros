@@ -44,8 +44,8 @@ async function newReport(tenantId: string, size = 1000): Promise<ReportRecord> {
     tenantId,
     createdBy: 'syn-actor',
     patientId: p.id,
-    type: 'vcf',
-    filename: 'a.vcf',
+    type: 'structured',
+    filename: 'a.json',
     sizeBytes: size,
     status: 'received',
     storageKey: null,
@@ -87,11 +87,11 @@ describe('closing abandoned attempts', () => {
   it('closes an old declaration and an old stored attempt, returns their quota, and says which may have left an object; a fresh one, a committed one and a held one stay', async () => {
     const t = tenant();
     const [old, stored, fresh, committed, held] = await Promise.all([newReport(t, 1000), newReport(t, 2000), newReport(t, 4000), newReport(t, 8000), newReport(t, 16000)]);
-    const hOld = (await declareUpload(reports, old, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!;
-    const hStored = (await declareUpload(reports, stored, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!;
-    const hFresh = (await declareUpload(reports, fresh, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!;
-    const hCommitted = await commitUpload(reports, committed, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf', version: 'v-commit' });
-    const hHeld = (await declareUpload(reports, held, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!;
+    const hOld = (await declareUpload(reports, old, { principal: 'p', sha256: HASH, contentType: 'application/json' }))!;
+    const hStored = (await declareUpload(reports, stored, { principal: 'p', sha256: HASH, contentType: 'application/json' }))!;
+    const hFresh = (await declareUpload(reports, fresh, { principal: 'p', sha256: HASH, contentType: 'application/json' }))!;
+    const hCommitted = await commitUpload(reports, committed, { principal: 'p', sha256: HASH, contentType: 'application/json', version: 'v-commit' });
+    const hHeld = (await declareUpload(reports, held, { principal: 'p', sha256: HASH, contentType: 'application/json' }))!;
     // The stored attempt wrote an object and was never committed; the held one has a live writer.
     const writer = randomUUID();
     expect(await reports.beginAttempt(hStored.identity, writer)).toBe(true);
@@ -115,7 +115,7 @@ describe('closing abandoned attempts', () => {
     const again = await declareUpload(reports, old, {
       principal: 'p',
       sha256: HASH,
-      contentType: 'text/x-vcf',
+      contentType: 'application/json',
       expectedRevision: (await reports.findById(t, old.id))!.uploadRevision,
     });
     expect(again).toBeDefined();
@@ -124,7 +124,7 @@ describe('closing abandoned attempts', () => {
   it('leaves alone a cancelled attempt a writer still holds (it is closed once the writer has let go)', async () => {
     const t = tenant();
     const r = await newReport(t, 900);
-    const h = (await declareUpload(reports, r, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!;
+    const h = (await declareUpload(reports, r, { principal: 'p', sha256: HASH, contentType: 'application/json' }))!;
     await owner((c) =>
       c.query(`UPDATE report_upload_attempts SET state = 'cancelled', writer = $2, lease_until = now() + interval '1 hour' WHERE id = $1`, [h.attempt.id, randomUUID()]),
     );
@@ -137,8 +137,8 @@ describe('closing abandoned attempts', () => {
   it('respects the grace period (control: the same attempt is closed with a shorter one), closes a cancelled attempt at once, and a dry run changes nothing', async () => {
     const t = tenant();
     const [a, b] = await Promise.all([newReport(t, 500), newReport(t, 700)]);
-    const ha = (await declareUpload(reports, a, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!;
-    const hb = (await declareUpload(reports, b, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!;
+    const ha = (await declareUpload(reports, a, { principal: 'p', sha256: HASH, contentType: 'application/json' }))!;
+    const hb = (await declareUpload(reports, b, { principal: 'p', sha256: HASH, contentType: 'application/json' }))!;
     await age(ha.attempt.id, 2 * 3600); // lease ended two hours ago
     await reports.cancelAttempt(hb.identity); // cancelled just now
     expect(await owner((c) => sweepRegistered(c, t, { graceSeconds: 86400, dryRun: true }))).toMatchObject({ released: 1, releasedBytes: 700 }); // only the cancelled one
@@ -153,8 +153,8 @@ describe('closing abandoned attempts', () => {
   it("sweeps only the organization it is given, refuses the application login, and never touches another organization's attempts", async () => {
     const [t1, t2] = [tenant(), tenant()];
     const [r1, r2] = await Promise.all([newReport(t1, 100), newReport(t2, 200)]);
-    const h1 = (await declareUpload(reports, r1, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!;
-    const h2 = (await declareUpload(reports, r2, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!;
+    const h1 = (await declareUpload(reports, r1, { principal: 'p', sha256: HASH, contentType: 'application/json' }))!;
+    const h2 = (await declareUpload(reports, r2, { principal: 'p', sha256: HASH, contentType: 'application/json' }))!;
     await age(h1.attempt.id, 3 * 86400);
     await age(h2.attempt.id, 3 * 86400);
     // The sweep is the queue owner's function (migration 0024): the application login cannot run it, so a request can never sweep.
@@ -171,7 +171,7 @@ describe('closing abandoned attempts', () => {
   it('deletes no object, no report and no committed row, and refuses a grace outside its range', async () => {
     const t = tenant();
     const r = await newReport(t, 300);
-    const h = await commitUpload(reports, r, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf', version: 'v1' });
+    const h = await commitUpload(reports, r, { principal: 'p', sha256: HASH, contentType: 'application/json', version: 'v1' });
     const before = await owner(async (c) => (await c.query('SELECT * FROM reports WHERE id = $1', [r.id])).rows[0]);
     await owner((c) => sweepRegistered(c, t, { graceSeconds: 0, dryRun: false }));
     expect(await owner(async (c) => (await c.query('SELECT * FROM reports WHERE id = $1', [r.id])).rows[0])).toEqual(before);
@@ -185,7 +185,7 @@ describe('the uploads sweep command', () => {
     const [t1, t2] = [tenant(), tenant()];
     for (const t of [t1, t2]) {
       await owner((c) => c.query(`INSERT INTO tenants (id, display_name, created_by, changed_by) VALUES ($1, $1, 'syn-operator', 'syn-operator') ON CONFLICT DO NOTHING`, [t]));
-      const h = (await declareUpload(reports, await newReport(t, 250), { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!;
+      const h = (await declareUpload(reports, await newReport(t, 250), { principal: 'p', sha256: HASH, contentType: 'application/json' }))!;
       await age(h.attempt.id, 3 * 86400);
     }
     const lines: string[] = [];
@@ -206,9 +206,9 @@ describe('the uploads sweep command', () => {
     const [t1, t2] = [tenant(), tenant()];
     const [r1, r2, r3] = await Promise.all([newReport(t1, 100), newReport(t1, 250), newReport(t2, 400)]);
     const [h1, h2, h3] = [
-      (await declareUpload(reports, r1, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!,
-      (await declareUpload(reports, r2, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!,
-      (await declareUpload(reports, r3, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!,
+      (await declareUpload(reports, r1, { principal: 'p', sha256: HASH, contentType: 'application/json' }))!,
+      (await declareUpload(reports, r2, { principal: 'p', sha256: HASH, contentType: 'application/json' }))!,
+      (await declareUpload(reports, r3, { principal: 'p', sha256: HASH, contentType: 'application/json' }))!,
     ];
     await age(h1.attempt.id, 3 * 86400);
     await age(h3.attempt.id, 3 * 86400);

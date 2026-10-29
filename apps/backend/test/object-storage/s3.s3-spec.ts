@@ -27,8 +27,8 @@ async function upload(key: string, bytes: Buffer, contentType: string) {
 describe('S3ObjectStorage', () => {
   it('inspects an uploaded object: size, content type and a SHA-256 computed by streaming', async () => {
     const bytes = randomBytes(3 * 1024 * 1024); // multi-chunk
-    await upload('reports/t/1/a', bytes, 'text/x-vcf');
-    expect(await storage.inspect('reports/t/1/a')).toEqual({ sizeBytes: bytes.length, contentType: 'text/x-vcf', sha256: sha(bytes) });
+    await upload('reports/t/1/a', bytes, 'application/json');
+    expect(await storage.inspect('reports/t/1/a')).toEqual({ sizeBytes: bytes.length, contentType: 'application/json', sha256: sha(bytes) });
   });
 
   it('returns undefined for an object that does not exist', async () => {

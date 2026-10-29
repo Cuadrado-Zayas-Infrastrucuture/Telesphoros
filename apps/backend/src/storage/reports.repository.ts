@@ -64,6 +64,12 @@ export class InMemoryReportsRepository extends ReportsRepository {
   async countByPatient(tenantId: string, patientId: string) {
     return this.owned(tenantId).filter((row) => row.patientId === patientId).length;
   }
+  /** For usage counts only (in-memory store): one tenant's rows, deleted ones included, reduced to what usage needs. */
+  usageRows(tenantId: string): Array<{ uploadedAt: string | null; deletedAt: string | null; sizeBytes: number }> {
+    return [...this.rows.values()]
+      .filter((row) => row.tenantId === tenantId)
+      .map((row) => ({ uploadedAt: row.uploadedAt ?? null, deletedAt: row.deletedAt ?? null, sizeBytes: row.sizeBytes }));
+  }
   async insert(record: ReportRecord) {
     if (record.creationRequestId && record.creationRequestHash) {
       const key = JSON.stringify([record.tenantId, record.createdBy, record.creationRequestId]);

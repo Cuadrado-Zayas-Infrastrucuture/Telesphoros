@@ -18,12 +18,12 @@ const date = '2026-10-12T00:00:00Z';
 const row = (patientId = p1, fileUploaded = true) => ({
   id: '33333333-3333-4333-8333-333333333333',
   patientId,
-  type: 'vcf',
-  filename: 'synthetic.vcf',
+  type: 'structured',
+  filename: 'synthetic.json',
   sizeBytes: 8,
   status: 'received',
   fileUploaded,
-  contentType: fileUploaded ? 'text/x-vcf' : null,
+  contentType: fileUploaded ? 'application/json' : null,
   sha256: fileUploaded ? 'a'.repeat(64) : null,
   createdAt: date,
   updatedAt: date,
@@ -81,11 +81,11 @@ describe('reports page with real auth and route guards', () => {
       expect(screen.queryByRole('textbox', { name: 'Sample question' })).not.toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Chat preview' })).toHaveAttribute('href', '/local-interpretation');
       expect(Boolean(screen.queryByRole('link', { name: 'Upload synthetic report' }))).toBe(roles.includes('clinician'));
-      await userEvent.setup().click(await screen.findByRole('button', { name: 'Open synthetic.vcf' }));
+      await userEvent.setup().click(await screen.findByRole('button', { name: 'Open synthetic.json' }));
       const drawer = screen.getByRole('dialog', { name: 'Report details' });
       expect(within(drawer).getByRole('heading', { name: 'Report details' })).toHaveFocus();
       expect(within(drawer).getByText('Yes — server verified')).toBeVisible();
-      expect(Boolean(within(drawer).queryByRole('button', { name: 'Download synthetic.vcf' }))).toBe(roles.some((role) => ['clinician', 'reviewer'].includes(role)));
+      expect(Boolean(within(drawer).queryByRole('button', { name: 'Download synthetic.json' }))).toBe(roles.some((role) => ['clinician', 'reviewer'].includes(role)));
       expect(await axe(container)).toHaveNoViolations();
     },
   );
@@ -112,23 +112,23 @@ describe('reports page with real auth and route guards', () => {
     async (...roles: Role[]) => {
       renderApp('/reports', { signedInAs: roles, fetchImpl: fetcher(roles) });
       await heading();
-      await screen.findByRole('button', { name: 'Open synthetic.vcf' });
+      await screen.findByRole('button', { name: 'Open synthetic.json' });
       expect(Boolean(screen.queryByRole('link', { name: 'Upload synthetic report' }))).toBe(roles.some((role) => ['clinician'].includes(role)));
       const user = userEvent.setup();
-      await user.click(screen.getByRole('button', { name: 'Open synthetic.vcf' }));
-      expect(Boolean(screen.queryByRole('button', { name: 'Download synthetic.vcf' }))).toBe(roles.some((role) => ['clinician', 'reviewer'].includes(role)));
+      await user.click(screen.getByRole('button', { name: 'Open synthetic.json' }));
+      expect(Boolean(screen.queryByRole('button', { name: 'Download synthetic.json' }))).toBe(roles.some((role) => ['clinician', 'reviewer'].includes(role)));
       expect(screen.queryByLabelText('Preview roles')).not.toBeInTheDocument();
     },
   );
   it('refuses an administrator who holds no clinical role (administration is not clinical access)', async () => {
     renderApp('/reports', { signedInAs: ['admin'], fetchImpl: fetcher(['admin']) });
     expect(await screen.findByRole('heading', { level: 1, name: 'You do not have access to this page' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Open synthetic.vcf' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open synthetic.json' })).not.toBeInTheDocument();
   });
   it('keeps upload verification separate from received status, with keyboard-accessible details', async () => {
     const { container } = renderApp('/reports', { signedInAs: ['reviewer'], fetchImpl: fetcher(['reviewer']) });
     await heading();
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Open synthetic.vcf' }));
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Open synthetic.json' }));
     const detail = within(screen.getByRole('region', { name: 'Report details' }));
     expect(detail.getByText('received')).toBeInTheDocument();
     expect(detail.getByText('Yes — server verified')).toBeInTheDocument();
@@ -150,12 +150,12 @@ describe('reports page with real auth and route guards', () => {
     renderApp('/reports', { signedInAs: ['reviewer'], fetchImpl: api });
     await heading();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Open synthetic.vcf' }));
+    await user.click(await screen.findByRole('button', { name: 'Open synthetic.json' }));
     await user.click(screen.getByRole('button', { name: 'Next report page' }));
     await waitFor(() => expect(pageTwoRead).toBe(true));
     expect(screen.queryByText('Yes — server verified')).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText('Filter by patient'), p2);
-    await screen.findByRole('button', { name: 'Open synthetic.vcf' });
+    await screen.findByRole('button', { name: 'Open synthetic.json' });
     finish(json({ data: [row(p1, false)], meta: { page: 2, pageSize: 20, total: 21, totalPages: 2 } }));
     await waitFor(() => expect(api).toHaveBeenCalledWith(`${API}/api/v1/reports?page=1&pageSize=20&patientId=${p2}`, expect.anything()));
     expect(screen.queryByText('Not complete')).not.toBeInTheDocument();
@@ -188,7 +188,7 @@ describe('reports page with real auth and route guards', () => {
     );
     renderApp('/reports', { signedInAs: ['reviewer'], fetchImpl: api });
     await heading();
-    await screen.findByRole('button', { name: 'Open synthetic.vcf' });
+    await screen.findByRole('button', { name: 'Open synthetic.json' });
     const user = userEvent.setup(),
       next = screen.getByRole('button', { name: 'Next report page' });
     await user.click(next);
@@ -196,7 +196,7 @@ describe('reports page with real auth and route guards', () => {
     expect(next).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByRole('region', { name: 'Report records table' })).toHaveAttribute('aria-busy', 'true');
     expect(screen.getByText('Loading reports…')).toHaveAttribute('role', 'status');
-    expect(screen.queryByRole('button', { name: 'Open synthetic.vcf' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open synthetic.json' })).not.toBeInTheDocument();
     await user.click(next); // In-flight controls cannot launch a duplicate request.
     expect(api.mock.calls.filter(([url]) => String(url).includes('/reports?page=2'))).toHaveLength(1);
     finish(json({ message: 'do-not-display' }, 503));
@@ -210,7 +210,7 @@ describe('reports page with real auth and route guards', () => {
     renderApp('/reports', { signedInAs: ['reader'], fetchImpl: fetcher(['reader']) });
     await heading();
     const user = userEvent.setup(),
-      trigger = await screen.findByRole('button', { name: 'Open synthetic.vcf' });
+      trigger = await screen.findByRole('button', { name: 'Open synthetic.json' });
     await user.click(trigger);
     expect(screen.getByRole('heading', { name: 'Report details' })).toHaveFocus();
     const disclosure = screen.getByText('Technical details').closest('details')!;
@@ -232,14 +232,14 @@ describe('reports page with real auth and route guards', () => {
     );
     const { container } = renderApp('/reports', { signedInAs: ['reader'], fetchImpl: api });
     const user = userEvent.setup();
-    await screen.findByRole('button', { name: 'Open synthetic.vcf' });
+    await screen.findByRole('button', { name: 'Open synthetic.json' });
     await user.selectOptions(screen.getByLabelText('Filter by patient'), p2);
     const table = screen.getByRole('region', { name: 'Report records table' });
     expect(table).toHaveAttribute('aria-busy', 'true');
     expect(within(table).queryByRole('button')).not.toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
     await user.click(screen.getByRole('button', { name: 'Clear patient filter' }));
-    await screen.findByRole('button', { name: 'Open synthetic.vcf' });
+    await screen.findByRole('button', { name: 'Open synthetic.json' });
     expect(screen.getByRole('heading', { name: 'Report records' })).toHaveFocus();
     expect(screen.getByLabelText('Filter by patient')).toHaveValue('');
     expect(table).toHaveAttribute('aria-busy', 'false');
@@ -263,11 +263,11 @@ describe('reports page with real auth and route guards', () => {
     );
     renderApp('/reports', { signedInAs: ['reviewer'], fetchImpl: api });
     const user = userEvent.setup();
-    await screen.findByRole('button', { name: 'Open synthetic.vcf' });
+    await screen.findByRole('button', { name: 'Open synthetic.json' });
     await user.selectOptions(screen.getByLabelText('Filter by patient'), p2);
     await user.click(screen.getByRole('button', { name: 'Next report page' }));
     await user.click(await screen.findByRole('button', { name: 'Go to first page' }));
-    await screen.findByRole('button', { name: 'Open synthetic.vcf' });
+    await screen.findByRole('button', { name: 'Open synthetic.json' });
     expect(screen.getByRole('heading', { name: 'Report records' })).toHaveFocus();
     expect(screen.getByLabelText('Filter by patient')).toHaveValue(p2);
     expect(api).toHaveBeenLastCalledWith(`${API}/api/v1/reports?page=1&pageSize=20&patientId=${p2}`, expect.anything());
@@ -282,8 +282,8 @@ describe('reports page with real auth and route guards', () => {
     );
     renderApp('/reports', { signedInAs: ['reviewer'], fetchImpl: fetcher(['reviewer']) });
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Open synthetic.vcf' }));
-    const button = screen.getByRole('button', { name: 'Download synthetic.vcf' });
+    await user.click(await screen.findByRole('button', { name: 'Open synthetic.json' }));
+    const button = screen.getByRole('button', { name: 'Download synthetic.json' });
     await user.click(button);
     expect(button).toHaveFocus();
     expect(button).toHaveAttribute('aria-disabled', 'true');
@@ -304,12 +304,12 @@ describe('reports page with real auth and route guards', () => {
     const fetchImpl: typeof fetch = async (input, init) => (String(input).includes('/patients') ? json({ message: 'private' }, 503) : api(input, init));
     renderApp('/reports', { signedInAs: ['clinician'], fetchImpl });
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Open synthetic.vcf' }));
-    expect(screen.queryByRole('button', { name: 'Download synthetic.vcf' })).not.toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Open synthetic.json' }));
+    expect(screen.queryByRole('button', { name: 'Download synthetic.json' })).not.toBeInTheDocument();
     expect(screen.getByText('No — not complete')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Back to reports' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Reports remain available');
-    expect(screen.getByRole('button', { name: 'Open synthetic.vcf' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open synthetic.json' })).toBeInTheDocument();
     expect(downloadReport).not.toHaveBeenCalled();
   });
 });
@@ -321,7 +321,7 @@ it('opens a separate synthetic preview without passing report or patient context
     const { router } = renderApp('/reports', { signedInAs: ['reader'], fetchImpl: api });
     await heading();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Open synthetic.vcf' }));
+    await user.click(await screen.findByRole('button', { name: 'Open synthetic.json' }));
     await user.click(screen.getByRole('button', { name: 'Back to reports' }));
     const link = await screen.findByRole('link', { name: 'Chat preview' });
     expect(link).toHaveAttribute('href', '/local-interpretation');
@@ -330,7 +330,7 @@ it('opens a separate synthetic preview without passing report or patient context
     await screen.findByRole('heading', { name: 'Chat workspace' });
     expect(router.state.location.search).toBe('');
     expect(router.state.location.state).toBeNull();
-    expect(screen.queryByText('synthetic.vcf')).not.toBeInTheDocument();
+    expect(screen.queryByText('synthetic.json')).not.toBeInTheDocument();
     expect(screen.queryByText('SYN-1')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Download/ })).not.toBeInTheDocument();
     expect(api.mock.calls.length).toBe(calls);
@@ -343,12 +343,12 @@ describe('dashboard presentation', () => {
   it('shows the patient on each row only while the list is not filtered to one patient', async () => {
     renderApp('/reports', { signedInAs: ['reader'], fetchImpl: fetcher(['reader']) });
     const user = userEvent.setup();
-    await screen.findByRole('button', { name: 'Open synthetic.vcf' });
+    await screen.findByRole('button', { name: 'Open synthetic.json' });
     const table = screen.getByRole('region', { name: 'Report records table' });
     expect(within(table).getByText('SYN-1')).toBeInTheDocument();
     expect(within(table).getByRole('columnheader', { name: 'Report / patient' })).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText('Filter by patient'), p2);
-    await screen.findByRole('button', { name: 'Open synthetic.vcf' });
+    await screen.findByRole('button', { name: 'Open synthetic.json' });
     expect(within(table).queryByText('SYN-2')).not.toBeInTheDocument();
     expect(within(table).getByRole('columnheader', { name: 'Report' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Clear patient filter' }));
@@ -361,12 +361,12 @@ describe('dashboard presentation', () => {
   ] as const)('leads the details panel with the upload state (uploaded: %s) and hides its icon from assistive technology', async (uploaded, title) => {
     const api = fetcher(['clinician'], async () => json({ data: [row(p1, uploaded)], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } }));
     renderApp('/reports', { signedInAs: ['clinician'], fetchImpl: api });
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Open synthetic.vcf' }));
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Open synthetic.json' }));
     const detail = within(screen.getByRole('region', { name: 'Report details' }));
     const state = detail.getByRole('heading', { name: title });
     expect(state.compareDocumentPosition(detail.getByText('Record status')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(state.parentElement!.previousElementSibling).toHaveAttribute('aria-hidden', 'true');
-    expect(Boolean(detail.queryByRole('button', { name: 'Download synthetic.vcf' }))).toBe(uploaded);
+    expect(Boolean(detail.queryByRole('button', { name: 'Download synthetic.json' }))).toBe(uploaded);
   });
 
   it('keeps patient-option paging reachable by the same names in its quieter form', async () => {
@@ -399,19 +399,19 @@ it('filters only loaded records, clears stale details and restores records witho
   renderApp('/reports', { signedInAs: ['clinician'], fetchImpl: api });
   await heading();
   const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: 'Open synthetic.vcf' }));
+  await user.click(await screen.findByRole('button', { name: 'Open synthetic.json' }));
   await user.click(screen.getByRole('button', { name: 'Back to reports' }));
   await user.click(screen.getByText('Search and filter this page'));
   const calls = api.mock.calls.length;
   await user.type(screen.getByLabelText('Filename on this page'), 'PENDING');
-  expect(screen.queryByRole('button', { name: 'Open synthetic.vcf' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Open synthetic.json' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Open pending.json' })).toBeVisible();
   expect(screen.queryByRole('dialog', { name: 'Report details' })).not.toBeInTheDocument();
   expect(screen.getByText('1 of 2 records on this page.')).toBeVisible();
   await user.selectOptions(screen.getByLabelText('Storage upload'), 'verified');
   expect(screen.getByRole('heading', { name: 'No matches on this page' })).toBeVisible();
   await user.click(screen.getByRole('button', { name: 'Show all records on this page' }));
-  expect(screen.getByRole('button', { name: 'Open synthetic.vcf' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Open synthetic.json' })).toBeVisible();
   expect(screen.getByRole('button', { name: 'Open pending.json' })).toBeVisible();
   expect(screen.getByLabelText('Filename on this page')).toHaveFocus();
   expect(api.mock.calls.length).toBe(calls);
@@ -453,7 +453,7 @@ describe('report stages', () => {
     const api = fetcher(['reviewer'], undefined, async (url) => stagePage(stageRows(url.searchParams.get('patientId') || p1))(url));
     renderApp('/reports', { signedInAs: ['reviewer'], fetchImpl: api });
     const user = userEvent.setup();
-    await screen.findByRole('button', { name: 'Open synthetic.vcf' });
+    await screen.findByRole('button', { name: 'Open synthetic.json' });
     await waitFor(() => expect(stageCalls(api)).toHaveLength(1));
     await user.click(screen.getByRole('button', { name: 'Next report page' }));
     await waitFor(() => expect(api.mock.calls.some(([url]) => String(url).includes('page=2&pageSize=20'))).toBe(true));

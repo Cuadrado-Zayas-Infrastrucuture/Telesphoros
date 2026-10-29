@@ -82,12 +82,15 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
     [['clinician', 'reviewer'], 201],
     [['admin', 'reviewer'], 403],
     [['admin', 'clinician'], 201],
-  ] as const)('with the roles %j, creating a (vcf) report answers %i: the whole set of roles counts, and neither reviewer nor admin alone ever writes', async (roles, status) => {
-    const writer = await tenantToken('clin-1', ['clinician']);
-    const patientId = await newPatient(app, writer);
-    const token = await tenantToken(`person-${roles.join('-')}`, [...roles]);
-    await createReport(app, token, patientId, { type: 'vcf', filename: 'a.vcf' }).expect(status);
-  });
+  ] as const)(
+    'with the roles %j, creating a (structured) report answers %i: the whole set of roles counts, and neither reviewer nor admin alone ever writes',
+    async (roles, status) => {
+      const writer = await tenantToken('clin-1', ['clinician']);
+      const patientId = await newPatient(app, writer);
+      const token = await tenantToken(`person-${roles.join('-')}`, [...roles]);
+      await createReport(app, token, patientId, { type: 'structured', filename: 'a.json' }).expect(status);
+    },
+  );
 
   it('reports every role a person holds, reviewer included', async () => {
     const me = await api(app)
@@ -97,20 +100,19 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
     expect(me.body.roles).toEqual(['clinician', 'reviewer']);
   });
 
-  it('leaves vcf and structured reports exactly as they were', async () => {
+  it('refuses a vcf report (no raw genomic data is stored) and leaves structured reports exactly as they were', async () => {
     const token = await tenantToken('clin-1', ['clinician']);
     const patientId = await newPatient(app, token);
-    await createReport(app, token, patientId, { type: 'vcf', filename: 'a.vcf' }).expect(201);
-    await createReport(app, token, patientId, { type: 'structured', filename: 'a.json' }).expect(201);
+    expect((await createReport(app, token, patientId, { type: 'vcf', filename: 'a.vcf' }).expect(400)).body.error.code).toBe('VALIDATION_ERROR');
+    await createReport(app, token, patientId, { type: 'structured', filename: 'a.json' }).expect(201); // control
   });
 
-  it('keeps a file name and its type together on create (a .pdf is never a "vcf", a lab-pdf is never a .vcf)', async () => {
+  it('keeps a file name and its type together on create (a .pdf is never "structured", a lab-pdf is never a .json)', async () => {
     const token = await tenantToken('clin-1', ['clinician']);
     const patientId = await newPatient(app, token);
     for (const bad of [
-      { type: 'vcf', filename: 'a.pdf' },
       { type: 'structured', filename: 'a.pdf' },
-      { type: 'lab-pdf', filename: 'a.vcf' },
+      { type: 'lab-pdf', filename: 'a.json' },
     ]) {
       const res = await createReport(app, token, patientId, bad).expect(400);
       expect(res.body.error.code).toBe('VALIDATION_ERROR');
@@ -120,7 +122,7 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
   it('allows an unuploaded report type correction while processing is off without touching storage', async () => {
     const token = await tenantToken('clin-1', ['clinician']);
     const patientId = await newPatient(app, token);
-    const id = (await createReport(app, token, patientId, { type: 'vcf', filename: 'a.vcf' }).expect(201)).body.id;
+    const id = (await createReport(app, token, patientId, { type: 'structured', filename: 'a.json' }).expect(201)).body.id;
     const res = await api(app).patch(`/api/v1/reports/${id}`).set(bearer(token)).send({ type: 'lab-pdf', filename: 'a.pdf' }).expect(200);
     expect(res.body.type).toBe('lab-pdf');
     expect((await api(app).get(`/api/v1/reports/${id}`).set(bearer(token))).body).toMatchObject({ type: 'lab-pdf', filename: 'a.pdf' });
@@ -257,7 +259,7 @@ describe('lab-pdf reports: the pipeline switch is OFF (the default)', () => {
     };
     await app.get(LedgerRecordsRepository).insertCapture('tenant-cap', 'cap-person', captureFor(seeded));
 
-    const patch = await api(app).patch(`/api/v1/reports/${id}`).set(bearer(alice)).send({ type: 'vcf', filename: 'a.vcf' }).expect(409);
+    const patch = await api(app).patch(`/api/v1/reports/${id}`).set(bearer(alice)).send({ type: 'structured', filename: 'a.json' }).expect(409);
     expect(patch.body.error.code).toBe('CONFLICT');
     await api(app).delete(`/api/v1/reports/${id}`).set(bearer(alice)).expect(409);
     expect((await row(id)).deleted_at).toBeNull();

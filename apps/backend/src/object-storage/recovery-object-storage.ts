@@ -82,9 +82,10 @@ export class RecoveryObjectStorage extends ObjectStorage {
     return storage;
   }
 
-  private resolve(key: string, version?: string): Entry {
+  /** Undefined when the restore holds no such key or logical version: "not found", as from any store (audit O1). */
+  private resolve(key: string, version?: string): Entry | undefined {
     const entries = (this.entries.get(key) ?? []).filter((e) => version === undefined || e.logicalVersion === version);
-    if (!entries.length) throw new EvidenceError('missing');
+    if (!entries.length) return undefined;
     if (entries.length !== 1) throw new EvidenceError('ambiguous');
     return entries[0];
   }
@@ -92,6 +93,7 @@ export class RecoveryObjectStorage extends ObjectStorage {
   private async read(entry: Entry, maxBytes: number): Promise<FetchedObject> {
     const { source, key, version, logicalVersion } = entry;
     const fetched = await this.target.getObject(key, { version, maxBytes: Math.min(maxBytes, source.bytes) });
+    // A catalogued copy that startup verified and that is now gone is a broken restore, not an ordinary missing file: it stays an error.
     if (!fetched) throw new EvidenceError('missing');
     const ref = source.reference;
     if (
@@ -114,18 +116,22 @@ export class RecoveryObjectStorage extends ObjectStorage {
   }
 
   async inspect(key: string, options: { version?: string } = {}) {
-    const { sizeBytes, contentType, sha256, version } = await this.getObject(key, { ...options, maxBytes: MAX_REPORT_BYTES });
+    const fetched = await this.getObject(key, { ...options, maxBytes: MAX_REPORT_BYTES });
+    if (!fetched) return undefined;
+    const { sizeBytes, contentType, sha256, version } = fetched;
     return { sizeBytes, contentType, sha256, version };
   }
-  async getObject(key: string, options: { version?: string; maxBytes: number }): Promise<FetchedObject> {
+  async getObject(key: string, options: { version?: string; maxBytes: number }): Promise<FetchedObject | undefined> {
     if (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 0) throw new ObjectTooLargeError(0);
     const entry = this.resolve(key, options.version);
+    if (!entry) return undefined;
     if (entry.source.bytes > options.maxBytes) throw new ObjectTooLargeError(options.maxBytes);
     return this.read(entry, options.maxBytes);
   }
   async createDownloadUrl(key: string, version: string, ttlSeconds: number, options?: { filename: string }): Promise<string> {
     if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds < 1 || ttlSeconds > 900) throw new EvidenceError('policy');
     const entry = this.resolve(key, version);
+    if (!entry) throw new EvidenceError('missing');
     await this.read(entry, entry.source.bytes); // exact bytes verified again before signing; never signs a missing/corrupt substitute
     return this.target.createDownloadUrl(entry.key, entry.version, ttlSeconds, options);
   }

@@ -122,9 +122,20 @@ jobs:
       - name: Demo users and verify-script reports
         if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
         run: pnpm test:demo-seed
+      # A cold run spends about 140 s of its ~165 s downloading the validator, the IG and the packages it resolves (2026-10-28: one cold
+      # download stalled past the validator's 360 s limit). validate.mjs pins both artifacts by sha256 and checks them on every load, so the
+      # key follows that file; the validator-resolved packages stay at the versions first fetched until validate.mjs changes.
+      - name: Cache the FHIR validator, the IG and its packages
+        if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.fhir/packages
+            ~/.cache/telesphoros-fhir-ig
+          key: fhir-ig-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/smart-pilot/test/fhir-ig/validate.mjs') }}
       - name: Published FHIR Genomics IG validation (synthetic only)
         if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
-        run: JAVA_HOME="$JAVA_HOME_21_X64" pnpm --filter @telesphoros/smart-pilot test:ig
+        run: JAVA_HOME="$JAVA_HOME_21_X64" FHIR_ARTIFACT_DIR="$HOME/.cache/telesphoros-fhir-ig" pnpm --filter @telesphoros/smart-pilot test:ig
       - name: Frontend chunk budget
         if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
         run: pnpm --filter @telesphoros/frontend check:chunks
@@ -132,6 +143,10 @@ jobs:
       - name: Knowledge directory loads under production rules
         if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
         run: pnpm --filter @telesphoros/backend knowledge:verify --production
+      # Unconditional, like the install: test:infra imports the backend's configuration loader, which imports @telesphoros/shared-types from its
+      # built dist. A documentation-only run skips Production builds above, so without this the tripwire cannot load (2026-10-28, #144).
+      - name: Build the shared types the guards import
+        run: pnpm --filter @telesphoros/shared-types build
       # The three guards below run on every pull request, including documentation-only ones: they are the only code that reads docs/ and CLAUDE.md
       # (scope.test.mjs lists the readers). Everything above is skipped when only documentation changed.
       - name: Terraform security tripwire

@@ -94,7 +94,7 @@ describe('a committed upload is re-checked end to end (event, relay, claim, hand
     ['a version the bucket does not have', { pinVersion: 'not-a-version-of-this-object' }, 'missing', 'version-missing', 'file-missing'],
     ["bytes that differ from the report's hash", { claim: { sha256: 'c'.repeat(64) } }, 'changed', 'hash-mismatch', 'file-changed'],
     ["a size that differs from the report's", { claim: { sizeBytes: 5 } }, 'changed', 'size-mismatch', 'file-changed'],
-    ["a content type that differs from the report's", { claim: { contentType: 'application/json' } }, 'changed', 'type-mismatch', 'file-changed'],
+    ["a content type that differs from the report's", { claim: { contentType: 'application/pdf' } }, 'changed', 'type-mismatch', 'file-changed'],
   ])('finds %s, records it, and ends the job dead without touching the file', async (_name, options, outcome, reason, code) => {
     const r = await seedReport(f, s3, TENANT_A, options);
     await commitEvent(TENANT_A, r.reportId);

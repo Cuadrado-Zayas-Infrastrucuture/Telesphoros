@@ -36,8 +36,8 @@ async function newReport(tenantId: string): Promise<ReportRecord> {
     tenantId,
     createdBy: 'syn-actor',
     patientId: p.id,
-    type: 'vcf',
-    filename: 'a.vcf',
+    type: 'structured',
+    filename: 'a.json',
     sizeBytes: 1000,
     status: 'received',
     storageKey: null,
@@ -61,7 +61,7 @@ describe('the upload commit and the outbox', () => {
     const t = tenant();
     const r = await newReport(t);
     expect(await eventsFor(r.id)).toEqual([]);
-    const h = await commitUpload(reports, r, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf', version: 'v1' });
+    const h = await commitUpload(reports, r, { principal: 'p', sha256: HASH, contentType: 'application/json', version: 'v1' });
     expect(await eventsFor(r.id)).toEqual([{ tenant_id: t, event_type: 'report.file-committed', subject_id: r.id, relayed_at: null }]);
     expect(await reports.commitAttempt(h.identity)).toBe(true); // an idempotent repeat
     expect(await eventsFor(r.id)).toHaveLength(1);
@@ -70,8 +70,8 @@ describe('the upload commit and the outbox', () => {
   it('writes none for a declaration, a refused commit or a cancelled attempt', async () => {
     const t = tenant();
     const [declared, cancelled] = [await newReport(t), await newReport(t)];
-    await declareUpload(reports, declared, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' });
-    const h = (await declareUpload(reports, cancelled, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf' }))!;
+    await declareUpload(reports, declared, { principal: 'p', sha256: HASH, contentType: 'application/json' });
+    const h = (await declareUpload(reports, cancelled, { principal: 'p', sha256: HASH, contentType: 'application/json' }))!;
     await reports.cancelAttempt(h.identity);
     expect(await reports.commitAttempt(h.identity)).toBe(false);
     expect(await eventsFor(declared.id)).toEqual([]);

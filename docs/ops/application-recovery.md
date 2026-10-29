@@ -14,7 +14,7 @@ The test helper performs this handoff inside the fresh recovery worker. A real o
 
 ## Read behavior
 
-The DB's original PDF version remains immutable. The resolver checks the original key/logical version, reads the mapped target key/exact version, checks actual bytes/metadata and returns the original logical version to existing callers. Authorized PDF/text URLs bind target versions after a new verification read. Text and completed unpinned VCF/JSON use the observed verified identity. Unknown/ambiguous identities and missing/corrupt bytes refuse; no latest fallback, primary reads or recapture substitution.
+The DB's original PDF version remains immutable. The resolver checks the original key/logical version, reads the mapped target key/exact version, checks actual bytes/metadata and returns the original logical version to existing callers. Authorized PDF/text URLs bind target versions after a new verification read. Text and completed unpinned JSON use the observed verified identity. Unknown/ambiguous identities and missing/corrupt bytes refuse; no latest fallback, primary reads or recapture substitution.
 
 Recovery file storage is read only. New uploads and text writes return a fixed 503. Restored decisions/evaluations continue using the restricted database role and existing ledger guards. Standard reports are checked through existing metadata APIs and injected application storage; no new standard-report download route is claimed.
 

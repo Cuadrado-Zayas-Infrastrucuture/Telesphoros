@@ -116,6 +116,14 @@ export class SubprocessReportReader implements ReportReader {
       let settled = false;
       let killReason: { reason: ProcessingFailureReason; cause: string } | null = null;
       let killTimer: NodeJS.Timeout | undefined;
+      let exitTimer: NodeJS.Timeout | undefined;
+      let heldOpen: (() => void) | undefined;
+      // After the exit, every chunk still draining from the pipes restarts the wait: only a pipe that is open AND idle counts as held.
+      const rearmHeldOpen = () => {
+        if (!heldOpen) return;
+        if (exitTimer) clearTimeout(exitTimer);
+        exitTimer = setTimeout(heldOpen, this.killGraceMs);
+      };
 
       const killGroup = (signal: NodeJS.Signals) => {
         try {
@@ -145,21 +153,37 @@ export class SubprocessReportReader implements ReportReader {
         settled = true;
         clearTimeout(deadline);
         if (killTimer) clearTimeout(killTimer);
+        if (exitTimer) clearTimeout(exitTimer);
         signal?.removeEventListener('abort', onAbort);
         resolveOutcome(cancelled ? { ok: false, cancelled: true, reason: signal!.reason } : outcome);
       };
 
       child.stdout.on('data', (chunk: Buffer) => {
+        rearmHeldOpen();
         outBytes += chunk.length;
         if (outBytes > this.maxOutputBytes) return terminate('worker-error', 'output-limit');
         out.push(chunk);
       });
       child.stderr.on('data', (chunk: Buffer) => {
+        rearmHeldOpen();
         stderrBytes += chunk.length;
         if (errBuffer.length < MAX_STDERR_BYTES) errBuffer = Buffer.concat([errBuffer, chunk]).subarray(0, MAX_STDERR_BYTES);
       });
       child.stdin.on('error', () => undefined); // intentional: the child may exit before reading; its exit code tells the story
       child.on('error', () => finish({ ok: false, reason: 'worker-error', cause: 'spawn-failed', fields: {} }));
+      // 'close' waits for the pipes as well as the exit. A descendant that left the process group (out of the group kill's reach) can hold
+      // them open forever, and the read would never free its limiter slot (audit O2). Once the process has exited and the pipes have been silent for
+      // one kill grace without 'close', stop reading and fail: output from a reader that left a process behind is not trusted, even after a
+      // clean exit.
+      child.on('exit', (code, signal) => {
+        heldOpen = () => {
+          child.stdout.destroy();
+          child.stderr.destroy();
+          killGroup('SIGKILL');
+          finish({ ok: false, reason: 'worker-error', cause: 'output-held-open', fields: { exitCode: code, signal, durationMs: Date.now() - started, textChars } });
+        };
+        rearmHeldOpen();
+      });
       child.on('close', (code, signal) => {
         // Whatever happened, nothing the child started may outlive it.
         if (killReason) killGroup('SIGKILL');

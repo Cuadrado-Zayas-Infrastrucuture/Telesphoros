@@ -24,7 +24,6 @@ async function storageInventory() {
 
 const samples = [
   { type: 'lab-pdf', name: 'synthetic.pdf', mime: 'application/pdf', bytes: Buffer.from('%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n') },
-  { type: 'vcf', name: 'synthetic.vcf', mime: 'text/x-vcf', bytes: Buffer.from('##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n') },
   { type: 'structured', name: 'synthetic.json', mime: 'application/json', bytes: Buffer.from('{"synthetic":true}') },
 ];
 async function fill(page: Page, patient: string, sample: typeof samples[number]) {
@@ -48,6 +47,13 @@ async function findReport(page: Page, id: string) {
   }
   throw new Error('Synthetic report not found within bounded pages.');
 }
+test('raw genomic VCF is not offered by the owned-storage build, while structured JSON and lab PDF are', async ({ page }) => {
+  await signInWithPatient(page);
+  const type = page.getByLabel(/report type/i);
+  await expect(type.locator('option[value="vcf"]')).toHaveCount(0);
+  await expect(type.locator('option[value="structured"]')).toHaveCount(1);
+  await expect(type.locator('option[value="lab-pdf"]')).toHaveCount(1);
+});
 for (const sample of samples) test(`${sample.type}: browser intake, verified attachment bytes, no storage credentials`, async ({ page }) => {
   const fixture = await signInWithPatient(page);
   let storagePuts = 0; let authenticatedGets = 0; let downloadedVersion = false;
@@ -88,7 +94,7 @@ test('lost registration, declaration and byte replies recover one report with on
       const reply = await route.fetch(); expect(reply.ok()).toBe(true); await route.abort('failed');
     });
   }
-  await fill(page, fixture.id, samples[2]!);
+  await fill(page, fixture.id, samples[1]!);
   for (let retry = 0; retry < 3; retry++) {
     await page.getByRole('button', { name: 'Upload report', exact: true }).click();
     await expect(page.getByRole('alert')).toBeVisible();
@@ -102,7 +108,7 @@ test('cancel after an interrupted transfer receives acknowledgement and permits 
   const fixture = await signInWithPatient(page); let cancels = 0;
   await page.route('**/api/v1/reports/*/upload-attempts/*/bytes', route => route.abort('failed'));
   page.on('request', req => { if (req.url().endsWith('/cancel')) cancels++; });
-  await fill(page, fixture.id, samples[2]!);
+  await fill(page, fixture.id, samples[1]!);
   await page.getByRole('button', { name: 'Upload report', exact: true }).click();
   await expect(page.getByRole('alert')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start a new upload' })).toBeDisabled();
@@ -116,7 +122,7 @@ test('malformed file refused by server without verified success or any direct-up
   const fixture = await signInWithPatient(page); let legacy = 0;
   const before = await storageInventory();
   page.on('request', req => { if (req.url().endsWith('/upload-url')) legacy++; });
-  await fill(page, fixture.id, { ...samples[2]!, bytes: Buffer.from('{"bad":') });
+  await fill(page, fixture.id, { ...samples[1]!, bytes: Buffer.from('{"bad":') });
   await page.getByRole('button', { name: 'Upload report', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('server refused');
   expect((await rows(page, fixture))[0].fileUploaded).toBe(false); expect(legacy).toBe(0);
@@ -125,7 +131,7 @@ test('malformed file refused by server without verified success or any direct-up
 
 test('reader sees metadata but cannot request a file or upload', async ({ page }) => {
   const fixture = await signInWithPatient(page);
-  await fill(page, fixture.id, samples[2]!); await page.getByRole('button', { name: 'Upload report', exact: true }).click();
+  await fill(page, fixture.id, samples[1]!); await page.getByRole('button', { name: 'Upload report', exact: true }).click();
   await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
   const report = (await rows(page, fixture))[0];
   await openWorkspaceNavigation(page);
@@ -142,7 +148,7 @@ test('reader sees metadata but cannot request a file or upload', async ({ page }
 
 
 test('reports pagination, keyboard download, reviewer access and accessibility', async ({ page }) => {
-  const fixture = await signInWithPatient(page); const sample = samples[2]!;
+  const fixture = await signInWithPatient(page); const sample = samples[1]!;
   await fill(page, fixture.id, sample); await page.getByRole('button', { name: 'Upload report', exact: true }).click();
   await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
   const report = (await rows(page, fixture))[0];

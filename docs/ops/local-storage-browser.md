@@ -1,6 +1,6 @@
 # L2 synthetic storage browser
 
-The standard upload page supports validated PDF, VCF and JSON intake when the frontend is explicitly built with `VITE_LOCAL_STORAGE_INTAKE=true`. This mode requires a non-production build served at `127.0.0.1`. The API independently requires an owned `LOCAL_STORAGE_RUN_ID`, disposable loopback storage/database configuration, and disabled clinical processing. The browser flag grants no server permissions. An absent/false flag retains the existing VCF/JSON transport; an invalid flag fails configuration. Intake failures never fall back to direct storage uploads.
+The standard upload page supports validated PDF and JSON intake when the frontend is explicitly built with `VITE_LOCAL_STORAGE_INTAKE=true`. This mode requires a non-production build served at `127.0.0.1`. The API independently requires an owned `LOCAL_STORAGE_RUN_ID`, disposable loopback storage/database configuration, and disabled clinical processing. The browser flag grants no server permissions. An absent/false flag retains the existing JSON transport; an invalid flag fails configuration. Intake failures never fall back to direct storage uploads.
 
 Keep `VITE_REPORT_STORAGE_ORIGINS` explicitly configured for the owned emulator origin. It authorizes attachment retrieval only in this mode. Upload bytes travel through the configured authenticated API. No storage write credentials are given to the browser.
 

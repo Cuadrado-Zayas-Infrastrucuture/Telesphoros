@@ -3,9 +3,9 @@ import { useLandingLanguage } from '@/lib/landing/landing-language';
 
 /** Fictional file names and which status each shows; the words come from the landing copy in the chosen language. */
 export const statusRows = [
-  { name: 'SYN-001.vcf', status: 'verified' },
+  { name: 'SYN-001.pdf', status: 'verified' },
   { name: 'SYN-002.json', status: 'incomplete' },
-  { name: 'SYN-003.vcf', status: 'received' },
+  { name: 'SYN-003.pdf', status: 'received' },
 ] as const;
 
 /** Decorative fictional file list for a capability row; see PatientLinkFragment for the rules these fragments keep. */

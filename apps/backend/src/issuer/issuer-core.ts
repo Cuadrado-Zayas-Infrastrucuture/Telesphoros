@@ -9,6 +9,10 @@ import {
   type CapabilityIssueRequest,
   CapabilityIssuerPort,
   type IssuedCapability,
+  type IssuedJobCapability,
+  JOB_PURPOSE,
+  JobCapabilityIssuer,
+  type JobCapabilityRequest,
   REQUEST_PURPOSE,
 } from './capability-issuer.port';
 
@@ -93,6 +97,59 @@ export class IssuerCore extends CapabilityIssuerPort {
   }
 }
 
+/** What the job route asks of the database: `issuer_nonce_claim` (migration 0057) and `tenant_capability_issue_for_job` (0056). */
+export interface JobCapabilityStore {
+  /** True the first time a caller presents a nonce, on any issuer task; false for a copy. */
+  claimNonce(caller: string, nonce: string): Promise<boolean>;
+  issueForJob(call: { jobId: string; workerId: string; tokenHash: Buffer }): Promise<IssueOutcome & { tenantId: string | null; sub: string | null }>;
+}
+
+/**
+ * Spec 012 slice 2: the issuer side of a job capability. The server has checked the worker's signature; this claims the nonce, generates the token, hands
+ * the database only its sha256, and returns the token once with the organization and person the database named. Like IssuerCore, it writes the one
+ * `Capability not issued: <reason>` line per failure that issuer.tf's metric filters count.
+ */
+export class JobIssuerCore extends JobCapabilityIssuer {
+  private readonly logger = new Logger('SessionIssuer');
+
+  constructor(
+    private readonly store: JobCapabilityStore,
+    private readonly random: (size: number) => Buffer = randomBytes,
+  ) {
+    super();
+  }
+
+  async issueForJob(job: JobCapabilityRequest): Promise<IssuedJobCapability> {
+    let claimed: boolean;
+    try {
+      claimed = await this.store.claimNonce(job.caller, job.nonce);
+    } catch (error) {
+      this.logger.warn(`Capability not issued: unavailable (${(error as Error).name})`);
+      throw new CapabilityIssueError('unavailable');
+    }
+    if (!claimed) throw this.refuse('replayed', job);
+    const token = this.random(32).toString('base64url');
+    if (!CAPABILITY_TOKEN_PATTERN.test(token)) throw this.refuse('unavailable', job);
+    let outcome;
+    try {
+      outcome = await this.store.issueForJob({ jobId: job.jobId, workerId: job.workerId, tokenHash: createHash('sha256').update(token, 'utf8').digest() });
+    } catch (error) {
+      this.logger.warn(`Capability not issued: unavailable (${(error as Error).name})`);
+      throw new CapabilityIssueError('unavailable');
+    }
+    if (outcome.refusal !== null) throw this.refuse('refused', job, outcome.refusal);
+    if (!outcome.expiresAt || !Number.isSafeInteger(outcome.membershipVersion) || outcome.membershipVersion! < 1 || !outcome.tenantId || !outcome.sub)
+      throw this.refuse('unavailable', job);
+    return { token, expiresAt: outcome.expiresAt, membershipVersion: outcome.membershipVersion!, tenantId: outcome.tenantId, sub: outcome.sub };
+  }
+
+  private refuse(reason: CapabilityIssueError['reason'], job: JobCapabilityRequest, detail?: string): CapabilityIssueError {
+    const id = SAFE_REQUEST_ID.test(job.requestId) ? job.requestId : '-';
+    this.logger.warn(`Capability not issued: ${reason}${detail ? ` (${detail})` : ''} purpose=${JOB_PURPOSE} request=${id}`);
+    return new CapabilityIssueError(reason, detail);
+  }
+}
+
 export interface PgCapabilityIssueStoreOptions {
   /** Connection string for the ISSUER login (`telesphoros_session_issuer`), never the application's or the migrator's. */
   url: string;
@@ -101,7 +158,7 @@ export interface PgCapabilityIssueStoreOptions {
 }
 
 /** The issuer's database door, on its own small pool. */
-export class PgCapabilityIssueStore implements CapabilityIssueStore {
+export class PgCapabilityIssueStore implements CapabilityIssueStore, JobCapabilityStore {
   private readonly logger = new Logger('SessionIssuer');
   private readonly pool: Pool;
 
@@ -127,6 +184,27 @@ export class PgCapabilityIssueStore implements CapabilityIssueStore {
     if (!row) throw new Error('The issue function returned no row');
     // bigint arrives as text; a version beyond the safe range cannot be a real one and is refused by the core.
     return { expiresAt: row.expires_at, refusal: row.refusal, membershipVersion: row.membership_version === null ? null : Number(row.membership_version) };
+  }
+
+  async claimNonce(caller: string, nonce: string): Promise<boolean> {
+    const { rows } = await this.pool.query<{ claimed: boolean }>('SELECT issuer_nonce_claim($1, $2) AS claimed', [caller, nonce]);
+    return rows[0]?.claimed === true;
+  }
+
+  async issueForJob(call: { jobId: string; workerId: string; tokenHash: Buffer }): Promise<IssueOutcome & { tenantId: string | null; sub: string | null }> {
+    const { rows } = await this.pool.query<{ expires_at: Date | null; refusal: string | null; membership_version: string | null; tenant_id: string | null; sub: string | null }>(
+      'SELECT expires_at, refusal, membership_version, tenant_id, sub FROM tenant_capability_issue_for_job($1, $2, $3)',
+      [call.jobId, call.workerId, call.tokenHash],
+    );
+    const row = rows[0];
+    if (!row) throw new Error('The job issue function returned no row');
+    return {
+      expiresAt: row.expires_at,
+      refusal: row.refusal,
+      membershipVersion: row.membership_version === null ? null : Number(row.membership_version),
+      tenantId: row.tenant_id,
+      sub: row.sub,
+    };
   }
 
   close(): Promise<void> {

@@ -22,7 +22,30 @@ export interface IssuedCapability {
   membershipVersion: number;
 }
 
-export type CapabilityIssueFailure = 'invalid-token' | 'no-tenant' | 'invalid-request' | 'refused' | 'unavailable';
+/** The purpose of a job capability (spec 012, migration 0056): issued to the worker holding an evaluation's job, for the person who asked. */
+export const JOB_PURPOSE = 'evaluation-job';
+
+/** A job-capability request whose signature the server has already checked (worker-signature.ts). */
+export interface JobCapabilityRequest {
+  jobId: string;
+  workerId: string;
+  requestId: string;
+  /** The signed caller and nonce: the nonce is claimed once, across every issuer task, before anything is issued. */
+  caller: string;
+  nonce: string;
+}
+
+/** A job capability names the organization and the person, so the worker binds exactly what the database issued it for. */
+export interface IssuedJobCapability extends IssuedCapability {
+  tenantId: string;
+  sub: string;
+}
+
+export abstract class JobCapabilityIssuer {
+  abstract issueForJob(request: JobCapabilityRequest): Promise<IssuedJobCapability>;
+}
+
+export type CapabilityIssueFailure = 'invalid-token' | 'no-tenant' | 'invalid-request' | 'refused' | 'unavailable' | 'unauthenticated' | 'replayed';
 
 /**
  * Why a capability was not issued. The message never carries a token, a database message or an address; `detail` is the database's closed refusal code.

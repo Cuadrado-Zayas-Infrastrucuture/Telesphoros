@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { openWorkspaceNavigation, signInWithPatient } from './helpers';
 
-const VCF = Buffer.from('##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n');
+const REPORT = Buffer.from('{"synthetic":true}');
 function latch() { let release!: () => void; const promise = new Promise<void>(resolve => { release = resolve; }); return { promise, release }; }
 async function record(page: Page) {
   return page.evaluate(() => {
@@ -19,8 +19,8 @@ async function fill(page: Page, fixture: { id: string; label: string }, name: st
     await next.click();
   }
   await page.getByLabel(/synthetic patient \(required\)/i).selectOption(fixture.id);
-  await page.getByLabel(/report type/i).selectOption('vcf');
-  await page.getByLabel(/report file/i).setInputFiles({ name, mimeType: 'text/x-vcf', buffer: VCF });
+  await page.getByLabel(/report type/i).selectOption('structured');
+  await page.getByLabel(/report file/i).setInputFiles({ name, mimeType: 'application/json', buffer: REPORT });
   await page.getByLabel(/synthetic data only/i).check();
   await page.getByRole('button', { name: 'Upload report', exact: true }).click();
 }
@@ -50,18 +50,18 @@ test('an abandoned registration cannot replace newer recovery, and the newer upl
   await page.route('**/api/v1/reports', async route => {
     if (route.request().method() !== 'POST') return route.continue();
     registrations++;
-    if (route.request().postDataJSON().filename !== 'navigation-old.vcf') return route.continue();
+    if (route.request().postDataJSON().filename !== 'navigation-old.json') return route.continue();
     const reply = await route.fetch(); expect(reply.status()).toBe(201); oldId = (await reply.json()).id;
     arrived.release(); await released.promise;
     try { await route.fulfill({ response: reply }); } finally { delivered.release(); }
   });
   const held = await holdFirstTransfer(page);
   try {
-    await fill(page, fixture, 'navigation-old.vcf'); await arrived.promise;
+    await fill(page, fixture, 'navigation-old.json'); await arrived.promise;
     await navigateAwayAndBack(page);
-    await fill(page, fixture, 'navigation-current.vcf'); await held.arrived;
-    const kept = await record(page); expect(kept?.file).not.toHaveProperty('name'); expect(kept?.file.reportType).toBe('vcf');
-    const received = page.waitForResponse(reply => reply.url().endsWith('/api/v1/reports') && reply.request().postDataJSON()?.filename === 'navigation-old.vcf');
+    await fill(page, fixture, 'navigation-current.json'); await held.arrived;
+    const kept = await record(page); expect(kept?.file).not.toHaveProperty('name'); expect(kept?.file.reportType).toBe('structured');
+    const received = page.waitForResponse(reply => reply.url().endsWith('/api/v1/reports') && reply.request().postDataJSON()?.filename === 'navigation-old.json');
     released.release(); await delivered.promise; await received;
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
     expect(await record(page)).toEqual(kept);
@@ -82,7 +82,7 @@ test('navigation and reload retain original recovery keys and finish the same up
   let registrations = 0; const declarations: string[] = [];
   page.on('request', req => { if (req.method() === 'POST' && req.url().endsWith('/api/v1/reports')) registrations++; if (req.method() === 'POST' && req.url().endsWith('/upload-attempts')) declarations.push(req.postData()!); });
   try {
-    await fill(page, fixture, 'navigation-resume.vcf'); await held.arrived;
+    await fill(page, fixture, 'navigation-resume.json'); await held.arrived;
     const kept = await record(page);
     await navigateAwayAndBack(page); held.release(); await held.done;
     await expect(page.getByText('An upload was interrupted', { exact: true })).toBeVisible();
@@ -91,7 +91,7 @@ test('navigation and reload retain original recovery keys and finish the same up
     await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await page.waitForURL('**/reports/upload');
     await expect(page.getByText('An upload was interrupted', { exact: true })).toBeVisible();
     expect(await record(page)).toEqual(kept);
-    await fill(page, fixture, 'navigation-resume.vcf');
+    await fill(page, fixture, 'navigation-resume.json');
     await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
     expect(registrations).toBe(1);
     expect(declarations).toHaveLength(2); expect(declarations[0]).toBe(declarations[1]);
@@ -106,7 +106,7 @@ test('navigation keeps recovery cancellable and only server acknowledgement clea
     cancels++; const reply = await route.fetch(); expect(reply.status()).toBe(200); cancelArrived.release(); await releaseCancel.promise; await route.fulfill({ response: reply });
   });
   try {
-    await fill(page, fixture, 'navigation-cancel.vcf'); await held.arrived;
+    await fill(page, fixture, 'navigation-cancel.json'); await held.arrived;
     const kept = await record(page);
     await navigateAwayAndBack(page); held.release(); await held.done;
     await page.getByRole('button', { name: 'Cancel the interrupted upload', exact: true }).click(); await cancelArrived.promise;
@@ -114,6 +114,6 @@ test('navigation keeps recovery cancellable and only server acknowledgement clea
     releaseCancel.release();
     await expect(page.getByText('The interrupted upload was cancelled. You can start a new one.', { exact: true })).toBeVisible();
     expect(cancels).toBe(1); expect(await record(page)).toBeNull();
-    await fill(page, fixture, 'navigation-cancel.vcf'); await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
+    await fill(page, fixture, 'navigation-cancel.json'); await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
   } finally { held.release(); releaseCancel.release(); }
 });

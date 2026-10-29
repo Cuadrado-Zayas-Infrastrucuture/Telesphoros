@@ -10,6 +10,7 @@ import { CapturesController, ReportCaptureController } from '../lab-reports/capt
 import { EvaluationsController, ReportEvaluationController } from '../lab-reports/evaluations.controller';
 import { EvaluationRequestsController } from '../lab-reports/evaluation-requests.controller';
 import { NotesController, EvaluationCorrectionsController } from '../lab-reports/corrections.controller';
+import { ClinicianDecisionsController } from '../lab-reports/clinician-decisions.controller';
 import { DisputesController } from '../lab-reports/disputes.controller';
 import { LedgerController } from '../ledger/ledger.controller';
 import { HealthController } from '../health/health.controller';
@@ -17,6 +18,7 @@ import { MeController } from '../me/me.controller';
 import { MembersController } from '../members/members.controller';
 import { PatientIdentifiersController, PatientLinkQuarantineController, ReportPatientLinkController } from '../patient-identity/patient-identity.controller';
 import { PatientDuplicatesController, PatientMergesController } from '../patient-merge/patient-merge.controller';
+import { UsageController } from '../usage/usage.controller';
 import { InputBoundaryInterceptor } from './input-boundary.interceptor';
 import { ZodValidationPipe } from './zod-validation.pipe';
 
@@ -30,6 +32,7 @@ const controllers: Type[] = [
   NotesController,
   EvaluationCorrectionsController,
   DisputesController,
+  ClinicianDecisionsController,
   LedgerController,
   EvaluationRequestsController,
   HealthController,
@@ -40,6 +43,7 @@ const controllers: Type[] = [
   PatientLinkQuarantineController,
   PatientDuplicatesController,
   PatientMergesController,
+  UsageController,
 ];
 const routes = controllers.flatMap((controller) =>
   Object.getOwnPropertyNames(controller.prototype)
@@ -66,7 +70,7 @@ it('inventories every registered production controller and strict input pipe', (
     .filter((file) => String(file).endsWith('.controller.ts'))
     .flatMap((file) => [...readFileSync(resolve(source, String(file)), 'utf8').matchAll(/export class (\w+Controller)\b/g)].map((match) => match[1]));
   expect(controllers.map((c) => c.name).sort()).toEqual(declared.sort());
-  expect(controllers).toHaveLength(19);
+  expect(controllers).toHaveLength(21);
   expect(routes.length).toBeGreaterThan(30);
   for (const { controller, name } of routes) {
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, controller, name) ?? {};

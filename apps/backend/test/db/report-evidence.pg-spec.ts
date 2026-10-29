@@ -62,7 +62,7 @@ describe('the columns that pin a lab PDF', () => {
     // A pin without an upload is meaningless.
     expect((await insert({ uploaded_at: null }))?.constraint).toBe('reports_pin_after_upload');
     // The older report types are untouched: no version, no uploader, uploaded.
-    expect(await insert({ type: 'vcf', object_version: null, uploaded_by: null })).toBeUndefined();
+    expect(await insert({ type: 'structured', object_version: null, uploaded_by: null })).toBeUndefined();
   });
 });
 
@@ -140,7 +140,7 @@ describe('once uploaded, the stored file cannot change', () => {
 
 describe('once a capture exists, the report is frozen further', () => {
   it.each([
-    ['type', `type = 'vcf'`],
+    ['type', `type = 'structured'`],
     ['original_filename', `original_filename = 'other.pdf'`],
     ['deleted_at', `deleted_at = now()`],
   ])('refuses a change of %s', async (_name, set) => {
@@ -191,18 +191,18 @@ describe('a capture needs a live, pinned lab PDF with the same hash', () => {
   it('the database refuses a report of another type; the repository refuses it as "source changed"', async () => {
     const t = tenant();
     const report = await seedLabReport(pg.adminUrl, t);
-    expect((await update(report, `type = 'vcf'`))?.code).toBe(INTEGRITY); // uploaded type is now frozen before capture
+    expect((await update(report, `type = 'structured'`))?.code).toBe(INTEGRITY); // uploaded type is now frozen before capture
     const foreign = await seedLabReport(pg.adminUrl, t);
-    const vcfId = newId(),
-      vcfKey = `vcf/${randomUUID()}`;
+    const structuredId = newId(),
+      structuredKey = `structured/${randomUUID()}`;
     await withAdmin(pg.adminUrl, (c) =>
       c.query(
-        `INSERT INTO reports(id,tenant_id,created_by,patient_id,type,original_filename,size_bytes,storage_key,sha256,content_type,uploaded_at,object_version,uploaded_by) VALUES($1,$2,'syn-up',$3,'vcf','inert.vcf',10,$4,$5,'text/x-vcf',now(),'syn-v','syn-up')`,
-        [vcfId, t, foreign.patientId, vcfKey, report.pdfSha256],
+        `INSERT INTO reports(id,tenant_id,created_by,patient_id,type,original_filename,size_bytes,storage_key,sha256,content_type,uploaded_at,object_version,uploaded_by) VALUES($1,$2,'syn-up',$3,'structured','inert.json',10,$4,$5,'application/json',now(),'syn-v','syn-up')`,
+        [structuredId, t, foreign.patientId, structuredKey, report.pdfSha256],
       ),
     );
-    report.reportId = vcfId;
-    report.storageKey = vcfKey;
+    report.reportId = structuredId;
+    report.storageKey = structuredKey;
     report.objectVersion = 'syn-v';
     expect((await rawCapture(report))?.code).toBe(INTEGRITY);
     await expect(repo.insertCapture(t, 'syn-capturer', captureFor(report))).rejects.toBeInstanceOf(SourceChangedError);

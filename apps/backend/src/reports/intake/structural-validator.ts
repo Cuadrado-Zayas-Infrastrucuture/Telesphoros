@@ -152,17 +152,19 @@ class JsonSyntax {
     if (!this.done || this.stack.length) bad();
   }
 }
+/**
+ * The structural check of an upload, by its declared type. Exactly two types are accepted: a lab PDF and a structured (curated JSON) report. The
+ * product stores no raw genomic data (founder decision, 2026-10-28), so a VCF or any other type is refused here as well as by the schema and the
+ * database: there is no default branch for an unknown type.
+ */
 export class StructuralValidator {
   private prefix = Buffer.alloc(0);
   private tail = Buffer.alloc(0);
   private readonly decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
   private readonly json = new JsonSyntax();
-  private line = '';
-  private lineBytes = 0;
-  private headerBytes = 0;
-  private first = true;
-  private columns = false;
-  constructor(private readonly type: ReportType) {}
+  constructor(private readonly type: ReportType) {
+    if (type !== 'lab-pdf' && type !== 'structured') bad();
+  }
   feed(bytes: Buffer) {
     if (this.type === 'lab-pdf') {
       if (this.prefix.length < 9) this.prefix = Buffer.concat([this.prefix, bytes.subarray(0, 9 - this.prefix.length)]);
@@ -175,43 +177,7 @@ export class StructuralValidator {
     } catch {
       return bad();
     }
-    this.text(text);
-  }
-  private text(text: string) {
-    if (this.type === 'structured') {
-      this.json.feed(text);
-      return;
-    }
-    if (text.includes('\0')) bad();
-    if (this.columns) return; // Opaque variant rows; UTF-8 remains checked on every chunk.
-    for (const c of text) {
-      const length = Buffer.byteLength(c, 'utf8');
-      this.headerBytes += length;
-      this.lineBytes += length;
-      if (this.headerBytes > 262144 || this.lineBytes > 65536) bad();
-      if (c !== '\n') {
-        this.line += c;
-        continue;
-      }
-      const line = this.line.replace(/\r$/, '');
-      this.line = '';
-      this.lineBytes = 0;
-      if (this.first) {
-        if (!/^##fileformat=VCFv4\.[1-5]$/.test(line)) bad();
-        this.first = false;
-      } else if (line.startsWith('##')) continue;
-      else {
-        const cols = line.split('\t');
-        if (
-          cols.slice(0, 8).join('\t') !== '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO' ||
-          cols.length < 8 ||
-          (cols.length > 8 && (cols[8] !== 'FORMAT' || cols.length < 10 || cols.slice(9).some((c) => !c)))
-        )
-          bad();
-        this.columns = true;
-        break;
-      }
-    }
+    this.json.feed(text);
   }
   finish() {
     if (this.type === 'lab-pdf') {
@@ -219,11 +185,10 @@ export class StructuralValidator {
       return;
     }
     try {
-      this.text(this.decoder.decode());
+      this.json.feed(this.decoder.decode());
     } catch {
       return bad();
     }
-    if (this.type === 'structured') this.json.finish();
-    else if (!this.columns) bad();
+    this.json.finish();
   }
 }

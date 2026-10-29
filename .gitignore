@@ -25,7 +25,6 @@ __pycache__/
 *.fastq.gz
 *.bam
 *.cram
-!data/sample-reports/vcf/synthetic-*.vcf
 ml/datasets/*
 !ml/datasets/README.md
 !ml/datasets/.gitkeep
