@@ -31,7 +31,8 @@
     "font-family-mono": "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
     "dashboard-foreground": "#263034",
     "dashboard-muted-foreground": "#4E5A61",
-    "mark-plate": "transparent"
+    "mark-plate": "transparent",
+    "skeleton-highlight": "#ffffffb3"
   },
   "darkTokens": {
     "background": "#1B1E20",
@@ -57,7 +58,8 @@
     "ring": "#8FC2C4",
     "brand-accent": "#6FAFBD",
     "band": "#151719",
-    "mark-plate": "#DCEBE7"
+    "mark-plate": "#DCEBE7",
+    "skeleton-highlight": "#ffffff14"
   },
   "allowedColorLiterals": [
     "#041a2440",
@@ -112,7 +114,9 @@
     "#ffffff",
     "#ffffff00",
     "#ffffff0d",
-    "#ffffff24"
+    "#ffffff14",
+    "#ffffff24",
+    "#ffffffb3"
   ],
   "assets": {
     "apps/frontend/src/assets/telesphoros-shield-rx.png": "f1dd8c3152dc16a1f5ccc4d8a90ebea7befee360b5a926dbcf9c9e0a2e65a8de",

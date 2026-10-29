@@ -40,6 +40,16 @@ describe('Settings', () => {
     expect(within(roles).queryByText('Administrator')).not.toBeInTheDocument();
   });
 
+  it('announces the organization while it loads, instead of a label no one hears on a hidden placeholder', async () => {
+    open(
+      ['reader'],
+      api(['reader'], () => new Promise<Response>(() => {}) as unknown as Response),
+    );
+    const account = await section('Account');
+    expect(await within(account).findByText('Loading the organization…')).toHaveAttribute('role', 'status');
+    expect(within(account).queryByLabelText(/Loading/)).not.toBeInTheDocument();
+  });
+
   it('never sends the email to the API, in any address, header or body', async () => {
     const fetchImpl = api(['reader'], organization);
     open(['reader'], fetchImpl);
