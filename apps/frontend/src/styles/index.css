@@ -27,6 +27,17 @@
   --color-warning-surface: var(--warning-surface);
   --color-ring: var(--ring);
   --color-transparent: transparent;
+  /* Settings > Appearance: fixed light and dark colors for the theme cards (tokens.css --theme-preview-*). */
+  --color-preview-light-background: var(--theme-preview-light-background);
+  --color-preview-light-panel: var(--theme-preview-light-panel);
+  --color-preview-light-divider: var(--theme-preview-light-divider);
+  --color-preview-light-foreground: var(--theme-preview-light-foreground);
+  --color-preview-light-primary: var(--theme-preview-light-primary);
+  --color-preview-dark-background: var(--theme-preview-dark-background);
+  --color-preview-dark-panel: var(--theme-preview-dark-panel);
+  --color-preview-dark-divider: var(--theme-preview-dark-divider);
+  --color-preview-dark-foreground: var(--theme-preview-dark-foreground);
+  --color-preview-dark-primary: var(--theme-preview-dark-primary);
 
   --font-sans: var(--font-family-sans);
   --font-heading: var(--font-family-heading);
@@ -46,9 +57,14 @@
 
   --container-page: var(--size-page);
   --container-prose: var(--size-prose);
+  --aspect-theme-card: 4 / 3;
 }
 
 @layer components {
+  /* The "Match this device" theme card: the dark drawing covers only its right half. */
+  .theme-card-split {
+    clip-path: inset(0 0 0 50%);
+  }
   .button-raised {
     background-image: var(--button-sheen);
     box-shadow: var(--shadow-button);
