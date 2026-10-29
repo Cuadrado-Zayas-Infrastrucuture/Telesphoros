@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
-import { openWorkspaceNavigation, selectReportsPatient, signInAs, signInWithPatient } from '../e2e/helpers';
+import { openWorkspaceNavigation, selectReportsPatient, signInAs, signInWithPatient, waitPastSignOutSecond } from '../e2e/helpers';
 const STORAGE_ORIGIN = process.env.E2E_REPORT_STORAGE_ORIGIN ?? 'http://127.0.0.1:5557';
 
 async function storageInventory() {
@@ -136,6 +136,9 @@ test('reader sees metadata but cannot request a file or upload', async ({ page }
   const report = (await rows(page, fixture))[0];
   await openWorkspaceNavigation(page);
   await page.getByRole('button', { name: /sign out/i }).click();
+  // Sign-out posts to the API before it sends the browser to the provider's /logout; a goto before /signed-out keeps the provider session.
+  await expect(page).toHaveURL(/\/signed-out$/);
+  await waitPastSignOutSecond(page); // the next test signs alice in again; the API refuses a token issued in her sign-out second
   const me = page.waitForResponse(res => res.url().endsWith('/api/v1/me'));
   await signInAs(page, 'bob', '/reports');
   const reply = await me; const headers = { Authorization: reply.request().headers().authorization! };
@@ -159,6 +162,8 @@ test('reports pagination, keyboard download, reviewer access and accessibility',
   }
   await openWorkspaceNavigation(page);
   await page.getByRole('button', { name: /sign out/i }).click();
+  await expect(page).toHaveURL(/\/signed-out$/); // let the provider's /logout end its session first
+  await waitPastSignOutSecond(page); // as above: a later test signs alice in again
   await signInAs(page, 'gina', '/reports');
   await selectReportsPatient(page, fixture);
   await expect(page.getByRole('button', { name: 'Next report page', exact: true })).toHaveAttribute('aria-disabled', 'false');

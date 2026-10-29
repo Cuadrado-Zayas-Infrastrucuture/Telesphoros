@@ -28,6 +28,9 @@ test('report loading preserves layout and focus, honors reduced motion and recov
   const pending = new Promise<void>(resolve => { release = resolve; });
   let reads = 0;
   await page.route('**/api/v1/reports?*', async route => {
+    // Only the report list's own page read (pageSize=20) fails here. A refresh also remounts the stages strip, which pages the same
+    // endpoint at pageSize=100; it goes to the API, so this test exercises one failed read.
+    if (new URL(route.request().url()).searchParams.get('pageSize') !== '20') return route.fallback();
     reads++;
     await pending;
     await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'private-response-must-not-render' }) });
@@ -44,11 +47,13 @@ test('report loading preserves layout and focus, honors reduced motion and recov
   await page.keyboard.press('Enter');
   expect(reads).toBe(1);
   expect((await table.boundingBox())?.height).toBe(before?.height);
-  const skeleton = table.locator('tbody[aria-hidden="true"]');
+  // Spec 017: the bars sweep after their delay; reduced motion keeps them (they still appear) and drops only the sweep.
+  const skeleton = table.locator('tbody[aria-hidden="true"] [data-slot="skeleton"]').first();
   await page.emulateMedia({ reducedMotion: 'no-preference' });
-  expect(await skeleton.evaluate(el => getComputedStyle(el).animationName)).toBe('pulse');
+  expect(await skeleton.evaluate(el => getComputedStyle(el).animationName)).toBe('skeleton-appear, skeleton-shimmer');
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  expect(await skeleton.evaluate(el => getComputedStyle(el).animationName)).toBe('none');
+  expect(await skeleton.evaluate(el => getComputedStyle(el).animationName)).toBe('skeleton-appear');
+  await expect(skeleton).toHaveCSS('background-image', 'none');
   await page.addScriptTag({ path: createRequire(import.meta.url).resolve('axe-core/axe.min.js') });
   const violations = await page.evaluate(async () => {
     // @ts-expect-error axe injected into this local synthetic browser test
