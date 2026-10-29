@@ -119,32 +119,32 @@ export class JobIssuerCore extends JobCapabilityIssuer {
     super();
   }
 
-  async issueForJob(request: JobCapabilityRequest): Promise<IssuedJobCapability> {
+  async issueForJob(job: JobCapabilityRequest): Promise<IssuedJobCapability> {
     let claimed: boolean;
     try {
-      claimed = await this.store.claimNonce(request.caller, request.nonce);
+      claimed = await this.store.claimNonce(job.caller, job.nonce);
     } catch (error) {
       this.logger.warn(`Capability not issued: unavailable (${(error as Error).name})`);
       throw new CapabilityIssueError('unavailable');
     }
-    if (!claimed) throw this.refuse('replayed', request);
+    if (!claimed) throw this.refuse('replayed', job);
     const token = this.random(32).toString('base64url');
-    if (!CAPABILITY_TOKEN_PATTERN.test(token)) throw this.refuse('unavailable', request);
+    if (!CAPABILITY_TOKEN_PATTERN.test(token)) throw this.refuse('unavailable', job);
     let outcome;
     try {
-      outcome = await this.store.issueForJob({ jobId: request.jobId, workerId: request.workerId, tokenHash: createHash('sha256').update(token, 'utf8').digest() });
+      outcome = await this.store.issueForJob({ jobId: job.jobId, workerId: job.workerId, tokenHash: createHash('sha256').update(token, 'utf8').digest() });
     } catch (error) {
       this.logger.warn(`Capability not issued: unavailable (${(error as Error).name})`);
       throw new CapabilityIssueError('unavailable');
     }
-    if (outcome.refusal !== null) throw this.refuse('refused', request, outcome.refusal);
+    if (outcome.refusal !== null) throw this.refuse('refused', job, outcome.refusal);
     if (!outcome.expiresAt || !Number.isSafeInteger(outcome.membershipVersion) || outcome.membershipVersion! < 1 || !outcome.tenantId || !outcome.sub)
-      throw this.refuse('unavailable', request);
+      throw this.refuse('unavailable', job);
     return { token, expiresAt: outcome.expiresAt, membershipVersion: outcome.membershipVersion!, tenantId: outcome.tenantId, sub: outcome.sub };
   }
 
-  private refuse(reason: CapabilityIssueError['reason'], request: JobCapabilityRequest, detail?: string): CapabilityIssueError {
-    const id = SAFE_REQUEST_ID.test(request.requestId) ? request.requestId : '-';
+  private refuse(reason: CapabilityIssueError['reason'], job: JobCapabilityRequest, detail?: string): CapabilityIssueError {
+    const id = SAFE_REQUEST_ID.test(job.requestId) ? job.requestId : '-';
     this.logger.warn(`Capability not issued: ${reason}${detail ? ` (${detail})` : ''} purpose=${JOB_PURPOSE} request=${id}`);
     return new CapabilityIssueError(reason, detail);
   }

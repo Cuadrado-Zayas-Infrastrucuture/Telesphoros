@@ -115,7 +115,8 @@ describe('POST /v1/job-capabilities', () => {
     expect(await capabilities(t.job)).toBe(0);
     expect(await owner(async (c) => Number((await c.query('SELECT count(*) AS n FROM capability_issuance_log WHERE request_id = $1', [t.job])).rows[0].n))).toBe(0);
     expect(answer.text).not.toContain(key.toString('base64url'));
-    if (refused.headers['x-telesphoros-signature']) expect(answer.text).not.toContain(refused.headers['x-telesphoros-signature']);
+    const signature = (refused.headers as Record<string, string | undefined>)['x-telesphoros-signature'];
+    if (signature) expect(answer.text).not.toContain(signature);
   });
 
   it("passes on the database's refusal code when the worker does not hold the job", async () => {
