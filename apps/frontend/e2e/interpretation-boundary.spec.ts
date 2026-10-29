@@ -1,12 +1,22 @@
 import { expect, test } from '@playwright/test';
 import { signInAs } from './helpers';
 
-test('production build has no one-screen workspace route or link (specs/016 OSW-3)', async ({ page }) => {
+test('production build has no one-screen workspace route or link (specs/016 OSW-3, specs/022 WMS-3)', async ({ page }) => {
   await signInAs(page, 'alice', '/reports');
-  await expect(page.getByRole('link', { name: 'Workspace preview' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Workspace', exact: true })).toHaveCount(0);
+  await expect(page.locator('a[href="/local-workspace"]')).toHaveCount(0);
   await page.goto('/local-workspace');
   await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Which report should we read?' })).toHaveCount(0);
+});
+
+test('production sign-in from the home page still lands on the home page (specs/022 WMS-1)', async ({ page }) => {
+  await page.goto('/signin');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('button', { name: /Sign in as alice\b/ }).click();
+  await page.waitForURL('**/auth/callback**');
+  await page.waitForURL((url) => !url.pathname.startsWith('/auth/callback'));
+  expect(new URL(page.url()).pathname).toBe('/');
 });
 
 test('production build has no interpretation preview route', async ({ page }) => {

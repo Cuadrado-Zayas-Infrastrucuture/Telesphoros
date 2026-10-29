@@ -24,6 +24,18 @@ describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () 
     expect(sidebar()).not.toBeNull();
   });
 
+  it('in the local preview, puts "Workspace" first, linking to the one-screen workspace (specs/022)', async () => {
+    vi.stubGlobal('location', { ...window.location, hostname: '127.0.0.1' });
+    try {
+      renderApp('/settings', { signedInAs: ['clinician'] });
+      const nav = await primary();
+      expect(nav.getAllByRole('link').map((link) => link.textContent)).toEqual(['Workspace', 'Chat preview', 'Reports', 'Upload report', 'Settings', 'Overview']);
+      expect(nav.getByRole('link', { name: 'Workspace' })).toHaveAttribute('href', '/local-workspace');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('gives an administrator Usage and no Reports link that would lead to "no access"', async () => {
     renderApp('/usage', { signedInAs: ['admin'] as Role[] });
     expect(await linkNames()).toEqual(['Usage', 'Settings', 'Overview']);
