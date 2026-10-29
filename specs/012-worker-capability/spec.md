@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-28
 
-**Status**: Draft, awaiting the founder's approval of [plan.md](plan.md). Direction set by the founder on 2026-10-28: option B, _"the issuer checks again when the worker picks up the job"_, with a fail-closed guard first (`fix/evaluation-requests-issuer-guard`, local).
+**Status**: Approved 2026-10-28 ([plan.md](plan.md), D1 to D5 as recommended). Direction set by the founder on 2026-10-28: option B, _"the issuer checks again when the worker picks up the job"_, with a fail-closed guard first (#141, merged as `fefcb31`).
 
 **Input**: H4 ([spec 007](../007-async-evaluation/spec.md)) left out "how a background worker acts". The [P2 session authority decision](../../docs/design/plans/agentic-session-capability.md) of 2026-10-19 accepted a trusted backend identity for synthetic-only staging and requires an issuer-proved identity before any real data.
 
