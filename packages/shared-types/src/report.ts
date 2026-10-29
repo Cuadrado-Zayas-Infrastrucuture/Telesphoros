@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-export const REPORT_TYPES = ['vcf', 'structured', 'lab-pdf'] as const;
+/** The accepted report types. No raw genomic data (VCF or sequence) is stored (founder decision, 2026-10-28); `structured` is a curated JSON report. */
+export const REPORT_TYPES = ['structured', 'lab-pdf'] as const;
 export const reportTypeSchema = z.enum(REPORT_TYPES);
 export type ReportType = z.infer<typeof reportTypeSchema>;
 
@@ -16,10 +17,10 @@ export const reportFilenameSchema = z
   .min(1)
   .max(100)
   .regex(/^[A-Za-z0-9._-]+$/, 'Use letters, numbers, dots, dashes and underscores only.')
-  .regex(/\.(vcf|json|pdf)$/i, 'Only .vcf, .json and .pdf files are accepted.');
+  .regex(/\.(json|pdf)$/i, 'Only .json and .pdf files are accepted.');
 
-/** The one extension each report type takes. A name must match its type: a .pdf is never a "vcf". */
-export const REPORT_EXTENSIONS: Record<ReportType, '.vcf' | '.json' | '.pdf'> = { vcf: '.vcf', structured: '.json', 'lab-pdf': '.pdf' };
+/** The one extension each report type takes. A name must match its type: a .pdf is never "structured". */
+export const REPORT_EXTENSIONS: Record<ReportType, '.json' | '.pdf'> = { structured: '.json', 'lab-pdf': '.pdf' };
 
 export const filenameMatchesType = (type: ReportType, filename: string): boolean => filename.toLowerCase().endsWith(REPORT_EXTENSIONS[type]);
 
@@ -82,7 +83,6 @@ export type ReportListQuery = z.infer<typeof reportListQuerySchema>;
 
 /** Content types accepted per report type. The client declares one; the server checks it matches. */
 export const REPORT_CONTENT_TYPES: Record<ReportType, readonly string[]> = {
-  vcf: ['text/x-vcf', 'text/plain'],
   structured: ['application/json'],
   'lab-pdf': ['application/pdf'],
 };

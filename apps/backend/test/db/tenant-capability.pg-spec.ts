@@ -607,9 +607,11 @@ describe('reverting 0031 and 0028', () => {
     const through = revertThrough('tenant_capability_issue_current'); // this migration and anything above it
     expect(await owner((c) => migrateDown(c, through.steps))).toEqual(through.reverted);
     const down = await owner(catalogSnapshot);
-    // 0032 through D01b (0055) go with 0031. H1, H3, H4 and D01b remove their request/receipt/cancellation/decision tables, policies and helpers; 0043's drop is undone below.
+    // 0032 through spec 012's 0057 go with 0031. H1, H3, H4 and D01b remove their request/receipt/cancellation/decision tables, policies and helpers, and
+    // 0056 its job-capability function and the capability owner's read policies on jobs and evaluation requests, 0057 its nonce table and function;
+    // 0043's drop is undone below.
     const removed =
-      /tenant_capability_issue_current|app_tenant_bound|app_capability_version|tenant_capability_bind_internal|member_sign_out|patient_merge_decisions_hold|patients_guard_delete|outbox_stats|patients_creation_request_guard|patient_identifiers_creation_request_guard|invitations_creation_request_guard|invitation_create_keyed|outbox_append\(text,uuid,text\)|agentic_explain_receipt|agentic_explain_identity|agentic_explain_run|agentic_explain_transition|evaluation_request|evaluation_job_fence|evaluation_job_cancel|evaluation_cancellation_check|evaluation_completion_check|clinician_result_decisions|clinician_decision_codes_valid/;
+      /tenant_capability_issue_current|tenant_capability_issue_for_job|jobs_capability|issuer_nonce_claim|issuer_request_nonces|app_tenant_bound|app_capability_version|tenant_capability_bind_internal|member_sign_out|patient_merge_decisions_hold|patients_guard_delete|outbox_stats|patients_creation_request_guard|patient_identifiers_creation_request_guard|invitations_creation_request_guard|invitation_create_keyed|outbox_append\(text,uuid,text\)|agentic_explain_receipt|agentic_explain_identity|agentic_explain_run|agentic_explain_transition|evaluation_request|evaluation_job_fence|evaluation_job_cancel|evaluation_cancellation_check|evaluation_completion_check|clinician_result_decisions|clinician_decision_codes_valid/;
     expect(down.filter((l) => removed.test(l))).toEqual([]);
     // Reverting 0043 puts the dropped legacy table back (with its policy), so the reverted catalog has those two lines the head catalog lacks; nothing else moved.
     const restoredLegacyTable = (l: string) => l.startsWith('rel recommendations ') || l.startsWith('policy recommendations.');
@@ -619,7 +621,11 @@ describe('reverting 0031 and 0028', () => {
     const hardened = (l: string) => /^policy report_upload_(attempts|runs)\./.test(l) || /^policy security_events\./.test(l) || l.startsWith('rel security_events ');
     expect(down.filter((l) => /^policy report_upload_(attempts|runs)\./.test(l)).every((l) => l.endsWith('{public}'))).toBe(true);
     expect(full.filter((l) => /^policy report_upload_(attempts|runs)\./.test(l)).some((l) => l.includes('{public}'))).toBe(false);
-    expect(full.filter((l) => !removed.test(l) && !hardened(l))).toEqual(down.filter((l) => !restoredLegacyTable(l) && !hardened(l)));
+    // 0056 grants the capability owner SELECT on jobs; reverting it takes exactly that one entry off the table's access list.
+    const jobCapabilityGrant = ',telesphoros_capability=r/telesphoros_jobs';
+    expect(full.filter((l) => l.startsWith('rel jobs ') && l.includes(jobCapabilityGrant))).toHaveLength(1);
+    const withoutJobGrant = (l: string) => (l.startsWith('rel jobs ') ? l.replace(jobCapabilityGrant, '') : l);
+    expect(full.filter((l) => !removed.test(l) && !hardened(l)).map(withoutJobGrant)).toEqual(down.filter((l) => !restoredLegacyTable(l) && !hardened(l)));
     expect(await owner((c) => migrateUp(c))).toEqual(versionsFrom('tenant_capability_issue_current'));
     expect(await owner(catalogSnapshot)).toEqual(full); // and re-applying 0043 drops the legacy table again
     // the snapshot is sensitive to the thing it guards: a grant to PUBLIC changes it

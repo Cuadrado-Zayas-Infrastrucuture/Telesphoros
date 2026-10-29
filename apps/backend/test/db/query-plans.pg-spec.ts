@@ -44,7 +44,7 @@ beforeAll(async () => {
       );
       await c.query(
         `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes)
-        SELECT $1, 'syn-author', p.id, 'vcf', 'syn.vcf', 100 FROM patients p CROSS JOIN generate_series(1,2) g WHERE p.tenant_id=$1`,
+        SELECT $1, 'syn-author', p.id, 'structured', 'syn.json', 100 FROM patients p CROSS JOIN generate_series(1,2) g WHERE p.tenant_id=$1`,
         [tenant],
       );
     }

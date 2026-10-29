@@ -4,7 +4,7 @@ import { useLandingLanguage } from '@/lib/landing/landing-language';
 import '@/styles/landing-workflow.css';
 
 const records = [
-  { name: 'SYN-001.vcf', type: 'VCF', format: 'Variant Call Format', uploaded: true },
+  { name: 'SYN-001.pdf', type: 'PDF', format: 'Lab report (PDF)', uploaded: true },
   { name: 'SYN-002.json', type: 'JSON', format: 'JSON', uploaded: false },
 ] as const;
 /** An invented, shortened value that only illustrates what the server compares. It is labelled fictional on screen. */

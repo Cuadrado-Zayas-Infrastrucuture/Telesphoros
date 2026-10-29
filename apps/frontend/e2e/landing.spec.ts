@@ -60,7 +60,7 @@ test('landing has working anchors, readable responsive layout and honest preview
   await expect(incomplete).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#landing-file-detail').getByText('Upload not complete', { exact: true })).toBeVisible();
   await expect(page.locator('#landing-file-detail')).toContainText('Only metadata is available.');
-  const verified = page.getByRole('button', { name: /SYN-001.vcf/ });
+  const verified = page.getByRole('button', { name: /SYN-001\.pdf/ });
   await verified.focus(); await page.keyboard.press('Space');
   await expect(verified).toHaveAttribute('aria-pressed', 'true');
   await expect(incomplete).toHaveAttribute('aria-pressed', 'false');
@@ -69,7 +69,7 @@ test('landing has working anchors, readable responsive layout and honest preview
   await page.getByRole('button', { name: 'Back to the beginning', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Upload', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'JSON', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: 'VCF', exact: true }).click();
+  await page.getByRole('button', { name: 'PDF', exact: true }).click();
   expect(illustrationRequests).toEqual([]);
   await page.getByRole('region', { name: 'Add a report. Know what’s stored.' }).screenshot({ path: `../../docs/design/previews/workflow-${info.project.name}.png` });
   // Load the below-fold original artwork, and let every entrance run, before full-page evidence capture.

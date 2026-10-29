@@ -125,8 +125,8 @@ suite('F2 fresh-process independent byte recovery (synthetic translated copies)'
     const kinds = result.metrics!.requiredByKind as Record<string, { objects: number }>;
     expect(kinds['lab-pdf'].objects).toBe(2);
     expect(kinds.text.objects).toBe(1);
-    expect(kinds.vcf.objects).toBe(1);
-    expect(kinds.structured.objects).toBe(1);
+    expect(kinds.structured.objects).toBe(2); // formerly one vcf and one structured
+    expect(Object.keys(kinds).sort()).toEqual(['lab-pdf', 'structured', 'text']);
     measurements.push(result.metrics);
     pass(name);
   }
@@ -156,11 +156,11 @@ suite('F2 fresh-process independent byte recovery (synthetic translated copies)'
     copy = new S3EvidenceStorage({ ...settings, bucket: await newBucket(), prefix: 'catalogues/' });
     backupStore = new S3EvidenceStorage({ ...settings, bucket: await newBucket(), prefix: 'backups/' });
     sourceStorage = new S3ObjectStorage(emulator(), primaryBucket);
-    async function uploaded(tenant: string, kind: 'lab-pdf' | 'vcf' | 'structured', bytes: Buffer, pinned: boolean) {
+    async function uploaded(tenant: string, kind: 'lab-pdf' | 'structured', bytes: Buffer, pinned: boolean) {
       const patientId = randomUUID();
       const reportId = randomUUID();
       const storageKey = 'reports/' + reportId;
-      const contentType = kind === 'lab-pdf' ? 'application/pdf' : kind === 'vcf' ? 'text/x-vcf' : 'application/json';
+      const contentType = kind === 'lab-pdf' ? 'application/pdf' : 'application/json';
       const put = await sourceStorage.putObject(storageKey, bytes, contentType);
       await withAdmin(pg.adminUrl, async (c) => {
         await c.query("INSERT INTO patients (id,tenant_id,created_by,label) VALUES ($1,$2,'syn-author',$3)", [patientId, tenant, 'SYN-' + reportId]);
@@ -174,7 +174,7 @@ suite('F2 fresh-process independent byte recovery (synthetic translated copies)'
     pdf = await uploaded('syn-f2-a', 'lab-pdf', Buffer.from('%PDF-1.4\n% synthetic F2 bytes\n'), true);
     const soft = await uploaded('syn-f2-b', 'lab-pdf', Buffer.from('%PDF-1.4\n% synthetic soft-deleted\n'), true);
     await withAdmin(pg.adminUrl, (c) => c.query('UPDATE reports SET deleted_at=now() WHERE tenant_id=$1 AND id=$2', [soft.tenantId, soft.reportId]));
-    const vcf = await uploaded('syn-f2-a', 'vcf', Buffer.from('##fileformat=VCFv4.2\n'), false);
+    const structuredA = await uploaded('syn-f2-a', 'structured', Buffer.from('{"synthetic":"tenant-a"}'), false);
     const structured = await uploaded('syn-f2-b', 'structured', Buffer.from('{"synthetic":true}'), false);
     const text = 'synthetic \u{1f9ea} recovery text';
     const textKey = pdf.storageKey + '/text/synthetic';
@@ -187,7 +187,7 @@ suite('F2 fresh-process independent byte recovery (synthetic translated copies)'
     }
     // Resolve unpinned completed standard reports/text from historical bytes, never latest substitutes.
     for (const [key, type] of [
-      [vcf.storageKey, 'text/x-vcf'],
+      [structuredA.storageKey, 'application/json'],
       [structured.storageKey, 'application/json'],
       [textKey, 'text/plain; charset=utf-8'],
     ]) {

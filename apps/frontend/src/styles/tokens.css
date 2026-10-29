@@ -82,6 +82,7 @@
 
   /* Layout */
   --size-sidebar: 15rem;
+  --size-sidebar-collapsed: 4.5rem;
   --size-context-drawer: 30rem;
   --size-chat-workspace: calc(100dvh - 15rem);
   --size-chat-min: 26rem;
@@ -93,6 +94,9 @@
   --size-image-dialog: 44rem;
   --size-source-image-zoom: 76.5rem;
   --duration-preview-shimmer: 3s;
+  /* Loading placeholders: shown only after this delay (fast loads never flash), then a slow sweep. */
+  --delay-skeleton: 150ms;
+  --duration-skeleton-shimmer: 1.8s;
   /* Deepest progressive blur at a scroll edge; the container pads its content by the same. */
   --size-blur-edge: 3rem;
 
@@ -104,6 +108,8 @@
 
   /* Behind the logo images: nothing in light; a seafoam plate in dark, where the dark teal marks would vanish. */
   --mark-plate: transparent;
+  /* The faint highlight that sweeps across a loading placeholder. */
+  --skeleton-highlight: #ffffffb3;
 }
 
 /*
@@ -136,6 +142,7 @@
   --brand-accent: #6FAFBD;
   --band: #151719;
   --mark-plate: #DCEBE7;
+  --skeleton-highlight: #ffffff14;
 }
 
 /* Product landing: decorative depth, kept separate from operational surfaces. */

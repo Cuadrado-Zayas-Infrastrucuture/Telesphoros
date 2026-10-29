@@ -23,7 +23,7 @@ const patient = async (who = token) =>
       .send({ label: `SYN-${randomUUID()}` })
       .expect(201)
   ).body.id as string;
-const metadata = (patientId: string) => ({ patientId, type: 'vcf', filename: 'synthetic.vcf', sizeBytes: 100 });
+const metadata = (patientId: string) => ({ patientId, type: 'structured', filename: 'synthetic.json', sizeBytes: 100 });
 const create = (body: object, who = token) => api().post(base).set(bearer(who)).send(body);
 
 describe('report registration retries', () => {
@@ -62,11 +62,11 @@ describe('report registration retries', () => {
     const first = await create(body).expect(201);
     const changed =
       field === 'type'
-        ? { type: 'structured', filename: 'synthetic.json' }
+        ? { type: 'lab-pdf', filename: 'synthetic.pdf' }
         : field === 'patientId'
           ? { patientId: otherPatient }
           : field === 'filename'
-            ? { filename: 'different.vcf' }
+            ? { filename: 'different.json' }
             : { sizeBytes: 101 };
     const refusal = await create({ ...body, ...changed }).expect(409);
     expect(refusal.body.error.code).toBe('CONFLICT');
@@ -77,10 +77,10 @@ describe('report registration retries', () => {
   it('matches the original snapshot after a metadata correction and returns current state', async () => {
     const body = { ...metadata(await patient()), requestId: randomUUID() };
     const first = await create(body).expect(201);
-    await api().patch(`${base}/${first.body.id}`).set(bearer(token)).send({ filename: 'corrected.vcf' }).expect(200);
+    await api().patch(`${base}/${first.body.id}`).set(bearer(token)).send({ filename: 'corrected.json' }).expect(200);
     const replay = await create(body).expect(201);
-    expect(replay.body).toMatchObject({ id: first.body.id, filename: 'corrected.vcf' });
-    await create({ ...body, filename: 'corrected.vcf' }).expect(409);
+    expect(replay.body).toMatchObject({ id: first.body.id, filename: 'corrected.json' });
+    await create({ ...body, filename: 'corrected.json' }).expect(409);
   });
 
   it('reserves keys across soft deletion instead of resurrecting or duplicating a report', async () => {

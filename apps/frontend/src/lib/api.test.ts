@@ -130,15 +130,17 @@ describe('standard report upload (the validated intake)', () => {
     const changed = { ...values };
     if (change === 'patient') changed.patientId = id;
     if (change === 'type') {
-      changed.reportType = 'vcf';
-      changed.file = file('synthetic.vcf');
+      // The only other type is lab-pdf, which the form accepts only in owned local storage mode.
+      vi.stubEnv('VITE_LOCAL_STORAGE_INTAKE', 'true');
+      changed.reportType = 'lab-pdf';
+      changed.file = file('synthetic.pdf');
     }
     if (change === 'filename') changed.file = file('new.json');
     if (change === 'bytes') changed.file = file('synthetic.json', 'y');
     await expect(submitReport(changed, lost, progress)).rejects.toThrow('interrupted');
     expect(progress.requestId).not.toBe(key);
   });
-  it.each([{ patientId: id }, { type: 'vcf' }, { filename: 'other.json' }, { sizeBytes: 2 }])(
+  it.each([{ patientId: id }, { type: 'lab-pdf' }, { filename: 'other.json' }, { sizeBytes: 2 }])(
     'refuses inconsistent registration %j before declaring or sending bytes',
     async (mismatch) => {
       const apiFetch = vi.fn().mockResolvedValue(response({ ...report(), ...mismatch }));
@@ -179,7 +181,8 @@ describe('standard report upload (the validated intake)', () => {
     const apiFetch = vi.fn();
     for (const value of [
       { ...values, syntheticConfirmed: false },
-      { ...values, file: file('bad.vcf') },
+      { ...values, file: file('bad.pdf') },
+      { ...values, file: file('raw.vcf') }, // no raw genomic data is accepted
       { ...values, file: file('bad name.json') },
       { ...values, file: file('empty.json', '') },
     ]) {

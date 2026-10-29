@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ApiFetch } from '@/lib/api';
 import { loadUsage, UsageLoadError, type UsageReport } from '@/lib/usage';
 import { Button } from '@/components/ui/Button';
-import { Skeleton } from '@/components/ui/Skeleton';
+import { SkeletonCard } from '@/components/ui/SkeletonCard';
 import { UsageSummary } from './UsageSummary';
 
 type Loaded = UsageReport | { state: 'loading' } | { state: 'failed'; message: string };
@@ -23,7 +23,20 @@ export function UsageReportView({ apiFetch, onRetry }: { apiFetch: ApiFetch; onR
     return () => controller.abort();
   }, [apiFetch]);
 
-  if (report.state === 'loading') return <Skeleton className="h-48 w-full" aria-label="Loading usage" />;
+  if (report.state === 'loading')
+    return (
+      // Shaped like UsageSummary (two month cards, then storage), so nothing moves when the figures arrive.
+      <div className="flex flex-col gap-6">
+        <p role="status" className="sr-only">
+          Loading usage…
+        </p>
+        <div className="grid gap-6 md:grid-cols-2">
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+        <SkeletonCard rows={2} description />
+      </div>
+    );
   if (report.state === 'ready') return <UsageSummary usage={report.usage} />;
   if (report.state === 'unavailable') return <p className="text-muted-foreground">Usage is not available on this server yet.</p>;
   return (

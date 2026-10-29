@@ -5,10 +5,10 @@ import { openWorkspaceNavigation, selectReportsPatient, signInAs, signInWithPati
 // from the API. File download is not offered here: signed links need the owned-storage build's configured storage origins.
 test('a clinician opens Reports from the navigation and finds the report they uploaded, without a file download', async ({ page }) => {
   const fixture = await signInWithPatient(page);
-  const name = `synthetic-${crypto.randomUUID().slice(0, 8)}.vcf`;
+  const name = `synthetic-${crypto.randomUUID().slice(0, 8)}.json`;
   await page.getByLabel(/synthetic patient \(required\)/i).selectOption(fixture.id);
-  await page.getByLabel(/report type/i).selectOption('vcf');
-  await page.getByLabel(/report file/i).setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from('##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n') });
+  await page.getByLabel(/report type/i).selectOption('structured');
+  await page.getByLabel(/report file/i).setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
   await page.getByLabel(/synthetic data only/i).check();
   await page.getByRole('button', { name: 'Upload report' }).click();
   await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { REPORT_TYPES } from '@/types/report';
 
 export const MAX_REPORT_BYTES = 10 * 1024 * 1024;
-export const ALLOWED_EXTENSIONS = ['.vcf', '.json'] as const;
+export const ALLOWED_EXTENSIONS = ['.json'] as const;
 
 /** One schema: the form validates against it now and the backend can share it later. */
 export const uploadReportSchema = z.object({
@@ -18,7 +18,7 @@ export const uploadReportSchema = z.object({
     .refine((file) => !(file instanceof File) || file.size <= MAX_REPORT_BYTES, {
       error: 'The file is larger than 10 MB.',
     })
-    .refine((file) => !(file instanceof File) || ALLOWED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext)), { error: 'Only .vcf and .json files are accepted.' }),
+    .refine((file) => !(file instanceof File) || ALLOWED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext)), { error: 'Only .json files are accepted.' }),
   syntheticConfirmed: z.boolean().refine((value) => value, {
     error: 'Confirm that this file contains synthetic data only.',
   }),

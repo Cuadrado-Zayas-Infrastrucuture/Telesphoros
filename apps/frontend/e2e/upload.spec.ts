@@ -4,10 +4,10 @@ import { openWorkspaceNavigation, signInWithPatient, waitPastSignOutSecond } fro
 
 const STORAGE_ORIGIN = process.env.E2E_REPORT_STORAGE_ORIGIN ?? 'http://127.0.0.1:5557';
 
-async function fill(page: Page, patientId: string, type: 'vcf' | 'structured', name: string, bytes: Buffer) {
+async function fill(page: Page, patientId: string, type: 'structured', name: string, bytes: Buffer) {
   await page.getByLabel(/synthetic patient \(required\)/i).selectOption(patientId);
   await page.getByLabel(/report type/i).selectOption(type);
-  await page.getByLabel(/report file/i).setInputFiles({ name, mimeType: type === 'vcf' ? 'text/plain' : 'application/json', buffer: bytes });
+  await page.getByLabel(/report file/i).setInputFiles({ name, mimeType: 'application/json', buffer: bytes });
   await page.getByLabel(/synthetic data only/i).check();
 }
 async function stored(page: Page, fixture: Awaited<ReturnType<typeof signInWithPatient>>) {
@@ -16,8 +16,8 @@ async function stored(page: Page, fixture: Awaited<ReturnType<typeof signInWithP
   return (await response.json()).data as { id: string; patientId: string; fileUploaded: boolean; sha256: string; sizeBytes: number; contentType: string }[];
 }
 
-test('VCF completes through the validated intake with no browser request to object storage, and a new upload gets a new report', async ({ page }) => {
-  const fixture = await signInWithPatient(page); const bytes = Buffer.from('##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n');
+test('a structured report completes through the validated intake with no browser request to object storage, and a new upload gets a new report', async ({ page }) => {
+  const fixture = await signInWithPatient(page); const bytes = Buffer.from('{"synthetic":true}');
   const storage: string[] = []; const transfers: string[] = []; const legacy: string[] = [];
   page.on('request', request => {
     const url = new URL(request.url());
@@ -25,16 +25,16 @@ test('VCF completes through the validated intake with no browser request to obje
     if (request.method() === 'PUT' && url.pathname.endsWith('/bytes')) transfers.push(url.pathname);
     if (/\/(upload-url|complete)$/.test(url.pathname)) legacy.push(url.pathname);
   });
-  await fill(page, fixture.id, 'vcf', 'synthetic.vcf', bytes);
+  await fill(page, fixture.id, 'structured', 'synthetic.json', bytes);
   await page.screenshot({ path: `test-results/screens/upload-form-${test.info().project.name}.png`, fullPage: true });
   await page.getByRole('button', { name: 'Upload report' }).click();
   await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
   let reports = await stored(page, fixture); expect(reports).toHaveLength(1);
   expect(reports[0]).toMatchObject({ patientId: fixture.id, fileUploaded: true, sizeBytes: bytes.length,
-    contentType: 'text/x-vcf', sha256: createHash('sha256').update(bytes).digest('hex') });
+    contentType: 'application/json', sha256: createHash('sha256').update(bytes).digest('hex') });
   await page.screenshot({ path: `test-results/screens/upload-${test.info().project.name}.png`, fullPage: true });
   await page.getByRole('button', { name: 'Upload another report' }).click();
-  await fill(page, fixture.id, 'vcf', 'synthetic.vcf', bytes); await page.getByRole('button', { name: 'Upload report' }).click();
+  await fill(page, fixture.id, 'structured', 'synthetic.json', bytes); await page.getByRole('button', { name: 'Upload report' }).click();
   await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
   reports = await stored(page, fixture); expect(reports).toHaveLength(2); expect(reports[0]!.id).not.toBe(reports[1]!.id);
   expect(transfers).toHaveLength(2); expect(storage).toEqual([]); expect(legacy).toEqual([]);
@@ -73,11 +73,11 @@ test('a refused transfer retains form inputs and retries for the same report wit
     if (transfers === 1) return route.fulfill({ status: 503, json: { error: { code: 'SERVICE_UNAVAILABLE' } } });
     return route.continue();
   });
-  await fill(page, fixture.id, 'vcf', 'retry.vcf', Buffer.from('##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n'));
+  await fill(page, fixture.id, 'structured', 'retry.json', Buffer.from('{"synthetic":true}'));
   await page.getByRole('button', { name: 'Upload report' }).click();
   await expect(page.getByRole('alert')).toContainText('server refused or interrupted');
   await expect(page.getByLabel(/synthetic patient \(required\)/i)).toHaveValue(fixture.id);
-  await expect(page.getByLabel(/report type/i)).toHaveValue('vcf');
+  await expect(page.getByLabel(/report type/i)).toHaveValue('structured');
   await expect(page.getByLabel(/synthetic data only/i)).toBeChecked();
   expect((await stored(page, fixture))[0]!.fileUploaded).toBe(false);
   await page.getByRole('button', { name: 'Upload report' }).click();
@@ -100,7 +100,7 @@ test('a malformed file is refused by the server and cannot show upload success',
 // A reload signs the app out locally and signs in again instantly; the tab keeps one small record of the interrupted upload.
 
 const RECOVERY_KEY = 'telesphoros.upload-recovery.v2';
-const VCF = Buffer.from('##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n');
+const REPORT = Buffer.from('{"synthetic":true}');
 
 /**
  * Holds the first transfer request (it never reaches the server) until `interrupt()` is called, which fails it the way a closing tab does; later requests pass.
@@ -133,7 +133,7 @@ async function reselect(page: Page, fixture: { id: string; label: string }, name
     if (!(await next.count()) || !(await next.isEnabled())) throw new Error('The fixture patient was not listed within the bounded test pages.');
     await next.click();
   }
-  await fill(page, fixture.id, 'vcf', name, bytes);
+  await fill(page, fixture.id, 'structured', name, bytes);
 }
 
 test('a reload during the transfer finishes the same upload: one report, one stored file, the same declaration, and nothing sensitive kept', async ({ page }) => {
@@ -145,28 +145,28 @@ test('a reload during the transfer finishes the same upload: one report, one sto
     if (request.method() === 'PUT' && request.url().endsWith('/bytes')) transfers++;
   });
   const held = await holdTransfer(page);
-  await fill(page, fixture.id, 'vcf', 'reload.vcf', VCF);
+  await fill(page, fixture.id, 'structured', 'reload.json', REPORT);
   await page.getByRole('button', { name: 'Upload report' }).click();
   await held.arrived;
   const kept = await page.evaluate(key => window.sessionStorage.getItem(key), RECOVERY_KEY);
   expect(kept).toBeTruthy();
   expect(kept).not.toContain(fixture.id);
   expect(kept).not.toMatch(/Bearer|eyJ|patientId|uploadUrl|X-Amz/i);
-  expect(kept).not.toContain('reload.vcf');
-  expect(JSON.parse(kept!)).toMatchObject({ v: 2, scope: expect.stringMatching(/^[0-9a-f]{64}$/), file: { sizeBytes: VCF.length, reportType: 'vcf', sha256: createHash('sha256').update(VCF).digest('hex') } });
+  expect(kept).not.toContain('reload.json');
+  expect(JSON.parse(kept!)).toMatchObject({ v: 2, scope: expect.stringMatching(/^[0-9a-f]{64}$/), file: { sizeBytes: REPORT.length, reportType: 'structured', sha256: createHash('sha256').update(REPORT).digest('hex') } });
   expect((await stored(page, fixture))[0]!.fileUploaded).toBe(false);
 
   await reloadAndSignIn(page, held.interrupt);
   await expect(page.getByText('An upload was interrupted')).toBeVisible();
   await expect(page.getByText('The file you chose earlier', { exact: true })).toBeVisible();
   await page.screenshot({ path: `test-results/screens/upload-interrupted-${test.info().project.name}.png`, fullPage: true });
-  await reselect(page, fixture, 'reload.vcf', VCF);
+  await reselect(page, fixture, 'reload.json', REPORT);
   await page.getByRole('button', { name: 'Upload report' }).click();
   await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
 
   const reports = await stored(page, fixture);
   expect(reports).toHaveLength(1);
-  expect(reports[0]).toMatchObject({ fileUploaded: true, sizeBytes: VCF.length, sha256: createHash('sha256').update(VCF).digest('hex') });
+  expect(reports[0]).toMatchObject({ fileUploaded: true, sizeBytes: REPORT.length, sha256: createHash('sha256').update(REPORT).digest('hex') });
   expect(registrations).toHaveLength(1); // the reload did not register a second report
   expect(declarations).toHaveLength(2); expect(declarations[0]).toBe(declarations[1]); // the original declaration was replayed
   expect(transfers).toBe(2); // the held one never reached the server
@@ -183,12 +183,12 @@ test('a reload after the server stored the file finishes without sending it agai
     if (!first) return route.continue();
     first = false; const reply = await route.fetch(); expect(reply.status()).toBe(200); replied(); await lost; await route.abort('failed'); // the server stored it; the reply never arrives
   });
-  await fill(page, fixture.id, 'vcf', 'stored.vcf', VCF);
+  await fill(page, fixture.id, 'structured', 'stored.json', REPORT);
   await page.getByRole('button', { name: 'Upload report' }).click();
   await stored$;
 
   await reloadAndSignIn(page, lose);
-  await reselect(page, fixture, 'stored.vcf', VCF);
+  await reselect(page, fixture, 'stored.json', REPORT);
   await page.getByRole('button', { name: 'Upload report' }).click();
   await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
   expect(await stored(page, fixture)).toHaveLength(1);
@@ -198,11 +198,11 @@ test('a reload after the server stored the file finishes without sending it agai
 test('a different patient or file after a reload is refused until the interrupted upload is finished or cancelled', async ({ page }) => {
   const fixture = await signInWithPatient(page);
   const held = await holdTransfer(page);
-  await fill(page, fixture.id, 'vcf', 'first.vcf', VCF);
+  await fill(page, fixture.id, 'structured', 'first.json', REPORT);
   await page.getByRole('button', { name: 'Upload report' }).click();
   await held.arrived;
   await reloadAndSignIn(page, held.interrupt);
-  await reselect(page, fixture, 'second.vcf', Buffer.concat([VCF, Buffer.from('1\t100\t.\tA\tG\t.\t.\t.\n')]));
+  await reselect(page, fixture, 'second.json', Buffer.from('{"synthetic":true,"second":true}'));
   await page.getByRole('button', { name: 'Upload report' }).click();
   await expect(page.getByRole('alert')).toContainText('interrupted upload of another file');
   expect(await stored(page, fixture)).toHaveLength(1);
@@ -212,7 +212,7 @@ test('cancelling the interrupted upload after a reload leaves nothing stored, cl
   const fixture = await signInWithPatient(page); let cancels = 0;
   page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/cancel')) cancels++; });
   const held = await holdTransfer(page);
-  await fill(page, fixture.id, 'vcf', 'cancel.vcf', VCF);
+  await fill(page, fixture.id, 'structured', 'cancel.json', REPORT);
   await page.getByRole('button', { name: 'Upload report' }).click();
   await held.arrived;
   await reloadAndSignIn(page, held.interrupt);
@@ -223,7 +223,7 @@ test('cancelling the interrupted upload after a reload leaves nothing stored, cl
   expect(await page.evaluate(key => window.sessionStorage.getItem(key), RECOVERY_KEY)).toBeNull();
   expect((await stored(page, fixture)).every(report => !report.fileUploaded)).toBe(true);
 
-  await reselect(page, fixture, 'cancel.vcf', VCF);
+  await reselect(page, fixture, 'cancel.json', REPORT);
   await page.getByRole('button', { name: 'Upload report' }).click();
   await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
   const reports = await stored(page, fixture);
@@ -233,7 +233,7 @@ test('cancelling the interrupted upload after a reload leaves nothing stored, cl
 test('signing out clears an interrupted upload, so the next person on this tab is not offered it', async ({ page }) => {
   const fixture = await signInWithPatient(page);
   const held = await holdTransfer(page);
-  await fill(page, fixture.id, 'vcf', 'signout.vcf', VCF);
+  await fill(page, fixture.id, 'structured', 'signout.json', REPORT);
   await page.getByRole('button', { name: 'Upload report' }).click();
   await held.arrived;
   await reloadAndSignIn(page, held.interrupt);
@@ -249,7 +249,7 @@ test('signing out clears an interrupted upload, so the next person on this tab i
 test('a different verified caller after a 401 never sees or replays the previous upload', async ({ page, context }) => {
   const fixture = await signInWithPatient(page);
   const held = await holdTransfer(page);
-  await fill(page, fixture.id, 'vcf', 'previous-caller.vcf', VCF);
+  await fill(page, fixture.id, 'structured', 'previous-caller.json', REPORT);
   await page.getByRole('button', { name: 'Upload report' }).click();
   await held.arrived;
   await reloadAndSignIn(page, held.interrupt);
@@ -262,7 +262,7 @@ test('a different verified caller after a 401 never sees or replays the previous
   await page.getByRole('button', { name: /Sign in as hal\b/ }).click();
   await page.waitForURL('**/reports/upload');
   await expect(page.getByRole('heading', { level: 1, name: 'Upload report' })).toBeVisible();
-  await expect(page.getByText('previous-caller.vcf', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('previous-caller.json', { exact: true })).toHaveCount(0);
   await expect(page.getByText('An upload was interrupted')).toHaveCount(0);
   expect(await page.evaluate(key => sessionStorage.getItem(key), RECOVERY_KEY)).toBeNull();
 });
@@ -270,7 +270,7 @@ test('a different verified caller after a 401 never sees or replays the previous
 for (const invalid of ['legacy', 'expired'] as const) test(`${invalid} metadata is discarded before the upload route displays recovery`, async ({ page }) => {
   const fixture = await signInWithPatient(page);
   const held = await holdTransfer(page);
-  await fill(page, fixture.id, 'vcf', 'discard.vcf', VCF);
+  await fill(page, fixture.id, 'structured', 'discard.json', REPORT);
   await page.getByRole('button', { name: 'Upload report' }).click();
   await held.arrived;
   await page.evaluate(({ key, invalid }) => {
@@ -285,7 +285,7 @@ for (const invalid of ['legacy', 'expired'] as const) test(`${invalid} metadata 
     }
   }, { key: RECOVERY_KEY, invalid });
   await reloadAndSignIn(page, held.interrupt);
-  await expect(page.getByText('discard.vcf', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('discard.json', { exact: true })).toHaveCount(0);
   await expect(page.getByText('An upload was interrupted')).toHaveCount(0);
   expect(await page.evaluate(key => sessionStorage.getItem(key), RECOVERY_KEY)).toBeNull();
   expect(await page.evaluate(() => sessionStorage.getItem('telesphoros.upload-recovery.v1'))).toBeNull();

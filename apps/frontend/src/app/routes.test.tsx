@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { axe } from 'vitest-axe';
@@ -73,21 +73,31 @@ describe('protected pages', () => {
   });
 
   it('hide the upload link from people who cannot use it', async () => {
-    renderApp('/', { signedInAs: ['reader'] });
-    await screen.findByRole('button', { name: 'Sign out' });
+    renderApp('/settings', { signedInAs: ['reader'] });
+    await screen.findByRole('button', { name: 'Collapse sidebar' });
     expect(screen.queryByRole('link', { name: 'Upload report' })).not.toBeInTheDocument();
   });
 
-  it('show the upload link, the role and a sign-out button to a clinician', async () => {
+  it('show the upload link, the role and a sign-out control in the sidebar to a clinician', async () => {
+    renderApp('/settings', { signedInAs: ['clinician'] });
+    await screen.findByRole('button', { name: 'Collapse sidebar' });
+    expect(screen.getByRole('link', { name: 'Upload report' })).toBeInTheDocument();
+    const sidebar = document.querySelector('header.workspace-navigation') as HTMLElement;
+    expect(within(sidebar).getByText('clinician')).toBeInTheDocument();
+    expect(within(sidebar).getAllByRole('button', { name: 'Sign out' })[0]).toBeEnabled();
+  });
+
+  it('offer the way back into the workspace on the landing header, with no sign-out there', async () => {
     renderApp('/', { signedInAs: ['clinician'] });
-    expect(await screen.findByRole('link', { name: 'Upload report' })).toBeInTheDocument();
-    expect(screen.getByText('clinician')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sign out' })).toBeEnabled();
+    expect(await screen.findByRole('link', { name: 'Open workspace' })).toHaveAttribute('href', '/reports');
+    expect(within(screen.getByRole('banner')).queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
   });
 
   it('sign out calls the identity client and forgets the user', async () => {
-    const { client } = renderApp('/', { signedInAs: ['clinician'] });
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Sign out' }));
+    const { client } = renderApp('/settings', { signedInAs: ['clinician'] });
+    await screen.findByRole('button', { name: 'Collapse sidebar' });
+    const sidebar = document.querySelector('header.workspace-navigation') as HTMLElement;
+    await userEvent.setup().click(within(sidebar).getAllByRole('button', { name: 'Sign out' })[0]!);
     expect(client.signOut).toHaveBeenCalledTimes(1);
     expect(await screen.findByRole('link', { name: 'Sign in' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Upload report' })).not.toBeInTheDocument();

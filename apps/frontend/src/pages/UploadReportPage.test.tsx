@@ -33,8 +33,8 @@ const interruptedUpload = () => {
   const progress: UploadProgress = {
     requestId: '55555555-5555-4555-8555-555555555555',
     reportId,
-    facts: { reportType: 'vcf', name: 'half.vcf', sizeBytes: 2048, sha256: 'a'.repeat(64) },
-    declaration: { requestId: '66666666-6666-4666-8666-666666666666', revision: '33333333-3333-4333-8333-333333333333', contentType: 'text/x-vcf', sha256: 'a'.repeat(64) },
+    facts: { reportType: 'structured', name: 'half.json', sizeBytes: 2048, sha256: 'a'.repeat(64) },
+    declaration: { requestId: '66666666-6666-4666-8666-666666666666', revision: '33333333-3333-4333-8333-333333333333', contentType: 'application/json', sha256: 'a'.repeat(64) },
     attempt: { attemptId: '44444444-4444-4444-8444-444444444444', revision: '77777777-7777-4777-8777-777777777777', state: 'declared', expiresAt: '2099-01-01T00:00:00.000Z' },
   };
   bindRecovery(progress, pageOwner);
@@ -52,11 +52,11 @@ afterEach(() => {
   window.sessionStorage.clear();
 });
 
-async function fillValidForm(user: ReturnType<typeof userEvent.setup>, fileName = 'sample.vcf') {
+async function fillValidForm(user: ReturnType<typeof userEvent.setup>, fileName = 'sample.json') {
   await screen.findByRole('option', { name: 'SYN-0001' });
   await user.selectOptions(screen.getByLabelText(/synthetic patient \(required\)/i), patientId);
-  await user.selectOptions(screen.getByLabelText(/report type/i), 'vcf');
-  await user.upload(screen.getByLabelText(/report file/i), new File(['x'], fileName));
+  await user.selectOptions(screen.getByLabelText(/report type/i), 'structured');
+  await user.upload(screen.getByLabelText(/report file/i), new File(['{"synthetic":true}'], fileName));
   await user.click(screen.getByLabelText(/synthetic data only/i));
 }
 
@@ -100,14 +100,14 @@ describe('UploadReportPage', () => {
     });
     const user = userEvent.setup();
     render(<UploadReportPage />);
-    await fillValidForm(user, 'fail.vcf');
+    await fillValidForm(user, 'fail.json');
     await user.click(screen.getByRole('button', { name: 'Upload report' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('The server could not accept this report.');
     expect(screen.getByLabelText(/synthetic patient \(required\)/i)).toHaveValue(patientId);
-    expect(screen.getByLabelText(/report type/i)).toHaveValue('vcf');
+    expect(screen.getByLabelText(/report type/i)).toHaveValue('structured');
     expect(screen.getByLabelText(/synthetic data only/i)).toBeChecked();
-    expect((screen.getByLabelText(/report file/i) as HTMLInputElement).files?.[0]?.name).toBe('fail.vcf');
+    expect((screen.getByLabelText(/report file/i) as HTMLInputElement).files?.[0]?.name).toBe('fail.json');
     expect(screen.getByRole('button', { name: 'Upload report' })).toBeEnabled();
   });
 
@@ -136,7 +136,7 @@ describe('UploadReportPage', () => {
     render(<UploadReportPage />);
     expect(await screen.findByText('An upload was interrupted')).toBeInTheDocument();
     expect(screen.getByText('The file you chose earlier')).toBeInTheDocument();
-    expect(screen.queryByText('half.vcf')).not.toBeInTheDocument();
+    expect(screen.queryByText('half.json')).not.toBeInTheDocument();
     expect(screen.getByText(/2\.0 KiB/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Cancel the interrupted upload' })).toBeEnabled();
   });
@@ -168,7 +168,7 @@ describe('UploadReportPage', () => {
     expect(await screen.findByText('The interrupted upload was cancelled. You can start a new one.')).toBeInTheDocument();
     expect(screen.queryByText('An upload was interrupted')).not.toBeInTheDocument();
     submitMock.mockResolvedValueOnce({ reference: reportId });
-    await fillValidForm(user, 'next.vcf');
+    await fillValidForm(user, 'next.json');
     await user.click(screen.getByRole('button', { name: 'Upload report' }));
     expect(submitMock.mock.calls[0]![2]).toEqual({}); // a clean progress: nothing of the cancelled upload is carried over
   });
@@ -185,7 +185,7 @@ describe('UploadReportPage', () => {
     submitMock.mockResolvedValueOnce({ reference: reportId });
     const user = userEvent.setup();
     render(<UploadReportPage />);
-    await fillValidForm(user, 'half.vcf');
+    await fillValidForm(user, 'half.json');
     await user.click(screen.getByRole('button', { name: 'Upload report' }));
     expect(submitMock.mock.calls[0]![2]).toMatchObject({ reportId, restored: true, requestId: '55555555-5555-4555-8555-555555555555' });
   });
@@ -448,17 +448,17 @@ describe('guided upload questionnaire', () => {
     await screen.findByRole('heading', { name: 'Choose file' });
     await user.click(screen.getByRole('button', { name: 'Next step' }));
     expect(await screen.findByText('Choose a report type.')).toBeVisible();
-    await user.selectOptions(screen.getByLabelText(/report type/i), 'vcf');
-    await user.upload(screen.getByLabelText(/report file/i), new File(['x'], 'guided.vcf'));
+    await user.selectOptions(screen.getByLabelText(/report type/i), 'structured');
+    await user.upload(screen.getByLabelText(/report file/i), new File(['{"synthetic":true}'], 'guided.json'));
     await user.click(screen.getByRole('button', { name: 'Next step' }));
     const review = await screen.findByRole('heading', { name: 'Review upload' });
     expect(review).toHaveFocus();
-    expect(screen.getByRole('region', { name: 'Upload summary' })).toHaveTextContent('guided.vcf');
+    expect(screen.getByRole('region', { name: 'Upload summary' })).toHaveTextContent('guided.json');
     expect(submitMock).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Previous step' }));
-    expect((screen.getByLabelText(/report file/i) as HTMLInputElement).files?.[0]?.name).toBe('guided.vcf');
+    expect((screen.getByLabelText(/report file/i) as HTMLInputElement).files?.[0]?.name).toBe('guided.json');
     await user.click(screen.getByRole('button', { name: 'Show full form' }));
-    expect((screen.getByLabelText(/report file/i) as HTMLInputElement).files?.[0]?.name).toBe('guided.vcf');
+    expect((screen.getByLabelText(/report file/i) as HTMLInputElement).files?.[0]?.name).toBe('guided.json');
     await user.click(screen.getByRole('button', { name: 'Guide me step by step' }));
     await user.click(screen.getByRole('button', { name: 'Next step' }));
     await screen.findByRole('heading', { name: 'Choose file' });

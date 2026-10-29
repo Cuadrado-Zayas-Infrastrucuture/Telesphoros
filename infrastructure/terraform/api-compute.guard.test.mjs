@@ -15,7 +15,7 @@ const edgeTf = read('./api-edge.tf');
 const appFactory = read('../../apps/backend/src/app.factory.ts');
 const apiMain = read('../../apps/backend/src/main.ts');
 const { installProcessFaultHandlers } = await import('../../apps/backend/src/common/process-faults.ts').catch((error) => {
-  throw new Error(`the API's process fault handler could not be imported (this guard needs Node 22.18 or newer): ${error.message}`);
+  throw new Error(`the API's process fault handler could not be imported (it needs Node 22.18 or newer and a built @telesphoros/shared-types: pnpm --filter @telesphoros/shared-types build): ${error.message}`);
 });
 const gracefulShutdown = read('../../apps/backend/src/common/graceful-shutdown.ts');
 const ledgerSource = read('../../apps/backend/src/ledger/ledger-monitor.ts');
@@ -24,7 +24,7 @@ const loggerOptions = read('../../apps/backend/src/logger-options.ts');
 const appModule = read('../../apps/backend/src/app.module.ts');
 const cliSource = read('../../apps/backend/src/db/cli.ts');
 const { loadEnv } = await import('../../apps/backend/src/config/env.ts').catch((error) => {
-  throw new Error(`the application's own configuration loader could not be imported (this guard needs Node 22.18 or newer): ${error.message}`);
+  throw new Error(`the application's own configuration loader could not be imported (it needs Node 22.18 or newer and a built @telesphoros/shared-types: pnpm --filter @telesphoros/shared-types build): ${error.message}`);
 });
 
 const squash = (s) => s.replace(/[ \t]+/g, ' ');

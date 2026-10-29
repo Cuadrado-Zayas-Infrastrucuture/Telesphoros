@@ -10,7 +10,7 @@ import { bearer, signToken } from './helpers/tokens';
  */
 const TENANT = 'tenant-user-a';
 const OPERATOR = { by: 'operator-test', reason: 'test' };
-const BYTES = Buffer.from('##fileformat=VCFv4.3\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n');
+const BYTES = Buffer.from('{"synthetic":true}');
 const sha = createHash('sha256').update(BYTES).digest('hex');
 const person = () => `person-${randomUUID().slice(0, 8)}`;
 const token = (sub: string, options: Parameters<typeof signToken>[0] = {}) => signToken({ sub, tenant: TENANT, ...options });
@@ -35,17 +35,21 @@ async function uploadedReport(target: NestExpressApplication, sub: string): Prom
       .send({ label: `SYN-${randomUUID().slice(0, 8)}` })
       .expect(201)
   ).body.id;
-  const reportId = (await api(target).post('/api/v1/reports').set(t).send({ patientId, type: 'vcf', filename: 'inert.vcf', sizeBytes: BYTES.length }).expect(201)).body.id;
+  const reportId = (await api(target).post('/api/v1/reports').set(t).send({ patientId, type: 'structured', filename: 'inert.json', sizeBytes: BYTES.length }).expect(201)).body.id;
   const revision = (await api(target).get(`/api/v1/reports/${reportId}/upload-state`).set(t).expect(200)).body.revision;
   const attempt = (
-    await api(target).post(`/api/v1/reports/${reportId}/upload-attempts`).set(t).send({ requestId: randomUUID(), revision, contentType: 'text/x-vcf', sha256: sha }).expect(201)
+    await api(target)
+      .post(`/api/v1/reports/${reportId}/upload-attempts`)
+      .set(t)
+      .send({ requestId: randomUUID(), revision, contentType: 'application/json', sha256: sha })
+      .expect(201)
   ).body;
   await api(target)
     .put(`/api/v1/reports/${reportId}/upload-attempts/${attempt.attemptId}/bytes`)
     .set(t)
     .set('X-Upload-Revision', attempt.revision)
-    .set('Content-Type', 'text/x-vcf')
-    .send(BYTES)
+    .set('Content-Type', 'application/json')
+    .send(BYTES.toString('utf8'))
     .expect(200);
   return reportId;
 }

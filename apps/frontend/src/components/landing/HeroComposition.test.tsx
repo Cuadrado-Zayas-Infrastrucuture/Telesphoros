@@ -16,11 +16,11 @@ describe('hero composition', () => {
     const text = container.textContent ?? '';
     for (const expected of [
       'Example patient',
-      'SYN-001.vcf',
+      'SYN-001.pdf',
       'Server verified',
       'SYN-002.json',
       'Not complete',
-      'SYN-003.vcf',
+      'SYN-003.pdf',
       'Received',
       'Synthetic data only. Not for clinical use.',
     ])
