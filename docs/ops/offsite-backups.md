@@ -100,11 +100,14 @@ name, so it can never be mistaken for a backup.
   what turns "tested" into "works".**
 - The read key's `backup-check` probe, if the key turns out to be writable, leaves one empty object named in the
   finding; delete it with the admin console.
-- **The AWS backup region may refuse the backups KMS key.** In the founder's AWS account on 2026-10-29, `us-east-1` (the
-  Terraform default for `backup_region`) refused `kms:CreateKey` to the account's role, and a service control policy
-  denies `kms:ListKeys` there. Before the first apply, check that the role that applies Terraform can create a KMS key
-  in `backup_region`, or choose a region that allows it
-  ([verification](../verification/s3-default-key-check.md#backups-bucket)).
+- **The AWS backup region may refuse the backups KMS key.** In the founder's AWS account on 2026-10-29 the account's
+  role could create a tagged KMS key only in the primary region (`us-east-2`): `us-east-1` (the Terraform default for
+  `backup_region`) refused it (no identity-based policy allows `kms:TagResource`; a service control policy also denies
+  `kms:ListKeys` there), and `us-west-2` refused it with an explicit deny in a service control policy. Terraform tags
+  every key (`default_tags`), so a first apply would meet the same refusal. Changing the default does not help: the
+  organization's policies decide which region can hold the backups key, so allowing one (or another account) belongs
+  to decision D1. Before the first apply, check that the role that applies Terraform can create a tagged KMS key in
+  `backup_region` ([verification](../verification/s3-default-key-check.md#backups-bucket)).
 
 ## Choosing the provider: questions to put to each candidate
 
