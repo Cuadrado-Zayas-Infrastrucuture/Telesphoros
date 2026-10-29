@@ -43,6 +43,8 @@ export const routes: RouteObject[] = [
           ...(import.meta.env.DEV
             ? [
                 { path: 'local-interpretation', lazy: async () => ({ Component: (await import('@/pages/LocalInterpretationPage')).default }) },
+                // specs/016: the whole flow on one screen; brings its own bar, so AppLayout drops the header, sidebar and footer here.
+                { path: 'local-workspace', lazy: async () => ({ Component: (await import('@/pages/LocalWorkspacePage')).default }) },
                 { path: 'local-upload', lazy: async () => ({ Component: (await import('@/pages/LocalUploadReportPage')).default }) },
                 { path: 'local-review', lazy: async () => ({ Component: (await import('@/pages/LocalReviewPage')).default }) },
                 { path: 'local-operations', lazy: async () => ({ Component: (await import('@/pages/LocalOperationsPage')).default }) },

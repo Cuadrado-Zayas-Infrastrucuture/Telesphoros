@@ -23,6 +23,18 @@ export function AppLayout() {
   const navigation = useNavigation();
   useRouteFocus(mainRef, landing);
 
+  // The one-screen workspace (specs/016) is its own frame: no site header, sidebar or footer.
+  if (pathname === '/local-workspace') {
+    return (
+      <ThemeProvider pathname={pathname}>
+        <SkipLink />
+        <main id="main" ref={mainRef} tabIndex={-1} className="focus:outline-none">
+          <Outlet />
+        </main>
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider pathname={pathname}>
       <div className={`flex min-h-dvh flex-col${workspace ? ' workspace-shell' : ''}${sidebar ? ' workspace-layout' : ''}`}>
