@@ -50,6 +50,13 @@ describe('the evaluation worker settings', () => {
     expect(error?.message).not.toMatch(/invalid\/db|bedrock/);
   });
 
+  // The worker has no request and no sign-in token, so it cannot be issued a capability; it must not run beside an API that uses one.
+  it('refuses to start while the session issuer is in use, naming the setting and not its address', () => {
+    const attempt = () => load({}, { ...env, ISSUER_URL: 'http://session-issuer:8082' } as Env);
+    expect(attempt).toThrow(/EVALUATION_WORKER.*ISSUER_URL/);
+    expect(attempt).not.toThrow(/session-issuer|8082/);
+  });
+
   it('gives two containers with the same host name and PID 1 different ids when WORKER_ID is not set', () => {
     const unset = { ...source, WORKER_ID: undefined };
     const a = loadEvaluationWorkerConfig(env, unset, 'evaluation-worker', 1).workerId;

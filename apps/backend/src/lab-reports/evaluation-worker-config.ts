@@ -36,7 +36,8 @@ export interface EvaluationWorkerConfig {
 
 /**
  * H3: the settings of the evaluation-request worker (src/evaluation-worker.ts). Refuses to start unless it is switched on, the lab-report pipeline it runs is
- * enabled (which the application already refuses in production: it is a synthetic integration), and the queue login is not the application login.
+ * enabled (which the application already refuses in production: it is a synthetic integration), the session issuer is not in use, and the queue login is
+ * not the application login.
  * Every refusal names the setting, never its value.
  */
 export function loadEvaluationWorkerConfig(
@@ -51,6 +52,8 @@ export function loadEvaluationWorkerConfig(
   const c = parsed.data;
   if (c.EVALUATION_WORKER !== 'enabled') throw new Error('EVALUATION_WORKER is not enabled.');
   if (env.LAB_REPORT_PIPELINE !== 'enabled') throw new Error('EVALUATION_WORKER needs LAB_REPORT_PIPELINE=enabled.');
+  // It has no request and no sign-in token, so the issuer cannot issue it a capability: it would act with less proof than the API beside it.
+  if (env.ISSUER_URL) throw new Error('EVALUATION_WORKER is refused while ISSUER_URL is set: it cannot yet act for the requester under an issuer capability.');
   if (!c.EVALUATION_WORKER_DATABASE_URL) throw new Error('EVALUATION_WORKER_DATABASE_URL is required.');
   if (c.EVALUATION_WORKER_DATABASE_URL === env.DATABASE_URL) throw new Error('EVALUATION_WORKER_DATABASE_URL must be the queue login, not the application login (DATABASE_URL).');
   assertNoUrlTls(c.EVALUATION_WORKER_DATABASE_URL, 'EVALUATION_WORKER_DATABASE_URL');
