@@ -12,7 +12,7 @@ DECLARE
              || E'  SELECT b.tenant_id, b.sub INTO v_tenant, v_actor FROM public.security_event_capability() b;\n';
 BEGIN
   IF position(v_new IN v_def) = 0 THEN
-    RAISE EXCEPTION 'Migration 0058 down: security_event_append is not the definition 0058 left';
+    RAISE EXCEPTION 'Migration 0059 down: security_event_append is not the definition 0059 left';
   END IF;
   EXECUTE replace(v_def, v_new, v_old);
 END

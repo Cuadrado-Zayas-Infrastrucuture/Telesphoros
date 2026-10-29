@@ -51,7 +51,7 @@ DECLARE
                     WHERE p.pronamespace = 'public'::regnamespace AND p.proname = 'security_event_append');
 BEGIN
   IF v_owner IS NULL THEN
-    RAISE EXCEPTION 'Migration 0058: security_event_append not found';
+    RAISE EXCEPTION 'Migration 0059: security_event_append not found';
   END IF;
   EXECUTE format('GRANT EXECUTE ON FUNCTION public.security_event_capability() TO %I', v_owner);
 END
@@ -70,7 +70,7 @@ DECLARE
              || E'  SELECT b.tenant_id, b.sub INTO v_tenant, v_actor FROM public.security_event_capability() b;\n';
 BEGIN
   IF (length(v_def) - length(replace(v_def, v_old, ''))) / length(v_old) <> 1 THEN
-    RAISE EXCEPTION 'Migration 0058: security_event_append is not the definition 0047 left';
+    RAISE EXCEPTION 'Migration 0059: security_event_append is not the definition 0047 left';
   END IF;
   EXECUTE replace(v_def, v_old, v_new);
 END

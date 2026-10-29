@@ -178,7 +178,7 @@ export class Database {
 
   /**
    * Records one refusal through `security_event_append`, and runs nothing else (spec 015). Unlike `withTenant` it does not refuse a request that outlived
-   * its capability: the capability is bound even when expired, and the database's event writer accepts it for a grace window (migration 0058) while
+   * its capability: the capability is bound even when expired, and the database's event writer accepts it for a grace window (migration 0059) while
    * every other function and policy still sees no organization. The organization and person are set as settings too, which the guc and dual modes
    * read when there is no capability. Errors propagate; the caller logs them.
    */

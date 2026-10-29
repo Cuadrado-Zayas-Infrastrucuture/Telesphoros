@@ -607,8 +607,8 @@ describe('reverting 0031 and 0028', () => {
     const through = revertThrough('tenant_capability_issue_current'); // this migration and anything above it
     expect(await owner((c) => migrateDown(c, through.steps))).toEqual(through.reverted);
     const down = await owner(catalogSnapshot);
-    // 0032 through spec 015's 0058 go with 0031. H1, H3, H4 and D01b remove their request/receipt/cancellation/decision tables, policies and helpers,
-    // 0056 its job-capability function and the capability owner's read policies on jobs and evaluation requests, 0057 its nonce table and function, 0058
+    // 0032 through spec 015's 0059 go with 0031. H1, H3, H4 and D01b remove their request/receipt/cancellation/decision tables, policies and helpers,
+    // 0056 its job-capability function and the capability owner's read policies on jobs and evaluation requests, 0057 its nonce table and function, 0059
     // the security events' grace check;
     // 0043's drop is undone below.
     const removed =

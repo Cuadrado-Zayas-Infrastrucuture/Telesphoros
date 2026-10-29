@@ -10,7 +10,7 @@ Spec 015 ([specs/015-security-event-grace](../../specs/015-security-event-grace/
 - In `capability` mode there is no fallback: the write was refused with `42501` and the event was lost (logged at `error`).
 
 **The fix.**
-- Migration 0058 adds `security_event_capability()`, the event writer's own check. It accepts a capability that is not revoked and expired no more than 5 minutes ago (D1), checks no organization status (as `app_tenant_bound()`), and returns nothing when the settings name another organization. Without a capability it falls back to the settings in `guc` and `dual` only. Only the owner of `security_event_append` may call it.
+- Migration 0059 adds `security_event_capability()`, the event writer's own check. It accepts a capability that is not revoked and expired no more than 5 minutes ago (D1), checks no organization status (as `app_tenant_bound()`), and returns nothing when the settings name another organization. Without a capability it falls back to the settings in `guc` and `dual` only. Only the owner of `security_event_append` may call it.
 - `security_event_append` takes the organization and person from it. The migration restates the function from its live definition and refuses to run if that is not the one 0047 left; the down file restores it and drops the new function.
 - `Database.appendSecurityEvent` (D2; `recordSecurityEvent` was already the access-audit writer) runs that one statement with the request's capability bound even when expired. `withTenant` still refuses every other transaction under an expired capability (#114).
 - `PostgresSecurityEvents` uses it; `withoutExpiredCapability` is removed. In `dual` mode a refusal under a capability is now attributed from the capability, not the settings (D3).
