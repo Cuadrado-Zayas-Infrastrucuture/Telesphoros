@@ -1,0 +1,144 @@
+/* One-screen workspace (specs/016). Tokens only; the backdrop is the landing's folds and A/C/G/T letters, kept faint. */
+.one-screen {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  min-height: 100dvh;
+  flex-direction: column;
+  background: var(--background);
+}
+
+.one-screen-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.one-screen-backdrop svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.one-screen-backdrop .fold {
+  fill: var(--primary);
+  opacity: 0.1;
+}
+
+.one-screen-backdrop .fold-edge {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 1.5;
+  opacity: 0.25;
+}
+
+.one-screen-backdrop .sequence {
+  position: absolute;
+  top: 18%;
+  right: 4%;
+  font-family: var(--font-family-mono);
+  font-size: 0.9375rem;
+  line-height: 2.2;
+  letter-spacing: 0.6em;
+  color: var(--primary);
+  opacity: 0.14;
+  writing-mode: vertical-rl;
+}
+
+.one-screen-backdrop .sequence-left {
+  top: 40%;
+  right: auto;
+  left: 5%;
+}
+
+.one-screen-column {
+  width: 100%;
+  max-width: 42rem;
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+}
+
+.one-screen-start {
+  padding-bottom: 8vh;
+}
+
+.one-screen-you {
+  max-width: 85%;
+}
+
+.one-screen-mark {
+  width: 1.75rem;
+  height: auto;
+  border-radius: var(--radius-2);
+}
+
+:root[data-theme='dark'] .one-screen-mark {
+  padding: 2px;
+  background: var(--mark-plate);
+}
+
+.one-screen-mascot {
+  display: block;
+  width: 6.75rem;
+  height: auto;
+  margin: 0 auto 0.5rem;
+}
+
+.one-screen-avatar {
+  width: 2.125rem;
+  height: auto;
+  flex: none;
+}
+
+.one-screen-box {
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  background: var(--panel);
+  box-shadow: var(--elevation-panel);
+  padding: 0.6rem 0.6rem 0.6rem 0.9rem;
+}
+
+.one-screen-box[data-dragging='true'] {
+  border-style: dashed;
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.one-screen-box textarea {
+  width: 100%;
+  min-height: 2.5rem;
+  resize: none;
+  border: 0;
+  background: none;
+  color: var(--foreground);
+  outline: none;
+}
+
+.one-screen-file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.6rem;
+  margin-bottom: 0.5rem;
+  padding: 0.4rem 0.65rem;
+  border-radius: 0.75rem;
+  background: var(--surface);
+  font-size: 0.875rem;
+}
+
+.one-screen-file select {
+  height: 2.75rem;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font-weight: 500;
+}
+
+@media (max-width: 40rem) {
+  .one-screen-backdrop .sequence {
+    display: none;
+  }
+}
