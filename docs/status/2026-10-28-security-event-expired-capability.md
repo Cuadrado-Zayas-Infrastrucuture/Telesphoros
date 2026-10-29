@@ -17,7 +17,7 @@ Found by the 2026-10-27 audit (A3, the security-events half; the read half was f
 
 **Not changed.** The 503 for every other transaction under an expired capability (#114). `asOrganizationWork`, which keeps the capability on purpose for cleanup and sweep work. The SQL functions and the binding mode.
 
-**Open.** In the `capability` binding mode, a transaction with no capability resolves no organization, so such an event would still be lost (logged at `error`). The planned move to that mode needs a way to record security events that does not depend on the request's capability.
+**Open, then closed by spec 015.** In the `capability` binding mode, a transaction with no capability resolves no organization, so such an event would still be lost (logged at `error`). Spec 015 closes it: the event writer accepts a recently expired capability, and `withoutExpiredCapability` is gone ([2026-10-29-security-event-grace.md](2026-10-29-security-event-grace.md)).
 
 **The tests.** `test/db/security-event-expired-capability.pg-spec.ts`:
 - a refusal under a valid capability is recorded and the capability is bound (the control);

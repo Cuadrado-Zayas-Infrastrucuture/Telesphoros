@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { asOrganizationWork, currentRequestId, withoutExpiredCapability } from '../auth/authority-context';
+import { currentRequestId } from '../auth/authority-context';
 import { Database } from '../db/database';
 
 /** Why a caller with a valid token was refused (the membership checks of M1.5). */
@@ -83,30 +83,14 @@ export class PostgresSecurityEvents extends SecurityEvents {
   }
 
   private async write(tenantId: string, sub: string, row: ReturnType<typeof eventRow>): Promise<void> {
-    const requestId = currentRequestId(); // read before leaving the request's context below
+    const requestId = currentRequestId();
     try {
-      // Organization work: the person was refused, so their own authority must not decide whether the refusal is written. Nor may an expired
-      // capability: a refusal made late in a long request (a slow upload) is still recorded (audit A3).
-      await asOrganizationWork(() => withoutExpiredCapability(() => this.append(tenantId, sub, row, requestId)));
+      // Not `withTenant`: the person was refused, so their own authority must not decide whether the refusal is written, and a refusal made late in a
+      // long request (a slow upload) is recorded under the request's capability even after it expired, within the database's grace window (spec 015).
+      await this.db.appendSecurityEvent(tenantId, sub, { ...row, requestId });
     } catch (error) {
       // An event that is lost must be findable: this is the only trace of it.
       this.logger.error({ event: 'security-event-not-recorded', type: row.eventType, error: (error as Error).name }, 'A security event could not be recorded');
     }
-  }
-
-  private append(tenantId: string, actor: string, row: ReturnType<typeof eventRow>, requestId: string | undefined) {
-    return this.db.withTenant(
-      tenantId,
-      (client) =>
-        client.query('SELECT security_event_append($1, $2, $3, $4, $5::jsonb, $6)', [
-          row.eventType,
-          row.outcome,
-          row.subjectKind,
-          row.subjectRef,
-          JSON.stringify(row.details),
-          requestId ?? null,
-        ]),
-      { actor },
-    );
   }
 }

@@ -22,6 +22,16 @@ const MAX_ACTOR_LENGTH = 128;
 // eslint-disable-next-line no-control-regex -- the point is to refuse control characters
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
 
+/** One row for `security_event_append`: identifiers and short codes only. */
+export interface SecurityEventInput {
+  eventType: string;
+  outcome: string;
+  subjectKind: string;
+  subjectRef: string;
+  details: Record<string, string>;
+  requestId?: string;
+}
+
 export interface TenantWorkOptions {
   /**
    * The authenticated individual (the token's `sub`). Recorded as the author of audited writes. Like the tenant, it is an identity
@@ -125,7 +135,7 @@ export class Database {
 
   /**
    * The request's capability, if it has one, goes in after BEGIN with is_local = true, so the next transaction on this pooled connection cannot see it.
-   * One that expired before the transaction was refused above; one that expires in between is still set (the database then resolves nothing) and counted as missing. EVERY call is counted, the guard's own
+   * One that expired before the transaction was refused above (except for `appendSecurityEvent`, which binds it on purpose); one that expires in between is still set (the database then resolves nothing) and counted as missing. EVERY call is counted, the guard's own
    * membership lookup included: it runs under the capability, which the guard now asks for first.
    */
   private async bindCapability(client: PoolClient): Promise<void> {
@@ -164,6 +174,40 @@ export class Database {
   /** Cheap liveness probe for /ready. */
   async ping(): Promise<void> {
     await this.pool.query('SELECT 1');
+  }
+
+  /**
+   * Records one refusal through `security_event_append`, and runs nothing else (spec 015). Unlike `withTenant` it does not refuse a request that outlived
+   * its capability: the capability is bound even when expired, and the database's event writer accepts it for a grace window (migration 0059) while
+   * every other function and policy still sees no organization. The organization and person are set as settings too, which the guc and dual modes
+   * read when there is no capability. Errors propagate; the caller logs them.
+   */
+  async appendSecurityEvent(tenantId: string, actor: string, event: SecurityEventInput): Promise<void> {
+    if (!tenantId || tenantId.length > MAX_TENANT_ID_LENGTH) throw new Error('Invalid tenant id');
+    if (!actor || actor.length > MAX_ACTOR_LENGTH || CONTROL_CHARACTERS.test(actor)) throw new Error('Invalid actor');
+    const client = await this.pool.connect();
+    let discard = false;
+    try {
+      await client.query('BEGIN');
+      await client.query(`SELECT set_config('app.current_tenant_id', $1, true), set_config('app.current_actor', $2, true)`, [tenantId, actor]);
+      await this.bindCapability(client);
+      await client.query('SELECT security_event_append($1, $2, $3, $4, $5::jsonb, $6)', [
+        event.eventType,
+        event.outcome,
+        event.subjectKind,
+        event.subjectRef,
+        JSON.stringify(event.details),
+        event.requestId ?? null,
+      ]);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {
+        discard = true; // the connection is already broken; release(true) below throws it away
+      });
+      throw error;
+    } finally {
+      client.release(discard);
+    }
   }
 
   /** The app role has EXECUTE on this writer, but no table privileges. */
