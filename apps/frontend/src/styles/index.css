@@ -116,6 +116,20 @@
   :root[data-theme='dark'] .brand-mark {
     padding: calc(var(--space-unit) * 1);
   }
+  /* The mascot keeps its approved bytes too. Its baked-in white ground shadow glows against the dark theme, so there it sits on the
+     same light plate, round; the light theme shows it as before. */
+  /* The inset is a length, not a percentage: a percentage padding is taken from the surrounding column's width, which would squeeze
+     the mascot to nothing. Small placements set a smaller --mascot-plate-inset. */
+  :root[data-theme='dark'] .mascot-plate {
+    aspect-ratio: 1;
+    object-fit: contain;
+    padding: var(--mascot-plate-inset, calc(var(--space-unit) * 2));
+    border-radius: 50%;
+    background-color: var(--mark-plate);
+  }
+  :root[data-theme='dark'] .one-screen-avatar {
+    --mascot-plate-inset: calc(var(--space-unit) * 0.5);
+  }
 }
 
 @layer base {
