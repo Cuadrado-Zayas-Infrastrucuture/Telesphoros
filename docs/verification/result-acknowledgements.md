@@ -44,6 +44,8 @@ Date: 2026-10-29. Branch `feat/result-acknowledgements`, built and verified on `
 | Playwright `e2e:storage` | 26 passed, 6 failed: the same six tests that fail on `73efc16` itself, fixed separately by PR #170 |
 | gitleaks over the changed directories | no leaks |
 
+**Rerun after merging `main` `5002d68`** (which includes PR #170): every step passed. Backend 3188 / 3573 / 3593 passed, 0 failed; frontend 524; worker 241; `test:ci-config` 207; Playwright `e2e` 155, 32 and 2; `e2e:storage` 33 passed, 0 failed; gitleaks no leaks.
+
 ## Not covered
 
 - **No Playwright test drives the test-only page.** Its states and accessibility are covered in jsdom; a browser test needs seeded evaluation results in the e2e backend.
