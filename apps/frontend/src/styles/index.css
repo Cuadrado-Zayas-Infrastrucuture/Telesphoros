@@ -56,6 +56,42 @@
   .button-raised:not(:disabled):not([aria-disabled='true']):active {
     box-shadow: var(--shadow-button-pressed);
   }
+  /* Loading placeholder: invisible for --delay-skeleton, then a slow, faint sweep. Reduced motion keeps the shape and drops the sweep. */
+  .skeleton {
+    background-color: var(--divider);
+    background-image: linear-gradient(90deg, transparent 0%, var(--skeleton-highlight) 50%, transparent 100%);
+    background-repeat: no-repeat;
+    background-size: 50% 100%;
+    opacity: 0;
+    animation:
+      skeleton-appear 0s linear var(--delay-skeleton) forwards,
+      skeleton-shimmer var(--duration-skeleton-shimmer) ease-in-out var(--delay-skeleton) infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton {
+      background-image: none;
+      animation: skeleton-appear 0s linear var(--delay-skeleton) forwards;
+    }
+  }
+  @media (forced-colors: active) {
+    .skeleton {
+      background: none;
+      border: 1px solid CanvasText;
+    }
+  }
+  @keyframes skeleton-appear {
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes skeleton-shimmer {
+    from {
+      background-position: -100% 0;
+    }
+    to {
+      background-position: 200% 0;
+    }
+  }
   /* Logo images keep their approved bytes; in the dark theme they sit on a light plate so the dark teal stays visible. */
   .brand-mark {
     background-color: var(--mark-plate);

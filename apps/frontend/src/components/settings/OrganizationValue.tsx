@@ -22,7 +22,15 @@ export function OrganizationValue({ apiFetch, onRetry }: { apiFetch: ApiFetch; o
     return () => controller.abort();
   }, [apiFetch]);
 
-  if (organization.state === 'loading') return <Skeleton className="h-5 w-48" aria-label="Loading the organization" />;
+  if (organization.state === 'loading')
+    return (
+      <>
+        <Skeleton className="h-5 w-48" />
+        <span role="status" className="sr-only">
+          Loading the organization…
+        </span>
+      </>
+    );
   if (organization.state === 'ready') return <>{organization.name}</>;
   if (organization.state === 'unavailable') return <span className="text-muted-foreground">Not available on this server yet.</span>;
   return (
