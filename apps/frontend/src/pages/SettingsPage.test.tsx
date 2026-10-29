@@ -161,6 +161,20 @@ describe('Appearance', () => {
     expect(page().dataset.theme).toBe('dark');
   });
 
+  it('the picture cards are still radios: arrow keys move the choice, and only the chosen card is marked', async () => {
+    open(['reader'], api(['reader'], organization));
+    const appearance = await section('Appearance');
+    await userEvent.click(within(appearance).getByRole('radio', { name: /^Light/ }));
+    await userEvent.keyboard('{ArrowRight}');
+    const dark = within(appearance).getByRole('radio', { name: /^Dark/ });
+    expect(dark).toBeChecked();
+    expect(dark).toHaveFocus();
+    expect(page().dataset.theme).toBe('dark');
+    const marks = appearance.querySelectorAll('svg.lucide-check');
+    expect(marks).toHaveLength(1);
+    expect(marks[0].closest('label')).toBe(dark.closest('label'));
+  });
+
   it("follows the device's setting live while set to match it", async () => {
     const flip = device(true);
     open(['reader'], api(['reader'], organization));
