@@ -6,7 +6,7 @@ export function SiteFooter() {
   const landing = useLandingRoute();
   const { footer } = useShellCopy();
   return (
-    <footer className={`border-t border-divider bg-surface${landing ? ' landing-site-footer' : ''}`}>
+    <footer className={`border-t border-divider ${landing ? 'bg-surface landing-site-footer' : 'bg-band'}`}>
       <div className="mx-auto flex max-w-page items-start gap-4 px-4 py-6 sm:items-center sm:px-6">
         <img src={companySymbol} alt={footer.companyAlt} width="48" height="48" loading="lazy" className="brand-mark shrink-0" />
         <div className="flex min-w-0 flex-col gap-2 text-xs sm:text-sm">

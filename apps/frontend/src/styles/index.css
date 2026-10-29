@@ -8,6 +8,7 @@
   --color-*: initial;
   --color-background: var(--background);
   --color-panel: var(--panel);
+  --color-band: var(--band);
   --color-foreground: var(--foreground);
   --color-surface: var(--surface);
   --color-muted: var(--muted);

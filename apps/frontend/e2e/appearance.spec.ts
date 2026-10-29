@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import { axeViolations, signInAs } from './helpers';
 
-const DARK_BACKGROUND = 'rgb(14, 27, 31)'; // --background in the dark theme (tokens.css)
-const LIGHT_BACKGROUND = 'rgb(245, 246, 247)';
+const DARK_BACKGROUND = 'rgb(27, 30, 32)'; // --background in the dark theme (tokens.css, #1B1E20)
+const LIGHT_BACKGROUND = 'rgb(245, 247, 247)'; // #F5F7F7
 const pageBackground = (page: Page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 const theme = (page: Page) => page.evaluate(() => document.documentElement.dataset.theme ?? 'light');
 /** As if Dark had been chosen in an earlier visit: the saved word is all that persists. */
