@@ -1,9 +1,12 @@
 import { HttpStatus } from '@nestjs/common';
 import { ERROR_CODE, evaluationRequest, fatal, retryable, type HandlerContext, type RegisteredJob } from '@telesphoros/jobs';
 import { evaluationExecutionProfileSchema, type EvaluationExecutionProfile } from '@telesphoros/shared-types';
+import { runWithCapability, type RequestCapability } from '../auth/authority-context';
 import type { Principal } from '../auth/principal';
 import { AppException } from '../common/app-exception';
 import type { Database } from '../db/database';
+import { CapabilityIssueError } from '../issuer/capability-issuer.port';
+import type { JobCapabilityClient } from '../issuer/job-capability-client';
 import { LedgerBusyError, LedgerCompromisedError } from '../ledger/ledger-types';
 import { EvaluationRequestsRepository } from '../storage/postgres/evaluation-requests.repository';
 import type { EvaluationsService } from './evaluations.service';
@@ -16,6 +19,10 @@ const NOT_HELD = 'EJ001';
  * pinned execution profile; the evaluation is made by the same EvaluationsService as the synchronous route, acting for the person who asked, and is stored
  * in ONE transaction with the request's completion, which the database accepts only while this worker holds the job (a worker whose lease ran out stores
  * nothing). Delivery is at-least-once: a request that is already complete is reported done without reading again.
+ *
+ * Given a job-capability client (spec 012 slice 3), every transaction of the job runs under a capability the issuer issued for it (plan D2), and the person
+ * it acts for is the one the issuer names, not the one this worker read from the request. Without one, it runs as before (the guard keeps that worker away
+ * from an API that uses an issuer: evaluation-worker-config.ts).
  */
 export class EvaluationRequestConsumer {
   private readonly requests: EvaluationRequestsRepository;
@@ -25,6 +32,7 @@ export class EvaluationRequestConsumer {
     database: Database,
     private readonly evaluations: EvaluationsService,
     profile: EvaluationExecutionProfile,
+    private readonly jobCapabilities?: JobCapabilityClient,
   ) {
     this.requests = new EvaluationRequestsRepository(database);
     this.profile = Object.freeze(evaluationExecutionProfileSchema.parse(profile));
@@ -33,23 +41,41 @@ export class EvaluationRequestConsumer {
   async handle({ job, workerId, signal }: Pick<HandlerContext, 'job' | 'workerId' | 'signal'>): Promise<void> {
     const { requestId } = evaluationRequest.payload.parse(job.payload);
     try {
-      const request = await this.requests.forJob(job.tenantId, requestId, job.id, workerId);
-      if (request.completed) return;
-      // The request was admitted for one execution profile. A worker running another (a different engine, model manifest, knowledge set or
-      // recordings) must not answer it: the result would not be the one the request pinned.
-      if (!sameProfile(request.executionProfile, this.profile)) throw fatal('execution-profile-mismatch');
-      // `roles` is not read on this path: EvaluationsService.create uses only the tenant and the person. The database asks again when the result is
-      // stored (migration 0051: the requester must still be an active clinician or reviewer), but for the person this worker names, not one an issuer proved.
-      const principal: Principal = { tenantId: job.tenantId, sub: request.requestedBy, roles: ['clinician'] };
-      await this.evaluations.create(
-        principal,
-        request.reportId,
-        { captureId: request.captureId, acceptanceId: request.acceptanceId },
-        { signal, completion: { requestId, jobId: job.id, workerId } },
-      );
+      if (!this.jobCapabilities) return await this.evaluate(job, requestId, workerId, signal);
+      const client = this.jobCapabilities;
+      // The person every capability of this job names. The first issuance fixes it; a later one naming anyone else, or another organization, ends the job.
+      let actingFor: string | undefined;
+      const source = async (): Promise<RequestCapability> => {
+        const issued = await client.issue({ jobId: job.id, workerId });
+        if (issued.tenantId !== job.tenantId || (actingFor !== undefined && issued.sub !== actingFor)) throw fatal('requester-not-authorized');
+        actingFor = issued.sub;
+        return { token: issued.token, expiresAt: issued.expiresAt, membershipVersion: issued.membershipVersion };
+      };
+      await runWithCapability(source, () => this.evaluate(job, requestId, workerId, signal, () => actingFor));
     } catch (error) {
       throw jobError(error, signal);
     }
+  }
+
+  /** `issuedFor` is set only under the issuer: the person the capabilities name, read once the first transaction has run. */
+  private async evaluate(job: HandlerContext['job'], requestId: string, workerId: string, signal: AbortSignal, issuedFor?: () => string | undefined): Promise<void> {
+    const request = await this.requests.forJob(job.tenantId, requestId, job.id, workerId);
+    if (request.completed) return;
+    // The request was admitted for one execution profile. A worker running another (a different engine, model manifest, knowledge set or
+    // recordings) must not answer it: the result would not be the one the request pinned.
+    if (!sameProfile(request.executionProfile, this.profile)) throw fatal('execution-profile-mismatch');
+    // `roles` is not read on this path: EvaluationsService.create uses only the tenant and the person. The database asks again when the result is
+    // stored (migration 0051: the requester must still be an active clinician or reviewer). Without an issuer that is the person this worker names; under
+    // one it is the person the issuer proved, who must be the one who asked.
+    const sub = issuedFor ? issuedFor() : request.requestedBy;
+    if (sub === undefined || sub !== request.requestedBy) throw fatal('requester-not-authorized');
+    const principal: Principal = { tenantId: job.tenantId, sub, roles: ['clinician'] };
+    await this.evaluations.create(
+      principal,
+      request.reportId,
+      { captureId: request.captureId, acceptanceId: request.acceptanceId },
+      { signal, completion: { requestId, jobId: job.id, workerId } },
+    );
   }
 }
 
@@ -66,6 +92,7 @@ function sameProfile(pinned: EvaluationExecutionProfile, running: EvaluationExec
 function jobError(error: unknown, signal: AbortSignal): unknown {
   if (error instanceof Error && error.name === 'JobError') return error;
   if (signal.aborted) return retryable('handler-aborted');
+  if (error instanceof CapabilityIssueError) return capabilityError(error);
   const code = (error as { code?: unknown } | null)?.code;
   if (code === NOT_HELD) return retryable('lease-lost');
   if (code === '42501') return fatal('requester-not-authorized');
@@ -82,4 +109,15 @@ function jobError(error: unknown, signal: AbortSignal): unknown {
     return fatal(typeof reason === 'string' && ERROR_CODE.test(reason) ? reason : 'evaluation-refused');
   }
   return error;
+}
+
+/**
+ * Why the issuer issued no capability (FR-005). Its refusals are about the job or the person and end the job; anything else says nothing about either
+ * (an issuer that is down, a key that does not match while a deployment rolls) and is tried again.
+ */
+function capabilityError(error: CapabilityIssueError): unknown {
+  if (error.reason !== 'refused') return retryable(error.reason === 'unavailable' ? 'issuer-unavailable' : 'issuer-unauthenticated');
+  if (error.detail === 'job-not-held') return fatal('job-not-held');
+  if (error.detail === 'tenant-inactive') return fatal('tenant-inactive');
+  return fatal('requester-not-authorized');
 }

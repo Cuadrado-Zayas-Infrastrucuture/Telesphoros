@@ -137,6 +137,11 @@ export const envSchema = z
      * the pipeline. Refused in production (see below). While `disabled` the routes answer 503 EVALUATION_REQUESTS_DISABLED and nothing is queued.
      */
     EVALUATION_REQUESTS: z.enum(['disabled', 'enabled']).default('disabled'),
+    /**
+     * Spec 012 (plan D4): what the person enabling queued requests beside ISSUER_URL relies on. `capability` states that the evaluation worker is
+     * configured for the issuer (EVALUATION_WORKER_ISSUER_URL and its key), so it acts under an issuer capability. The default keeps the refusal.
+     */
+    EVALUATION_REQUESTS_WORKER_BINDING: z.enum(['none', 'capability']).default('none'),
     /** The one execution profile requests are admitted under, as JSON (the evaluation worker reads the same setting). Required when they are enabled. */
     EVALUATION_EXECUTION_PROFILE: z.string().min(1).optional(),
 
@@ -242,9 +247,13 @@ export const envSchema = z
       if (!isExecutionProfile(env.EVALUATION_EXECUTION_PROFILE))
         problem('EVALUATION_EXECUTION_PROFILE', 'is required when EVALUATION_REQUESTS=enabled, as an execution profile in JSON');
       if (env.NODE_ENV === 'production') problem('EVALUATION_REQUESTS', 'is refused in production: queued evaluation is part of the synthetic, non-production pipeline');
-      // The worker that answers a request has no sign-in token and is issued no capability; while the API uses one, a queued request would be answered
-      // with less proof than the same request made directly. How a background worker acts under a capability is a separate founder decision.
-      if (env.ISSUER_URL) problem('EVALUATION_REQUESTS', 'is refused while ISSUER_URL is set: no worker can yet act for the requester under an issuer capability');
+      // A worker without the issuer settings has no sign-in token and is issued no capability; while the API uses one, a queued request would be answered
+      // with less proof than the same request made directly. The API cannot see the worker's settings, so the person enabling this says so (spec 012, D4).
+      if (env.ISSUER_URL && env.EVALUATION_REQUESTS_WORKER_BINDING !== 'capability')
+        problem(
+          'EVALUATION_REQUESTS',
+          'is refused while ISSUER_URL is set unless EVALUATION_REQUESTS_WORKER_BINDING=capability: the evaluation worker must act for the requester under an issuer capability',
+        );
     }
 
     if (env.LOCAL_UPLOAD_CLEANUP_GRACE_SECONDS < 86400 && (!env.LOCAL_STORAGE_RUN_ID || env.NODE_ENV === 'production' || env.LAB_REPORT_PIPELINE !== 'disabled'))

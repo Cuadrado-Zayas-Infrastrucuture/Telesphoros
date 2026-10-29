@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { evaluationExecutionProfileSchema, type EvaluationExecutionProfile } from '@telesphoros/shared-types';
 import type { Env } from '../config/env';
 import { assertNoUrlTls } from '../db/tls';
+import { checkIssuerBaseUrl } from '../issuer/issuer-http-client';
+import { workerKeyProblem } from '../issuer/worker-signature';
 
 const number = (min: number, max: number, fallback: number) => z.coerce.number().int().min(min).max(max).default(fallback);
 
@@ -22,6 +24,10 @@ const schema = z.object({
   EVALUATION_WORKER_TENANT_CAP: number(1, 50, 1),
   EVALUATION_WORKER_POLL_MS: number(50, 60_000, 2_000),
   EVALUATION_WORKER_DRAIN_SECONDS: number(0, 600, 30),
+  /** Spec 012: the session issuer this worker asks for a capability for each transaction of a job. Set together with the key, or not at all. */
+  EVALUATION_WORKER_ISSUER_URL: z.string().min(1).optional(),
+  /** The key it signs those requests with: the issuer's ISSUER_WORKER_KEY. Checked below with workerKeyProblem, which never names the value. */
+  EVALUATION_WORKER_ISSUER_KEY: z.string().min(1).optional(),
 });
 
 export interface EvaluationWorkerConfig {
@@ -32,6 +38,8 @@ export interface EvaluationWorkerConfig {
   tenantCap: number;
   pollMs: number;
   drainSeconds: number;
+  /** Set when the worker runs each transaction under an issuer capability (spec 012). */
+  issuer?: { baseUrl: string; key: Buffer };
 }
 
 /**
@@ -52,8 +60,18 @@ export function loadEvaluationWorkerConfig(
   const c = parsed.data;
   if (c.EVALUATION_WORKER !== 'enabled') throw new Error('EVALUATION_WORKER is not enabled.');
   if (env.LAB_REPORT_PIPELINE !== 'enabled') throw new Error('EVALUATION_WORKER needs LAB_REPORT_PIPELINE=enabled.');
-  // It has no request and no sign-in token, so the issuer cannot issue it a capability: it would act with less proof than the API beside it.
-  if (env.ISSUER_URL) throw new Error('EVALUATION_WORKER is refused while ISSUER_URL is set: it cannot yet act for the requester under an issuer capability.');
+  if ((c.EVALUATION_WORKER_ISSUER_URL === undefined) !== (c.EVALUATION_WORKER_ISSUER_KEY === undefined))
+    throw new Error('EVALUATION_WORKER_ISSUER_URL and EVALUATION_WORKER_ISSUER_KEY must be set together.');
+  const urlProblem = c.EVALUATION_WORKER_ISSUER_URL === undefined ? undefined : checkIssuerBaseUrl(c.EVALUATION_WORKER_ISSUER_URL);
+  if (urlProblem) throw new Error(`EVALUATION_WORKER_ISSUER_URL ${urlProblem}.`);
+  const keyProblem = c.EVALUATION_WORKER_ISSUER_KEY === undefined ? undefined : workerKeyProblem(c.EVALUATION_WORKER_ISSUER_KEY);
+  if (keyProblem) throw new Error(`EVALUATION_WORKER_ISSUER_KEY ${keyProblem}.`);
+  // Without the issuer settings it has no sign-in token and no capability, so beside an API that uses an issuer it would act with less proof than the API.
+  // With them every transaction runs under a capability the issuer issued for it (spec 012 slice 3).
+  if (env.ISSUER_URL && c.EVALUATION_WORKER_ISSUER_URL === undefined)
+    throw new Error(
+      'EVALUATION_WORKER is refused while ISSUER_URL is set unless EVALUATION_WORKER_ISSUER_URL and EVALUATION_WORKER_ISSUER_KEY are set: it would act for the requester without an issuer capability.',
+    );
   if (!c.EVALUATION_WORKER_DATABASE_URL) throw new Error('EVALUATION_WORKER_DATABASE_URL is required.');
   if (c.EVALUATION_WORKER_DATABASE_URL === env.DATABASE_URL) throw new Error('EVALUATION_WORKER_DATABASE_URL must be the queue login, not the application login (DATABASE_URL).');
   assertNoUrlTls(c.EVALUATION_WORKER_DATABASE_URL, 'EVALUATION_WORKER_DATABASE_URL');
@@ -73,6 +91,9 @@ export function loadEvaluationWorkerConfig(
     tenantCap: c.EVALUATION_WORKER_TENANT_CAP,
     pollMs: c.EVALUATION_WORKER_POLL_MS,
     drainSeconds: c.EVALUATION_WORKER_DRAIN_SECONDS,
+    ...(c.EVALUATION_WORKER_ISSUER_URL !== undefined && c.EVALUATION_WORKER_ISSUER_KEY !== undefined
+      ? { issuer: { baseUrl: c.EVALUATION_WORKER_ISSUER_URL, key: Buffer.from(c.EVALUATION_WORKER_ISSUER_KEY, 'base64url') } }
+      : {}),
   };
 }
 

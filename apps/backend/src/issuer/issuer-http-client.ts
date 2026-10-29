@@ -130,7 +130,7 @@ export class HttpCapabilityIssuer extends CapabilityIssuerPort {
       return signal.aborted ? unavailable('timeout') : unavailable('network', true);
     }
 
-    const text = await this.readCapped(response, signal);
+    const text = await readCappedBody(response, signal);
     if (text === 'timeout') return unavailable('timeout');
     if (text === 'too-large') return unavailable('response-too-large');
     if (text === 'gone') return unavailable('bad-response');
@@ -161,34 +161,34 @@ export class HttpCapabilityIssuer extends CapabilityIssuerPort {
         return unavailable('bad-response'); // unreachable: `allowed` holds only the four above
     }
   }
+}
 
-  /** The body as text, read at most up to the cap. A longer body is cut as soon as it passes the cap; the deadline covers a body that stalls. */
-  private async readCapped(response: Response, signal: AbortSignal): Promise<string | 'timeout' | 'too-large' | 'gone'> {
-    const declared = Number(response.headers.get('content-length'));
-    if (Number.isFinite(declared) && declared > MAX_ISSUER_RESPONSE_BYTES) {
-      await response.body?.cancel().catch(() => undefined);
-      return 'too-large';
-    }
-    if (!response.body) return '';
-    const reader = response.body.getReader();
-    const parts: Uint8Array[] = [];
-    let size = 0;
-    try {
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        size += value.byteLength;
-        if (size > MAX_ISSUER_RESPONSE_BYTES) {
-          await reader.cancel().catch(() => undefined);
-          return 'too-large';
-        }
-        parts.push(value);
-      }
-    } catch {
-      return signal.aborted ? 'timeout' : 'gone';
-    }
-    return Buffer.concat(parts).toString('utf8');
+/** The body as text, read at most up to the cap (shared with the worker's job-capability client). A longer body is cut as soon as it passes the cap; the deadline covers a body that stalls. */
+export async function readCappedBody(response: Response, signal: AbortSignal): Promise<string | 'timeout' | 'too-large' | 'gone'> {
+  const declared = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > MAX_ISSUER_RESPONSE_BYTES) {
+    await response.body?.cancel().catch(() => undefined);
+    return 'too-large';
   }
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_ISSUER_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        return 'too-large';
+      }
+      parts.push(value);
+    }
+  } catch {
+    return signal.aborted ? 'timeout' : 'gone';
+  }
+  return Buffer.concat(parts).toString('utf8');
 }
 
 function parseJson(text: string): unknown {
