@@ -2,7 +2,7 @@ import productMark from '@/assets/telesphoros-shield-rx.png';
 import { ownedStorageMode } from '@/lib/storageMode';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
-import { WRITER_ROLES } from '@/auth/roles';
+import { ADMIN_ROLES, WRITER_ROLES } from '@/auth/roles';
 import { AccountMenu } from '@/components/layout/AccountMenu';
 import { cn } from '@/lib/utils';
 import { useLandingRoute, useShellCopy } from '@/lib/landing/landing-language';
@@ -22,6 +22,7 @@ export function SiteHeader() {
       ? [{ to: '/local-interpretation', label: 'AI preview', end: true, show: true }]
       : []),
     { to: '/reports/upload', label: 'Upload report', end: false, show: !ownedStorageMode() && roles.some((r) => WRITER_ROLES.includes(r)) },
+    { to: '/usage', label: 'Usage', end: true, show: !landing && roles.some((r) => ADMIN_ROLES.includes(r)) },
     { to: '/settings', label: 'Settings', end: true, show: !landing && status === 'signedIn' },
   ].filter((link) => link.show);
 

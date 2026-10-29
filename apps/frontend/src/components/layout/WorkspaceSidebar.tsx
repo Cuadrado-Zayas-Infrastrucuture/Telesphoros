@@ -1,9 +1,9 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
 import { NavLink } from 'react-router-dom';
-import { FileText, Home, Menu, MessageSquare, Settings, Upload, X } from 'lucide-react';
+import { ChartColumn, FileText, Home, Menu, MessageSquare, Settings, Upload, X } from 'lucide-react';
 import productMark from '@/assets/telesphoros-shield-rx.png';
 import { useAuth } from '@/auth/AuthProvider';
-import { CLINICAL_READ_ROLES, WRITER_ROLES } from '@/auth/roles';
+import { ADMIN_ROLES, CLINICAL_READ_ROLES, WRITER_ROLES } from '@/auth/roles';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { AccountMenu } from './AccountMenu';
@@ -16,6 +16,7 @@ export function WorkspaceSidebar() {
     ...(import.meta.env.DEV && location.hostname === '127.0.0.1' ? [{ to: '/local-interpretation', label: 'Chat preview', icon: MessageSquare, show: true }] : []),
     { to: '/reports', label: 'Reports', icon: FileText, show: roles.some((role) => CLINICAL_READ_ROLES.includes(role)) },
     { to: '/reports/upload', label: 'Upload report', icon: Upload, show: roles.some((role) => WRITER_ROLES.includes(role)) },
+    { to: '/usage', label: 'Usage', icon: ChartColumn, show: roles.some((role) => ADMIN_ROLES.includes(role)) },
     { to: '/settings', label: 'Settings', icon: Settings, show: status === 'signedIn' },
     { to: '/', label: 'Overview', icon: Home, show: true },
   ].filter((link) => link.show);
