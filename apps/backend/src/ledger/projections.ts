@@ -156,6 +156,34 @@ const LOADERS: Record<Exclude<RecordTable, 'evaluations'>, Loader> = {
             FROM patient_merge_decisions WHERE id = ANY($1::uuid[])`,
     project: (r) => ({ kind: 'patient-merge-decision', ...common(r), proposalId: r.proposal_id, decision: r.decision }),
   },
+  // Every column as stored except the retry identity (as capture decisions, 0044); the note is its {id, bodySha256}.
+  clinician_result_decisions: {
+    sql: `SELECT d.id::text AS id, d.tenant_id, d.seq::text AS seq, d.created_by, ${UTC('d.created_at')} AS created_at, d.ledger_event_id::text AS ledger_event_id,
+                 d.result_id::text AS result_id, d.evaluation_id::text AS evaluation_id, d.patient_id::text AS patient_id, d.author_roles,
+                 d.membership_version::text AS membership_version, d.entry_kind, d.previous_entry_id::text AS previous_entry_id, d.response, d.detail_codes,
+                 to_char(d.review_by, 'YYYY-MM-DD') AS review_by, d.vocabulary_version, ${UTC('d.occurred_at')} AS occurred_at, d.occurred_at_source,
+                 d.eligibility_policy, n.id::text AS note_id, n.body_sha256 AS note_digest
+            FROM clinician_result_decisions d LEFT JOIN event_notes n ON n.id = d.note_id AND n.tenant_id = d.tenant_id WHERE d.id = ANY($1::uuid[])`,
+    project: (r) => ({
+      kind: 'clinician-result-decision',
+      ...common(r),
+      resultId: r.result_id,
+      evaluationId: r.evaluation_id,
+      patientId: r.patient_id,
+      authorRoles: r.author_roles,
+      membershipVersion: r.membership_version,
+      entryKind: r.entry_kind,
+      previousEntryId: r.previous_entry_id,
+      response: r.response,
+      detailCodes: r.detail_codes,
+      reviewBy: r.review_by,
+      vocabularyVersion: r.vocabulary_version,
+      occurredAt: r.occurred_at,
+      occurredAtSource: r.occurred_at_source,
+      eligibilityPolicy: r.eligibility_policy,
+      note: note(r.note_id, r.note_digest),
+    }),
+  },
 };
 
 const EVALUATION_SQL = `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
