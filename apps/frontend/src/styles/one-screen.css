@@ -91,6 +91,8 @@
   width: 2.125rem;
   height: auto;
   flex: none;
+  /* Message is a flex row; without this the image stretches to the answer's full height. */
+  align-self: flex-start;
 }
 
 .one-screen-box {
