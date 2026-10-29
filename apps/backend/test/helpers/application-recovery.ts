@@ -141,6 +141,7 @@ export async function applicationAcceptance(url: string, catalogue: EvidenceCata
       await lab.api().get(`/api/v1/reports/${report.id}`).set(bearer(who.token)).expect(200);
       await lab.api().get(`/api/v1/reports/${report.id}`).set(bearer(other.token)).expect(404);
       const read = await storage.getObject(report.storage_key, { ...(report.object_version ? { version: report.object_version } : {}), maxBytes: Number(report.size_bytes) });
+      assert.ok(read, 'every restored report is found');
       assert.equal(read.sha256, report.sha256);
       if (report.object_version) assert.equal(read.version, report.object_version);
     }
@@ -193,7 +194,8 @@ export async function applicationAcceptance(url: string, catalogue: EvidenceCata
     assert.equal((await verifier.verify(lab.tenant, { mode: 'full' })).status, 'ok');
     apiControls.push('ledger-validity');
     await assert.rejects(storage.putObject(), /read only/);
-    await assert.rejects(storage.getObject(pdf.storage_key, { version: 'missing-logical-pin', maxBytes: Number(pdf.size_bytes) }), /missing/);
+    // A pin the restore does not hold is not found (undefined), never a fallback to another version (audit O1).
+    assert.equal(await storage.getObject(pdf.storage_key, { version: 'missing-logical-pin', maxBytes: Number(pdf.size_bytes) }), undefined);
     apiControls.push('read-only-and-exact-pin-refusal');
     const finalInventory = await readEvidenceInventory(url, new EvidenceBudget());
     assert.deepEqual(finalInventory.references, inventory.references);
