@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { assertNoUrlTls, type DatabaseTls } from '../db/tls';
+import { workerKeyProblem } from './worker-signature';
 
 /**
  * The session issuer's environment (DATA-01 PR A). Its own loader, not `config/env.ts`: that schema describes the API, and carries every secret the API
@@ -20,6 +21,7 @@ export const ISSUER_ENV_KEYS = [
   'COGNITO_APP_CLIENT_ID',
   'COGNITO_ISSUER',
   'COGNITO_JWKS_URI',
+  'ISSUER_WORKER_KEY',
 ] as const;
 
 /**
@@ -35,6 +37,8 @@ export interface IssuerConfig {
   databaseUrl: string;
   databaseTls: DatabaseTls;
   cognito: { issuer: string; clientId: string; jwksUri: string | undefined };
+  /** The key the evaluation worker signs job-capability requests with (spec 012). Unset, the issuer serves no job capabilities. */
+  workerKey?: Buffer;
 }
 
 const DEFAULT_PORT = 8082;
@@ -57,6 +61,8 @@ const schema = z.object({
   COGNITO_APP_CLIENT_ID: z.string().min(1),
   COGNITO_ISSUER: z.url().optional(),
   COGNITO_JWKS_URI: z.url().optional(),
+  // Checked below with workerKeyProblem, which names the rule and never the value.
+  ISSUER_WORKER_KEY: z.string().optional(),
 });
 
 /** Reads the environment. Every refusal names the setting, never its value. */
@@ -87,6 +93,11 @@ export function loadIssuerEnv(source: NodeJS.ProcessEnv): IssuerConfig {
     if (!env.COGNITO_USER_POOL_ID) problem('COGNITO_USER_POOL_ID', 'is required unless COGNITO_ISSUER is set');
   }
 
+  if (picked.ISSUER_WORKER_KEY !== undefined) {
+    const keyProblem = workerKeyProblem(picked.ISSUER_WORKER_KEY);
+    if (keyProblem) problem('ISSUER_WORKER_KEY', keyProblem);
+  }
+
   if (env) {
     try {
       assertNoUrlTls(env.DATABASE_URL, 'DATABASE_URL');
@@ -108,5 +119,6 @@ export function loadIssuerEnv(source: NodeJS.ProcessEnv): IssuerConfig {
       clientId: env.COGNITO_APP_CLIENT_ID,
       jwksUri: env.COGNITO_JWKS_URI,
     },
+    ...(env.ISSUER_WORKER_KEY === undefined ? {} : { workerKey: Buffer.from(env.ISSUER_WORKER_KEY, 'base64url') }),
   };
 }
