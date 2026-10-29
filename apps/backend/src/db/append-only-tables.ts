@@ -15,6 +15,7 @@ export const APPEND_ONLY_CLASSES = {
     'report_patient_decisions',
     'patient_merge_proposals',
     'patient_merge_decisions',
+    'clinician_result_decisions',
   ],
   /** Parts of a record, covered by the parent's event. Insert-only; frozen once the parent's event is visible. */
   child: ['evaluation_results', 'evaluation_gene_states'],
