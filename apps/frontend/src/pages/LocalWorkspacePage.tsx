@@ -342,7 +342,7 @@ export default function LocalWorkspacePage() {
       {!started ? (
         <div className="one-screen-start flex flex-1 flex-col justify-center">
           <div className="one-screen-column">
-            <img className="one-screen-mascot" src={mascot} width="162" height="192" loading="eager" alt="Telesphoros mascot in a teal cloak" />
+            <img className="one-screen-mascot mascot-plate" src={mascot} width="162" height="192" loading="eager" alt="Telesphoros mascot in a teal cloak" />
             <h1 className="mb-6 text-center font-heading text-3xl font-medium">Which report should we read?</h1>
             {box}
             {suggestions}
@@ -374,7 +374,7 @@ export default function LocalWorkspacePage() {
               <div key={turn.id} className="flex flex-col gap-4" ref={index === chat.turns.length - 1 ? latest : undefined} tabIndex={-1}>
                 <p className="one-screen-you self-end rounded-2xl bg-surface px-4 py-2">{turn.question}</p>
                 <Message>
-                  <img className="one-screen-avatar" src={mascot} width="162" height="192" loading="lazy" alt="" />
+                  <img className="one-screen-avatar mascot-plate" src={mascot} width="162" height="192" loading="lazy" alt="" />
                   <div className="flex min-w-0 flex-1 flex-col gap-2">
                     <MessageContent>{turn.answer}</MessageContent>
                     <p className="text-xs text-muted-foreground">Sample answer from synthetic data. Not clinical advice.</p>
