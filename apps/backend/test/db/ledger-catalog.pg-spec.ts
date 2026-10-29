@@ -203,6 +203,8 @@ describe('catalog guard: the audit tables are classified and protected as their 
       'job_attempts:SELECT:{telesphoros_app,telesphoros_worker}',
       'jobs:ALL:{telesphoros_jobs}',
       'jobs:SELECT:{telesphoros_app,telesphoros_worker}',
+      // Spec 012 (0056): the capability owner reads a job to check its lease before issuing a job capability. NOLOGIN; only its definers act as it.
+      'jobs:SELECT:{telesphoros_capability}',
     ]);
     const history = await q<{ ev: number }>(
       `SELECT t.tgtype::int AS ev FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_proc p ON p.oid = t.tgfoid WHERE c.relnamespace = 'public'::regnamespace AND NOT t.tgisinternal AND p.proname = 'refuse_mutation' AND c.relname = 'job_attempts'`,
