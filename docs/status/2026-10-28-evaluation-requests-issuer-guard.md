@@ -9,15 +9,15 @@ H4 ([spec 007](../../specs/007-async-evaluation/spec.md)) left one question open
 - When `ISSUER_URL` is set, every API request carries a capability from the session issuer (DATA-01).
 - The evaluation worker has no request and no sign-in token, so it is issued none. It binds the tenant through the older setting.
 - A request queued in that configuration would therefore be answered with less proof than the API gives the same request made directly.
-- Nothing at run time checks again that the requester is still a member allowed to evaluate. The route checked once, when the request was queued.
+- The database does check again when the result is stored: `evaluation_completion_check` (migration 0051) requires the person acting to be the requester and still an active clinician or reviewer. But in the `dual` binding mode that person is a setting the worker supplies, not one an issuer proved.
 
 ## What changed
 
 - `EVALUATION_REQUESTS=enabled` is refused at start-up while `ISSUER_URL` is set (`apps/backend/src/config/env.ts`). Nothing can be queued that no worker can answer correctly.
 - The evaluation worker refuses to start while `ISSUER_URL` is set (`apps/backend/src/lab-reports/evaluation-worker-config.ts`).
 - Both refusals name the setting and never its address.
-- A comment in `evaluation-request-consumer.ts` says that the principal's `roles` is not read on this path and that the run-time membership check belongs to the worker-capability spec. The literal itself is unchanged.
-- `docs/lab-report-reader.md` describes the refusal and the missing run-time check.
+- A comment in `evaluation-request-consumer.ts` says that the principal's `roles` is not read on this path, and where the database checks the requester again. The literal itself is unchanged.
+- `docs/lab-report-reader.md` describes the refusal and what the stored-result check does and does not prove.
 
 ## How it was verified
 

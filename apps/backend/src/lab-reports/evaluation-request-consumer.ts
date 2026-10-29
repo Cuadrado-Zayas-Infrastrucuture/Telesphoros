@@ -38,8 +38,8 @@ export class EvaluationRequestConsumer {
       // The request was admitted for one execution profile. A worker running another (a different engine, model manifest, knowledge set or
       // recordings) must not answer it: the result would not be the one the request pinned.
       if (!sameProfile(request.executionProfile, this.profile)) throw fatal('execution-profile-mismatch');
-      // `roles` is not read on this path: EvaluationsService.create uses only the tenant and the person. Nothing here asks again whether that person is
-      // still a member allowed to evaluate (the route checked when the request was queued); that check at run time is part of the worker-capability spec.
+      // `roles` is not read on this path: EvaluationsService.create uses only the tenant and the person. The database asks again when the result is
+      // stored (migration 0051: the requester must still be an active clinician or reviewer), but for the person this worker names, not one an issuer proved.
       const principal: Principal = { tenantId: job.tenantId, sub: request.requestedBy, roles: ['clinician'] };
       await this.evaluations.create(
         principal,
