@@ -12,11 +12,12 @@ The guard's own controls weaken the text five ways and check that each is report
 
 ## Results
 
-| Run                                                                         | Result     |
-| --------------------------------------------------------------------------- | ---------- |
-| `node --test infrastructure/terraform/issuer.guard.test.mjs`                | 4 passed   |
-| `tofu fmt -check` on `issuer.tf` (CI runs `terraform fmt`, the same format) | clean      |
-| `pnpm test:infra`, after `pnpm build`                                       | 150 passed |
+| Run                                                                                                                                                                                                                                                                                                                                                                                                  | Result     |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `node --test infrastructure/terraform/issuer.guard.test.mjs`                                                                                                                                                                                                                                                                                                                                         | 4 passed   |
+| `tofu fmt -check` on `issuer.tf` (CI runs `terraform fmt`, the same format)                                                                                                                                                                                                                                                                                                                          | clean      |
+| `pnpm test:infra`, after `pnpm build`                                                                                                                                                                                                                                                                                                                                                                | 150 passed |
+| The full local loop on `7323ced`: install, typecheck, lint, `pnpm test`, build, demo seed, `knowledge:verify --production`, `test:infra` (150), `test:ci-config`, `check:workflows`, `test:launcher-cors`, the backend in memory, on PostgreSQL and on PostgreSQL and S3 (3181 / 3531 / 3551 passed), the worker with services, the F2 and F3 recovery validators, the browser (153 / 30 / 2 passed) | exit 0     |
 
 The first `test:infra` run in this worktree failed one file, `guard.test.mjs`, because `@telesphoros/shared-types` had not been built there yet. The full loop builds first. After `pnpm build`, all 150 passed.
 
