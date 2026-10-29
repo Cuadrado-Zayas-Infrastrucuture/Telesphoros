@@ -143,6 +143,10 @@ jobs:
       - name: Knowledge directory loads under production rules
         if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
         run: pnpm --filter @telesphoros/backend knowledge:verify --production
+      # Unconditional, like the install: test:infra imports the backend's configuration loader, which imports @telesphoros/shared-types from its
+      # built dist. A documentation-only run skips Production builds above, so without this the tripwire cannot load (2026-10-28, #144).
+      - name: Build the shared types the guards import
+        run: pnpm --filter @telesphoros/shared-types build
       # The three guards below run on every pull request, including documentation-only ones: they are the only code that reads docs/ and CLAUDE.md
       # (scope.test.mjs lists the readers). Everything above is skipped when only documentation changed.
       - name: Terraform security tripwire

@@ -186,7 +186,7 @@ function verifyStepProblems(text) {
     if (conditions.length && !HEAVY_STEPS.includes(name)) problems.push(`step ${name ?? st.split('\n')[0]} may not be conditional`);
     if (conditions.length > 1 || (conditions.length && conditions[0] !== `        if: ${heavyStepCondition}`)) problems.push(`step ${name} carries a condition other than the heavy step condition`);
   }
-  for (const command of ['pnpm install --frozen-lockfile', 'pnpm test:infra', 'pnpm test:ci-config', 'pnpm check:workflows']) {
+  for (const command of ['pnpm install --frozen-lockfile', 'pnpm --filter @telesphoros/shared-types build', 'pnpm test:infra', 'pnpm test:ci-config', 'pnpm check:workflows']) {
     const step = steps.filter(st => st.includes(`run: ${command}\n`) || st.endsWith(`run: ${command}`));
     if (step.length !== 1 || /^        (?:if|continue-on-error):/m.test(step[0])) problems.push(`${command} must run, unconditionally, in every verify run`);
   }
@@ -278,6 +278,7 @@ test('the scope structure check turns red for each way a gate could be skipped w
     'a fifth output leaks in': swap(changes, '      archive:', '      docs: ${{ steps.scope.outputs.docs }}\n      archive:'),
     'the joining gate always runs even with nothing to join (old shape)': workflow.replace(/    if: always\(\) && !\(needs\.service-memory.*\n/, '    if: always()\n'),
     'a documentation-only run skips the docs guard': workflow.replace('      - name: Terraform security tripwire\n        run: pnpm test:infra', `      - name: Terraform security tripwire\n        if: \${{ needs.changes.outputs.heavy == 'true' }}\n        run: pnpm test:infra`),
+    'the shared types are not built on a documentation-only change, so test:infra cannot import the configuration loader': workflow.replace('        run: pnpm --filter @telesphoros/shared-types build', `        if: \${{ needs.changes.outputs.heavy == 'true' }}\n        run: pnpm --filter @telesphoros/shared-types build`),
     'the CI configuration guard is skipped': workflow.replace('        run: pnpm test:ci-config', `        if: \${{ needs.changes.outputs.heavy == 'true' }}\n        run: pnpm test:ci-config`),
     'the workflow pack checker is skipped, though it reads docs/engineering/workflows.md': workflow.replace('        run: pnpm check:workflows', `        if: \${{ needs.changes.outputs.heavy == 'true' }}\n        run: pnpm check:workflows`),
     'the install is skipped on a documentation-only change, which test:infra cannot survive': swap(verify, '      - name: Install locked dependencies\n', `      - name: Install locked dependencies\n        if: \${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}\n`),
