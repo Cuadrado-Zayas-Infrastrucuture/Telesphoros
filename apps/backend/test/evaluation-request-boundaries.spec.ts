@@ -41,3 +41,22 @@ it('keeps inference-provider configuration out of the strict queue payload', () 
     expect(evaluationRequest.payload.safeParse({ requestId, ...extra }).success).toBe(false);
   }
 });
+
+// Spec 012 slice 3 (T030): running outside a request under issued capabilities is the evaluation worker's alone. Any other caller of runWithCapability,
+// or any other reader of the capability source than the database door, fails here and has to be argued for in review. Calls and the definition are
+// matched, not mentions in comments.
+it('lets only the evaluation-request consumer run under issued capabilities, and only the database read the source', () => {
+  const sources = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+      entry.isDirectory() ? sources(join(dir, entry.name)) : /\.ts$/.test(entry.name) && !/\.spec\.ts$/.test(entry.name) ? [join(dir, entry.name)] : [],
+    );
+  const files = sources(join(root, 'apps/backend/src'));
+  expect(files.length).toBeGreaterThan(50);
+  const naming = (pattern: RegExp) =>
+    files
+      .filter((file) => pattern.test(readFileSync(file, 'utf8')))
+      .map((file) => file.slice(root.length + 1))
+      .sort();
+  expect(naming(/\brunWithCapability\s*[<(]/)).toEqual(['apps/backend/src/auth/authority-context.ts', 'apps/backend/src/lab-reports/evaluation-request-consumer.ts']);
+  expect(naming(/\bcurrentCapabilitySource\s*\(/)).toEqual(['apps/backend/src/auth/authority-context.ts', 'apps/backend/src/db/database.ts']);
+});

@@ -27,9 +27,28 @@ interface RequestStore {
   capabilityAbsent?: string;
   /** The request's correlation id, so a security event can be matched to the diagnostic log line for the same request. */
   requestId?: string;
+  /** Work that has no request (the evaluation worker, spec 012): every `withTenant` call asks this for a new capability, so each transaction has its own. */
+  capabilitySource?: CapabilitySource;
 }
 
+/** Issues a capability for ONE transaction. It throws when none is issued; the transaction then does not run. */
+export type CapabilitySource = () => Promise<RequestCapability>;
+
 const storage = new AsyncLocalStorage<RequestStore>();
+
+/**
+ * Spec 012 slice 3 (plan D2): runs `work` as the evaluation worker acting for a job's requester, outside any request. Each transaction it opens is bound
+ * to a capability the issuer issued for that transaction, so each one is checked against the membership as it is then. Nothing of a surrounding request
+ * is kept. Only the evaluation worker calls this (evaluation-request-boundaries.spec.ts).
+ */
+export function runWithCapability<T>(source: CapabilitySource, work: () => Promise<T>): Promise<T> {
+  return storage.run({ capabilitySource: source }, work);
+}
+
+/** The capability source of the worker work this code runs in, if any. Read by `Database` before each transaction. */
+export function currentCapabilitySource(): CapabilitySource | undefined {
+  return storage.getStore()?.capabilitySource;
+}
 
 /**
  * Opens a per-request slot that AuthGuard fills after it has resolved the caller's membership. Registered by configureApp before routing, so

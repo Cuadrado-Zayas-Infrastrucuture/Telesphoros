@@ -233,6 +233,15 @@ describe('loadEnv', () => {
         expect(attempt).not.toThrow(/session-issuer|8082/);
       });
 
+      // Spec 012 (plan D4): the refusal lifts only when the person enabling it states that the worker acts under issuer capabilities.
+      it('is allowed beside the issuer with EVALUATION_REQUESTS_WORKER_BINDING=capability, and only with that value', () => {
+        const queued = { ...pipeline, EVALUATION_REQUESTS: 'enabled', EVALUATION_EXECUTION_PROFILE: SYNTHETIC_PROFILE, ISSUER_URL: 'http://session-issuer:8082' };
+        expect(loadEnv({ ...queued, EVALUATION_REQUESTS_WORKER_BINDING: 'capability' }).EVALUATION_REQUESTS).toBe('enabled');
+        expect(() => loadEnv({ ...queued, EVALUATION_REQUESTS_WORKER_BINDING: 'none' })).toThrow(/EVALUATION_REQUESTS.*ISSUER_URL/);
+        expect(() => loadEnv({ ...queued, EVALUATION_REQUESTS_WORKER_BINDING: 'yes' })).toThrow(/EVALUATION_REQUESTS_WORKER_BINDING/);
+        expect(loadEnv({ ...pipeline }).EVALUATION_REQUESTS_WORKER_BINDING).toBe('none');
+      });
+
       it('leaves the issuer alone while queued evaluation is off (control)', () => {
         expect(loadEnv({ ...pipeline, ISSUER_URL: 'http://session-issuer:8082' }).ISSUER_URL).toBe('http://session-issuer:8082');
       });

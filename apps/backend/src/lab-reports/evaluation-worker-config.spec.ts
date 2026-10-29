@@ -57,6 +57,33 @@ describe('the evaluation worker settings', () => {
     expect(attempt).not.toThrow(/session-issuer|8082/);
   });
 
+  // Spec 012 slice 3: with the issuer's address and the signing key it acts under capabilities, so the refusal lifts, and only with both.
+  const key = Buffer.alloc(32, 7).toString('base64url');
+  const issuer = { EVALUATION_WORKER_ISSUER_URL: 'http://session-issuer:8082', EVALUATION_WORKER_ISSUER_KEY: key };
+  it('starts beside the session issuer when both issuer settings are set, and carries them', () => {
+    expect(load(issuer, { ...env, ISSUER_URL: 'http://session-issuer:8082' } as Env).issuer).toEqual({ baseUrl: 'http://session-issuer:8082', key: Buffer.alloc(32, 7) });
+    expect(load(issuer).issuer).toBeDefined(); // without ISSUER_URL on the API side too
+    expect(load().issuer).toBeUndefined();
+  });
+
+  it.each([
+    ['only the address is set', { EVALUATION_WORKER_ISSUER_URL: issuer.EVALUATION_WORKER_ISSUER_URL }, /set together/],
+    ['only the key is set', { EVALUATION_WORKER_ISSUER_KEY: key }, /set together/],
+    ['the key is too short', { ...issuer, EVALUATION_WORKER_ISSUER_KEY: Buffer.alloc(16, 7).toString('base64url') }, /EVALUATION_WORKER_ISSUER_KEY must decode/],
+    ['the key is not base64url', { ...issuer, EVALUATION_WORKER_ISSUER_KEY: `${key}==` }, /EVALUATION_WORKER_ISSUER_KEY must be base64url/],
+    ['the address has a path', { ...issuer, EVALUATION_WORKER_ISSUER_URL: 'http://session-issuer:8082/v1' }, /EVALUATION_WORKER_ISSUER_URL must not have a path/],
+  ])('refuses the issuer settings when %s, beside an API that uses the issuer, never echoing a value', (_case, overrides, message) => {
+    let error: Error | undefined;
+    try {
+      load(overrides, { ...env, ISSUER_URL: 'http://session-issuer:8082' } as Env);
+    } catch (e) {
+      error = e as Error;
+    }
+    expect(error?.message).toMatch(message);
+    expect(error?.message).not.toContain(key);
+    expect(error?.message).not.toMatch(/session-issuer|8082/);
+  });
+
   it('gives two containers with the same host name and PID 1 different ids when WORKER_ID is not set', () => {
     const unset = { ...source, WORKER_ID: undefined };
     const a = loadEvaluationWorkerConfig(env, unset, 'evaluation-worker', 1).workerId;
