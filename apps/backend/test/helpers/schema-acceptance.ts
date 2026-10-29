@@ -119,6 +119,7 @@ const primaryKeys: Record<string, string> = {
   tenant_capabilities: 'token_hash',
   capability_issuance_log: 'seq',
   capability_purposes: 'purpose',
+  issuer_request_nonces: 'caller, nonce',
   tenant_binding_mode: 'singleton',
   agentic_explain_receipts: 'receipt_id',
   agentic_explain_runs: 'run_id',
@@ -245,6 +246,7 @@ const checkNames: Record<string, string> = {
   tenant_capabilities: 'hash_len sub_len request_len window',
   capability_purposes: 'name lifetime limits',
   capability_issuance: 'outcome reason lengths', // constraint prefix differs from table capability_issuance_log
+  issuer_request_nonces: 'caller nonce',
   tenant_binding_mode: 'one_row value',
   agentic_explain_receipts:
     'check check1 check2 check3 detail_codes_check evidence_digest_check generated_units_check guards_run_check harness_version_check input_units_check invocation_path_check model_calls_check model_id_check output_digest_check reason_code_check requester_ref_check run_id_check sdk_version_check slots_check task_check template_digest_check tenant_id_check terminal_state_check usage_state_check',
@@ -325,6 +327,7 @@ const queryIndexes: Record<string, string> = {
   security_audit_request_id: 'INDEX security_audit_request_id ON public.security_audit_events USING btree (request_id)',
   tenant_capabilities_expiry_idx: 'INDEX tenant_capabilities_expiry_idx ON public.tenant_capabilities USING btree (expires_at)',
   capability_issuance_rate_idx: "INDEX capability_issuance_rate_idx ON public.capability_issuance_log USING btree (sub, purpose, occurred_at) WHERE (outcome = 'issued'::text)",
+  issuer_request_nonces_seen_idx: 'INDEX issuer_request_nonces_seen_idx ON public.issuer_request_nonces USING btree (seen_at)',
 };
 
 /** Reusable acceptance gate for a migrated or restored database; counts/names alone are insufficient. */

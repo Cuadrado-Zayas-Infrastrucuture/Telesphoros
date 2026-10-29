@@ -246,6 +246,24 @@ const CAPABILITY_CURRENT_RIGHTS: Record<'app' | 'verifier' | 'worker' | 'issuer'
 };
 
 /**
+ * Spec 012: the job capability (0056) and the shared nonce store (0057). Only the issuer may call either; no login may read or write the nonce table.
+ * Each is checked only once its migration is applied, so an older database still passes.
+ */
+const JOB_CAPABILITY_RIGHTS: Record<'app' | 'verifier' | 'worker' | 'issuer', Record<string, boolean>> = {
+  app: { tenant_capability_issue_for_job: false },
+  verifier: { tenant_capability_issue_for_job: false },
+  worker: { tenant_capability_issue_for_job: false },
+  issuer: { tenant_capability_issue_for_job: true },
+};
+const NONCE_TABLES = ['issuer_request_nonces'];
+const NONCE_RIGHTS: Record<'app' | 'verifier' | 'worker' | 'issuer', Record<string, boolean>> = {
+  app: { issuer_nonce_claim: false },
+  verifier: { issuer_nonce_claim: false },
+  worker: { issuer_nonce_claim: false },
+  issuer: { issuer_nonce_claim: true },
+};
+
+/**
  * The explanation receipts (0048) and runs (0049): the application login appends and reads receipts and admits, reads, advances and cancels runs through capability-bound functions; nobody else may run them, and the identity
  * helper and the operator purge are executable by no login. No login may read or write the table. Checked only once the migration is applied.
  */
@@ -549,6 +567,11 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
     .rows[0].ok as boolean;
   const hasReceipts = (await admin.query("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'agentic_explain_receipt_append' AND pronamespace = 'public'::regnamespace) AS ok"))
     .rows[0].ok as boolean;
+  const hasJobCapability = (
+    await admin.query("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'tenant_capability_issue_for_job' AND pronamespace = 'public'::regnamespace) AS ok")
+  ).rows[0].ok as boolean;
+  const hasNonces = (await admin.query("SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'issuer_nonce_claim' AND pronamespace = 'public'::regnamespace) AS ok")).rows[0]
+    .ok as boolean;
   const canExecute = async (login: string, fn: string): Promise<boolean | undefined> => {
     const rows = (
       await admin.query<{ ok: boolean }>(
@@ -572,12 +595,14 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
       ...CAPABILITY_RIGHTS[kind],
       ...(hasCurrent ? CAPABILITY_CURRENT_RIGHTS[kind] : {}),
       ...(hasReceipts ? EXPLAIN_RECEIPT_RIGHTS[kind] : {}),
+      ...(hasJobCapability ? JOB_CAPABILITY_RIGHTS[kind] : {}),
+      ...(hasNonces ? NONCE_RIGHTS[kind] : {}),
     })) {
       const can = await canExecute(login, fn);
       if (can === undefined) wrong.push(`${fn} (missing)`);
       else if (can !== allowed) wrong.push(`${fn} (${allowed ? 'cannot' : 'CAN'} execute)`);
     }
-    for (const table of [...CAPABILITY_TABLES, ...(hasReceipts ? EXPLAIN_RECEIPT_TABLES : [])]) {
+    for (const table of [...CAPABILITY_TABLES, ...(hasReceipts ? EXPLAIN_RECEIPT_TABLES : []), ...(hasNonces ? NONCE_TABLES : [])]) {
       const readable = (await admin.query<{ ok: boolean }>(`SELECT has_table_privilege($1, $2, 'SELECT') AS ok`, [login, `public.${table}`])).rows[0].ok;
       if (readable) wrong.push(`${table} (CAN read)`);
       if (await canWrite(login, table)) wrong.push(`${table} (CAN write)`);
