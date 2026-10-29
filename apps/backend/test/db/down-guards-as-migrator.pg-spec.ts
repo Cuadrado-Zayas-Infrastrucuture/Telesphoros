@@ -514,6 +514,24 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
     }
   });
 
+  it('refuses to revert the worker job capability (spec 012) while an issuance record of one exists, as the restricted migrator', async () => {
+    const f = await fixture();
+    try {
+      const above = revertAbove('worker_job_capability');
+      expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted);
+      await withAdmin(f.admin, (c) =>
+        c.query(`INSERT INTO capability_issuance_log (occurred_at, purpose, request_id, outcome, reason) VALUES (now(), 'evaluation-job', $1, 'refused', 'job-not-held')`, [
+          randomUUID(),
+        ]),
+      );
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow('Capability issuance records must be preserved');
+      const version = revertThrough('worker_job_capability').reverted.at(-1)!;
+      expect((await f.migrator.query('SELECT 1 FROM schema_migrations WHERE version = $1', [version])).rowCount).toBe(1);
+    } finally {
+      await f.drop();
+    }
+  });
+
   it('with nothing in those tables every one of these rollbacks goes through, so a guard refuses populated data and not everything', async () => {
     const f = await fixture();
     try {
