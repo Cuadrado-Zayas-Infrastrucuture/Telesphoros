@@ -21,6 +21,7 @@ const ALLOWED_FILES = new Set([
   'src/issuer/issuer-server.ts',
   'src/issuer/issuer-core.ts',
   'src/issuer/capability-issuer.port.ts',
+  'src/issuer/worker-signature.ts',
   'src/auth/cognito-token-verifier.ts',
   'src/auth/token-verifier.ts',
   'src/db/tls.ts',

@@ -158,3 +158,26 @@ describe('loadIssuerEnv: a refusal names the setting and never quotes a value', 
     expect(messageOf(production2)).not.toContain(sentinel);
   });
 });
+
+describe('loadIssuerEnv: the worker key (spec 012 slice 2)', () => {
+  const key = Buffer.alloc(32, 7).toString('base64url');
+
+  it('is optional: without it the issuer serves no job capabilities (control)', () => {
+    expect(loadIssuerEnv(production).workerKey).toBeUndefined();
+  });
+
+  it('when set, is decoded to the 32 bytes the worker signs with, in production too', () => {
+    expect(loadIssuerEnv({ ...production, ISSUER_WORKER_KEY: key }).workerKey).toEqual(Buffer.alloc(32, 7));
+    expect(loadIssuerEnv({ ...development, ISSUER_WORKER_KEY: key }).workerKey).toEqual(Buffer.alloc(32, 7));
+  });
+
+  it.each([
+    ['too short', Buffer.alloc(16, 7).toString('base64url')],
+    ['not base64url', `${key.slice(0, 40)}+/=`],
+    ['empty', ''],
+  ])('refuses a key that is %s, naming the setting and not the value', (_case, value) => {
+    const message = messageOf({ ...production, ISSUER_WORKER_KEY: value });
+    expect(message).toContain('ISSUER_WORKER_KEY');
+    if (value) expect(message).not.toContain(value);
+  });
+});

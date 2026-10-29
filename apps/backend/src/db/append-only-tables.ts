@@ -83,8 +83,9 @@ export const VERIFICATION_TABLES = ['file_verifications'] as const;
  * The tenant capability (migration 0028, DATA-01), owned by the NOLOGIN role `telesphoros_capability`. No login holds any privilege on these tables: the session
  * issuer writes only through `tenant_capability_issue`, and a request's binding is read only through `app_tenant()` / `app_actor()`. `capability_issuance_log` is
  * append-only (refuse_mutation); `tenant_capabilities` rows expire and are swept; `capability_purposes` and `tenant_binding_mode` are reviewed configuration.
+ * `issuer_request_nonces` (0057) holds replay markers for signed worker requests; each claim forgets those older than 10 minutes.
  */
-export const CAPABILITY_TABLES = ['tenant_capabilities', 'capability_issuance_log', 'capability_purposes', 'tenant_binding_mode'] as const;
+export const CAPABILITY_TABLES = ['tenant_capabilities', 'capability_issuance_log', 'capability_purposes', 'tenant_binding_mode', 'issuer_request_nonces'] as const;
 
 /**
  * The inactive synthetic agentic fixtures (migration 0029, P2), owned by the NOLOGIN role `telesphoros_jobs`. No login holds a table privilege: the application and the

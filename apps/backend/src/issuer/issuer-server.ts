@@ -1,13 +1,16 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { Logger } from '@nestjs/common';
 import { z } from 'zod';
-import { CapabilityIssueError, type CapabilityIssueFailure, type CapabilityIssueRequest, type CapabilityIssuerPort } from './capability-issuer.port';
+import { CapabilityIssueError, type CapabilityIssueFailure, type CapabilityIssueRequest, type CapabilityIssuerPort, type JobCapabilityIssuer } from './capability-issuer.port';
+import { verifyWorkerRequest } from './worker-signature';
 
 /**
  * The session issuer's HTTP face (DATA-01 PR A). Plain node:http, no framework, so there is no route table, body parser or error filter to configure
  * wrongly: two routes, one table.
  *
- *   POST /v1/capabilities   {accessToken, requestId}  ->  200 {token, expiresAt, membershipVersion}
+ *   POST /v1/capabilities       {accessToken, requestId}          ->  200 {token, expiresAt, membershipVersion}
+ *   POST /v1/job-capabilities   {jobId, workerId, requestId}      ->  200 {token, expiresAt, membershipVersion, tenantId, sub}
+ *                               signed by the evaluation worker (worker-signature.ts); only when the issuer has a worker key (spec 012)
  *   GET  /livez                                                          ->  200 (the container's health check)
  *   anything else                                                        ->  404
  *
@@ -29,12 +32,32 @@ const STATUS: Record<CapabilityIssueFailure, number> = {
   'invalid-request': 400,
   refused: 403,
   unavailable: 503,
+  unauthenticated: 401,
+  replayed: 401,
 };
 
 const body = z.strictObject({
   accessToken: z.string().min(1).max(MAX_ACCESS_TOKEN_CHARS),
   requestId: z.string().regex(SAFE_REQUEST_ID),
 });
+
+/** Spec 012 slice 2. `workerId` has the shape the evaluation worker's WORKER_ID allows (evaluation-worker-config.ts). */
+const jobBody = z.strictObject({
+  jobId: z.uuid(),
+  workerId: z.string().regex(/^[A-Za-z0-9._:-]{1,96}$/),
+  requestId: z.string().regex(SAFE_REQUEST_ID),
+});
+
+/** The job route's settings. Without them the route does not exist: a request to it is a 404, like any other unknown path. */
+export interface JobRouteOptions {
+  /** The key the evaluation worker signs with (ISSUER_WORKER_KEY). */
+  key: Buffer;
+  issuer: JobCapabilityIssuer;
+  /** The issuer's clock, for the signature's timestamp check. */
+  now?: () => number;
+}
+
+export const JOB_CAPABILITIES_PATH = '/v1/job-capabilities';
 
 export interface IssuerServerLimits {
   /** How long a client may take to send its request line and headers. */
@@ -51,7 +74,7 @@ export const DEFAULT_LIMITS: IssuerServerLimits = { headersTimeoutMs: 5000, requ
 
 type Early = 'unsupported-media-type' | 'payload-too-large' | 'invalid-request';
 
-export function createIssuerServer(issuer: CapabilityIssuerPort, limits: Partial<IssuerServerLimits> = {}): Server {
+export function createIssuerServer(issuer: CapabilityIssuerPort, limits: Partial<IssuerServerLimits> = {}, jobs?: JobRouteOptions): Server {
   const l = { ...DEFAULT_LIMITS, ...limits };
   const logger = new Logger('IssuerHttp');
 
@@ -121,12 +144,51 @@ export function createIssuerServer(issuer: CapabilityIssuerPort, limits: Partial
     }
   };
 
+  /** The signature is checked over the exact body bytes before the body is parsed, and before anything reaches the database. */
+  const issueForJob = async (req: IncomingMessage, res: ServerResponse, route: JobRouteOptions): Promise<void> => {
+    if (!/^application\/json\s*(;|$)/i.test(req.headers['content-type'] ?? '')) return reject(req, res, 415, 'unsupported-media-type');
+    const declared = Number(req.headers['content-length']);
+    if (req.headers['content-length'] !== undefined && declared > MAX_BODY_BYTES) return reject(req, res, 413, 'payload-too-large');
+    const raw = await readBody(req);
+    if (raw === 'gone') return;
+    if (raw === 'too-large') return reject(req, res, 413, 'payload-too-large');
+    const signed = verifyWorkerRequest({ key: route.key, method: 'POST', path: JOB_CAPABILITIES_PATH, body: raw, headers: req.headers, now: (route.now ?? Date.now)() });
+    if (!signed.ok) {
+      logger.warn(`Issuer request rejected: unauthenticated (${signed.reason})`);
+      return reply(res, STATUS.unauthenticated, { error: 'unauthenticated' });
+    }
+    let request: z.infer<typeof jobBody>;
+    try {
+      request = jobBody.parse(JSON.parse(raw.toString('utf8')));
+    } catch {
+      return reject(req, res, 400, 'invalid-request');
+    }
+    try {
+      const issued = await route.issuer.issueForJob({ ...request, caller: signed.caller, nonce: signed.nonce });
+      reply(res, 200, { token: issued.token, expiresAt: issued.expiresAt.toISOString(), membershipVersion: issued.membershipVersion, tenantId: issued.tenantId, sub: issued.sub });
+    } catch (error) {
+      if (error instanceof CapabilityIssueError) {
+        const detail = error.reason === 'refused' && error.detail && SAFE_DETAIL.test(error.detail) ? { detail: error.detail } : {};
+        return reply(res, STATUS[error.reason], { error: error.reason, ...detail });
+      }
+      logger.warn(`Issuer request failed: unexpected (${error instanceof Error && SAFE_NAME.test(error.name) ? error.name : 'Error'})`);
+      reply(res, 503, { error: 'unavailable' });
+    }
+  };
+
   const server = createServer(
     { headersTimeout: l.headersTimeoutMs, requestTimeout: l.requestTimeoutMs, connectionsCheckingInterval: l.checkIntervalMs, keepAliveTimeout: 5000, maxHeaderSize: 8192 },
     (req, res) => {
       if (req.method === 'GET' && req.url === '/livez') return reply(res, 200, { status: 'ok' });
       if (req.method === 'POST' && req.url === '/v1/capabilities') {
         issue(req, res).catch(() => {
+          logger.warn('Issuer request failed: unexpected (Error)');
+          reply(res, 503, { error: 'unavailable' });
+        });
+        return;
+      }
+      if (jobs && req.method === 'POST' && req.url === JOB_CAPABILITIES_PATH) {
+        issueForJob(req, res, jobs).catch(() => {
           logger.warn('Issuer request failed: unexpected (Error)');
           reply(res, 503, { error: 'unavailable' });
         });
