@@ -113,10 +113,13 @@ function jobError(error: unknown, signal: AbortSignal): unknown {
 
 /**
  * Why the issuer issued no capability (FR-005). Its refusals are about the job or the person and end the job; anything else says nothing about either
- * (an issuer that is down, a key that does not match while a deployment rolls) and is tried again.
+ * (an issuer that is down, a key that does not match while a deployment rolls) and is tried again. So is `rate-limited`: it says the person has been
+ * issued many capabilities lately, not that they may not have this one, and once the limits are enforced (0028 `enforce_limits`) a requester with many
+ * queued requests would otherwise lose them for good.
  */
 function capabilityError(error: CapabilityIssueError): unknown {
   if (error.reason !== 'refused') return retryable(error.reason === 'unavailable' ? 'issuer-unavailable' : 'issuer-unauthenticated');
+  if (error.detail === 'rate-limited') return retryable('issuer-rate-limited');
   if (error.detail === 'job-not-held') return fatal('job-not-held');
   if (error.detail === 'tenant-inactive') return fatal('tenant-inactive');
   return fatal('requester-not-authorized');
