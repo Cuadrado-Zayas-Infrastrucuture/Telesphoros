@@ -7,8 +7,11 @@ const fake = (state: { lastLoopAt: number; activeCount: number; isStopping: bool
 
 describe('health server', () => {
   it('is live while the loop goes round, not ready once stopping, and stale when the loop stops', async () => {
+    // A wide window, and staleness set by moving lastLoopAt far back: the result never depends on how long the test itself takes
+    // (a 200 ms window failed at 357 ms when every package's tests ran at once).
+    const STALE_AFTER_MS = 60_000;
     const state = { lastLoopAt: Date.now(), activeCount: 2, isStopping: false };
-    const server = await startHealthServer(fake(state), { host: '127.0.0.1', port: 0, staleAfterMs: 200 });
+    const server = await startHealthServer(fake(state), { host: '127.0.0.1', port: 0, staleAfterMs: STALE_AFTER_MS });
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     try {
       const live = await fetch(`${base}/livez`);
@@ -18,7 +21,7 @@ describe('health server', () => {
       state.isStopping = true;
       expect((await fetch(`${base}/readyz`)).status).toBe(503);
       expect((await fetch(`${base}/livez`)).status).toBe(200);
-      state.lastLoopAt = Date.now() - 1000;
+      state.lastLoopAt = Date.now() - 2 * STALE_AFTER_MS;
       expect((await fetch(`${base}/livez`)).status).toBe(503);
       expect((await fetch(`${base}/other`)).status).toBe(404);
       expect((await fetch(`${base}/livez`, { method: 'POST' })).status).toBe(404);
