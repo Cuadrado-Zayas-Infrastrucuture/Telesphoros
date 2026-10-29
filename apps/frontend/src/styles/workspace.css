@@ -11,7 +11,7 @@
   letter-spacing: -.04em;
 }
 .workspace-shell main { font-variant-numeric: lining-nums; }
-.workspace-shell header { background: var(--panel); }
+.workspace-shell header { background: var(--band); }
 .workspace-shell .reports-workspace { gap: var(--workspace-content-gap); }
 .workspace-shell .reports-workspace > div:first-child { padding-bottom: .5rem; }
 .workspace-shell .reports-workspace table th { font-weight: 550; }
