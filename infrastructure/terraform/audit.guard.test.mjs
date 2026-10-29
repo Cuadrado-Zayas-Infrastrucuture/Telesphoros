@@ -87,6 +87,19 @@ export function auditProblems(tf, appIam = iam) {
     need(!/identifiers\s*=\s*\["\*"\]/.test(statement), 'no wildcard principal may be allowed on the audit bucket');
   }
   need(has(policy, 'resources = ["${aws_s3_bucket.audit.arn}/AWSLogs/${local.audit_account_id}/*"]'), 'CloudTrail may write only under this account\'s prefix');
+  // An Allow-only bucket policy limits nobody in the same account: an identity policy granting s3:PutObject still writes. "Only this trail may write"
+  // needs a Deny for every other writer, and the trail does not record ordinary writes here, so an added file would leave no trace.
+  const writeDeny = blocks(policy, 'statement ').find((st) => has(st, 'sid = "DenyWritesNotFromThisTrail"')) ?? '';
+  need(
+    has(writeDeny, 'effect = "Deny"') &&
+      has(writeDeny, 'actions = ["s3:PutObject"]') &&
+      has(writeDeny, 'resources = ["${aws_s3_bucket.audit.arn}/*"]') &&
+      has(writeDeny, 'identifiers = ["*"]') &&
+      has(writeDeny, 'test = "StringNotEqualsIfExists"') &&
+      has(writeDeny, 'variable = "aws:SourceArn"') &&
+      has(writeDeny, 'values = [local.audit_trail_arn]'),
+    'the audit bucket must deny s3:PutObject on every object to anything that is not this trail',
+  );
 
   // The key: rotation on; only CloudTrail, CloudWatch Logs and CloudWatch (and the account) get anything; nothing for the application.
   need(has(one('resource "aws_kms_key" "audit"'), 'enable_key_rotation = true'), 'the audit key must rotate');
@@ -162,6 +175,9 @@ test('the audit guard reports each way the text could be weakened (controls)', (
     ['insecure transport allowed', 'variable = "aws:SecureTransport"', 'variable = "aws:Other"'],
     ['anyone may write logs', 'identifiers = ["cloudtrail.amazonaws.com"]\n    }\n    condition {\n      test     = "StringEquals"\n      variable = "aws:SourceArn"\n      values   = [local.audit_trail_arn]\n    }\n    condition {\n      test     = "StringEquals"\n      variable = "s3:x-amz-acl"', 'identifiers = ["*"]\n    }\n    condition {\n      test     = "StringEquals"\n      variable = "aws:SourceArn"\n      values   = [local.audit_trail_arn]\n    }\n    condition {\n      test     = "StringEquals"\n      variable = "s3:x-amz-acl"'],
     ['writes allowed for any prefix', '/AWSLogs/${local.audit_account_id}/*', '/*'],
+    ['other writers not denied', 'sid       = "DenyWritesNotFromThisTrail"\n    effect    = "Deny"', 'sid       = "DenyWritesNotFromThisTrail"\n    effect    = "Allow"'],
+    ['the write deny covers the wrong action', 'sid       = "DenyWritesNotFromThisTrail"\n    effect    = "Deny"\n    actions   = ["s3:PutObject"]', 'sid       = "DenyWritesNotFromThisTrail"\n    effect    = "Deny"\n    actions   = ["s3:GetObject"]'],
+    ['the write deny exempts every source', 'test     = "StringNotEqualsIfExists"\n      variable = "aws:SourceArn"\n      values   = [local.audit_trail_arn]', 'test     = "StringNotEqualsIfExists"\n      variable = "aws:SourceArn"\n      values   = ["*"]'],
     ['key rotation off', 'enable_key_rotation     = true\n  deletion_window_in_days = local.kms_deletion_days\n  policy', 'enable_key_rotation     = false\n  deletion_window_in_days = local.kms_deletion_days\n  policy'],
     ['not multi-region', 'is_multi_region_trail         = !local.synthetic', 'is_multi_region_trail         = false'],
     ['log validation off', 'enable_log_file_validation    = true', 'enable_log_file_validation    = false'],

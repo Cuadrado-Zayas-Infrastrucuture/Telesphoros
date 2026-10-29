@@ -289,6 +289,25 @@ data "aws_iam_policy_document" "audit_bucket" {
       values   = ["bucket-owner-full-control"]
     }
   }
+  # The two statements above only ALLOW this trail. An identity policy in this account that grants s3:PutObject (an administrator) could still
+  # write here, and the trail does not record ordinary writes in this bucket, so an added file would leave no trace. This makes "only this trail
+  # writes" hold for everyone: a request without this trail's aws:SourceArn (any IAM user or role) is refused. Deletes are left to the lock and
+  # to the trail, which records them; denying them would also stop force_destroy in the synthetic environment.
+  statement {
+    sid       = "DenyWritesNotFromThisTrail"
+    effect    = "Deny"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.audit.arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "StringNotEqualsIfExists"
+      variable = "aws:SourceArn"
+      values   = [local.audit_trail_arn]
+    }
+  }
   statement {
     sid       = "DenyInsecureTransport"
     effect    = "Deny"
