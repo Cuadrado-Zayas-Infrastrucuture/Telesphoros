@@ -533,6 +533,37 @@ resource "aws_cloudwatch_metric_alarm" "issuer_rate_limited" {
   depends_on          = [aws_cloudwatch_log_metric_filter.issuer_rate_limited]
 }
 
+# A job-capability request the issuer could not authenticate (spec 012): no signature, an unknown caller, a malformed or wrong signature, or a stale clock. The
+# evaluation worker retries such jobs, so a worker key that does not match the issuer's after a rotation, or a worker clock that drifts, shows up here and
+# not as failed jobs. A burst with no worker deployed is someone else calling the route. The issuer server writes the phrase (issuer-server.ts).
+resource "aws_cloudwatch_log_metric_filter" "issuer_worker_unauthenticated" {
+  count          = local.api_count
+  name           = "${local.name}-issuer-worker-unauthenticated"
+  log_group_name = aws_cloudwatch_log_group.issuer[0].name
+  pattern        = "\"Issuer request rejected: unauthenticated\""
+  metric_transformation {
+    name      = "IssuerWorkerUnauthenticated"
+    namespace = local.issuer_metrics
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "issuer_worker_unauthenticated" {
+  count               = local.api_count
+  alarm_name          = "${local.name}-issuer-worker-unauthenticated"
+  alarm_description   = "Five or more job-capability requests failed the worker signature check in five minutes. Check that the worker and the issuer hold the same key and that the worker's clock is right; with no worker deployed, someone else is calling the route (spec 012)."
+  namespace           = local.issuer_metrics
+  metric_name         = "IssuerWorkerUnauthenticated"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 5
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  depends_on          = [aws_cloudwatch_log_metric_filter.issuer_worker_unauthenticated]
+}
+
 # Missing data counts as a breach: no report from Container Insights means no running issuer task is reporting.
 resource "aws_cloudwatch_metric_alarm" "issuer_running_tasks" {
   count               = local.issuer_service_count
