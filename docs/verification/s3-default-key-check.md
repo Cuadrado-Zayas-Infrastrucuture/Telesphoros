@@ -58,5 +58,5 @@ The same outcomes as the reports bucket: I3 holds, the policy refuses it, and `D
 
 ## Not verified
 
-- The backup region itself: a first apply with the default `backup_region` (`us-east-1`) may fail on the backups KMS key in this account, as `kms:CreateKey` did here. Unproven: the role that applies Terraform may have other permissions, and no apply was attempted. [offsite-backups.md](../ops/offsite-backups.md#limits-stated-plainly) says to check it first.
+- The backup region itself: a first apply with the default `backup_region` (`us-east-1`) may fail on the backups KMS key in this account, as `kms:CreateKey` did here. A later probe the same day (one tagged throwaway key, as Terraform's `default_tags` would create it) was refused in `us-west-2` too, by an explicit deny in a service control policy; nothing was created. So the region is the organization's choice (decision D1), not the default's. Unproven: the role that applies Terraform may have other permissions, and no apply was attempted. [offsite-backups.md](../ops/offsite-backups.md#limits-stated-plainly) says to check it first.
 - Nothing is deployed, so no live bucket was checked; the resources here were created for the check and removed.

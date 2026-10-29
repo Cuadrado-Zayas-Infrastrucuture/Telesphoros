@@ -8,6 +8,7 @@ import { installProcessFaultHandlers } from './common/process-faults';
 import { loadEnv } from './config/env';
 import { Database } from './db/database';
 import { pgClientConfig } from './db/tls';
+import { HttpJobCapabilityClient } from './issuer/job-capability-client';
 import { EvaluationRequestConsumer, evaluationRequestJob } from './lab-reports/evaluation-request-consumer';
 import { assertRunsProfile, loadEvaluationWorkerConfig } from './lab-reports/evaluation-worker-config';
 import { EvaluationsService, LAB_KNOWLEDGE } from './lab-reports/evaluations.service';
@@ -32,7 +33,9 @@ async function main(): Promise<void> {
   // The file worker's limits (audit W5): without them a database that stops answering would hold a claim or the stop below for ever.
   const pool = new Pool({ ...pgClientConfig(config.queueDatabaseUrl), ...WORKER_POOL_LIMITS, max: config.concurrency + 2, application_name: 'telesphoros-evaluation-worker' });
   pool.on('error', () => log('error', 'database-connection-error', { code: 'pool-error' }));
-  const consumer = new EvaluationRequestConsumer(app.get(Database), app.get(EvaluationsService), config.profile);
+  // Spec 012 slice 3: configured for the issuer, every transaction of a job runs under a capability issued for it.
+  const jobCapabilities = config.issuer ? new HttpJobCapabilityClient({ baseUrl: config.issuer.baseUrl, key: config.issuer.key }) : undefined;
+  const consumer = new EvaluationRequestConsumer(app.get(Database), app.get(EvaluationsService), config.profile, jobCapabilities);
   const runner = new Runner({
     workerId: config.workerId,
     queue: new JobQueue(pool),

@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { Pool, type PoolClient } from 'pg';
-import { capabilityAbsentReason, currentRequestAuthority, currentRequestCapability } from '../auth/authority-context';
+import { capabilityAbsentReason, currentCapabilitySource, currentRequestAuthority, currentRequestCapability, type RequestCapability } from '../auth/authority-context';
 import { assertSessionCurrent } from '../auth/session-admission';
 import { AppException } from '../common/app-exception';
 import { CapabilityCounter, type CapabilityStats } from './capability-counter';
@@ -94,7 +94,9 @@ export class Database {
     if (actor !== undefined && (!actor || actor.length > MAX_ACTOR_LENGTH || CONTROL_CHARACTERS.test(actor))) throw new Error('Invalid actor');
     // A request that outlived its capability is refused, never run: the database would resolve no organization, and row-level security answers that with
     // no rows rather than an error, so a slow read would look empty (audit A3). The caller retries as a new request, which is issued a new capability.
-    const capability = currentRequestCapability();
+    // Worker work (runWithCapability) has no request: each transaction is issued its own, before a connection is taken, so a slow issuer holds none.
+    const source = currentCapabilitySource();
+    const capability = source ? await source() : currentRequestCapability();
     if (capability && capability.expiresAt.getTime() <= Date.now()) {
       this.capabilities.recordMissing('expired');
       throw AppException.unavailable('This request took too long. Try again.');
@@ -111,7 +113,7 @@ export class Database {
       await client.query('BEGIN');
       await client.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
       if (actor !== undefined) await client.query(`SELECT set_config('app.current_actor', $1, true)`, [actor]);
-      await this.bindCapability(client);
+      await this.bindCapability(client, capability);
       const result = await work(client);
       if (!options.ownVersionMayChange && !(await this.authorityStillCurrent(client, tenantId))) {
         refused = currentRequestAuthority();
@@ -138,8 +140,7 @@ export class Database {
    * One that expired before the transaction was refused above (except for `appendSecurityEvent`, which binds it on purpose); one that expires in between is still set (the database then resolves nothing) and counted as missing. EVERY call is counted, the guard's own
    * membership lookup included: it runs under the capability, which the guard now asks for first.
    */
-  private async bindCapability(client: PoolClient): Promise<void> {
-    const capability = currentRequestCapability();
+  private async bindCapability(client: PoolClient, capability: RequestCapability | undefined): Promise<void> {
     if (capability) await client.query(`SELECT set_config('app.capability', $1, true)`, [capability.token]);
     if (capability && capability.expiresAt.getTime() > Date.now()) this.capabilities.recordBound();
     else this.capabilities.recordMissing(capability ? 'expired' : (capabilityAbsentReason() ?? 'absent'));
@@ -190,7 +191,7 @@ export class Database {
     try {
       await client.query('BEGIN');
       await client.query(`SELECT set_config('app.current_tenant_id', $1, true), set_config('app.current_actor', $2, true)`, [tenantId, actor]);
-      await this.bindCapability(client);
+      await this.bindCapability(client, currentRequestCapability());
       await client.query('SELECT security_event_append($1, $2, $3, $4, $5::jsonb, $6)', [
         event.eventType,
         event.outcome,

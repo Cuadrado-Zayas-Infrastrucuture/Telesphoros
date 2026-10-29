@@ -82,6 +82,19 @@
 - [ ] T031 Migration `00NN_tenant_binding_enforce.{up,down}.sql` (`-- compat: breaking`): set the mode to `capability`; the down migration sets it back to `dual`. The FR-010 lint becomes failing. In the same PR, change `apps/backend/src/db/restore.ts:288-296` (`verifyIsolation`) to prove isolation with a capability (FR-016), because in `capability` mode it would otherwise report a healthy restore as broken
 - [ ] T032 Report the D7 evidence before the PR is marked ready: the capability-less count, total requests and window, and the issuer's p50/p95 with sample size
 
+### Slice 5 readiness (inventory 2026-10-29, `main` `f4f74dc`)
+
+What still runs tenant-scoped SQL without a capability, or assumes `dual`. Each must be closed, or shown not to apply, before T031 flips the mode. Gates D4, D7 and D8 are unchanged.
+
+- [ ] R1 `restore.ts` `verifyIsolation` (now `apps/backend/src/db/restore.ts:314-341`; T029, T031 cite the older 288-296): the "with tenant" case sets only `app.current_tenant_id` (`:330-331`) and would see 0 rows in `capability` mode. Closed by T029 and T031 (FR-016).
+- [ ] R2 `agentic_synthetic_member_current` (`migrations/0029_agentic_synthetic.up.sql:519`) still writes the tenant setting on the worker side; 0030 and `docs/verification/business-durable-synthetic.md:219` say slice 5 must not flip before it moves. Not yet a task here: needs one.
+- [ ] R3 The evaluation worker acts under a capability only when `EVALUATION_WORKER_ISSUER_URL` and its key are set (`apps/backend/src/config/env.ts:142`, spec 012); no Terraform sets them. Needed before D7's window can start.
+- [ ] R4 API requests carry a capability only when the issuer is deployed: `enable_issuer` defaults to `false` (`infrastructure/terraform/issuer.tf:13`). D7's window starts only once it is on in synthetic staging.
+- [ ] R5 The ai-service durable store calls an injected `withTenant` (`apps/ai-service/durable/postgres.ts:44`); whether that binds a capability is not determined. Find out before T031.
+- [ ] R6 Specs that pin `dual`: `apps/backend/test/db/tenant-capability.pg-spec.ts:128` asserts the mode is `dual`, and `:293-300`, `:526-532` restore `dual` after switching. T031's PR updates them with the flip.
+
+Paths checked and needing no capability (they bind the organization from the row or read no setting): the upload sweep, `jobs-cli`, the ledger monitor and verifier, the outbox relay and job claim and heartbeat (`docs/verification/tenant-capability.md`, class (c)). The security-event writer accepts a recently expired capability since spec 015 (0059).
+
 ## Phase 7: Slice 6, contract — separately approved
 
 - [ ] T033 Remove the `guc`/`dual` fallback from `app_tenant()`, the old function overloads and, if nothing still needs it, the `app.current_tenant_id` write in `withTenant`. SC-002's catalog query returns 0
