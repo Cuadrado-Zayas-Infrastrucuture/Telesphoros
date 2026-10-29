@@ -124,7 +124,15 @@ describe('what the browser keeps', () => {
     for (const bad of [
       'not json',
       '{}',
-      JSON.stringify({ v: 2, scope: owner.scope, requestId: id, reportId: id, file: { reportType: 'vcf', name: 'a.vcf', sizeBytes: 1, sha256: sha }, savedAt: date, patientId }),
+      JSON.stringify({
+        v: 2,
+        scope: owner.scope,
+        requestId: id,
+        reportId: id,
+        file: { reportType: 'structured', name: 'a.json', sizeBytes: 1, sha256: sha },
+        savedAt: date,
+        patientId,
+      }),
     ]) {
       memory.set('telesphoros.upload-recovery.v2', bad);
       expect(readRecovery(owner)).toBeUndefined();

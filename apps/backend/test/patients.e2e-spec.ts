@@ -152,7 +152,7 @@ describe('patients: update, delete, conflicts', () => {
   it('refuses to delete a patient that still has reports (mirrors the Phase 3 foreign key)', async () => {
     const a = await clinicianA();
     const p = await makePatient(a, 'SYN-FK-1');
-    const report = await api().post('/api/v1/reports').set(bearer(a)).send({ patientId: p.id, type: 'vcf', filename: 'x.vcf', sizeBytes: 10 }).expect(201);
+    const report = await api().post('/api/v1/reports').set(bearer(a)).send({ patientId: p.id, type: 'structured', filename: 'x.json', sizeBytes: 10 }).expect(201);
     const res = await api().delete(`${BASE}/${p.id}`).set(bearer(a)).expect(409);
     expect(res.body.error.code).toBe('CONFLICT');
 

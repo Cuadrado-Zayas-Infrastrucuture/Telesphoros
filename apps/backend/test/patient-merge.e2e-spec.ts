@@ -200,12 +200,12 @@ describe('who may propose and decide a merge', () => {
     const [a, b] = [await lab.patient(c1), await lab.patient(c1)];
     const p = await propose(c1, 'merge', a, b).expect(201);
     await decide(c2, p.body.id, 'approved').expect(201);
-    const report = await lab.api().post('/api/v1/reports').set(bearer(c1.token)).send({ patientId: a, type: 'vcf', filename: 'x.vcf', sizeBytes: 10 }).expect(409);
+    const report = await lab.api().post('/api/v1/reports').set(bearer(c1.token)).send({ patientId: a, type: 'structured', filename: 'x.json', sizeBytes: 10 }).expect(409);
     expect(report.body.error.details[0]).toMatchObject({ reason: 'patient-merged' });
     expect(report.body.error.message).toContain(b);
     const ident = await lab.api().post(`/api/v1/patients/${a}/identifiers`).set(bearer(c1.token)).send({ system: 'hospital-a-mrn', value: secretNumber() }).expect(409);
     expect(ident.body.error.details[0]).toMatchObject({ reason: 'patient-merged' });
-    await lab.api().post('/api/v1/reports').set(bearer(c1.token)).send({ patientId: b, type: 'vcf', filename: 'x.vcf', sizeBytes: 10 }).expect(201);
+    await lab.api().post('/api/v1/reports').set(bearer(c1.token)).send({ patientId: b, type: 'structured', filename: 'x.json', sizeBytes: 10 }).expect(201);
     await lab.api().post(`/api/v1/patients/${b}/identifiers`).set(bearer(c1.token)).send({ system: 'hospital-a-mrn', value: secretNumber() }).expect(201);
   });
 
@@ -242,7 +242,7 @@ describe('who may propose and decide a merge', () => {
     const { c1, c2 } = await organization();
     const [a, b] = [await lab.patient(c1), await lab.patient(c1)];
     const make = async (patientId: string) =>
-      (await lab.api().post('/api/v1/reports').set(bearer(c1.token)).send({ patientId, type: 'vcf', filename: 'x.vcf', sizeBytes: 10 }).expect(201)).body.id as string;
+      (await lab.api().post('/api/v1/reports').set(bearer(c1.token)).send({ patientId, type: 'structured', filename: 'x.json', sizeBytes: 10 }).expect(201)).body.id as string;
     const [ra, rb] = [await make(a), await make(b)];
     const reportsOf = async (patientId: string) =>
       ((await lab.api().get(`/api/v1/reports?patientId=${patientId}`).set(bearer(c1.token)).expect(200)).body.data as { id: string; patientId: string }[]).map((r) => r.id).sort();

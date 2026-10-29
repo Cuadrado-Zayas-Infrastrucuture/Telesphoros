@@ -42,8 +42,8 @@ async function newReport(tenantId: string): Promise<ReportRecord> {
     tenantId,
     createdBy: 'syn-actor',
     patientId: p.id,
-    type: 'vcf',
-    filename: 'a.vcf',
+    type: 'structured',
+    filename: 'a.json',
     sizeBytes: 1000,
     status: 'received',
     storageKey: null,
@@ -77,7 +77,7 @@ describe('the upload commit carries the request id into the outbox event and the
   it('stores the id of the request on the event and puts it in the job payload', async () => {
     const t = tenant();
     const r = await newReport(t);
-    await inRequest(REQUEST, () => commitUpload(reports, r, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf', version: 'v1' }));
+    await inRequest(REQUEST, () => commitUpload(reports, r, { principal: 'p', sha256: HASH, contentType: 'application/json', version: 'v1' }));
     expect(await eventOf(r.id)).toEqual({ request_id: REQUEST });
     await relay();
     expect(await payloadOf(r.id)).toEqual({ reportId: r.id, requestId: REQUEST });
@@ -86,7 +86,7 @@ describe('the upload commit carries the request id into the outbox event and the
   it('carries nothing for a commit that has no request behind it (a background caller), and the job is as before', async () => {
     const t = tenant();
     const r = await newReport(t);
-    await commitUpload(reports, r, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf', version: 'v1' });
+    await commitUpload(reports, r, { principal: 'p', sha256: HASH, contentType: 'application/json', version: 'v1' });
     expect(await eventOf(r.id)).toEqual({ request_id: null });
     await relay();
     expect(await payloadOf(r.id)).toEqual({ reportId: r.id });
@@ -95,7 +95,7 @@ describe('the upload commit carries the request id into the outbox event and the
   it('drops a request id the jobs table would refuse (a caller-supplied id may hold a dot or an underscore) instead of failing the event', async () => {
     const t = tenant();
     const r = await newReport(t);
-    await inRequest('caller.supplied_id-1', () => commitUpload(reports, r, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf', version: 'v1' }));
+    await inRequest('caller.supplied_id-1', () => commitUpload(reports, r, { principal: 'p', sha256: HASH, contentType: 'application/json', version: 'v1' }));
     expect(await eventOf(r.id)).toEqual({ request_id: null });
     await relay();
     expect(await payloadOf(r.id)).toEqual({ reportId: r.id }); // relayed, not stuck as a poison event
@@ -106,13 +106,13 @@ describe('the upload commit carries the request id into the outbox event and the
     const [off, on] = [await newReport(t), await newReport(t)];
     await owner((c) => c.query(`UPDATE outbox_routes SET carry_request_id = false WHERE event_type = 'report.file-committed'`));
     try {
-      await inRequest(REQUEST, () => commitUpload(reports, off, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf', version: 'v1' }));
+      await inRequest(REQUEST, () => commitUpload(reports, off, { principal: 'p', sha256: HASH, contentType: 'application/json', version: 'v1' }));
       await relay();
       expect(await payloadOf(off.id)).toEqual({ reportId: off.id });
     } finally {
       await owner((c) => c.query(`UPDATE outbox_routes SET carry_request_id = true WHERE event_type = 'report.file-committed'`));
     }
-    await inRequest(REQUEST, () => commitUpload(reports, on, { principal: 'p', sha256: HASH, contentType: 'text/x-vcf', version: 'v1' }));
+    await inRequest(REQUEST, () => commitUpload(reports, on, { principal: 'p', sha256: HASH, contentType: 'application/json', version: 'v1' }));
     await relay();
     expect(await payloadOf(on.id)).toEqual({ reportId: on.id, requestId: REQUEST });
   });

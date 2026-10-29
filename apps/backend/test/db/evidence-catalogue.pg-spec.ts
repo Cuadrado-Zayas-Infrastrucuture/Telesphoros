@@ -38,20 +38,21 @@ describe('catalogue inventory on verified PostgreSQL restore', () => {
     await withAdmin(pg.adminUrl, async (c) => {
       await c.query('UPDATE reports SET deleted_at=now() WHERE tenant_id=$1 AND id=$2', [b.tenantId, b.reportId]);
       for (const report of [a, b])
-        for (const kind of ['vcf', 'structured']) {
+        // Two completed standard reports per tenant (formerly one vcf and one structured; the vcf type is gone, the counts below are unchanged).
+        for (const kind of ['structured', 'structured']) {
           const id = randomUUID();
           await c.query(
             "INSERT INTO reports (id,tenant_id,created_by,patient_id,type,original_filename,size_bytes,content_type,sha256,storage_key,uploaded_at) VALUES ($1,$2,'syn-author',$3,$4,'synthetic.txt',1,$5,$6,$7,now())",
-            [id, report.tenantId, report.patientId, kind, kind === 'vcf' ? 'text/plain' : 'application/json', sha('x'), 'reports/' + id],
+            [id, report.tenantId, report.patientId, kind, 'application/json', sha('x'), 'reports/' + id],
           );
         }
-      await c.query("INSERT INTO reports (tenant_id,created_by,patient_id,type,original_filename,size_bytes) VALUES ($1,'syn-author',$2,'vcf','pending.vcf',1)", [
+      await c.query("INSERT INTO reports (tenant_id,created_by,patient_id,type,original_filename,size_bytes) VALUES ($1,'syn-author',$2,'structured','pending.json',1)", [
         a.tenantId,
         a.patientId,
       ]);
       // Cross a real keyset boundary with numeric seq values; lexical ordering silently loses rows.
       await c.query(
-        "INSERT INTO reports (tenant_id,created_by,patient_id,type,original_filename,size_bytes,content_type,sha256,storage_key,uploaded_at) SELECT $1,'syn-author',$2,'vcf','synthetic.vcf',1,'text/x-vcf',$3,'reports/'||gen_random_uuid()::text,now() FROM generate_series(1,101)",
+        "INSERT INTO reports (tenant_id,created_by,patient_id,type,original_filename,size_bytes,content_type,sha256,storage_key,uploaded_at) SELECT $1,'syn-author',$2,'structured','synthetic.json',1,'application/json',$3,'reports/'||gen_random_uuid()::text,now() FROM generate_series(1,101)",
         [a.tenantId, a.patientId, sha('x')],
       );
     });
@@ -148,11 +149,11 @@ producerSuite('catalogue production on PostgreSQL and Moto (metadata/protocol on
     source = new S3EvidenceStorage({ ...settings, bucket, prefix: 'reports/' });
     destination = new S3EvidenceStorage({ ...settings, bucket: copy, prefix: 'catalogues/' });
     storage = new S3ObjectStorage(emulator(), bucket);
-    async function uploaded(tenant: string, type: 'lab-pdf' | 'vcf' | 'structured', bytes: Buffer, pinnedVersion = true): Promise<SeededReport> {
+    async function uploaded(tenant: string, type: 'lab-pdf' | 'structured', bytes: Buffer, pinnedVersion = true): Promise<SeededReport> {
       const patientId = randomUUID();
       const reportId = randomUUID();
       const key = 'reports/' + reportId;
-      const contentType = type === 'lab-pdf' ? 'application/pdf' : type === 'vcf' ? 'text/x-vcf' : 'application/json';
+      const contentType = type === 'lab-pdf' ? 'application/pdf' : 'application/json';
       const stored = await storage.putObject(key, bytes, contentType);
       await withAdmin(pg.adminUrl, async (c) => {
         await c.query("INSERT INTO patients (id,tenant_id,created_by,label) VALUES ($1,$2,'syn-author',$3)", [patientId, tenant, 'SYN-' + reportId]);
@@ -166,8 +167,8 @@ producerSuite('catalogue production on PostgreSQL and Moto (metadata/protocol on
     pinned = await uploaded('syn-producer-a', 'lab-pdf', pdf);
     const soft = await uploaded('syn-producer-b', 'lab-pdf', pdf);
     await withAdmin(pg.adminUrl, (c) => c.query('UPDATE reports SET deleted_at=now() WHERE tenant_id=$1 AND id=$2', [soft.tenantId, soft.reportId]));
-    const unpinnedVcf = await uploaded('syn-producer-a', 'vcf', Buffer.from('##fileformat=VCFv4.2\n'), false);
-    await storage.putObject(unpinnedVcf.storageKey, Buffer.from('larger unrelated current VCF bytes'.repeat(4)), 'text/x-vcf');
+    const unpinnedStructured = await uploaded('syn-producer-a', 'structured', Buffer.from('{"synthetic":"unpinned"}'), false);
+    await storage.putObject(unpinnedStructured.storageKey, Buffer.from('larger unrelated current JSON bytes'.repeat(4)), 'application/json');
     await uploaded('syn-producer-b', 'structured', Buffer.from('{"synthetic":true}'), false);
     textKey = 'reports/' + pinned.reportId + '/text/synthetic';
     await storage.putObject(textKey, Buffer.from(text), 'text/plain; charset=utf-8');

@@ -12,12 +12,12 @@ const date = '2026-10-12T00:00:00Z';
 const row = {
   id: '33333333-3333-4333-8333-333333333333',
   patientId: '11111111-1111-4111-8111-111111111111',
-  type: 'vcf',
-  filename: 'synthetic.vcf',
+  type: 'structured',
+  filename: 'synthetic.json',
   sizeBytes: 8,
   status: 'received',
   fileUploaded: true,
-  contentType: 'text/x-vcf',
+  contentType: 'application/json',
   sha256: 'a'.repeat(64),
   createdAt: date,
   updatedAt: date,
@@ -48,7 +48,7 @@ describe('the reports page in the published build', () => {
     const { fetchImpl, asked } = api(['clinician']);
     const { container } = renderApp('/reports', { signedInAs: ['clinician'], fetchImpl });
     await heading();
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Open synthetic.vcf' }));
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Open synthetic.json' }));
     const detail = within(screen.getByRole('region', { name: 'Report details' }));
     expect(detail.getByText('Yes — server verified')).toBeInTheDocument();
     expect(asked).toContain('/api/v1/reports');
@@ -59,8 +59,8 @@ describe('the reports page in the published build', () => {
     const { fetchImpl, asked } = api([role]);
     renderApp('/reports', { signedInAs: [role], fetchImpl });
     await heading();
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Open synthetic.vcf' }));
-    expect(screen.queryByRole('button', { name: 'Download synthetic.vcf' })).not.toBeInTheDocument();
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Open synthetic.json' }));
+    expect(screen.queryByRole('button', { name: 'Download synthetic.json' })).not.toBeInTheDocument();
     expect(screen.getByText('File downloads are not available in this build.')).toBeInTheDocument();
     expect(asked.some((path) => path.endsWith('/download-url'))).toBe(false);
   });

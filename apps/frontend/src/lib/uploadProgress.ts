@@ -20,7 +20,7 @@ export type Declaration = z.infer<typeof declarationSchema>;
 
 /** What identifies the file of an upload without being the file: enough to recognize the same file again, nothing about the patient. */
 export const fileFactsSchema = z.strictObject({
-  reportType: z.enum(['vcf', 'structured', 'lab-pdf']),
+  reportType: z.enum(['structured', 'lab-pdf']),
   name: z.string().min(1).max(100),
   sizeBytes: z.number().int().min(1),
   sha256: z.string().regex(/^[0-9a-f]{64}$/),

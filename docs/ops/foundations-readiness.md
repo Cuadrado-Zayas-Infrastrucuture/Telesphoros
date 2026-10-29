@@ -95,7 +95,7 @@ The normal production frontend has `/reports/upload` and no `/reports` dashboard
 ([route gates](../../apps/frontend/src/app/routes.tsx)). It selects an existing
 synthetic patient; seed one through authorized APIs before testing. Upload bytes
 go through [validated API intake](../../apps/frontend/src/lib/api.ts), not browser
-presigned S3 uploads. Test accepted VCF/JSON, malformed input, interruption/reload
+presigned S3 uploads. Test accepted JSON, malformed input, interruption/reload
 recovery, tenant/member denials, stored version/checksum and the worker's real
 verification result. Exercise authorized retrieval through the API independently;
 do not promise a dashboard journey this hosted build does not expose.

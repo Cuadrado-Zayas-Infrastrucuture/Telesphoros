@@ -166,7 +166,7 @@ describe('captures and acceptances', () => {
     const r = await seedLabReport(pg.adminUrl, t);
     // The repository compares what the caller relied on with the locked report row, so each of these is "the report is not what you saw".
     await expect(repo.insertCapture(t, r.uploader, captureFor(r, 'x', { pdfSha256: sha('some other file') }))).rejects.toBeInstanceOf(SourceChangedError);
-    await expect(withAdmin(pg.adminUrl, (c) => c.query(`UPDATE reports SET type = 'vcf' WHERE id = $1`, [r.reportId]))).rejects.toMatchObject({ code: '23000' });
+    await expect(withAdmin(pg.adminUrl, (c) => c.query(`UPDATE reports SET type = 'structured' WHERE id = $1`, [r.reportId]))).rejects.toMatchObject({ code: '23000' });
     await withAdmin(pg.adminUrl, (c) => c.query(`UPDATE reports SET deleted_at = now() WHERE id = $1`, [r.reportId]));
     await expect(repo.insertCapture(t, r.uploader, captureFor(r))).rejects.toBeInstanceOf(SourceChangedError);
     const [other] = [`tenant-${randomUUID()}`];

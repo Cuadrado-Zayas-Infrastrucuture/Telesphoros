@@ -373,7 +373,7 @@ describe('schema (asserted by trying to break it on a real PostgreSQL)', () => {
     (
       await q(
         `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes${extra ? ', ' + extra.split('=')[0] : ''})
-       VALUES ($1, $1, $2, 'vcf', 'a.vcf', 100${extra ? ', ' + extra.split('=')[1] : ''}) RETURNING id`,
+       VALUES ($1, $1, $2, 'structured', 'a.json', 100${extra ? ', ' + extra.split('=')[1] : ''}) RETURNING id`,
         [tenant, patientId],
       )
     ).rows[0].id as string;
@@ -429,13 +429,13 @@ describe('schema (asserted by trying to break it on a real PostgreSQL)', () => {
   it('validates report fields', async () => {
     const p = await patient('o-rf', 'SYN-RF');
     const bad = (cols: string, vals: string) => expectCode(`INSERT INTO reports (tenant_id, created_by, patient_id, ${cols}) VALUES ('o-rf', 'o-rf', '${p}', ${vals})`, '23514');
-    await bad('type, original_filename, size_bytes', `'pdf', 'a.vcf', 10`);
-    await bad('type, original_filename, size_bytes', `'vcf', '../a.vcf', 10`);
-    await bad('type, original_filename, size_bytes', `'vcf', 'a.vcf', 0`);
-    await bad('type, original_filename, size_bytes', `'vcf', 'a.vcf', 10485761`);
-    await bad('type, original_filename, size_bytes, status', `'vcf', 'a.vcf', 10, 'done'`);
-    await bad('type, original_filename, size_bytes, sha256', `'vcf', 'a.vcf', 10, '${'A'.repeat(64)}'`);
-    await bad('type, original_filename, size_bytes, uploaded_at', `'vcf', 'a.vcf', 10, now()`); // uploaded needs key+sha+type
+    await bad('type, original_filename, size_bytes', `'pdf', 'a.json', 10`);
+    await bad('type, original_filename, size_bytes', `'structured', '../a.json', 10`);
+    await bad('type, original_filename, size_bytes', `'structured', 'a.json', 0`);
+    await bad('type, original_filename, size_bytes', `'structured', 'a.json', 10485761`);
+    await bad('type, original_filename, size_bytes, status', `'structured', 'a.json', 10, 'done'`);
+    await bad('type, original_filename, size_bytes, sha256', `'structured', 'a.json', 10, '${'A'.repeat(64)}'`);
+    await bad('type, original_filename, size_bytes, uploaded_at', `'structured', 'a.json', 10, now()`); // uploaded needs key+sha+type
   });
 
   it('never lets the same object key be registered twice', async () => {
@@ -444,7 +444,7 @@ describe('schema (asserted by trying to break it on a real PostgreSQL)', () => {
     await report('o-key', p, `storage_key='reports/x/1'`);
     await expectCode(
       `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes, storage_key, sha256, content_type)
-       VALUES ('o-key', 'o-key', '${p}', 'vcf', 'b.vcf', 5, 'reports/x/1', '${sha}', 'text/plain')`,
+       VALUES ('o-key', 'o-key', '${p}', 'structured', 'b.json', 5, 'reports/x/1', '${sha}', 'text/plain')`,
       '23505',
     );
   });
@@ -452,7 +452,7 @@ describe('schema (asserted by trying to break it on a real PostgreSQL)', () => {
   it('composite foreign keys stop a child pointing at another tenant’s parent', async () => {
     const mine = await patient('o-fk1', 'SYN-FK1');
     await expectCode(
-      `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ('o-fk2', 'o-fk2', '${mine}', 'vcf', 'a.vcf', 1)`,
+      `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ('o-fk2', 'o-fk2', '${mine}', 'structured', 'a.json', 1)`,
       '23503',
     );
   });

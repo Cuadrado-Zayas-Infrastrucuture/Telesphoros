@@ -12,8 +12,8 @@ export function FileUpload({ canAttach, busy }: { canAttach: boolean; busy: bool
   const disabled = !canAttach || !confirmed || busy;
   function accept(files: File[]) {
     if (disabled) return;
-    if (files.length !== 1 || files[0].size === 0 || files[0].size > 5 * 1024 * 1024 || !/\.(pdf|png|jpe?g|json|vcf)$/i.test(files[0].name)) {
-      setError('Choose one nonempty PDF, PNG, JPEG, JSON or VCF file, up to 5 MB.');
+    if (files.length !== 1 || files[0].size === 0 || files[0].size > 5 * 1024 * 1024 || !/\.(pdf|png|jpe?g|json)$/i.test(files[0].name)) {
+      setError('Choose one nonempty PDF, PNG, JPEG or JSON file, up to 5 MB.');
       return;
     }
     // Retain only display metadata. Never read bytes, create object URLs or send the File.
@@ -57,7 +57,7 @@ export function FileUpload({ canAttach, busy }: { canAttach: boolean; busy: bool
           <input
             ref={input}
             type="file"
-            accept=".pdf,.png,.jpg,.jpeg,.json,.vcf"
+            accept=".pdf,.png,.jpg,.jpeg,.json"
             disabled={disabled}
             aria-label="Choose synthetic attachment"
             className="hidden"

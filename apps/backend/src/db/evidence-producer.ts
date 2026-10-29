@@ -321,7 +321,6 @@ export async function produceEvidenceCatalogue(options: CatalogueOptions): Promi
   budget.check();
   const requiredByKind: CatalogueMetrics['requiredByKind'] = {
     'lab-pdf': { objects: 0, ...volume(0) },
-    vcf: { objects: 0, ...volume(0) },
     structured: { objects: 0, ...volume(0) },
     text: { objects: 0, ...volume(0) },
   };

@@ -22,13 +22,13 @@ async function seed(db: EphemeralDatabase) {
     const b = (await c.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ($1, 'syn-author', 'SYN-B') RETURNING id`, [tenant])).rows[0].id as string;
     const report = (
       await c.query(
-        `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ($1, 'syn-author', $2, 'vcf', 'syn.vcf', 1) RETURNING id`,
+        `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ($1, 'syn-author', $2, 'structured', 'syn.json', 1) RETURNING id`,
         [tenant, a],
       )
     ).rows[0].id as string;
     const otherReport = (
       await c.query(
-        `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ($1, 'syn-author', $2, 'vcf', 'syn.vcf', 1) RETURNING id`,
+        `INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ($1, 'syn-author', $2, 'structured', 'syn.json', 1) RETURNING id`,
         [tenant, b],
       )
     ).rows[0].id as string;

@@ -149,9 +149,9 @@ export default function LocalUploadReportPage() {
                     <FormItem>
                       <FormLabel>Report file (required)</FormLabel>
                       <FormControl>
-                        <Input type="file" accept=".vcf,.json" name={name} ref={ref} onBlur={onBlur} onChange={(event) => onChange(event.target.files?.[0])} />
+                        <Input type="file" accept=".json" name={name} ref={ref} onBlur={onBlur} onChange={(event) => onChange(event.target.files?.[0])} />
                       </FormControl>
-                      <FormDescription>.vcf or .json, up to 10 MB.</FormDescription>
+                      <FormDescription>.json, up to 10 MB.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}

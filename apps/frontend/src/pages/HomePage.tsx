@@ -15,7 +15,7 @@ export default function HomePage() {
     return (
       <div className="flex max-w-prose flex-col gap-6">
         <h1 className="text-3xl font-bold">Synthetic report storage</h1>
-        <p>Upload and retrieve synthetic PDF, VCF and JSON files. The server verifies file storage; clinical processing is disabled.</p>
+        <p>Upload and retrieve synthetic PDF and structured JSON files. The server verifies file storage; clinical processing is disabled.</p>
         <p>Use synthetic records only. No clinical interpretation or recommendations are produced.</p>
         {import.meta.env.VITE_SYNTHETIC_PGX_DEMO === 'true' && location.hostname === '127.0.0.1' && (
           <p>

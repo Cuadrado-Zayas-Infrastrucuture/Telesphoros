@@ -14,15 +14,9 @@ import { bearer, clinicianA, clinicianB, readerA, signToken } from './helpers/to
 
 // The validated intake in the organization's own scope (M2.2a): no disposable run, keys under the report, a per-organization quota and a refused file recorded as
 // a security event. Synthetic data only. Runs on memory, PostgreSQL and PostgreSQL plus S3.
-const vcf = {
-  type: 'vcf',
-  mime: 'text/x-vcf',
-  name: 'sample.vcf',
-  bytes: Buffer.from('##fileformat=VCFv4.3\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n1\t100\t.\tA\tG\t.\t.\t.\n'),
-};
 const json = { type: 'structured', mime: 'application/json', name: 'sample.json', bytes: Buffer.from('{"synthetic":true,"values":[1,2,3]}') };
 const pdf = { type: 'lab-pdf', mime: 'application/pdf', name: 'sample.pdf', bytes: Buffer.from('%PDF-1.7\nSynthetic opaque bytes\n%%EOF\n') };
-type Sample = typeof vcf | typeof json | typeof pdf;
+type Sample = typeof json | typeof pdf;
 const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
 const TENANT_A = 'tenant-user-a';
 
@@ -74,28 +68,24 @@ describe('validated intake in the organization scope', () => {
     await app.close();
   });
 
-  it.each([vcf, json])(
-    'stores a valid $type once, under the report, pinned to a real version, with the person who declared and sent it as both requester and uploader',
-    async (s) => {
-      const id = await registration(s);
-      const a = await declare(id, s);
-      expect((await send(id, a, s).expect(200)).body.state).toBe('committed');
-      const stored = (await row(id))!;
-      expect(stored.storageKey).toBe(`reports/${tenantPrefix(TENANT_A)}/${id}/intake/${a.attemptId}`);
-      expect(stored).toMatchObject({ sha256: sha(s.bytes), contentType: s.mime, sizeBytes: s.bytes.length, uploadedBy: 'user-a', uploadRequestedBy: 'user-a' });
-      expect(stored.uploadedAt).toBeTruthy();
-      expect(stored.objectVersion && stored.objectVersion !== 'null').toBe(true);
-      const report = (await api().get(`/api/v1/reports/${id}`).set(bearer(token)).expect(200)).body;
-      expect(report).toMatchObject({ fileUploaded: true, sha256: sha(s.bytes) });
-      expect(report).not.toHaveProperty('storageKey');
-      const link = await api().get(`/api/v1/reports/${id}/download-url`).set(bearer(token)).expect(200);
-      if (usingS3()) expect(sha(Buffer.from(await (await fetch(link.body.url)).arrayBuffer()))).toBe(sha(s.bytes));
-    },
-  );
+  it.each([json])('stores a valid $type once, under the report, pinned to a real version, with the person who declared and sent it as both requester and uploader', async (s) => {
+    const id = await registration(s);
+    const a = await declare(id, s);
+    expect((await send(id, a, s).expect(200)).body.state).toBe('committed');
+    const stored = (await row(id))!;
+    expect(stored.storageKey).toBe(`reports/${tenantPrefix(TENANT_A)}/${id}/intake/${a.attemptId}`);
+    expect(stored).toMatchObject({ sha256: sha(s.bytes), contentType: s.mime, sizeBytes: s.bytes.length, uploadedBy: 'user-a', uploadRequestedBy: 'user-a' });
+    expect(stored.uploadedAt).toBeTruthy();
+    expect(stored.objectVersion && stored.objectVersion !== 'null').toBe(true);
+    const report = (await api().get(`/api/v1/reports/${id}`).set(bearer(token)).expect(200)).body;
+    expect(report).toMatchObject({ fileUploaded: true, sha256: sha(s.bytes) });
+    expect(report).not.toHaveProperty('storageKey');
+    const link = await api().get(`/api/v1/reports/${id}/download-url`).set(bearer(token)).expect(200);
+    if (usingS3()) expect(sha(Buffer.from(await (await fetch(link.body.url)).arrayBuffer()))).toBe(sha(s.bytes));
+  });
 
   it.each([
-    ['a VCF with no header line', vcf, Buffer.from('1\t100\t.\tA\tG\n')],
-    ['broken JSON', json, Buffer.from('{"x":}')],
+    ['broken JSON', json, Buffer.from('{"leak-canary":}')],
     ['a PDF that is really HTML', pdf, Buffer.from('<html>opaque</html>')],
   ] as const)('refuses %s: nothing is written to storage, the attempt is closed, and the refusal is recorded as a security event', async (_label, s, bytes) => {
     // The pipeline is off in this app, so use the type that does not need it for the control; the PDF case is covered in the pipeline block below.
@@ -114,7 +104,7 @@ describe('validated intake in the organization scope', () => {
     expect(events[0]).toMatchObject({ tenantId: TENANT_A, outcome: 'refused', actorRef: 'user-a', subjectKind: 'person', subjectRef: 'user-a', details: { reason: 'structure' } });
     // Only a short code: nothing about the file, its name, its hash or the report.
     const shown = JSON.stringify(events[0]);
-    for (const secret of [s.name, sha(bytes), id, a.attemptId, 'fileformat']) expect(shown).not.toContain(secret);
+    for (const secret of [s.name, sha(bytes), id, a.attemptId, 'leak-canary']) expect(shown).not.toContain(secret);
     // Throttled like other refusals: the same person and reason within a minute add nothing.
     const again = await declare(await registration(s, token, bytes.length), s);
     void again;
@@ -125,9 +115,9 @@ describe('validated intake in the organization scope', () => {
     const id = await registration(json);
     const a = await declare(id, json);
     await send(id, a, json, Buffer.from('{"x":}')).expect(400);
-    const id2 = await registration(vcf);
-    const b = await declare(id2, vcf);
-    await send(id2, b, vcf, Buffer.from(vcf.bytes.toString().replace('\t100\t', '\t200\t'))).expect(400); // well formed, right size, wrong hash
+    const id2 = await registration(json);
+    const b = await declare(id2, json);
+    await send(id2, b, json, Buffer.from(json.bytes.toString().replace('[1,2,3]', '[1,2,4]'))).expect(400); // well formed, right size, wrong hash
     const reasons = (await securityEventsOf(app))
       .filter((e) => e.eventType === 'intake.rejected')
       .map((e) => e.details.reason)

@@ -292,7 +292,7 @@ describe('every kind of write a request makes passes through the commit check', 
     try {
       const t = bearer(await clinicianA());
       const api = () => request(app.getHttpServer());
-      const bytes = Buffer.from('##fileformat=VCFv4.3\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n');
+      const bytes = Buffer.from('{"synthetic":true}');
 
       let patientId = '';
       expect(await delta(async () => (patientId = (await api().post('/api/v1/patients').set(t).send({ label: label() }).expect(201)).body.id))).toBeGreaterThan(0);
@@ -300,10 +300,11 @@ describe('every kind of write a request makes passes through the commit check', 
       let reportId = '';
       expect(
         await delta(
-          async () => (reportId = (await api().post('/api/v1/reports').set(t).send({ patientId, type: 'vcf', filename: 'a.vcf', sizeBytes: bytes.length }).expect(201)).body.id),
+          async () =>
+            (reportId = (await api().post('/api/v1/reports').set(t).send({ patientId, type: 'structured', filename: 'a.json', sizeBytes: bytes.length }).expect(201)).body.id),
         ),
       ).toBeGreaterThan(0);
-      expect(await delta(() => api().patch(`/api/v1/reports/${reportId}`).set(t).send({ filename: 'b.vcf' }).expect(200))).toBeGreaterThan(0);
+      expect(await delta(() => api().patch(`/api/v1/reports/${reportId}`).set(t).send({ filename: 'b.json' }).expect(200))).toBeGreaterThan(0);
 
       const revision = (await api().get(`/api/v1/reports/${reportId}/upload-state`).set(t).expect(200)).body.revision;
       let attempt: { attemptId: string; revision: string } = { attemptId: '', revision: '' };
@@ -313,7 +314,7 @@ describe('every kind of write a request makes passes through the commit check', 
             await api()
               .post(`/api/v1/reports/${reportId}/upload-attempts`)
               .set(t)
-              .send({ requestId: randomUUID(), revision, contentType: 'text/x-vcf', sha256: createHash('sha256').update(bytes).digest('hex') })
+              .send({ requestId: randomUUID(), revision, contentType: 'application/json', sha256: createHash('sha256').update(bytes).digest('hex') })
               .expect(201)
           ).body;
         }),
@@ -325,8 +326,8 @@ describe('every kind of write a request makes passes through the commit check', 
             .put(`/api/v1/reports/${reportId}/upload-attempts/${attempt.attemptId}/bytes`)
             .set(t)
             .set('X-Upload-Revision', attempt.revision)
-            .set('Content-Type', 'text/x-vcf')
-            .send(bytes)
+            .set('Content-Type', 'application/json')
+            .send(bytes.toString('utf8'))
             .expect(200),
         ),
       ).toBeGreaterThan(0);
@@ -351,7 +352,7 @@ describe("a removed person's transfer in flight", () => {
     try {
       const t = await clinicianA();
       const api = () => request(app.getHttpServer());
-      const malformed = Buffer.from('##fileformat=VCFv4.3\n#CHROM\tPOS\n'); // the server refuses this as a VCF once it has read it
+      const malformed = Buffer.from('{"synthetic":[1,2,3],"unterminated":'); // the server refuses this as JSON once it has read it
       const patientId = (
         await api()
           .post('/api/v1/patients')
@@ -359,13 +360,14 @@ describe("a removed person's transfer in flight", () => {
           .send({ label: `SYN-${randomUUID().slice(0, 12)}` })
           .expect(201)
       ).body.id;
-      const reportId = (await api().post('/api/v1/reports').set(bearer(t)).send({ patientId, type: 'vcf', filename: 'x.vcf', sizeBytes: malformed.length }).expect(201)).body.id;
+      const reportId = (await api().post('/api/v1/reports').set(bearer(t)).send({ patientId, type: 'structured', filename: 'x.json', sizeBytes: malformed.length }).expect(201))
+        .body.id;
       const revision = (await api().get(`/api/v1/reports/${reportId}/upload-state`).set(bearer(t)).expect(200)).body.revision;
       const attempt = (
         await api()
           .post(`/api/v1/reports/${reportId}/upload-attempts`)
           .set(bearer(t))
-          .send({ requestId: randomUUID(), revision, contentType: 'text/x-vcf', sha256: createHash('sha256').update(malformed).digest('hex') })
+          .send({ requestId: randomUUID(), revision, contentType: 'application/json', sha256: createHash('sha256').update(malformed).digest('hex') })
           .expect(201)
       ).body;
 
@@ -376,7 +378,7 @@ describe("a removed person's transfer in flight", () => {
         port,
         method: 'PUT',
         path: `/api/v1/reports/${reportId}/upload-attempts/${attempt.attemptId}/bytes`,
-        headers: { Authorization: `Bearer ${t}`, 'X-Upload-Revision': attempt.revision, 'Content-Type': 'text/x-vcf', 'Content-Length': malformed.length },
+        headers: { Authorization: `Bearer ${t}`, 'X-Upload-Revision': attempt.revision, 'Content-Type': 'application/json', 'Content-Length': malformed.length },
       });
       const status = new Promise<number>((resolve, reject) => {
         transfer.on('response', (res) => {

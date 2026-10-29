@@ -211,7 +211,7 @@ export async function independentRecoveryProbe(options: RecoveryProbeOptions) {
       references: catalogue.sources.length,
       recoveredObjects,
       requiredByKind: Object.fromEntries(
-        ['lab-pdf', 'vcf', 'structured', 'text'].map((kind) => {
+        ['lab-pdf', 'structured', 'text'].map((kind) => {
           const objects = [...unique.values()].filter((s) => s.reference.kind === kind);
           return [kind, { objects: objects.length, ...volume(objects.reduce((sum, s) => sum + s.bytes, 0)) }];
         }),

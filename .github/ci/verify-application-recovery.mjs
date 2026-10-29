@@ -39,10 +39,10 @@ export function verifyApplicationRecovery(value) {
     count(a.linkedBytes);
     keys(r, ['format', 'databaseRecoveryVerified', 'independentBytesRecovered', 'applicationRecoveryComplete', 'identityMode', 'references', 'recoveredObjects', 'requiredByKind', 'volumes', 'seconds', 'concurrency']);
     if (r.format !== 1 || r.databaseRecoveryVerified !== true || r.independentBytesRecovered !== true || r.applicationRecoveryComplete !== false || r.identityMode !== 'translated-test-only' || r.references !== 7 || r.recoveredObjects !== 7 || r.concurrency !== 1) refuse();
-    keys(r.requiredByKind, ['lab-pdf', 'vcf', 'structured', 'text']);
+    keys(r.requiredByKind, ['lab-pdf', 'structured', 'text']);
     let bytes = 0; let objects = 0;
     for (const [kind, v] of Object.entries(r.requiredByKind)) {
-      volume(v, true); if (!v.bytes || v.objects !== (kind === 'lab-pdf' ? 3 : kind === 'text' ? 2 : 1)) refuse(); bytes += v.bytes; objects += v.objects;
+      volume(v, true); if (!v.bytes || v.objects !== (kind === 'lab-pdf' ? 3 : 2)) refuse(); bytes += v.bytes; objects += v.objects;
     }
     if (objects !== 7) refuse();
     keys(r.volumes, ['restoredDatabase', 'archive', 'catalogue', 'recoveredObjects', 'read', 'writeAttempted']);

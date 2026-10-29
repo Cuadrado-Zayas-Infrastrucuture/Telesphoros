@@ -72,7 +72,7 @@ beforeAll(async () => {
   for (const owner of ['alice', 'bob']) {
     const patient = await admin.query(`INSERT INTO patients (owner_id, label) VALUES ($1, $2) RETURNING id`, [owner, `SYN-${owner}`]);
     ids[owner] = patient.rows[0].id;
-    const report = await admin.query(`INSERT INTO reports (owner_id, patient_id, type, original_filename, size_bytes) VALUES ($1, $2, 'vcf', 'a.vcf', 5) RETURNING id`, [
+    const report = await admin.query(`INSERT INTO reports (owner_id, patient_id, type, original_filename, size_bytes) VALUES ($1, $2, 'structured', 'a.json', 5) RETURNING id`, [
       owner,
       patient.rows[0].id,
     ]);

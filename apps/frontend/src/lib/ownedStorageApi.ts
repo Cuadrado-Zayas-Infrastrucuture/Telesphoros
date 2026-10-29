@@ -115,7 +115,7 @@ export async function submitOwnedReport(
   const sha256 = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await values.file.arrayBuffer())), (b) => b.toString(16).padStart(2, '0')).join('');
   signal?.throwIfAborted();
   assertLiveUpload(progress);
-  const contentType = values.reportType === 'lab-pdf' ? 'application/pdf' : values.reportType === 'structured' ? 'application/json' : 'text/x-vcf';
+  const contentType = values.reportType === 'lab-pdf' ? 'application/pdf' : 'application/json';
   const identity = JSON.stringify([values.patientId.toLowerCase(), values.reportType, values.file.name, values.file.size, sha256]);
   const facts: FileFacts = { reportType: values.reportType, name: values.file.name, sizeBytes: values.file.size, sha256 };
   // A progress that was restored after a reload has its facts and keys already; the first thing the person does is choose the patient and file again.

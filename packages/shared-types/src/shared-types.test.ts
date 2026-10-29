@@ -23,6 +23,8 @@ import {
   patientCreateSchema,
   patientInputSchema,
   REPORT_CONTENT_TYPES,
+  REPORT_TYPES,
+  reportTypeSchema,
   reportCreateSchema,
   reportDtoSchema,
   reportPatchSchema,
@@ -76,29 +78,39 @@ describe('pagination', () => {
 describe('inputs are strict (no mass assignment)', () => {
   it('rejects unknown fields', () => {
     expect(patientInputSchema.safeParse({ label: 'SYN-1', ownerId: 'x' }).success).toBe(false);
-    expect(reportCreateSchema.safeParse({ patientId: uuid, type: 'vcf', filename: 'a.vcf', sizeBytes: 5, status: 'processed' }).success).toBe(false);
+    expect(reportCreateSchema.safeParse({ patientId: uuid, type: 'structured', filename: 'a.json', sizeBytes: 5, status: 'processed' }).success).toBe(false);
   });
   it('rejects labels that look like names and bad filenames', () => {
     expect(patientInputSchema.safeParse({ label: 'Jane Doe' }).success).toBe(false);
-    expect(reportCreateSchema.safeParse({ patientId: uuid, type: 'vcf', filename: '../etc/passwd.vcf', sizeBytes: 5 }).success).toBe(false);
-    expect(reportCreateSchema.safeParse({ patientId: uuid, type: 'vcf', filename: 'a.exe', sizeBytes: 5 }).success).toBe(false);
+    expect(reportCreateSchema.safeParse({ patientId: uuid, type: 'structured', filename: '../etc/passwd.json', sizeBytes: 5 }).success).toBe(false);
+    expect(reportCreateSchema.safeParse({ patientId: uuid, type: 'structured', filename: 'a.exe', sizeBytes: 5 }).success).toBe(false);
   });
   it('requires at least one field to PATCH a report', () => {
     expect(reportPatchSchema.safeParse({}).success).toBe(false);
     // A file name must end in the extension of its type, in both directions, on create and on patch.
     const create = (type: string, filename: string) => reportCreateSchema.safeParse({ patientId: uuid, type, filename, sizeBytes: 5 }).success;
-    expect([create('lab-pdf', 'a.pdf'), create('lab-pdf', 'A.PDF'), create('vcf', 'a.vcf'), create('structured', 'a.json')]).toEqual([true, true, true, true]);
-    expect([create('vcf', 'a.pdf'), create('lab-pdf', 'a.vcf'), create('lab-pdf', 'a.json'), create('structured', 'a.pdf'), create('vcf', 'a.json')]).toEqual([
+    expect([create('lab-pdf', 'a.pdf'), create('lab-pdf', 'A.PDF'), create('structured', 'a.json'), create('structured', 'A.JSON')]).toEqual([true, true, true, true]);
+    expect([create('lab-pdf', 'a.json'), create('structured', 'a.pdf')]).toEqual([false, false]);
+    expect(reportPatchSchema.safeParse({ type: 'lab-pdf', filename: 'a.pdf' }).success).toBe(true);
+    expect(reportPatchSchema.safeParse({ type: 'structured', filename: 'a.pdf' }).success).toBe(false);
+    expect(reportPatchSchema.safeParse({ filename: 'a.pdf' }).success).toBe(true); // alone: the service checks it against the stored type
+    expect(reportPatchSchema.safeParse({ type: 'structured' }).success).toBe(true);
+  });
+  it('refuses raw genomic data: VCF is no longer a report type or an accepted file name (founder decision, 2026-10-28)', () => {
+    const create = (type: string, filename: string) => reportCreateSchema.safeParse({ patientId: uuid, type, filename, sizeBytes: 5 }).success;
+    // Positive control: the curated types are still accepted.
+    expect([...REPORT_TYPES]).toEqual(['structured', 'lab-pdf']);
+    expect([reportTypeSchema.safeParse('structured').success, reportTypeSchema.safeParse('lab-pdf').success]).toEqual([true, true]);
+    expect(reportTypeSchema.safeParse('vcf').success).toBe(false);
+    expect([create('vcf', 'a.vcf'), create('structured', 'a.vcf'), create('lab-pdf', 'a.vcf'), create('vcf', 'a.json'), create('vcf', 'a.pdf')]).toEqual([
       false,
       false,
       false,
       false,
       false,
     ]);
-    expect(reportPatchSchema.safeParse({ type: 'lab-pdf', filename: 'a.pdf' }).success).toBe(true);
-    expect(reportPatchSchema.safeParse({ type: 'vcf', filename: 'a.pdf' }).success).toBe(false);
-    expect(reportPatchSchema.safeParse({ filename: 'a.pdf' }).success).toBe(true); // alone: the service checks it against the stored type
-    expect(reportPatchSchema.safeParse({ type: 'structured' }).success).toBe(true);
+    expect(reportPatchSchema.safeParse({ type: 'vcf' }).success).toBe(false);
+    expect(reportPatchSchema.safeParse({ filename: 'a.vcf' }).success).toBe(false);
   });
 });
 
@@ -122,20 +134,23 @@ describe('error envelope', () => {
 describe('upload contract (the declaration an upload makes)', () => {
   const sha = 'a'.repeat(64);
   it('requires a lowercase hex SHA-256 and a content type, and refuses extra fields (no client-chosen storage key)', () => {
-    expect(reportFileDeclarationSchema.safeParse({ contentType: 'text/x-vcf', sha256: sha }).success).toBe(true);
-    expect(reportFileDeclarationSchema.safeParse({ contentType: 'text/x-vcf', sha256: sha.toUpperCase() }).success).toBe(false);
-    expect(reportFileDeclarationSchema.safeParse({ contentType: 'text/x-vcf', sha256: 'abc' }).success).toBe(false);
-    expect(reportFileDeclarationSchema.safeParse({ contentType: 'text/x-vcf' }).success).toBe(false);
-    expect(reportFileDeclarationSchema.safeParse({ contentType: 'text/x-vcf', sha256: sha, storageKey: 'reports/x' }).success).toBe(false);
+    expect(reportFileDeclarationSchema.safeParse({ contentType: 'application/json', sha256: sha }).success).toBe(true);
+    expect(reportFileDeclarationSchema.safeParse({ contentType: 'application/json', sha256: sha.toUpperCase() }).success).toBe(false);
+    expect(reportFileDeclarationSchema.safeParse({ contentType: 'application/json', sha256: 'abc' }).success).toBe(false);
+    expect(reportFileDeclarationSchema.safeParse({ contentType: 'application/json' }).success).toBe(false);
+    expect(reportFileDeclarationSchema.safeParse({ contentType: 'application/json', sha256: sha, storageKey: 'reports/x' }).success).toBe(false);
   });
   it('accepts a content type per report type, and the DTO never carries a storage key', () => {
-    expect(REPORT_CONTENT_TYPES.vcf).toContain('text/x-vcf');
     expect(REPORT_CONTENT_TYPES.structured).toEqual(['application/json']);
+    expect(REPORT_CONTENT_TYPES['lab-pdf']).toEqual(['application/pdf']);
+    // No raw genomic content type is accepted for any report type.
+    expect(Object.keys(REPORT_CONTENT_TYPES)).toEqual(['structured', 'lab-pdf']);
+    expect(Object.values(REPORT_CONTENT_TYPES).flat()).not.toContain('text/x-vcf');
     const dto = {
       id: uuid,
       patientId: uuid,
-      type: 'vcf',
-      filename: 'a.vcf',
+      type: 'structured',
+      filename: 'a.json',
       sizeBytes: 5,
       status: 'received',
       fileUploaded: false,
@@ -146,6 +161,7 @@ describe('upload contract (the declaration an upload makes)', () => {
     };
     expect(reportDtoSchema.safeParse(dto).success).toBe(true);
     expect(reportDtoSchema.safeParse({ ...dto, storageKey: 'reports/x' }).success).toBe(false);
+    expect(reportDtoSchema.safeParse({ ...dto, type: 'vcf', filename: 'a.vcf' }).success).toBe(false);
   });
 });
 
