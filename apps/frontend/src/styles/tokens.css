@@ -82,6 +82,7 @@
 
   /* Layout */
   --size-sidebar: 15rem;
+  --size-sidebar-collapsed: 4.5rem;
   --size-context-drawer: 30rem;
   --size-chat-workspace: calc(100dvh - 15rem);
   --size-chat-min: 26rem;
