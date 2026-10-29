@@ -1,8 +1,8 @@
-# Verification: which key S3 applies to a reports upload, against the rendered reports bucket policy
+# Verification: which key S3 applies to a reports or backups upload, against the rendered bucket policies
 
 Date: 2026-10-29
 
-Scope: audit item I3 on the reports bucket. The IAM policy simulator ([bucket-policy-simulation.md](bucket-policy-simulation.md)) evaluates the policy logic but not S3 itself, so it could not show which key S3 uses for an upload with no encryption header, or for `aws:kms` with no key id. This check asked S3. `storage.tf` is unchanged between `fefcb31`, where the policy was rendered, and `main` `8fb9bce`.
+Scope: audit item I3 on the reports bucket. The IAM policy simulator ([bucket-policy-simulation.md](bucket-policy-simulation.md)) evaluates the policy logic but not S3 itself, so it could not show which key S3 uses for an upload with no encryption header, or for `aws:kms` with no key id. This check asked S3, for the reports bucket and then for the backups bucket ([below](#backups-bucket)). `storage.tf` is unchanged between `fefcb31`, where the policies were rendered, and `main` `1e65cfa`.
 
 ## Method
 
@@ -37,7 +37,26 @@ The same `aws:kms` upload with no key id, on one bucket under three policies:
 - **The simulator understates the policy here.** Under the simulator, with `DenyManagedKey` removed, this upload came back allowed (the "Seen failing" case of the simulation). S3 refused it: it evaluates the key-id condition against the key it chose, so `DenyOtherKey` already refuses the request and `DenyManagedKey` is a second barrier, not the only one. The statement is inferred by elimination (AWS's message names the policy type, not the statement): of the other four, two need an insecure or old-TLS request, one an encryption other than `aws:kms`, and one a customer-supplied key, and this request had none of those.
 - **The application is unaffected.** It sends no encryption header, and such an upload gets the bucket's key.
 
+## Backups bucket
+
+The same check against the rendered backups bucket policy, with one new throwaway KMS key and one bucket, both removed afterwards (the key is pending deletion). Two differences in method:
+
+- **Region `us-east-2`, not the backup region.** The backups bucket lives in `backup_region`, whose Terraform default is `us-east-1`. There this account's role was refused `kms:CreateKey` (no identity-based policy allows `kms:TagResource`), and `kms:ListKeys` is refused by an explicit deny in a service control policy; nothing was created. The bucket policy does not depend on the region, so the check ran in `us-east-2`.
+- **No Object Lock.** The backups bucket policy requires no lock header (the backup job's need for `s3:PutObjectRetention` is an IAM matter, checked by the simulator), and the lock does not change which key S3 picks. Without it the bucket could be deleted at once.
+
+| Upload                                                 | Result                                                |
+| ------------------------------------------------------ | ----------------------------------------------------- |
+| `aws:kms` with no key id, no bucket policy             | Accepted, encrypted with the AWS-managed `aws/s3` key |
+| The same, the rendered policy without `DenyManagedKey` | Refused: "explicit deny in a resource-based policy"   |
+| No encryption header, full policy                      | Accepted, encrypted with the bucket's key             |
+| `aws:kms` with no key id, full policy                  | Refused                                               |
+| `aws:kms` with the bucket's key ARN, full policy       | Accepted, encrypted with that key                     |
+| `aws:kms` naming `alias/aws/s3`, full policy           | Refused                                               |
+| `AES256`, full policy                                  | Refused                                               |
+
+The same outcomes as the reports bucket: I3 holds, the policy refuses it, and `DenyOtherKey` is enough on its own in S3.
+
 ## Not verified
 
-- The backups bucket: its `DenyManagedKey` is the same statement, but it was not tested in AWS.
+- The backup region itself: a first apply with the default `backup_region` (`us-east-1`) may fail on the backups KMS key in this account, as `kms:CreateKey` did here. Unproven: the role that applies Terraform may have other permissions, and no apply was attempted. [offsite-backups.md](../ops/offsite-backups.md#limits-stated-plainly) says to check it first.
 - Nothing is deployed, so no live bucket was checked; the resources here were created for the check and removed.
