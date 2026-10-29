@@ -61,6 +61,13 @@ export function findBrandViolations({ policy, textFiles, assetHashes, fileHashes
   for (const name of Object.keys(dark)) {
     if (!Object.hasOwn(policy.darkTokens, name)) errors.push(`${tokenPath}: dark theme may not set --${name}`);
   }
+  // The Appearance setting's fixed preview colors must be copies of the real tokens, never their own palette.
+  for (const [name, value] of Object.entries(definitions)) {
+    const preview = name.match(/^theme-preview-(light|dark)-(.+)$/);
+    if (!preview) continue;
+    const source = preview[1] === 'light' ? policy.tokens : policy.darkTokens;
+    if (source[preview[2]]?.toLowerCase() !== value.toLowerCase()) errors.push(`${tokenPath}: --${name} must equal the ${preview[1]} --${preview[2]}`);
+  }
   for (const literal of tokens.match(/#[\da-f]{3,8}\b/gi) ?? []) {
     if (!policy.allowedColorLiterals.includes(literal.toLowerCase())) errors.push(`${tokenPath}: unapproved color ${literal}`);
   }

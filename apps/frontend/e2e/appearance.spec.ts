@@ -11,10 +11,14 @@ const savedDark = (page: Page) => page.addInitScript(() => window.localStorage.s
 test('choosing Dark in Settings turns the page dark at once, and Light turns it back', async ({ page }) => {
   await signInAs(page, 'alice', '/settings');
   const appearance = page.getByRole('region', { name: 'Appearance' });
-  await appearance.getByRole('radio', { name: /^Dark/ }).check();
+  // The radios are visually hidden inside picture cards; a person clicks the card, so the test does too.
+  const card = (id: string) => appearance.locator('label', { has: page.locator(`#theme-${id}`) });
+  await card('dark').click();
+  await expect(appearance.getByRole('radio', { name: /^Dark/ })).toBeChecked();
   expect(await theme(page)).toBe('dark');
   expect(await pageBackground(page)).toBe(DARK_BACKGROUND);
-  await appearance.getByRole('radio', { name: /^Light/ }).check();
+  await card('light').click();
+  await expect(appearance.getByRole('radio', { name: /^Light/ })).toBeChecked();
   expect(await pageBackground(page)).toBe(LIGHT_BACKGROUND);
 });
 
