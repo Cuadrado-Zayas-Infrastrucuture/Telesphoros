@@ -13,7 +13,7 @@ const target = (over: Partial<VerifyTarget> = {}): VerifyTarget => ({
   objectVersion: 'v1',
   sha256: SHA,
   sizeBytes: 100,
-  contentType: 'text/x-vcf',
+  contentType: 'application/json',
   ...over,
 });
 const job = (type: string): ClaimedJob => ({
@@ -64,7 +64,7 @@ const logged: { level: string; event: string; fields?: unknown }[] = [];
 const capture: HandlerDeps['log'] = (level, event, fields) => {
   logged.push({ level, event, fields });
 };
-const ok: InspectedFile = { sizeBytes: 100, sha256: SHA, contentType: 'text/x-vcf' };
+const ok: InspectedFile = { sizeBytes: 100, sha256: SHA, contentType: 'application/json' };
 const run = (jobs: RegisteredJob[], type: string, signal = new AbortController().signal) =>
   jobs.find((j) => j.definition.type === type)!.handler({ job: job(type), actor: `system:${type}`, workerId: 'w1', signal } as HandlerContext);
 const make = (data: FakeData, found: Parameters<typeof inspector>[0]) => {
@@ -125,7 +125,7 @@ describe('files.verify-stored', () => {
     ['an object larger than the report says', 'too-large' as const, 'changed', 'size-mismatch', 'file-changed'],
     ['a different size', { ...ok, sizeBytes: 99 }, 'changed', 'size-mismatch', 'file-changed'],
     ['different bytes', { ...ok, sha256: 'b'.repeat(64) }, 'changed', 'hash-mismatch', 'file-changed'],
-    ['a different content type', { ...ok, contentType: 'application/json' }, 'changed', 'type-mismatch', 'file-changed'],
+    ['a different content type', { ...ok, contentType: 'application/pdf' }, 'changed', 'type-mismatch', 'file-changed'],
     ['no content type', { ...ok, contentType: undefined }, 'changed', 'type-mismatch', 'file-changed'],
   ])('records %s as a finding and ends the job dead at once', async (_name, found, outcome, reason, code) => {
     const data = new FakeData();
@@ -145,8 +145,8 @@ describe('files.verify-stored', () => {
   });
   it('accepts a content type that differs only in parameters or case', async () => {
     const data = new FakeData();
-    data.single = target({ contentType: 'text/x-vcf' });
-    await run(make(data, { ...ok, contentType: 'Text/X-VCF; charset=utf-8' }), 'files.verify-stored');
+    data.single = target({ contentType: 'application/json' });
+    await run(make(data, { ...ok, contentType: 'Application/JSON; charset=utf-8' }), 'files.verify-stored');
     expect(data.recorded[0]!.outcome).toBe('ok');
   });
 });

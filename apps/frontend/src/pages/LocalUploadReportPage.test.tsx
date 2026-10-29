@@ -12,10 +12,10 @@ vi.mock('@/lib/localReportApi', async (importOriginal) => ({
 const submitMock = vi.mocked(submitReport);
 vi.mock('@/auth/AuthProvider', () => ({ useAuth: () => ({ apiFetch: vi.fn() }) }));
 
-async function fillValidForm(user: ReturnType<typeof userEvent.setup>, fileName = 'sample.vcf') {
+async function fillValidForm(user: ReturnType<typeof userEvent.setup>, fileName = 'sample.json') {
   await user.type(screen.getByLabelText(/synthetic patient label/i), 'SYN-0001');
-  await user.selectOptions(screen.getByLabelText(/report type/i), 'vcf');
-  await user.upload(screen.getByLabelText(/report file/i), new File(['x'], fileName));
+  await user.selectOptions(screen.getByLabelText(/report type/i), 'structured');
+  await user.upload(screen.getByLabelText(/report file/i), new File(['{"synthetic":true}'], fileName));
   await user.click(screen.getByLabelText(/synthetic data only/i));
 }
 
@@ -55,14 +55,14 @@ describe('UploadReportPage', () => {
     });
     const user = userEvent.setup();
     render(<UploadReportPage />);
-    await fillValidForm(user, 'fail.vcf');
+    await fillValidForm(user, 'fail.json');
     await user.click(screen.getByRole('button', { name: 'Upload report' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('The server could not accept this report.');
     expect(screen.getByLabelText(/synthetic patient label/i)).toHaveValue('SYN-0001');
-    expect(screen.getByLabelText(/report type/i)).toHaveValue('vcf');
+    expect(screen.getByLabelText(/report type/i)).toHaveValue('structured');
     expect(screen.getByLabelText(/synthetic data only/i)).toBeChecked();
-    expect((screen.getByLabelText(/report file/i) as HTMLInputElement).files?.[0]?.name).toBe('fail.vcf');
+    expect((screen.getByLabelText(/report file/i) as HTMLInputElement).files?.[0]?.name).toBe('fail.json');
     expect(screen.getByRole('button', { name: 'Upload report' })).toBeEnabled();
   });
 

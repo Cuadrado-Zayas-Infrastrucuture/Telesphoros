@@ -245,7 +245,7 @@ export default function LocalReviewPage() {
     <div className="min-w-0 space-y-6">
       <h1 className="text-2xl">Local synthetic PDF review</h1>
       <Button asChild variant="outline" className="h-auto min-h-control whitespace-normal py-2">
-        <Link to="/local-upload">JSON and VCF upload</Link>
+        <Link to="/local-upload">JSON upload</Link>
       </Button>{' '}
       <Button asChild variant="outline" className="h-auto min-h-control whitespace-normal py-2">
         <Link to="/local-operations">Evaluation history, corrections and disputes</Link>

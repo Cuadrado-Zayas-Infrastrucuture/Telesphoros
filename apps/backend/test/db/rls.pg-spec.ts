@@ -14,7 +14,10 @@ beforeAll(async () => {
   await withAdmin(db.adminUrl, async (c) => {
     for (const tenant of ['alice', 'bob']) {
       const p = await c.query(`INSERT INTO patients (tenant_id, created_by, label) VALUES ($1, $1, $2) RETURNING id`, [tenant, `SYN-${tenant}`]);
-      await c.query(`INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ($1, $1, $2, 'vcf', 'a.vcf', 5)`, [tenant, p.rows[0].id]);
+      await c.query(`INSERT INTO reports (tenant_id, created_by, patient_id, type, original_filename, size_bytes) VALUES ($1, $1, $2, 'structured', 'a.json', 5)`, [
+        tenant,
+        p.rows[0].id,
+      ]);
     }
   });
 });

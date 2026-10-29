@@ -31,8 +31,8 @@ const report = (tenantId: string, patientId: string, over: Partial<ReportRecord>
   tenantId,
   createdBy: 'syn-actor',
   patientId,
-  type: 'vcf',
-  filename: 'a.vcf',
+  type: 'structured',
+  filename: 'a.json',
   sizeBytes: 100,
   status: 'received',
   storageKey: null,
@@ -170,7 +170,7 @@ describe.each([
       await patients.insert(p);
       const r = report(o, p.id);
       await reports.insert(r);
-      const edited = { ...r, filename: 'b.json', type: 'structured' as const, status: 'processing' as const, updatedAt: stamp(10) };
+      const edited = { ...r, filename: 'b.pdf', type: 'lab-pdf' as const, status: 'processing' as const, updatedAt: stamp(10) };
       await reports.update(edited);
       expect(await reports.findById(o, r.id)).toEqual({ ...edited, uploadRevision: expect.any(String), deletedAt: null });
     });
@@ -186,8 +186,8 @@ describe.each([
       const declared = (await declareUpload(reports, r, { principal: 'syn-first', sha256: hash, contentType: 'application/json', key: 'k/1' }))!;
       expect(declared).toBeDefined();
       // A stale copy of the record, written back by update(), must not erase or replace the declared file.
-      await reports.update({ ...r, filename: 'c.vcf', storageKey: 'other', sha256: 'd'.repeat(64), uploadRequestedBy: 'syn-other', updatedAt: stamp(10) });
-      expect(await reports.findById(o, r.id)).toMatchObject({ filename: 'c.vcf', storageKey: 'k/1', sha256: hash, uploadRequestedBy: 'syn-first' });
+      await reports.update({ ...r, filename: 'c.json', storageKey: 'other', sha256: 'd'.repeat(64), uploadRequestedBy: 'syn-other', updatedAt: stamp(10) });
+      expect(await reports.findById(o, r.id)).toMatchObject({ filename: 'c.json', storageKey: 'k/1', sha256: hash, uploadRequestedBy: 'syn-first' });
     });
 
     it('records the declared file and the FIRST requester, then pins the upload exactly once, to the person who sent it', async () => {

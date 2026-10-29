@@ -60,10 +60,10 @@ test('keyboard: the whole upload form can be completed without a mouse', async (
   for (let attempts = 0; attempts < 5 && !(await page.getByLabel(/report type/i).evaluate(element => element === document.activeElement)); attempts++) await page.keyboard.press('Tab');
   await expect(page.getByLabel(/report type/i)).toBeFocused();
   // Native-select typeahead chooses the named option without depending on platform popup behavior.
-  await page.keyboard.press('v');
-  await expect(page.getByLabel(/report type/i)).toHaveValue('vcf');
+  await page.keyboard.press('s');
+  await expect(page.getByLabel(/report type/i)).toHaveValue('structured');
   await page.keyboard.press('Tab');
-  await page.getByLabel(/report file/i).setInputFiles({ name: 'ok.vcf', mimeType: 'text/plain', buffer: Buffer.from('##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n') });
+  await page.getByLabel(/report file/i).setInputFiles({ name: 'ok.json', mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
   await page.keyboard.press('Tab');
   await page.keyboard.press('Space');
   await page.keyboard.press('Tab');
@@ -81,8 +81,10 @@ test('form: field-level errors, input preserved after a failed submit, loading s
   await expect(page.getByText('Confirm that this file contains synthetic data only.')).toBeVisible();
 
   await page.getByLabel(/synthetic patient \(required\)/i).selectOption(patient.id);
-  await page.getByLabel(/report type/i).selectOption('vcf');
-  await page.getByLabel(/report file/i).setInputFiles({ name: 'fail.vcf', mimeType: 'text/plain', buffer: Buffer.from('x') });
+  // No raw genomic data: VCF is not offered as a report type (founder decision, 2026-10-28); structured JSON still is.
+  await expect(page.getByLabel(/report type/i).locator('option[value="vcf"]')).toHaveCount(0);
+  await page.getByLabel(/report type/i).selectOption('structured');
+  await page.getByLabel(/report file/i).setInputFiles({ name: 'fail.json', mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
   await page.getByLabel(/synthetic data only/i).check();
 
   await page.route('**/api/v1/reports', async route => {
@@ -97,7 +99,7 @@ test('form: field-level errors, input preserved after a failed submit, loading s
 
   await expect(page.getByRole('alert')).toContainText('Too many requests. Wait a moment');
   await expect(page.getByLabel(/synthetic patient \(required\)/i)).toHaveValue(patient.id);
-  await expect(page.getByLabel(/report type/i)).toHaveValue('vcf');
+  await expect(page.getByLabel(/report type/i)).toHaveValue('structured');
   await expect(page.getByLabel(/synthetic data only/i)).toBeChecked();
   await expect(submit).toBeEnabled();
 });

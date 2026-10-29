@@ -6,8 +6,8 @@ const patientId = '11111111-1111-4111-8111-111111111111';
 const report = {
   id: '22222222-2222-4222-8222-222222222222',
   patientId,
-  type: 'vcf',
-  filename: 'synthetic.vcf',
+  type: 'structured',
+  filename: 'synthetic.json',
   sizeBytes: 8,
   status: 'received',
   fileUploaded: false,

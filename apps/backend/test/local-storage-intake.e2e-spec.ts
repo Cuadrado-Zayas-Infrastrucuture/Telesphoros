@@ -13,7 +13,6 @@ import { createEphemeralDatabase, type EphemeralDatabase } from './helpers/datab
 import { bearer, clinicianA, clinicianB, readerA, signToken } from './helpers/tokens';
 const samples = [
   { type: 'lab-pdf', mime: 'application/pdf', name: 'inert.pdf', bytes: Buffer.from('%PDF-1.7\nSynthetic opaque bytes\n%%EOF\n') },
-  { type: 'vcf', mime: 'text/x-vcf', name: 'inert.vcf', bytes: Buffer.from('##fileformat=VCFv4.3\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n') },
   { type: 'structured', mime: 'application/json', name: 'inert.json', bytes: Buffer.from('{"synthetic":true,"opaque":[1,2]}') },
 ];
 let app: NestExpressApplication;
@@ -118,8 +117,7 @@ it.each(samples)('stores and retrieves exact $type bytes while clinical processi
 });
 it.each([
   { ...samples[0], bytes: Buffer.from('<html>opaque</html>') },
-  { ...samples[1], bytes: Buffer.from('##fileformat=VCFv4.3\n#CHROM\tPOS\n') },
-  { ...samples[2], bytes: Buffer.from('{"x":}') },
+  { ...samples[1], bytes: Buffer.from('{"x":}') },
 ])('rejects malformed $type with zero S3 writes and cancels its lease', async (s) => {
   const id = await registration(s);
   const a = await declare(id, s);

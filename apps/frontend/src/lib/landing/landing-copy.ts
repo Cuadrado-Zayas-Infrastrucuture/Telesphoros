@@ -67,7 +67,7 @@ const en = {
     rows: [
       {
         title: 'Keep the patient and report connected.',
-        text: 'Select an existing synthetic patient before uploading. Standard intake accepts VCF and JSON; the storage workspace also accepts PDF.',
+        text: 'Select an existing synthetic patient before uploading. Standard intake accepts structured JSON; the storage workspace also accepts PDF. Raw genomic files are not accepted.',
         note: 'Uploads require a clinician role.',
       },
       {
@@ -156,7 +156,7 @@ const en = {
     uploaded: 'File uploaded',
     notComplete: 'Not complete',
     serverVerified: 'Server verified',
-    sample: 'SYN-001.vcf · Synthetic example',
+    sample: 'SYN-001.pdf · Synthetic example',
     reportRecord: 'Report record',
     registered: 'Registered',
     storedFile: 'Stored file',
@@ -250,7 +250,7 @@ const es: LandingCopy = {
     rows: [
       {
         title: 'Mantén unidos al paciente y al informe.',
-        text: 'Selecciona un paciente sintético existente antes de cargar. La carga estándar acepta VCF y JSON; el espacio de almacenamiento también acepta PDF.',
+        text: 'Selecciona un paciente sintético existente antes de cargar. La carga estándar acepta JSON estructurado; el espacio de almacenamiento también acepta PDF. No se aceptan archivos genómicos sin procesar.',
         note: 'Cargar requiere un rol de clínico.',
       },
       {
@@ -339,7 +339,7 @@ const es: LandingCopy = {
     uploaded: 'Archivo cargado',
     notComplete: 'Incompleto',
     serverVerified: 'Verificado por el servidor',
-    sample: 'SYN-001.vcf · Ejemplo sintético',
+    sample: 'SYN-001.pdf · Ejemplo sintético',
     reportRecord: 'Registro del informe',
     registered: 'Registrado',
     storedFile: 'Archivo almacenado',

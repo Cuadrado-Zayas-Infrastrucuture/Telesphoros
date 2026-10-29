@@ -3,8 +3,8 @@ import { MAX_REPORT_BYTES, uploadReportSchema } from '@/lib/uploadReportSchema';
 
 const valid = {
   patientLabel: 'SYN-0001',
-  reportType: 'vcf',
-  file: new File(['##fileformat=VCFv4.2'], 'sample.vcf'),
+  reportType: 'structured',
+  file: new File(['{"synthetic":true}'], 'sample.json'),
   syntheticConfirmed: true,
 };
 
@@ -30,8 +30,14 @@ describe('uploadReportSchema', () => {
   });
 
   it('rejects oversize files and wrong extensions', () => {
-    const big = new File([new Uint8Array(MAX_REPORT_BYTES + 1)], 'big.vcf');
+    const big = new File([new Uint8Array(MAX_REPORT_BYTES + 1)], 'big.json');
     expect(messages({ ...valid, file: big })).toContain('The file is larger than 10 MB.');
-    expect(messages({ ...valid, file: new File(['x'], 'report.exe') })).toContain('Only .vcf and .json files are accepted.');
+    expect(messages({ ...valid, file: new File(['x'], 'report.exe') })).toContain('Only .json files are accepted.');
+  });
+
+  it('refuses raw genomic VCF as a type and as a file, while structured JSON is still accepted', () => {
+    expect(uploadReportSchema.safeParse(valid).success).toBe(true);
+    expect(uploadReportSchema.safeParse({ ...valid, reportType: 'vcf' }).success).toBe(false);
+    expect(messages({ ...valid, file: new File(['##fileformat=VCFv4.2'], 'sample.vcf') })).toContain('Only .json files are accepted.');
   });
 });

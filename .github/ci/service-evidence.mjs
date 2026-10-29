@@ -89,7 +89,7 @@ function catalogue(value) {
     for (const key of ['references', 'uniqueObjects', 'uncompletedRegistrations', 'orphanTextObjects', 'copiedObjectsVerified', 'copiedBytesVerified']) {
       if (!Number.isSafeInteger(metric[key]) || metric[key] < 0) refuse();
     }
-    exactKeys(metric.requiredByKind, ['lab-pdf', 'vcf', 'structured', 'text']);
+    exactKeys(metric.requiredByKind, ['lab-pdf', 'structured', 'text']);
     for (const v of Object.values(metric.requiredByKind)) volume(v, true);
     exactKeys(metric.volumes, ['restoredDatabase', 'archive', 'catalogue', 'requiredObjects', 'read', 'writeAttempted']);
     for (const v of Object.values(metric.volumes)) volume(v);

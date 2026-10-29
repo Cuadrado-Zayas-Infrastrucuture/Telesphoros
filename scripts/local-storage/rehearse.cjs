@@ -25,7 +25,7 @@ async function main() {
     // but its servers now come entirely from L3 ownership/setup, not Playwright fixtures.
     const browserLog = fs.openSync(path.join(o.base, 'browser.log'), 'w', 0o600), browserError = fs.openSync(path.join(o.base, 'browser-error.log'), 'w', 0o600);
     try { execFileSync('pnpm', ['--filter', '@telesphoros/frontend', 'exec', 'playwright', 'test', '-c', 'playwright.operations.config.ts'], { cwd: o.root, env: { ...runtime.environment(m), L3_RUN_ID: m.id, CHROMIUM_PATH: process.env.CHROMIUM_PATH }, stdio: ['ignore', browserLog, browserError], timeout: 180000 }); } finally { fs.closeSync(browserLog); fs.closeSync(browserError); }
-    record('browser-owned-postgres-moto', { passed: true, tests: 16, formats: ['PDF', 'VCF', 'JSON'], viewports: [375, 1280] });
+    record('browser-owned-postgres-moto', { passed: true, tests: 16, formats: ['PDF', 'JSON'], viewports: [375, 1280] });
     process.env.TMPDIR = path.join(m.root, 'stage');
     const expiry = await protocol(m, record); m = o.load(m.id);
     record('iam-policy-credential-sentinel', { passed: true, ...iam(m, true) });

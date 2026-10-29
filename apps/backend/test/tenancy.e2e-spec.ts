@@ -59,7 +59,7 @@ describe('tenancy: members of one organization share its records', () => {
       await api()
         .post('/api/v1/reports')
         .set(bearer(await ben()))
-        .send({ patientId: mine.id, type: 'vcf', filename: 'a.vcf', sizeBytes: 10 })
+        .send({ patientId: mine.id, type: 'structured', filename: 'a.json', sizeBytes: 10 })
         .expect(201)
     ).body;
     await api()
@@ -106,7 +106,7 @@ describe('tenancy: another organization sees nothing, and cannot tell what exist
       await api()
         .post('/api/v1/reports')
         .set(bearer(await ann()))
-        .send({ patientId: patient.id, type: 'vcf', filename: 'a.vcf', sizeBytes: 10 })
+        .send({ patientId: patient.id, type: 'structured', filename: 'a.json', sizeBytes: 10 })
         .expect(201)
     ).body;
 
@@ -138,7 +138,7 @@ describe('tenancy: another organization sees nothing, and cannot tell what exist
     await api()
       .post('/api/v1/reports')
       .set(bearer(await gus()))
-      .send({ patientId: patient.id, type: 'vcf', filename: 'a.vcf', sizeBytes: 10 })
+      .send({ patientId: patient.id, type: 'structured', filename: 'a.json', sizeBytes: 10 })
       .expect(404);
   });
 });
@@ -175,7 +175,7 @@ describe('tenancy: the individual is recorded by the server, not the client', ()
       await api()
         .post('/api/v1/reports')
         .set(bearer(await ben()))
-        .send({ patientId: patient.id, type: 'vcf', filename: 'a.vcf', sizeBytes: 10 })
+        .send({ patientId: patient.id, type: 'structured', filename: 'a.json', sizeBytes: 10 })
         .expect(201)
     ).body;
     expect(await app.get(ReportsRepository).findById(acme, report.id)).toMatchObject({ tenantId: acme, createdBy: 'ben' });
@@ -202,12 +202,13 @@ describe('tenancy: stored files are grouped by tenant, not by person', () => {
   it('colleagues’ uploads share one storage prefix, another tenant’s differs, and no raw id appears in it', async () => {
     const keyFor = async (token: string, tenantId: string) => {
       const patient = (await api().post('/api/v1/patients').set(bearer(token)).send({ label: label() }).expect(201)).body;
-      const report = (await api().post('/api/v1/reports').set(bearer(token)).send({ patientId: patient.id, type: 'vcf', filename: 'a.vcf', sizeBytes: 10 }).expect(201)).body;
+      const report = (await api().post('/api/v1/reports').set(bearer(token)).send({ patientId: patient.id, type: 'structured', filename: 'a.json', sizeBytes: 10 }).expect(201))
+        .body;
       const revision = (await api().get(`/api/v1/reports/${report.id}/upload-state`).set(bearer(token)).expect(200)).body.revision;
       await api()
         .post(`/api/v1/reports/${report.id}/upload-attempts`)
         .set(bearer(token))
-        .send({ requestId: randomUUID(), revision, contentType: 'text/plain', sha256: 'a'.repeat(64) })
+        .send({ requestId: randomUUID(), revision, contentType: 'application/json', sha256: 'a'.repeat(64) })
         .expect(201);
       return (await app.get(ReportsRepository).findById(tenantId, report.id))!.storageKey!;
     };

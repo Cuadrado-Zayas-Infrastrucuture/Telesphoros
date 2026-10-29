@@ -1,7 +1,7 @@
 export function recoveryMetricControl() {
   const volume = bytes => ({ bytes, GB: bytes / 1e9, GiB: bytes / 1024 ** 3 });
   const metric = { format: 1, databaseRecoveryVerified: true, independentBytesRecovered: true, applicationRecoveryComplete: false, identityMode: 'translated-test-only', references: 5, recoveredObjects: 5, concurrency: 1,
-    requiredByKind: Object.fromEntries(['lab-pdf', 'vcf', 'structured', 'text'].map(kind => [kind, { objects: kind === 'lab-pdf' ? 2 : 1, ...volume(10) }])),
+    requiredByKind: Object.fromEntries(['lab-pdf', 'structured', 'text'].map(kind => [kind, { objects: kind === 'lab-pdf' || kind === 'structured' ? 2 : 1, ...volume(kind === 'structured' ? 20 : 10) }])),
     volumes: { restoredDatabase: volume(300), archive: volume(100), catalogue: volume(90), recoveredObjects: volume(40), read: volume(100), writeAttempted: volume(10) },
     seconds: { backupDownload: 1, catalogue: 1, restoreAndEvidence: 3, evidenceVerification: 2, total: 5 } };
   const measurements = Array.from({ length: 7 }, () => structuredClone(metric)); measurements.at(-1).volumes.writeAttempted = volume(0);
@@ -12,7 +12,7 @@ export function recoveryMetricControl() {
 export function applicationMetricControl() {
   const value = recoveryMetricControl();
   const r = value.measurements[0]; r.references = 7; r.recoveredObjects = 7;
-  for (const [kind, v] of Object.entries(r.requiredByKind)) v.objects = kind === 'lab-pdf' ? 3 : kind === 'text' ? 2 : 1;
+  for (const [kind, v] of Object.entries(r.requiredByKind)) v.objects = kind === 'lab-pdf' ? 3 : 2;
   const application = { applicationRecoveryComplete: true, clinicalUseApproved: false, apiControls: ['restricted-login-rls', 'module-health-readiness', 'link-authentication-roles-and-tenant', 'verified-version-links',
     'standard-and-pdf-bytes', 'soft-deletion', 'golden-evaluations-and-clinical-holds', 'evaluation-tenant-isolation', 'database-evidence-guard', 'ledger-validity', 'read-only-and-exact-pin-refusal', 'unchanged-evidence-inventory'], linkedBytes: 20, seconds: 1 };
   const measurements = [{ recovery: r, application }, structuredClone({ recovery: r, application })];

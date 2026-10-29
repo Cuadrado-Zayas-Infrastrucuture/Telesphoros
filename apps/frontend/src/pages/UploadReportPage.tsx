@@ -562,14 +562,14 @@ export default function UploadReportPage() {
                             <FormControl>
                               <Input
                                 type="file"
-                                accept={owned ? '.vcf,.json,.pdf' : '.vcf,.json'}
+                                accept={owned ? '.json,.pdf' : '.json'}
                                 name={name}
                                 ref={ref}
                                 onBlur={onBlur}
                                 onChange={(event) => onChange(event.target.files?.[0])}
                               />
                             </FormControl>
-                            <FormDescription>{owned ? '.pdf, .vcf or .json, up to 10 MiB.' : '.vcf or .json, up to 10 MB.'}</FormDescription>
+                            <FormDescription>{owned ? '.pdf or .json, up to 10 MiB.' : '.json, up to 10 MB.'}</FormDescription>
                             <FormMessage />
                           </FormItem>
                         )}

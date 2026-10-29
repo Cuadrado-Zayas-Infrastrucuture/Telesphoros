@@ -186,8 +186,10 @@ const MAX_BURNERS = 40;
       const early = await lab.capture(clinician, pending.reportId).expect(409);
       expect(early.body.error.details[0].reason).toBe('not-uploaded');
       const patientId = await lab.patient(clinician);
-      const vcf = (await lab.api().post('/api/v1/reports').set(bearer(clinician.token)).send({ patientId, type: 'vcf', filename: 'a.vcf', sizeBytes: 5 }).expect(201)).body.id;
-      expect((await lab.capture(clinician, vcf).expect(409)).body.error.details[0].reason).toBe('wrong-type');
+      const structured = (
+        await lab.api().post('/api/v1/reports').set(bearer(clinician.token)).send({ patientId, type: 'structured', filename: 'a.json', sizeBytes: 5 }).expect(201)
+      ).body.id;
+      expect((await lab.capture(clinician, structured).expect(409)).body.error.details[0].reason).toBe('wrong-type');
       const done = await lab.uploadedLabPdf(clinician, fixturePdf('D01'));
       await lab.capture(stranger, done.reportId).expect(404);
       await lab.capture(clinician, '00000000-0000-4000-8000-000000000000').expect(404);
