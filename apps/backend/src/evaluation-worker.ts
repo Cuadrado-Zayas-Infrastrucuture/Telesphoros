@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { Logger } from 'nestjs-pino';
 import { Pool } from 'pg';
-import { JobQueue, jsonLogger, Runner } from '@telesphoros/jobs';
+import { boundedStop, JobQueue, jsonLogger, Runner, shutdownDeadlineMs, WORKER_POOL_LIMITS } from '@telesphoros/jobs';
 import { AppModule } from './app.module';
 import { installProcessFaultHandlers } from './common/process-faults';
 import { loadEnv } from './config/env';
@@ -29,7 +29,8 @@ async function main(): Promise<void> {
   assertRunsProfile(config.profile, { knowledgeSetId: app.get<KnowledgeSet>(LAB_KNOWLEDGE).id, recordingsSha256: app.get(TextCaptureRunner).manifestSha256 });
 
   const log = jsonLogger(undefined, 'evaluation-worker');
-  const pool = new Pool({ ...pgClientConfig(config.queueDatabaseUrl), max: config.concurrency + 2, application_name: 'telesphoros-evaluation-worker' });
+  // The file worker's limits (audit W5): without them a database that stops answering would hold a claim or the stop below for ever.
+  const pool = new Pool({ ...pgClientConfig(config.queueDatabaseUrl), ...WORKER_POOL_LIMITS, max: config.concurrency + 2, application_name: 'telesphoros-evaluation-worker' });
   pool.on('error', () => log('error', 'database-connection-error', { code: 'pool-error' }));
   const consumer = new EvaluationRequestConsumer(app.get(Database), app.get(EvaluationsService), config.profile);
   const runner = new Runner({
@@ -44,21 +45,20 @@ async function main(): Promise<void> {
   });
   runner.start();
 
-  let stopping = false;
-  const stop = async () => {
-    if (stopping) return;
-    stopping = true;
-    // A stop that left a job to lease expiry (a failed release, an outcome not recorded) exits 1 after closing the rest, so it is not read as a clean stop (audit W3).
-    let failed = false;
-    await runner.stop().catch(() => {
-      failed = true;
-    });
-    await pool.end().catch(() => undefined);
-    await app.close();
-    process.exit(failed ? 1 : 0);
-  };
-  process.on('SIGTERM', () => void stop());
-  process.on('SIGINT', () => void stop());
+  // A stop that left a job to lease expiry (a failed release, an outcome not recorded) exits 1 after closing the rest, so it is not read as a clean stop (audit W3).
+  // The whole sequence is bounded by the drain plus a grace, as in the file worker: past it the process logs shutdown-forced and exits 1 (audit W5).
+  const stop = boundedStop({
+    steps: [
+      { name: 'runner', run: () => runner.stop() },
+      { name: 'pool', run: () => pool.end().catch(() => undefined) },
+      { name: 'app', run: () => app.close() },
+    ],
+    log,
+    exit: (code) => process.exit(code),
+    deadlineMs: shutdownDeadlineMs(config.drainSeconds),
+  });
+  process.on('SIGTERM', () => void stop('SIGTERM'));
+  process.on('SIGINT', () => void stop('SIGINT'));
 }
 
 main().catch((error: unknown) => {
