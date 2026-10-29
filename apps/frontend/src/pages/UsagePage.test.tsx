@@ -102,4 +102,15 @@ describe('Usage', () => {
       unmount();
     }
   });
+
+  it('announces loading once, and holds the page layout with placeholder cards until the figures arrive', async () => {
+    open(
+      '/usage',
+      ['admin'],
+      api(['admin'], () => new Promise<Response>(() => {}) as unknown as Response),
+    );
+    expect(await screen.findByText('Loading usage…')).toHaveAttribute('role', 'status');
+    expect(document.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(10);
+    expect(screen.queryByRole('region', { name: 'Storage' })).not.toBeInTheDocument();
+  });
 });
