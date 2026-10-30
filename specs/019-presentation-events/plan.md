@@ -1,6 +1,6 @@
 # Plan: presentation events (D02), rendered and acknowledged
 
-**Status**: for the founder's review. No slice is authorized. Spec: [spec.md](spec.md).
+**Status**: approved by the founder on 2026-10-29: P2 to P7 accepted as recommended. D02a is authorized, then D02b. Spec: [spec.md](spec.md). Tasks: [tasks.md](tasks.md).
 
 ## What exists (read at `main` `b7edea6`)
 
@@ -14,7 +14,9 @@
 | A per-result decision API | exists, no screen calls it | spec 006 D01b, `clinician-decisions.controller.ts` |
 | Roles | `CLINICAL_READ_ROLES = reader, clinician, reviewer` on every read | `apps/backend/src/auth/clinical-read.ts:8` |
 
-## Founder decisions (only you can make these)
+## Founder decisions
+
+P1 was decided on 2026-10-28. P2 to P7 were accepted as recommended on 2026-10-29.
 
 | # | Decision | Recommendation |
 | --- | --- | --- |
