@@ -15,7 +15,7 @@ no repository policy, no replication, no pull-through cache. The task **executio
 | Setting | Value | Why |
 | --- | --- | --- |
 | Tags | **immutable** | A tag can never be moved to different content. Every push needs a new tag. |
-| Scan | on push | Findings are visible in the registry; the CI `image` job remains the release gate (fixed HIGH/CRITICAL, no exemptions). |
+| Scan | on push | Findings are visible in the registry; the CI `image` job remains the release gate (fixed HIGH/CRITICAL, no exemptions). The account's registry scan rule (`registry.tf`) is what makes this happen: a registry setting with no rules overrides the repository's own scan on push. |
 | Encryption | AES-256, AWS-managed key | Decision recorded in the FD-7 plan. The image holds code, not records. A customer-managed key would first need decrypt grants on both execution roles. |
 | Retention | the last 10 **tagged** images | Older images expire. Signatures are untagged OCI referrers and are not counted. A rollback target is always within the last ten, but **do not rely on an old digest staying pullable**. |
 | Deleting the repository | **synthetic profile only** (`force_delete = local.synthetic`) | A synthetic destroy works with images in it. In production AWS refuses to delete a repository that still holds images. |
