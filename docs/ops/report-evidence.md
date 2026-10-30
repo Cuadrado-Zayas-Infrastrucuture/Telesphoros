@@ -1,7 +1,8 @@
 # Report files as evidence
 
 A lab PDF that has been captured, reviewed and evaluated is evidence: the records cite its exact bytes. This page says what protects those
-bytes and what an operator must and must not do. (Slice 5B-3.2a. Nothing here is applied in AWS yet.)
+bytes and what an operator must and must not do. (Slice 5B-3.2a. In synthetic staging the reports bucket is versioned, with Object Lock in GOVERNANCE mode and 1-day retention; production
+requires COMPLIANCE. See [environments.md](environments.md).)
 
 ## What pins a file
 

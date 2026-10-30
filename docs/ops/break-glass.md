@@ -95,8 +95,8 @@ cannot read the file's contents: removing a file does not require seeing it.
 
 The design says each use "is an audit event with a reason". `DeleteObjectVersion` is an S3 **data event**, recorded only by a trail that asks for
 data events on the reports bucket. The Terraform now describes exactly that trail and its alarms ([audit-trail.md](audit-trail.md), `infrastructure/terraform/audit.tf`),
-including an alarm on any attempt to assume this role and one on any deletion in the reports bucket. **It is written but not applied, so today a use of this role would still leave no durable record
-except the decision record you write yourself.**
+including an alarm on any attempt to assume this role and one on any deletion in the reports bucket. **In synthetic staging the trail and both alarms are applied, but the role itself is not created
+([environments.md](environments.md)); production has neither yet.**
 
 Do not create the role until the audit trail has been applied, is logging, and both alarms have been tested (the checklist in [audit-trail.md](audit-trail.md)).
 
