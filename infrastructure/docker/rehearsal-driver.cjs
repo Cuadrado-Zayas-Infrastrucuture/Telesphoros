@@ -71,7 +71,7 @@ async function seed(tenant) {
     VALUES ($1,$2,$3,$4,'lab-pdf','synthetic.pdf',1000,'received','application/pdf',$5,$6,now(),$7,$3,$3)`,[report,tenant,'synthetic-author',patient,sha,key,version]);
     await c.query('COMMIT');
   });
-  return {reportId:report, expectedReport:{patientId:patient,sha256:sha,objectVersion:version,storageKey:key},pdfSha256:sha,textStorageKey:`synthetic/text/${report}`,textSha256:hash(report+'text'),textScalars:14,popplerVersion:'26.03.0',runner:'fake'};
+  return {reportId:report, expectedReport:{patientId:patient,sha256:sha,objectVersion:version,storageKey:key},pdfSha256:sha,textStorageKey:`synthetic/text/${report}`,textSha256:hash(report+'text'),textScalars:14,popplerVersion:'26.03.0',runner:'fake',origin:'synthetic'};
 }
 async function write(tenant,input) {
   const {Database}=require('/app/dist/db/database');

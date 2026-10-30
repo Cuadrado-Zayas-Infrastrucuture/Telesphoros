@@ -31,7 +31,7 @@ for (const mode of ['dark', 'light'] as const) {
     };
     // The large mascot shows on the start screen; the avatar beside each answer.
     await check(page.locator('img.one-screen-mascot'));
-    await page.getByRole('button', { name: 'Explain this example', exact: true }).click();
+    await page.getByRole('button', { name: 'Explain this', exact: true }).click();
     await check(page.locator('img.one-screen-avatar').first());
   });
 }

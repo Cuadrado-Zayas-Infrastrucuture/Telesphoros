@@ -10,7 +10,7 @@ import { migrateDown, migrateUp } from '../../src/db/migrator';
 import { provisionLogins, type SecretStore } from '../../src/db/provision-logins';
 import { pgClientConfig } from '../../src/db/tls';
 import { adminUrl, withAdmin } from '../helpers/database';
-import { acceptanceFor, captureFor, evaluationFor, seedLabReport } from '../helpers/ledger-fixtures';
+import { acceptanceFor, captureFor, evaluationFor, forgetProvenance, seedLabReport } from '../helpers/ledger-fixtures';
 import { revertAbove, revertThrough } from '../helpers/migration-history';
 
 /**
@@ -306,6 +306,7 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
           { actor },
         );
         const admitted = await service.admit(principal, { reportId: report.reportId, captureId: stored.record.id, acceptanceId: acceptance.record.id, requestId: randomUUID() });
+        await forgetProvenance(f.admin);
         const above = revertAbove('evaluation_requests');
         expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted); // H3 holds no completion yet, so it reverts with the newer ones; then 0050's own guard is under test
         await expect(migrateDown(f.migrator, 1)).rejects.toThrow('Durable evaluation work must be preserved');
@@ -314,6 +315,7 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
         await connection.withTenant(tenant, (c) => enqueueJob(c, evaluationRequest, { requestId: randomUUID() }, { idempotencyKey: `evaluation-request:${randomUUID()}` }), {
           actor,
         });
+        await forgetProvenance(f.admin);
         const above = revertAbove('evaluation_requests');
         expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted);
         await expect(migrateDown(f.migrator, 1)).rejects.toThrow('Durable evaluation work must be preserved');
@@ -379,6 +381,7 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
       });
       expect((await f.migrator.query('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user')).rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });
 
+      await forgetProvenance(f.admin);
       const above = revertAbove('evaluation_request_completion');
       expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted);
       await expect(migrateDown(f.migrator, 1)).rejects.toThrow('Durable evaluation work must be preserved');
@@ -426,6 +429,7 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
       await service.cancel(principal, request.id);
       expect((await f.migrator.query('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user')).rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });
 
+      await forgetProvenance(f.admin);
       const above = revertAbove('evaluation_request_cancellations');
       expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted);
       await expect(migrateDown(f.migrator, 1)).rejects.toThrow('Durable evaluation work must be preserved');
@@ -450,6 +454,7 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
       expect(me).toEqual({ rolsuper: false, rolbypassrls: false }); // the login under test is the restricted one
       await withAdmin(f.admin, (c) => guard.populate(c, f));
       const version = revertThrough(guard.anchor).reverted.at(-1)!;
+      await forgetProvenance(f.admin);
       await revertAboveThenSwitchOff(f.migrator, guard.anchor);
 
       await expect(migrateDown(f.migrator, 1)).rejects.toThrow(guard.refusal);
@@ -503,6 +508,7 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
         request: { id: randomUUID(), hash },
       });
       const version = revertThrough('clinician_result_decisions').reverted.at(-1)!;
+      await forgetProvenance(f.admin);
       await revertAboveThenSwitchOff(f.migrator, 'clinician_result_decisions');
       await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated clinician decisions/);
       await setting(f.migrator, AUDIT, 'yes'); // no setting allows it: the audit one does not either
@@ -548,6 +554,7 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
         request: { id: randomUUID(), hash },
       });
       const version = revertThrough('result_acknowledgements').reverted.at(-1)!;
+      await forgetProvenance(f.admin);
       await revertAboveThenSwitchOff(f.migrator, 'result_acknowledgements');
       await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated result acknowledgements/);
       await setting(f.migrator, AUDIT, 'yes'); // no setting allows it: the audit one does not either
@@ -603,6 +610,7 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
         withoutExposure: 0,
       });
       const version = revertThrough('result_render_events').reverted.at(-1)!;
+      await forgetProvenance(f.admin);
       await revertAboveThenSwitchOff(f.migrator, 'result_render_events');
       await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated result render events/);
       await setting(f.migrator, AUDIT, 'yes'); // no setting allows it: the audit one does not either
@@ -629,6 +637,35 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
       const version = revertThrough('worker_job_capability').reverted.at(-1)!;
       expect((await f.migrator.query('SELECT 1 FROM schema_migrations WHERE version = $1', [version])).rowCount).toBe(1);
     } finally {
+      await f.drop();
+    }
+  });
+
+  // Spec 020 E1a: as D02a, no override (the ledger's type CHECK cannot be restored while a provenance event exists); the empty case reverts in the last test below.
+  it('data_provenance: a populated table is refused as the migrator, the refusal rolls back whole, and FORCE is restored', async () => {
+    const f = await fixture();
+    const connection = new Database({ url: f.app, ssl: 'disable' });
+    try {
+      const repo = new PostgresLedgerRecordsRepository(connection);
+      const report = await seedLabReport(f.admin, tenant);
+      await repo.insertCapture(tenant, report.uploader, captureFor(report)); // the capture's provenance row is written in the same transaction
+      expect((await withAdmin(f.admin, (c) => c.query('SELECT count(*)::int AS n FROM data_provenance'))).rows).toEqual([{ n: 1 }]);
+      const version = revertThrough('data_provenance').reverted.at(-1)!;
+      await revertAboveThenSwitchOff(f.migrator, 'data_provenance');
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated data provenance/);
+      await setting(f.migrator, AUDIT, 'yes'); // no setting allows it: the audit one does not either
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated data provenance/);
+      expect((await f.migrator.query('SELECT 1 FROM schema_migrations WHERE version = $1', [version])).rowCount).toBe(1);
+      expect((await f.migrator.query(`SELECT relforcerowsecurity AS f FROM pg_class WHERE oid = 'data_provenance'::regclass`)).rows).toEqual([{ f: true }]);
+      // Positive control: with the table empty the same down goes through, so the refusal above was the guard and not a broken revert.
+      await withAdmin(f.admin, async (c) => {
+        await c.query('SET session_replication_role = replica');
+        await c.query('DELETE FROM data_provenance');
+        await c.query(`DELETE FROM ledger_events WHERE event_type = 'data-provenance'`);
+      });
+      expect(await migrateDown(f.migrator, 1)).toEqual([version]);
+    } finally {
+      await connection.onModuleDestroy();
       await f.drop();
     }
   });

@@ -43,7 +43,7 @@ afterEach(() => vi.restoreAllMocks());
 describe('one-screen workspace (specs/016)', () => {
   it('is its own frame: the mascot and one box, no site header, sidebar or footer', async () => {
     open(['clinician']);
-    expect(await screen.findByRole('heading', { level: 1, name: 'Which report should we read?' })).toBeVisible();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Start with a synthetic report.' })).toBeVisible();
     expect(screen.getByRole('img', { name: 'Telesphoros mascot in a teal cloak' })).toBeVisible();
     expect(screen.queryByRole('navigation', { name: 'Primary' })).toBeNull();
     expect(document.querySelector('header.workspace-navigation')).toBeNull();
@@ -58,7 +58,7 @@ describe('one-screen workspace (specs/016)', () => {
     expect(await screen.findByRole('combobox', { name: 'Patient' })).toHaveValue(PATIENT.id);
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
     expect(screen.getByRole('status')).toHaveTextContent('Confirm the file is synthetic.');
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Synthetic' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' }));
     expect(screen.getByRole('button', { name: 'Send' })).not.toHaveAttribute('aria-disabled', 'true');
   });
 
@@ -67,7 +67,7 @@ describe('one-screen workspace (specs/016)', () => {
     await screen.findByRole('button', { name: 'Attach a report' });
     await userEvent.upload(document.querySelector<HTMLInputElement>('input[type=file]')!, new File(['##fileformat=VCFv4.2\n'], 'SYN-004.vcf'), { applyAccept: false });
     expect(screen.getByRole('alert')).toHaveTextContent('Raw genomic data (VCF) is not accepted.');
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Synthetic' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' }));
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
     expect(fetchImpl.mock.calls.some(([input]) => String(input).includes('/uploads'))).toBe(false);
   });
@@ -78,14 +78,14 @@ describe('one-screen workspace (specs/016)', () => {
     await userEvent.upload(document.querySelector<HTMLInputElement>('input[type=file]')!, report());
     const label = await screen.findByRole('textbox', { name: 'New patient label' });
     await userEvent.type(label, 'Jane Doe');
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Synthetic' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' }));
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
     expect(screen.getByRole('status')).toHaveTextContent(/letters, numbers and hyphens/i);
   });
 
   it('gives a reader no way to attach, but the sample questions still work', async () => {
     open(['reader'] as Role[]);
-    await screen.findByRole('heading', { level: 1, name: 'Which report should we read?' });
+    await screen.findByRole('heading', { level: 1, name: 'Start with a synthetic report.' });
     expect(screen.queryByRole('button', { name: 'Attach a report' })).toBeNull();
     expect(within(screen.getByLabelText('Sample questions')).getAllByRole('button')).toHaveLength(3);
   });

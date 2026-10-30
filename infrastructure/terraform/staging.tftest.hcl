@@ -106,8 +106,8 @@ run "plan_b_with_web_hosting" {
     error_message = "still no services without an image"
   }
   assert {
-    condition     = local.api_repository == "arn:aws:ecr:${var.region}:${local.audit_account_id}:repository/none" && length(aws_iam_role_policy.api_execution_service) == 1 && length(aws_iam_role_policy.api_execution_migrate) == 1 && length(aws_iam_role_policy.api_execution_provision) == 1 && length(aws_iam_role_policy.worker_execution) == 1
-    error_message = "the four execution policies already exist in B, before the image changes their pull repository"
+    condition     = local.api_repository == "arn:aws:ecr:${var.region}:${local.audit_account_id}:repository/none" && length(aws_iam_role_policy.api_execution_service) == 1 && length(aws_iam_role_policy.api_execution_migrate) == 1 && length(aws_iam_role_policy.api_execution_provision) == 1 && length(aws_iam_role_policy.worker_execution) == 1 && length(aws_iam_role_policy.issuer_execution) == 1
+    error_message = "the five execution policies already exist in B, before the image changes their pull repository"
   }
 }
 

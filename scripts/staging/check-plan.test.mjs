@@ -33,7 +33,7 @@ function fixture(stage) {
   };
 }
 
-test('staged plans accept create-only A/B and exactly the four repository-only updates in first-image C', () => {
+test('staged plans accept create-only A/B and exactly the five repository-only updates in first-image C', () => {
   for (const stage of ['A', 'B', 'C']) {
     const plan = fixture(stage);
     plan.resource_changes.push({ address: 'data.aws_caller_identity.current', mode: 'data', change: { actions: ['read'] } });

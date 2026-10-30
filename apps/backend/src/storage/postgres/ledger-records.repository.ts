@@ -21,6 +21,7 @@ import { CaptureDecisionRequestReusedError, DisputeRequestReusedError, LedgerRec
 import type { ClinicianDecisionInput, ResultBasis } from '../clinician-decisions';
 import { assertDecisionBasis, clinicianDecisionError, insertDecisionRow, resultBasis } from './clinician-decisions';
 import type { ResultAcknowledgementInput } from '../result-acknowledgements';
+import { insertCaptureProvenance, insertEvaluationProvenance } from './data-provenance';
 import { assertAcknowledgementBasis, insertAcknowledgementRow, resultAcknowledgementError } from './result-acknowledgements';
 import type {
   AcceptanceInput,
@@ -76,9 +77,10 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
         object_version: string | null;
         storage_key: string | null;
         uploaded: boolean;
+        uploaded_at: Date | null;
         deleted: boolean;
       }>(
-        `SELECT type, patient_id::text AS patient_id, sha256, object_version, storage_key, uploaded_at IS NOT NULL AS uploaded, deleted_at IS NOT NULL AS deleted
+        `SELECT type, patient_id::text AS patient_id, sha256, object_version, storage_key, uploaded_at IS NOT NULL AS uploaded, uploaded_at, deleted_at IS NOT NULL AS deleted
            FROM reports WHERE id = $1 AND tenant_id = $2 FOR SHARE`,
         [input.reportId, tenantId],
       );
@@ -114,7 +116,19 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
         [id, tenantId, actor, newId(), input.reportId, input.pdfSha256, input.textStorageKey, input.textSha256, input.textScalars, input.popplerVersion, input.runner],
       );
       if (inserted.rowCount === 0) return this.raced(client, tenantId, 'report_captures', 'report_captures_identity_uq', [input.reportId, input.textSha256, input.popplerVersion]);
-      return this.finish(client, tenantId, 'report_captures', id);
+      // Spec 020 E1a: the capture's provenance, in this same transaction and from the locked report row. A capture that cannot name its origin stores nothing.
+      const provenanceId = await insertCaptureProvenance(client, tenantId, actor, id, {
+        origin: input.origin,
+        reportId: input.reportId,
+        pdfSha256: input.pdfSha256,
+        objectVersion: report.object_version!,
+        receivedAt: report.uploaded_at!,
+        runner: input.runner,
+        popplerVersion: input.popplerVersion,
+      });
+      const stored = await this.finish(client, tenantId, 'report_captures', id);
+      await this.finish(client, tenantId, 'data_provenance', provenanceId);
+      return stored;
     });
   }
 
@@ -510,7 +524,16 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
         [tenantId, id, state.gene, state.state, state.phenotype, state.diplotype, state.activityScore, state.reasonCode],
       );
     }
+    // Spec 020 E1a: the evaluation's provenance, in this same transaction. An evaluation that cannot name its origin stores nothing.
+    const provenanceId = await insertEvaluationProvenance(client, tenantId, actor, id, {
+      origin: input.origin,
+      captureId: input.captureId,
+      captureAcceptanceId: input.captureAcceptanceId,
+      engineVersion: input.engineVersion,
+      knowledgeSetId: input.knowledgeSetId,
+    });
     const stored = await this.finish(client, tenantId, 'evaluations', id);
+    await this.finish(client, tenantId, 'data_provenance', provenanceId);
     // Capture decisions append under this same lock. A fresh statement sees any decision committed before we acquired it.
     if (input.captureAcceptanceId !== null) await this.assertCurrentAcceptance(client, tenantId, input.captureId, input.captureAcceptanceId);
     if (input.patientLinkDecisionId !== undefined) await this.assertVerifiedLink(client, tenantId, input.reportId, input.patientLinkDecisionId);

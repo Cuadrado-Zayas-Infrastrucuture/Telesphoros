@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Env } from '../config/env';
 import { expectAppException } from '../../test/helpers/expect-app-exception';
 import type { Principal } from '../auth/principal';
+import { DataOriginError } from '../ledger/data-origin';
 import { InMemoryObjectStorage } from '../object-storage/in-memory-object-storage';
 import type { ObjectStorage } from '../object-storage/object-storage';
 import { type FetchedObject } from '../object-storage/object-storage';
@@ -13,7 +14,7 @@ import { PipelineSwitch } from './pipeline-switch';
 import type { TextCaptureRunner } from './runner/text-capture-runner';
 
 // Cases that need a storage or ledger that misbehaves on purpose, which a real store will not do.
-const pipeline = new PipelineSwitch({ LAB_REPORT_PIPELINE: 'enabled', DOWNLOAD_URL_TTL_SECONDS: 120 } as Env);
+const pipeline = new PipelineSwitch({ NODE_ENV: 'test', LAB_REPORT_PIPELINE: 'enabled', DOWNLOAD_URL_TTL_SECONDS: 120 } as Env);
 const principal = (roles: Principal['roles']): Principal => ({ sub: 'syn-person', tenantId: 'tenant-unit', roles });
 const runnerFor = (text = 'synthetic text'): TextCaptureRunner => ({ name: 'fake', manifestSha256: 'f'.repeat(64), capture: async () => ({ text, popplerVersion: '26.03.0' }) });
 
@@ -89,6 +90,30 @@ describe('CapturesService: file links are for the roles that may open files', ()
     const { service, report } = await setup();
     const link = await service.pdfLink(principal(['clinician']), report.id);
     expect(link.url).toContain('versionId=v1');
+  });
+});
+
+describe('CapturesService: the origin of the data (spec 020 E1a)', () => {
+  it('names the origin first and passes it to the ledger: synthetic while the pipeline cannot run in production', async () => {
+    const { service, report, ledger } = await setup(new WrongBytesStorage({ sha256: 'a'.repeat(64) })); // the pinned version, with the report's hash
+    ledger.findCaptureByIdentity.mockResolvedValue(undefined);
+    ledger.insertCapture.mockRejectedValue(new Error('stop here: the call is what is asserted'));
+    await expect(service.capture(principal(['clinician']), report.id)).rejects.toThrow('stop here');
+    expect(ledger.insertCapture).toHaveBeenCalledWith('tenant-unit', 'syn-person', expect.objectContaining({ origin: 'synthetic' }));
+  });
+
+  it('refuses to capture, before reading or storing anything, when the origin cannot be named (production)', async () => {
+    const storage = new InMemoryObjectStorage();
+    const read = jest.spyOn(storage, 'getObject');
+    const put = jest.spyOn(storage, 'putObject');
+    const { report, ledger } = await setup(storage);
+    const production = new PipelineSwitch({ NODE_ENV: 'production', LAB_REPORT_PIPELINE: 'enabled', DOWNLOAD_URL_TTL_SECONDS: 120 } as Env);
+    const reports = new InMemoryReportsRepository();
+    const service = new CapturesService(reports, storage, production, ledger, runnerFor());
+    await expect(service.capture(principal(['clinician']), report.id)).rejects.toBeInstanceOf(DataOriginError);
+    expect(read).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
+    expect(ledger.insertCapture).not.toHaveBeenCalled();
   });
 });
 

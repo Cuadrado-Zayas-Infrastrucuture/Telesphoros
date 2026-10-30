@@ -104,7 +104,7 @@ class ControlledVerifier implements VerifierPort {
 
       const first = (await verify(admin.token).expect(200)).body;
       expect(ledgerVerifyResultSchema.safeParse(first).success).toBe(true);
-      expect(first).toMatchObject({ status: 'ok', mode: 'full', failures: [], eventsChecked: 3 }); // no checkpoint yet, so the "tail" is the whole chain: capture, its decision, the report's patient link
+      expect(first).toMatchObject({ status: 'ok', mode: 'full', failures: [], eventsChecked: 4 }); // no checkpoint yet, so the "tail" is the whole chain: capture, its provenance, its decision, the report's patient link
       expect(first.checkpointId).toEqual(expect.any(String));
 
       const full = (await verify(admin.token, '?full=true').expect(200)).body;

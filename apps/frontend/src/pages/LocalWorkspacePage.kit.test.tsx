@@ -44,7 +44,7 @@ describe('one-screen workspace on Prompt Kit (specs/021)', () => {
   it('shows the thinking bar while answering, then a message with the demo source, feedback and the synthetic notice', async () => {
     open();
     expect(await screen.findByRole('form', { name: 'Report and question' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Explain this example' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Explain this' }));
     expect(await screen.findByRole('group', { name: 'Sample response preparation' })).toBeInTheDocument();
     expect(await screen.findByText(/No genotype, phenotype/, {}, slow)).toBeInTheDocument();
     expect(screen.getByText(DEMO_SOURCE)).toBeInTheDocument();
@@ -59,7 +59,7 @@ describe('one-screen workspace on Prompt Kit (specs/021)', () => {
     await screen.findByRole('form', { name: 'Report and question' });
     const input = document.querySelector<HTMLInputElement>('input[type=file]')!;
     fireEvent.change(input, { target: { files: [new File(['{"synthetic":true}'], 'SYN-004.json')] } });
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Synthetic' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' }));
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
     const steps = await screen.findByRole('list', { name: 'Upload of SYN-004.json' });
     await waitFor(() => expect(within(steps).getAllByText('Done')).toHaveLength(2), slow);
@@ -67,7 +67,7 @@ describe('one-screen workspace on Prompt Kit (specs/021)', () => {
     // Not wrapped in act(): act waits for all work to settle, and the page's 150 ms progress poll keeps scheduling more. waitFor handles the update.
     release();
     await waitFor(() => expect(within(steps).getAllByText('Done')).toHaveLength(3), slow);
-    fireEvent.click(screen.getByRole('button', { name: 'Explain this example' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Explain this' }));
     expect(await screen.findByText('Attached: SYN-004.json · not read by the sample engine', {}, slow)).toBeInTheDocument();
     expect(screen.queryByText(DEMO_SOURCE)).not.toBeInTheDocument();
   });

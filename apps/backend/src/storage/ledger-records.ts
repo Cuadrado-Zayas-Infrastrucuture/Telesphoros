@@ -1,4 +1,5 @@
 import type { DrugResult, GeneStateResult } from '@telesphoros/cpic-schema';
+import type { DataOrigin } from '../ledger/data-origin';
 
 /** Mutable read context for an evaluation; corrections retain their complete canonical projections, oldest first. */
 export interface EvaluationReadContext {
@@ -44,6 +45,8 @@ export interface CaptureInput {
   textScalars: number;
   popplerVersion: string;
   runner: 'fake' | 'poppler';
+  /** Spec 020 E1a. Required, set by the server (currentDataOrigin), never by a request. Stored as the capture's provenance in the same transaction. */
+  origin: DataOrigin;
 }
 
 export interface AcceptanceInput {
@@ -71,6 +74,8 @@ export interface EvaluationCompletion {
 }
 
 export interface EvaluationInput {
+  /** Spec 020 E1a. Required, set by the server (currentDataOrigin), never by a request. Stored as the evaluation's provenance in the same transaction. */
+  origin: DataOrigin;
   patientId: string;
   reportId: string;
   captureId: string;

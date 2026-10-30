@@ -11,6 +11,7 @@ export const IMAGE_POLICY_UPDATES = [
   'aws_iam_role_policy.api_execution_migrate[0]',
   'aws_iam_role_policy.api_execution_provision[0]',
   'aws_iam_role_policy.worker_execution[0]',
+  'aws_iam_role_policy.issuer_execution[0]',
 ];
 const PULL_ACTIONS = ['ecr:BatchCheckLayerAvailability', 'ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer'];
 const canonical = (value) => JSON.stringify(value, (_key, item) => item && !Array.isArray(item) && typeof item === 'object'

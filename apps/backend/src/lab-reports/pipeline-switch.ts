@@ -1,6 +1,7 @@
 import { applyDecorators, type CanActivate, Inject, Injectable, Logger, type OnApplicationBootstrap, SetMetadata, UseGuards } from '@nestjs/common';
 import { ENV, type Env } from '../config/env';
 import { AppException } from '../common/app-exception';
+import { currentDataOrigin, type DataOrigin } from '../ledger/data-origin';
 import { ObjectStorage } from '../object-storage/object-storage';
 
 /**
@@ -12,11 +13,18 @@ export class PipelineSwitch {
   readonly enabled: boolean;
   readonly localStorageOnly: boolean;
   readonly downloadUrlTtlSeconds: number;
+  private readonly originEnv: Pick<Env, 'NODE_ENV' | 'LAB_REPORT_PIPELINE'>;
 
   constructor(@Inject(ENV) env: Env) {
+    this.originEnv = { NODE_ENV: env.NODE_ENV, LAB_REPORT_PIPELINE: env.LAB_REPORT_PIPELINE };
     this.enabled = env.LAB_REPORT_PIPELINE === 'enabled';
     this.localStorageOnly = !!env.LOCAL_STORAGE_RUN_ID;
     this.downloadUrlTtlSeconds = env.DOWNLOAD_URL_TTL_SECONDS;
+  }
+
+  /** The origin of the data this process stores (spec 020 E1a): `synthetic` while the pipeline cannot run in production; throws DataOriginError otherwise. */
+  dataOrigin(): DataOrigin {
+    return currentDataOrigin(this.originEnv);
   }
 
   /** Throws 503 PIPELINE_DISABLED. Cheap and side-effect free: call it BEFORE touching storage, the reader or the ledger. */
