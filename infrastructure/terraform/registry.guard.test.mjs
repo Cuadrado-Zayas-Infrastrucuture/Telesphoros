@@ -38,13 +38,26 @@ export function registryProblems(tf) {
   };
   const lines = (body) => new Set(body.split('\n').map(squash).filter(Boolean));
 
-  // Exactly the repository and its lifecycle policy: no repository policy (the execution roles' pull grant is the only access), no replication, no cache.
+  // Exactly the repository, its lifecycle policy and the registry's scan rule: no repository policy (the execution roles' pull grant is the only
+  // access), no replication, no cache.
   const resources = [...text.matchAll(/^resource "([^"]+)" "([^"]+)"/gm)].map((m) => `${m[1]}.${m[2]}`);
+  const expected = ['aws_ecr_repository.api', 'aws_ecr_lifecycle_policy.api', 'aws_ecr_registry_scanning_configuration.main'];
   need(
-    resources.length === 2 && resources.includes('aws_ecr_repository.api') && resources.includes('aws_ecr_lifecycle_policy.api'),
-    `registry.tf must define exactly aws_ecr_repository.api and aws_ecr_lifecycle_policy.api (found: ${resources.join(', ') || 'none'})`,
+    resources.length === expected.length && expected.every((name) => resources.includes(name)),
+    `registry.tf must define exactly ${expected.join(', ')} (found: ${resources.join(', ') || 'none'})`,
   );
-  need(!/aws_ecr_repository_policy|aws_ecr_replication|aws_ecr_pull_through|aws_ecr_registry_policy|aws_ecr_registry_scanning/.test(text), 'no repository policy, replication or pull-through cache: the execution roles are the only readers');
+  need(!/aws_ecr_repository_policy|aws_ecr_replication|aws_ecr_pull_through|aws_ecr_registry_policy/.test(text), 'no repository policy, replication or pull-through cache: the execution roles are the only readers');
+
+  // The registry's scan rule (2026-10-30): a registry setting with no rules overrides scan_on_push, so pushed images went unscanned.
+  const [scanning] = blocks(text, 'resource "aws_ecr_registry_scanning_configuration" "main"');
+  const scanningLines = lines(scanning ?? '');
+  need(scanning !== undefined, 'the registry scanning configuration must exist: without a rule, the repository scan_on_push is not used');
+  need(scanningLines.has('count = local.api_count'), 'the scanning configuration must be counted by local.api_count (off with the rest of API hosting)');
+  need(scanningLines.has('scan_type = "BASIC"'), 'basic scanning is the decision (enhanced scanning is a paid Inspector service)');
+  need(blocks(scanning ?? '', 'rule').length === 1, 'exactly one scan rule');
+  for (const line of ['scan_frequency = "SCAN_ON_PUSH"', 'filter = aws_ecr_repository.api[0].name', 'filter_type = "WILDCARD"']) {
+    need(scanningLines.has(line), `the scan rule must scan the API repository on push: missing ${line}`);
+  }
 
   // The repository.
   const [repo] = blocks(text, 'resource "aws_ecr_repository" "api"');
@@ -98,6 +111,11 @@ test('the registry guard reports each way the text could be weakened (controls)'
     ['a repository policy', 'output "api_repository_url" {', 'resource "aws_ecr_repository_policy" "api" {\n  repository = aws_ecr_repository.api[0].name\n  policy     = "{}"\n}\n\noutput "api_repository_url" {'],
     ['a plain index in the output', 'one(aws_ecr_repository.api[*].repository_url)', 'aws_ecr_repository.api[0].repository_url'],
     ['output removed', 'output "api_repository_url"', 'output "api_other"'],
+    ['scan rule removed', 'resource "aws_ecr_registry_scanning_configuration" "main"', 'resource "terraform_data" "main"'],
+    ['ungated scan rule', 'resource "aws_ecr_registry_scanning_configuration" "main" {\n  count     = local.api_count\n', 'resource "aws_ecr_registry_scanning_configuration" "main" {\n'],
+    ['scans only on request', 'scan_frequency = "SCAN_ON_PUSH"', 'scan_frequency = "MANUAL"'],
+    ['scans another repository', 'filter      = aws_ecr_repository.api[0].name', 'filter      = "elsewhere"'],
+    ['enhanced scanning', 'scan_type = "BASIC"', 'scan_type = "ENHANCED"'],
   ];
   for (const [name, from, to] of weakened) {
     assert.ok(registry.includes(from), `the control for "${name}" must match the real text (it does not: fix the control)`);
