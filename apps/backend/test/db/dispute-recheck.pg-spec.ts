@@ -189,7 +189,7 @@ describe('a dispute and an evaluation racing for the same tenant (decided by the
     const events = await withAdmin(pg.adminUrl, async (c) =>
       (await c.query(`SELECT event_type FROM ledger_events WHERE tenant_id = $1 ORDER BY seq`, [t])).rows.map((r) => r.event_type),
     );
-    expect(events.slice(-2)).toEqual(['evaluation', 'dispute']); // the dispute is ordered AFTER the evaluation it could not have been known to
+    expect(events.slice(-3)).toEqual(['evaluation', 'data-provenance', 'dispute']); // the dispute is ordered AFTER the evaluation it could not have been known to
   });
 
   it('the same replay of a stored evaluation still returns it while a dispute is active (the check is for new results only)', async () => {

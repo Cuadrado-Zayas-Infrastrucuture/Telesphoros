@@ -290,9 +290,9 @@ describe("concurrency on one tenant's chain", () => {
       const seqs = await withAdmin(pg.adminUrl, async (c) =>
         (await c.query(`SELECT seq::int AS seq FROM ledger_events WHERE tenant_id = $1 ORDER BY seq`, [tenantId])).rows.map((r) => r.seq),
       );
-      expect(seqs).toEqual(Array.from({ length: writers }, (_, i) => i + 1));
+      expect(seqs).toEqual(Array.from({ length: writers * 2 }, (_, i) => i + 1)); // each capture is followed by its provenance event (spec 020 E1a)
       const verdict = await verifier.verify(tenantId);
-      expect({ status: verdict.status, n: verdict.eventsChecked, failures: verdict.failures }).toEqual({ status: 'ok', n: writers, failures: [] });
+      expect({ status: verdict.status, n: verdict.eventsChecked, failures: verdict.failures }).toEqual({ status: 'ok', n: writers * 2, failures: [] });
       // Measured, not asserted against a number (a loaded CI machine is slower); printed so a regression is visible in the log.
       process.stdout.write(`[ledger contention] writers=${writers} wall=${timing.wallMs.toFixed(0)}ms p50=${timing.p50.toFixed(0)}ms p95=${timing.p95.toFixed(0)}ms\n`);
     },
@@ -328,6 +328,6 @@ describe("concurrency on one tenant's chain", () => {
       holder.release();
     }
     await repo.insertCapture(a, ra2.uploader, captureFor(ra2)); // the lock is free again
-    expect(await verifier.verify(a)).toMatchObject({ status: 'ok', eventsChecked: 1 });
+    expect(await verifier.verify(a)).toMatchObject({ status: 'ok', eventsChecked: 2 }); // the capture and its provenance event (spec 020 E1a)
   }, 20_000);
 });

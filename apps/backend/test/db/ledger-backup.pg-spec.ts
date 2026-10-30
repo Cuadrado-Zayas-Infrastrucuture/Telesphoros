@@ -108,7 +108,7 @@ describe('a backup of a populated ledger', () => {
     // still belong to their least-privilege owners, not to whoever ran the restore.
     const verifier = LedgerVerifier.connect(withDb(pg.verifierUrl, name));
     try {
-      expect(await verifier.verify(tenantId)).toMatchObject({ status: 'ok', eventsChecked: 5 });
+      expect(await verifier.verify(tenantId)).toMatchObject({ status: 'ok', eventsChecked: 7 });
     } finally {
       await verifier.close();
     }
@@ -131,7 +131,7 @@ describe('a backup of a populated ledger', () => {
       const repo = new PostgresLedgerRecordsRepository(database);
       const extra = await seedLabReport(withDb(pg.adminUrl, name), tenantId, 'syn-uploader', 'SYN-9');
       await repo.insertCapture(tenantId, extra.uploader, captureFor(extra));
-      expect(await verifier2.verify(tenantId)).toMatchObject({ status: 'ok', eventsChecked: 6 });
+      expect(await verifier2.verify(tenantId)).toMatchObject({ status: 'ok', eventsChecked: 9 });
     } finally {
       await verifier2.close();
       await database.onModuleDestroy();

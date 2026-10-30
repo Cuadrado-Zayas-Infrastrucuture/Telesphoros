@@ -45,13 +45,14 @@ describe('ledger records: the happy path', () => {
     const list = await events(t);
     expect(list.map((x) => [x.seq, x.event_type, x.subject_table])).toEqual([
       [1, 'capture', 'report_captures'],
-      [2, 'capture-decision', 'capture_acceptances'],
-      [3, 'evaluation', 'evaluations'],
+      [2, 'data-provenance', 'data_provenance'], // spec 020 E1a: each fact is followed by its provenance event, appended in the same transaction
+      [3, 'capture-decision', 'capture_acceptances'],
+      [4, 'evaluation', 'evaluations'],
+      [5, 'data-provenance', 'data_provenance'],
     ]);
     expect(list[0]!.prev_hash).toBe('0'.repeat(64));
-    expect(list[1]!.prev_hash).toBe(list[0]!.record_hash);
-    expect(list[2]!.prev_hash).toBe(list[1]!.record_hash);
-    expect(list.map((x) => x.actor_sub)).toEqual([report.uploader, 'syn-reviewer', 'syn-system']);
+    for (let i = 1; i < list.length; i++) expect(list[i]!.prev_hash).toBe(list[i - 1]!.record_hash);
+    expect(list.map((x) => x.actor_sub)).toEqual([report.uploader, report.uploader, 'syn-reviewer', 'syn-system', 'syn-system']);
   });
 
   it('returns the projection that was hashed, with free text replaced by its digest', async () => {
@@ -75,7 +76,7 @@ describe('ledger records: the happy path', () => {
     const evAgain = await repo.insertEvaluation(t, 'syn-system', evaluationFor(report, c.record.id, a.record.id));
     expect(evAgain.created).toBe(false);
     expect(evAgain.record.id).toBe(e.record.id);
-    expect((await events(t)).length).toBe(3);
+    expect((await events(t)).length).toBe(5); // an existing fact gets no second provenance row
   });
 
   it('refuses an acceptance by the person who uploaded the report', async () => {
@@ -84,6 +85,6 @@ describe('ledger records: the happy path', () => {
     const capture = captureFor(report);
     const c = await repo.insertCapture(t, report.uploader, capture);
     await expect(repo.insertAcceptance(t, report.uploader, acceptanceFor(c.record.id, capture))).rejects.toBeInstanceOf(LedgerIntegrityError);
-    expect((await events(t)).length).toBe(1); // nothing of the refused write remains
+    expect((await events(t)).length).toBe(2); // the capture and its provenance; nothing of the refused write remains
   });
 });

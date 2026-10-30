@@ -10,7 +10,7 @@ import { EvaluationRequestsService } from '../../src/lab-reports/evaluation-requ
 import { EvaluationRequestsRepository } from '../../src/storage/postgres/evaluation-requests.repository';
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
-import { acceptanceFor, captureFor, evaluationFor, seedLabReport, sha } from '../helpers/ledger-fixtures';
+import { acceptanceFor, captureFor, evaluationFor, forgetProvenance, seedLabReport, sha } from '../helpers/ledger-fixtures';
 import { revertAbove, revertThrough } from '../helpers/migration-history';
 
 let pg: EphemeralDatabase;
@@ -589,6 +589,7 @@ it('refuses rollback of admitted durable work and leaves its row/job readable', 
   try {
     const x = await eligible({ pg: isolated, database: connection });
     const admitted = await service(connection).admit(x.principal, x.input);
+    await forgetProvenance(isolated.adminUrl); // the facts it rests on have provenance rows, and 0062's down (tested on its own) refuses a populated table
     const above = revertAbove('evaluation_requests');
     expect(await withAdmin(isolated.adminUrl, (client) => migrateDown(client, above.steps))).toEqual(above.reverted); // nothing completed yet, so H3 reverts with the newer ones
     await expect(withAdmin(isolated.adminUrl, (client) => migrateDown(client))).rejects.toThrow('Durable evaluation work must be preserved');
