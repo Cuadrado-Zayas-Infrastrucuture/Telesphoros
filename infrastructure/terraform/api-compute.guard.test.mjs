@@ -115,7 +115,7 @@ export function apiComputeProblems(tf, sources = {}) {
   need(has(text, 'api_service_count = var.enable_api_hosting && var.api_image != "" ? 1 : 0'), 'api_service_count must need the switch and an image');
   const resources = [...text.matchAll(/^resource "([^"]+)" "([^"]+)"/gm)];
   need(resources.length >= 21, 'the scan must find the resources (a floor, so an empty read cannot pass)');
-  const SERVICE_ONLY = new Set(['aws_ecs_task_definition.api', 'aws_ecs_task_definition.api_migrate', 'aws_ecs_task_definition.api_provision', 'aws_ecs_service.api', 'aws_cloudwatch_metric_alarm.api_unhealthy_targets', 'aws_cloudwatch_metric_alarm.api_target_5xx', 'aws_cloudwatch_metric_alarm.api_elb_502', 'aws_cloudwatch_metric_alarm.api_elb_504', 'aws_cloudwatch_metric_alarm.api_running_tasks']);
+  const SERVICE_ONLY = new Set(['aws_ecs_task_definition.api', 'aws_ecs_task_definition.api_migrate', 'aws_ecs_task_definition.api_provision', 'aws_ecs_service.api', 'aws_cloudwatch_metric_alarm.api_unhealthy_targets', 'aws_cloudwatch_metric_alarm.api_target_5xx', 'aws_cloudwatch_metric_alarm.api_elb_502', 'aws_cloudwatch_metric_alarm.api_elb_504', 'aws_cloudwatch_metric_alarm.api_running_tasks', 'aws_cloudwatch_log_metric_filter.api_ledger_full_check', 'aws_cloudwatch_metric_alarm.api_ledger_check_stale']);
   for (const [header, type, name] of resources) {
     const b = blocks(text, header.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))[0] ?? '';
     const want = SERVICE_ONLY.has(`${type}.${name}`) ? 'local.api_service_count' : 'local.api_count';
@@ -283,6 +283,18 @@ export function apiComputeProblems(tf, sources = {}) {
     need(has(a, `metric_name = "${metric}"`) && has(a, 'statistic = "Sum"') && alarmLine('period', String(period)) && alarmLine('evaluation_periods', '1') && alarmLine('threshold', '1') && has(a, 'comparison_operator = "GreaterThanOrEqualToThreshold"') && has(a, 'treat_missing_data = "notBreaching"') && has(a, 'alarm_actions = [aws_sns_topic.audit_alarms.arn]'), `one ${event} line must raise the ${name} alarm, and silence is normal`);
     need(new RegExp(`event: '${event}'`).test(ledger), `the application must still write the ${event} event`);
   }
+  // The heartbeat: the record-log watch is silent when all is well, so a stopped watch is only heard as missing heartbeats. Silence breaches,
+  // and the window must outlast the slowest walk interval (the interval plus its 10% jitter) with room for the walk itself.
+  const beat = one('resource "aws_cloudwatch_log_metric_filter" "api_ledger_full_check"');
+  need(has(beat, 'pattern = "{ $.event = \\"ledger-full-check-completed\\" }"') && has(beat, 'name = "LedgerFullChecks"') && has(beat, 'value = "1"') && has(beat, 'log_group_name = aws_cloudwatch_log_group.api[0].name'), 'the heartbeat filter must count the ledger-full-check-completed event in the API log group');
+  need(/event: 'ledger-full-check-completed'/.test(ledger), 'the application must still write the ledger-full-check-completed event');
+  const stale = one('resource "aws_cloudwatch_metric_alarm" "api_ledger_check_stale"');
+  const staleLine = (key) => Number(new RegExp(`^\\s*${key}\\s*=\\s*(\\d+)\\s*$`, 'm').exec(code(stale))?.[1]);
+  const interval = Number(/LEDGER_FULL_VERIFY_INTERVAL_HOURS\s*=\s*"(\d+)"/.exec(text)?.[1]);
+  const windowHours = (staleLine('period') * staleLine('evaluation_periods')) / 3600;
+  need(has(stale, 'metric_name = "LedgerFullChecks"') && has(stale, 'statistic = "Sum"') && staleLine('threshold') === 1 && has(stale, 'comparison_operator = "LessThanThreshold"') && has(stale, 'treat_missing_data = "breaching"') && has(stale, 'alarm_actions = [aws_sns_topic.audit_alarms.arn]'), 'missing ledger heartbeats must raise the stale alarm (silence breaches)');
+  need(staleLine('period') >= 3600 && staleLine('datapoints_to_alarm') === staleLine('evaluation_periods'), 'the stale alarm must need the whole window silent, in periods of an hour or more');
+  need(interval > 0 && windowHours >= interval * 1.1 + 2 && windowHours <= 168, `the stale window (${windowHours} h) must outlast the walk interval (${interval} h) plus jitter and two hours, within CloudWatch's seven days`);
   for (const [alarm, metric] of [['api_elb_502', 'HTTPCode_ELB_502_Count'], ['api_elb_504', 'HTTPCode_ELB_504_Count']]) {
     const b = one(`resource "aws_cloudwatch_metric_alarm" "${alarm}"`);
     need(has(b, `metric_name = "${metric}"`) && has(b, 'namespace = "AWS/ApplicationELB"') && has(b, 'statistic = "Sum"') && has(b, 'comparison_operator = "GreaterThanOrEqualToThreshold"') && has(b, 'treat_missing_data = "notBreaching"'), `errors the load balancer answers itself (${metric}) must raise the ${alarm} alarm`);
@@ -481,6 +493,13 @@ test('the API compute guard reports each way the text could be weakened (control
     ['the process-fault alarm needs ten faults', 'threshold           = 1\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_process_fault]', 'threshold           = 10\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_process_fault]'],
     ['the process-fault alarm is renamed away', 'resource "aws_cloudwatch_metric_alarm" "api_process_fault" {', 'resource "aws_cloudwatch_metric_alarm" "api_process_fault_x" {'],
     ['provisioning task not counted by the image', 'resource "aws_ecs_task_definition" "api_provision" {\n  count                    = local.api_service_count', 'resource "aws_ecs_task_definition" "api_provision" {\n  count                    = local.api_count'],
+    ['the heartbeat filter names another event', 'pattern        = "{ $.event = \\"ledger-full-check-completed\\" }"', 'pattern        = "{ $.event = \\"ledger-full-check-done\\" }"'],
+    ['the stale alarm treats silence as normal', 'treat_missing_data  = "breaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_full_check]', 'treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_full_check]'],
+    ['the stale window is shorter than the walk interval', 'evaluation_periods  = 30\n  datapoints_to_alarm = 30', 'evaluation_periods  = 24\n  datapoints_to_alarm = 24'],
+    ['the stale alarm fires on one silent hour', 'datapoints_to_alarm = 30', 'datapoints_to_alarm = 1'],
+    ['the stale alarm compares the wrong way', 'comparison_operator = "LessThanThreshold"\n  treat_missing_data  = "breaching"', 'comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "breaching"'],
+    ['the walk interval outgrows the stale window', 'LEDGER_FULL_VERIFY_INTERVAL_HOURS = "24"', 'LEDGER_FULL_VERIFY_INTERVAL_HOURS = "48"'],
+    ['the stale alarm counted before an image runs', 'resource "aws_cloudwatch_metric_alarm" "api_ledger_check_stale" {\n  count               = local.api_service_count', 'resource "aws_cloudwatch_metric_alarm" "api_ledger_check_stale" {\n  count               = local.api_count'],
   ];
   for (const [name, from, to] of weakened) {
     assert.ok(compute.includes(from), `the control for "${name}" must match the real text (it does not: fix the control)`);
@@ -491,6 +510,7 @@ test('the API compute guard reports each way the text could be weakened (control
     ['the application stops logging the event', { ledger: ledgerSource.replace("event: 'ledger-compromised'", "event: 'ledger-broken'") }],
     ['the application renames the over-size event', { ledger: ledgerSource.replace("event: 'ledger-chain-over-size'", "event: 'ledger-too-long'") }],
     ['the application renames the verification-error event', { ledger: ledgerSource.replaceAll("event: 'ledger-verification-error'", "event: 'ledger-check-error'") }],
+    ['the application renames the heartbeat event', { ledger: ledgerSource.replace("event: 'ledger-full-check-completed'", "event: 'ledger-walk-done'") }],
     ['the log-shape test is deleted', { spec: '' }],
     ['the logger options start nesting objects', { options: `${loggerOptions}\n  nestedKey: 'payload'` }],
     ['the application stops using the shared options', { appModule: appModule.replace('pinoHttpOptions(config)', '{}') }],
