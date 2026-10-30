@@ -12,15 +12,15 @@ import { landingAfterSignIn } from '@/lib/localWorkspace';
 /** The address the sign-in page sends the browser back to. Redeems the one-time code, then moves on. */
 export default function AuthCallbackPage() {
   usePageTitle('Signing you in');
-  const { completeSignIn } = useAuth();
+  const { completeSignIn, roles } = useAuth();
   const navigate = useNavigate();
+  const [returnTo, setReturnTo] = useState<string | null>(null);
   const [failure, setFailure] = useState<'none' | 'generic' | 'account'>('none');
 
   useEffect(() => {
     let cancelled = false;
     completeSignIn().then(
-      // `replace`: the one-time code in this URL must not stay in the browser history.
-      (returnTo) => !cancelled && navigate(landingAfterSignIn(returnTo), { replace: true }),
+      (target) => !cancelled && setReturnTo(target),
       (error: unknown) => {
         // The one-time code and state must not stay in the address bar or history after a failure either.
         window.history.replaceState(window.history.state, '', window.location.pathname);
@@ -30,7 +30,13 @@ export default function AuthCallbackPage() {
     return () => {
       cancelled = true;
     };
-  }, [completeSignIn, navigate]);
+  }, [completeSignIn]);
+
+  // The roles are set in the same step that resolves the sign-in, so they are current by the time this runs. `replace`: the one-time code in this URL must
+  // not stay in the browser history.
+  useEffect(() => {
+    if (returnTo !== null) navigate(landingAfterSignIn(returnTo, roles), { replace: true });
+  }, [returnTo, roles, navigate]);
 
   if (failure === 'account') {
     return (

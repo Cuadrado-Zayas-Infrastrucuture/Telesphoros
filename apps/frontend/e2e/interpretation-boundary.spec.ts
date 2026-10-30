@@ -10,13 +10,13 @@ test('production build has no one-screen workspace route or link (specs/016 OSW-
   await expect(page.getByRole('heading', { name: 'Start with a synthetic report.' })).toHaveCount(0);
 });
 
-test('production sign-in from the home page still lands on the home page (specs/022 WMS-1)', async ({ page }) => {
+test('production sign-in from the home page lands on the chat home for a clinician (specs/024 CH-1; was the home page in specs/022 WMS-1)', async ({ page }) => {
   await page.goto('/signin');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.getByRole('button', { name: /Sign in as alice\b/ }).click();
   await page.waitForURL('**/auth/callback**');
   await page.waitForURL((url) => !url.pathname.startsWith('/auth/callback'));
-  expect(new URL(page.url()).pathname).toBe('/');
+  expect(new URL(page.url()).pathname).toBe('/workspace');
 });
 
 test('production build has no interpretation preview route', async ({ page }) => {
