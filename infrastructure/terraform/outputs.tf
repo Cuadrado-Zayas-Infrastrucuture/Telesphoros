@@ -58,6 +58,15 @@ output "cognito_sign_in_domain" {
   value       = "https://${aws_cognito_user_pool_domain.main.domain}.auth.${var.region}.amazoncognito.com"
 }
 
+output "ses_dkim_records" {
+  description = "Add these three CNAMEs in Cloudflare, DNS-only, and keep them: SES signs as the sender's domain with them, and the identity verifies once they resolve."
+  value = [for token in try(aws_sesv2_email_identity.from.dkim_signing_attributes[0].tokens, []) : {
+    name  = "${token}._domainkey.${local.ses_from_domain}"
+    type  = "CNAME"
+    value = "${token}.dkim.amazonses.com"
+  }]
+}
+
 # ---- Audit trail (F1) ----
 output "audit_bucket" {
   description = "Where the CloudTrail logs and their signed digest files are kept (Object Lock)."

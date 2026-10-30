@@ -64,6 +64,10 @@ run "plan_a_foundations_and_api_edge" {
     error_message = "the example selects the synthetic profile"
   }
   assert {
+    condition     = aws_sesv2_email_identity.from.email_identity == "staging.telesphoros.app" && aws_cognito_user_pool.main.email_configuration[0].from_email_address == "no-reply@staging.telesphoros.app"
+    error_message = "SES must verify the sender's domain (DKIM as staging.telesphoros.app, which DMARC adkim=s accepts) while Cognito still sends from the no-reply address"
+  }
+  assert {
     condition     = length(aws_vpc.synthetic) == 1 && length(aws_subnet.synthetic) == 2 && length(aws_internet_gateway.synthetic) == 1
     error_message = "the profile creates its own VPC with two subnets and an internet gateway"
   }

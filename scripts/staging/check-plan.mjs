@@ -69,10 +69,62 @@ function recordProblems(record, variable, parts) {
   return problems;
 }
 
+const SES_IDENTITY = 'aws_sesv2_email_identity.from';
+const SES_POOL = 'aws_cognito_user_pool.main';
+const SES_NOTIFIER_POLICY = 'aws_iam_role_policy.password_notifier';
+const REPLACE = [canonical(['delete', 'create']), canonical(['create', 'delete'])];
+const withoutEmailSource = (pool) => ({ ...pool, email_configuration: (pool.email_configuration ?? []).map(({ source_arn: _ignored, ...rest }) => rest) });
+
+/**
+ * The one change after stage A that moves the SES sender from an address identity to its domain (DKIM, so the domain's DMARC
+ * policy accepts Cognito's mail). Exactly three changes, nothing else: the identity is replaced by the address's own domain, the
+ * user pool is updated in place with only its SES source ARN changing (a replaced pool deletes every account), and the notifier's
+ * policy is updated in place. That policy is unknown at plan time because it names the new identity's ARN; guard.test.mjs checks
+ * its text instead.
+ */
+function sesProblems(plan, need) {
+  const problems = [];
+  const seen = new Map();
+  for (const entry of plan.resource_changes) {
+    const { address, mode, change } = entry;
+    if (!change || entry.deposed || change.importing) { problems.push(`${address}: incomplete, deposed or imported resource`); continue; }
+    const actions = canonical(change.actions);
+    if (mode === 'data' && [canonical(['read']), canonical(['no-op'])].includes(actions)) continue;
+    if (actions === canonical(['no-op'])) continue;
+    seen.set(address, { actions, change });
+  }
+  for (const address of seen.keys()) {
+    if (![SES_IDENTITY, SES_POOL, SES_NOTIFIER_POLICY].includes(address)) problems.push(`${address}: unexpected change; the SES change touches only the identity, the user pool's email source and the notifier policy`);
+  }
+  const identity = seen.get(SES_IDENTITY);
+  const before = identity?.change.before?.email_identity;
+  const after = identity?.change.after?.email_identity;
+  need(identity && REPLACE.includes(identity.actions), `${SES_IDENTITY}: must be replaced (address identity to domain identity)`);
+  need(typeof before === 'string' && before.split('@').length === 2 && after === before.split('@')[1], `${SES_IDENTITY}: the new identity must be the old address's own domain`);
+  const pool = seen.get(SES_POOL);
+  need(pool?.actions === canonical(['update']), `${SES_POOL}: must be updated in place, never replaced (a new pool deletes every account)`);
+  if (pool?.actions === canonical(['update'])) {
+    const { before: old, after: next, after_unknown: unknownAfter } = pool.change;
+    const unknownElsewhere = unknownAfter && Object.entries(unknownAfter).some(([key, value]) => key !== 'email_configuration' && unknown(value));
+    need(old && next && !unknownElsewhere && canonical(withoutEmailSource(old)) === canonical(withoutEmailSource(next)), `${SES_POOL}: only the email configuration's SES source ARN may change`);
+  }
+  need(seen.get(SES_NOTIFIER_POLICY)?.actions === canonical(['update']), `${SES_NOTIFIER_POLICY}: expected an in-place update`);
+  return problems;
+}
+
 export function planProblems(plan, stage, record) {
   const problems = [];
   const need = (ok, reason) => { if (!ok) problems.push(reason); };
-  if (!['A', 'B', 'C'].includes(stage)) return ['stage must be A, B or C'];
+  if (!['A', 'B', 'C', 'SES'].includes(stage)) return ['stage must be A, B, C or SES'];
+  if (stage === 'SES') {
+    if (!plan || !/^1\./.test(plan.format_version ?? '') || !Array.isArray(plan.resource_changes)) return ['expected terraform show -json plan output with resource_changes'];
+    need(plan.errored !== true && plan.complete !== false && plan.applyable !== false, 'plan must be complete, applicable and free of errors');
+    need(plan.variables?.deployment_profile?.value === 'synthetic' && plan.variables?.environment?.value === 'staging', 'only the staging/synthetic profile is supported');
+    need(!(plan.resource_drift ?? []).some((entry) => canonical(entry.change?.actions) !== canonical(['no-op'])), 'resource drift requires separate review');
+    // sesProblems reports through `need` as well, so it runs before `problems` is read.
+    const ses = sesProblems(plan, need);
+    return [...problems, ...ses];
+  }
   if (!plan || !/^1\./.test(plan.format_version ?? '') || !Array.isArray(plan.resource_changes)) return ['expected terraform show -json plan output with resource_changes'];
   need(plan.errored !== true && plan.complete !== false && plan.applyable !== false, 'plan must be complete, applicable and free of errors');
   const variable = (name) => plan.variables?.[name]?.value;
@@ -115,7 +167,7 @@ export function planProblems(plan, stage, record) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    if (process.argv.length !== 4) throw new Error('usage: node scripts/staging/check-plan.mjs A|B|C plan.json');
+    if (process.argv.length !== 4) throw new Error('usage: node scripts/staging/check-plan.mjs A|B|C|SES plan.json');
     const plan = JSON.parse(readFileSync(process.argv[3], 'utf8'));
     let record;
     if (process.argv[2] === 'C') {
@@ -131,7 +183,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       console.log(`Stage ${process.argv[2]} action checks passed; line-by-line resource and cost review is still required.`);
     }
   } catch {
-    console.error('Cannot check plan: use A|B|C and a readable terraform show -json plan file.');
+    console.error('Cannot check plan: use A|B|C|SES and a readable terraform show -json plan file.');
     process.exitCode = 1;
   }
 }
