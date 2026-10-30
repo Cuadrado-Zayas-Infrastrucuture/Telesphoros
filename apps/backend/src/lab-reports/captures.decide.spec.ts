@@ -11,7 +11,7 @@ import { PipelineSwitch } from './pipeline-switch';
 import type { TextCaptureRunner } from './runner/text-capture-runner';
 
 // What the service hands the ledger when a decision carries a retry id, and how it answers when the ledger refuses a reused one.
-const pipeline = new PipelineSwitch({ LAB_REPORT_PIPELINE: 'enabled', DOWNLOAD_URL_TTL_SECONDS: 120 } as Env);
+const pipeline = new PipelineSwitch({ NODE_ENV: 'test', LAB_REPORT_PIPELINE: 'enabled', DOWNLOAD_URL_TTL_SECONDS: 120 } as Env);
 const reviewer: Principal = { sub: 'syn-reviewer', tenantId: 'tenant-unit', roles: ['clinician'] };
 const runner: TextCaptureRunner = { name: 'fake', manifestSha256: 'f'.repeat(64), capture: async () => ({ text: 't', popplerVersion: '26.03.0' }) };
 

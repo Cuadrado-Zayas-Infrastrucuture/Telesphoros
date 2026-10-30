@@ -607,12 +607,12 @@ describe('reverting 0031 and 0028', () => {
     const through = revertThrough('tenant_capability_issue_current'); // this migration and anything above it
     expect(await owner((c) => migrateDown(c, through.steps))).toEqual(through.reverted);
     const down = await owner(catalogSnapshot);
-    // 0032 through spec 019's 0061 go with 0031. H1, H3, H4, D01b, D02a and D02b remove their request/receipt/cancellation/decision/acknowledgement/render tables, policies and helpers,
+    // 0032 through spec 020's 0062 go with 0031. H1, H3, H4, D01b, D02a, D02b and E1a remove their request/receipt/cancellation/decision/acknowledgement/render tables, policies and helpers,
     // 0056 its job-capability function and the capability owner's read policies on jobs and evaluation requests, 0057 its nonce table and function, 0059
     // the security events' grace check;
     // 0043's drop is undone below.
     const removed =
-      /tenant_capability_issue_current|tenant_capability_issue_for_job|jobs_capability|issuer_nonce_claim|issuer_request_nonces|security_event_capability|app_tenant_bound|app_capability_version|tenant_capability_bind_internal|member_sign_out|patient_merge_decisions_hold|patients_guard_delete|outbox_stats|patients_creation_request_guard|patient_identifiers_creation_request_guard|invitations_creation_request_guard|invitation_create_keyed|outbox_append\(text,uuid,text\)|agentic_explain_receipt|agentic_explain_identity|agentic_explain_run|agentic_explain_transition|evaluation_request|evaluation_job_fence|evaluation_job_cancel|evaluation_cancellation_check|evaluation_completion_check|clinician_result_decisions|clinician_decision_codes_valid|result_acknowledgement|result_render_events/;
+      /tenant_capability_issue_current|tenant_capability_issue_for_job|jobs_capability|issuer_nonce_claim|issuer_request_nonces|security_event_capability|app_tenant_bound|app_capability_version|tenant_capability_bind_internal|member_sign_out|patient_merge_decisions_hold|patients_guard_delete|outbox_stats|patients_creation_request_guard|patient_identifiers_creation_request_guard|invitations_creation_request_guard|invitation_create_keyed|outbox_append\(text,uuid,text\)|agentic_explain_receipt|agentic_explain_identity|agentic_explain_run|agentic_explain_transition|evaluation_request|evaluation_job_fence|evaluation_job_cancel|evaluation_cancellation_check|evaluation_completion_check|clinician_result_decisions|clinician_decision_codes_valid|result_acknowledgement|result_render_events|data_provenance/;
     expect(down.filter((l) => removed.test(l))).toEqual([]);
     // Reverting 0043 puts the dropped legacy table back (with its policy), so the reverted catalog has those two lines the head catalog lacks; nothing else moved.
     const restoredLegacyTable = (l: string) => l.startsWith('rel recommendations ') || l.startsWith('policy recommendations.');

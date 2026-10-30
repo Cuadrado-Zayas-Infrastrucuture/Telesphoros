@@ -204,6 +204,36 @@ const LOADERS: Record<Exclude<RecordTable, 'evaluations'>, Loader> = {
       basisRule: r.basis_rule,
     }),
   },
+  // Spec 020 E1a. Every column as stored: the row has no retry identity and no free text.
+  data_provenance: {
+    sql: `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
+                 subject_kind, capture_id::text AS capture_id, evaluation_id::text AS evaluation_id, origin, interpretation, document_sha256, object_version,
+                 ${UTC('received_at')} AS received_at, transform_runner, transform_poppler_version, transform_engine_version, transform_knowledge_set_id,
+                 parent_kind, parent_id::text AS parent_id, source_organization, source_type, context, collection_location
+            FROM data_provenance WHERE id = ANY($1::uuid[])`,
+    project: (r) => ({
+      kind: 'data-provenance',
+      ...common(r),
+      subjectKind: r.subject_kind,
+      captureId: r.capture_id,
+      evaluationId: r.evaluation_id,
+      origin: r.origin,
+      interpretation: r.interpretation,
+      documentSha256: r.document_sha256,
+      objectVersion: r.object_version,
+      receivedAt: r.received_at,
+      transformRunner: r.transform_runner,
+      transformPopplerVersion: r.transform_poppler_version,
+      transformEngineVersion: r.transform_engine_version,
+      transformKnowledgeSetId: r.transform_knowledge_set_id,
+      parentKind: r.parent_kind,
+      parentId: r.parent_id,
+      sourceOrganization: r.source_organization,
+      sourceType: r.source_type,
+      context: r.context,
+      collectionLocation: r.collection_location,
+    }),
+  },
 };
 
 const EVALUATION_SQL = `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,

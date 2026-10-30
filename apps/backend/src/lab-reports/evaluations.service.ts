@@ -16,6 +16,7 @@ import { evaluate } from '../services/recommendation-engine/recommendation-engin
 import { adaptReport, adapterKnowledgeFrom, type AdapterResult } from '../services/report-adapter';
 import { applyDisputeOverlay, type DisputedCell, OVERLAY_VERSION, type OverlayResult } from '../services/knowledge/dispute-overlay';
 import type { KnowledgeSet } from '../services/knowledge/knowledge-set';
+import { currentDataOrigin } from '../ledger/data-origin';
 import { DisputeChangedError, PatientLinkUnverifiedError } from '../ledger/ledger-types';
 import { linkState } from '../patient-identity/link-state';
 import { type ReaderResult } from '../services/report-reader/reader-result';
@@ -80,6 +81,8 @@ export class EvaluationsService {
     const reader = this.need(this.reader);
     // A request that cannot be stored (the tenant's record log is contained) is refused before the reader spends any effort on it.
     this.status?.assertOpen(principal.tenantId);
+    // Named first (spec 020 E1a): an evaluation that cannot say whether its data is synthetic is refused before the reader spends any effort.
+    const origin = currentDataOrigin(this.env);
 
     const report = await this.reports.findById(principal.tenantId, reportId);
     if (!report) throw AppException.notFound('Report not found.');
@@ -127,7 +130,7 @@ export class EvaluationsService {
     // appeared in between, the repository refuses and we evaluate once more with the new set (the reader is not run again).
     for (let attempt = 1; ; attempt++) {
       const active = (await ledger.listDisputes(principal.tenantId)).filter((d) => d.status !== 'dismissed');
-      const input = { ...this.build(report.patientId, report.id, capture.id, adapted, knowledge, runner, active), patientLinkDecisionId: link.decision!.id };
+      const input = { origin, ...this.build(report.patientId, report.id, capture.id, adapted, knowledge, runner, active), patientLinkDecisionId: link.decision!.id };
       try {
         const result = await ledger.insertEvaluation(principal.tenantId, principal.sub, input, options.completion);
         return { evaluation: await this.present(principal.tenantId, result.record), created: result.created };
@@ -199,7 +202,7 @@ export class EvaluationsService {
     knowledge: KnowledgeSet,
     runner: TextCaptureRunner,
     active: DisputeStatus[],
-  ): EvaluationInput {
+  ): Omit<EvaluationInput, 'origin'> {
     // The scope and what the substitute runner can answer for are part of the stored binding, hence of the ledger event.
     const binding: Record<string, unknown> = { ...adapted.binding, scope: PIPELINE_SCOPE, recordingsSha256: runner.manifestSha256 };
     // Bind the actual base files into the immutable, ledger-hashed record; an overlay changes verification, never file identity.
