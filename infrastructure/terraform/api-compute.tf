@@ -104,6 +104,8 @@ locals {
     TRUST_PROXY_HOPS                  = "1"
     BUILD_VERSION                     = local.api_build
     LEDGER_FULL_VERIFY_INTERVAL_HOURS = "24"
+    # Spec 025: the key that wraps each patient's identity data key (envelope encryption, context {tenant, patient}). Not a secret: an ARN.
+    PATIENT_FIELD_KMS_KEY_ID = aws_kms_key.data.arn
     # ISSUER_URL (DATA-01) is not typed here: it is built from the issuer's own names in issuer.tf and exists only while the issuer service does.
   }, local.issuer_client_environment)
 }
@@ -260,6 +262,40 @@ resource "aws_iam_role_policy_attachment" "api_task_runtime" {
   count      = local.api_count
   role       = aws_iam_role.api_task[0].name
   policy_arn = aws_iam_policy.app_runtime.arn
+}
+
+# Spec 025 (PD-b): the API wraps and unwraps each patient's identity data key with the data key, directly (not through S3). Only with an
+# encryption context that names exactly a tenant and a patient: S3's own context (aws:s3:arn) and a call with no context are refused here, so
+# this statement cannot widen the report-file grant in app_runtime. The API's task role only: the worker and the issuer never get it.
+data "aws_iam_policy_document" "api_patient_identity" {
+  statement {
+    sid       = "PatientIdentityEnvelope"
+    actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
+    resources = [aws_kms_key.data.arn]
+    condition {
+      test     = "ForAllValues:StringEquals"
+      variable = "kms:EncryptionContextKeys"
+      values   = ["tenant", "patient"]
+    }
+    condition {
+      test     = "Null"
+      variable = "kms:EncryptionContextKeys"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_iam_policy" "api_patient_identity" {
+  count       = local.api_count
+  name        = "${local.name}-api-patient-identity"
+  description = "Patient identity envelope keys for the Telesphoros API (spec 025)."
+  policy      = data.aws_iam_policy_document.api_patient_identity.json
+}
+
+resource "aws_iam_role_policy_attachment" "api_task_patient_identity" {
+  count      = local.api_count
+  role       = aws_iam_role.api_task[0].name
+  policy_arn = aws_iam_policy.api_patient_identity[0].arn
 }
 
 data "aws_iam_policy_document" "api_execution_common" {
