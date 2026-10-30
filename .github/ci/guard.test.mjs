@@ -366,6 +366,43 @@ test('the CLAUDE.md path check detects a missing file and passes a real one (con
   assert.deepEqual(pathsIn('no paths at all').named, []);
 });
 
+// ---- What is applied in AWS is said in one place: docs/ops/environments.md ----
+// A file with no dated history must not state an applied or deployed status of its own: it goes stale on the next
+// apply (2026-10-30: fifteen Terraform headers said NOT APPLIED while synthetic staging ran them). Dated records
+// (docs/status, docs/verification, plans, specs, CHANGELOG.md) keep their wording and are not read here.
+
+const STALE_STATE = /\bnot applied\b|\bnever applied\b|\bnot yet applied\b|\bnever been applied\b|\bnothing (?:here )?is (?:applied|deployed)\b/i;
+
+/** The files that describe the code as it is now: every Terraform file, the agent and contributor entry points, the app READMEs. */
+export function currentStateFiles() {
+  const terraform = readdirSync(new URL('infrastructure/terraform/', REPO), { withFileTypes: true })
+    .filter((e) => e.isFile() && !e.name.startsWith('.'))
+    .map((e) => `infrastructure/terraform/${e.name}`);
+  const readmes = readdirSync(new URL('apps/', REPO)).map((a) => `apps/${a}/README.md`).filter((p) => existsSync(new URL(p, REPO)));
+  return [...terraform, ...readmes, 'CLAUDE.md', '.github/pull_request_template.md', '.github/workflows/ci.yml',
+    '.specify/memory/constitution.md', 'apps/worker/src/deploy-contract.test.ts'];
+}
+
+/** Each line of `text` that states its own applied or deployed status, as "line: text". */
+export function staleStateLines(text) {
+  return text.split('\n').flatMap((line, i) => (STALE_STATE.test(line) ? [`${i + 1}: ${line.trim()}`] : []));
+}
+
+test('files with no dated history leave applied status to docs/ops/environments.md', () => {
+  const files = currentStateFiles();
+  assert.ok(files.length >= 40, `expected at least 40 files to read, found ${files.length}: a scan that reads nothing proves nothing`);
+  const found = files.flatMap((p) => staleStateLines(readFileSync(new URL(p, REPO), 'utf8')).map((l) => `${p}:${l}`));
+  assert.deepEqual(found, [], `say what is applied in docs/ops/environments.md, not here:\n${found.join('\n')}`);
+});
+
+test('the applied-status check flags each stale phrase and passes current wording (controls)', () => {
+  for (const s of ['# F1: the audit trail. NOT APPLIED.', '# WRITTEN, NEVER APPLIED. Off by default.', 'nothing is applied in AWS',
+    '# Nothing here is deployed.', 'Terraform has never been applied', 'sign-in is Cognito (not yet applied)']) {
+    assert.equal(staleStateLines(s).length, 1, s);
+  }
+  assert.deepEqual(staleStateLines('# F1: the audit trail.\n# What is applied: docs/ops/environments.md'), []);
+});
+
 export function imageJobProblems(text) {
   const block=text.split(/^jobs:\s*$/m)[1]?.split(/^ {2}(?=[a-z][a-z0-9-]*:\s*$)/m).find(b=>b.startsWith('image:')) || '';
   const rules=[

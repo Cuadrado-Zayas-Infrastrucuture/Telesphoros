@@ -6,7 +6,7 @@ import { Ticker } from './scheduler';
 import { shutdownDeadlineMs } from './shutdown';
 
 /**
- * The contract between the worker and its Terraform (infrastructure/terraform/worker.tf, NOT applied): the environment block is handed to the worker's OWN
+ * The contract between the worker and its Terraform (infrastructure/terraform/worker.tf): the environment block is handed to the worker's OWN
  * loader as a production configuration, and the CloudWatch filter patterns are evaluated against the lines the worker's OWN logger writes. The text guard
  * (worker.guard.test.mjs) pins the settings; this proves the two sides still agree.
  */

@@ -1,4 +1,4 @@
-# DATA-01 slice 2b: the session issuer's compute (service, roles, secret container, network, log group, alarms). WRITTEN, NEVER APPLIED. Off by default.
+# DATA-01 slice 2b: the session issuer's compute (service, roles, secret container, network, log group, alarms). Off by default.
 # The issuer verifies a person's Cognito access token and mints a 60-second tenant capability through ONE database function (migration 0028). It is the
 # only principal that can. So it must not share anything the API can reach: it has its own execution role, its own task role, its own secret, its own security group and its own log group.
 # Spec: specs/001-tenant-capability/. Task T019. Transport and its prices: docs/design/plans/tenant-capability-issuer-transport.md (and its addendum).
@@ -6,7 +6,7 @@
 #
 # THE SERVICE IS BEHIND ITS OWN SWITCH (enable_issuer, default false), because one thing the repository does not have yet:
 #  - the client's reach is untested. The API has its client (apps/backend/src/issuer/issuer-http-client.ts, ISSUER_URL) and api-compute.tf joins the namespace below and
-#    receives ISSUER_URL, both only while this switch is on. Nothing here is applied, so whether the API can resolve and reach the issuer is unverified.
+#    receives ISSUER_URL, both only while this switch is on. Whether the API can resolve and reach the issuer is unverified until it runs (docs/ops/environments.md).
 # The entry exists: apps/backend/src/issuer/main.ts, compiled by the existing backend build to dist/issuer/main.js in the same image. The task's `command` is that
 # path WITHOUT a leading `node`: the image's ENTRYPOINT is node, and an ECS command only replaces the image's CMD (issuer.guard.test.mjs ties the line to the build).
 

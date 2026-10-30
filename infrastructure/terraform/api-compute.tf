@@ -1,4 +1,4 @@
-# F3b: the API's compute (cluster, tasks, roles, secret containers, log group, alarms). NOT APPLIED. Off by default.
+# F3b: the API's compute (cluster, tasks, roles, secret containers, log group, alarms). Off by default.
 # It sits behind the edge in api-edge.tf (same switch, enable_api_hosting). The cluster, roles, secret containers, log group and the ledger alarm
 # exist as soon as the switch is on; the task definitions and the service also need `api_image`, so the foundations can be applied, the secrets
 # filled and the image built (F4) before anything runs. Plan: docs/design/plans/f3-api-hosting.md. Design: docs/ops/api-hosting.md.

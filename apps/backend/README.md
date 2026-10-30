@@ -1,7 +1,7 @@
 # @telesphoros/backend
 
 NestJS API (Phases 2-4). **Synthetic data only.** Storage is PostgreSQL (or in memory for quick tests) plus S3 for
-report files; sign-in is Amazon Cognito (not yet applied; see [docs/auth.md](../../docs/auth.md)). See [docs/database.md](../../docs/database.md).
+report files; sign-in is Amazon Cognito (see [docs/auth.md](../../docs/auth.md)). What runs where: [docs/ops/environments.md](../../docs/ops/environments.md). See [docs/database.md](../../docs/database.md).
 
 ```bash
 pnpm --filter @telesphoros/backend test        # unit + e2e (Jest)

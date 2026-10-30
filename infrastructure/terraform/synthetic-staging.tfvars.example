@@ -1,4 +1,4 @@
-# FD-7 staged synthetic environment (docs/design/plans/fd7-staged-synthetic-deploy.md). NOT APPLIED. Copy to a file outside version control, replace the three
+# FD-7 staged synthetic environment (docs/design/plans/fd7-staged-synthetic-deploy.md). Copy to a file outside version control, replace the three
 # PLACEHOLDER lines, and read docs/ops/staging-plan-review.md BEFORE the first plan. Synthetic data only: nothing here is approved for real records.
 # example.tfvars.example (production shape) is a different file and is not changed by this one. A test (staging.guard.test.mjs) keeps every value below
 # equal to the values staging.tftest.hcl plans offline.

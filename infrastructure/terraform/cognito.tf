@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------------------------
 # Authentication: Amazon Cognito. Invite-only, MFA required, short-lived tokens.
-# NOT APPLIED. Cognito is covered by the AWS BAA only once it is executed for the account.
+# Cognito is covered by the AWS BAA only once it is executed for the account.
 # ------------------------------------------------------------------------------------------------
 
 locals {
