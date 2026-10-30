@@ -35,11 +35,17 @@ data "aws_iam_policy_document" "password_notifier" {
     actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
     resources = ["${aws_cloudwatch_log_group.password_notifier.arn}:*"]
   }
-  # Only the one verified sender; it cannot send as anyone else.
+  # Only the one sender address; it cannot send as anyone else. The identity covers the whole
+  # domain, so the condition is what keeps it to the no-reply address.
   statement {
     sid       = "SendAsTheNoReplyAddress"
     actions   = ["ses:SendEmail"]
     resources = [aws_sesv2_email_identity.from.arn]
+    condition {
+      test     = "StringEquals"
+      variable = "ses:FromAddress"
+      values   = [var.ses_from_email]
+    }
   }
 }
 
