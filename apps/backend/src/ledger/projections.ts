@@ -234,6 +234,80 @@ const LOADERS: Record<Exclude<RecordTable, 'evaluations'>, Loader> = {
       collectionLocation: r.collection_location,
     }),
   },
+  // Spec 020 E1b. Every column as stored; none holds free text (references and codes only, bound to patterns).
+  use_grants: {
+    sql: `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
+                 patient_id::text AS patient_id, purpose, scope, jurisdiction, legal_authority, form_version, terms_version, language,
+                 ${UTC('effective_from')} AS effective_from, expiry_kind, ${UTC('expires_at')} AS expires_at, signer, signer_capacity, authority_evidence_ref,
+                 recorded_by, witness_or_attester, signed_document_ref, signed_document_sha256, ${UTC('signed_at')} AS signed_at
+            FROM use_grants WHERE id = ANY($1::uuid[])`,
+    project: (r) => ({
+      kind: 'use-grant',
+      ...common(r),
+      patientId: r.patient_id,
+      purpose: r.purpose,
+      scope: r.scope,
+      jurisdiction: r.jurisdiction,
+      legalAuthority: r.legal_authority,
+      formVersion: r.form_version,
+      termsVersion: r.terms_version,
+      language: r.language,
+      effectiveFrom: r.effective_from,
+      expiryKind: r.expiry_kind,
+      expiresAt: r.expires_at,
+      signer: r.signer,
+      signerCapacity: r.signer_capacity,
+      authorityEvidenceRef: r.authority_evidence_ref,
+      recordedBy: r.recorded_by,
+      witnessOrAttester: r.witness_or_attester,
+      signedDocumentRef: r.signed_document_ref,
+      signedDocumentSha256: r.signed_document_sha256,
+      signedAt: r.signed_at,
+    }),
+  },
+  use_grant_validations: {
+    sql: `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
+                 grant_id::text AS grant_id, validated_by
+            FROM use_grant_validations WHERE id = ANY($1::uuid[])`,
+    project: (r) => ({ kind: 'use-grant-validation', ...common(r), grantId: r.grant_id, validatedBy: r.validated_by }),
+  },
+  use_withdrawals: {
+    sql: `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
+                 grant_id::text AS grant_id, ${UTC('effective_at')} AS effective_at, recorded_by
+            FROM use_withdrawals WHERE id = ANY($1::uuid[])`,
+    project: (r) => ({ kind: 'use-withdrawal', ...common(r), grantId: r.grant_id, effectiveAt: r.effective_at, recordedBy: r.recorded_by }),
+  },
+  use_restrictions: {
+    sql: `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
+                 patient_id::text AS patient_id, purpose, ${UTC('effective_from')} AS effective_from, ${UTC('effective_until')} AS effective_until, reason_code
+            FROM use_restrictions WHERE id = ANY($1::uuid[])`,
+    project: (r) => ({
+      kind: 'use-restriction',
+      ...common(r),
+      patientId: r.patient_id,
+      purpose: r.purpose,
+      effectiveFrom: r.effective_from,
+      effectiveUntil: r.effective_until,
+      reasonCode: r.reason_code,
+    }),
+  },
+  tenant_use_terms: {
+    sql: `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
+                 agreement_ref, agreement_version, ${UTC('effective_from')} AS effective_from, ${UTC('effective_until')} AS effective_until,
+                 authorized_purposes, authorized_classifications, de_identification_authorized
+            FROM tenant_use_terms WHERE id = ANY($1::uuid[])`,
+    project: (r) => ({
+      kind: 'tenant-use-terms',
+      ...common(r),
+      agreementRef: r.agreement_ref,
+      agreementVersion: r.agreement_version,
+      effectiveFrom: r.effective_from,
+      effectiveUntil: r.effective_until,
+      authorizedPurposes: r.authorized_purposes,
+      authorizedClassifications: r.authorized_classifications,
+      deIdentificationAuthorized: r.de_identification_authorized,
+    }),
+  },
 };
 
 const EVALUATION_SQL = `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,

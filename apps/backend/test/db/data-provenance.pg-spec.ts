@@ -10,6 +10,7 @@ import { Session } from '../helpers/barrier';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { acceptanceFor, captureFor, evaluationFor, seedLabReport, sha } from '../helpers/ledger-fixtures';
 import type { PgError } from '../helpers/ledger-sql';
+import { revertThrough, versionsFrom } from '../helpers/migration-history';
 
 // Spec 020 E1a at the database: what holds for the repository and, separately, for a writer that bypasses it (direct SQL as the application role). The
 // expected values are written by hand; the oracle is the database's own refusal (its error code and constraint name) or the stored rows.
@@ -389,7 +390,8 @@ const ACTOR = 'syn-prov-actor';
       const tenant = `t-${randomUUID().slice(0, 8)}`;
 
       // BEFORE: the database as it was at 0061. 0062 is empty, so it reverts; facts are then written the way the previous release wrote them.
-      expect(await withAdmin(own.adminUrl, (c) => migrateDown(c, 1))).toEqual(['0062']);
+      const beneath = revertThrough('data_provenance'); // 0062 and anything above it (spec 020 E1b's 0063), all empty here
+      expect(await withAdmin(own.adminUrl, (c) => migrateDown(c, beneath.steps))).toEqual(beneath.reverted);
       const oldReport = await seedLabReport(own.adminUrl, tenant);
       const old = await Session.open(own.appUrl, 'prov-before', tenant, oldReport.uploader);
       const oldCaptureId = await old.insertCapture(oldReport); // the pre-0062 INSERT and event, no provenance
@@ -400,7 +402,7 @@ const ACTOR = 'syn-prov-actor';
 
       // THE MIGRATION, with events already in the chain: it restates the ledger's type set and subject mapping over them. (The verifier of this code reads
       // every record table, so it is first run against the migrated schema; the two old events are what it walks.)
-      expect(await withAdmin(own.adminUrl, (c) => migrateUp(c))).toEqual(['0062']);
+      expect(await withAdmin(own.adminUrl, (c) => migrateUp(c))).toEqual(versionsFrom('data_provenance'));
       expect(await verify(tenant)).toMatchObject({ status: 'ok', failures: [], eventsChecked: 2 });
 
       // AFTER: a capture and an evaluation through the repository, each with its provenance event in the same chain.
