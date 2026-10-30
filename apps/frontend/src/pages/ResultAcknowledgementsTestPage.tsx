@@ -1,14 +1,15 @@
 import { useSearchParams } from 'react-router-dom';
 import { ReviewedControl } from '@/components/acknowledgements/ReviewedControl';
+import { RecommendationSummaryRegion } from '@/components/renders/RecommendationSummaryRegion';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 /**
  * Spec 019 D02a, test only: mounted in the e2e build alone (routes.tsx), never in production (scripts/check-chunks.mjs proves it). It lists synthetic
- * fixture results by id, with no clinical text, each with a ReviewedControl: `?patient=<id>&result=<id>&result=<id>`. Each control is keyed by patient
- * and result, so changing the patient remounts every row and nothing pending for the previous patient can finish or submit. The clinical result view
- * is a separate build and adopts the control.
+ * fixture results by id, with no clinical text, each with a ReviewedControl and (D02b) a recommendation-summary region whose render capture is
+ * attached: `?patient=<id>&result=<id>&result=<id>`. Each row is keyed by patient and result, so changing the patient remounts every row: nothing
+ * pending for the previous patient can finish or submit, and every render episode ends. The clinical result view is a separate build and adopts both.
  */
 export default function ResultAcknowledgementsTestPage() {
   usePageTitle('Result acknowledgements (test)');
@@ -31,7 +32,10 @@ export default function ResultAcknowledgementsTestPage() {
           <ul className="flex flex-col divide-y divide-divider">
             {results.map((id) => (
               <li key={`${patient}:${id}`} className="flex flex-col gap-2 py-3">
-                <span className="font-mono text-sm">{id}</span>
+                <RecommendationSummaryRegion resultId={id} patientId={patient}>
+                  <span className="text-sm text-muted-foreground">Recommendation summary (synthetic)</span>
+                  <span className="font-mono text-sm">{id}</span>
+                </RecommendationSummaryRegion>
                 <ReviewedControl key={`${patient}:${id}`} resultId={id} />
               </li>
             ))}

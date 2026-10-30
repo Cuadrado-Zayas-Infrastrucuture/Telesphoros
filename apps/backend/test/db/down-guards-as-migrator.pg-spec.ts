@@ -5,6 +5,7 @@ import { Database } from '../../src/db/database';
 import { EvaluationRequestsService } from '../../src/lab-reports/evaluation-requests.service';
 import { EvaluationRequestsRepository } from '../../src/storage/postgres/evaluation-requests.repository';
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
+import { PostgresResultRendersRepository } from '../../src/storage/postgres/result-renders';
 import { migrateDown, migrateUp } from '../../src/db/migrator';
 import { provisionLogins, type SecretStore } from '../../src/db/provision-logins';
 import { pgClientConfig } from '../../src/db/tls';
@@ -553,6 +554,61 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
       await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated result acknowledgements/);
       expect((await f.migrator.query('SELECT 1 FROM schema_migrations WHERE version = $1', [version])).rowCount).toBe(1);
       expect((await f.migrator.query(`SELECT relforcerowsecurity AS f FROM pg_class WHERE oid = 'result_acknowledgements'::regclass`)).rows).toEqual([{ f: true }]);
+    } finally {
+      await connection.onModuleDestroy();
+      await f.drop();
+    }
+  });
+
+  // Spec 019 D02b: as D02a, no override (render rows are retained evidence); the empty case reverts in the last test below.
+  it('result_render_events: a populated table is refused as the migrator, the refusal rolls back whole, and FORCE is restored', async () => {
+    const f = await fixture();
+    const connection = new Database({ url: f.app, ssl: 'disable' });
+    try {
+      const repo = new PostgresLedgerRecordsRepository(connection);
+      const report = await seedLabReport(f.admin, tenant);
+      const capture = captureFor(report);
+      const stored = await repo.insertCapture(tenant, report.uploader, capture);
+      const acceptance = await repo.insertAcceptance(tenant, 'syn-reviewer', acceptanceFor(stored.record.id, capture));
+      await repo.insertPatientDecision(tenant, 'syn-verifier', {
+        reportId: report.reportId,
+        expectedReport: { patientId: report.patientId, sha256: report.pdfSha256, objectVersion: report.objectVersion },
+        decision: 'verified',
+        method: 'person-confirmed',
+        basisCode: 'no-identifier-on-report',
+      });
+      const evaluation = (await repo.insertEvaluation(tenant, 'syn-system', evaluationFor(report, stored.record.id, acceptance.record.id))).record;
+      const actor = 'syn-render-reader';
+      const shown = await withAdmin(f.admin, async (c) => {
+        await c.query(`INSERT INTO tenant_memberships (tenant_id,sub,status,roles,changed_by) VALUES ($1,$2,'active',ARRAY['reader'],'syn-test')`, [tenant, actor]);
+        return (await c.query<{ id: string }>(`SELECT id::text AS id FROM evaluation_results WHERE evaluation_id = $1 AND outcome = 'shown'`, [evaluation.id])).rows[0]!.id;
+      });
+      const at = new Date().toISOString();
+      const event = {
+        episodeId: randomUUID(),
+        seq: 0,
+        kind: 'exposure' as const,
+        resultId: shown,
+        measurement: 'viewport' as const,
+        ruleVersion: 'render-v1' as const,
+        schemaVersion: 1 as const,
+        capability: ['intersection-observer' as const, 'page-visibility' as const],
+        occurredAt: at,
+        continuousMs: 1000,
+        cumulativeMs: 1000,
+      };
+      expect(await new PostgresResultRendersRepository(connection).record(tenant, actor, { sentAt: at, events: [event] })).toEqual({
+        stored: 1,
+        alreadyStored: 0,
+        withoutExposure: 0,
+      });
+      const version = revertThrough('result_render_events').reverted.at(-1)!;
+      await revertAboveThenSwitchOff(f.migrator, 'result_render_events');
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated result render events/);
+      await setting(f.migrator, AUDIT, 'yes'); // no setting allows it: the audit one does not either
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated result render events/);
+      expect((await f.migrator.query('SELECT 1 FROM schema_migrations WHERE version = $1', [version])).rowCount).toBe(1);
+      expect((await f.migrator.query(`SELECT relforcerowsecurity AS f FROM pg_class WHERE oid = 'result_render_events'::regclass`)).rows).toEqual([{ f: true }]);
     } finally {
       await connection.onModuleDestroy();
       await f.drop();

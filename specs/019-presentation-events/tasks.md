@@ -1,6 +1,6 @@
-# Tasks: spec 019, slice D02a (acknowledgements); D02b follows
+# Tasks: spec 019, slices D02a (acknowledgements) and D02b (render capture)
 
-**Authorized:** D02a, then D02b (founder, 2026-10-29, P2 to P7 accepted as recommended). D02b tasks are written once D02a merges.
+**Authorized:** D02a, then D02b (founder, 2026-10-29, P2 to P7 accepted as recommended). D02a merged as PR #176 (`88a524e`). The D02b tasks are at the end; the founder accepted R1 to R3 on 2026-10-29.
 
 Derived from [plan.md](plan.md). D02a copies spec 006 D01b (`clinician_result_decisions`, migration 0055) wherever the two agree, and differs only where P5a and P5b require it.
 
@@ -40,3 +40,35 @@ Derived from [plan.md](plan.md). D02a copies spec 006 D01b (`clinician_result_de
 ## Not touched
 
 The clinical result view, the engine, evaluations, the meaning of spec 006 decisions and their API, the SMART pilot, `security_audit_events`, Terraform and CI configuration.
+
+## D02b: render capture
+
+### Slice decisions (founder, 2026-10-29)
+
+| # | Decision | Why |
+| --- | --- | --- |
+| R1 | One `exposure` row per episode, written when `render-v1` is met, then append-only `duration` rows (`seq` >= 1) with continuous and cumulative visible milliseconds. No row is ever updated. | P2 (durations for the 1, 2 and 3 second comparison), P3 (append-only), P4 (first exposure promptly, durations batched) |
+| R2 | Two measurement paths: `viewport` (at least 50% of the summary region in view, in a visible tab) and `focus` (keyboard or assistive-technology focus inside the region, in a visible tab). Each needs 1 continuous second and is recorded with its path. | P2, the assistive-technology path |
+| R3 | The browser test routes the API on the test-only page, so viewport, visibility and focus are measured by a real browser. The server is proven by the jest API and database tests. | No evaluations exist in the e2e backend |
+| R4 | Found in build review: a `duration` whose `exposure` is not stored is **skipped and counted** (`withoutExposure`), and the rest of its batch is stored. The trigger still refuses one that reaches the table. | One queue serves every row on the page: refusing the batch would drop other rows' exposures every 5 s while the orphaned episode lasts |
+
+### Tasks
+
+| # | Task | Requirement | Done when |
+| --- | --- | --- | --- |
+| T101 | Branch `feat/result-render-capture` off a freshly fetched `main`. The next free migration (0061) is checked on `main`, the open PRs and other sessions' branches. | P7 | Number recorded |
+| T102 | Migration `result_render_events`: append-only (refuse UPDATE, DELETE and TRUNCATE), **not** ledgered, ENABLE and FORCE RLS, grants as the other record tables. Columns: episode id, `seq`, `kind` (`exposure` or `duration`), result, evaluation and patient (composite keys as 0060), viewer, the viewer's roles and membership version (copied by a trigger from the live membership, any clinical read role), `measurement` (`viewport` or `focus`), `rule_version` (`render-v1`), `schema_version`, `capability` (what the browser supported), client occurrence time, client send time, server receipt time, continuous and cumulative milliseconds. Unique on (tenant, viewer, episode, seq); seq 0 is the exposure. No content column. The down migration refuses a populated table, as 0060 does. | P2, P3, FR-02, FR-03, FR-06, FR-07 | PostgreSQL tier: constraints, append-only, RLS, down guard as the migrator |
+| T103 | Shared types: a strict batch schema (at most 50 events, no extra fields) | FR-07, P4 | Schema tests refuse each malformed or extra field |
+| T104 | `POST /api/v1/result-renders` for `CLINICAL_READ_ROLES`. All-or-nothing: any result outside the tenant is 404 and stores nothing. A stored (episode, seq) is skipped, so a retried batch stores nothing twice; the answer counts stored and already-stored events. A `duration` row needs its `exposure`. Clock uncertainty is the server receipt minus the client send time. | FR-02 to FR-04, FR-06, P4 | e2e: tenancy, roles, idempotent batches, order |
+| T105 | Hook `useResultRender(resultId, regionRef)`. It uses `IntersectionObserver` (threshold 0.5) and `visibilitychange` for `viewport`, and `focusin` and `focusout` for `focus`. An episode is created after 1 continuous second; a change of patient, result or visibility ends it. The exposure is sent at once and durations in batches, using `fetch` with `keepalive` on page hide (no `sendBeacon`). Retries are bounded, and the buffer holds ids and times only. Failures are never shown to the clinician. | P2, P4 | Unit tests with fake timers: under 1 s gives nothing, 1 s gives one episode, a hidden tab or a reset gives none, focus is its own path |
+| T106 | The test-only page gives each row a recommendation-summary region with synthetic ids only, and attaches the hook | FR-01 | Page test |
+| T107 | Playwright (the main e2e suite, API routed, R3): a row in view for at least 1 second sends exactly one exposure; one in view for less sends none; a hidden tab sends none | P2, R3 | Spec green |
+| T108 | Mutations: the threshold, the visibility condition, the role check, the tenant check, the idempotency key | V | Each fails its test at the expected assertion |
+| T109 | Full local loop from the CI workflow's own step list, and gitleaks | V | Counts recorded; skips listed |
+| T110 | `docs/verification/result-render-capture.md`, one status fragment, a `docs/database.md` row | V | `test:ci-config` green |
+
+### Open items (not built in D02b)
+
+- **Retention:** the period for render rows is set before any real data, with counsel (question 10).
+- **Coverage and lag reporting** (P4: upload failures, ingestion lag, coverage) are later analytics. D02b stores what they need.
+- **Comprehension** is validated separately with clinicians (P2); no render is evidence of it.

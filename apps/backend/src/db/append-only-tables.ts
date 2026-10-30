@@ -120,6 +120,13 @@ export const AGENTIC_EXPLAIN_TABLES = ['agentic_explain_receipts', 'agentic_expl
  */
 export const EVALUATION_REQUEST_TABLES = ['evaluation_requests', 'evaluation_request_completions', 'evaluation_request_cancellations'] as const;
 
+/**
+ * Render events (migration 0061, spec 019 D02b): evidence that a result was displayed, never that it was read. Forced tenant RLS and truly append-only
+ * (no update, delete or truncate for anyone, the owner included); the application inserts through the BEFORE INSERT check (live clinical-read membership)
+ * and reads its own organization's rows. NOT a ledger record (plan P3): no ledger event, no projection, no ledger role reads it.
+ */
+export const RENDER_EVENT_TABLES = ['result_render_events'] as const;
+
 export const ALL_CLASSIFIED_TABLES: readonly string[] = [
   ...Object.values(APPEND_ONLY_CLASSES).flat(),
   ...LEGACY_TABLES,
@@ -136,4 +143,5 @@ export const ALL_CLASSIFIED_TABLES: readonly string[] = [
   ...AGENTIC_SYNTHETIC_TABLES,
   ...AGENTIC_EXPLAIN_TABLES,
   ...EVALUATION_REQUEST_TABLES,
+  ...RENDER_EVENT_TABLES,
 ];
