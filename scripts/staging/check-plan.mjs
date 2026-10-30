@@ -17,6 +17,18 @@ const canonical = (value) => JSON.stringify(value, (_key, item) => item && !Arra
   ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
 const unknown = (value) => value === true || (value && typeof value === 'object' && Object.values(value).some(unknown));
 const withoutPolicy = (value) => Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'policy'));
+// Attributes AWS moves on its own, with no change to the resource: RDS advances the point-in-time-restore mark every few minutes,
+// so every plan against a running database reports it as drift. Drift counts only when something else moved too.
+const SELF_MOVING = { aws_db_instance: ['latest_restorable_time'] };
+const selfMovingOnly = (entry) => {
+  const allowed = SELF_MOVING[entry?.type];
+  const { actions, before, after } = entry?.change ?? {};
+  if (entry?.mode !== 'managed' || !allowed || canonical(actions) !== canonical(['update'])) return false;
+  if (!before || !after || typeof before !== 'object' || typeof after !== 'object') return false;
+  const moved = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((key) => canonical(before[key]) !== canonical(after[key]));
+  return moved.length > 0 && moved.every((key) => allowed.includes(key));
+};
+const unreviewedDrift = (plan) => (plan.resource_drift ?? []).some((entry) => canonical(entry.change?.actions) !== canonical(['no-op']) && !selfMovingOnly(entry));
 
 function repositoryOnly(change, repository) {
   if (!change.before || !change.after || unknown(change.after_unknown)) return false;
@@ -131,7 +143,7 @@ export function planProblems(plan, stage, record) {
     // Targeted on purpose (see sesProblems), so `complete` is false; every change is checked instead.
     need(plan.errored !== true && plan.applyable !== false, 'plan must be applicable and free of errors');
     need(plan.variables?.deployment_profile?.value === 'synthetic' && plan.variables?.environment?.value === 'staging', 'only the staging/synthetic profile is supported');
-    need(!(plan.resource_drift ?? []).some((entry) => canonical(entry.change?.actions) !== canonical(['no-op'])), 'resource drift requires separate review');
+    need(!unreviewedDrift(plan), 'resource drift requires separate review');
     // sesProblems reports through `need` as well, so it runs before `problems` is read.
     const ses = sesProblems(plan, need);
     return [...problems, ...ses];
@@ -151,7 +163,7 @@ export function planProblems(plan, stage, record) {
     need(parts && parts[2] === variable('region') && parts[3] !== 'none', 'C needs a digest-pinned image in the stack Region');
     problems.push(...recordProblems(record, variable, parts));
   } else need(image === '', 'A and B must have no api_image');
-  need(!(plan.resource_drift ?? []).some((entry) => canonical(entry.change?.actions) !== canonical(['no-op'])), 'resource drift requires separate review');
+  need(!unreviewedDrift(plan), 'resource drift requires separate review');
   const seen = new Set();
   const updated = new Set();
   let creates = 0;
