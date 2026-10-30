@@ -1,4 +1,4 @@
-/* One-screen workspace (specs/016). Tokens only; the backdrop is the landing's folds and A/C/G/T letters, kept faint. */
+/* One-screen workspace (specs/016, polished in specs/023). Tokens only; the backdrop is the landing's two folds, kept faint. */
 .one-screen {
   position: relative;
   isolation: isolate;
@@ -33,25 +33,6 @@
   stroke: var(--primary);
   stroke-width: 1.5;
   opacity: 0.25;
-}
-
-.one-screen-backdrop .sequence {
-  position: absolute;
-  top: 18%;
-  right: 4%;
-  font-family: var(--font-family-mono);
-  font-size: 0.9375rem;
-  line-height: 2.2;
-  letter-spacing: 0.6em;
-  color: var(--primary);
-  opacity: 0.14;
-  writing-mode: vertical-rl;
-}
-
-.one-screen-backdrop .sequence-left {
-  top: 40%;
-  right: auto;
-  left: 5%;
 }
 
 .one-screen-column {
@@ -121,9 +102,8 @@
 
 .one-screen-file {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem 0.6rem;
+  flex-direction: column;
+  gap: 0.25rem;
   margin-bottom: 0.5rem;
   padding: 0.4rem 0.65rem;
   border-radius: 0.75rem;
@@ -137,10 +117,4 @@
   background: none;
   color: var(--primary);
   font-weight: 500;
-}
-
-@media (max-width: 40rem) {
-  .one-screen-backdrop .sequence {
-    display: none;
-  }
 }

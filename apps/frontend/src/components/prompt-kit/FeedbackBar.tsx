@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/Button';
 export function FeedbackBar({ value, onChange }: { value: 'helpful' | 'not-helpful' | null; onChange: (value: 'helpful' | 'not-helpful' | null) => void }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-3 border-t border-divider pt-2">
-      <p className="text-xs text-muted-foreground">{value ? 'Feedback marked locally · not submitted' : 'Was this layout helpful?'}</p>
+      <p className="text-xs text-muted-foreground">{value ? 'Feedback marked locally · not submitted' : 'Was this answer helpful?'}</p>
       <div className="flex gap-1">
         <Button
           size="sm"
