@@ -39,6 +39,18 @@ Read at `main` `9fceca6f`. The create paths and columns are traced in the table 
 
 ## E1b: the four records and `use-eligibility-v1`, synthetic only
 
+### Slice plan (founder, 2026-10-30: B1 to B5 accepted as recommended)
+
+Read at `main` `f0a777e7`. Patients have no jurisdiction field, and nothing in the backend names one. Migration 0063.
+
+| # | Decision | Why |
+| --- | --- | --- |
+| B1 | Each grant records its jurisdiction. The v1 allowlist (E4) holds only the synthetic code `ZZ` (ISO 3166 user-assigned) for every purpose. A real jurisdiction and purpose pair needs counsel, a new migration and a new policy version. | Patients have no jurisdiction. No real pair is approved, so nothing real can be eligible by accident. |
+| B2 | A fifth append-only, ledgered record, `use_grant_validations` (who validated a grant, and when). A grant without one answers `grant-unvalidated`. | Append-only: a grant row cannot be updated to "validated" (E5). |
+| B3 | The function takes the fact being used (a capture or an evaluation) and reads its `data_provenance`. A fact with no provenance (stored before 0062) answers `origin-unknown`. | Origin belongs to a fact, not to a patient (FR-07). |
+| B4 | A grant records its `legal_authority` (`authorization`, `waiver`, `tpo`). Tenant terms record the data classifications they authorize. The function takes the classification as an input and returns both in its answer. Storing each use's decision is D07's. | E1: each decision records legal authority and classification; E1b has no per-use record. |
+| B5 | Expiry kinds in v1: `date` and the research-only `no-expiration`. `event` expiry is refused by the database until a later slice records the event. | No program-end event is recorded anywhere yet. |
+
 | # | Task | Requirement | Done when |
 | --- | --- | --- | --- |
 | T201 | Branch `feat/use-eligibility-records` off `main` after E1a merges | E8 | Branch tip equals `origin/main` |

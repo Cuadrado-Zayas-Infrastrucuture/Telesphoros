@@ -12,6 +12,7 @@ import { pgClientConfig } from '../../src/db/tls';
 import { adminUrl, withAdmin } from '../helpers/database';
 import { acceptanceFor, captureFor, evaluationFor, forgetProvenance, seedLabReport } from '../helpers/ledger-fixtures';
 import { revertAbove, revertThrough } from '../helpers/migration-history';
+import { grantRow, restrictionRow, termsRow, validationRow, withdrawalRow, writeUseRecord } from '../helpers/use-eligibility-fixtures';
 
 /**
  * The "refuse to drop populated data" guards in the down migrations, run as the login an operator really uses: `telesphoros_migrator`, which owns
@@ -666,6 +667,56 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
       expect(await migrateDown(f.migrator, 1)).toEqual([version]);
     } finally {
       await connection.onModuleDestroy();
+      await f.drop();
+    }
+  });
+
+  // Spec 020 E1b: as E1a, no override (the ledger's type CHECK cannot be restored while one of the five events exists). One table at a time is populated, so each
+  // of the five tests in the guard's OR is seen to refuse alone; the empty case then reverts as the same login (the positive control).
+  it('use-eligibility records: a populated table is refused as the migrator (each table alone), the refusal rolls back whole, FORCE is restored, and empty reverts', async () => {
+    const f = await fixture();
+    try {
+      const report = await seedLabReport(f.admin, tenant);
+      const version = revertThrough('use_eligibility').reverted.at(-1)!;
+      await revertAboveThenSwitchOff(f.migrator, 'use_eligibility');
+      const tables = ['use_grants', 'use_grant_validations', 'use_withdrawals', 'use_restrictions', 'tenant_use_terms'];
+      const forced = async () => (await f.migrator.query(`SELECT relname, relforcerowsecurity AS f FROM pg_class WHERE relname = ANY($1) ORDER BY 1`, [tables])).rows;
+      const forget = (...subjects: string[]) =>
+        withAdmin(f.admin, async (c) => {
+          await c.query('BEGIN');
+          await c.query('SET LOCAL session_replication_role = replica');
+          for (const table of subjects) await c.query(`DELETE FROM ${table}`);
+          await c.query(`DELETE FROM ledger_events WHERE subject_table = ANY($1)`, [subjects]);
+          await c.query('COMMIT');
+        });
+      const refused = async (label: string) => {
+        await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated use-eligibility records/);
+        await setting(f.migrator, AUDIT, 'yes'); // no setting allows it: the audit one does not either
+        await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated use-eligibility records/);
+        await setting(f.migrator, AUDIT, '');
+        expect({ label, applied: (await f.migrator.query('SELECT 1 FROM schema_migrations WHERE version = $1', [version])).rowCount }).toEqual({ label, applied: 1 });
+        expect((await forced()).map((r) => r.f)).toEqual([true, true, true, true, true]);
+      };
+
+      const terms = await writeUseRecord(f.app, 'tenant_use_terms', termsRow(tenant, 'syn-operator'));
+      expect(terms.id).toEqual(expect.any(String));
+      await refused('tenant_use_terms');
+      await forget('tenant_use_terms');
+      await writeUseRecord(f.app, 'use_restrictions', restrictionRow(tenant, report.patientId, 'syn-recorder'));
+      await refused('use_restrictions');
+      await forget('use_restrictions');
+      const grant = grantRow(tenant, report.patientId, 'syn-recorder');
+      await writeUseRecord(f.app, 'use_grants', grant);
+      await refused('use_grants');
+      await writeUseRecord(f.app, 'use_grant_validations', validationRow(tenant, grant.id as string, 'syn-validator'));
+      await forget('use_grant_validations');
+      await refused('use_grants (after a validation was removed)');
+      await writeUseRecord(f.app, 'use_withdrawals', withdrawalRow(tenant, grant.id as string, 'syn-recorder'));
+      await forget('use_withdrawals');
+      await forget('use_grants');
+      // Positive control: with all five tables empty the same down goes through, so the refusals above were the guard and not a broken revert.
+      expect(await migrateDown(f.migrator, 1)).toEqual([version]);
+    } finally {
       await f.drop();
     }
   });
