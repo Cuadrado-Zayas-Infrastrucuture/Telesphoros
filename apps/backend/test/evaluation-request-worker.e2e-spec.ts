@@ -127,6 +127,19 @@ class WatchedReader implements ReportReader {
     expect(receipt).toEqual({ job_id: request.jobId, worker_id: 'w-held' });
   }, 60_000);
 
+  it('stores the evaluation without building the response the worker never reads', async () => {
+    const { setup, request } = await admitted();
+    const job = await claim('w-no-response', request.jobId);
+    const present = jest.spyOn(app.get(EvaluationsService) as unknown as { present: () => Promise<unknown> }, 'present');
+    try {
+      await run(job, 'w-no-response');
+      expect(present).not.toHaveBeenCalled();
+    } finally {
+      present.mockRestore();
+    }
+    expect(await stored(setup.reportId, request.id)).toEqual({ evaluations: 1, completions: 1 });
+  }, 60_000);
+
   it('refuses a worker whose lease was lost before it started, without reading, and the new holder completes', async () => {
     const { setup, request } = await admitted();
     const stale = await claim('w-stale', request.jobId);
