@@ -27,6 +27,9 @@ resource "aws_db_parameter_group" "main" {
   parameter {
     name  = "rds.force_ssl"
     value = "1"
+    # RDS reports this parameter as pending-reboot after creation; without it here every plan shows an in-place
+    # update of the group (found by check-plan B after the 2026-10-29 staging apply).
+    apply_method = "pending-reboot"
   }
   parameter {
     name  = "log_connections"
