@@ -1,7 +1,9 @@
 # Releasing the API image (FD-7, INF-03)
 
-**Status: written and tested offline, not applied.** The registry (`registry.tf`), the signing key and the CI release role (`signing.tf`) are Terraform. The
-`release-image` job in `ci.yml` is skipped until the founder turns it on ([ci-cd.md](ci-cd.md)). None of these steps has been run against a real account.
+**Status: the registry is applied in synthetic staging; the signing key and the CI release role are not** ([environments.md](environments.md)). The
+registry (`registry.tf`), the signing key and the CI release role (`signing.tf`) are Terraform. The `release-image` job in `ci.yml` is skipped
+until the founder turns it on ([ci-cd.md](ci-cd.md)), and the organization's service control policy denies GitHub OIDC providers in this
+account, so it cannot run there. The one image in staging was pushed by hand.
 Nothing here approves an apply: the gates in `infrastructure/terraform/README.md` and the plan in
 [../design/plans/fd7-staged-synthetic-deploy.md](../design/plans/fd7-staged-synthetic-deploy.md) still hold. Synthetic data only. Design:
 `specs/002-signed-image-release`.

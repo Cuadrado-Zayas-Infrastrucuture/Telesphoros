@@ -8,4 +8,4 @@ Code owners are listed in [.github/CODEOWNERS](.github/CODEOWNERS). Code-owner a
 
 [DRAFT: how decisions are made when a second maintainer joins.]
 
-**Status:** pre-release. Synthetic data only. Nothing is deployed, and the software is not approved for clinical use. See [docs/STATUS.md](docs/STATUS.md).
+**Status:** pre-release. Synthetic data only. One synthetic staging environment runs ([docs/ops/environments.md](docs/ops/environments.md)); there is no production, and the software is not approved for clinical use. See [docs/STATUS.md](docs/STATUS.md).

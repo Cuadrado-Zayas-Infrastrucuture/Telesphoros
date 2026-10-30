@@ -3,7 +3,8 @@
 Telesphoros Remastered: CPIC-guided pharmacogenomic decision support. A pnpm monorepo (NestJS backend, React/Vite frontend, PostgreSQL 16 with
 row-level security, S3, Cognito, Terraform). Synthetic data only; nothing here is approved for clinical use.
 
-**Read first: `docs/STATUS.md`.** It lists what exists, what is open, the **Working agreements**, and how to run everything locally.
+**Read first: `docs/ops/environments.md`** (what is applied in AWS now), **then `docs/STATUS.md`**: what exists, what is open, the
+**Working agreements**, and how to run everything locally.
 Then, as the task needs: `CONTRIBUTING.md` (rules for changes and merging), `docs/architecture.md`, `docs/design/records-and-corrections.md`
 (the records and ledger specification), `docs/lab-report-reader.md` (the pipeline routes), `docs/database.md`, and the runbooks in `docs/ops/`.
 

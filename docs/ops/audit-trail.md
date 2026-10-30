@@ -1,6 +1,7 @@
 # The audit trail (CloudTrail, protected logs, alarms)
 
-Step F1. **Written, never applied.** `infrastructure/terraform/audit.tf` describes it; nothing exists in AWS. It is part of the same root
+Step F1. **Applied in synthetic staging** as a single-Region trail with GOVERNANCE-mode locks ([environments.md](environments.md)); production
+(multi-Region, COMPLIANCE) is not applied. `infrastructure/terraform/audit.tf` describes it. It is part of the same root
 module as the rest, so the three first-apply gates in `infrastructure/terraform/README.md` (executed BAA, remote state, a human reading the plan) apply to it too.
 
 ## What it does

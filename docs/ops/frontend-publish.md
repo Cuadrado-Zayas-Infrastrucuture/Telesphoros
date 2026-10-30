@@ -1,6 +1,6 @@
 # Publishing the frontend (FD-7 slice 2)
 
-**Status: the script and its tests exist; real AWS publication remains unverified.** It is for the synthetic staged environment and runs from a person's shell:
+**Status: the script and its tests exist, and the synthetic staging frontend is published (`index.html` last written 2026-10-30; [environments.md](environments.md)).** It is for the synthetic staged environment and runs from a person's shell:
 CI holds no cloud credentials and publishes nothing. Plan: [fd7-staged-synthetic-deploy.md](../design/plans/fd7-staged-synthetic-deploy.md). The hosting itself is described in [domains-and-hosting.md](domains-and-hosting.md).
 
 Complete the pending [readiness decisions and live authorization](foundations-readiness.md)
