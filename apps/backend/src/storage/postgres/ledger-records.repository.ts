@@ -34,6 +34,7 @@ import type {
   EvaluationInput,
   EvaluationReadContext,
   EvaluationState,
+  EvaluationView,
   InsertResult,
   MergeDecisionInput,
   MergeProposalInput,
@@ -222,18 +223,20 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
   }
 
   patientLinkStates(tenantId: string, reportIds: string[]): Promise<Map<string, PatientLinkStateValue>> {
-    return this.read(tenantId, async (client) => {
-      const { rows } = await client.query<{ report_id: string; state: PatientLinkStateValue }>(
-        `SELECT r.id::text AS report_id,
+    return this.read(tenantId, (client) => this.linkStatesIn(client, tenantId, reportIds));
+  }
+
+  private async linkStatesIn(client: PoolClient, tenantId: string, reportIds: string[]): Promise<Map<string, PatientLinkStateValue>> {
+    const { rows } = await client.query<{ report_id: string; state: PatientLinkStateValue }>(
+      `SELECT r.id::text AS report_id,
                 CASE WHEN d.id IS NULL OR NOT (${LINK_APPLIES}) THEN 'unverified' WHEN d.decision = 'verified' THEN 'verified' ELSE 'rejected' END AS state
            FROM reports r
            LEFT JOIN LATERAL (SELECT x.* FROM report_patient_decisions x WHERE x.tenant_id = r.tenant_id AND x.report_id = r.id ORDER BY x.seq DESC LIMIT 1) d ON true
           WHERE r.tenant_id = $1 AND r.id = ANY($2::uuid[])`,
-        [tenantId, reportIds],
-      );
-      const found = new Map(rows.map((r) => [r.report_id, r.state]));
-      return new Map(reportIds.map((id) => [id, found.get(id) ?? 'unverified']));
-    });
+      [tenantId, reportIds],
+    );
+    const found = new Map(rows.map((r) => [r.report_id, r.state]));
+    return new Map(reportIds.map((id) => [id, found.get(id) ?? 'unverified']));
   }
 
   pageQuarantine(tenantId: string, page: PageRequest): Promise<Page<QuarantineEntry>> {
@@ -600,51 +603,91 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 
   evaluationContexts(tenantId: string, evaluationIds: string[]): Promise<Map<string, EvaluationReadContext>> {
     if (evaluationIds.length === 0) return Promise.resolve(new Map());
-    return this.read(tenantId, async (client) => {
-      const { rows } = await client.query<{ id: string; acceptance_id: string | null; decision: 'accepted' | 'rejected' | null; latest_id: string | null }>(
-        `WITH selected AS MATERIALIZED (SELECT id, capture_id, capture_acceptance_id FROM evaluations WHERE tenant_id = $1 AND id = ANY($2::uuid[])),
+    return this.read(tenantId, (client) => this.contextsIn(client, tenantId, evaluationIds));
+  }
+
+  private async contextsIn(client: PoolClient, tenantId: string, evaluationIds: string[]): Promise<Map<string, EvaluationReadContext>> {
+    const { rows } = await client.query<{ id: string; acceptance_id: string | null; decision: 'accepted' | 'rejected' | null; latest_id: string | null }>(
+      `WITH selected AS MATERIALIZED (SELECT id, capture_id, capture_acceptance_id FROM evaluations WHERE tenant_id = $1 AND id = ANY($2::uuid[])),
           latest AS (SELECT DISTINCT ON (capture_id) capture_id, id FROM capture_acceptances
             WHERE tenant_id = $1 AND capture_id IN (SELECT capture_id FROM selected) ORDER BY capture_id, seq DESC)
           SELECT e.id::text AS id, a.id::text AS acceptance_id, a.decision, l.id::text AS latest_id FROM selected e
             LEFT JOIN capture_acceptances a ON a.id = e.capture_acceptance_id AND a.tenant_id = $1 AND a.capture_id = e.capture_id
             LEFT JOIN latest l ON l.capture_id = e.capture_id`,
-        [tenantId, evaluationIds],
-      );
-      const contexts = new Map<string, EvaluationReadContext>(
-        rows.map((r) => [
-          r.id,
-          {
-            acceptance: r.acceptance_id === null ? null : { id: r.acceptance_id, decision: r.decision!, current: r.acceptance_id === r.latest_id },
-            corrections: [],
-          },
-        ]),
-      );
-      if (contexts.size === 0) return contexts;
-      const corrections = await client.query<{ id: string }>(`SELECT id::text AS id FROM corrections WHERE tenant_id = $1 AND evaluation_id = ANY($2::uuid[]) ORDER BY seq`, [
-        tenantId,
-        [...contexts.keys()],
-      ]);
-      for (const correction of await this.many(
-        client,
-        tenantId,
-        'corrections',
-        corrections.rows.map((r) => r.id),
-      )) {
-        contexts.get(correction.evaluationId as string)!.corrections.push(correction);
-      }
-      return contexts;
-    });
+      [tenantId, evaluationIds],
+    );
+    const contexts = new Map<string, EvaluationReadContext>(
+      rows.map((r) => [
+        r.id,
+        {
+          acceptance: r.acceptance_id === null ? null : { id: r.acceptance_id, decision: r.decision!, current: r.acceptance_id === r.latest_id },
+          corrections: [],
+        },
+      ]),
+    );
+    if (contexts.size === 0) return contexts;
+    const corrections = await client.query<{ id: string }>(`SELECT id::text AS id FROM corrections WHERE tenant_id = $1 AND evaluation_id = ANY($2::uuid[]) ORDER BY seq`, [
+      tenantId,
+      [...contexts.keys()],
+    ]);
+    for (const correction of await this.many(
+      client,
+      tenantId,
+      'corrections',
+      corrections.rows.map((r) => r.id),
+    )) {
+      contexts.get(correction.evaluationId as string)!.corrections.push(correction);
+    }
+    return contexts;
   }
 
   currentEvaluationIds(tenantId: string, reportIds: string[]): Promise<Map<string, string | null>> {
+    return this.read(tenantId, (client) => this.currentIdsIn(client, tenantId, reportIds));
+  }
+
+  private async currentIdsIn(client: PoolClient, tenantId: string, reportIds: string[]): Promise<Map<string, string | null>> {
+    const { rows } = await client.query<{ report_id: string; id: string }>(
+      `SELECT e.report_id::text AS report_id, e.id::text AS id FROM evaluations e WHERE e.id IN (${CURRENT_EVALUATIONS_SQL}) AND e.report_id = ANY($2::uuid[])`,
+      [tenantId, reportIds],
+    );
+    const found = new Map(rows.map((r) => [r.report_id, r.id]));
+    return new Map(reportIds.map((reportId) => [reportId, found.get(reportId) ?? null]));
+  }
+
+  evaluationView(tenantId: string, id: string): Promise<EvaluationView | undefined> {
     return this.read(tenantId, async (client) => {
-      const { rows } = await client.query<{ report_id: string; id: string }>(
-        `SELECT e.report_id::text AS report_id, e.id::text AS id FROM evaluations e WHERE e.id IN (${CURRENT_EVALUATIONS_SQL}) AND e.report_id = ANY($2::uuid[])`,
-        [tenantId, reportIds],
-      );
-      const found = new Map(rows.map((r) => [r.report_id, r.id]));
-      return new Map(reportIds.map((reportId) => [reportId, found.get(reportId) ?? null]));
+      const record = await this.one(client, tenantId, 'evaluations', id);
+      return record ? this.viewIn(client, tenantId, record) : undefined;
     });
+  }
+
+  viewOfEvaluation(tenantId: string, record: Projected): Promise<EvaluationView> {
+    return this.read(tenantId, (client) => this.viewIn(client, tenantId, record));
+  }
+
+  /** Every statement runs in the caller's transaction, so one read costs one checkout, one BEGIN and one COMMIT however many facts it gathers. */
+  private async viewIn(client: PoolClient, tenantId: string, record: Projected): Promise<EvaluationView> {
+    const reportId = record.reportId as string;
+    const context = (await this.contextsIn(client, tenantId, [record.id])).get(record.id);
+    if (!context) throw new Error('An evaluation read in this transaction has no context.');
+    const currentId = (await this.currentIdsIn(client, tenantId, [reportId])).get(reportId) ?? null;
+    const patientLink = (await this.linkStatesIn(client, tenantId, [reportId])).get(reportId) ?? 'unverified';
+    return { record, context, current: currentId === record.id, patientLink, activeDisputes: await this.activeDisputeCountIn(client, tenantId) };
+  }
+
+  activeDisputeCount(tenantId: string): Promise<number> {
+    return this.read(tenantId, (client) => this.activeDisputeCountIn(client, tenantId));
+  }
+
+  /** A dispute is active unless its one final decision dismisses it (an open dispute has no decision), as `disputeStatuses` derives it. */
+  private async activeDisputeCountIn(client: PoolClient, tenantId: string): Promise<number> {
+    const { rows } = await client.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM cell_disputes d
+         LEFT JOIN cell_dispute_decisions x ON x.dispute_id = d.id AND x.tenant_id = d.tenant_id
+        WHERE d.tenant_id = $1 AND x.decision IS DISTINCT FROM 'dismissed'`,
+      [tenantId],
+    );
+    return rows[0]!.n;
   }
 
   insertCorrection(tenantId: string, actor: string, input: CorrectionInput): Promise<InsertResult> {

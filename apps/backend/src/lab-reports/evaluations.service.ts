@@ -22,7 +22,7 @@ import { linkState } from '../patient-identity/link-state';
 import { type ReaderResult } from '../services/report-reader/reader-result';
 import type { ReadOptions, ReportReader } from '../services/report-reader/report-reader';
 import { LedgerRecordsRepository } from '../storage/ledger-records.repository';
-import type { DisputeStatus, EvaluationCompletion, EvaluationInput, Projected } from '../storage/ledger-records';
+import type { DisputeStatus, EvaluationCompletion, EvaluationInput, EvaluationView, InsertResult, Projected } from '../storage/ledger-records';
 import { ReportsRepository } from '../storage/reports.repository';
 import { DatabaseCaptureAcceptanceStore } from './acceptance-store';
 import { type EvaluationContext, toEvaluationDto, toEvaluationSummaryDto } from './lab-report.mapper';
@@ -70,11 +70,18 @@ export class EvaluationsService {
     return dependency;
   }
 
+  /** Evaluates and stores (see `store`), then reads the stored evaluation back the way a caller of the API sees it. */
+  async create(principal: Principal, reportId: string, body: EvaluationCreate, options: EvaluationCreateOptions = {}): Promise<EvaluationOutcome> {
+    const stored = await this.store(principal, reportId, body, options);
+    return { evaluation: await this.present(principal.tenantId, stored.record), created: stored.created };
+  }
+
   /**
    * Evaluates an accepted capture (plan section 6). Everything that can be refused is refused BEFORE the reader runs, and nothing is
    * stored by a refusal. The reader and the engine run outside any database transaction; one transaction stores the result.
+   * Returns the stored record only: the request worker has no reader of the response, so it calls this and builds none.
    */
-  async create(principal: Principal, reportId: string, body: EvaluationCreate, options: EvaluationCreateOptions = {}): Promise<EvaluationOutcome> {
+  async store(principal: Principal, reportId: string, body: EvaluationCreate, options: EvaluationCreateOptions = {}): Promise<InsertResult> {
     const ledger = this.need(this.ledger);
     const runner = this.need(this.runner);
     const knowledge = this.need(this.knowledge);
@@ -132,8 +139,7 @@ export class EvaluationsService {
       const active = (await ledger.listDisputes(principal.tenantId)).filter((d) => d.status !== 'dismissed');
       const input = { origin, ...this.build(report.patientId, report.id, capture.id, adapted, knowledge, runner, active), patientLinkDecisionId: link.decision!.id };
       try {
-        const result = await ledger.insertEvaluation(principal.tenantId, principal.sub, input, options.completion);
-        return { evaluation: await this.present(principal.tenantId, result.record), created: result.created };
+        return await ledger.insertEvaluation(principal.tenantId, principal.sub, input, options.completion);
       } catch (error) {
         if (error instanceof PatientLinkUnverifiedError) throw this.unverified();
         if (!(error instanceof DisputeChangedError) || attempt >= 2) throw error;
@@ -154,7 +160,7 @@ export class EvaluationsService {
       principal.tenantId,
       records.map((r) => r.id),
     );
-    const disputes = await this.activeDisputes(principal.tenantId);
+    const disputes = await ledger.activeDisputeCount(principal.tenantId);
     const reportIds = [...new Set(records.map((r) => r.reportId as string))];
     const currentIds = await ledger.currentEvaluationIds(principal.tenantId, reportIds);
     const links = await ledger.patientLinkStates(principal.tenantId, reportIds);
@@ -175,9 +181,9 @@ export class EvaluationsService {
   }
 
   async get(principal: Principal, id: string): Promise<EvaluationDto> {
-    const record = await this.need(this.ledger).findEvaluation(principal.tenantId, id);
-    if (!record) throw AppException.notFound('Evaluation not found.');
-    return this.present(principal.tenantId, record);
+    const view = await this.need(this.ledger).evaluationView(principal.tenantId, id);
+    if (!view) throw AppException.notFound('Evaluation not found.');
+    return toEvaluationDto(view.record, contextOf(view));
   }
 
   // ---- helpers ---------------------------------------------------------------------------------------------------------------
@@ -263,28 +269,12 @@ export class EvaluationsService {
     };
   }
 
-  private async activeDisputes(tenantId: string): Promise<number> {
-    return (await this.need(this.ledger).listDisputes(tenantId)).filter((d) => d.status !== 'dismissed').length;
-  }
-
-  private async context(tenantId: string, record: Projected, disputes: number, currentIds?: Map<string, string | null>): Promise<EvaluationContext> {
-    const ledger = this.need(this.ledger);
-    const acceptanceId = record.captureAcceptanceId as string | null;
-    let acceptance: EvaluationContext['acceptance'] = null;
-    if (acceptanceId) {
-      const decided = await ledger.findAcceptance(tenantId, acceptanceId);
-      const latest = await ledger.latestAcceptance(tenantId, record.captureId as string);
-      if (decided) acceptance = { id: decided.id, decision: decided.decision as 'accepted' | 'rejected', current: latest?.id === decided.id };
-    }
-    // The state is derived from these same corrections (mapper), so what is shown can never disagree with the history shown beside it.
-    const corrections = await ledger.listCorrections(tenantId, record.id);
-    const reportId = record.reportId as string;
-    const currentId = (currentIds ?? (await ledger.currentEvaluationIds(tenantId, [reportId]))).get(reportId) ?? null;
-    const patientLink = (await ledger.patientLinkStates(tenantId, [reportId])).get(reportId) ?? 'unverified';
-    return { acceptance, corrections, current: currentId === record.id, activeDisputes: disputes, patientLink };
-  }
-
   private async present(tenantId: string, record: Projected): Promise<EvaluationDto> {
-    return toEvaluationDto(record, await this.context(tenantId, record, await this.activeDisputes(tenantId)));
+    return toEvaluationDto(record, contextOf(await this.need(this.ledger).viewOfEvaluation(tenantId, record)));
   }
+}
+
+/** The state is derived from these same corrections (mapper), so what is shown can never disagree with the history shown beside it. */
+function contextOf(view: EvaluationView): EvaluationContext {
+  return { ...view.context, current: view.current, activeDisputes: view.activeDisputes, patientLink: view.patientLink };
 }

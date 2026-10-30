@@ -9,6 +9,7 @@ import type {
   EvaluationInput,
   EvaluationReadContext,
   EvaluationState,
+  EvaluationView,
   InsertResult,
   MergeDecisionInput,
   MergeProposalInput,
@@ -107,6 +108,12 @@ export abstract class LedgerRecordsRepository {
   abstract evaluationContexts(tenantId: string, evaluationIds: string[]): Promise<Map<string, EvaluationReadContext>>;
   /** For each report, the id of its current evaluation (its newest, if that is active), or null when it has none. Every asked report has an entry. */
   abstract currentEvaluationIds(tenantId: string, reportIds: string[]): Promise<Map<string, string | null>>;
+  /** One evaluation and everything shown beside it, in ONE transaction. Undefined for an unknown (or foreign) id. */
+  abstract evaluationView(tenantId: string, id: string): Promise<EvaluationView | undefined>;
+  /** The same for an evaluation record already in hand, e.g. one just stored. */
+  abstract viewOfEvaluation(tenantId: string, record: Projected): Promise<EvaluationView>;
+  /** How many disputes are active (open or upheld): the count of `listDisputes` without the dismissed ones, without loading them. */
+  abstract activeDisputeCount(tenantId: string): Promise<number>;
 
   abstract insertCorrection(tenantId: string, actor: string, input: CorrectionInput): Promise<InsertResult>;
   abstract listCorrections(tenantId: string, evaluationId: string): Promise<Projected[]>;
