@@ -237,6 +237,8 @@ test('stages A/B/C still require a complete plan (only SES is checked change by 
   const plan = fixture('A');
   plan.complete = false;
   assert.ok(planProblems(plan, 'A').some((problem) => /complete/.test(problem)));
+});
+
 // RDS moves latest_restorable_time on its own every few minutes; a running database must not block every later plan.
 const restoreMark = (overrides = {}) => ({ address: 'aws_db_instance.main', mode: 'managed', type: 'aws_db_instance', change: {
   actions: ['update'], before: { identifier: 'telesphoros-staging', latest_restorable_time: '2026-10-30T01:00:00Z' },
@@ -247,7 +249,7 @@ test('drift that only moves the database restore mark is not review drift, in ev
     const plan = fixture(stage); plan.resource_drift = [restoreMark()];
     assert.deepEqual(planProblems(plan, stage, RECORD), [], stage);
   }
-  const ses = sesFixture(); ses.resource_drift = [restoreMark()];
+  const ses = sesPlan(POOL); ses.resource_drift = [restoreMark()];
   assert.deepEqual(planProblems(ses, 'SES'), []);
 });
 
@@ -266,7 +268,7 @@ test('any other drift is still refused, including the restore mark beside anothe
       const plan = fixture(stage); plan.resource_drift = [entry];
       assert.ok(planProblems(plan, stage, RECORD).some((reason) => reason.includes('drift')), `${name} (${stage})`);
     }
-    const ses = sesFixture(); ses.resource_drift = [entry];
+    const ses = sesPlan(POOL); ses.resource_drift = [entry];
     assert.ok(planProblems(ses, 'SES').some((reason) => reason.includes('drift')), `${name} (SES)`);
   }
   const both = fixture('B'); both.resource_drift = [restoreMark(), { address: 'aws_s3_bucket.reports', mode: 'managed', type: 'aws_s3_bucket', change: { actions: ['update'], before: { a: 1 }, after: { a: 2 } } }];
