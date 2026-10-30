@@ -50,22 +50,28 @@ export class PostgresPatientsRepository extends PatientsRepository {
   list(tenantId: string, { offset, limit }: PageRequest, options: { includeMerged?: boolean } = {}): Promise<Page<PatientRecord>> {
     return this.db.withTenant(tenantId, async (client) => {
       // The alias edges in force (a merge makes the source an alias of the target; nothing on the patient row changes).
-      const rows = await client.query<PatientRow & { merged_into: string | null }>(
+      // The edges are computed once and shared by the page and the total. The total rides on the page's own statement (a scalar subquery, run once),
+      // so the page keeps its early stop on `seq` and both come from one snapshot. A page with no rows carries no total; at offset 0 that means there
+      // are no patients, and past the end it is asked for once.
+      const { rows } = await client.query<PatientRow & { merged_into: string | null; total: number }>(
         `WITH edges AS MATERIALIZED (SELECT * FROM patient_alias_edges($1))
          SELECT ${COLUMNS.split(', ')
            .map((c) => `p.${c}`)
-           .join(', ')}, e.target_patient_id::text AS merged_into
+           .join(', ')}, e.target_patient_id::text AS merged_into,
+                (SELECT count(*)::int FROM patients q LEFT JOIN edges f ON f.source_patient_id = q.id
+                  WHERE q.tenant_id = $1 AND q.deleted_at IS NULL AND ($4::boolean OR f.source_patient_id IS NULL)) AS total
            FROM patients p LEFT JOIN edges e ON e.source_patient_id = p.id
           WHERE p.tenant_id = $1 AND p.deleted_at IS NULL AND ($4::boolean OR e.source_patient_id IS NULL) ORDER BY p.seq LIMIT $2 OFFSET $3`,
         [tenantId, limit, offset, options.includeMerged === true],
       );
-      const total = await client.query<{ n: number }>(
+      if (rows.length > 0 || offset === 0) return { items: rows.map(withMergedInto), total: rows[0]?.total ?? 0 };
+      const past = await client.query<{ n: number }>(
         `WITH edges AS MATERIALIZED (SELECT * FROM patient_alias_edges($1))
          SELECT count(*)::int AS n FROM patients p LEFT JOIN edges e ON e.source_patient_id = p.id
           WHERE p.tenant_id = $1 AND p.deleted_at IS NULL AND ($2::boolean OR e.source_patient_id IS NULL)`,
         [tenantId, options.includeMerged === true],
       );
-      return { items: rows.rows.map(withMergedInto), total: total.rows[0]!.n };
+      return { items: [], total: past.rows[0]!.n };
     });
   }
 

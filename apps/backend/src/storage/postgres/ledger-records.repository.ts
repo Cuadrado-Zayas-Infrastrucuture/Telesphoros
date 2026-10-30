@@ -647,7 +647,7 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 
   private async currentIdsIn(client: PoolClient, tenantId: string, reportIds: string[]): Promise<Map<string, string | null>> {
     const { rows } = await client.query<{ report_id: string; id: string }>(
-      `SELECT e.report_id::text AS report_id, e.id::text AS id FROM evaluations e WHERE e.id IN (${CURRENT_EVALUATIONS_SQL}) AND e.report_id = ANY($2::uuid[])`,
+      `SELECT e.report_id::text AS report_id, e.id::text AS id FROM evaluations e WHERE e.id IN (${currentEvaluationsSql('$2')}) AND e.report_id = ANY($2::uuid[])`,
       [tenantId, reportIds],
     );
     const found = new Map(rows.map((r) => [r.report_id, r.id]));
@@ -1035,12 +1035,14 @@ const LINK_APPLIES = `d.report_sha256 = r.sha256 AND d.object_version = r.object
  * this", and nobody has said the older one is what to rely on instead. An evaluation is not active when its last correction (the one with
  * no child) is a retraction or a supersession; no corrections, or a last reinstatement, means active.
  * Uses `$1` for the tenant. Computed in one statement, so a list built from it is consistent.
+ * With `reportsParam` (the name of a uuid[] parameter, e.g. `$2`) only those reports are looked at: the newest evaluation of a report is the same
+ * whichever other reports are read, so the answer for them is unchanged, but the work no longer grows with every report the tenant has.
  */
-const CURRENT_EVALUATIONS_SQL = `
+const currentEvaluationsSql = (reportsParam?: string) => `
   SELECT newest.id
     FROM (SELECT DISTINCT ON (a.report_id) a.id, a.tenant_id, a.report_id
             FROM evaluations a
-           WHERE a.tenant_id = $1
+           WHERE a.tenant_id = $1${reportsParam ? ` AND a.report_id = ANY(${reportsParam}::uuid[])` : ''}
            ORDER BY a.report_id, a.seq DESC) newest
    WHERE NOT EXISTS (
      -- M2.1c-1: a report whose patient link was rejected for the file it holds now is quarantined, and nothing on it is current.
@@ -1051,6 +1053,7 @@ const CURRENT_EVALUATIONS_SQL = `
      SELECT 1 FROM corrections c
       WHERE c.tenant_id = newest.tenant_id AND c.evaluation_id = newest.id AND c.kind IN ('retraction', 'supersession')
         AND NOT EXISTS (SELECT 1 FROM corrections n WHERE n.tenant_id = c.tenant_id AND n.previous_correction_id = c.id))`;
+const CURRENT_EVALUATIONS_SQL = currentEvaluationsSql();
 
 /**
  * The key under which "the same evaluation" is recognised: what was evaluated (capture and acceptance), with which knowledge and

@@ -182,7 +182,7 @@ test('reports pagination, keyboard download, reviewer access and accessibility',
   await page.screenshot({ path: `test-results/l2-reports-${test.info().project.name}.png`, fullPage: true });
   await page.getByRole('button', { name: 'Back to reports', exact: true }).click();
   await openWorkspaceNavigation(page);
-  await page.getByRole('link', { name: 'Overview', exact: true }).click();
+  await page.locator('header.workspace-navigation').getByRole('link', { name: /^Telesphoros/ }).first().click();
   await expect(page.getByRole('heading', { name: 'Synthetic report storage' })).toBeVisible();
   await expect(page.getByRole('main')).toContainText('clinical processing is disabled');
   await expect(page.getByRole('link', { name: 'Upload a synthetic report' })).toHaveCount(0);

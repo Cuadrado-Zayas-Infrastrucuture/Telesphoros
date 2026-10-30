@@ -281,11 +281,22 @@ Drafts [#146](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Rema
 - **gitleaks compilation inputs are cached** by setup-go (OS, architecture, resolved Go release and the hash of `.github/ci/gitleaks.version`, a one-line file holding the exact gitleaks pin; `cache.test.mjs` keeps it equal to the install command and the step name). There is no repository `go.sum`, so that file is the explicit dependency input. It used to be `ci.yml`, so every workflow edit discarded the cache. Source installation and the full-history scan run on both cold and warm caches.
 - **Docker uses a scoped GitHub Actions layer cache** (`api-amd64-v1`), with bounded import/export waits and non-blocking export failures. Lock/workspace inputs are fetched before source is copied; the subsequent frozen install is offline. Both image exports, attestations, vulnerability scanning, and the runtime rehearsal remain mandatory. Cache restore misses rebuild normally; no test/scan result is cached. GitHub's branch/ref cache isolation applies, so a PR cache is not reusable by main. The existing cache storage limit is not raised.
 - **The Terraform provider lock file is committed.** `versions.tf` constrains AWS to `~> 6.67`; the current lock selects AWS 6.68.0 and archive 2.8.1. Provider updates must preserve the reviewed lock/checksums and supported platforms; CI does not resolve an unreviewed newest 5.x provider.
-- **Native GitHub secret scanning / code scanning** are not configured here. On a private repository on the Team plan they are
-  paid add-ons (Secret Protection, Code Security, per active committer). **Accepted gap, founder decision 2026-10-20 (audit
-  finding INF-18):** not bought for now; the compensating controls are the required gitleaks full-history scan (`secret-scan`)
-  and Dependabot security updates. Revisit before the first real user. If bought, turn them on in Settings → Code security and
-  add CodeQL to CI in its own pull request.
+- **Native GitHub code scanning and secret scanning are on.** They are repository settings, not files here. As read with
+  `gh api` on 2026-10-30:
+  - **CodeQL default setup** (configured 2026-10-23): languages `actions`, `javascript-typescript` and `python`, the
+    default query suite, on standard runners, for pull requests, `main` and a weekly schedule.
+  - **Secret scanning and push protection** are enabled. Validity checks, non-provider patterns and AI detection are off.
+  - **Alerts:** 0 open code-scanning alerts out of 22 ever raised (7 fixed, six of them by PRs #9 and #10; 15 dismissed
+    after the 2026-10-23 triage found none real). 0 secret-scanning alerts.
+
+  CodeQL is **advisory**: the ruleset does not require it, so a new alert does not block a merge. Making it a gate is a
+  ruleset change in its own pull request. gitleaks (`secret-scan`) stays the required secret gate.
+
+  **INF-18 is superseded (founder decision 2026-10-30).** It was accepted on 2026-10-20 as a paid add-on for a private
+  repository. The repository is public, where both tools are free, and both have run since 2026-10-23.
+
+  To re-check, run both read-only commands; a setting is not proved off until they say so:
+  `gh api 'repos/{owner}/{repo}' --jq .security_and_analysis` and `gh api 'repos/{owner}/{repo}/code-scanning/default-setup'`.
 
 ### Isolated service profiles and the joining gate
 

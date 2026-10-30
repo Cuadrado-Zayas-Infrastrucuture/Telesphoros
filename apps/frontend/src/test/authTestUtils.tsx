@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import type { Role } from '@telesphoros/shared-types';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { vi } from 'vitest';
@@ -57,4 +57,17 @@ export function renderApp(path: string, options: { signedInAs?: Role[]; client?:
     </AuthProvider>,
   );
   return { ...result, client, router, fetchImpl: fetchImpl as unknown as ReturnType<typeof fakeFetch> };
+}
+
+/**
+ * Signs in (landing on Settings, the one page every member has) and then moves to `path`. Signing in from the home page now lands on the chat home for
+ * clinical roles (specs/024), so a test of the signed-in home page itself reaches it as a person would: by navigating there after signing in.
+ */
+export async function renderSignedInAt(path: string, options: { signedInAs: Role[]; fetchImpl?: typeof fetch }) {
+  const result = renderApp('/settings', options);
+  await screen.findByRole('button', { name: /^(Collapse|Expand) sidebar$/ });
+  await act(async () => {
+    await result.router.navigate(path);
+  });
+  return result;
 }

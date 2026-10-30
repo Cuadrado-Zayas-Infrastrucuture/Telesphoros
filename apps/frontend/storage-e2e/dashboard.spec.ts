@@ -14,7 +14,7 @@ test('real report reads filter and paginate without retaining the previous selec
     expect(response.status()).toBe(201);
   }
   await openWorkspaceNavigation(page);
-  await page.getByRole('link', { name: 'Reports', exact: true }).click();
+  await page.getByRole('link', { name: 'All reports', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Reports' })).toBeVisible();
   await selectReportsPatient(page, fixture);
   await expect(page.getByText('Page 1 of 2. 21 records.', { exact: true })).toBeVisible();

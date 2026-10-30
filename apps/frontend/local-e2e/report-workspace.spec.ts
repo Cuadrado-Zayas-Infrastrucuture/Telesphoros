@@ -15,7 +15,7 @@ test('report selection opens a drawer and restores the row focus without replaci
   const fixture = await signInWithPatient(page);
   const response = await page.request.post(`${fixture.api}/api/v1/reports`, { headers: fixture.headers, data: { patientId: fixture.id, type: 'structured', filename: 'sidebar-synthetic.json', sizeBytes: 2 } });
   expect(response.status()).toBe(201);
-  await openWorkspaceNavigation(page); await page.getByRole('link', { name: 'Reports', exact: true }).click();
+  await openWorkspaceNavigation(page); await page.getByRole('link', { name: 'All reports', exact: true }).click();
   await selectReportsPatient(page, fixture);
   const row = page.getByRole('button', { name: 'Open sidebar-synthetic.json' });
   await row.click();

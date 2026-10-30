@@ -1,13 +1,17 @@
-import { useRef, useState, type KeyboardEvent } from 'react';
-import { NavLink } from 'react-router-dom';
-import { ChartColumn, FileText, Home, LogOut, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, Settings, Sparkles, Upload, X } from 'lucide-react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
+import { ChartColumn, FileText, LogOut, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, Settings, Sparkles, SquarePen, Upload, X } from 'lucide-react';
 import productMark from '@/assets/telesphoros-shield-rx.png';
 import { useAuth } from '@/auth/AuthProvider';
 import { ADMIN_ROLES, CLINICAL_READ_ROLES, primaryRole, WRITER_ROLES } from '@/auth/roles';
-import { LOCAL_WORKSPACE_PATH, localWorkspaceAvailable } from '@/lib/localWorkspace';
+import { SidebarPatients } from '@/components/workspace/SidebarPatients';
+import { SidebarReports } from '@/components/workspace/SidebarReports';
+import { LOCAL_WORKSPACE_PATH, localWorkspaceAvailable, WORKSPACE_PATH } from '@/lib/localWorkspace';
 import { readSidebarCollapsed, writeSidebarCollapsed } from '@/lib/sidebarPreference';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
+
+type PanelItem = { kind: 'link'; to: string; label: string; icon: typeof FileText; show: boolean } | { kind: 'reports' | 'patients'; show: boolean };
 
 /**
  * The frame of every signed-in page (specs/018-unified-sidebar). On desktop it collapses to icons, remembered in this browser; the layout
@@ -24,19 +28,57 @@ export function WorkspaceSidebar() {
     });
   }
   const toggle = useRef<HTMLButtonElement>(null);
-  const links = [
+  const header = useRef<HTMLElement>(null);
+  const canRead = roles.some((role) => CLINICAL_READ_ROLES.includes(role));
+  // The local previews promise to make no API request of their own (local-e2e checks it), so their pages keep the panel's lists out.
+  const { pathname } = useLocation();
+  const lists = canRead && !pathname.startsWith('/local-');
+  // The feature panel (specs/024 D2): these items, in this order, each only for the roles that may use it. A string is a link; a section is a list on the page.
+  const everything: PanelItem[] = [
     ...(localWorkspaceAvailable()
       ? [
-          { to: LOCAL_WORKSPACE_PATH, label: 'Workspace', icon: Sparkles, show: true },
-          { to: '/local-interpretation', label: 'Chat preview', icon: MessageSquare, show: true },
+          { kind: 'link' as const, to: LOCAL_WORKSPACE_PATH, label: 'Workspace', icon: Sparkles, show: true },
+          { kind: 'link' as const, to: '/local-interpretation', label: 'Chat preview', icon: MessageSquare, show: true },
         ]
       : []),
-    { to: '/reports', label: 'Reports', icon: FileText, show: roles.some((role) => CLINICAL_READ_ROLES.includes(role)) },
-    { to: '/reports/upload', label: 'Upload report', icon: Upload, show: roles.some((role) => WRITER_ROLES.includes(role)) },
-    { to: '/usage', label: 'Usage', icon: ChartColumn, show: roles.some((role) => ADMIN_ROLES.includes(role)) },
-    { to: '/settings', label: 'Settings', icon: Settings, show: status === 'signedIn' },
-    { to: '/', label: 'Overview', icon: Home, show: true },
-  ].filter((link) => link.show);
+    { kind: 'link', to: WORKSPACE_PATH, label: 'New chat', icon: SquarePen, show: status === 'signedIn' },
+    { kind: 'reports', show: lists },
+    { kind: 'patients', show: lists },
+    { kind: 'link', to: '/reports/upload', label: 'Upload report', icon: Upload, show: roles.some((role) => WRITER_ROLES.includes(role)) },
+    { kind: 'link', to: '/reports', label: 'All reports', icon: FileText, show: canRead },
+    { kind: 'link', to: '/usage', label: 'Usage', icon: ChartColumn, show: roles.some((role) => ADMIN_ROLES.includes(role)) },
+    { kind: 'link', to: '/settings', label: 'Settings', icon: Settings, show: status === 'signedIn' },
+  ];
+  const items = everything.filter((item) => item.show);
+  // The open drawer (phones only: the menu button is hidden on desktop) keeps Tab inside it and closes on Escape from anywhere in it.
+  useEffect(() => {
+    if (!open) return;
+    const handle = (event: globalThis.KeyboardEvent) => {
+      const frame = header.current;
+      if (!frame || !(document.activeElement instanceof Node) || !frame.contains(document.activeElement)) return;
+      if (event.key === 'Escape') {
+        setOpen(false);
+        toggle.current?.focus();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const controls = [...frame.querySelectorAll<HTMLElement>('a[href], button, input, select, textarea')].filter(
+        (element) => !element.matches(':disabled') && element.tabIndex >= 0 && element.getClientRects().length > 0,
+      );
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handle);
+    return () => document.removeEventListener('keydown', handle);
+  }, [open]);
   function dismiss(event: KeyboardEvent<HTMLElement>) {
     if (event.key === 'Escape' && open) {
       setOpen(false);
@@ -44,7 +86,7 @@ export function WorkspaceSidebar() {
     }
   }
   return (
-    <header className={cn('workspace-navigation', collapsed && 'is-collapsed')}>
+    <header ref={header} className={cn('workspace-navigation', collapsed && 'is-collapsed')}>
       <div className="workspace-brand-row">
         <NavLink to="/" onClick={() => setOpen(false)} className="workspace-brand inline-flex min-w-0 items-center gap-2 rounded-sm">
           <img src={productMark} alt="Telesphoros shield and Rx logo" width="64" height="66" loading="eager" className="brand-mark h-auto w-16 shrink-0" />
@@ -71,26 +113,33 @@ export function WorkspaceSidebar() {
         <nav aria-label="Primary">
           <p className="workspace-group-label mb-3 px-3 text-xs font-medium text-muted-foreground">Workspace</p>
           <ul className="flex flex-col gap-1">
-            {links.map(({ to, label, icon: Icon }) => (
-              <li key={to}>
-                <NavLink
-                  to={to}
-                  end
-                  onKeyDown={dismiss}
-                  onClick={() => setOpen(false)}
-                  title={collapsed ? label : undefined}
-                  className={({ isActive }) =>
-                    cn(
-                      'flex min-h-control items-center gap-3 rounded-md px-3 py-2 text-sm font-medium hover:bg-muted',
-                      isActive ? 'bg-muted text-primary' : 'text-muted-foreground',
-                    )
-                  }
-                >
-                  <Icon aria-hidden="true" className="size-4 shrink-0" />
-                  <span className="workspace-link-label">{label}</span>
-                </NavLink>
-              </li>
-            ))}
+            {items.map((item) =>
+              item.kind === 'link' ? (
+                <li key={item.to}>
+                  <NavLink
+                    to={item.to}
+                    end
+                    data-panel-item={item.label}
+                    onKeyDown={dismiss}
+                    onClick={() => setOpen(false)}
+                    title={collapsed ? item.label : undefined}
+                    className={({ isActive }) =>
+                      cn(
+                        'flex min-h-control items-center gap-3 rounded-md px-3 py-2 text-sm font-medium hover:bg-muted',
+                        isActive ? 'bg-muted text-primary' : 'text-muted-foreground',
+                      )
+                    }
+                  >
+                    <item.icon aria-hidden="true" className="size-4 shrink-0" />
+                    <span className="workspace-link-label">{item.label}</span>
+                  </NavLink>
+                </li>
+              ) : (
+                <li key={item.kind} className="workspace-panel-item">
+                  {item.kind === 'reports' ? <SidebarReports /> : <SidebarPatients />}
+                </li>
+              ),
+            )}
           </ul>
         </nav>
         <div className="workspace-account flex flex-col gap-3 border-t border-divider pt-4">

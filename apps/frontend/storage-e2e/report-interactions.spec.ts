@@ -12,7 +12,7 @@ test('report loading preserves layout and focus, honors reduced motion and recov
   }
   // The application intentionally keeps its session in memory; use its own navigation.
   await openWorkspaceNavigation(page);
-  await page.getByRole('link', { name: 'Reports', exact: true }).click();
+  await page.getByRole('link', { name: 'All reports', exact: true }).click();
   await selectReportsPatient(page, fixture);
   const report = page.getByRole('button', { name: 'Open synthetic-interaction.json', exact: true });
   await expect(report).toBeVisible();

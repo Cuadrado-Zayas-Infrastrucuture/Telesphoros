@@ -6,7 +6,7 @@ const primary = (page: import('@playwright/test').Page) => page.getByRole('navig
 test('Settings and Usage share the sidebar with Reports and Upload', async ({ page }) => {
   await signInAs(page, 'alice', '/settings');
   await openWorkspaceNavigation(page);
-  for (const name of ['Reports', 'Upload report', 'Settings']) await expect(primary(page).getByRole('link', { name, exact: true })).toBeVisible();
+  for (const name of ['New chat', 'Upload report', 'All reports', 'Settings']) await expect(primary(page).getByRole('link', { name, exact: true })).toBeVisible();
   await expect(page.locator('header.workspace-navigation')).toBeVisible();
 });
 
@@ -28,10 +28,10 @@ test.describe('desktop collapse', () => {
       expect(await axeViolations(page)).toEqual([]);
       await page.screenshot({ path: `test-results/sidebar/collapsed-${dark ? 'dark' : 'light'}-${info.project.name}.png` });
       // The choice holds across in-page navigation, and expanding brings the names back.
-      await primary(page).getByRole('link', { name: 'Reports', exact: true }).click();
+      await primary(page).getByRole('link', { name: 'All reports', exact: true }).click();
       await expect(sidebar).toHaveClass(/is-collapsed/);
       await page.getByRole('button', { name: 'Expand sidebar' }).click();
-      await expect(primary(page).getByText('Reports', { exact: true })).toBeVisible();
+      await expect(primary(page).getByText('All reports', { exact: true })).toBeVisible();
     });
   }
 });
@@ -50,8 +50,8 @@ test('on a phone the sidebar stays a menu, and a desktop collapse never hides it
 test('signed in, the landing header offers the way back into the workspace and no Sign out', async ({ page }) => {
   await signInAs(page, 'alice', '/settings');
   await openWorkspaceNavigation(page);
-  await primary(page).getByRole('link', { name: 'Overview', exact: true }).click();
+  await page.locator('header.workspace-navigation').getByRole('link', { name: /^Telesphoros/ }).first().click();
   const banner = page.getByRole('banner');
-  await expect(banner.getByRole('link', { name: 'Open workspace' })).toHaveAttribute('href', '/reports');
+  await expect(banner.getByRole('link', { name: 'Open workspace' })).toHaveAttribute('href', '/workspace');
   await expect(banner.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
 });

@@ -116,14 +116,15 @@ export class PostgresReportsRepository extends ReportsRepository {
       // `$2::uuid IS NULL OR patient_id = $2` keeps ONE static query text for both filtered and unfiltered lists.
       // The patient filter means the patient's whole group (a merged patient and the one it was merged into), so a bookmark to either finds everything.
       const where = 'tenant_id = $1 AND deleted_at IS NULL AND ($2::uuid IS NULL OR patient_id IN (SELECT patient_group_ids($1, $2::uuid)))';
-      const rows = await client.query<ReportRow>(`SELECT ${COLUMNS} FROM reports WHERE ${where} ORDER BY seq LIMIT $3 OFFSET $4`, [
-        tenantId,
-        filter.patientId ?? null,
-        limit,
-        offset,
-      ]);
-      const total = await client.query<{ n: number }>(`SELECT count(*)::int AS n FROM reports WHERE ${where}`, [tenantId, filter.patientId ?? null]);
-      return { items: rows.rows.map(toRecord), total: total.rows[0]!.n };
+      // The total rides on the page's own statement (a scalar subquery, run once), so the page keeps its early stop on the `seq` index and both
+      // come from one snapshot. A page with no rows carries no total; at offset 0 that means there are no reports, and past the end it is asked for once.
+      const { rows } = await client.query<ReportRow & { total: number }>(
+        `SELECT ${COLUMNS}, (SELECT count(*)::int FROM reports WHERE ${where}) AS total FROM reports WHERE ${where} ORDER BY seq LIMIT $3 OFFSET $4`,
+        [tenantId, filter.patientId ?? null, limit, offset],
+      );
+      if (rows.length > 0 || offset === 0) return { items: rows.map(toRecord), total: rows[0]?.total ?? 0 };
+      const past = await client.query<{ n: number }>(`SELECT count(*)::int AS n FROM reports WHERE ${where}`, [tenantId, filter.patientId ?? null]);
+      return { items: [], total: past.rows[0]!.n };
     });
   }
 
