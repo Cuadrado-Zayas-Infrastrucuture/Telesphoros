@@ -963,8 +963,11 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 
   /** Appends the record's event as the last statement and returns the projection that was hashed. */
   private async finish(client: PoolClient, tenantId: string, table: RecordTable, id: string): Promise<InsertResult> {
-    await appendEvent(this.ledger, tenantId, client, table, id, await this.eventIdOf(client, table, id));
-    return { record: await this.mustOne(client, tenantId, table, id), created: true };
+    const { projection } = await appendEvent(this.ledger, tenantId, client, table, id, await this.eventIdOf(client, table, id));
+    // Not loaded again: the append has just read and hashed it, and loading it once more would run while the tenant's head lock is held.
+    // Row-level security already limits the read to the tenant; this is the second, independent check (as in `one`).
+    if (projection.tenantId !== tenantId) throw new Error('A record written in this transaction could not be read back.');
+    return { record: projection as Projected, created: true };
   }
 
   private async eventIdOf(client: PoolClient, table: RecordTable, id: string): Promise<string> {
