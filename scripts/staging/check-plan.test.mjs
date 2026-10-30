@@ -186,42 +186,55 @@ test('the plan checker CLI is read-only, fails closed, and does not echo invalid
 });
 
 // The SES change after stage A: address identity -> its domain, so Cognito's mail is DKIM-signed as the domain (DMARC p=reject).
-function sesFixture() {
-  const pool = (sourceArn) => ({ name: 'telesphoros-staging', deletion_protection: 'INACTIVE', mfa_configuration: 'ON',
-    email_configuration: [{ email_sending_account: 'DEVELOPER', from_email_address: 'no-reply@staging.telesphoros.app', source_arn: sourceArn }] });
+// Applied in two targeted plans (Terraform marks both `complete: false`): first the identity and the notifier policy, then, once
+// SES reports the domain verified, the user pool on its own. Cognito refuses an unverified identity (staging, 2026-10-30).
+const IDENTITY = { address: 'aws_sesv2_email_identity.from', mode: 'managed', change: { actions: ['delete', 'create'], before: { email_identity: 'no-reply@staging.telesphoros.app' }, after: { email_identity: 'staging.telesphoros.app' }, after_unknown: { arn: true } } };
+const POLICY = { address: 'aws_iam_role_policy.password_notifier', mode: 'managed', change: { actions: ['update'], before: { name: 'send-notice', policy: '{}' }, after: { name: 'send-notice' }, after_unknown: { policy: true } } };
+const pool = (sourceArn) => ({ name: 'telesphoros-staging', deletion_protection: 'INACTIVE', mfa_configuration: 'ON',
+  email_configuration: [{ email_sending_account: 'DEVELOPER', from_email_address: 'no-reply@staging.telesphoros.app', source_arn: sourceArn }] });
+const POOL = { address: 'aws_cognito_user_pool.main', mode: 'managed', change: { actions: ['update'], before: pool(`arn:aws:ses:${REGION}:${ACCOUNT}:identity/no-reply@staging.telesphoros.app`), after: pool(`arn:aws:ses:${REGION}:${ACCOUNT}:identity/staging.telesphoros.app`), after_unknown: {} } };
+function sesPlan(...changes) {
   return {
-    format_version: '1.2', complete: true, applyable: true, errored: false,
+    format_version: '1.2', complete: false, applyable: true, errored: false,
     variables: { deployment_profile: { value: 'synthetic' }, environment: { value: 'staging' } },
-    resource_changes: [
-      { address: 'aws_sesv2_email_identity.from', mode: 'managed', change: { actions: ['delete', 'create'], before: { email_identity: 'no-reply@staging.telesphoros.app' }, after: { email_identity: 'staging.telesphoros.app' }, after_unknown: { arn: true } } },
-      { address: 'aws_cognito_user_pool.main', mode: 'managed', change: { actions: ['update'], before: pool(`arn:aws:ses:${REGION}:${ACCOUNT}:identity/no-reply@staging.telesphoros.app`), after: pool(null), after_unknown: { email_configuration: [{ source_arn: true }] } } },
-      { address: 'aws_iam_role_policy.password_notifier', mode: 'managed', change: { actions: ['update'], before: { name: 'send-notice', policy: '{}' }, after: { name: 'send-notice' }, after_unknown: { policy: true } } },
+    resource_changes: [...structuredClone(changes),
       { address: 'data.aws_iam_policy_document.password_notifier', mode: 'data', change: { actions: ['read'] } },
-      { address: 'aws_s3_bucket.reports', mode: 'managed', change: { actions: ['no-op'] } },
-    ],
+      { address: 'aws_s3_bucket.reports', mode: 'managed', change: { actions: ['no-op'] } }],
   };
 }
 
-test('SES: accepts exactly the identity replace, the pool email-source update and the notifier policy update', () => {
-  assert.deepEqual(planProblems(sesFixture(), 'SES'), []);
+test('SES: accepts the two targeted applies (identity + policy, then the pool alone), though Terraform marks them incomplete', () => {
+  assert.deepEqual(planProblems(sesPlan(IDENTITY, POLICY), 'SES'), []);
+  assert.deepEqual(planProblems(sesPlan(POOL), 'SES'), []);
+  assert.deepEqual(planProblems(sesPlan(POLICY), 'SES'), []);
 });
 
-test('SES: refuses a replaced user pool, any other pool change, a foreign domain, a missing change and anything extra', () => {
+test('SES: refuses the identity and the pool in one plan, which Cognito rejects while the new identity is unverified', () => {
+  assert.ok(planProblems(sesPlan(IDENTITY, POLICY, POOL), 'SES').some((problem) => /in one plan/.test(problem)));
+});
+
+test('SES: refuses a replaced user pool, any other pool change, a foreign domain, an empty plan, errors and anything extra', () => {
   const cases = [
-    ['pool replaced', (plan) => { plan.resource_changes[1].change.actions = ['delete', 'create']; }, /never replaced/],
-    ['pool MFA changed', (plan) => { plan.resource_changes[1].change.after.mfa_configuration = 'OFF'; }, /only the email configuration's SES source ARN/],
-    ['pool sender changed', (plan) => { plan.resource_changes[1].change.after.email_configuration[0].from_email_address = 'x@evil.example'; }, /only the email configuration's SES source ARN/],
-    ['pool other value unknown', (plan) => { plan.resource_changes[1].change.after_unknown.mfa_configuration = true; }, /only the email configuration's SES source ARN/],
-    ['identity to another domain', (plan) => { plan.resource_changes[0].change.after.email_identity = 'evil.example'; }, /own domain/],
-    ['identity updated, not replaced', (plan) => { plan.resource_changes[0].change.actions = ['update']; }, /must be replaced/],
-    ['no pool change', (plan) => { plan.resource_changes.splice(1, 1); }, /updated in place/],
-    ['extra resource', (plan) => { plan.resource_changes.push({ address: 'aws_s3_bucket.reports_copy', mode: 'managed', change: { actions: ['create'], before: null, after: {} } }); }, /unexpected change/],
-    ['production', (plan) => { plan.variables.deployment_profile.value = 'production'; }, /staging\/synthetic/],
+    ['pool replaced', () => { const plan = sesPlan(POOL); plan.resource_changes[0].change.actions = ['delete', 'create']; return plan; }, /never replaced/],
+    ['pool MFA changed', () => { const plan = sesPlan(POOL); plan.resource_changes[0].change.after.mfa_configuration = 'OFF'; return plan; }, /only the email configuration's SES source ARN/],
+    ['pool sender changed', () => { const plan = sesPlan(POOL); plan.resource_changes[0].change.after.email_configuration[0].from_email_address = 'x@evil.example'; return plan; }, /only the email configuration's SES source ARN/],
+    ['pool other value unknown', () => { const plan = sesPlan(POOL); plan.resource_changes[0].change.after_unknown.mfa_configuration = true; return plan; }, /only the email configuration's SES source ARN/],
+    ['identity to another domain', () => { const plan = sesPlan(IDENTITY, POLICY); plan.resource_changes[0].change.after.email_identity = 'evil.example'; return plan; }, /own domain/],
+    ['identity updated, not replaced', () => { const plan = sesPlan(IDENTITY, POLICY); plan.resource_changes[0].change.actions = ['update']; return plan; }, /must be replaced/],
+    ['policy replaced', () => { const plan = sesPlan(POLICY); plan.resource_changes[0].change.actions = ['delete', 'create']; return plan; }, /in-place update/],
+    ['empty plan', () => sesPlan(), /changes nothing/],
+    ['errored plan', () => { const plan = sesPlan(POOL); plan.errored = true; return plan; }, /free of errors/],
+    ['extra resource', () => { const plan = sesPlan(POOL); plan.resource_changes.push({ address: 'aws_s3_bucket.reports_copy', mode: 'managed', change: { actions: ['create'], before: null, after: {} } }); return plan; }, /unexpected change/],
+    ['production', () => { const plan = sesPlan(POOL); plan.variables.deployment_profile.value = 'production'; return plan; }, /staging\/synthetic/],
   ];
-  for (const [name, mutate, expected] of cases) {
-    const plan = sesFixture();
-    mutate(plan);
-    const problems = planProblems(plan, 'SES');
+  for (const [name, build, expected] of cases) {
+    const problems = planProblems(build(), 'SES');
     assert.ok(problems.some((problem) => expected.test(problem)), `${name}: expected ${expected}, got ${JSON.stringify(problems)}`);
   }
+});
+
+test('stages A/B/C still require a complete plan (only SES is checked change by change)', () => {
+  const plan = fixture('A');
+  plan.complete = false;
+  assert.ok(planProblems(plan, 'A').some((problem) => /complete/.test(problem)));
 });

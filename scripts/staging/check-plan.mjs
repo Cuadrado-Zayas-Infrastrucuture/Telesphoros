@@ -76,11 +76,14 @@ const REPLACE = [canonical(['delete', 'create']), canonical(['create', 'delete']
 const withoutEmailSource = (pool) => ({ ...pool, email_configuration: (pool.email_configuration ?? []).map(({ source_arn: _ignored, ...rest }) => rest) });
 
 /**
- * The one change after stage A that moves the SES sender from an address identity to its domain (DKIM, so the domain's DMARC
- * policy accepts Cognito's mail). Exactly three changes, nothing else: the identity is replaced by the address's own domain, the
- * user pool is updated in place with only its SES source ARN changing (a replaced pool deletes every account), and the notifier's
- * policy is updated in place. That policy is unknown at plan time because it names the new identity's ARN; guard.test.mjs checks
- * its text instead.
+ * The change after stage A that moves the SES sender from an address identity to its domain (DKIM, so the domain's DMARC policy
+ * accepts Cognito's mail). It is applied in TWO targeted plans, because Cognito refuses an SES identity that is not verified yet
+ * and the new domain verifies only once its DKIM CNAMEs are in DNS:
+ *   1. the identity (replaced by the address's own domain) and the notifier's policy (updated in place);
+ *   2. after SES reports the domain verified, the user pool (updated in place; only its SES source ARN changes).
+ * A plan may hold any of those changes and nothing else, but never the identity and the pool together. A targeted plan is always
+ * `complete: false`, so completeness is not required here: every change in the plan is checked instead. The policy is unknown at
+ * plan time because it names the new identity's ARN; guard.test.mjs checks its text.
  */
 function sesProblems(plan, need) {
   const problems = [];
@@ -96,19 +99,26 @@ function sesProblems(plan, need) {
   for (const address of seen.keys()) {
     if (![SES_IDENTITY, SES_POOL, SES_NOTIFIER_POLICY].includes(address)) problems.push(`${address}: unexpected change; the SES change touches only the identity, the user pool's email source and the notifier policy`);
   }
+  need(seen.size > 0, 'the plan changes nothing');
   const identity = seen.get(SES_IDENTITY);
-  const before = identity?.change.before?.email_identity;
-  const after = identity?.change.after?.email_identity;
-  need(identity && REPLACE.includes(identity.actions), `${SES_IDENTITY}: must be replaced (address identity to domain identity)`);
-  need(typeof before === 'string' && before.split('@').length === 2 && after === before.split('@')[1], `${SES_IDENTITY}: the new identity must be the old address's own domain`);
   const pool = seen.get(SES_POOL);
-  need(pool?.actions === canonical(['update']), `${SES_POOL}: must be updated in place, never replaced (a new pool deletes every account)`);
-  if (pool?.actions === canonical(['update'])) {
-    const { before: old, after: next, after_unknown: unknownAfter } = pool.change;
-    const unknownElsewhere = unknownAfter && Object.entries(unknownAfter).some(([key, value]) => key !== 'email_configuration' && unknown(value));
-    need(old && next && !unknownElsewhere && canonical(withoutEmailSource(old)) === canonical(withoutEmailSource(next)), `${SES_POOL}: only the email configuration's SES source ARN may change`);
+  const policy = seen.get(SES_NOTIFIER_POLICY);
+  need(!(identity && pool), `${SES_IDENTITY} and ${SES_POOL} in one plan: apply the identity, wait until SES reports it verified, then plan the user pool on its own (Cognito refuses an unverified identity)`);
+  if (identity) {
+    const before = identity.change.before?.email_identity;
+    const after = identity.change.after?.email_identity;
+    need(REPLACE.includes(identity.actions), `${SES_IDENTITY}: must be replaced (address identity to domain identity)`);
+    need(typeof before === 'string' && before.split('@').length === 2 && after === before.split('@')[1], `${SES_IDENTITY}: the new identity must be the old address's own domain`);
   }
-  need(seen.get(SES_NOTIFIER_POLICY)?.actions === canonical(['update']), `${SES_NOTIFIER_POLICY}: expected an in-place update`);
+  if (pool) {
+    need(pool.actions === canonical(['update']), `${SES_POOL}: must be updated in place, never replaced (a new pool deletes every account)`);
+    if (pool.actions === canonical(['update'])) {
+      const { before: old, after: next, after_unknown: unknownAfter } = pool.change;
+      const unknownElsewhere = unknownAfter && Object.entries(unknownAfter).some(([key, value]) => key !== 'email_configuration' && unknown(value));
+      need(old && next && !unknownElsewhere && canonical(withoutEmailSource(old)) === canonical(withoutEmailSource(next)), `${SES_POOL}: only the email configuration's SES source ARN may change`);
+    }
+  }
+  if (policy) need(policy.actions === canonical(['update']), `${SES_NOTIFIER_POLICY}: expected an in-place update`);
   return problems;
 }
 
@@ -118,7 +128,8 @@ export function planProblems(plan, stage, record) {
   if (!['A', 'B', 'C', 'SES'].includes(stage)) return ['stage must be A, B, C or SES'];
   if (stage === 'SES') {
     if (!plan || !/^1\./.test(plan.format_version ?? '') || !Array.isArray(plan.resource_changes)) return ['expected terraform show -json plan output with resource_changes'];
-    need(plan.errored !== true && plan.complete !== false && plan.applyable !== false, 'plan must be complete, applicable and free of errors');
+    // Targeted on purpose (see sesProblems), so `complete` is false; every change is checked instead.
+    need(plan.errored !== true && plan.applyable !== false, 'plan must be applicable and free of errors');
     need(plan.variables?.deployment_profile?.value === 'synthetic' && plan.variables?.environment?.value === 'staging', 'only the staging/synthetic profile is supported');
     need(!(plan.resource_drift ?? []).some((entry) => canonical(entry.change?.actions) !== canonical(['no-op'])), 'resource drift requires separate review');
     // sesProblems reports through `need` as well, so it runs before `problems` is read.
