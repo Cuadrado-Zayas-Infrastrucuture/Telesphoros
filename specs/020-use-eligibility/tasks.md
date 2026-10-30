@@ -6,6 +6,27 @@ Derived from [plan.md](plan.md). Each slice is its own branch and PR off a fresh
 
 ## E1a: data provenance
 
+### Slice plan (T102; founder, 2026-10-30)
+
+Read at `main` `9fceca6f`. The create paths and columns are traced in the table below. There is no origin or provenance column anywhere today.
+
+| # | Decision | Why |
+| --- | --- | --- |
+| P1 | Provenance attaches to **`report_captures`** and **`evaluations`**, not to `reports` (founder's choice). A capture's parent is its report. | Both are ledgered and both have the document's sha256 when they are created. A `reports` row is a legacy, unledgered declaration written before its PDF arrives. |
+| P2 | One `data_provenance` row per fact, written in the same transaction as the fact. The record is append-only and ledgered, with a new event type `data-provenance`. The migration (0062) restates 0060's ledger set plus this one. | E7, FR-05 |
+| P3 | `origin` is written by the server, never taken from a request. It is `synthetic` while the pipeline is refused in production (`apps/backend/src/config/env.ts`, `LAB_REPORT_PIPELINE`). `real` is allowed by the CHECK, but no code path writes it yet. There is no default. | R21, FR-07 |
+| P4 | Provenance links to permissions and never encodes them: no purpose, consent or eligibility column. | E7 |
+
+| Field (E7) | Capture | Evaluation |
+| --- | --- | --- |
+| origin | `synthetic` | `synthetic` |
+| interpretation | null: the lab's own interpretation is not separated yet | `software-derived` |
+| originating document | `pdf_sha256`; the report's object version | the capture's `pdf_sha256`, through its parent |
+| receipt time | the report's `uploaded_at` | null: not a receipt |
+| transformation | runner and poppler version | engine version and knowledge set |
+| parent asset | the report | the capture acceptance |
+| source organization and type, context, collection location | null, "not known yet": nothing collects them | null, same |
+
 | # | Task | Requirement | Done when |
 | --- | --- | --- | --- |
 | T101 | Branch `feat/data-provenance` off a freshly fetched `main` | E8 | Branch tip equals `origin/main` |

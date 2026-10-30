@@ -91,7 +91,7 @@ describe('the restore check "ledger chain"', () => {
     const report = await restoreAndVerify({ allowUnauthenticated: true, adminUrl: adminUrl(), backupDir, targetDatabase: name });
     expect(report.checks.filter((c) => !c.ok)).toEqual([]);
     expect(chainCheck(report)).toMatchObject({ ok: true });
-    expect(chainCheck(report)!.detail).toMatch(/^1 tenant ledger\(s\), 5 events: chain, records and notes verified in full$/);
+    expect(chainCheck(report)!.detail).toMatch(/^1 tenant ledger\(s\), 7 events: chain, records and notes verified in full$/);
     expect(report.ok).toBe(true);
 
     // A throwaway restore stays a throwaway: no checkpoint (and so no event) was added by the check.
@@ -108,7 +108,7 @@ describe('the restore check "ledger chain"', () => {
     expect(chainCheck(report)!.detail).toBe('ledger 1 of 1 could not be walked to the end (2 events checked)');
     expect(report.checks.filter((c) => !c.ok).map((c) => c.name)).toEqual(['ledger chain']);
     // Control: the same backup with room to walk everything passes.
-    expect(chainCheck(await restoreAndVerify({ allowUnauthenticated: true, adminUrl: adminUrl(), backupDir, ledgerChainMaxEvents: 5 }))).toMatchObject({ ok: true });
+    expect(chainCheck(await restoreAndVerify({ allowUnauthenticated: true, adminUrl: adminUrl(), backupDir, ledgerChainMaxEvents: 7 }))).toMatchObject({ ok: true });
   });
 
   it('is NOT ok for a restored ledger with an edited record, names the kind and sequence number, and shows no value or tenant', async () => {

@@ -50,7 +50,7 @@ describe('a capture decision with a retry identity', () => {
     expect(again.record.id).toBe(first.record.id);
     expect(await count(t, 'capture_acceptances')).toBe(1);
     expect(await count(t, 'event_notes')).toBe(1);
-    expect(await count(t, 'ledger_events')).toBe(2); // the capture and the one decision
+    expect(await count(t, 'ledger_events')).toBe(3); // the capture, its provenance (spec 020 E1a) and the one decision
   });
 
   it('does not make the evaluation stale: accept, evaluate, repeat the accept, and the evaluation still stands on the newest decision', async () => {
@@ -131,7 +131,7 @@ describe('a capture decision with a retry identity', () => {
     }
     expect(await count(t, 'capture_acceptances')).toBe(1);
     expect(await count(t, 'event_notes')).toBe(1);
-    expect(await count(t, 'ledger_events')).toBe(2);
+    expect(await count(t, 'ledger_events')).toBe(3); // the capture, its provenance and the one decision
   });
 
   it('does not change what the ledger records: the projection of a keyed decision has the same fields as an unkeyed one and shows no retry identity', async () => {

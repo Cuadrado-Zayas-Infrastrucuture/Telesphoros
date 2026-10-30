@@ -53,6 +53,8 @@ export class CapturesService {
   async capture(principal: Principal, reportId: string): Promise<CaptureOutcome> {
     const ledger = this.need(this.ledger);
     const runner = this.need(this.runner);
+    // Named first (spec 020 E1a): a capture that cannot say whether its data is synthetic is refused before any file is read.
+    const origin = this.pipeline.dataOrigin();
     const report = await this.requireUploadedLabPdf(principal, reportId);
 
     let fetched;
@@ -101,6 +103,7 @@ export class CapturesService {
         textScalars,
         popplerVersion: read.popplerVersion,
         runner: runner.name,
+        origin,
       });
       return { capture: await this.present(principal, stored.record), created: stored.created };
     } catch (error) {

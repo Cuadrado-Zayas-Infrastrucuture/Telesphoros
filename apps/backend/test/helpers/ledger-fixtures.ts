@@ -57,6 +57,7 @@ export const captureFor = (r: SeededReport, text = 'synthetic text', over: Parti
   textScalars: text.length,
   popplerVersion: '26.03.0',
   runner: 'fake',
+  origin: 'synthetic',
   ...over,
 });
 
@@ -101,6 +102,7 @@ export const absentState: GeneStateResult = { gene: 'CYP2D6', state: 'absent', p
 
 export function evaluationFor(r: SeededReport, captureId: string, acceptanceId: string, over: Partial<EvaluationInput> = {}): EvaluationInput {
   return {
+    origin: 'synthetic',
     patientId: r.patientId,
     reportId: r.reportId,
     captureId,
@@ -116,4 +118,29 @@ export function evaluationFor(r: SeededReport, captureId: string, acceptanceId: 
     geneStates: [canonicalState, absentState],
     ...over,
   };
+}
+
+/**
+ * TEST ONLY, for the tests that populate facts at head and then revert migrations beneath spec 020's 0062 to exercise an older guard. Every fact now has a
+ * provenance row, and 0062's down refuses a populated table (that refusal is tested in data-provenance.pg-spec.ts), so these tests would stop at 0062 and
+ * never reach the guard they are about. This removes the provenance rows and their ledger events as the cluster superuser, with triggers off, and moves
+ * each head back to its newest remaining event. The ledger chain is NOT valid afterwards: use it only where the test goes on to migrate, never to verify.
+ */
+export async function forgetProvenance(adminDatabaseUrl: string): Promise<void> {
+  await withAdmin(adminDatabaseUrl, async (c) => {
+    await c.query('BEGIN');
+    try {
+      await c.query('SET LOCAL session_replication_role = replica');
+      await c.query('DELETE FROM data_provenance');
+      await c.query(`DELETE FROM ledger_events WHERE event_type = 'data-provenance'`);
+      await c.query(
+        `UPDATE ledger_heads h SET seq = e.seq, record_hash = e.record_hash
+           FROM (SELECT DISTINCT ON (tenant_id) tenant_id, seq, record_hash FROM ledger_events ORDER BY tenant_id, seq DESC) e WHERE e.tenant_id = h.tenant_id`,
+      );
+      await c.query('COMMIT');
+    } catch (error) {
+      await c.query('ROLLBACK');
+      throw error;
+    }
+  });
 }

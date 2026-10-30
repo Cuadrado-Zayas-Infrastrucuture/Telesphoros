@@ -104,7 +104,7 @@ describe('append-only: nobody updates, deletes or truncates, the owner included'
     expect((await attempt(pg.appUrl, tenantId, 'syn-x', (c) => c.query(`UPDATE ledger_heads SET seq = 99`)))?.code).toBe('42501');
     const own = await run(pg.appUrl, tenantId, 'syn-x', (c) => c.query(`SELECT count(*)::int AS n FROM ledger_events`));
     const foreign = await run(pg.appUrl, other, 'syn-x', (c) => c.query(`SELECT count(*)::int AS n FROM ledger_events`));
-    expect([own.rows[0].n, foreign.rows[0].n]).toEqual([8, 0]);
+    expect([own.rows[0].n, foreign.rows[0].n]).toEqual([10, 0]); // spec 020 E1a: the capture and the evaluation each add a provenance event
   });
 });
 
@@ -229,7 +229,7 @@ describe('the commit-time contract: a record and its event exist together or not
     expect(await head(t)).toEqual(base);
     // And the ledger is not wedged: a normal write succeeds afterwards.
     await repo.insertCapture(t, r.uploader, captureFor(r));
-    expect(await events(t)).toBe(1);
+    expect(await events(t)).toBe(2); // the capture and its provenance (spec 020 E1a)
   });
 
   it('a connection killed mid-transaction leaves nothing and releases the head lock', async () => {
@@ -250,7 +250,7 @@ describe('the commit-time contract: a record and its event exist together or not
     expect(await rows(t, 'report_captures')).toBe(0);
     expect(await events(t)).toBe(0);
     await repo.insertCapture(t, r.uploader, captureFor(r)); // would block for the lock timeout if the lock had leaked
-    expect(await events(t)).toBe(1);
+    expect(await events(t)).toBe(2); // the capture and its provenance (spec 020 E1a)
   });
 });
 
@@ -342,8 +342,8 @@ describe('redaction of a note', () => {
       async (c) => (await c.query(`SELECT body, redacted_at IS NOT NULL AS redacted, redaction_basis_code, body_sha256 FROM event_notes WHERE id = $1`, [note.id])).rows[0],
     );
     expect(row).toEqual({ body: '[redacted]', redacted: true, redaction_basis_code: 'phi-in-note', body_sha256: note.bodySha });
-    expect(await events(s.tenantId)).toBe(9);
-    expect(await verifier.verify(s.tenantId)).toMatchObject({ status: 'ok', eventsChecked: 9 });
+    expect(await events(s.tenantId)).toBe(11); // spec 020 E1a: two of these are provenance events
+    expect(await verifier.verify(s.tenantId)).toMatchObject({ status: 'ok', eventsChecked: 11 });
     // The parent record's own event still verifies: it committed to the digest, not to the text.
     expect(await repo.findEvaluation(s.tenantId, s.e.record.id)).toEqual(s.e.record);
   });
@@ -356,7 +356,7 @@ describe('redaction of a note', () => {
     expect((await redact(s.tenantId, note.id, 'phi-in-note', pg.verifierUrl))?.code).toBe('42501');
     expect(await redact(s.tenantId, note.id, 'legal-order')).toBeUndefined();
     expect((await redact(s.tenantId, note.id, 'legal-order'))?.code).toBe('23000');
-    expect(await events(s.tenantId)).toBe(9);
+    expect(await events(s.tenantId)).toBe(11); // spec 020 E1a: two of these are provenance events
   });
 
   it('cannot redact a note of a tenant other than the one in force', async () => {
