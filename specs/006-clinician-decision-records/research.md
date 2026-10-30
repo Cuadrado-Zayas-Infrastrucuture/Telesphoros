@@ -61,7 +61,7 @@ Owner: **F** founder (clinical, product, policy), **E** engineering, **C** couns
 | R18 | Population descriptors (6.8) | none in backend | absent-after-search | Later | F | later | n/a |
 | R19 | Aggregate release, disclosure controls (9.3) | none; Tableau note in STATUS ("not planned in detail") | planned-only | D05 + D07; counsel | F, C | D07 | T20, T21, T27 |
 | R20 | Analysis-run state machine on existing jobs (10) | Job queue + fenced worker (`0023`, `0050`, `0051`) | partial (infrastructure only) | D07 | E | D07 | T22 |
-| R21 | Synthetic vs empirical classification (5.12, T28) | Pipeline switch refuses production (`apps/backend/src/lab-reports/pipeline-switch.ts`); every row is synthetic by construction | partial | Explicit data-origin field when real data is possible | F | D05 | T28 |
+| R21 | Synthetic vs empirical classification (5.12, T28) | Configuration validation refuses `LAB_REPORT_PIPELINE=enabled` in production (`apps/backend/src/config/env.ts`); every row is synthetic by construction | partial | Explicit data-origin field when real data is possible | F | D05 | T28 |
 | R22 | Old payloads and ledger verify after change (12, T24) | Verifier re-derives from rows (`apps/backend/src/ledger/verifier.ts:344`); projection lists columns (`projections.ts:165`) | implemented | Prove unchanged | E | D01a/b | T24 |
 | R23 | Backup/restore with new tables and roles (T25) | Restore suites (`apps/backend/test/helpers/database.ts:191`), ledger chain check on restore | implemented (reuse) | New table must survive restore | E | D01b | T25 |
 
