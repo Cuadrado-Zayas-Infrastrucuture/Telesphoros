@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 
-const PAGES = ['HomePage', 'UploadReportPage', 'NotFoundPage'];
+const PAGES = ['HomePage', 'UploadReportPage', 'NotFoundPage', 'WorkspacePage'];
 const ENTRY_GZIP_BUDGET_KB = 150;
 
 const manifest = JSON.parse(readFileSync('dist/.vite/manifest.json', 'utf8'));

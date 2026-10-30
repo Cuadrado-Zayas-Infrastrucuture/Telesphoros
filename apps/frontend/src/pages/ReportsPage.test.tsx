@@ -5,6 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Role } from '@telesphoros/shared-types';
 import { API, RECOVERY_SCOPE, renderApp } from '@/test/authTestUtils';
 import { downloadReport } from '@/lib/ownedStorageApi';
+// These tests are about the Reports page's own reads; the feature panel's lists (specs/024) would add reads of the same endpoints. The panel has its own tests.
+vi.mock('@/components/workspace/SidebarReports', () => ({ SidebarReports: () => null }));
+vi.mock('@/components/workspace/SidebarPatients', () => ({ SidebarPatients: () => null }));
 vi.mock('@/lib/storageMode', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/storageMode')>()), ownedStorageMode: () => true }));
 vi.mock('@/lib/ownedStorageApi', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/ownedStorageApi')>()), downloadReport: vi.fn(async () => undefined) }));
 beforeEach(() => vi.mocked(downloadReport).mockReset());

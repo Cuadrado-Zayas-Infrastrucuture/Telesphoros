@@ -28,6 +28,8 @@ export const routes: RouteObject[] = [
       {
         element: <ProtectedRoute />,
         children: [
+          // Specs/024: the chat-first home, in every build, for any signed-in member. Attaching is for writers; the panel's lists are for clinical readers.
+          { path: 'workspace', lazy: async () => ({ Component: (await import('@/pages/WorkspacePage')).default }) },
           // Every signed-in member, including one with no role: it shows their own account, roles and session, nothing clinical.
           { path: 'settings', lazy: async () => ({ Component: (await import('@/pages/SettingsPage')).default }) },
           // Every build: the API authorizes each read. Only file download is owned-storage only (ReportsPage).

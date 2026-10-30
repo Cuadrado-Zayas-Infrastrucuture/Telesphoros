@@ -5,7 +5,7 @@ import { axe } from 'vitest-axe';
 import { describe, expect, it } from 'vitest';
 import { routes } from '@/app/routes';
 import { AuthProvider } from '@/auth/AuthProvider';
-import { API, fakeClient, fakeFetch, renderApp } from '@/test/authTestUtils';
+import { API, fakeClient, fakeFetch, renderApp, renderSignedInAt } from '@/test/authTestUtils';
 
 const heading = (name: string | RegExp) => screen.findByRole('heading', { level: 1, name });
 
@@ -88,8 +88,8 @@ describe('protected pages', () => {
   });
 
   it('offer the way back into the workspace on the landing header, with no sign-out there', async () => {
-    renderApp('/', { signedInAs: ['clinician'] });
-    expect(await screen.findByRole('link', { name: 'Open workspace' })).toHaveAttribute('href', '/reports');
+    await renderSignedInAt('/', { signedInAs: ['clinician'] });
+    expect(await screen.findByRole('link', { name: 'Open workspace' })).toHaveAttribute('href', '/workspace');
     expect(within(screen.getByRole('banner')).queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
   });
 
