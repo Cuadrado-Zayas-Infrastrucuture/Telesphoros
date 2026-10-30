@@ -146,7 +146,9 @@ Extra inputs: `app_callback_urls`, `app_logout_urls`, `cognito_domain_prefix`, `
 The SES identity is the **domain** of `ses_from_email`, not the address. After apply, add the three CNAMEs from
 `terraform output ses_dkim_records` in Cloudflare, DNS-only, and keep them: SES verifies the domain once they resolve and
 DKIM-signs as it. The domain's DMARC record (`p=reject; sp=reject; adkim=s`) rejects mail that is not signed as the domain,
-so Cognito emails send only once this identity shows as verified. No verification email is sent.
+so Cognito emails send only once this identity shows as verified. No verification email is sent. Cognito refuses an
+unverified identity, so on an existing user pool the pool's update is a second apply after verification; see
+[staging-plan-review.md](../../docs/ops/staging-plan-review.md#after-stage-a-the-ses-senders-domain-identity).
 
 | Setting | From (output) |
 | --- | --- |
