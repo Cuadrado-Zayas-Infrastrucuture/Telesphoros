@@ -151,19 +151,15 @@ export class EvaluationsService {
   async list(principal: Principal, query: EvaluationListQuery): Promise<Paginated<EvaluationSummaryDto>> {
     const ledger = this.need(this.ledger);
     const { current, page, pageSize, ...filter } = query;
-    const { items: records, total } = await ledger.listEvaluations(
-      principal.tenantId,
-      { ...filter, current: current === 'true' },
-      { offset: (page - 1) * pageSize, limit: pageSize },
-    );
-    const contexts = await ledger.evaluationContexts(
-      principal.tenantId,
-      records.map((r) => r.id),
-    );
-    const disputes = await ledger.activeDisputeCount(principal.tenantId);
-    const reportIds = [...new Set(records.map((r) => r.reportId as string))];
-    const currentIds = await ledger.currentEvaluationIds(principal.tenantId, reportIds);
-    const links = await ledger.patientLinkStates(principal.tenantId, reportIds);
+    // One transaction for the page and everything shown beside it (it used to be five).
+    const {
+      items: records,
+      total,
+      contexts,
+      currentIds,
+      links,
+      activeDisputes: disputes,
+    } = await ledger.evaluationPage(principal.tenantId, { ...filter, current: current === 'true' }, { offset: (page - 1) * pageSize, limit: pageSize });
     const out: EvaluationSummaryDto[] = [];
     for (const record of records) {
       const context = contexts.get(record.id);
