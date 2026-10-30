@@ -34,6 +34,13 @@ import '@/styles/one-screen.css';
 
 const NEW_PATIENT = 'new';
 const QUESTION_ID = 'one-screen-question';
+// Short labels fit one line (specs/023 D4); each still asks the full question the sample engine knows.
+const SHORT_LABELS: Record<(typeof DEMO_QUESTIONS)[number], string> = {
+  'Explain this example': 'Explain this',
+  'What evidence is missing?': 'Missing evidence',
+  'What are the limitations?': 'Limitations',
+};
+const CONFIRMATION = 'I confirm this file contains synthetic data only';
 
 interface Sent {
   id: number;
@@ -216,11 +223,14 @@ export default function LocalWorkspacePage() {
 
   const started = sent.length > 0 || chat.turns.length > 0 || !!chat.pending;
   // The synthetic engine answers only these; offering them keeps the preview honest about what it can say.
+  // Before a conversation they may wrap under the input; once docked they keep to one row so the bar stays short on a phone (D2).
+  // On a phone the docked row drops the arrow and uses smaller text so all three fit without scrolling sideways.
+  const docked = 'shrink-0 whitespace-nowrap max-sm:gap-0 max-sm:px-2.5 max-sm:text-xs max-sm:[&>svg]:hidden';
   const suggestions = !file && !busy && !chat.full && (
-    <div className="mt-3 grid gap-2 sm:grid-cols-3" aria-label="Sample questions">
+    <div role="group" aria-label="Sample questions" className={started ? 'flex gap-2 overflow-x-auto' : 'mt-3 flex flex-wrap justify-center gap-2'}>
       {DEMO_QUESTIONS.map((sample) => (
-        <PromptSuggestion key={sample} onClick={() => void chat.submit(sample)}>
-          {sample}
+        <PromptSuggestion key={sample} title={sample} className={started ? docked : 'shrink-0 whitespace-nowrap'} onClick={() => void chat.submit(sample)}>
+          {SHORT_LABELS[sample]}
         </PromptSuggestion>
       ))}
     </div>
@@ -247,44 +257,48 @@ export default function LocalWorkspacePage() {
         className="border-0 bg-transparent p-0"
       >
         {file && (
+          // Three clean lines (D5): the file and its remove button, its patient, then the same confirmation as the Upload page.
           <div className="one-screen-file">
-            <FileText aria-hidden="true" className="size-4" />
-            <span className="min-w-0 flex-1 truncate font-medium sm:max-w-48 sm:flex-none">{file.name}</span>
-            {/* Beside the name on a phone; at the end of the line on wider screens. */}
-            <Button variant="ghost" size="sm" className="size-11 p-0 sm:order-last" aria-label="Remove file" onClick={() => setFile(null)}>
-              <X aria-hidden="true" className="size-4" />
-            </Button>
-            <span className="text-muted-foreground">for</span>
-            {patients ? (
-              <>
-                <select aria-label="Patient" value={patientId} onChange={(event) => setPatientId(event.target.value)}>
-                  {patients.map((patient) => (
-                    <option key={patient.id} value={patient.id}>
-                      {patient.label}
-                    </option>
-                  ))}
-                  <option value={NEW_PATIENT}>New synthetic patient…</option>
-                </select>
-                {adding && (
-                  <input
-                    aria-label="New patient label"
-                    placeholder="e.g. SYN-004"
-                    maxLength={40}
-                    value={newLabel}
-                    onChange={(event) => setNewLabel(event.target.value)}
-                    className="h-11 w-32 rounded-md border border-border bg-background px-2"
-                  />
-                )}
-              </>
-            ) : (
-              <span className="text-muted-foreground">{patientsError ?? 'loading patients…'}</span>
-            )}
-            <label className="ml-auto inline-flex min-h-11 items-center gap-2">
-              <input type="checkbox" className="size-5 accent-primary" checked={synthetic} onChange={(event) => setSynthetic(event.target.checked)} />
-              Synthetic
+            <div className="flex items-center gap-2">
+              <FileText aria-hidden="true" className="size-4 shrink-0" />
+              <span className="min-w-0 flex-1 truncate font-medium">{file.name}</span>
+              <Button variant="ghost" size="sm" className="size-11 shrink-0 p-0" aria-label="Remove file" onClick={() => setFile(null)}>
+                <X aria-hidden="true" className="size-4" />
+              </Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="text-muted-foreground">for</span>
+              {patients ? (
+                <>
+                  <select aria-label="Patient" value={patientId} onChange={(event) => setPatientId(event.target.value)}>
+                    {patients.map((patient) => (
+                      <option key={patient.id} value={patient.id}>
+                        {patient.label}
+                      </option>
+                    ))}
+                    <option value={NEW_PATIENT}>New synthetic patient…</option>
+                  </select>
+                  {adding && (
+                    <input
+                      aria-label="New patient label"
+                      placeholder="e.g. SYN-004"
+                      maxLength={40}
+                      value={newLabel}
+                      onChange={(event) => setNewLabel(event.target.value)}
+                      className="h-11 w-32 rounded-md border border-border bg-background px-2"
+                    />
+                  )}
+                </>
+              ) : (
+                <span className="text-muted-foreground">{patientsError ?? 'loading patients…'}</span>
+              )}
+            </div>
+            <label className="inline-flex min-h-11 items-center gap-2">
+              <input type="checkbox" className="size-5 shrink-0 accent-primary" checked={synthetic} onChange={(event) => setSynthetic(event.target.checked)} />
+              {CONFIRMATION}
             </label>
             {fileError && (
-              <p role="alert" className="order-last w-full text-destructive">
+              <p role="alert" className="text-destructive">
                 {fileError}
               </p>
             )}
@@ -343,12 +357,16 @@ export default function LocalWorkspacePage() {
         <div className="one-screen-start flex flex-1 flex-col justify-center">
           <div className="one-screen-column">
             <img className="one-screen-mascot mascot-plate" src={mascot} width="162" height="192" loading="eager" alt="Telesphoros mascot in a teal cloak" />
-            <h1 className="mb-6 text-center font-heading text-3xl font-medium">Which report should we read?</h1>
+            {/* The prototype does not interpret reports yet, so the heading does not promise a reading (D3). */}
+            <h1 className="mb-6 text-center font-heading text-3xl font-medium">Start with a synthetic report.</h1>
             {box}
             {suggestions}
             <p className="mt-3 text-center text-sm text-muted-foreground">
               {canAttach ? 'Drop a report here, or attach one. Synthetic reports only.' : 'Ask about a synthetic example report.'}
             </p>
+            <div className="mt-4">
+              <SystemMessage quiet>Synthetic data only. Not for clinical use.</SystemMessage>
+            </div>
             {interrupted && (
               <p className="mt-2 text-center text-sm">
                 An earlier upload was interrupted. <Link to="/reports/upload">Finish or cancel it on the upload page</Link>.
@@ -399,7 +417,7 @@ export default function LocalWorkspacePage() {
             )}
             {chat.error && <SystemMessage error>{chat.error}</SystemMessage>}
           </div>
-          <div className="one-screen-column sticky bottom-0 pt-2 pb-4">
+          <div className="one-screen-column one-screen-dock sticky bottom-0 pt-2 pb-3">
             {away && (
               <div className="mb-2 flex justify-center">
                 <ScrollButton onClick={toLatest} />
@@ -408,11 +426,11 @@ export default function LocalWorkspacePage() {
             {suggestions}
             <div className="mt-2">{box}</div>
           </div>
+          <div className="one-screen-column pb-3">
+            <SystemMessage quiet>Synthetic data only. Not for clinical use.</SystemMessage>
+          </div>
         </>
       )}
-      <div className="one-screen-column pb-3">
-        <SystemMessage quiet>Synthetic data only. Not for clinical use.</SystemMessage>
-      </div>
     </div>
   );
 }
