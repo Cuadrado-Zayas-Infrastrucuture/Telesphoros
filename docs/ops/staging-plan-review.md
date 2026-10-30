@@ -18,7 +18,7 @@ and AWS refuses; each such failure is recorded, not hidden.
 ## Before the first plan
 
 1. Copy `infrastructure/terraform/synthetic-staging.tfvars.example` to a file **outside version control** (`*.tfvars` is gitignored) and replace the three `PLACEHOLDER` lines:
-   `cognito_domain_prefix` (globally unique in the Region), `ses_from_email` (verified in SES; the sandbox only delivers to verified addresses) and `alarm_email` (an inbox a person reads; it must not still be `@example.com`).
+   `cognito_domain_prefix` (globally unique in the Region), `ses_from_email` (its domain becomes the SES identity, verified by the three `ses_dkim_records` CNAMEs after apply; the sandbox only delivers to verified addresses) and `alarm_email` (an inbox a person reads; it must not still be `@example.com`).
 2. Check the hostnames. `web_domain` is a **base domain**: the app is `app.<web_domain>`. `api_domain` is **not** derived from it, and the web page's policy allows exactly `api.<web_domain>`: if they disagree the browser blocks every API call.
    The example sets `api.staging.telesphoros.app`; a guard fails the build if the example drifts.
 3. Complete the separately authorized [backend activation and state-inventory gates](terraform-state.md#main-backend-configuration-source-only), then initialize with `terraform -chdir=infrastructure/terraform init -input=false -backend-config=backend.s3.tfbackend`. Main's partial S3 source wiring does not establish a live backend. Confirm the existing owner with `aws sts get-caller-identity`: the account and the Region are the ones decided in D1. Use only the approved synthetic state key and default workspace; no extra backend overrides.
@@ -89,7 +89,7 @@ grep -nE 'aws_s3_bucket\.backups|aws_kms_key\.backup|automated_backups_replicati
 | Buckets | 3: reports, audit, access-logs, each with a public-access block, encryption and ownership controls; `force_destroy = true`; the audit bucket with Object Lock **GOVERNANCE, 1 day** | `COMPLIANCE` is irreversible and is refused by the profile |
 | Keys | 4 KMS keys (data, audit, API logs, worker logs), deletion window 7 days | short window so a destroy completes |
 | Secrets | 6 secret **containers** (3 database logins, the worker login, the invitation key, the identifier key) with `recovery_window_in_days = 0`; no secret versions | values are filled by hand and by `provision-logins` ([staging-rehearsal.md](staging-rehearsal.md)) |
-| Sign-in | 1 user pool (MFA on, admin-create-only, no SMS), 1 browser client, 1 sign-in domain, 4 groups, `deletion_protection = INACTIVE`; 1 SES identity; 1 Lambda for password notices | invite-only; the SES identity sends a verification email when applied |
+| Sign-in | 1 user pool (MFA on, admin-create-only, no SMS), 1 browser client, 1 sign-in domain, 4 groups, `deletion_protection = INACTIVE`; 1 SES identity; 1 Lambda for password notices | invite-only; the SES identity is the sender's domain and verifies once its three DKIM CNAMEs are in DNS |
 | Audit | 1 trail, **single-Region** (`is_multi_region_trail = false`), 11 log metric filters and 11 alarms, 1 SNS topic and its email subscription | the subscription must be confirmed by the owner or no alarm reaches anyone |
 | API edge | 1 load balancer (HTTPS 443 only, no port-80 listener), 1 listener, 1 rule, 1 target group, 1 certificate and its validation, 1 firewall (WAF) and its association, 1 cluster, 1 log group | the certificate validation blocks the apply until the CNAME exists |
 | Services | **none**: no task definitions, no services | they need `api_image` |
@@ -106,9 +106,47 @@ Check in every task definition: the image is `...@sha256:<64 hex>` (never a tag)
 Tasks and services get a **public address** here (`assign_public_ip = true`) because the synthetic network has no NAT; that is expected in the synthetic profile only.
 **Setting `api_image` starts the services at once**, before the logins and the schema exist, so they will fail until the one-off steps are done: that is expected and described in [staging-rehearsal.md](staging-rehearsal.md).
 
+## After stage A: the SES sender's domain identity
+
+Stage A was applied with SES verifying an **address** (`no-reply@staging.telesphoros.app`). An address identity signs mail as
+`amazonses.com`, and the domain's DMARC record (`p=reject; sp=reject; adkim=s`) rejects that, so Cognito's invitations and reset
+codes would never arrive. `cognito.tf` now makes the identity the address's **domain**, which SES DKIM-signs as. This is the only
+change that may replace a resource after A. It takes **two targeted applies**, because Cognito refuses an SES identity that is
+not verified yet, and the new domain verifies only once its DKIM CNAMEs are in DNS. `check-plan SES` checks every change in each
+plan (a `-target` plan is always `complete: false`) and refuses the identity and the user pool in the same plan:
+
+| Change | Plan | Expected action |
+| --- | --- | --- |
+| `aws_sesv2_email_identity.from` | 1 | replaced: `no-reply@staging.telesphoros.app` becomes `staging.telesphoros.app`. The address identity may already be verified; its mail is signed as `amazonses.com`, which DMARC rejects, so nothing that works is lost |
+| `aws_iam_role_policy.password_notifier` | 1 | updated in place: the identity ARN and an `ses:FromAddress` condition for the no-reply address |
+| `aws_cognito_user_pool.main` | 2 | **updated in place**; only `email_configuration.source_arn` changes. A replaced pool deletes every account: stop |
+
+Run each command with the same AWS identity, Terraform binary and data directory as the stage A apply (`aws sts
+get-caller-identity` must show the staging account first). From the identity's replacement until plan 2 is applied, Cognito
+cannot send email; invite nobody in between.
+
+```sh
+umask 077
+# Plan 1: the identity and the notifier policy
+terraform -chdir=infrastructure/terraform plan -var-file=<yours> -var enable_web_hosting=false \
+  -target=aws_sesv2_email_identity.from -target=aws_iam_role_policy.password_notifier -out=ses.tfplan
+terraform -chdir=infrastructure/terraform show -json ses.tfplan > infrastructure/terraform/.terraform/ses.plan.json
+node scripts/staging/check-plan.mjs SES infrastructure/terraform/.terraform/ses.plan.json
+```
+
+1. Apply exactly `ses.tfplan` (founder-run, as for A).
+2. `terraform -chdir=infrastructure/terraform output -json ses_dkim_records`: add the three CNAMEs in Cloudflare, **DNS-only**, and keep them.
+3. Wait until `aws sesv2 get-email-identity --email-identity staging.telesphoros.app --query '[VerifiedForSendingStatus, DkimAttributes.Status]'` prints `true` and `"SUCCESS"` (minutes to an hour; up to 72 hours). Amazon may publish only one of the three keys at first; SES checks the CNAMEs.
+4. Plan 2, the user pool alone: `plan … -target=aws_cognito_user_pool.main -out=pool.tfplan`, then `show -json` and `check-plan.mjs SES` as above. Expect `0 to add, 1 to change, 0 to destroy`, then apply exactly `pool.tfplan`. Any earlier saved plan is stale after an apply; plan again rather than reusing it.
+5. The `no-reply@staging.telesphoros.app` destination address in Cloudflare Email Routing (added for the old verification email) is no longer needed.
+6. SES is still in its sandbox: invite only addresses verified in SES until production access is granted. Invite yourself once and check the message headers show `dkim=pass` and `dmarc=pass`.
+
+Applied in staging on 2026-10-30 in this order, after a first single plan with all three changes failed at the user pool.
+
 ## Stop and ask when
 
-- anything is destroyed or replaced; any update appears in A/B; C updates anything beyond the four specified repository-only policy changes, or any one of those changes is missing;
+- anything is destroyed or replaced (except the one SES identity replacement above, checked with `check-plan SES`); any update appears in A/B;
+- `check-plan SES` refuses a plan, or the user pool appears in the same plan as the SES identity; C updates anything beyond the four specified repository-only policy changes, or any one of those changes is missing;
 - a relaxation (`force_destroy`, no deletion protection, a 7-day key window, `recovery_window_in_days = 0`, a public task address) appears for a resource that is not in the tables above, or `deployment_profile` is not `synthetic`;
 - a resource named in the quick checks appears; an unapproved Region, a backups bucket or a CloudTrail trail that is multi-Region appears. The web certificate in `us-east-1` and global CloudFront are expected by `web.tf`, even when the primary data Region differs; they are not off-site backups;
 - a value that should be known is `(known after apply)` and the table says it is a literal (bucket names contain the account id, which the offline plan replaces with a random string, so read the real plan's names for the account you decided in D1);

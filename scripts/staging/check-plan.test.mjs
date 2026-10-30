@@ -184,3 +184,93 @@ test('the plan checker CLI is read-only, fails closed, and does not echo invalid
     writeFileSync(file, 'SYNTHETIC_PRIVATE_CANARY'); const bad = run(['C', file]); assert.notEqual(bad.status, 0); assert.doesNotMatch(bad.stdout + bad.stderr, /SYNTHETIC_PRIVATE_CANARY/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+// The SES change after stage A: address identity -> its domain, so Cognito's mail is DKIM-signed as the domain (DMARC p=reject).
+// Applied in two targeted plans (Terraform marks both `complete: false`): first the identity and the notifier policy, then, once
+// SES reports the domain verified, the user pool on its own. Cognito refuses an unverified identity (staging, 2026-10-30).
+const IDENTITY = { address: 'aws_sesv2_email_identity.from', mode: 'managed', change: { actions: ['delete', 'create'], before: { email_identity: 'no-reply@staging.telesphoros.app' }, after: { email_identity: 'staging.telesphoros.app' }, after_unknown: { arn: true } } };
+const POLICY = { address: 'aws_iam_role_policy.password_notifier', mode: 'managed', change: { actions: ['update'], before: { name: 'send-notice', policy: '{}' }, after: { name: 'send-notice' }, after_unknown: { policy: true } } };
+const pool = (sourceArn) => ({ name: 'telesphoros-staging', deletion_protection: 'INACTIVE', mfa_configuration: 'ON',
+  email_configuration: [{ email_sending_account: 'DEVELOPER', from_email_address: 'no-reply@staging.telesphoros.app', source_arn: sourceArn }] });
+const POOL = { address: 'aws_cognito_user_pool.main', mode: 'managed', change: { actions: ['update'], before: pool(`arn:aws:ses:${REGION}:${ACCOUNT}:identity/no-reply@staging.telesphoros.app`), after: pool(`arn:aws:ses:${REGION}:${ACCOUNT}:identity/staging.telesphoros.app`), after_unknown: {} } };
+function sesPlan(...changes) {
+  return {
+    format_version: '1.2', complete: false, applyable: true, errored: false,
+    variables: { deployment_profile: { value: 'synthetic' }, environment: { value: 'staging' } },
+    resource_changes: [...structuredClone(changes),
+      { address: 'data.aws_iam_policy_document.password_notifier', mode: 'data', change: { actions: ['read'] } },
+      { address: 'aws_s3_bucket.reports', mode: 'managed', change: { actions: ['no-op'] } }],
+  };
+}
+
+test('SES: accepts the two targeted applies (identity + policy, then the pool alone), though Terraform marks them incomplete', () => {
+  assert.deepEqual(planProblems(sesPlan(IDENTITY, POLICY), 'SES'), []);
+  assert.deepEqual(planProblems(sesPlan(POOL), 'SES'), []);
+  assert.deepEqual(planProblems(sesPlan(POLICY), 'SES'), []);
+});
+
+test('SES: refuses the identity and the pool in one plan, which Cognito rejects while the new identity is unverified', () => {
+  assert.ok(planProblems(sesPlan(IDENTITY, POLICY, POOL), 'SES').some((problem) => /in one plan/.test(problem)));
+});
+
+test('SES: refuses a replaced user pool, any other pool change, a foreign domain, an empty plan, errors and anything extra', () => {
+  const cases = [
+    ['pool replaced', () => { const plan = sesPlan(POOL); plan.resource_changes[0].change.actions = ['delete', 'create']; return plan; }, /never replaced/],
+    ['pool MFA changed', () => { const plan = sesPlan(POOL); plan.resource_changes[0].change.after.mfa_configuration = 'OFF'; return plan; }, /only the email configuration's SES source ARN/],
+    ['pool sender changed', () => { const plan = sesPlan(POOL); plan.resource_changes[0].change.after.email_configuration[0].from_email_address = 'x@evil.example'; return plan; }, /only the email configuration's SES source ARN/],
+    ['pool other value unknown', () => { const plan = sesPlan(POOL); plan.resource_changes[0].change.after_unknown.mfa_configuration = true; return plan; }, /only the email configuration's SES source ARN/],
+    ['identity to another domain', () => { const plan = sesPlan(IDENTITY, POLICY); plan.resource_changes[0].change.after.email_identity = 'evil.example'; return plan; }, /own domain/],
+    ['identity updated, not replaced', () => { const plan = sesPlan(IDENTITY, POLICY); plan.resource_changes[0].change.actions = ['update']; return plan; }, /must be replaced/],
+    ['policy replaced', () => { const plan = sesPlan(POLICY); plan.resource_changes[0].change.actions = ['delete', 'create']; return plan; }, /in-place update/],
+    ['empty plan', () => sesPlan(), /changes nothing/],
+    ['errored plan', () => { const plan = sesPlan(POOL); plan.errored = true; return plan; }, /free of errors/],
+    ['extra resource', () => { const plan = sesPlan(POOL); plan.resource_changes.push({ address: 'aws_s3_bucket.reports_copy', mode: 'managed', change: { actions: ['create'], before: null, after: {} } }); return plan; }, /unexpected change/],
+    ['production', () => { const plan = sesPlan(POOL); plan.variables.deployment_profile.value = 'production'; return plan; }, /staging\/synthetic/],
+  ];
+  for (const [name, build, expected] of cases) {
+    const problems = planProblems(build(), 'SES');
+    assert.ok(problems.some((problem) => expected.test(problem)), `${name}: expected ${expected}, got ${JSON.stringify(problems)}`);
+  }
+});
+
+test('stages A/B/C still require a complete plan (only SES is checked change by change)', () => {
+  const plan = fixture('A');
+  plan.complete = false;
+  assert.ok(planProblems(plan, 'A').some((problem) => /complete/.test(problem)));
+});
+
+// RDS moves latest_restorable_time on its own every few minutes; a running database must not block every later plan.
+const restoreMark = (overrides = {}) => ({ address: 'aws_db_instance.main', mode: 'managed', type: 'aws_db_instance', change: {
+  actions: ['update'], before: { identifier: 'telesphoros-staging', latest_restorable_time: '2026-10-30T01:00:00Z' },
+  after: { identifier: 'telesphoros-staging', latest_restorable_time: '2026-10-30T01:05:00Z' }, ...overrides } });
+
+test('drift that only moves the database restore mark is not review drift, in every stage', () => {
+  for (const stage of ['A', 'B', 'C']) {
+    const plan = fixture(stage); plan.resource_drift = [restoreMark()];
+    assert.deepEqual(planProblems(plan, stage, RECORD), [], stage);
+  }
+  const ses = sesPlan(POOL); ses.resource_drift = [restoreMark()];
+  assert.deepEqual(planProblems(ses, 'SES'), []);
+});
+
+test('any other drift is still refused, including the restore mark beside another change', () => {
+  const cases = [
+    ['another attribute too', restoreMark({ after: { identifier: 'renamed', latest_restorable_time: '2026-10-30T01:05:00Z' } })],
+    ['same attribute, another type', { ...restoreMark(), address: 'aws_rds_cluster.main', type: 'aws_rds_cluster' }],
+    ['deleted outside Terraform', restoreMark({ actions: ['delete'] })],
+    ['no before', restoreMark({ before: null })],
+    ['nothing moved', restoreMark({ after: { identifier: 'telesphoros-staging', latest_restorable_time: '2026-10-30T01:00:00Z' } })],
+    ['data source', { ...restoreMark(), mode: 'data' }],
+    ['untyped entry', { change: { actions: ['update'] } }],
+  ];
+  for (const [name, entry] of cases) {
+    for (const stage of ['A', 'B', 'C']) {
+      const plan = fixture(stage); plan.resource_drift = [entry];
+      assert.ok(planProblems(plan, stage, RECORD).some((reason) => reason.includes('drift')), `${name} (${stage})`);
+    }
+    const ses = sesPlan(POOL); ses.resource_drift = [entry];
+    assert.ok(planProblems(ses, 'SES').some((reason) => reason.includes('drift')), `${name} (SES)`);
+  }
+  const both = fixture('B'); both.resource_drift = [restoreMark(), { address: 'aws_s3_bucket.reports', mode: 'managed', type: 'aws_s3_bucket', change: { actions: ['update'], before: { a: 1 }, after: { a: 2 } } }];
+  assert.ok(planProblems(both, 'B', RECORD).some((reason) => reason.includes('drift')), 'restore mark beside real drift');
+});
