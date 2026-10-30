@@ -1,8 +1,9 @@
 # Deployment (design only)
 
-**Nothing is deployed from this repository, and no workflow can deploy.** There is deliberately no deploy workflow:
-Terraform has never been applied, no AWS account is wired to GitHub, the AWS BAA is not executed, and the hosting
-choice below is settled but not deployed. This page records the intended flow so the workflow can be written once the remaining prerequisites are settled.
+**No workflow can deploy.** There is deliberately no deploy workflow: no AWS account is wired to GitHub (the organization's
+service control policy denies GitHub OIDC providers), and the AWS BAA is not executed. Terraform has been applied **by hand**, to one
+synthetic staging environment only; what runs there is in [environments.md](environments.md). This page records the intended flow so the
+workflow can be written once the remaining prerequisites are settled.
 
 For offline preparation of FD-7, start with [foundations readiness](foundations-readiness.md).
 The OIDC/protected-environment flow below is future FD-6 automation. FD-7 proposes
@@ -31,9 +32,9 @@ that a target is empty today.
 
 | Decision | State |
 | --- | --- |
-| Frontend hosting | Founder chose company site on Vercel, product on S3 + CloudFront; H1 configuration is disabled by default, not applied |
+| Frontend hosting | Founder chose company site on Vercel, product on S3 + CloudFront; H1 configuration is disabled by default and applied in synthetic staging only |
 | AWS BAA executed | deferred; **no real patient data until it is** |
-| Remote Terraform state backend and the OIDC roles | not created |
+| Remote Terraform state backend and the OIDC roles | state backend created (staging account); OIDC roles not created |
 | DNS location for both domains | Jan's single Cloudflare account, administered by Jan; Google email records preserved |
 | Backups on a different provider than the database | not met: see the backup requirement in [../database.md](../database.md) |
 
