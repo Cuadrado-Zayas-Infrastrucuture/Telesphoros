@@ -276,6 +276,7 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
     this.status.setFullRunning(true);
     const done = (async () => {
       let allOk = true;
+      let tenantsChecked = 0;
       let lock: PassLock | undefined;
       try {
         if (source === 'background') await this.pause(Math.floor(Math.random() * (this.config.bootPassJitterMs ?? 0)));
@@ -301,6 +302,7 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
             }),
           );
           await this.note(result, source);
+          tenantsChecked += 1;
           // A contained tenant that still fails is expected and already reported; it must not keep the instance "verifying" forever.
           if (result.status !== 'ok' && !(result.status === 'failed' && this.status.hasIncident(tenantId))) allOk = false;
         }
@@ -312,7 +314,12 @@ export class LedgerMonitor implements OnApplicationBootstrap, OnModuleDestroy {
         this.status.setFullRunning(false);
         this.passInProgress = false;
       }
-      if (allOk && !this.stopped) this.status.markFullCompleted();
+      if (allOk && !this.stopped) {
+        this.status.markFullCompleted();
+        // The heartbeat the `api-ledger-check-stale` alarm counts (infrastructure/terraform/api-compute.tf): the walk is silent when it is fine,
+        // so without this line a stopped walk and a healthy one look the same. A count and the source only, never a tenant.
+        this.logger.log({ event: 'ledger-full-check-completed', source, tenantsChecked, message: 'A full check of the record log reached every tenant.' });
+      }
     })();
     return done;
   }

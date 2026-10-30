@@ -106,7 +106,7 @@ missing assets, denied anonymous storage access and staging redirects. Verify
 all actual deployed alarms, including the four worker alarms, with receipt of
 notifications and separate representative real-event/filter evidence. Never paste
 tokens or signed URLs into shared evidence. [Capabilities](../product-capabilities.md)
-and [worker checks](jobs.md#deployment-m23c-written-never-applied) define the scope.
+and [worker checks](jobs.md#deployment-m23c) define the scope.
 
 ## Cleanup boundary
 

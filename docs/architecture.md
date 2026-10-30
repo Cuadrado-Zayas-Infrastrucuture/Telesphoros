@@ -72,5 +72,5 @@ Details of the reader and adapter: [lab-report-reader.md](lab-report-reader.md).
 
 ## Delivery
 CI runs six required checks (`verify`, `database-and-storage`, `browser`, `terraform`, `secret-scan`, `image`) plus an advisory lint; every GitHub
-Action is pinned to a commit SHA ([ops/ci-cd.md](ops/ci-cd.md)). Infrastructure is Terraform that has **never been applied**
-([ops/deployment.md](ops/deployment.md)).
+Action is pinned to a commit SHA ([ops/ci-cd.md](ops/ci-cd.md)). Infrastructure is Terraform, applied by hand to one synthetic
+staging environment and nowhere else ([ops/environments.md](ops/environments.md), [ops/deployment.md](ops/deployment.md)).

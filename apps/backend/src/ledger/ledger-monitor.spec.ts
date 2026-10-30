@@ -476,6 +476,84 @@ describe('LedgerMonitor: the background full walk', () => {
   });
 });
 
+// The heartbeat the `api-ledger-check-stale` alarm counts (infrastructure/terraform/api-compute.tf): one line per full walk that reached every
+// tenant, exactly when readiness may say "up". Silence for 30 hours means the walks stopped, so every way a walk can fall short must stay silent.
+describe('LedgerMonitor: the full-walk heartbeat', () => {
+  let infos: jest.SpyInstance;
+  beforeEach(() => {
+    infos = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+  });
+  const beats = () => infos.mock.calls.flat().filter((c) => c?.event === 'ledger-full-check-completed');
+
+  it('writes one line when the background walk reaches every tenant, with the source and the tenant count only', async () => {
+    const { monitor } = await started(new FakeVerifier(['a', 'b']));
+    expect(beats()).toEqual([{ event: 'ledger-full-check-completed', source: 'background', tenantsChecked: 2, message: expect.any(String) }]);
+    await monitor.onModuleDestroy();
+  });
+
+  it('writes one for each scheduled walk too', async () => {
+    const { monitor } = await started(new FakeVerifier(['a']));
+    await (monitor as unknown as { runFullPass(source: 'scheduled'): Promise<void> }).runFullPass('scheduled');
+    expect(beats().map((b) => b.source)).toEqual(['background', 'scheduled']);
+    await monitor.onModuleDestroy();
+  });
+
+  it('still beats when a tenant is contained: the walk reached every tenant, and the damage has its own alarm', async () => {
+    const verifier = new FakeVerifier(['a', 'b'], (tenantId, options) =>
+      options.mode === 'full' && tenantId === 'a' ? failed(tenantId) : outcome(tenantId, { mode: options.mode ?? 'tail' }),
+    );
+    const { monitor, status } = await started(verifier);
+    expect(status.readiness()).toBe('contained');
+    expect(beats()).toHaveLength(1);
+    expect(JSON.stringify(beats())).not.toMatch(/"a"|"b"/); // no tenant is named
+    await monitor.onModuleDestroy();
+  });
+
+  it.each([
+    ['runs out of time', (t: string, o: VerifyOptions) => (o.mode === 'full' ? outcome(t, { status: 'incomplete', mode: 'full', incompleteReason: 'time' }) : outcome(t))],
+    [
+      'meets a chain over the size limit',
+      (t: string, o: VerifyOptions) => (o.mode === 'full' ? outcome(t, { status: 'incomplete', mode: 'full', incompleteReason: 'size' }) : outcome(t)),
+    ],
+    [
+      'cannot run (a database error)',
+      (t: string, o: VerifyOptions) => {
+        if (o.mode === 'full') throw Object.assign(new Error('terminating connection'), { code: '57P01' });
+        return outcome(t);
+      },
+    ],
+  ] as Array<[string, Answer]>)('stays silent when the walk %s', async (_name, answer) => {
+    const { monitor, status } = await started(new FakeVerifier(['a', 'b'], answer));
+    expect(status.readiness()).toBe('verifying'); // control: the walk really fell short
+    expect(beats()).toEqual([]);
+    await monitor.onModuleDestroy();
+  });
+
+  it('stays silent when the tenant list cannot be read', async () => {
+    const verifier = new FakeVerifier(['a']);
+    const { monitor } = await started(verifier);
+    infos.mockClear();
+    verifier.failTenants = new Error('no route');
+    await (monitor as unknown as { runFullPass(source: 'scheduled'): Promise<void> }).runFullPass('scheduled');
+    expect(beats()).toEqual([]);
+    await monitor.onModuleDestroy();
+  });
+
+  it('stays silent when the application shuts down in the middle of a walk', async () => {
+    const hold = gate<VerifyResult>();
+    const verifier = new FakeVerifier(['a', 'b'], (tenantId, options) =>
+      options.mode === 'full' && tenantId === 'a' ? hold.promise : outcome(tenantId, { mode: options.mode ?? 'tail' }),
+    );
+    const { monitor } = build(verifier);
+    await monitor.onApplicationBootstrap();
+    await untilWalking(verifier);
+    const stopping = monitor.onModuleDestroy();
+    hold.release(outcome('a', { mode: 'full' }));
+    await stopping;
+    expect(beats()).toEqual([]);
+  });
+});
+
 describe('LedgerMonitor: the timer', () => {
   const walks = (v: FakeVerifier) => v.full.length;
 
