@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { Client } from 'pg';
 import { Database } from '../../src/db/database';
 import { IntegrityError } from '../../src/storage/errors';
 import type { PatientsRepository } from '../../src/storage/patients.repository';
@@ -291,5 +292,49 @@ describe('postgres: what only the database can guarantee', () => {
     const withKey = { storageKey: key, contentType: 'text/plain', sha256: 'c'.repeat(64), uploadedAt: stamp() };
     await reports.insert(report(o, p.id, withKey));
     await expect(reports.insert(report(o, p.id, withKey))).rejects.toBeInstanceOf(IntegrityError);
+  });
+
+  it('lists a page and its total in ONE statement, and still gives the total for a page past the end', async () => {
+    const { patients, reports } = stores();
+    const o = tenant();
+    const people = Array.from({ length: 5 }, (_, i) => patient(o, `SYN-L${i + 1}`));
+    for (const p of people) await patients.insert(p);
+    for (const p of people) await reports.insert(report(o, p.id));
+    // Counts the statements that read the two tables: the page and the total used to be two.
+    async function reads<T>(work: () => Promise<T>) {
+      const query = jest.spyOn(Client.prototype, 'query'); // pass through to the REAL application-role PostgreSQL client
+      try {
+        const value = await work();
+        const statements = (query.mock.calls as unknown[][]).filter(
+          (call) => typeof call[0] === 'string' && /^\s*(SELECT|WITH)\b/i.test(call[0]) && /\b(patients|reports)\b/i.test(call[0]),
+        );
+        return { value, statements: statements.length };
+      } finally {
+        query.mockRestore();
+      }
+    }
+    const firstPage = await reads(() => patients.list(o, { offset: 0, limit: 2 }));
+    expect(firstPage.statements).toBe(1);
+    expect(firstPage.value.total).toBe(5);
+    expect(firstPage.value.items.map((p) => p.label)).toEqual(['SYN-L1', 'SYN-L2']);
+    const pastEnd = await reads(() => patients.list(o, { offset: 50, limit: 2 }));
+    expect(pastEnd.statements).toBe(2); // a page with no rows carries no total, so a page past the end asks for it once
+    expect(pastEnd.value).toEqual({ items: [], total: 5 });
+    const noPatients = await reads(() => patients.list(`tenant-${randomUUID()}`, { offset: 0, limit: 2 }));
+    expect(noPatients.statements).toBe(1);
+    expect(noPatients.value).toEqual({ items: [], total: 0 });
+    const reportPage = await reads(() => reports.list(o, { offset: 2, limit: 2 }, {}));
+    expect(reportPage.statements).toBe(1);
+    expect(reportPage.value.total).toBe(5);
+    expect(reportPage.value.items.map((r) => r.patientId)).toEqual([people[2]!.id, people[3]!.id]);
+    const reportsPastEnd = await reads(() => reports.list(o, { offset: 50, limit: 2 }, {}));
+    expect(reportsPastEnd.statements).toBe(2); // a page with no rows carries no total, so a page past the end asks for it once
+    expect(reportsPastEnd.value).toEqual({ items: [], total: 5 });
+    const nothing = await reads(() => reports.list(`tenant-${randomUUID()}`, { offset: 0, limit: 2 }, {}));
+    expect(nothing.statements).toBe(1);
+    expect(nothing.value).toEqual({ items: [], total: 0 });
+    const forOne = await reads(() => reports.list(o, { offset: 0, limit: 20 }, { patientId: people[0]!.id }));
+    expect(forOne.statements).toBe(1);
+    expect(forOne.value.total).toBe(1);
   });
 });
