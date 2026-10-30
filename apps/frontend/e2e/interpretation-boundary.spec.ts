@@ -7,7 +7,7 @@ test('production build has no one-screen workspace route or link (specs/016 OSW-
   await expect(page.locator('a[href="/local-workspace"]')).toHaveCount(0);
   await page.goto('/local-workspace');
   await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Which report should we read?' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Start with a synthetic report.' })).toHaveCount(0);
 });
 
 test('production sign-in from the home page still lands on the home page (specs/022 WMS-1)', async ({ page }) => {

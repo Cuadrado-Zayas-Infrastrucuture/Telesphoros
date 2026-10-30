@@ -38,7 +38,7 @@ There is no plan with both hosting switches off. With the profile's own network 
 The counts are the offline plan of the commit that wrote this page; the root keeps growing, so compare the **shape** below and investigate a large difference, not a small one.
 The merged image registry adds the registry and its retention policy to plan A ([image-push.md](image-push.md)). Read each plan as text: `terraform show a.tfplan > a.txt`.
 
-Plan A against empty state and plan B against A's state are **create-only**: `Plan: N to add, 0 to change, 0 to destroy.` Plan C against B's state also updates the **four existing execution-role policies** listed below. Any other update, any deletion or any replacement is a stop. These are first-bring-up stages, not rules for later releases or an already running environment.
+Plan A against empty state and plan B against A's state are **create-only**: `Plan: N to add, 0 to change, 0 to destroy.` Plan C against B's state also updates the **five existing execution-role policies** listed below. Any other update, any deletion or any replacement is a stop. These are first-bring-up stages, not rules for later releases or an already running environment.
 
 Before an image is set, API hosting already creates these policies with `PullThisRepositoryOnly.Resource` pointing to `arn:aws:ecr:<region>:<account>:repository/none`. C changes that one resource to the repository derived from the digest-pinned `api_image`:
 
@@ -46,6 +46,7 @@ Before an image is set, API hosting already creates these policies with `PullThi
 - `aws_iam_role_policy.api_execution_migrate[0]`
 - `aws_iam_role_policy.api_execution_provision[0]`
 - `aws_iam_role_policy.worker_execution[0]`
+- `aws_iam_role_policy.issuer_execution[0]`
 
 In each policy, only that statement's `Resource` may change. The role, all actions, conditions and other statements must stay the same. No wildcard pull repository is permitted. The image must belong to the selected stack Region; a cross-account or other unexpected transition requires separate review.
 
@@ -101,7 +102,7 @@ Check: aliases are `app.<web_domain>`, `<web_domain>` and `www.<web_domain>`; th
 
 ## What plan C adds (9)
 
-2 services (API and worker, `desired_count = 1` each), 4 task definitions (API, migration, provisioning, worker), the image-gated API alarms (running tasks, unhealthy targets, 5xx), the API's scalable target (held at the desired count; no scaling policy while `api_max_count` is null), **plus the four repository-only policy updates above**. The worker's four alarms and other API/worker foundations are already gated by API hosting; inventory all actual alarms rather than using the earlier resource totals as a current bill of materials.
+2 services (API and worker, `desired_count = 1` each), 4 task definitions (API, migration, provisioning, worker), the image-gated API alarms (running tasks, unhealthy targets, 5xx), the API's scalable target (held at the desired count; no scaling policy while `api_max_count` is null), **plus the five repository-only policy updates above**. The worker's four alarms and other API/worker foundations are already gated by API hosting; inventory all actual alarms rather than using the earlier resource totals as a current bill of materials.
 Check in every task definition: the image is `...@sha256:<64 hex>` (never a tag), `readonlyRootFilesystem = true`, user `10001`, `DATABASE_SSL = require`, no secret in `environment` (secrets come from `secrets` with ARNs), and the migration task has **no task role**.
 Tasks and services get a **public address** here (`assign_public_ip = true`) because the synthetic network has no NAT; that is expected in the synthetic profile only.
 **Setting `api_image` starts the services at once**, before the logins and the schema exist, so they will fail until the one-off steps are done: that is expected and described in [staging-rehearsal.md](staging-rehearsal.md).

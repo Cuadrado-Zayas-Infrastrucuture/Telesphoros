@@ -104,28 +104,39 @@ test('the staged example is in step with its offline test and inside the staging
   assert.deepEqual(stagingProblems(example), []);
 });
 
-test('the first-image update list matches the four existing execution-policy bindings and the review page', () => {
+test('the first-image update list matches the five existing execution-policy bindings and the review page', () => {
   const compute = read('api-compute.tf');
   const worker = read('worker.tf');
+  const issuer = read('issuer.tf');
   const page = readFileSync(new URL('../../docs/ops/staging-plan-review.md', dir), 'utf8');
   const block = (text, header) => {
     const start = text.indexOf(header);
     assert.ok(start >= 0, `missing ${header}`);
     return text.slice(start, text.indexOf('\n}', start) + 2);
   };
-  assert.equal(IMAGE_POLICY_UPDATES.length, 4);
+  assert.equal(IMAGE_POLICY_UPDATES.length, 5);
   for (const address of IMAGE_POLICY_UPDATES) {
     const name = address.match(/^aws_iam_role_policy\.([a-z_]+)\[0\]$/)[1];
-    const source = name === 'worker_execution' ? worker : compute;
+    const source = { worker_execution: worker, issuer_execution: issuer }[name] ?? compute;
     const resource = block(source, `resource "aws_iam_role_policy" "${name}"`);
     assert.match(resource, /count\s*=\s*local\.api_count/);
     assert.ok(resource.includes(`data.aws_iam_policy_document.${name}[0].json`), `${address} must retain its policy document`);
     const policy = block(source, `data "aws_iam_policy_document" "${name}"`);
-    if (name === 'worker_execution') assert.match(policy, /resources\s*=\s*\[local\.api_repository\]/);
+    if (name === 'worker_execution' || name === 'issuer_execution') assert.match(policy, /resources\s*=\s*\[local\.api_repository\]/);
     else assert.match(policy, /source_policy_documents\s*=\s*\[data\.aws_iam_policy_document\.api_execution_common\.json\]/);
     assert.ok(page.includes(address), `the operator must review ${address}`);
   }
   assert.match(block(compute, 'data "aws_iam_policy_document" "api_execution_common"'), /resources\s*=\s*\[local\.api_repository\]/);
+  // The other direction: every role policy built on a document that pulls local.api_repository is on the list. The issuer's was missing until 2026-10-30.
+  const terraform = readdirSync(dir).filter((name) => name.endsWith('.tf')).map(read).join('\n');
+  const pulling = new Set([...terraform.matchAll(/^data "aws_iam_policy_document" "([a-z0-9_]+)" \{\n([\s\S]*?)^\}/gm)]
+    .filter(([, , body]) => /resources\s*=\s*\[local\.api_repository\]|source_policy_documents\s*=\s*\[data\.aws_iam_policy_document\.api_execution_common\.json\]/.test(body))
+    .map(([, name]) => name));
+  const bound = [...terraform.matchAll(/^resource "aws_iam_role_policy" "([a-z0-9_]+)" \{\n([\s\S]*?)^\}/gm)]
+    .filter(([, , body]) => [...pulling].some((name) => body.includes(`data.aws_iam_policy_document.${name}[0].json`)))
+    .map(([, name]) => `aws_iam_role_policy.${name}[0]`);
+  assert.ok(pulling.has('api_execution_common') && bound.length >= 5, 'the scan found the pull documents and their bindings (a floor, so an empty read cannot pass)');
+  assert.deepEqual([...bound].sort(), [...IMAGE_POLICY_UPDATES].sort());
   assert.ok(page.includes('scripts/staging/check-plan.mjs'));
   assert.ok(!page.includes('Plans B and C against the state left by the one before must be create-only too'));
 });
