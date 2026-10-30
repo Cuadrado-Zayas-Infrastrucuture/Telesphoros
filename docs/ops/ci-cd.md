@@ -345,7 +345,7 @@ as a line with the date, the digest and the reason, and release the same commit 
 
 | Date | Digest | Reason |
 |---|---|---|
-| (none yet) | | |
+| 2026-10-30 | `sha256:daa42eb04212809ef99c1d4285dae3166eb71a87ed4e4f5bcf020c681a17c65d` (commit `888979b`) | CI cannot sign: this account's organization SCP denies GitHub OIDC providers. First synthetic staging image, for the demo. Not yet released through CI. |
 
 ### Turning it on
 
