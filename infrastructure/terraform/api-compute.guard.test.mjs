@@ -57,6 +57,7 @@ const PLACEHOLDERS = {
   'aws_s3_bucket.reports.bucket': 'telesphoros-staging-reports-123456789012',
   'join(",", var.api_cors_origins)': 'https://app.example.com',
   'local.api_build': 'sha256-abababababab',
+  'aws_kms_key.data.arn': 'arn:aws:kms:us-east-2:123456789012:key/00000000-0000-4000-8000-000000000000',
 };
 const SECRET_PLACEHOLDERS = {
   DATABASE_URL: 'postgres://app_login@db.example:5432/telesphoros',
@@ -130,6 +131,21 @@ export function apiComputeProblems(tf, sources = {}) {
   need(!text.includes('AmazonECSTaskExecutionRolePolicy'), 'the broad managed execution policy must not be used');
   need(!/aws_iam_role_policy" "api_task"/.test(text) && !/iam:PassRole/.test(text), 'the task role must carry the app_runtime policy and nothing of its own');
   need(has(one('resource "aws_iam_role_policy_attachment" "api_task_runtime"'), 'policy_arn = aws_iam_policy.app_runtime.arn') && has(one('resource "aws_iam_role_policy_attachment" "api_task_runtime"'), 'role = aws_iam_role.api_task[0].name'), 'the task role must have the app_runtime policy attached');
+  // Spec 025 (PD-b): the patient identity envelope. The key id is in the task's environment; the grant is the data key, directly, only with a
+  // context naming exactly a tenant and a patient (never an empty or S3 context), attached to the API's task role and to nothing else.
+  need(has(one('api_environment = '), 'PATIENT_FIELD_KMS_KEY_ID = aws_kms_key.data.arn'), 'the task environment must name the data key as PATIENT_FIELD_KMS_KEY_ID (production refuses to start without it)');
+  const identity = statements(one('data "aws_iam_policy_document" "api_patient_identity"'));
+  need(identity.length === 1, 'the patient identity policy must hold exactly one statement');
+  for (const s of identity) {
+    need(s.actions === '["kms:GenerateDataKey", "kms:Decrypt"]', 'the patient identity statement must allow only kms:GenerateDataKey and kms:Decrypt');
+    need(s.resources === '[aws_kms_key.data.arn]', 'the patient identity statement must name the data key and nothing else');
+    need(has(s.body, 'test = "ForAllValues:StringEquals"\n variable = "kms:EncryptionContextKeys"\n values = ["tenant", "patient"]'), 'the patient identity statement must allow only the context keys tenant and patient');
+    need(has(s.body, 'test = "Null"\n variable = "kms:EncryptionContextKeys"\n values = ["false"]'), 'the patient identity statement must refuse a call with no encryption context (ForAllValues alone passes an empty set)');
+    need(!/kms:ViaService/.test(s.body), 'the patient identity statement is a direct call, not through a service');
+  }
+  const identityAttach = one('resource "aws_iam_role_policy_attachment" "api_task_patient_identity"');
+  need(has(identityAttach, 'role = aws_iam_role.api_task[0].name') && has(identityAttach, 'policy_arn = aws_iam_policy.api_patient_identity[0].arn'), 'the patient identity policy must be attached to the API task role');
+  need([...text.matchAll(/aws_iam_policy\.api_patient_identity\[0\]\.arn/g)].length === 1, 'the patient identity policy must be attached once, to the API task role only');
   const assume = one('data "aws_iam_policy_document" "api_ecs_assume"');
   need(has(assume, 'identifiers = ["ecs-tasks.amazonaws.com"]') && has(assume, 'variable = "aws:SourceAccount"'), 'the roles must be assumable by ECS tasks of this account only');
   for (const role of ['api_task', 'api_execution_service', 'api_execution_migrate', 'api_execution_provision', 'api_provision_task']) need(has(one(`resource "aws_iam_role" "${role}"`), 'assume_role_policy = data.aws_iam_policy_document.api_ecs_assume.json'), `the ${role} role must use the ECS-only trust`);
@@ -480,6 +496,15 @@ test('the API compute guard reports each way the text could be weakened (control
     ['the process-fault alarm needs two faults', 'threshold           = 1\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_process_fault]', 'threshold           = 2\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_process_fault]'],
     ['the process-fault alarm needs ten faults', 'threshold           = 1\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_process_fault]', 'threshold           = 10\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_process_fault]'],
     ['the process-fault alarm is renamed away', 'resource "aws_cloudwatch_metric_alarm" "api_process_fault" {', 'resource "aws_cloudwatch_metric_alarm" "api_process_fault_x" {'],
+    ['the patient key id dropped from the environment', '    PATIENT_FIELD_KMS_KEY_ID = aws_kms_key.data.arn\n', ''],
+    ['the patient key id names another key', 'PATIENT_FIELD_KMS_KEY_ID = aws_kms_key.data.arn', 'PATIENT_FIELD_KMS_KEY_ID = aws_kms_key.service_logs.arn'],
+    ['the patient identity grant allows encryption too', 'actions   = ["kms:GenerateDataKey", "kms:Decrypt"]\n    resources = [aws_kms_key.data.arn]\n    condition {\n      test     = "ForAllValues:StringEquals"', 'actions   = ["kms:GenerateDataKey", "kms:Decrypt", "kms:Encrypt"]\n    resources = [aws_kms_key.data.arn]\n    condition {\n      test     = "ForAllValues:StringEquals"'],
+    ['the patient identity grant covers every key', 'resources = [aws_kms_key.data.arn]\n    condition {\n      test     = "ForAllValues:StringEquals"', 'resources = ["*"]\n    condition {\n      test     = "ForAllValues:StringEquals"'],
+    ['the patient identity grant accepts any context key', 'test     = "ForAllValues:StringEquals"', 'test     = "ForAnyValue:StringEquals"'],
+    ['the patient identity grant accepts no context', '    condition {\n      test     = "Null"\n      variable = "kms:EncryptionContextKeys"\n      values   = ["false"]\n    }\n', ''],
+    ['the patient identity grant accepts a third context key', 'values   = ["tenant", "patient"]', 'values   = ["tenant", "patient", "aws:s3:arn"]'],
+    ['the patient identity policy not attached', 'policy_arn = aws_iam_policy.api_patient_identity[0].arn', 'policy_arn = aws_iam_policy.app_runtime.arn'],
+    ['the patient identity policy attached to the provisioning role too', 'resource "aws_iam_role_policy_attachment" "api_task_patient_identity" {', 'resource "aws_iam_role_policy_attachment" "api_provision_identity" {\n  count      = local.api_count\n  role       = aws_iam_role.api_provision_task[0].name\n  policy_arn = aws_iam_policy.api_patient_identity[0].arn\n}\n\nresource "aws_iam_role_policy_attachment" "api_task_patient_identity" {'],
     ['provisioning task not counted by the image', 'resource "aws_ecs_task_definition" "api_provision" {\n  count                    = local.api_service_count', 'resource "aws_ecs_task_definition" "api_provision" {\n  count                    = local.api_count'],
   ];
   for (const [name, from, to] of weakened) {
