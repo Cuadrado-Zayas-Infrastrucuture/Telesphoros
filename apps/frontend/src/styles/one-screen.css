@@ -118,3 +118,16 @@
   color: var(--primary);
   font-weight: 500;
 }
+
+/* Specs/024: the chat home inside the shared frame (the main area has its own padding), so the box docks at the bottom of the window. */
+.chat-home {
+  display: flex;
+  min-height: calc(100dvh - 4rem);
+  flex-direction: column;
+}
+
+@media (max-width: 63.99rem) {
+  .chat-home {
+    min-height: calc(100dvh - 3rem);
+  }
+}

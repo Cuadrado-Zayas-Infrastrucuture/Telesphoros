@@ -46,7 +46,7 @@ test('wide Prompt Kit conversation keeps evidence in a keyboard-accessible drawe
 test('report navigation is offered without owned storage, beside the local previews', async ({ page }) => {
   await signInAs(page, 'alice', '/local-interpretation');
   await openWorkspaceNavigation(page);
-  await expect(page.getByRole('link', { name: 'Reports', exact: true })).toHaveAttribute('href', '/reports');
+  await expect(page.getByRole('link', { name: 'All reports', exact: true })).toHaveAttribute('href', '/reports');
   await expect(page.getByRole('link', { name: 'Chat preview', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Upload report', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Upload report', exact: true })).toBeVisible();
