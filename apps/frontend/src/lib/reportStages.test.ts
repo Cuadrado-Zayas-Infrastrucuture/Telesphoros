@@ -84,3 +84,68 @@ describe('countReportStages', () => {
     await expect(countReportStages(vi.fn(async () => json({}, 500)))).rejects.toBeInstanceOf(SubmitError);
   });
 });
+
+describe('countReportStages round trips', () => {
+  // A server that answers after a short wait, so overlapping requests show, and that records how many were open at once.
+  function tracked(rows: ReturnType<typeof report>[], options: { failOn?: number; slowFirstPages?: boolean } = {}) {
+    const inner = server(rows);
+    const signals: AbortSignal[] = [];
+    let open = 0;
+    let most = 0;
+    const api = vi.fn(async (path: string, init?: RequestInit) => {
+      const page = Number(new URL(path, 'https://api.test').searchParams.get('page'));
+      if (init?.signal) signals.push(init.signal);
+      open += 1;
+      most = Math.max(most, open);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, options.slowFirstPages ? Math.max(1, 30 - page * 3) : 5));
+        if (page === options.failOn) return json({}, 500);
+        return await inner(path);
+      } finally {
+        open -= 1;
+      }
+    });
+    return { api, signals, mostAtOnce: () => most };
+  }
+  const pageRows = (pages: number, status: (page: number) => string) =>
+    Array.from({ length: pages * REPORT_STAGE_PAGE_SIZE }, (_, i) => report(status(Math.floor(i / REPORT_STAGE_PAGE_SIZE) + 1), true));
+
+  it('reads the first page, then the rest three at a time, so ten pages take four rounds and not ten', async () => {
+    const { api, mostAtOnce } = tracked(pageRows(REPORT_STAGE_MAX_PAGES, () => 'processed'));
+    const stages = await countReportStages(api);
+    expect(stages).toMatchObject({ registered: REPORT_STAGE_PAGE_SIZE * REPORT_STAGE_MAX_PAGES, read: REPORT_STAGE_PAGE_SIZE * REPORT_STAGE_MAX_PAGES, capped: false });
+    expect(api).toHaveBeenCalledTimes(REPORT_STAGE_MAX_PAGES);
+    expect(new URL(api.mock.calls[0]![0], 'https://api.test').searchParams.get('page')).toBe('1');
+    expect(mostAtOnce()).toBe(3);
+  });
+
+  it('counts the same whichever page answers first', async () => {
+    const statuses = ['processed', 'failed', 'received', 'processed', 'failed', 'received'];
+    const { api } = tracked(
+      pageRows(6, (page) => statuses[page - 1]!),
+      { slowFirstPages: true },
+    );
+    expect(await countReportStages(api)).toEqual({ registered: 600, uploaded: 600, read: 200, failed: 200, total: 600, capped: false });
+  });
+
+  it('stops asking and cancels the requests still open when one page fails', async () => {
+    const { api, signals } = tracked(
+      pageRows(REPORT_STAGE_MAX_PAGES, () => 'processed'),
+      { failOn: 3 },
+    );
+    await expect(countReportStages(api)).rejects.toBeInstanceOf(SubmitError);
+    expect(api.mock.calls.length).toBeLessThanOrEqual(4); // the first page and the first round of three, no later round
+    expect(signals.some((signal) => signal.aborted)).toBe(true);
+  });
+
+  it("passes the caller's cancellation on to the requests in flight", async () => {
+    const { api, signals } = tracked(pageRows(3, () => 'processed'));
+    const controller = new AbortController();
+    const counting = countReportStages(api, controller.signal);
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    controller.abort();
+    await counting.catch(() => undefined);
+    expect(signals.length).toBeGreaterThan(0);
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+  });
+});
