@@ -1,6 +1,6 @@
 # Plan: use eligibility (D05), design only
 
-**Status**: for the founder's review. No slice is authorized. Spec: [spec.md](spec.md).
+**Status**: approved by the founder on 2026-10-29: E1 to E8 accepted as recommended. Only E1a and E1b are authorized; E2 and E3 are not. Spec: [spec.md](spec.md). Tasks: [tasks.md](tasks.md).
 
 ## What exists today (read at `main` `b7edea6`)
 
@@ -42,7 +42,9 @@ Grants and withdrawals for one patient serialize on a per-patient lock. A use th
 
 D07 receives only (record, answer, policy version, evidence ids). Release-level controls stay D07's job and counsel's: minimum cells, overlap and differencing control, and the de-identification method. As the founder put it, *"Aggregation alone will not resolve release privacy."*
 
-## Founder decisions (only you can make these)
+## Founder decisions
+
+E1 to E8 were accepted as recommended on 2026-10-29. Building is authorized for E1a and E1b only.
 
 | # | Decision | Recommendation |
 | --- | --- | --- |

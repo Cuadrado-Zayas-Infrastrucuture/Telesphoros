@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-28
 
-**Status**: design for the founder's review. Nothing here is approved, built or sent to counsel. Decisions E1 to E8 are in [plan.md](plan.md).
+**Status**: approved for slices E1a and E1b only. The founder accepted decisions E1 to E8 in [plan.md](plan.md) as recommended on 2026-10-29. E2 (the operator command for tenant terms) and E3 (the grants API, which waits for counsel's form) are not authorized. Nothing is built or sent to counsel. Tasks: [tasks.md](tasks.md).
 
 **Input**:
 - The founder's 2026-10-27 data-product report. It is quoted in spec 006 [research.md](../006-clinician-decision-records/research.md), rows R15, R19 and R21. Its own D05 section was not available when this was written and is marked unverified here.
