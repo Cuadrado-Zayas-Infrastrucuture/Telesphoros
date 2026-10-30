@@ -225,3 +225,39 @@ test('SES: refuses a replaced user pool, any other pool change, a foreign domain
     assert.ok(problems.some((problem) => expected.test(problem)), `${name}: expected ${expected}, got ${JSON.stringify(problems)}`);
   }
 });
+
+// RDS moves latest_restorable_time on its own every few minutes; a running database must not block every later plan.
+const restoreMark = (overrides = {}) => ({ address: 'aws_db_instance.main', mode: 'managed', type: 'aws_db_instance', change: {
+  actions: ['update'], before: { identifier: 'telesphoros-staging', latest_restorable_time: '2026-10-30T01:00:00Z' },
+  after: { identifier: 'telesphoros-staging', latest_restorable_time: '2026-10-30T01:05:00Z' }, ...overrides } });
+
+test('drift that only moves the database restore mark is not review drift, in every stage', () => {
+  for (const stage of ['A', 'B', 'C']) {
+    const plan = fixture(stage); plan.resource_drift = [restoreMark()];
+    assert.deepEqual(planProblems(plan, stage, RECORD), [], stage);
+  }
+  const ses = sesFixture(); ses.resource_drift = [restoreMark()];
+  assert.deepEqual(planProblems(ses, 'SES'), []);
+});
+
+test('any other drift is still refused, including the restore mark beside another change', () => {
+  const cases = [
+    ['another attribute too', restoreMark({ after: { identifier: 'renamed', latest_restorable_time: '2026-10-30T01:05:00Z' } })],
+    ['same attribute, another type', { ...restoreMark(), address: 'aws_rds_cluster.main', type: 'aws_rds_cluster' }],
+    ['deleted outside Terraform', restoreMark({ actions: ['delete'] })],
+    ['no before', restoreMark({ before: null })],
+    ['nothing moved', restoreMark({ after: { identifier: 'telesphoros-staging', latest_restorable_time: '2026-10-30T01:00:00Z' } })],
+    ['data source', { ...restoreMark(), mode: 'data' }],
+    ['untyped entry', { change: { actions: ['update'] } }],
+  ];
+  for (const [name, entry] of cases) {
+    for (const stage of ['A', 'B', 'C']) {
+      const plan = fixture(stage); plan.resource_drift = [entry];
+      assert.ok(planProblems(plan, stage, RECORD).some((reason) => reason.includes('drift')), `${name} (${stage})`);
+    }
+    const ses = sesFixture(); ses.resource_drift = [entry];
+    assert.ok(planProblems(ses, 'SES').some((reason) => reason.includes('drift')), `${name} (SES)`);
+  }
+  const both = fixture('B'); both.resource_drift = [restoreMark(), { address: 'aws_s3_bucket.reports', mode: 'managed', type: 'aws_s3_bucket', change: { actions: ['update'], before: { a: 1 }, after: { a: 2 } } }];
+  assert.ok(planProblems(both, 'B', RECORD).some((reason) => reason.includes('drift')), 'restore mark beside real drift');
+});
