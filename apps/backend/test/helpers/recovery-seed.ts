@@ -22,7 +22,8 @@ export const EXPECTED_ROWS: Record<string, number> = {
   cell_disputes: 6,
   cell_dispute_decisions: 3,
   ledger_checkpoints: 3,
-  ledger_events: 60,
+  data_provenance: 30, // spec 020 E1a: one row per capture (6) and per evaluation (24), each with its own ledger event
+  ledger_events: 90, // 60 before E1a, plus those 30
   security_audit_events: 1,
 };
 

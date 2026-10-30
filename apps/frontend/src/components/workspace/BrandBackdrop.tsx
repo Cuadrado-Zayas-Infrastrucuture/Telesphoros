@@ -1,4 +1,4 @@
-/** The landing's two folds and an A/C/G/T sequence, faint behind the one-screen workspace. Decorative and static. */
+/** The landing's two folds, faint behind the one-screen workspace. Decorative and static. The A/C/G/T letters were removed in specs/023 (D7). */
 export function BrandBackdrop() {
   return (
     <div className="one-screen-backdrop" aria-hidden="true">
@@ -8,8 +8,6 @@ export function BrandBackdrop() {
         <path className="fold" d="M-252 583C-53 346 60 416 86 566C114 725 266 577 348 680C422 774 231 911 90 886L-220 827Z" />
         <path className="fold-edge" d="M-252 583C-53 346 60 416 86 566C114 725 266 577 348 680" />
       </svg>
-      <span className="sequence">ACGTTCAG TGCAAGTC</span>
-      <span className="sequence sequence-left">GATCTGCA</span>
     </div>
   );
 }

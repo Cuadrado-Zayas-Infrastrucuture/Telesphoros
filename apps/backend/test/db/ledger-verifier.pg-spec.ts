@@ -23,7 +23,10 @@ afterAll(async () => {
   await pg.drop();
 });
 
-/** A tenant with a capture, an accepted capture, an evaluation (with children), a correction, and a dispute with a note. */
+/**
+ * A tenant with a capture, an accepted capture, an evaluation (with children), a correction, and a dispute with a note: seven events, since the capture and the
+ * evaluation are each followed by their provenance event (spec 020 E1a): 1 capture, 2 its provenance, 3 acceptance, 4 evaluation, 5 its provenance, 6 correction, 7 dispute.
+ */
 async function chain(): Promise<{ tenantId: string; report: SeededReport; ids: Record<string, string> }> {
   const tenantId = `tenant-${randomUUID()}`;
   const report = await seedLabReport(pg.adminUrl, tenantId);
@@ -55,28 +58,28 @@ describe('ledger verifier: an intact chain', () => {
   it('verifies in full and in tail mode, and records a checkpoint that tail mode starts from', async () => {
     const { tenantId } = await chain();
     const full = await verifier.verify(tenantId, { mode: 'full', recordCheckpoint: true });
-    expect(full).toMatchObject({ status: 'ok', mode: 'full', eventsChecked: 5, headSeq: '5', failures: [] });
+    expect(full).toMatchObject({ status: 'ok', mode: 'full', eventsChecked: 7, headSeq: '7', failures: [] });
     expect(full.checkpointId).toEqual(expect.any(String));
     const tail = await verifier.verify(tenantId, { mode: 'tail' });
     expect(tail).toMatchObject({ status: 'ok', mode: 'tail', eventsChecked: 1 }); // only the checkpoint's own event is newer
     const again = await verifier.verify(tenantId, { mode: 'full' });
-    expect(again).toMatchObject({ status: 'ok', eventsChecked: 6, headSeq: '6' });
+    expect(again).toMatchObject({ status: 'ok', eventsChecked: 8, headSeq: '8' });
   });
 
   it('walks a chain longer than nine events in numeric order, and starts a tail check from the NEWEST checkpoint', async () => {
     // Regression: sequence numbers were once sorted as text ("10" before "2"), which only shows from the tenth event on.
     const tenantId = `tenant-${randomUUID()}`;
     for (let i = 0; i < 9; i++) await repo.insertCapture(tenantId, 'syn-uploader', captureFor(await seedLabReport(pg.adminUrl, tenantId)));
-    await verifier.verify(tenantId, { recordCheckpoint: true }); // up to 9 (its own event is 10)
+    await verifier.verify(tenantId, { recordCheckpoint: true }); // up to 18, two events per capture (its own event is 19)
     for (let i = 0; i < 3; i++) await repo.insertCapture(tenantId, 'syn-uploader', captureFor(await seedLabReport(pg.adminUrl, tenantId)));
-    await verifier.verify(tenantId, { recordCheckpoint: true }); // up to 13 (its own event is 14)
-    expect(await verifier.verify(tenantId, { mode: 'full' })).toMatchObject({ status: 'ok', eventsChecked: 14, failures: [] });
+    await verifier.verify(tenantId, { recordCheckpoint: true }); // up to 25 (its own event is 26)
+    expect(await verifier.verify(tenantId, { mode: 'full' })).toMatchObject({ status: 'ok', eventsChecked: 26, failures: [] });
     expect(await verifier.verify(tenantId, { mode: 'tail' })).toMatchObject({ status: 'ok', mode: 'tail', eventsChecked: 1 });
   });
 
   it('falls back to a full walk when a tail is requested but no checkpoint exists', async () => {
     const { tenantId } = await chain();
-    expect(await verifier.verify(tenantId, { mode: 'tail' })).toMatchObject({ status: 'ok', mode: 'full', eventsChecked: 5 });
+    expect(await verifier.verify(tenantId, { mode: 'tail' })).toMatchObject({ status: 'ok', mode: 'full', eventsChecked: 7 });
   });
 
   it('is incomplete, never ok, when the budget runs out, and writes no checkpoint', async () => {
@@ -89,7 +92,7 @@ describe('ledger verifier: an intact chain', () => {
     aborted.abort();
     expect(await verifier.verify(tenantId, { signal: aborted.signal })).toMatchObject({ status: 'incomplete', incompleteReason: 'shutdown', eventsChecked: 0 });
     // The budget is exactly the chain length: complete, not incomplete.
-    const exact = await verifier.verify(tenantId, { maxEvents: 5 });
+    const exact = await verifier.verify(tenantId, { maxEvents: 7 });
     expect(exact).toMatchObject({ status: 'ok' });
     expect(exact.incompleteReason).toBeUndefined();
     const count = await withAdmin(pg.adminUrl, async (c) => (await c.query(`SELECT count(*)::int AS n FROM ledger_checkpoints WHERE tenant_id = $1`, [tenantId])).rows[0].n);
@@ -97,10 +100,10 @@ describe('ledger verifier: an intact chain', () => {
   });
 
   it('walks a chain at or below fullWalkAtOrBelow in FULL even when a checkpoint exists, and from the checkpoint above it', async () => {
-    const { tenantId } = await chain(); // 5 events
-    await verifier.verify(tenantId, { recordCheckpoint: true }); // its own event is the 6th
-    expect(await verifier.verify(tenantId, { mode: 'tail', fullWalkAtOrBelow: 6 })).toMatchObject({ status: 'ok', mode: 'full', eventsChecked: 6 });
-    expect(await verifier.verify(tenantId, { mode: 'tail', fullWalkAtOrBelow: 5 })).toMatchObject({ status: 'ok', mode: 'tail', eventsChecked: 1 });
+    const { tenantId } = await chain(); // 7 events
+    await verifier.verify(tenantId, { recordCheckpoint: true }); // its own event is the 8th
+    expect(await verifier.verify(tenantId, { mode: 'tail', fullWalkAtOrBelow: 8 })).toMatchObject({ status: 'ok', mode: 'full', eventsChecked: 8 });
+    expect(await verifier.verify(tenantId, { mode: 'tail', fullWalkAtOrBelow: 7 })).toMatchObject({ status: 'ok', mode: 'tail', eventsChecked: 1 });
     expect(await verifier.verify(tenantId, { mode: 'tail' })).toMatchObject({ mode: 'tail' }); // control: unset, the checkpoint is used
   });
 
@@ -164,7 +167,7 @@ describe('ledger verifier: tampering by someone who can bypass every trigger', (
     ],
     ['an edited event actor', 'record-hash-mismatch', (c, t) => c.query(`UPDATE ledger_events SET actor_sub = 'someone-else' WHERE tenant_id = $1 AND seq = 2`, [t.tenantId])],
     ['a deleted middle event', 'seq-gap', (c, t) => c.query(`DELETE FROM ledger_events WHERE tenant_id = $1 AND seq = 3`, [t.tenantId])],
-    ['a deleted last event', 'head-mismatch', (c, t) => c.query(`DELETE FROM ledger_events WHERE tenant_id = $1 AND seq = 5`, [t.tenantId])],
+    ['a deleted last event', 'head-mismatch', (c, t) => c.query(`DELETE FROM ledger_events WHERE tenant_id = $1 AND seq = 7`, [t.tenantId])],
     ['a forged prev_hash', 'prev-hash-mismatch', (c, t) => c.query(`UPDATE ledger_events SET prev_hash = repeat('c', 64) WHERE tenant_id = $1 AND seq = 4`, [t.tenantId])],
     ['a moved head', 'head-mismatch', (c, t) => c.query(`UPDATE ledger_heads SET record_hash = repeat('d', 64) WHERE tenant_id = $1`, [t.tenantId])],
     ['a deleted record whose event remains', 'record-missing', (c, t) => c.query(`DELETE FROM report_captures WHERE id = $1`, [t.ids.capture])],
@@ -207,7 +210,7 @@ describe('ledger verifier: tampering by someone who can bypass every trigger', (
   });
 
   it('reports damage as failed, with no incomplete reason, even when the walk also hit its event limit', async () => {
-    const t = await chain(); // 5 events
+    const t = await chain(); // 7 events
     await tamper((c) => c.query(`UPDATE ledger_events SET payload_sha256 = repeat('b', 64) WHERE tenant_id = $1 AND seq = 2`, [t.tenantId]));
     const cut = await verifier.verify(t.tenantId, { maxEvents: 3 }); // damage inside the first three events; more chain remains
     expect(cut.status).toBe('failed');
@@ -248,7 +251,7 @@ describe('ledger verifier: tampering by someone who can bypass every trigger', (
     expect((await verifier.verify(t.tenantId, { mode: 'tail' })).status).toBe('ok');
     await tamper((c) => c.query(`UPDATE evaluations SET engine_version = 'forged' WHERE id = $1`, [e.record.id]).then(() => undefined));
     expect(kinds(await verifier.verify(t.tenantId, { mode: 'tail' }))).toContain('payload-mismatch');
-    await tamper((c) => c.query(`UPDATE ledger_events SET record_hash = repeat('f', 64) WHERE tenant_id = $1 AND seq = 5`, [t.tenantId]).then(() => undefined));
+    await tamper((c) => c.query(`UPDATE ledger_events SET record_hash = repeat('f', 64) WHERE tenant_id = $1 AND seq = 7`, [t.tenantId]).then(() => undefined)); // the event the checkpoint names
     expect(kinds(await verifier.verify(t.tenantId, { mode: 'tail' }))).toContain('checkpoint-mismatch');
   });
 });

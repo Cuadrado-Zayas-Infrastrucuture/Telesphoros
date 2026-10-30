@@ -86,6 +86,7 @@ const real = new StandInReportReader();
         textScalars: 15,
         popplerVersion: '26.03.0',
         runner: 'fake',
+        origin: 'synthetic',
       });
       expect(await lab.count('report_captures', 'report_id = $1', [s.reportId])).toBe(2);
       await lab.evaluate(s.clinician, s.reportId, body(s)).expect(201);
