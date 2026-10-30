@@ -184,3 +184,44 @@ test('the plan checker CLI is read-only, fails closed, and does not echo invalid
     writeFileSync(file, 'SYNTHETIC_PRIVATE_CANARY'); const bad = run(['C', file]); assert.notEqual(bad.status, 0); assert.doesNotMatch(bad.stdout + bad.stderr, /SYNTHETIC_PRIVATE_CANARY/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+// The SES change after stage A: address identity -> its domain, so Cognito's mail is DKIM-signed as the domain (DMARC p=reject).
+function sesFixture() {
+  const pool = (sourceArn) => ({ name: 'telesphoros-staging', deletion_protection: 'INACTIVE', mfa_configuration: 'ON',
+    email_configuration: [{ email_sending_account: 'DEVELOPER', from_email_address: 'no-reply@staging.telesphoros.app', source_arn: sourceArn }] });
+  return {
+    format_version: '1.2', complete: true, applyable: true, errored: false,
+    variables: { deployment_profile: { value: 'synthetic' }, environment: { value: 'staging' } },
+    resource_changes: [
+      { address: 'aws_sesv2_email_identity.from', mode: 'managed', change: { actions: ['delete', 'create'], before: { email_identity: 'no-reply@staging.telesphoros.app' }, after: { email_identity: 'staging.telesphoros.app' }, after_unknown: { arn: true } } },
+      { address: 'aws_cognito_user_pool.main', mode: 'managed', change: { actions: ['update'], before: pool(`arn:aws:ses:${REGION}:${ACCOUNT}:identity/no-reply@staging.telesphoros.app`), after: pool(null), after_unknown: { email_configuration: [{ source_arn: true }] } } },
+      { address: 'aws_iam_role_policy.password_notifier', mode: 'managed', change: { actions: ['update'], before: { name: 'send-notice', policy: '{}' }, after: { name: 'send-notice' }, after_unknown: { policy: true } } },
+      { address: 'data.aws_iam_policy_document.password_notifier', mode: 'data', change: { actions: ['read'] } },
+      { address: 'aws_s3_bucket.reports', mode: 'managed', change: { actions: ['no-op'] } },
+    ],
+  };
+}
+
+test('SES: accepts exactly the identity replace, the pool email-source update and the notifier policy update', () => {
+  assert.deepEqual(planProblems(sesFixture(), 'SES'), []);
+});
+
+test('SES: refuses a replaced user pool, any other pool change, a foreign domain, a missing change and anything extra', () => {
+  const cases = [
+    ['pool replaced', (plan) => { plan.resource_changes[1].change.actions = ['delete', 'create']; }, /never replaced/],
+    ['pool MFA changed', (plan) => { plan.resource_changes[1].change.after.mfa_configuration = 'OFF'; }, /only the email configuration's SES source ARN/],
+    ['pool sender changed', (plan) => { plan.resource_changes[1].change.after.email_configuration[0].from_email_address = 'x@evil.example'; }, /only the email configuration's SES source ARN/],
+    ['pool other value unknown', (plan) => { plan.resource_changes[1].change.after_unknown.mfa_configuration = true; }, /only the email configuration's SES source ARN/],
+    ['identity to another domain', (plan) => { plan.resource_changes[0].change.after.email_identity = 'evil.example'; }, /own domain/],
+    ['identity updated, not replaced', (plan) => { plan.resource_changes[0].change.actions = ['update']; }, /must be replaced/],
+    ['no pool change', (plan) => { plan.resource_changes.splice(1, 1); }, /updated in place/],
+    ['extra resource', (plan) => { plan.resource_changes.push({ address: 'aws_s3_bucket.reports_copy', mode: 'managed', change: { actions: ['create'], before: null, after: {} } }); }, /unexpected change/],
+    ['production', (plan) => { plan.variables.deployment_profile.value = 'production'; }, /staging\/synthetic/],
+  ];
+  for (const [name, mutate, expected] of cases) {
+    const plan = sesFixture();
+    mutate(plan);
+    const problems = planProblems(plan, 'SES');
+    assert.ok(problems.some((problem) => expected.test(problem)), `${name}: expected ${expected}, got ${JSON.stringify(problems)}`);
+  }
+});

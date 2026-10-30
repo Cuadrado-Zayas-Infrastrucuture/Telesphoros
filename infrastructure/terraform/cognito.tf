@@ -4,13 +4,18 @@
 # ------------------------------------------------------------------------------------------------
 
 locals {
-  roles = ["reader", "clinician", "admin", "reviewer"]
+  roles           = ["reader", "clinician", "admin", "reviewer"]
+  ses_from_domain = split("@", var.ses_from_email)[1]
 }
 
 # Invitations, reset codes and the password-change notice are sent through SES (HIPAA-eligible,
 # and not subject to Cognito's small default email quota).
+# The identity is the sender's DOMAIN, not the address. SES then DKIM-signs as that domain, which
+# the domain's DMARC policy (p=reject, sp=reject, adkim=s) requires; an address identity signs as
+# amazonses.com and its mail would be rejected. It verifies once the three CNAMEs in the
+# ses_dkim_records output are published (Cloudflare, DNS-only); no verification email is sent.
 resource "aws_sesv2_email_identity" "from" {
-  email_identity = var.ses_from_email
+  email_identity = local.ses_from_domain
 }
 
 resource "aws_cognito_user_pool" "main" {

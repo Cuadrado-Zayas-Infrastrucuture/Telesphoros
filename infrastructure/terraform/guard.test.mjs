@@ -69,7 +69,20 @@ test('the notifier is invokable only by this user pool and may send only as the 
   has(lambda, 'source_arn = aws_cognito_user_pool.main.arn');
   has(lambda, 'actions = ["ses:SendEmail"]');
   has(lambda, 'resources = [aws_sesv2_email_identity.from.arn]');
+  // The identity is the whole domain, so only this condition keeps the notifier to the one address.
+  has(lambda, 'variable = "ses:FromAddress"');
+  has(lambda, 'values = [var.ses_from_email]');
   lacks(lambda, /resources\s*=\s*\["\*"\]/, 'no wildcard resources');
+});
+
+test('SES sends as a DKIM-signed domain identity, which the domain DMARC policy (p=reject, adkim=s) accepts', () => {
+  has(cognito, 'ses_from_domain = split("@", var.ses_from_email)[1]');
+  has(cognito, 'email_identity = local.ses_from_domain');
+  // An address identity signs as amazonses.com: DMARC with adkim=s rejects every invitation and reset code.
+  lacks(cognito, /email_identity\s*=\s*var\.ses_from_email/, 'the SES identity must be the domain, not the address');
+  const outputs = readFileSync(new URL('./outputs.tf', import.meta.url), 'utf8');
+  has(outputs, 'output "ses_dkim_records"');
+  has(outputs, 'value = "${token}.dkim.amazonses.com"');
 });
 
 // ---- Report evidence (slice 5B-3.2a) --------------------------------------------------------------------------------------------

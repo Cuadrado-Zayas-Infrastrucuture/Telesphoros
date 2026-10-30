@@ -178,8 +178,12 @@ variable "cognito_domain_prefix" {
 }
 
 variable "ses_from_email" {
-  description = "Verified sender for invitations, reset codes and password-change notices, e.g. no-reply@telesphoros.app. SES sends a verification email when this is first applied."
+  description = "Sender for invitations, reset codes and password-change notices, e.g. no-reply@telesphoros.app. SES verifies its domain once the ses_dkim_records output is published in DNS."
   type        = string
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.ses_from_email))
+    error_message = "ses_from_email must be one address, like no-reply@staging.telesphoros.app; its domain becomes the SES identity."
+  }
 }
 
 variable "cognito_deletion_protection" {
