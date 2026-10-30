@@ -21,6 +21,7 @@ import type {
 } from './ledger-records';
 import type { DisputeStatusValue } from '@telesphoros/shared-types';
 import type { ClinicianDecisionInput, ResultBasis } from './clinician-decisions';
+import type { ResultAcknowledgementInput } from './result-acknowledgements';
 import type { Page, PageRequest } from './records';
 
 /** The same retry id came with a different decision or note (or for another capture) than the one stored under it. */
@@ -127,4 +128,9 @@ export abstract class LedgerRecordsRepository {
   abstract insertClinicianDecision(tenantId: string, actor: string, input: ClinicianDecisionInput): Promise<InsertResult>;
   /** The result's whole history, oldest first, and its basis now; undefined when the tenant has no such result. */
   abstract clinicianDecisionHistory(tenantId: string, resultId: string): Promise<{ basis: ResultBasis; entries: Projected[] } | undefined>;
+
+  /** Spec 019 D02a. Raises the refusals in result-acknowledgements.ts; a replay of a stored request returns it with `created: false`. */
+  abstract insertResultAcknowledgement(tenantId: string, actor: string, input: ResultAcknowledgementInput): Promise<InsertResult>;
+  /** Every acknowledgement of the result, oldest first, and its basis now; undefined when the tenant has no such result. */
+  abstract resultAcknowledgements(tenantId: string, resultId: string): Promise<{ basis: ResultBasis; entries: Projected[] } | undefined>;
 }

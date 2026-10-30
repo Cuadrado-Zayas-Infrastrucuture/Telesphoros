@@ -79,14 +79,14 @@ afterAll(async () => {
 });
 
 describe('T020: every tenant-setting policy reads the capability, for every role (0032)', () => {
-  it('no policy text reads the setting any more, and exactly 55 read the accessor (47 before H1, its three policies, the H3 completion insert, the two H4 cancellation policies, and the two tenant policies of the D01b clinician decisions)', async () => {
+  it('no policy text reads the setting any more, and exactly 57 read the accessor (47 before H1, its three policies, the H3 completion insert, the two H4 cancellation policies, the two tenant policies of the D01b clinician decisions, and the two of the D02a result acknowledgements)', async () => {
     const rows = await owner((c) =>
       c.query<{ tablename: string; policyname: string; qual: string | null; with_check: string | null }>(
         `SELECT tablename, policyname, qual, with_check FROM pg_policies WHERE schemaname = 'public' AND (qual LIKE '%app.current_tenant_id%' OR with_check LIKE '%app.current_tenant_id%' OR qual LIKE '%app_tenant()%' OR with_check LIKE '%app_tenant()%' OR qual LIKE '%app_tenant_bound()%' OR with_check LIKE '%app_tenant_bound()%')`,
       ),
     ).then((r) => r.rows);
     expect(rows.filter((r) => `${r.qual ?? ''}${r.with_check ?? ''}`.includes('app.current_tenant_id'))).toEqual([]);
-    expect(rows).toHaveLength(55);
+    expect(rows).toHaveLength(57);
     expect(rows.every((r) => /\(\s*SELECT\s+(public\.)?app_tenant(_bound)?\(\)/.test(`${r.qual ?? ''}${r.with_check ?? ''}`))).toBe(true);
     // 0047: only the authority tables keep reading the binding of a suspended organization; every other policy reads the active-checked app_tenant().
     const bound = rows.filter((r) => `${r.qual ?? ''}${r.with_check ?? ''}`.includes('app_tenant_bound()'));
@@ -247,6 +247,8 @@ describe('T020 vacuity guard: every tenant-policy table is seeded here or listed
     'report_upload_attempts',
     'report_upload_runs',
     'reports',
+    // Spec 019 D02a: test/result-acknowledgements.e2e-spec.ts seeds it and asserts that another tenant's result is not found.
+    'result_acknowledgements',
   ];
 
   it('the catalog and the two lists agree, and every seeded table holds rows', async () => {

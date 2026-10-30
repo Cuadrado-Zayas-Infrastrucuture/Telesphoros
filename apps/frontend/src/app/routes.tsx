@@ -50,6 +50,16 @@ export const routes: RouteObject[] = [
                 { path: 'local-operations', lazy: async () => ({ Component: (await import('@/pages/LocalOperationsPage')).default }) },
               ]
             : []),
+          // Spec 019 D02a: a test-only page of synthetic result ids, in the e2e build (`vite build --mode e2e`) alone. Vite replaces MODE at build time, so
+          // a production build has no route and no chunk for it (scripts/check-chunks.mjs checks the route, scripts/check-foundation.mjs the chunk).
+          ...(import.meta.env.MODE === 'e2e'
+            ? [
+                {
+                  element: <RequireRole anyOf={CLINICAL_READ_ROLES} />,
+                  children: [{ path: 'e2e/result-acknowledgements', lazy: async () => ({ Component: (await import('@/pages/ResultAcknowledgementsTestPage')).default }) }],
+                },
+              ]
+            : []),
           {
             element: <RequireRole anyOf={WRITER_ROLES} />,
             children: [

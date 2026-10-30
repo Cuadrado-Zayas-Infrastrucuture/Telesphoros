@@ -21,6 +21,8 @@ import { EvaluationsService, LAB_KNOWLEDGE, LAB_READER } from './evaluations.ser
 import { LedgerController } from '../ledger/ledger.controller';
 import { PipelineGateGuard, PipelineStartupCheck, PipelineSwitch } from './pipeline-switch';
 import { ReaderLimiter } from './reader-limiter';
+import { ResultAcknowledgementsController } from './result-acknowledgements.controller';
+import { ResultAcknowledgementsService } from './result-acknowledgements.service';
 import { FakeTextCaptureRunner } from './runner/fake-text-capture-runner';
 import { TextCaptureRunner } from './runner/text-capture-runner';
 
@@ -60,6 +62,7 @@ export const labReaderFactory = async (env: Env): Promise<ReportReader | undefin
     NotesController,
     DisputesController,
     ClinicianDecisionsController,
+    ResultAcknowledgementsController,
     LedgerController,
     EvaluationRequestsController,
   ],
@@ -72,6 +75,7 @@ export const labReaderFactory = async (env: Env): Promise<ReportReader | undefin
     CorrectionsService,
     DisputesService,
     ClinicianDecisionsService,
+    ResultAcknowledgementsService,
     { provide: ReaderLimiter, inject: [ENV], useFactory: (env: Env) => new ReaderLimiter(env.LAB_REPORT_MAX_CONCURRENT_READS) },
     {
       provide: TextCaptureRunner,

@@ -714,3 +714,21 @@ Migration 0055 adds the table, the event type `clinician-result-decision` and tw
 - **Vocabulary.** The detail codes are `cdr-v1`, 13 codes, decided by the founder on 2026-10-28 (D6; the spec's data model, section 2.1). The
   shared-types lists and the database function `clinician_decision_codes_valid` must change together, and a test compares them exactly. A code never
   changes once data exists: a split or rename is `cdr-v2`.
+
+## 25. Amendment made while building spec 019 D02a: result acknowledgements (this adds a record kind; it changes nothing above)
+
+A clinician records that they reviewed one evaluation result. Spec: [specs/019-presentation-events](../../specs/019-presentation-events/spec.md).
+Migration 0060 adds the table and the event type `result-acknowledgement`; it reuses the two keys 0055 added.
+
+- **The record.** `result_acknowledgements`, one row per review. A result row is the version reviewed: results are immutable, so a correction or a
+  re-evaluation makes new rows. The row stores the basis the clinician was shown (the section 24 basis, rule `cdr-basis-v1`), the `kind` (`review`,
+  or `retraction-reviewed` when the basis includes `retracted`, enforced by a CHECK) and the `review_task` (only `result-review` in v1).
+- **What it is not.** It says a review was made. It does not say what was concluded (section 24 does), and it never says that anything was read,
+  ordered, dispensed or taken.
+- **Who.** A current clinician by the live membership row, checked by the route and again by the trigger. Reading is for the clinical read roles.
+- **Once.** Unique per clinician, result, review task and kind. A retry with the same request returns the stored row; a new request for the same
+  review is refused (409 `already-acknowledged`).
+- **The basis at commit.** The client sends the basis it displayed. After the ledger append, a fresh statement computes the server's basis; a
+  difference is refused (409 `acknowledgement-basis-changed`), so a retraction committed first is always seen. A review made before a retraction
+  stays, and the history marks whether each review's basis is still current.
+- **Rollback.** As section 24: the down migration refuses while any row exists, with no override.
