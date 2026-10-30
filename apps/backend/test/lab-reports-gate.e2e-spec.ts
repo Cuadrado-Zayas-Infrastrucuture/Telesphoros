@@ -68,6 +68,7 @@ describe('the lab-report pipeline routes', () => {
       'POST /api/v1/reports/:id/capture',
       'POST /api/v1/reports/:id/evaluation-requests',
       'POST /api/v1/reports/:id/evaluations',
+      'POST /api/v1/result-renders',
     ]);
     expect(moduleControllers).toEqual(expect.arrayContaining([ReportCaptureController, CapturesController]));
   });

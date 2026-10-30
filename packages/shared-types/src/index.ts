@@ -14,3 +14,4 @@ export * from './evaluation-request';
 export * from './usage';
 export * from './clinician-decisions';
 export * from './result-acknowledgements';
+export * from './result-renders';

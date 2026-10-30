@@ -44,6 +44,9 @@ const relationships: [string, string, string, string][] = [
   // Spec 019 D02a (result acknowledgements): the result, its evaluation and patient.
   ['result_acknowledgements_result_fk', 'result_acknowledgements', 'result_id,evaluation_id,tenant_id', 'evaluation_results:id,evaluation_id,tenant_id'],
   ['result_acknowledgements_evaluation_fk', 'result_acknowledgements', 'evaluation_id,tenant_id,patient_id', 'evaluations:id,tenant_id,patient_id'],
+  // Spec 019 D02b (render events, not ledgered): the result, its evaluation and patient.
+  ['result_render_events_result_fk', 'result_render_events', 'result_id,evaluation_id,tenant_id', 'evaluation_results:id,evaluation_id,tenant_id'],
+  ['result_render_events_evaluation_fk', 'result_render_events', 'evaluation_id,tenant_id,patient_id', 'evaluations:id,tenant_id,patient_id'],
   ['evaluations_patient_fk', 'evaluations', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   ['evaluations_report_fk', 'evaluations', 'report_id,patient_id,tenant_id', 'reports:id,patient_id,tenant_id'],
   ['evaluations_capture_fk', 'evaluations', 'capture_id,tenant_id', 'report_captures:id,tenant_id'],
@@ -95,6 +98,7 @@ const primaryKeys: Record<string, string> = {
   capture_acceptances: 'id',
   clinician_result_decisions: 'id',
   result_acknowledgements: 'id',
+  result_render_events: 'id',
   evaluations: 'id',
   evaluation_results: 'id',
   evaluation_gene_states: 'id',
@@ -170,6 +174,7 @@ const uniqueKeys: Record<string, string> = {
   clinician_result_decisions_id_result_tenant_uq: 'id, result_id, tenant_id',
   result_acknowledgements_creation_request_uq: 'tenant_id, created_by, creation_request_id',
   result_acknowledgements_once_uq: 'tenant_id, created_by, result_id, review_task, kind',
+  result_render_events_once_uq: 'tenant_id, viewer, episode_id, seq',
   evaluation_results_id_evaluation_tenant_uq: 'id, evaluation_id, tenant_id',
   evaluations_id_tenant_patient_uq: 'id, tenant_id, patient_id',
   evaluations_id_tenant_report_uq: 'id, tenant_id, report_id',
@@ -237,6 +242,7 @@ const checkNames: Record<string, string> = {
   clinician_result_decisions:
     'tenant_id_len created_by_len created_by_human author_roles entry_kind chain_shape response codes vocabulary policy occurred_source occurred_at request_hash',
   result_acknowledgements: 'tenant_id_len created_by_len created_by_human author_roles kind review_task basis kind_basis basis_rule request_hash',
+  result_render_events: 'tenant_id_len viewer_len viewer_human viewer_roles seq kind kind_seq measurement rule_version schema_version capability client_times ms',
   evaluations: 'created_by_len disposition engine_version_len hash_formats hold_code hold_consistent json_shapes tenant_id_len binding_size gene_inputs_size occurrences_size',
   evaluation_results: 'citation_ids citation_size gene_evidence_size json ordinal outcome reason shape strength',
   evaluation_gene_states: 'gene reason shape state',
@@ -306,6 +312,7 @@ const queryIndexes: Record<string, string> = {
     'UNIQUE INDEX clinician_result_decisions_successor_uq ON public.clinician_result_decisions USING btree (previous_entry_id) WHERE (previous_entry_id IS NOT NULL)',
   clinician_result_decisions_result_idx: 'INDEX clinician_result_decisions_result_idx ON public.clinician_result_decisions USING btree (tenant_id, result_id, seq)',
   result_acknowledgements_result_idx: 'INDEX result_acknowledgements_result_idx ON public.result_acknowledgements USING btree (tenant_id, result_id, seq)',
+  result_render_events_result_idx: 'INDEX result_render_events_result_idx ON public.result_render_events USING btree (tenant_id, result_id, received_at)',
   evaluations_tenant_report_idx: 'INDEX evaluations_tenant_report_idx ON public.evaluations USING btree (tenant_id, report_id, seq)',
   evaluations_tenant_patient_idx: 'INDEX evaluations_tenant_patient_idx ON public.evaluations USING btree (tenant_id, patient_id, seq)',
   evaluation_results_tenant_evaluation_idx: 'INDEX evaluation_results_tenant_evaluation_idx ON public.evaluation_results USING btree (tenant_id, evaluation_id, ordinal)',

@@ -11,6 +11,7 @@ import {
   PATIENT_IDENTITY_TABLES,
   SECURITY_AUDIT_TABLES,
   EVALUATION_REQUEST_TABLES,
+  RENDER_EVENT_TABLES,
 } from '../../src/db/append-only-tables';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { expectRecordTablePolicies, type CatalogPolicy } from '../helpers/catalog-policy-assertions';
@@ -173,6 +174,41 @@ describe('catalog guard: the audit tables are classified and protected as their 
         [table],
       );
       expect(triggers.map((t) => t.tgname)).toEqual(['patient_duplicate_flags_append_only', 'patient_duplicate_flags_no_truncate']);
+    }
+  });
+
+  it('render events (D02b) have forced tenant RLS, are read and added by the application through their check alone, refuse everyone an edit, a delete or a truncate, and are no ledger record', async () => {
+    const tables = await q<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>(
+      `SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relname = ANY($1)`,
+      [[...RENDER_EVENT_TABLES]],
+    );
+    expect(tables).toHaveLength(RENDER_EVENT_TABLES.length);
+    for (const t of tables) expect(t).toMatchObject({ relrowsecurity: true, relforcerowsecurity: true });
+    for (const table of RENDER_EVENT_TABLES) {
+      const grants = await q<{ grantee: string; privilege_type: string }>(
+        `SELECT grantee, privilege_type FROM information_schema.role_table_grants WHERE table_schema = 'public' AND table_name = $1 AND grantee LIKE 'telesphoros_%'
+          AND grantee <> pg_get_userbyid((SELECT relowner FROM pg_class WHERE oid = $1::regclass)) ORDER BY 1, 2`,
+        [table],
+      );
+      expect(grants.map((g) => `${g.grantee}:${g.privilege_type}`)).toEqual(['telesphoros_app:INSERT', 'telesphoros_app:SELECT']); // no ledger or verifier role
+      const policies = await q<{ cmd: string; roles: string; qual: string; with_check: string }>(
+        `SELECT cmd, roles::text, qual, with_check FROM pg_policies WHERE schemaname = 'public' AND tablename = $1`,
+        [table],
+      );
+      expect(policies).toHaveLength(1);
+      expect(policies[0]).toMatchObject({ cmd: 'ALL', roles: '{telesphoros_app}' });
+      expect(policies[0]!.qual).toMatch(/app_tenant(_bound)?\(\)/);
+      expect(policies[0]!.with_check).toMatch(/app_tenant(_bound)?\(\)/);
+      const triggers = await q<{ tgname: string; fn: string }>(
+        `SELECT t.tgname, p.proname AS fn FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid WHERE t.tgrelid = $1::regclass AND NOT t.tgisinternal ORDER BY 1`,
+        [table],
+      );
+      expect(triggers.map((t) => `${t.tgname}:${t.fn}`)).toEqual([
+        `${table}_append_only:refuse_mutation`,
+        `${table}_check:result_render_events_check`,
+        `${table}_no_truncate:refuse_mutation`,
+      ]);
+      expect(Object.values(APPEND_ONLY_CLASSES).flat()).not.toContain(table);
     }
   });
 
