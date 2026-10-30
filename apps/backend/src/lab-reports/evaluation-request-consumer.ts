@@ -70,7 +70,7 @@ export class EvaluationRequestConsumer {
     const sub = issuedFor ? issuedFor() : request.requestedBy;
     if (sub === undefined || sub !== request.requestedBy) throw fatal('requester-not-authorized');
     const principal: Principal = { tenantId: job.tenantId, sub, roles: ['clinician'] };
-    await this.evaluations.create(
+    await this.evaluations.store(
       principal,
       request.reportId,
       { captureId: request.captureId, acceptanceId: request.acceptanceId },
