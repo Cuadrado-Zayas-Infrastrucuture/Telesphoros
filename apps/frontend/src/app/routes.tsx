@@ -51,7 +51,7 @@ export const routes: RouteObject[] = [
               ]
             : []),
           // Spec 019 D02a: a test-only page of synthetic result ids, in the e2e build (`vite build --mode e2e`) alone. Vite replaces MODE at build time, so
-          // a production build has no route and no chunk for it (scripts/check-chunks.mjs checks that).
+          // a production build has no route and no chunk for it (scripts/check-chunks.mjs checks the route, scripts/check-foundation.mjs the chunk).
           ...(import.meta.env.MODE === 'e2e'
             ? [
                 {

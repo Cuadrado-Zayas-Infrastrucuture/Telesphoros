@@ -61,11 +61,12 @@ for (const path of files('src/pages').filter(
   (p) => p.endsWith('.tsx') && !p.endsWith('.test.tsx'),
 )) {
   const key = Object.keys(manifest).find((k) => k.endsWith(path));
-  if (basename(path).startsWith('Local')) {
+  // `Local*` pages are development-only and `*TestPage` pages are e2e-build-only (`import.meta.env.MODE === 'e2e'`): neither may reach production.
+  if (basename(path).startsWith('Local') || basename(path).endsWith('TestPage.tsx')) {
     assert.equal(
       key,
       undefined,
-      `${path}: development page leaked into production`,
+      `${path}: development or test page leaked into production`,
     );
     continue;
   }

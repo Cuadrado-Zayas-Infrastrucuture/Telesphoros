@@ -26,11 +26,10 @@ for (const page of PAGES) {
   if (html.includes(chunk.file)) failures.push(`${page}: preloaded by index.html (${chunk.file})`);
 }
 
-// Test-only pages (mounted under `import.meta.env.MODE === 'e2e'`) must not exist in this, the production, build: no chunk and no route path.
-const TEST_ONLY_PAGES = [{ page: 'ResultAcknowledgementsTestPage', path: 'e2e/result-acknowledgements' }];
+// Test-only pages (mounted under `import.meta.env.MODE === 'e2e'`) leave no route path in the production build. check-foundation.mjs refuses their chunk.
+const TEST_ONLY_ROUTES = [{ page: 'ResultAcknowledgementsTestPage', path: 'e2e/result-acknowledgements' }];
 const builtJs = entries.filter((chunk) => chunk.file.endsWith('.js')).map((chunk) => readFileSync(`dist/${chunk.file}`, 'utf8'));
-for (const { page, path } of TEST_ONLY_PAGES) {
-  if (Object.keys(manifest).some((k) => k.endsWith(`pages/${page}.tsx`))) failures.push(`${page}: test-only page is in the production build`);
+for (const { page, path } of TEST_ONLY_ROUTES) {
   if (builtJs.some((code) => code.includes(path))) failures.push(`${page}: its route path "${path}" is in the production build`);
 }
 
