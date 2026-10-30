@@ -20,10 +20,12 @@ RUN mkdir /output/worker && cp apps/worker/dist/main.js /output/worker/main.js
 
 FROM node:22.22.0-bookworm-slim@sha256:dd9d21971ec4395903fa6143c2b9267d048ae01ca6d3ea96f16cb30df6187d94 AS runtime
 WORKDIR /app
-# Fixed versions from the blocking scan; unavailable fixes fail the build.
+# Fixed versions from the blocking scan; unavailable fixes fail the build. glibc and dpkg are below the gate (Debian rates them medium/low) but
+# the registry scan reports them high, and Debian has fixes (2026-10-30), so they are pinned too.
 RUN apt-get update && apt-get install --yes --no-install-recommends --only-upgrade \
     libcap2=1:2.66-4+deb12u3+b1 libgnutls30=3.7.9-2+deb12u7 \
     libpcre2-8-0=10.42-1+deb12u2 perl-base=5.36.0-7+deb12u4 \
+    libc6=2.36-9+deb12u14 libc-bin=2.36-9+deb12u14 dpkg=1.21.23 \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /output/ ./
 COPY infrastructure/docker/global-bundle.pem infrastructure/docker/global-bundle.sha256 /opt/telesphoros/ca/
