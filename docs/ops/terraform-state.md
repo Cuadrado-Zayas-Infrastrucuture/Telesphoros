@@ -1,4 +1,7 @@
-# Terraform state bootstrap: built locally, not applied
+# Terraform state bootstrap
+
+**Status (2026-10-30): applied.** The versioned state bucket exists in the staging account (`us-east-2`; [environments.md](environments.md)).
+State recovery has never been drilled. The rest of this page was written before the first apply.
 
 FD-7a has an independent root at `infrastructure/terraform-state/`. Its scope
 is the state bucket, its key, policies, version lifecycle and a backend

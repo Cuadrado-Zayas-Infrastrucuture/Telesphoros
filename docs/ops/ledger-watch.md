@@ -116,11 +116,12 @@ balancer keeps sending traffic to a task that is ready, and the database refuses
 ## The alarm
 
 The watch writes one structured **error** line per finding (`event: "ledger-compromised"`). Turning that line into a page or an email is a
-deployment task. The alarm is written ([ops/api-hosting.md](api-hosting.md), `api-compute.tf`: a metric filter on the line and an alarm into the audit topic), but the
-Terraform is **never applied**, so **no alarm exists in AWS yet**. Until it is applied and tested, someone has to be reading the logs, or must treat `/ready` failing on
+deployment task. The alarm is written ([ops/api-hosting.md](api-hosting.md), `api-compute.tf`: a metric filter on the line and an alarm into the audit topic), and the
+alarm **exists in synthetic staging** (into the audit topic, which has one confirmed email address; [environments.md](environments.md)). It has
+never been fired on purpose. Until it is tested, someone has to be reading the logs, or must treat `/ready` failing on
 `ledger` as the signal. A test pins that the application writes `event` at the top level of its JSON log line (the field the alarm matches).
 
-Two more lines now have a metric filter and an alarm into the audit topic (`api-compute.tf`), written and never applied like the first:
+Two more lines now have a metric filter and an alarm into the audit topic (`api-compute.tf`), applied in synthetic staging like the first:
 
 | Alarm | Line | Raised by | Means |
 |---|---|---|---|

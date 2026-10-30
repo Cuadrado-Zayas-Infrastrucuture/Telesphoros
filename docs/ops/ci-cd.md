@@ -21,7 +21,7 @@ A first job, `changes`, decides how much of the rest a run must do (next section
 | `release-image` | no (runs after merge) | INF-03. On a push to `main` only, after `image`: pushes that job's archive to ECR **without a rebuild**, checks ECR kept its digest, signs the digest with the KMS image-signing key (no transparency log), verifies it. **Skipped until the founder sets the repository variables** below |
 | `terraform-lint` | no (advisory) | tflint with the AWS ruleset. Promote it once it has run clean on `main` (below) |
 
-A green run is evidence about the code at that commit. It is not evidence about AWS: Terraform has never been applied.
+A green run is evidence about the code at that commit. It is not evidence about AWS: Terraform is applied by hand, to synthetic staging only ([environments.md](environments.md)).
 
 ### Skipping work: what is proved
 
