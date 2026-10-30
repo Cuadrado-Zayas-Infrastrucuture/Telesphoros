@@ -160,6 +160,54 @@ it('bounds context by requested tenant IDs, including duplicates and missing/for
   }
 });
 
+it('counts an open or upheld dispute as active and a dismissed one as not, for this organization only', async () => {
+  const tenantId = `syn-${randomUUID()}`;
+  const elsewhere = `syn-${randomUUID()}`;
+  const seeded = await evaluations(tenantId, 1);
+  await evaluations(elsewhere, 1);
+  const raise = (tenant: string, row: string) =>
+    repo.raiseDispute(tenant, 'syn-reviewer', {
+      guidelineId: 'syn-advisory',
+      guidelineVersion: '1',
+      guidelineContentSha256: sha('advisory'),
+      locator: { table: '1', row },
+      note: 'Synthetic evidence',
+    });
+  await raise(tenantId, 'open');
+  const upheld = await raise(tenantId, 'upheld');
+  const dismissed = await raise(tenantId, 'dismissed');
+  await repo.decideDispute(tenantId, 'syn-decider', { disputeId: upheld.record.id, decision: 'upheld', evidenceNote: 'the cell is wrong' });
+  await repo.decideDispute(tenantId, 'syn-decider', { disputeId: dismissed.record.id, decision: 'dismissed', evidenceNote: 'the cell is right' });
+  await raise(elsewhere, 'open-1');
+  await raise(elsewhere, 'open-2');
+  await raise(elsewhere, 'open-3');
+  const principal: Principal = { tenantId, sub: 'syn-reviewer', roles: ['clinician'] };
+  expect((await service.get(principal, seeded.ids[0]!)).advisory.activeDisputes).toBe(2);
+  const listed = await service.list(principal, { page: 1, pageSize: 20 });
+  expect(listed.data.map((e) => e.advisory.activeDisputes)).toEqual([2]);
+});
+
+it('reads one evaluation, and everything shown beside it, in a single transaction', async () => {
+  const tenantId = `syn-${randomUUID()}`;
+  const seeded = await evaluations(tenantId, 2);
+  await repo.insertCorrection(tenantId, 'syn-reviewer', { evaluationId: seeded.ids[0]!, kind: 'retraction', reasonCode: 'software-defect' });
+  const principal: Principal = { tenantId, sub: 'syn-reviewer', roles: ['clinician'] };
+  async function transactionsOf(work: () => Promise<unknown>): Promise<number> {
+    const query = jest.spyOn(Client.prototype, 'query'); // pass through to the REAL application-role PostgreSQL client
+    try {
+      await work().catch(() => undefined); // the caller asserts the outcome
+      return (query.mock.calls as unknown[][]).filter((call) => call[0] === 'BEGIN').length;
+    } finally {
+      query.mockRestore();
+    }
+  }
+  expect(await transactionsOf(() => service.get(principal, seeded.ids[0]!))).toBe(1);
+  expect(await transactionsOf(() => service.get(principal, seeded.ids[1]!))).toBe(1);
+  const unknown = randomUUID();
+  expect(await transactionsOf(() => service.get(principal, unknown))).toBe(1);
+  await expect(service.get(principal, unknown)).rejects.toThrow('Evaluation not found.');
+});
+
 it('refuses a list when a selected evaluation is missing its context rather than fabricating an active result', async () => {
   const tenantId = `syn-${randomUUID()}`;
   await evaluations(tenantId, 1);

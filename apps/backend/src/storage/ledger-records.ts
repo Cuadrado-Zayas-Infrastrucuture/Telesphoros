@@ -6,6 +6,17 @@ export interface EvaluationReadContext {
   corrections: Projected[];
 }
 
+/** One evaluation with everything shown beside it, read in a single transaction. */
+export interface EvaluationView {
+  record: Projected;
+  context: EvaluationReadContext;
+  /** Whether it is the newest evaluation of its report and still active. */
+  current: boolean;
+  patientLink: PatientLinkStateValue;
+  /** Disputes open or upheld in this organization (not the dismissed ones). */
+  activeDisputes: number;
+}
+
 /**
  * Records of the lab-report pipeline (docs/design/records-and-corrections.md). Every one is append-only, tenant-scoped, and committed
  * together with its ledger event. Reads return the PROJECTION of the stored row (the exact object that was hashed): camelCase,
