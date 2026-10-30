@@ -846,6 +846,40 @@ resource "aws_cloudwatch_metric_alarm" "api_ledger_chain_over_size" {
   depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]
 }
 
+# The record-log watch is silent when all is well, so the alarms above cannot tell a healthy watch from a stopped one. Every full walk that reaches every
+# tenant writes one heartbeat line (ledger-monitor.ts); walks run at each API start and then every LEDGER_FULL_VERIFY_INTERVAL_HOURS (24) with ±10% jitter,
+# so 30 hours without one means the walks stopped or keep falling short. Missing data is the signal here, so it breaches. Counted by the running service,
+# like api_running_tasks: before an image runs there is no watch to hear from. Apply it with an image built from the commit that writes the line, or it
+# fires 30 hours later.
+resource "aws_cloudwatch_log_metric_filter" "api_ledger_full_check" {
+  count          = local.api_service_count
+  name           = "${local.name}-api-ledger-full-check"
+  log_group_name = aws_cloudwatch_log_group.api[0].name
+  pattern        = "{ $.event = \"ledger-full-check-completed\" }"
+  metric_transformation {
+    name      = "LedgerFullChecks"
+    namespace = local.api_metrics
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "api_ledger_check_stale" {
+  count               = local.api_service_count
+  alarm_name          = "${local.name}-api-ledger-check-stale"
+  alarm_description   = "No full check of the record log has reached every tenant for 30 hours: the watch stopped, or every walk falls short. Damage would go unseen: docs/ops/ledger-watch.md."
+  namespace           = local.api_metrics
+  metric_name         = "LedgerFullChecks"
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 30
+  datapoints_to_alarm = 30
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "breaching"
+  alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_full_check]
+}
+
 # Missing data counts as a breach here: no report from Container Insights means no running task is reporting.
 resource "aws_cloudwatch_metric_alarm" "api_running_tasks" {
   count               = local.api_service_count
