@@ -29,7 +29,17 @@ const selfMovingOnly = (entry) => {
   const moved = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((key) => canonical(before[key]) !== canonical(after[key]));
   return moved.length > 0 && moved.every((key) => allowed.includes(key));
 };
-const unreviewedDrift = (plan) => (plan.resource_drift ?? []).some((entry) => canonical(entry.change?.actions) !== canonical(['no-op']) && !selfMovingOnly(entry));
+// The provider reads an absent `tags` map of a task definition back as an empty one, so a plan after a release reports it as drift though nothing
+// changed and no value was added. Tolerated for the WEB stage only (it is passed in, never a default), and only as exactly null -> {} on `tags`.
+const emptyTagsReadBack = (entry) => {
+  const { actions, before, after } = entry?.change ?? {};
+  if (entry?.mode !== 'managed' || entry?.type !== 'aws_ecs_task_definition' || canonical(actions) !== canonical(['update'])) return false;
+  if (!before || !after || typeof before !== 'object' || typeof after !== 'object') return false;
+  const moved = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((key) => canonical(before[key]) !== canonical(after[key]));
+  return moved.length === 1 && moved[0] === 'tags' && before.tags === null && canonical(after.tags) === canonical({});
+};
+const unreviewedDrift = (plan, tolerated = () => false) => (plan.resource_drift ?? [])
+  .some((entry) => canonical(entry.change?.actions) !== canonical(['no-op']) && !selfMovingOnly(entry) && !tolerated(entry));
 
 function repositoryOnly(change, repository) {
   if (!change.before || !change.after || unknown(change.after_unknown)) return false;
@@ -140,6 +150,28 @@ const CACHING_DISABLED = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad';
 const CACHING_OPTIMIZED = '658327ea-f89d-4fab-a63d-7e88639e058f';
 // AWS recomputes these on every update of a distribution, so the plan lists them as unknown. They are never a change of ours.
 const WEB_COMPUTED = ['etag', 'last_modified_time', 'status', 'in_progress_validation_batches'];
+const WEB_POLICY = 'aws_s3_bucket_policy.web[0]';
+const isObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
+// The provider leaves the new path's `grpc_config` to be computed (the default behaviour's is known: enabled false). Nothing else of the path may be unknown.
+const pathComputedOnly = (value) => Array.isArray(value) && value.length === 1 && isObject(value[0])
+  && Object.entries(value[0]).filter(([, item]) => unknown(item)).every(([key]) => key === 'grpc_config');
+// The bucket policy is built from the distribution's ARN, so while the distribution has a pending change the plan lists the whole policy as "known after
+// apply". An in-place update cannot change the ARN, so the same text is written back. Accepted only as exactly that: an update, nothing but `policy`
+// unknown, nothing else moved, the old text naming this distribution's ARN, and the ARN itself unchanged.
+function policyIsReadBack(change, distribution) {
+  const { actions, before, after, after_unknown: unknownAfter } = change;
+  if (canonical(actions) !== canonical(['update']) || !isObject(before) || !isObject(after)) return false;
+  if (canonical(withoutPolicy(before)) !== canonical(withoutPolicy(after))) return false;
+  const unknownKeys = Object.entries(unknownAfter ?? {}).filter(([, value]) => unknown(value)).map(([key]) => key);
+  if (unknownKeys.length !== 1 || unknownKeys[0] !== 'policy') return false;
+  const arn = distribution.before?.arn;
+  if (typeof arn !== 'string' || arn === '' || distribution.after?.arn !== arn || typeof before.policy !== 'string') return false;
+  try {
+    return JSON.parse(before.policy).Statement.some((statement) => statement?.Condition?.StringEquals?.['AWS:SourceArn'] === arn);
+  } catch {
+    return false;
+  }
+}
 // The attributes the cached path sets on purpose (web.tf). Any other attribute of it must be blank: no forwarded values, no edge function, no TTL override.
 const ASSET_ATTRIBUTES = ['path_pattern', 'target_origin_id', 'viewer_protocol_policy', 'allowed_methods', 'cached_methods', 'compress', 'cache_policy_id', 'response_headers_policy_id', 'function_association'];
 const blank = (value) => value === null || value === undefined || value === '' || value === 0 || value === false
@@ -167,11 +199,14 @@ function webProblems(plan, need) {
     changed.set(address, change);
   }
   for (const address of changed.keys()) {
-    if (address !== WEB_DISTRIBUTION) problems.push(`${address}: unexpected change; the WEB change touches only the web distribution`);
+    if (address !== WEB_DISTRIBUTION && address !== WEB_POLICY) problems.push(`${address}: unexpected change; the WEB change touches only the web distribution`);
   }
   need(changed.size > 0, 'the plan changes nothing');
   const change = changed.get(WEB_DISTRIBUTION);
-  if (!change) return problems;
+  if (!change) {
+    if (changed.has(WEB_POLICY)) problems.push(`${WEB_POLICY}: the bucket policy is accepted only beside the in-place update of the web distribution`);
+    return problems;
+  }
   const where = WEB_DISTRIBUTION;
   if (canonical(change.actions) !== canonical(['update']) || !change.before || !change.after) {
     problems.push(`${where}: must be updated in place, never replaced or created`);
@@ -179,8 +214,10 @@ function webProblems(plan, need) {
   }
   const { before, after } = change;
   const unknownKeys = Object.entries(change.after_unknown ?? {}).filter(([, value]) => unknown(value)).map(([key]) => key);
-  const foreign = unknownKeys.filter((key) => !WEB_COMPUTED.includes(key));
+  const foreign = unknownKeys.filter((key) => !WEB_COMPUTED.includes(key) && !(key === 'ordered_cache_behavior' && pathComputedOnly(change.after_unknown[key])));
   need(foreign.length === 0, `${where}: unknown values beyond AWS's own computed attributes (${foreign.join(', ')})`);
+  const policy = changed.get(WEB_POLICY);
+  if (policy) need(policyIsReadBack(policy, change), `${WEB_POLICY}: the bucket policy may only be listed as unknown because the distribution changes; nothing else about it may move`);
   const moved = [...new Set([...Object.keys(before), ...Object.keys(after)])]
     .filter((key) => key !== 'ordered_cache_behavior' && !unknownKeys.includes(key) && canonical(before[key]) !== canonical(after[key]));
   need(moved.length === 0, `${where}: only the cached path may change (also moved: ${moved.join(', ')})`);
@@ -216,7 +253,7 @@ export function planProblems(plan, stage, record) {
     // Targeted or full (see webProblems), so `complete` is not required; every change is checked instead.
     need(plan.errored !== true && plan.applyable !== false, 'plan must be applicable and free of errors');
     need(plan.variables?.deployment_profile?.value === 'synthetic' && plan.variables?.environment?.value === 'staging', 'only the staging/synthetic profile is supported');
-    need(!unreviewedDrift(plan), 'resource drift requires separate review');
+    need(!unreviewedDrift(plan, emptyTagsReadBack), 'resource drift requires separate review');
     const web = webProblems(plan, need);
     return [...problems, ...web];
   }

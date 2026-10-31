@@ -162,10 +162,18 @@ node scripts/staging/check-plan.mjs WEB infrastructure/terraform/.terraform/web.
 CachingOptimized policy, compression, `redirect-to-https`, the `web-s3` origin, the same security-headers policy and viewer-request function as the default
 behaviour, and no forwarded values, edge function or TTL override. It refuses any other change in the plan, any other attribute of the distribution
 that moves (aliases, origin, tags, the default behaviour), the shell on the caching policy, unknown values other than AWS's own computed ones (`etag`,
-`status`, `last_modified_time`), a replacement, and unreviewed drift. Expect `0 to add, 1 to change, 0 to destroy`.
+`status`, `last_modified_time`), a replacement, and unreviewed drift.
 
-Known limit: the stage was written against the shape of `terraform show -json` and tested on plans modelled on it, not on a saved plan from the real stack.
-It fails closed, so a first real run may refuse an attribute it did not expect; read the message, and widen it only after reading the plan line by line.
+The first real saved plan (2026-10-31) showed three more things, which the stage now accepts, each only as exactly this and nothing wider:
+
+- The new path's `grpc_config` is unknown (the provider computes it; the default behaviour's is known, `enabled: false`). No other attribute of the path may be unknown.
+- `aws_s3_bucket_policy.web[0]` is listed as an update with `policy` "known after apply", because the policy is built from the distribution's ARN. An in-place update
+  cannot change the ARN, so the same text is written back. Accepted only beside the in-place distribution update, with nothing but `policy` unknown, nothing else
+  of the policy moved, and the old policy text naming this distribution's ARN. Expect `0 to add, 2 to change, 0 to destroy`: the distribution and this policy.
+- Drift where a task definition's `tags` read back from `null` to `{}` (no value is added). This allowance exists in the WEB stage only; A, B, C and SES still refuse it.
+
+Known limit: it fails closed, so a plan that differs from the one above may refuse an attribute it did not expect; read the message, and widen it only after
+reading the plan line by line.
 After the apply, check the effect from outside: the shell must stay `x-cache: Miss from cloudfront` with `cache-control: no-cache`, and a hashed file
 under `/assets/` should show `content-encoding: br` and `x-cache: Hit from cloudfront` on its second request.
 
