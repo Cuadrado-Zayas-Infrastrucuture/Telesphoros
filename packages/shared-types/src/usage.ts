@@ -22,3 +22,30 @@ export const usageDtoSchema = z.strictObject({
   storage: z.strictObject({ reportFiles: count, reportBytes: count }),
 });
 export type UsageDto = z.infer<typeof usageDtoSchema>;
+
+/** A calendar date in Puerto Rico time, as `YYYY-MM-DD`. */
+const puertoRicoDate = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/);
+
+/** `GET /usage/days` (specs/028-usage-heatmap): a four-digit year. With none, the current Puerto Rico year. */
+export const usageDaysQuerySchema = z.strictObject({
+  year: z
+    .string()
+    .regex(/^\d{4}$/)
+    .transform(Number)
+    .optional(),
+});
+export type UsageDaysQuery = z.infer<typeof usageDaysQuerySchema>;
+
+/**
+ * `GET /usage/days` (admin only, specs/028-usage-heatmap D6 with A1): reports uploaded per Puerto Rico day of one calendar year, for the caller's own
+ * organization. `days` lists only days with at least one upload, oldest first. `firstDate` (the day the organization was created) and `today`
+ * bound the years that can be asked for and mark the days that cannot have counts. A separate route, so `usageDtoSchema` stays unchanged.
+ */
+export const usageDaysDtoSchema = z.strictObject({
+  timeZone: z.literal('America/Puerto_Rico'),
+  year: z.number().int(),
+  firstDate: puertoRicoDate,
+  today: puertoRicoDate,
+  days: z.array(z.strictObject({ date: puertoRicoDate, reportsUploaded: z.number().int().positive() })),
+});
+export type UsageDaysDto = z.infer<typeof usageDaysDtoSchema>;
