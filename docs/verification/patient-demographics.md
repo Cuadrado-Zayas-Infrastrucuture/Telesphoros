@@ -48,6 +48,8 @@ Date: 2026-10-30. Branch `feat/patient-demographics-core`: one commit off `main`
 | Docker image rehearsal (`rehearsal.cjs` on a local linux/amd64 build of `api.Dockerfile`) | pass (7 checks, exit 0); with the key id removed from `rehearsal.cjs` it fails at the driver's initialize step (exit 1), so the env change is required |
 | FHIR IG validation (`smart-pilot test:ig`) | not run: no Java 21 here; this change does not touch the SMART pilot |
 
+After `main` `35d14799` (#204 frontend load path, with `sideEffects: false` on shared-types, and #205 docs) was merged in: no file is changed on both sides, and the lockfile is unchanged. Rerun on the merge: typecheck, lint, build and `check:chunks` pass; shared-types 121 / 121, frontend 570 / 570, `test:ci-config` 209 / 209.
+
 ## Not covered
 
 - **Real AWS KMS.** The provider runs against Moto's KMS. The IAM condition that limits the API task to the `{tenant, patient}` context (PD-b, #198) is checked by the Terraform guard, not by a live call; it is first exercised by the staging release.
