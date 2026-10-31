@@ -63,7 +63,7 @@ admin, a squash merge, an API error, a missing run) the push run is the full run
 steps (after the install, which `test:infra` needs: it loads the backend's configuration loader), and the other required checks report as skipped. The rule is that narrow on purpose, from what the repository's
 own tests read: `knowledge/lab-report-reader/v2-handoff/ORIGIN.md` is read by a backend test, and `docs/` also holds JSON results and PNG
 previews that are not documentation. The only code that reads documentation is `test:infra` (`docs/ops/break-glass.md`,
-`docs/ops/staging-plan-review.md`) `test:ci-config` (`docs/status/`, `CLAUDE.md`) and `check:workflows` (`docs/engineering/workflows.md`), which is why those three stay. `scope.test.mjs`
+`docs/ops/staging-plan-review.md`) `test:ci-config` (`docs/status/`, `CLAUDE.md`, and `docs/ops/environments.md` against `docs/ops/staging-expected.json`) and `check:workflows` (`docs/engineering/workflows.md`), which is why those three stay. `scope.test.mjs`
 lists the readers it can see (literal docs paths beside a file call), so a new one turns the guard red before it can be skipped.
 The changed files come from the test merge GitHub checks out for a pull request (two parents, the second being the event's head;
 anything else runs everything) and from `before..after` for a push to `main`. Renames are listed as a delete plus an add, so moving a
