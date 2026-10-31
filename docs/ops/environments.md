@@ -22,7 +22,7 @@ CloudFront `/assets/*` cache (#202, #212), then `main` `6c4714de` (patient demog
 the issuer's three log alarms, #210), then `main` `299efbb3` the same evening (spec 026: the worker removes expired capabilities every minute,
 #214, migration 0065) and #216's three sweep alarms. No CI job holds cloud credentials or applies anything.
 
-The last apply read the backend clone at, and so applied from `main` `1bfbdab4`: anything merged after it under `infrastructure/terraform/` is not
+The last apply read the backend clone at, and so applied from `main` `780b88e3` (#216, the sweep alarms): anything merged after it under `infrastructure/terraform/` is not
 applied until a release says so here. The values in the table below are kept as data in
 [staging-expected.json](staging-expected.json) (spec 027); a guard in `pnpm test:ci-config` fails when this page and that file disagree, so change
 both in the same pull request.
