@@ -14,7 +14,7 @@ test('a clinician opens Reports from the navigation and finds the report they up
   await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
 
   await openWorkspaceNavigation(page);
-  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'Reports', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'All reports', exact: true }).click();
   await expect(page).toHaveURL(/\/reports$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Reports' })).toBeVisible();
   const links: string[] = [];

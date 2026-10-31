@@ -1,6 +1,6 @@
 # Background jobs: the queue, the worker and the operator command
 
-Synthetic data only. Nothing here is applied in AWS, and no job in this milestone touches a clinical record. Built in [M2.3a](../design/plans/m2-3-jobs-outbox-worker.md#m23a-as-built-and-where-it-differs-from-the-plan) ([verification](../verification/m2-3a-queue-core.md)) and [M2.3b](../design/plans/m2-3-jobs-outbox-worker.md#m23b-as-built-and-where-it-differs-from-the-plan) ([verification](../verification/m2-3b-outbox-consumers.md))and [M2.3c](../design/plans/m2-3-jobs-outbox-worker.md#m23c-as-built-and-where-it-differs-from-the-plan) ([verification](../verification/m2-3c-worker-deploy.md)): the deployment (Terraform written, not applied; alarms; image target; the worker login).
+Synthetic data only. The worker runs in synthetic staging ([environments.md](environments.md)), and no job in this milestone touches a clinical record. Built in [M2.3a](../design/plans/m2-3-jobs-outbox-worker.md#m23a-as-built-and-where-it-differs-from-the-plan) ([verification](../verification/m2-3a-queue-core.md)) and [M2.3b](../design/plans/m2-3-jobs-outbox-worker.md#m23b-as-built-and-where-it-differs-from-the-plan) ([verification](../verification/m2-3b-outbox-consumers.md))and [M2.3c](../design/plans/m2-3-jobs-outbox-worker.md#m23c-as-built-and-where-it-differs-from-the-plan) ([verification](../verification/m2-3c-worker-deploy.md)): the deployment (Terraform written, not applied; alarms; image target; the worker login).
 
 ## What exists
 
@@ -77,7 +77,9 @@ jobs cancel --id JOB_ID --by NAME             stop a job that has not started (q
 
 **A dead job is a decision, not a chore.** Read `jobs show`, find out why from the error code and the log, fix the cause, then retry. Retrying a job whose cause is not fixed only produces another dead letter.
 
-## Deployment (M2.3c; written, never applied)
+## Deployment (M2.3c)
+
+**Applied in synthetic staging** (one task, 2026-10-30; [environments.md](environments.md)). Not applied anywhere else.
 
 The worker is the **same image as the API**, started with the command `worker/main.js` (the image's ENTRYPOINT is `node`, and an ECS `command` replaces only its CMD, so the command must not repeat `node`; the image holds `dist/main.js` for the API and `worker/main.js`, a single bundle, for the worker). Terraform is `infrastructure/terraform/worker.tf` and follows the API's switch: it exists only when `enable_api_hosting` is on, and its task definition and service also need `api_image`. Nothing here has been applied; the first real apply is the FD-7 rehearsal.
 

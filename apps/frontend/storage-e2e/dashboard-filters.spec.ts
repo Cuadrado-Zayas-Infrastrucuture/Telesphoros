@@ -8,7 +8,7 @@ test('report filters show their page scope, combine and reset with keyboard acce
     expect(response.status()).toBe(201);
   }
   await openWorkspaceNavigation(page);
-  await page.getByRole('link', { name: 'Reports', exact: true }).click();
+  await page.getByRole('link', { name: 'All reports', exact: true }).click();
   await selectReportsPatient(page, fixture);
   const disclosure = page.getByText('Search and filter this page', { exact: true });
   await disclosure.focus(); await page.keyboard.press('Enter');

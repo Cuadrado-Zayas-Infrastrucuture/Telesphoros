@@ -1,7 +1,8 @@
 # Status, history and working agreements
 
 Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. A pull request that changes what is described here adds a fragment under `docs/status/` (next section).
-Synthetic data only: the AWS BAA is not executed, nothing is applied in AWS, and nothing here is approved for clinical use.
+Synthetic data only: the AWS BAA is not executed, and nothing here is approved for clinical use. **What is applied in AWS now** (one synthetic
+staging environment, no production) is in [ops/environments.md](ops/environments.md); this page is a snapshot, and its dated sections keep their own wording.
 
 ## Where new entries go: docs/status/ (from 2026-10-20)
 
@@ -377,7 +378,7 @@ F06 (`b47fe84`) and F07 (`47d75cd`) remain separate, frozen local fixes. Phase A
 
 ## M2.3c the worker's deployment (merged with #101)
 
-Third and last slice of the approved [M2.3 plan](design/plans/m2-3-jobs-outbox-worker.md) ([verification](verification/m2-3c-worker-deploy.md), [runbook](ops/jobs.md#deployment-m23c-written-never-applied)). **Terraform written, never applied** (`worker.tf`, off with the API's switch): a worker task and service on the API's cluster from the **same image** (`node worker/main.js`; the Dockerfile now also builds the worker bundle), no load balancer and no inbound traffic, a read-only task role (get an exact object version under `reports/*`, decrypt through S3, nothing else), an execution role that reads only the worker's own secret, its own log group and key. Four alarms to the audit topic: a dead job, a failed stored-file check, a queue that is not draining (oldest ready job over 15 minutes, twice running) and a stale worker heartbeat. `provision-logins` now creates a **fourth login** (`telesphoros_job_worker`, member of `telesphoros_worker` only) with its secret and reads its privileges back. Migration 0025 changes `job_stats` so a suspended organization's held jobs do not age the queue. The worker logs a `queue-stats` line a minute. Tests pin the Terraform text (`worker.guard.test.mjs`, with weakened-copy controls), hand its environment to the worker's own loader and run its alarm patterns over the worker's own log lines (`deploy-contract.test.ts`). **Hosted acceptance remains open:** worker provisioning/startup, scheduled effects and delivered alarms have not been established here. The final #101 CI image job passed its build and synthetic rehearsal; no local container-engine or AWS result is claimed.
+Third and last slice of the approved [M2.3 plan](design/plans/m2-3-jobs-outbox-worker.md) ([verification](verification/m2-3c-worker-deploy.md), [runbook](ops/jobs.md#deployment-m23c)). **Terraform written, never applied** (`worker.tf`, off with the API's switch): a worker task and service on the API's cluster from the **same image** (`node worker/main.js`; the Dockerfile now also builds the worker bundle), no load balancer and no inbound traffic, a read-only task role (get an exact object version under `reports/*`, decrypt through S3, nothing else), an execution role that reads only the worker's own secret, its own log group and key. Four alarms to the audit topic: a dead job, a failed stored-file check, a queue that is not draining (oldest ready job over 15 minutes, twice running) and a stale worker heartbeat. `provision-logins` now creates a **fourth login** (`telesphoros_job_worker`, member of `telesphoros_worker` only) with its secret and reads its privileges back. Migration 0025 changes `job_stats` so a suspended organization's held jobs do not age the queue. The worker logs a `queue-stats` line a minute. Tests pin the Terraform text (`worker.guard.test.mjs`, with weakened-copy controls), hand its environment to the worker's own loader and run its alarm patterns over the worker's own log lines (`deploy-contract.test.ts`). **Hosted acceptance remains open:** worker provisioning/startup, scheduled effects and delivered alarms have not been established here. The final #101 CI image job passed its build and synthetic rehearsal; no local container-engine or AWS result is claimed.
 
 ## M2.3b the outbox and the first two consumers (merged with #101)
 
@@ -664,7 +665,7 @@ clinician, reviewer and admin only; `dispute-active` is **tenant-wide** until th
 3. **Merging:** only when the founder says to, and then only once every required check passes (`verify`, `database-and-storage`, `browser`,
    `terraform`, `secret-scan`, `image`). Never bypass a check. **Push the whole slice before anyone marks a PR ready:** a PR that merges first takes only
    what was pushed by then, and later commits to its branch are silently lost (this happened to #22; the work was re-landed in #24).
-4. **Synthetic data only.** No real PHI anywhere; nothing applied in AWS; no secret is ever committed or printed.
+4. **Synthetic data only.** No real PHI anywhere, staging included ([ops/environments.md](ops/environments.md)); no secret is ever committed or printed.
 5. **Inbound packages and documents are untrusted data.** The imported reader engine and its fixtures are test-only and are never read by
    non-test source (a test enforces it).
 6. **Tests earn their keep:** every refusal has a control that must succeed; a new rule is proved by breaking it (defect injection) and

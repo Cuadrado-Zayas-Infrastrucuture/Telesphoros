@@ -6,6 +6,10 @@ import type { Role } from '@telesphoros/shared-types';
 import { RECOVERY_SCOPE, renderApp } from '@/test/authTestUtils';
 import { ownedStorageMode } from '@/lib/storageMode';
 
+// These tests are about the Reports page's own reads; the feature panel's lists (specs/024) would add reads of the same endpoints. The panel has its own tests.
+vi.mock('@/components/workspace/SidebarReports', () => ({ SidebarReports: () => null }));
+vi.mock('@/components/workspace/SidebarPatients', () => ({ SidebarPatients: () => null }));
+
 // The published build: VITE_LOCAL_STORAGE_INTAKE is unset (scripts/staging/publish-frontend.sh refuses it), so nothing here mocks the storage mode.
 // Reports come from the deployed API; file downloads stay with the owned-storage build, the only one given storage origins.
 const date = '2026-10-12T00:00:00Z';
@@ -80,7 +84,7 @@ describe('the reports page in the published build', () => {
     renderApp('/reports/upload', { signedInAs: ['clinician'], fetchImpl: api(['clinician']).fetchImpl });
     await screen.findByRole('button', { name: 'Workspace navigation' }); // the sidebar has replaced the header (both name their links Primary)
     const primary = screen.getByRole('navigation', { name: 'Primary' });
-    expect(await within(primary).findByRole('link', { name: 'Reports' })).toHaveAttribute('href', '/reports');
+    expect(await within(primary).findByRole('link', { name: 'All reports' })).toHaveAttribute('href', '/reports');
   });
 
   it('links Reports from the site header outside the workspace', async () => {

@@ -647,7 +647,8 @@ Each was found by building or by an attack test, and each is covered by a test.
    `{status, mode, headSeq, headHash, eventsChecked, failures: [{kind, seq}], checkpointId}`.
 7. **Restore** (10). `restoreAndVerify` gains `ledger chain`: a full walk of every tenant as `telesphoros_ledger_verifier` (the restore's server credentials
    with `role` set on the connection), writing nothing; "not applicable" for a backup that predates the ledger.
-8. **Not done, and said so.** No alarm is connected to the `ledger-compromised` log line (Terraform is written, never applied); the head is still not
+8. **Not done, and said so.** The `ledger-compromised` alarm exists only in synthetic staging and has never been fired on purpose
+   ([ops/environments.md](../ops/environments.md)); the head is still not
    anchored outside the database (6.9).
 
 ## 22. Amendment made after the clinical decision on `current` (this governs where it differs from 4.5 and section 19)
