@@ -290,8 +290,9 @@ const behaviour = (cachePolicy, path) => ({
   forwarded_values: [], min_ttl: 0, default_ttl: 0, max_ttl: 0, smooth_streaming: false, grpc_config: [{ enabled: false }],
 });
 const ASSETS = behaviour(CACHING_OPTIMIZED, '/assets/*');
+const DISTRIBUTION_ARN = `arn:aws:cloudfront::${ACCOUNT}:distribution/E1WD7E7PP8PU73`;
 const distribution = (ordered, extra = {}) => ({
-  aliases: ['app.staging.telesphoros.app', 'staging.telesphoros.app'], enabled: true, default_root_object: 'index.html', price_class: 'PriceClass_100', http_version: 'http2and3',
+  arn: DISTRIBUTION_ARN, aliases: ['app.staging.telesphoros.app', 'staging.telesphoros.app'], enabled: true, default_root_object: 'index.html', price_class: 'PriceClass_100', http_version: 'http2and3',
   default_cache_behavior: [behaviour(CACHING_DISABLED)], ordered_cache_behavior: ordered, origin: [{ origin_id: 'web-s3', domain_name: 'web.s3.us-east-2.amazonaws.com' }],
   tags: { Project: 'telesphoros' }, ...extra,
 });
@@ -328,7 +329,7 @@ test('WEB: refuses anything but that one update, and every way the cached path c
     ['not applyable', () => { const plan = webPlan(DISTRIBUTION_CHANGE()); plan.applyable = false; return plan; }, /free of errors/],
     ['production', () => { const plan = webPlan(DISTRIBUTION_CHANGE()); plan.variables.deployment_profile.value = 'production'; return plan; }, /staging\/synthetic/],
     ['web hosting off', () => { const plan = webPlan(DISTRIBUTION_CHANGE()); plan.variables.enable_web_hosting.value = false; return plan; }, /web hosting/],
-    ['another resource changed', () => webPlan(DISTRIBUTION_CHANGE(), { address: 'aws_s3_bucket_policy.web[0]', mode: 'managed', change: { actions: ['update'], before: {}, after: {} } }), /unexpected change/],
+    ['another resource changed', () => webPlan(DISTRIBUTION_CHANGE(), { address: 'aws_s3_bucket_versioning.web[0]', mode: 'managed', change: { actions: ['update'], before: {}, after: {} } }), /unexpected change/],
     ['a resource created', () => webPlan(DISTRIBUTION_CHANGE(), { address: 'aws_s3_bucket.copy', mode: 'managed', change: { actions: ['create'], before: null, after: {} } }), /unexpected change/],
     ['no cached path added', edit((c) => { c.after.ordered_cache_behavior = []; }), /exactly one cached path/],
     ['a cached path existed before', edit((c) => { c.before.ordered_cache_behavior = [ASSETS]; }), /no cached path before/],
@@ -358,6 +359,82 @@ test('WEB: refuses anything but that one update, and every way the cached path c
     const problems = planProblems(build(), 'WEB');
     assert.ok(problems.some((problem) => expected.test(problem)), `${name}: expected ${expected}, got ${JSON.stringify(problems)}`);
   }
+});
+
+// What the first real saved plan of this change showed (2026-10-31), beyond the distribution update itself: the provider leaves the new path's
+// `grpc_config` to be computed, the bucket policy is rebuilt from the distribution's ARN so it is "known after apply" though the ARN cannot change in
+// an in-place update, and three task definitions read an absent `tags` map back as an empty one.
+const webPolicy = (arn) => JSON.stringify({ Version: '2012-10-17', Statement: [{ Sid: 'AllowCloudFrontRead', Effect: 'Allow', Principal: { Service: 'cloudfront.amazonaws.com' },
+  Action: 's3:GetObject', Resource: 'arn:aws:s3:::web/*', Condition: { StringEquals: { 'AWS:SourceArn': arn } } }] });
+const BUCKET_POLICY = (mutate = () => {}) => {
+  const entry = { address: 'aws_s3_bucket_policy.web[0]', mode: 'managed', type: 'aws_s3_bucket_policy',
+    change: { actions: ['update'], before: { bucket: 'web', id: 'web', policy: webPolicy(DISTRIBUTION_ARN) }, after: { bucket: 'web', id: 'web' }, after_unknown: { policy: true } } };
+  mutate(entry.change);
+  return entry;
+};
+const REAL_DISTRIBUTION = (mutate = () => {}) => {
+  const entry = DISTRIBUTION_CHANGE();
+  delete entry.change.after.ordered_cache_behavior[0].grpc_config;
+  entry.change.after_unknown.ordered_cache_behavior = [{ grpc_config: true }];
+  mutate(entry.change);
+  return entry;
+};
+const taskDefinitionTags = (name, before, after, type = 'aws_ecs_task_definition') => ({ address: `${type}.${name}[0]`, mode: 'managed', type, change: { actions: ['update'], before: { tags: before }, after: { tags: after } } });
+const realPlan = (mutate = () => {}) => {
+  const plan = webPlan(REAL_DISTRIBUTION(), BUCKET_POLICY());
+  plan.resource_drift = [restoreMark(), taskDefinitionTags('api', null, {}), taskDefinitionTags('api_provision', null, {}), taskDefinitionTags('worker', null, {})];
+  mutate(plan);
+  return plan;
+};
+
+test('WEB: accepts the read-back shapes of a real plan: grpc_config to be computed, the bucket policy as unknown, empty tags read back as drift', () => {
+  assert.deepEqual(planProblems(realPlan(), 'WEB'), []);
+  assert.deepEqual(planProblems(realPlan((plan) => { plan.complete = true; }), 'WEB'), []);
+});
+
+test('WEB: each read-back shape is accepted only as exactly that, and anything wider is refused', () => {
+  const policy = (mutate) => () => realPlan((plan) => { plan.resource_changes[1] = BUCKET_POLICY(mutate); });
+  const dist = (mutate) => () => realPlan((plan) => { plan.resource_changes[0] = REAL_DISTRIBUTION(mutate); });
+  const drift = (...entries) => () => realPlan((plan) => { plan.resource_drift = entries; });
+  const cases = [
+    // grpc_config
+    ['another value unknown beside grpc_config', dist((c) => { c.after_unknown.ordered_cache_behavior = [{ grpc_config: true, forwarded_values: true }]; }), /unknown/],
+    ['grpc_config unknown on the default behaviour', dist((c) => { c.after_unknown.default_cache_behavior = [{ grpc_config: true }]; }), /unknown/],
+    ['grpc_config unknown on two paths', dist((c) => { c.after_unknown.ordered_cache_behavior = [{ grpc_config: true }, { grpc_config: true }]; }), /unknown/],
+    // the bucket policy
+    ['policy text changed in a way the plan knows', policy((c) => { c.after.policy = webPolicy('arn:aws:cloudfront::1:distribution/EEVIL'); c.after_unknown = {}; }), /bucket policy/],
+    ['policy unknown and another attribute changed', policy((c) => { c.after.bucket = 'other'; }), /bucket policy/],
+    ['policy unknown and a second attribute unknown', policy((c) => { c.after_unknown = { policy: true, bucket: true }; }), /bucket policy/],
+    ['policy that does not name this distribution', policy((c) => { c.before.policy = webPolicy('arn:aws:cloudfront::1:distribution/EOTHER'); }), /bucket policy/],
+    ['policy not JSON', policy((c) => { c.before.policy = 'not json'; }), /bucket policy/],
+    ['policy replaced', policy((c) => { c.actions = ['delete', 'create']; }), /bucket policy/],
+    ['policy created', policy((c) => { c.actions = ['create']; c.before = null; }), /bucket policy/],
+    ['another bucket policy', () => realPlan((plan) => { const other = BUCKET_POLICY(); other.address = 'aws_s3_bucket_policy.reports[0]'; plan.resource_changes[1] = other; }), /unexpected change/],
+    ['policy beside no distribution update', () => realPlan((plan) => { plan.resource_changes.splice(0, 1); }), /beside the in-place update/],
+    ['the distribution ARN moves', dist((c) => { c.after.arn = 'arn:aws:cloudfront::1:distribution/ENEW'; }), /bucket policy|only the cached path may change/],
+    // the drift
+    ['tags gain a value', drift(taskDefinitionTags('api', null, { owner: 'x' })), /drift/],
+    ['tags emptied', drift(taskDefinitionTags('api', { a: 'b' }, {})), /drift/],
+    ['tags removed', drift(taskDefinitionTags('api', {}, null)), /drift/],
+    ['tags read back on another type', drift(taskDefinitionTags('web', null, {}, 'aws_ecs_service')), /drift/],
+    ['tags and another attribute', drift({ ...taskDefinitionTags('api', null, {}), change: { actions: ['update'], before: { tags: null, cpu: '256' }, after: { tags: {}, cpu: '512' } } }), /drift/],
+    ['a task definition deleted outside Terraform', drift({ ...taskDefinitionTags('api', null, {}), change: { actions: ['delete'], before: { tags: null }, after: null } }), /drift/],
+    ['a data source', drift({ ...taskDefinitionTags('api', null, {}), mode: 'data' }), /drift/],
+  ];
+  for (const [name, build, expected] of cases) {
+    const problems = planProblems(build(), 'WEB');
+    assert.ok(problems.some((problem) => expected.test(problem)), `${name}: expected ${expected}, got ${JSON.stringify(problems)}`);
+  }
+});
+
+test('WEB: the empty-tags drift is a WEB allowance only: stages A, B, C and SES still refuse it', () => {
+  const entry = taskDefinitionTags('api', null, {});
+  for (const stage of ['A', 'B', 'C']) {
+    const plan = fixture(stage); plan.resource_drift = [entry];
+    assert.ok(planProblems(plan, stage, RECORD).some((reason) => reason.includes('drift')), stage);
+  }
+  const ses = sesPlan(POOL); ses.resource_drift = [entry];
+  assert.ok(planProblems(ses, 'SES').some((reason) => reason.includes('drift')), 'SES');
 });
 
 test('WEB: the other stages still refuse a plan that only updates the distribution, and the CLI knows the stage', () => {
