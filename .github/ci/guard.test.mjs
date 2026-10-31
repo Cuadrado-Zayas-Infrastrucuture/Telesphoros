@@ -403,6 +403,51 @@ test('the applied-status check flags each stale phrase and passes current wordin
   assert.deepEqual(staleStateLines('# F1: the audit trail.\n# What is applied: docs/ops/environments.md'), []);
 });
 
+// ---- The shared agent policy: .claude/settings.json holds deny rules and nothing else ----
+// It reaches every agent session in a clone of this repository. A deny rule beats an allow from any scope, so the
+// file is the floor for everyone; an allow, hook or env entry here would run or widen on every teammate's machine.
+// Per-person approvals go in .claude/settings.local.json, which is ignored. Text only: whether Claude Code enforces
+// a rule is checked in a fresh session (docs/ops/agent-policy.md), not here.
+
+export const REQUIRED_DENY = [
+  'Read(**/.env)', 'Read(**/.env.local)', 'Read(**/.env.*.local)', 'Read(**/.env.development)', 'Read(**/.env.staging)',
+  'Read(**/.env.production)',
+  'Bash(terraform apply*)', 'Bash(terraform destroy*)', 'Bash(terraform -chdir=* apply*)', 'Bash(terraform -chdir=* destroy*)',
+  'Bash(tofu apply*)', 'Bash(tofu destroy*)', 'Bash(tofu -chdir=* apply*)', 'Bash(tofu -chdir=* destroy*)',
+  'Bash(git push --force*)', 'Bash(git push -f*)', 'Bash(git push * --force*)', 'Bash(git push * -f*)', 'Bash(git push * +*)',
+  'Bash(git push * main)', 'Bash(git push * HEAD:main)',
+  ...['PUT', 'POST', 'PATCH', 'DELETE'].flatMap((m) => [`Bash(gh api -X ${m} *rulesets*)`, `Bash(gh api --method ${m} *rulesets*)`]),
+];
+
+/** What is wrong with a parsed shared settings object: missing deny rules, or anything besides $schema and permissions.deny. */
+export function agentPolicyProblems(settings) {
+  const problems = [];
+  const extra = Object.keys(settings).filter((k) => !['$schema', 'permissions'].includes(k));
+  if (extra.length) problems.push(`keys other than $schema and permissions: ${extra.join(', ')}`);
+  const permissions = settings.permissions ?? {};
+  const extraPermissions = Object.keys(permissions).filter((k) => k !== 'deny');
+  if (extraPermissions.length) problems.push(`permissions other than deny: ${extraPermissions.join(', ')}`);
+  const deny = Array.isArray(permissions.deny) ? permissions.deny : [];
+  const missing = REQUIRED_DENY.filter((r) => !deny.includes(r));
+  if (missing.length) problems.push(`missing deny rules: ${missing.join(', ')}`);
+  return problems;
+}
+
+test('the shared agent policy denies what agents must never do, and holds nothing else', () => {
+  const settings = JSON.parse(read('../../.claude/settings.json'));
+  assert.deepEqual(agentPolicyProblems(settings), []);
+  assert.match(read('../../.gitignore'), /^\.claude\/settings\.local\.json$/m, 'per-person approvals must stay out of version control');
+});
+
+test('the agent policy check reports a missing rule, an allow, a hook and an env block (controls)', () => {
+  const good = { $schema: 'x', permissions: { deny: [...REQUIRED_DENY] } };
+  assert.deepEqual(agentPolicyProblems(good), []);
+  assert.match(agentPolicyProblems({ permissions: { deny: REQUIRED_DENY.slice(1) } })[0], /missing deny rules: Read\(\*\*\/\.env\)/);
+  assert.match(agentPolicyProblems({ permissions: { deny: [...REQUIRED_DENY], allow: ['Bash(*)'] } })[0], /permissions other than deny: allow/);
+  assert.match(agentPolicyProblems({ ...good, hooks: {} })[0], /keys other than \$schema and permissions: hooks/);
+  assert.match(agentPolicyProblems({ ...good, env: { TOKEN: 'x' } })[0], /keys other than \$schema and permissions: env/);
+});
+
 export function imageJobProblems(text) {
   const block=text.split(/^jobs:\s*$/m)[1]?.split(/^ {2}(?=[a-z][a-z0-9-]*:\s*$)/m).find(b=>b.startsWith('image:')) || '';
   const rules=[

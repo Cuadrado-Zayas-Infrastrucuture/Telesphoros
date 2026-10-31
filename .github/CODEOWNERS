@@ -22,6 +22,14 @@
 /tests/clinical_scenarios/          @jzayas03
 /docs/clinical-validation/          @jzayas03
 
+# Agent instructions and the guards that check them: a skill or settings file is an instruction to every agent,
+# and a guard weakened in the same pull request as the code it checks would pass
+/.claude/                          @jzayas03
+/.agents/                          @jzayas03
+/.specify/                         @jzayas03
+/AGENTS.md                         @jzayas03
+/CLAUDE.md                         @jzayas03
+**/*.guard.test.mjs                @jzayas03
 # Infrastructure, CI, and the rules about merging
 /infrastructure/                    @jzayas03
 /.github/                           @jzayas03
