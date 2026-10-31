@@ -1,4 +1,4 @@
-# H1: static frontend only. NOT APPLIED. Off by default; no deployment workflow or DNS writes.
+# H1: static frontend only. Off by default; no deployment workflow or DNS writes.
 variable "enable_web_hosting" {
   description = "Opt in only after the hosting plan, costs and first-apply gates have been approved."
   type        = bool

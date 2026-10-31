@@ -27,7 +27,7 @@ and only within it. Anything past that `tasks.md` is unapproved work: stop and a
 ### II. Synthetic data only; secrets and PHI never leave their place
 
 - No real PHI anywhere: not in the repository, tests, fixtures, the dev database or logs.
-- Nothing is applied in AWS; no secret is ever committed or printed.
+- What is applied in AWS is recorded in [docs/ops/environments.md](../../docs/ops/environments.md); no secret is ever committed or printed.
 - Parameterized SQL only; every query is tenant-scoped; no PHI in logs or error responses.
 - The fake identity provider (`packages/fake-idp`) is test only: never deployed, never
   pointed at by production.
@@ -84,4 +84,4 @@ restates them for the Spec Kit skills. Amend this file only in the same PR that 
 them, or to correct a restatement that drifted. `specify init` upgrades refresh templates
 and scripts but must never regenerate this file.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-19 | **Last Amended**: 2026-10-19
+**Version**: 1.0.1 | **Ratified**: 2026-10-19 | **Last Amended**: 2026-10-30

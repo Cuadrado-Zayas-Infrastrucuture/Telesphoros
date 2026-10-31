@@ -1,4 +1,4 @@
-# The database connection budget. NOT APPLIED. Nothing here changes the database: it refuses a plan whose services could open more
+# The database connection budget. Nothing here changes the database: it refuses a plan whose services could open more
 # connections than the instance accepts.
 #
 # Every process that connects, at its largest count (the API at local.api_max_tasks, its autoscaling ceiling in api-autoscaling.tf; the worker

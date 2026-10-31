@@ -5,7 +5,7 @@
 // The issuer exists so that the API cannot mint its own tenant. Two sets of rules therefore matter more than the rest, and each has controls below:
 //  - separation: no role of the API (or the worker, or the provisioning task) can read the issuer's secret, and nothing the API owns can use the issuer's roles;
 //  - reach: the issuer accepts one connection source (the API tasks, on the issuer port) and sends out only to the database and HTTPS.
-// What cannot be judged from text is stated in the transport addendum: nothing is applied, so latency and the real behaviour of Service Connect are unmeasured.
+// What cannot be judged from text is stated in the transport addendum: latency and the real behaviour of Service Connect are unmeasured until the issuer runs (docs/ops/environments.md).
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { posix } from 'node:path';

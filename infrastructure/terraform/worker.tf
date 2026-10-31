@@ -1,4 +1,4 @@
-# M2.3c: the background worker's compute (service, roles, secret container, log group, alarms). NOT APPLIED. Off by default: it follows the API's switch
+# M2.3c: the background worker's compute (service, roles, secret container, log group, alarms). Off by default: it follows the API's switch
 # (enable_api_hosting) and, like the API's service, also needs `api_image` (the worker is the SAME image; its `command` is `worker/main.js` because the image ENTRYPOINT is `node`).
 # Plan: docs/design/plans/m2-3-jobs-outbox-worker.md. Design and runbook: docs/ops/jobs.md. It uses the API's cluster, subnets and execution-role pattern (api-compute.tf).
 
