@@ -176,6 +176,65 @@ describe('Database.withTenant and the request capability', () => {
     expect(seen).toEqual({ inside: cap.token, tenant: TENANT, mismatch: null });
   });
 
+  /** The statements one `withTenant` sends, in order, with the settings the work saw. A request opens a connection's transaction with BEGIN, then the settings, then the work. */
+  async function statementsOf(db: Database, actor: string | undefined, capability: Awaited<ReturnType<typeof mint>> | null) {
+    const spy = jest.spyOn(Client.prototype, 'query');
+    try {
+      const run = () =>
+        db.withTenant(
+          TENANT,
+          async (c) =>
+            (
+              await c.query(
+                `SELECT current_setting('app.current_tenant_id', true) AS tenant, current_setting('app.current_actor', true) AS actor, current_setting('app.capability', true) AS capability`,
+              )
+            ).rows[0] as { tenant: string; actor: string | null; capability: string | null },
+          actor === undefined ? {} : { actor },
+        );
+      const seen = await asyncRequest(async () => {
+        if (capability) bindRequestCapability(capability);
+        return run();
+      });
+      const texts = (spy.mock.calls as unknown[][]).map((c) => (typeof c[0] === 'string' ? c[0] : ''));
+      return { seen, texts };
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  it('sends the tenant, the person and the capability in ONE statement, and the work sees exactly those values', async () => {
+    const db = singleConnection();
+    const cap = await mint();
+    const { seen, texts } = await statementsOf(db, SUB, cap);
+    expect(seen).toEqual({ tenant: TENANT, actor: SUB, capability: cap.token });
+    expect(texts.filter((t) => t.includes('set_config'))).toHaveLength(1);
+    expect(texts).toHaveLength(4); // BEGIN, the settings, the work, COMMIT (it was six: one statement for each setting)
+    expect(texts[0]).toBe('BEGIN');
+    for (const name of ['app.current_tenant_id', 'app.current_actor', 'app.capability']) expect(texts[1]).toContain(name);
+    expect(texts[3]).toBe('COMMIT');
+  });
+
+  it('without a capability it sends the tenant and the person in one statement, and no capability setting', async () => {
+    const db = singleConnection();
+    const { seen, texts } = await statementsOf(db, SUB, null);
+    expect(seen.tenant).toBe(TENANT);
+    expect(seen.actor).toBe(SUB);
+    noCapability(seen.capability);
+    expect(texts.filter((t) => t.includes('set_config'))).toHaveLength(1);
+    expect(texts[1]).not.toContain('app.capability');
+    expect(texts).toHaveLength(4); // it was five
+  });
+
+  it('without a person it sends the tenant alone, and the person setting is not left over from an earlier use of the connection', async () => {
+    const db = singleConnection();
+    await statementsOf(db, SUB, null); // an earlier transaction on the same single connection names a person
+    const { seen, texts } = await statementsOf(db, undefined, null);
+    expect(seen.tenant).toBe(TENANT);
+    expect([null, '']).toContain(seen.actor);
+    expect(texts[1]).not.toContain('app.current_actor');
+    expect(texts).toHaveLength(4);
+  });
+
   it('is transaction-local: the next transaction on the SAME pooled connection does not see it, after a commit or a rollback', async () => {
     const db = singleConnection();
     const cap = await mint();
