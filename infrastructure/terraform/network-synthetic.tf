@@ -1,4 +1,4 @@
-# FD-3: the network of the synthetic profile (profile.tf). NOT APPLIED. Exists only when deployment_profile = "synthetic" and no vpc_id is supplied.
+# FD-3: the network of the synthetic profile (profile.tf). Exists only when deployment_profile = "synthetic" and no vpc_id is supplied.
 #
 # Public subnets only, no NAT gateway (a NAT costs money every hour and is the one piece the free plan is least likely to cover): the API tasks
 # get a public address so they can reach AWS services and Cognito's key endpoint, and the S3 gateway endpoint keeps report-file and image-layer

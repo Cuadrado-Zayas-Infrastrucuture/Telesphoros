@@ -1,4 +1,4 @@
-# H1: static frontend only. NOT APPLIED. Off by default; no deployment workflow or DNS writes.
+# H1: static frontend only. Off by default; no deployment workflow or DNS writes.
 variable "enable_web_hosting" {
   description = "Opt in only after the hosting plan, costs and first-apply gates have been approved."
   type        = bool
@@ -175,6 +175,25 @@ resource "aws_cloudfront_distribution" "web" {
     compress               = true
     # AWS managed CachingDisabled: shell/auth responses are never cached.
     cache_policy_id            = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.web[0].id
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.web[0].arn
+    }
+  }
+  # The hashed build output, and only that: scripts/staging/publish-frontend.sh uploads /assets with public,max-age=31536000,immutable and
+  # everything else (index.html included) with no-cache, which stays on the default behaviour above. The managed CachingOptimized policy follows the
+  # origin's Cache-Control, compresses (gzip and brotli) and keys the cache on Accept-Encoding alone: no cookies, headers or query strings reach
+  # the cache key. The same viewer-request function (host redirects) and security headers apply as everywhere else.
+  ordered_cache_behavior {
+    path_pattern           = "/assets/*"
+    target_origin_id       = "web-s3"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+    # AWS managed CachingOptimized.
+    cache_policy_id            = "658327ea-f89d-4fab-a63d-7e88639e058f"
     response_headers_policy_id = aws_cloudfront_response_headers_policy.web[0].id
     function_association {
       event_type   = "viewer-request"

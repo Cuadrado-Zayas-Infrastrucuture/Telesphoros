@@ -274,3 +274,101 @@ test('any other drift is still refused, including the restore mark beside anothe
   const both = fixture('B'); both.resource_drift = [restoreMark(), { address: 'aws_s3_bucket.reports', mode: 'managed', type: 'aws_s3_bucket', change: { actions: ['update'], before: { a: 1 }, after: { a: 2 } } }];
   assert.ok(planProblems(both, 'B', RECORD).some((reason) => reason.includes('drift')), 'restore mark beside real drift');
 });
+
+// WEB: the one change F1 makes to the web distribution: a cached /assets/* path. Applied as a targeted plan (Terraform marks it
+// `complete: false`) or a full one; every change in the plan is checked either way. Shapes modelled on `terraform show -json`:
+// computed attributes (etag, status, last_modified_time) are missing from `after` and listed in `after_unknown`.
+const CACHING_DISABLED = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad';
+const CACHING_OPTIMIZED = '658327ea-f89d-4fab-a63d-7e88639e058f';
+const ROUTING_FUNCTION = `arn:aws:cloudfront::${ACCOUNT}:function/telesphoros-staging-web-routing`;
+const HEADERS_POLICY = '11111111-2222-3333-4444-555555555555';
+const behaviour = (cachePolicy, path) => ({
+  ...(path ? { path_pattern: path } : {}),
+  target_origin_id: 'web-s3', viewer_protocol_policy: 'redirect-to-https', allowed_methods: ['GET', 'HEAD'], cached_methods: ['GET', 'HEAD'], compress: true,
+  cache_policy_id: cachePolicy, response_headers_policy_id: HEADERS_POLICY, function_association: [{ event_type: 'viewer-request', function_arn: ROUTING_FUNCTION }],
+  origin_request_policy_id: '', field_level_encryption_id: '', realtime_log_config_arn: '', lambda_function_association: [], trusted_key_groups: [], trusted_signers: [],
+  forwarded_values: [], min_ttl: 0, default_ttl: 0, max_ttl: 0, smooth_streaming: false, grpc_config: [{ enabled: false }],
+});
+const ASSETS = behaviour(CACHING_OPTIMIZED, '/assets/*');
+const distribution = (ordered, extra = {}) => ({
+  aliases: ['app.staging.telesphoros.app', 'staging.telesphoros.app'], enabled: true, default_root_object: 'index.html', price_class: 'PriceClass_100', http_version: 'http2and3',
+  default_cache_behavior: [behaviour(CACHING_DISABLED)], ordered_cache_behavior: ordered, origin: [{ origin_id: 'web-s3', domain_name: 'web.s3.us-east-2.amazonaws.com' }],
+  tags: { Project: 'telesphoros' }, ...extra,
+});
+const COMPUTED = { etag: 'E2QWRUHAPOMQZL', last_modified_time: '2026-10-30T12:00:00Z', status: 'Deployed', in_progress_validation_batches: 0 };
+const DISTRIBUTION_CHANGE = () => ({
+  address: 'aws_cloudfront_distribution.web[0]', mode: 'managed', type: 'aws_cloudfront_distribution',
+  change: { actions: ['update'], before: { ...distribution([]), ...COMPUTED }, after: distribution([ASSETS]),
+    after_unknown: { etag: true, last_modified_time: true, status: true, in_progress_validation_batches: true } },
+});
+function webPlan(...changes) {
+  return {
+    format_version: '1.2', complete: false, applyable: true, errored: false,
+    variables: { deployment_profile: { value: 'synthetic' }, environment: { value: 'staging' }, enable_web_hosting: { value: true } },
+    resource_changes: [...changes,
+      { address: 'data.aws_iam_policy_document.web[0]', mode: 'data', change: { actions: ['read'] } },
+      { address: 'aws_s3_bucket.web[0]', mode: 'managed', change: { actions: ['no-op'] } }],
+  };
+}
+
+test('WEB: accepts the one update that adds the cached /assets/* path, targeted or full', () => {
+  assert.deepEqual(planProblems(webPlan(DISTRIBUTION_CHANGE()), 'WEB'), []);
+  const full = webPlan(DISTRIBUTION_CHANGE());
+  full.complete = true;
+  assert.deepEqual(planProblems(full, 'WEB'), []);
+});
+
+test('WEB: refuses anything but that one update, and every way the cached path could be wider than agreed', () => {
+  const edit = (mutate) => () => { const change = DISTRIBUTION_CHANGE(); mutate(change.change); return webPlan(change); };
+  const cases = [
+    ['distribution replaced', edit((c) => { c.actions = ['delete', 'create']; }), /must be updated in place/],
+    ['distribution created', edit((c) => { c.actions = ['create']; c.before = null; }), /must be updated in place/],
+    ['empty plan', () => webPlan(), /changes nothing/],
+    ['errored plan', () => { const plan = webPlan(DISTRIBUTION_CHANGE()); plan.errored = true; return plan; }, /free of errors/],
+    ['not applyable', () => { const plan = webPlan(DISTRIBUTION_CHANGE()); plan.applyable = false; return plan; }, /free of errors/],
+    ['production', () => { const plan = webPlan(DISTRIBUTION_CHANGE()); plan.variables.deployment_profile.value = 'production'; return plan; }, /staging\/synthetic/],
+    ['web hosting off', () => { const plan = webPlan(DISTRIBUTION_CHANGE()); plan.variables.enable_web_hosting.value = false; return plan; }, /web hosting/],
+    ['another resource changed', () => webPlan(DISTRIBUTION_CHANGE(), { address: 'aws_s3_bucket_policy.web[0]', mode: 'managed', change: { actions: ['update'], before: {}, after: {} } }), /unexpected change/],
+    ['a resource created', () => webPlan(DISTRIBUTION_CHANGE(), { address: 'aws_s3_bucket.copy', mode: 'managed', change: { actions: ['create'], before: null, after: {} } }), /unexpected change/],
+    ['no cached path added', edit((c) => { c.after.ordered_cache_behavior = []; }), /exactly one cached path/],
+    ['a cached path existed before', edit((c) => { c.before.ordered_cache_behavior = [ASSETS]; }), /no cached path before/],
+    ['two cached paths', edit((c) => { c.after.ordered_cache_behavior = [ASSETS, { ...ASSETS, path_pattern: '/*.html' }]; }), /exactly one cached path/],
+    ['another path', edit((c) => { c.after.ordered_cache_behavior = [{ ...ASSETS, path_pattern: '/*' }]; }), /\/assets\/\*/],
+    ['the shell cached (caching policy on the default)', edit((c) => { c.after.default_cache_behavior = [behaviour(CACHING_OPTIMIZED)]; }), /default behaviour/],
+    ['a different cache policy on the path', edit((c) => { c.after.ordered_cache_behavior = [{ ...ASSETS, cache_policy_id: CACHING_DISABLED }]; }), /CachingOptimized/],
+    ['writes allowed', edit((c) => { c.after.ordered_cache_behavior = [{ ...ASSETS, allowed_methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'OPTIONS', 'DELETE'] }]; }), /read-only/],
+    ['no compression', edit((c) => { c.after.ordered_cache_behavior = [{ ...ASSETS, compress: false }]; }), /compress/],
+    ['plain http allowed', edit((c) => { c.after.ordered_cache_behavior = [{ ...ASSETS, viewer_protocol_policy: 'allow-all' }]; }), /redirect-to-https/],
+    ['other security headers', edit((c) => { c.after.ordered_cache_behavior = [{ ...ASSETS, response_headers_policy_id: 'another-policy' }]; }), /same security headers/],
+    ['no host-redirect function', edit((c) => { c.after.ordered_cache_behavior = [{ ...ASSETS, function_association: [] }]; }), /same viewer-request function/],
+    ['another function', edit((c) => { c.after.ordered_cache_behavior = [{ ...ASSETS, function_association: [{ event_type: 'viewer-request', function_arn: `arn:aws:cloudfront::${ACCOUNT}:function/other` }] }]; }), /same viewer-request function/],
+    ['an edge function attached', edit((c) => { c.after.ordered_cache_behavior = [{ ...ASSETS, lambda_function_association: [{ event_type: 'origin-request', lambda_arn: 'arn:aws:lambda:us-east-1:1:function:x:1' }] }]; }), /lambda_function_association/],
+    ['query strings forwarded', edit((c) => { c.after.ordered_cache_behavior = [{ ...ASSETS, forwarded_values: [{ query_string: true }] }]; }), /forwarded_values/],
+    ['another origin', edit((c) => { c.after.ordered_cache_behavior = [{ ...ASSETS, target_origin_id: 'api' }]; }), /web-s3/],
+    ['an alias changed', edit((c) => { c.after.aliases = ['evil.example']; }), /only the cached path may change/],
+    ['the distribution disabled', edit((c) => { c.after.enabled = false; }), /only the cached path may change/],
+    ['the origin changed', edit((c) => { c.after.origin = [{ origin_id: 'web-s3', domain_name: 'evil.example' }]; }), /only the cached path may change/],
+    ['a tag changed', edit((c) => { c.after.tags = { Project: 'other' }; }), /only the cached path may change/],
+    ['the default behaviour changed', edit((c) => { c.after.default_cache_behavior = [{ ...behaviour(CACHING_DISABLED), compress: false }]; }), /only the cached path may change/],
+    ['an unknown value elsewhere', edit((c) => { c.after_unknown.aliases = true; }), /unknown/],
+    ['an unknown value inside the path', edit((c) => { c.after_unknown.ordered_cache_behavior = [{ cache_policy_id: true }]; }), /unknown/],
+    ['review drift', () => { const plan = webPlan(DISTRIBUTION_CHANGE()); plan.resource_drift = [{ address: 'aws_s3_bucket.web[0]', mode: 'managed', type: 'aws_s3_bucket', change: { actions: ['update'], before: {}, after: { versioning: [] } } }]; return plan; }, /drift/],
+  ];
+  for (const [name, build, expected] of cases) {
+    const problems = planProblems(build(), 'WEB');
+    assert.ok(problems.some((problem) => expected.test(problem)), `${name}: expected ${expected}, got ${JSON.stringify(problems)}`);
+  }
+});
+
+test('WEB: the other stages still refuse a plan that only updates the distribution, and the CLI knows the stage', () => {
+  for (const stage of ['A', 'B', 'C', 'SES']) assert.ok(planProblems(webPlan(DISTRIBUTION_CHANGE()), stage).length > 0, stage);
+  assert.match(planProblems(webPlan(DISTRIBUTION_CHANGE()), 'X')[0], /WEB/);
+  const dir = mkdtempSync(join(tmpdir(), 'staging-plan-'));
+  try {
+    const file = join(dir, 'web.json');
+    writeFileSync(file, JSON.stringify(webPlan(DISTRIBUTION_CHANGE())));
+    const run = spawnSync(process.execPath, [new URL('./check-plan.mjs', import.meta.url).pathname, 'WEB', file], { encoding: 'utf8', env: {} });
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stdout, /Stage WEB action checks passed/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

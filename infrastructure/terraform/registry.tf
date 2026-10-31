@@ -1,4 +1,4 @@
-# FD-7 slice 1: the API image registry. NOT APPLIED. Off by default (same switch as the rest of API hosting: enable_api_hosting).
+# FD-7 slice 1: the API image registry. Off by default (same switch as the rest of API hosting: enable_api_hosting).
 # Until now `api_image` was validated as an ECR digest reference and the task execution roles were granted pull on that repository, but nothing
 # created the repository, so there was nowhere to push. This is that repository and the scan rule for it, nothing else: no replication, no
 # pull-through cache, no repository policy (the execution roles' own pull grant, api-compute.tf and worker.tf, is the only access besides the person who pushes).

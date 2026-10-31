@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { LedgerGate } from './ledger-status';
 import { EVENT_TYPE_FOR_TABLE, PROJECTION_VERSION, type RecordTable, toLedgerError } from './ledger-types';
-import { loadProjections, projectionHash, type Queryable } from './projections';
+import { loadProjections, projectionHash, type Projection, type Queryable } from './projections';
 
 /**
  * The ONLY code that calls `ledger_append`. Call `appendEvent` as the LAST statement of the transaction that inserted the record
@@ -10,6 +10,10 @@ import { loadProjections, projectionHash, type Queryable } from './projections';
  * (migration 0005: deferred foreign key from the record, deferred constraint trigger on the event).
  *
  * The transaction must have set the tenant and actor settings (Database.withTenant does, given an actor).
+ *
+ * Returns the projection it hashed. Nothing `ledger_append` writes (the event and the chain head) is part of any record's projection, and the
+ * append is the last statement that touches the record, so this is what a reader sees once the transaction commits. A caller that needs the record
+ * back uses it instead of loading it again while the tenant's head lock is held.
  *
  * `gate` is the ledger watch's answer to "may anything be written for this tenant?". It is a required first argument, and it is asked before
  * the projection is read or anything is appended, so a caller cannot reach the ledger without passing it, and a contained tenant takes no
@@ -23,7 +27,7 @@ export async function appendEvent(
   table: RecordTable,
   recordId: string,
   eventId: string,
-): Promise<{ seq: string; payloadSha256: string }> {
+): Promise<{ seq: string; payloadSha256: string; projection: Projection }> {
   gate.assertOpen(tenantId);
   const projections = await loadProjections(client, table, [recordId]);
   const projection = projections.get(recordId);
@@ -38,7 +42,7 @@ export async function appendEvent(
       payloadSha256,
       PROJECTION_VERSION,
     ]);
-    return { seq: rows[0]!.seq, payloadSha256 };
+    return { seq: rows[0]!.seq, payloadSha256, projection };
   } catch (error) {
     throw toLedgerError(error);
   }

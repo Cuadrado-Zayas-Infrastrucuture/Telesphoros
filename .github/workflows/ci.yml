@@ -3,7 +3,7 @@
 # The six external gate names below ARE the required status checks in .github/rulesets/main.json.
 # Renaming a job silently un-requires it, so change both together.
 #
-# Synthetic data only: nothing here has cloud credentials, and nothing is deployed.
+# Synthetic data only: nothing here has cloud credentials, and no job deploys.
 name: ci
 
 on:

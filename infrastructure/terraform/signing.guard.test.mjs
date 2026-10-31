@@ -1,5 +1,5 @@
 // Guards for the image-signing key, the GitHub OIDC trust and the CI release role (signing.tf), audit finding INF-03, specs/002-signed-image-release
-// (plan approved 2026-10-20). Imported by guard.test.mjs, so `pnpm test:infra` runs it. NOTHING here is applied: the key and the role exist only when API
+// (plan approved 2026-10-20). Imported by guard.test.mjs, so `pnpm test:infra` runs it. The key and the role exist only when API
 // hosting is on AND the GitHub repository IDs are set, and the founder applies them after the BAA.
 // Like the other guards it reads Terraform TEXT. `signingProblems` returns what is wrong with a copy of the text (empty when nothing is); the tests run it on
 // the real file and on deliberately broken copies, so every rule has been seen to fail.

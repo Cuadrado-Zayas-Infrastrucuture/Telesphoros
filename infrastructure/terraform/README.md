@@ -1,4 +1,6 @@
-# Terraform: database and storage (NOT APPLIED)
+# Terraform: database and storage
+
+What is applied in AWS, and where, is in [docs/ops/environments.md](../../docs/ops/environments.md).
 
 > **Status: source wiring only; backend activation and live acceptance remain unverified.**
 > Do **not** run `terraform apply` until **all** of these are true:

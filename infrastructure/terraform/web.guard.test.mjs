@@ -70,6 +70,29 @@ test('certificate uses us-east-1; viewers require HTTPS/TLS 1.2; shell is not ca
   has(distribution, 'event_type = "viewer-request"');
 });
 
+// Only the hashed build output is cached at the edge. The shell (index.html, the auth callback, every route) stays on CachingDisabled, and the
+// cached behaviour trusts the origin's Cache-Control, so the publish script is checked too.
+test('only /assets/* is cached at the edge; everything else is never cached', () => {
+  const distribution = block(source, 'resource "aws_cloudfront_distribution" "web"');
+  const CACHING_DISABLED = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad';
+  const CACHING_OPTIMIZED = '658327ea-f89d-4fab-a63d-7e88639e058f';
+  const fallback = code(block(distribution, 'default_cache_behavior'));
+  assert.ok(fallback.includes(`cache_policy_id = "${CACHING_DISABLED}"`), 'the default behaviour (the shell) must stay on CachingDisabled');
+  assert.ok(!fallback.includes(CACHING_OPTIMIZED), 'the default behaviour must never use the caching policy');
+  assert.equal([...code(distribution).matchAll(/ordered_cache_behavior \{/g)].length, 1, 'exactly one path is cached');
+  const assets = code(block(distribution, 'ordered_cache_behavior'));
+  assert.ok(assets.includes('path_pattern = "/assets/*"'), 'the cached path is exactly /assets/*');
+  assert.ok(assets.includes(`cache_policy_id = "${CACHING_OPTIMIZED}"`));
+  assert.ok(assets.includes('compress = true'));
+  assert.ok(assets.includes('allowed_methods = ["GET", "HEAD"]') && assets.includes('cached_methods = ["GET", "HEAD"]'), 'read-only methods only');
+  assert.ok(assets.includes('viewer_protocol_policy = "redirect-to-https"'));
+  assert.ok(assets.includes('response_headers_policy_id = aws_cloudfront_response_headers_policy.web[0].id'), 'the same security headers as every other path');
+  assert.ok(assets.includes('function_arn = aws_cloudfront_function.web[0].arn'), 'the host redirects apply to assets too');
+  const publish = readFileSync(new URL('../../scripts/staging/publish-frontend.sh', import.meta.url), 'utf8');
+  assert.ok(/s3 sync "\$stage\/assets" "s3:\/\/\$WEB_BUCKET\/assets" --cache-control "public,max-age=31536000,immutable"/.test(publish), '/assets is uploaded as immutable');
+  assert.ok(/--exclude "assets\/\*" --exclude "index\.html" --cache-control "no-cache"/.test(publish) && /index\.html" --cache-control "no-cache"/.test(publish), 'everything else is uploaded no-cache');
+});
+
 test('headers forbid inline scripts, framing and referrer leaks; HSTS preload stays off', () => {
   const headers = block(source, 'resource "aws_cloudfront_response_headers_policy" "web"');
   has(headers, "script-src 'self';");

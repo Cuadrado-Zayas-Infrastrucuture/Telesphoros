@@ -1,4 +1,4 @@
-# F3a: the API's edge (certificate, load balancer, firewall, security groups). NOT APPLIED. Off by default.
+# F3a: the API's edge (certificate, load balancer, firewall, security groups). Off by default.
 # The compute that sits behind it (cluster, service, task, roles, secrets, alarms) is F3b. Plan: docs/design/plans/f3-api-hosting.md.
 # Design: docs/ops/api-hosting.md. Enabling this switch is NOT approval to apply the rest of the root (see README.md).
 

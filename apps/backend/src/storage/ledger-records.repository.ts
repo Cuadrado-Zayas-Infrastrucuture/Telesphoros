@@ -10,6 +10,7 @@ import type {
   EvaluationCompletion,
   EvaluationInput,
   EvaluationReadContext,
+  EvaluationPageView,
   EvaluationState,
   EvaluationView,
   InsertResult,
@@ -112,6 +113,8 @@ export abstract class LedgerRecordsRepository {
   abstract findEvaluation(tenantId: string, id: string): Promise<Projected | undefined>;
   /** `current` keeps only the current evaluation of each report: its newest, if active (specification 4.5, amended in section 22); the other filters narrow the result further. */
   abstract listEvaluations(tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }, page: PageRequest): Promise<Page<Projected>>;
+  /** `listEvaluations` and everything the list shows beside the page (contexts, current ids, link states, the dispute count), in ONE transaction. */
+  abstract evaluationPage(tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }, page: PageRequest): Promise<EvaluationPageView>;
   /** Batch the named acceptance/current-decision comparison and complete corrections for selected tenant evaluations. Unknown/foreign IDs are absent. */
   abstract evaluationContexts(tenantId: string, evaluationIds: string[]): Promise<Map<string, EvaluationReadContext>>;
   /** For each report, the id of its current evaluation (its newest, if that is active), or null when it has none. Every asked report has an entry. */

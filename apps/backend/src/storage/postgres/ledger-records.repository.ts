@@ -32,6 +32,7 @@ import type {
   DisputeStatus,
   EvaluationCompletion,
   EvaluationInput,
+  EvaluationPageView,
   EvaluationReadContext,
   EvaluationState,
   EvaluationView,
@@ -578,26 +579,42 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
   }
 
   listEvaluations(tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }, page: PageRequest): Promise<Page<Projected>> {
-    return this.read(tenantId, async (client) => {
-      // Count and page use ONE statement snapshot, including when the requested page is empty.
-      const { rows } = await client.query<{ id: string | null; total: number }>(
-        `WITH matching AS MATERIALIZED (SELECT e.id, e.seq FROM evaluations e
+    return this.read(tenantId, (client) => this.listIn(client, tenantId, filter, page));
+  }
+
+  private async listIn(client: PoolClient, tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }, page: PageRequest): Promise<Page<Projected>> {
+    // Count and page use ONE statement snapshot, including when the requested page is empty.
+    const { rows } = await client.query<{ id: string | null; total: number }>(
+      `WITH matching AS MATERIALIZED (SELECT e.id, e.seq FROM evaluations e
           WHERE e.tenant_id = $1 AND ($2::uuid IS NULL OR e.report_id = $2::uuid) AND ($3::uuid IS NULL OR e.patient_id IN (SELECT patient_group_ids($1, $3::uuid)))
             AND (NOT $4::boolean OR e.id IN (${CURRENT_EVALUATIONS_SQL}))),
           page AS (SELECT id, seq FROM matching ORDER BY seq LIMIT $5 OFFSET $6)
           SELECT page.id::text AS id, totals.total FROM (SELECT count(*)::int AS total FROM matching) totals
             LEFT JOIN page ON true ORDER BY page.seq`,
-        [tenantId, filter.reportId ?? null, filter.patientId ?? null, filter.current === true, page.limit, page.offset],
-      );
-      return {
-        items: await this.many(
-          client,
-          tenantId,
-          'evaluations',
-          rows.flatMap((r) => (r.id === null ? [] : [r.id])),
-        ),
-        total: rows[0]!.total,
-      };
+      [tenantId, filter.reportId ?? null, filter.patientId ?? null, filter.current === true, page.limit, page.offset],
+    );
+    return {
+      items: await this.many(
+        client,
+        tenantId,
+        'evaluations',
+        rows.flatMap((r) => (r.id === null ? [] : [r.id])),
+      ),
+      total: rows[0]!.total,
+    };
+  }
+
+  /** The list's reads on one client: one checkout, one BEGIN and one COMMIT however many facts the page needs. Nothing is read for reports a page does not have. */
+  evaluationPage(tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }, page: PageRequest): Promise<EvaluationPageView> {
+    return this.read(tenantId, async (client) => {
+      const listed = await this.listIn(client, tenantId, filter, page);
+      const ids = listed.items.map((r) => r.id);
+      const reportIds = [...new Set(listed.items.map((r) => r.reportId as string))];
+      const contexts = ids.length === 0 ? new Map<string, EvaluationReadContext>() : await this.contextsIn(client, tenantId, ids);
+      const activeDisputes = await this.activeDisputeCountIn(client, tenantId);
+      const currentIds = reportIds.length === 0 ? new Map<string, string | null>() : await this.currentIdsIn(client, tenantId, reportIds);
+      const links = reportIds.length === 0 ? new Map<string, PatientLinkStateValue>() : await this.linkStatesIn(client, tenantId, reportIds);
+      return { items: listed.items, total: listed.total, contexts, currentIds, links, activeDisputes };
     });
   }
 
@@ -969,8 +986,11 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 
   /** Appends the record's event as the last statement and returns the projection that was hashed. */
   private async finish(client: PoolClient, tenantId: string, table: RecordTable, id: string): Promise<InsertResult> {
-    await appendEvent(this.ledger, tenantId, client, table, id, await this.eventIdOf(client, table, id));
-    return { record: await this.mustOne(client, tenantId, table, id), created: true };
+    const { projection } = await appendEvent(this.ledger, tenantId, client, table, id, await this.eventIdOf(client, table, id));
+    // Not loaded again: the append has just read and hashed it, and loading it once more would run while the tenant's head lock is held.
+    // Row-level security already limits the read to the tenant; this is the second, independent check (as in `one`).
+    if (projection.tenantId !== tenantId) throw new Error('A record written in this transaction could not be read back.');
+    return { record: projection as Projected, created: true };
   }
 
   private async eventIdOf(client: PoolClient, table: RecordTable, id: string): Promise<string> {
