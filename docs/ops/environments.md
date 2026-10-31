@@ -22,6 +22,11 @@ CloudFront `/assets/*` cache (#202, #212), then `main` `6c4714de` (patient demog
 the issuer's three log alarms, #210), then `main` `299efbb3` the same evening (spec 026: the worker removes expired capabilities every minute,
 #214, migration 0065) and #216's three sweep alarms. No CI job holds cloud credentials or applies anything.
 
+The last apply read the backend clone at, and so applied from `main` `780b88e3` (#216, the sweep alarms): anything merged after it under `infrastructure/terraform/` is not
+applied until a release says so here. The values in the table below are kept as data in
+[staging-expected.json](staging-expected.json) (spec 027); a guard in `pnpm test:ci-config` fails when this page and that file disagree, so change
+both in the same pull request.
+
 | Piece | What runs (read 2026-10-31) | What production adds or changes |
 | --- | --- | --- |
 | API | ECS Fargate service `telesphoros-staging-api` on cluster `telesphoros-staging-api`: 1 task, task definition revision 5, image `sha256:e1ea8d63e95f…` (commit `299efbb3`, pushed by hand; see "Break-glass" in [ci-cd.md](ci-cd.md)), `NODE_ENV=production`. Patient name and date of birth are encrypted under a KMS data key per patient; the task's key policy only allows calls with a `{tenant, patient}` encryption context | At least 2 tasks; only images signed in CI |
