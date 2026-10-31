@@ -26,7 +26,7 @@ async function fill(page: Page, fixture: { id: string; label: string }, name: st
 }
 async function navigateAwayAndBack(page: Page) {
   await openWorkspaceNavigation(page);
-  await page.getByRole('link', { name: 'Overview', exact: true }).click();
+  await page.locator('header.workspace-navigation').getByRole('link', { name: /^Telesphoros/ }).first().click();
   await expect(page).toHaveURL(/\/$/);
   await openWorkspaceNavigation(page);
   await page.getByRole('link', { name: 'Upload report', exact: true }).click();

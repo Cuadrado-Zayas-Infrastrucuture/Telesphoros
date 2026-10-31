@@ -112,6 +112,37 @@ describe('the current evaluation of a report', () => {
     expect((await repo.listEvaluations(t, { current: true, reportId: randomUUID() }, { offset: 0, limit: 100 })).items).toEqual([]);
   });
 
+  it('gives a report the same answer whichever other reports are asked about with it', async () => {
+    const t = tenant();
+    const [a, b, c, d] = [await report(t), await report(t), await report(t), await report(t)];
+    const [a1, a2, b1, c1, c2] = [await a.evaluate(), await a.evaluate(), await b.evaluate(), await c.evaluate(), await c.evaluate()];
+    await retract(t, a2); // a: the newest is retracted, so none is current
+    await retract(t, c1); // c: an older one is retracted, the newest stays current
+    const everyone = [a, b, c, d].map((r) => r.reportId);
+    const all = await repo.currentEvaluationIds(t, everyone);
+    expect([...all.entries()]).toEqual([
+      [a.reportId, null],
+      [b.reportId, b1],
+      [c.reportId, c2],
+      [d.reportId, null], // no evaluation at all
+    ]);
+    const unknown = randomUUID();
+    for (const subset of [[a], [b], [c], [d], [a, b], [b, c], [c, d, a], [d, c, b, a]]) {
+      const asked = subset.map((r) => r.reportId);
+      const answer = await repo.currentEvaluationIds(t, asked);
+      expect([...answer.entries()]).toEqual(asked.map((id) => [id, all.get(id)]));
+    }
+    expect([...(await repo.currentEvaluationIds(t, [unknown, b.reportId])).entries()]).toEqual([
+      [unknown, null],
+      [b.reportId, b1],
+    ]);
+    expect((await repo.currentEvaluationIds(t, [])).size).toBe(0);
+    // The list filter, which needs every report, agrees with the per-report answers.
+    const listed = (await repo.listEvaluations(t, { current: true }, { offset: 0, limit: 100 })).items.map((e) => e.id).sort();
+    expect(listed).toEqual([...all.values()].filter((id): id is string => id !== null).sort());
+    expect(a1).not.toBe(a2);
+  });
+
   it("never looks at another tenant's evaluations (checked as a superuser, where only the query's own conditions protect)", async () => {
     const ta = tenant();
     const tb = tenant();

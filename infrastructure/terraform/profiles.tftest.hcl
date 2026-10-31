@@ -97,7 +97,7 @@ run "default_variables_plan" {
     error_message = "the worker, with its secret and alarms, is off by default"
   }
   assert {
-    condition     = length(aws_ecr_repository.api) == 0 && length(aws_ecr_lifecycle_policy.api) == 0 && output.api_repository_url == null
+    condition     = length(aws_ecr_repository.api) == 0 && length(aws_ecr_lifecycle_policy.api) == 0 && length(aws_ecr_registry_scanning_configuration.main) == 0 && output.api_repository_url == null
     error_message = "the image registry is off by default, with the rest of API hosting"
   }
   assert {
@@ -271,6 +271,10 @@ run "production_hosting_on" {
   assert {
     condition     = aws_ecr_repository.api[0].image_tag_mutability == "IMMUTABLE" && one(aws_ecr_repository.api[0].image_scanning_configuration).scan_on_push == true && one(aws_ecr_repository.api[0].encryption_configuration).encryption_type == "AES256"
     error_message = "the registry has immutable tags, scans on push and is encrypted with the AWS-managed key"
+  }
+  assert {
+    condition     = length(aws_ecr_registry_scanning_configuration.main) == 1 && aws_ecr_registry_scanning_configuration.main[0].scan_type == "BASIC" && one(aws_ecr_registry_scanning_configuration.main[0].rule).scan_frequency == "SCAN_ON_PUSH" && one(one(aws_ecr_registry_scanning_configuration.main[0].rule).repository_filter).filter == "telesphoros-production-api"
+    error_message = "the registry scan rule scans the API repository on push (a registry setting with no rules overrides scan_on_push)"
   }
   assert {
     condition     = output.api_task_assign_public_ip == false && output.api_task_subnet_ids == tolist(["subnet-aaaa1111", "subnet-bbbb2222"])

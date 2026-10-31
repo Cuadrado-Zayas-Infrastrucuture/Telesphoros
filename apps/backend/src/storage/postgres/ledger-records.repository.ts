@@ -32,6 +32,7 @@ import type {
   DisputeStatus,
   EvaluationCompletion,
   EvaluationInput,
+  EvaluationPageView,
   EvaluationReadContext,
   EvaluationState,
   EvaluationView,
@@ -578,26 +579,42 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
   }
 
   listEvaluations(tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }, page: PageRequest): Promise<Page<Projected>> {
-    return this.read(tenantId, async (client) => {
-      // Count and page use ONE statement snapshot, including when the requested page is empty.
-      const { rows } = await client.query<{ id: string | null; total: number }>(
-        `WITH matching AS MATERIALIZED (SELECT e.id, e.seq FROM evaluations e
+    return this.read(tenantId, (client) => this.listIn(client, tenantId, filter, page));
+  }
+
+  private async listIn(client: PoolClient, tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }, page: PageRequest): Promise<Page<Projected>> {
+    // Count and page use ONE statement snapshot, including when the requested page is empty.
+    const { rows } = await client.query<{ id: string | null; total: number }>(
+      `WITH matching AS MATERIALIZED (SELECT e.id, e.seq FROM evaluations e
           WHERE e.tenant_id = $1 AND ($2::uuid IS NULL OR e.report_id = $2::uuid) AND ($3::uuid IS NULL OR e.patient_id IN (SELECT patient_group_ids($1, $3::uuid)))
             AND (NOT $4::boolean OR e.id IN (${CURRENT_EVALUATIONS_SQL}))),
           page AS (SELECT id, seq FROM matching ORDER BY seq LIMIT $5 OFFSET $6)
           SELECT page.id::text AS id, totals.total FROM (SELECT count(*)::int AS total FROM matching) totals
             LEFT JOIN page ON true ORDER BY page.seq`,
-        [tenantId, filter.reportId ?? null, filter.patientId ?? null, filter.current === true, page.limit, page.offset],
-      );
-      return {
-        items: await this.many(
-          client,
-          tenantId,
-          'evaluations',
-          rows.flatMap((r) => (r.id === null ? [] : [r.id])),
-        ),
-        total: rows[0]!.total,
-      };
+      [tenantId, filter.reportId ?? null, filter.patientId ?? null, filter.current === true, page.limit, page.offset],
+    );
+    return {
+      items: await this.many(
+        client,
+        tenantId,
+        'evaluations',
+        rows.flatMap((r) => (r.id === null ? [] : [r.id])),
+      ),
+      total: rows[0]!.total,
+    };
+  }
+
+  /** The list's reads on one client: one checkout, one BEGIN and one COMMIT however many facts the page needs. Nothing is read for reports a page does not have. */
+  evaluationPage(tenantId: string, filter: { reportId?: string; patientId?: string; current?: boolean }, page: PageRequest): Promise<EvaluationPageView> {
+    return this.read(tenantId, async (client) => {
+      const listed = await this.listIn(client, tenantId, filter, page);
+      const ids = listed.items.map((r) => r.id);
+      const reportIds = [...new Set(listed.items.map((r) => r.reportId as string))];
+      const contexts = ids.length === 0 ? new Map<string, EvaluationReadContext>() : await this.contextsIn(client, tenantId, ids);
+      const activeDisputes = await this.activeDisputeCountIn(client, tenantId);
+      const currentIds = reportIds.length === 0 ? new Map<string, string | null>() : await this.currentIdsIn(client, tenantId, reportIds);
+      const links = reportIds.length === 0 ? new Map<string, PatientLinkStateValue>() : await this.linkStatesIn(client, tenantId, reportIds);
+      return { items: listed.items, total: listed.total, contexts, currentIds, links, activeDisputes };
     });
   }
 
@@ -647,7 +664,7 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 
   private async currentIdsIn(client: PoolClient, tenantId: string, reportIds: string[]): Promise<Map<string, string | null>> {
     const { rows } = await client.query<{ report_id: string; id: string }>(
-      `SELECT e.report_id::text AS report_id, e.id::text AS id FROM evaluations e WHERE e.id IN (${CURRENT_EVALUATIONS_SQL}) AND e.report_id = ANY($2::uuid[])`,
+      `SELECT e.report_id::text AS report_id, e.id::text AS id FROM evaluations e WHERE e.id IN (${currentEvaluationsSql('$2')}) AND e.report_id = ANY($2::uuid[])`,
       [tenantId, reportIds],
     );
     const found = new Map(rows.map((r) => [r.report_id, r.id]));
@@ -963,8 +980,11 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
 
   /** Appends the record's event as the last statement and returns the projection that was hashed. */
   private async finish(client: PoolClient, tenantId: string, table: RecordTable, id: string): Promise<InsertResult> {
-    await appendEvent(this.ledger, tenantId, client, table, id, await this.eventIdOf(client, table, id));
-    return { record: await this.mustOne(client, tenantId, table, id), created: true };
+    const { projection } = await appendEvent(this.ledger, tenantId, client, table, id, await this.eventIdOf(client, table, id));
+    // Not loaded again: the append has just read and hashed it, and loading it once more would run while the tenant's head lock is held.
+    // Row-level security already limits the read to the tenant; this is the second, independent check (as in `one`).
+    if (projection.tenantId !== tenantId) throw new Error('A record written in this transaction could not be read back.');
+    return { record: projection as Projected, created: true };
   }
 
   private async eventIdOf(client: PoolClient, table: RecordTable, id: string): Promise<string> {
@@ -1035,12 +1055,14 @@ const LINK_APPLIES = `d.report_sha256 = r.sha256 AND d.object_version = r.object
  * this", and nobody has said the older one is what to rely on instead. An evaluation is not active when its last correction (the one with
  * no child) is a retraction or a supersession; no corrections, or a last reinstatement, means active.
  * Uses `$1` for the tenant. Computed in one statement, so a list built from it is consistent.
+ * With `reportsParam` (the name of a uuid[] parameter, e.g. `$2`) only those reports are looked at: the newest evaluation of a report is the same
+ * whichever other reports are read, so the answer for them is unchanged, but the work no longer grows with every report the tenant has.
  */
-const CURRENT_EVALUATIONS_SQL = `
+const currentEvaluationsSql = (reportsParam?: string) => `
   SELECT newest.id
     FROM (SELECT DISTINCT ON (a.report_id) a.id, a.tenant_id, a.report_id
             FROM evaluations a
-           WHERE a.tenant_id = $1
+           WHERE a.tenant_id = $1${reportsParam ? ` AND a.report_id = ANY(${reportsParam}::uuid[])` : ''}
            ORDER BY a.report_id, a.seq DESC) newest
    WHERE NOT EXISTS (
      -- M2.1c-1: a report whose patient link was rejected for the file it holds now is quarantined, and nothing on it is current.
@@ -1051,6 +1073,7 @@ const CURRENT_EVALUATIONS_SQL = `
      SELECT 1 FROM corrections c
       WHERE c.tenant_id = newest.tenant_id AND c.evaluation_id = newest.id AND c.kind IN ('retraction', 'supersession')
         AND NOT EXISTS (SELECT 1 FROM corrections n WHERE n.tenant_id = c.tenant_id AND n.previous_correction_id = c.id))`;
+const CURRENT_EVALUATIONS_SQL = currentEvaluationsSql();
 
 /**
  * The key under which "the same evaluation" is recognised: what was evaluated (capture and acceptance), with which knowledge and

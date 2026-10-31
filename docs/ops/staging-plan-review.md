@@ -144,9 +144,35 @@ node scripts/staging/check-plan.mjs SES infrastructure/terraform/.terraform/ses.
 
 Applied in staging on 2026-10-30 in this order, after a first single plan with all three changes failed at the user pool.
 
+## After stage C: caching the hashed build output (`/assets/*`)
+
+Once `web.tf` has the separate `/assets/*` cache behaviour (managed CachingOptimized, compression on; the shell stays on CachingDisabled), applying it
+is **one in-place update of `aws_cloudfront_distribution.web[0]`** and nothing else. No existing stage fits that shape (A, B and C need creates, and
+SES knows only the SES resources), so `check-plan WEB` checks it. Targeted or full both work: `-target` makes the plan `complete: false`, and the stage
+checks every change in the plan instead. Prefer a full plan: it also shows any drift.
+
+```sh
+umask 077
+terraform -chdir=infrastructure/terraform plan -var-file=<yours> -var enable_web_hosting=true -out=web.tfplan
+terraform -chdir=infrastructure/terraform show -json web.tfplan > infrastructure/terraform/.terraform/web.plan.json
+node scripts/staging/check-plan.mjs WEB infrastructure/terraform/.terraform/web.plan.json
+```
+
+`check-plan WEB` accepts only an in-place update of the distribution that adds exactly one cached path: `/assets/*`, read-only methods, the managed
+CachingOptimized policy, compression, `redirect-to-https`, the `web-s3` origin, the same security-headers policy and viewer-request function as the default
+behaviour, and no forwarded values, edge function or TTL override. It refuses any other change in the plan, any other attribute of the distribution
+that moves (aliases, origin, tags, the default behaviour), the shell on the caching policy, unknown values other than AWS's own computed ones (`etag`,
+`status`, `last_modified_time`), a replacement, and unreviewed drift. Expect `0 to add, 1 to change, 0 to destroy`.
+
+Known limit: the stage was written against the shape of `terraform show -json` and tested on plans modelled on it, not on a saved plan from the real stack.
+It fails closed, so a first real run may refuse an attribute it did not expect; read the message, and widen it only after reading the plan line by line.
+After the apply, check the effect from outside: the shell must stay `x-cache: Miss from cloudfront` with `cache-control: no-cache`, and a hashed file
+under `/assets/` should show `content-encoding: br` and `x-cache: Hit from cloudfront` on its second request.
+
 ## Stop and ask when
 
 - anything is destroyed or replaced (except the one SES identity replacement above, checked with `check-plan SES`); any update appears in A/B;
+- `check-plan WEB` refuses a plan;
 - `check-plan SES` refuses a plan, or the user pool appears in the same plan as the SES identity; C updates anything beyond the four specified repository-only policy changes, or any one of those changes is missing;
 - a relaxation (`force_destroy`, no deletion protection, a 7-day key window, `recovery_window_in_days = 0`, a public task address) appears for a resource that is not in the tables above, or `deployment_profile` is not `synthetic`;
 - a resource named in the quick checks appears; an unapproved Region, a backups bucket or a CloudTrail trail that is multi-Region appears. The web certificate in `us-east-1` and global CloudFront are expected by `web.tf`, even when the primary data Region differs; they are not off-site backups;

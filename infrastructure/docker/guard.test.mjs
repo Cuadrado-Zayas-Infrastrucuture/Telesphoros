@@ -7,7 +7,7 @@ export function problems(source){
   const lines=source.split('\n').filter(l=>!l.trim().startsWith('#')).join('\n');
   const rules=[
     ['base',()=>{const from=[...lines.matchAll(/^FROM (\S+) AS (\w+)$/gm)];return from.length===2 && from.every(m=>/^node:22\.22\.0-bookworm-slim@sha256:[0-9a-f]{64}$/.test(m[1]));}],
-    ['OS fixes',()=>['libcap2=1:2.66-4+deb12u3+b1','libgnutls30=3.7.9-2+deb12u7','libpcre2-8-0=10.42-1+deb12u2','perl-base=5.36.0-7+deb12u4'].every(pin=>lines.includes(pin))],
+    ['OS fixes',()=>['libcap2=1:2.66-4+deb12u3+b1','libgnutls30=3.7.9-2+deb12u7','libpcre2-8-0=10.42-1+deb12u2','perl-base=5.36.0-7+deb12u4','libc6=2.36-9+deb12u14','libc-bin=2.36-9+deb12u14','dpkg=1.21.23'].every(pin=>lines.includes(pin))],
     ['installer removal',()=>lines.includes('/usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx')],
     ['pnpm',()=>lines.includes('pnpm@10.28.0')],
     ['frozen',()=>lines.includes('pnpm fetch --frozen-lockfile')&&lines.includes('pnpm install --frozen-lockfile --offline')],
@@ -27,6 +27,8 @@ export function problems(source){
 test('Dockerfile contract (control)',()=>assert.deepEqual(problems(text),[]));
 const mutations=[
  ['OS fixes',s=>s.replace('libcap2=1:2.66-4+deb12u3+b1','libcap2')],
+ ['OS fixes',s=>s.replace('libc6=2.36-9+deb12u14 ','')],
+ ['OS fixes',s=>s.replace('dpkg=1.21.23','dpkg')],
  ['installer removal',s=>s.replace('/usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx','/unused')],
  ['base',s=>s.replace(/@sha256:[0-9a-f]{64}/g,'')],
  ['pnpm',s=>s.replace('pnpm@10.28.0','pnpm@latest')],

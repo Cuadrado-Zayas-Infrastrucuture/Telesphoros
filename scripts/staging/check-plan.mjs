@@ -1,4 +1,4 @@
-// Read-only action check for saved FD-7 A/B/C plans. This does not approve a plan or inspect every resource setting.
+// Read-only action check for saved FD-7 A/B/C plans, and the narrow SES and WEB changes after them. This does not approve a plan or inspect every resource setting.
 // Stage C also needs verified-image.json next to the plan, written by verify-image.mjs (INF-03 slice 3): every image the plan deploys was verified
 // against this stack's signing key, or recorded as break-glass for synthetic staging.
 import { readFileSync } from 'node:fs';
@@ -135,10 +135,91 @@ function sesProblems(plan, need) {
   return problems;
 }
 
+const WEB_DISTRIBUTION = 'aws_cloudfront_distribution.web[0]';
+const CACHING_DISABLED = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad';
+const CACHING_OPTIMIZED = '658327ea-f89d-4fab-a63d-7e88639e058f';
+// AWS recomputes these on every update of a distribution, so the plan lists them as unknown. They are never a change of ours.
+const WEB_COMPUTED = ['etag', 'last_modified_time', 'status', 'in_progress_validation_batches'];
+// The attributes the cached path sets on purpose (web.tf). Any other attribute of it must be blank: no forwarded values, no edge function, no TTL override.
+const ASSET_ATTRIBUTES = ['path_pattern', 'target_origin_id', 'viewer_protocol_policy', 'allowed_methods', 'cached_methods', 'compress', 'cache_policy_id', 'response_headers_policy_id', 'function_association'];
+const blank = (value) => value === null || value === undefined || value === '' || value === 0 || value === false
+  || (Array.isArray(value) ? value.every(blank) : typeof value === 'object' && Object.values(value).every(blank));
+const sameSet = (list, expected) => Array.isArray(list) && canonical([...list].sort()) === canonical([...expected].sort());
+
+/**
+ * The one change after the first bring-up that caches the hashed build output at the edge (infrastructure/terraform/web.tf, `/assets/*`): an in-place
+ * update of the web distribution that adds exactly one cached path, and nothing else. It can be a targeted plan (`complete: false`) or a full one; every
+ * change in the plan is checked either way. Anything else in the plan, any other attribute of the distribution that moves, and any widening of the path
+ * (another path, a write method, the shell on the caching policy, other headers, a function, forwarded values) is refused. Known limit: this was written
+ * against the shape of `terraform show -json`, not a real saved plan; it fails closed, so an attribute it did not expect is refused, not waved through.
+ */
+function webProblems(plan, need) {
+  const problems = [];
+  const hosting = plan.variables?.enable_web_hosting?.value;
+  need(hosting === true || hosting === 'true', 'web hosting must be enabled (enable_web_hosting)');
+  const changed = new Map();
+  for (const entry of plan.resource_changes) {
+    const { address, mode, change } = entry;
+    if (!change || entry.deposed || change.importing) { problems.push(`${address}: incomplete, deposed or imported resource`); continue; }
+    const actions = canonical(change.actions);
+    if (mode === 'data' && [canonical(['read']), canonical(['no-op'])].includes(actions)) continue;
+    if (actions === canonical(['no-op'])) continue;
+    changed.set(address, change);
+  }
+  for (const address of changed.keys()) {
+    if (address !== WEB_DISTRIBUTION) problems.push(`${address}: unexpected change; the WEB change touches only the web distribution`);
+  }
+  need(changed.size > 0, 'the plan changes nothing');
+  const change = changed.get(WEB_DISTRIBUTION);
+  if (!change) return problems;
+  const where = WEB_DISTRIBUTION;
+  if (canonical(change.actions) !== canonical(['update']) || !change.before || !change.after) {
+    problems.push(`${where}: must be updated in place, never replaced or created`);
+    return problems;
+  }
+  const { before, after } = change;
+  const unknownKeys = Object.entries(change.after_unknown ?? {}).filter(([, value]) => unknown(value)).map(([key]) => key);
+  const foreign = unknownKeys.filter((key) => !WEB_COMPUTED.includes(key));
+  need(foreign.length === 0, `${where}: unknown values beyond AWS's own computed attributes (${foreign.join(', ')})`);
+  const moved = [...new Set([...Object.keys(before), ...Object.keys(after)])]
+    .filter((key) => key !== 'ordered_cache_behavior' && !unknownKeys.includes(key) && canonical(before[key]) !== canonical(after[key]));
+  need(moved.length === 0, `${where}: only the cached path may change (also moved: ${moved.join(', ')})`);
+  need(Array.isArray(before.ordered_cache_behavior) && before.ordered_cache_behavior.length === 0, `${where}: expected no cached path before this change`);
+  const fallback = Array.isArray(after.default_cache_behavior) ? after.default_cache_behavior[0] : undefined;
+  need(fallback?.cache_policy_id === CACHING_DISABLED, `${where}: the default behaviour (the shell) must stay on CachingDisabled`);
+  const cached = after.ordered_cache_behavior;
+  if (!Array.isArray(cached) || cached.length !== 1) {
+    problems.push(`${where}: exactly one cached path may be added`);
+    return problems;
+  }
+  const path = cached[0];
+  need(path.path_pattern === '/assets/*', `${where}: the cached path must be exactly /assets/*`);
+  need(path.cache_policy_id === CACHING_OPTIMIZED, `${where}: the cached path must use the managed CachingOptimized policy`);
+  need(path.compress === true, `${where}: the cached path must compress`);
+  need(sameSet(path.allowed_methods, ['GET', 'HEAD']) && sameSet(path.cached_methods, ['GET', 'HEAD']), `${where}: the cached path allows read-only methods only (GET, HEAD)`);
+  need(path.viewer_protocol_policy === 'redirect-to-https', `${where}: the cached path must redirect viewers to https (redirect-to-https)`);
+  need(path.target_origin_id === 'web-s3', `${where}: the cached path must use the web-s3 origin`);
+  need(Boolean(path.response_headers_policy_id) && path.response_headers_policy_id === fallback?.response_headers_policy_id, `${where}: the cached path must carry the same security headers as the default behaviour`);
+  need(Array.isArray(path.function_association) && path.function_association.length === 1 && canonical(path.function_association) === canonical(fallback?.function_association), `${where}: the cached path must carry the same viewer-request function as the default behaviour`);
+  for (const key of Object.keys(path)) {
+    if (!ASSET_ATTRIBUTES.includes(key)) need(blank(path[key]), `${where}: ${key} must be empty on the cached path`);
+  }
+  return problems;
+}
+
 export function planProblems(plan, stage, record) {
   const problems = [];
   const need = (ok, reason) => { if (!ok) problems.push(reason); };
-  if (!['A', 'B', 'C', 'SES'].includes(stage)) return ['stage must be A, B, C or SES'];
+  if (!['A', 'B', 'C', 'SES', 'WEB'].includes(stage)) return ['stage must be A, B, C, SES or WEB'];
+  if (stage === 'WEB') {
+    if (!plan || !/^1\./.test(plan.format_version ?? '') || !Array.isArray(plan.resource_changes)) return ['expected terraform show -json plan output with resource_changes'];
+    // Targeted or full (see webProblems), so `complete` is not required; every change is checked instead.
+    need(plan.errored !== true && plan.applyable !== false, 'plan must be applicable and free of errors');
+    need(plan.variables?.deployment_profile?.value === 'synthetic' && plan.variables?.environment?.value === 'staging', 'only the staging/synthetic profile is supported');
+    need(!unreviewedDrift(plan), 'resource drift requires separate review');
+    const web = webProblems(plan, need);
+    return [...problems, ...web];
+  }
   if (stage === 'SES') {
     if (!plan || !/^1\./.test(plan.format_version ?? '') || !Array.isArray(plan.resource_changes)) return ['expected terraform show -json plan output with resource_changes'];
     // Targeted on purpose (see sesProblems), so `complete` is false; every change is checked instead.
@@ -191,7 +272,7 @@ export function planProblems(plan, stage, record) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    if (process.argv.length !== 4) throw new Error('usage: node scripts/staging/check-plan.mjs A|B|C|SES plan.json');
+    if (process.argv.length !== 4) throw new Error('usage: node scripts/staging/check-plan.mjs A|B|C|SES|WEB plan.json');
     const plan = JSON.parse(readFileSync(process.argv[3], 'utf8'));
     let record;
     if (process.argv[2] === 'C') {
@@ -207,7 +288,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       console.log(`Stage ${process.argv[2]} action checks passed; line-by-line resource and cost review is still required.`);
     }
   } catch {
-    console.error('Cannot check plan: use A|B|C|SES and a readable terraform show -json plan file.');
+    console.error('Cannot check plan: use A|B|C|SES|WEB and a readable terraform show -json plan file.');
     process.exitCode = 1;
   }
 }

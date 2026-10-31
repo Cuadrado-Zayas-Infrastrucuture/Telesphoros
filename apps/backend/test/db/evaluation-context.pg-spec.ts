@@ -67,7 +67,7 @@ it('executes a constant number of real SQL statements for one, twenty and the ma
   expect(one.queries).toBeGreaterThan(0);
   expect(twenty.queries).toBe(one.queries);
   expect(hundred.queries).toBe(one.queries);
-  expect(hundred.queries).toBeLessThanOrEqual(28);
+  expect(hundred.queries).toBeLessThanOrEqual(14); // one transaction: BEGIN, its settings, the page and four reads, COMMIT (it was 25 in five)
 });
 
 it('preserves capture-specific latest decisions, ordered correction chains, null acceptances, and list/detail DTO parity', async () => {
@@ -187,20 +187,22 @@ it('counts an open or upheld dispute as active and a dismissed one as not, for t
   expect(listed.data.map((e) => e.advisory.activeDisputes)).toEqual([2]);
 });
 
+/** How many transactions `work` opens, counted on the REAL application-role PostgreSQL client. */
+async function transactionsOf(work: () => Promise<unknown>): Promise<number> {
+  const query = jest.spyOn(Client.prototype, 'query');
+  try {
+    await work().catch(() => undefined); // the caller asserts the outcome
+    return (query.mock.calls as unknown[][]).filter((call) => call[0] === 'BEGIN').length;
+  } finally {
+    query.mockRestore();
+  }
+}
+
 it('reads one evaluation, and everything shown beside it, in a single transaction', async () => {
   const tenantId = `syn-${randomUUID()}`;
   const seeded = await evaluations(tenantId, 2);
   await repo.insertCorrection(tenantId, 'syn-reviewer', { evaluationId: seeded.ids[0]!, kind: 'retraction', reasonCode: 'software-defect' });
   const principal: Principal = { tenantId, sub: 'syn-reviewer', roles: ['clinician'] };
-  async function transactionsOf(work: () => Promise<unknown>): Promise<number> {
-    const query = jest.spyOn(Client.prototype, 'query'); // pass through to the REAL application-role PostgreSQL client
-    try {
-      await work().catch(() => undefined); // the caller asserts the outcome
-      return (query.mock.calls as unknown[][]).filter((call) => call[0] === 'BEGIN').length;
-    } finally {
-      query.mockRestore();
-    }
-  }
   expect(await transactionsOf(() => service.get(principal, seeded.ids[0]!))).toBe(1);
   expect(await transactionsOf(() => service.get(principal, seeded.ids[1]!))).toBe(1);
   const unknown = randomUUID();
@@ -208,13 +210,50 @@ it('reads one evaluation, and everything shown beside it, in a single transactio
   await expect(service.get(principal, unknown)).rejects.toThrow('Evaluation not found.');
 });
 
+it('reads a page of evaluations, and everything shown beside them, in a single transaction', async () => {
+  const tenantId = `syn-${randomUUID()}`;
+  const a = await evaluations(tenantId, 2);
+  const b = await evaluations(tenantId, 1);
+  await repo.insertCorrection(tenantId, 'syn-reviewer', { evaluationId: a.ids[0]!, kind: 'retraction', reasonCode: 'software-defect' });
+  await repo.raiseDispute(tenantId, 'syn-reviewer', {
+    guidelineId: 'syn-advisory',
+    guidelineVersion: '1',
+    guidelineContentSha256: sha('advisory'),
+    locator: { table: '1', row: '1' },
+    note: 'Synthetic evidence',
+  });
+  const principal: Principal = { tenantId, sub: 'syn-reviewer', roles: ['clinician'] };
+  expect(await transactionsOf(() => service.list(principal, { page: 1, pageSize: 20 }))).toBe(1);
+  expect(await transactionsOf(() => service.list(principal, { page: 1, pageSize: 20, current: 'true' }))).toBe(1);
+  expect(await transactionsOf(() => service.list(principal, { page: 9, pageSize: 20 }))).toBe(1); // past the end
+  expect(await transactionsOf(() => service.list({ ...principal, tenantId: `syn-${randomUUID()}` }, { page: 1, pageSize: 20 }))).toBe(1); // nothing at all
+  // The answers, which a single transaction must not change.
+  const all = await service.list(principal, { page: 1, pageSize: 20 });
+  expect(all.data.map((e) => [e.id, e.current, e.advisory.activeDisputes])).toEqual([
+    [a.ids[0], false, 1],
+    [a.ids[1], true, 1],
+    [b.ids[0], true, 1],
+  ]);
+  expect(all.meta.total).toBe(3);
+  const currentOnly = await service.list(principal, { page: 1, pageSize: 20, current: 'true' });
+  expect(currentOnly.data.map((e) => e.id)).toEqual([a.ids[1], b.ids[0]]);
+  expect(currentOnly.meta.total).toBe(2);
+  const past = await service.list(principal, { page: 9, pageSize: 20 });
+  expect(past.data).toEqual([]);
+  expect(past.meta.total).toBe(3);
+  const nothing = await service.list({ ...principal, tenantId: `syn-${randomUUID()}` }, { page: 1, pageSize: 20 });
+  expect(nothing.data).toEqual([]);
+  expect(nothing.meta.total).toBe(0);
+});
+
 it('refuses a list when a selected evaluation is missing its context rather than fabricating an active result', async () => {
   const tenantId = `syn-${randomUUID()}`;
   await evaluations(tenantId, 1);
-  const context = jest.spyOn(repo, 'evaluationContexts').mockResolvedValue(new Map());
+  const original = repo.evaluationPage.bind(repo);
+  const page = jest.spyOn(repo, 'evaluationPage').mockImplementation(async (...args) => ({ ...(await original(...args)), contexts: new Map() }));
   try {
     await expect(service.list({ tenantId, sub: 'syn-reviewer', roles: ['clinician'] }, { page: 1, pageSize: 20 })).rejects.toThrow();
   } finally {
-    context.mockRestore();
+    page.mockRestore();
   }
 });

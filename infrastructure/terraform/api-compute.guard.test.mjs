@@ -57,6 +57,7 @@ const PLACEHOLDERS = {
   'aws_s3_bucket.reports.bucket': 'telesphoros-staging-reports-123456789012',
   'join(",", var.api_cors_origins)': 'https://app.example.com',
   'local.api_build': 'sha256-abababababab',
+  'aws_kms_key.data.arn': 'arn:aws:kms:us-east-2:123456789012:key/00000000-0000-4000-8000-000000000000',
 };
 const SECRET_PLACEHOLDERS = {
   DATABASE_URL: 'postgres://app_login@db.example:5432/telesphoros',
@@ -115,7 +116,7 @@ export function apiComputeProblems(tf, sources = {}) {
   need(has(text, 'api_service_count = var.enable_api_hosting && var.api_image != "" ? 1 : 0'), 'api_service_count must need the switch and an image');
   const resources = [...text.matchAll(/^resource "([^"]+)" "([^"]+)"/gm)];
   need(resources.length >= 21, 'the scan must find the resources (a floor, so an empty read cannot pass)');
-  const SERVICE_ONLY = new Set(['aws_ecs_task_definition.api', 'aws_ecs_task_definition.api_migrate', 'aws_ecs_task_definition.api_provision', 'aws_ecs_service.api', 'aws_cloudwatch_metric_alarm.api_unhealthy_targets', 'aws_cloudwatch_metric_alarm.api_target_5xx', 'aws_cloudwatch_metric_alarm.api_elb_502', 'aws_cloudwatch_metric_alarm.api_elb_504', 'aws_cloudwatch_metric_alarm.api_running_tasks']);
+  const SERVICE_ONLY = new Set(['aws_ecs_task_definition.api', 'aws_ecs_task_definition.api_migrate', 'aws_ecs_task_definition.api_provision', 'aws_ecs_service.api', 'aws_cloudwatch_metric_alarm.api_unhealthy_targets', 'aws_cloudwatch_metric_alarm.api_target_5xx', 'aws_cloudwatch_metric_alarm.api_elb_502', 'aws_cloudwatch_metric_alarm.api_elb_504', 'aws_cloudwatch_metric_alarm.api_running_tasks', 'aws_cloudwatch_log_metric_filter.api_ledger_full_check', 'aws_cloudwatch_metric_alarm.api_ledger_check_stale']);
   for (const [header, type, name] of resources) {
     const b = blocks(text, header.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))[0] ?? '';
     const want = SERVICE_ONLY.has(`${type}.${name}`) ? 'local.api_service_count' : 'local.api_count';
@@ -130,6 +131,21 @@ export function apiComputeProblems(tf, sources = {}) {
   need(!text.includes('AmazonECSTaskExecutionRolePolicy'), 'the broad managed execution policy must not be used');
   need(!/aws_iam_role_policy" "api_task"/.test(text) && !/iam:PassRole/.test(text), 'the task role must carry the app_runtime policy and nothing of its own');
   need(has(one('resource "aws_iam_role_policy_attachment" "api_task_runtime"'), 'policy_arn = aws_iam_policy.app_runtime.arn') && has(one('resource "aws_iam_role_policy_attachment" "api_task_runtime"'), 'role = aws_iam_role.api_task[0].name'), 'the task role must have the app_runtime policy attached');
+  // Spec 025 (PD-b): the patient identity envelope. The key id is in the task's environment; the grant is the data key, directly, only with a
+  // context naming exactly a tenant and a patient (never an empty or S3 context), attached to the API's task role and to nothing else.
+  need(has(one('api_environment = '), 'PATIENT_FIELD_KMS_KEY_ID = aws_kms_key.data.arn'), 'the task environment must name the data key as PATIENT_FIELD_KMS_KEY_ID (production refuses to start without it)');
+  const identity = statements(one('data "aws_iam_policy_document" "api_patient_identity"'));
+  need(identity.length === 1, 'the patient identity policy must hold exactly one statement');
+  for (const s of identity) {
+    need(s.actions === '["kms:GenerateDataKey", "kms:Decrypt"]', 'the patient identity statement must allow only kms:GenerateDataKey and kms:Decrypt');
+    need(s.resources === '[aws_kms_key.data.arn]', 'the patient identity statement must name the data key and nothing else');
+    need(has(s.body, 'test = "ForAllValues:StringEquals"\n variable = "kms:EncryptionContextKeys"\n values = ["tenant", "patient"]'), 'the patient identity statement must allow only the context keys tenant and patient');
+    need(has(s.body, 'test = "Null"\n variable = "kms:EncryptionContextKeys"\n values = ["false"]'), 'the patient identity statement must refuse a call with no encryption context (ForAllValues alone passes an empty set)');
+    need(!/kms:ViaService/.test(s.body), 'the patient identity statement is a direct call, not through a service');
+  }
+  const identityAttach = one('resource "aws_iam_role_policy_attachment" "api_task_patient_identity"');
+  need(has(identityAttach, 'role = aws_iam_role.api_task[0].name') && has(identityAttach, 'policy_arn = aws_iam_policy.api_patient_identity[0].arn'), 'the patient identity policy must be attached to the API task role');
+  need([...text.matchAll(/aws_iam_policy\.api_patient_identity\[0\]\.arn/g)].length === 1, 'the patient identity policy must be attached once, to the API task role only');
   const assume = one('data "aws_iam_policy_document" "api_ecs_assume"');
   need(has(assume, 'identifiers = ["ecs-tasks.amazonaws.com"]') && has(assume, 'variable = "aws:SourceAccount"'), 'the roles must be assumable by ECS tasks of this account only');
   for (const role of ['api_task', 'api_execution_service', 'api_execution_migrate', 'api_execution_provision', 'api_provision_task']) need(has(one(`resource "aws_iam_role" "${role}"`), 'assume_role_policy = data.aws_iam_policy_document.api_ecs_assume.json'), `the ${role} role must use the ECS-only trust`);
@@ -283,6 +299,18 @@ export function apiComputeProblems(tf, sources = {}) {
     need(has(a, `metric_name = "${metric}"`) && has(a, 'statistic = "Sum"') && alarmLine('period', String(period)) && alarmLine('evaluation_periods', '1') && alarmLine('threshold', '1') && has(a, 'comparison_operator = "GreaterThanOrEqualToThreshold"') && has(a, 'treat_missing_data = "notBreaching"') && has(a, 'alarm_actions = [aws_sns_topic.audit_alarms.arn]'), `one ${event} line must raise the ${name} alarm, and silence is normal`);
     need(new RegExp(`event: '${event}'`).test(ledger), `the application must still write the ${event} event`);
   }
+  // The heartbeat: the record-log watch is silent when all is well, so a stopped watch is only heard as missing heartbeats. Silence breaches,
+  // and the window must outlast the slowest walk interval (the interval plus its 10% jitter) with room for the walk itself.
+  const beat = one('resource "aws_cloudwatch_log_metric_filter" "api_ledger_full_check"');
+  need(has(beat, 'pattern = "{ $.event = \\"ledger-full-check-completed\\" }"') && has(beat, 'name = "LedgerFullChecks"') && has(beat, 'value = "1"') && has(beat, 'log_group_name = aws_cloudwatch_log_group.api[0].name'), 'the heartbeat filter must count the ledger-full-check-completed event in the API log group');
+  need(/event: 'ledger-full-check-completed'/.test(ledger), 'the application must still write the ledger-full-check-completed event');
+  const stale = one('resource "aws_cloudwatch_metric_alarm" "api_ledger_check_stale"');
+  const staleLine = (key) => Number(new RegExp(`^\\s*${key}\\s*=\\s*(\\d+)\\s*$`, 'm').exec(code(stale))?.[1]);
+  const interval = Number(/LEDGER_FULL_VERIFY_INTERVAL_HOURS\s*=\s*"(\d+)"/.exec(text)?.[1]);
+  const windowHours = (staleLine('period') * staleLine('evaluation_periods')) / 3600;
+  need(has(stale, 'metric_name = "LedgerFullChecks"') && has(stale, 'statistic = "Sum"') && staleLine('threshold') === 1 && has(stale, 'comparison_operator = "LessThanThreshold"') && has(stale, 'treat_missing_data = "breaching"') && has(stale, 'alarm_actions = [aws_sns_topic.audit_alarms.arn]'), 'missing ledger heartbeats must raise the stale alarm (silence breaches)');
+  need(staleLine('period') >= 3600 && staleLine('datapoints_to_alarm') === staleLine('evaluation_periods'), 'the stale alarm must need the whole window silent, in periods of an hour or more');
+  need(interval > 0 && windowHours >= interval * 1.1 + 2 && windowHours <= 168, `the stale window (${windowHours} h) must outlast the walk interval (${interval} h) plus jitter and two hours, within CloudWatch's seven days`);
   for (const [alarm, metric] of [['api_elb_502', 'HTTPCode_ELB_502_Count'], ['api_elb_504', 'HTTPCode_ELB_504_Count']]) {
     const b = one(`resource "aws_cloudwatch_metric_alarm" "${alarm}"`);
     need(has(b, `metric_name = "${metric}"`) && has(b, 'namespace = "AWS/ApplicationELB"') && has(b, 'statistic = "Sum"') && has(b, 'comparison_operator = "GreaterThanOrEqualToThreshold"') && has(b, 'treat_missing_data = "notBreaching"'), `errors the load balancer answers itself (${metric}) must raise the ${alarm} alarm`);
@@ -480,7 +508,23 @@ test('the API compute guard reports each way the text could be weakened (control
     ['the process-fault alarm needs two faults', 'threshold           = 1\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_process_fault]', 'threshold           = 2\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_process_fault]'],
     ['the process-fault alarm needs ten faults', 'threshold           = 1\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_process_fault]', 'threshold           = 10\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_process_fault]'],
     ['the process-fault alarm is renamed away', 'resource "aws_cloudwatch_metric_alarm" "api_process_fault" {', 'resource "aws_cloudwatch_metric_alarm" "api_process_fault_x" {'],
+    ['the patient key id dropped from the environment', '    PATIENT_FIELD_KMS_KEY_ID = aws_kms_key.data.arn\n', ''],
+    ['the patient key id names another key', 'PATIENT_FIELD_KMS_KEY_ID = aws_kms_key.data.arn', 'PATIENT_FIELD_KMS_KEY_ID = aws_kms_key.service_logs.arn'],
+    ['the patient identity grant allows encryption too', 'actions   = ["kms:GenerateDataKey", "kms:Decrypt"]\n    resources = [aws_kms_key.data.arn]\n    condition {\n      test     = "ForAllValues:StringEquals"', 'actions   = ["kms:GenerateDataKey", "kms:Decrypt", "kms:Encrypt"]\n    resources = [aws_kms_key.data.arn]\n    condition {\n      test     = "ForAllValues:StringEquals"'],
+    ['the patient identity grant covers every key', 'resources = [aws_kms_key.data.arn]\n    condition {\n      test     = "ForAllValues:StringEquals"', 'resources = ["*"]\n    condition {\n      test     = "ForAllValues:StringEquals"'],
+    ['the patient identity grant accepts any context key', 'test     = "ForAllValues:StringEquals"', 'test     = "ForAnyValue:StringEquals"'],
+    ['the patient identity grant accepts no context', '    condition {\n      test     = "Null"\n      variable = "kms:EncryptionContextKeys"\n      values   = ["false"]\n    }\n', ''],
+    ['the patient identity grant accepts a third context key', 'values   = ["tenant", "patient"]', 'values   = ["tenant", "patient", "aws:s3:arn"]'],
+    ['the patient identity policy not attached', 'policy_arn = aws_iam_policy.api_patient_identity[0].arn', 'policy_arn = aws_iam_policy.app_runtime.arn'],
+    ['the patient identity policy attached to the provisioning role too', 'resource "aws_iam_role_policy_attachment" "api_task_patient_identity" {', 'resource "aws_iam_role_policy_attachment" "api_provision_identity" {\n  count      = local.api_count\n  role       = aws_iam_role.api_provision_task[0].name\n  policy_arn = aws_iam_policy.api_patient_identity[0].arn\n}\n\nresource "aws_iam_role_policy_attachment" "api_task_patient_identity" {'],
     ['provisioning task not counted by the image', 'resource "aws_ecs_task_definition" "api_provision" {\n  count                    = local.api_service_count', 'resource "aws_ecs_task_definition" "api_provision" {\n  count                    = local.api_count'],
+    ['the heartbeat filter names another event', 'pattern        = "{ $.event = \\"ledger-full-check-completed\\" }"', 'pattern        = "{ $.event = \\"ledger-full-check-done\\" }"'],
+    ['the stale alarm treats silence as normal', 'treat_missing_data  = "breaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_full_check]', 'treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_full_check]'],
+    ['the stale window is shorter than the walk interval', 'evaluation_periods  = 30\n  datapoints_to_alarm = 30', 'evaluation_periods  = 24\n  datapoints_to_alarm = 24'],
+    ['the stale alarm fires on one silent hour', 'datapoints_to_alarm = 30', 'datapoints_to_alarm = 1'],
+    ['the stale alarm compares the wrong way', 'comparison_operator = "LessThanThreshold"\n  treat_missing_data  = "breaching"', 'comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "breaching"'],
+    ['the walk interval outgrows the stale window', 'LEDGER_FULL_VERIFY_INTERVAL_HOURS = "24"', 'LEDGER_FULL_VERIFY_INTERVAL_HOURS = "48"'],
+    ['the stale alarm counted before an image runs', 'resource "aws_cloudwatch_metric_alarm" "api_ledger_check_stale" {\n  count               = local.api_service_count', 'resource "aws_cloudwatch_metric_alarm" "api_ledger_check_stale" {\n  count               = local.api_count'],
   ];
   for (const [name, from, to] of weakened) {
     assert.ok(compute.includes(from), `the control for "${name}" must match the real text (it does not: fix the control)`);
@@ -491,6 +535,7 @@ test('the API compute guard reports each way the text could be weakened (control
     ['the application stops logging the event', { ledger: ledgerSource.replace("event: 'ledger-compromised'", "event: 'ledger-broken'") }],
     ['the application renames the over-size event', { ledger: ledgerSource.replace("event: 'ledger-chain-over-size'", "event: 'ledger-too-long'") }],
     ['the application renames the verification-error event', { ledger: ledgerSource.replaceAll("event: 'ledger-verification-error'", "event: 'ledger-check-error'") }],
+    ['the application renames the heartbeat event', { ledger: ledgerSource.replace("event: 'ledger-full-check-completed'", "event: 'ledger-walk-done'") }],
     ['the log-shape test is deleted', { spec: '' }],
     ['the logger options start nesting objects', { options: `${loggerOptions}\n  nestedKey: 'payload'` }],
     ['the application stops using the shared options', { appModule: appModule.replace('pinoHttpOptions(config)', '{}') }],

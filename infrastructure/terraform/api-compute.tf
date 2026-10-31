@@ -104,6 +104,8 @@ locals {
     TRUST_PROXY_HOPS                  = "1"
     BUILD_VERSION                     = local.api_build
     LEDGER_FULL_VERIFY_INTERVAL_HOURS = "24"
+    # Spec 025: the key that wraps each patient's identity data key (envelope encryption, context {tenant, patient}). Not a secret: an ARN.
+    PATIENT_FIELD_KMS_KEY_ID = aws_kms_key.data.arn
     # ISSUER_URL (DATA-01) is not typed here: it is built from the issuer's own names in issuer.tf and exists only while the issuer service does.
   }, local.issuer_client_environment)
 }
@@ -260,6 +262,40 @@ resource "aws_iam_role_policy_attachment" "api_task_runtime" {
   count      = local.api_count
   role       = aws_iam_role.api_task[0].name
   policy_arn = aws_iam_policy.app_runtime.arn
+}
+
+# Spec 025 (PD-b): the API wraps and unwraps each patient's identity data key with the data key, directly (not through S3). Only with an
+# encryption context that names exactly a tenant and a patient: S3's own context (aws:s3:arn) and a call with no context are refused here, so
+# this statement cannot widen the report-file grant in app_runtime. The API's task role only: the worker and the issuer never get it.
+data "aws_iam_policy_document" "api_patient_identity" {
+  statement {
+    sid       = "PatientIdentityEnvelope"
+    actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
+    resources = [aws_kms_key.data.arn]
+    condition {
+      test     = "ForAllValues:StringEquals"
+      variable = "kms:EncryptionContextKeys"
+      values   = ["tenant", "patient"]
+    }
+    condition {
+      test     = "Null"
+      variable = "kms:EncryptionContextKeys"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_iam_policy" "api_patient_identity" {
+  count       = local.api_count
+  name        = "${local.name}-api-patient-identity"
+  description = "Patient identity envelope keys for the Telesphoros API (spec 025)."
+  policy      = data.aws_iam_policy_document.api_patient_identity.json
+}
+
+resource "aws_iam_role_policy_attachment" "api_task_patient_identity" {
+  count      = local.api_count
+  role       = aws_iam_role.api_task[0].name
+  policy_arn = aws_iam_policy.api_patient_identity[0].arn
 }
 
 data "aws_iam_policy_document" "api_execution_common" {
@@ -844,6 +880,40 @@ resource "aws_cloudwatch_metric_alarm" "api_ledger_chain_over_size" {
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.audit_alarms.arn]
   depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]
+}
+
+# The record-log watch is silent when all is well, so the alarms above cannot tell a healthy watch from a stopped one. Every full walk that reaches every
+# tenant writes one heartbeat line (ledger-monitor.ts); walks run at each API start and then every LEDGER_FULL_VERIFY_INTERVAL_HOURS (24) with ±10% jitter,
+# so 30 hours without one means the walks stopped or keep falling short. Missing data is the signal here, so it breaches. Counted by the running service,
+# like api_running_tasks: before an image runs there is no watch to hear from. Apply it with an image built from the commit that writes the line, or it
+# fires 30 hours later.
+resource "aws_cloudwatch_log_metric_filter" "api_ledger_full_check" {
+  count          = local.api_service_count
+  name           = "${local.name}-api-ledger-full-check"
+  log_group_name = aws_cloudwatch_log_group.api[0].name
+  pattern        = "{ $.event = \"ledger-full-check-completed\" }"
+  metric_transformation {
+    name      = "LedgerFullChecks"
+    namespace = local.api_metrics
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "api_ledger_check_stale" {
+  count               = local.api_service_count
+  alarm_name          = "${local.name}-api-ledger-check-stale"
+  alarm_description   = "No full check of the record log has reached every tenant for 30 hours: the watch stopped, or every walk falls short. Damage would go unseen: docs/ops/ledger-watch.md."
+  namespace           = local.api_metrics
+  metric_name         = "LedgerFullChecks"
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 30
+  datapoints_to_alarm = 30
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "breaching"
+  alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_full_check]
 }
 
 # Missing data counts as a breach here: no report from Container Insights means no running task is reporting.
