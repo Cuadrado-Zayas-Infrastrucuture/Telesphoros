@@ -1,0 +1,29 @@
+{
+  "checked": "2026-10-31",
+  "appliedCommit": "1bfbdab4f6d71f5561e780f05357c826ab359cd8",
+  "image": {
+    "digest": "sha256:d5df735309ec472c7369c9e48cd49f49f8c0840732a215691626d76d8c76b432",
+    "commit": "6c4714de440195a38576a3789e64814df4feed8c"
+  },
+  "taskDefinitions": { "api": 4, "worker": 3 },
+  "alarms": 31,
+  "newestMigration": "0064",
+  "cloudfrontCachePaths": ["/assets/*"],
+  "acceptedExceptions": [
+    {
+      "id": "break-glass-daa42eb04212",
+      "reason": "Pushed by hand on 2026-10-30 (commit 888979b): the organization SCP denies GitHub OIDC, so CI cannot sign. No longer running.",
+      "reviewBy": "2026-11-30"
+    },
+    {
+      "id": "break-glass-d227aa9e78c2",
+      "reason": "Pushed by hand on 2026-10-30 (commit f03b56e2): the organization SCP denies GitHub OIDC, so CI cannot sign. No longer running.",
+      "reviewBy": "2026-11-30"
+    },
+    {
+      "id": "break-glass-d5df735309ec",
+      "reason": "Pushed by hand on 2026-10-31 (commit 6c4714de): the organization SCP denies GitHub OIDC, so CI cannot sign. The running image.",
+      "reviewBy": "2026-11-30"
+    }
+  ]
+}

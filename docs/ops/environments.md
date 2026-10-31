@@ -21,6 +21,11 @@ Applied by hand from the founder's backend clone, as the staged plans in [stagin
 CloudFront `/assets/*` cache (#202, #212), then `main` `6c4714de` (patient demographics, spec 025 PD-a, migration 0064; the same apply removed
 the issuer's three log alarms, #210). No CI job holds cloud credentials or applies anything.
 
+The last apply read the backend clone at, and so applied from `main` `1bfbdab4`: anything merged after it under `infrastructure/terraform/` is not
+applied until a release says so here. The values in the table below are kept as data in
+[staging-expected.json](staging-expected.json) (spec 027); a guard in `pnpm test:ci-config` fails when this page and that file disagree, so change
+both in the same pull request.
+
 | Piece | What runs (read 2026-10-31) | What production adds or changes |
 | --- | --- | --- |
 | API | ECS Fargate service `telesphoros-staging-api` on cluster `telesphoros-staging-api`: 1 task, task definition revision 4, image `sha256:d5df735309ec…` (commit `6c4714de`, pushed by hand; see "Break-glass" in [ci-cd.md](ci-cd.md)), `NODE_ENV=production`. Patient name and date of birth are encrypted under a KMS data key per patient; the task's key policy only allows calls with a `{tenant, patient}` encryption context | At least 2 tasks; only images signed in CI |
