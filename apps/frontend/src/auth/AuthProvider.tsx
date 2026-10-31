@@ -131,7 +131,11 @@ export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthPr
       token.current = held;
       // Deliberately NOT apiFetch: if the API refuses a brand-new token, signing in again would loop
       // forever (the identity provider's session bounces straight back). Report failure instead.
-      const response = await send('/api/v1/me');
+      // Both are plain reads of the same token, so they go out together (one round trip, not two). What each answer means is still decided in the
+      // order below: /me first, then the binding, so a failure of the first is never reported as a failure of the second.
+      const [meSettled, scopeSettled] = await Promise.allSettled([send('/api/v1/me'), send('/api/v1/me/recovery-scope')]);
+      if (meSettled.status === 'rejected') throw meSettled.reason;
+      const response = meSettled.value;
       if (epoch.current !== attempt || token.current !== held) throw new SessionEndedError('Sign-in superseded');
       if (response.status === 403) throw new AccountNotReadyError('The account is not set up for an organization');
       if (!response.ok) throw new Error('The API did not accept the sign-in');
@@ -139,7 +143,8 @@ export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthPr
       if (epoch.current !== attempt || token.current !== held) throw new SessionEndedError('Sign-in superseded');
       // A missing capability on an older backend disables reload recovery, not ordinary sign-in.
       // Refusals, outages and malformed successful replies remain failures; never invent a persistent binding.
-      const scopeResponse = await send('/api/v1/me/recovery-scope');
+      if (scopeSettled.status === 'rejected') throw scopeSettled.reason;
+      const scopeResponse = scopeSettled.value;
       if (epoch.current !== attempt || token.current !== held) throw new SessionEndedError('Sign-in superseded');
       if (scopeResponse.status === 403) throw new AccountNotReadyError('The account is not set up for an organization');
       if (!scopeResponse.ok && scopeResponse.status !== 404) throw new Error('The API did not accept the recovery binding');

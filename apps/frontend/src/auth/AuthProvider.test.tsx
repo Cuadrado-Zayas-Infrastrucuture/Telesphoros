@@ -429,11 +429,13 @@ it('a stale roles body cannot erase a newer verified session', async () => {
       finish = resolve;
     });
   };
-  const fetchImpl = vi
-    .fn()
-    .mockResolvedValueOnce(stale)
-    .mockResolvedValueOnce(new Response(JSON.stringify({ roles: ['clinician'] })))
-    .mockResolvedValueOnce(new Response(JSON.stringify({ recoveryScope: 'b'.repeat(64) })));
+  // Answers by path, not by call order: a sign-in asks for /me and the recovery binding together, so the older one's second request is also in flight.
+  let meCalls = 0;
+  const fetchImpl = vi.fn((input: RequestInfo | URL) => {
+    if (String(input).endsWith('/recovery-scope')) return Promise.resolve(new Response(JSON.stringify({ recoveryScope: 'b'.repeat(64) })));
+    meCalls += 1;
+    return Promise.resolve(meCalls === 1 ? stale : new Response(JSON.stringify({ roles: ['clinician'] })));
+  });
   const { result } = setup({ fetchImpl: fetchImpl as never });
   const old = result.current.completeSignIn();
   const refused = expect(old).rejects.toBeInstanceOf(SessionEndedError);
@@ -451,5 +453,39 @@ it('a stale roles body cannot erase a newer verified session', async () => {
   expect(result.current.roles).toEqual(['clinician']);
   expect(result.current.recoverySession).toBe(current);
   expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v2')).toBe(kept);
-  expect(fetchImpl).toHaveBeenCalledTimes(3);
+  expect(fetchImpl).toHaveBeenCalledTimes(4);
+});
+
+it('asks for the roles and the recovery binding at the same time', async () => {
+  const gates = new Map<string, (response: Response) => void>();
+  const fetchImpl = vi.fn<typeof fetch>((input) => new Promise<Response>((resolve) => gates.set(new URL(String(input)).pathname, resolve)));
+  const { result } = setup({ fetchImpl });
+  let signingIn!: Promise<string>;
+  await act(async () => {
+    signingIn = result.current.completeSignIn();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(fetchImpl.mock.calls.map(([input]) => new URL(String(input)).pathname)).toEqual(['/api/v1/me', '/api/v1/me/recovery-scope']);
+  await act(async () => {
+    gates.get('/api/v1/me/recovery-scope')!(new Response(JSON.stringify({ recoveryScope: RECOVERY_SCOPE })));
+    gates.get('/api/v1/me')!(new Response(JSON.stringify({ roles: ['clinician'] })));
+    await signingIn;
+  });
+  expect(result.current.status).toBe('signedIn');
+  expect(result.current.roles).toEqual(['clinician']);
+});
+
+it.each([
+  ['/me is refused for a missing organization and the binding fails', 403, 500, AccountNotReadyError],
+  ['/me fails and the binding says the account has no organization', 500, 403, Error],
+])('decides on /me first when %s', async (_name, meStatus, scopeStatus, expected) => {
+  const fetchImpl = vi.fn<typeof fetch>((input) => Promise.resolve(new Response('{}', { status: String(input).endsWith('/recovery-scope') ? scopeStatus : meStatus })));
+  const { result } = setup({ fetchImpl });
+  let failure: unknown;
+  await act(async () => {
+    failure = await result.current.completeSignIn().catch((error: unknown) => error);
+  });
+  expect(failure).toBeInstanceOf(expected);
+  if (expected === Error) expect(failure).not.toBeInstanceOf(AccountNotReadyError);
+  expect(result.current.status).toBe('failed');
 });
