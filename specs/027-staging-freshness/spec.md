@@ -91,7 +91,7 @@ the check does not run.
 **Acceptance:**
 1. A Lambda in staging runs once a day on an EventBridge schedule. It has a read-only role plus publish rights on the audit alarms topic.
 2. It reads `docs/ops/staging-expected.json` and `docs/ops/ci-cd.md` from `main` in the public repository, and compares them with live
-   ECS (image digest, task-definition revisions), the CloudWatch alarm count, the CloudFront cache paths and `/ready` on the API.
+   ECS (image digest, task-definition revisions), the CloudWatch alarm count, the CloudFront cache paths and `/api/v1/ready` on the API.
 3. It names any Terraform PRs merged after the applied commit, and an image behind `main` by an application change for longer than D4's limit.
 4. When a check finds something, it publishes one message to `telesphoros-staging-audit-alarms`. That topic's single subscription is the
    founder's confirmed email. The message lists each finding as field, expected and live, with counts and digests only.
@@ -118,9 +118,9 @@ the check does not run.
 
 ## Assumptions and limits
 
-- **The daily check cannot run `terraform plan`.** It reads observable proxies (image, revisions, alarm count, cache paths, `/ready`) and
+- **The daily check cannot run `terraform plan`.** It reads observable proxies (image, revisions, alarm count, cache paths, `/api/v1/ready`) and
   the PR list. The authoritative check is `staging-status`, which runs where the founder's credentials are and only when he is present.
-- **`/ready` includes `migrationsAppliedCheck`** (`apps/backend/src/health/health.module.ts:18`). So 200 means the running image's
+- **`/api/v1/ready` includes `migrationsAppliedCheck`** (`apps/backend/src/health/health.module.ts:18`). So 200 means the running image's
   migrations are applied. It does not say a newer migration on `main` is waiting; `staging-status` compares that from git.
 - **GitHub's unauthenticated API allows 60 requests an hour per address**, and Lambda's outbound addresses are shared. A refused request
   makes the run incomplete, which emails the founder (D3).
