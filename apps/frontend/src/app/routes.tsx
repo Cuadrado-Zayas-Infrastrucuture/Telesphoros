@@ -5,6 +5,7 @@ import { RequireRole } from '@/auth/RequireRole';
 import { ADMIN_ROLES, CLINICAL_READ_ROLES, WRITER_ROLES } from '@/auth/roles';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { RouteError } from '@/components/RouteError';
+import { RouteLoading } from '@/components/RouteLoading';
 
 /**
  * Every page is a lazy import, so each route ships as its own JavaScript chunk and the
@@ -20,6 +21,8 @@ export const routes: RouteObject[] = [
   {
     element: <AppLayout />,
     errorElement: <RouteError />,
+    // The first load of a lazy page: without it the router renders null in place of the whole app until the chunk arrives.
+    HydrateFallback: RouteLoading,
     children: [
       { index: true, lazy: async () => ({ Component: (await import('@/pages/HomePage')).default }) },
       { path: 'signin', lazy: async () => ({ Component: (await import('@/pages/SignInPage')).default }) },

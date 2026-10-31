@@ -54,6 +54,8 @@ export function WorkspaceConversation() {
   const canAttach = roles.some((role) => WRITER_ROLES.includes(role));
   const [patients, setPatients] = useState<PatientDto[] | null>(null);
   const [patientsError, setPatientsError] = useState<string | null>(null);
+  // Bumped by Retry: reloading the page instead would sign this tab out (the sign-in is held in memory only).
+  const [patientsAttempt, setPatientsAttempt] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [patientId, setPatientId] = useState('');
   const [synthetic, setSynthetic] = useState(false);
@@ -92,7 +94,7 @@ export function WorkspaceConversation() {
       controller.abort();
       stop();
     };
-  }, [canAttach, apiFetch]);
+  }, [canAttach, apiFetch, patientsAttempt]);
 
   const update = (id: number, change: Partial<Extract<Entry, { kind: 'upload' }>>) =>
     setEntries((list) => list.map((entry) => (entry.id === id && entry.kind === 'upload' ? { ...entry, ...change } : entry)));
@@ -270,8 +272,27 @@ export function WorkspaceConversation() {
                     />
                   )}
                 </>
+              ) : patientsError ? (
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  <span role="alert" className="text-destructive">
+                    {patientsError}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-label="Retry loading patients"
+                    onClick={() => {
+                      setPatientsError(null);
+                      setPatientsAttempt((attempt) => attempt + 1);
+                    }}
+                  >
+                    Retry
+                  </Button>
+                </span>
               ) : (
-                <span className="text-muted-foreground">{patientsError ?? 'loading patients…'}</span>
+                <span role="status" className="text-muted-foreground">
+                  loading patients…
+                </span>
               )}
             </div>
             <label className="inline-flex min-h-11 items-center gap-2">
