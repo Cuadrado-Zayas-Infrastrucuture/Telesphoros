@@ -7,6 +7,7 @@ import { explainableResultSchema, explanationSchema, SENSORS } from './evaluator
 import {
   EXPLAIN_CAPABILITY,
   EXPLAIN_LIMITS,
+  OUTPUT_CAPS,
   EXPLAIN_TASK,
   EXPLANATION_LABEL,
   engineTextOf,
@@ -222,7 +223,7 @@ export async function runExplanation(
       if (!(await begin(draftAttempt))) return fail('USAGE_HELD');
       let reply;
       try {
-        reply = await call(drafting, 768);
+        reply = await call(drafting, OUTPUT_CAPS.draft);
       } catch {
         return fail('MODEL_ERROR');
       }
@@ -254,7 +255,7 @@ export async function runExplanation(
       if (!(await begin(verifyAttempt))) return fail('USAGE_HELD');
       let judged;
       try {
-        judged = await call(verifying, 1024);
+        judged = await call(verifying, OUTPUT_CAPS.verify);
       } catch {
         return fail('MODEL_ERROR');
       }

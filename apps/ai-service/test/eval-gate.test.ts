@@ -2,7 +2,8 @@ import { describe, expect, test } from 'vitest';
 import { ATTACKS } from '../evals/attacks/attacks';
 import { CASES } from '../evals/golden/cases';
 import { RESULTS } from '../evals/golden/results';
-import { currentDigests, runGate, type Compose } from '../evals/run';
+import { currentDigests, GATED_MODEL, runGate, type Compose } from '../evals/run';
+import { EXPLAIN_LIMITS, OUTPUT_CAPS } from '../src/explain-contracts';
 import { ALL_SENSORS } from '../src/evaluators/sensors';
 import { SENSORS, type Sensor, type SensorId } from '../src/evaluators/types';
 import { buildPrompt } from '../src/prompts/explain-v1';
@@ -65,13 +66,29 @@ describe('the evaluation gate (R3, FR-013)', () => {
     expect(report.ok).toBe(false);
     expect(report.attacks.effective).toBeGreaterThanOrEqual(ATTACKS.filter((a) => a.cls === 'shape').length);
   });
-  test('changing a template, lexicon or glossary without updating the pinned digest turns the gate red', async () => {
+  test('changing a template, lexicon, glossary, model or limit without updating the pinned digest turns the gate red', async () => {
     const d = currentDigests();
-    for (const k of ['template', 'repair', 'verify', 'lexicon', 'glossary'] as const) {
+    for (const k of ['template', 'repair', 'verify', 'lexicon', 'glossary', 'model', 'limits'] as const) {
       const report = await runGate({ pinned: { ...d, [k]: 'sha256:' + '0'.repeat(64) } });
       expect(report.digestsMatch, k).toBe(false);
       expect(report.ok, k).toBe(false);
     }
+  });
+  test('another model, SDK or invocation path is a different harness: the gate is red until it is pinned (FR-010)', async () => {
+    for (const change of [{ modelId: 'scripted-v2' }, { sdkVersion: '1.0.0' }, { invocationPath: 'on-demand' as const }]) {
+      const report = await runGate({ model: { ...GATED_MODEL, ...change } });
+      expect(report.digestsMatch, JSON.stringify(change)).toBe(false);
+      expect(report.ok, JSON.stringify(change)).toBe(false);
+    }
+  });
+  test('raising a token cap, an output cap or an attempt limit is a different harness: the gate is red until it is pinned', async () => {
+    const pinned = { ...EXPLAIN_LIMITS, outputCaps: OUTPUT_CAPS };
+    for (const change of [{ tokens: EXPLAIN_LIMITS.tokens + 1 }, { draftAttempts: 3 }, { outputCaps: { ...OUTPUT_CAPS, draft: OUTPUT_CAPS.draft + 1 } }]) {
+      const report = await runGate({ limits: { ...pinned, ...change } });
+      expect(report.digestsMatch, Object.keys(change)[0]).toBe(false);
+      expect(report.ok, Object.keys(change)[0]).toBe(false);
+    }
+    expect((await runGate({ limits: pinned })).digestsMatch).toBe(true);
   });
   test('a case that expects a hold for the wrong reason is a mismatch, not a pass', async () => {
     const report = await runGate({ cases: [{ ...CASES.find((c) => c.id === 'w09-added-number')!, sensors: ['S1'] }] });

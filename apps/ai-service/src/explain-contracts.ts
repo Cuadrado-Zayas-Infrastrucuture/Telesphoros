@@ -8,6 +8,8 @@ import type { TraceStep } from './trace';
 export const EXPLAIN_TASK = 'pgx.explain.v1';
 /** The kernel's loop limits (kernel.ts, budgets.ts), restated for the explanation run. A test pins them to the synthetic profile's budget. */
 export const EXPLAIN_LIMITS = { draftAttempts: 2, repairs: 1, slots: 4, deadlineMs: 120000, tokens: 28160 } as const;
+/** The most output units each model call may ask for. Part of the harness version (FR-010): a change re-runs and re-pins the gate. */
+export const OUTPUT_CAPS = { draft: 768, verify: 1024 } as const;
 
 /** Every way a run can end without releasing a model-written explanation. Each has a test (T014); the clinician then sees the engine text alone. */
 export const FAILURE_REASONS = [
