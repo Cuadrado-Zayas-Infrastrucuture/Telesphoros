@@ -52,9 +52,18 @@ Environment (all validated at start; a refusal names the setting, never a value)
 | `WORKER_SCHEDULE_TICK_SECONDS` | 30 | How often it asks the database to enqueue due recurring jobs |
 | `WORKER_HEALTH_HOST` / `_PORT` | `127.0.0.1` / 8081 | Health endpoint (`/livez`, `/readyz`; counts only) |
 | `WORKER_RELAY_SECONDS` | 5 | How often pending outbox events become jobs |
+| `WORKER_CAPABILITY_SWEEP_SECONDS` | 60 | How often it removes expired capabilities (30 to 3600; spec 026, below) |
+| `WORKER_CAPABILITY_SWEEP_LIMIT` | 1000 | At most this many per run (1 to 10000) |
 | `REPORTS_BUCKET` | none | The bucket the stored-file re-check reads (read-only). **Required in production**; without it the file jobs are not registered (logged as `job-types-disabled`) |
 | `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE`, `AWS_REGION` | none | For an S3-compatible server in development and tests; AWS credentials come from the environment's role |
 | `WORKER_TEST_JOBS`, `WORKER_TEST_EFFECT_DIR` | `no` | Test job types; refused when `NODE_ENV=production` |
+
+**The capability sweep (spec 026, migration 0065).** Every internal binding (a held job, the upload sweep, the ledger checks, redaction) mints a
+60-second capability row, and requests do too once the issuer is on. The worker removes those that expired more than five minutes ago, on its own
+timer: it is not a recurring job, because it belongs to no organization. It calls `capabilities_sweep_run(limit)`, the worker's only way to the sweep,
+and logs every run, one that removed nothing included: `capability-sweep-ran` with `count` (rows removed) and `outcome` (`behind` when a full batch was
+removed, so more may be waiting; otherwise `current`), and `capability-sweep-failed` with a code. Its alarms (failing, stale, behind) arrive with their
+own pull request; until then nothing alarms if the sweep stops.
 
 `SIGTERM`/`SIGINT` drains: it stops claiming, waits up to `WORKER_DRAIN_SECONDS` for running jobs, **releases** what is left (the unmade attempt is not counted) and exits 0. A job whose handler has finished and whose outcome is still being reported (`settle()` retries for up to 7.5 s while the database is briefly unavailable) is not released: the stop waits up to 8 s for it, because a released finished job would run again with its attempt not counted. **If a release fails, or an outcome is not recorded, the stop logs `worker-stopped` at `error` with the count and exits 1** (before 2026-10-28 it exited 0); those jobs are recovered by lease expiry, and one on its last attempt is then dead-lettered as `lease-expired`, so look at `jobs dead` after such a stop. A hard kill leaves leases that expire; nothing else is needed. The whole stop is bounded: if a step is still waiting `WORKER_DRAIN_SECONDS` + 15 s after the signal (a database that has stopped answering, a handler that ignores its abort), the worker logs `shutdown-forced` and exits **1**, ahead of the container's 60 s `stopTimeout`; the leases it did not release expire as after a hard kill. The worker's database pool is limited (`apps/worker/src/pool-limits.ts`): 2 s to connect, 10 s per statement, 10 s idle inside a transaction, so a hung database fails the claim, the tickers and the stop instead of holding them.
 

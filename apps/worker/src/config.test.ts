@@ -7,6 +7,7 @@ describe('worker configuration', () => {
   it('has safe defaults and names the worker after its host and process', () => {
     const c = loadConfig({ DATABASE_URL: URL }, 'host-1', 42, 'a1b2c3d4');
     expect(c).toMatchObject({ workerId: 'host-1:42:a1b2c3d4', concurrency: 4, tenantCap: 2, drainSeconds: 30, testJobs: false, databaseTls: 'disable', healthHost: '127.0.0.1' });
+    expect(c).toMatchObject({ capabilitySweepSeconds: 60, capabilitySweepLimit: 1000 }); // spec 026 D2
   });
   it('gives two containers (both PID 1, same host name, no WORKER_ID) different ids: the lease fence matches on it', () => {
     const a = loadConfig({ DATABASE_URL: URL }, undefined, 1).workerId;
@@ -22,6 +23,10 @@ describe('worker configuration', () => {
       { DATABASE_URL: URL, WORKER_POLL_MS: 'soon' },
       { DATABASE_URL: URL, WORKER_ID: 'has space' },
       { DATABASE_URL: URL, WORKER_TEST_JOBS: 'maybe' },
+      { DATABASE_URL: URL, WORKER_CAPABILITY_SWEEP_SECONDS: '29' },
+      { DATABASE_URL: URL, WORKER_CAPABILITY_SWEEP_SECONDS: '3601' },
+      { DATABASE_URL: URL, WORKER_CAPABILITY_SWEEP_LIMIT: '0' },
+      { DATABASE_URL: URL, WORKER_CAPABILITY_SWEEP_LIMIT: '10001' },
     ]) {
       expect(() => loadConfig(env)).toThrow(/Worker settings are invalid: /);
     }
