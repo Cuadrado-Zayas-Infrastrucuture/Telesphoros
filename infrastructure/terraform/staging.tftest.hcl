@@ -153,6 +153,14 @@ run "plan_c_with_image" {
     error_message = "one API task and one worker task"
   }
   assert {
+    condition     = length(aws_lambda_function.staging_freshness) == 1 && length(aws_cloudwatch_event_rule.staging_freshness) == 1 && length(aws_cloudwatch_metric_alarm.freshness_check_missed) == 1 && length(aws_cloudwatch_metric_alarm.freshness_check_failing) == 1 && length(aws_cloudwatch_log_metric_filter.freshness_run_complete) == 1
+    error_message = "with the API and the web distribution, the daily freshness check exists with its schedule, its filter and its two alarms"
+  }
+  assert {
+    condition     = contains(local.service_log_groups, aws_cloudwatch_log_group.staging_freshness[0].name)
+    error_message = "the service-logs key may encrypt the freshness check's log group"
+  }
+  assert {
     condition     = local.api_repository == "arn:aws:ecr:us-east-2:123456789012:repository/telesphoros-staging-api" && one([for statement in data.aws_iam_policy_document.api_execution_common.statement : statement.resources if statement.sid == "PullThisRepositoryOnly"]) == toset([local.api_repository]) && one([for statement in data.aws_iam_policy_document.worker_execution[0].statement : statement.resources if statement.sid == "PullThisRepositoryOnly"]) == toset([local.api_repository])
     error_message = "setting api_image changes the configured API and worker pull resources to its exact repository, even though JSON serialization is mocked"
   }
