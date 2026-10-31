@@ -157,6 +157,7 @@ export function issuerProblems(tf, rest = others, sources = {}) {
       .some((l) => squash(l).trim() === squash(fragment));
 
   // Counting: foundations by the hosting switch; the task, the service and the alarms that need a running service by the issuer switch; the TLS role by a named CA.
+  // The log filters and their alarms are service-only too: their one producer is the issuer's own log group, so without the service they sit at OK and read as healthy.
   const resources = [...text.matchAll(/^resource "([^"]+)" "([^"]+)"/gm)];
   need(resources.length >= 18, 'the scan must find the resources (a floor, so an empty read cannot pass)');
   const SERVICE_ONLY = new Set([
@@ -164,6 +165,12 @@ export function issuerProblems(tf, rest = others, sources = {}) {
     'aws_ecs_service.issuer',
     'aws_cloudwatch_metric_alarm.issuer_running_tasks',
     'aws_cloudwatch_metric_alarm.issuer_cpu_high',
+    'aws_cloudwatch_log_metric_filter.issuer_unavailable',
+    'aws_cloudwatch_metric_alarm.issuer_unavailable',
+    'aws_cloudwatch_log_metric_filter.issuer_rate_limited',
+    'aws_cloudwatch_metric_alarm.issuer_rate_limited',
+    'aws_cloudwatch_log_metric_filter.issuer_worker_unauthenticated',
+    'aws_cloudwatch_metric_alarm.issuer_worker_unauthenticated',
   ]);
   const TLS_ONLY = new Set(['aws_iam_role.issuer_service_connect_tls', 'aws_iam_role_policy.issuer_service_connect_tls']);
   for (const [header, type, name] of resources) {
@@ -863,6 +870,12 @@ test('the issuer compute guard reports each way the issuer text could be weakene
       'alarm_description   = "x"\n  namespace           = local.issuer_metrics\n  metric_name         = "IssuerUnavailable"\n  statistic           = "Sum"\n  period              = 300\n  evaluation_periods  = 1\n  threshold           = 5\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = []',
     ],
     ['an output missing', 'output "issuer_service_name"', 'output "issuer_service"'],
+    ['the issuer_unavailable filter outlives the service', 'resource "aws_cloudwatch_log_metric_filter" "issuer_unavailable" {\n  count          = local.issuer_service_count', 'resource "aws_cloudwatch_log_metric_filter" "issuer_unavailable" {\n  count          = local.api_count'],
+    ['the issuer_unavailable alarm outlives the service', 'resource "aws_cloudwatch_metric_alarm" "issuer_unavailable" {\n  count               = local.issuer_service_count', 'resource "aws_cloudwatch_metric_alarm" "issuer_unavailable" {\n  count               = local.api_count'],
+    ['the issuer_rate_limited filter outlives the service', 'resource "aws_cloudwatch_log_metric_filter" "issuer_rate_limited" {\n  count          = local.issuer_service_count', 'resource "aws_cloudwatch_log_metric_filter" "issuer_rate_limited" {\n  count          = local.api_count'],
+    ['the issuer_rate_limited alarm outlives the service', 'resource "aws_cloudwatch_metric_alarm" "issuer_rate_limited" {\n  count               = local.issuer_service_count', 'resource "aws_cloudwatch_metric_alarm" "issuer_rate_limited" {\n  count               = local.api_count'],
+    ['the issuer_worker_unauthenticated filter outlives the service', 'resource "aws_cloudwatch_log_metric_filter" "issuer_worker_unauthenticated" {\n  count          = local.issuer_service_count', 'resource "aws_cloudwatch_log_metric_filter" "issuer_worker_unauthenticated" {\n  count          = local.api_count'],
+    ['the issuer_worker_unauthenticated alarm outlives the service', 'resource "aws_cloudwatch_metric_alarm" "issuer_worker_unauthenticated" {\n  count               = local.issuer_service_count', 'resource "aws_cloudwatch_metric_alarm" "issuer_worker_unauthenticated" {\n  count               = local.api_count'],
   ];
   for (const [name, from, to] of weakened) {
     assert.ok(issuer.includes(from), `the control for "${name}" must match the real text (it does not: fix the control)`);
