@@ -11,7 +11,7 @@ const heading = (name: string | RegExp) => screen.findByRole('heading', { level:
 
 describe('public pages', () => {
   it.each([
-    ['/', 'A clearer view of your PGx reports.'],
+    ['/', 'PGx reports, interpreted with care.'],
     ['/signin', 'Sign in'],
     ['/signed-out', 'You have been signed out'],
     ['/nope', 'Page not found'],
@@ -24,14 +24,14 @@ describe('public pages', () => {
 
   it('gives every informative image a non-empty alt text', async () => {
     renderApp('/');
-    await heading(/A clearer view of/);
+    await heading(/PGx reports, interpreted/);
     for (const img of screen.getAllByRole('img')) expect(img.getAttribute('alt')?.trim()).toBeTruthy();
   });
 
   it('makes the skip link the first tab stop', async () => {
     const user = userEvent.setup();
     renderApp('/');
-    await heading(/A clearer view of/);
+    await heading(/PGx reports, interpreted/);
     await user.tab();
     expect(screen.getByRole('link', { name: 'Skip to main content' })).toHaveFocus();
   });

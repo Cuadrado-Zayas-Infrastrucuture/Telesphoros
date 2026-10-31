@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useRef } from 'react';
 import { MascotWelcome } from '@/components/MascotWelcome';
 import { LandingActions } from './LandingActions';
-import { LandingProductPreview } from './LandingProductPreview';
 import { LandingParticles } from './LandingParticles';
 import { PatientLinkFragment } from './PatientLinkFragment';
 import { FileStatusFragment } from './FileStatusFragment';
@@ -33,7 +32,7 @@ export function ProductLanding({ canUpload, signedIn }: { canUpload: boolean; si
       document.documentElement.lang = 'en';
     };
   }, [language]);
-  const { hero, purpose, workspace, capabilities, questions, closing } = copy;
+  const { hero, purpose, capabilities, questions, closing } = copy;
   return (
     <div ref={root} className="product-landing">
       <section className="landing-hero" aria-labelledby="home-title">
@@ -94,17 +93,6 @@ export function ProductLanding({ canUpload, signedIn }: { canUpload: boolean; si
         </div>
       </section>
 
-      <section className="landing-workspace-section landing-wrap" id="workflow" aria-labelledby="workspace-title">
-        <div className="landing-section-heading" data-reveal="1">
-          <div>
-            <p className="landing-eyebrow">{workspace.eyebrow}</p>
-            <h2 id="workspace-title">{lines(workspace.title)}</h2>
-          </div>
-          <p className="landing-section-description">{workspace.description}</p>
-        </div>
-        <LandingProductPreview />
-      </section>
-
       <section id="platform" className="landing-capabilities-section" aria-labelledby="capabilities-title">
         <div className="landing-capabilities landing-wrap">
           <div className="landing-capability-intro" data-reveal="1">
@@ -161,8 +149,7 @@ export function ProductLanding({ canUpload, signedIn }: { canUpload: boolean; si
               {closing.title}
             </h2>
             <p data-reveal="2">{closing.text}</p>
-            <LandingActions canUpload={canUpload} signedIn={signedIn} reveal={3} />
-            <p className="landing-closing-note" data-reveal="4">
+            <p className="landing-closing-note" data-reveal="3">
               {closing.note}
             </p>
           </MascotWelcome>

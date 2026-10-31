@@ -174,23 +174,6 @@
   text-decoration: underline;
   text-underline-offset: .25rem;
 }
-.product-landing .landing-workspace-section {
-  padding-top:var(--landing-section-gap);
-  padding-bottom:var(--landing-section-gap)
-}
-.product-landing .landing-section-heading {
-  display:flex;
-  align-items:flex-end;
-  gap:3.75rem;
-  justify-content:space-between;
-  margin-bottom:3rem
-}
-.product-landing .landing-section-description {
-  font-size:var(--landing-fs-lead);
-  line-height:1.55;
-  max-width:26rem;
-  padding-bottom:0.25rem
-}
 .product-landing .landing-capabilities-section {
   background:var(--background)
 }
@@ -303,13 +286,6 @@
   .product-landing .landing-purpose {
     grid-template-columns: minmax(0, 1fr);
   }
-  .product-landing .landing-section-heading {
-    display:block
-  }
-  .product-landing .landing-section-description {
-    max-width:36rem;
-    margin-top:1.25rem
-  }
 }
 @media(max-width:45.0rem) {
   .product-landing .landing-wrap {
@@ -337,9 +313,6 @@
   }
   .product-landing .landing-eyebrow {
     margin-bottom:1.0rem
-  }
-  .product-landing .landing-section-heading {
-    margin-bottom:1.75rem
   }
   .product-landing .landing-capabilities {
     display:block
@@ -458,12 +431,7 @@
 .product-landing .landing-primary,
 .product-landing .landing-secondary > span,
 .product-landing .landing-primary > svg,
-.product-landing .landing-questions summary span,
-.product-landing .workflow-steps button,
-.product-landing .workflow-format button,
-.product-landing .workflow-records button,
-.product-landing .workflow-next,
-.product-landing .workflow-compare {
+.product-landing .landing-questions summary span {
   transition: transform var(--landing-feedback-duration) var(--landing-ease), background-color var(--landing-feedback-duration) var(--landing-ease), color var(--landing-feedback-duration) var(--landing-ease), border-color var(--landing-feedback-duration) var(--landing-ease);
 }
 .product-landing .landing-primary:hover { transform: translateY(-0.0625rem); }
@@ -471,13 +439,6 @@
 .product-landing .landing-primary:hover > svg { transform: translateX(0.25rem); }
 .product-landing .landing-secondary:hover > span { transform: translateY(0.1875rem); }
 .product-landing .landing-questions summary:hover { color: var(--primary-hover); }
-.product-landing .workflow-format button:active,
-.product-landing .workflow-records button:active,
-.product-landing .workflow-steps button:active { transform: scale(0.98); }
-.product-landing .workflow-next:hover > svg,
-.product-landing .workflow-compare:hover > svg { transform: translateX(0.25rem); }
-.product-landing .workflow-next > svg,
-.product-landing .workflow-compare > svg { transition: transform var(--landing-feedback-duration) var(--landing-ease); }
 
 @media (prefers-reduced-motion: reduce) {
   .product-landing * {
@@ -489,9 +450,7 @@
   .product-landing .landing-primary:hover,
   .product-landing .landing-primary:active,
   .product-landing .landing-primary:hover > svg,
-  .product-landing .landing-secondary:hover > span,
-  .product-landing .workflow-next:hover > svg,
-  .product-landing .workflow-compare:hover > svg { transform: none; }
+  .product-landing .landing-secondary:hover > span { transform: none; }
 }
 
 /* Hero composition: copy beside a still synthetic report card, over a code-drawn backdrop (plan: docs/design/plans/landing-alignment.md, S2). */
