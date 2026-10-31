@@ -474,10 +474,12 @@ resource "aws_ecs_service" "issuer" {
 # ------------------------------------------------------------------------------------------------
 # Alarms, into the audit topic so one confirmed email address hears everything. The issuer core writes reason codes through Nest's Logger (issuer-core.ts); a test keeps the two phrases below
 # and the core's literals in agreement. Thresholds are provisional: set them from the staging measurement (decision D4).
+# Every filter and alarm here is counted by issuer_service_count, like the service: their only producer is the issuer's own log group, so with enable_issuer off
+# an alarm would sit at OK because nothing can ever write the line, which reads as "healthy" when it means "not running" (staging until 2026-10-30).
 # ------------------------------------------------------------------------------------------------
 # The issuer could not reach the database or got no answer: every request fails closed while this lasts.
 resource "aws_cloudwatch_log_metric_filter" "issuer_unavailable" {
-  count          = local.api_count
+  count          = local.issuer_service_count
   name           = "${local.name}-issuer-unavailable"
   log_group_name = aws_cloudwatch_log_group.issuer[0].name
   pattern        = "\"Capability not issued: unavailable\""
@@ -489,7 +491,7 @@ resource "aws_cloudwatch_log_metric_filter" "issuer_unavailable" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "issuer_unavailable" {
-  count               = local.api_count
+  count               = local.issuer_service_count
   alarm_name          = "${local.name}-issuer-unavailable"
   alarm_description   = "The session issuer failed five or more issuances in five minutes because the database did not answer. Once enforcement is on, requests fail with 503 (DATA-01 decision D4)."
   namespace           = local.issuer_metrics
@@ -506,7 +508,7 @@ resource "aws_cloudwatch_metric_alarm" "issuer_unavailable" {
 
 # The database refused issuance because a person asked too often. The limit is the database's (migration 0028); a burst is either a bug in a client or a relayed token being used.
 resource "aws_cloudwatch_log_metric_filter" "issuer_rate_limited" {
-  count          = local.api_count
+  count          = local.issuer_service_count
   name           = "${local.name}-issuer-rate-limited"
   log_group_name = aws_cloudwatch_log_group.issuer[0].name
   pattern        = "\"Capability not issued: refused (rate-limited)\""
@@ -518,7 +520,7 @@ resource "aws_cloudwatch_log_metric_filter" "issuer_rate_limited" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "issuer_rate_limited" {
-  count               = local.api_count
+  count               = local.issuer_service_count
   alarm_name          = "${local.name}-issuer-rate-limited"
   alarm_description   = "Ten or more issuances were refused as rate-limited in five minutes. Look for a client retry loop or a relayed access token: docs/design/plans/tenant-capability-issuer-transport.md."
   namespace           = local.issuer_metrics
@@ -537,7 +539,7 @@ resource "aws_cloudwatch_metric_alarm" "issuer_rate_limited" {
 # evaluation worker retries such jobs, so a worker key that does not match the issuer's after a rotation, or a worker clock that drifts, shows up here and
 # not as failed jobs. A burst with no worker deployed is someone else calling the route. The issuer server writes the phrase (issuer-server.ts).
 resource "aws_cloudwatch_log_metric_filter" "issuer_worker_unauthenticated" {
-  count          = local.api_count
+  count          = local.issuer_service_count
   name           = "${local.name}-issuer-worker-unauthenticated"
   log_group_name = aws_cloudwatch_log_group.issuer[0].name
   pattern        = "\"Issuer request rejected: unauthenticated\""
@@ -549,7 +551,7 @@ resource "aws_cloudwatch_log_metric_filter" "issuer_worker_unauthenticated" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "issuer_worker_unauthenticated" {
-  count               = local.api_count
+  count               = local.issuer_service_count
   alarm_name          = "${local.name}-issuer-worker-unauthenticated"
   alarm_description   = "Five or more job-capability requests failed the worker signature check in five minutes. Check that the worker and the issuer hold the same key and that the worker's clock is right; with no worker deployed, someone else is calling the route (spec 012)."
   namespace           = local.issuer_metrics
