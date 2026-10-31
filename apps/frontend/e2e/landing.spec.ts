@@ -26,7 +26,7 @@ async function checkLayout(page: Page) {
 }
 test('landing has working anchors, readable responsive layout and honest preview', async ({ page }, info) => {
   await page.goto('/?mascot=centered');
-  await expect(page.getByRole('heading', { name: 'A clearer view of your PGx reports.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'PGx reports, interpreted with care.' })).toBeVisible();
   // Previous design-review URLs cannot override the approved layout.
   await expect(page.locator('[data-mascot-context="landing"]')).toHaveAttribute('data-mascot-variant', 'companion');
   await page.evaluate(() => document.fonts.ready);
@@ -38,40 +38,15 @@ test('landing has working anchors, readable responsive layout and honest preview
   const mark = page.getByRole('img', { name: 'Telesphoros shield and Rx logo' });
   expect((await mark.boundingBox())!.y).toBeGreaterThanOrEqual(0);
   await expect(page.locator('.landing-dna')).toHaveCount(0);
-  const illustrationRequests: string[] = [];
-  page.on('request', request => { if (/\/api\//.test(request.url())) illustrationRequests.push(request.url()); });
-  await page.getByRole('button', { name: 'JSON', exact: true }).click();
-  await expect(page.locator('.workflow-file')).toContainText('SYN-002.json');
+  await expect(page).toHaveTitle('Overview · Telesphoros');
+  // The walkthrough is gone, the examples are JSON (staging refuses PDF), and Sign in is offered once in the page body.
+  await expect(page.locator('#workflow')).toHaveCount(0);
+  await expect(page.locator('.landing-report-card')).not.toContainText('.pdf');
+  await expect(page.locator('.landing-report-card')).toContainText('SYN-001.json');
+  await expect(page.getByRole('link', { name: 'Sign in to Telesphoros', exact: true })).toHaveCount(1);
+  await expect(page.getByRole('link', { name: 'Sign in to Telesphoros', exact: true })).toHaveAttribute('href', '/signin');
   await expect(page.locator('input[type="file"]')).toHaveCount(0);
   await checkLayout(page);
-  await page.getByRole('button', { name: 'Next: check', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Check', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('heading', { name: 'Server verified', exact: true })).toBeVisible();
-  const compare = page.getByRole('button', { name: 'Compare an incomplete upload', exact: true });
-  await compare.focus(); await page.keyboard.press('Space');
-  await expect(compare).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('heading', { name: 'Not complete', exact: true })).toBeVisible();
-  await checkLayout(page);
-  await page.getByRole('region', { name: 'See whether the upload completed.' }).screenshot({ path: `../../docs/design/previews/workflow-verify-${info.project.name}.png` });
-  await page.getByRole('button', { name: 'Find', exact: true }).focus();
-  await page.keyboard.press('Enter');
-  const incomplete = page.getByRole('button', { name: /SYN-002.json/ });
-  await incomplete.focus(); await page.keyboard.press('Enter');
-  await expect(incomplete).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('#landing-file-detail').getByText('Upload not complete', { exact: true })).toBeVisible();
-  await expect(page.locator('#landing-file-detail')).toContainText('Only metadata is available.');
-  const verified = page.getByRole('button', { name: /SYN-001\.pdf/ });
-  await verified.focus(); await page.keyboard.press('Space');
-  await expect(verified).toHaveAttribute('aria-pressed', 'true');
-  await expect(incomplete).toHaveAttribute('aria-pressed', 'false');
-  await expect(page.locator('#landing-file-detail')).toContainText('Yes — server verified');
-  await checkLayout(page);
-  await page.getByRole('button', { name: 'Back to the beginning', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Upload', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('button', { name: 'JSON', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: 'PDF', exact: true }).click();
-  expect(illustrationRequests).toEqual([]);
-  await page.getByRole('region', { name: 'Add a report. Know what’s stored.' }).screenshot({ path: `../../docs/design/previews/workflow-${info.project.name}.png` });
   // Load the below-fold original artwork, and let every entrance run, before full-page evidence capture.
   await scrollThrough(page);
   await page.getByRole('img', { name: 'Telesphoros mascot in a teal cloak' }).scrollIntoViewIfNeeded();
@@ -83,21 +58,17 @@ test('landing has working anchors, readable responsive layout and honest preview
   await settle(page);
   await page.screenshot({ path: `../../docs/design/previews/landing-${info.project.name}.png`, fullPage: true });
   await page.screenshot({ path: `../../docs/design/previews/landing-hero-${info.project.name}.png` });
-  for (const [label, hash] of [['Workspace', '#platform'], ['Workflow', '#workflow'], ['FAQ', '#questions']]) {
+  for (const [label, hash] of [['Features', '#platform'], ['FAQ', '#questions']]) {
     await page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: label, exact: true }).click();
     expect(new URL(page.url()).hash).toBe(hash);
   }
-  const question = page.locator('summary').filter({ hasText: 'Does the assistant interpret my reports?' });
+  const question = page.locator('summary').filter({ hasText: 'Does the chat interpret my reports?' });
   await question.focus(); await page.keyboard.press('Enter');
-  await expect(page.getByText(/^No. The assistant interface is a separate local development preview/)).toBeVisible();
+  await expect(page.getByText(/^No. In this prototype the chat uploads a report and shows its status/)).toBeVisible();
   await checkLayout(page);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
   await checkLayout(page);
-  for (const name of ['Check', 'Find']) {
-    await page.getByRole('button', { name, exact: true }).click();
-    await checkLayout(page);
-  }
 });
 test('landing motion is decorative, finite and leaves a complete still page for reduced motion', async ({ page }, info) => {
   const apiRequests: string[] = [];
@@ -106,7 +77,7 @@ test('landing motion is decorative, finite and leaves a complete still page for 
   await expect(page.locator('.product-landing')).toHaveClass(/is-motion/);
   // During the hero sequence: entrances move text but never fade it, so contrast is real at every frame.
   expect(await axeViolations(page)).toEqual([]);
-  await expect(page.getByRole('heading', { name: 'A clearer view of your PGx reports.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'PGx reports, interpreted with care.' })).toBeVisible();
   await expect(page.locator('.landing-headline .landing-line')).toHaveCount(2);
   // Drawn elements are decoration only.
   expect(await page.locator('.landing-particles--hero .landing-particle').count()).toBeGreaterThan(20);
@@ -125,17 +96,11 @@ test('landing motion is decorative, finite and leaves a complete still page for 
     new PerformanceObserver(list => { for (const entry of list.getEntries() as (PerformanceEntry & { value: number; hadRecentInput: boolean })[]) if (!entry.hadRecentInput) shift += entry.value; }).observe({ type: 'layout-shift', buffered: true });
     setTimeout(() => resolve(shift), 200);
   }))).toBeLessThan(0.01);
-  // Reading down the page plays each fragment once; the assistant sample ends on its fixed, labelled answer.
+  // Reading down the page plays each fragment once; the chat sample ends on the note the chat really shows.
   await scrollThrough(page);
   await page.locator('#platform').scrollIntoViewIfNeeded();
   await expect(page.locator('.landing-fragment-answer')).toBeVisible();
-  await expect(page.locator('.landing-fragment-answer')).toHaveText('Sample response. Not connected to your reports.');
-  // The walkthrough's digest is labelled fictional, and an incomplete upload has none.
-  await page.locator('#workflow').scrollIntoViewIfNeeded();
-  await page.getByRole('button', { name: 'Check', exact: true }).click();
-  await expect(page.locator('.workflow-checklist')).toContainText('SHA-256 9f2c…41ad · fictional example');
-  await page.getByRole('button', { name: 'Compare an incomplete upload', exact: true }).click();
-  await expect(page.locator('.workflow-checklist')).toContainText('Not available');
+  await expect(page.locator('.landing-fragment-answer')).toHaveText('Interpretation is not available in the prototype yet.');
   await checkLayout(page);
   await page.locator('#platform').screenshot({ path: `../../docs/design/previews/landing-fragments-${info.project.name}.png` });
   expect(apiRequests).toEqual([]);
@@ -143,7 +108,7 @@ test('landing motion is decorative, finite and leaves a complete still page for 
   // Reduced motion: no motion layer, nothing animating, and every element in its final place.
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'A clearer view of your PGx reports.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'PGx reports, interpreted with care.' })).toBeVisible();
   await expect(page.locator('.product-landing')).not.toHaveClass(/is-motion/);
   expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
   await expect(page.locator('.landing-fragment-answer')).toBeVisible();
@@ -160,15 +125,17 @@ test('landing sign-in works and returning home includes the brand header', async
   await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toHaveCSS('font-family', /Poppins/);
   await expect(page.locator('.landing-site-footer')).toHaveCount(0);
   await page.getByRole('link', { name: /Telesphoros shield and Rx logo/ }).click();
-  await expect(page.getByRole('heading', { name: /A clearer view of/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /PGx reports, interpreted/ })).toBeVisible();
   expect((await page.getByRole('img', { name: 'Telesphoros shield and Rx logo' }).boundingBox())!.y).toBeGreaterThanOrEqual(0);
 });
-test('reader sees the workflow but receives no upload action or live AI route', async ({ page }) => {
+test('reader is pointed to the workspace but receives no upload action or live AI route', async ({ page }) => {
   await signInAs(page, 'bob', '/reports/upload');
   await expect(page.getByRole('heading', { name: 'You do not have access to this page' })).toBeVisible();
   await page.getByRole('link', { name: /Telesphoros shield and Rx logo/ }).click();
-  await expect(page.getByRole('heading', { name: /A clearer view of/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /PGx reports, interpreted/ })).toBeVisible();
   await expect(page.getByRole('link', { name: /Upload/ })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Explore the workflow', exact: true })).toHaveCount(2);
+  // The header's account control and the hero both open the signed-in home (specs/024 D1).
+  await expect(page.getByRole('link', { name: 'Open workspace', exact: true })).toHaveCount(2);
+  for (const link of await page.getByRole('link', { name: 'Open workspace', exact: true }).all()) await expect(link).toHaveAttribute('href', '/workspace');
   await expect(page.locator('a[href="/local-interpretation"]')).toHaveCount(0);
 });

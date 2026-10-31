@@ -93,3 +93,44 @@ describe('PostgresUsageRepository', () => {
     expect(await usage.activity(`tenant-${randomUUID()}`, ...around)).toEqual({ reportsUploaded: 0, evaluated: 0, held: 0 });
   });
 });
+
+describe('PostgresUsageRepository, per Puerto Rico day (specs/028-usage-heatmap)', () => {
+  const YEAR_FROM = new Date('2026-01-01T04:00:00Z');
+  const YEAR_TO = new Date('2027-01-01T04:00:00Z');
+
+  it('groups uploads by Puerto Rico day at the 04:00 UTC edge, keeps deleted reports, and lists only days with uploads', async () => {
+    const tenant = `tenant-${randomUUID()}`;
+    await report(tenant, 1, at('2026-01-01T03:59:59Z')); // 31 December 2025 in Puerto Rico: outside the year
+    await report(tenant, 1, at('2026-01-01T04:00:00Z')); // first instant of 2026
+    await report(tenant, 1, at('2026-10-31T03:59:59Z')); // 30 October
+    await report(tenant, 1, at('2026-10-31T04:00:00Z')); // 31 October
+    await report(tenant, 1, at('2026-10-31T23:00:00Z'), true); // 31 October, deleted since: still an upload
+    await report(tenant, 1, at('2027-01-01T03:59:59Z')); // last second of 2026
+    await report(tenant, 1, at('2027-01-01T04:00:00Z')); // 2027: outside
+    await report(tenant, 1, null); // never uploaded: nowhere
+    expect(await usage.uploadsByDay(tenant, YEAR_FROM, YEAR_TO)).toEqual([
+      { date: '2026-01-01', reportsUploaded: 1 },
+      { date: '2026-10-30', reportsUploaded: 1 },
+      { date: '2026-10-31', reportsUploaded: 2 },
+      { date: '2026-12-31', reportsUploaded: 1 },
+    ]);
+  });
+
+  it("never counts another organization's uploads", async () => {
+    const mine = `tenant-${randomUUID()}`;
+    const theirs = `tenant-${randomUUID()}`;
+    await report(mine, 1, at('2026-05-14T12:00:00Z'));
+    await report(theirs, 1, at('2026-05-14T12:00:00Z'));
+    await report(theirs, 1, at('2026-05-15T12:00:00Z'));
+    expect(await usage.uploadsByDay(mine, YEAR_FROM, YEAR_TO)).toEqual([{ date: '2026-05-14', reportsUploaded: 1 }]);
+    expect(await usage.uploadsByDay(`tenant-${randomUUID()}`, YEAR_FROM, YEAR_TO)).toEqual([]);
+  });
+
+  it("reads the caller's own organization's creation time", async () => {
+    const tenant = `tenant-${randomUUID()}`;
+    await withAdmin(pg.adminUrl, (c) =>
+      c.query(`INSERT INTO tenants (id, display_name, created_by, changed_by, created_at) VALUES ($1, $1, 'test-usage', 'test-usage', $2)`, [tenant, at('2025-03-09T02:00:00Z')]),
+    );
+    expect((await usage.createdAt(tenant)).toISOString()).toBe('2025-03-09T02:00:00.000Z');
+  });
+});
