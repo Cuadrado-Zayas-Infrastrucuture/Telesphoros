@@ -4,7 +4,7 @@
 #
 #   scripts/staging/staging-status.sh
 #
-# Reads, and never writes, AWS: the ECS services and task definitions, the alarm count, the CloudFront cache paths, and the API's /ready.
+# Reads, and never writes, AWS: the ECS services and task definitions, the alarm count, the CloudFront cache paths, and the API's /api/v1/ready.
 # Reads the Terraform state's serial and lineage (nothing else of it) and runs `plan -lock=false -detailed-exitcode` on the backend clone's
 # HEAD, printing addresses and actions only. Lists the Terraform merged on origin/main after the applied commit, the saved plans and the claim.
 # It does not fetch: run `git -C "$BACKEND_CLONE" fetch origin` first if origin/main may be behind.
@@ -66,9 +66,9 @@ if read_aws dists cloudfront list-distributions --query 'DistributionList.Items[
   read_aws paths cloudfront get-distribution --id "$(tr -d '[:space:]' < "$WORK/dists.out")" \
     --query 'Distribution.DistributionConfig.CacheBehaviors.Items[].PathPattern' || true
 fi
-READY=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://api.staging.telesphoros.app/ready </dev/null || true)
+READY=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://api.staging.telesphoros.app/api/v1/ready </dev/null || true)
 
-# The newest migration in the running image's commit; /ready answers 200 only when that binary's migrations are applied.
+# The newest migration in the running image's commit; /api/v1/ready answers 200 only when that binary's migrations are applied.
 IMAGE_COMMIT=$(fact image.commit)
 if [ "$(cat "$WORK/api-digest" 2>/dev/null)" = "$(fact image.digest)" ] && git -C "$C" cat-file -e "$IMAGE_COMMIT^{commit}" 2>/dev/null; then
   git -C "$C" ls-tree --name-only "$IMAGE_COMMIT" apps/backend/migrations/ | grep -oE '/[0-9]{4}_' | tr -d '/_' | sort | tail -1 > "$WORK/migration"

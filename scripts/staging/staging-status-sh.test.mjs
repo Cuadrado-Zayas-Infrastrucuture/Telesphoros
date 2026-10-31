@@ -29,7 +29,8 @@ stub('aws', `case "$*" in
   *get-distribution*) echo "/assets/*" ;;
   *) echo "unexpected aws $*" >&2; exit 99 ;;
 esac`);
-stub('curl', 'printf 200');
+// Only the real readiness path answers 200 (apps/backend/src/health/health.controller.ts, GET /api/v1/ready); any other URL is a 404.
+stub('curl', 'case "$*" in *https://api.staging.telesphoros.app/api/v1/ready*) printf 200 ;; *) printf 404 ;; esac');
 stub('terraform', `case "$*" in
   version) echo "Terraform v1.16.5" ;;
   *state\\ pull*) echo '{"version":4,"serial":42,"lineage":"l-1","outputs":{"x":{"value":"SENTINEL-STATE"}}}' ;;
