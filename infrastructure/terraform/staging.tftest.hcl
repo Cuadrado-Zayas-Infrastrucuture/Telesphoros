@@ -127,7 +127,7 @@ run "web_edge_caching" {
   command = plan
 
   assert {
-    condition     = length(aws_cloudfront_distribution.web[0].ordered_cache_behavior) == 1 && one(aws_cloudfront_distribution.web[0].ordered_cache_behavior).path_pattern == "/assets/*" && one(aws_cloudfront_distribution.web[0].ordered_cache_behavior).cache_policy_id == "658327ea-f89d-4fab-a63d-7e88639e058f" && one(aws_cloudfront_distribution.web[0].ordered_cache_behavior).compress
+    condition     = length(aws_cloudfront_distribution.web[0].ordered_cache_behavior) == 1 && one(aws_cloudfront_distribution.web[0].ordered_cache_behavior).path_pattern == "/assets/*" && one(aws_cloudfront_distribution.web[0].ordered_cache_behavior).cache_policy_id == "658327ea-f89d-4fab-a63d-7e88639e58f6" && one(aws_cloudfront_distribution.web[0].ordered_cache_behavior).compress
     error_message = "exactly /assets/* is cached, with the managed CachingOptimized policy and compression"
   }
   assert {
