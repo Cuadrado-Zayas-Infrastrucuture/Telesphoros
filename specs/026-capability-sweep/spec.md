@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-31
 
-**Status**: Draft. Decisions D1 to D5 in [plan.md](plan.md) wait for the founder.
+**Status**: Approved by the founder on 2026-10-31, D1 to D5 as recommended ([plan.md](plan.md)).
 
 **Input**: found while reviewing Phase 0 of the production-stack evaluation (2026-10-30). Migration 0028 wrote the cleanup function and
 deferred its caller: "The scheduled job that calls it is wired in slice 2, when capabilities are first minted outside tests"

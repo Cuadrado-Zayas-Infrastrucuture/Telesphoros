@@ -1,6 +1,6 @@
 # Tasks: expired capabilities are removed, on a schedule, and someone hears when that stops
 
-**Spec**: [spec.md](spec.md) · **Plan**: [plan.md](plan.md) · Tasks assume D1 (a) and the recommended D2 to D5; they change if a decision does.
+**Spec**: [spec.md](spec.md) · **Plan**: [plan.md](plan.md) · D1 to D5 approved as recommended (2026-10-31).
 
 ## PR A: database and worker
 

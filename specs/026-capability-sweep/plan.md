@@ -2,7 +2,8 @@
 
 **Spec**: [spec.md](spec.md)
 
-**Status**: Draft. D1 to D5 wait for the founder.
+**Status**: Approved by the founder on 2026-10-31, D1 to D5 as recommended: a worker timer calling a new definer, every 60 s and 1000
+rows, the five-minute retention kept, three alarms, and the staging backlog read once before the release.
 
 ## Summary
 
