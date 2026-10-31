@@ -18,6 +18,21 @@ export interface EvaluationView {
   activeDisputes: number;
 }
 
+/** A page of evaluations and everything the list shows beside them, read in a single transaction. */
+export interface EvaluationPageView {
+  items: Projected[];
+  /** All evaluations the filter matches, not only this page. */
+  total: number;
+  /** One entry per evaluation on the page. */
+  contexts: Map<string, EvaluationReadContext>;
+  /** One entry per report on the page: the id of its current evaluation, or null. */
+  currentIds: Map<string, string | null>;
+  /** One entry per report on the page. */
+  links: Map<string, PatientLinkStateValue>;
+  /** Disputes open or upheld in this organization (not the dismissed ones). */
+  activeDisputes: number;
+}
+
 /**
  * Records of the lab-report pipeline (docs/design/records-and-corrections.md). Every one is append-only, tenant-scoped, and committed
  * together with its ledger event. Reads return the PROJECTION of the stored row (the exact object that was hashed): camelCase,

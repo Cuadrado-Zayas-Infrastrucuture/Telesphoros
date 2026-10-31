@@ -85,3 +85,8 @@
   .workspace-navigation-content.is-open { display: flex; }
   .workspace-main { padding: 1.5rem 1rem; }
 }
+/* Specs/024: the feature panel's lists (past reports, patients) are for an expanded sidebar; collapsed to icons they would not fit. */
+.workspace-navigation.is-collapsed .workspace-panel-item { display: none; }
+@media (max-width: 63.99rem) {
+  .workspace-navigation.is-collapsed .workspace-panel-item { display: list-item; }
+}
