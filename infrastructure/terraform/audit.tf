@@ -1,4 +1,4 @@
-# F1: the audit trail. NOT APPLIED.
+# F1: the audit trail.
 #
 # CloudTrail records who did what in the AWS account, including every read and delete of a report file
 # (S3 data events on the reports bucket) and every delete or lock change of an audit log or off-site backup.

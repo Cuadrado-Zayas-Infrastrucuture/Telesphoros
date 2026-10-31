@@ -1,5 +1,5 @@
 # INF-03 slice 1 (specs/002-signed-image-release, plan approved by the founder 2026-10-20): the image-signing key, the GitHub OIDC trust and the CI release
-# role. NOT APPLIED. It exists only with API hosting on AND the GitHub repository named by its immutable IDs; until the founder sets those, nothing here is
+# role. It exists only with API hosting on AND the GitHub repository named by its immutable IDs; until the founder sets those, nothing here is
 # planned and the CI release job (slice 2) skips itself.
 #
 # What it is for: CI pushes the exact image archive its `image` job built, scanned and rehearsed, and signs that digest with this key; an apply refuses an

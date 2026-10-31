@@ -1,4 +1,4 @@
-# The API's autoscaling (Application Auto Scaling on the ECS service). NOT APPLIED. Exists with the API service (api-compute.tf).
+# The API's autoscaling (Application Auto Scaling on the ECS service). Exists with the API service (api-compute.tf).
 #
 # The service is always registered as a scalable target between api_desired_count (the floor) and api_max_count (the ceiling). With
 # api_max_count null the two are equal and nothing scales: the target only holds the count. A CPU target-tracking policy is added when the

@@ -1,4 +1,4 @@
-# FD-3: the deployment profile. NOT APPLIED.
+# FD-3: the deployment profile.
 #
 # `production` (the default) is the shape the product is built for: two Regions, Multi-AZ, a private network supplied by the operator,
 # irreversible protections. `synthetic` is a REHEARSAL shape: one Region, small, cheap, and destroyable, so the same root can be applied

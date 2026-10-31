@@ -1,6 +1,6 @@
 // Guard for the image's ENTRYPOINT against every ECS task `command` that runs it. Imported by guard.test.mjs, so `pnpm test:infra` runs it.
 // api.Dockerfile sets ENTRYPOINT ["node"] and CMD ["dist/main.js"]. An ECS container-definition `command` replaces only the image's CMD, so a command that
-// starts with "node" runs `node node ...` and dies with "Cannot find module '/app/node'". Nothing is applied yet, so no task has failed; this keeps it that way.
+// starts with "node" runs `node node ...` and dies with "Cannot find module '/app/node'". This keeps any task from dying that way.
 // A health check (`healthCheck.command = ["CMD", "node", "-e", ...]`) is not covered and must not be: ECS runs it directly, bypassing the ENTRYPOINT.
 // Like the other guards it reads Terraform TEXT. `entrypointProblems` returns what is wrong with a set of files (empty when nothing is); the tests run it on the
 // real files and on deliberately broken copies, so every rule has been seen to fail.

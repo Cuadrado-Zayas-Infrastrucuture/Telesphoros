@@ -14,7 +14,7 @@
 
 - [ ] **Synthetic data only.** No real patient data, in code, tests, fixtures, logs, or screenshots.
 - [ ] **No PHI and no secrets** in this diff or in the PR description.
-- [ ] **BAA status unchanged:** the AWS BAA is not executed, so nothing real is stored and nothing is applied in AWS. (If this PR changes that, say so here.)
+- [ ] **BAA status unchanged:** the AWS BAA is not executed, so nothing real is stored. (If this PR changes that, say so here. If it applies anything in AWS, update `docs/ops/environments.md`.)
 - [ ] **Clinical hold unchanged:** nothing in this PR lifts or weakens a clinical hold. (If it does, it must name the sign-off.)
 - [ ] Clinical logic changes carry tests and a validation note in `docs/clinical-validation/`.
 - [ ] Database changes are a new numbered migration with a down file, and the database tier was run.

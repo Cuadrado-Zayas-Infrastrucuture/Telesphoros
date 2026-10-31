@@ -5,7 +5,7 @@ description: Assess Telesphoros release readiness, deployment prerequisites, lau
 
 # Assess readiness without crossing release gates
 
-Read the [repository context](../../references/telesphoros.md) and the current deployment/hosting plan. Verify current state; a dated "nothing deployed" paragraph is not live-account evidence. Read-only account inspection needs the appropriate connected access; absence of access means unverified.
+Read the [repository context](../../references/telesphoros.md) and the current deployment/hosting plan. Start from `docs/ops/environments.md` (what is applied, as read from the account on its date), then verify current state; a dated "nothing deployed" paragraph is not live-account evidence. Read-only account inspection needs the appropriate connected access; absence of access means unverified.
 
 1. Identify the exact candidate SHA, intended environment, artifact identity and requested outcome. Separate source merged, local verification, required exact-head CI, hosted synthetic acceptance and clinical release. If the user only asks for readiness, remain read-only.
 2. Trace each prerequisite to an existing owner and evidence: hosting/state/IAM decisions, migration/provisioning order, identity and tenant containment, rollback/restore procedure, monitoring and delivered alarms, provider/BAA requirements and clinical hold. Synthetic/Moto results do not establish RDS/IAM/KMS behavior or permission to introduce patient data.
