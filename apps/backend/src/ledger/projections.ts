@@ -308,6 +308,30 @@ const LOADERS: Record<Exclude<RecordTable, 'evaluations'>, Loader> = {
       deIdentificationAuthorized: r.de_identification_authorized,
     }),
   },
+  // Spec 025 PD-a. Every column as stored except the retry identity (as clinician decisions). The three identity fields enter the payload as the sha-256 of
+  // nonce || ciphertext: never a plaintext value, and never the ciphertext itself. The coded columns are plaintext by design (D1).
+  patient_demographics: {
+    sql: `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
+                 patient_id::text AS patient_id, version, key_version,
+                 encode(sha256(given_name_nonce || given_name_ct), 'hex') AS given_name_sha256,
+                 encode(sha256(family_name_nonce || family_name_ct), 'hex') AS family_name_sha256,
+                 encode(sha256(date_of_birth_nonce || date_of_birth_ct), 'hex') AS date_of_birth_sha256,
+                 sex, birth_year, ethnicity
+            FROM patient_demographics WHERE id = ANY($1::uuid[])`,
+    project: (r) => ({
+      kind: 'patient-demographics',
+      ...common(r),
+      patientId: r.patient_id,
+      version: r.version,
+      keyVersion: r.key_version,
+      givenNameSha256: r.given_name_sha256,
+      familyNameSha256: r.family_name_sha256,
+      dateOfBirthSha256: r.date_of_birth_sha256,
+      sex: r.sex,
+      birthYear: r.birth_year,
+      ethnicity: r.ethnicity,
+    }),
+  },
 };
 
 const EVALUATION_SQL = `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,

@@ -9,6 +9,8 @@ import { PostgresMemberAdminRepository } from './postgres/member-admin.repositor
 import { InMemoryMembershipRepository, MembershipRepository } from './membership.repository';
 import { PostgresMembershipRepository } from './postgres/membership.repository';
 import { PostgresLedgerRecordsRepository } from './postgres/ledger-records.repository';
+import { PostgresPatientDemographicsRepository } from './postgres/patient-demographics.repository';
+import { PatientDemographicsRepository, UnavailablePatientDemographicsRepository } from './patient-demographics.repository';
 import { InMemoryPatientsRepository, PatientsRepository } from './patients.repository';
 import { PostgresPatientIdentifiersRepository } from './postgres/patient-identifiers.repository';
 import { PostgresPatientsRepository } from './postgres/patients.repository';
@@ -26,7 +28,16 @@ import { InMemoryUsageRepository, UsageRepository } from './usage.repository';
 @Module({})
 export class StorageModule {
   static register(env: Env): DynamicModule {
-    const repositories = [PatientsRepository, PatientIdentifiersRepository, ReportsRepository, MembershipRepository, MemberAdminRepository, SecurityEvents, UsageRepository];
+    const repositories = [
+      PatientsRepository,
+      PatientDemographicsRepository,
+      PatientIdentifiersRepository,
+      ReportsRepository,
+      MembershipRepository,
+      MemberAdminRepository,
+      SecurityEvents,
+      UsageRepository,
+    ];
 
     if (env.STORAGE_DRIVER === 'postgres') {
       const providers: Provider[] = [
@@ -34,6 +45,7 @@ export class StorageModule {
         { provide: Database, useFactory: () => new Database({ url: env.DATABASE_URL!, ssl: env.DATABASE_SSL, max: env.DATABASE_POOL_MAX }) },
         { provide: SecurityAuditStore, useClass: PostgresSecurityAuditStore },
         { provide: PatientsRepository, useClass: PostgresPatientsRepository },
+        { provide: PatientDemographicsRepository, useClass: PostgresPatientDemographicsRepository },
         { provide: PatientIdentifiersRepository, useClass: PostgresPatientIdentifiersRepository },
         { provide: ReportsRepository, useClass: PostgresReportsRepository },
         { provide: MembershipRepository, useClass: PostgresMembershipRepository },
@@ -51,6 +63,8 @@ export class StorageModule {
       providers: [
         { provide: SecurityAuditStore, useClass: InMemorySecurityAuditStore },
         { provide: PatientsRepository, useClass: InMemoryPatientsRepository },
+        // Demographics are ledger records and the ledger exists only on PostgreSQL: here lists show no coded fields and the routes answer 503.
+        { provide: PatientDemographicsRepository, useClass: UnavailablePatientDemographicsRepository },
         { provide: PatientIdentifiersRepository, useClass: InMemoryPatientIdentifiersRepository },
         { provide: ReportsRepository, useClass: InMemoryReportsRepository },
         { provide: MembershipRepository, useClass: InMemoryMembershipRepository },
