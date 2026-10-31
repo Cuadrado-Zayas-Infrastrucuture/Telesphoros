@@ -57,7 +57,15 @@ the issuer's three log alarms, #210). No CI job holds cloud credentials or appli
 
 ## Checking it again (read-only)
 
-Run these with the staging identity, and confirm that identity first. The reports and audit bucket names end in the account id, so read them
+**Before planning anything against staging**, run `scripts/staging/staging-status.sh` (founder-run, read-only; spec 027). It compares
+live staging with `docs/ops/staging-expected.json` on `origin/main`, runs `terraform plan -lock=false -detailed-exitcode` on the backend
+clone, lists the Terraform merged after the applied commit, marks saved plans made at another state serial as stale, and shows who holds
+the stack claim. It prints identifiers and counts, never a state, plan or variable value, and exits 0 only when there is nothing to do.
+A plan for staging quotes its table; a session that has not seen it does not know what staging runs. Its live values (the account, the
+clone, the Terraform binary and data directory, the canonical var file) come from the private `~/telesphoros-private/staging/stack.env`,
+described in the script's header.
+
+The single commands below are what it runs, for reading one thing by hand. Run these with the staging identity, and confirm that identity first. The reports and audit bucket names end in the account id, so read them
 from the console or `aws s3api list-buckets`; they are not written here.
 
 ```bash
