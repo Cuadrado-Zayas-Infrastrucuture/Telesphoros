@@ -3,6 +3,7 @@ import { expectAppException } from '../../test/helpers/expect-app-exception';
 import { AppException } from '../common/app-exception';
 import type { Principal } from '../auth/principal';
 import { PatientHasMergedRecordsError } from '../storage/errors';
+import { UnavailablePatientDemographicsRepository } from '../storage/patient-demographics.repository';
 import { InMemoryPatientsRepository } from '../storage/patients.repository';
 import { InMemoryReportsRepository } from '../storage/reports.repository';
 import { PatientsService } from './patients.service';
@@ -13,7 +14,7 @@ const bob: Principal = { sub: 'bob', tenantId: 'bob', roles: ['clinician'] };
 function setup() {
   const patients = new InMemoryPatientsRepository();
   const reports = new InMemoryReportsRepository();
-  return { service: new PatientsService(patients, reports), patients, reports };
+  return { service: new PatientsService(patients, reports, new UnavailablePatientDemographicsRepository()), patients, reports };
 }
 
 describe('PatientsService', () => {

@@ -1,3 +1,5 @@
+import type { PoolClient } from 'pg';
+import type { RecordTable } from '../ledger/ledger-types';
 import type {
   AcceptanceInput,
   CaptureInput,
@@ -48,6 +50,12 @@ export class DisputeRequestReusedError extends Error {
  * Every method is tenant-scoped; `actor` is the authenticated individual.
  */
 export abstract class LedgerRecordsRepository {
+  /**
+   * For a repository that owns the table of one record type (patient demographics, spec 025): appends the ledger event of a record just inserted in `client`'s
+   * transaction, as that transaction's LAST statement. The only code that appends events stays in the Postgres ledger repository, behind the ledger watch's gate.
+   */
+  abstract appendRecordEvent(client: PoolClient, tenantId: string, table: RecordTable, id: string, eventId: string): Promise<void>;
+
   /**
    * Locks the report row, re-reads the bindings the caller relied on (`input.expectedReport`) and throws SourceChangedError if any
    * differs; only then inserts. Idempotent per content identity: the same text again returns the existing capture and writes nothing.

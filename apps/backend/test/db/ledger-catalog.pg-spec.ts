@@ -12,6 +12,7 @@ import {
   SECURITY_AUDIT_TABLES,
   EVALUATION_REQUEST_TABLES,
   RENDER_EVENT_TABLES,
+  FIELD_KEY_TABLES,
 } from '../../src/db/append-only-tables';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { expectRecordTablePolicies, type CatalogPolicy } from '../helpers/catalog-policy-assertions';
@@ -65,6 +66,42 @@ describe('catalog guard: the audit tables are classified and protected as their 
       expect(guards.some((t) => (t.mask & 8) !== 0 && (t.mask & 16) !== 0)).toBe(true);
       expect(guards.some((t) => (t.mask & 32) !== 0)).toBe(true);
     }
+  });
+
+  it('the wrapped patient keys are forced tenant-RLS, insert-only for the application, closed to the worker, and deletable only through the erasure function (spec 025)', async () => {
+    const rows = await q<{
+      relname: string;
+      relforcerowsecurity: boolean;
+      app_select: boolean;
+      app_insert: boolean;
+      app_update: boolean;
+      app_delete: boolean;
+      app_truncate: boolean;
+      worker_read: boolean;
+    }>(
+      `SELECT relname, relforcerowsecurity,
+              has_table_privilege('telesphoros_app', oid, 'SELECT') AS app_select, has_table_privilege('telesphoros_app', oid, 'INSERT') AS app_insert,
+              has_table_privilege('telesphoros_app', oid, 'UPDATE') AS app_update, has_table_privilege('telesphoros_app', oid, 'DELETE') AS app_delete,
+              has_table_privilege('telesphoros_app', oid, 'TRUNCATE') AS app_truncate, has_table_privilege('telesphoros_worker', oid, 'SELECT') AS worker_read
+         FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relname = ANY($1)`,
+      [[...FIELD_KEY_TABLES]],
+    );
+    expect(rows).toHaveLength(FIELD_KEY_TABLES.length);
+    for (const row of rows) {
+      expect(row).toMatchObject({ relforcerowsecurity: true, app_select: true, app_insert: true, app_update: false, app_delete: false, app_truncate: false, worker_read: false });
+      const triggers = await q<{ name: string }>(
+        `SELECT p.proname AS name FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid WHERE t.tgrelid = $1::regclass AND NOT t.tgisinternal`,
+        [row.relname],
+      );
+      expect(triggers.map((t) => t.name).sort()).toEqual(['patient_field_keys_check', 'patient_field_keys_delete_guard', 'refuse_mutation', 'refuse_mutation']);
+    }
+    const erase = await q<{ app: boolean; worker: boolean; verifier: boolean; issuer: boolean; definer: boolean }>(
+      `SELECT has_function_privilege('telesphoros_app', f, 'EXECUTE') AS app, has_function_privilege('telesphoros_worker', f, 'EXECUTE') AS worker,
+              has_function_privilege('telesphoros_ledger_verifier', f, 'EXECUTE') AS verifier, has_function_privilege('telesphoros_issuer', f, 'EXECUTE') AS issuer,
+              (SELECT prosecdef FROM pg_proc WHERE oid = f) AS definer
+         FROM (SELECT 'patient_field_key_erase(text,uuid)'::regprocedure AS f) x`,
+    );
+    expect(erase).toEqual([{ app: false, worker: false, verifier: false, issuer: false, definer: true }]);
   });
 
   it('every table in the public schema is classified, and every classified table exists (a floor on both sides)', async () => {

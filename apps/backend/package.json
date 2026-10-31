@@ -24,6 +24,7 @@
     "knowledge:locate": "node dist/services/knowledge/cli.js locate"
   },
   "dependencies": {
+    "@aws-sdk/client-kms": "^3.1153.0",
     "@aws-sdk/client-s3": "^3.1153.0",
     "@aws-sdk/client-secrets-manager": "^3.1153.0",
     "@aws-sdk/s3-request-presigner": "^3.1153.0",

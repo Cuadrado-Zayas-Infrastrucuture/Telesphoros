@@ -202,6 +202,24 @@ export const envSchema = z
       .string()
       .regex(/^[0-9a-f]{64}$/, 'must be 64 lower-case hex characters')
       .optional(),
+
+    /**
+     * Patient identity encryption (spec 025, D2). A patient's given name, family name and date of birth are encrypted under a random data key per
+     * patient, and the key provider wraps that data key. Two providers:
+     *   - KMS (deployed builds): `PATIENT_FIELD_KMS_KEY_ID` names the AWS KMS key (an id, an ARN or an alias). Every wrap and unwrap names the encryption
+     *     context {tenant, patient}, so KMS answers only for that pair, and every unwrap is a CloudTrail record. Required in production.
+     *   - local (development and tests): `PATIENT_FIELD_LOCAL_KEY`, 64 hex characters, wraps the data keys with AES-256-GCM in this process. Refused in
+     *     production, where a key held in the environment would put the wrapping key next to the data. Unset in development, a fixed key that is not
+     *     secret is used, like IDENTIFIER_DIGEST_KEY.
+     * Setting both is refused: it would be ambiguous which one wraps.
+     */
+    PATIENT_FIELD_KMS_KEY_ID: z.string().min(1).max(2048).optional(),
+    PATIENT_FIELD_LOCAL_KEY: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/, 'must be 64 lower-case hex characters')
+      .optional(),
+    /** Where AWS KMS answers, for a local emulator (Moto). A development override; refused in production, as the Cognito overrides are. */
+    KMS_ENDPOINT: z.url().optional(),
   })
   .superRefine((env, ctx) => {
     const problem = (path: string, message: string) => ctx.addIssue({ code: 'custom', path: [path], message });
@@ -219,6 +237,8 @@ export const envSchema = z
       const names = env[key] ? urlTlsParameterNames(env[key]) : [];
       if (names.length > 0) problem(key, `must not carry TLS parameters (${names.join(', ')}): they can override DATABASE_SSL, which is the only TLS setting`);
     }
+    if (env.PATIENT_FIELD_KMS_KEY_ID && env.PATIENT_FIELD_LOCAL_KEY)
+      problem('PATIENT_FIELD_LOCAL_KEY', 'and PATIENT_FIELD_KMS_KEY_ID cannot both be set: it would be ambiguous which one wraps the patient keys');
     if (env.OBJECT_STORAGE_DRIVER === 's3' && !env.REPORTS_BUCKET) problem('REPORTS_BUCKET', 'is required when OBJECT_STORAGE_DRIVER=s3');
 
     // The watch needs the database and its own login; the production and pipeline requirements are checked next to each of those.
@@ -270,6 +290,10 @@ export const envSchema = z
       if (env.DATABASE_SSL !== 'require') problem('DATABASE_SSL', 'must be require in production');
       if (!env.INVITATION_DIGEST_KEY) problem('INVITATION_DIGEST_KEY', 'is required in production (invitations store only a keyed digest of the address)');
       if (!env.IDENTIFIER_DIGEST_KEY) problem('IDENTIFIER_DIGEST_KEY', 'is required in production (patient identifiers are stored only as keyed digests)');
+      if (!env.PATIENT_FIELD_KMS_KEY_ID) problem('PATIENT_FIELD_KMS_KEY_ID', 'is required in production (patient identity is encrypted under a data key that AWS KMS wraps)');
+      if (env.PATIENT_FIELD_LOCAL_KEY)
+        problem('PATIENT_FIELD_LOCAL_KEY', 'is refused in production: the local key provider is for development and tests, and the patient keys are wrapped by AWS KMS');
+      if (env.KMS_ENDPOINT) problem('KMS_ENDPOINT', 'is a development-only override and is refused in production');
       if (!env.LEDGER_VERIFIER_DATABASE_URL)
         problem('LEDGER_VERIFIER_DATABASE_URL', 'is required in production (the record log is verified at start and re-verified while running)');
       if (!env.RATE_LIMIT_ENABLED) problem('RATE_LIMIT_ENABLED', 'must be true in production');

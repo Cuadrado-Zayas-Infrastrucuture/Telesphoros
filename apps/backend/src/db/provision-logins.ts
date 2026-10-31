@@ -223,6 +223,11 @@ const WORKER_UNREADABLE = [
   'invitations',
 ];
 
+/** Tables a later migration added that the worker must not read either (0064, spec 025: encrypted identity and its wrapped keys). Checked only once the table exists. */
+const LATER_WORKER_UNREADABLE = ['patient_demographics', 'patient_field_keys'];
+/** The erasure function (0064): no login may execute it. Checked only once it exists. */
+const LATER_OWNER_ONLY_FUNCTIONS = ['patient_field_key_erase'];
+
 const LEDGER_TABLES = ['ledger_events', 'ledger_heads', 'ledger_checkpoints'];
 
 /** The tenant capability (migration 0028). Only the issuer mints; no login reads or writes its tables; the sweep is the jobs role's alone. */
@@ -495,6 +500,13 @@ export async function checkGroups(admin: Client, groups: readonly string[] = PRI
   };
 }
 
+/** Of these tables, the ones this database has (a database that has not reached the migration that adds a table is not called broken for lacking it). */
+async function existingTables(admin: Client, tables: readonly string[]): Promise<string[]> {
+  const found: string[] = [];
+  for (const table of tables) if ((await admin.query<{ ok: boolean }>(`SELECT to_regclass($1) IS NOT NULL AS ok`, [`public.${table}`])).rows[0]!.ok) found.push(table);
+  return found;
+}
+
 async function verifyLogins(admin: Client, names: LoginNames, options: ProvisionOptions): Promise<Check[]> {
   const checks: Check[] = [];
   const add = (name: string, ok: boolean, detail: string, skipped = false) => checks.push({ name, ok, detail, ...(skipped ? { skipped } : {}) });
@@ -617,6 +629,7 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
       else if (can !== allowed) wrong.push(`${fn} (${allowed ? 'cannot' : 'CAN'} execute)`);
     }
     for (const table of LEDGER_TABLES) if (await canWrite(names[kind], table)) wrong.push(`${table} (CAN write)`);
+    for (const fn of LATER_OWNER_ONLY_FUNCTIONS) if ((await canExecute(names[kind], fn)) === true) wrong.push(`${fn} (CAN execute)`);
     if (hasQueue) {
       for (const fn of [...WORKER_FUNCTIONS, ...APPLICATION_FUNCTIONS, ...OWNER_ONLY_FUNCTIONS]) {
         const allowed = kind === 'worker' ? WORKER_FUNCTIONS.includes(fn) : kind === 'app' ? APPLICATION_FUNCTIONS.includes(fn) : false;
@@ -629,7 +642,7 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
     }
     if (hasCapability) wrong.push(...(await capabilityProblems(names[kind], kind)));
     if (kind === 'worker') {
-      for (const table of WORKER_UNREADABLE) {
+      for (const table of [...WORKER_UNREADABLE, ...(await existingTables(admin, LATER_WORKER_UNREADABLE))]) {
         const readable = (await admin.query<{ ok: boolean }>(`SELECT has_table_privilege($1, $2, 'SELECT') AS ok`, [names.worker, `public.${table}`])).rows[0].ok;
         if (readable) wrong.push(`${table} (CAN read)`);
       }
@@ -647,7 +660,7 @@ async function verifyLogins(admin: Client, names: LoginNames, options: Provision
   if (withIssuer) {
     if (hasCapability) {
       const wrong = await capabilityProblems(names.issuer, 'issuer');
-      for (const table of WORKER_UNREADABLE) {
+      for (const table of [...WORKER_UNREADABLE, ...(await existingTables(admin, LATER_WORKER_UNREADABLE))]) {
         const readable = (await admin.query<{ ok: boolean }>(`SELECT has_table_privilege($1, $2, 'SELECT') AS ok`, [names.issuer, `public.${table}`])).rows[0].ok;
         if (readable) wrong.push(`${table} (CAN read)`);
       }
