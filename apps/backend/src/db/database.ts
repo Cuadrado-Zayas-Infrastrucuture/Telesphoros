@@ -111,9 +111,13 @@ export class Database {
     let refused: ReturnType<typeof currentRequestAuthority>;
     try {
       await client.query('BEGIN');
-      await client.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
-      if (actor !== undefined) await client.query(`SELECT set_config('app.current_actor', $1, true)`, [actor]);
-      await this.bindCapability(client, capability);
+      // The tenant, the person and the capability go in as one statement: three round trips before the work were one too many. Every name is a literal here and every value a parameter.
+      const settings = [`set_config('app.current_tenant_id', $1, true)`];
+      const values = [tenantId];
+      if (actor !== undefined) settings.push(`set_config('app.current_actor', $${values.push(actor)}, true)`);
+      if (capability) settings.push(`set_config('app.capability', $${values.push(capability.token)}, true)`);
+      await client.query(`SELECT ${settings.join(', ')}`, values);
+      this.countCapability(capability);
       const result = await work(client);
       if (!options.ownVersionMayChange && !(await this.authorityStillCurrent(client, tenantId))) {
         refused = currentRequestAuthority();
@@ -142,6 +146,11 @@ export class Database {
    */
   private async bindCapability(client: PoolClient, capability: RequestCapability | undefined): Promise<void> {
     if (capability) await client.query(`SELECT set_config('app.capability', $1, true)`, [capability.token]);
+    this.countCapability(capability);
+  }
+
+  /** The count half of `bindCapability`, for `withTenant`, which sends the capability in the same statement as the tenant and the person. */
+  private countCapability(capability: RequestCapability | undefined): void {
     if (capability && capability.expiresAt.getTime() > Date.now()) this.capabilities.recordBound();
     else this.capabilities.recordMissing(capability ? 'expired' : (capabilityAbsentReason() ?? 'absent'));
   }
