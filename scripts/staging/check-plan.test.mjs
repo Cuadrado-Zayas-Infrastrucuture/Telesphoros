@@ -279,7 +279,7 @@ test('any other drift is still refused, including the restore mark beside anothe
 // `complete: false`) or a full one; every change in the plan is checked either way. Shapes modelled on `terraform show -json`:
 // computed attributes (etag, status, last_modified_time) are missing from `after` and listed in `after_unknown`.
 const CACHING_DISABLED = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad';
-const CACHING_OPTIMIZED = '658327ea-f89d-4fab-a63d-7e88639e058f';
+const CACHING_OPTIMIZED = '658327ea-f89d-4fab-a63d-7e88639e58f6'; // verified in the staging account on 2026-10-31
 const ROUTING_FUNCTION = `arn:aws:cloudfront::${ACCOUNT}:function/telesphoros-staging-web-routing`;
 const HEADERS_POLICY = '11111111-2222-3333-4444-555555555555';
 const behaviour = (cachePolicy, path) => ({

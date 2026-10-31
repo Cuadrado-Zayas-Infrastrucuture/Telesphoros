@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 
@@ -75,7 +75,8 @@ test('certificate uses us-east-1; viewers require HTTPS/TLS 1.2; shell is not ca
 test('only /assets/* is cached at the edge; everything else is never cached', () => {
   const distribution = block(source, 'resource "aws_cloudfront_distribution" "web"');
   const CACHING_DISABLED = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad';
-  const CACHING_OPTIMIZED = '658327ea-f89d-4fab-a63d-7e88639e058f';
+  // Read from the staging account on 2026-10-31 (`aws cloudfront list-cache-policies --type managed`: Managed-CachingOptimized), not from documentation or memory.
+  const CACHING_OPTIMIZED = '658327ea-f89d-4fab-a63d-7e88639e58f6';
   const fallback = code(block(distribution, 'default_cache_behavior'));
   assert.ok(fallback.includes(`cache_policy_id = "${CACHING_DISABLED}"`), 'the default behaviour (the shell) must stay on CachingDisabled');
   assert.ok(!fallback.includes(CACHING_OPTIMIZED), 'the default behaviour must never use the caching policy');
@@ -91,6 +92,21 @@ test('only /assets/* is cached at the edge; everything else is never cached', ()
   const publish = readFileSync(new URL('../../scripts/staging/publish-frontend.sh', import.meta.url), 'utf8');
   assert.ok(/s3 sync "\$stage\/assets" "s3:\/\/\$WEB_BUCKET\/assets" --cache-control "public,max-age=31536000,immutable"/.test(publish), '/assets is uploaded as immutable');
   assert.ok(/--exclude "assets\/\*" --exclude "index\.html" --cache-control "no-cache"/.test(publish) && /index\.html" --cache-control "no-cache"/.test(publish), 'everything else is uploaded no-cache');
+});
+
+// The first attempt to apply this change failed with NoSuchCachePolicy: the id in web.tf, the plan check and their tests had been copied from memory with the
+// last two blocks transposed, and every test agreed with the typo, so none could notice. The id is pinned above from the account; this keeps the typo out.
+test('the cache policy id that does not exist in the account appears nowhere in the Terraform, the plan check or their tests', () => {
+  const wrong = ['658327ea', 'f89d', '4fab', 'a63d', '7e88639e058f'].join('-');
+  const here = new URL('./', import.meta.url);
+  const staging = new URL('../../scripts/staging/', import.meta.url);
+  const files = [
+    ...readdirSync(here).filter((name) => /\.(tf|hcl|mjs|tftpl)$/.test(name)).map((name) => new URL(name, here)),
+    ...readdirSync(staging).filter((name) => /\.(mjs|sh)$/.test(name)).map((name) => new URL(name, staging)),
+  ];
+  assert.ok(files.length > 20, 'the scan found the files');
+  const found = files.filter((file) => readFileSync(file, 'utf8').includes(wrong)).map((file) => file.pathname.split('/').pop());
+  assert.deepEqual(found, [], `the id is a typo of the managed CachingOptimized policy: ${found.join(', ')}`);
 });
 
 test('headers forbid inline scripts, framing and referrer leaks; HSTS preload stays off', () => {

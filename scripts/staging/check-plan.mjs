@@ -147,7 +147,7 @@ function sesProblems(plan, need) {
 
 const WEB_DISTRIBUTION = 'aws_cloudfront_distribution.web[0]';
 const CACHING_DISABLED = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad';
-const CACHING_OPTIMIZED = '658327ea-f89d-4fab-a63d-7e88639e058f';
+const CACHING_OPTIMIZED = '658327ea-f89d-4fab-a63d-7e88639e58f6'; // read from the staging account (list-cache-policies --type managed), 2026-10-31
 // AWS recomputes these on every update of a distribution, so the plan lists them as unknown. They are never a change of ours.
 const WEB_COMPUTED = ['etag', 'last_modified_time', 'status', 'in_progress_validation_batches'];
 const WEB_POLICY = 'aws_s3_bucket_policy.web[0]';
