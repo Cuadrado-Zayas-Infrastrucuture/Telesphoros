@@ -357,6 +357,7 @@ as a line with the date, the digest and the reason, and release the same commit 
 | Date | Digest | Reason |
 |---|---|---|
 | 2026-10-30 | `sha256:daa42eb04212809ef99c1d4285dae3166eb71a87ed4e4f5bcf020c681a17c65d` (commit `888979b`) | CI cannot sign: this account's organization SCP denies GitHub OIDC providers. First synthetic staging image, for the demo. Not yet released through CI. |
+| 2026-10-30 | `sha256:d227aa9e78c266b8fcb7e507d030ae11104892485859f9ec4e9d1f8c2eb87d93` (commit `f03b56e2`) | CI cannot sign: this account's organization SCP denies GitHub OIDC providers. Release of `main` with the glibc/dpkg pins (#190) and the ledger heartbeat (#195); CI's image job was green on the same commit. Replaces the image above on synthetic staging. Not yet released through CI. |
 
 ### Turning it on
 
