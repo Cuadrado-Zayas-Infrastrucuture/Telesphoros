@@ -503,6 +503,95 @@ resource "aws_cloudwatch_metric_alarm" "worker_schedule_failing" {
   depends_on          = [aws_cloudwatch_log_metric_filter.worker_schedule_failed]
 }
 
+# Spec 026: the capability sweep (migration 0065). The worker's `capability-sweep` timer removes expired capabilities every minute and logs EVERY run
+# (`capability-sweep-ran`, with `outcome` behind or current), so its run line is also its heartbeat. Apply these only after the image that runs the timer
+# and migration 0065 are released: before that the stale alarm has nothing to count and the failing alarm would read a missing function.
+resource "aws_cloudwatch_log_metric_filter" "worker_capability_sweep_failed" {
+  count          = local.api_count
+  name           = "${local.name}-worker-capability-sweep-failed"
+  log_group_name = aws_cloudwatch_log_group.worker[0].name
+  pattern        = "{ $.event = \"capability-sweep-failed\" }"
+  metric_transformation {
+    name      = "CapabilitySweepFailures"
+    namespace = local.worker_metrics
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "worker_capability_sweep_failing" {
+  count               = local.api_count
+  alarm_name          = "${local.name}-worker-capability-sweep-failing"
+  alarm_description   = "The capability sweep has failed in each of the last three minutes: expired capabilities are not being removed. Check the database and the worker log."
+  namespace           = local.worker_metrics
+  metric_name         = "CapabilitySweepFailures"
+  statistic           = "Sum"
+  period              = 60
+  evaluation_periods  = 3
+  datapoints_to_alarm = 3
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  depends_on          = [aws_cloudwatch_log_metric_filter.worker_capability_sweep_failed]
+}
+
+resource "aws_cloudwatch_log_metric_filter" "worker_capability_sweep_ran" {
+  count          = local.api_count
+  name           = "${local.name}-worker-capability-sweep-ran"
+  log_group_name = aws_cloudwatch_log_group.worker[0].name
+  pattern        = "{ $.event = \"capability-sweep-ran\" }"
+  metric_transformation {
+    name      = "CapabilitySweepRuns"
+    namespace = local.worker_metrics
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "worker_capability_sweep_stale" {
+  count               = local.api_count
+  alarm_name          = "${local.name}-worker-capability-sweep-stale"
+  alarm_description   = "No capability sweep has run for 15 minutes (or no data at all): the worker is down, or its timer stopped. Expired capabilities accumulate until it runs."
+  namespace           = local.worker_metrics
+  metric_name         = "CapabilitySweepRuns"
+  statistic           = "Sum"
+  period              = 900
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "breaching"
+  alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  depends_on          = [aws_cloudwatch_log_metric_filter.worker_capability_sweep_ran]
+}
+
+resource "aws_cloudwatch_log_metric_filter" "worker_capability_sweep_behind" {
+  count          = local.api_count
+  name           = "${local.name}-worker-capability-sweep-behind"
+  log_group_name = aws_cloudwatch_log_group.worker[0].name
+  pattern        = "{ $.event = \"capability-sweep-ran\" && $.outcome = \"behind\" }"
+  metric_transformation {
+    name      = "CapabilitySweepBehind"
+    namespace = local.worker_metrics
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "worker_capability_sweep_behind" {
+  count               = local.api_count
+  alarm_name          = "${local.name}-worker-capability-sweep-behind"
+  alarm_description   = "The capability sweep has removed a full batch in every five minutes for 30 minutes: capabilities are minted faster than they are removed. Raise WORKER_CAPABILITY_SWEEP_LIMIT."
+  namespace           = local.worker_metrics
+  metric_name         = "CapabilitySweepBehind"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 6
+  datapoints_to_alarm = 6
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.audit_alarms.arn]
+  depends_on          = [aws_cloudwatch_log_metric_filter.worker_capability_sweep_behind]
+}
+
 # The worker process hit an uncaught exception or an unhandled rejection and ended (apps/worker/src/process-faults.ts writes one `process-fault` line).
 # ECS replaces the task and its jobs wait for the lease to expire; one occurrence is worth a person looking.
 resource "aws_cloudwatch_log_metric_filter" "worker_process_fault" {
