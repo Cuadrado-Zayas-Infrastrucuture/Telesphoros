@@ -28,6 +28,13 @@ describe('public pages', () => {
     for (const img of screen.getAllByRole('img')) expect(img.getAttribute('alt')?.trim()).toBeTruthy();
   });
 
+  it("shows a loading status, not a blank page, while the first page's code downloads", async () => {
+    const { container } = renderApp('/signin');
+    expect(within(container).getByRole('status')).toHaveTextContent('Loading…');
+    expect(await heading('Sign in')).toBeInTheDocument();
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
+  });
+
   it('makes the skip link the first tab stop', async () => {
     const user = userEvent.setup();
     renderApp('/');
