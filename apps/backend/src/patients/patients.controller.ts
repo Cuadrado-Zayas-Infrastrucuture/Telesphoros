@@ -16,7 +16,7 @@ import { CLINICAL_READ_ROLES } from '../auth/clinical-read';
 import { CurrentPrincipal, Roles } from '../auth/decorators';
 import type { Principal } from '../auth/principal';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
-import { toPatientDto } from './patients.mapper';
+import { toPatientDto, toPatientListItemDto } from './patients.mapper';
 import { PatientsService } from './patients.service';
 
 // Reading needs a clinical role; changing data needs the clinician role (admin is administration only).
@@ -30,7 +30,7 @@ export class PatientsController {
   @Roles(...CLINICAL_READ_ROLES)
   async list(@CurrentPrincipal() principal: Principal, @Query(new ZodValidationPipe(patientListQuerySchema)) query: PatientListQuery): Promise<Paginated<PatientDto>> {
     const { items, total } = await this.service.list(principal, query);
-    return { data: items.map(toPatientDto), meta: buildMeta(query.page, query.pageSize, total) };
+    return { data: items.map((item) => toPatientListItemDto(item)), meta: buildMeta(query.page, query.pageSize, total) };
   }
 
   @Get(':id')

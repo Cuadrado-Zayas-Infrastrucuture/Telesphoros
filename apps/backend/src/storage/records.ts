@@ -16,6 +16,8 @@ export interface PatientRecord {
   /** The retry identity the patient was created under, and the hash of the original request (internal; never returned by the API). */
   creationRequestId?: string;
   creationRequestHash?: string;
+  /** The coded demographics of the latest version (spec 025), attached by list reads only. Never identity values. */
+  coded?: { version: number; sex: 'male' | 'female' | null; birthYear: number; ethnicity: string[] | null };
 }
 
 export interface ReportRecord {

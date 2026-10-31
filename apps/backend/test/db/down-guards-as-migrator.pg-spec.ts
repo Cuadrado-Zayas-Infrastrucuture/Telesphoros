@@ -5,6 +5,8 @@ import { Database } from '../../src/db/database';
 import { EvaluationRequestsService } from '../../src/lab-reports/evaluation-requests.service';
 import { EvaluationRequestsRepository } from '../../src/storage/postgres/evaluation-requests.repository';
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
+import { PostgresPatientDemographicsRepository } from '../../src/storage/postgres/patient-demographics.repository';
+import { sealField } from '../../src/patient-demographics/identity-crypto';
 import { PostgresResultRendersRepository } from '../../src/storage/postgres/result-renders';
 import { migrateDown, migrateUp } from '../../src/db/migrator';
 import { provisionLogins, type SecretStore } from '../../src/db/provision-logins';
@@ -717,6 +719,99 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
       // Positive control: with all five tables empty the same down goes through, so the refusals above were the guard and not a broken revert.
       expect(await migrateDown(f.migrator, 1)).toEqual([version]);
     } finally {
+      await f.drop();
+    }
+  });
+
+  // Spec 025 PD-a: as E1a and E1b, no override (the ledger's type CHECK cannot be restored while a `patient-demographics` event exists). A key row alone is refused too.
+  // Both tables are FORCE-RLS with no policy for the migrator, so the guard has to lift FORCE to see them: the populated case below is the proof that it does.
+  it('patient demographics: a populated table (or a key alone) is refused as the migrator, the refusal rolls back whole, FORCE is restored, and empty reverts', async () => {
+    const f = await fixture();
+    const connection = new Database({ url: f.app, ssl: 'disable' });
+    try {
+      const repo = new PostgresPatientDemographicsRepository(connection, new PostgresLedgerRecordsRepository(connection));
+      const seeded = await seedLabReport(f.admin, tenant);
+      const dataKey = randomBytes(32);
+      const binding = { tenant, patient: seeded.patientId, keyVersion: 1 };
+      await repo.insertVersion(tenant, 'syn-clinician', {
+        id: randomUUID(),
+        patientId: seeded.patientId,
+        keyVersion: 1,
+        givenName: sealField(dataKey, binding, 'given_name', 'Synthetic-Given'),
+        familyName: sealField(dataKey, binding, 'family_name', 'Synthetic-Family'),
+        dateOfBirth: sealField(dataKey, binding, 'date_of_birth', '1980-05-06'),
+        sex: 'male',
+        birthYear: 1980,
+        ethnicity: ['white'],
+        newKey: { keyVersion: 1, wrapped: randomBytes(61), provider: 'local' },
+      });
+      const version = revertThrough('patient_demographics').reverted.at(-1)!;
+      await revertAboveThenSwitchOff(f.migrator, 'patient_demographics');
+      const forced = async () =>
+        (await f.migrator.query(`SELECT relname, relforcerowsecurity AS f FROM pg_class WHERE relname IN ('patient_demographics', 'patient_field_keys') ORDER BY 1`)).rows;
+      const refused = async (label: string) => {
+        await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated patient demographics/);
+        await setting(f.migrator, AUDIT, 'yes'); // no setting allows it: the audit one does not either
+        await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated patient demographics/);
+        await setting(f.migrator, AUDIT, '');
+        expect({ label, applied: (await f.migrator.query('SELECT 1 FROM schema_migrations WHERE version = $1', [version])).rowCount }).toEqual({ label, applied: 1 });
+        expect((await forced()).map((r) => r.f)).toEqual([true, true]);
+      };
+      await refused('a version and its key');
+      // The key alone (an erased identity keeps its versions, but a key with none is the other half of the guard's OR).
+      await withAdmin(f.admin, async (c) => {
+        await c.query('BEGIN');
+        await c.query('SET LOCAL session_replication_role = replica');
+        await c.query('DELETE FROM patient_demographics');
+        await c.query(`DELETE FROM ledger_events WHERE event_type = 'patient-demographics'`);
+        await c.query('COMMIT');
+      });
+      await refused('a key alone');
+      await withAdmin(f.admin, async (c) => {
+        await c.query('BEGIN');
+        await c.query('SET LOCAL session_replication_role = replica');
+        await c.query('DELETE FROM patient_field_keys');
+        await c.query('COMMIT');
+      });
+      // Positive control: with both tables empty the same down goes through, so the refusals above were the guard and not a broken revert.
+      expect(await migrateDown(f.migrator, 1)).toEqual([version]);
+    } finally {
+      await connection.onModuleDestroy();
+      await f.drop();
+    }
+  });
+
+  it('patient demographics: the migrator (an owner without BYPASSRLS) destroys a key only through patient_field_key_erase(), and a plain DELETE removes nothing', async () => {
+    const f = await fixture();
+    const connection = new Database({ url: f.app, ssl: 'disable' });
+    try {
+      const repo = new PostgresPatientDemographicsRepository(connection, new PostgresLedgerRecordsRepository(connection));
+      const seeded = await seedLabReport(f.admin, tenant);
+      const dataKey = randomBytes(32);
+      const binding = { tenant, patient: seeded.patientId, keyVersion: 1 };
+      await repo.insertVersion(tenant, 'syn-clinician', {
+        id: randomUUID(),
+        patientId: seeded.patientId,
+        keyVersion: 1,
+        givenName: sealField(dataKey, binding, 'given_name', 'Synthetic-Given'),
+        familyName: sealField(dataKey, binding, 'family_name', 'Synthetic-Family'),
+        dateOfBirth: sealField(dataKey, binding, 'date_of_birth', '1980-05-06'),
+        sex: null,
+        birthYear: 1980,
+        ethnicity: null,
+        newKey: { keyVersion: 1, wrapped: randomBytes(61), provider: 'local' },
+      });
+      const keys = async () =>
+        (await withAdmin(f.admin, (c) => c.query('SELECT count(*)::int AS n FROM patient_field_keys WHERE patient_id = $1', [seeded.patientId]))).rows[0].n as number;
+      expect(await keys()).toBe(1);
+      const stray = await f.migrator.query('DELETE FROM patient_field_keys WHERE patient_id = $1', [seeded.patientId]);
+      expect(stray.rowCount).toBe(0); // FORCE row-level security: the owner sees no row to delete
+      expect(await keys()).toBe(1);
+      expect((await f.migrator.query('SELECT patient_field_key_erase($1, $2) AS destroyed', [tenant, seeded.patientId])).rows).toEqual([{ destroyed: true }]);
+      expect(await keys()).toBe(0);
+      expect((await withAdmin(f.admin, (c) => c.query('SELECT count(*)::int AS n FROM patient_demographics WHERE patient_id = $1', [seeded.patientId]))).rows).toEqual([{ n: 1 }]); // the version stays
+    } finally {
+      await connection.onModuleDestroy();
       await f.drop();
     }
   });

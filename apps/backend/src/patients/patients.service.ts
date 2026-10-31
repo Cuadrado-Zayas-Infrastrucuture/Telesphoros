@@ -4,6 +4,7 @@ import type { PatientCreate, PatientInput, PatientListQuery } from '@telesphoros
 import { AppException } from '../common/app-exception';
 import type { Principal } from '../auth/principal';
 import { IntegrityError, PatientHasMergedRecordsError } from '../storage/errors';
+import { PatientDemographicsRepository } from '../storage/patient-demographics.repository';
 import { PatientsRepository } from '../storage/patients.repository';
 import type { PatientRecord } from '../storage/records';
 import { ReportsRepository } from '../storage/reports.repository';
@@ -13,10 +14,22 @@ export class PatientsService {
   constructor(
     private readonly patients: PatientsRepository,
     private readonly reports: ReportsRepository,
+    // Coded columns only. This service is deliberately NOT given the key provider: a list cannot decrypt anything (spec 025, PD-6).
+    private readonly demographics: PatientDemographicsRepository,
   ) {}
 
-  list(principal: Principal, { page, pageSize, includeMerged }: Pick<PatientListQuery, 'page' | 'pageSize'> & { includeMerged?: boolean }) {
-    return this.patients.list(principal.tenantId, { offset: (page - 1) * pageSize, limit: pageSize }, { includeMerged });
+  async list(principal: Principal, { page, pageSize, includeMerged }: Pick<PatientListQuery, 'page' | 'pageSize'> & { includeMerged?: boolean }) {
+    const result = await this.patients.list(principal.tenantId, { offset: (page - 1) * pageSize, limit: pageSize }, { includeMerged });
+    return { ...result, items: await this.withCoded(principal.tenantId, result.items) };
+  }
+
+  /** Attaches each patient's latest coded demographics (sex, birth year, ethnicity). Reads no ciphertext and needs no key. */
+  async withCoded(tenantId: string, records: PatientRecord[]): Promise<PatientRecord[]> {
+    const coded = await this.demographics.codedFor(
+      tenantId,
+      records.map((r) => r.id),
+    );
+    return records.map((r) => (coded.has(r.id) ? { ...r, coded: coded.get(r.id)! } : r));
   }
 
   /** Someone else's patient is reported as NOT_FOUND, so ids cannot be probed for existence. */

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ETHNICITY_CODES, SEX_CODES } from './patient-demographics';
 
 /**
  * Patients are identified by a synthetic label (e.g. SYN-0001). No name or date of birth exists anywhere in this model, by design.
@@ -36,5 +37,16 @@ export const patientDtoSchema = z.strictObject({
   updatedAt: z.iso.datetime(),
   /** The patient this one was merged into (M2.1c-2), or null. A merged-away patient keeps every record; reads resolve the pair as one. */
   mergedInto: z.uuid().nullable().default(null),
+  /**
+   * The coded demographics (spec 025, D3/D6). Present on LIST items only; a single patient's response omits them (the demographics route returns them).
+   * Never an identity value: a list does not decrypt anything. `null` means not recorded (the patient is "Incomplete").
+   */
+  sex: z.enum(SEX_CODES).nullable().optional(),
+  birthYear: z.number().int().nullable().optional(),
+  /** This year minus the birth year, so it can be one year HIGH until the birthday. For grouping, never for a dose. */
+  ageYears: z.number().int().nullable().optional(),
+  ethnicity: z.array(z.enum(ETHNICITY_CODES)).nullable().optional(),
+  /** True when a demographics version exists and both sex and ethnicity are recorded. */
+  demographicsComplete: z.boolean().optional(),
 });
 export type PatientDto = z.infer<typeof patientDtoSchema>;

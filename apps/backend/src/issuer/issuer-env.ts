@@ -28,7 +28,15 @@ export const ISSUER_ENV_KEYS = [
  * The application's own secrets and logins. The issuer task is not given them (issuer.tf), and a production issuer that finds one in its environment
  * refuses to start: only their PRESENCE is looked at, never the value. Development ignores them, because a shell that runs the API may have exported them.
  */
-export const FORBIDDEN_IN_PRODUCTION = ['JWT_SECRET', 'INVITATION_DIGEST_KEY', 'IDENTIFIER_DIGEST_KEY', 'LEDGER_VERIFIER_DATABASE_URL'] as const;
+export const FORBIDDEN_IN_PRODUCTION = [
+  'JWT_SECRET',
+  'INVITATION_DIGEST_KEY',
+  'IDENTIFIER_DIGEST_KEY',
+  'LEDGER_VERIFIER_DATABASE_URL',
+  // Spec 025: the issuer never wraps or opens a patient's data key (the API alone does), so it is given neither provider's setting.
+  'PATIENT_FIELD_KMS_KEY_ID',
+  'PATIENT_FIELD_LOCAL_KEY',
+] as const;
 
 export interface IssuerConfig {
   nodeEnv: 'development' | 'test' | 'production';
