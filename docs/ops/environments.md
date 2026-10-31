@@ -20,7 +20,7 @@ Applied by hand from the founder's backend clone, as the staged plans in [stagin
 (glibc/dpkg pins, the ledger heartbeat #195, the patient-identity KMS policy #198, migrations 0061 to 0063), and on 2026-10-31 the
 CloudFront `/assets/*` cache (#202, #212), then `main` `6c4714de` (patient demographics, spec 025 PD-a, migration 0064; the same apply removed
 the issuer's three log alarms, #210), then `main` `299efbb3` the same evening (spec 026: the worker removes expired capabilities every minute,
-#214, migration 0065). No CI job holds cloud credentials or applies anything.
+#214, migration 0065) and #216's three sweep alarms. No CI job holds cloud credentials or applies anything.
 
 | Piece | What runs (read 2026-10-31) | What production adds or changes |
 | --- | --- | --- |
@@ -33,7 +33,7 @@ the issuer's three log alarms, #210), then `main` `299efbb3` the same evening (s
 | Sign-in | Cognito user pool `telesphoros-staging` (invite only, authenticator-app MFA required); mail through SES | |
 | Report files | Versioned S3 bucket with Object Lock in **GOVERNANCE** mode, 1-day default retention, no replication | Object Lock **COMPLIANCE** (`profile.tf` precondition) |
 | Audit trail | CloudTrail `telesphoros-staging-audit`, logging, **single Region**. It records every object read and write in the reports bucket, and deletes and lock changes in the audit bucket. The audit bucket has Object Lock in GOVERNANCE mode with 1-day retention ([audit-trail.md](audit-trail.md)) | A multi-Region trail and COMPLIANCE lock |
-| Alarms | 31 CloudWatch alarms into SNS topic `telesphoros-staging-audit-alarms`, which has **1 confirmed email subscription**. Includes `ledger-compromised` ([ledger-watch.md](ledger-watch.md)), the audit alarms, the database alarms and the worker alarms. None has been fired on purpose yet. The three capability-sweep alarms (#216) are merged but **not applied**: they are applied after the sweep runs, and this row changes in the same pull request | Paging to an on-call person |
+| Alarms | 34 CloudWatch alarms into SNS topic `telesphoros-staging-audit-alarms`, which has **1 confirmed email subscription**. Includes `ledger-compromised` ([ledger-watch.md](ledger-watch.md)), the audit alarms, the database alarms and the worker alarms. The three capability-sweep alarms (failing, stale, behind; #216) were applied on 2026-10-31 once the sweep ran, and each was fired once on purpose that evening: CloudWatch ran every notification and all three returned to OK. No other alarm has been fired on purpose yet | Paging to an on-call person |
 | Terraform state | Versioned S3 state bucket in `us-east-2` ([terraform-state.md](terraform-state.md)) | |
 
 **Not created, or not readable from the account.**

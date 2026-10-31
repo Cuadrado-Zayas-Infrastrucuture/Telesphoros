@@ -17,7 +17,11 @@ none. That is spec 026 D5's measurement, taken from the sweep's own log lines as
 glibc CVE-2026-84243 (catalogs loaded from a path named by `LANGUAGE`), which Debian lists as unfixed in every suite. The image already carries
 the newest bookworm glibc, and the image it replaced has the same glibc.
 
+**Alarms (#216), applied the same evening** once the sweep had run (the stale alarm treats missing data as a breach, so it could not go first). The plan was
+complete and had six creates and nothing else: three log filters (`capability-sweep-ran`, `-failed` and `-behind`) and three alarms (failing, stale, behind).
+Afterwards all three alarms were OK, the sweep logged one run a minute, and the account held 34 alarms (31 before). Spec 026 SC-002: each alarm was
+forced into ALARM once (twice in all, since the script was run twice); CloudWatch reported the notification executed for every one, they returned to OK
+within two minutes, and the test emails arrived. That proves the notification path, not the metric path.
+
 **Not established.**
-- The three capability-sweep alarms (#216) are not applied yet; until they are, a stopped sweep reaches no one.
-- No alarm has been fired on purpose (spec 026 SC-002).
 - SC-001 (no row older than one interval plus five minutes, a day after the release) is read tomorrow.
