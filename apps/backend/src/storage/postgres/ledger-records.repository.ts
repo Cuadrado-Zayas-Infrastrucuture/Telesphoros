@@ -963,6 +963,12 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
     });
   }
 
+  // ---- records owned by another repository (spec 025: patient demographics) ---------------------------------------------------------
+
+  async appendRecordEvent(client: PoolClient, tenantId: string, table: RecordTable, id: string, eventId: string): Promise<void> {
+    await appendEvent(this.ledger, tenantId, client, table, id, eventId);
+  }
+
   // ---- plumbing -------------------------------------------------------------------------------------------------------------
 
   /** One tenant- and actor-scoped transaction; any integrity refusal (also at COMMIT) becomes a LedgerIntegrityError. */

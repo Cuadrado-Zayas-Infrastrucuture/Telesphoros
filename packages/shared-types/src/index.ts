@@ -6,6 +6,7 @@ export * from './pagination';
 export * from './patient-merge';
 export * from './patient-identity';
 export * from './patient';
+export * from './patient-demographics';
 export * from './recommendation';
 export * from './report';
 export * from './roles';

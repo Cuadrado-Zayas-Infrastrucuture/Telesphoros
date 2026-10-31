@@ -120,6 +120,7 @@ describe('loadEnv', () => {
       TRUST_PROXY_HOPS: '1',
       INVITATION_DIGEST_KEY: 'ab'.repeat(32),
       IDENTIFIER_DIGEST_KEY: 'cd'.repeat(32),
+      PATIENT_FIELD_KMS_KEY_ID: 'alias/synthetic-patient-fields',
       TLS_CERT_PEM: 'synthetic-cert-pem',
       TLS_KEY_PEM: 'synthetic-key-pem',
     };
@@ -142,6 +143,15 @@ describe('loadEnv', () => {
       ['a malformed invitation digest key', { INVITATION_DIGEST_KEY: 'short' }, /INVITATION_DIGEST_KEY/],
       ['a missing identifier digest key', { IDENTIFIER_DIGEST_KEY: undefined }, /IDENTIFIER_DIGEST_KEY.*production/],
       ['a malformed identifier digest key', { IDENTIFIER_DIGEST_KEY: 'short' }, /IDENTIFIER_DIGEST_KEY/],
+      // Spec 025 PD-3: patient identity is wrapped by KMS in a deployed build. The local provider is for development and tests only.
+      ['no KMS key for patient identity', { PATIENT_FIELD_KMS_KEY_ID: undefined }, /PATIENT_FIELD_KMS_KEY_ID.*production/],
+      ['the local patient-key provider (a wrapping key held in the environment)', { PATIENT_FIELD_LOCAL_KEY: 'ef'.repeat(32) }, /PATIENT_FIELD_LOCAL_KEY.*(both|production)/],
+      [
+        'the local patient-key provider INSTEAD of the KMS key',
+        { PATIENT_FIELD_KMS_KEY_ID: undefined, PATIENT_FIELD_LOCAL_KEY: 'ef'.repeat(32) },
+        /PATIENT_FIELD_LOCAL_KEY.*production/,
+      ],
+      ['a KMS endpoint override', { KMS_ENDPOINT: 'http://127.0.0.1:5593' }, /KMS_ENDPOINT.*production/],
       ['no listener certificate (the load balancer would reach the task in clear text)', { TLS_CERT_PEM: undefined, TLS_KEY_PEM: undefined }, /TLS_CERT_PEM.*production/],
       ['a listener certificate without its key', { TLS_KEY_PEM: undefined }, /TLS_KEY_PEM/],
       ['a missing ledger verifier login', { LEDGER_VERIFIER_DATABASE_URL: undefined }, /LEDGER_VERIFIER_DATABASE_URL.*production/],
@@ -154,6 +164,39 @@ describe('loadEnv', () => {
       ],
     ])('refuses %s', (_name, change, message) => {
       expect(() => loadEnv({ ...production, ...change })).toThrow(message);
+    });
+  });
+
+  describe('patient identity key provider (spec 025)', () => {
+    it('needs nothing outside production: the local provider with its fixed non-secret key is the default', () => {
+      const env = loadEnv({ ...base });
+      expect(env.PATIENT_FIELD_KMS_KEY_ID).toBeUndefined();
+      expect(env.PATIENT_FIELD_LOCAL_KEY).toBeUndefined();
+    });
+
+    it('accepts a local key (64 lower-case hex) or a KMS key id outside production, and a KMS endpoint for an emulator', () => {
+      expect(loadEnv({ ...base, PATIENT_FIELD_LOCAL_KEY: 'ab'.repeat(32) }).PATIENT_FIELD_LOCAL_KEY).toBe('ab'.repeat(32));
+      expect(loadEnv({ ...base, PATIENT_FIELD_KMS_KEY_ID: 'alias/synthetic-patient-fields', KMS_ENDPOINT: 'http://127.0.0.1:5593' }).KMS_ENDPOINT).toBe('http://127.0.0.1:5593');
+    });
+
+    it.each([
+      ['a short local key', { PATIENT_FIELD_LOCAL_KEY: 'short' }, /PATIENT_FIELD_LOCAL_KEY/],
+      ['an upper-case local key', { PATIENT_FIELD_LOCAL_KEY: 'AB'.repeat(32) }, /PATIENT_FIELD_LOCAL_KEY/],
+      ['an empty KMS key id', { PATIENT_FIELD_KMS_KEY_ID: '' }, /PATIENT_FIELD_KMS_KEY_ID/],
+      ['both providers at once (it would be ambiguous which one wraps)', { PATIENT_FIELD_KMS_KEY_ID: 'alias/x', PATIENT_FIELD_LOCAL_KEY: 'ab'.repeat(32) }, /cannot both be set/],
+    ])('refuses %s', (_name, change, message) => {
+      expect(() => loadEnv({ ...base, ...change })).toThrow(message);
+    });
+
+    it('never puts a key value in its error text', () => {
+      const secret = 'zz'.repeat(32);
+      try {
+        loadEnv({ ...base, PATIENT_FIELD_LOCAL_KEY: secret });
+        throw new Error('expected a refusal');
+      } catch (error) {
+        expect((error as Error).message).toMatch(/PATIENT_FIELD_LOCAL_KEY/);
+        expect((error as Error).message).not.toContain(secret);
+      }
     });
   });
 
@@ -348,6 +391,7 @@ describe('loadEnv', () => {
       TRUST_PROXY_HOPS: '1',
       INVITATION_DIGEST_KEY: 'ab'.repeat(32),
       IDENTIFIER_DIGEST_KEY: 'cd'.repeat(32),
+      PATIENT_FIELD_KMS_KEY_ID: 'alias/synthetic-patient-fields',
       TLS_CERT_PEM: 'synthetic-cert-pem',
       TLS_KEY_PEM: 'synthetic-key-pem',
     };

@@ -23,6 +23,7 @@ export const APPEND_ONLY_CLASSES = {
     'use_withdrawals',
     'use_restrictions',
     'tenant_use_terms',
+    'patient_demographics',
   ],
   /** Parts of a record, covered by the parent's event. Insert-only; frozen once the parent's event is visible. */
   child: ['evaluation_results', 'evaluation_gene_states'],
@@ -133,6 +134,14 @@ export const EVALUATION_REQUEST_TABLES = ['evaluation_requests', 'evaluation_req
  */
 export const RENDER_EVENT_TABLES = ['result_render_events'] as const;
 
+/**
+ * Wrapped patient data keys (migration 0064, spec 025 D2/D8). Tenant-isolated, forced RLS, and the one table here that can lose a row on purpose. It is not a ledger
+ * record and not append-only: a ledger record can never be deleted, and erasure (D8) is exactly the deletion of a patient's key, which makes every version of their
+ * identity unreadable. The application can read and insert and nothing more (no UPDATE, no DELETE, no TRUNCATE); a row leaves only through
+ * `patient_field_key_erase()`, which no login may execute. The worker login holds no privilege on it.
+ */
+export const FIELD_KEY_TABLES = ['patient_field_keys'] as const;
+
 export const ALL_CLASSIFIED_TABLES: readonly string[] = [
   ...Object.values(APPEND_ONLY_CLASSES).flat(),
   ...LEGACY_TABLES,
@@ -150,4 +159,5 @@ export const ALL_CLASSIFIED_TABLES: readonly string[] = [
   ...AGENTIC_EXPLAIN_TABLES,
   ...EVALUATION_REQUEST_TABLES,
   ...RENDER_EVENT_TABLES,
+  ...FIELD_KEY_TABLES,
 ];
