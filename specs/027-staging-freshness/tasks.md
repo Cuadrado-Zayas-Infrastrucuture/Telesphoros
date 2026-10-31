@@ -1,6 +1,6 @@
 # Tasks: synthetic staging, and every record about it, stays current, and a person hears when it does not
 
-**Spec**: [spec.md](spec.md) · **Plan**: [plan.md](plan.md) · Lambda chosen (founder, 2026-10-31); D1 to D6 open.
+**Spec**: [spec.md](spec.md) · **Plan**: [plan.md](plan.md) · Lambda chosen; D1 to D6 approved as recommended (founder, 2026-10-31).
 
 ## PR 1: the facts file
 

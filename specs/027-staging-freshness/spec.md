@@ -4,8 +4,8 @@
 
 **Created**: 2026-10-31
 
-**Status**: Draft. The design was approved by the founder on 2026-10-31, including where the daily check runs: a Lambda in synthetic
-staging, not launchd on the founder's Mac. D1 to D6 in [plan.md](plan.md) are open.
+**Status**: Approved by the founder on 2026-10-31, including where the daily check runs: a Lambda in synthetic staging, not launchd on
+the founder's Mac. D1 to D6 in [plan.md](plan.md) approved as recommended (2026-10-31).
 
 **Input**: the 6c4714de release of spec 025 PD-a to synthetic staging (2026-10-30 and 2026-10-31). Line numbers cite `main` `c144dc1d`.
 

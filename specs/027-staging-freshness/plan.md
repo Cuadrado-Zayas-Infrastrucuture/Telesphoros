@@ -2,8 +2,9 @@
 
 **Spec**: [spec.md](spec.md)
 
-**Status**: Draft. The where-it-runs decision is made (a Lambda in staging, founder, 2026-10-31). D1 to D6 below are open, each with a
-recommendation.
+**Status**: Approved by the founder on 2026-10-31: a Lambda in staging, and D1 to D6 as recommended. Findings are listed in the
+email; the check runs daily at 12:00 UTC; GitHub is read without a token, and a refusal makes the run incomplete; an image behind
+`main` is a finding after 7 days; the release check is its own file; the Lambda is applied last.
 
 ## Summary
 
@@ -94,7 +95,7 @@ prints the facts-file diff for the docs PR (the person opens that PR; nothing is
   Both go to the audit topic. The facts file's alarm count rises by 2 in the PR that applies them.
 - **Created only in the synthetic profile.** A production design is out of scope.
 
-## Decisions (open)
+## Decisions (approved as recommended, 2026-10-31)
 
 | | Decision | Recommended | Alternative |
 | --- | --- | --- | --- |
