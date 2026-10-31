@@ -1,8 +1,8 @@
 import { useLandingLanguage } from '@/lib/landing/landing-language';
 
 /**
- * Decorative fictional exchange for the assistant capability row: a sample question, typing dots under motion, then a
- * fixed answer that says it is not connected to any report. See PatientLinkFragment for the rules these fragments keep.
+ * Decorative fictional exchange for the chat capability row: a sample question, typing dots under motion, then the note the
+ * chat really shows outside the local preview (specs/024 CH-4). See PatientLinkFragment for the rules these fragments keep.
  */
 export function AssistantFragment() {
   const { fragments } = useLandingLanguage().copy;

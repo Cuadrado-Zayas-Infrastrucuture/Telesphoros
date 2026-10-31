@@ -17,7 +17,7 @@ export function PatientLinkFragment() {
       <span className="landing-fragment-wire" />
       <span className="landing-fragment-chip landing-fragment-chip--file">
         <FileText />
-        SYN-001.pdf
+        SYN-001.json
       </span>
     </div>
   );

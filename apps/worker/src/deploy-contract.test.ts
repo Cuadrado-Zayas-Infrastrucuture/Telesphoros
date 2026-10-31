@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from './config';
 import { jsonLogger } from './log';
-import { Ticker } from './scheduler';
+import { Ticker, type TickReport } from './scheduler';
 import { shutdownDeadlineMs } from './shutdown';
 
 /**
@@ -265,6 +265,32 @@ describe('the alarm patterns match the lines the worker writes', () => {
     expect(JSON.stringify(out)).not.toContain('Jane');
   });
 
+  it('spec 026: every sweep run raises the run filter, a full batch also raises the behind filter, and a failed run raises only the failure filter', async () => {
+    const logged = async (run: () => Promise<TickReport>): Promise<Json[]> => {
+      const out: Json[] = [];
+      await new Ticker(
+        'capability-sweep',
+        run,
+        60,
+        jsonLogger((l) => out.push(JSON.parse(l) as Json)),
+        { logEveryRun: true },
+      ).tick();
+      return out;
+    };
+    const quiet = await logged(async () => ({ count: 0, outcome: 'current' }));
+    const behind = await logged(async () => ({ count: 1000, outcome: 'behind' }));
+    const failed = await logged(refused);
+    expect([quiet.length, behind.length, failed.length]).toEqual([1, 1, 1]);
+    expect(matches(filterPattern('worker_capability_sweep_ran'), quiet[0]!)).toBe(true); // a run that removed nothing still counts as a run
+    expect(matches(filterPattern('worker_capability_sweep_behind'), quiet[0]!)).toBe(false);
+    expect(matches(filterPattern('worker_capability_sweep_ran'), behind[0]!)).toBe(true);
+    expect(matches(filterPattern('worker_capability_sweep_behind'), behind[0]!)).toBe(true);
+    expect(matches(filterPattern('worker_capability_sweep_failed'), failed[0]!)).toBe(true);
+    expect(matches(filterPattern('worker_capability_sweep_ran'), failed[0]!)).toBe(false);
+    for (const line of [...quiet, ...behind]) expect(matches(filterPattern('worker_capability_sweep_failed'), line)).toBe(false);
+    for (const name of ['worker_relay_failed', 'worker_schedule_failed']) expect(matches(filterPattern(name), failed[0]!), name).toBe(false);
+  });
+
   it('main.ts names the tickers as the test does', () => {
     const main = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
     expect(main).toContain("new Ticker('outbox-relay'");
@@ -276,6 +302,7 @@ describe('the alarm patterns match the lines the worker writes', () => {
     for (const [alarm, metric] of [
       ['worker_relay_failing', 'OutboxRelayFailures'],
       ['worker_schedule_failing', 'ScheduleFailures'],
+      ['worker_capability_sweep_failing', 'CapabilitySweepFailures'],
     ] as const) {
       const at = code.indexOf(`resource "aws_cloudwatch_metric_alarm" "${alarm}"`);
       const block = code.slice(at, code.indexOf('\n}', at));
