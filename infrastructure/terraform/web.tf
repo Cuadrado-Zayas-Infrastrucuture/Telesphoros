@@ -181,6 +181,25 @@ resource "aws_cloudfront_distribution" "web" {
       function_arn = aws_cloudfront_function.web[0].arn
     }
   }
+  # The hashed build output, and only that: scripts/staging/publish-frontend.sh uploads /assets with public,max-age=31536000,immutable and
+  # everything else (index.html included) with no-cache, which stays on the default behaviour above. The managed CachingOptimized policy follows the
+  # origin's Cache-Control, compresses (gzip and brotli) and keys the cache on Accept-Encoding alone: no cookies, headers or query strings reach
+  # the cache key. The same viewer-request function (host redirects) and security headers apply as everywhere else.
+  ordered_cache_behavior {
+    path_pattern           = "/assets/*"
+    target_origin_id       = "web-s3"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+    # AWS managed CachingOptimized.
+    cache_policy_id            = "658327ea-f89d-4fab-a63d-7e88639e058f"
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.web[0].id
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.web[0].arn
+    }
+  }
   restrictions {
     geo_restriction {
       restriction_type = "none"

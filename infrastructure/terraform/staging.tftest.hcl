@@ -122,6 +122,20 @@ run "web_aliases" {
   }
 }
 
+# Only the hashed build output is cached at the edge; the shell keeps the managed CachingDisabled policy (web.guard.test.mjs checks the same from the text).
+run "web_edge_caching" {
+  command = plan
+
+  assert {
+    condition     = length(aws_cloudfront_distribution.web[0].ordered_cache_behavior) == 1 && one(aws_cloudfront_distribution.web[0].ordered_cache_behavior).path_pattern == "/assets/*" && one(aws_cloudfront_distribution.web[0].ordered_cache_behavior).cache_policy_id == "658327ea-f89d-4fab-a63d-7e88639e058f" && one(aws_cloudfront_distribution.web[0].ordered_cache_behavior).compress
+    error_message = "exactly /assets/* is cached, with the managed CachingOptimized policy and compression"
+  }
+  assert {
+    condition     = one(aws_cloudfront_distribution.web[0].default_cache_behavior).cache_policy_id == "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+    error_message = "everything else, the shell included, stays on the managed CachingDisabled policy"
+  }
+}
+
 # Plan C: with the image pinned by digest, the task definitions and both services appear.
 run "plan_c_with_image" {
   command = plan
