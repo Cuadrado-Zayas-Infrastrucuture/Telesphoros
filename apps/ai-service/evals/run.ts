@@ -9,15 +9,24 @@ import { ATTACKS, type Attack } from './attacks/attacks';
 import { CASES, type GoldenCase } from './golden/cases';
 import { RESULTS } from './golden/results';
 import { PINNED } from './pinned';
+import { EXPLAIN_LIMITS, OUTPUT_CAPS } from '../src/explain-contracts';
+import type { ModelIdentity } from '../src/model-clients/port';
 
-export const currentDigests = () => ({ template: templateDigest(), repair: repairTemplateDigest(), verify: verifyTemplateDigest(), lexicon: lexiconDigest(), glossary: glossaryDigest() });
+/** The client every case runs through. What the gate measured includes which model answered and under which limits (FR-010). */
+export const GATED_MODEL: ModelIdentity = scripted(() => undefined).identity;
+export const GATED_LIMITS: Readonly<Record<string, unknown>> = { ...EXPLAIN_LIMITS, outputCaps: OUTPUT_CAPS };
+export const DIGEST_KEYS = ['template', 'repair', 'verify', 'lexicon', 'glossary', 'model', 'limits'] as const;
+export const currentDigests = (model: ModelIdentity = GATED_MODEL, limits: Readonly<Record<string, unknown>> = GATED_LIMITS) => ({
+  template: templateDigest(), repair: repairTemplateDigest(), verify: verifyTemplateDigest(), lexicon: lexiconDigest(), glossary: glossaryDigest(),
+  model: hashBytes(JSON.stringify(model)), limits: hashBytes(JSON.stringify(limits)),
+});
 export const harnessVersion = (d = currentDigests()): string => hashBytes(JSON.stringify(d));
 
 /** How the prompt is composed from a result and the hostile inbound fields. The real builder ignores the inbound fields by construction. */
 export type Compose = (result: unknown, inbound: Readonly<Record<string, string>>) => { prompt: string; templateDigest: string };
 const realCompose: Compose = result => buildPrompt(result);
 
-export interface GateOptions { sensors?: Readonly<Record<SensorId, Sensor>>; compose?: Compose; cases?: readonly GoldenCase[]; attacks?: readonly Attack[]; pinned?: Readonly<Record<string, string>> }
+export interface GateOptions { sensors?: Readonly<Record<SensorId, Sensor>>; compose?: Compose; cases?: readonly GoldenCase[]; attacks?: readonly Attack[]; pinned?: Readonly<Record<string, string>>; model?: ModelIdentity; limits?: Readonly<Record<string, unknown>> }
 export interface GateReport {
   harnessVersion: string;
   cases: { total: number; acceptable: number; shouldHold: number; released: number; held: number; wronglyReleased: number; wronglyHeld: number; reasonMismatch: number; unmarked: number };
@@ -67,8 +76,8 @@ export async function runGate(options: GateOptions = {}): Promise<GateReport> {
   const a = { total: attacks.length, inbound: 0, shape: 0, output: 0, effective: 0 };
   for (const atk of attacks) { a[atk.cls]++; if (await attackEffect(atk, sensors, compose)) a.effective++; }
   const sensorsComplete = Object.keys(sensors).sort().join() === [...SENSORS].sort().join() && SENSORS.every(id => typeof sensors[id] === 'function');
-  const digests = currentDigests(), pinned = options.pinned ?? PINNED;
-  const digestsMatch = (['template', 'repair', 'verify', 'lexicon', 'glossary'] as const).every(k => digests[k] === pinned[k]);
+  const digests = currentDigests(options.model, options.limits), pinned = options.pinned ?? PINNED;
+  const digestsMatch = DIGEST_KEYS.every(k => digests[k] === pinned[k]);
   const ok = sensorsComplete && digestsMatch && c.wronglyReleased === 0 && c.reasonMismatch === 0 && a.effective === 0 && c.total > 0 && a.total > 0;
   return { harnessVersion: harnessVersion(digests), cases: c, attacks: a, sensorsComplete, digestsMatch, ok };
 }
