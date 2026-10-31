@@ -287,6 +287,7 @@ describe('provisioning on a database nothing has been applied to', () => {
       await expect(c.query('SELECT outbox_relay(1)')).resolves.toBeDefined();
       await expect(c.query('SELECT * FROM outbox_stats()')).resolves.toBeDefined();
       await expect(c.query('SELECT job_schedule_tick()')).resolves.toBeDefined();
+      await expect(c.query('SELECT * FROM capabilities_sweep_run(10)')).resolves.toBeDefined(); // spec 026: the sweep, through its caller only
       for (const sql of [
         "INSERT INTO jobs (tenant_id, type, idempotency_key, requested_by) VALUES ('t', 'x.y', 'k', 'u')",
         'SELECT * FROM patients',
@@ -296,6 +297,7 @@ describe('provisioning on a database nothing has been applied to', () => {
         "SELECT ledger_append('00000000-0000-0000-0000-000000000000', 'x', 'y', gen_random_uuid(), 'z', 1::smallint)",
         "SELECT outbox_append('report.file-committed', gen_random_uuid())",
         "SELECT * FROM uploads_sweep('t', 0, true)",
+        'SELECT tenant_capabilities_sweep(10)',
         'SET ROLE telesphoros_jobs',
       ]) {
         await expect(c.query(sql)).rejects.toMatchObject({ code: '42501' });
@@ -417,6 +419,17 @@ describe('what it refuses to call ready', () => {
         `GRANT EXECUTE ON FUNCTION job_enqueue(text, jsonb, text, timestamptz, integer) TO ${f.names.worker}`,
         `REVOKE EXECUTE ON FUNCTION job_enqueue(text, jsonb, text, timestamptz, integer) FROM ${f.names.worker}`,
         /worker login privileges: .*job_enqueue/,
+      ],
+      // Spec 026: the worker reaches the sweep only through capabilities_sweep_run; holding the sweep itself, or losing the caller, is reported.
+      [
+        `GRANT EXECUTE ON FUNCTION tenant_capabilities_sweep(integer) TO ${f.names.worker}`,
+        `REVOKE EXECUTE ON FUNCTION tenant_capabilities_sweep(integer) FROM ${f.names.worker}`,
+        /worker login privileges: .*tenant_capabilities_sweep \(CAN execute\)/,
+      ],
+      [
+        'REVOKE EXECUTE ON FUNCTION capabilities_sweep_run(integer) FROM telesphoros_worker',
+        'GRANT EXECUTE ON FUNCTION capabilities_sweep_run(integer) TO telesphoros_worker',
+        /worker login privileges: .*capabilities_sweep_run \(cannot execute\)/,
       ],
     ] as const) {
       await withAdmin(f.options.adminUrl, (c) => c.query(grant));

@@ -269,6 +269,7 @@ describe('the alarm patterns match the lines the worker writes', () => {
     const main = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
     expect(main).toContain("new Ticker('outbox-relay'");
     expect(main).toContain("new Ticker('schedule'");
+    expect(main).toContain("new Ticker('capability-sweep'"); // spec 026: its alarms (PR B) read capability-sweep-ran and -failed
   });
 
   it('the failure alarms need a failure in each of three consecutive minutes, and silence is healthy', () => {

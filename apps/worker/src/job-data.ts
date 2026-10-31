@@ -34,3 +34,13 @@ export class PgJobData implements JobData {
     return { released: Number(r.released), releasedBytes: Number(r.released_bytes), objectsKept: Number(r.objects_kept) };
   }
 }
+
+/**
+ * Spec 026: removes expired capabilities through `capabilities_sweep_run` (migration 0065), the worker's only way to the sweep. Not a job: the sweep
+ * belongs to no organization. The outcome says whether a full batch was removed, so more may be waiting.
+ */
+export async function sweepCapabilities(db: Queryable, limit: number): Promise<{ count: number; outcome: 'behind' | 'current' }> {
+  const { rows } = await db.query('SELECT removed, behind FROM capabilities_sweep_run($1)', [limit]);
+  const r = rows[0]!;
+  return { count: Number(r.removed), outcome: r.behind === true ? 'behind' : 'current' };
+}

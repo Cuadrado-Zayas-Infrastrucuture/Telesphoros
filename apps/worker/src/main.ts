@@ -9,7 +9,7 @@ import { startHealthServer } from './health';
 import { filesVerifyJobs } from './handlers/files-verify';
 import { testJobs } from './handlers/test-jobs';
 import { uploadsSweepJob } from './handlers/uploads-sweep';
-import { PgJobData } from './job-data';
+import { PgJobData, sweepCapabilities } from './job-data';
 import { jsonLogger } from './log';
 import { installProcessFaultHandlers } from './process-faults';
 import { WORKER_POOL_LIMITS } from './pool-limits';
@@ -61,6 +61,10 @@ async function main(): Promise<void> {
   });
   const scheduler = new Ticker('schedule', () => queue.scheduleTick(), config.scheduleTickSeconds, log);
   const relay = new Ticker('outbox-relay', () => queue.relayOutbox(), config.relaySeconds, log);
+  // Spec 026: removes expired capabilities. Every run is logged, so the "sweep is stale" alarm also hears a worker that writes nothing at all.
+  const capabilitySweep = new Ticker('capability-sweep', () => sweepCapabilities(pool, config.capabilitySweepLimit), config.capabilitySweepSeconds, log, {
+    logEveryRun: true,
+  });
   // The queue's depth and the age of its oldest ready job, as one log line a minute: the "queue is not draining" alarm reads `ageSeconds` (suspended organizations'
   // jobs are not counted: they are held on purpose).
   const stats = new Ticker(
@@ -85,6 +89,7 @@ async function main(): Promise<void> {
   runner.start();
   scheduler.start();
   relay.start();
+  capabilitySweep.start();
   stats.start();
   const health = await startHealthServer(runner, { host: config.healthHost, port: config.healthPort, staleAfterMs: Math.max(30_000, config.pollMs * 5) });
   log('info', 'health-listening', { count: (health.address() as AddressInfo).port });
@@ -94,7 +99,7 @@ async function main(): Promise<void> {
       health.close();
       health.closeAllConnections();
     },
-    tickers: [scheduler, relay, stats],
+    tickers: [scheduler, relay, capabilitySweep, stats],
     runner,
     closePool: () => pool.end().catch(() => undefined),
     log,

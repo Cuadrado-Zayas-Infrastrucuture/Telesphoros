@@ -18,6 +18,9 @@ const schema = z.object({
   /** How long a stop signal lets running jobs finish before the rest are released. */
   WORKER_DRAIN_SECONDS: number(0, 600, 30),
   WORKER_SCHEDULE_TICK_SECONDS: number(5, 3600, 30),
+  /** Spec 026: how often expired capabilities are removed, and at most how many per run. */
+  WORKER_CAPABILITY_SWEEP_SECONDS: number(30, 3600, 60),
+  WORKER_CAPABILITY_SWEEP_LIMIT: number(1, 10_000, 1000),
   /** How often pending outbox events are turned into jobs. */
   WORKER_RELAY_SECONDS: number(1, 600, 5),
   /** How often the worker logs the queue's depth and age (an alarm reads it). */
@@ -51,6 +54,8 @@ export interface WorkerConfig {
   pollMs: number;
   drainSeconds: number;
   scheduleTickSeconds: number;
+  capabilitySweepSeconds: number;
+  capabilitySweepLimit: number;
   relaySeconds: number;
   statsSeconds: number;
   reportsBucket: string | undefined;
@@ -86,6 +91,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, hostname = 'wor
     pollMs: c.WORKER_POLL_MS,
     drainSeconds: c.WORKER_DRAIN_SECONDS,
     scheduleTickSeconds: c.WORKER_SCHEDULE_TICK_SECONDS,
+    capabilitySweepSeconds: c.WORKER_CAPABILITY_SWEEP_SECONDS,
+    capabilitySweepLimit: c.WORKER_CAPABILITY_SWEEP_LIMIT,
     relaySeconds: c.WORKER_RELAY_SECONDS,
     statsSeconds: c.WORKER_STATS_SECONDS,
     reportsBucket: c.REPORTS_BUCKET,

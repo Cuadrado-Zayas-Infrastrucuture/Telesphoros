@@ -187,7 +187,7 @@ const FUNCTION_RIGHTS: Record<'app' | 'verifier' | 'worker', Record<string, bool
   },
 };
 
-/** The queue's functions (migrations 0023, 0024 and 0036), by who may run them. Checked only on a database that has them. */
+/** The queue's functions (migrations 0023, 0024, 0036 and 0065), by who may run them. Checked only on a database that has them. */
 const WORKER_FUNCTIONS = [
   'job_claim',
   'job_heartbeat',
@@ -203,10 +203,11 @@ const WORKER_FUNCTIONS = [
   'file_verification_stale',
   'file_verification_record',
   'job_uploads_sweep',
+  'capabilities_sweep_run',
 ];
 const APPLICATION_FUNCTIONS = ['job_enqueue', 'outbox_append'];
 /** Queue functions a later migration added: checked only once they exist, as the capability's 0031 entries are, so a database that has not reached that migration is not called broken. */
-const LATER_QUEUE_FUNCTIONS = ['outbox_stats']; // 0036
+const LATER_QUEUE_FUNCTIONS = ['outbox_stats', 'capabilities_sweep_run']; // 0036, 0065
 const OWNER_ONLY_FUNCTIONS = ['uploads_sweep', 'uploads_organization_run_id', 'job_held'];
 const JOB_TABLES = ['jobs', 'job_attempts', 'job_schedules', 'job_workers', 'outbox_events', 'outbox_routes', 'file_verifications'];
 /** Tables the worker login must not even read (it reaches data only through the queue's functions). */

@@ -7,17 +7,23 @@ import type { Logger } from './log';
  *   keyed by the slot), so several schedulers - or a restart in the middle of a slot - never double-enqueue and a stopped worker leaves no backlog of missed slots.
  * - the outbox relay: asks the database to turn pending outbox events into jobs. Concurrent relays take different events, and an event becomes its job and is marked
  *   in one transaction, so a crash cannot lose or duplicate one.
+ * - the capability sweep (spec 026): asks the database to remove expired capabilities. It logs every run, one that removed nothing included, because its
+ *   "sweep is stale" alarm counts those lines; the others log only when they did something.
  */
+/** What a run did: a count, or a count and a short outcome code for the log. */
+export type TickReport = number | { count: number; outcome: string };
+
 export class Ticker {
   private timer: NodeJS.Timeout | undefined;
   private inFlight: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly name: string,
-    /** Returns how many things it did (a count for the log). */
-    private readonly run: () => Promise<number>,
+    /** Returns how many things it did (a count for the log), with an outcome code when it has one. */
+    private readonly run: () => Promise<TickReport>,
     private readonly everySeconds: number,
     private readonly log: Logger,
+    private readonly options: { logEveryRun?: boolean } = {},
   ) {}
 
   start(): void {
@@ -29,8 +35,9 @@ export class Ticker {
   tick(): Promise<void> {
     this.inFlight = this.inFlight.then(async () => {
       try {
-        const done = await this.run();
-        if (done > 0) this.log('info', `${this.name}-ran`, { count: done });
+        const report = await this.run();
+        const { count, outcome } = typeof report === 'number' ? { count: report, outcome: undefined } : report;
+        if (count > 0 || this.options.logEveryRun) this.log('info', `${this.name}-ran`, outcome === undefined ? { count } : { count, outcome });
       } catch {
         this.log('error', `${this.name}-failed`, { code: 'queue-unavailable' });
       }
