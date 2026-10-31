@@ -40,8 +40,7 @@ export function SiteHeader() {
           <ul className="flex flex-wrap items-center gap-1">
             {landing &&
               [
-                ['#platform', h.workspace],
-                ['#workflow', h.workflow],
+                ['#platform', h.features],
                 ['#questions', h.faq],
               ].map(([href, label]) => (
                 <li key={href}>

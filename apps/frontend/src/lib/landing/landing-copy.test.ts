@@ -21,13 +21,6 @@ describe('landing copy', () => {
     for (const [path, leaf] of [...english, ...spanish]) if (typeof leaf === 'string') expect([path, leaf.trim().length > 0]).toEqual([path, true]);
   });
 
-  it('keeps the same function entries callable with the same arguments', () => {
-    expect(LANDING_COPY.en.workflow.kicker(2)).toBe('Explore step 02 / 03');
-    expect(LANDING_COPY.es.workflow.kicker(2)).toContain('02 / 03');
-    expect(LANDING_COPY.en.workflow.next('Check')).toBe('Next: check');
-    expect(LANDING_COPY.es.workflow.next('Verificar')).toBe('Siguiente: verificar');
-  });
-
   it('keeps every boundary statement in both languages: synthetic only, not clinical, no medication or dose advice', () => {
     const text = (language: 'en' | 'es') =>
       paths(LANDING_COPY[language])
@@ -52,8 +45,9 @@ describe('landing copy', () => {
       expect(text('es')).toContain(phrase);
   });
 
-  it('English is the text the landing has always carried', () => {
-    expect(LANDING_COPY.en.hero.headline.join(' ')).toBe('A clearer view of your PGx reports.');
+  it('English leads with report interpretation, as the public site does, and quotes the chat note exactly', () => {
+    expect(LANDING_COPY.en.hero.headline.join(' ')).toBe('PGx reports, interpreted with care.');
+    expect(LANDING_COPY.en.fragments.answer).toBe('Interpretation is not available in the prototype yet.');
     expect(LANDING_COPY.en.header.skip).toBe('Skip to main content');
     expect(LANDING_COPY.en.closing.mascotAlt).toBe('Telesphoros mascot in a teal cloak');
   });
