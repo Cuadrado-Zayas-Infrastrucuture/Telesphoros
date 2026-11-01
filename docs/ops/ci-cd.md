@@ -63,7 +63,7 @@ admin, a squash merge, an API error, a missing run) the push run is the full run
 steps (after the install, which `test:infra` needs: it loads the backend's configuration loader), and the other required checks report as skipped. The rule is that narrow on purpose, from what the repository's
 own tests read: `knowledge/lab-report-reader/v2-handoff/ORIGIN.md` is read by a backend test, and `docs/` also holds JSON results and PNG
 previews that are not documentation. The only code that reads documentation is `test:infra` (`docs/ops/break-glass.md`,
-`docs/ops/staging-plan-review.md`) `test:ci-config` (`docs/status/`, `CLAUDE.md`) and `check:workflows` (`docs/engineering/workflows.md`), which is why those three stay. `scope.test.mjs`
+`docs/ops/staging-plan-review.md`) `test:ci-config` (`docs/status/`, `CLAUDE.md`, and `docs/ops/environments.md` against `docs/ops/staging-expected.json`) and `check:workflows` (`docs/engineering/workflows.md`), which is why those three stay. `scope.test.mjs`
 lists the readers it can see (literal docs paths beside a file call), so a new one turns the guard red before it can be skipped.
 The changed files come from the test merge GitHub checks out for a pull request (two parents, the second being the event's head;
 anything else runs everything) and from `before..after` for a push to `main`. Renames are listed as a delete plus an add, so moving a
@@ -328,6 +328,7 @@ The file is a GitHub **ruleset** for the default branch. It is not active until 
 | --- | --- | --- |
 | Require a pull request | on; **0 required approvals**; conversations must be resolved | Every PR is opened under the sole maintainer's account, so a required approval would be a permanent self-approval deadlock |
 | Required status checks | `verify`, `database-and-storage`, `browser`, `terraform`, `secret-scan`, `image`, each bound to the GitHub Actions app | Another app cannot report a check by the same name |
+| Code scanning results | tool `CodeQL`; alerts threshold `errors`; security alerts threshold `high_or_higher` (founder decision 2026-10-31) | A green `Analyze (...)` job only shows the analysis ran. This rule makes CodeQL's results exist before a merge, and refuses a pull request that adds an error-level alert or a high or critical security alert. Warnings and medium alerts still show on the pull request without blocking it. It is not a seventh status check, so the six names above and their guard are unchanged |
 | Block force pushes | on | History on `main` is never rewritten |
 | Block deletion | on | |
 | "Require branch to be up to date" | **on** (founder decision 2026-10-19, security audit INF-05) | The checks must have run against the `main` the PR merges into. `main` is now contested (several sessions merge the same day), so a PR that was green against an older `main` is not evidence. Cost: after another PR merges, update the branch and wait for CI again before merging |
@@ -345,7 +346,7 @@ On 2026-10-10 the founder approved adding the missing live `image` check. Rulese
 
 ### Break-glass (no standing bypass)
 
-If Actions is down or out of minutes and a merge cannot wait: as a repository admin, edit ruleset `24691287` to add the bypass, merge
+If Actions is down or out of minutes and a merge cannot wait: as a repository admin, edit the ruleset named `main` (its id is in `gh api repos/<owner>/<repo>/rulesets`; the id once written here no longer exists) to add the bypass, merge
 the one pull request, and **remove the bypass again at once**. Say so in that PR, with the reason. GitHub records ruleset edits in
 the repository's audit log, so the exception is visible afterwards instead of being a standing permission.
 
@@ -359,6 +360,7 @@ as a line with the date, the digest and the reason, and release the same commit 
 | 2026-10-30 | `sha256:daa42eb04212809ef99c1d4285dae3166eb71a87ed4e4f5bcf020c681a17c65d` (commit `888979b`) | CI cannot sign: this account's organization SCP denies GitHub OIDC providers. First synthetic staging image, for the demo. Not yet released through CI. |
 | 2026-10-30 | `sha256:d227aa9e78c266b8fcb7e507d030ae11104892485859f9ec4e9d1f8c2eb87d93` (commit `f03b56e2`) | CI cannot sign: this account's organization SCP denies GitHub OIDC providers. Release of `main` with the glibc/dpkg pins (#190) and the ledger heartbeat (#195); CI's image job was green on the same commit. Replaces the image above on synthetic staging. Not yet released through CI. |
 | 2026-10-31 | `sha256:d5df735309ec472c7369c9e48cd49f49f8c0840732a215691626d76d8c76b432` (commit `6c4714de`) | CI cannot sign: this account's organization SCP denies GitHub OIDC providers. Release of `main` with patient demographics (spec 025 PD-a, #208, migration 0064). The push run skipped by tree reuse; the pull-request run at the same tree (`73ebb777`) had a green image job. Replaces the image above on synthetic staging. Not yet released through CI. |
+| 2026-10-31 | `sha256:e1ea8d63e95f65d92bc7be12ad4e99598380121ba3e52ebf89a1218ba9e3fa33` (commit `299efbb3`) | CI cannot sign: this account's organization SCP denies GitHub OIDC providers. Release of `main` with the expired-capability sweep (spec 026 PR A, #214, migration 0065). The push run's image job was green on the same commit. ECR's scan of the linux/amd64 image: 0 critical, 8 high, none with a Debian bookworm fix (one new since the last release: glibc CVE-2026-84243, unfixed in every suite). Replaces the image above on synthetic staging. Not yet released through CI. |
 
 ### Turning it on
 
