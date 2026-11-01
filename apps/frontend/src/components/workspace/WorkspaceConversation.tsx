@@ -9,8 +9,12 @@ import { PromptInput } from '@/components/prompt-kit/PromptInput';
 import { PromptInputTextarea } from '@/components/prompt-kit/PromptInputTextarea';
 import { Steps } from '@/components/prompt-kit/Steps';
 import { SystemMessage } from '@/components/prompt-kit/SystemMessage';
-import { STATUS_WORD } from '@/components/workspace/PastReports';
+import { PatientPicker } from '@/components/PatientPicker';
+import { Input } from '@/components/ui/Input';
+import { ReportStatusText } from '@/components/ReportStatusText';
 import { Button } from '@/components/ui/Button';
+import { INCOMPLETE_PROMPT } from '@/components/patients/IncompleteWord';
+import { incompleteness } from '@/lib/demographicsDraft';
 import { createPatient, listPatients, SubmitError, submitReport, type UploadProgress } from '@/lib/api';
 import { cancelOwnedUpload, listReports } from '@/lib/ownedStorageApi';
 import { productUploadSchema } from '@/lib/productUploadSchema';
@@ -113,6 +117,8 @@ export function WorkspaceConversation() {
 
   const text = input.trim();
   const adding = patientId === NEW_PATIENT;
+  const chosen = adding ? null : patients?.find((p) => p.id === patientId);
+  const chosenIncomplete = adding || (chosen ? incompleteness(chosen) === 'incomplete' : false);
   const labelProblem = adding ? patientLabelSchema.safeParse(newLabel).error?.issues[0]?.message : undefined;
   const blocked = file
     ? !patientId
@@ -251,50 +257,38 @@ export function WorkspaceConversation() {
             </div>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span className="text-muted-foreground">for</span>
-              {patients ? (
-                <>
-                  <select aria-label="Patient" value={patientId} onChange={(event) => setPatientId(event.target.value)} className="max-w-full">
-                    {patients.map((patient) => (
-                      <option key={patient.id} value={patient.id}>
-                        {patient.label}
-                      </option>
-                    ))}
-                    <option value={NEW_PATIENT}>New synthetic patient…</option>
-                  </select>
-                  {adding && (
-                    <input
-                      aria-label="New patient label"
-                      placeholder="e.g. SYN-004"
-                      maxLength={40}
-                      value={newLabel}
-                      onChange={(event) => setNewLabel(event.target.value)}
-                      className="h-11 w-32 max-w-full rounded-md border border-border bg-background px-2"
-                    />
-                  )}
-                </>
-              ) : patientsError ? (
-                <span className="inline-flex flex-wrap items-center gap-2">
-                  <span role="alert" className="text-destructive">
-                    {patientsError}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    aria-label="Retry loading patients"
-                    onClick={() => {
-                      setPatientsError(null);
-                      setPatientsAttempt((attempt) => attempt + 1);
-                    }}
-                  >
-                    Retry
-                  </Button>
-                </span>
-              ) : (
-                <span role="status" className="text-muted-foreground">
-                  loading patients…
-                </span>
+              <PatientPicker
+                aria-label="Patient"
+                patients={patients}
+                value={patientId}
+                onValueChange={setPatientId}
+                disabled={uploading}
+                error={patientsError}
+                newPatientOption={{ value: NEW_PATIENT, label: 'New synthetic patient…' }}
+                onRetry={() => {
+                  setPatientsError(null);
+                  setPatientsAttempt((attempt) => attempt + 1);
+                }}
+              />
+              {adding && (
+                <div className="flex min-w-0 flex-col gap-1">
+                  <Input
+                    aria-label="New patient label"
+                    aria-describedby="workspace-new-patient-help"
+                    placeholder="e.g. SYN-004"
+                    maxLength={40}
+                    value={newLabel}
+                    disabled={uploading}
+                    onChange={(event) => setNewLabel(event.target.value)}
+                  />
+                  <p id="workspace-new-patient-help" className="text-xs text-muted-foreground">
+                    Letters, numbers and hyphens. A code, never a name.
+                  </p>
+                </div>
               )}
             </div>
+            {/* Spec 025 T302: one line, never blocking. A new patient made here has a label only, so it starts Incomplete. */}
+            {chosenIncomplete && <p className="text-warning">{INCOMPLETE_PROMPT}</p>}
             <label className="inline-flex min-h-11 items-center gap-2">
               <input type="checkbox" className="size-5 shrink-0 accent-primary" checked={synthetic} onChange={(event) => setSynthetic(event.target.checked)} />
               {CONFIRMATION}
@@ -386,7 +380,7 @@ export function WorkspaceConversation() {
                   {entry.phase === 'sent' && entry.status && (
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                       <span className="text-muted-foreground">Report status</span>
-                      <span className={`font-medium ${STATUS_WORD[entry.status].tone}`}>{STATUS_WORD[entry.status].label}</span>
+                      <ReportStatusText status={entry.status} className="font-medium" />
                       <Button variant="outline" size="sm" disabled={entry.checking} onClick={() => void readStatus(entry.id, entry.reportId!, entry.patientId, true)}>
                         Check status
                       </Button>

@@ -38,7 +38,11 @@ export const routes: RouteObject[] = [
           // Every build: the API authorizes each read. Only file download is owned-storage only (ReportsPage).
           {
             element: <RequireRole anyOf={CLINICAL_READ_ROLES} />,
-            children: [{ path: 'reports', lazy: async () => ({ Component: (await import('@/pages/ReportsPage')).default }) }],
+            children: [
+              { path: 'reports', lazy: async () => ({ Component: (await import('@/pages/ReportsPage')).default }) },
+              // Spec 025 T303: one patient's demographics and their versions. Clinical readers read; the page offers corrections to writers only.
+              { path: 'patients/:id', lazy: async () => ({ Component: (await import('@/pages/PatientPage')).default }) },
+            ],
           },
           // Administrators only: the organization's own counts. Nothing clinical, so admin needs no clinical role for it.
           {

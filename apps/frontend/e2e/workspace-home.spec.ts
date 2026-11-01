@@ -132,7 +132,17 @@ test.describe('the conversation', () => {
     const name = `chat-${crypto.randomUUID().slice(0, 8)}.json`;
     await page.locator('input[type=file]').setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
     await page.getByRole('combobox', { name: 'Patient' }).selectOption({ label: 'New synthetic patient…' });
-    await page.getByRole('textbox', { name: 'New patient label' }).fill(label());
+    const newLabel = page.getByRole('textbox', { name: 'New patient label' });
+    await expect(newLabel).toHaveAccessibleDescription('Letters, numbers and hyphens. A code, never a name.');
+    for (const control of [page.getByRole('combobox', { name: 'Patient' }), newLabel]) {
+      const box = await control.boundingBox();
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+      expect(await control.evaluate((element) => getComputedStyle(element).fontSize)).toBe('16px');
+    }
+    expect(await axeViolations(page)).toEqual([]);
+    await newLabel.fill(label());
     // Without the confirmation nothing is sent. Send is aria-disabled so that it can still say why; Playwright treats that as disabled, hence force.
     await page.getByRole('button', { name: 'Send' }).click({ force: true });
     await expect(page.getByRole('status').filter({ hasText: 'Confirm the file is synthetic.' })).toBeVisible();
