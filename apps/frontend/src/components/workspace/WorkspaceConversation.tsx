@@ -17,7 +17,7 @@ import { productUploadSchema } from '@/lib/productUploadSchema';
 import { reportTypeFor } from '@/lib/reportTypeFor';
 import { readRecovery } from '@/lib/uploadRecovery';
 import { UPLOAD_STEPS, UPLOAD_WORDS, uploadStage } from '@/lib/uploadSteps';
-import { fileProblem } from '@/lib/workspaceFileRule';
+import { chatFileAccept, fileProblem } from '@/lib/workspaceFileRule';
 import { announcePatientAdded, announceReportsChanged, onPatientAdded } from '@/lib/workspaceEvents';
 import '@/styles/one-screen.css';
 
@@ -317,7 +317,15 @@ export function WorkspaceConversation() {
         <div className="flex items-center justify-between gap-2">
           {canAttach ? (
             <>
-              <input ref={picker} type="file" accept=".json,.pdf" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={(event) => choose(event.target.files?.[0])} />
+              <input
+                ref={picker}
+                type="file"
+                accept={chatFileAccept()}
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden="true"
+                onChange={(event) => choose(event.target.files?.[0])}
+              />
               <Button variant="ghost" size="sm" className="size-11 rounded-full p-0" aria-label="Attach a report" onClick={() => picker.current?.click()}>
                 <Paperclip aria-hidden="true" className="size-5" />
               </Button>
