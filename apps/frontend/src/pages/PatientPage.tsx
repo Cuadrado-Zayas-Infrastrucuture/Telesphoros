@@ -4,6 +4,7 @@ import type { PatientDto } from '@telesphoros/shared-types';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
 import { WRITER_ROLES } from '@/auth/roles';
 import { DemographicsSection } from '@/components/patients/DemographicsSection';
+import { MedicationsSection } from '@/components/patients/MedicationsSection';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { usePageTitle } from '@/hooks/usePageTitle';
@@ -31,6 +32,7 @@ export default function PatientPage() {
     const controller = new AbortController();
     Promise.all([getPatient(apiFetch, id, controller.signal), getDemographics(apiFetch, id, version, controller.signal)])
       .then(([loadedPatient, loadedRead]) => {
+        if (controller.signal.aborted) return;
         setPatient(loadedPatient);
         setRead(loadedRead);
       })
@@ -76,7 +78,7 @@ export default function PatientPage() {
       </div>
     );
   }
-  if (!patient || !read) {
+  if (!patient || patient.id !== id || !read) {
     return (
       <div className="flex flex-col gap-3" aria-busy="true">
         <Skeleton className="h-8 w-48" />
@@ -95,6 +97,7 @@ export default function PatientPage() {
         <p className="text-sm text-muted-foreground">Synthetic patient, added {when(patient.createdAt)}.</p>
       </div>
       <DemographicsSection patientId={id} read={read} version={version} canWrite={canWrite} onViewVersion={view} onSaved={reload} />
+      <MedicationsSection key={id} patientId={id} canWrite={roles.includes('clinician')} />
     </div>
   );
 }
