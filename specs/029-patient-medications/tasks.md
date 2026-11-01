@@ -23,3 +23,7 @@ Built in two slices, each its own branch and PR off a fresh `main`. Migration nu
 | T502 | Coded drug picker (filter by typing, Tall Man shown, plain name as the accessible name); add, stop, correct | MD-7, MD-8 |
 | T503 | Browser test in `storage-e2e` (it needs the database), axe in light and dark | V |
 | T504 | Screenshots at 390, 768 and 1280 px, light and dark, sent to the founder before commit | V |
+
+## Local MD-a progress, 2026-11-01
+
+T401 records the founder-held CPIC licensing confirmation; FDA/NLM sources were re-read and ISMP-only entries stay excluded. T403–T407 are implemented locally with API, storage, access, privacy and clinical-boundary checks. T402 remains blocked by source access: the manifest explicitly records that no verified list is installed. A blocking shared-types test keeps that state red even though the API correctly refuses capture with 503. T408 has run the local loop and targeted defect probes, with full-tier failures/rechecks and environment limits recorded in [verification](../../docs/verification/patient-medications.md). No push, merge, deployment or AWS change.

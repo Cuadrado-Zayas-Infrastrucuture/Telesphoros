@@ -308,6 +308,25 @@ const LOADERS: Record<Exclude<RecordTable, 'evaluations'>, Loader> = {
       deIdentificationAuthorized: r.de_identification_authorized,
     }),
   },
+  patient_medications: {
+    sql: `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
+      patient_id::text AS patient_id, entry_id::text AS entry_id, version, drug_rxcui, drug_name, list_version, status, start_month, stop_month, source
+      FROM patient_medications WHERE id = ANY($1::uuid[])`,
+    project: (r) => ({
+      kind: 'patient-medication',
+      ...common(r),
+      patientId: r.patient_id,
+      entryId: r.entry_id,
+      medicationVersion: r.version,
+      rxcui: r.drug_rxcui,
+      name: r.drug_name,
+      listVersion: r.list_version,
+      status: r.status,
+      startMonth: r.start_month,
+      stopMonth: r.stop_month,
+      source: r.source,
+    }),
+  },
   // Spec 025 PD-a. Every column as stored except the retry identity (as clinician decisions). The three identity fields enter the payload as the sha-256 of
   // nonce || ciphertext: never a plaintext value, and never the ciphertext itself. The coded columns are plaintext by design (D1).
   patient_demographics: {

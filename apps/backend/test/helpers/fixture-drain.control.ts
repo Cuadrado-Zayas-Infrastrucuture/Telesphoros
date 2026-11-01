@@ -69,13 +69,14 @@ if (mode === 'app') {
   afterAll(async () => {
     await Promise.all(databases.map((database) => database.drop()));
   });
-  it('a test that times out while the database is still being migrated', async () => {
-    const connect = Client.prototype.connect;
-    // eslint-disable-next-line @typescript-eslint/no-misused-promises -- pg types connect's callback overload as void; the real method returns this promise
-    jest.spyOn(Client.prototype, 'connect').mockImplementation(async function (this: Client) {
-      await Reflect.apply(connect, this, []);
-      if (/^test_/.test((this as unknown as { database: string }).database)) await delay(SLOW_MS);
-    });
+  it('a test that times out while the database copy is still being returned', async () => {
+    const query = Client.prototype.query;
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises -- pg types query's callback overloads as void; the real method returns this promise
+    jest.spyOn(Client.prototype, 'query').mockImplementation(async function (this: Client, ...args: unknown[]) {
+      const result = await Reflect.apply(query, this, args);
+      if (typeof args[0] === 'string' && /^CREATE DATABASE test_[a-f0-9]+ TEMPLATE /.test(args[0])) await delay(SLOW_MS);
+      return result;
+    } as typeof query);
     databases.push(await createEphemeralDatabase());
   });
 } else {

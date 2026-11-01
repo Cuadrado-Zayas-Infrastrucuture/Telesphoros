@@ -53,6 +53,7 @@ const relationships: [string, string, string, string][] = [
   ['use_withdrawals_grant_fk', 'use_withdrawals', 'grant_id,tenant_id', 'use_grants:id,tenant_id'],
   ['use_restrictions_patient_fk', 'use_restrictions', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   // Spec 025 PD-a (patient demographics): the versions and the wrapped key both name the patient. No foreign key from a version to its key: erasure deletes the key.
+  ['patient_medications_patient_fk', 'patient_medications', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   ['patient_demographics_patient_fk', 'patient_demographics', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   ['patient_field_keys_patient_fk', 'patient_field_keys', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   // Spec 019 D02b (render events, not ledgered): the result, its evaluation and patient.
@@ -116,6 +117,7 @@ const primaryKeys: Record<string, string> = {
   use_restrictions: 'id',
   tenant_use_terms: 'id',
   patient_demographics: 'id',
+  patient_medications: 'id',
   patient_field_keys: 'tenant_id, patient_id',
   result_render_events: 'id',
   evaluations: 'id',
@@ -199,6 +201,7 @@ const uniqueKeys: Record<string, string> = {
   use_grant_validations_once_uq: 'grant_id, tenant_id',
   use_withdrawals_once_uq: 'grant_id, tenant_id',
   tenant_use_terms_once_uq: 'tenant_id, agreement_ref, agreement_version',
+  patient_medications_version_uq: 'tenant_id, entry_id, version',
   patient_demographics_version_uq: 'tenant_id, patient_id, version',
   patient_field_keys_version_uq: 'tenant_id, patient_id, key_version',
   result_render_events_once_uq: 'tenant_id, viewer, episode_id, seq',
@@ -276,6 +279,7 @@ const checkNames: Record<string, string> = {
   use_withdrawals: 'tenant_id_len created_by_len recorded_by_actor not_backdated',
   use_restrictions: 'tenant_id_len created_by_len purpose interval reason_code',
   tenant_use_terms: 'tenant_id_len created_by_len refs interval purposes classifications',
+  patient_medications: 'tenant_id_len created_by_len version rxcui name list_version status start_month stop_month month_order active_stop source request_hash',
   patient_demographics: 'tenant_id_len created_by_len version key_version nonces name_len dob_len sex birth_year ethnicity request_pair request_hash',
   patient_field_keys: 'tenant_id_len created_by_len version wrapped_len provider',
   result_render_events: 'tenant_id_len viewer_len viewer_human viewer_roles seq kind kind_seq measurement rule_version schema_version capability client_times ms',
@@ -331,6 +335,7 @@ for (const table of [
   'use_restrictions',
   'tenant_use_terms',
   'patient_demographics',
+  'patient_medications',
   'ledger_checkpoints',
 ]) {
   relationships.push([`${table}_event_fk`, table, 'ledger_event_id,tenant_id', 'ledger_events:id,tenant_id']);
