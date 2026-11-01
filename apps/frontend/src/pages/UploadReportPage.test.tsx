@@ -236,7 +236,8 @@ it('reports a list failure, preserves selection, and retries the requested page'
   await user.click(screen.getByRole('button', { name: 'Next patients' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Patients could not be loaded');
   expect(screen.getByLabelText(/synthetic patient \(required\)/i)).toHaveValue(patientId);
-  await user.click(screen.getByRole('button', { name: 'Refresh patients' }));
+  expect(screen.queryByRole('button', { name: 'Refresh patients' })).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Retry loading patients' }));
   await screen.findByText('Patient page 2 of 2');
   expect(patientApi.mock.calls.at(-1)?.[0]).toBe('/api/v1/patients?page=2&pageSize=20');
 });
