@@ -3,7 +3,7 @@
   position: relative;
   isolation: isolate;
   display: flex;
-  min-height: 100dvh;
+  min-height: var(--size-safe-viewport);
   flex-direction: column;
   background: var(--background);
 }
@@ -122,12 +122,15 @@
 /* Specs/024: the chat home inside the shared frame (the main area has its own padding), so the box docks at the bottom of the window. */
 .chat-home {
   display: flex;
-  min-height: calc(100dvh - 4rem);
+  min-height: calc(var(--size-safe-viewport) - 4rem);
   flex-direction: column;
 }
 
 @media (max-width: 63.99rem) {
   .chat-home {
-    min-height: calc(100dvh - 3rem);
+    min-height: calc(var(--size-safe-viewport) - 3rem);
   }
 }
+
+/* A sticky composer stays above the home indicator as the page scrolls. */
+.one-screen-dock { bottom: var(--safe-area-bottom); }

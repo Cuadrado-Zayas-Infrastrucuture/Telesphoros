@@ -25,3 +25,41 @@ test('with reduced motion the placeholders still appear, without the sweep', asy
   await expect(block).toHaveCSS('opacity', '1');
   await expect(block).toHaveCSS('background-image', 'none');
 });
+
+// Inspect the animation timeline directly: no wall-clock sleep or race with a fast API response.
+test('placeholders remain hidden through 250ms and appear after 300ms', async ({ page }) => {
+  await holdUsage(page);
+  await signInAs(page, 'carol', '/usage');
+  const block = page.locator('[data-slot="skeleton"]').first();
+  const seek = async (time: number) => block.evaluate((element, elapsed) => {
+    const appear = element.getAnimations().find((animation) => animation instanceof CSSAnimation && animation.animationName === 'skeleton-appear');
+    if (!appear) throw new Error('The loading placeholder has no appearance animation.');
+    appear.pause();
+    appear.currentTime = elapsed;
+  }, time);
+  await seek(250);
+  await expect(block).toHaveCSS('opacity', '0');
+  await seek(301);
+  await expect(block).toHaveCSS('opacity', '1');
+});
+
+test('loading and loaded usage share card rows and storage position', async ({ page }) => {
+  let release!: () => void;
+  const ready = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/api/v1/usage', async (route) => {
+    const response = await route.fetch();
+    await ready;
+    await route.fulfill({ response });
+  });
+  await signInAs(page, 'carol', '/usage');
+  // Use the heading's section so card internals can change without changing this assertion.
+  const section = page.locator('#usage-storage').locator('xpath=ancestor::section[1]');
+  await expect(section.locator('[data-slot="skeleton"]')).toHaveCount(2);
+  const before = await section.boundingBox();
+  release();
+  await expect(page.getByRole('region', { name: 'Storage' })).toBeVisible();
+  await expect(section.locator('[data-slot="skeleton"]')).toHaveCount(0);
+  const after = await section.boundingBox();
+  expect(Math.abs(after!.y - before!.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(after!.height - before!.height)).toBeLessThanOrEqual(1);
+});

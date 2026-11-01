@@ -80,11 +80,20 @@
   --size-button-lg: 3.5rem;
   --size-control: 2.75rem;
 
+  /* Device cutouts and the home indicator. Zero on ordinary displays. */
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-block: calc(var(--safe-area-top) + var(--safe-area-bottom));
+  --safe-area-inline: calc(var(--safe-area-left) + var(--safe-area-right));
+  --size-safe-viewport: calc(100dvh - var(--safe-area-block));
+
   /* Layout */
   --size-sidebar: 15rem;
   --size-sidebar-collapsed: 4.5rem;
   --size-context-drawer: 30rem;
-  --size-chat-workspace: calc(100dvh - 15rem);
+  --size-chat-workspace: calc(var(--size-safe-viewport) - 15rem);
   --size-chat-min: 26rem;
   --size-page: 72rem;
   --size-prose: 40rem;
@@ -95,7 +104,7 @@
   --size-source-image-zoom: 76.5rem;
   --duration-preview-shimmer: 3s;
   /* Loading placeholders: shown only after this delay (fast loads never flash), then a slow sweep. */
-  --delay-skeleton: 150ms;
+  --delay-skeleton: 300ms;
   --duration-skeleton-shimmer: 1.8s;
   /* Deepest progressive blur at a scroll edge; the container pads its content by the same. */
   --size-blur-edge: 3rem;

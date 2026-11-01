@@ -163,7 +163,7 @@ export default function ReportsPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl leading-tight tracking-tight">Reports</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Report records and verified upload information.</p>
+          <p className="mt-1 text-sm text-pretty text-muted-foreground">Report records and verified upload information.</p>
         </div>
         {roles.some((role) => WRITER_ROLES.includes(role)) && (
           <Button asChild className="min-h-control w-full whitespace-normal px-5 sm:w-auto">
