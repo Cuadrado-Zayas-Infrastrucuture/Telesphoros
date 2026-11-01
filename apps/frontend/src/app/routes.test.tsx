@@ -13,12 +13,21 @@ describe('public pages', () => {
   it.each([
     ['/', 'PGx reports, interpreted with care.'],
     ['/signin', 'Sign in'],
+    ['/signin/', 'Sign in'],
+    ['/signin?source=header', 'Sign in'],
     ['/signed-out', 'You have been signed out'],
     ['/nope', 'Page not found'],
   ])('lazy-loads %s with exactly one h1, no accessibility violations, and no sign-in needed', async (path, title) => {
     const { container } = renderApp(path);
     expect(await heading(title)).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    const header = within(screen.getByRole('banner'));
+    if (title === 'Sign in') {
+      expect(header.queryByRole('link', { name: 'Sign in', exact: true })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Sign in', exact: true })).toBeEnabled();
+    } else {
+      expect(header.getByRole('link', { name: 'Sign in', exact: true })).toHaveAttribute('href', '/signin');
+    }
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -106,7 +115,7 @@ describe('protected pages', () => {
     const sidebar = document.querySelector('header.workspace-navigation') as HTMLElement;
     await userEvent.setup().click(within(sidebar).getAllByRole('button', { name: 'Sign out' })[0]!);
     expect(client.signOut).toHaveBeenCalledTimes(1);
-    expect(await screen.findByRole('link', { name: 'Sign in' })).toBeInTheDocument();
+    expect(await heading('Sign in')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Upload report' })).not.toBeInTheDocument();
   });
 });

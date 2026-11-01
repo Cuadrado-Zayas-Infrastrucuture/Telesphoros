@@ -14,11 +14,14 @@ async function axeViolations(page: Page) {
 }
 
 test.describe('signing in', () => {
-  test('an anonymous visitor to a protected page is sent to sign in; the sign-in page is accessible', async ({ page }) => {
+  test('an anonymous visitor to a protected page is sent to sign in; the sign-in page is accessible', async ({ page }, testInfo) => {
     await page.goto('/reports/upload');
     await expect(page).toHaveURL(/\/signin$/);
     await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
+    await expect(page.getByRole('banner').getByRole('link', { name: 'Sign in', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeEnabled();
     expect(await axeViolations(page)).toEqual([]);
+    await page.screenshot({ path: testInfo.outputPath('sign-in-entry.png') });
   });
 
   test('a clinician signs in through the identity provider and lands on the page they wanted', async ({ page }) => {
