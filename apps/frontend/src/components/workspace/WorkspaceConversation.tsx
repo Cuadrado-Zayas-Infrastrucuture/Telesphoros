@@ -11,6 +11,8 @@ import { Steps } from '@/components/prompt-kit/Steps';
 import { SystemMessage } from '@/components/prompt-kit/SystemMessage';
 import { STATUS_WORD } from '@/components/workspace/PastReports';
 import { Button } from '@/components/ui/Button';
+import { INCOMPLETE_PROMPT } from '@/components/patients/IncompleteWord';
+import { incompleteness } from '@/lib/demographicsDraft';
 import { createPatient, listPatients, SubmitError, submitReport, type UploadProgress } from '@/lib/api';
 import { cancelOwnedUpload, listReports } from '@/lib/ownedStorageApi';
 import { productUploadSchema } from '@/lib/productUploadSchema';
@@ -111,6 +113,8 @@ export function WorkspaceConversation() {
 
   const text = input.trim();
   const adding = patientId === NEW_PATIENT;
+  const chosen = adding ? null : patients?.find((p) => p.id === patientId);
+  const chosenIncomplete = adding || (chosen ? incompleteness(chosen) === 'incomplete' : false);
   const labelProblem = adding ? patientLabelSchema.safeParse(newLabel).error?.issues[0]?.message : undefined;
   const blocked = file
     ? !patientId
@@ -274,6 +278,8 @@ export function WorkspaceConversation() {
                 <span className="text-muted-foreground">{patientsError ?? 'loading patients…'}</span>
               )}
             </div>
+            {/* Spec 025 T302: one line, never blocking. A new patient made here has a label only, so it starts Incomplete. */}
+            {chosenIncomplete && <p className="text-warning">{INCOMPLETE_PROMPT}</p>}
             <label className="inline-flex min-h-11 items-center gap-2">
               <input type="checkbox" className="size-5 shrink-0 accent-primary" checked={synthetic} onChange={(event) => setSynthetic(event.target.checked)} />
               {CONFIRMATION}

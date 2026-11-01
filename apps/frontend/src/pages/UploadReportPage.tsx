@@ -5,7 +5,6 @@ import { clearRecovery, readRecovery, RECOVERY_LIFETIME_MS, type RecoveryEntry }
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Plus, RefreshCw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { patientLabelSchema } from '@telesphoros/shared-types';
 import type { Paginated, PatientDto } from '@telesphoros/shared-types';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
 import { useForm, useWatch, type FieldErrors } from 'react-hook-form';
@@ -26,7 +25,11 @@ import { Label } from '@/components/ui/Label';
 import { NativeSelect } from '@/components/ui/NativeSelect';
 import { Spinner } from '@/components/ui/Spinner';
 import { usePageTitle } from '@/hooks/usePageTitle';
-import { createPatient, listPatients, SubmitError, submitReport, type UploadProgress } from '@/lib/api';
+import { useAddPatient } from '@/hooks/useAddPatient';
+import { INCOMPLETE_PROMPT } from '@/components/patients/IncompleteWord';
+import { PatientDemographicsFields } from '@/components/patients/PatientDemographicsFields';
+import { incompleteness } from '@/lib/demographicsDraft';
+import { listPatients, SubmitError, submitReport, type UploadProgress } from '@/lib/api';
 import { productUploadSchema, type ProductUploadValues } from '@/lib/productUploadSchema';
 import { REPORT_TYPE_LABELS, REPORT_TYPES } from '@/types/report';
 
@@ -123,49 +126,32 @@ export default function UploadReportPage() {
 
   // Adding a synthetic patient from this page. The panel opens by itself when the roster is empty, so nobody is left without a way forward.
   const [addOpen, setAddOpen] = useState(false);
-  const [newLabel, setNewLabel] = useState('');
-  const [labelError, setLabelError] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState<string | null>(null);
-  // One request id per label being tried: a retry after a lost response replays the same patient instead of creating a second one.
-  const addRequest = useRef<{ label: string; id: string } | null>(null);
+  // Spec 025 T301: the label and the demographics, in two requests that each replay their first request id on a retry (`useAddPatient`).
+  const addForm = useAddPatient((created) => {
+    setSelectedPatient(created);
+    form.setValue('patientId', created.id, { shouldValidate: true, shouldTouch: true });
+  });
   const focusPatientAfterLoad = useRef(false);
   const rosterEmpty = !patientsLoading && patients?.meta.total === 0;
-  const addVisible = addOpen || rosterEmpty;
+  const addVisible = addOpen || rosterEmpty || addForm.pending !== null;
   useEffect(() => {
     if (patientsLoading || !focusPatientAfterLoad.current) return;
     focusPatientAfterLoad.current = false;
     form.setFocus('patientId');
   }, [patientsLoading, form]);
+  // The list row of the chosen patient carries `demographicsComplete`; a just-created patient gets it once the page reloads.
+  const chosenPatientId = useWatch({ control: form.control, name: 'patientId' });
+  const chosenRow = patients?.data.find((patient) => patient.id === chosenPatientId);
 
   async function addPatient() {
-    const parsed = patientLabelSchema.safeParse(newLabel);
-    if (!parsed.success) {
-      setLabelError(parsed.error.issues[0]?.message ?? 'Enter a synthetic patient label.');
-      return;
-    }
-    const label = parsed.data;
-    const request = addRequest.current?.label === label ? addRequest.current : { label, id: crypto.randomUUID() };
-    addRequest.current = request;
-    setAdding(true);
-    setLabelError(null);
     setAdded(null);
-    try {
-      const created = await createPatient(apiFetch, label, request.id);
-      addRequest.current = null;
-      setSelectedPatient(created);
-      form.setValue('patientId', created.id, { shouldValidate: true, shouldTouch: true });
-      setNewLabel('');
-      setAddOpen(false);
-      setAdded(`Added ${created.label} and selected it.`);
-      focusPatientAfterLoad.current = true;
-      loadPatients(patients?.meta.page ?? 1);
-    } catch (error) {
-      if (error instanceof SessionEndedError) return;
-      setLabelError(error instanceof SubmitError ? error.message : 'The patient could not be added. Please retry.');
-    } finally {
-      setAdding(false);
-    }
+    const outcome = await addForm.submit();
+    if (!outcome) return;
+    setAddOpen(false);
+    setAdded(`Added ${outcome.patient.label} and selected it.`);
+    focusPatientAfterLoad.current = true;
+    loadPatients(patients?.meta.page ?? 1);
   }
 
   const [step, setStep] = useState(0);
@@ -395,6 +381,14 @@ export default function UploadReportPage() {
                               </NativeSelect>
                             </FormControl>
                             <FormDescription>Select a synthetic patient, or add a new one.</FormDescription>
+                            {chosenRow && incompleteness(chosenRow) === 'incomplete' && (
+                              <p className="text-sm text-warning">
+                                {INCOMPLETE_PROMPT}{' '}
+                                <Link to={`/patients/${chosenRow.id}`} className="underline underline-offset-2">
+                                  Open {chosenRow.label}
+                                </Link>
+                              </p>
+                            )}
                             <FormMessage />
                           </FormItem>
                         )}
@@ -460,51 +454,67 @@ export default function UploadReportPage() {
                           <p id="add-patient-heading" className="text-sm font-medium">
                             Add a synthetic patient
                           </p>
-                          <div className="flex flex-col gap-2">
-                            <Label htmlFor="new-patient-label">Synthetic patient label</Label>
-                            <Input
-                              id="new-patient-label"
-                              value={newLabel}
-                              autoComplete="off"
-                              spellCheck={false}
-                              readOnly={adding}
-                              aria-invalid={labelError ? true : undefined}
-                              aria-describedby={labelError ? 'new-patient-help new-patient-error' : 'new-patient-help'}
-                              onChange={(event) => {
-                                setNewLabel(event.target.value);
-                                setLabelError(null);
-                              }}
-                              onKeyDown={(event) => {
-                                // Enter adds the patient; without this it would submit the whole upload form.
-                                if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
-                                  event.preventDefault();
-                                  void addPatient();
-                                }
-                              }}
-                            />
-                            <p id="new-patient-help" className="text-sm text-muted-foreground">
-                              Letters, numbers and hyphens only, up to 40 characters, for example SYN-0002. Never a name or a real identifier.
+                          {addForm.pending ? (
+                            <p className="text-sm text-muted-foreground">
+                              Patient <span className="font-medium text-foreground">{addForm.pending.label}</span> exists and is selected. Save its demographics, or continue and
+                              add them later on the patient's page.
                             </p>
-                            {labelError && (
-                              <p id="new-patient-error" role="alert" className="text-sm text-destructive">
-                                {labelError}
+                          ) : (
+                            <div className="flex flex-col gap-2">
+                              <Label htmlFor="new-patient-label">Synthetic patient label</Label>
+                              <Input
+                                id="new-patient-label"
+                                value={addForm.label}
+                                autoComplete="off"
+                                spellCheck={false}
+                                readOnly={addForm.busy}
+                                aria-invalid={addForm.labelError ? true : undefined}
+                                aria-describedby={addForm.labelError ? 'new-patient-help new-patient-error' : 'new-patient-help'}
+                                onChange={(event) => addForm.setLabel(event.target.value)}
+                                onKeyDown={(event) => {
+                                  // Enter adds the patient; without this it would submit the whole upload form.
+                                  if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                                    event.preventDefault();
+                                    void addPatient();
+                                  }
+                                }}
+                              />
+                              <p id="new-patient-help" className="text-sm text-muted-foreground">
+                                Letters, numbers and hyphens only, up to 40 characters, for example SYN-0002. A code, never a name or a real identifier.
                               </p>
-                            )}
-                          </div>
+                              {addForm.labelError && (
+                                <p id="new-patient-error" role="alert" className="text-sm text-destructive">
+                                  {addForm.labelError}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                          <PatientDemographicsFields
+                            idPrefix="new-patient"
+                            value={addForm.draft}
+                            errors={addForm.errors}
+                            disabled={addForm.busy}
+                            onChange={addForm.setDraft}
+                            onEnter={() => void addPatient()}
+                          />
+                          {addForm.problem && (
+                            <p role="alert" className="text-sm text-destructive">
+                              {addForm.problem}
+                            </p>
+                          )}
                           <div className="flex flex-wrap gap-2">
-                            <Button type="button" size="sm" disabled={adding || isSubmitting} onClick={() => void addPatient()}>
-                              {adding ? 'Adding…' : 'Add patient'}
+                            <Button type="button" size="sm" disabled={addForm.busy || isSubmitting} onClick={() => void addPatient()}>
+                              {addForm.busy ? 'Saving…' : addForm.pending ? 'Save demographics' : 'Add patient'}
                             </Button>
                             {!rosterEmpty && (
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                disabled={adding}
+                                disabled={addForm.busy}
                                 onClick={() => {
                                   setAddOpen(false);
-                                  setNewLabel('');
-                                  setLabelError(null);
+                                  addForm.reset();
                                 }}
                               >
                                 Cancel
