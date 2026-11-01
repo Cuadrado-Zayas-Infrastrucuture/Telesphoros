@@ -18,6 +18,16 @@ it.each(['clinician'] as const)('sends the upload action to the signed-in home, 
   for (const link of screen.getAllByRole('link', { name: 'Upload a synthetic report' })) expect(link).toHaveAttribute('href', signedInHome([role]));
   expect(screen.getAllByRole('link', { name: 'Upload a synthetic report' })).toHaveLength(1);
 });
+it.each([{ roles: ['admin'] }, { roles: [] }] as const)('shows no Reports link in the header to $roles, who cannot open the page', async ({ roles }) => {
+  await renderSignedInAt('/', { signedInAs: [...roles] });
+  await screen.findByRole('heading', { name: /PGx reports, interpreted/ });
+  expect(screen.queryByRole('link', { name: 'Reports' })).not.toBeInTheDocument();
+});
+it.each(['reader', 'reviewer', 'clinician'] as const)('shows the Reports link in the header to %s', async (role) => {
+  await renderSignedInAt('/', { signedInAs: [role] });
+  await screen.findByRole('heading', { name: /PGx reports, interpreted/ });
+  expect(screen.getByRole('link', { name: 'Reports' })).toHaveAttribute('href', '/reports');
+});
 it('preserves the owned-storage home and avoids marketing in that workflow', async () => {
   vi.stubEnv('VITE_LOCAL_STORAGE_INTAKE', 'true');
   await renderSignedInAt('/', { signedInAs: ['reader'] });
