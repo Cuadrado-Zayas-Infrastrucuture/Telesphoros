@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { PatientDto } from '@telesphoros/shared-types';
+import type { DemographicsCompleteness, PatientDto } from '@telesphoros/shared-types';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
 import { WRITER_ROLES } from '@/auth/roles';
 import { IncompleteWord } from '@/components/patients/IncompleteWord';
@@ -8,6 +8,7 @@ import { PatientDemographicsFields } from '@/components/patients/PatientDemograp
 import { Button } from '@/components/ui/Button';
 import { useAddPatient } from '@/hooks/useAddPatient';
 import { listPatients } from '@/lib/api';
+import { getCompleteness } from '@/lib/patientDemographics';
 import { announcePatientAdded, onPatientAdded } from '@/lib/workspaceEvents';
 
 /**
@@ -18,13 +19,26 @@ export function SidebarPatients() {
   const { apiFetch, roles } = useAuth();
   const canAdd = roles.some((role) => WRITER_ROLES.includes(role));
   const [patients, setPatients] = useState<PatientDto[] | null>(null);
+  const [counts, setCounts] = useState<DemographicsCompleteness | null>(null);
   const [failed, setFailed] = useState(false);
   const [open, setOpen] = useState(false);
   const [added, setAdded] = useState<string | null>(null);
   const toggle = useRef<HTMLButtonElement>(null);
+  // The line is an extra: when the counts cannot be read (the in-memory store has none), it is left out, with no alert.
+  const loadCounts = useCallback(
+    (signal?: AbortSignal) => {
+      getCompleteness(apiFetch, signal)
+        .then(setCounts)
+        .catch(() => {
+          if (!signal?.aborted) setCounts(null);
+        });
+    },
+    [apiFetch],
+  );
   const form = useAddPatient((created) => {
     setPatients((list) => (list?.some((p) => p.id === created.id) ? list : [created, ...(list ?? [])]));
     announcePatientAdded(created);
+    loadCounts();
   });
   const field = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -48,13 +62,17 @@ export function SidebarPatients() {
   useEffect(() => {
     const controller = new AbortController();
     load(controller.signal);
-    // The chat can add a patient too; show it here without another request.
-    const stop = onPatientAdded((patient) => setPatients((list) => (list?.some((p) => p.id === patient.id) ? list : [patient, ...(list ?? [])])));
+    loadCounts(controller.signal);
+    // The chat can add a patient too; show it here without another request for the list (the counts move, so they are read again).
+    const stop = onPatientAdded((patient) => {
+      setPatients((list) => (list?.some((p) => p.id === patient.id) ? list : [patient, ...(list ?? [])]));
+      loadCounts();
+    });
     return () => {
       controller.abort();
       stop();
     };
-  }, [load]);
+  }, [load, loadCounts]);
 
   async function add() {
     setAdded(null);
@@ -62,6 +80,7 @@ export function SidebarPatients() {
     if (!outcome) return;
     // The row came from the create response, which carries no demographics: mark it from what was just saved.
     setPatients((list) => list?.map((p) => (p.id === outcome.patient.id ? { ...p, demographicsComplete: outcome.complete } : p)) ?? list);
+    loadCounts(); // the demographics were saved after the patient was created: the count moves now
     setOpen(false);
     setAdded(`Added ${outcome.patient.label}.`);
     toggle.current?.focus();
@@ -72,6 +91,14 @@ export function SidebarPatients() {
       <p id="panel-patients-heading" className="text-xs font-medium text-muted-foreground">
         Patients
       </p>
+      {counts && counts.patients > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Demographics:{' '}
+          <span className={counts.complete < counts.patients ? 'text-warning' : 'text-success'}>
+            {counts.complete} of {counts.patients} complete
+          </span>
+        </p>
+      )}
       {failed ? (
         <div role="alert" className="flex flex-col items-start gap-1 text-xs">
           <span className="text-destructive">Patients could not be loaded.</span>

@@ -26,6 +26,11 @@ export class PatientsService {
     return { ...result, items: await this.withCoded(principal.tenantId, result.items) };
   }
 
+  /** How many patients have complete coded demographics, with the denominator. Counts only: reads no ciphertext and asks the key provider for nothing. */
+  completeness(principal: Principal) {
+    return this.demographics.completenessCounts(principal.tenantId);
+  }
+
   /** Attaches each patient's latest coded demographics (sex, birth year, ethnicity). Reads no ciphertext and needs no key. */
   async withCoded(tenantId: string, records: PatientRecord[]): Promise<PatientRecord[]> {
     const coded = await this.demographics.codedFor(
