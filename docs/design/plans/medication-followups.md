@@ -9,6 +9,8 @@ Date: 2026-11-01. Capture backend #244 and compact/type-ahead UI #245 are merged
 | Synthetic staging | Founder as release approver; maintainer prepares evidence | [Capture release plan](medication-capture-staging.md) | Founder reads the concrete plan and explicitly authorizes the target/release; live checks and signed artifacts then establish readiness |
 | Drug–gene flags | Product owner plus a named pharmacist/clinical signer, still to be appointed | [Draft spec 031](../../../specs/031-medication-gene-flags/spec.md) | Product decisions, source rights, independent validation and clinical sign-off precede implementation/release of clinical output |
 
+Tracking issues, assigned to the repository maintainer: [upkeep #246](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros/issues/246), [rights #247](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros/issues/247), [synthetic release #248](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros/issues/248), and [clinical draft #249](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros/issues/249). These remain open until their acceptance criteria are satisfied; preparing the documents does not close the rights, deployment or clinical gates.
+
 ## Permission request
 
 **Status: drafted, not sent; rights remain unconfirmed.** Spec 029 assigns the contact to the founder or counsel. Verify the current ECRI/ISMP rights or licensing contact on the official website before sending; no recipient address has been verified in this session. No ISMP-only rows are copied here.
