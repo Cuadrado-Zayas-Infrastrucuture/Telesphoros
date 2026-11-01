@@ -80,6 +80,7 @@
   --size-button-lg: 3.5rem;
   --size-control: 2.75rem;
 
+  --size-consent-space: 0px;
   /* Device cutouts and the home indicator. Zero on ordinary displays. */
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-right: env(safe-area-inset-right, 0px);

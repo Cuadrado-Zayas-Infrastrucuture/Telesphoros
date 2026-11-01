@@ -1,3 +1,4 @@
+import { preferenceStorage } from '@/lib/storageConsent';
 import { useSyncExternalStore } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ownedStorageMode } from '@/lib/storageMode';
@@ -13,7 +14,7 @@ const listeners = new Set<() => void>();
 
 function stored(): LandingLanguage {
   try {
-    return window.localStorage.getItem(KEY) === 'es' ? 'es' : 'en';
+    return preferenceStorage.read(KEY) === 'es' ? 'es' : 'en';
   } catch {
     return 'en';
   }
@@ -23,12 +24,18 @@ let current: LandingLanguage = typeof window === 'undefined' ? 'en' : stored();
 export function setLandingLanguage(language: LandingLanguage) {
   current = language;
   try {
-    window.localStorage.setItem(KEY, language);
+    preferenceStorage.write(KEY, language);
   } catch {
     /* the choice still applies for this session */
   }
   listeners.forEach((listener) => listener());
 }
+
+// Consent changes may make a saved language available; session choices still take precedence.
+preferenceStorage.subscribe(() => {
+  current = stored();
+  listeners.forEach((listener) => listener());
+});
 
 const subscribe = (listener: () => void) => {
   listeners.add(listener);

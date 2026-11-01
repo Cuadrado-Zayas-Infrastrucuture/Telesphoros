@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { axeViolations, signInAs } from './helpers';
 
-const savedDark = (page: Page) => page.addInitScript(() => window.localStorage.setItem('telesphoros.theme', 'dark'));
+const savedDark = (page: Page) => page.addInitScript(() => { window.localStorage.setItem('telesphoros.storage-consent.v1', JSON.stringify({ version: 1, preferences: true })); window.localStorage.setItem('telesphoros.theme', 'dark'); });
 
 test('an administrator reads usage from the real API: two named months and storage', async ({ page }) => {
   await signInAs(page, 'carol', '/usage');

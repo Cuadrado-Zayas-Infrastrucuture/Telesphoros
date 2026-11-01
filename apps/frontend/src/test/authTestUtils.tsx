@@ -2,6 +2,7 @@ import { act, render, screen } from '@testing-library/react';
 import type { Role } from '@telesphoros/shared-types';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { vi } from 'vitest';
+import { preferenceStorage, CONSENT_KEY } from '@/lib/storageConsent';
 import { routes } from '@/app/routes';
 import { AuthProvider } from '@/auth/AuthProvider';
 import type { AuthClient, Session } from '@/auth/authClient';
@@ -47,7 +48,15 @@ export const API = 'http://api.test';
  * `signedInAs` completes a sign-in first (through /auth/callback, exactly as the browser would),
  * then lands on `path`.
  */
-export function renderApp(path: string, options: { signedInAs?: Role[]; client?: FakeClient; fetchImpl?: typeof fetch } = {}) {
+export function renderApp(
+  path: string,
+  options: { signedInAs?: Role[]; client?: FakeClient; fetchImpl?: typeof fetch; storageChoice?: 'preferences' | 'necessary' | 'unknown' } = {},
+) {
+  // Existing app tests model a returning visitor. Consent-specific tests opt into a first visit or necessary-only choice.
+  if (options.storageChoice === 'unknown') {
+    window.localStorage.removeItem(CONSENT_KEY);
+    window.dispatchEvent(new StorageEvent('storage', { key: null }));
+  } else preferenceStorage.choose(options.storageChoice !== 'necessary');
   const client = options.client ?? fakeClient({ returnTo: path });
   const fetchImpl = options.fetchImpl ?? (fakeFetch({ roles: options.signedInAs ?? [] }) as unknown as typeof fetch);
   const router = createMemoryRouter(routes, { initialEntries: [options.signedInAs ? '/auth/callback' : path] });

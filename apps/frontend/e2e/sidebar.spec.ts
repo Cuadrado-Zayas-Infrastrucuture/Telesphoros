@@ -15,7 +15,7 @@ test.describe('desktop collapse', () => {
 
   for (const dark of [false, true]) {
     test(`collapses to icons with names kept, one Sign out, and no WCAG A/AA violations (${dark ? 'dark' : 'light'})`, async ({ page }, info) => {
-      if (dark) await page.addInitScript(() => window.localStorage.setItem('telesphoros.theme', 'dark'));
+      if (dark) await page.addInitScript(() => { window.localStorage.setItem('telesphoros.storage-consent.v1', JSON.stringify({ version: 1, preferences: true })); window.localStorage.setItem('telesphoros.theme', 'dark'); });
       await signInAs(page, 'alice', '/settings');
       expect(await axeViolations(page)).toEqual([]);
       await page.getByRole('button', { name: 'Collapse sidebar' }).click();
@@ -38,7 +38,7 @@ test.describe('desktop collapse', () => {
 
 test('on a phone the sidebar stays a menu, and a desktop collapse never hides its names', async ({ page }, info) => {
   test.skip((page.viewportSize()?.width ?? 0) >= 1024, 'phone layout only');
-  await page.addInitScript(() => window.localStorage.setItem('telesphoros.sidebar', 'collapsed'));
+  await page.addInitScript(() => { window.localStorage.setItem('telesphoros.storage-consent.v1', JSON.stringify({ version: 1, preferences: true })); window.localStorage.setItem('telesphoros.sidebar', 'collapsed'); });
   await signInAs(page, 'alice', '/settings');
   await expect(page.getByRole('button', { name: 'Collapse sidebar' })).toBeHidden();
   await openWorkspaceNavigation(page);

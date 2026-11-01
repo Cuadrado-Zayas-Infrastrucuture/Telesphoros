@@ -1,3 +1,4 @@
+import { preferenceStorage } from '@/lib/storageConsent';
 import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Role } from '@telesphoros/shared-types';
@@ -50,6 +51,7 @@ const open = (path: string, roles: Role[]) => renderApp(path, { signedInAs: role
 
 afterEach(() => {
   window.localStorage.clear();
+  preferenceStorage.choose(true);
   vi.restoreAllMocks();
 });
 

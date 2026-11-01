@@ -17,7 +17,7 @@ const plate = (image: Locator) =>
       filled: content / element.clientWidth >= 0.75,
     };
   });
-const theme = (page: Page, value: 'dark' | 'light') => page.addInitScript((saved) => window.localStorage.setItem('telesphoros.theme', saved), value);
+const theme = (page: Page, value: 'dark' | 'light') => page.addInitScript((saved) => { window.localStorage.setItem('telesphoros.storage-consent.v1', JSON.stringify({ version: 1, preferences: true })); window.localStorage.setItem('telesphoros.theme', saved); }, value);
 
 for (const mode of ['dark', 'light'] as const) {
   test(`workspace mascot and answer avatar: ${mode === 'dark' ? 'round seafoam plate' : 'no plate'} in the ${mode} theme`, async ({ page }) => {
