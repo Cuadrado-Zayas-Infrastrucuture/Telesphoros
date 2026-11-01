@@ -53,6 +53,7 @@ export default defineConfig({
         LOG_LEVEL: 'warn',
         // Shared fake personas run many uploads at once; quota refusals have an explicit browser control.
         RATE_LIMIT_ENABLED: 'false',
+        MEDICATION_WRITES: 'enabled', // Synthetic acceptance explicitly opens capture; deployed default stays fenced.
         AUTH_VERIFIER: 'cognito',
         COGNITO_APP_CLIENT_ID: 'e2e-client',
         COGNITO_ISSUER: IDP,

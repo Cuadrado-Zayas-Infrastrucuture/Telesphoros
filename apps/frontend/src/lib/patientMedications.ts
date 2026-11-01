@@ -26,6 +26,15 @@ export async function recordMedication(apiFetch: ApiFetch, patient: string, inpu
       body: JSON.stringify(checked.data),
     });
     if (response.ok) return patientMedicationDtoSchema.parse(await response.json());
+    if (response.status === 503) {
+      let reason: unknown;
+      try {
+        reason = (await response.json())?.error?.details?.[0]?.reason;
+      } catch {
+        /* fixed fallback below */
+      }
+      if (reason === 'medication-writes-fenced') throw new SubmitError('Medication recording is temporarily paused. Your entries are kept; retry later.', 503);
+    }
     if (response.status === 409) {
       let reason: unknown;
       try {

@@ -19,6 +19,13 @@ describe('loadEnv', () => {
     });
   });
 
+  it('defaults medication writes to disabled and accepts only an explicit enabled/disabled choice', () => {
+    expect(loadEnv(base)).toMatchObject({ MEDICATION_WRITES: 'disabled' });
+    expect(loadEnv({ ...base, MEDICATION_WRITES: 'enabled' })).toMatchObject({ MEDICATION_WRITES: 'enabled' });
+    expect(loadEnv({ ...base, MEDICATION_WRITES: 'disabled' })).toMatchObject({ MEDICATION_WRITES: 'disabled' });
+    for (const value of ['true', 'false', 'on', '']) expect(() => loadEnv({ ...base, MEDICATION_WRITES: value })).toThrow(/MEDICATION_WRITES/);
+  });
+
   it('coerces PORT from a string and rejects out-of-range ports', () => {
     expect(loadEnv({ ...base, PORT: '8080' }).PORT).toBe(8080);
     expect(() => loadEnv({ ...base, PORT: '70000' })).toThrow(/PORT/);
