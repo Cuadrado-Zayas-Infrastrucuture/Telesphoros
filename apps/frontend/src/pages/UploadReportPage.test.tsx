@@ -1,5 +1,7 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render as renderBare, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactElement } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { axe } from 'vitest-axe';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import UploadReportPage from '@/pages/UploadReportPage';
@@ -41,6 +43,8 @@ const interruptedUpload = () => {
   rememberUpload(progress);
 };
 const submitMock = vi.mocked(submitReport);
+// The page links to /reports in every build, so it renders inside a router.
+const render = (ui: ReactElement) => renderBare(ui, { wrapper: MemoryRouter });
 beforeEach(() => {
   endRecoverySession(pageOwner ?? null);
   window.sessionStorage.clear();
@@ -395,6 +399,19 @@ it('keeps one progress object across retries and clears it when starting another
   await user.click(screen.getByRole('button', { name: 'Upload report' }));
   await screen.findByText(/verified-report-id/);
   expect(submitMock.mock.calls[2]![2]).not.toBe(progress);
+});
+
+it('moves focus to "Report received" and links to the reports, where the status is, in every build', async () => {
+  submitMock.mockReset().mockResolvedValue({ reference: 'verified-report-id' });
+  patientApi.mockReset().mockImplementation(async () => pageResponse());
+  const user = userEvent.setup();
+  render(<UploadReportPage />);
+  expect(screen.getByRole('link', { name: 'Reports page' })).toHaveAttribute('href', '/reports');
+  await fillValidForm(user);
+  await user.click(screen.getByRole('button', { name: 'Upload report' }));
+  const received = await screen.findByRole('heading', { level: 1, name: 'Report received' });
+  await waitFor(() => expect(received).toHaveFocus());
+  expect(screen.getByRole('link', { name: 'View reports' })).toHaveAttribute('href', '/reports');
 });
 
 it('never renders raw service or transport errors', async () => {

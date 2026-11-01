@@ -19,7 +19,7 @@ import { productUploadSchema } from '@/lib/productUploadSchema';
 import { reportTypeFor } from '@/lib/reportTypeFor';
 import { readRecovery } from '@/lib/uploadRecovery';
 import { UPLOAD_STEPS, UPLOAD_WORDS, uploadStage } from '@/lib/uploadSteps';
-import { fileProblem } from '@/lib/workspaceFileRule';
+import { chatFileAccept, fileProblem } from '@/lib/workspaceFileRule';
 import { announcePatientAdded, announceReportsChanged, onPatientAdded } from '@/lib/workspaceEvents';
 import '@/styles/one-screen.css';
 
@@ -56,6 +56,8 @@ export function WorkspaceConversation() {
   const canAttach = roles.some((role) => WRITER_ROLES.includes(role));
   const [patients, setPatients] = useState<PatientDto[] | null>(null);
   const [patientsError, setPatientsError] = useState<string | null>(null);
+  // Bumped by Retry: reloading the page instead would sign this tab out (the sign-in is held in memory only).
+  const [patientsAttempt, setPatientsAttempt] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [patientId, setPatientId] = useState('');
   const [synthetic, setSynthetic] = useState(false);
@@ -94,7 +96,7 @@ export function WorkspaceConversation() {
       controller.abort();
       stop();
     };
-  }, [canAttach, apiFetch]);
+  }, [canAttach, apiFetch, patientsAttempt]);
 
   const update = (id: number, change: Partial<Extract<Entry, { kind: 'upload' }>>) =>
     setEntries((list) => list.map((entry) => (entry.id === id && entry.kind === 'upload' ? { ...entry, ...change } : entry)));
@@ -274,8 +276,27 @@ export function WorkspaceConversation() {
                     />
                   )}
                 </>
+              ) : patientsError ? (
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  <span role="alert" className="text-destructive">
+                    {patientsError}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-label="Retry loading patients"
+                    onClick={() => {
+                      setPatientsError(null);
+                      setPatientsAttempt((attempt) => attempt + 1);
+                    }}
+                  >
+                    Retry
+                  </Button>
+                </span>
               ) : (
-                <span className="text-muted-foreground">{patientsError ?? 'loading patients…'}</span>
+                <span role="status" className="text-muted-foreground">
+                  loading patients…
+                </span>
               )}
             </div>
             {/* Spec 025 T302: one line, never blocking. A new patient made here has a label only, so it starts Incomplete. */}
@@ -302,7 +323,15 @@ export function WorkspaceConversation() {
         <div className="flex items-center justify-between gap-2">
           {canAttach ? (
             <>
-              <input ref={picker} type="file" accept=".json,.pdf" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={(event) => choose(event.target.files?.[0])} />
+              <input
+                ref={picker}
+                type="file"
+                accept={chatFileAccept()}
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden="true"
+                onChange={(event) => choose(event.target.files?.[0])}
+              />
               <Button variant="ghost" size="sm" className="size-11 rounded-full p-0" aria-label="Attach a report" onClick={() => picker.current?.click()}>
                 <Paperclip aria-hidden="true" className="size-5" />
               </Button>
