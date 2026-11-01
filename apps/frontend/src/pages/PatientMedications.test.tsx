@@ -56,6 +56,16 @@ async function open(roles: Role[] = ['clinician'], rows: PatientMedicationDto[] 
 }
 
 describe('patient medication capture', () => {
+  it('makes NLM attribution and source currency available in a collapsed disclosure', async () => {
+    const { region } = await open(['reader'], [row]);
+    const attribution = region.getByText(/This product uses publicly available data courtesy of/);
+    expect(attribution).not.toBeVisible();
+    await userEvent.click(region.getByText('Drug list information'));
+    expect(attribution).toBeVisible();
+    expect(attribution).toHaveTextContent('U.S. National Library of Medicine');
+    expect(attribution).toHaveTextContent('does not endorse or recommend');
+    expect(region.getByText('This bundled snapshot may not reflect the most current or accurate NLM data.')).toBeVisible();
+  });
   it('offers local suggestions and requires an explicit keyboard choice before saving', async () => {
     const { region, posts } = await open();
     await userEvent.click(region.getByRole('button', { name: 'Add medication' }));

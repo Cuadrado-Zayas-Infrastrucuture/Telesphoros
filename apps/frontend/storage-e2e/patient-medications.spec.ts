@@ -26,6 +26,14 @@ test('clinicians add, correct and stop coded medications; readers see prior vers
   const path = await openPatient(page);
   const medications = page.getByRole('region', { name: 'Medications' });
   await expect(medications.getByText('No medications recorded yet.')).toBeVisible();
+  const attribution = medications.getByText(/This product uses publicly available data courtesy of/);
+  await expect(attribution).toBeHidden();
+  await medications.getByText('Drug list information', { exact: true }).click();
+  await expect(attribution).toBeVisible();
+  await expect(attribution).toContainText('U.S. National Library of Medicine');
+  await expect(medications.getByText('This bundled snapshot may not reflect the most current or accurate NLM data.')).toBeVisible();
+  expect(await axeViolations(page)).toEqual([]);
+  await medications.getByText('Drug list information', { exact: true }).click();
   await medications.getByRole('button', { name: 'Add medication' }).click();
   await medications.getByRole('combobox', { name: 'Drug', exact: true }).fill('hydralaz');
   await expect(medications.getByRole('option', { name: 'hydralazine', exact: true })).toHaveText('hydrALAZINE');
