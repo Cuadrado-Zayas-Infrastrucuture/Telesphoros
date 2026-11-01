@@ -2,7 +2,7 @@ import productMark from '@/assets/telesphoros-shield-rx.png';
 import { ownedStorageMode } from '@/lib/storageMode';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
-import { ADMIN_ROLES, WRITER_ROLES } from '@/auth/roles';
+import { ADMIN_ROLES, CLINICAL_READ_ROLES, WRITER_ROLES } from '@/auth/roles';
 import { AccountMenu } from '@/components/layout/AccountMenu';
 import { cn } from '@/lib/utils';
 import { useLandingRoute, useShellCopy } from '@/lib/landing/landing-language';
@@ -17,7 +17,8 @@ export function SiteHeader() {
   // Links to pages the user cannot use are simply not shown. The pages are guarded as well.
   const links = [
     { to: '/', label: 'Overview', end: true, show: !landing },
-    { to: '/reports', label: 'Reports', end: true, show: roles.length > 0 },
+    // The page needs a clinical-read role (routes.tsx), so an administrator alone is not offered a link that ends in "forbidden".
+    { to: '/reports', label: 'Reports', end: true, show: roles.some((r) => CLINICAL_READ_ROLES.includes(r)) },
     ...(import.meta.env.DEV && location.hostname === '127.0.0.1' && ownedStorageMode() && roles.length > 0 && pathname !== '/reports'
       ? [{ to: '/local-interpretation', label: 'AI preview', end: true, show: true }]
       : []),

@@ -152,6 +152,12 @@ describe('the chat-first home in every build (specs/024)', () => {
     expect(submitReport).toHaveBeenCalledTimes(1);
   });
 
+  it('offers only the file types this build accepts in the attach picker, so a PDF is not offered and then refused (CH-6)', async () => {
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    expect(file()).toHaveAttribute('accept', '.json');
+  });
+
   it('refuses a PDF without owned-storage mode, naming the local preview, and uploads nothing (CH-6, D4)', async () => {
     const { fetchImpl } = open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
