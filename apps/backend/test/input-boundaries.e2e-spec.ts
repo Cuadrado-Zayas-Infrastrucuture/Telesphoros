@@ -1,14 +1,33 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
-import { createTestApp } from './helpers/app';
+import { createTestApp, usingPostgres } from './helpers/app';
+import { createEphemeralDatabase } from './helpers/database';
+import type { EphemeralDatabase } from './helpers/database';
 import { bearer, clinicianA } from './helpers/tokens';
 
 let app: NestExpressApplication;
+let database: Promise<EphemeralDatabase | undefined> | undefined;
+let startingApp: Promise<NestExpressApplication> | undefined;
+const cancellation = new AbortController();
+// Like intake fixtures, database preparation and API startup each retain the default five-second hook budget.
 beforeAll(async () => {
-  app = await createTestApp();
+  database = usingPostgres() ? createEphemeralDatabase({ signal: cancellation.signal }) : Promise.resolve(undefined);
+  await database;
+});
+beforeAll(async () => {
+  const pg = await database;
+  cancellation.signal.throwIfAborted();
+  startingApp = createTestApp({ ...(pg ? { postgresUrl: pg.appUrl, ownerUrl: pg.adminUrl } : {}), signal: cancellation.signal });
+  app = await startingApp;
 });
 afterAll(async () => {
-  await app.close();
+  cancellation.abort(new Error('Input-boundary fixture scope ended'));
+  // Await pending ownership too: a timed-out hook does not cancel its setup promise.
+  try {
+    await (await startingApp)?.close();
+  } finally {
+    await (await database)?.drop();
+  }
 });
 
 it('rejects unexpected query and body without changing a record; auth takes precedence', async () => {
