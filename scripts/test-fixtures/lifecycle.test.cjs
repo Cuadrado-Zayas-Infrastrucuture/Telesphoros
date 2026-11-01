@@ -17,10 +17,12 @@ async function databases() {
 for (const [mode, file, name, expected] of [
   ['split', 'test/local-storage-intake.e2e-spec.ts', 'stores and retrieves exact lab-pdf', 0],
   ['late', 'test/local-storage-intake.e2e-spec.ts', 'stores and retrieves exact lab-pdf', 1],
+  ['split', 'test/input-boundaries.e2e-spec.ts', 'rejects unexpected query and body', 0],
+  ['late', 'test/input-boundaries.e2e-spec.ts', 'rejects unexpected query and body', 1],
   ['lock', 'test/db/report-registration.pg-spec.ts', 'fails migration on bounded lock contention', 0],
   ['late-lock', 'test/db/report-registration.pg-spec.ts', 'fails migration on bounded lock contention', 1],
 ]) {
-  test(`${mode}: real resources close naturally and checks retain their deadlines`, async () => {
+  test(`${mode}: real resources close naturally and checks retain their deadlines [${file}]`, async () => {
     const before = await databases();
     const result = spawnSync(process.execPath, [backendRequire.resolve('jest/bin/jest'), '--runInBand',
       '--runTestsByPath', file, '--testNamePattern', name,
