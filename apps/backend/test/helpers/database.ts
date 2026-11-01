@@ -140,14 +140,32 @@ export async function ensureMigratedTemplate(base: string = adminUrl(), signal?:
       await admin.query(`DROP DATABASE ${datname} WITH (FORCE)`);
     }
     const build = `${TEMPLATE_BUILD_PREFIX}${randomBytes(6).toString('hex')}`;
-    await admin.query(`CREATE DATABASE ${build}`);
-    await withAdmin(withDatabase(base, build), async (migrator) => {
+    let owned = build;
+    let created = false;
+    try {
+      await admin.query(`CREATE DATABASE ${build}`);
+      created = true;
+      await withAdmin(withDatabase(base, build), async (migrator) => {
+        signal?.throwIfAborted();
+        await migrateUp(migrator);
+      });
       signal?.throwIfAborted();
-      await migrateUp(migrator);
-    });
-    signal?.throwIfAborted();
-    await admin.query(`ALTER DATABASE ${build} RENAME TO ${template}`);
-    await admin.query(`ALTER DATABASE ${template} WITH IS_TEMPLATE true ALLOW_CONNECTIONS false`);
+      await admin.query(`ALTER DATABASE ${build} RENAME TO ${template}`);
+      owned = template;
+      await admin.query(`ALTER DATABASE ${template} WITH IS_TEMPLATE true ALLOW_CONNECTIONS false`);
+    } catch (error) {
+      // This builder owns the unfinished database until publication; a failed build must not wait for a later retry to reclaim it.
+      await disposeFixtures(
+        [
+          async () => {
+            if (!created) return;
+            await admin.query(`ALTER DATABASE ${owned} IS_TEMPLATE false`);
+            await admin.query(`DROP DATABASE ${owned} WITH (FORCE)`);
+          },
+        ],
+        [error],
+      );
+    }
   });
   return template;
 }

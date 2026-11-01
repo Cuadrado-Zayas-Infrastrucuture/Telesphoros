@@ -1,3 +1,5 @@
+import { PatientMedicationsRepository, UnavailablePatientMedicationsRepository } from './patient-medications.repository';
+import { PostgresPatientMedicationsRepository } from './postgres/patient-medications.repository';
 import { type DynamicModule, Global, Module, type Provider } from '@nestjs/common';
 import { Database } from '../db/database';
 import { InMemorySecurityAuditStore, PostgresSecurityAuditStore, SecurityAuditStore } from '../auth/security-audit';
@@ -31,6 +33,7 @@ export class StorageModule {
     const repositories = [
       PatientsRepository,
       PatientDemographicsRepository,
+      PatientMedicationsRepository,
       PatientIdentifiersRepository,
       ReportsRepository,
       MembershipRepository,
@@ -46,6 +49,7 @@ export class StorageModule {
         { provide: SecurityAuditStore, useClass: PostgresSecurityAuditStore },
         { provide: PatientsRepository, useClass: PostgresPatientsRepository },
         { provide: PatientDemographicsRepository, useClass: PostgresPatientDemographicsRepository },
+        { provide: PatientMedicationsRepository, useClass: PostgresPatientMedicationsRepository },
         { provide: PatientIdentifiersRepository, useClass: PostgresPatientIdentifiersRepository },
         { provide: ReportsRepository, useClass: PostgresReportsRepository },
         { provide: MembershipRepository, useClass: PostgresMembershipRepository },
@@ -65,6 +69,7 @@ export class StorageModule {
         { provide: PatientsRepository, useClass: InMemoryPatientsRepository },
         // Demographics are ledger records and the ledger exists only on PostgreSQL: here lists show no coded fields and the routes answer 503.
         { provide: PatientDemographicsRepository, useClass: UnavailablePatientDemographicsRepository },
+        { provide: PatientMedicationsRepository, useClass: UnavailablePatientMedicationsRepository },
         { provide: PatientIdentifiersRepository, useClass: InMemoryPatientIdentifiersRepository },
         { provide: ReportsRepository, useClass: InMemoryReportsRepository },
         { provide: MembershipRepository, useClass: InMemoryMembershipRepository },

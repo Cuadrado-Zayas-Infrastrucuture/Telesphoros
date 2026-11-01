@@ -11,7 +11,7 @@ async function databases() {
   const client = new Client({ connectionString: process.env.TEST_DATABASE_URL });
   try {
     await client.connect();
-    return (await client.query('SELECT datname FROM pg_database WHERE left(datname, 5)=$1 ORDER BY datname', ['test_'])).rows.map(row => row.datname);
+    return (await client.query('SELECT datname FROM pg_database WHERE starts_with(datname, $1) OR starts_with(datname, $2) ORDER BY datname', ['test_', 'tplbuild_'])).rows.map(row => row.datname);
   } finally { await client.end(); }
 }
 for (const [mode, file, name, expected] of [

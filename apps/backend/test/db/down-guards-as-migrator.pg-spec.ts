@@ -5,6 +5,7 @@ import { Database } from '../../src/db/database';
 import { EvaluationRequestsService } from '../../src/lab-reports/evaluation-requests.service';
 import { EvaluationRequestsRepository } from '../../src/storage/postgres/evaluation-requests.repository';
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
+import { PostgresPatientMedicationsRepository } from '../../src/storage/postgres/patient-medications.repository';
 import { PostgresPatientDemographicsRepository } from '../../src/storage/postgres/patient-demographics.repository';
 import { sealField } from '../../src/patient-demographics/identity-crypto';
 import { PostgresResultRendersRepository } from '../../src/storage/postgres/result-renders';
@@ -827,6 +828,45 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
       expect(await migrateDown(f.migrator, 1)).toEqual([through.reverted.at(-1)]);
       expect((await stillForced(f.migrator)).every((t) => t.f)).toBe(true);
     } finally {
+      await f.drop();
+    }
+  });
+});
+
+describe('patient medications down guard as the non-superuser migrator', () => {
+  it('refuses populated records with FORCE restored, and restores the prior ledger function when empty', async () => {
+    const f = await fixture();
+    const connection = new Database({ url: f.app, ssl: 'disable' });
+    try {
+      expect((await f.migrator.query('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user')).rows).toEqual([{ rolsuper: false, rolbypassrls: false }]);
+      const seeded = await seedLabReport(f.admin, tenant);
+      const repo = new PostgresPatientMedicationsRepository(connection, new PostgresLedgerRecordsRepository(connection));
+      await repo.insertVersion(tenant, 'SYN-clinician', {
+        id: randomUUID(),
+        entryId: randomUUID(),
+        patientId: seeded.patientId,
+        name: 'syn-ingredient',
+        requestHash: 'a'.repeat(64),
+        input: { requestId: randomUUID(), rxcui: '991001', listVersion: 'a'.repeat(64), status: 'active', startMonth: null, stopMonth: null, source: 'clinician-entered' },
+      });
+      expect((await f.migrator.query('SELECT count(*)::int AS n FROM patient_medications')).rows).toEqual([{ n: 0 }]); // FORCE hides rows from the owner.
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated patient medications/);
+      expect((await f.migrator.query("SELECT relforcerowsecurity AS forced FROM pg_class WHERE relname='patient_medications'")).rows).toEqual([{ forced: true }]);
+      // Remove synthetic fixtures only as the test administrator, to exercise the empty down path in the same database.
+      await withAdmin(f.admin, async (c) => {
+        await c.query('BEGIN');
+        await c.query('SET LOCAL session_replication_role = replica');
+        await c.query('DELETE FROM patient_medications');
+        await c.query("DELETE FROM ledger_events WHERE event_type='patient-medication'");
+        await c.query('COMMIT');
+      });
+      expect(await migrateDown(f.migrator, 1)).toEqual(['0066']);
+      expect((await f.migrator.query("SELECT to_regclass('patient_medications') AS name")).rows).toEqual([{ name: null }]);
+      const fn = (await f.migrator.query("SELECT pg_get_functiondef('ledger_event_row_exists()'::regprocedure) AS body")).rows[0].body;
+      expect(fn).toContain('patient_demographics');
+      expect(fn).not.toContain('patient_medications');
+    } finally {
+      await connection.onModuleDestroy();
       await f.drop();
     }
   });
