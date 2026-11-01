@@ -21,6 +21,8 @@ export function MedicationForm(props: { patientId: string; initial?: PatientMedi
   const [problem, setProblem] = useState<string | null>(null);
   const saving = useRef(false);
   const request = useRef<{ key: string; id: string } | null>(null);
+  const initial = props.initial;
+  const retired = initial && BUNDLED_DRUG_LIST && !BUNDLED_DRUG_LIST.entries.some((entry) => entry.rxcui === initial.rxcui) ? initial : undefined;
   const label = props.stopping ? 'Stop medication' : props.initial ? 'Correct medication' : 'Add medication';
 
   async function save() {
@@ -69,7 +71,17 @@ export function MedicationForm(props: { patientId: string; initial?: PatientMedi
       <p className="text-sm text-muted-foreground">
         {props.initial ? 'This adds a version. Earlier versions stay readable.' : 'Record one ingredient. Dates are optional year-months.'}
       </p>
-      <DrugPicker value={drug} disabled={busy || Boolean(props.stopping)} onChange={setDrug} />
+      {retired ? (
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={`${id}-recorded-drug`}>Recorded drug</Label>
+          <Input id={`${id}-recorded-drug`} value={retired.name} readOnly aria-describedby={`${id}-retired-help`} />
+          <p id={`${id}-retired-help`} className="text-sm text-muted-foreground">
+            This ingredient is no longer in the current list. Its recorded identity is retained.
+          </p>
+        </div>
+      ) : (
+        <DrugPicker value={drug} disabled={busy || Boolean(props.stopping)} onChange={setDrug} />
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor={`${id}-status`}>Status</Label>

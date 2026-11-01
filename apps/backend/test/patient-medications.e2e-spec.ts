@@ -95,6 +95,67 @@ const body = (over: object = {}) => ({
     expect(await lab.count('patient_medications', 'patient_id=$1', [patient])).toBe(3);
     expect(await verifier.verify(lab.tenant)).toMatchObject({ status: 'ok', eventsChecked: 3, failures: [] });
   });
+  async function afterRetirement(run: (updated: LabPipeline) => Promise<void>) {
+    const updatedApp = await createTestApp({
+      postgresUrl: db.appUrl,
+      overrides: [{ provide: MEDICATION_DRUG_LIST, useValue: { ...LIST, version: 'b'.repeat(64), entries: [LIST.entries[1]] } }],
+    });
+    try {
+      await run(new LabPipeline(updatedApp, db.adminUrl, lab.tenant));
+    } finally {
+      await updatedApp.close();
+    }
+  }
+  it.each(['stop', 'correct'] as const)('can %s an existing ingredient after retirement without rewriting its provenance', async (action) => {
+    const { clinician, patient } = await world();
+    const first = (await post(clinician, patient, body()).expect(201)).body;
+    await afterRetirement(async (updated) => {
+      const payload = body({
+        entryId: first.entryId,
+        expectedVersion: 1,
+        listVersion: 'b'.repeat(64),
+        ...(action === 'stop' ? { status: 'stopped', stopMonth: '2026-03' } : { source: 'clinician-entered', startMonth: '2025-12' }),
+      });
+      const save = (data: object) => updated.api().post(`/api/v1/patients/${patient}/medications`).set(bearer(clinician.token)).send(data);
+      const results = await Promise.all(Array.from({ length: 4 }, () => save(payload)));
+      expect(results.map((r) => r.status)).toEqual([201, 201, 201, 201]);
+      expect(new Set(results.map((r) => r.body.id)).size).toBe(1);
+      expect(results[0]!.body).toMatchObject({
+        entryId: first.entryId,
+        version: 2,
+        rxcui: '991001',
+        name: NAME,
+        listVersion: LIST.version,
+        ...(action === 'stop' ? { status: 'stopped', stopMonth: '2026-03' } : { source: 'clinician-entered', startMonth: '2025-12' }),
+      });
+      await save({ ...payload, requestId: randomUUID() }).expect(409);
+      await save({ ...payload, source: 'patient-reported', startMonth: '2025-11' }).expect(409);
+      const historic = (await get(clinician, patient, `?entryId=${first.entryId}&version=1`).expect(200)).body.items[0];
+      expect(historic).toMatchObject({ name: NAME, listVersion: LIST.version, version: 1, current: false, status: 'active', startMonth: '2026-01' });
+      expect(await lab.count('patient_medications', 'patient_id=$1', [patient])).toBe(2);
+      expect(await verifier.verify(lab.tenant)).toMatchObject({ status: 'ok', eventsChecked: 2, failures: [] });
+    });
+  });
+  it('does not admit retired codes as new entries, replacements or cross-patient/tenant edits', async () => {
+    const { clinician, patient } = await world();
+    const first = (await post(clinician, patient, body()).expect(201)).body;
+    const other = (await post(clinician, patient, body({ rxcui: '991002' })).expect(201)).body;
+    const otherPatient = await lab.patient(clinician);
+    const outsider = await new LabPipeline(app, db.adminUrl).person('SYN-outsider', ['clinician']);
+    const reader = await lab.person('SYN-reader', ['reader']);
+    await afterRetirement(async (updated) => {
+      const save = (who: Person, target: string, data: object) => updated.api().post(`/api/v1/patients/${target}/medications`).set(bearer(who.token)).send(data);
+      const edit = body({ listVersion: 'b'.repeat(64), entryId: first.entryId, expectedVersion: 1 });
+      await save(clinician, patient, body({ listVersion: 'b'.repeat(64) })).expect(400);
+      await save(clinician, patient, { ...edit, entryId: other.entryId }).expect(400);
+      await save(clinician, otherPatient, edit).expect(400);
+      await save(outsider, patient, edit).expect(404);
+      await save(reader, patient, edit).expect(403);
+      await save(clinician, patient, { ...edit, listVersion: LIST.version }).expect(409);
+      await save(clinician, patient, { ...edit, rxcui: '991003' }).expect(400);
+      expect(await lab.count('patient_medications', 'patient_id=$1', [patient])).toBe(2);
+    });
+  });
   it('stores the canonical source name for a Tall Man drug, never its visual display form', async () => {
     const { clinician, patient } = await world();
     const record = (await post(clinician, patient, body({ rxcui: '991002', startMonth: undefined, stopMonth: undefined })).expect(201)).body;
