@@ -513,12 +513,7 @@ describe('demographics while adding and choosing a patient (spec 025 T301, T302)
   it('says once, without blocking, that the chosen patient is Incomplete, and links to its page', async () => {
     patientApi.mockReset().mockImplementation(async () => pageResponse([incompletePatient]));
     const user = userEvent.setup();
-    const { MemoryRouter } = await import('react-router-dom');
-    render(
-      <MemoryRouter>
-        <UploadReportPage />
-      </MemoryRouter>,
-    );
+    render(<UploadReportPage />);
     const select = await screen.findByLabelText(/synthetic patient \(required\)/i);
     expect(await screen.findByRole('option', { name: 'SYN-0001' })).toBeInTheDocument();
     await user.selectOptions(select, patientId);
