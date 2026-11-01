@@ -248,3 +248,90 @@ test.describe('Add patient in the panel (CH-9)', () => {
     await expect(page.getByRole('button', { name: 'Add patient' })).toHaveCount(0);
   });
 });
+
+test('a lost patient-create response locks Send, then retries the same identity and uploads once', async ({ page }, info) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const bodies: unknown[] = [];
+  const returnedIds: string[] = [];
+  let release!: () => void;
+  const responseGate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/api/v1/patients', async (route) => {
+    if (route.request().method() !== 'POST') { await route.continue(); return; }
+    bodies.push(route.request().postDataJSON());
+    const stored = await route.fetch();
+    expect(stored.ok()).toBe(true);
+    returnedIds.push((await stored.json()).id);
+    if (bodies.length === 1) {
+      await responseGate;
+      await route.abort('failed'); // The real API created it; only its response is lost.
+    } else await route.fulfill({ response: stored });
+  });
+  await signInAs(page, 'alice', '/workspace');
+  const name = `replay-${crypto.randomUUID().slice(0, 8)}.json`;
+  await page.locator('input[type=file]').setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
+  await page.getByRole('combobox', { name: 'Patient' }).selectOption('new');
+  await page.getByRole('textbox', { name: 'New patient label' }).fill(label());
+  await page.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' }).check();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  const pending = page.getByRole('button', { name: 'Adding patient', exact: true });
+  await expect(pending).toBeDisabled();
+  await expect(pending).toHaveAttribute('aria-busy', 'true');
+  await expect(pending.locator('svg')).toHaveCSS('animation-name', 'none');
+  await expect(page.getByRole('combobox', { name: 'Patient' })).toBeDisabled();
+  await pending.scrollIntoViewIfNeeded();
+  const box = await pending.boundingBox();
+  expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  const form = page.getByRole('form', { name: 'Report and question' });
+  try {
+    const headingBox = await page.getByRole('heading', { level: 1, name: 'Start with a synthetic report.' }).boundingBox();
+    const formBox = await form.boundingBox();
+    expect(headingBox).not.toBeNull();
+    expect(formBox).not.toBeNull();
+    expect(headingBox!.y + headingBox!.height).toBeLessThanOrEqual(formBox!.y);
+    await page.screenshot({ path: info.outputPath('patient-create-pending.png') });
+    await form.evaluate((node) => (node as HTMLFormElement).requestSubmit());
+    expect(bodies).toHaveLength(1);
+  } finally {
+    release(); // Also settle the held response when a layout assertion fails.
+  }
+  await expect(page.getByRole('alert').filter({ hasText: /patient/i })).toBeVisible();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Conversation' }).getByRole('list', { name: `Upload of ${name}` })).toHaveCount(1);
+  await expect(page.getByRole('region', { name: 'Conversation' }).getByText('Received', { exact: true })).toBeVisible();
+  expect(bodies).toHaveLength(2);
+  expect(bodies[1]).toEqual(bodies[0]);
+  expect(returnedIds).toHaveLength(2);
+  expect(returnedIds[1]).toBe(returnedIds[0]);
+});
+
+test('attachment Undo restores the file, pauses for keyboard focus and expires without a request', async ({ page }, info) => {
+  await signInAs(page, 'alice', '/workspace');
+  await page.clock.install();
+  // Freeze before creating the timer: wall-clock time must not leak into the 7999/8000ms boundary.
+  await page.clock.pauseAt(new Date(Date.now() + 60_000));
+  const name = `undo-${crypto.randomUUID().slice(0, 8)}.json`;
+  const form = page.getByRole('form', { name: 'Report and question' });
+  await page.locator('input[type=file]').setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
+  await page.getByRole('textbox', { name: 'Question' }).fill('Keep this note');
+  const posts: string[] = [];
+  page.on('request', (request) => { if (request.method() === 'POST') posts.push(request.url()); });
+  await form.getByRole('button', { name: 'Remove file' }).click();
+  const undo = form.getByRole('button', { name: 'Undo attachment removal' });
+  await expect(form.getByRole('status').filter({ hasText: 'Attachment removed.' })).toBeVisible();
+  await undo.focus();
+  await page.mouse.move(0, 0);
+  await page.clock.fastForward(9_000);
+  await expect(undo).toBeVisible();
+  await page.screenshot({ path: info.outputPath('attachment-undo.png') });
+  await undo.press('Enter');
+  await expect(form.getByText(name, { exact: true })).toBeVisible();
+  await expect(form.getByRole('textbox', { name: 'Question' })).toHaveValue('Keep this note');
+  await form.getByRole('button', { name: 'Remove file' }).click();
+  await form.getByRole('textbox', { name: 'Question' }).focus();
+  await page.mouse.move(0, 0);
+  await page.clock.fastForward(7_999);
+  await expect(undo).toBeVisible();
+  await page.clock.fastForward(1);
+  await expect(undo).toHaveCount(0);
+  expect(posts).toEqual([]);
+});

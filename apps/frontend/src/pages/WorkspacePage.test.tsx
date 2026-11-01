@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReportStatus, Role } from '@telesphoros/shared-types';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -54,6 +54,7 @@ beforeEach(() => {
   vi.mocked(submitReport).mockResolvedValue({ reference: REPORT_ID });
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.clearAllMocks();
 });
 
@@ -114,6 +115,85 @@ describe('the chat-first home in every build (specs/024)', () => {
     await userEvent.upload(file(), json());
     await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Patient' }), 'new');
     expect(screen.getByRole('textbox', { name: 'New patient label' })).toHaveAccessibleDescription('Letters, numbers and hyphens. A code, never a name.');
+  });
+
+  it('locks Send while creating a patient, then retries a failed create with the same identity and sends the report once', async () => {
+    const requests: Array<{ label: string; requestId: string }> = [];
+    const replies: Array<(response: Response) => void> = [];
+    const ok = api(['clinician']);
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      if (String(input).includes('/api/v1/patients') && init?.method === 'POST') {
+        requests.push(JSON.parse(String(init.body)));
+        return new Promise<Response>((resolve) => replies.push(resolve));
+      }
+      return ok(input, init);
+    });
+    renderApp('/workspace', { signedInAs: ['clinician'], fetchImpl });
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.upload(file(), json());
+    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Patient' }), 'new');
+    await userEvent.type(screen.getByRole('textbox', { name: 'New patient label' }), 'SYN-NEW');
+    await userEvent.click(screen.getByRole('checkbox', CONFIRM));
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(requests).toHaveLength(1));
+    const pending = screen.getByRole('button', { name: 'Adding patient' });
+    expect(pending).toBeDisabled();
+    expect(pending).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByRole('combobox', { name: 'Patient' })).toBeDisabled();
+    fireEvent.submit(screen.getByRole('form', { name: 'Report and question' }));
+    expect(requests).toHaveLength(1);
+    await act(async () => replies[0]!(new Response('{}', { status: 503 })));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/patient/i);
+    expect(submitReport).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(requests).toHaveLength(2));
+    expect(requests[1]).toEqual(requests[0]);
+    expect(requests[0]!.requestId).toMatch(/^[0-9a-f-]{36}$/);
+    await act(async () => replies[1]!(new Response(JSON.stringify({ ...PATIENT, id: '1a8fad5b-d9cb-469f-a165-70867728950f', label: 'SYN-NEW' }), { status: 201 })));
+    expect(await within(await conversation()).findByText('Received')).toBeVisible();
+    expect(submitReport).toHaveBeenCalledTimes(1);
+  });
+
+  it('can undo removing an unsent attachment without losing the selected patient or note, and sends nothing by itself', async () => {
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.upload(file(), json());
+    const form = within(screen.getByRole('form', { name: 'Report and question' }));
+    await userEvent.type(form.getByRole('textbox', { name: 'Question' }), 'Keep this note');
+    await userEvent.click(form.getByRole('button', { name: 'Remove file' }));
+    expect(form.queryByText('SYN-004-cyp2c19.json')).not.toBeInTheDocument();
+    const undo = form.getByRole('button', { name: 'Undo attachment removal' });
+    expect(undo.closest('[role="status"]')).toHaveTextContent('Attachment removed.');
+    await userEvent.click(undo);
+    expect(form.getByText('SYN-004-cyp2c19.json')).toBeVisible();
+    expect(form.getByRole('combobox', { name: 'Patient' })).toHaveValue(PATIENT.id);
+    expect(form.getByRole('textbox', { name: 'Question' })).toHaveValue('Keep this note');
+    expect(form.queryByRole('button', { name: 'Undo attachment removal' })).not.toBeInTheDocument();
+    expect(submitReport).not.toHaveBeenCalled();
+  });
+
+  it('expires the attachment Undo after eight seconds', async () => {
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.upload(file(), json());
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove file' }));
+    act(() => vi.advanceTimersByTime(7_999));
+    expect(screen.getByRole('button', { name: 'Undo attachment removal' })).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.queryByRole('button', { name: 'Undo attachment removal' })).not.toBeInTheDocument();
+    expect(submitReport).not.toHaveBeenCalled();
+  });
+
+  it('a replacement attachment supersedes the removed file instead of leaving an Undo that restores stale input', async () => {
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.upload(file(), json());
+    await userEvent.click(screen.getByRole('button', { name: 'Remove file' }));
+    await userEvent.upload(file(), new File(['{"synthetic":true}'], 'SYN-REPLACEMENT.json'));
+    const form = within(screen.getByRole('form', { name: 'Report and question' }));
+    expect(form.getByText('SYN-REPLACEMENT.json')).toBeVisible();
+    expect(form.queryByRole('button', { name: 'Undo attachment removal' })).not.toBeInTheDocument();
   });
 
   it('needs the synthetic confirmation before it sends (D5)', async () => {
