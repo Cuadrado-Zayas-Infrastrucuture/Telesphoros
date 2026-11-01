@@ -13,5 +13,7 @@ This file only points. The rules live in those documents so they cannot drift ap
 - **Plan before code.** `docs/STATUS.md` says what a plan contains and that the founder approves it first.
 - **A green run without the database and S3 tiers proves nothing about the schema.** See "Running things locally" in `docs/STATUS.md`.
 - **Some commands are refused for every agent session** (secrets, applies, force pushes): `docs/ops/agent-policy.md`.
+- **Before planning anything against staging, the founder runs `scripts/staging/staging-status.sh`** and the plan quotes its table: see
+  "Checking it again" in `docs/ops/environments.md`.
 
 This is the rebuild, a separate repository from the earlier Telesphoros gateway; that repository's conventions do not apply here.
