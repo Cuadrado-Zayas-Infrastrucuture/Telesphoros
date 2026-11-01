@@ -2,15 +2,15 @@
 
 Spec amendment A1 (plan.md) was approved on 2026-10-31 and is part of spec.md D6.
 
-## Backend PR (`feat/usage-days-api`)
+## Backend PR (`feat/usage-days-api`), merged as #219
 
-- [ ] T001 `usageDaysQuerySchema` and `usageDaysDtoSchema` in shared-types (D6 with A1, USC-4)
-- [ ] T002 `usageYear` and `puertoRicoDate` in Puerto Rico time, with unit tests (D4, USC-2)
-- [ ] T003 `UsageRepository.uploadsByDay` and `createdAt`: in-memory and PostgreSQL (D1, D5, USC-1, USC-3, USC-5)
-- [ ] T004 `GET /usage/days`, admin only, 400 for a year outside the range (D2, D5)
-- [ ] T005 PostgreSQL spec and e2e on all tiers; deliberate breaks
-- [ ] T006 `EXPLAIN (ANALYZE)` on 100,000 seeded reports; add the index migration only if the query takes more than 100 ms
-- [ ] T007 Full local loop and gitleaks
+- [x] T001 `usageDaysQuerySchema` and `usageDaysDtoSchema` in shared-types (D6 with A1, USC-4)
+- [x] T002 `usageYear` and `puertoRicoDate` in Puerto Rico time, with unit tests (D4, USC-2)
+- [x] T003 `UsageRepository.uploadsByDay` and `createdAt`: in-memory and PostgreSQL (D1, D5, USC-1, USC-3, USC-5)
+- [x] T004 `GET /usage/days`, admin only, 400 for a year outside the range (D2, D5)
+- [x] T005 PostgreSQL spec and e2e on all tiers; deliberate breaks
+- [x] T006 `EXPLAIN (ANALYZE)` on 100,000 seeded reports; add the index migration only if the query takes more than 100 ms
+- [x] T007 Full local loop and gitleaks
 
 ## Page PR (`feat/usage-calendar`), after the backend PR merges
 

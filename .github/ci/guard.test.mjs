@@ -300,6 +300,34 @@ test('the pull-request rule pins the extra-approval-for-unattributed-changes set
   assert.equal(pr.require_extra_approval_for_unattributed_changes, false);
 });
 
+// Founder decision 2026-10-31: CodeQL findings gate a merge. A green `Analyze (...)` job only shows the analysis RAN; the rule below is what refuses a pull request
+// that adds an error-level alert or a high or critical security alert, and it also requires CodeQL's results to exist before the merge. The thresholds are named
+// explicitly for the same reason as the setting above: a field the file leaves out takes GitHub's default when the file is applied through the API.
+export function codeScanningProblems(rules) {
+  const rule = rules.find((r) => r.type === 'code_scanning');
+  if (!rule) return ['the ruleset must have a code_scanning rule'];
+  const tools = rule.parameters?.code_scanning_tools ?? [];
+  if (tools.length !== 1) return [`the code_scanning rule must name exactly one tool (found ${tools.length})`];
+  const [tool] = tools;
+  const problems = [];
+  if (tool.tool !== 'CodeQL') problems.push(`the tool must be CodeQL (found ${tool.tool})`);
+  if (tool.alerts_threshold !== 'errors') problems.push(`alerts_threshold must be "errors" (found ${tool.alerts_threshold})`);
+  if (tool.security_alerts_threshold !== 'high_or_higher') problems.push(`security_alerts_threshold must be "high_or_higher" (found ${tool.security_alerts_threshold})`);
+  return problems;
+}
+
+test('CodeQL results gate a merge, with the thresholds named, and the checks above are unchanged', () => {
+  assert.deepEqual(codeScanningProblems(ruleset.rules), []);
+  const without = ruleset.rules.filter((r) => r.type !== 'code_scanning');
+  const named = (rules, tool) => codeScanningProblems(rules.map((r) => (r.type === 'code_scanning' ? { ...r, parameters: { code_scanning_tools: [tool] } } : r)));
+  assert.notDeepEqual(codeScanningProblems(without), [], 'a ruleset without the rule must be reported');
+  const base = ruleset.rules.find((r) => r.type === 'code_scanning').parameters.code_scanning_tools[0];
+  for (const change of [{ tool: 'Other' }, { alerts_threshold: 'none' }, { alerts_threshold: undefined }, { security_alerts_threshold: 'all' }, { security_alerts_threshold: 'none' }, { security_alerts_threshold: undefined }]) {
+    assert.notDeepEqual(named(ruleset.rules, { ...base, ...change }), [], `a weakened rule must be reported: ${JSON.stringify(change)}`);
+  }
+  assert.deepEqual(ruleset.rules.find((r) => r.type === 'required_status_checks').parameters.required_status_checks.length, 6, 'the code_scanning rule is not a seventh status check');
+});
+
 test('required checks come from GitHub Actions only (so another app cannot report them)', () => {
   const checks = ruleset.rules.find((r) => r.type === 'required_status_checks').parameters.required_status_checks;
   for (const c of checks) assert.equal(c.integration_id, 15368, `${c.context} must be bound to the GitHub Actions app`);
