@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { describe, expect, it, vi } from 'vitest';
-import type { Role } from '@telesphoros/shared-types';
+import type { ReportStatus, Role } from '@telesphoros/shared-types';
 import { RECOVERY_SCOPE, renderApp } from '@/test/authTestUtils';
 import { ownedStorageMode } from '@/lib/storageMode';
 
@@ -27,7 +27,7 @@ const row = {
   updatedAt: date,
 };
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status });
-function api(roles: Role[]) {
+function api(roles: Role[], status: ReportStatus = 'received') {
   const asked: string[] = [];
   const fetchImpl = vi.fn<typeof fetch>(async (input) => {
     const url = new URL(String(input));
@@ -36,7 +36,7 @@ function api(roles: Role[]) {
     if (url.pathname.endsWith('/me/recovery-scope')) return json({ recoveryScope: RECOVERY_SCOPE });
     if (url.pathname.endsWith('/patients'))
       return json({ data: [{ id: row.patientId, label: 'SYN-1', createdAt: date, updatedAt: date }], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } });
-    if (url.pathname === '/api/v1/reports') return json({ data: [row], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } });
+    if (url.pathname === '/api/v1/reports') return json({ data: [{ ...row, status }], meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 } });
     return json({ message: 'not expected' }, 500);
   });
   return { fetchImpl, asked };
@@ -44,6 +44,19 @@ function api(roles: Role[]) {
 const heading = () => screen.findByRole('heading', { level: 1, name: 'Reports' });
 
 describe('the reports page in the published build', () => {
+  it.each([
+    ['received', 'Received', 'text-warning'],
+    ['processing', 'Processing', 'text-warning'],
+    ['processed', 'Processed', 'text-success'],
+    ['failed', 'Failed', 'text-destructive'],
+  ] as const)('shows %s as a readable semantic status, not an action', async (status, label, tone) => {
+    renderApp('/reports', { signedInAs: ['reader'], fetchImpl: api(['reader'], status).fetchImpl });
+    await screen.findByRole('button', { name: 'Open synthetic.json' });
+    const cell = screen.getByRole('cell', { name: label });
+    expect(within(cell).getByText(label)).toHaveClass(tone);
+    expect(cell).not.toHaveClass('text-primary');
+  });
+
   it('is a published build (control: the owned-storage setting is off)', () => {
     expect(ownedStorageMode()).toBe(false);
   });

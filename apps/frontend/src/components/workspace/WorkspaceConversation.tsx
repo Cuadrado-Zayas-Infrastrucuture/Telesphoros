@@ -9,7 +9,7 @@ import { PromptInput } from '@/components/prompt-kit/PromptInput';
 import { PromptInputTextarea } from '@/components/prompt-kit/PromptInputTextarea';
 import { Steps } from '@/components/prompt-kit/Steps';
 import { SystemMessage } from '@/components/prompt-kit/SystemMessage';
-import { STATUS_WORD } from '@/components/workspace/PastReports';
+import { ReportStatusText } from '@/components/ReportStatusText';
 import { Button } from '@/components/ui/Button';
 import { INCOMPLETE_PROMPT } from '@/components/patients/IncompleteWord';
 import { incompleteness } from '@/lib/demographicsDraft';
@@ -392,7 +392,7 @@ export function WorkspaceConversation() {
                   {entry.phase === 'sent' && entry.status && (
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                       <span className="text-muted-foreground">Report status</span>
-                      <span className={`font-medium ${STATUS_WORD[entry.status].tone}`}>{STATUS_WORD[entry.status].label}</span>
+                      <ReportStatusText status={entry.status} className="font-medium" />
                       <Button variant="outline" size="sm" disabled={entry.checking} onClick={() => void readStatus(entry.id, entry.reportId!, entry.patientId, true)}>
                         Check status
                       </Button>
