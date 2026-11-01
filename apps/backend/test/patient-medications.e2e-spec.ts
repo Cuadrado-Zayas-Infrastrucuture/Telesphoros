@@ -57,6 +57,7 @@ const body = (over: object = {}) => ({
     });
     app = await createTestApp({
       postgresUrl: db.appUrl,
+      medicationWrites: 'enabled',
       overrides: [
         { provide: MEDICATION_DRUG_LIST, useValue: LIST },
         { provide: 'pino-params', useValue: { pinoHttp: [pinoHttpOptions({ LOG_LEVEL: 'trace' }), sink] } },
@@ -98,6 +99,7 @@ const body = (over: object = {}) => ({
   async function afterRetirement(run: (updated: LabPipeline) => Promise<void>) {
     const updatedApp = await createTestApp({
       postgresUrl: db.appUrl,
+      medicationWrites: 'enabled',
       overrides: [{ provide: MEDICATION_DRUG_LIST, useValue: { ...LIST, version: 'b'.repeat(64), entries: [LIST.entries[1]] } }],
     });
     try {
@@ -155,6 +157,38 @@ const body = (over: object = {}) => ({
       await save(clinician, patient, { ...edit, rxcui: '991003' }).expect(400);
       expect(await lab.count('patient_medications', 'patient_id=$1', [patient])).toBe(2);
     });
+  });
+  it('fences every medication POST by default without consuming a retry id, while authorized history stays readable', async () => {
+    const { clinician, patient } = await world();
+    const original = body();
+    const first = (await post(clinician, patient, original).expect(201)).body;
+    const reader = await lab.person('SYN-reader', ['reader']);
+    const outsider = await new LabPipeline(app, db.adminUrl).person('SYN-outsider', ['clinician']);
+    const fencedApp = await createTestApp({ postgresUrl: db.appUrl, overrides: [{ provide: MEDICATION_DRUG_LIST, useValue: LIST }] });
+    const fenced = new LabPipeline(fencedApp, db.adminUrl, lab.tenant);
+    const save = (who: Person, target: string, data: object) => fenced.api().post(`/api/v1/patients/${target}/medications`).set(bearer(who.token)).send(data);
+    const correction = body({ entryId: first.entryId, expectedVersion: 1, source: 'clinician-entered' });
+    try {
+      for (const input of [body(), correction, body({ entryId: first.entryId, expectedVersion: 1, status: 'stopped' }), original]) {
+        const response = await save(clinician, patient, input).expect(503);
+        expect(response.body.error.details).toEqual([
+          { field: 'request', reason: 'medication-writes-fenced', message: 'Medication recording is temporarily paused. Retry later.' },
+        ]);
+      }
+      await save(reader, patient, correction).expect(403);
+      await save(outsider, patient, correction).expect(404);
+      const historic = await fenced.api().get(`/api/v1/patients/${patient}/medications?entryId=${first.entryId}&version=1`).set(bearer(reader.token)).expect(200);
+      expect(historic.body.items).toHaveLength(1);
+      expect(await lab.count('patient_medications', 'patient_id=$1', [patient])).toBe(1);
+      expect(await verifier.verify(lab.tenant)).toMatchObject({ status: 'ok', eventsChecked: 1, failures: [] });
+    } finally {
+      await fencedApp.close();
+    }
+    // The exact refused request can be saved once after reopening; fencing reserves no id.
+    const saved = (await post(clinician, patient, correction).expect(201)).body;
+    expect(saved).toMatchObject({ version: 2, source: 'clinician-entered' });
+    expect((await post(clinician, patient, correction).expect(201)).body.id).toBe(saved.id);
+    expect(await verifier.verify(lab.tenant)).toMatchObject({ status: 'ok', eventsChecked: 2, failures: [] });
   });
   it('stores the canonical source name for a Tall Man drug, never its visual display form', async () => {
     const { clinician, patient } = await world();
@@ -251,7 +285,7 @@ const body = (over: object = {}) => ({
 
 describe('medication capture fails closed without its required dependencies', () => {
   it('returns 503 when the storage or verified list is unavailable', async () => {
-    const app = await createTestApp({ overrides: [{ provide: MEDICATION_DRUG_LIST, useValue: null }] });
+    const app = await createTestApp({ medicationWrites: 'enabled', overrides: [{ provide: MEDICATION_DRUG_LIST, useValue: null }] });
     try {
       const lab = new LabPipeline(app, '');
       const clinician = await lab.person('SYN-clinician', ['clinician']);

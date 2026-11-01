@@ -62,7 +62,7 @@ async function api(m) {
   const { NestFactory } = backend('@nestjs/core'); const { Logger } = backend('nestjs-pino');
   const { AppModule } = dist('app.module'); const { configureApp } = dist('app.factory'); const { loadEnv } = dist('config/env');
   const idp = `http://127.0.0.1:${m.ports.idp}`, appOrigin = `http://127.0.0.1:${m.ports.web}`;
-  const env = loadEnv({ NODE_ENV: 'development', PORT: String(m.ports.api), LOG_LEVEL: 'silent', AUTH_VERIFIER: 'cognito', COGNITO_APP_CLIENT_ID: 'e2e-client', COGNITO_ISSUER: idp, COGNITO_JWKS_URI: idp + '/.well-known/jwks.json', CORS_ALLOWED_ORIGINS: appOrigin, STORAGE_DRIVER: 'postgres', DATABASE_URL: dbUrl(m), DATABASE_SSL: 'disable', OBJECT_STORAGE_DRIVER: 's3', S3_ENDPOINT: endpoint(m), S3_FORCE_PATH_STYLE: 'true', AWS_REGION: 'us-east-2', REPORTS_BUCKET: m.bucket, LOCAL_STORAGE_RUN_ID: m.id, LAB_REPORT_PIPELINE: 'disabled', RATE_LIMIT_ENABLED: 'false', DOWNLOAD_URL_TTL_SECONDS: '60' });
+  const env = loadEnv({ NODE_ENV: 'development', PORT: String(m.ports.api), LOG_LEVEL: 'silent', AUTH_VERIFIER: 'cognito', COGNITO_APP_CLIENT_ID: 'e2e-client', COGNITO_ISSUER: idp, COGNITO_JWKS_URI: idp + '/.well-known/jwks.json', CORS_ALLOWED_ORIGINS: appOrigin, STORAGE_DRIVER: 'postgres', DATABASE_URL: dbUrl(m), DATABASE_SSL: 'disable', OBJECT_STORAGE_DRIVER: 's3', S3_ENDPOINT: endpoint(m), S3_FORCE_PATH_STYLE: 'true', AWS_REGION: 'us-east-2', REPORTS_BUCKET: m.bucket, LOCAL_STORAGE_RUN_ID: m.id, LAB_REPORT_PIPELINE: 'disabled', MEDICATION_WRITES: 'enabled', RATE_LIMIT_ENABLED: 'false', DOWNLOAD_URL_TTL_SECONDS: '60' });
   let app, listening = false, stopping = false;
   const { scheduler, guardAdmission } = require('./scheduler.cjs');
   let sequence = 0; let history = [];
