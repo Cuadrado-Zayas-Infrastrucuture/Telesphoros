@@ -157,8 +157,8 @@ export function SidebarPatients() {
               </p>
             )}
             <div className="flex gap-2">
-              <Button type="submit" size="sm" disabled={form.busy}>
-                {form.busy ? 'Saving…' : form.pending ? 'Save demographics' : 'Create patient'}
+              <Button type="submit" size="sm" pending={form.busy} pendingLabel="Saving…">
+                {form.pending ? 'Save demographics' : 'Create patient'}
               </Button>
               <Button
                 type="button"

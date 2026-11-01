@@ -23,7 +23,6 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
 import { NativeSelect } from '@/components/ui/NativeSelect';
-import { Spinner } from '@/components/ui/Spinner';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { useAddPatient } from '@/hooks/useAddPatient';
 import { INCOMPLETE_PROMPT } from '@/components/patients/IncompleteWord';
@@ -510,8 +509,8 @@ export default function UploadReportPage() {
                             </p>
                           )}
                           <div className="flex flex-wrap gap-2">
-                            <Button type="button" size="sm" disabled={addForm.busy || isSubmitting} onClick={() => void addPatient()}>
-                              {addForm.busy ? 'Saving…' : addForm.pending ? 'Save demographics' : 'Add patient'}
+                            <Button type="button" size="sm" pending={addForm.busy} pendingLabel="Saving…" disabled={isSubmitting} onClick={() => void addPatient()}>
+                              {addForm.pending ? 'Save demographics' : 'Add patient'}
                             </Button>
                             {!rosterEmpty && (
                               <Button
@@ -644,17 +643,13 @@ export default function UploadReportPage() {
                       <Button
                         hidden={guided && step < 2}
                         type="submit"
+                        pending={isSubmitting}
+                        pendingLabel="Uploading…"
                         size="lg"
                         disabled={isSubmitting || cancelling}
                         className={guided && step < 2 ? 'hidden' : 'w-full sm:w-auto'}
                       >
-                        {isSubmitting ? (
-                          <>
-                            <Spinner /> Uploading…
-                          </>
-                        ) : (
-                          'Upload report'
-                        )}
+                        Upload report
                       </Button>
                       {serverError && (
                         <Button

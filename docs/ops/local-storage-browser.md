@@ -30,7 +30,7 @@ Run the existing `pnpm --filter @telesphoros/frontend e2e` separately to verify 
 
 Since M1.5 the API reads each person's standing from the database, so the PostgreSQL browser suite needs its personas granted once, after the
 database is migrated and before `e2e:storage` (the in-memory browser suite needs nothing: there the development mirror grants whoever signs in).
-Use the owner connection of the same disposable database (`E2E_OWNER_URL` below is the loopback superuser or table-owner URL, never the application role's):
+The nightly CI run does all of this with `scripts/e2e-storage/provision.sh` (database, migrations, application login, organizations, personas; it prints nothing secret and appends `E2E_DATABASE_URL` to the file named in `E2E_ENV_FILE`), and you can run the same script on a local server. To do it by hand instead, use the owner connection of the same disposable database (`E2E_OWNER_URL` below is the loopback superuser or table-owner URL, never the application role's):
 
 ```
 CLI="node apps/backend/dist/db/cli.js"; export DATABASE_MIGRATOR_URL="$E2E_OWNER_URL"

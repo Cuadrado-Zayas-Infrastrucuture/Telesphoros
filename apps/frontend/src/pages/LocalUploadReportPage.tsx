@@ -15,7 +15,6 @@ import { Checkbox } from '@/components/ui/Checkbox';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/Form';
 import { Input } from '@/components/ui/Input';
 import { NativeSelect } from '@/components/ui/NativeSelect';
-import { Spinner } from '@/components/ui/Spinner';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { submitReport, type UploadProgress } from '@/lib/localReportApi';
 import { uploadReportSchema, type UploadReportValues } from '@/lib/uploadReportSchema';
@@ -174,14 +173,8 @@ export default function LocalUploadReportPage() {
                 />
 
                 <div>
-                  <Button type="submit" size="lg" disabled={isSubmitting} className="w-full sm:w-auto">
-                    {isSubmitting ? (
-                      <>
-                        <Spinner /> Uploading…
-                      </>
-                    ) : (
-                      'Upload report'
-                    )}
+                  <Button type="submit" pending={isSubmitting} pendingLabel="Uploading…" size="lg" disabled={isSubmitting} className="w-full sm:w-auto">
+                    Upload report
                   </Button>
                 </div>
               </fieldset>
