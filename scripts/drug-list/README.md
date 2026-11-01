@@ -6,6 +6,8 @@ It retrieves the CPIC API drug table and current CPIC release metadata, verifies
 
 The generator is build-time tooling. It receives no patient data. The application never sends a clinician's medication search to these services. FDA-only Tall Man names are independently cited in `fda-tall-man.json`; ISMP-only names wait for written permission.
 
+Operational ownership, monthly review cadence, update acceptance and historical-record compatibility are in [Medication list maintenance](../../docs/ops/medication-list-maintenance.md).
+
 Review the generated diff without manually correcting rows. Run `node --test scripts/drug-list/build.test.mjs`, the shared-types tests, and the medication API/database checks. Record the generated list version in the verification note. Deployment and pushing remain separate decisions.
 
 The standalone archive supplied with the handoff contains this directory and the two public JSON files it needs. If saved as `~/Downloads/telesphoros-drug-list.zip`, this command extracts it without overwriting existing files and runs the generator:

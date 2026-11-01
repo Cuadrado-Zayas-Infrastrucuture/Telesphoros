@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BUNDLED_DRUG_LIST, matchesDrug, type PatientMedicationDto } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
+import { DrugListInformation } from '@/components/patients/DrugListInformation';
 import { MedicationForm } from '@/components/patients/MedicationForm';
 import { MedicationHistory } from '@/components/patients/MedicationHistory';
 import { MedicationValues } from '@/components/patients/MedicationValues';
@@ -175,6 +176,7 @@ export function MedicationsSection({ patientId, canWrite }: { patientId: string;
           )
         ))}
       {!BUNDLED_DRUG_LIST && <p role="status">The verified drug list is unavailable. Medication changes are disabled.</p>}
+      <DrugListInformation />
     </section>
   );
 }
