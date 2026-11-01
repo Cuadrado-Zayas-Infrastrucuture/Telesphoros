@@ -110,6 +110,12 @@
   --mark-plate: transparent;
   /* The faint highlight that sweeps across a loading placeholder. */
   --skeleton-highlight: #ffffffb3;
+  /* The Usage calendar's shades (specs/028-usage-heatmap D8): zero is --muted, then four even steps toward --primary. Mixed from the theme's own
+     tokens, so dark mode follows without a palette of its own and no shade reads as a warning. */
+  --usage-step-1: color-mix(in srgb, var(--primary) 25%, var(--muted));
+  --usage-step-2: color-mix(in srgb, var(--primary) 50%, var(--muted));
+  --usage-step-3: color-mix(in srgb, var(--primary) 75%, var(--muted));
+  --usage-step-4: var(--primary);
 
   /* Settings > Appearance draws a small light and dark screen side by side, whatever the current theme. These stay fixed
      across themes, and scripts/check-branding.mjs requires each to equal the light or dark token it is named after. */

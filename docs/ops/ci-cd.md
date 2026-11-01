@@ -328,6 +328,7 @@ The file is a GitHub **ruleset** for the default branch. It is not active until 
 | --- | --- | --- |
 | Require a pull request | on; **0 required approvals**; conversations must be resolved | Every PR is opened under the sole maintainer's account, so a required approval would be a permanent self-approval deadlock |
 | Required status checks | `verify`, `database-and-storage`, `browser`, `terraform`, `secret-scan`, `image`, each bound to the GitHub Actions app | Another app cannot report a check by the same name |
+| Code scanning results | tool `CodeQL`; alerts threshold `errors`; security alerts threshold `high_or_higher` (founder decision 2026-10-31) | A green `Analyze (...)` job only shows the analysis ran. This rule makes CodeQL's results exist before a merge, and refuses a pull request that adds an error-level alert or a high or critical security alert. Warnings and medium alerts still show on the pull request without blocking it. It is not a seventh status check, so the six names above and their guard are unchanged |
 | Block force pushes | on | History on `main` is never rewritten |
 | Block deletion | on | |
 | "Require branch to be up to date" | **on** (founder decision 2026-10-19, security audit INF-05) | The checks must have run against the `main` the PR merges into. `main` is now contested (several sessions merge the same day), so a PR that was green against an older `main` is not evidence. Cost: after another PR merges, update the branch and wait for CI again before merging |
@@ -345,7 +346,7 @@ On 2026-10-10 the founder approved adding the missing live `image` check. Rulese
 
 ### Break-glass (no standing bypass)
 
-If Actions is down or out of minutes and a merge cannot wait: as a repository admin, edit ruleset `24691287` to add the bypass, merge
+If Actions is down or out of minutes and a merge cannot wait: as a repository admin, edit the ruleset named `main` (its id is in `gh api repos/<owner>/<repo>/rulesets`; the id once written here no longer exists) to add the bypass, merge
 the one pull request, and **remove the bypass again at once**. Say so in that PR, with the reason. GitHub records ruleset edits in
 the repository's audit log, so the exception is visible afterwards instead of being a standing permission.
 
