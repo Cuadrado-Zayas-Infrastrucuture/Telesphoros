@@ -393,7 +393,7 @@ export function WorkspaceConversation() {
           </section>
         )}
       </div>
-      <div className="one-screen-column sticky bottom-0 bg-background pt-2 pb-3">
+      <div className="one-screen-column one-screen-dock sticky bg-background pt-2 pb-3">
         {box}
         <div className="mt-3">
           <SystemMessage quiet>Synthetic data only. Not for clinical use.</SystemMessage>

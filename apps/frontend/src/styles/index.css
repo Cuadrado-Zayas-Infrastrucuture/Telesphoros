@@ -66,6 +66,9 @@
 }
 
 @layer components {
+  .app-frame { min-height: var(--size-safe-viewport); }
+  .app-skip-link:focus { top: calc(var(--safe-area-top) + .5rem); left: calc(var(--safe-area-left) + .5rem); }
+
   /* The "Match this device" theme card: the dark drawing covers only its right half. */
   .theme-card-split {
     clip-path: inset(0 0 0 50%);
@@ -144,6 +147,7 @@
     -webkit-text-size-adjust: 100%;
   }
   body {
+    padding: var(--safe-area-top) var(--safe-area-right) var(--safe-area-bottom) var(--safe-area-left);
     background-color: var(--background);
     color: var(--foreground);
     line-height: 1.6;
