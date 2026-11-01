@@ -31,6 +31,47 @@ function saveInterruption(owner: RecoverySession) {
 }
 
 describe('AuthProvider', () => {
+  it('ends a stalled authenticated request at its deadline without retrying a write or ending the session', async () => {
+    const { result, fetchImpl, client } = setup();
+    await act(async () => void (await result.current.completeSignIn()));
+    const deadline = new AbortController();
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
+    const before = fetchImpl.mock.calls.length;
+    fetchImpl.mockImplementationOnce(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          if (!init?.signal) return reject(new Error('Request has no deadline'));
+          init.signal.addEventListener('abort', () => reject(init.signal!.reason), { once: true });
+        }),
+    );
+    const pending = result.current.apiFetch('/api/v1/patients', { method: 'POST', body: '{}' });
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'TimeoutError' });
+    deadline.abort(new DOMException('Request deadline exceeded', 'TimeoutError'));
+    await rejected;
+    expect(fetchImpl.mock.calls.length - before).toBe(1);
+    expect(result.current.status).toBe('signedIn');
+    expect(client.signIn).not.toHaveBeenCalled();
+  });
+
+  it('preserves caller cancellation alongside the request deadline', async () => {
+    const { result, fetchImpl } = setup();
+    await act(async () => void (await result.current.completeSignIn()));
+    const caller = new AbortController();
+    const deadline = new AbortController();
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
+    let signal: AbortSignal | null | undefined;
+    fetchImpl.mockImplementationOnce((_url, init) => {
+      signal = init?.signal;
+      return new Promise((_resolve, reject) => signal?.addEventListener('abort', () => reject(signal!.reason), { once: true }));
+    });
+    const pending = result.current.apiFetch('/api/v1/patients', { signal: caller.signal });
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    caller.abort();
+    await rejected;
+    expect(deadline.signal.aborted).toBe(false);
+    expect(signal?.aborted).toBe(true);
+  });
+
   it('discards legacy unbound recovery metadata before a signed-in page can display it', async () => {
     window.sessionStorage.setItem(
       'telesphoros.upload-recovery.v1',

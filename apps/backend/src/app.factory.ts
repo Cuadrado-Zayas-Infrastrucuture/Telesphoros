@@ -73,7 +73,7 @@ export function configureApp(app: NestExpressApplication, options: ConfigureOpti
       origin: (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => callback(null, origin !== undefined && allowed.has(origin)),
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
       allowedHeaders: ['Authorization', 'Content-Type', 'X-Request-Id', 'X-Upload-Revision'],
-      exposedHeaders: ['X-Request-Id'],
+      exposedHeaders: ['X-Request-Id', 'Retry-After'],
       maxAge: 600,
       credentials: false, // we authenticate with a bearer header, never cookies
     });

@@ -1,0 +1,6 @@
+# Production-readiness safeguards and evidence
+Date: 2026-11-01
+
+The nine-area [readiness review](../verification/production-readiness-2026-11-01.md) traces actual UI/API/database/storage/worker flows, separates local evidence from hosted acceptance, and records remaining launch gates. Focused repairs add an outer authenticated-browser deadline, S3 deadlines that retain caller cancellation, runtime database query deadlines for half-open sockets, cross-origin access to Retry-After, and coalescing of worker timer ticks during a stall. Every code defect has a failing-before/passing-after control. The backup runbook now points to the existing local F2/F3 recovery paths rather than describing them as absent.
+
+A reproducible synthetic HTTP/PostgreSQL [load rehearsal](../../scripts/readiness/local-load.cjs) uses existing restricted-role fixtures, checks tenant separation and concurrent request replay, and records latency/error/throughput/CPU/RSS metrics. No schema, dependency, clinical algorithm, model prompt, paid service, production data or deployed setting changes. Hosted monitoring/notification delivery, exact fleet monetary/user quotas, retention cost policy, provider restore/custody and production capacity remain separate acceptance; this does not authorize clinical launch.
