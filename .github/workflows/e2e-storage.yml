@@ -1,0 +1,103 @@
+# Nightly browser suite on PostgreSQL (`e2e:storage`), which until now ran only by hand (docs/ops/local-storage-browser.md).
+# The pull-request `browser` job runs the in-memory suites; this one drives the same pages against the real database with row-level security, the
+# application login and the memberships, so a change that passes every unit test but breaks the signed-in flow on PostgreSQL shows up by morning.
+# ADVISORY, like rescan.yml: it runs only on its schedule and by hand, never on push or pull_request, so it can never block a merge and costs a
+# pull request nothing. A failed scheduled run makes GitHub email the person who last changed the schedule (not a manual run: read its result).
+# Synthetic data only: a service container that is gone when the job ends, no cloud credentials, no repository secrets, contents: read.
+# docs/ops/ci-cd.md ("Nightly browser suite on PostgreSQL") says what it proves and what it does not.
+name: e2e-storage
+on:
+  schedule:
+    - cron: '53 8 * * *' # 08:53 UTC (04:53 in Puerto Rico): after the 07:41 nightly of ci.yml has finished and before anyone merges
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One at a time, and a run that is still going is never cancelled by the next one: two runs would share the fixed emulator and browser ports.
+concurrency:
+  group: e2e-storage
+  cancel-in-progress: false
+
+env:
+  CI: "true"
+  NODE_VERSION: "22.22.0"
+
+jobs:
+  e2e-storage:
+    name: e2e-storage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d # postgres:16, multi-arch index; one digest for every tier (supply-chain.test.mjs)
+        env:
+          # A throwaway service container on the runner, reachable only from this job. Not a secret.
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Resolve the installed Playwright browser version
+        id: playwright-version
+        working-directory: apps/frontend
+        run: |
+          node <<'NODE'
+          const { appendFileSync } = require('node:fs');
+          const { version } = require('@playwright/test/package.json');
+          if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Invalid Playwright version');
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);
+          NODE
+      - name: Cache the Playwright browser
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright-version.outputs.version }}
+      # System libraries are not part of the cache, so they are installed on every run.
+      - name: Install the browser
+        working-directory: apps/frontend
+        run: |
+          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
+            pnpm exec playwright install-deps chromium
+          else
+            pnpm exec playwright install --with-deps chromium
+          fi
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: .github/ci/requirements.txt
+      - name: Install the pinned browser S3 emulator
+        run: pip install --require-hashes -r .github/ci/requirements.txt
+      # The provisioning script needs the built backend (its migrate and membership commands).
+      - name: Build the backend
+        run: pnpm --filter @telesphoros/backend build
+      - name: Provision the disposable database (migrations, a non-owner login, the personas)
+        env:
+          E2E_OWNER_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+        # The script appends E2E_DATABASE_URL to the file named here: the next step reads it, and the log never shows it.
+        run: E2E_ENV_FILE="$GITHUB_ENV" scripts/e2e-storage/provision.sh
+      - name: Browser tests on PostgreSQL
+        run: pnpm --filter @telesphoros/frontend e2e:storage
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-storage-failures
+          path: apps/frontend/test-results
+          retention-days: 7
+          if-no-files-found: ignore

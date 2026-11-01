@@ -24,7 +24,6 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
 import { NativeSelect } from '@/components/ui/NativeSelect';
-import { Spinner } from '@/components/ui/Spinner';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { createPatient, listPatients, SubmitError, submitReport, type UploadProgress } from '@/lib/api';
 import { productUploadSchema, type ProductUploadValues } from '@/lib/productUploadSchema';
@@ -263,10 +262,18 @@ export default function UploadReportPage() {
     setFormKey((key) => key + 1);
   }
 
+  // The form, and the Submit button that had focus, are replaced by the result: say where the person is now.
+  const receivedHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (reference) receivedHeading.current?.focus();
+  }, [reference]);
+
   if (reference) {
     return (
       <div className="flex max-w-prose flex-col gap-4">
-        <h1 className="text-3xl leading-tight font-bold">Report received</h1>
+        <h1 ref={receivedHeading} tabIndex={-1} className="text-3xl leading-tight font-bold focus:outline-none">
+          Report received
+        </h1>
         <Alert variant="success">
           <AlertTitle>Upload complete</AlertTitle>
           <AlertDescription>
@@ -277,11 +284,10 @@ export default function UploadReportPage() {
           <Button disabled={isSubmitting || cancelling} onClick={startOver}>
             Upload another report
           </Button>
-          {owned && (
-            <Button asChild variant="outline">
-              <Link to="/reports">View reports</Link>
-            </Button>
-          )}
+          {/* Every build has /reports (b9b5307d), and every uploader holds a role that may read it. */}
+          <Button asChild variant="outline">
+            <Link to="/reports">View reports</Link>
+          </Button>
         </div>
       </div>
     );
@@ -492,8 +498,8 @@ export default function UploadReportPage() {
                             )}
                           </div>
                           <div className="flex flex-wrap gap-2">
-                            <Button type="button" size="sm" disabled={adding || isSubmitting} onClick={() => void addPatient()}>
-                              {adding ? 'Adding…' : 'Add patient'}
+                            <Button type="button" size="sm" pending={adding} pendingLabel="Adding…" disabled={isSubmitting} onClick={() => void addPatient()}>
+                              Add patient
                             </Button>
                             {!rosterEmpty && (
                               <Button
@@ -627,17 +633,13 @@ export default function UploadReportPage() {
                       <Button
                         hidden={guided && step < 2}
                         type="submit"
+                        pending={isSubmitting}
+                        pendingLabel="Uploading…"
                         size="lg"
                         disabled={isSubmitting || cancelling}
                         className={guided && step < 2 ? 'hidden' : 'w-full sm:w-auto'}
                       >
-                        {isSubmitting ? (
-                          <>
-                            <Spinner /> Uploading…
-                          </>
-                        ) : (
-                          'Upload report'
-                        )}
+                        Upload report
                       </Button>
                       {serverError && (
                         <Button
@@ -669,15 +671,13 @@ export default function UploadReportPage() {
           <ul className="mt-3 flex list-disc flex-col gap-3 pl-5 text-sm">
             <li>Use synthetic records only. Real patient information must not be uploaded.</li>
             <li>The server verifies the stored file. Verification confirms storage; it is not clinical review.</li>
-            {owned && (
-              <li>
-                Afterwards, find the report on the{' '}
-                <Link className="underline" to="/reports">
-                  Reports page
-                </Link>
-                .
-              </li>
-            )}
+            <li>
+              Afterwards, find the report on the{' '}
+              <Link className="inline-flex min-h-control items-center underline" to="/reports">
+                Reports page
+              </Link>
+              .
+            </li>
           </ul>
         </aside>
       </div>

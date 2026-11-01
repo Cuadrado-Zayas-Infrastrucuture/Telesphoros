@@ -152,6 +152,12 @@ describe('the chat-first home in every build (specs/024)', () => {
     expect(submitReport).toHaveBeenCalledTimes(1);
   });
 
+  it('offers only the file types this build accepts in the attach picker, so a PDF is not offered and then refused (CH-6)', async () => {
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    expect(file()).toHaveAttribute('accept', '.json');
+  });
+
   it('refuses a PDF without owned-storage mode, naming the local preview, and uploads nothing (CH-6, D4)', async () => {
     const { fetchImpl } = open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
@@ -170,6 +176,23 @@ describe('the chat-first home in every build (specs/024)', () => {
     await userEvent.upload(file(), new File(['##fileformat=VCFv4.2\n'], 'SYN-004.vcf'), { applyAccept: false });
     expect(await screen.findByRole('alert')).toHaveTextContent('Raw genomic data (VCF) is not accepted.');
     expect(submitReport).not.toHaveBeenCalled();
+  });
+
+  it('says so when the patient list fails, and Retry loads it without a reload, which would sign the tab out', async () => {
+    let patientsDown = true;
+    const ok = api(['clinician']);
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) =>
+      patientsDown && String(input).includes('/api/v1/patients') ? new Response('{}', { status: 503 }) : ok(input, init),
+    );
+    renderApp('/workspace', { signedInAs: ['clinician'], fetchImpl: fetchImpl as unknown as typeof fetch });
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.upload(file(), json());
+    const retry = await screen.findByRole('button', { name: 'Retry loading patients' });
+    expect(within(retry.parentElement!).getByRole('alert')).toHaveTextContent(/patients/i);
+    patientsDown = false;
+    await userEvent.click(retry);
+    expect(await screen.findByRole('combobox', { name: 'Patient' })).toHaveValue(PATIENT.id);
+    expect(screen.queryByRole('button', { name: 'Retry loading patients' })).not.toBeInTheDocument();
   });
 
   it('"New chat" starts an empty conversation', async () => {
