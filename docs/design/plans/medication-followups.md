@@ -13,7 +13,7 @@ Tracking issues, assigned to the repository maintainer: [upkeep #246](https://gi
 
 ## Permission request
 
-**Status: drafted, not sent; rights remain unconfirmed.** Spec 029 assigns the contact to the founder or counsel. Verify the current ECRI/ISMP rights or licensing contact on the official website before sending; no recipient address has been verified in this session. No ISMP-only rows are copied here.
+**Status: drafted, not sent; rights remain unconfirmed.** Spec 029 assigns the contact to the founder or counsel. On 2026-11-01, the official [ECRI Contact Us page](https://home.ecri.org/pages/ecri-contact-us-form) was checked: it lists `clientservices@ecri.org` and +1 610.825.6000 for the United States. This is a verified general routing contact, not a confirmed permissions officer. Founder/counsel can ask that channel to route the request to the person authorized to grant ISMP content rights; verify that person's authority before accepting a licence. No message or form submission has been sent. The [ECRI terms of service](https://home.ecri.org/pages/ecri-terms-of-service) reserve copyright; this review found no grant establishing the intended public-source/browser redistribution scope. No ISMP-only rows are copied here.
 
 Subject: Written permission to display ISMP Tall Man drug-name forms in Telesphoros
 
