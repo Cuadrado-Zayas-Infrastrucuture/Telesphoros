@@ -27,6 +27,11 @@
   --color-warning-surface: var(--warning-surface);
   --color-ring: var(--ring);
   --color-transparent: transparent;
+  /* Usage calendar shades (tokens.css --usage-step-*). */
+  --color-usage-1: var(--usage-step-1);
+  --color-usage-2: var(--usage-step-2);
+  --color-usage-3: var(--usage-step-3);
+  --color-usage-4: var(--usage-step-4);
   /* Settings > Appearance: fixed light and dark colors for the theme cards (tokens.css --theme-preview-*). */
   --color-preview-light-background: var(--theme-preview-light-background);
   --color-preview-light-panel: var(--theme-preview-light-panel);

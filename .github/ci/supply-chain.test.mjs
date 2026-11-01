@@ -20,7 +20,7 @@ const real = {
 };
 
 /** The only workflow files allowed on main. Adding one means changing this line, in review. */
-export const WORKFLOWS = ['ci.yml', 'rescan.yml'];
+export const WORKFLOWS = ['ci.yml', 'e2e-storage.yml', 'rescan.yml'];
 
 const code = (text) => text.split('\n').filter((line) => !/^\s*#/.test(line)).join('\n');
 
@@ -75,6 +75,15 @@ export function supplyChainProblems({ workflows, requirementsIn, requirementsTxt
   need(/trivy(-action)?/.test(rescan) && /exit-code: '1'/.test(rescan) && /severity: CRITICAL,HIGH/.test(rescan), 'rescan.yml must fail on a CRITICAL or HIGH finding in a fresh image');
   need(/pnpm audit --prod --audit-level high/.test(rescan), 'rescan.yml must audit the production dependencies');
   need(/timeout-minutes: \d+/.test(rescan), 'rescan.yml must have a time limit');
+
+  // The nightly browser suite on PostgreSQL: advisory like the rescan, and it must really run the suite on a database it built.
+  const storage = code(workflows['e2e-storage.yml'] ?? '');
+  need(/^on:\n {2}schedule:\n {4}- cron: '[^']+'[^\n]*\n {2}workflow_dispatch:\n(?! )/m.test(storage), 'e2e-storage.yml must run only on its schedule and by hand (never on push or pull_request, so it cannot gate a merge)');
+  need(/timeout-minutes: \d+/.test(storage), 'e2e-storage.yml must have a time limit');
+  need(/^concurrency:\n {2}group: e2e-storage\n {2}cancel-in-progress: false\n/m.test(storage), 'e2e-storage.yml must run one at a time and never cancel a run in progress (the emulator and browser ports are fixed)');
+  need(/^\s*run: pnpm --filter @telesphoros\/frontend e2e:storage\s*$/m.test(storage), 'e2e-storage.yml must run the e2e:storage suite');
+  need(/scripts\/e2e-storage\/provision\.sh/.test(storage), 'e2e-storage.yml must build its database with scripts/e2e-storage/provision.sh');
+  need(!/continue-on-error/.test(storage), 'e2e-storage.yml must not hide a failure with continue-on-error');
   return problems;
 }
 
@@ -86,6 +95,7 @@ test('every workflow meets the supply-chain rules (and the scan found the files:
 test('the supply-chain rules report each way the files could be weakened (controls)', () => {
   const ci = real.workflows['ci.yml'];
   const rescan = real.workflows['rescan.yml'] ?? '';
+  const storageYml = real.workflows['e2e-storage.yml'] ?? '';
   const pg = /image: (postgres:16@sha256:[0-9a-f]{64})/.exec(ci)?.[1] ?? 'postgres:16@sha256:missing';
   const weakened = [
     ['an unreviewed workflow', { workflows: { ...real.workflows, 'debug.yml': 'name: x\npermissions:\n  contents: read\n' } }],
@@ -100,6 +110,13 @@ test('the supply-chain rules report each way the files could be weakened (contro
     ['the rescan no longer audits packages', { workflows: { ...real.workflows, 'rescan.yml': rescan.replace('pnpm audit --prod --audit-level high', 'pnpm audit --prod --audit-level critical') } }],
     ['the rescan never fails', { workflows: { ...real.workflows, 'rescan.yml': rescan.replace("exit-code: '1'", "exit-code: '0'") } }],
     ['the rescan action by tag', { workflows: { ...real.workflows, 'rescan.yml': rescan.replace(/actions\/checkout@[0-9a-f]{40}/, 'actions/checkout@v7') } }],
+    ['the nightly browser suite runs on pull requests (a merge gate)', { workflows: { ...real.workflows, 'e2e-storage.yml': storageYml.replace('  workflow_dispatch:\n', '  workflow_dispatch:\n  pull_request:\n') } }],
+    ['the nightly browser suite no longer runs the suite', { workflows: { ...real.workflows, 'e2e-storage.yml': storageYml.replace('e2e:storage\n', 'e2e\n') } }],
+    ['the nightly browser suite hides its failure', { workflows: { ...real.workflows, 'e2e-storage.yml': storageYml.replace('    timeout-minutes: 30\n', '    timeout-minutes: 30\n    continue-on-error: true\n') } }],
+    ['the nightly browser suite has no time limit', { workflows: { ...real.workflows, 'e2e-storage.yml': storageYml.replace('    timeout-minutes: 30\n', '') } }],
+    ['the nightly browser suite may be cancelled by the next run', { workflows: { ...real.workflows, 'e2e-storage.yml': storageYml.replace('cancel-in-progress: false', 'cancel-in-progress: true') } }],
+    ['the nightly browser suite builds no database', { workflows: { ...real.workflows, 'e2e-storage.yml': storageYml.replace('scripts/e2e-storage/provision.sh', 'true') } }],
+    ['the nightly browser suite may write', { workflows: { ...real.workflows, 'e2e-storage.yml': storageYml.replace('permissions:\n  contents: read\n', 'permissions:\n  contents: read\n  issues: write\n') } }],
     ['the rescan may write', { workflows: { ...real.workflows, 'rescan.yml': rescan.replace('permissions:\n  contents: read\n', 'permissions:\n  contents: read\n  issues: write\n') } }],
     ['a package without a hash', { requirementsTxt: real.requirementsTxt.replace(/(\nmoto==[^\n]+) \\\n(\s+--hash=sha256:[0-9a-f]{64} \\\n)+/, '$1\n') }],
     ['a package by range', { requirementsTxt: real.requirementsTxt.replace(/\nmoto==/, '\nmoto>=') }],

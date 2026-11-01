@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { patientLabelSchema, type PatientDto } from '@telesphoros/shared-types';
+import { Link } from 'react-router-dom';
+import type { PatientDto } from '@telesphoros/shared-types';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
 import { WRITER_ROLES } from '@/auth/roles';
+import { IncompleteWord } from '@/components/patients/IncompleteWord';
+import { PatientDemographicsFields } from '@/components/patients/PatientDemographicsFields';
 import { Button } from '@/components/ui/Button';
-import { createPatient, listPatients, SubmitError } from '@/lib/api';
+import { useAddPatient } from '@/hooks/useAddPatient';
+import { listPatients } from '@/lib/api';
 import { announcePatientAdded, onPatientAdded } from '@/lib/workspaceEvents';
 
 /**
- * The panel's "Patients": the first page of synthetic labels, and for writer roles an "Add patient" control (specs/024 D2a). Adding follows the Upload page:
- * the label is checked first, and a retry with the same label replays the first request id, so a lost response never makes a second patient.
+ * The panel's "Patients": the first page of synthetic labels, each a link to the patient's page and marked "Incomplete" when its demographics are missing,
+ * and for writer roles an "Add patient" control (specs/024 D2a) that also asks the demographics (spec 025 T301, `useAddPatient`).
  */
 export function SidebarPatients() {
   const { apiFetch, roles } = useAuth();
@@ -16,12 +20,12 @@ export function SidebarPatients() {
   const [patients, setPatients] = useState<PatientDto[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [open, setOpen] = useState(false);
-  const [label, setLabel] = useState('');
-  const [problem, setProblem] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState<string | null>(null);
-  const request = useRef<{ label: string; id: string } | null>(null);
   const toggle = useRef<HTMLButtonElement>(null);
+  const form = useAddPatient((created) => {
+    setPatients((list) => (list?.some((p) => p.id === created.id) ? list : [created, ...(list ?? [])]));
+    announcePatientAdded(created);
+  });
   const field = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (open) field.current?.focus();
@@ -53,31 +57,14 @@ export function SidebarPatients() {
   }, [load]);
 
   async function add() {
-    const parsed = patientLabelSchema.safeParse(label);
-    if (!parsed.success) {
-      setProblem(parsed.error.issues[0]?.message ?? 'Enter a synthetic patient label.');
-      return;
-    }
-    const clean = parsed.data;
-    const attempt = request.current?.label === clean ? request.current : { label: clean, id: crypto.randomUUID() };
-    request.current = attempt;
-    setAdding(true);
-    setProblem(null);
     setAdded(null);
-    try {
-      const created = await createPatient(apiFetch, clean, attempt.id);
-      request.current = null;
-      setPatients((list) => (list?.some((p) => p.id === created.id) ? list : [created, ...(list ?? [])]));
-      announcePatientAdded(created);
-      setLabel('');
-      setOpen(false);
-      setAdded(`Added ${created.label}.`);
-      toggle.current?.focus();
-    } catch (caught) {
-      if (!(caught instanceof SessionEndedError)) setProblem(caught instanceof SubmitError ? caught.message : 'The patient could not be added. Please retry.');
-    } finally {
-      setAdding(false);
-    }
+    const outcome = await form.submit();
+    if (!outcome) return;
+    // The row came from the create response, which carries no demographics: mark it from what was just saved.
+    setPatients((list) => list?.map((p) => (p.id === outcome.patient.id ? { ...p, demographicsComplete: outcome.complete } : p)) ?? list);
+    setOpen(false);
+    setAdded(`Added ${outcome.patient.label}.`);
+    toggle.current?.focus();
   }
 
   return (
@@ -107,8 +94,11 @@ export function SidebarPatients() {
       ) : (
         <ul aria-label="Patients" className="flex flex-col">
           {patients.map((patient) => (
-            <li key={patient.id} className="truncate py-1 text-xs text-foreground">
-              {patient.label}
+            <li key={patient.id} className="flex min-w-0 items-center gap-2 text-xs">
+              <Link to={`/patients/${patient.id}`} className="flex min-h-control min-w-0 items-center truncate text-foreground underline-offset-2 hover:underline">
+                {patient.label}
+              </Link>
+              <IncompleteWord patient={patient} className="shrink-0" />
             </li>
           ))}
         </ul>
@@ -127,37 +117,48 @@ export function SidebarPatients() {
               void add();
             }}
           >
-            <label htmlFor="panel-patient-label" className="text-xs font-medium">
-              Synthetic patient label
-            </label>
-            <input
-              ref={field}
-              id="panel-patient-label"
-              value={label}
-              maxLength={40}
-              autoComplete="off"
-              spellCheck={false}
-              readOnly={adding}
-              aria-invalid={problem ? true : undefined}
-              aria-describedby={problem ? 'panel-patient-help panel-patient-error' : 'panel-patient-help'}
-              placeholder="SYN-0002"
-              onChange={(event) => {
-                setLabel(event.target.value);
-                setProblem(null);
-              }}
-              className="h-11 w-full rounded-md border border-border bg-background px-2 text-sm"
-            />
-            <p id="panel-patient-help" className="text-xs text-muted-foreground">
-              Letters, numbers and hyphens. Never a name.
-            </p>
-            {problem && (
-              <p id="panel-patient-error" role="alert" className="text-xs text-destructive">
-                {problem}
+            {form.pending ? (
+              <p className="text-xs text-muted-foreground">
+                Patient <span className="font-medium text-foreground">{form.pending.label}</span> exists. Save its demographics, or close and add them later.
+              </p>
+            ) : (
+              <>
+                <label htmlFor="panel-patient-label" className="text-xs font-medium">
+                  Synthetic patient label
+                </label>
+                <input
+                  ref={field}
+                  id="panel-patient-label"
+                  value={form.label}
+                  maxLength={40}
+                  autoComplete="off"
+                  spellCheck={false}
+                  readOnly={form.busy}
+                  aria-invalid={form.labelError ? true : undefined}
+                  aria-describedby={form.labelError ? 'panel-patient-help panel-patient-error' : 'panel-patient-help'}
+                  placeholder="SYN-0002"
+                  onChange={(event) => form.setLabel(event.target.value)}
+                  className="h-11 w-full rounded-md border border-border bg-background px-2 text-sm"
+                />
+                <p id="panel-patient-help" className="text-xs text-muted-foreground">
+                  Letters, numbers and hyphens. A code, never a name.
+                </p>
+                {form.labelError && (
+                  <p id="panel-patient-error" role="alert" className="text-xs text-destructive">
+                    {form.labelError}
+                  </p>
+                )}
+              </>
+            )}
+            <PatientDemographicsFields idPrefix="panel-patient" compact value={form.draft} errors={form.errors} disabled={form.busy} onChange={form.setDraft} />
+            {form.problem && (
+              <p role="alert" className="text-xs text-destructive">
+                {form.problem}
               </p>
             )}
             <div className="flex gap-2">
-              <Button type="submit" size="sm" disabled={adding}>
-                {adding ? 'Adding…' : 'Create patient'}
+              <Button type="submit" size="sm" pending={form.busy} pendingLabel="Saving…">
+                {form.pending ? 'Save demographics' : 'Create patient'}
               </Button>
               <Button
                 type="button"
@@ -165,7 +166,7 @@ export function SidebarPatients() {
                 size="sm"
                 onClick={() => {
                   setOpen(false);
-                  setProblem(null);
+                  form.reset();
                 }}
               >
                 Cancel

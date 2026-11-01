@@ -159,7 +159,8 @@ describe('the feature panel (specs/024 D2, D6, CH-2)', () => {
     expect(within(past).getByText('Processed')).toHaveClass('text-success');
     const patients = nav.getByRole('list', { name: 'Patients' });
     expect(await within(patients).findByText('SYN-004')).toBeVisible();
-    expect(within(patients).queryAllByRole('link')).toHaveLength(0);
+    // Spec 025 T303: each label now opens the patient's page (labels only: no name or date of birth in the panel).
+    expect(within(patients).getByRole('link', { name: 'SYN-004' })).toHaveAttribute('href', expect.stringMatching(/^\/patients\/[0-9a-f-]{36}$/));
   });
 
   it('asks for neither list when the role has no clinical read access', async () => {
@@ -238,6 +239,133 @@ describe('the feature panel (specs/024 D2, D6, CH-2)', () => {
       expect(await within(patients.getByRole('list', { name: 'Patients' })).findByText('SYN-777')).toBeVisible();
       expect(posts).toHaveLength(2);
       expect(posts[1]!.requestId).toBe(posts[0]!.requestId);
+    });
+
+    describe('with demographics (spec 025 T301, T302)', () => {
+      const NAME = 'Zzyzx-Needle';
+      /** Creation plus `POST /patients/:id/demographics`; `failDemographicsOnce` refuses the first demographics request with 503. */
+      function withDemographics(failDemographicsOnce = false) {
+        const calls: { path: string; body: Record<string, unknown> }[] = [];
+        const { impl: base } = withCreate(['clinician']);
+        let demographicsTries = 0;
+        const impl = vi.fn<typeof fetch>(async (input, init) => {
+          const url = String(input);
+          if (init?.method === 'POST') calls.push({ path: new URL(url, 'http://x').pathname, body: JSON.parse(String(init.body)) });
+          if (url.includes('/demographics') && init?.method === 'POST') {
+            demographicsTries += 1;
+            if (failDemographicsOnce && demographicsTries === 1) return new Response('{}', { status: 503 });
+            const sent = JSON.parse(String(init.body)) as Record<string, unknown>;
+            const at = '2026-10-31T12:00:00.000Z';
+            const version = { version: 1, createdAt: at, createdBy: 'person-1', sex: sent.sex ?? null, birthYear: 1980, ethnicity: sent.ethnicity ?? null };
+            const dto = {
+              patientId: NEW.id,
+              current: true,
+              givenName: sent.givenName,
+              familyName: sent.familyName,
+              dateOfBirth: sent.dateOfBirth,
+              ageYears: 46,
+              ...version,
+              versions: [version],
+            };
+            return new Response(JSON.stringify(dto), { status: 201, headers: { 'Content-Type': 'application/json' } });
+          }
+          return base(input, init);
+        });
+        return { impl, calls };
+      }
+      async function fill(patients: ReturnType<typeof within>, opts: { sexAndEthnicity: boolean }) {
+        await userEvent.click(patients.getByRole('button', { name: 'Add patient' }));
+        await userEvent.type(patients.getByRole('textbox', { name: 'Synthetic patient label' }), 'SYN-777');
+        await userEvent.type(patients.getByRole('textbox', { name: 'Given name' }), NAME);
+        await userEvent.type(patients.getByRole('textbox', { name: 'Family name' }), 'Testcase');
+        fireEvent.change(patients.getByLabelText('Date of birth'), { target: { value: '1980-02-29' } });
+        if (opts.sexAndEthnicity) {
+          await userEvent.selectOptions(patients.getByRole('combobox', { name: 'Sex' }), 'female');
+          await userEvent.click(patients.getByRole('checkbox', { name: 'Hispanic or Latino' }));
+        }
+      }
+
+      it('creates the patient, then records its first version with its own request id, and the row is not Incomplete', async () => {
+        const { impl, calls } = withDemographics();
+        renderApp('/settings', { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
+        await primary();
+        const patients = within(await screen.findByRole('region', { name: 'Patients' }));
+        await fill(patients, { sexAndEthnicity: true });
+        await userEvent.click(patients.getByRole('button', { name: 'Create patient' }));
+        expect(await patients.findByText('Added SYN-777.')).toBeVisible();
+        expect(calls.map((call) => call.path)).toEqual(['/api/v1/patients', `/api/v1/patients/${NEW.id}/demographics`]);
+        expect(calls[1]!.body).toMatchObject({ givenName: NAME, familyName: 'Testcase', dateOfBirth: '1980-02-29', sex: 'female', ethnicity: ['hispanic-or-latino'] });
+        expect(calls[1]!.body.requestId).toMatch(/^[0-9a-f-]{36}$/);
+        expect(calls[1]!.body.requestId).not.toBe(calls[0]!.body.requestId);
+        const row = within(patients.getByRole('list', { name: 'Patients' }))
+          .getByRole('link', { name: 'SYN-777' })
+          .closest('li')!;
+        expect(within(row).queryByText('Incomplete')).toBeNull();
+        // The draft is dropped once saved: reopening the form shows empty fields.
+        await userEvent.click(patients.getByRole('button', { name: 'Add patient' }));
+        expect(patients.getByRole('textbox', { name: 'Given name' })).toHaveValue('');
+      });
+
+      it('a label alone adds the patient and marks it Incomplete, without a demographics request', async () => {
+        const { impl, calls } = withDemographics();
+        renderApp('/settings', { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
+        await primary();
+        const patients = await addPatient('SYN-777');
+        expect(await patients.findByText('Added SYN-777.')).toBeVisible();
+        expect(calls.map((call) => call.path)).toEqual(['/api/v1/patients']);
+        const row = within(patients.getByRole('list', { name: 'Patients' }))
+          .getByRole('link', { name: 'SYN-777' })
+          .closest('li')!;
+        expect(within(row).getByText('Incomplete')).toHaveClass('text-warning');
+      });
+
+      it('names and a date without sex and ethnicity are saved, and the row stays Incomplete', async () => {
+        const { impl, calls } = withDemographics();
+        renderApp('/settings', { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
+        await primary();
+        const patients = within(await screen.findByRole('region', { name: 'Patients' }));
+        await fill(patients, { sexAndEthnicity: false });
+        await userEvent.click(patients.getByRole('button', { name: 'Create patient' }));
+        expect(await patients.findByText('Added SYN-777.')).toBeVisible();
+        expect(calls[1]!.body).toMatchObject({ sex: null, ethnicity: null });
+        const row = within(patients.getByRole('list', { name: 'Patients' }))
+          .getByRole('link', { name: 'SYN-777' })
+          .closest('li')!;
+        expect(within(row).getByText('Incomplete')).toBeVisible();
+      });
+
+      it('when the demographics fail, the patient stays, and the retry sends only the demographics with the same request id', async () => {
+        const { impl, calls } = withDemographics(true);
+        renderApp('/settings', { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
+        await primary();
+        const patients = within(await screen.findByRole('region', { name: 'Patients' }));
+        await fill(patients, { sexAndEthnicity: true });
+        await userEvent.click(patients.getByRole('button', { name: 'Create patient' }));
+        const alert = await patients.findByRole('alert');
+        expect(alert).toHaveTextContent('SYN-777 was added, but its demographics were not saved.');
+        expect(alert.textContent).not.toContain(NAME);
+        expect(within(patients.getByRole('list', { name: 'Patients' })).getByRole('link', { name: 'SYN-777' })).toBeVisible();
+        await userEvent.click(patients.getByRole('button', { name: 'Save demographics' }));
+        expect(await patients.findByText('Added SYN-777.')).toBeVisible();
+        const paths = calls.map((call) => call.path);
+        expect(paths.filter((path) => path === '/api/v1/patients')).toHaveLength(1);
+        expect(paths.filter((path) => path.endsWith('/demographics'))).toHaveLength(2);
+        expect(calls[2]!.body.requestId).toBe(calls[1]!.body.requestId);
+      });
+
+      it('refuses sex without a name and date of birth before any request, naming the fields only', async () => {
+        const { impl, calls } = withDemographics();
+        renderApp('/settings', { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
+        await primary();
+        const patients = within(await screen.findByRole('region', { name: 'Patients' }));
+        await userEvent.click(patients.getByRole('button', { name: 'Add patient' }));
+        await userEvent.type(patients.getByRole('textbox', { name: 'Synthetic patient label' }), 'SYN-777');
+        await userEvent.selectOptions(patients.getByRole('combobox', { name: 'Sex' }), 'male');
+        await userEvent.click(patients.getByRole('button', { name: 'Create patient' }));
+        expect(await patients.findByText('Enter the given name.')).toBeVisible();
+        expect(patients.getByText('Enter the date of birth.')).toBeVisible();
+        expect(calls).toHaveLength(0);
+      });
     });
   });
 

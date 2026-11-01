@@ -6,7 +6,6 @@ import { Alert } from '@/components/ui/Alert';
 import { AlertDescription } from '@/components/ui/AlertDescription';
 import { AlertTitle } from '@/components/ui/AlertTitle';
 import { Button } from '@/components/ui/Button';
-import { Spinner } from '@/components/ui/Spinner';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 export default function SignInPage() {
@@ -39,14 +38,8 @@ export default function SignInPage() {
         </Alert>
       )}
       <div>
-        <Button size="lg" onClick={start} disabled={busy}>
-          {busy ? (
-            <>
-              <Spinner /> Redirecting…
-            </>
-          ) : (
-            'Sign in'
-          )}
+        <Button size="lg" onClick={start} pending={busy} pendingLabel="Redirecting…" disabled={busy}>
+          Sign in
         </Button>
       </div>
     </div>
