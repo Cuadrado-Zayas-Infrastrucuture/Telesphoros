@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-01",
+  "base": "50b2f180986592b496d92dbf936ad5f0b4fa0e73",
+  "originalAuditBase": "45ce0af1f0ce5eb3bedf05e9a48e8b31cf7da1cc",
+  "sourceSet": {
+    "algorithm": "sha256",
+    "encoding": "UTF-8 canonical JSON of path/sha256 records, sorted by path; sorted object keys; compact separators",
+    "paths": [
+      "apps/backend/src/app.factory.ts",
+      "apps/backend/src/db/database.ts",
+      "apps/backend/src/db/query-deadline.spec.ts",
+      "apps/backend/src/issuer/issuer-core.ts",
+      "apps/backend/src/ledger/verifier.ts",
+      "apps/backend/src/object-storage/s3-deadlines.spec.ts",
+      "apps/backend/src/object-storage/s3-object-storage.ts",
+      "apps/backend/test/rate-limit.e2e-spec.ts",
+      "apps/frontend/src/auth/AuthProvider.test.tsx",
+      "apps/frontend/src/auth/AuthProvider.tsx",
+      "apps/worker/src/scheduler.test.ts",
+      "apps/worker/src/scheduler.ts",
+      "scripts/readiness/local-load.cjs"
+    ],
+    "digest": "3a0b322bc7e6d7a4c368624e6b3a18c57994acb8a7da31dbb8666bd1f6fd3621",
+    "perFileManifest": "Preserved outside the repository in local verification evidence; individual hashes are not repository immutability pins."
+  },
+  "status": "passed locally; ready for PR",
+  "scope": "No runtime changes after rebase; evidence format repaired to preserve source mutability without changing integrity/format rules.",
+  "projectChecks": {
+    "typecheck": {
+      "exit": 0,
+      "log": "ux-readiness-publish-typecheck.log"
+    },
+    "lint": {
+      "exit": 0,
+      "log": "ux-readiness-publish-lint.log"
+    },
+    "test": {
+      "exit": 0,
+      "log": "ux-readiness-publish-test.log"
+    },
+    "build": {
+      "exit": 0,
+      "log": "ux-readiness-publish-build.log"
+    },
+    "infra": {
+      "exit": 0,
+      "log": "ux-readiness-publish-infra.log"
+    },
+    "ci-config": {
+      "exit": 0,
+      "log": "ux-readiness-publish-ci-config.log"
+    },
+    "chunks": {
+      "exit": 0,
+      "log": "ux-readiness-publish-chunks.log"
+    },
+    "demo": {
+      "exit": 0,
+      "log": "ux-readiness-publish-demo.log"
+    },
+    "workflows": {
+      "exit": 0,
+      "log": "ux-readiness-publish-workflows.log"
+    },
+    "knowledge": {
+      "exit": 0,
+      "log": "ux-readiness-publish-knowledge.log"
+    }
+  },
+  "postgresS3Affected": {
+    "passed": 224,
+    "files": 22,
+    "exit": 0,
+    "cleanup": true,
+    "scope": "Runtime deadlines, issuer/ledger/pool/restore paths, actual list-order repository/API integration, upload intake and real SDK behavior."
+  },
+  "workspace": {
+    "frontendPassed": 641,
+    "frontendFiles": 58,
+    "backendMemoryPassed": 2070,
+    "backendMemorySkipped": 436
+  },
+  "publicationIntegrityRepair": "Four existing Prettier/integrity checks pass with aggregate source-set evidence; no format scope, ignore list or guard changes.",
+  "browser": {
+    "passed": 255,
+    "configPassCounts": [
+      207,
+      46,
+      2
+    ],
+    "skipped": 5,
+    "exit": 0,
+    "launcherPassed": 5
+  },
+  "secretScan": "Staged diff and exact commit are required before publication; results retained in local delivery receipts."
+}

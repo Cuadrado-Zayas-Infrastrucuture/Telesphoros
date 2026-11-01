@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { listOrderSchema } from './pagination';
 
 /** The accepted report types. No raw genomic data (VCF or sequence) is stored (founder decision, 2026-10-28); `structured` is a curated JSON report. */
 export const REPORT_TYPES = ['structured', 'lab-pdf'] as const;
@@ -78,6 +79,7 @@ export const reportListQuerySchema = z.strictObject({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   patientId: z.uuid().optional(),
+  order: listOrderSchema,
 });
 export type ReportListQuery = z.infer<typeof reportListQuerySchema>;
 

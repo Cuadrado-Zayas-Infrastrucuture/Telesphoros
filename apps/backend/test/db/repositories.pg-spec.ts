@@ -115,6 +115,20 @@ describe.each([
       expect((await patients.list(o, { offset: 50, limit: 2 })).total).toBe(5);
     });
 
+    it('lists newest first on request: the same rows backward, a tie in reverse creation order, the same totals; the default stays oldest first', async () => {
+      const { patients } = await make();
+      const o = tenant();
+      const sameInstant = stamp();
+      for (let i = 1; i <= 5; i++) await patients.insert(patient(o, `SYN-${i}`, sameInstant));
+      const labels = async (page: Parameters<typeof patients.list>[1]) => (await patients.list(o, page)).items.map((p) => p.label);
+      expect(await labels({ offset: 0, limit: 2, order: 'desc' })).toEqual(['SYN-5', 'SYN-4']);
+      expect(await labels({ offset: 4, limit: 2, order: 'desc' })).toEqual(['SYN-1']);
+      expect((await patients.list(o, { offset: 0, limit: 2, order: 'desc' })).total).toBe(5);
+      expect((await patients.list(o, { offset: 50, limit: 2, order: 'desc' })).total).toBe(5);
+      expect(await labels({ offset: 0, limit: 2 })).toEqual(['SYN-1', 'SYN-2']);
+      expect(await labels({ offset: 0, limit: 2, order: 'asc' })).toEqual(['SYN-1', 'SYN-2']);
+    });
+
     it('updates the label and timestamp', async () => {
       const { patients } = await make();
       const o = tenant();
@@ -159,6 +173,11 @@ describe.each([
       expect(await reports.findById(o, uploaded.id)).toEqual({ ...uploaded, uploadRevision: expect.any(String), deletedAt: null });
       expect((await reports.list(o, { offset: 0, limit: 10 }, { patientId: p1.id })).total).toBe(2);
       expect((await reports.list(o, { offset: 0, limit: 10 }, {})).total).toBe(3);
+      const ids = async (order?: 'asc' | 'desc') => (await reports.list(o, { offset: 0, limit: 10, order }, {})).items.map((r) => r.id);
+      const oldestFirst = await ids();
+      expect(oldestFirst).toHaveLength(3);
+      expect(await ids('asc')).toEqual(oldestFirst);
+      expect(await ids('desc')).toEqual([...oldestFirst].reverse());
       expect(await reports.countByPatient(o, p1.id)).toBe(2);
       await reports.delete(o, uploaded.id);
       expect(await reports.countByPatient(o, p1.id)).toBe(1);
