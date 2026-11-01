@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '@/auth/AuthProvider';
+import { UsageCalendar } from '@/components/usage/UsageCalendar';
 import { UsageReportView } from '@/components/usage/UsageReportView';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
@@ -16,6 +17,7 @@ export default function UsagePage() {
         <p className="text-muted-foreground">Your organization&apos;s activity and storage. Months are in Puerto Rico time.</p>
       </div>
       <UsageReportView key={attempt} apiFetch={apiFetch} onRetry={() => setAttempt((n) => n + 1)} />
+      <UsageCalendar apiFetch={apiFetch} />
     </div>
   );
 }
