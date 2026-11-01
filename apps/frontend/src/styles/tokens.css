@@ -95,7 +95,7 @@
   --size-source-image-zoom: 76.5rem;
   --duration-preview-shimmer: 3s;
   /* Loading placeholders: shown only after this delay (fast loads never flash), then a slow sweep. */
-  --delay-skeleton: 150ms;
+  --delay-skeleton: 300ms;
   --duration-skeleton-shimmer: 1.8s;
   /* Deepest progressive blur at a scroll edge; the container pads its content by the same. */
   --size-blur-edge: 3rem;
