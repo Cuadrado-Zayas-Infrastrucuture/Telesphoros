@@ -87,6 +87,9 @@ export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthPr
       const doFetch = fetchImpl ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
       return doFetch(`${apiBaseUrl}${path}`, {
         ...init,
+        // Includes response-body consumption. Keep caller cancellation, and never retry a write whose outcome may be unknown.
+        // Intake can spend 60 s receiving bytes plus two 30 s storage checks; leave room for admission/commit as well.
+        signal: AbortSignal.any([...(init.signal ? [init.signal] : []), AbortSignal.timeout(180_000)]),
         // After the caller's options on purpose: an authenticated response (patients, reports, results) is never kept in the browser HTTP cache.
         cache: 'no-store',
         headers: { ...(init.headers as Record<string, string> | undefined), Authorization: `Bearer ${held.accessToken}` },

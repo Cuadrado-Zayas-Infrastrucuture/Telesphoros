@@ -80,6 +80,7 @@ export class Database {
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 2_000, // fail fast instead of queueing forever when the database is down
       statement_timeout: 5_000, // no query may run unbounded
+      query_timeout: 7_000, // client-side bound if a half-open socket prevents the server's timeout response arriving
       idle_in_transaction_session_timeout: 10_000,
       application_name: options.applicationName ?? 'telesphoros-backend',
     });
