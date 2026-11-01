@@ -506,3 +506,61 @@ it('removes an idle recovery banner at the fixed one-hour boundary', async () =>
   expect(screen.queryByText('The file you chose earlier')).not.toBeInTheDocument();
   expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v2')).toBeNull();
 });
+
+describe('demographics while adding and choosing a patient (spec 025 T301, T302)', () => {
+  const incompletePatient = { ...patient, sex: null, birthYear: null, ageYears: null, ethnicity: null, demographicsComplete: false };
+
+  it('says once, without blocking, that the chosen patient is Incomplete, and links to its page', async () => {
+    patientApi.mockReset().mockImplementation(async () => pageResponse([incompletePatient]));
+    const user = userEvent.setup();
+    render(<UploadReportPage />);
+    const select = await screen.findByLabelText(/synthetic patient \(required\)/i);
+    expect(await screen.findByRole('option', { name: 'SYN-0001' })).toBeInTheDocument();
+    await user.selectOptions(select, patientId);
+    expect(await screen.findByText(/demographics are incomplete\. You can still attach the report/)).toHaveClass('text-warning');
+    expect(screen.getByRole('link', { name: 'Open SYN-0001' })).toHaveAttribute('href', `/patients/${patientId}`);
+    expect(screen.queryByText('Choose an existing patient.')).not.toBeInTheDocument();
+  });
+
+  it('Enter in a demographics field adds the patient with its demographics, and does not submit the upload', async () => {
+    const demographicsPosts: unknown[] = [];
+    let added = false;
+    patientApi.mockReset().mockImplementation(async (path: string, init?: RequestInit) => {
+      if (init?.method === 'POST' && path.endsWith('/demographics')) {
+        const sent = JSON.parse(String(init.body));
+        demographicsPosts.push(sent);
+        const v = { version: 1, createdAt: date, createdBy: 'p', sex: sent.sex, birthYear: 1980, ethnicity: sent.ethnicity };
+        return new Response(
+          JSON.stringify({
+            patientId: createdPatient.id,
+            current: true,
+            givenName: sent.givenName,
+            familyName: sent.familyName,
+            dateOfBirth: sent.dateOfBirth,
+            ageYears: 46,
+            ...v,
+            versions: [v],
+          }),
+          { status: 201 },
+        );
+      }
+      if (init?.method === 'POST') {
+        added = true;
+        return createdAnswer();
+      }
+      return pageResponse(added ? [createdPatient] : []);
+    });
+    const user = userEvent.setup();
+    render(<UploadReportPage />);
+    await screen.findByText('No patients yet. Add a synthetic patient to continue.');
+    await user.type(screen.getByLabelText('Synthetic patient label'), 'SYN-0002');
+    await user.type(screen.getByRole('textbox', { name: 'Given name' }), 'Zzyzx-Needle');
+    await user.type(screen.getByRole('textbox', { name: 'Family name' }), 'Testcase');
+    await user.type(screen.getByLabelText('Date of birth'), '1980-02-29');
+    await user.type(screen.getByRole('textbox', { name: 'Family name' }), '{Enter}');
+    expect(await screen.findByText('Added SYN-0002 and selected it.')).toBeInTheDocument();
+    expect(demographicsPosts).toEqual([expect.objectContaining({ givenName: 'Zzyzx-Needle', familyName: 'Testcase', dateOfBirth: '1980-02-29', sex: null, ethnicity: null })]);
+    expect(submitMock).not.toHaveBeenCalled();
+    expect(screen.queryByText('Zzyzx-Needle')).not.toBeInTheDocument();
+  });
+});
