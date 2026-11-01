@@ -1,3 +1,4 @@
+import { StoragePreferencesButton } from '@/components/privacy/StoragePreferencesButton';
 import { ownedStorageMode } from '@/lib/storageMode';
 import companySymbol from '@/assets/company-symbol.svg';
 import { useLandingRoute, useShellCopy } from '@/lib/landing/landing-language';
@@ -28,6 +29,7 @@ export function SiteFooter() {
               </>
             )}
           </p>
+          <StoragePreferencesButton className="self-start" />
         </div>
       </div>
     </footer>

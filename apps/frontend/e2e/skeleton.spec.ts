@@ -6,7 +6,7 @@ const holdUsage = (page: Page) => page.route('**/api/v1/usage', () => new Promis
 
 for (const dark of [false, true]) {
   test(`while usage loads, the page keeps its shape, announces it once, and has no WCAG A/AA violations (${dark ? 'dark' : 'light'})`, async ({ page }, info) => {
-    if (dark) await page.addInitScript(() => window.localStorage.setItem('telesphoros.theme', 'dark'));
+    if (dark) await page.addInitScript(() => { window.localStorage.setItem('telesphoros.storage-consent.v1', JSON.stringify({ version: 1, preferences: true })); window.localStorage.setItem('telesphoros.theme', 'dark'); });
     await holdUsage(page);
     await signInAs(page, 'carol', '/usage');
     await expect(page.getByRole('status').filter({ hasText: 'Loading usage…' })).toHaveCount(1);

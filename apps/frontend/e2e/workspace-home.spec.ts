@@ -182,7 +182,7 @@ test.describe('the conversation', () => {
 test.describe('accessibility and layout (CH-7)', () => {
   for (const dark of [false, true]) {
     test(`no WCAG A/AA violations: empty, file attached, and with a note (${dark ? 'dark' : 'light'})`, async ({ page }) => {
-      if (dark) await page.addInitScript(() => window.localStorage.setItem('telesphoros.theme', 'dark'));
+      if (dark) await page.addInitScript(() => { window.localStorage.setItem('telesphoros.storage-consent.v1', JSON.stringify({ version: 1, preferences: true })); window.localStorage.setItem('telesphoros.theme', 'dark'); });
       await signInAs(page, 'alice', '/workspace');
       await expect(page.getByRole('heading', { level: 1, name: HEADING })).toBeVisible();
       await openWorkspaceNavigation(page); // on a phone the panel is a drawer; open it so axe sees the lists too

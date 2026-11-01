@@ -80,6 +80,8 @@
   --size-button-lg: 3.5rem;
   --size-control: 2.75rem;
 
+  --size-consent-space: 0px;
+
   /* Layout */
   --size-sidebar: 15rem;
   --size-sidebar-collapsed: 4.5rem;

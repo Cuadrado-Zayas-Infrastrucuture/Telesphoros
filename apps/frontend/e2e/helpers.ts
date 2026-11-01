@@ -10,9 +10,14 @@ export const ROLE: Record<Persona, string> = { alice: 'clinician', bob: 'reader'
  * Signs in exactly as a person would: open a protected page, get sent to sign in, click through to the
  * identity provider, pick an account there, and come back to the page they wanted.
  */
-export async function signInAs(page: Page, persona: Persona, path = '/reports/upload') {
+export async function signInAs(page: Page, persona: Persona, path = '/reports/upload', consent: 'preferences' | 'necessary' | 'unanswered' = 'preferences') {
   await page.goto(path);
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
+  // Existing flows model a visitor's explicit choice; consent tests can leave the first-visit bar unanswered.
+  if (consent !== 'unanswered') {
+    const choice = page.getByRole('button', { name: consent === 'preferences' ? 'Allow preferences' : 'Use necessary only', exact: true });
+    if (await choice.count()) await choice.click();
+  }
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.getByRole('button', { name: new RegExp(`Sign in as ${persona}\\b`) }).click();
   await page.waitForURL(`**${path}`);

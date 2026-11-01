@@ -1,3 +1,4 @@
+import { preferenceStorage } from '@/lib/storageConsent';
 import { ownedStorageMode } from '@/lib/storageMode';
 
 /** What the person chose in Settings. "system" follows the device's light or dark setting. */
@@ -14,7 +15,7 @@ const DARK_QUERY = '(prefers-color-scheme: dark)';
  */
 export function readThemePreference(): ThemePreference {
   try {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
+    const saved = preferenceStorage.read(STORAGE_KEY);
     return THEME_PREFERENCES.includes(saved as ThemePreference) ? (saved as ThemePreference) : 'system';
   } catch {
     return 'system';
@@ -23,8 +24,8 @@ export function readThemePreference(): ThemePreference {
 
 export function writeThemePreference(preference: ThemePreference): void {
   try {
-    if (preference === 'system') window.localStorage.removeItem(STORAGE_KEY);
-    else window.localStorage.setItem(STORAGE_KEY, preference);
+    if (preference === 'system') preferenceStorage.write(STORAGE_KEY, null);
+    else preferenceStorage.write(STORAGE_KEY, preference);
   } catch {
     // Not saved: the choice still applies to this tab.
   }
