@@ -1,3 +1,4 @@
+import './runtime-rootfs.test.cjs';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -6,21 +7,21 @@ const text=readFileSync(new URL('api.Dockerfile',import.meta.url),'utf8');
 export function problems(source){
   const lines=source.split('\n').filter(l=>!l.trim().startsWith('#')).join('\n');
   const rules=[
-    ['base',()=>{const from=[...lines.matchAll(/^FROM (\S+) AS (\w+)$/gm)];return from.length===2 && from.every(m=>/^node:22\.22\.0-bookworm-slim@sha256:[0-9a-f]{64}$/.test(m[1]));}],
+    ['base',()=>{const from=[...lines.matchAll(/^FROM (\S+) AS (\w+)$/gm)];return from.length===3 && from.slice(0,2).every(m=>/^node:22\.22\.0-bookworm-slim@sha256:[0-9a-f]{64}$/.test(m[1])) && from[2][1]==='scratch' && from[2][2]==='runtime';}],
     ['OS fixes',()=>['libcap2=1:2.66-4+deb12u3+b1','libgnutls30=3.7.9-2+deb12u7','libpcre2-8-0=10.42-1+deb12u2','perl-base=5.36.0-7+deb12u4','libc6=2.36-9+deb12u14','libc-bin=2.36-9+deb12u14','dpkg=1.21.23'].every(pin=>lines.includes(pin))],
-    ['installer removal',()=>lines.includes('/usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx')],
+    ['minimal runtime',()=>lines.includes('RUN node /tmp/runtime-rootfs.cjs /runtime-rootfs') && lines.includes('COPY --from=runtime_files /runtime-rootfs/ /') && !/^COPY --from=runtime_files \/(?:usr|lib|etc)\//m.test(lines)],
     ['pnpm',()=>lines.includes('pnpm@10.28.0')],
     ['frozen',()=>lines.includes('pnpm fetch --frozen-lockfile')&&lines.includes('pnpm install --frozen-lockfile --offline')],
     ['prod',()=>/pnpm --filter @telesphoros\/backend deploy --legacy --prod \/output/.test(lines)],
     ['worker bundle',()=>lines.includes('pnpm --filter @telesphoros/worker build')&&lines.includes('cp apps/worker/dist/main.js /output/worker/main.js')&&!/COPY .*worker.*\.map/.test(lines)],
     ['dependency graph',()=>lines.includes('dependency-graph.cjs record') && lines.includes('dependency-graph.cjs compare')],
     ['CA build check',()=>lines.includes('sha256sum --check global-bundle.sha256')],
-    ['production',()=>/ENV NODE_ENV=production NODE_EXTRA_CA_CERTS=\/opt\/telesphoros\/ca\/global-bundle.pem/.test(lines)],
+    ['production',()=>/ENV PATH=\/usr\/local\/bin NODE_ENV=production NODE_EXTRA_CA_CERTS=\/opt\/telesphoros\/ca\/global-bundle.pem LANG=C LC_ALL=C LANGUAGE=C/.test(lines)],
     ['nonroot',()=>/^USER 10001:10001$/m.test(lines)],
     ['exec entrypoint',()=>/^ENTRYPOINT \["node"\]$/m.test(lines)&&/^CMD \["dist\/main.js"\]$/m.test(lines)],
     ['no credential ARG',()=>!/^ARG\s+/m.test(lines)],
     ['no healthcheck',()=>!/^HEALTHCHECK\b/m.test(lines)],
-    ['no runtime installers',()=>!/^RUN.*(?:npm|pnpm|pip).*install/m.test(lines.split('AS runtime')[1] || '')],
+    ['no runtime installers',()=>!/^RUN.*(?:npm|pnpm|pip).*install/m.test(lines.split('FROM scratch AS runtime')[1] || '')],
   ];
   return rules.filter(([,check])=>!check()).map(([name])=>name);
 }
@@ -29,7 +30,7 @@ const mutations=[
  ['OS fixes',s=>s.replace('libcap2=1:2.66-4+deb12u3+b1','libcap2')],
  ['OS fixes',s=>s.replace('libc6=2.36-9+deb12u14 ','')],
  ['OS fixes',s=>s.replace('dpkg=1.21.23','dpkg')],
- ['installer removal',s=>s.replace('/usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx','/unused')],
+ ['minimal runtime',s=>s.replace('COPY --from=runtime_files /runtime-rootfs/ /','COPY --from=runtime_files / /')],
  ['base',s=>s.replace(/@sha256:[0-9a-f]{64}/g,'')],
  ['pnpm',s=>s.replace('pnpm@10.28.0','pnpm@latest')],
  ['frozen',s=>s.replace('--frozen-lockfile','')],
