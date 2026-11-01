@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
 import { NativeSelect } from '@/components/ui/NativeSelect';
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { PatientPicker } from '@/components/PatientPicker';
 import { useAddPatient } from '@/hooks/useAddPatient';
 import { INCOMPLETE_PROMPT } from '@/components/patients/IncompleteWord';
 import { PatientDemographicsFields } from '@/components/patients/PatientDemographicsFields';
@@ -367,24 +368,20 @@ export default function UploadReportPage() {
                           <FormItem>
                             <FormLabel>Synthetic patient (required)</FormLabel>
                             <FormControl>
-                              <NativeSelect
+                              <PatientPicker
                                 {...field}
-                                disabled={patientsLoading || isSubmitting}
-                                onChange={(event) => {
-                                  field.onChange(event);
-                                  setSelectedPatient(patients?.data.find((patient) => patient.id === event.target.value) ?? null);
+                                patients={patients?.data ?? null}
+                                selectedPatient={selectedPatient}
+                                loading={patientsLoading}
+                                error={patientError}
+                                emptyMessage="No patients yet. Add a synthetic patient to continue."
+                                disabled={isSubmitting}
+                                onRetry={() => loadPatients(patientRequest.page)}
+                                onValueChange={(id) => {
+                                  field.onChange(id);
+                                  setSelectedPatient(patients?.data.find((patient) => patient.id === id) ?? null);
                                 }}
-                              >
-                                <option value="">Choose an existing patient…</option>
-                                {selectedPatient && !patients?.data.some((patient) => patient.id === selectedPatient.id) && (
-                                  <option value={selectedPatient.id}>{selectedPatient.label}</option>
-                                )}
-                                {patients?.data.map((patient) => (
-                                  <option key={patient.id} value={patient.id}>
-                                    {patient.label}
-                                  </option>
-                                ))}
-                              </NativeSelect>
+                              />
                             </FormControl>
                             <FormDescription>Select a synthetic patient, or add a new one.</FormDescription>
                             {chosenRow && incompleteness(chosenRow) === 'incomplete' && (
@@ -401,26 +398,18 @@ export default function UploadReportPage() {
                       />
 
                       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-                        <p role="status" className="text-sm text-muted-foreground">
-                          {patientsLoading
-                            ? 'Loading patients…'
-                            : patients?.meta.total === 0
-                              ? 'No patients yet. Add a synthetic patient to continue.'
-                              : patients
-                                ? `Patient page ${patients.meta.page} of ${patients.meta.totalPages}`
-                                : 'Patients unavailable.'}
-                        </p>
+                        {!patientsLoading && !patientError && patients && patients.meta.total > 0 && (
+                          <p role="status" className="text-sm text-muted-foreground">
+                            Patient page {patients.meta.page} of {patients.meta.totalPages}
+                          </p>
+                        )}
                         <div className="-ml-3 flex flex-wrap gap-1 sm:ml-0">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            disabled={patientsLoading || isSubmitting}
-                            onClick={() => loadPatients(patientError ? patientRequest.page : (patients?.meta.page ?? 1))}
-                          >
-                            <RefreshCw aria-hidden="true" className="size-4 shrink-0" />
-                            Refresh patients
-                          </Button>
+                          {!patientError && (
+                            <Button type="button" variant="ghost" size="sm" disabled={patientsLoading || isSubmitting} onClick={() => loadPatients(patients?.meta.page ?? 1)}>
+                              <RefreshCw aria-hidden="true" className="size-4 shrink-0" />
+                              Refresh patients
+                            </Button>
+                          )}
                           {patients && patients.meta.totalPages > 1 && (
                             <>
                               <Button
@@ -445,11 +434,6 @@ export default function UploadReportPage() {
                           )}
                         </div>
                       </div>
-                      {patientError && (
-                        <p role="alert" className="text-sm text-destructive">
-                          {patientError}
-                        </p>
-                      )}
                       {added && (
                         <p role="status" className="text-sm text-muted-foreground">
                           {added}

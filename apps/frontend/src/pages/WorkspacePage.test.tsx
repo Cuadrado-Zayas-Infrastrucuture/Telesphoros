@@ -108,6 +108,14 @@ describe('the chat-first home in every build (specs/024)', () => {
     expect(useSyntheticChat).not.toHaveBeenCalled();
   });
 
+  it('explains the synthetic label rules beside a new patient choice and associates them with its input', async () => {
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.upload(file(), json());
+    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Patient' }), 'new');
+    expect(screen.getByRole('textbox', { name: 'New patient label' })).toHaveAccessibleDescription('Letters, numbers and hyphens. A code, never a name.');
+  });
+
   it('needs the synthetic confirmation before it sends (D5)', async () => {
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
