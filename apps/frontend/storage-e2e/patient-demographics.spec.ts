@@ -9,6 +9,14 @@ test.describe('Patient demographics: collected in Add patient, read and correcte
     await signInAs(page, 'alice', '/workspace');
     await openWorkspaceNavigation(page);
     const section = page.getByRole('region', { name: 'Patients' });
+    // The panel's line "N of M complete" (T304) comes from the counts route; this suite shares one database, so the test reads where it starts and checks the change.
+    const line = section.getByText(/\d+ of \d+ complete/);
+    const readCounts = async () => {
+      const [, complete, patients] = /(\d+) of (\d+) complete/.exec((await line.textContent()) ?? '') ?? [];
+      return { complete: Number(complete), patients: Number(patients) };
+    };
+    await expect(line).toBeVisible();
+    const start = await readCounts();
     const created = label();
     await section.getByRole('button', { name: 'Add patient' }).click();
     await section.getByRole('textbox', { name: 'Synthetic patient label' }).fill(created);
@@ -19,6 +27,7 @@ test.describe('Patient demographics: collected in Add patient, read and correcte
     await section.getByRole('checkbox', { name: 'Hispanic or Latino' }).check();
     await section.getByRole('button', { name: 'Create patient' }).click();
     await expect(section.getByText(`Added ${created}.`)).toBeVisible();
+    await expect.poll(readCounts).toEqual({ complete: start.complete + 1, patients: start.patients + 1 });
     const row = section.getByRole('list', { name: 'Patients' }).getByRole('listitem').filter({ hasText: created });
     await expect(row.getByText('Incomplete')).toHaveCount(0);
 
@@ -62,5 +71,6 @@ test.describe('Patient demographics: collected in Add patient, read and correcte
     await section.getByRole('textbox', { name: 'Synthetic patient label' }).fill(bare);
     await section.getByRole('button', { name: 'Create patient' }).click();
     await expect(section.getByRole('list', { name: 'Patients' }).getByRole('listitem').filter({ hasText: bare }).getByText('Incomplete')).toBeVisible();
+    await expect.poll(readCounts).toEqual({ complete: start.complete + 1, patients: start.patients + 2 }); // a label alone adds one to the denominator and nothing to complete
   });
 });

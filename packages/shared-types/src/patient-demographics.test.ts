@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ageFromBirthYear, dateOfBirthProblem, ETHNICITY_CODES, patientDemographicsInputSchema, patientDtoSchema, SEX_CODES } from './index';
+import { ageFromBirthYear, dateOfBirthProblem, demographicsCompletenessSchema, ETHNICITY_CODES, patientDemographicsInputSchema, patientDtoSchema, SEX_CODES } from './index';
 
 // Spec 025 PD-a: the request schema (T103). Each malformed field is refused on its own against a valid control, and no message repeats a submitted value.
 describe('patientDemographicsInputSchema', () => {
@@ -95,5 +95,22 @@ describe('patientDtoSchema with the coded list fields', () => {
       expect(patientDtoSchema.safeParse({ ...base, ...identity }).success).toBe(false);
     }
     expect(patientDtoSchema.safeParse({ ...base, sex: 'unknown' }).success).toBe(false);
+  });
+});
+
+// Spec 025 T304: counts only, and the denominator is the sum of the three states.
+describe('demographicsCompletenessSchema', () => {
+  const ok = { patients: 4, complete: 1, incomplete: 2, none: 1 };
+
+  it('accepts counts that add up, including an empty organization', () => {
+    expect(demographicsCompletenessSchema.safeParse(ok).success).toBe(true);
+    expect(demographicsCompletenessSchema.safeParse({ patients: 0, complete: 0, incomplete: 0, none: 0 }).success).toBe(true);
+  });
+
+  it('refuses counts that do not add up, negative or fractional counts, and any extra field (no identity can ride along)', () => {
+    expect(demographicsCompletenessSchema.safeParse({ ...ok, patients: 5 }).success).toBe(false);
+    expect(demographicsCompletenessSchema.safeParse({ ...ok, none: -1, patients: 2 }).success).toBe(false);
+    expect(demographicsCompletenessSchema.safeParse({ ...ok, complete: 1.5, incomplete: 1.5 }).success).toBe(false);
+    expect(demographicsCompletenessSchema.safeParse({ ...ok, givenName: 'x' }).success).toBe(false);
   });
 });

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import type { Role } from '@telesphoros/shared-types';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RECOVERY_SCOPE, renderApp } from '@/test/authTestUtils';
+import { announcePatientAdded } from '@/lib/workspaceEvents';
 
 const sidebar = () => document.querySelector<HTMLElement>('header.workspace-navigation');
 /** The sidebar's navigation, once sign-in has finished (before that, the signed-out header has its own "Primary" navigation). */
@@ -390,5 +391,64 @@ describe('the feature panel (specs/024 D2, D6, CH-2)', () => {
     fireEvent.keyDown(screen.getByRole('link', { name: 'Upload report' }), { key: 'Escape' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(toggle).toHaveFocus();
+  });
+});
+
+describe('the demographics line under Patients (spec 025 T304)', () => {
+  const COUNTS_PATH = '/api/v1/patients/demographics-completeness';
+  /** The panel's usual answers, plus the counts route: a body, or `unavailable` for the in-memory store's 503. */
+  function withCounts(answer: () => object | 'unavailable') {
+    const base = api(['clinician']);
+    const impl = vi.fn<typeof fetch>(async (input, init) => {
+      if (String(input).endsWith(COUNTS_PATH)) {
+        const body = answer();
+        return body === 'unavailable' ? new Response('{}', { status: 503 }) : new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
+      }
+      return base(input, init);
+    });
+    return impl;
+  }
+  const patientsSection = async () => {
+    await panelItems();
+    return within(screen.getByRole('region', { name: 'Patients' }));
+  };
+
+  it('says how many have complete demographics, in color: warning while some are missing, success when all are there', async () => {
+    renderApp('/settings', { signedInAs: ['clinician'], fetchImpl: withCounts(() => ({ patients: 20, complete: 12, incomplete: 5, none: 3 })) as unknown as typeof fetch });
+    expect(await (await patientsSection()).findByText('12 of 20 complete')).toHaveClass('text-warning');
+  });
+
+  it('shows success when every patient is complete', async () => {
+    renderApp('/settings', { signedInAs: ['clinician'], fetchImpl: withCounts(() => ({ patients: 2, complete: 2, incomplete: 0, none: 0 })) as unknown as typeof fetch });
+    expect(await (await patientsSection()).findByText('2 of 2 complete')).toHaveClass('text-success');
+  });
+
+  it('leaves the line out, with no alert, when the counts cannot be read, when there are no patients, or when the answer is malformed', async () => {
+    for (const answer of ['unavailable', { patients: 0, complete: 0, incomplete: 0, none: 0 }, { patients: 5, complete: 1, incomplete: 1, none: 1 }] as const) {
+      const { unmount } = renderApp('/settings', { signedInAs: ['clinician'], fetchImpl: withCounts(() => answer) as unknown as typeof fetch });
+      const section = await patientsSection();
+      await vi.waitFor(() => expect(section.getByRole('list', { name: 'Patients' })).toBeVisible());
+      expect(section.queryByText(/Demographics:/)).toBeNull();
+      expect(section.queryByRole('alert')).toBeNull();
+      unmount();
+    }
+  });
+
+  it('reads the counts again when a patient is added elsewhere (the chat), so the line moves', async () => {
+    let answer = { patients: 1, complete: 1, incomplete: 0, none: 0 };
+    const impl = withCounts(() => answer);
+    renderApp('/settings', { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
+    expect(await (await patientsSection()).findByText('1 of 1 complete')).toBeVisible();
+    answer = { patients: 2, complete: 1, incomplete: 0, none: 1 };
+    announcePatientAdded({
+      id: '3b241101-e2bb-4255-8caf-4136c566a962',
+      label: 'SYN-NEW',
+      createdAt: '2026-10-31T12:00:00.000Z',
+      updatedAt: '2026-10-31T12:00:00.000Z',
+      mergedInto: null,
+      demographicsComplete: false,
+    });
+    expect(await (await patientsSection()).findByText('1 of 2 complete')).toHaveClass('text-warning');
+    expect(impl.mock.calls.filter(([input]) => String(input).endsWith(COUNTS_PATH))).toHaveLength(2);
   });
 });

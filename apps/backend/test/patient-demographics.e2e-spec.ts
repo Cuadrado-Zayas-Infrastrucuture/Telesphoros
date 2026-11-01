@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { ageFromBirthYear, patientDemographicsDtoSchema, patientDtoSchema } from '@telesphoros/shared-types';
+import { ageFromBirthYear, demographicsCompletenessSchema, patientDemographicsDtoSchema, patientDtoSchema } from '@telesphoros/shared-types';
 import { FIELD_KEY_PROVIDER, type FieldKeyProvider, LocalFieldKeyProvider } from '../src/patient-demographics/field-key-provider';
 import { createTestApp, usingPostgres } from './helpers/app';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from './helpers/database';
@@ -308,6 +308,66 @@ class CountingProvider implements FieldKeyProvider {
       expect(item).toMatchObject({ sex: 'male', birthYear: 1980, ethnicity: ['hispanic-or-latino'], demographicsComplete: true });
       const single = (await lab.api().get(`/api/v1/patients/${patientId}`).set(bearer(clinician.token)).expect(200)).body;
       expect(Object.keys(single).sort()).toEqual(['createdAt', 'id', 'label', 'mergedInto', 'updatedAt']);
+    });
+  });
+
+  describe('completeness counts (T304)', () => {
+    const counts = (who: Person) => lab.api().get('/api/v1/patients/demographics-completeness').set(bearer(who.token));
+
+    it('counts each state with its denominator, agrees with the list, follows a correction, and holds no identity and no key use', async () => {
+      const clinician = await lab.person('dr', ['clinician']);
+      const reader = await lab.person('reader', ['reader']);
+      expect((await counts(reader).expect(200)).body).toEqual({ patients: 0, complete: 0, incomplete: 0, none: 0 });
+      const complete = await lab.patient(clinician);
+      const noEthnicity = await lab.patient(clinician);
+      const noSex = await lab.patient(clinician);
+      await lab.patient(clinician); // no demographics at all
+      await post(clinician, complete, body()).expect(201);
+      await post(clinician, noEthnicity, body({ ethnicity: null })).expect(201);
+      await post(clinician, noSex, body({ sex: null })).expect(201);
+
+      const before = provider.calls;
+      const res = await counts(reader).expect(200);
+      expect(provider.calls).toBe(before); // counting reads coded columns only: the key provider is never asked
+      expect(res.body).toEqual({ patients: 4, complete: 1, incomplete: 2, none: 1 });
+      expect(demographicsCompletenessSchema.safeParse(res.body).success).toBe(true);
+      expect(JSON.stringify(res.body)).not.toMatch(/Zzyzx|Qwerty|1971|patientId|givenName/);
+
+      // The counts and the list apply one rule: the denominator is the list's total, and the complete count is the rows marked complete.
+      const rows = (await list(reader).expect(200)).body;
+      expect(rows.meta.total).toBe(res.body.patients);
+      expect((rows.data as Json[]).filter((p) => p.demographicsComplete).length).toBe(res.body.complete);
+
+      await post(clinician, noEthnicity, body()).expect(201); // a correction fills the gap
+      expect((await counts(reader).expect(200)).body).toEqual({ patients: 4, complete: 2, incomplete: 1, none: 1 });
+    });
+
+    it('is for clinical read roles only, and never counts another organization’s patients', async () => {
+      const clinician = await lab.person('dr', ['clinician']);
+      const patientId = await lab.patient(clinician);
+      await post(clinician, patientId, body()).expect(201);
+      for (const roles of [['reader'], ['reviewer']]) expect((await counts(await lab.person(`r-${roles[0]}`, roles)).expect(200)).body.patients).toBe(1);
+      for (const roles of [['admin'], []]) expect((await counts(await lab.person(`n-${roles[0] ?? 'none'}`, roles)).expect(403)).body.error.code).toBe('FORBIDDEN');
+      const stranger = await lab.person('stranger', ['clinician'], `tenant-${randomUUID().slice(0, 8)}`);
+      expect((await counts(stranger).expect(200)).body).toEqual({ patients: 0, complete: 0, incomplete: 0, none: 0 });
+    });
+
+    it('does not count a patient that was merged into another, as the list does not show it', async () => {
+      const proposer = await lab.person('dr-one', ['clinician']);
+      const decider = await lab.person('dr-two', ['clinician']);
+      const source = await lab.patient(proposer); // no demographics: it would count as "none" if it were counted
+      const target = await lab.patient(proposer);
+      await post(proposer, target, body()).expect(201);
+      expect((await counts(proposer).expect(200)).body).toEqual({ patients: 2, complete: 1, incomplete: 0, none: 1 });
+      const proposed = await lab
+        .api()
+        .post('/api/v1/patient-merges')
+        .set(bearer(proposer.token))
+        .send({ kind: 'merge', sourcePatientId: source, targetPatientId: target, reasonCode: 'entered-twice' })
+        .expect(201);
+      await lab.api().post(`/api/v1/patient-merges/${proposed.body.id}/decision`).set(bearer(decider.token)).send({ decision: 'approved' }).expect(201);
+      expect((await counts(proposer).expect(200)).body).toEqual({ patients: 1, complete: 1, incomplete: 0, none: 0 });
+      expect((await list(proposer).expect(200)).body.meta.total).toBe(1); // the list agrees
     });
   });
 

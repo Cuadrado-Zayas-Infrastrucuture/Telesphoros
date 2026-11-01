@@ -122,6 +122,23 @@ export const patientDemographicsDtoSchema = z.strictObject({
 });
 export type PatientDemographicsDto = z.infer<typeof patientDemographicsDtoSchema>;
 
+/**
+ * `GET /patients/demographics-completeness`: how many of the organization's patients (merged-away ones excluded, as in the list) have complete coded
+ * demographics. `complete` means the latest version records both sex and ethnicity, the same rule as `demographicsComplete` on a list row, so the counts
+ * and the "Incomplete" word never disagree. `patients` is the denominator: it equals `complete + incomplete + none`. Counts only: no name, date or id.
+ */
+export const demographicsCompletenessSchema = z
+  .strictObject({
+    patients: z.number().int().min(0),
+    complete: z.number().int().min(0),
+    /** A version exists, but sex or ethnicity is not recorded. */
+    incomplete: z.number().int().min(0),
+    /** No version recorded yet. */
+    none: z.number().int().min(0),
+  })
+  .refine((c) => c.complete + c.incomplete + c.none === c.patients, { message: 'The counts must add up to the number of patients.' });
+export type DemographicsCompleteness = z.infer<typeof demographicsCompletenessSchema>;
+
 /** The `reason` of each refusal a client must tell apart (in `error.details[0].reason`). */
 export const DEMOGRAPHICS_REFUSAL_REASONS = {
   /** 410: the patient's identity key was destroyed (D8). Every version is unreadable and no new version can be written. Nothing can undo it. */
