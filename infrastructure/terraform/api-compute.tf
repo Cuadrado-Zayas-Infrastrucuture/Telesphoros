@@ -73,6 +73,12 @@ variable "api_log_retention_days" {
   }
 }
 
+variable "medication_writes_enabled" {
+  description = "Open medication POSTs only after migration 0066 and compatible API/worker/verifier rollout are confirmed. False fences medication writes; it is not a global write drain."
+  type        = bool
+  default     = false
+}
+
 locals {
   api_service_count = var.enable_api_hosting && var.api_image != "" ? 1 : 0
   api_container     = "api"
@@ -101,6 +107,7 @@ locals {
     DATABASE_POOL_MAX                 = tostring(var.api_db_pool_max)
     CORS_ALLOWED_ORIGINS              = join(",", var.api_cors_origins)
     RATE_LIMIT_ENABLED                = "true"
+    MEDICATION_WRITES                 = var.medication_writes_enabled ? "enabled" : "disabled"
     TRUST_PROXY_HOPS                  = "1"
     BUILD_VERSION                     = local.api_build
     LEDGER_FULL_VERIFY_INTERVAL_HOURS = "24"

@@ -24,7 +24,7 @@ const row: PatientMedicationDto = {
   createdBy: 'synthetic',
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-async function open(roles: Role[] = ['clinician'], rows: PatientMedicationDto[] = [], mode: 'normal' | 'lost' | 'stale' = 'normal') {
+async function open(roles: Role[] = ['clinician'], rows: PatientMedicationDto[] = [], mode: 'normal' | 'lost' | 'stale' | 'fenced' = 'normal') {
   const posts: Record<string, unknown>[] = [];
   let current = rows;
   const fetchImpl = vi.fn<typeof fetch>(async (url, init) => {
@@ -33,6 +33,7 @@ async function open(roles: Role[] = ['clinician'], rows: PatientMedicationDto[] 
       if (init?.method === 'POST') {
         const body = JSON.parse(String(init.body));
         posts.push(body);
+        if (mode === 'fenced') return json({ error: { message: 'DO-NOT-ECHO', details: [{ reason: 'medication-writes-fenced' }] } }, 503);
         if (mode === 'stale') return json({ error: { message: 'DO-NOT-ECHO', details: [{ reason: 'medication-changed' }] } }, 409);
         if (mode === 'lost' && posts.length === 1) throw new Error('DO-NOT-ECHO');
         const next = { ...row, ...body, version: body.expectedVersion ? body.expectedVersion + 1 : 1 };
@@ -180,6 +181,21 @@ describe('patient medication capture', () => {
       listVersion: BUNDLED_DRUG_LIST!.version,
       ...(action === 'Stop' ? { status: 'stopped' } : { source: 'patient-reported' }),
     });
+  });
+
+  it('keeps the form and retry id when medication recording is paused', async () => {
+    const { region, posts } = await open(['clinician'], [row], 'fenced');
+    await userEvent.click(region.getByRole('button', { name: 'Details for hydralazine' }));
+    await userEvent.click(region.getByRole('button', { name: 'Correct hydralazine' }));
+    await userEvent.selectOptions(region.getByLabelText('Source'), 'patient-reported');
+    await userEvent.click(region.getByRole('button', { name: 'Save correction' }));
+    expect(await region.findByRole('alert')).toHaveTextContent('Medication recording is temporarily paused. Your entries are kept; retry later.');
+    expect(region.getByLabelText('Source')).toHaveValue('patient-reported');
+    expect(region.queryByText('Medication saved.')).toBeNull();
+    expect(region.queryByText('DO-NOT-ECHO')).toBeNull();
+    await userEvent.click(region.getByRole('button', { name: 'Save correction' }));
+    expect(posts).toHaveLength(2);
+    expect(posts[1]).toEqual(posts[0]);
   });
 
   it('retains a rejected stale correction without presenting it as saved', async () => {

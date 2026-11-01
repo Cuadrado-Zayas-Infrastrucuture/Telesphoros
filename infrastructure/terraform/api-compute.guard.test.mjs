@@ -50,6 +50,7 @@ function blocks(text, header) {
 
 const PLACEHOLDERS = {
   'tostring(local.api_port)': '3000',
+  'var.medication_writes_enabled ? "enabled" : "disabled"': 'disabled',
   'tostring(var.api_db_pool_max)': '10', // database-connections.tf; its default, which the backend's own loader must accept
   'var.region': 'us-east-2',
   'aws_cognito_user_pool.main.id': 'us-east-2_AbCdEfGhI',
@@ -233,6 +234,9 @@ export function apiComputeProblems(tf, sources = {}) {
   need(has(provisionExec, 'source_policy_documents = [data.aws_iam_policy_document.api_execution_common.json]'), 'the provisioning execution role must build on the common statements');
   for (const doc of ['api_execution_provision', 'api_provision_task']) need(has(one(`data "aws_iam_policy_document" "${doc}"`), 'count = local.api_count'), `${doc} must be counted by local.api_count`);
 
+  need(has(one('variable "medication_writes_enabled"'), 'type = bool') && has(one('variable "medication_writes_enabled"'), 'default = false'), 'medication writes need an explicit boolean switch defaulting to false');
+  need(has(one('api_environment = '), 'MEDICATION_WRITES = var.medication_writes_enabled ? "enabled" : "disabled"'), 'the API environment must carry the medication-write fence');
+
   // The environment, judged by the application's own start-up rules.
   const env = environmentOf(text, problems);
   for (const key of FORBIDDEN_ENVIRONMENT) need(!(key in env), `${key} must not be a plain environment value`);
@@ -392,6 +396,8 @@ const envLine = (key, value) => `${key.padEnd(33)} = ${value}`;
 
 test('the API compute guard reports each way the text could be weakened (controls)', () => {
   const weakened = [
+    ['medication capture enabled by default', 'default     = false\n}\n\nlocals {\n  api_service_count', 'default     = true\n}\n\nlocals {\n  api_service_count'],
+    ['the medication fence missing from the task', envLine('MEDICATION_WRITES', 'var.medication_writes_enabled ? "enabled" : "disabled"'), ''],
     ['the verification-error filter names another event', 'pattern        = "{ $.event = \\"ledger-verification-error\\" }"', 'pattern        = "{ $.event = \\"ledger-verification-failed\\" }"'],
     ['the over-size alarm treats silence as failure', 'treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]', 'treat_missing_data  = "breaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]'],
     ['the over-size alarm needs ten lines', 'threshold           = 1\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]', 'threshold           = 10\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]'],

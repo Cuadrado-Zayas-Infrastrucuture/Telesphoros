@@ -3,6 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { BUNDLED_DRUG_LIST, type DrugList, type PatientMedicationDto, type PatientMedicationInput, type PatientMedicationsQuery } from '@telesphoros/shared-types';
 import type { Principal } from '../auth/principal';
 import { AppException } from '../common/app-exception';
+import { ENV, type Env } from '../config/env';
 import { PatientsRepository } from '../storage/patients.repository';
 import { medicationDto, MedicationRequestRaceError, MedicationStaleError, PatientMedicationsRepository } from '../storage/patient-medications.repository';
 export const MEDICATION_DRUG_LIST = Symbol('MEDICATION_DRUG_LIST');
@@ -13,6 +14,7 @@ export class PatientMedicationsService {
     private readonly patients: PatientsRepository,
     private readonly medications: PatientMedicationsRepository,
     @Inject(MEDICATION_DRUG_LIST) private readonly list: DrugList | null,
+    @Inject(ENV) private readonly env: Env,
   ) {}
   async read(principal: Principal, patientId: string, query: PatientMedicationsQuery): Promise<{ items: PatientMedicationDto[] }> {
     await this.patient(principal, patientId);
@@ -22,6 +24,10 @@ export class PatientMedicationsService {
   }
   async record(principal: Principal, patientId: string, input: PatientMedicationInput): Promise<PatientMedicationDto> {
     await this.patient(principal, patientId);
+    if (this.env.MEDICATION_WRITES !== 'enabled') {
+      const message = 'Medication recording is temporarily paused. Retry later.';
+      throw AppException.unavailable(message, [{ field: 'request', reason: 'medication-writes-fenced', message }]);
+    }
     // Explicit stable order: retry equality cannot depend on the caller's JSON key order.
     const hash = createHash('sha256')
       .update(
@@ -58,8 +64,12 @@ export class PatientMedicationsService {
       // supply its identity; never accept a client-provided name or borrow another entry's code.
       const current = input.entryId ? (await this.medications.read(principal.tenantId, patientId, { entryId: input.entryId }))[0] : undefined;
       if (!current || current.rxcui !== input.rxcui) throw AppException.validation([{ field: 'rxcui', message: 'Choose a drug from the bundled list.' }]);
-      if (current.version !== input.expectedVersion)
+      if (current.version !== input.expectedVersion) {
+        // A concurrent identical request may have committed between the initial replay lookup and this read.
+        const replayed = await replay();
+        if (replayed) return replayed;
         throw AppException.conflictBecause('medication-changed', 'The medication entry changed. Read its current version before correcting it.');
+      }
       name = current.name;
       sourceListVersion = current.listVersion;
     }
