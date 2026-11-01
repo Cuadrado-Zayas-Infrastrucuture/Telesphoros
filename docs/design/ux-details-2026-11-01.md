@@ -1,6 +1,6 @@
 # Twenty UX details evaluated for Telesphoros
 
-Date: 2026-11-01. Scope: public Telesphoros web app, based on main `4449161e`. PatientPicker PR #235 was open at the start; this branch does not include or alter that PR. Synthetic data only. No backend, dependency, infrastructure or clinical-content change.
+Date: 2026-11-01. Scope: public Telesphoros web app. The original evaluation began on main `4449161e` while PatientPicker PR #235 was open. Delivery rebased this UX-only branch onto main `50b2f180`, retaining the merged shared PatientPicker, its accessible instructions and PR #236 list ordering. The patient-creation lock and retry behavior were integrated with that picker; both sets of regression tests remain. Synthetic data only. No backend, dependency, infrastructure or clinical-content change.
 
 ## Decisions and how to see them
 
@@ -42,7 +42,11 @@ Each addition is implemented sequentially. Before the next functional addition, 
 - Item 19: old-code page regression failed; all affected page cases passed. Two browser cases verified pending controls, reduced motion, same request body and same API patient ID after losing a real successful response. Corrected a test locator to use the rendered upload's accessible label.
 - Item 5: old-code missing-Undo regression failed; page coverage includes restoring context, expiry and superseding input. All project checks and both focused Undo browser cases passed. The initial browser boundary test was corrected to freeze time before starting the timer. Final aggregate browser results are recorded in the shared working notes and local evidence receipt.
 
-Separate PostgreSQL/S3 backend and worker service tiers, absent report-reader engine specs, FHIR IG and container-image checks are not part of these local UI runs. Skips are not passes. Device insets are Chromium emulation; real Safari/iPhone/Android hardware acceptance remains unverified. Browser screenshots contain only synthetic fixtures and are local evidence, not production screenshots. No push, PR or deployment is included.
+Delivery screenshot review after the PatientPicker integration found that the taller attached-file form could cover part of the mobile heading. The expanded form now flows with the page; the empty composer remains docked. A geometry assertion failed at 375px before repair and verifies the heading ends above the form, alongside the same pending/replay checks.
+
+Delivery checks on main `50b2f180`: all ten project commands passed after the integration/layout repair; frontend 643 tests in 58 files. The complete browser run passed 219 + 46 + 2 cases, with five skips, before the final expanded-form layout correction. All 52 workspace/safe-area cases then passed after that correction, with two expected skips, preserving the original retry/Undo assertions and adding heading geometry. Launcher/CORS passed five cases. New synthetic screenshots were inspected at mobile/desktop sizes.
+
+Separate PostgreSQL/S3 backend and worker service tiers, absent report-reader engine specs, FHIR IG and container-image checks are not part of these local UI runs. Skips are not passes. Device insets are Chromium emulation; real Safari/iPhone/Android hardware acceptance remains unverified. Browser screenshots contain only synthetic fixtures and are local evidence, not production screenshots. Publication is recorded in the pull request; no deployment is included. Original per-addition logs remain historical evidence, and delivery checks rerun on the rebased candidate.
 
 ## Platform references
 

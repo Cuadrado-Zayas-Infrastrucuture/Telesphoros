@@ -454,7 +454,8 @@ export function WorkspaceConversation() {
           </section>
         )}
       </div>
-      <div className="one-screen-column one-screen-dock sticky bg-background pt-2 pb-3">
+      {/* The expanded attachment form can exceed a mobile viewport; let it flow below the heading. */}
+      <div className={`one-screen-column one-screen-dock bg-background pt-2 pb-3${file ? '' : ' sticky'}`}>
         {box}
         <div className="mt-3">
           <SystemMessage quiet>Synthetic data only. Not for clinical use.</SystemMessage>

@@ -281,10 +281,19 @@ test('a lost patient-create response locks Send, then retries the same identity 
   await pending.scrollIntoViewIfNeeded();
   const box = await pending.boundingBox();
   expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
-  await page.screenshot({ path: info.outputPath('patient-create-pending.png') });
-  await page.getByRole('form', { name: 'Report and question' }).evaluate((form) => (form as HTMLFormElement).requestSubmit());
-  expect(bodies).toHaveLength(1);
-  release();
+  const form = page.getByRole('form', { name: 'Report and question' });
+  try {
+    const headingBox = await page.getByRole('heading', { level: 1, name: 'Start with a synthetic report.' }).boundingBox();
+    const formBox = await form.boundingBox();
+    expect(headingBox).not.toBeNull();
+    expect(formBox).not.toBeNull();
+    expect(headingBox!.y + headingBox!.height).toBeLessThanOrEqual(formBox!.y);
+    await page.screenshot({ path: info.outputPath('patient-create-pending.png') });
+    await form.evaluate((node) => (node as HTMLFormElement).requestSubmit());
+    expect(bodies).toHaveLength(1);
+  } finally {
+    release(); // Also settle the held response when a layout assertion fails.
+  }
   await expect(page.getByRole('alert').filter({ hasText: /patient/i })).toBeVisible();
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Conversation' }).getByRole('list', { name: `Upload of ${name}` })).toHaveCount(1);
