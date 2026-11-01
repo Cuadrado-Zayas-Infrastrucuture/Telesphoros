@@ -248,3 +248,49 @@ test.describe('Add patient in the panel (CH-9)', () => {
     await expect(page.getByRole('button', { name: 'Add patient' })).toHaveCount(0);
   });
 });
+
+test('a lost patient-create response locks Send, then retries the same identity and uploads once', async ({ page }, info) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const bodies: unknown[] = [];
+  const returnedIds: string[] = [];
+  let release!: () => void;
+  const responseGate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/api/v1/patients', async (route) => {
+    if (route.request().method() !== 'POST') { await route.continue(); return; }
+    bodies.push(route.request().postDataJSON());
+    const stored = await route.fetch();
+    expect(stored.ok()).toBe(true);
+    returnedIds.push((await stored.json()).id);
+    if (bodies.length === 1) {
+      await responseGate;
+      await route.abort('failed'); // The real API created it; only its response is lost.
+    } else await route.fulfill({ response: stored });
+  });
+  await signInAs(page, 'alice', '/workspace');
+  const name = `replay-${crypto.randomUUID().slice(0, 8)}.json`;
+  await page.locator('input[type=file]').setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
+  await page.getByRole('combobox', { name: 'Patient' }).selectOption('new');
+  await page.getByRole('textbox', { name: 'New patient label' }).fill(label());
+  await page.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' }).check();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  const pending = page.getByRole('button', { name: 'Adding patient', exact: true });
+  await expect(pending).toBeDisabled();
+  await expect(pending).toHaveAttribute('aria-busy', 'true');
+  await expect(pending.locator('svg')).toHaveCSS('animation-name', 'none');
+  await expect(page.getByRole('combobox', { name: 'Patient' })).toBeDisabled();
+  await pending.scrollIntoViewIfNeeded();
+  const box = await pending.boundingBox();
+  expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  await page.screenshot({ path: info.outputPath('patient-create-pending.png') });
+  await page.getByRole('form', { name: 'Report and question' }).evaluate((form) => (form as HTMLFormElement).requestSubmit());
+  expect(bodies).toHaveLength(1);
+  release();
+  await expect(page.getByRole('alert').filter({ hasText: /patient/i })).toBeVisible();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Conversation' }).getByRole('list', { name: `Upload of ${name}` })).toHaveCount(1);
+  await expect(page.getByRole('region', { name: 'Conversation' }).getByText('Received', { exact: true })).toBeVisible();
+  expect(bodies).toHaveLength(2);
+  expect(bodies[1]).toEqual(bodies[0]);
+  expect(returnedIds).toHaveLength(2);
+  expect(returnedIds[1]).toBe(returnedIds[0]);
+});

@@ -64,6 +64,8 @@ export function WorkspaceConversation() {
   const [patientId, setPatientId] = useState('');
   const [synthetic, setSynthetic] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [creationProblem, setCreationProblem] = useState<string | null>(null);
+  const [creatingPatient, setCreatingPatient] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [tried, setTried] = useState(false);
   const [newLabel, setNewLabel] = useState('');
@@ -75,6 +77,7 @@ export function WorkspaceConversation() {
   const counter = useRef(0);
   const picker = useRef<HTMLInputElement>(null);
   const transfer = useRef<AbortController | null>(null);
+  const sending = useRef(false);
   const progress = useRef<UploadProgress>({});
 
   useEffect(() => {
@@ -106,15 +109,17 @@ export function WorkspaceConversation() {
   function choose(next: File | undefined) {
     if (!next) return;
     setFile(next);
+    setCreationProblem(null);
     setFileError(fileProblem(next.name));
   }
 
   function drop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setDragging(false);
-    if (canAttach) choose(event.dataTransfer.files[0]);
+    if (canAttach && !busy) choose(event.dataTransfer.files[0]);
   }
 
+  const busy = uploading || creatingPatient;
   const text = input.trim();
   const adding = patientId === NEW_PATIENT;
   const chosen = adding ? null : patients?.find((p) => p.id === patientId);
@@ -139,6 +144,8 @@ export function WorkspaceConversation() {
     if (!adding) return patients?.find((p) => p.id === patientId) ?? null;
     const label = newLabel.trim();
     if (addRequest.current?.label !== label) addRequest.current = { label, id: crypto.randomUUID() };
+    setCreatingPatient(true);
+    setCreationProblem(null);
     try {
       const created = await createPatient(apiFetch, label, addRequest.current.id);
       addRequest.current = null;
@@ -148,8 +155,10 @@ export function WorkspaceConversation() {
       announcePatientAdded(created);
       return created;
     } catch (error) {
-      if (!(error instanceof SessionEndedError)) setFileError(error instanceof SubmitError ? error.message : 'The patient could not be added. Please retry.');
+      if (!(error instanceof SessionEndedError)) setCreationProblem(error instanceof SubmitError ? error.message : 'The patient could not be added. Please retry.');
       return null;
+    } finally {
+      setCreatingPatient(false);
     }
   }
 
@@ -169,52 +178,57 @@ export function WorkspaceConversation() {
 
   async function send() {
     setTried(true);
-    if (uploading || blocked) return;
-    setTried(false);
-    if (file) {
-      const patient = await patientForUpload();
-      if (!patient) return;
-      const reportType = reportTypeFor(file.name);
-      const parsed = productUploadSchema.safeParse({ patientId: patient.id, reportType, file, syntheticConfirmed: synthetic });
-      if (!parsed.success) {
-        setFileError(parsed.error.issues[0]?.message ?? 'This file cannot be uploaded.');
-        return;
+    if (busy || sending.current || blocked) return;
+    sending.current = true;
+    try {
+      setTried(false);
+      if (file) {
+        const patient = await patientForUpload();
+        if (!patient) return;
+        const reportType = reportTypeFor(file.name);
+        const parsed = productUploadSchema.safeParse({ patientId: patient.id, reportType, file, syntheticConfirmed: synthetic });
+        if (!parsed.success) {
+          setFileError(parsed.error.issues[0]?.message ?? 'This file cannot be uploaded.');
+          return;
+        }
+        const id = ++counter.current;
+        setEntries((list) => [...list, { kind: 'upload', id, filename: file.name, patient: patient.label, patientId: patient.id, stage: 0, phase: 'uploading' }]);
+        setUploading(true);
+        transfer.current = new AbortController();
+        progress.current = {};
+        const watch = window.setInterval(() => update(id, { stage: uploadStage(progress.current.attempt?.state) }), 150);
+        let reportId: string;
+        try {
+          reportId = (await submitReport(parsed.data, apiFetch, progress.current, transfer.current.signal, recoverySession ?? undefined)).reference;
+          update(id, { stage: UPLOAD_STEPS.length, phase: 'sent', reportId, status: 'received' });
+          setFile(null);
+          setSynthetic(false);
+        } catch (error) {
+          if (error instanceof SessionEndedError) return;
+          if (progress.current.cancelRequested) await cancelOwnedUpload(apiFetch, progress.current).catch(() => undefined);
+          update(id, {
+            phase: 'failed',
+            message: progress.current.cancelRequested
+              ? 'Upload cancelled.'
+              : error instanceof SubmitError
+                ? error.message
+                : 'The upload was interrupted. Your file is kept; please retry.',
+          });
+          return;
+        } finally {
+          window.clearInterval(watch);
+          transfer.current = null;
+          setUploading(false);
+        }
+        announceReportsChanged();
+        void readStatus(id, reportId, patient.id, false);
       }
-      const id = ++counter.current;
-      setEntries((list) => [...list, { kind: 'upload', id, filename: file.name, patient: patient.label, patientId: patient.id, stage: 0, phase: 'uploading' }]);
-      setUploading(true);
-      transfer.current = new AbortController();
-      progress.current = {};
-      const watch = window.setInterval(() => update(id, { stage: uploadStage(progress.current.attempt?.state) }), 150);
-      let reportId: string;
-      try {
-        reportId = (await submitReport(parsed.data, apiFetch, progress.current, transfer.current.signal, recoverySession ?? undefined)).reference;
-        update(id, { stage: UPLOAD_STEPS.length, phase: 'sent', reportId, status: 'received' });
-        setFile(null);
-        setSynthetic(false);
-      } catch (error) {
-        if (error instanceof SessionEndedError) return;
-        if (progress.current.cancelRequested) await cancelOwnedUpload(apiFetch, progress.current).catch(() => undefined);
-        update(id, {
-          phase: 'failed',
-          message: progress.current.cancelRequested
-            ? 'Upload cancelled.'
-            : error instanceof SubmitError
-              ? error.message
-              : 'The upload was interrupted. Your file is kept; please retry.',
-        });
-        return;
-      } finally {
-        window.clearInterval(watch);
-        transfer.current = null;
-        setUploading(false);
+      if (text) {
+        setEntries((list) => [...list, { kind: 'question', id: ++counter.current, text }]);
+        setInput('');
       }
-      announceReportsChanged();
-      void readStatus(id, reportId, patient.id, false);
-    }
-    if (text) {
-      setEntries((list) => [...list, { kind: 'question', id: ++counter.current, text }]);
-      setInput('');
+    } finally {
+      sending.current = false;
     }
   }
 
@@ -230,7 +244,7 @@ export function WorkspaceConversation() {
       className="one-screen-box"
       data-dragging={dragging}
       onDragOver={(event) => {
-        if (!canAttach) return;
+        if (!canAttach || busy) return;
         event.preventDefault();
         setDragging(true);
       }}
@@ -242,7 +256,7 @@ export function WorkspaceConversation() {
         value={input}
         onValueChange={setInput}
         onSubmit={() => void send()}
-        isLoading={uploading}
+        isLoading={busy}
         allowEmpty={!!file}
         className="border-0 bg-transparent p-0"
       >
@@ -251,7 +265,7 @@ export function WorkspaceConversation() {
             <div className="flex items-center gap-2">
               <FileText aria-hidden="true" className="size-4 shrink-0" />
               <span className="min-w-0 flex-1 truncate font-medium">{file.name}</span>
-              <Button variant="ghost" size="sm" className="size-11 shrink-0 p-0" aria-label="Remove file" onClick={() => setFile(null)}>
+              <Button variant="ghost" size="sm" className="size-11 shrink-0 p-0" aria-label="Remove file" disabled={busy} onClick={() => setFile(null)}>
                 <X aria-hidden="true" className="size-4" />
               </Button>
             </div>
@@ -261,8 +275,11 @@ export function WorkspaceConversation() {
                 aria-label="Patient"
                 patients={patients}
                 value={patientId}
-                onValueChange={setPatientId}
-                disabled={uploading}
+                onValueChange={(value) => {
+                  setPatientId(value);
+                  setCreationProblem(null);
+                }}
+                disabled={busy}
                 error={patientsError}
                 newPatientOption={{ value: NEW_PATIENT, label: 'New synthetic patient…' }}
                 onRetry={() => {
@@ -278,8 +295,11 @@ export function WorkspaceConversation() {
                     placeholder="e.g. SYN-004"
                     maxLength={40}
                     value={newLabel}
-                    disabled={uploading}
-                    onChange={(event) => setNewLabel(event.target.value)}
+                    disabled={busy}
+                    onChange={(event) => {
+                      setNewLabel(event.target.value);
+                      setCreationProblem(null);
+                    }}
                   />
                   <p id="workspace-new-patient-help" className="text-xs text-muted-foreground">
                     Letters, numbers and hyphens. A code, never a name.
@@ -290,12 +310,12 @@ export function WorkspaceConversation() {
             {/* Spec 025 T302: one line, never blocking. A new patient made here has a label only, so it starts Incomplete. */}
             {chosenIncomplete && <p className="text-warning">{INCOMPLETE_PROMPT}</p>}
             <label className="inline-flex min-h-11 items-center gap-2">
-              <input type="checkbox" className="size-5 shrink-0 accent-primary" checked={synthetic} onChange={(event) => setSynthetic(event.target.checked)} />
+              <input type="checkbox" className="size-5 shrink-0 accent-primary" checked={synthetic} disabled={busy} onChange={(event) => setSynthetic(event.target.checked)} />
               {CONFIRMATION}
             </label>
-            {fileError && (
+            {(fileError || creationProblem) && (
               <p role="alert" className="text-destructive">
-                {fileError}
+                {fileError ?? creationProblem}
               </p>
             )}
           </div>
@@ -314,20 +334,25 @@ export function WorkspaceConversation() {
               <input
                 ref={picker}
                 type="file"
+                disabled={busy}
                 accept={chatFileAccept()}
                 className="sr-only"
                 tabIndex={-1}
                 aria-hidden="true"
                 onChange={(event) => choose(event.target.files?.[0])}
               />
-              <Button variant="ghost" size="sm" className="size-11 rounded-full p-0" aria-label="Attach a report" onClick={() => picker.current?.click()}>
+              <Button variant="ghost" size="sm" className="size-11 rounded-full p-0" aria-label="Attach a report" disabled={busy} onClick={() => picker.current?.click()}>
                 <Paperclip aria-hidden="true" className="size-5" />
               </Button>
             </>
           ) : (
             <span />
           )}
-          {uploading ? (
+          {creatingPatient ? (
+            <Button size="sm" aria-label="Adding patient" pending pendingLabel="Adding patient…">
+              Send
+            </Button>
+          ) : uploading ? (
             <Button size="sm" className="size-11 rounded-full p-0" aria-label="Stop" onClick={stop}>
               <Square aria-hidden="true" className="size-4" />
             </Button>
