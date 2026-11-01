@@ -19,7 +19,23 @@ async function withinSafeArea(page: Page, control: Locator) {
 
 test('the page, navigation and chat controls stay inside device safe areas', async ({ page }, info) => {
   await cutout(page);
+  const signedIn = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/me');
   await signInAs(page, 'alice', '/workspace');
+  const me = await signedIn;
+  const api = new URL(me.url()).origin;
+  const headers = { Authorization: me.request().headers().authorization! };
+  // Fill a real first page: a long panel must scroll a focused link above the home indicator too.
+  for (let index = 0; index < 20; index++) {
+    const added = await page.request.post(`${api}/api/v1/patients`, { headers, data: { label: `SYN-SAFE-${crypto.randomUUID().slice(0, 8)}-${index}`, requestId: crypto.randomUUID() } });
+    expect(added.ok()).toBe(true);
+  }
+  // Visit home, then use its account link to remount a fresh workspace panel.
+  // A second sign-in would use the identity provider's existing session and skip its persona picker.
+  await page.locator('header.workspace-navigation a[href="/"]').click();
+  await page.getByRole('link', { name: 'Open workspace', exact: true }).click();
+  await openWorkspaceNavigation(page);
+  await expect(page.getByRole('region', { name: 'Patients' }).getByRole('listitem')).toHaveCount(20);
+  if (page.viewportSize()!.width < 1024) await page.getByRole('button', { name: 'Workspace navigation', exact: true }).click();
   await expect(page.locator('body')).toHaveCSS('padding-top', '24px');
   await expect(page.locator('body')).toHaveCSS('padding-left', '32px');
   await expect(page.locator('body')).toHaveCSS('padding-right', '32px');

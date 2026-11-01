@@ -142,6 +142,7 @@
 
 @layer base {
   html {
+    scroll-padding: var(--safe-area-top) var(--safe-area-right) var(--safe-area-bottom) var(--safe-area-left);
     font-family: var(--font-family-sans);
     font-optical-sizing: auto;
     -webkit-text-size-adjust: 100%;
