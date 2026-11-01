@@ -5,7 +5,7 @@ Run `pnpm --filter @telesphoros/backend test:fixture-lifecycle` on Node 22.22.0 
 service-postgres under the existing shared deadline, after the unchanged API profile.
 No cloud services or real data are used.
 
-The child processes run the actual intake and registration specifications. Controlled
+The child processes run the actual intake, input-boundary and registration specifications. Controlled
 latency makes the race repeatable without changing Jest's five-second hook/test
 limits or PostgreSQL's two-second migration lock timeout:
 
@@ -22,8 +22,14 @@ Every child must exit naturally within 25 seconds; hitting that outer bound fail
 regression. The late-hook child's failure is expected, never changed into a passing
 application test. Complete child output is preserved in the parent output. Database
 names before and after each child must match, proving no fixture database was leaked.
-The original two specifications fail these controls; the corrected specifications
+The original specifications fail these controls; the corrected specifications
 pass them. Fresh databases and buckets remain independent for every intake case.
+
+The input-boundary suite uses the same split and late-delivery controls. Splitting
+database preparation from API startup preserves both five-second hook limits. Its
+cleanup awaits the pending application before dropping the database, including
+when setup times out; it never assumes that an application has been returned.
+All authentication, validation, redaction and unchanged-record assertions remain.
 
 The October 17 failure on main 95c6ead finished with two test failures, then Jest
 remained alive until the existing CI deadline cancelled the process. Async Jest

@@ -1,6 +1,6 @@
 # Cookie/storage consent for actual app preferences
 
-Date: 2026-11-01. Public Telesphoros. The original implementation began at `45ce0af1`; delivery rebased the independent consent commit onto main `7ff49849`, including readiness PR #237 and demographics-completeness PR #239. Founder approved necessary storage always on and optional preference persistence off until accepted. The twenty-item UX changes in PR #238 remain separate.
+Date: 2026-11-01. Public Telesphoros. The original implementation began at `45ce0af1`; initial delivery used main `7ff49849`. PR #240 then synced main `4062c425`, including merged UX PR #238 and backend test repairs #241/#242. Founder approved necessary storage always on and optional preference persistence off until accepted. Consent remains its own PR intention; the UX and backend repairs are now common main ancestry.
 
 ## Scope
 
@@ -36,6 +36,8 @@ Theme, sidebar and language helpers use this store for their persistence only. E
 The initial bar has equal outline treatment for acceptance and rejection. On narrow screens, labels may wrap within separate grid cells and Manage occupies another row. A measured layout reserve prevents covering controls; the chat composer stays in document flow while the bar is visible to avoid overlapping its heading. The panel uses the app's quiet opaque surface, Inter UI headings, shared 44px controls, native dialog semantics and device inset spacing. No new animation or dependency was added. Reduced-motion, light/dark and Spanish landing behavior have browser coverage.
 
 Delivery verification reproduced a reduced-motion transition of the body's measured banner padding on both mobile and desktop. The global short-duration fallback had activated an otherwise absent transition. Consent spacing now disables that body transition under reduced motion; the existing landing assertion requiring zero animations is retained unchanged.
+
+The later main sync retained the consent provider around the extracted frame, applied main's `app-frame` safe-viewport class to that frame, and preserved both the measured consent reserve and main's safe-area/delayed-skeleton tokens. The extracted frame matches main's layout apart from its exported component name. The existing unanswered-consent geometry case now exercises actual cutout/home-indicator insets as well as equal-weight actions, readable labels, chat clearance and accessibility.
 
 The attached [UI Arc consent reference](https://uiarc.dev/components/cookie-consent) supplied the interaction concept. Its source was not installed/copied, and its blur/morph dependency was not adopted.
 

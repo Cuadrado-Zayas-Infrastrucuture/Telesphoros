@@ -62,6 +62,9 @@ test('first-visit preferences start off, support keyboard cancellation and follo
 });
 
 test('the first-visit bar leaves chat controls usable without deciding and gives acceptance and rejection equal weight', async ({ page }, info) => {
+  const insets = { top: 24, right: 16, bottom: 34, left: 16 };
+  const device = await page.context().newCDPSession(page);
+  await device.send('Emulation.setSafeAreaInsetsOverride', { insets });
   await signInAs(page, 'alice', '/workspace', 'unanswered');
   const bar = page.getByRole('region', { name: 'Cookies and browser storage', exact: true });
   await expect(bar).toBeVisible();
@@ -83,6 +86,11 @@ test('the first-visit bar leaves chat controls usable without deciding and gives
   await send.scrollIntoViewIfNeeded();
   const sendBox = await send.boundingBox();
   const barBox = await bar.boundingBox();
+  const viewport = page.viewportSize()!;
+  expect(barBox!.x).toBeGreaterThanOrEqual(insets.left);
+  expect(barBox!.x + barBox!.width).toBeLessThanOrEqual(viewport.width - insets.right);
+  expect(barBox!.y).toBeGreaterThanOrEqual(insets.top);
+  expect(barBox!.y + barBox!.height).toBeLessThanOrEqual(viewport.height - insets.bottom);
   expect(sendBox!.y + sendBox!.height).toBeLessThanOrEqual(barBox!.y);
   const heading = await page.getByRole('heading', { name: 'Start with a synthetic report.', exact: true }).boundingBox();
   const composer = await page.getByRole('form', { name: 'Report and question' }).boundingBox();

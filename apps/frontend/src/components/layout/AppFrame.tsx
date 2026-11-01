@@ -37,7 +37,7 @@ export function AppFrame() {
 
   return (
     <ThemeProvider pathname={pathname}>
-      <div className={`flex min-h-dvh flex-col${workspace ? ' workspace-shell' : ''}${sidebar ? ' workspace-layout' : ''}`}>
+      <div className={`app-frame flex flex-col${workspace ? ' workspace-shell' : ''}${sidebar ? ' workspace-layout' : ''}`}>
         <SkipLink />
         {sidebar ? <WorkspaceSidebar /> : <SiteHeader />}
         <div className={sidebar ? 'workspace-body' : 'contents'}>

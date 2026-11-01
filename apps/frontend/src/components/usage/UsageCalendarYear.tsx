@@ -34,7 +34,7 @@ export function UsageCalendarYear({ days }: { days: UsageDaysDto }) {
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 tabular-nums">
       <p>{summary}</p>
       <div className="overflow-x-auto py-2">
         <div aria-hidden="true" className="flex w-max gap-0.5">
