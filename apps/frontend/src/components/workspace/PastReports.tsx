@@ -1,19 +1,12 @@
 import { useEffect, useState } from 'react';
-import type { ReportDto, ReportStatus } from '@telesphoros/shared-types';
+import type { ReportDto } from '@telesphoros/shared-types';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
 import { ContextDrawer } from '@/components/ui/ContextDrawer';
+import { ReportStatusText } from '@/components/ReportStatusText';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { listReports } from '@/lib/ownedStorageApi';
 import { SubmitError } from '@/lib/api';
-
-/** Status as a word in color, never a badge. */
-export const STATUS_WORD: Record<ReportStatus, { label: string; tone: string }> = {
-  received: { label: 'Received', tone: 'text-warning' },
-  processing: { label: 'Processing', tone: 'text-warning' },
-  processed: { label: 'Processed', tone: 'text-success' },
-  failed: { label: 'Failed', tone: 'text-destructive' },
-};
 
 /** The first page of reports, in the existing drawer (specs/016 D7). The parent remounts it (a new key) on each opening, so it is never stale. */
 export function PastReports({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -66,7 +59,7 @@ export function PastReports({ open, onClose }: { open: boolean; onClose: () => v
           {reports.map((report) => (
             <li key={report.id} className="border-b border-divider py-2 last:border-0">
               <span className="block truncate text-sm font-medium">{report.filename}</span>
-              <span className={`text-xs ${STATUS_WORD[report.status].tone}`}>{STATUS_WORD[report.status].label}</span>
+              <ReportStatusText status={report.status} className="text-xs" />
               <span className="text-xs text-muted-foreground"> · {new Date(report.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
             </li>
           ))}

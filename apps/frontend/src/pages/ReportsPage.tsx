@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { NativeSelect } from '@/components/ui/NativeSelect';
 import { PaginationControls } from '@/components/PaginationControls';
 import { ContextDrawer } from '@/components/ui/ContextDrawer';
+import { ReportStatusText } from '@/components/ReportStatusText';
 import { ReportDetails } from '@/components/ReportDetails';
 import { ReportListSkeleton } from '@/components/ReportListSkeleton';
 import { ReportStages } from '@/components/ReportStages';
@@ -394,7 +395,9 @@ export default function ReportsPage() {
                             </p>
                           )}
                         </td>
-                        <td className="break-words px-2 py-2 capitalize text-primary sm:px-3">{report.status}</td>
+                        <td className="break-words px-2 py-2 sm:px-3">
+                          <ReportStatusText status={report.status} />
+                        </td>
                         <td className={report.fileUploaded ? 'break-words px-2 py-2 text-success sm:px-3' : 'break-words px-2 py-2 text-primary sm:px-3'}>
                           <span className="inline-flex items-start gap-2">
                             {report.fileUploaded ? (

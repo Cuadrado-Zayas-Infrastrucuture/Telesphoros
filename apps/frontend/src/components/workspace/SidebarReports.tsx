@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ReportDto } from '@telesphoros/shared-types';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
-import { STATUS_WORD } from '@/components/workspace/PastReports';
+import { ReportStatusText } from '@/components/ReportStatusText';
 import { listReports } from '@/lib/ownedStorageApi';
 import { onReportsChanged } from '@/lib/workspaceEvents';
 
@@ -63,7 +63,7 @@ export function SidebarReports() {
           {reports.map((report) => (
             <li key={report.id} className="py-1 text-xs">
               <span className="block truncate font-medium text-foreground">{report.filename}</span>
-              <span className={STATUS_WORD[report.status].tone}>{STATUS_WORD[report.status].label}</span>
+              <ReportStatusText status={report.status} />
             </li>
           ))}
         </ul>

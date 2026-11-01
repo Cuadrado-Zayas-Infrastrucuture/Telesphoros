@@ -22,7 +22,7 @@ export default defineConfig({
   webServer: servers.map((server, index) => index === 1 ? {
     ...server, url: `http://127.0.0.1:5557/synthetic-storage-${runId}`, env: { L2_BROWSER_RUN_ID: runId },
   } : index === 2 ? {
-    ...server, env: { ...server.env, LOCAL_STORAGE_RUN_ID: runId, LAB_REPORT_PIPELINE: 'disabled', REPORTS_BUCKET: `synthetic-storage-${runId}` },
+    ...server, env: { ...server.env, LOCAL_STORAGE_RUN_ID: runId, LAB_REPORT_PIPELINE: 'disabled', PATIENT_FIELD_LOCAL_KEY: 'ab'.repeat(32), REPORTS_BUCKET: `synthetic-storage-${runId}` },
   } : index === 3 ? {
     ...server, command: 'pnpm exec vite preview --outDir dist-storage-e2e --host 127.0.0.1 --port 4173 --strictPort',
   } : server),
