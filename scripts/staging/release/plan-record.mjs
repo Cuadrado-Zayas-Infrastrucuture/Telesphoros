@@ -17,25 +17,27 @@ export function stateIdentity(text) {
   return { serial: s.serial, lineage: s.lineage };
 }
 
-export function record({ mode, head, varSha256, planSha256, state, made = new Date().toISOString() }) {
-  if (!['MIGRATE', 'IMAGE', 'INFRA'].includes(mode)) throw new Error('mode must be MIGRATE, IMAGE or INFRA');
+export function record({ mode, head, varSha256, planSha256, state, sourceVarSha256, made = new Date().toISOString() }) {
+  if (!['MIGRATE', 'IMAGE', 'INFRA', 'FENCE-CLOSE', 'FENCE-OPEN'].includes(mode)) throw new Error('unsupported release mode');
+  const fence = mode === 'FENCE-CLOSE' || mode === 'FENCE-OPEN';
+  if (fence && !HEX64.test(sourceVarSha256 ?? '')) throw new Error('fence source var hash must be sha256 hex');
   if (!/^[0-9a-f]{40}$/.test(head ?? '')) throw new Error('head is not a full commit id');
   if (!HEX64.test(varSha256 ?? '') || !HEX64.test(planSha256 ?? '')) throw new Error('the var file and plan hashes must be sha256 hex');
-  return { mode, serial: state.serial, lineage: state.lineage, head, varSha256, planSha256, made };
+  return { mode, serial: state.serial, lineage: state.lineage, head, varSha256, planSha256, made, ...(fence ? { sourceVarSha256 } : {}) };
 }
 
 /** Each way the stack now differs from the record, as text; empty when the plan is still the one that was read. */
 export function mismatches(saved, now) {
-  return ['mode', 'serial', 'lineage', 'head', 'varSha256', 'planSha256']
+  return ['mode', 'serial', 'lineage', 'head', 'varSha256', 'planSha256', ...(['FENCE-CLOSE', 'FENCE-OPEN'].includes(now.mode) ? ['sourceVarSha256'] : [])]
     .filter((k) => saved?.[k] !== now[k])
     .map((k) => `${k}: the plan was made at ${saved?.[k] ?? '(none)'}, now ${now[k]}`);
 }
 
-function main([cmd, meta, mode, head, varSha256, planSha256]) {
+function main([cmd, meta, mode, head, varSha256, planSha256, sourceVarSha256]) {
   const input = readFileSync(0, 'utf8');
   if (cmd === 'state') return console.log(JSON.stringify(stateIdentity(input)));
   const state = JSON.parse(input);
-  const now = record({ mode, head, varSha256, planSha256, state });
+  const now = record({ mode, head, varSha256, planSha256, state, sourceVarSha256 });
   if (cmd === 'write') return writeFileSync(meta, `${JSON.stringify(now, null, 2)}\n`, { mode: 0o600 });
   if (cmd === 'check') {
     let saved;

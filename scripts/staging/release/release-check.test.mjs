@@ -66,7 +66,7 @@ for (const [name, mode, make, pass] of cases) {
 }
 
 test('release-check refuses an unknown mode and two equal images', () => {
-  assert.deepEqual(problems('FOLD', image(), OLD, NEW), ['mode must be MIGRATE, IMAGE or INFRA']);
+  assert.deepEqual(problems('FOLD', image(), OLD, NEW), ['mode must be MIGRATE, IMAGE, INFRA, FENCE-CLOSE or FENCE-OPEN']);
   assert.ok(problems('IMAGE', image(), NEW, NEW).length > 0);
   assert.ok(problems('INFRA', infra(), OLD, OLD).length === 0, 'INFRA needs only the running image, given twice');
 });

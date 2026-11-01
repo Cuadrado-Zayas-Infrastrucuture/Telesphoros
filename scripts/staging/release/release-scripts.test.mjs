@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { createHash } from 'node:crypto';
+import { fencePlan } from './fence-plan.fixtures.mjs';
 
 const here = new URL('.', import.meta.url).pathname;
 const box = mkdtempSync(join(tmpdir(), 'release-scripts-'));
@@ -24,7 +25,7 @@ const bin = join(box, 'bin');
 mkdirSync(bin);
 const stub = (name, body) => { writeFileSync(join(bin, name), `#!/usr/bin/env bash\n${body}\n`); chmodSync(join(bin, name), 0o755); };
 stub('aws', `case "$*" in
-  *"--query Account"*) echo "${ACCOUNT}" ;;
+  *"--query Account"*) echo "\${STUB_ACCOUNT:-${ACCOUNT}}" ;;
   *"--query Arn"*) echo "arn:aws:sts::${ACCOUNT}:assumed-role/StagingRole/s" ;;
   *describe-services*) echo "arn:aws:ecs:us-east-2:${ACCOUNT}:task-definition/telesphoros-staging-api:4" ;;
   *describe-task-definition*) cat "$STUB/running" ;;
@@ -36,7 +37,7 @@ stub('terraform', `case "$*" in
   *"show -json"*) cat "$STUB/plan.json" ;;
   *"show -no-color"*) echo "Plan: 0 to add, 1 to change, 0 to destroy." ;;
   *" plan "*) for a in "$@"; do case "$a" in -out=*) printf 'plan %s %s\\n' "$RANDOM$RANDOM" "$*" > "\${a#-out=}" ;; esac; done ;;
-  *" apply "*) echo $(( $(cat "$STUB/serial") + 1 )) > "$STUB/serial"; exit "\${STUB_APPLY_EXIT:-0}" ;;
+  *" apply "*) echo $(( $(cat "$STUB/serial") + 1 )) > "$STUB/serial"; if [ -n "\${STUB_MUTATE_TARGET:-}" ]; then printf "SYN_UNREVIEWED_TARGET\\n" > "$STUB_MUTATE_TARGET"; fi; exit "\${STUB_APPLY_EXIT:-0}" ;;
   *) echo "unexpected terraform $*" >&2; exit 99 ;;
 esac`);
 const stubDir = join(box, 'stub');
@@ -183,4 +184,108 @@ test('IMAGE: after it applies, its var file becomes current.tfvars; a hand-edite
   writeFileSync(current, `${readFileSync(current, 'utf8')}# edited\n`);
   rmSync(join(rel, 'x.tfplan'), { force: true });
   assert.match(run('plan.sh', ['INFRA', COMMIT], owner).stderr, /does not match its recorded sha256/);
+});
+
+
+test('fence operations preserve history, bind both var hashes and apply only the reviewed same-image plan', () => {
+  writeCurrent(NEW); // Restore the approved baseline after the preceding hand-edit rejection control.
+  const verificationFile = join(rel, 'verified-image.json');
+  writeFileSync(join(stubDir, 'plan.json'), JSON.stringify(fencePlan('FENCE-OPEN', false, NEW))); // Every opening-refusal control otherwise has a valid plan.
+  assert.equal(run('plan.sh', ['FENCE-OPEN', COMMIT, 'unverified'], owner).status, 1, 'an empty verification marker is insufficient');
+  writeFileSync(verificationFile, JSON.stringify({ format: 1, environment: 'staging', method: 'signature', images: [NEW],
+    keyAlias: 'alias/telesphoros-staging-image-signing', keyArn: `arn:aws:kms:us-east-2:${ACCOUNT}:key/11111111-2222-4333-8444-555555555555`,
+    cosignVersion: 'v3.1.3', recordedAt: '2026-11-01T00:00:00Z' }));
+  const priorImageLog = readFileSync(join(rel, 'i-apply.txt'), 'utf8');
+  writeFileSync(join(rel, 'i-apply.txt'), '== apply exit status: 9\n');
+  assert.equal(run('plan.sh', ['FENCE-OPEN', COMMIT, 'incomplete-image'], owner).status, 1);
+  writeFileSync(join(rel, 'i-apply.txt'), priorImageLog);
+  writeFileSync(join(rel, 'migrate-status.txt'), 'pending: 0066\n');
+  assert.equal(run('plan.sh', ['FENCE-OPEN', COMMIT, 'pending-migration'], owner).status, 1);
+  writeFileSync(join(rel, 'migrate-status.txt'), 'pending: (none)\n');
+  const original = readFileSync(current, 'utf8');
+  const startSerial = readFileSync(join(stubDir, 'serial'), 'utf8');
+  const saveCurrent = (text) => { writeFileSync(current, text); writeFileSync(`${current}.sha256`, sha(current) + '\n'); };
+  writeFileSync(join(stubDir, 'plan.json'), JSON.stringify(fencePlan('FENCE-CLOSE', true, NEW)));
+  assert.equal(run('plan.sh', ['FENCE-CLOSE', COMMIT], owner).status, 1, 'an operation id is required');
+  assert.equal(run('plan.sh', ['FENCE-CLOSE', COMMIT, '../escape'], owner).status, 1);
+  const planned = run('plan.sh', ['FENCE-CLOSE', COMMIT, 'close-1'], owner);
+  assert.equal(planned.status, 0, planned.stdout + planned.stderr); quiet(planned);
+  const folder = join(rel, 'fences/close-1');
+  const pin = planned.stdout.match(/plan sha256: ([0-9a-f]{64})/)?.[1];
+  assert.ok(pin);
+  const target = readFileSync(join(folder, 'fc.tfvars'), 'utf8');
+  assert.equal(readFileSync(join(folder, 'source.tfvars'), 'utf8'), original);
+  assert.equal(target, original + 'medication_writes_enabled = false\n');
+  const metadata = JSON.parse(readFileSync(join(folder, 'fc.tfplan.meta.json'), 'utf8'));
+  assert.equal(metadata.sourceVarSha256, sha(current));
+  assert.equal(metadata.varSha256, sha(join(folder, 'fc.tfvars')));
+  assert.equal(run('apply.sh', ['FENCE-CLOSE', COMMIT, '0'.repeat(64), 'close-1'], owner).status, 1);
+  saveCurrent(target); // Even a changed canonical file with a valid self-hash must not pass.
+  const changedSource = run('apply.sh', ['FENCE-CLOSE', COMMIT, pin, 'close-1'], owner);
+  assert.equal(changedSource.status, 1); assert.match(changedSource.stderr, /sourceVarSha256|stale|source variables changed/);
+  writeFileSync(join(folder, 'source.tfvars'), target);
+  const changedBoth = run('apply.sh', ['FENCE-CLOSE', COMMIT, pin, 'close-1'], owner);
+  assert.equal(changedBoth.status, 1); assert.match(changedBoth.stderr, /sourceVarSha256/);
+  writeFileSync(join(folder, 'source.tfvars'), original);
+  saveCurrent(original);
+  writeFileSync(join(stubDir, 'serial'), String(Number(startSerial) + 1));
+  assert.equal(run('apply.sh', ['FENCE-CLOSE', COMMIT, pin, 'close-1'], owner).status, 1, 'state drift must refuse the plan');
+  writeFileSync(join(stubDir, 'serial'), startSerial);
+  const started = run('apply.sh', ['FENCE-CLOSE', COMMIT, pin, 'close-1'], owner);
+  assert.equal(started.status, 0, started.stdout + started.stderr);
+  assert.match(waitFor(join(folder, 'fc-apply.txt')), /== apply exit status: 0/);
+  assert.equal(readFileSync(current, 'utf8'), target);
+  assert.equal(readFileSync(`${current}.sha256`, 'utf8').trim(), sha(current));
+  assert.equal(run('plan.sh', ['FENCE-CLOSE', COMMIT, 'close-1'], owner).status, 1, 'old operation records are not overwritten');
+
+  writeFileSync(join(stubDir, 'plan.json'), JSON.stringify(fencePlan('FENCE-OPEN', false, NEW)));
+  const opening = run('plan.sh', ['FENCE-OPEN', COMMIT, 'open-1'], owner);
+  assert.equal(opening.status, 0, opening.stdout + opening.stderr);
+  const openPin = opening.stdout.match(/plan sha256: ([0-9a-f]{64})/)?.[1];
+  writeFileSync(join(rel, 'migrate-status.txt'), 'pending: 0066\n');
+  assert.equal(run('apply.sh', ['FENCE-OPEN', COMMIT, openPin, 'open-1'], owner).status, 1, 'opening is rechecked at apply');
+  writeFileSync(join(rel, 'migrate-status.txt'), 'pending: (none)\n');
+  const openApply = run('apply.sh', ['FENCE-OPEN', COMMIT, openPin, 'open-1'], owner);
+  assert.equal(openApply.status, 0, openApply.stdout + openApply.stderr);
+  assert.match(waitFor(join(rel, 'fences/open-1/fo-apply.txt')), /== apply exit status: 0/);
+  assert.equal(readFileSync(current, 'utf8'), original + 'medication_writes_enabled = true\n');
+  assert.ok(existsSync(join(folder, 'fc.tfplan.meta.json')), 'earlier close evidence remains');
+
+  writeFileSync(join(stubDir, 'plan.json'), JSON.stringify(fencePlan('FENCE-CLOSE', false, NEW)));
+  const nextClose = run('plan.sh', ['FENCE-CLOSE', COMMIT, 'close-2'], owner);
+  assert.equal(nextClose.status, 0, nextClose.stdout + nextClose.stderr);
+  const nextPin = nextClose.stdout.match(/plan sha256: ([0-9a-f]{64})/)?.[1];
+  const nextApply = run('apply.sh', ['FENCE-CLOSE', COMMIT, nextPin, 'close-2'], owner);
+  assert.equal(nextApply.status, 0, nextApply.stdout + nextApply.stderr);
+  assert.match(waitFor(join(rel, 'fences/close-2/fc-apply.txt')), /== apply exit status: 0/);
+  assert.equal(readFileSync(current, 'utf8'), target);
+  writeFileSync(join(stubDir, 'plan.json'), JSON.stringify(fencePlan('FENCE-OPEN', false, NEW)));
+  const blockedPlan = run('plan.sh', ['FENCE-OPEN', COMMIT, 'open-already-started'], owner);
+  assert.equal(blockedPlan.status, 0, blockedPlan.stdout + blockedPlan.stderr);
+  const blockedPin = blockedPlan.stdout.match(/plan sha256: ([0-9a-f]{64})/)?.[1];
+  mkdirSync(join(rel, 'fences/open-already-started/apply-started'));
+  assert.equal(run('apply.sh', ['FENCE-OPEN', COMMIT, blockedPin, 'open-already-started'], owner).status, 1, 'a previous start blocks another apply even before its log exists');
+  assert.ok(!existsSync(join(rel, 'fences/open-already-started/fo-apply.txt')));
+  const changedPlan = run('plan.sh', ['FENCE-OPEN', COMMIT, 'open-target-changes'], owner);
+  assert.equal(changedPlan.status, 0, changedPlan.stdout + changedPlan.stderr);
+  const changedPin = changedPlan.stdout.match(/plan sha256: ([0-9a-f]{64})/)?.[1];
+  const changeFolder = join(rel, 'fences/open-target-changes');
+  const changing = run('apply.sh', ['FENCE-OPEN', COMMIT, changedPin, 'open-target-changes'], { ...owner, STUB_MUTATE_TARGET: join(changeFolder, 'fo.tfvars') });
+  assert.equal(changing.status, 0, changing.stdout + changing.stderr);
+  const changedLog = waitFor(join(changeFolder, 'fo-apply.txt'));
+  assert.match(changedLog, /== apply exit status: 3/);
+  assert.equal(readFileSync(current, 'utf8'), target, 'a target edited during apply is never published as canonical');
+  // The next case independently supplies a fresh observed plan after the simulated partial/publication failure.
+  const failurePlan = run('plan.sh', ['FENCE-OPEN', COMMIT, 'open-fails'], owner);
+  assert.equal(failurePlan.status, 0, failurePlan.stdout + failurePlan.stderr);
+  const failurePin = failurePlan.stdout.match(/plan sha256: ([0-9a-f]{64})/)?.[1];
+  assert.equal(run('apply.sh', ['FENCE-OPEN', COMMIT, failurePin, 'open-fails'], { CLAIM_OWNER: 'session-b' }).status, 1);
+  assert.equal(run('apply.sh', ['FENCE-OPEN', COMMIT, failurePin, 'open-fails'], { ...owner, STUB_ACCOUNT: '999900001111' }).status, 1);
+  assert.ok(!existsSync(join(rel, 'fences/open-fails/fo-apply.txt')));
+  const failing = run('apply.sh', ['FENCE-OPEN', COMMIT, failurePin, 'open-fails'], { ...owner, STUB_APPLY_EXIT: '17' });
+  assert.equal(failing.status, 0, failing.stdout + failing.stderr);
+  const failedLog = waitFor(join(rel, 'fences/open-fails/fo-apply.txt'));
+  assert.match(failedLog, /== apply exit status: 17/);
+  assert.equal(readFileSync(current, 'utf8'), target, 'a failed apply does not publish its target as canonical');
+  assert.equal(readFileSync(`${current}.sha256`, 'utf8').trim(), sha(current));
 });
