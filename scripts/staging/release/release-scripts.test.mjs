@@ -174,7 +174,7 @@ test('IMAGE: after it applies, its var file becomes current.tfvars; a hand-edite
   assert.equal(applied.status, 0, applied.stdout + applied.stderr);
   const log = waitFor(join(rel, 'i-apply.txt'));
   assert.match(log, /current\.tfvars is now this release's var file/);
-  assert.match(readFileSync(current, 'utf8'), new RegExp(`api_image = "${NEW.replace(/[.]/g, '\\.')}"`));
+  assert.ok(readFileSync(current, 'utf8').split('\n').includes(`api_image = "${NEW}"`), 'current.tfvars contains the exact released api_image assignment');
   assert.equal(readFileSync(`${current}.sha256`, 'utf8').trim(), sha(current));
   for (const f of ['x.tfplan', 'x.tfplan.meta.json']) rmSync(join(rel, f), { force: true });
   const behind = run('plan.sh', ['INFRA', COMMIT], owner);
