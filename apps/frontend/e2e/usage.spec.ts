@@ -6,6 +6,9 @@ const savedDark = (page: Page) => page.addInitScript(() => window.localStorage.s
 test('an administrator reads usage from the real API: two named months and storage', async ({ page }) => {
   await signInAs(page, 'carol', '/usage');
   await expect(page.getByRole('heading', { level: 1, name: 'Usage' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Usage' })).toHaveCSS('text-wrap-style', 'balance');
+  await expect(page.getByText("Your organization's activity and storage. Months are in Puerto Rico time.")).toHaveCSS('text-wrap-style', 'pretty');
+  await expect(page.getByRole('region', { name: 'Storage' }).locator('p').first()).toHaveCSS('text-wrap-style', 'pretty');
   await expect(page.getByRole('region', { name: /, so far$/ })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Storage' }).getByText('Report files', { exact: true })).toBeVisible();
   for (const value of await page.getByRole('region', { name: 'Storage' }).locator('dd').all()) {
