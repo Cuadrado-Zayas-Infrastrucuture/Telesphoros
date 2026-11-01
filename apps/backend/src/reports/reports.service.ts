@@ -19,8 +19,8 @@ export class ReportsService {
     private readonly pipeline: PipelineSwitch,
   ) {}
 
-  list(principal: Principal, { page, pageSize, patientId }: ReportListQuery) {
-    return this.reports.list(principal.tenantId, { offset: (page - 1) * pageSize, limit: pageSize }, { patientId });
+  list(principal: Principal, { page, pageSize, patientId, order }: Omit<ReportListQuery, 'order'> & { order?: ReportListQuery['order'] }) {
+    return this.reports.list(principal.tenantId, { offset: (page - 1) * pageSize, limit: pageSize, order }, { patientId });
   }
 
   async get(principal: Principal, id: string): Promise<ReportRecord> {

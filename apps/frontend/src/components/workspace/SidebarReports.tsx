@@ -13,7 +13,7 @@ export function SidebarReports() {
   const [failed, setFailed] = useState(false);
   const load = useCallback(
     (signal?: AbortSignal) => {
-      listReports(apiFetch, 1, signal)
+      listReports(apiFetch, 1, signal, undefined, 'newest')
         .then((result) => {
           setFailed(false);
           setReports(result.data);
