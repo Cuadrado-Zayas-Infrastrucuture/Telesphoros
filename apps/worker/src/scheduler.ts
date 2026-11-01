@@ -15,7 +15,7 @@ export type TickReport = number | { count: number; outcome: string };
 
 export class Ticker {
   private timer: NodeJS.Timeout | undefined;
-  private inFlight: Promise<void> = Promise.resolve();
+  private inFlight: Promise<void> | undefined;
 
   constructor(
     private readonly name: string,
@@ -33,15 +33,22 @@ export class Ticker {
   }
 
   tick(): Promise<void> {
-    this.inFlight = this.inFlight.then(async () => {
-      try {
-        const report = await this.run();
-        const { count, outcome } = typeof report === 'number' ? { count: report, outcome: undefined } : report;
-        if (count > 0 || this.options.logEveryRun) this.log('info', `${this.name}-ran`, outcome === undefined ? { count } : { count, outcome });
-      } catch {
-        this.log('error', `${this.name}-failed`, { code: 'queue-unavailable' });
-      }
-    });
+    // A timer tick is a request to reconcile current state, not durable work to enqueue.
+    // Coalesce while busy: a slow database must not accumulate an unbounded promise chain or a burst on recovery/shutdown.
+    if (this.inFlight) return this.inFlight;
+    this.inFlight = Promise.resolve()
+      .then(async () => {
+        try {
+          const report = await this.run();
+          const { count, outcome } = typeof report === 'number' ? { count: report, outcome: undefined } : report;
+          if (count > 0 || this.options.logEveryRun) this.log('info', `${this.name}-ran`, outcome === undefined ? { count } : { count, outcome });
+        } catch {
+          this.log('error', `${this.name}-failed`, { code: 'queue-unavailable' });
+        }
+      })
+      .finally(() => {
+        this.inFlight = undefined;
+      });
     return this.inFlight;
   }
 
