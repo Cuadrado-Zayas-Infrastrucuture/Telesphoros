@@ -158,16 +158,6 @@
   }
 }
 
-/* Walkthrough: show what changed. */
-.product-landing.is-motion .workflow-steps::before { transition: transform var(--landing-scene-duration) var(--landing-ease-travel); }
-.product-landing.is-motion .workflow-steps button[aria-pressed="true"] { border-top-color: var(--divider); }
-.product-landing.is-motion .workflow-file { animation: landing-file-settle var(--landing-scene-duration) var(--landing-ease-out) both; }
-.product-landing.is-motion .workflow-check-result > svg { animation: landing-pop var(--landing-scene-duration) var(--landing-ease-out) var(--landing-fragment-step) both; }
-.product-landing.is-motion .workflow-checklist > div { animation: landing-row-in var(--landing-scene-duration) var(--landing-ease-out) both; }
-.product-landing.is-motion .workflow-checklist > div:nth-child(2) { animation-delay: var(--landing-fragment-step); }
-.product-landing.is-motion .workflow-checklist > div:nth-child(3) { animation-delay: calc(var(--landing-fragment-step) * 2); }
-.product-landing.is-motion .workflow-details-body { animation: landing-panel-in var(--landing-scene-duration) var(--landing-ease-out) both; }
-
 /* Capability fragments: each plays once when its row is revealed. */
 .product-landing.is-motion .landing-fragment-wire { transition: transform var(--landing-reveal-duration) var(--landing-ease-out) calc(var(--landing-fragment-step) * 2); }
 .product-landing.is-motion .landing-fragment-chip--file { transition: transform var(--landing-scene-duration) var(--landing-ease-out) calc(var(--landing-fragment-step) * 6); }
@@ -203,10 +193,6 @@
   from { transform: translateY(calc(var(--particle-depth) * var(--landing-drift-distance))); }
   to { transform: translateY(calc(var(--particle-depth) * var(--landing-drift-distance) * -1)); }
 }
-@keyframes landing-file-settle { from { transform: translateY(.375rem) scale(.97); } to { transform: none; } }
-@keyframes landing-pop { from { transform: scale(.6); } to { transform: none; } }
-@keyframes landing-row-in { from { transform: translateY(.625rem); } to { transform: none; } }
-@keyframes landing-panel-in { from { transform: translateX(1rem); } to { transform: none; } }
 @keyframes landing-typing-dot { 0%, 100% { transform: none; } 50% { transform: translateY(-.25rem); } }
 @keyframes landing-typing-out { from { transform: none; opacity: 1; } to { transform: scale(.8); opacity: 0; } }
 @keyframes landing-answer-in { from { transform: scale(0); } to { transform: none; } }

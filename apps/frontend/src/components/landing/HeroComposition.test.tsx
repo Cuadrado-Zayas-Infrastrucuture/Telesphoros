@@ -16,15 +16,17 @@ describe('hero composition', () => {
     const text = container.textContent ?? '';
     for (const expected of [
       'Example patient',
-      'SYN-001.pdf',
+      'SYN-001.json',
       'Server verified',
       'SYN-002.json',
       'Not complete',
-      'SYN-003.pdf',
+      'SYN-003.json',
       'Received',
       'Synthetic data only. Not for clinical use.',
     ])
       expect(text).toContain(expected);
+    // Staging takes structured JSON only (specs/024 D4), so the card shows no PDF.
+    expect(text).not.toContain('.pdf');
     expect(container.querySelectorAll('.landing-report-verified')).toHaveLength(1);
   });
 

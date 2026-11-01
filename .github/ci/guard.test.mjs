@@ -403,6 +403,91 @@ test('the applied-status check flags each stale phrase and passes current wordin
   assert.deepEqual(staleStateLines('# F1: the audit trail.\n# What is applied: docs/ops/environments.md'), []);
 });
 
+// ---- What staging runs is written once, as data: docs/ops/staging-expected.json (spec 027, PR 1) ----
+// environments.md restates it for people; the daily check in staging (PR 4) compares the JSON with AWS. The page and the file may not disagree.
+// The repository is public: the file holds digests, revisions, counts and dates, never an account id, an ARN or a secret.
+
+const FACTS = 'docs/ops/staging-expected.json';
+const ENVIRONMENTS = 'docs/ops/environments.md';
+const sha40Hex = /^[0-9a-f]{40}$/;
+
+/** Each problem with a facts object's shape, as text. */
+export function factsShapeProblems(f) {
+  const p = [];
+  const isInt = (v) => Number.isInteger(v) && v > 0;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f?.checked ?? '')) p.push('checked is not YYYY-MM-DD');
+  if (!sha40Hex.test(f?.appliedCommit ?? '')) p.push('appliedCommit is not a full commit id');
+  if (!/^sha256:[0-9a-f]{64}$/.test(f?.image?.digest ?? '')) p.push('image.digest is not sha256:<64 hex>');
+  if (!sha40Hex.test(f?.image?.commit ?? '')) p.push('image.commit is not a full commit id');
+  if (!isInt(f?.taskDefinitions?.api) || !isInt(f?.taskDefinitions?.worker)) p.push('taskDefinitions.api and .worker must be positive integers');
+  if (!isInt(f?.alarms)) p.push('alarms must be a positive integer');
+  if (!/^\d{4}$/.test(f?.newestMigration ?? '')) p.push('newestMigration is not four digits');
+  if (!Array.isArray(f?.cloudfrontCachePaths) || f.cloudfrontCachePaths.some((x) => typeof x !== 'string' || !x.startsWith('/'))) p.push('cloudfrontCachePaths must be a list of paths');
+  for (const [i, e] of (Array.isArray(f?.acceptedExceptions) ? f.acceptedExceptions : [null]).entries()) {
+    if (!e || typeof e.id !== 'string' || !e.id || typeof e.reason !== 'string' || !e.reason || !/^\d{4}-\d{2}-\d{2}$/.test(e.reviewBy ?? '')) {
+      p.push(`acceptedExceptions[${i}] needs id, reason and reviewBy (YYYY-MM-DD)`);
+    }
+  }
+  return p;
+}
+
+/** Each value of the facts that environments.md does not state, or states differently, as text. */
+export function factsPageProblems(f, page) {
+  const p = [];
+  const row = (piece) => page.split('\n').find((l) => l.startsWith(`| ${piece} |`)) ?? '';
+  const api = row('API');
+  const worker = row('Worker');
+  if (!api.includes(`task definition revision ${f.taskDefinitions.api},`)) p.push(`the API row does not say task definition revision ${f.taskDefinitions.api}`);
+  if (!api.includes(`image \`${f.image.digest.slice(0, 19)}…\``)) p.push(`the API row does not name image ${f.image.digest.slice(0, 19)}…`);
+  if (!api.includes(`(commit \`${f.image.commit.slice(0, 8)}\``)) p.push(`the API row does not name image commit ${f.image.commit.slice(0, 8)}`);
+  if (!worker.includes(`(task definition revision ${f.taskDefinitions.worker})`)) p.push(`the Worker row does not say task definition revision ${f.taskDefinitions.worker}`);
+  if (!row('Database').includes(`Migrated through ${f.newestMigration};`)) p.push(`the Database row does not say migrated through ${f.newestMigration}`);
+  if (!row('Alarms').startsWith(`| Alarms | ${f.alarms} CloudWatch alarms `)) p.push(`the Alarms row does not say ${f.alarms} alarms`);
+  const frontend = row('Frontend');
+  for (const path of f.cloudfrontCachePaths) if (!frontend.includes(`(\`${path}\`)`)) p.push(`the Frontend row does not name the cache path ${path}`);
+  if (!page.includes(`applied from \`main\` \`${f.appliedCommit.slice(0, 8)}\``)) p.push(`the page does not name the applied commit ${f.appliedCommit.slice(0, 8)}`);
+  if (!page.includes(FACTS.replace('docs/ops/', ''))) p.push(`the page does not point to ${FACTS}`);
+  return p;
+}
+
+/** Lines that hold something a public file must not: an account id (12 digits), an ARN, or a key-looking assignment. */
+export function factsLeakLines(text) {
+  return text.split('\n').filter((l) => /(?<![0-9a-f])\d{12}(?![0-9a-f])|arn:aws|"(?:secret|password|token|key)"\s*:/i.test(l));
+}
+
+test('docs/ops/environments.md states exactly what docs/ops/staging-expected.json holds, and the file holds nothing private', () => {
+  const text = readFileSync(new URL(FACTS, REPO), 'utf8');
+  const facts = JSON.parse(text);
+  assert.deepEqual(factsShapeProblems(facts), []);
+  assert.deepEqual(factsPageProblems(facts, readFileSync(new URL(ENVIRONMENTS, REPO), 'utf8')), [], `make ${ENVIRONMENTS} and ${FACTS} agree`);
+  assert.deepEqual(factsLeakLines(text), []);
+});
+
+test('the staging facts check fails on each field that disagrees, and on a leak (controls)', () => {
+  const facts = JSON.parse(readFileSync(new URL(FACTS, REPO), 'utf8'));
+  const page = readFileSync(new URL(ENVIRONMENTS, REPO), 'utf8');
+  assert.deepEqual(factsPageProblems(facts, page), [], 'positive control: the real pair agrees');
+  const moved = [
+    (f) => { f.taskDefinitions.api += 1; }, (f) => { f.taskDefinitions.worker += 1; }, (f) => { f.alarms += 1; },
+    (f) => { f.newestMigration = String(Number(f.newestMigration) + 1).padStart(4, '0'); },
+    (f) => { f.image.digest = `sha256:${'0'.repeat(64)}`; }, (f) => { f.image.commit = '0'.repeat(40); },
+    (f) => { f.appliedCommit = '0'.repeat(40); }, (f) => { f.cloudfrontCachePaths = [...f.cloudfrontCachePaths, '/never/*']; },
+  ];
+  for (const move of moved) {
+    const f = structuredClone(facts);
+    move(f);
+    assert.equal(factsPageProblems(f, page).length, 1, `exactly one problem for: ${move}`);
+  }
+  assert.ok(factsPageProblems(facts, page.replaceAll(FACTS.replace('docs/ops/', ''), 'elsewhere')).length > 0, 'a page that stops pointing to the file');
+  for (const bad of [{ ...facts, appliedCommit: '1bfbdab4' }, { ...facts, alarms: 0 }, { ...facts, acceptedExceptions: [{ id: 'x', reason: 'y' }] }]) {
+    assert.ok(factsShapeProblems(bad).length > 0, JSON.stringify(Object.keys(bad)));
+  }
+  assert.equal(factsLeakLines('  "note": "account 123456789012"').length, 1);
+  assert.equal(factsLeakLines('  "role": "arn:aws:iam::x:role/y"').length, 1);
+  assert.equal(factsLeakLines('  "token": "abc"').length, 1);
+  assert.deepEqual(factsLeakLines(`  "digest": "sha256:${'a1'.repeat(32)}",\n  "commit": "${'0123456789'.repeat(4)}"`), [], 'hex digests and commit ids are not account ids');
+});
+
 // ---- The shared agent policy: .claude/settings.json holds deny rules and nothing else ----
 // It reaches every agent session in a clone of this repository. A deny rule beats an allow from any scope, so the
 // file is the floor for everyone; an allow, hook or env entry here would run or widen on every teammate's machine.

@@ -16,6 +16,7 @@ const runnerSource = read('../../packages/jobs/src/runner.ts');
 const filesVerifySource = read('../../apps/worker/src/handlers/files-verify.ts');
 const mainSource = read('../../apps/worker/src/main.ts');
 const schedulerSource = read('../../apps/worker/src/scheduler.ts');
+const jobDataSource = read('../../apps/worker/src/job-data.ts');
 
 const squash = (s) => s.replace(/[ \t]+/g, ' ');
 const code = (text) => text.split('\n').filter((line) => !/^\s*#/.test(line)).join('\n');
@@ -51,6 +52,7 @@ export function workerProblems(tf, iamTf = iam, sources = {}) {
   const filesVerify = sources.filesVerify ?? filesVerifySource;
   const main = sources.main ?? mainSource;
   const scheduler = sources.scheduler ?? schedulerSource;
+  const jobData = sources.jobData ?? jobDataSource;
   const problems = [];
   const text = code(tf);
   const need = (condition, why) => {
@@ -174,7 +176,19 @@ export function workerProblems(tf, iamTf = iam, sources = {}) {
   need(has(waiting, 'metric_name = "JobsDeadWaiting"') && has(waiting, 'statistic = "Maximum"') && line(waiting, 'threshold = 0') && has(waiting, 'comparison_operator = "GreaterThanThreshold"') && has(waiting, 'treat_missing_data = "notBreaching"'), 'any dead job waiting must raise the dead-waiting alarm');
   need(pattern('worker_relay_failed') === '{ $.event = "outbox-relay-failed" }' && pattern('worker_schedule_failed') === '{ $.event = "schedule-failed" }', 'the relay and scheduler filters must match their failure events');
   need(/new Ticker\('outbox-relay'/.test(main) && /new Ticker\('schedule'/.test(main) && /`\$\{this\.name\}-failed`/.test(scheduler), 'the tickers must still be named outbox-relay and schedule and log <name>-failed');
-  for (const [alarm, metric] of [['worker_relay_failing', 'OutboxRelayFailures'], ['worker_schedule_failing', 'ScheduleFailures']]) {
+  // Spec 026: the capability sweep logs every run (logEveryRun), so its run line also proves the worker is alive and sweeping; behind is a run line
+  // whose outcome says a full batch was removed.
+  need(pattern('worker_capability_sweep_failed') === '{ $.event = "capability-sweep-failed" }' && pattern('worker_capability_sweep_ran') === '{ $.event = "capability-sweep-ran" }'
+    && pattern('worker_capability_sweep_behind') === '{ $.event = "capability-sweep-ran" && $.outcome = "behind" }', 'the capability-sweep filters must match its run, failure and behind lines');
+  need(/new Ticker\('capability-sweep'/.test(main) && /logEveryRun: true/.test(main) && /'behind' : 'current'/.test(jobData), 'the sweep must still be named capability-sweep, log every run and report behind');
+  const sweepStale = one('resource "aws_cloudwatch_metric_alarm" "worker_capability_sweep_stale"');
+  need(has(sweepStale, 'metric_name = "CapabilitySweepRuns"') && has(sweepStale, 'statistic = "Sum"') && line(sweepStale, 'period = 900') && line(sweepStale, 'evaluation_periods = 1')
+    && line(sweepStale, 'threshold = 1') && has(sweepStale, 'comparison_operator = "LessThanThreshold"') && has(sweepStale, 'treat_missing_data = "breaching"'), 'no sweep run for 15 minutes, or no data at all, must raise the stale alarm');
+  const sweepBehind = one('resource "aws_cloudwatch_metric_alarm" "worker_capability_sweep_behind"');
+  need(has(sweepBehind, 'metric_name = "CapabilitySweepBehind"') && has(sweepBehind, 'statistic = "Sum"') && line(sweepBehind, 'period = 300') && line(sweepBehind, 'evaluation_periods = 6')
+    && line(sweepBehind, 'datapoints_to_alarm = 6') && line(sweepBehind, 'threshold = 1') && has(sweepBehind, 'comparison_operator = "GreaterThanOrEqualToThreshold"')
+    && has(sweepBehind, 'treat_missing_data = "notBreaching"'), 'a sweep behind in every five minutes for 30 minutes, and only then, must raise the behind alarm');
+  for (const [alarm, metric] of [['worker_relay_failing', 'OutboxRelayFailures'], ['worker_schedule_failing', 'ScheduleFailures'], ['worker_capability_sweep_failing', 'CapabilitySweepFailures']]) {
     const b = one(`resource "aws_cloudwatch_metric_alarm" "${alarm}"`);
     need(has(b, `metric_name = "${metric}"`) && has(b, 'statistic = "Sum"') && line(b, 'period = 60') && line(b, 'evaluation_periods = 3') && line(b, 'datapoints_to_alarm = 3') && line(b, 'threshold = 1') && has(b, 'comparison_operator = "GreaterThanOrEqualToThreshold"'), `${alarm} must need a failure in each of three consecutive minutes`);
     need(has(b, 'treat_missing_data = "notBreaching"'), `a minute with no failure publishes no data point and must count as healthy for ${alarm}`);
@@ -189,7 +203,7 @@ export function workerProblems(tf, iamTf = iam, sources = {}) {
   const fault = one('resource "aws_cloudwatch_metric_alarm" "worker_process_fault"');
   need(has(fault, 'metric_name = "ProcessFaults"') && has(fault, 'statistic = "Sum"') && line(fault, 'period = 60') && line(fault, 'evaluation_periods = 1') && line(fault, 'threshold = 1') && has(fault, 'comparison_operator = "GreaterThanOrEqualToThreshold"') && has(fault, 'treat_missing_data = "notBreaching"'), 'one process fault must raise the worker process-fault alarm, and silence is normal');
   need(/installProcessFaultHandlers\(process, jsonLogger\(\)\)/.test(main), 'the worker must still install the process fault handlers');
-  for (const alarm of ['worker_job_dead', 'worker_file_check_failed', 'worker_queue_not_draining', 'worker_heartbeat_stale', 'worker_dead_waiting', 'worker_relay_failing', 'worker_schedule_failing', 'worker_outbox_stuck', 'worker_process_fault']) {
+  for (const alarm of ['worker_job_dead', 'worker_file_check_failed', 'worker_queue_not_draining', 'worker_heartbeat_stale', 'worker_dead_waiting', 'worker_relay_failing', 'worker_schedule_failing', 'worker_outbox_stuck', 'worker_process_fault', 'worker_capability_sweep_failing', 'worker_capability_sweep_stale', 'worker_capability_sweep_behind']) {
     const b = one(`resource "aws_cloudwatch_metric_alarm" "${alarm}"`);
     need(has(b, 'alarm_actions = [aws_sns_topic.audit_alarms.arn]'), `the ${alarm} alarm must notify the audit topic`);
     need(has(b, 'namespace = local.worker_metrics'), `the ${alarm} alarm must read the worker metrics namespace`);
@@ -269,6 +283,12 @@ test('the worker compute guard reports each way the text could be weakened (cont
     ['the process-fault pattern names another event', 'pattern        = "{ $.event = \\"process-fault\\" }"', 'pattern        = "{ $.event = \\"process-faulted\\" }"'],
     ['the process-fault alarm needs two faults', 'threshold           = 1\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.worker_process_fault]', 'threshold           = 2\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.worker_process_fault]'],
     ['the process-fault alarm treats silence as failure', 'treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.worker_process_fault]', 'treat_missing_data  = "breaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.worker_process_fault]'],
+    ['the sweep failure pattern names another event', '\\"capability-sweep-failed\\"', '\\"capability-sweep-error\\"'],
+    ['the behind pattern drops the outcome', ' && $.outcome = \\"behind\\"', ''],
+    ['the stale window widened to a day', 'period              = 900', 'period              = 86400'],
+    ['the stale alarm treats silence as healthy', 'treat_missing_data  = "breaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.worker_capability_sweep_ran]', 'treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.worker_capability_sweep_ran]'],
+    ['the behind alarm fires on one period', 'evaluation_periods  = 6\n  datapoints_to_alarm = 6', 'evaluation_periods  = 1\n  datapoints_to_alarm = 1'],
+    ['the sweep failing alarm tells nobody', 'alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.worker_capability_sweep_failed]', 'alarm_actions       = []\n  depends_on          = [aws_cloudwatch_log_metric_filter.worker_capability_sweep_failed]'],
     ['an output missing', 'output "worker_service_name"', 'output "worker_service"'],
   ];
   for (const [name, from, to] of weakened) {
@@ -299,6 +319,9 @@ test('the worker compute guard reports each way the text could be weakened (cont
     ['the scheduler ticker is renamed', { main: mainSource.replace("new Ticker('schedule'", "new Ticker('sched'") }],
     ['the worker stops logging the outbox age', { main: mainSource.replace('outboxAgeSeconds:', 'outboxAge:') }],
     ['the ticker stops logging <name>-failed', { scheduler: schedulerSource.replace('`${this.name}-failed`', '`${this.name}-error`') }],
+    ['the sweep ticker is renamed', { main: mainSource.replace("new Ticker('capability-sweep'", "new Ticker('sweep'") }],
+    ['the sweep stops logging every run', { main: mainSource.replace('logEveryRun: true', 'logEveryRun: false') }],
+    ['the sweep stops reporting behind', { jobData: jobDataSource.replace("'behind' : 'current'", "'late' : 'current'") }],
   ];
   for (const [name, sources] of workerSide) assert.ok(workerProblems(worker, iam, sources).length > 0, `a changed worker must be reported: ${name}`);
   assert.deepEqual(workerProblems(worker), []); // control: the unchanged text is clean
