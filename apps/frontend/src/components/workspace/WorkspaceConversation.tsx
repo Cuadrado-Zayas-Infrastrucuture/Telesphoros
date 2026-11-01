@@ -26,6 +26,7 @@ import { announcePatientAdded, announceReportsChanged, onPatientAdded } from '@/
 import '@/styles/one-screen.css';
 
 const NEW_PATIENT = 'new';
+const ATTACHMENT_UNDO_MS = 8_000;
 const QUESTION_ID = 'workspace-question';
 const CONFIRMATION = 'I confirm this file contains synthetic data only';
 /** The only reply to a typed question outside the local preview (specs/024 D3): a note, never an answer. */
@@ -61,6 +62,8 @@ export function WorkspaceConversation() {
   // Bumped by Retry: reloading the page instead would sign this tab out (the sign-in is held in memory only).
   const [patientsAttempt, setPatientsAttempt] = useState(0);
   const [file, setFile] = useState<File | null>(null);
+  const [removedFile, setRemovedFile] = useState<File | null>(null);
+  const [undoPaused, setUndoPaused] = useState(false);
   const [patientId, setPatientId] = useState('');
   const [synthetic, setSynthetic] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -103,14 +106,28 @@ export function WorkspaceConversation() {
     };
   }, [canAttach, apiFetch, patientsAttempt]);
 
+  useEffect(() => {
+    if (!removedFile || undoPaused) return;
+    const timer = window.setTimeout(() => setRemovedFile(null), ATTACHMENT_UNDO_MS);
+    return () => window.clearTimeout(timer);
+  }, [removedFile, undoPaused]);
+
   const update = (id: number, change: Partial<Extract<Entry, { kind: 'upload' }>>) =>
     setEntries((list) => list.map((entry) => (entry.id === id && entry.kind === 'upload' ? { ...entry, ...change } : entry)));
 
   function choose(next: File | undefined) {
     if (!next) return;
+    setRemovedFile(null);
     setFile(next);
     setCreationProblem(null);
     setFileError(fileProblem(next.name));
+  }
+
+  function removeAttachment() {
+    if (busy || !file) return;
+    setRemovedFile(file);
+    setUndoPaused(false);
+    setFile(null);
   }
 
   function drop(event: DragEvent<HTMLDivElement>) {
@@ -265,7 +282,7 @@ export function WorkspaceConversation() {
             <div className="flex items-center gap-2">
               <FileText aria-hidden="true" className="size-4 shrink-0" />
               <span className="min-w-0 flex-1 truncate font-medium">{file.name}</span>
-              <Button variant="ghost" size="sm" className="size-11 shrink-0 p-0" aria-label="Remove file" disabled={busy} onClick={() => setFile(null)}>
+              <Button variant="ghost" size="sm" className="size-11 shrink-0 p-0" aria-label="Remove file" disabled={busy} onClick={removeAttachment}>
                 <X aria-hidden="true" className="size-4" />
               </Button>
             </div>
@@ -318,6 +335,25 @@ export function WorkspaceConversation() {
                 {fileError ?? creationProblem}
               </p>
             )}
+          </div>
+        )}
+        {removedFile && (
+          <div
+            role="status"
+            className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+            onMouseEnter={() => setUndoPaused(true)}
+            onMouseLeave={(event) => {
+              if (!event.currentTarget.contains(document.activeElement)) setUndoPaused(false);
+            }}
+            onFocusCapture={() => setUndoPaused(true)}
+            onBlurCapture={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget) && !event.currentTarget.matches(':hover')) setUndoPaused(false);
+            }}
+          >
+            <span>Attachment removed.</span>
+            <Button size="sm" variant="ghost" aria-label="Undo attachment removal" disabled={busy} onClick={() => choose(removedFile)}>
+              Undo
+            </Button>
           </div>
         )}
         <PromptInputTextarea

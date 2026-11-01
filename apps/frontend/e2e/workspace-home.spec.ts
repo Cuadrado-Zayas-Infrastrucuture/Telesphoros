@@ -294,3 +294,35 @@ test('a lost patient-create response locks Send, then retries the same identity 
   expect(returnedIds).toHaveLength(2);
   expect(returnedIds[1]).toBe(returnedIds[0]);
 });
+
+test('attachment Undo restores the file, pauses for keyboard focus and expires without a request', async ({ page }, info) => {
+  await signInAs(page, 'alice', '/workspace');
+  await page.clock.install();
+  // Freeze before creating the timer: wall-clock time must not leak into the 7999/8000ms boundary.
+  await page.clock.pauseAt(new Date(Date.now() + 60_000));
+  const name = `undo-${crypto.randomUUID().slice(0, 8)}.json`;
+  const form = page.getByRole('form', { name: 'Report and question' });
+  await page.locator('input[type=file]').setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
+  await page.getByRole('textbox', { name: 'Question' }).fill('Keep this note');
+  const posts: string[] = [];
+  page.on('request', (request) => { if (request.method() === 'POST') posts.push(request.url()); });
+  await form.getByRole('button', { name: 'Remove file' }).click();
+  const undo = form.getByRole('button', { name: 'Undo attachment removal' });
+  await expect(form.getByRole('status').filter({ hasText: 'Attachment removed.' })).toBeVisible();
+  await undo.focus();
+  await page.mouse.move(0, 0);
+  await page.clock.fastForward(9_000);
+  await expect(undo).toBeVisible();
+  await page.screenshot({ path: info.outputPath('attachment-undo.png') });
+  await undo.press('Enter');
+  await expect(form.getByText(name, { exact: true })).toBeVisible();
+  await expect(form.getByRole('textbox', { name: 'Question' })).toHaveValue('Keep this note');
+  await form.getByRole('button', { name: 'Remove file' }).click();
+  await form.getByRole('textbox', { name: 'Question' }).focus();
+  await page.mouse.move(0, 0);
+  await page.clock.fastForward(7_999);
+  await expect(undo).toBeVisible();
+  await page.clock.fastForward(1);
+  await expect(undo).toHaveCount(0);
+  expect(posts).toEqual([]);
+});
