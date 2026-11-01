@@ -1,8 +1,10 @@
 import {
   DEMOGRAPHICS_REFUSAL_REASONS,
+  demographicsCompletenessSchema,
   patientDemographicsDtoSchema,
   patientDemographicsInputSchema,
   patientDtoSchema,
+  type DemographicsCompleteness,
   type PatientDemographicsDto,
   type PatientDemographicsInput,
   type PatientDto,
@@ -98,5 +100,20 @@ export async function recordDemographics(
   } catch (error) {
     if (passThrough(error, signal)) throw error;
     throw new SubmitError('The demographics could not be saved. Check your connection, then retry.');
+  }
+}
+
+/** How many of the organization's patients have complete demographics, with the denominator (spec 025 T304). Counts only; the panel shows a line, never a name. */
+export async function getCompleteness(apiFetch: ApiFetch, signal?: AbortSignal): Promise<DemographicsCompleteness> {
+  try {
+    const response = await apiFetch('/api/v1/patients/demographics-completeness', { signal });
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined); // an unread error body would leave the request open in the browser
+      throw new Error();
+    }
+    return demographicsCompletenessSchema.parse(await response.json());
+  } catch (error) {
+    if (passThrough(error, signal)) throw error;
+    throw new SubmitError('The demographics counts could not be loaded.');
   }
 }

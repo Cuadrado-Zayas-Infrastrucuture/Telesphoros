@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SubmitError } from './api';
-import { getDemographics, recordDemographics } from './patientDemographics';
+import { getCompleteness, getDemographics, recordDemographics } from './patientDemographics';
 
 const ID = '0f8fad5b-d9cb-469f-a165-70867728950e';
 const VALUE = {
@@ -97,5 +97,28 @@ describe('recordDemographics', () => {
       await expect(promise).rejects.toThrow(message);
       await expect(promise).rejects.not.toThrow(/Zzyzx|Núñez|1980/);
     }
+  });
+});
+
+describe('getCompleteness (spec 025 T304)', () => {
+  const COUNTS = { patients: 4, complete: 1, incomplete: 2, none: 1 };
+
+  it('reads the counts from the counts route', async () => {
+    const api = vi.fn<(path: string, init?: RequestInit) => Promise<Response>>(async () => json(200, COUNTS));
+    expect(await getCompleteness(api)).toEqual(COUNTS);
+    expect(api.mock.calls[0]![0]).toBe('/api/v1/patients/demographics-completeness');
+  });
+
+  it('answers with fixed text and closes the request when the route refuses: the unread error body is discarded', async () => {
+    const response = json(503, { error: { code: 'X', message: 'Zzyzx-Synthetic' } });
+    const cancel = vi.spyOn(response.body!, 'cancel');
+    const promise = getCompleteness(vi.fn(async () => response));
+    await expect(promise).rejects.toThrow('The demographics counts could not be loaded.');
+    await expect(promise).rejects.not.toThrow(/Zzyzx/);
+    expect(cancel).toHaveBeenCalled(); // an open body kept the browser's network busy and failed every page that waits for it to settle
+  });
+
+  it('refuses an answer whose counts do not add up', async () => {
+    await expect(getCompleteness(vi.fn(async () => json(200, { ...COUNTS, patients: 9 })))).rejects.toThrow('could not be loaded');
   });
 });
