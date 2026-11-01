@@ -841,58 +841,25 @@
     "Application-issued password reset tokens: provider-hosted auth instead",
     "General archive ingestion: absent"
   ],
-  "sourceFiles": [
-    {
-      "path": "apps/backend/src/app.factory.ts",
-      "sha256": "d264a8ef6127f385d9c0bb40c05bf453eba4ce7c5644c738dcce15a1d74f8f9c"
-    },
-    {
-      "path": "apps/backend/src/db/database.ts",
-      "sha256": "a0fc5a3ae3f377faf13ab98fe74cc021735ca8c21ecfc009e6cc5f6aed48aff5"
-    },
-    {
-      "path": "apps/backend/src/db/query-deadline.spec.ts",
-      "sha256": "610d5ed58d116783683b53107f04c3aef0e8f6bae953099ae3e59e64e02c7574"
-    },
-    {
-      "path": "apps/backend/src/issuer/issuer-core.ts",
-      "sha256": "ea7842b378866be095841339b9f0880d3123eec758a758e869a75b42af914b3d"
-    },
-    {
-      "path": "apps/backend/src/ledger/verifier.ts",
-      "sha256": "f9011dcd32eca3c6091e8d92d54252d792b33d53edfc872cffc486887a391241"
-    },
-    {
-      "path": "apps/backend/src/object-storage/s3-deadlines.spec.ts",
-      "sha256": "f87b8bfe1cd38ca6e989a5f2aa995ea76157e9e845ea6380c4ced05014229401"
-    },
-    {
-      "path": "apps/backend/src/object-storage/s3-object-storage.ts",
-      "sha256": "2fe1cc8dffc33222b687179e06f467f2e6d2da703de346c26537551b0187e359"
-    },
-    {
-      "path": "apps/backend/test/rate-limit.e2e-spec.ts",
-      "sha256": "572e62cbac774ce9c0185e1ddb775c61922fd3282745b09c279a156ddf7f98a3"
-    },
-    {
-      "path": "apps/frontend/src/auth/AuthProvider.test.tsx",
-      "sha256": "26eaf8ed588fb64fad4a593ce73336a8ce02c4688e03e1e131f8d369ea3cf988"
-    },
-    {
-      "path": "apps/frontend/src/auth/AuthProvider.tsx",
-      "sha256": "231fcb24963154fd61ca184a59c4002e3c0fa52e50b7c351c797820b9a1a0e82"
-    },
-    {
-      "path": "apps/worker/src/scheduler.test.ts",
-      "sha256": "7c2bc5a40130e11013bb366b3e15383c5319378490d09506a3de3d3f002dfb2b"
-    },
-    {
-      "path": "apps/worker/src/scheduler.ts",
-      "sha256": "afea14a2db3cb808c4ca22f60de3b4d79f7b052435d7d4d4a4432a5109a9f389"
-    },
-    {
-      "path": "scripts/readiness/local-load.cjs",
-      "sha256": "6da0697b0dfeedfb747ee20eda3afb49fe453f614a3eaf1ffb60c3678c2750b7"
-    }
-  ]
+  "sourceSet": {
+    "algorithm": "sha256",
+    "encoding": "UTF-8 canonical JSON of path/sha256 records, sorted by path; sorted object keys; compact separators",
+    "paths": [
+      "apps/backend/src/app.factory.ts",
+      "apps/backend/src/db/database.ts",
+      "apps/backend/src/db/query-deadline.spec.ts",
+      "apps/backend/src/issuer/issuer-core.ts",
+      "apps/backend/src/ledger/verifier.ts",
+      "apps/backend/src/object-storage/s3-deadlines.spec.ts",
+      "apps/backend/src/object-storage/s3-object-storage.ts",
+      "apps/backend/test/rate-limit.e2e-spec.ts",
+      "apps/frontend/src/auth/AuthProvider.test.tsx",
+      "apps/frontend/src/auth/AuthProvider.tsx",
+      "apps/worker/src/scheduler.test.ts",
+      "apps/worker/src/scheduler.ts",
+      "scripts/readiness/local-load.cjs"
+    ],
+    "digest": "3a0b322bc7e6d7a4c368624e6b3a18c57994acb8a7da31dbb8666bd1f6fd3621",
+    "perFileManifest": "Preserved outside the repository in local verification evidence; individual hashes are not repository immutability pins."
+  }
 }

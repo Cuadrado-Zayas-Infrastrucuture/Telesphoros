@@ -1,6 +1,6 @@
 # Production readiness: code, security and reliability
 
-Date: 2026-11-01 (America/Puerto_Rico). Public Telesphoros; base `45ce0af1f0ce5eb3bedf05e9a48e8b31cf7da1cc`; local branch `fix/production-readiness`. The founder approved a full-application review of all nine supplied areas. This branch is independent of the pending UX and consent candidates. AI assistance: Codex inspected source, wrote the fixes and tests, and evaluated the recorded results. No deployment, push or PR is included.
+Date: 2026-11-01 (America/Puerto_Rico). Public Telesphoros; base `45ce0af1f0ce5eb3bedf05e9a48e8b31cf7da1cc`; local branch `fix/production-readiness`. The founder approved a full-application review of all nine supplied areas. This branch is independent of the pending UX and consent candidates. Delivery preparation rebased the candidate onto main `50b2f180` (PR #236); the original measurements below remain explicitly tied to the audit baseline. The [delivery validation receipt](readiness-pr-delivery-2026-11-01.json) records the current-base checks. Individual mutable-source hashes are retained locally; the portable receipt uses an aggregate digest so it does not mark application files as immutable under the repository integrity rule. AI assistance: Codex inspected source, wrote the fixes and tests, and evaluated the recorded results. No deployment, push or PR is included.
 
 **Verdict: Not ready for a production/clinical launch.** This is a code-level and isolated-service assessment, not hosted acceptance or a HIPAA certification. The public reader engine is absent, the lab pipeline and queued evaluations explicitly refuse production configuration, and reviewed production knowledge/clinical acceptance remain separate gates. Existing synthetic staging is not evidence that those gates are satisfied. The specific local repairs below do not grant production permission.
 
@@ -155,7 +155,7 @@ Original failures and complete producer output are retained locally in `/private
 
 ## Verification receipt
 
-[Portable synthetic evidence](readiness-2026-11-01.evidence.json) binds the changed source files by SHA-256 and contains producer exits, measured load/query/recovery facts and limitations. All ten required/additional project commands exited 0: `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:infra`, `pnpm test:ci-config`, frontend `check:chunks`, `test:demo-seed`, `check:workflows` and production `knowledge:verify`. Image contract/rejection tests: 25; launcher: 5; infrastructure: 215; CI configuration: 217.
+[Portable synthetic evidence](readiness-2026-11-01.evidence.json) binds the changed source set by one aggregate SHA-256 digest and contains producer exits, measured load/query/recovery facts and limitations. All ten required/additional project commands exited 0: `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:infra`, `pnpm test:ci-config`, frontend `check:chunks`, `test:demo-seed`, `check:workflows` and production `knowledge:verify`. Image contract/rejection tests: 25; launcher: 5; infrastructure: 215; CI configuration: 217.
 
 | Tier | Actual result | Scope/limitations |
 | --- | --- | --- |
