@@ -47,9 +47,10 @@ export function refusal(status: number): SubmitError {
   return new SubmitError('The upload could not be verified. Your entries are kept; please retry.', status);
 }
 
-export async function listPatients(apiFetch: ApiFetch, page: number, signal?: AbortSignal) {
+/** `order: 'newest'` asks for newest first (the panel); the default, and every other caller, keeps the API's oldest-first order. */
+export async function listPatients(apiFetch: ApiFetch, page: number, signal?: AbortSignal, order?: 'newest') {
   try {
-    const response = await apiFetch(`/api/v1/patients?page=${page}&pageSize=20`, { signal });
+    const response = await apiFetch(`/api/v1/patients?page=${page}&pageSize=20${order === 'newest' ? '&order=desc' : ''}`, { signal });
     if (!response.ok) throw refusal(response.status);
     const result = paginatedSchema(patientDtoSchema).parse(await response.json());
     if (result.meta.page !== page || result.meta.pageSize !== 20 || result.data.length > 20) throw new Error();

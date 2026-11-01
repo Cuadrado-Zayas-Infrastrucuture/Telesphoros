@@ -10,6 +10,13 @@ export const paginationQuerySchema = z.strictObject({
 });
 export type PaginationQuery = z.infer<typeof paginationQuerySchema>;
 
+/**
+ * Optional on the lists that offer it (`GET /patients`, `GET /reports`): oldest first is the default and stays the contract for every caller that does not ask,
+ * `desc` reads the same index backwards, so a page still stops early. Any other word is refused, never guessed.
+ */
+export const listOrderSchema = z.enum(['asc', 'desc']).default('asc');
+export type ListOrder = z.infer<typeof listOrderSchema>;
+
 export const paginationMetaSchema = z.strictObject({
   page: z.number().int().min(1),
   pageSize: z.number().int().min(1),

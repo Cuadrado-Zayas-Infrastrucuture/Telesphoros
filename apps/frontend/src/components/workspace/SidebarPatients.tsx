@@ -33,7 +33,7 @@ export function SidebarPatients() {
 
   const load = useCallback(
     (signal?: AbortSignal) => {
-      listPatients(apiFetch, 1, signal)
+      listPatients(apiFetch, 1, signal, 'newest')
         .then((result) => {
           setFailed(false);
           setPatients(result.data);

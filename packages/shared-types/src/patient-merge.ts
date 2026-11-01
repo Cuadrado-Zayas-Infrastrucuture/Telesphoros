@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { paginationQuerySchema } from './pagination';
+import { listOrderSchema, paginationQuerySchema } from './pagination';
 
 /**
  * Possible duplicates and the merge of two patient records (M2.1c-2).
@@ -73,5 +73,6 @@ export const patientListQuerySchema = paginationQuerySchema.extend({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+  order: listOrderSchema,
 });
 export type PatientListQuery = z.infer<typeof patientListQuerySchema>;

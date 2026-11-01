@@ -214,11 +214,16 @@ export async function submitOwnedReport(
 }
 
 /** One bounded tenant-authorized page; the dashboard keeps filters out of browser history. */
-export async function listReports(api: ApiFetch, page: number, signal?: AbortSignal, patientId?: string) {
+export async function listReports(api: ApiFetch, page: number, signal?: AbortSignal, patientId?: string, order?: 'newest') {
   try {
-    const query = reportListQuerySchema.parse({ page, pageSize: 20, ...(patientId ? { patientId } : {}) });
+    const query = reportListQuerySchema.parse({ page, pageSize: 20, ...(patientId ? { patientId } : {}), ...(order === 'newest' ? { order: 'desc' } : {}) });
     if (!Number.isSafeInteger(query.page)) throw new Error();
-    const params = new URLSearchParams({ page: String(query.page), pageSize: '20', ...(query.patientId ? { patientId: query.patientId } : {}) });
+    const params = new URLSearchParams({
+      page: String(query.page),
+      pageSize: '20',
+      ...(query.patientId ? { patientId: query.patientId } : {}),
+      ...(query.order === 'desc' ? { order: 'desc' } : {}),
+    });
     const response = await api(`/api/v1/reports?${params}`, { signal });
     if (!response.ok) throw new Error();
     const result = paginatedSchema(reportDtoSchema).parse(await response.json());

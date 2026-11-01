@@ -262,7 +262,8 @@ test('a different verified caller after a 401 never sees or replays the previous
   await page.getByRole('button', { name: /Sign in as hal\b/ }).click();
   await page.waitForURL('**/reports/upload');
   await expect(page.getByRole('heading', { level: 1, name: 'Upload report' })).toBeVisible();
-  await expect(page.getByText('previous-caller.json', { exact: true })).toHaveCount(0);
+  // The panel's Past reports lists the newest reports, this one included: the recovery notice is what must not name it.
+  await expect(page.getByRole('main').getByText('previous-caller.json', { exact: true })).toHaveCount(0);
   await expect(page.getByText('An upload was interrupted')).toHaveCount(0);
   expect(await page.evaluate(key => sessionStorage.getItem(key), RECOVERY_KEY)).toBeNull();
 });
@@ -285,7 +286,8 @@ for (const invalid of ['legacy', 'expired'] as const) test(`${invalid} metadata 
     }
   }, { key: RECOVERY_KEY, invalid });
   await reloadAndSignIn(page, held.interrupt);
-  await expect(page.getByText('discard.json', { exact: true })).toHaveCount(0);
+  // The panel's Past reports lists the newest reports, this one included: the recovery notice is what must not name it.
+  await expect(page.getByRole('main').getByText('discard.json', { exact: true })).toHaveCount(0);
   await expect(page.getByText('An upload was interrupted')).toHaveCount(0);
   expect(await page.evaluate(key => sessionStorage.getItem(key), RECOVERY_KEY)).toBeNull();
   expect(await page.evaluate(() => sessionStorage.getItem('telesphoros.upload-recovery.v1'))).toBeNull();

@@ -138,6 +138,17 @@ describe('the feature panel (specs/024 D2, D6, CH-2)', () => {
     }
   });
 
+  it('asks for newest first for its patients and its past reports, so the latest are on top', async () => {
+    const fetchImpl = api(['clinician']);
+    renderApp('/settings', { signedInAs: ['clinician'], fetchImpl: fetchImpl as unknown as typeof fetch });
+    await panelItems();
+    const urls = () => fetchImpl.mock.calls.map(([input]) => String(input));
+    await vi.waitFor(() => {
+      expect(urls().some((url) => url.endsWith('/api/v1/patients?page=1&pageSize=20&order=desc'))).toBe(true);
+      expect(urls().some((url) => url.endsWith('/api/v1/reports?page=1&pageSize=20&order=desc'))).toBe(true);
+    });
+  });
+
   it('points each link where the old pages are, and New chat at /workspace (D7)', async () => {
     open('/settings', ['admin', 'clinician']);
     const nav = await primary();

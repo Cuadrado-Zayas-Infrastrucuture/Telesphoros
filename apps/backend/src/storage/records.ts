@@ -52,6 +52,8 @@ export interface ReportRecord {
 export interface PageRequest {
   offset: number;
   limit: number;
+  /** Only the patient and report lists read this; `desc` is newest first. Absent means oldest first. */
+  order?: 'asc' | 'desc';
 }
 
 export interface Page<T> {
@@ -69,6 +71,8 @@ export function byCreatedAt<T extends { createdAt: string }>(a: T, b: T): number
   return a.createdAt.localeCompare(b.createdAt);
 }
 
-export function slicePage<T>(rows: T[], { offset, limit }: PageRequest): Page<T> {
-  return { items: rows.slice(offset, offset + limit), total: rows.length };
+export function slicePage<T>(rows: T[], { offset, limit, order }: PageRequest): Page<T> {
+  // The in-memory lists are sorted oldest first (`byCreatedAt`, stable on ties); newest first is that order reversed, so a tie keeps its reverse creation order too.
+  const ordered = order === 'desc' ? [...rows].reverse() : rows;
+  return { items: ordered.slice(offset, offset + limit), total: rows.length };
 }
