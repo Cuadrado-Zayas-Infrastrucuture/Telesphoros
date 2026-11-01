@@ -17,7 +17,7 @@ export function UsageSummary({ usage }: { usage: UsageDto | null }) {
       format(value)
     );
   return (
-    <div aria-hidden={usage === null || undefined} className="flex flex-col gap-6">
+    <div aria-hidden={usage === null || undefined} className="flex flex-col gap-6 tabular-nums">
       <div className="grid gap-6 md:grid-cols-2">
         {[
           { month: current, title: current ? `${monthName(current.month)}, so far` : 'This month, so far', id: 'usage-current' },

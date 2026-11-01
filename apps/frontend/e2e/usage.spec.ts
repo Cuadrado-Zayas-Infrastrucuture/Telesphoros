@@ -8,6 +8,9 @@ test('an administrator reads usage from the real API: two named months and stora
   await expect(page.getByRole('heading', { level: 1, name: 'Usage' })).toBeVisible();
   await expect(page.getByRole('region', { name: /, so far$/ })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Storage' }).getByText('Report files', { exact: true })).toBeVisible();
+  for (const value of await page.getByRole('region', { name: 'Storage' }).locator('dd').all()) {
+    await expect(value).toHaveCSS('font-variant-numeric', /tabular-nums/);
+  }
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
@@ -19,6 +22,7 @@ test('an administrator reads the calendar from the real API: this year, each day
   const year = new Date().getUTCFullYear();
   await expect(calendar.getByRole('table', { name: new RegExp(`^Reports uploaded per month, (${year}|${year - 1})$`) })).toBeVisible();
   await expect(calendar.getByRole('table').getByRole('row')).toHaveCount(13);
+  await expect(calendar.getByRole('table').locator('td').first()).toHaveCSS('font-variant-numeric', /tabular-nums/);
   await expect(grid.locator('[role="gridcell"][tabindex="0"]')).toHaveCount(1);
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
