@@ -14,7 +14,7 @@ export default function UsagePage() {
     <div className="flex max-w-4xl flex-col gap-6">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl leading-tight tracking-tight">Usage</h1>
-        <p className="text-muted-foreground">Your organization&apos;s activity and storage. Months are in Puerto Rico time.</p>
+        <p className="text-pretty text-muted-foreground">Your organization&apos;s activity and storage. Months are in Puerto Rico time.</p>
       </div>
       <UsageReportView key={attempt} apiFetch={apiFetch} onRetry={() => setAttempt((n) => n + 1)} />
       <UsageCalendar apiFetch={apiFetch} />

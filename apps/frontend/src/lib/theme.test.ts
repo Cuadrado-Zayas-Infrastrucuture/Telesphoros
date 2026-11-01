@@ -1,5 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { preferenceStorage } from './storageConsent';
 import { applyTheme, readThemePreference, themeFor, writeThemePreference } from './theme';
+
+beforeEach(() => preferenceStorage.choose(true));
 
 afterEach(() => {
   window.localStorage.clear();

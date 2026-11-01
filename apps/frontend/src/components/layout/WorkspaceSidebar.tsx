@@ -7,6 +7,7 @@ import { ADMIN_ROLES, CLINICAL_READ_ROLES, primaryRole, WRITER_ROLES } from '@/a
 import { SidebarPatients } from '@/components/workspace/SidebarPatients';
 import { SidebarReports } from '@/components/workspace/SidebarReports';
 import { LOCAL_WORKSPACE_PATH, localWorkspaceAvailable, WORKSPACE_PATH } from '@/lib/localWorkspace';
+import { preferenceStorage } from '@/lib/storageConsent';
 import { readSidebarCollapsed, writeSidebarCollapsed } from '@/lib/sidebarPreference';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
@@ -21,6 +22,7 @@ export function WorkspaceSidebar() {
   const { status, roles, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(readSidebarCollapsed);
+  useEffect(() => preferenceStorage.subscribe(() => setCollapsed(readSidebarCollapsed())), []);
   function toggleCollapsed() {
     setCollapsed((current) => {
       writeSidebarCollapsed(!current);
