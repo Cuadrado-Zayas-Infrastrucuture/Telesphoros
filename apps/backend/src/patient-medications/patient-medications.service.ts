@@ -51,14 +51,26 @@ export class PatientMedicationsService {
     if (!this.list) throw AppException.unavailable('The verified medication drug list is not installed.');
     if (input.listVersion !== this.list.version) throw AppException.conflictBecause('drug-list-changed', 'The drug list changed. Reload it before saving.');
     const drug = this.list.entries.find((entry) => entry.rxcui === input.rxcui);
-    if (!drug) throw AppException.validation([{ field: 'rxcui', message: 'Choose a drug from the bundled list.' }]);
+    let name = drug?.name ?? '';
+    let sourceListVersion = this.list.version;
+    if (!drug) {
+      // A refresh may retire a code. Only the current version of this same patient entry can
+      // supply its identity; never accept a client-provided name or borrow another entry's code.
+      const current = input.entryId ? (await this.medications.read(principal.tenantId, patientId, { entryId: input.entryId }))[0] : undefined;
+      if (!current || current.rxcui !== input.rxcui) throw AppException.validation([{ field: 'rxcui', message: 'Choose a drug from the bundled list.' }]);
+      if (current.version !== input.expectedVersion)
+        throw AppException.conflictBecause('medication-changed', 'The medication entry changed. Read its current version before correcting it.');
+      name = current.name;
+      sourceListVersion = current.listVersion;
+    }
     try {
       const record = await this.medications.insertVersion(principal.tenantId, principal.sub, {
         id: randomUUID(),
         entryId: input.entryId ?? randomUUID(),
         patientId,
-        name: drug.name,
-        input,
+        name,
+        // The request acknowledges the current catalog, but identity provenance stays with its source.
+        input: { ...input, listVersion: sourceListVersion },
         requestHash: hash,
       });
       return medicationDto(record, true);

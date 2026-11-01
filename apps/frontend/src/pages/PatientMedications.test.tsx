@@ -161,6 +161,27 @@ describe('patient medication capture', () => {
     await region.findByText('Version 1 (earlier)');
   });
 
+  it.each(['Stop', 'Correct'] as const)('keeps a retired recorded ingredient visible when opening %s', async (action) => {
+    const retired = { ...row, rxcui: '991001', name: 'SYN-retired-ingredient', listVersion: 'a'.repeat(64) };
+    const { region, posts, view } = await open(['clinician'], [retired]);
+    await userEvent.click(region.getByRole('button', { name: `Details for ${retired.name}` }));
+    await userEvent.click(region.getByRole('button', { name: `${action} ${retired.name}` }));
+    expect(region.getByLabelText('Recorded drug')).toHaveValue(retired.name);
+    expect(region.getByLabelText('Recorded drug')).toHaveAttribute('readonly');
+    expect(region.getByText('This ingredient is no longer in the current list. Its recorded identity is retained.')).toBeVisible();
+    expect(await axe(view.container)).toHaveNoViolations();
+    if (action === 'Correct') await userEvent.selectOptions(region.getByLabelText('Source'), 'patient-reported');
+    await userEvent.click(region.getByRole('button', { name: action === 'Stop' ? 'Save stopped medication' : 'Save correction' }));
+    await region.findByText('Medication saved.');
+    expect(posts[0]).toMatchObject({
+      entryId: ENTRY,
+      expectedVersion: 1,
+      rxcui: retired.rxcui,
+      listVersion: BUNDLED_DRUG_LIST!.version,
+      ...(action === 'Stop' ? { status: 'stopped' } : { source: 'patient-reported' }),
+    });
+  });
+
   it('retains a rejected stale correction without presenting it as saved', async () => {
     const { region, posts } = await open(['clinician'], [row], 'stale');
     await userEvent.click(region.getByRole('button', { name: 'Details for hydralazine' }));
