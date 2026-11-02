@@ -47,9 +47,11 @@ Setup creates its own database, local bucket, organizations and fake-user member
 ## 3. Walk through the product
 
 1. Open **Sign in**, use its **Sign in** button, then choose **Sign in as alice** in the fake identity provider. Alice is the synthetic clinician in organization `alpha`.
-2. Open **Upload report**. Under **Add a synthetic patient**, enter `SYN-ONBOARDING-01` in **Synthetic patient label**, then choose **Add patient**. The new patient is selected automatically.
-3. Set **Report type** to **Lab report (PDF)**, then choose the original synthetic PDF at [data/fixtures/lab-reports/captures/D01/source.pdf](../data/fixtures/lab-reports/captures/D01/source.pdf) from your checkout. Confirm **synthetic data only**, then choose **Upload report**.
-4. Open **Reports** and confirm that `source.pdf` appears for `SYN-ONBOARDING-01`, with upload status **Verified**. File storage and verification are the goal of this walkthrough; the storage demo does not run capture review, evaluation or a live model.
+2. In chat, choose **Attach a report** and select the original synthetic PDF at [data/fixtures/lab-reports/captures/D01/source.pdf](../data/fixtures/lab-reports/captures/D01/source.pdf). Its **Report details** panel opens before upload. Choose **Add patient** there, enter `SYN-ONBOARDING-01` in **Synthetic patient label**, add the fictional demographics, and choose **Create patient**.
+3. The patient record holds demographics, medications and follow-up documentation. Choose **Back to chat**, then **Report details** to reopen the retained attachment. Confirm the selected patient and **synthetic data only**, then choose **Upload report**. Progress and **Received** appear in chat.
+4. Open **All reports** from the workspace navigation and open `source.pdf` for `SYN-ONBOARDING-01`. Its details show **Upload verified**. Use **Back to reports**, then close **Report history** to return to chat. File verification confirms storage, not clinical interpretation; the storage demo does not run capture review, evaluation or a live model.
+
+To demonstrate follow-up, add a recorded medication on the patient page, choose **Schedule follow-up**, and save a goal, date, timezone and responsible clinician. From chat, **Follow-ups** → **Open follow-up** opens the selected documentation form. Save a response, note and explicit next-date choice. Reminders remain inside the app; they do not send email or push notifications. Avoid refreshing during the presentation: sign-in is intentionally held in memory and a refresh requires signing in again.
 
 Use only repository fixtures and fictional labels. The fake identity provider is a local test component. Its users have different roles and organizations; use Alice for this walkthrough.
 

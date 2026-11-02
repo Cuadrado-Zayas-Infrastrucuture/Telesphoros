@@ -28,14 +28,17 @@ Use in-app links throughout. To show a second upload, close report history and a
 
 | Time | Action | Presenter wording |
 | --- | --- | --- |
-| 0:00–0:40 | Introduce the workflow | “Telesphoros is being built to bring pharmacogenomic evidence into the clinician’s workflow. Today’s prototype uses fictional patients and reports. Upload and storage are working; the interpretation screens show fixed examples.” |
-| 0:40–1:30 | Open chat, choose Add patient, enter synthetic information for `SYN-INVESTOR-01`, then Back to chat | “We associate each report with a patient. This gives the clinician a place to find the underlying evidence.” |
-| 1:30–2:15 | Attach D01 in chat, confirm the details and synthetic data only; upload, then open All reports and the uploaded report | “This file goes through the application’s upload and storage path. The application verifies the stored file. That confirms file storage, not clinical accuracy.” |
-| 2:15–3:25 | Choose Show fixed sample result; show gene inputs, invented drug output and source disclosure | “This illustrates the intended result experience. These values are hand-authored examples; no reader, rules engine or model has processed this upload. The next engineering milestone is to connect supported evidence to computed results.” |
-| 3:25–4:20 | Upload D08 for `SYN-INVESTOR-08`; open Show held sample | “This example illustrates a case where the system would withhold interpretation because the evidence cannot be aligned reliably. Today this is also a fixed demonstration.” |
-| 4:20–5:00 | Close with the next milestone | “We have a working application foundation and an illustrative result experience. The next milestone is a narrow synthetic workflow with actual extraction, independent review and reproducible computation, followed by clinical validation before any patient-data pilot.” |
+| 0:00–0:27 | Introduce the chat workspace | “Reports and follow-up work belong in the physician workflow. This demonstration uses fictional patients; interpretation examples are fixed.” |
+| 0:27–0:55 | Attach D01 in chat; add a note; choose Add patient from the details panel and create `SYN-INVESTOR-01` | “The report stays attached while we create the patient's record. Nothing uploads until the physician confirms.” |
+| 0:55–1:26 | Record a synthetic medication and its source; schedule a follow-up for today with a goal, timezone and responsible clinician | “The patient page holds medications and follow-up documentation. Reminders are saved without relying on a model.” |
+| 1:26–1:54 | Back to chat; reopen Report details; confirm and upload; open All reports and the uploaded file | “The note and attachment are preserved. The server verifies the stored file, which establishes file identity rather than clinical accuracy.” |
+| 1:54–2:20 | Show fixed sample result | “These invented values illustrate the result experience. No engine processed this upload, and fixed samples cannot create clinical decisions.” |
+| 2:20–2:51 | Close report panels; open Follow-ups → Open follow-up; record response, symptoms, source and note; choose In 14 days and save | “The reminder opens the relevant form. The physician saves documentation and the explicit next reminder together.” |
+| 2:51–3:24 | Return to chat; filter Follow-ups by Assigned to me and Upcoming; expand Recorded treatment responses | “This chart summarizes saved documentation and missing assessments. It is a foundation for Data Insights, not evidence of treatment effectiveness.” |
+| 3:24–3:50 | Close Follow-ups; attach and upload D08 for the same fictional patient; open Show held sample | “This fixed example illustrates unsupported evidence: a reason is shown, with no gene or drug result. Unmatched files get no sample interpretation.” |
+| 3:50–4:28 | Return to chat and describe the next milestone | “The workflow is working. Actual report extraction and validated computation come next; optional AI notes and governed Data Insights remain future work.” |
 
-Patient demographics, medication capture and follow-up documentation use the real local API and database. If time allows, add a recorded medication, document a synthetic follow-up, choose its next date, then open Follow-ups from chat. Describe this as an in-app reminder; no email or push notification is sent. Do not substitute hosted staging: the fixed-result screens are intentionally loopback-only and absent from its normal build.
+Patient demographics, medication capture and follow-up documentation use the real local API and database. The medication and recorded response are fictional examples, not treatment advice. Describe reminders as in-app; no email or push notification is sent. The response chart includes all recorded follow-ups, including closed reminders, and its clinic totals do not change when reminder filters change. Do not substitute hosted staging: the fixed-result screens are intentionally loopback-only and absent from its normal build.
 
 ## Rehearsal
 
@@ -59,20 +62,22 @@ Before a meeting, complete these checks on the exact presentation machine:
 - Start from a fresh owned run; record its source commit and tool versions.
 - Pass the complete product-demo browser suite and inspect the patient, chat intake, follow-up and result/held screenshots.
 - Perform the five-minute sequence twice by hand, including file selection and the second upload.
-- Record one clean, narrated desktop walkthrough. Keep a local copy and the screenshots available as backup; label both as synthetic with fixed results.
+- Open the current narrated backup on the meeting machine and check playback, captions and audio output. Keep the MP4 and screenshots available locally. Record a replacement only if the presented source or narration changes.
 - Review that no screen or narration implies computed results, clinical validation or a connected medication–gene analysis.
 - Read that run’s `blast-radius.md` before teardown. Stop through its foreground launcher or its exact UUID; never kill a process by port.
 
-Use the recording if a live demonstration fails. Do not repeatedly troubleshoot during the meeting. A browser-test recording is useful technical evidence but is not a polished narrated presentation.
+Use the recording if a live demonstration fails. Do not repeatedly troubleshoot during the meeting. The narrated backup is an automated synthetic demonstration; it does not replace the presenter's own rehearsal.
 
-The earlier report-page media package at `/workspace/investor-demo-assets/narrated/` contains the synthetic-voice draft, transcript, captions and timed rehearsal receipts. It predates the chat-first workflow and must not be used as a current UI walkthrough. Its recording is about three minutes, leaving room for questions within the five-minute slot. The voice is a reference narration for review; a presenter can use `narration.txt` to record their own delivery. These automated runs do not replace human rehearsal on the meeting machine.
+The current media package is `/workspace/investor-demo-assets/chat-first-2026-11-02/`, built from merged commit `e6b7be432786f403d69739f45946258b7199aba0`. Open `index.html` for offline playback and chapters, or play `investor-walkthrough.mp4` directly. The package includes captions, a transcript, presenter cues, screenshots and source/checksum evidence. The narration uses a local synthetic voice and lasts about four minutes and 28 seconds. Share `/workspace/investor-demo-assets/telesphoros-investor-demo-2026-11-02.zip`, the curated archive excluding raw browser recordings, private service state and temporary tooling. Extract it before opening the player; if the meeting browser blocks local HTML, play the MP4 directly.
+
+The earlier `/workspace/investor-demo-assets/narrated/` recording and `investor-prototype-preview.mp4` predate this workflow. Keep them as historical artifacts, not as current presentation material. The new package's verification record distinguishes automated rehearsal from the remaining human meeting-machine checks.
 
 ## Next delivery slices
 
 | Slice | Completion criterion |
 | --- | --- |
-| Rehearse existing prototype | Build and six browser controls pass; screenshots inspected; limitations documented |
-| Presentation acceptance | Two timed human rehearsals and one narrated backup recording on the meeting machine |
+| Rehearse existing prototype | Product build and all 38 browser cases pass; current walkthrough and screenshots checked; limitations documented |
+| Presentation acceptance | Current backup playback checked and two timed human rehearsals on the meeting machine |
 | Resolve demonstrated usability issues | A separately approved implementation plan for each needed change, retaining branding, roles and synthetic boundaries |
 | Computed synthetic MVP | Approved narrow report/content scope; real extraction, independent review, deterministic computation and result persistence connected through the UI; expected results independently verified |
 | Patient-data pilot | Separate clinical, legal, tenant-isolation, recovery and hosted operational acceptance; no date implied by prototype completion |
@@ -81,4 +86,4 @@ The earlier 3–7 working-day estimate is a planning range for packaging and reh
 
 ## Evidence
 
-Current rehearsal results and remaining gaps are recorded in [the dated verification record](verification/investor-demo-2026-11-02.md). Prior browser evidence belongs to [the 2026-10-26 verification](verification/fixture-product-demo.md) and must not be described as a fresh run.
+Current rehearsal results and media checks are recorded in [the chat-first package verification](verification/chat-first-demo-package.md). The [earlier investor rehearsal](verification/investor-demo-2026-11-02.md) and [2026-10-26 browser evidence](verification/fixture-product-demo.md) remain historical records.
