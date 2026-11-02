@@ -41,7 +41,7 @@ test.describe('where signing in lands (CH-1)', () => {
 
 test.describe('the feature panel (CH-2)', () => {
   const cases = [
-    ['alice', ['New chat', 'Past reports', 'Patients', 'Upload report', 'All reports', 'Settings']],
+    ['alice', ['New chat', 'Past reports', 'Patients', 'All reports', 'Settings']],
     ['bob', ['New chat', 'Past reports', 'Patients', 'All reports', 'Settings']],
     ['carol', ['New chat', 'Usage', 'Settings']],
   ] as const;
@@ -131,24 +131,32 @@ test.describe('the conversation', () => {
     });
     const name = `chat-${crypto.randomUUID().slice(0, 8)}.json`;
     await page.locator('input[type=file]').setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
-    await page.getByRole('combobox', { name: 'Patient' }).selectOption({ label: 'New synthetic patient…' });
-    const newLabel = page.getByRole('textbox', { name: 'New patient label' });
+    const details = page.getByRole('dialog', { name: 'Report details' });
+    await details.getByRole('link', { name: 'Add patient' }).click();
+    const newLabel = page.getByRole('textbox', { name: 'Synthetic patient label' });
     await expect(newLabel).toHaveAccessibleDescription('Letters, numbers and hyphens. A code, never a name.');
-    for (const control of [page.getByRole('combobox', { name: 'Patient' }), newLabel]) {
-      const box = await control.boundingBox();
-      expect(box!.height).toBeGreaterThanOrEqual(44);
-      expect(box!.x).toBeGreaterThanOrEqual(0);
-      expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
-      expect(await control.evaluate((element) => getComputedStyle(element).fontSize)).toBe('16px');
-    }
-    expect(await axeViolations(page)).toEqual([]);
+    const labelBox = await newLabel.boundingBox();
+    expect(labelBox!.height).toBeGreaterThanOrEqual(44);
+    expect(labelBox!.x).toBeGreaterThanOrEqual(0);
+    expect(labelBox!.x + labelBox!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
     await newLabel.fill(label());
+    await page.getByRole('button', { name: 'Create patient', exact: true }).click();
+    await expect(page).toHaveURL(/\/patients\/[0-9a-f-]{36}$/);
+    await page.getByRole('link', { name: 'Back to chat' }).click();
+    await page.getByRole('button', { name: 'Report details' }).click();
+    const choice = details.getByRole('combobox', { name: 'Patient' });
+    const box = await choice.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+    expect(await choice.evaluate((element) => getComputedStyle(element).fontSize)).toBe('16px');
+    expect(await axeViolations(page)).toEqual([]);
     // Without the confirmation nothing is sent. Send is aria-disabled so that it can still say why; Playwright treats that as disabled, hence force.
-    await page.getByRole('button', { name: 'Send' }).click({ force: true });
+    await page.getByRole('button', { name: 'Upload report' }).click({ force: true });
     await expect(page.getByRole('status').filter({ hasText: 'Confirm the file is synthetic.' })).toBeVisible();
     expect(declarations).toEqual([]);
     await page.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' }).check();
-    await page.getByRole('button', { name: 'Send' }).click();
+    await page.getByRole('button', { name: 'Upload report' }).click();
     const thread = page.getByRole('region', { name: 'Conversation' });
     await expect(thread.getByText(name)).toBeVisible();
     const word = thread.getByText(/^(Received|Processing|Processed|Failed)$/);
@@ -173,7 +181,7 @@ test.describe('the conversation', () => {
     await page.locator('input[type=file]').setInputFiles({ name: 'SYN-004.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4') });
     await expect(page.getByRole('alert').filter({ hasText: /local preview/i })).toBeVisible();
     await page.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' }).check();
-    await page.getByRole('button', { name: 'Send' }).click({ force: true });
+    await page.getByRole('button', { name: 'Upload report' }).click({ force: true });
     await expect(page.getByRole('alert').filter({ hasText: /local preview/i })).toBeVisible();
     expect(posts).toEqual([]);
   });
@@ -218,25 +226,30 @@ test.describe('accessibility and layout (CH-7)', () => {
   }
 });
 
-test.describe('Add patient in the panel (CH-9)', () => {
+test.describe('Add patient from chat (CH-9)', () => {
   test('a writer adds one synthetic patient; it shows in the section and the chat choice; a bad label sends nothing; a reader has no control', async ({ page }) => {
     await signInAs(page, 'alice', '/workspace');
     await page.locator('input[type=file]').setInputFiles({ name: 'p.json', mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
-    await openWorkspaceNavigation(page);
     const section = page.getByRole('region', { name: 'Patients' });
     const posts: string[] = [];
     page.on('request', (request) => {
       if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/v1/patients') posts.push(request.url());
     });
-    await section.getByRole('button', { name: 'Add patient' }).click();
-    await section.getByRole('textbox', { name: 'Synthetic patient label' }).fill('Jane Doe');
-    await section.getByRole('button', { name: 'Create patient' }).click();
-    await expect(section.getByRole('alert')).toBeVisible();
+    await page.getByRole('dialog', { name: 'Report details' }).getByRole('link', { name: 'Add patient' }).click();
+    await page.getByRole('textbox', { name: 'Synthetic patient label' }).fill('Jane Doe');
+    await page.getByRole('button', { name: 'Create patient' }).click();
+    await expect(page.getByRole('alert')).toBeVisible();
     expect(posts).toEqual([]);
     const created = label();
-    await section.getByRole('textbox', { name: 'Synthetic patient label' }).fill(created);
-    await section.getByRole('button', { name: 'Create patient' }).click();
+    await page.getByRole('textbox', { name: 'Synthetic patient label' }).fill(created);
+    await page.getByRole('button', { name: 'Create patient' }).click();
+    await expect(page).toHaveURL(/\/patients\/[0-9a-f-]{36}$/);
+    await page.getByRole('link', { name: 'Back to chat' }).click();
+    await openWorkspaceNavigation(page);
     await expect(section.getByRole('list', { name: 'Patients' }).getByText(created)).toBeVisible();
+    const menu = page.getByRole('button', { name: 'Workspace navigation', exact: true });
+    if (await menu.isVisible()) await menu.click();
+    await page.getByRole('button', { name: 'Report details' }).click();
     expect(posts).toHaveLength(1);
     await expect(page.getByRole('combobox', { name: 'Patient' }).locator('option', { hasText: created })).toHaveCount(1);
   });
@@ -245,11 +258,11 @@ test.describe('Add patient in the panel (CH-9)', () => {
     await signInAs(page, 'bob', '/workspace');
     await openWorkspaceNavigation(page);
     await expect(page.getByRole('region', { name: 'Patients' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Add patient' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Add patient' })).toHaveCount(0);
   });
 });
 
-test('a lost patient-create response locks Send, then retries the same identity and uploads once', async ({ page }, info) => {
+test('a lost patient-create response locks creation, then retries the same identity and uploads once', async ({ page }, info) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const bodies: unknown[] = [];
   const returnedIds: string[] = [];
@@ -269,21 +282,20 @@ test('a lost patient-create response locks Send, then retries the same identity 
   await signInAs(page, 'alice', '/workspace');
   const name = `replay-${crypto.randomUUID().slice(0, 8)}.json`;
   await page.locator('input[type=file]').setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
-  await page.getByRole('combobox', { name: 'Patient' }).selectOption('new');
-  await page.getByRole('textbox', { name: 'New patient label' }).fill(label());
-  await page.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' }).check();
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
-  const pending = page.getByRole('button', { name: 'Adding patient', exact: true });
+  await page.getByRole('dialog', { name: 'Report details' }).getByRole('link', { name: 'Add patient' }).click();
+  await page.getByRole('textbox', { name: 'Synthetic patient label' }).fill(label());
+  await page.getByRole('button', { name: 'Create patient', exact: true }).click();
+  const pending = page.getByRole('button', { name: 'Saving…', exact: true });
   await expect(pending).toBeDisabled();
   await expect(pending).toHaveAttribute('aria-busy', 'true');
   await expect(pending.locator('svg')).toHaveCSS('animation-name', 'none');
-  await expect(page.getByRole('combobox', { name: 'Patient' })).toBeDisabled();
+  await expect(page.getByRole('textbox', { name: 'Synthetic patient label' })).toHaveAttribute('readonly');
   await pending.scrollIntoViewIfNeeded();
   const box = await pending.boundingBox();
   expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
-  const form = page.getByRole('form', { name: 'Report and question' });
+  const form = page.getByRole('main').locator('form').filter({ has: pending });
   try {
-    const headingBox = await page.getByRole('heading', { level: 1, name: 'Start with a synthetic report.' }).boundingBox();
+    const headingBox = await page.getByRole('heading', { level: 1, name: 'New patient' }).boundingBox();
     const formBox = await form.boundingBox();
     expect(headingBox).not.toBeNull();
     expect(formBox).not.toBeNull();
@@ -295,7 +307,12 @@ test('a lost patient-create response locks Send, then retries the same identity 
     release(); // Also settle the held response when a layout assertion fails.
   }
   await expect(page.getByRole('alert').filter({ hasText: /patient/i })).toBeVisible();
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await page.getByRole('button', { name: 'Create patient', exact: true }).click();
+  await expect(page).toHaveURL(/\/patients\/[0-9a-f-]{36}$/);
+  await page.getByRole('link', { name: 'Back to chat' }).click();
+  await page.getByRole('button', { name: 'Report details' }).click();
+  await page.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' }).check();
+  await page.getByRole('button', { name: 'Upload report', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Conversation' }).getByRole('list', { name: `Upload of ${name}` })).toHaveCount(1);
   await expect(page.getByRole('region', { name: 'Conversation' }).getByText('Received', { exact: true })).toBeVisible();
   expect(bodies).toHaveLength(2);
@@ -312,7 +329,7 @@ test('attachment Undo restores the file, pauses for keyboard focus and expires w
   const name = `undo-${crypto.randomUUID().slice(0, 8)}.json`;
   const form = page.getByRole('form', { name: 'Report and question' });
   await page.locator('input[type=file]').setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
-  await page.getByRole('textbox', { name: 'Question' }).fill('Keep this note');
+  await page.getByRole('textbox', { name: 'Report note' }).fill('Keep this note');
   const posts: string[] = [];
   page.on('request', (request) => { if (request.method() === 'POST') posts.push(request.url()); });
   await form.getByRole('button', { name: 'Remove file' }).click();
@@ -325,7 +342,7 @@ test('attachment Undo restores the file, pauses for keyboard focus and expires w
   await page.screenshot({ path: info.outputPath('attachment-undo.png') });
   await undo.press('Enter');
   await expect(form.getByText(name, { exact: true })).toBeVisible();
-  await expect(form.getByRole('textbox', { name: 'Question' })).toHaveValue('Keep this note');
+  await expect(form.getByRole('textbox', { name: 'Report note' })).toHaveValue('Keep this note');
   await form.getByRole('button', { name: 'Remove file' }).click();
   await form.getByRole('textbox', { name: 'Question' }).focus();
   await page.mouse.move(0, 0);

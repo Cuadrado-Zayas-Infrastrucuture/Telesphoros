@@ -59,6 +59,7 @@ export interface TestAppOptions {
   evaluationRequests?: string;
   /** Explicitly open medication capture; omitted exercises the production-safe disabled default. */
   medicationWrites?: 'enabled' | 'disabled';
+  followupWrites?: 'enabled' | 'disabled';
   /**
    * Read reports with the private report-reader engine and its own captures, instead of the test stand-in and the public fixtures. Only specs on the
    * list in reader-engine-specs.json pass it: the app refuses to start without the engine.
@@ -196,6 +197,7 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
       ...(options.databasePoolMax === undefined ? {} : { DATABASE_POOL_MAX: String(options.databasePoolMax) }),
       ...(realIssuer ? { ISSUER_URL: realIssuer.url } : {}),
       ...(options.labReportPipeline ? { LAB_REPORT_PIPELINE: 'enabled' } : {}),
+      ...(options.followupWrites === undefined ? {} : { FOLLOWUP_WRITES: options.followupWrites }),
       ...(options.medicationWrites === undefined ? {} : { MEDICATION_WRITES: options.medicationWrites }),
       ...(options.evaluationRequests === undefined ? {} : { EVALUATION_REQUESTS: 'enabled', EVALUATION_EXECUTION_PROFILE: options.evaluationRequests }),
       ...(options.labReportPipeline

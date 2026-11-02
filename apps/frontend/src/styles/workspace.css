@@ -90,3 +90,14 @@
 @media (max-width: 63.99rem) {
   .workspace-navigation.is-collapsed .workspace-panel-item { display: list-item; }
 }
+
+/* Compact report details stay over the chat rather than navigating to a new page. */
+.context-drawer.report-intake { inset: 0; margin: auto; width: min(calc(100% - 2rem), var(--size-context-drawer)); height: fit-content; max-height: calc(var(--size-safe-viewport) - 2rem); border: 1px solid var(--divider); border-radius: 1rem; }
+
+/* Report history and account preferences keep the conversation behind a roomy panel. */
+.context-drawer.workspace-context-panel {
+  width: min(100%, 64rem);
+}
+
+/* Bound roster height so a busy clinic can still reach the main navigation. */
+.workspace-roster { max-height: clamp(6rem, 18vh, 10rem); overflow-y: auto; overscroll-behavior: contain; padding-inline: .125rem; }

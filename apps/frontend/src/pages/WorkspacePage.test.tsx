@@ -59,6 +59,151 @@ afterEach(() => {
 });
 
 describe('the chat-first home in every build (specs/024)', () => {
+  it('opens patient creation on the patient page instead of inside chat', async () => {
+    const { router } = open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.click(screen.getByRole('link', { name: 'Add patient' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/patients/new'));
+    expect(await screen.findByRole('heading', { name: 'New patient' })).toBeVisible();
+    expect(screen.getByRole('textbox', { name: 'Given name' })).toBeVisible();
+  });
+
+  it('preserves the unsent question and attachment across patient creation navigation', async () => {
+    const { router } = open(['clinician']);
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Question' }), 'Keep this draft');
+    await userEvent.upload(file(), json());
+    await userEvent.click(screen.getByRole('button', { name: 'Back to chat' }));
+    await userEvent.click(screen.getByRole('link', { name: 'Add patient' }));
+    await screen.findByRole('heading', { name: 'New patient' });
+    await userEvent.click(screen.getByRole('link', { name: 'Back to chat' }));
+    expect(router.state.location.pathname).toBe('/workspace');
+    expect(screen.getByRole('textbox', { name: 'Question' })).toHaveValue('Keep this draft');
+    expect(screen.getByRole('button', { name: 'Report details' })).toHaveTextContent('SYN-004-cyp2c19.json');
+    expect(submitReport).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['All reports', 'Report history'],
+    ['Settings', 'Account preferences'],
+  ])('opens %s over chat and keeps the draft when closed', async (link, title) => {
+    open(['clinician']);
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Question' }), 'Keep my draft');
+    await userEvent.click(screen.getByRole('link', { name: link }));
+    const panel = await screen.findByRole('dialog', { name: title });
+    await userEvent.click(within(panel).getByRole('button', { name: `Close ${title.toLowerCase()}` }));
+    expect(await screen.findByRole('textbox', { name: 'Question' })).toHaveValue('Keep my draft');
+  });
+
+  it('keeps a report note with its upload without treating it as an interpretation question', async () => {
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.upload(file(), json());
+    await userEvent.type(screen.getByRole('textbox', { name: 'Report note' }), 'Review at next visit');
+    await userEvent.click(screen.getByRole('checkbox', CONFIRM));
+    await userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
+    const thread = within(await conversation());
+    expect(await thread.findByText('Received')).toBeVisible();
+    expect(thread.getByText('Review at next visit')).toBeVisible();
+    expect(thread.queryByText(NOTE)).toBeNull();
+    expect(submitReport).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a failed upload inside the reopened details dialog and retains its note for retry', async () => {
+    vi.mocked(submitReport).mockRejectedValueOnce(new Error('outside-response-not-for-display'));
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.upload(file(), json());
+    await userEvent.type(screen.getByRole('textbox', { name: 'Report note' }), 'Keep this upload note');
+    await userEvent.click(screen.getByRole('checkbox', CONFIRM));
+    await userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
+    const details = within(await screen.findByRole('dialog', { name: 'Report details' }));
+    expect(await details.findByRole('alert')).toHaveTextContent('The upload was interrupted. Your file is kept; please retry.');
+    expect(details.getByRole('textbox', { name: 'Report note' })).toHaveValue('Keep this upload note');
+    expect(screen.queryByText('outside-response-not-for-display')).toBeNull();
+    await userEvent.click(details.getByRole('button', { name: 'Upload report' }));
+    expect(await within(await conversation()).findByText('Received')).toBeVisible();
+    expect(submitReport).toHaveBeenCalledTimes(2);
+  });
+
+  it('requires fresh confirmation after replacing a file', async () => {
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.upload(file(), json());
+    await userEvent.click(screen.getByRole('checkbox', CONFIRM));
+    await userEvent.upload(file(), new File(['{}'], 'replacement.json'));
+    expect(screen.getByRole('checkbox', CONFIRM)).not.toBeChecked();
+    await userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
+    expect(submitReport).not.toHaveBeenCalled();
+  });
+
+  it('can select the same file again after removing it', async () => {
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    const selected = json();
+    await userEvent.upload(file(), selected);
+    await userEvent.click(screen.getByRole('button', { name: 'Remove file' }));
+    await userEvent.upload(file(), selected);
+    expect(await screen.findByRole('dialog', { name: 'Report details' })).toBeVisible();
+    expect(submitReport).not.toHaveBeenCalled();
+  });
+
+  it('loads later patients for an attachment, retries a failed page and retains the selected patient', async () => {
+    const other = { ...PATIENT, id: '1a8fad5b-d9cb-469f-a165-70867728950f', label: 'SYN-LATER' };
+    const base = api(['clinician']);
+    let fail = true;
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/api/v1/patients' && !init?.method) {
+        const next = url.searchParams.get('page') === '2';
+        if (next && fail) return new Response('{}', { status: 503 });
+        return new Response(JSON.stringify({ data: [next ? other : PATIENT], meta: { page: next ? 2 : 1, pageSize: 20, total: 21, totalPages: 2 } }));
+      }
+      return base(input, init);
+    });
+    renderApp('/workspace', { signedInAs: ['clinician'], fetchImpl });
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.upload(file(), json());
+    const details = within(await screen.findByRole('dialog', { name: 'Report details' }));
+    await userEvent.click(details.getByRole('button', { name: 'More patients' }));
+    expect(await details.findByRole('alert')).toHaveTextContent(/patients/i);
+    expect(details.getByRole('combobox', { name: 'Patient' })).toHaveValue(PATIENT.id);
+    fail = false;
+    await userEvent.click(details.getByRole('button', { name: 'Retry loading patients' }));
+    expect(await details.findByRole('option', { name: 'SYN-LATER' })).toBeInTheDocument();
+    expect(details.getByRole('combobox', { name: 'Patient' })).toHaveValue(PATIENT.id);
+    await userEvent.selectOptions(details.getByRole('combobox', { name: 'Patient' }), other.id);
+    await userEvent.click(details.getByRole('checkbox', CONFIRM));
+    await userEvent.click(details.getByRole('button', { name: 'Upload report' }));
+    await waitFor(() => expect(submitReport).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(submitReport).mock.calls[0]![0].patientId).toBe(other.id);
+  });
+
+  it('opens report details over chat on attachment without starting an upload', async () => {
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.upload(file(), json());
+    const details = await screen.findByRole('dialog', { name: 'Report details' });
+    expect(within(details).getByRole('combobox', { name: 'Patient' })).toBeVisible();
+    expect(within(details).getByRole('checkbox', CONFIRM)).not.toBeChecked();
+    expect(submitReport).not.toHaveBeenCalled();
+  });
+
+  it('keeps a dismissed attachment and requires its details to be confirmed before uploading', async () => {
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.upload(file(), json());
+    await screen.findByRole('dialog', { name: 'Report details' });
+    await userEvent.click(screen.getByRole('button', { name: 'Back to chat' }));
+    expect(screen.queryByRole('dialog', { name: 'Report details' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Report details' }));
+    const details = await screen.findByRole('dialog', { name: 'Report details' });
+    await userEvent.click(within(details).getByRole('checkbox', CONFIRM));
+    await userEvent.click(within(details).getByRole('button', { name: 'Upload report' }));
+    expect(await within(await conversation()).findByText('Received')).toBeVisible();
+    expect(screen.queryByRole('dialog', { name: 'Report details' })).toBeNull();
+    expect(submitReport).toHaveBeenCalledTimes(1);
+  });
+
   it('renders on a host that is not the local preview, with the empty-state heading and the synthetic notice (CH-1)', async () => {
     open(['clinician']);
     expect(await screen.findByRole('heading', { level: 1, name: 'Start with a synthetic report.' })).toBeVisible();
@@ -109,15 +254,15 @@ describe('the chat-first home in every build (specs/024)', () => {
     expect(useSyntheticChat).not.toHaveBeenCalled();
   });
 
-  it('explains the synthetic label rules beside a new patient choice and associates them with its input', async () => {
+  it('opens the patient page from report details and explains the label rules there', async () => {
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
     await userEvent.upload(file(), json());
-    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Patient' }), 'new');
-    expect(screen.getByRole('textbox', { name: 'New patient label' })).toHaveAccessibleDescription('Letters, numbers and hyphens. A code, never a name.');
+    await userEvent.click(within(await screen.findByRole('dialog', { name: 'Report details' })).getByRole('link', { name: 'Add patient' }));
+    expect(await screen.findByRole('textbox', { name: 'Synthetic patient label' })).toHaveAccessibleDescription('Letters, numbers and hyphens. A code, never a name.');
   });
 
-  it('locks Send while creating a patient, then retries a failed create with the same identity and sends the report once', async () => {
+  it('locks patient creation, retries with the same identity and returns to the attachment to upload once', async () => {
     const requests: Array<{ label: string; requestId: string }> = [];
     const replies: Array<(response: Response) => void> = [];
     const ok = api(['clinician']);
@@ -131,25 +276,30 @@ describe('the chat-first home in every build (specs/024)', () => {
     renderApp('/workspace', { signedInAs: ['clinician'], fetchImpl });
     await screen.findByRole('button', { name: 'Attach a report' });
     await userEvent.upload(file(), json());
-    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Patient' }), 'new');
-    await userEvent.type(screen.getByRole('textbox', { name: 'New patient label' }), 'SYN-NEW');
-    await userEvent.click(screen.getByRole('checkbox', CONFIRM));
-    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await userEvent.click(within(await screen.findByRole('dialog', { name: 'Report details' })).getByRole('link', { name: 'Add patient' }));
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Synthetic patient label' }), 'SYN-NEW');
+    await userEvent.click(screen.getByRole('button', { name: 'Create patient' }));
     await waitFor(() => expect(requests).toHaveLength(1));
-    const pending = screen.getByRole('button', { name: 'Adding patient' });
+    const pending = screen.getByRole('button', { name: 'Saving…' });
     expect(pending).toBeDisabled();
     expect(pending).toHaveAttribute('aria-busy', 'true');
-    expect(screen.getByRole('combobox', { name: 'Patient' })).toBeDisabled();
-    fireEvent.submit(screen.getByRole('form', { name: 'Report and question' }));
+    expect(screen.getByRole('textbox', { name: 'Synthetic patient label' })).toHaveAttribute('readonly');
+    fireEvent.submit(pending.closest('form')!);
     expect(requests).toHaveLength(1);
     await act(async () => replies[0]!(new Response('{}', { status: 503 })));
     expect(await screen.findByRole('alert')).toHaveTextContent(/patient/i);
     expect(submitReport).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create patient' }));
     await waitFor(() => expect(requests).toHaveLength(2));
     expect(requests[1]).toEqual(requests[0]);
     expect(requests[0]!.requestId).toMatch(/^[0-9a-f-]{36}$/);
     await act(async () => replies[1]!(new Response(JSON.stringify({ ...PATIENT, id: '1a8fad5b-d9cb-469f-a165-70867728950f', label: 'SYN-NEW' }), { status: 201 })));
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Synthetic patient label' })).toBeNull());
+    await userEvent.click(await screen.findByRole('link', { name: 'Back to chat' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Report details' }));
+    expect(screen.getByRole('combobox', { name: 'Patient' })).toHaveValue('1a8fad5b-d9cb-469f-a165-70867728950f');
+    await userEvent.click(screen.getByRole('checkbox', CONFIRM));
+    await userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
     expect(await within(await conversation()).findByText('Received')).toBeVisible();
     expect(submitReport).toHaveBeenCalledTimes(1);
   });
@@ -201,7 +351,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     await screen.findByRole('button', { name: 'Attach a report' });
     await userEvent.upload(file(), json());
     expect(await screen.findByRole('combobox', { name: 'Patient' })).toHaveValue(PATIENT.id);
-    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
     expect(screen.getByText('Confirm the file is synthetic.')).toBeVisible();
     expect(submitReport).not.toHaveBeenCalled();
   });
@@ -212,7 +362,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     await userEvent.upload(file(), json());
     expect(await screen.findByRole('combobox', { name: 'Patient' })).toHaveValue(PATIENT.id);
     await userEvent.click(screen.getByRole('checkbox', CONFIRM));
-    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
     const thread = within(await conversation());
     expect(await thread.findByText(/SYN-004-cyp2c19\.json/)).toBeVisible();
     expect(await thread.findByText('Received')).toHaveClass('text-warning');
@@ -228,7 +378,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     await userEvent.upload(file(), json());
     await screen.findByRole('combobox', { name: 'Patient' });
     await userEvent.click(screen.getByRole('checkbox', CONFIRM));
-    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
     const thread = within(await conversation());
     await thread.findByText('Received');
     listed = 'processed';
@@ -252,7 +402,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     await userEvent.upload(file(), new File(['%PDF-1.4'], 'SYN-004.pdf', { type: 'application/pdf' }), { applyAccept: false });
     expect(await screen.findByRole('alert')).toHaveTextContent(/local preview/i);
     await userEvent.click(await screen.findByRole('checkbox', CONFIRM));
-    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
     await waitFor(() => expect(screen.getByRole('alert')).toBeVisible());
     expect(submitReport).not.toHaveBeenCalled();
     expect(fetchImpl.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
@@ -292,7 +442,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Start with a synthetic report.' })).toBeVisible();
     expect(screen.queryByText('First question')).toBeNull();
   });
-  it("a patient added in the panel appears in the chat's patient choice (CH-9)", async () => {
+  it("a patient added on its page appears in the chat's patient choice (CH-9)", async () => {
     const created = { ...PATIENT, id: '1a8fad5b-d9cb-469f-a165-70867728950f', label: 'SYN-777' };
     const base = api(['clinician']);
     const impl = vi.fn<typeof fetch>(async (input, init) =>
@@ -304,10 +454,12 @@ describe('the chat-first home in every build (specs/024)', () => {
     await screen.findByRole('button', { name: 'Attach a report' });
     await userEvent.upload(file(), json());
     await screen.findByRole('combobox', { name: 'Patient' });
-    const patients = within(await screen.findByRole('region', { name: 'Patients' }));
-    await userEvent.click(patients.getByRole('button', { name: 'Add patient' }));
-    await userEvent.type(patients.getByRole('textbox', { name: 'Synthetic patient label' }), 'SYN-777');
-    await userEvent.click(patients.getByRole('button', { name: 'Create patient' }));
+    await userEvent.click(within(await screen.findByRole('dialog', { name: 'Report details' })).getByRole('link', { name: 'Add patient' }));
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Synthetic patient label' }), 'SYN-777');
+    await userEvent.click(screen.getByRole('button', { name: 'Create patient' }));
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Synthetic patient label' })).toBeNull());
+    await userEvent.click(await screen.findByRole('link', { name: 'Back to chat' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Report details' }));
     expect(await within(screen.getByRole('combobox', { name: 'Patient' })).findByRole('option', { name: 'SYN-777' })).toBeInTheDocument();
   });
 });

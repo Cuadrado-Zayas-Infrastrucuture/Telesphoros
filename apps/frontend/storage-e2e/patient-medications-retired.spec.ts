@@ -34,10 +34,10 @@ test('historical ingredient corrections and stops remain compact among 20 medica
   await openWorkspaceNavigation(page);
   const patients = page.getByRole('region', { name: 'Patients' });
   const label = `SYN-RETIRED-${crypto.randomUUID().slice(0, 8)}`;
-  await patients.getByRole('button', { name: 'Add patient' }).click();
-  await patients.getByLabel('Synthetic patient label').fill(label);
+  await patients.getByRole('link', { name: 'Add patient' }).click();
+  await page.getByLabel('Synthetic patient label').fill(label);
   const created = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/patients'));
-  await patients.getByRole('button', { name: 'Create patient' }).click();
+  await page.getByRole('button', { name: 'Create patient' }).click();
   const response = await created;
   expect(response.status()).toBe(201);
   const patient = await response.json();
@@ -55,7 +55,8 @@ test('historical ingredient corrections and stops remain compact among 20 medica
     });
     expect(saved.status()).toBe(201);
   }
-  await patients.getByRole('link', { name: label, exact: true }).click();
+  await expect(page).toHaveURL(/\/patients\/[0-9a-f-]{36}$/);
+  await page.getByRole('region', { name: 'Medications' }).getByRole('button', { name: 'Refresh medications' }).click();
   const section = page.getByRole('region', { name: 'Medications' });
   await expect(section.getByRole('list', { name: 'Recorded medications' }).getByRole('listitem')).toHaveCount(20);
   for (const action of ['Correct', 'Stop']) {

@@ -11,17 +11,18 @@ test('20 recorded medications stay compact, searchable and readable in both them
   await openWorkspaceNavigation(page);
   const patients = page.getByRole('region', { name: 'Patients' });
   const label = `SYN-TWENTY-${crypto.randomUUID().slice(0, 8)}`;
-  await patients.getByRole('button', { name: 'Add patient' }).click();
-  await patients.getByLabel('Synthetic patient label').fill(label);
+  await patients.getByRole('link', { name: 'Add patient' }).click();
+  await page.getByLabel('Synthetic patient label').fill(label);
   const created = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().endsWith('/patients'));
-  await patients.getByRole('button', { name: 'Create patient' }).click();
+  await page.getByRole('button', { name: 'Create patient' }).click();
   const authenticated = await created;
   const api = new URL(authenticated.url()).origin;
   const headers = { Authorization: authenticated.request().headers().authorization! };
   // Fixture construction uses the actual tenant-scoped API. The list count and layout are verified independently in the browser.
   expect(authenticated.status()).toBe(201);
   const patient = await authenticated.json();
-  await patients.getByRole('link', { name: label, exact: true }).click();
+  await expect(page).toHaveURL(/\/patients\/[0-9a-f-]{36}$/);
+  await page.getByRole('region', { name: 'Medications' }).getByRole('button', { name: 'Refresh medications' }).click();
   const codes = [
     '5470',
     ...list.entries

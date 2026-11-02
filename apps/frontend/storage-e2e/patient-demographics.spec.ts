@@ -18,20 +18,22 @@ test.describe('Patient demographics: collected in Add patient, read and correcte
     await expect(line).toBeVisible();
     const start = await readCounts();
     const created = label();
-    await section.getByRole('button', { name: 'Add patient' }).click();
-    await section.getByRole('textbox', { name: 'Synthetic patient label' }).fill(created);
-    await section.getByRole('textbox', { name: 'Given name' }).fill(given);
-    await section.getByRole('textbox', { name: 'Family name' }).fill('Testcase');
-    await section.getByLabel('Date of birth').fill('1980-02-29');
-    await section.getByRole('combobox', { name: 'Sex' }).selectOption('female');
-    await section.getByRole('checkbox', { name: 'Hispanic or Latino' }).check();
-    await section.getByRole('button', { name: 'Create patient' }).click();
-    await expect(section.getByText(`Added ${created}.`)).toBeVisible();
+    await section.getByRole('link', { name: 'Add patient' }).click();
+    await page.getByRole('textbox', { name: 'Synthetic patient label' }).fill(created);
+    await page.getByRole('textbox', { name: 'Given name' }).fill(given);
+    await page.getByRole('textbox', { name: 'Family name' }).fill('Testcase');
+    await page.getByLabel('Date of birth').fill('1980-02-29');
+    await page.getByRole('combobox', { name: 'Sex' }).selectOption('female');
+    await page.getByRole('checkbox', { name: 'Hispanic or Latino' }).check();
+    await page.getByRole('button', { name: 'Create patient' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: created })).toBeVisible();
+    await openWorkspaceNavigation(page);
     await expect.poll(readCounts).toEqual({ complete: start.complete + 1, patients: start.patients + 1 });
     const row = section.getByRole('list', { name: 'Patients' }).getByRole('listitem').filter({ hasText: created });
     await expect(row.getByText('Incomplete')).toHaveCount(0);
 
-    await row.getByRole('link', { name: created }).click();
+    const menu = page.getByRole('button', { name: 'Workspace navigation', exact: true });
+    if (await menu.isVisible()) await menu.click();
     await expect(page.getByRole('heading', { level: 1, name: created })).toBeVisible();
     const demographics = page.getByRole('region', { name: 'Demographics' });
     await expect(demographics.getByText(given)).toBeVisible();
@@ -64,12 +66,14 @@ test.describe('Patient demographics: collected in Add patient, read and correcte
     await expect(outsider.getByText(given)).toHaveCount(0);
     await outsider.close();
 
-    await page.getByRole('link', { name: 'Workspace', exact: true }).click();
+    await page.getByRole('link', { name: 'Back to chat', exact: true }).click();
     await openWorkspaceNavigation(page);
     const bare = label();
-    await section.getByRole('button', { name: 'Add patient' }).click();
-    await section.getByRole('textbox', { name: 'Synthetic patient label' }).fill(bare);
-    await section.getByRole('button', { name: 'Create patient' }).click();
+    await section.getByRole('link', { name: 'Add patient' }).click();
+    await page.getByRole('textbox', { name: 'Synthetic patient label' }).fill(bare);
+    await page.getByRole('button', { name: 'Create patient' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: bare })).toBeVisible();
+    await openWorkspaceNavigation(page);
     await expect(section.getByRole('list', { name: 'Patients' }).getByRole('listitem').filter({ hasText: bare }).getByText('Incomplete')).toBeVisible();
     await expect.poll(readCounts).toEqual({ complete: start.complete + 1, patients: start.patients + 2 }); // a label alone adds one to the denominator and nothing to complete
   });

@@ -53,6 +53,10 @@ const relationships: [string, string, string, string][] = [
   ['use_withdrawals_grant_fk', 'use_withdrawals', 'grant_id,tenant_id', 'use_grants:id,tenant_id'],
   ['use_restrictions_patient_fk', 'use_restrictions', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   // Spec 025 PD-a (patient demographics): the versions and the wrapped key both name the patient. No foreign key from a version to its key: erasure deletes the key.
+  ['patient_followups_patient_fk', 'patient_followups', 'patient_id,tenant_id', 'patients:id,tenant_id'],
+  ['patient_followups_note_fk', 'patient_followups', 'note_id,tenant_id', 'event_notes:id,tenant_id'],
+  ['patient_followups_medication_id_fkey', 'patient_followups', 'medication_id', 'patient_medications:id'],
+  ['patient_followups_decision_id_fkey', 'patient_followups', 'decision_id', 'clinician_result_decisions:id'],
   ['patient_medications_patient_fk', 'patient_medications', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   ['patient_demographics_patient_fk', 'patient_demographics', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   ['patient_field_keys_patient_fk', 'patient_field_keys', 'patient_id,tenant_id', 'patients:id,tenant_id'],
@@ -118,6 +122,7 @@ const primaryKeys: Record<string, string> = {
   tenant_use_terms: 'id',
   patient_demographics: 'id',
   patient_medications: 'id',
+  patient_followups: 'id',
   patient_field_keys: 'tenant_id, patient_id',
   result_render_events: 'id',
   evaluations: 'id',
@@ -201,6 +206,8 @@ const uniqueKeys: Record<string, string> = {
   use_grant_validations_once_uq: 'grant_id, tenant_id',
   use_withdrawals_once_uq: 'grant_id, tenant_id',
   tenant_use_terms_once_uq: 'tenant_id, agreement_ref, agreement_version',
+  patient_followups_version_uq: 'tenant_id, thread_id, version',
+  patient_followups_request_uq: 'tenant_id, created_by, creation_request_id',
   patient_medications_version_uq: 'tenant_id, entry_id, version',
   patient_demographics_version_uq: 'tenant_id, patient_id, version',
   patient_field_keys_version_uq: 'tenant_id, patient_id, key_version',
@@ -279,6 +286,7 @@ const checkNames: Record<string, string> = {
   use_withdrawals: 'tenant_id_len created_by_len recorded_by_actor not_backdated',
   use_restrictions: 'tenant_id_len created_by_len purpose interval reason_code',
   tenant_use_terms: 'tenant_id_len created_by_len refs interval purposes classifications',
+  patient_followups: 'tenant_id_len created_by_len version action request_hash task_shape action_shape assessment_shape',
   patient_medications: 'tenant_id_len created_by_len version rxcui name list_version status start_month stop_month month_order active_stop source request_hash',
   patient_demographics: 'tenant_id_len created_by_len version key_version nonces name_len dob_len sex birth_year ethnicity request_pair request_hash',
   patient_field_keys: 'tenant_id_len created_by_len version wrapped_len provider',
@@ -336,6 +344,7 @@ for (const table of [
   'tenant_use_terms',
   'patient_demographics',
   'patient_medications',
+  'patient_followups',
   'ledger_checkpoints',
 ]) {
   relationships.push([`${table}_event_fk`, table, 'ledger_event_id,tenant_id', 'ledger_events:id,tenant_id']);
@@ -343,6 +352,8 @@ for (const table of [
 
 // Query-facing definitions. Constraint-backed indexes and internal append-only guards are also covered by ledger-catalog/behavior suites.
 const queryIndexes: Record<string, string> = {
+  patient_followups_patient_idx: 'INDEX patient_followups_patient_idx ON public.patient_followups USING btree (tenant_id, patient_id, thread_id, version DESC)',
+  patient_followups_event_idx: 'INDEX patient_followups_event_idx ON public.patient_followups USING btree (ledger_event_id, tenant_id)',
   evaluation_requests_tenant_report: 'INDEX evaluation_requests_tenant_report ON public.evaluation_requests USING btree (tenant_id, report_id)',
   browser_sessions_expiry_idx: 'INDEX browser_sessions_expiry_idx ON public.browser_sessions USING btree (tenant_id, expires_at, handle_hash)',
   upload_attempt_run_idx: 'INDEX upload_attempt_run_idx ON public.report_upload_attempts USING btree (tenant_id, run_id, state)',

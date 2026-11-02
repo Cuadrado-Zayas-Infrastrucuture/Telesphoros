@@ -1,5 +1,5 @@
 import { preferenceStorage } from '@/lib/storageConsent';
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Role } from '@telesphoros/shared-types';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -58,7 +58,7 @@ afterEach(() => {
 describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () => {
   it('frames Settings with the sidebar, holding the feature panel for a clinician', async () => {
     open('/settings', ['clinician']);
-    expect(await linkNames()).toEqual(['New chat', 'Upload report', 'All reports', 'Settings']);
+    expect(await linkNames()).toEqual(['New chat', 'Add patient', 'All reports', 'Settings']);
     expect(sidebar()).not.toBeNull();
   });
 
@@ -67,7 +67,7 @@ describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () 
     try {
       open('/settings', ['clinician']);
       const nav = await primary();
-      expect(nav.getAllByRole('link').map((link) => link.textContent)).toEqual(['Workspace', 'Chat preview', 'New chat', 'Upload report', 'All reports', 'Settings']);
+      expect(nav.getAllByRole('link').map((link) => link.textContent)).toEqual(['Workspace', 'Chat preview', 'New chat', 'Add patient', 'All reports', 'Settings']);
       expect(nav.getByRole('link', { name: 'Workspace' })).toHaveAttribute('href', '/local-workspace');
     } finally {
       vi.unstubAllGlobals();
@@ -124,13 +124,13 @@ describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () 
 describe('the feature panel (specs/024 D2, D6, CH-2)', () => {
   it('lists, in order, only the items the role may use', async () => {
     const cases: [Role[], string[]][] = [
-      [['clinician'], ['New chat', 'Past reports', 'Patients', 'Upload report', 'All reports', 'Settings']],
+      [['clinician'], ['New chat', 'Past reports', 'Patients', 'All reports', 'Settings']],
       [['reader'], ['New chat', 'Past reports', 'Patients', 'All reports', 'Settings']],
       [['reviewer'], ['New chat', 'Past reports', 'Patients', 'All reports', 'Settings']],
       [['admin'], ['New chat', 'Usage', 'Settings']],
       [
         ['admin', 'clinician'],
-        ['New chat', 'Past reports', 'Patients', 'Upload report', 'All reports', 'Usage', 'Settings'],
+        ['New chat', 'Past reports', 'Patients', 'All reports', 'Usage', 'Settings'],
       ],
       [[], ['New chat', 'Settings']],
     ];
@@ -156,9 +156,8 @@ describe('the feature panel (specs/024 D2, D6, CH-2)', () => {
     open('/settings', ['admin', 'clinician']);
     const nav = await primary();
     const href = (name: string) => nav.getByRole('link', { name }).getAttribute('href');
-    expect({ chat: href('New chat'), upload: href('Upload report'), all: href('All reports'), usage: href('Usage'), settings: href('Settings') }).toEqual({
+    expect({ chat: href('New chat'), all: href('All reports'), usage: href('Usage'), settings: href('Settings') }).toEqual({
       chat: '/workspace',
-      upload: '/reports/upload',
       all: '/reports',
       usage: '/usage',
       settings: '/settings',
@@ -209,9 +208,9 @@ describe('the feature panel (specs/024 D2, D6, CH-2)', () => {
       return { impl, posts };
     }
     const addPatient = async (label: string) => {
-      const patients = within(await screen.findByRole('region', { name: 'Patients' }));
-      await userEvent.click(patients.getByRole('button', { name: 'Add patient' }));
-      await userEvent.type(patients.getByRole('textbox', { name: 'Synthetic patient label' }), label);
+      const patients = screen;
+      await userEvent.click(patients.getByRole('link', { name: 'Add patient' }));
+      await userEvent.type(await patients.findByRole('textbox', { name: 'Synthetic patient label' }), label);
       await userEvent.click(patients.getByRole('button', { name: 'Create patient' }));
       return patients;
     };
@@ -219,7 +218,7 @@ describe('the feature panel (specs/024 D2, D6, CH-2)', () => {
     it('is offered to writer roles only', async () => {
       open('/settings', ['reader']);
       await primary();
-      expect(screen.queryByRole('button', { name: 'Add patient' })).toBeNull();
+      expect(screen.queryByRole('link', { name: 'Add patient' })).toBeNull();
       expect(await panelItems()).toContain('Patients');
     });
 
@@ -288,8 +287,8 @@ describe('the feature panel (specs/024 D2, D6, CH-2)', () => {
         return { impl, calls };
       }
       async function fill(patients: ReturnType<typeof within>, opts: { sexAndEthnicity: boolean }) {
-        await userEvent.click(patients.getByRole('button', { name: 'Add patient' }));
-        await userEvent.type(patients.getByRole('textbox', { name: 'Synthetic patient label' }), 'SYN-777');
+        await userEvent.click(patients.getByRole('link', { name: 'Add patient' }));
+        await userEvent.type(await patients.findByRole('textbox', { name: 'Synthetic patient label' }), 'SYN-777');
         await userEvent.type(patients.getByRole('textbox', { name: 'Given name' }), NAME);
         await userEvent.type(patients.getByRole('textbox', { name: 'Family name' }), 'Testcase');
         fireEvent.change(patients.getByLabelText('Date of birth'), { target: { value: '1980-02-29' } });
@@ -303,10 +302,11 @@ describe('the feature panel (specs/024 D2, D6, CH-2)', () => {
         const { impl, calls } = withDemographics();
         renderApp('/settings', { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
         await primary();
-        const patients = within(await screen.findByRole('region', { name: 'Patients' }));
+        const patients = screen;
         await fill(patients, { sexAndEthnicity: true });
         await userEvent.click(patients.getByRole('button', { name: 'Create patient' }));
-        expect(await patients.findByText('Added SYN-777.')).toBeVisible();
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Create patient' })).toBeNull());
+        expect(await screen.findByRole('link', { name: 'SYN-777' })).toBeVisible();
         expect(calls.map((call) => call.path)).toEqual(['/api/v1/patients', `/api/v1/patients/${NEW.id}/demographics`]);
         expect(calls[1]!.body).toMatchObject({ givenName: NAME, familyName: 'Testcase', dateOfBirth: '1980-02-29', sex: 'female', ethnicity: ['hispanic-or-latino'] });
         expect(calls[1]!.body.requestId).toMatch(/^[0-9a-f-]{36}$/);
@@ -316,8 +316,8 @@ describe('the feature panel (specs/024 D2, D6, CH-2)', () => {
           .closest('li')!;
         expect(within(row).queryByText('Incomplete')).toBeNull();
         // The draft is dropped once saved: reopening the form shows empty fields.
-        await userEvent.click(patients.getByRole('button', { name: 'Add patient' }));
-        expect(patients.getByRole('textbox', { name: 'Given name' })).toHaveValue('');
+        await userEvent.click(patients.getByRole('link', { name: 'Add patient' }));
+        expect(await patients.findByRole('textbox', { name: 'Given name' })).toHaveValue('');
       });
 
       it('a label alone adds the patient and marks it Incomplete, without a demographics request', async () => {
@@ -325,7 +325,8 @@ describe('the feature panel (specs/024 D2, D6, CH-2)', () => {
         renderApp('/settings', { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
         await primary();
         const patients = await addPatient('SYN-777');
-        expect(await patients.findByText('Added SYN-777.')).toBeVisible();
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Create patient' })).toBeNull());
+        expect(await screen.findByRole('link', { name: 'SYN-777' })).toBeVisible();
         expect(calls.map((call) => call.path)).toEqual(['/api/v1/patients']);
         const row = within(patients.getByRole('list', { name: 'Patients' }))
           .getByRole('link', { name: 'SYN-777' })
@@ -337,10 +338,11 @@ describe('the feature panel (specs/024 D2, D6, CH-2)', () => {
         const { impl, calls } = withDemographics();
         renderApp('/settings', { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
         await primary();
-        const patients = within(await screen.findByRole('region', { name: 'Patients' }));
+        const patients = screen;
         await fill(patients, { sexAndEthnicity: false });
         await userEvent.click(patients.getByRole('button', { name: 'Create patient' }));
-        expect(await patients.findByText('Added SYN-777.')).toBeVisible();
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Create patient' })).toBeNull());
+        expect(await screen.findByRole('link', { name: 'SYN-777' })).toBeVisible();
         expect(calls[1]!.body).toMatchObject({ sex: null, ethnicity: null });
         const row = within(patients.getByRole('list', { name: 'Patients' }))
           .getByRole('link', { name: 'SYN-777' })
@@ -352,7 +354,7 @@ describe('the feature panel (specs/024 D2, D6, CH-2)', () => {
         const { impl, calls } = withDemographics(true);
         renderApp('/settings', { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
         await primary();
-        const patients = within(await screen.findByRole('region', { name: 'Patients' }));
+        const patients = screen;
         await fill(patients, { sexAndEthnicity: true });
         await userEvent.click(patients.getByRole('button', { name: 'Create patient' }));
         const alert = await patients.findByRole('alert');
@@ -360,7 +362,8 @@ describe('the feature panel (specs/024 D2, D6, CH-2)', () => {
         expect(alert.textContent).not.toContain(NAME);
         expect(within(patients.getByRole('list', { name: 'Patients' })).getByRole('link', { name: 'SYN-777' })).toBeVisible();
         await userEvent.click(patients.getByRole('button', { name: 'Save demographics' }));
-        expect(await patients.findByText('Added SYN-777.')).toBeVisible();
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Create patient' })).toBeNull());
+        expect(await screen.findByRole('link', { name: 'SYN-777' })).toBeVisible();
         const paths = calls.map((call) => call.path);
         expect(paths.filter((path) => path === '/api/v1/patients')).toHaveLength(1);
         expect(paths.filter((path) => path.endsWith('/demographics'))).toHaveLength(2);
@@ -371,9 +374,9 @@ describe('the feature panel (specs/024 D2, D6, CH-2)', () => {
         const { impl, calls } = withDemographics();
         renderApp('/settings', { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
         await primary();
-        const patients = within(await screen.findByRole('region', { name: 'Patients' }));
-        await userEvent.click(patients.getByRole('button', { name: 'Add patient' }));
-        await userEvent.type(patients.getByRole('textbox', { name: 'Synthetic patient label' }), 'SYN-777');
+        const patients = screen;
+        await userEvent.click(patients.getByRole('link', { name: 'Add patient' }));
+        await userEvent.type(await patients.findByRole('textbox', { name: 'Synthetic patient label' }), 'SYN-777');
         await userEvent.selectOptions(patients.getByRole('combobox', { name: 'Sex' }), 'male');
         await userEvent.click(patients.getByRole('button', { name: 'Create patient' }));
         expect(await patients.findByText('Enter the given name.')).toBeVisible();
@@ -389,8 +392,8 @@ describe('the feature panel (specs/024 D2, D6, CH-2)', () => {
     const toggle = screen.getByRole('button', { name: 'Workspace navigation' });
     await userEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    screen.getByRole('link', { name: 'Upload report' }).focus();
-    fireEvent.keyDown(screen.getByRole('link', { name: 'Upload report' }), { key: 'Escape' });
+    screen.getByRole('link', { name: 'All reports' }).focus();
+    fireEvent.keyDown(screen.getByRole('link', { name: 'All reports' }), { key: 'Escape' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(toggle).toHaveFocus();
   });

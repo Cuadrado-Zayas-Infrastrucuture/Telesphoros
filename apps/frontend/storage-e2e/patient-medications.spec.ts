@@ -8,11 +8,10 @@ async function openPatient(page: Page) {
   await openWorkspaceNavigation(page);
   const patients = page.getByRole('region', { name: 'Patients' });
   const label = `SYN-MED-${crypto.randomUUID().slice(0, 8)}`;
-  await patients.getByRole('button', { name: 'Add patient' }).click();
-  await patients.getByLabel('Synthetic patient label').fill(label);
-  await patients.getByRole('button', { name: 'Create patient' }).click();
-  await expect(patients.getByText(`Added ${label}.`)).toBeVisible();
-  await patients.getByRole('link', { name: label, exact: true }).click();
+  await patients.getByRole('link', { name: 'Add patient' }).click();
+  await page.getByLabel('Synthetic patient label').fill(label);
+  await page.getByRole('button', { name: 'Create patient' }).click();
+  await expect(page).toHaveURL(/\/patients\/[0-9a-f-]{36}$/);
   await expect(page.getByRole('heading', { level: 1, name: label })).toBeVisible();
   return new URL(page.url()).pathname;
 }

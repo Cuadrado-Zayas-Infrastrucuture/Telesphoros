@@ -94,10 +94,11 @@ describe('protected pages', () => {
     expect(screen.queryByRole('link', { name: 'Upload report' })).not.toBeInTheDocument();
   });
 
-  it('show the upload link, the role and a sign-out control in the sidebar to a clinician', async () => {
+  it('show chat, the role and a sign-out control in the sidebar to a clinician', async () => {
     renderApp('/settings', { signedInAs: ['clinician'] });
     await screen.findByRole('button', { name: 'Collapse sidebar' });
-    expect(screen.getByRole('link', { name: 'Upload report' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'New chat' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Upload report' })).not.toBeInTheDocument();
     const sidebar = document.querySelector('header.workspace-navigation') as HTMLElement;
     expect(within(sidebar).getByText('clinician')).toBeInTheDocument();
     expect(within(sidebar).getAllByRole('button', { name: 'Sign out' })[0]).toBeEnabled();

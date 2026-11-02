@@ -79,14 +79,14 @@ afterAll(async () => {
 });
 
 describe('T020: every tenant-setting policy reads the capability, for every role (0032)', () => {
-  it('no policy text reads the setting any more, and exactly 76 read the accessor (47 before H1, its three policies, the H3 completion insert, the two H4 cancellation policies, the two tenant policies of the D01b clinician decisions, the two of the D02a result acknowledgements, the one of the D02b render events, the two of the E1a data provenance, the ten of the E1b use-eligibility records, and the four of spec 025 PD-a: the tenant and ledger policies of the demographics and the two application policies of the wrapped keys; plus the tenant and ledger policies of spec 029 medications)', async () => {
+  it('no policy text reads the setting any more, and exactly 78 read the accessor (47 before H1, its three policies, the H3 completion insert, the two H4 cancellation policies, the two tenant policies of the D01b clinician decisions, the two of the D02a result acknowledgements, the one of the D02b render events, the two of the E1a data provenance, the ten of the E1b use-eligibility records, and the four of spec 025 PD-a: the tenant and ledger policies of the demographics and the two application policies of the wrapped keys; plus the tenant and ledger policies of medications and treatment follow-ups)', async () => {
     const rows = await owner((c) =>
       c.query<{ tablename: string; policyname: string; qual: string | null; with_check: string | null }>(
         `SELECT tablename, policyname, qual, with_check FROM pg_policies WHERE schemaname = 'public' AND (qual LIKE '%app.current_tenant_id%' OR with_check LIKE '%app.current_tenant_id%' OR qual LIKE '%app_tenant()%' OR with_check LIKE '%app_tenant()%' OR qual LIKE '%app_tenant_bound()%' OR with_check LIKE '%app_tenant_bound()%')`,
       ),
     ).then((r) => r.rows);
     expect(rows.filter((r) => `${r.qual ?? ''}${r.with_check ?? ''}`.includes('app.current_tenant_id'))).toEqual([]);
-    expect(rows).toHaveLength(76);
+    expect(rows).toHaveLength(78);
     expect(rows.every((r) => /\(\s*SELECT\s+(public\.)?app_tenant(_bound)?\(\)/.test(`${r.qual ?? ''}${r.with_check ?? ''}`))).toBe(true);
     // 0047: only the authority tables keep reading the binding of a suspended organization; every other policy reads the active-checked app_tenant().
     const bound = rows.filter((r) => `${r.qual ?? ''}${r.with_check ?? ''}`.includes('app_tenant_bound()'));
@@ -235,6 +235,7 @@ describe('T020 vacuity guard: every tenant-policy table is seeded here or listed
     'patient_field_keys',
     // Spec 029: patient-medications.pg-spec.ts seeds a record and proves cross-tenant reads and writes are refused.
     'patient_medications',
+    'patient_followups',
     'evaluation_gene_states',
     'evaluation_results',
     'evaluations',
