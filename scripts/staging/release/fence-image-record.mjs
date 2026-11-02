@@ -3,9 +3,9 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 export function coversFenceImage(record, image) {
   const match = /^([0-9]{12})\.dkr\.ecr\.us-east-2\.amazonaws\.com\/telesphoros-staging-api@sha256:[0-9a-f]{64}$/.exec(image ?? '');
-  return Boolean(match && record?.format === 1 && record.environment === 'staging' && record.method === 'signature' &&
+  const key = /^arn:aws:kms:us-east-2:([0-9]{12}):key\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.exec(record?.keyArn ?? '');
+  return Boolean(match && key && key[1] === match[1] && record?.format === 1 && record.environment === 'staging' && record.method === 'signature' &&
     record.keyAlias === 'alias/telesphoros-staging-image-signing' &&
-    new RegExp(`^arn:aws:kms:us-east-2:${match[1]}:key/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`).test(record.keyArn ?? '') &&
     /^v3\.\d+\.\d+$/.test(record.cosignVersion ?? '') && typeof record.recordedAt === 'string' && Number.isFinite(Date.parse(record.recordedAt)) &&
     Array.isArray(record.images) && record.images.length > 0 && record.images.every((value) => value === image));
 }

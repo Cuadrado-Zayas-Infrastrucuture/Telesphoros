@@ -31,7 +31,8 @@ test('opening record coverage rejects unsigned, wrong-image and wrong-stack reco
     keyArn: 'arn:aws:kms:us-east-2:111122223333:key/11111111-2222-4333-8444-555555555555', cosignVersion: 'v3.1.3', recordedAt: '2026-11-01T00:00:00Z' };
   assert.equal(coversFenceImage(good, image), true);
   for (const change of [{}, { method: 'break-glass' }, { images: [] }, { images: [image.replace(/a{64}$/, 'b'.repeat(64))] },
-    { environment: 'production' }, { keyAlias: 'alias/other' }, { keyArn: 'SYN-PRIVATE' }, { cosignVersion: 'v2.0.0' }]) {
+    { environment: 'production' }, { keyAlias: 'alias/other' },
+    { keyArn: 'arn:aws:kms:us-east-2:999900001111:key/11111111-2222-4333-8444-555555555555' }, { keyArn: 'SYN-PRIVATE' }, { cosignVersion: 'v2.0.0' }]) {
     assert.equal(coversFenceImage(Object.keys(change).length ? { ...good, ...change } : {}, image), false);
   }
 });
