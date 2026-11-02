@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "pgx-artifacts-0.1",
+  "synthetic": true,
+  "reportId": "syn-report-2",
+  "revision": 2,
+  "assessmentId": "syn-assessment-2",
+  "note": "Hashes verify paired artifact bytes, not issuer identity, patient reconciliation or clinical validity.",
+  "files": {
+    "package.json": {
+      "sha256": "6cba877a80b70f164d69d6996ea6b084f2610ee5dbdc23ff62f5b1af56bc0486",
+      "sizeBytes": 4237
+    },
+    "laboratory-report.pdf": {
+      "sha256": "fac97ac3ee22d4de1f892dbcc0f7a31ffed95c9dca24b933ffdfca8f8dae9a7e",
+      "sizeBytes": 3591
+    },
+    "assessment.pdf": {
+      "sha256": "4a620d6e211bfbcb52f5b327f77e3b9ee23e88b3d186914c728ff1f2d0d2c3ba",
+      "sizeBytes": 3470
+    }
+  }
+}

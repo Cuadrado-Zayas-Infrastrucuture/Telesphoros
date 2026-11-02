@@ -19,3 +19,5 @@ export * from './result-renders';
 export * from './drug-list';
 export * from './patient-medications';
 export * from './patient-followups';
+
+export * from './synthetic-pgx';
