@@ -1,0 +1,2 @@
+# PDF xref records contain significant trailing spaces; preserve the generated binary artifact bytes.
+*.pdf binary
