@@ -45,6 +45,7 @@ Start with [the local demo](start-here.md), then use the sections below for the 
 
 - [Lab-report pipeline](lab-report-reader.md) and [adapter specification](design/report-adapter-spec.md): capture, review and evaluation boundaries.
 - [CPIC integration](cpic-integration.md): knowledge loading and the clinical-content gates.
+- [PGx report service proposal](../specs/032-pgx-report-service/spec.md): laboratory/assessment contracts, candidate coverage, partner requirements and synthetic acceptance scenarios.
 - [LLM harness specification](../specs/003-llm-harness/spec.md): explanation contracts, budgets, evaluation and release gates.
 - [AI safety requirements](ai-safety-and-hallucination-controls.md): requirements for a future model path.
 
