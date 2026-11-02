@@ -17,12 +17,14 @@ The product build adds `VITE_SYNTHETIC_PGX_DEMO=true` to the existing storage bu
 
 ## Rehearse
 
-1. Open the reported loopback address, sign in through the fake identity provider as Alice, and choose **Upload report**.
-2. Choose **Add a synthetic patient** if the roster is populated. Add patient `SYN-DEMO-01`, select **Lab report (PDF)**, choose [D01/source.pdf](../data/fixtures/lab-reports/captures/D01/source.pdf), confirm synthetic-only data and upload.
-3. Choose **View reports**, open the report, and inspect the real storage status. Under **PGx demo**, choose **Show fixed sample result**. D01 shows copied synthetic gene inputs and invented Drug Q/R output, with source and no-processing disclosures.
-4. Repeat with patient `SYN-DEMO-08` and [D08/source.pdf](../data/fixtures/lab-reports/captures/D08/source.pdf). Open the report and choose **Show held sample**. The fixed example shows `alignment-unsupported` and no gene/drug result.
+1. Open the reported loopback address and sign in through the fake identity provider as Alice. Chat is the primary workspace.
+2. Choose **Attach a report** and select [D01/source.pdf](../data/fixtures/lab-reports/captures/D01/source.pdf). In **Report details**, choose **Add patient** to create `SYN-DEMO-01` with fictional demographics on the patient page. Choose **Back to chat**, reopen **Report details**, confirm the selected patient and synthetic-only data, then upload. The attachment and note survive the patient-page visit.
+3. Choose **All reports**, open the uploaded report, and inspect **Upload verified**. Under **PGx demo**, choose **Show fixed sample result**. D01 shows copied synthetic gene inputs and invented Drug Q/R output, with source and no-processing disclosures.
+4. Choose **Back to reports**, close **Report history**, and attach [D08/source.pdf](../data/fixtures/lab-reports/captures/D08/source.pdf) in chat. Select the existing synthetic patient or create another from the details panel. Upload, reopen its report details, and choose **Show held sample**. The fixed example shows `alignment-unsupported` and no gene/drug result.
 5. Other PDFs have no fixed example. A filename alone never selects a result; only a completed lab-PDF upload with a known server-verified SHA-256 matches. Switching reports/file fingerprints resets the open sample.
 6. Verify keyboard operation, close/hide controls, narrow-screen reflow and the unchanged authorized file download. Stop using the owned [storage lifecycle](ops/local-storage-operations.md#written-teardown-blast-radius-check).
+
+The [investor presentation](investor-demo.md) adds medication capture, saved follow-up documentation, in-app reminders and recorded-response charts to this flow. Use in-app navigation; refreshing intentionally clears sign-in.
 
 ## What the demo establishes
 
