@@ -1,3 +1,4 @@
+import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { FollowupDto, FollowupInput, PatientMedicationDto } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
@@ -121,7 +122,7 @@ export function FollowupForm({
           </Button>
         </div>
       ) : !context ? (
-        <p role="status">Loading treatment details…</p>
+        <ContentSkeleton label="Loading treatment details…" variant="detail" />
       ) : (
         <>
           <fieldset disabled={busy} className="flex min-w-0 flex-col gap-4">

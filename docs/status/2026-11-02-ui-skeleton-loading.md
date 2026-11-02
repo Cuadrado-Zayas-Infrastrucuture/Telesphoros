@@ -1,0 +1,17 @@
+# Consistent UI skeleton loading
+
+Date: 2026-11-02
+
+Extended the existing token-based Skeleton component across initial/lazy page loads, authentication callback, sidebar patient/report lists, patient pickers, patient records, medications, follow-ups, response summaries, histories, stored results, decision notes and review status. Reports, report stages, past reports, organization settings and usage/calendar already had skeletons and retain them. Local synthetic workspace patient loading also uses the shared placeholder.
+
+Shared layouts cover compact lists, content lists, detail sections and pages. Placeholders have no invented data or focusable controls; loading labels remain available to assistive technology. They reuse existing delayed appearance and reduced-motion behavior. The route transition keeps the old page mounted and hidden, so a cancelled navigation preserves drafts. Upload/save/action progress remains explicit rather than suggesting it is a content read. No requests, API contracts, authentication configuration, permissions, backend logic or stored data changed. Static content has no artificial wait.
+
+Regression: the initial-route test first failed because it reserved no skeleton content; it now passes. A deferred lazy-route test verifies busy state, placeholders and retention of a typed draft after cancellation. Existing suites continue to exercise read completion, errors, retries and permission checks. UI test authentication and API calls use the existing synthetic harness, not live services.
+
+Chromium component review at 320, 390 and 1440px: no horizontal overflow; zero axe violations; reduced motion removes the sweep. Screenshots in docs/design/skeleton-loading show shared layouts in a local-only component harness, not a live patient screen. The temporary harness is removed before commit. Production sign-in and database/S3 flows were not browser-tested.
+
+Chat additions: active report uploads and status reads display a three-line skeleton with an explicit operation label. Check status uses the existing pending button. The fixed synthetic previews share the same skeleton within their explicitly simulated preparation UI, replacing the separate pulse placeholders. Ordinary typed questions do not invent a pending model response: interpretation remains unavailable. Deferred upload tests first failed for the missing chat loading state, then passed for both success and failure; they verify disappearance and no sample-engine invocation. Existing stop controls and upload-stage messages remain.
+
+Final verification: root typecheck and lint/format pass. The full root test command ran under the documented tini subreaper and passed: frontend 55 Node checks and 698 Vitest tests across 64 files; backend 156 suites / 2077 tests passed, 27 suites / 471 tests skipped. Other workspace unit tiers passed: shared types 206, CPIC schema 48, jobs 20, fake IdP 7, password notifier 10, worker 151, AI service 347 and SMART pilot 188. PostgreSQL/S3 integration tiers and five reader-engine specs did not run because their dependencies were unavailable; worker PostgreSQL/S3 tiers also did not run. No skipped tier is claimed as passed. The initial broad frontend run began before a ReportsPage JSX edit was corrected and failed on its cached parse error; the corrected full run is green without changing any existing assertions.
+
+Production build passed. Infrastructure guards passed 285/285 and CI configuration checks passed 217/217. No infrastructure or CI configuration changed.

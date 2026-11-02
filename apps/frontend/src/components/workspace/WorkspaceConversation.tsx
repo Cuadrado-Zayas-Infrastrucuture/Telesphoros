@@ -1,3 +1,4 @@
+import { ChatLoading } from '@/components/prompt-kit/ChatLoading';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUp, FileText, Paperclip, Square, X } from 'lucide-react';
@@ -433,12 +434,20 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
                   </span>
                   {entry.note && <p className="one-screen-you self-end rounded-2xl bg-surface px-4 py-2 break-words">{entry.note}</p>}
                   <Steps stage={entry.stage} failed={entry.phase === 'failed'} labels={UPLOAD_STEPS} words={UPLOAD_WORDS} label={`Upload of ${entry.filename}`} colored />
+                  {entry.phase === 'uploading' && <ChatLoading label="Uploading your report…" />}
+                  {entry.checking && <ChatLoading label="Checking report status…" />}
                   {entry.phase === 'failed' && <SystemMessage error>{entry.message}</SystemMessage>}
                   {entry.phase === 'sent' && entry.status && (
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                       <span className="text-muted-foreground">Report status</span>
                       <ReportStatusText status={entry.status} className="font-medium" />
-                      <Button variant="outline" size="sm" disabled={entry.checking} onClick={() => void readStatus(entry.id, entry.reportId!, entry.patientId, true)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        pending={entry.checking}
+                        pendingLabel="Checking status…"
+                        onClick={() => void readStatus(entry.id, entry.reportId!, entry.patientId, true)}
+                      >
                         Check status
                       </Button>
                       {entry.checkNote && <span className="text-muted-foreground">{entry.checkNote}</span>}

@@ -1,3 +1,4 @@
+import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useEffect, useState } from 'react';
 import type { NoteDto } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
@@ -31,7 +32,9 @@ export function DecisionNote({ note }: { note: { id: string; bodySha256: string 
         Retry note
       </Button>
     </div>
+  ) : !value ? (
+    <ContentSkeleton label="Loading note…" variant="compact" />
   ) : (
-    <p className="whitespace-pre-wrap wrap-anywhere">{value ? (value.redacted ? 'Note redacted.' : value.body) : 'Loading note…'}</p>
+    <p className="whitespace-pre-wrap wrap-anywhere">{value.redacted ? 'Note redacted.' : value.body}</p>
   );
 }

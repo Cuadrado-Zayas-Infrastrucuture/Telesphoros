@@ -1,3 +1,4 @@
+import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useEffect, useState } from 'react';
 import { BUNDLED_DRUG_LIST, matchesDrug, type PatientMedicationDto } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
@@ -88,7 +89,7 @@ export function MedicationsSection({ patientId, canWrite }: { patientId: string;
           </Button>
         </div>
       ) : items === null ? (
-        <p role="status">Loading medications…</p>
+        <ContentSkeleton label="Loading medications…" variant="list" />
       ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground">No medications recorded yet.</p>
       ) : ordered.length === 0 ? (

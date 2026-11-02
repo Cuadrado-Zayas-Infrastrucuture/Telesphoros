@@ -1,3 +1,4 @@
+import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { DemographicsCompleteness } from '@telesphoros/shared-types';
@@ -80,7 +81,7 @@ export function SidebarPatients({ onNavigate }: { onNavigate?: () => void }) {
         </div>
       )}
       {patients === null ? (
-        !error && <p className="text-xs text-muted-foreground">Loading…</p>
+        !error && <ContentSkeleton label="Loading patients…" variant="compact" />
       ) : patients.length === 0 ? (
         <p className="text-xs text-muted-foreground">No patients yet.</p>
       ) : (
