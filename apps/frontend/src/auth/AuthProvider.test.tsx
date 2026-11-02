@@ -201,6 +201,19 @@ describe('AuthProvider', () => {
     expect(result.current.roles).toEqual([]);
   });
 
+  it('keeps a preferred name in the current sign-in only and clears it on sign-out', async () => {
+    const fetchImpl = fakeFetch({ roles: ['clinician'] });
+    const { result } = setup({ fetchImpl });
+    await act(async () => void (await result.current.completeSignIn()));
+    act(() => result.current.setPreferredName('Avery'));
+    expect(result.current.preferredName).toBe('Avery');
+    expect(JSON.stringify(fetchImpl.mock.calls)).not.toContain('Avery');
+    const stored = [window.localStorage, window.sessionStorage].flatMap((store) => Object.keys(store).map((key) => store.getItem(key)));
+    expect(JSON.stringify(stored)).not.toContain('Avery');
+    await act(async () => void (await result.current.signOut()));
+    expect(result.current.preferredName).toBeNull();
+  });
+
   it('holds the email from the sign-in only while signed in, and keeps it out of browser storage', async () => {
     const { result } = setup({ client: fakeClient({ returnTo: '/settings', email: 'alice@example.test' }) });
     expect(result.current.email).toBeNull();
