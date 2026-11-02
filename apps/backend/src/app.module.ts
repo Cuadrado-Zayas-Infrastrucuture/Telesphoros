@@ -1,3 +1,4 @@
+import { PatientFollowupsModule } from './patient-followups/patient-followups.module';
 import { type DynamicModule, Module } from '@nestjs/common';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
@@ -45,6 +46,7 @@ export class AppModule {
         PatientsModule,
         PatientDemographicsModule,
         PatientMedicationsModule,
+        PatientFollowupsModule,
         PatientIdentityModule,
         PatientMergeModule,
         ReportsModule,

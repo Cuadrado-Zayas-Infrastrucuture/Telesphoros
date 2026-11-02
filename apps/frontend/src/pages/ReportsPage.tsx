@@ -167,9 +167,9 @@ export default function ReportsPage() {
         </div>
         {roles.some((role) => WRITER_ROLES.includes(role)) && (
           <Button asChild className="min-h-control w-full whitespace-normal px-5 sm:w-auto">
-            <Link to="/reports/upload">
+            <Link to="/workspace">
               <ArrowUpFromLine aria-hidden="true" className="size-4 shrink-0" />
-              Upload synthetic report
+              Attach report in chat
             </Link>
           </Button>
         )}
@@ -451,7 +451,7 @@ export default function ReportsPage() {
                   !request.patientId &&
                   roles.some((role) => WRITER_ROLES.includes(role)) && (
                     <Button asChild variant="outline">
-                      <Link to="/reports/upload">Upload first synthetic report</Link>
+                      <Link to="/workspace">Attach first report in chat</Link>
                     </Button>
                   )
                 )}

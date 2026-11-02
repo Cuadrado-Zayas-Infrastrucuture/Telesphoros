@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { PatientClinicalSections } from '@/components/patients/PatientClinicalSections';
 import { Link, useParams } from 'react-router-dom';
 import type { PatientDto } from '@telesphoros/shared-types';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
@@ -72,7 +73,7 @@ export default function PatientPage() {
             Retry
           </Button>
           <Button asChild variant="ghost" size="sm">
-            <Link to="/workspace">Back to the workspace</Link>
+            <Link to="/workspace">Back to chat</Link>
           </Button>
         </div>
       </div>
@@ -90,14 +91,15 @@ export default function PatientPage() {
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <div className="flex flex-col gap-1">
-        <Link to="/workspace" className="text-sm text-muted-foreground underline-offset-2 hover:underline">
-          Workspace
+        <Link to="/workspace" className="inline-flex min-h-control items-center text-sm text-muted-foreground underline-offset-2 hover:underline">
+          Back to chat
         </Link>
         <h1 className="text-2xl font-semibold wrap-anywhere">{patient.label}</h1>
         <p className="text-sm text-muted-foreground">Synthetic patient, added {when(patient.createdAt)}.</p>
       </div>
       <DemographicsSection patientId={id} read={read} version={version} canWrite={canWrite} onViewVersion={view} onSaved={reload} />
       <MedicationsSection key={id} patientId={id} canWrite={roles.includes('clinician')} />
+      {(roles.includes('clinician') || roles.includes('reviewer')) && <PatientClinicalSections key={`clinical-${id}`} patientId={id} />}
     </div>
   );
 }

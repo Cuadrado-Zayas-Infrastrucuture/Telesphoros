@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUp, FileText, Paperclip, Square, X } from 'lucide-react';
-import { patientLabelSchema, type PatientDto, type ReportStatus } from '@telesphoros/shared-types';
+import { type ReportStatus } from '@telesphoros/shared-types';
 import mascot from '@/assets/telesphoros-mascot.png';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
 import { WRITER_ROLES } from '@/auth/roles';
@@ -11,21 +11,22 @@ import { Steps } from '@/components/prompt-kit/Steps';
 import { SystemMessage } from '@/components/prompt-kit/SystemMessage';
 import { PatientPicker } from '@/components/PatientPicker';
 import { Input } from '@/components/ui/Input';
+import { useWorkspacePatients } from '@/hooks/useWorkspacePatients';
 import { ReportStatusText } from '@/components/ReportStatusText';
 import { Button } from '@/components/ui/Button';
+import { ContextDrawer } from '@/components/ui/ContextDrawer';
 import { INCOMPLETE_PROMPT } from '@/components/patients/IncompleteWord';
 import { incompleteness } from '@/lib/demographicsDraft';
-import { createPatient, listPatients, SubmitError, submitReport, type UploadProgress } from '@/lib/api';
+import { SubmitError, submitReport, type UploadProgress } from '@/lib/api';
 import { cancelOwnedUpload, listReports } from '@/lib/ownedStorageApi';
 import { productUploadSchema } from '@/lib/productUploadSchema';
 import { reportTypeFor } from '@/lib/reportTypeFor';
 import { readRecovery } from '@/lib/uploadRecovery';
 import { UPLOAD_STEPS, UPLOAD_WORDS, uploadStage } from '@/lib/uploadSteps';
 import { chatFileAccept, fileProblem } from '@/lib/workspaceFileRule';
-import { announcePatientAdded, announceReportsChanged, onPatientAdded } from '@/lib/workspaceEvents';
+import { announceReportsChanged, onPatientAdded } from '@/lib/workspaceEvents';
 import '@/styles/one-screen.css';
 
-const NEW_PATIENT = 'new';
 const ATTACHMENT_UNDO_MS = 8_000;
 const QUESTION_ID = 'workspace-question';
 const CONFIRMATION = 'I confirm this file contains synthetic data only';
@@ -38,6 +39,7 @@ type Entry =
       kind: 'upload';
       id: number;
       filename: string;
+      note?: string;
       patient: string;
       patientId: string;
       stage: number;
@@ -54,57 +56,32 @@ type Entry =
  * word and a "Check status" action. A typed question gets a note, not an answer: there is no interpretation outside the local preview, and no request is made.
  * The parent remounts this (a new key) for "New chat", which is how a conversation starts empty.
  */
-export function WorkspaceConversation() {
+export function WorkspaceConversation({ active = true }: { active?: boolean }) {
   const { roles, apiFetch, recoverySession } = useAuth();
   const canAttach = roles.some((role) => WRITER_ROLES.includes(role));
-  const [patients, setPatients] = useState<PatientDto[] | null>(null);
-  const [patientsError, setPatientsError] = useState<string | null>(null);
-  // Bumped by Retry: reloading the page instead would sign this tab out (the sign-in is held in memory only).
-  const [patientsAttempt, setPatientsAttempt] = useState(0);
+  const { patients, loading: patientsLoading, error: patientsError, hasMore: morePatients, loadMore: loadPatients } = useWorkspacePatients(canAttach);
   const [file, setFile] = useState<File | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [removedFile, setRemovedFile] = useState<File | null>(null);
   const [undoPaused, setUndoPaused] = useState(false);
-  const [patientId, setPatientId] = useState('');
+  const [selectedPatientId, setPatientId] = useState('');
+  const patientId = selectedPatientId || patients?.[0]?.id || '';
   const [synthetic, setSynthetic] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
-  const [creationProblem, setCreationProblem] = useState<string | null>(null);
-  const [creatingPatient, setCreatingPatient] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [tried, setTried] = useState(false);
-  const [newLabel, setNewLabel] = useState('');
   const [input, setInput] = useState('');
   const [entries, setEntries] = useState<Entry[]>([]);
   const [uploading, setUploading] = useState(false);
   const [interrupted] = useState(() => !!readRecovery(recoverySession));
-  const addRequest = useRef<{ label: string; id: string } | null>(null);
   const counter = useRef(0);
   const picker = useRef<HTMLInputElement>(null);
   const transfer = useRef<AbortController | null>(null);
   const sending = useRef(false);
   const progress = useRef<UploadProgress>({});
 
-  useEffect(() => {
-    if (!canAttach) return;
-    const controller = new AbortController();
-    listPatients(apiFetch, 1, controller.signal)
-      .then((page) => {
-        setPatients(page.data);
-        setPatientId((current) => current || page.data[0]?.id || NEW_PATIENT);
-      })
-      .catch((caught: unknown) => {
-        if (controller.signal.aborted || caught instanceof SessionEndedError) return;
-        setPatientsError(caught instanceof SubmitError ? caught.message : 'Patients could not be loaded. Please retry.');
-      });
-    // A patient added in the panel joins this choice at once.
-    const stop = onPatientAdded((patient) => {
-      setPatients((list) => (list?.some((p) => p.id === patient.id) ? list : [patient, ...(list ?? [])]));
-      setPatientId((current) => (current && current !== NEW_PATIENT ? current : patient.id));
-    });
-    return () => {
-      controller.abort();
-      stop();
-    };
-  }, [canAttach, apiFetch, patientsAttempt]);
+  useEffect(() => onPatientAdded((patient) => setPatientId(patient.id)), []);
 
   useEffect(() => {
     if (!removedFile || undoPaused) return;
@@ -119,15 +96,22 @@ export function WorkspaceConversation() {
     if (!next) return;
     setRemovedFile(null);
     setFile(next);
-    setCreationProblem(null);
+    setUploadError(null);
+    setSynthetic(false);
+    setTried(false);
+    setDetailsOpen(true);
     setFileError(fileProblem(next.name));
   }
 
   function removeAttachment() {
     if (busy || !file) return;
+    setDetailsOpen(false);
     setRemovedFile(file);
     setUndoPaused(false);
     setFile(null);
+    setFileError(null);
+    setUploadError(null);
+    setTried(false);
   }
 
   function drop(event: DragEvent<HTMLDivElement>) {
@@ -136,48 +120,21 @@ export function WorkspaceConversation() {
     if (canAttach && !busy) choose(event.dataTransfer.files[0]);
   }
 
-  const busy = uploading || creatingPatient;
+  const busy = uploading;
   const text = input.trim();
-  const adding = patientId === NEW_PATIENT;
-  const chosen = adding ? null : patients?.find((p) => p.id === patientId);
-  const chosenIncomplete = adding || (chosen ? incompleteness(chosen) === 'incomplete' : false);
-  const labelProblem = adding ? patientLabelSchema.safeParse(newLabel).error?.issues[0]?.message : undefined;
+  const chosen = patients?.find((p) => p.id === patientId);
+  const chosenIncomplete = chosen ? incompleteness(chosen) === 'incomplete' : false;
   const blocked = file
-    ? !patientId
+    ? !chosen
       ? 'Choose the patient first.'
-      : labelProblem
-        ? labelProblem
-        : !synthetic
-          ? 'Confirm the file is synthetic.'
-          : fileError
+      : !synthetic
+        ? 'Confirm the file is synthetic.'
+        : fileError
     : !text
       ? canAttach
         ? 'Attach a report or ask a question.'
         : 'Type a question.'
       : null;
-
-  /** A retry with the same label replays the first request (createPatient's requestId), so a lost response never makes a second patient. */
-  async function patientForUpload(): Promise<PatientDto | null> {
-    if (!adding) return patients?.find((p) => p.id === patientId) ?? null;
-    const label = newLabel.trim();
-    if (addRequest.current?.label !== label) addRequest.current = { label, id: crypto.randomUUID() };
-    setCreatingPatient(true);
-    setCreationProblem(null);
-    try {
-      const created = await createPatient(apiFetch, label, addRequest.current.id);
-      addRequest.current = null;
-      setPatients((list) => [created, ...(list ?? [])]);
-      setPatientId(created.id);
-      setNewLabel('');
-      announcePatientAdded(created);
-      return created;
-    } catch (error) {
-      if (!(error instanceof SessionEndedError)) setCreationProblem(error instanceof SubmitError ? error.message : 'The patient could not be added. Please retry.');
-      return null;
-    } finally {
-      setCreatingPatient(false);
-    }
-  }
 
   /** The report's status word, read from the list. Not finding it is said plainly rather than guessed. */
   async function readStatus(id: number, reportId: string, forPatientId: string, announce: boolean) {
@@ -194,13 +151,17 @@ export function WorkspaceConversation() {
   }
 
   async function send() {
+    if (file && !detailsOpen) {
+      setDetailsOpen(true);
+      return;
+    }
     setTried(true);
     if (busy || sending.current || blocked) return;
     sending.current = true;
     try {
       setTried(false);
       if (file) {
-        const patient = await patientForUpload();
+        const patient = chosen;
         if (!patient) return;
         const reportType = reportTypeFor(file.name);
         const parsed = productUploadSchema.safeParse({ patientId: patient.id, reportType, file, syntheticConfirmed: synthetic });
@@ -208,8 +169,13 @@ export function WorkspaceConversation() {
           setFileError(parsed.error.issues[0]?.message ?? 'This file cannot be uploaded.');
           return;
         }
+        setDetailsOpen(false);
+        setUploadError(null);
         const id = ++counter.current;
-        setEntries((list) => [...list, { kind: 'upload', id, filename: file.name, patient: patient.label, patientId: patient.id, stage: 0, phase: 'uploading' }]);
+        setEntries((list) => [
+          ...list,
+          { kind: 'upload', id, filename: file.name, patient: patient.label, patientId: patient.id, note: text || undefined, stage: 0, phase: 'uploading' },
+        ]);
         setUploading(true);
         transfer.current = new AbortController();
         progress.current = {};
@@ -219,18 +185,19 @@ export function WorkspaceConversation() {
           reportId = (await submitReport(parsed.data, apiFetch, progress.current, transfer.current.signal, recoverySession ?? undefined)).reference;
           update(id, { stage: UPLOAD_STEPS.length, phase: 'sent', reportId, status: 'received' });
           setFile(null);
+          setDetailsOpen(false);
           setSynthetic(false);
         } catch (error) {
           if (error instanceof SessionEndedError) return;
           if (progress.current.cancelRequested) await cancelOwnedUpload(apiFetch, progress.current).catch(() => undefined);
-          update(id, {
-            phase: 'failed',
-            message: progress.current.cancelRequested
-              ? 'Upload cancelled.'
-              : error instanceof SubmitError
-                ? error.message
-                : 'The upload was interrupted. Your file is kept; please retry.',
-          });
+          setDetailsOpen(true);
+          const message = progress.current.cancelRequested
+            ? 'Upload cancelled.'
+            : error instanceof SubmitError
+              ? error.message
+              : 'The upload was interrupted. Your file is kept; please retry.';
+          setUploadError(message);
+          update(id, { phase: 'failed', message });
           return;
         } finally {
           window.clearInterval(watch);
@@ -239,6 +206,8 @@ export function WorkspaceConversation() {
         }
         announceReportsChanged();
         void readStatus(id, reportId, patient.id, false);
+        setInput('');
+        return;
       }
       if (text) {
         setEntries((list) => [...list, { kind: 'question', id: ++counter.current, text }]);
@@ -277,65 +246,90 @@ export function WorkspaceConversation() {
         allowEmpty={!!file}
         className="border-0 bg-transparent p-0"
       >
+        {file && !detailsOpen && (
+          <Button variant="outline" size="sm" onClick={() => setDetailsOpen(true)} aria-label="Report details">
+            <FileText aria-hidden="true" className="size-4" />
+            <span className="truncate">{file.name}</span>
+          </Button>
+        )}
         {file && (
-          <div className="one-screen-file">
-            <div className="flex items-center gap-2">
-              <FileText aria-hidden="true" className="size-4 shrink-0" />
-              <span className="min-w-0 flex-1 truncate font-medium">{file.name}</span>
-              <Button variant="ghost" size="sm" className="size-11 shrink-0 p-0" aria-label="Remove file" disabled={busy} onClick={removeAttachment}>
-                <X aria-hidden="true" className="size-4" />
-              </Button>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="text-muted-foreground">for</span>
-              <PatientPicker
-                aria-label="Patient"
-                patients={patients}
-                value={patientId}
-                onValueChange={(value) => {
-                  setPatientId(value);
-                  setCreationProblem(null);
-                }}
-                disabled={busy}
-                error={patientsError}
-                newPatientOption={{ value: NEW_PATIENT, label: 'New synthetic patient…' }}
-                onRetry={() => {
-                  setPatientsError(null);
-                  setPatientsAttempt((attempt) => attempt + 1);
-                }}
-              />
-              {adding && (
-                <div className="flex min-w-0 flex-col gap-1">
-                  <Input
-                    aria-label="New patient label"
-                    aria-describedby="workspace-new-patient-help"
-                    placeholder="e.g. SYN-004"
-                    maxLength={40}
-                    value={newLabel}
-                    disabled={busy}
-                    onChange={(event) => {
-                      setNewLabel(event.target.value);
-                      setCreationProblem(null);
-                    }}
-                  />
-                  <p id="workspace-new-patient-help" className="text-xs text-muted-foreground">
-                    Letters, numbers and hyphens. A code, never a name.
-                  </p>
-                </div>
+          <ContextDrawer
+            id="chat-report-details"
+            title="Report details"
+            closeLabel="Close report details"
+            className="report-intake"
+            open={detailsOpen && active}
+            onClose={() => {
+              if (!busy) setDetailsOpen(false);
+            }}
+          >
+            <div className="one-screen-file">
+              <div className="flex items-center gap-2">
+                <FileText aria-hidden="true" className="size-4 shrink-0" />
+                <span className="min-w-0 flex-1 truncate font-medium">{file.name}</span>
+                <Button variant="ghost" size="sm" className="size-11 shrink-0 p-0" aria-label="Remove file" disabled={busy} onClick={removeAttachment}>
+                  <X aria-hidden="true" className="size-4" />
+                </Button>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-muted-foreground">for</span>
+                <PatientPicker
+                  aria-label="Patient"
+                  patients={patients}
+                  value={patientId}
+                  onValueChange={setPatientId}
+                  disabled={busy}
+                  error={patientsError}
+                  onRetry={loadPatients}
+                />
+                {morePatients && !patientsError && (
+                  <Button variant="ghost" size="sm" disabled={busy} pending={patientsLoading} pendingLabel="Loading patients…" onClick={loadPatients}>
+                    More patients
+                  </Button>
+                )}
+                {!busy && (
+                  <Link to="/patients/new" className="inline-flex min-h-control items-center text-sm underline" onClick={() => setDetailsOpen(false)}>
+                    Add patient
+                  </Link>
+                )}
+              </div>
+              <label htmlFor="chat-report-note" className="flex flex-col gap-1 text-sm">
+                Note (optional)
+                <Input id="chat-report-note" aria-label="Report note" value={input} maxLength={400} disabled={busy} onChange={(event) => setInput(event.target.value)} />
+              </label>
+              {/* Incomplete demographics remain visible without blocking report storage. */}
+              {chosenIncomplete && <p className="text-warning">{INCOMPLETE_PROMPT}</p>}
+              <label className="inline-flex min-h-11 items-center gap-2">
+                <input type="checkbox" className="size-5 shrink-0 accent-primary" checked={synthetic} disabled={busy} onChange={(event) => setSynthetic(event.target.checked)} />
+                {CONFIRMATION}
+              </label>
+              {(fileError || uploadError) && (
+                <p role="alert" className="text-destructive">
+                  {fileError ?? uploadError}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">Your report uploads after you confirm these details. Progress will appear in this chat.</p>
+              <div className="flex justify-end gap-2">
+                {uploading ? (
+                  <Button variant="outline" onClick={stop}>
+                    Stop upload
+                  </Button>
+                ) : (
+                  <Button variant="outline" disabled={busy} onClick={() => setDetailsOpen(false)}>
+                    Back to chat
+                  </Button>
+                )}
+                <Button aria-label="Upload report" pending={busy} pendingLabel="Uploading…" aria-disabled={!!blocked} onClick={() => void send()}>
+                  Upload report
+                </Button>
+              </div>
+              {tried && blocked && (
+                <p role="status" className="text-sm text-muted-foreground">
+                  {blocked}
+                </p>
               )}
             </div>
-            {/* Spec 025 T302: one line, never blocking. A new patient made here has a label only, so it starts Incomplete. */}
-            {chosenIncomplete && <p className="text-warning">{INCOMPLETE_PROMPT}</p>}
-            <label className="inline-flex min-h-11 items-center gap-2">
-              <input type="checkbox" className="size-5 shrink-0 accent-primary" checked={synthetic} disabled={busy} onChange={(event) => setSynthetic(event.target.checked)} />
-              {CONFIRMATION}
-            </label>
-            {(fileError || creationProblem) && (
-              <p role="alert" className="text-destructive">
-                {fileError ?? creationProblem}
-              </p>
-            )}
-          </div>
+          </ContextDrawer>
         )}
         {removedFile && (
           <div
@@ -372,10 +366,13 @@ export function WorkspaceConversation() {
                 type="file"
                 disabled={busy}
                 accept={chatFileAccept()}
-                className="sr-only"
+                hidden
                 tabIndex={-1}
                 aria-hidden="true"
-                onChange={(event) => choose(event.target.files?.[0])}
+                onChange={(event) => {
+                  choose(event.target.files?.[0]);
+                  event.target.value = '';
+                }}
               />
               <Button variant="ghost" size="sm" className="size-11 rounded-full p-0" aria-label="Attach a report" disabled={busy} onClick={() => picker.current?.click()}>
                 <Paperclip aria-hidden="true" className="size-5" />
@@ -384,10 +381,8 @@ export function WorkspaceConversation() {
           ) : (
             <span />
           )}
-          {creatingPatient ? (
-            <Button size="sm" aria-label="Adding patient" pending pendingLabel="Adding patient…">
-              Send
-            </Button>
+          {detailsOpen ? (
+            <span />
           ) : uploading ? (
             <Button size="sm" className="size-11 rounded-full p-0" aria-label="Stop" onClick={stop}>
               <Square aria-hidden="true" className="size-4" />
@@ -398,7 +393,7 @@ export function WorkspaceConversation() {
             </Button>
           )}
         </div>
-        {tried && blocked && (
+        {tried && blocked && !detailsOpen && (
           <p role="status" className="pt-1 text-sm text-muted-foreground">
             {blocked}
           </p>
@@ -436,6 +431,7 @@ export function WorkspaceConversation() {
                       {entry.filename} · {entry.patient}
                     </span>
                   </span>
+                  {entry.note && <p className="one-screen-you self-end rounded-2xl bg-surface px-4 py-2 break-words">{entry.note}</p>}
                   <Steps stage={entry.stage} failed={entry.phase === 'failed'} labels={UPLOAD_STEPS} words={UPLOAD_WORDS} label={`Upload of ${entry.filename}`} colored />
                   {entry.phase === 'failed' && <SystemMessage error>{entry.message}</SystemMessage>}
                   {entry.phase === 'sent' && entry.status && (
@@ -462,7 +458,7 @@ export function WorkspaceConversation() {
         </div>
         {interrupted && (
           <p className="mt-2 text-center text-sm">
-            An earlier upload was interrupted. <Link to="/reports/upload">Finish or cancel it on the upload page</Link>.
+            An earlier upload was interrupted. <Link to="/reports/upload">Resume or cancel upload</Link>.
           </p>
         )}
       </div>

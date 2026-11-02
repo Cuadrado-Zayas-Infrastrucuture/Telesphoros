@@ -75,6 +75,13 @@ export async function selectReportsPatient(page: Page, fixture: { id: string; la
 
 /** Open the compact workspace menu before using a sidebar item on mobile. */
 export async function openWorkspaceNavigation(page: Page) {
+  // Workspace routes now open modal panels; a physician closes the panel before using the sidebar.
+  const panel = /^\/(reports(?:\/upload)?|settings)$/.test(new URL(page.url()).pathname);
+  if (panel) {
+    const close = page.getByRole('button', { name: /^Close (report history|resume report upload|account preferences)$/ });
+    await close.click();
+    await expect(page).toHaveURL(/\/workspace$/);
+  }
   // The URL can change before React commits the signed-in workspace shell.
   // isVisible() does not wait: checking it first can silently skip the mobile menu.
   const workspaceRoute = /^\/(?:reports(?:\/|$)|local-|workspace(?:\/|$))/.test(new URL(page.url()).pathname);

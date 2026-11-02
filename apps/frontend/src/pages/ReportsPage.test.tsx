@@ -43,6 +43,7 @@ function fetcher(
     const url = new URL(String(input));
     if (url.pathname.endsWith('/me')) return json({ roles });
     if (url.pathname.endsWith('/me/recovery-scope')) return json({ recoveryScope: RECOVERY_SCOPE });
+    if (url.pathname.endsWith('/followups')) return json({ currentActor: p1, items: [], page: 1, hasMore: false, counts: { overdue: 0, today: 0, upcoming: 0, unassigned: 0 } });
     if (url.pathname.endsWith('/patients'))
       return json({ data: [p1, p2].map((id, i) => ({ id, label: `SYN-${i + 1}`, createdAt: date, updatedAt: date })), meta: { page: 1, pageSize: 20, total: 2, totalPages: 1 } });
     if (url.searchParams.get('pageSize') === '100') return stages(url);
@@ -80,10 +81,11 @@ describe('reports page with real auth and route guards', () => {
       vi.stubGlobal('location', { hostname: '127.0.0.1' });
       const { container } = renderApp('/reports', { signedInAs: roles, fetchImpl: fetcher(roles) });
       await heading();
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Report history' })).toBeVisible();
+      expect(screen.queryByRole('dialog', { name: 'Report details' })).not.toBeInTheDocument();
       expect(screen.queryByRole('textbox', { name: 'Sample question' })).not.toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Chat preview' })).toHaveAttribute('href', '/local-interpretation');
-      expect(Boolean(screen.queryByRole('link', { name: 'Upload synthetic report' }))).toBe(roles.includes('clinician'));
+      expect(Boolean(screen.queryByRole('link', { name: 'Attach report in chat' }))).toBe(roles.includes('clinician'));
       await userEvent.setup().click(await screen.findByRole('button', { name: 'Open synthetic.json' }));
       const drawer = screen.getByRole('dialog', { name: 'Report details' });
       expect(within(drawer).getByRole('heading', { name: 'Report details' })).toHaveFocus();
@@ -116,7 +118,7 @@ describe('reports page with real auth and route guards', () => {
       renderApp('/reports', { signedInAs: roles, fetchImpl: fetcher(roles) });
       await heading();
       await screen.findByRole('button', { name: 'Open synthetic.json' });
-      expect(Boolean(screen.queryByRole('link', { name: 'Upload synthetic report' }))).toBe(roles.some((role) => ['clinician'].includes(role)));
+      expect(Boolean(screen.queryByRole('link', { name: 'Attach report in chat' }))).toBe(roles.some((role) => ['clinician'].includes(role)));
       const user = userEvent.setup();
       await user.click(screen.getByRole('button', { name: 'Open synthetic.json' }));
       expect(Boolean(screen.queryByRole('button', { name: 'Download synthetic.json' }))).toBe(roles.some((role) => ['clinician', 'reviewer'].includes(role)));
@@ -258,7 +260,7 @@ describe('reports page with real auth and route guards', () => {
   ] as [Role[], boolean][])('offers empty-state upload only for an existing writer role: %j', async (roles, allowed) => {
     renderApp('/reports', { signedInAs: roles, fetchImpl: fetcher(roles, async () => json({ data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } })) });
     await screen.findByText('No reports found for this selection.');
-    expect(Boolean(screen.queryByRole('link', { name: 'Upload first synthetic report' }))).toBe(allowed);
+    expect(Boolean(screen.queryByRole('link', { name: 'Attach first report in chat' }))).toBe(allowed);
   });
   it('returns an emptied later page to page one while retaining the patient filter', async () => {
     const api = fetcher(['reviewer'], async (url) =>

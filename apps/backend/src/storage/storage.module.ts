@@ -1,3 +1,5 @@
+import { PatientFollowupsRepository, UnavailablePatientFollowupsRepository } from './patient-followups.repository';
+import { PostgresPatientFollowupsRepository } from './postgres/patient-followups.repository';
 import { PatientMedicationsRepository, UnavailablePatientMedicationsRepository } from './patient-medications.repository';
 import { PostgresPatientMedicationsRepository } from './postgres/patient-medications.repository';
 import { type DynamicModule, Global, Module, type Provider } from '@nestjs/common';
@@ -34,6 +36,7 @@ export class StorageModule {
       PatientsRepository,
       PatientDemographicsRepository,
       PatientMedicationsRepository,
+      PatientFollowupsRepository,
       PatientIdentifiersRepository,
       ReportsRepository,
       MembershipRepository,
@@ -50,6 +53,7 @@ export class StorageModule {
         { provide: PatientsRepository, useClass: PostgresPatientsRepository },
         { provide: PatientDemographicsRepository, useClass: PostgresPatientDemographicsRepository },
         { provide: PatientMedicationsRepository, useClass: PostgresPatientMedicationsRepository },
+        { provide: PatientFollowupsRepository, useClass: PostgresPatientFollowupsRepository },
         { provide: PatientIdentifiersRepository, useClass: PostgresPatientIdentifiersRepository },
         { provide: ReportsRepository, useClass: PostgresReportsRepository },
         { provide: MembershipRepository, useClass: PostgresMembershipRepository },
@@ -70,6 +74,7 @@ export class StorageModule {
         // Demographics are ledger records and the ledger exists only on PostgreSQL: here lists show no coded fields and the routes answer 503.
         { provide: PatientDemographicsRepository, useClass: UnavailablePatientDemographicsRepository },
         { provide: PatientMedicationsRepository, useClass: UnavailablePatientMedicationsRepository },
+        { provide: PatientFollowupsRepository, useClass: UnavailablePatientFollowupsRepository },
         { provide: PatientIdentifiersRepository, useClass: InMemoryPatientIdentifiersRepository },
         { provide: ReportsRepository, useClass: InMemoryReportsRepository },
         { provide: MembershipRepository, useClass: InMemoryMembershipRepository },

@@ -1,0 +1,12 @@
+# Chat and patient-record navigation
+Date: 2026-11-02
+
+The physician workflow now keeps chat mounted while visiting a patient record. Sidebar and attachment-dialog Add patient links open `/patients/new`, using the existing demographic validation and retry identities, then open the saved patient's record with medication capture. Returning to chat retains the question, selected patient and attached file in memory. New chat resets the conversation; signing out unmounts it. A synchronous submission guard prevents a second patient request while the first is pending.
+
+Report history, settings and the existing upload-recovery route open as panels over chat. Normal report attachment opens the compact details dialog and uploads only after confirmation. Legacy upload compatibility remains; follow-up documentation, assigned reminders and optional AI note assistance remain planned, with no new persistence, scheduler, provider or clinical behavior in this frontend slice.
+
+[Plan](../design/plans/physician-chat-and-patient-record.md), [verification](../verification/physician-workspace.md). Synthetic local checks only; no deployment or clinical release.
+
+The usability iteration keeps report notes with uploads, resets confirmation when an attachment changes, supports selecting the same file again, and exposes retry errors inside the details dialog without losing input. Patient selection and sidebar rosters can load beyond 20 records while retaining the selected patient; sidebar lists have bounded height and an explicit filter for loaded patients. Bklit chart fit is documented in the plan: patient outcome lines and chat sparklines after structured observations, optional follow-up bars after task storage, and no candlestick chart. No chart dependency or fabricated outcome data was added.
+
+Founder direction now explicitly connects physician documentation to the second product, Data Insights. The plan maps structured treatment context, existing PGx/decision provenance, actual reported treatment, follow-up observations and task history to useful analyses. It distinguishes decisions from treatment, missing outcomes from observed failure, and clinic-facing charts from governed secondary-use aggregates. Existing decision and presentation contracts are reused; month-only medication dates do not support exact days-to-change metrics. This addition is source-reviewed planning only, with no new collection, schema or export enabled.

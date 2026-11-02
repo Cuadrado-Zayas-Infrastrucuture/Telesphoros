@@ -110,7 +110,8 @@ const ACTOR = 'SYN-clinician';
   it('refuses update, delete and truncate even by the owner', async () => {
     const { tenant, input } = await world();
     await repository.insertVersion(tenant, ACTOR, input);
-    for (const sql of ['UPDATE patient_medications SET version=2 WHERE id=$1', 'DELETE FROM patient_medications WHERE id=$1', 'TRUNCATE patient_medications']) {
+    // Follow-ups reference medication versions. CASCADE gets past the FK's earlier 0A000 refusal to exercise append-only protection.
+    for (const sql of ['UPDATE patient_medications SET version=2 WHERE id=$1', 'DELETE FROM patient_medications WHERE id=$1', 'TRUNCATE patient_medications CASCADE']) {
       expect(await attempt(db.adminUrl, tenant, ACTOR, (c) => c.query(sql, sql.includes('$1') ? [input.id] : []))).toMatchObject({ code: '23000' });
     }
   });

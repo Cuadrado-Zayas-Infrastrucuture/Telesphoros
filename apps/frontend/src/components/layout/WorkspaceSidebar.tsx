@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { ChartColumn, FileText, LogOut, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, Settings, Sparkles, SquarePen, Upload, X } from 'lucide-react';
+import { ChartColumn, FileText, LogOut, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, Settings, Sparkles, SquarePen, X } from 'lucide-react';
 import productMark from '@/assets/telesphoros-shield-rx.png';
 import { useAuth } from '@/auth/AuthProvider';
-import { ADMIN_ROLES, CLINICAL_READ_ROLES, primaryRole, WRITER_ROLES } from '@/auth/roles';
+import { ADMIN_ROLES, CLINICAL_READ_ROLES, primaryRole } from '@/auth/roles';
 import { SidebarPatients } from '@/components/workspace/SidebarPatients';
+import { FollowupInbox } from '@/components/workspace/FollowupInbox';
 import { SidebarReports } from '@/components/workspace/SidebarReports';
 import { LOCAL_WORKSPACE_PATH, localWorkspaceAvailable, WORKSPACE_PATH } from '@/lib/localWorkspace';
 import { preferenceStorage } from '@/lib/storageConsent';
 import { readSidebarCollapsed, writeSidebarCollapsed } from '@/lib/sidebarPreference';
 import { cn } from '@/lib/utils';
+import { announceNewChat } from '@/lib/workspaceEvents';
 import { Button } from '@/components/ui/Button';
 
 type PanelItem = { kind: 'link'; to: string; label: string; icon: typeof FileText; show: boolean } | { kind: 'reports' | 'patients'; show: boolean };
@@ -46,7 +48,6 @@ export function WorkspaceSidebar() {
     { kind: 'link', to: WORKSPACE_PATH, label: 'New chat', icon: SquarePen, show: status === 'signedIn' },
     { kind: 'reports', show: lists },
     { kind: 'patients', show: lists },
-    { kind: 'link', to: '/reports/upload', label: 'Upload report', icon: Upload, show: roles.some((role) => WRITER_ROLES.includes(role)) },
     { kind: 'link', to: '/reports', label: 'All reports', icon: FileText, show: canRead },
     { kind: 'link', to: '/usage', label: 'Usage', icon: ChartColumn, show: roles.some((role) => ADMIN_ROLES.includes(role)) },
     { kind: 'link', to: '/settings', label: 'Settings', icon: Settings, show: status === 'signedIn' },
@@ -123,7 +124,10 @@ export function WorkspaceSidebar() {
                     end
                     data-panel-item={item.label}
                     onKeyDown={dismiss}
-                    onClick={() => setOpen(false)}
+                    onClick={() => {
+                      if (item.to === WORKSPACE_PATH) announceNewChat();
+                      setOpen(false);
+                    }}
                     title={collapsed ? item.label : undefined}
                     className={({ isActive }) =>
                       cn(
@@ -135,10 +139,11 @@ export function WorkspaceSidebar() {
                     <item.icon aria-hidden="true" className="size-4 shrink-0" />
                     <span className="workspace-link-label">{item.label}</span>
                   </NavLink>
+                  {item.to === WORKSPACE_PATH && lists && roles.some((role) => role === 'clinician' || role === 'reviewer') && <FollowupInbox onNavigate={() => setOpen(false)} />}
                 </li>
               ) : (
                 <li key={item.kind} className="workspace-panel-item">
-                  {item.kind === 'reports' ? <SidebarReports /> : <SidebarPatients />}
+                  {item.kind === 'reports' ? <SidebarReports /> : <SidebarPatients onNavigate={() => setOpen(false)} />}
                 </li>
               ),
             )}

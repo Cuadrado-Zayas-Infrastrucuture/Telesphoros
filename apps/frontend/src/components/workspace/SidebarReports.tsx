@@ -59,14 +59,18 @@ export function SidebarReports() {
       ) : reports.length === 0 ? (
         <p className="text-xs text-muted-foreground">No reports yet.</p>
       ) : (
-        <ul aria-label="Past reports" className="flex flex-col">
-          {reports.map((report) => (
-            <li key={report.id} className="py-1 text-xs">
-              <span className="block truncate font-medium text-foreground">{report.filename}</span>
-              <ReportStatusText status={report.status} />
-            </li>
-          ))}
-        </ul>
+        <div role="region" aria-label="Past reports list" tabIndex={0} className="workspace-roster rounded-sm focus-visible:outline-2 focus-visible:outline-ring">
+          <ul aria-label="Past reports" className="flex flex-col">
+            {reports.map((report) => (
+              <li key={report.id} className="py-1 text-xs">
+                <span title={report.filename} className="block truncate font-medium text-foreground">
+                  {report.filename}
+                </span>
+                <ReportStatusText status={report.status} />
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );

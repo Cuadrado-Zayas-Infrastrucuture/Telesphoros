@@ -123,6 +123,7 @@ export const envSchema = z
     LAB_REPORT_PIPELINE: z.enum(['disabled', 'enabled']).default('disabled'),
     // Rollout fence: reads stay available; enable writes only after migration and compatible services are confirmed.
     MEDICATION_WRITES: z.enum(['disabled', 'enabled']).default('disabled'),
+    FOLLOWUP_WRITES: z.enum(['disabled', 'enabled']).default('disabled'),
     /** Directory of recorded PDFs and their text for the TEST-ONLY text runner. Required when the pipeline is enabled; there is no default. */
     LAB_REPORT_FIXTURES_DIR: z.string().min(1).optional(),
     /** The knowledge directory the pipeline evaluates against (loaded once at start, under the non-production rules). Required when enabled. */

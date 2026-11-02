@@ -308,6 +308,27 @@ const LOADERS: Record<Exclude<RecordTable, 'evaluations'>, Loader> = {
       deIdentificationAuthorized: r.de_identification_authorized,
     }),
   },
+  patient_followups: {
+    sql: `SELECT f.id::text AS id, f.tenant_id, f.seq::text AS seq, f.created_by, ${UTC('f.created_at')} AS created_at, f.ledger_event_id::text AS ledger_event_id,
+      f.patient_id::text AS patient_id, f.thread_id::text AS thread_id, f.version, f.medication_id::text AS medication_id, f.decision_id::text AS decision_id,
+      f.action, f.assessment, f.due_date::text AS due_date, f.due_timezone, f.assignee, n.id::text AS note_id, n.body_sha256 AS note_digest
+      FROM patient_followups f JOIN event_notes n ON n.id=f.note_id AND n.tenant_id=f.tenant_id WHERE f.id=ANY($1::uuid[])`,
+    project: (r) => ({
+      kind: 'patient-followup',
+      ...common(r),
+      patientId: r.patient_id,
+      threadId: r.thread_id,
+      version: r.version,
+      medicationId: r.medication_id,
+      decisionId: r.decision_id,
+      action: r.action,
+      assessment: r.assessment,
+      dueDate: r.due_date,
+      dueTimezone: r.due_timezone,
+      assignee: r.assignee,
+      note: note(r.note_id, r.note_digest),
+    }),
+  },
   patient_medications: {
     sql: `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
       patient_id::text AS patient_id, entry_id::text AS entry_id, version, drug_rxcui, drug_name, list_version, status, start_month, stop_month, source

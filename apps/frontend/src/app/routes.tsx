@@ -32,16 +32,34 @@ export const routes: RouteObject[] = [
         element: <ProtectedRoute />,
         children: [
           // Specs/024: the chat-first home, in every build, for any signed-in member. Attaching is for writers; the panel's lists are for clinical readers.
-          { path: 'workspace', lazy: async () => ({ Component: (await import('@/pages/WorkspacePage')).default }) },
-          // Every signed-in member, including one with no role: it shows their own account, roles and session, nothing clinical.
-          { path: 'settings', lazy: async () => ({ Component: (await import('@/pages/SettingsPage')).default }) },
-          // Every build: the API authorizes each read. Only file download is owned-storage only (ReportsPage).
           {
-            element: <RequireRole anyOf={CLINICAL_READ_ROLES} />,
+            lazy: async () => ({ Component: (await import('@/pages/WorkspacePage')).default }),
             children: [
-              { path: 'reports', lazy: async () => ({ Component: (await import('@/pages/ReportsPage')).default }) },
-              // Spec 025 T303: one patient's demographics and their versions. Clinical readers read; the page offers corrections to writers only.
-              { path: 'patients/:id', lazy: async () => ({ Component: (await import('@/pages/PatientPage')).default }) },
+              { path: 'workspace', element: null },
+              // Every signed-in member, including one with no role: it shows their own account, roles and session, nothing clinical.
+              { path: 'settings', lazy: async () => ({ Component: (await import('@/pages/SettingsPage')).default }) },
+              // Every build: the API authorizes each read. Only file download is owned-storage only (ReportsPage).
+              {
+                element: <RequireRole anyOf={CLINICAL_READ_ROLES} />,
+                children: [{ path: 'reports', lazy: async () => ({ Component: (await import('@/pages/ReportsPage')).default }) }],
+              },
+              {
+                element: <RequireRole anyOf={WRITER_ROLES} />,
+                children: [
+                  {
+                    path: 'reports/upload',
+                    lazy: async () => ({ Component: (await import('@/pages/UploadReportPage')).default }),
+                  },
+                ],
+              },
+              {
+                element: <RequireRole anyOf={WRITER_ROLES} />,
+                children: [{ path: 'patients/new', lazy: async () => ({ Component: (await import('@/pages/NewPatientPage')).default }) }],
+              },
+              {
+                element: <RequireRole anyOf={CLINICAL_READ_ROLES} />,
+                children: [{ path: 'patients/:id', lazy: async () => ({ Component: (await import('@/pages/PatientPage')).default }) }],
+              },
             ],
           },
           // Administrators only: the organization's own counts. Nothing clinical, so admin needs no clinical role for it.
@@ -69,15 +87,6 @@ export const routes: RouteObject[] = [
                 },
               ]
             : []),
-          {
-            element: <RequireRole anyOf={WRITER_ROLES} />,
-            children: [
-              {
-                path: 'reports/upload',
-                lazy: async () => ({ Component: (await import('@/pages/UploadReportPage')).default }),
-              },
-            ],
-          },
         ],
       },
       { path: '*', lazy: async () => ({ Component: (await import('@/pages/NotFoundPage')).default }) },

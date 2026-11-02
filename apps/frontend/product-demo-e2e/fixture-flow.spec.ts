@@ -16,7 +16,7 @@ for (const fixtureId of ['D01', 'D08', 'D02'] as const) {
     if (await addPatient.isVisible()) await addPatient.click();
     await page.getByLabel('Synthetic patient label', { exact: true }).fill(`SYN-DEMO-${crypto.randomUUID().slice(0, 20)}`);
     const created = page.waitForResponse((response) => response.url().endsWith('/api/v1/patients') && response.request().method() === 'POST');
-    await page.getByRole('button', { name: 'Add patient', exact: true }).click();
+    await page.getByRole('main').getByRole('button', { name: 'Add patient', exact: true }).click();
     const patientResponse = await created;
     expect(patientResponse.status()).toBe(201);
     const patient = await patientResponse.json();

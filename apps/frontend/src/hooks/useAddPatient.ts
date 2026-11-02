@@ -27,6 +27,7 @@ export function useAddPatient(onCreated: (patient: PatientDto) => void) {
   const [errors, setErrors] = useState<DraftErrors>({});
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
   /** The patient created by this form whose demographics are not saved yet. */
   const [pending, setPending] = useState<PatientDto | null>(null);
   const patientRequest = useRef<{ label: string; id: string } | null>(null);
@@ -50,12 +51,14 @@ export function useAddPatient(onCreated: (patient: PatientDto) => void) {
   }
 
   async function submit(): Promise<AddPatientOutcome | null> {
+    if (submitting.current) return null;
     const checked = checkDraft(draft, true);
     const parsedLabel = pending ? null : patientLabelSchema.safeParse(label);
     const badLabel = parsedLabel && !parsedLabel.success ? (parsedLabel.error.issues[0]?.message ?? 'Enter a synthetic patient label.') : null;
     setLabelError(badLabel);
     setErrors(checked.errors);
     if (badLabel || Object.keys(checked.errors).length) return null;
+    submitting.current = true;
     setBusy(true);
     setProblem(null);
     let patient = pending;
@@ -89,6 +92,7 @@ export function useAddPatient(onCreated: (patient: PatientDto) => void) {
       }
       return null;
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }

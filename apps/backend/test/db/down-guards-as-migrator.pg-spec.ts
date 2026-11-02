@@ -5,6 +5,7 @@ import { Database } from '../../src/db/database';
 import { EvaluationRequestsService } from '../../src/lab-reports/evaluation-requests.service';
 import { EvaluationRequestsRepository } from '../../src/storage/postgres/evaluation-requests.repository';
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
+import { PostgresPatientFollowupsRepository } from '../../src/storage/postgres/patient-followups.repository';
 import { PostgresPatientMedicationsRepository } from '../../src/storage/postgres/patient-medications.repository';
 import { PostgresPatientDemographicsRepository } from '../../src/storage/postgres/patient-demographics.repository';
 import { sealField } from '../../src/patient-demographics/identity-crypto';
@@ -839,6 +840,8 @@ describe('patient medications down guard as the non-superuser migrator', () => {
     const connection = new Database({ url: f.app, ssl: 'disable' });
     try {
       expect((await f.migrator.query('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user')).rows).toEqual([{ rolsuper: false, rolbypassrls: false }]);
+      const above = revertAbove('patient_medications');
+      if (above.steps) await migrateDown(f.migrator, above.steps);
       const seeded = await seedLabReport(f.admin, tenant);
       const repo = new PostgresPatientMedicationsRepository(connection, new PostgresLedgerRecordsRepository(connection));
       await repo.insertVersion(tenant, 'SYN-clinician', {
@@ -865,6 +868,57 @@ describe('patient medications down guard as the non-superuser migrator', () => {
       const fn = (await f.migrator.query("SELECT pg_get_functiondef('ledger_event_row_exists()'::regprocedure) AS body")).rows[0].body;
       expect(fn).toContain('patient_demographics');
       expect(fn).not.toContain('patient_medications');
+    } finally {
+      await connection.onModuleDestroy();
+      await f.drop();
+    }
+  });
+});
+
+describe('patient follow-ups down guard as the non-superuser migrator', () => {
+  it('refuses populated follow-ups despite FORCE RLS and reverses the empty migration', async () => {
+    const f = await fixture();
+    const connection = new Database({ url: f.app, ssl: 'disable' });
+    try {
+      const seeded = await seedLabReport(f.admin, tenant);
+      await withAdmin(f.admin, (c) =>
+        c.query("INSERT INTO tenant_memberships (tenant_id,sub,status,roles,changed_by) VALUES ($1,'SYN-followup-author','active',ARRAY['clinician'],'synthetic-test')", [tenant]),
+      );
+      const ledger = new PostgresLedgerRecordsRepository(connection);
+      const medications = new PostgresPatientMedicationsRepository(connection, ledger);
+      const medication = await medications.insertVersion(tenant, 'SYN-followup-author', {
+        id: randomUUID(),
+        entryId: randomUUID(),
+        patientId: seeded.patientId,
+        name: 'syn-ingredient',
+        requestHash: 'a'.repeat(64),
+        input: { requestId: randomUUID(), rxcui: '991001', listVersion: 'a'.repeat(64), status: 'active', startMonth: null, stopMonth: null, source: 'clinician-entered' },
+      });
+      const records = new PostgresPatientFollowupsRepository(connection, ledger);
+      await records.record(tenant, 'SYN-followup-author', seeded.patientId, {
+        requestId: randomUUID(),
+        action: 'schedule',
+        medicationId: medication.id,
+        decisionId: null,
+        assessment: null,
+        note: 'Synthetic follow-up',
+        next: { date: '2026-01-01', timezone: 'America/Puerto_Rico', assignee: 'SYN-followup-author' },
+      });
+      expect((await f.migrator.query('SELECT count(*)::int AS n FROM patient_followups')).rows).toEqual([{ n: 0 }]);
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated patient follow-ups/);
+      expect((await f.migrator.query("SELECT relforcerowsecurity AS forced FROM pg_class WHERE relname='patient_followups'")).rows).toEqual([{ forced: true }]);
+      await withAdmin(f.admin, async (c) => {
+        await c.query('BEGIN');
+        await c.query('SET LOCAL session_replication_role=replica');
+        await c.query('DELETE FROM patient_followups');
+        await c.query("DELETE FROM ledger_events WHERE event_type='patient-followup'");
+        await c.query('COMMIT');
+      });
+      expect(await migrateDown(f.migrator, 1)).toEqual(['0067']);
+      expect((await f.migrator.query("SELECT to_regclass('patient_followups') AS name")).rows).toEqual([{ name: null }]);
+      const fn = (await f.migrator.query("SELECT pg_get_functiondef('ledger_event_row_exists()'::regprocedure) AS body")).rows[0].body;
+      expect(fn).toContain('patient_medications');
+      expect(fn).not.toContain('patient_followups');
     } finally {
       await connection.onModuleDestroy();
       await f.drop();
