@@ -25,6 +25,11 @@ describe('public pages', () => {
     if (title === 'Sign in') {
       expect(header.queryByRole('link', { name: 'Sign in', exact: true })).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Sign in', exact: true })).toBeEnabled();
+    } else if (title === 'You have been signed out') {
+      expect(header.queryByRole('link', { name: 'Sign in', exact: true })).not.toBeInTheDocument();
+      expect(header.queryByRole('navigation')).not.toBeInTheDocument();
+      expect(screen.getAllByRole('link', { name: 'Sign in', exact: true })).toHaveLength(1);
+      expect(screen.getByRole('link', { name: 'Sign in', exact: true })).toHaveAttribute('href', '/signin');
     } else {
       expect(header.getByRole('link', { name: 'Sign in', exact: true })).toHaveAttribute('href', '/signin');
     }
