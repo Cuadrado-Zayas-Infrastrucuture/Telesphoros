@@ -6,12 +6,18 @@ export async function readFollowups(apiFetch: ApiFetch, patient?: string, page =
   const path = patient ? `/api/v1/patients/${encodeURIComponent(patient)}/followups` : '/api/v1/followups';
   const selection = !patient && filters ? `&assignment=${encodeURIComponent(filters.assignment)}&status=${encodeURIComponent(filters.status)}` : '';
   const response = await apiFetch(`${path}?page=${page}${thread ? `&threadId=${encodeURIComponent(thread)}` : ''}${selection}`, { signal });
-  if (!response.ok) throw new SubmitError('Follow-ups could not be loaded. Please retry.', response.status);
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new SubmitError('Follow-ups could not be loaded. Please retry.', response.status);
+  }
   return followupListSchema.parse(await response.json());
 }
 export async function readFollowupAssignees(apiFetch: ApiFetch, signal?: AbortSignal) {
   const response = await apiFetch('/api/v1/followups/assignees', { signal });
-  if (!response.ok) throw new SubmitError('Responsible clinicians could not be loaded. Please retry.', response.status);
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new SubmitError('Responsible clinicians could not be loaded. Please retry.', response.status);
+  }
   return followupAssigneesSchema.parse(await response.json());
 }
 export async function recordFollowup(apiFetch: ApiFetch, patient: string, input: FollowupInput) {
@@ -24,6 +30,7 @@ export async function recordFollowup(apiFetch: ApiFetch, patient: string, input:
       body: JSON.stringify(checked.data),
     });
     if (response.ok) return followupDtoSchema.parse(await response.json());
+    await response.body?.cancel();
     if (response.status === 409) throw new SubmitError('This follow-up changed. Your draft is kept. Cancel and reload before saving against the current record.', 409);
     if (response.status === 403) throw new SubmitError('Your role cannot record this follow-up.', 403);
     if (response.status === 400) throw new SubmitError('Check the assessment date, medication and responsible clinician. Your draft is kept.', 400);
@@ -45,6 +52,9 @@ export function onFollowupsChanged(listener: () => void) {
 
 export async function readFollowupResponseSummary(apiFetch: ApiFetch, signal?: AbortSignal) {
   const response = await apiFetch('/api/v1/followups/summary', { signal });
-  if (!response.ok) throw new SubmitError('Response summary could not be loaded.', response.status);
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new SubmitError('Response summary could not be loaded.', response.status);
+  }
   return followupResponseSummarySchema.parse(await response.json());
 }

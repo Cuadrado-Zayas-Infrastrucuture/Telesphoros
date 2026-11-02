@@ -139,7 +139,7 @@ export function WorkspaceSidebar() {
                     <item.icon aria-hidden="true" className="size-4 shrink-0" />
                     <span className="workspace-link-label">{item.label}</span>
                   </NavLink>
-                  {item.to === WORKSPACE_PATH && roles.some((role) => role === 'clinician' || role === 'reviewer') && <FollowupInbox onNavigate={() => setOpen(false)} />}
+                  {item.to === WORKSPACE_PATH && lists && roles.some((role) => role === 'clinician' || role === 'reviewer') && <FollowupInbox onNavigate={() => setOpen(false)} />}
                 </li>
               ) : (
                 <li key={item.kind} className="workspace-panel-item">

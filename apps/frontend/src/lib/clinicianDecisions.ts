@@ -38,7 +38,10 @@ export async function readPatientResults(apiFetch: ApiFetch, patient: string, pa
 }
 export async function readDecisionHistory(apiFetch: ApiFetch, result: string, evaluation: string, patient: string, signal: AbortSignal) {
   const response = await apiFetch(path(result), { signal });
-  if (!response.ok) throw new SubmitError('Decision history could not be loaded. Please retry.', response.status);
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new SubmitError('Decision history could not be loaded. Please retry.', response.status);
+  }
   const history = clinicianDecisionHistoryDtoSchema.parse(await response.json());
   if (
     history.resultId !== result ||
@@ -51,7 +54,10 @@ export async function readDecisionHistory(apiFetch: ApiFetch, result: string, ev
 }
 export async function readDecisionNote(apiFetch: ApiFetch, note: { id: string; bodySha256: string }, signal: AbortSignal) {
   const response = await apiFetch(`/api/v1/notes/${encodeURIComponent(note.id)}`, { signal });
-  if (!response.ok) throw new SubmitError('Decision note could not be loaded.');
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new SubmitError('Decision note could not be loaded.');
+  }
   const value = noteDtoSchema.parse(await response.json());
   if (value.id !== note.id || value.bodySha256 !== note.bodySha256) throw new SubmitError('Decision note did not match the record.');
   return value;
@@ -66,6 +72,7 @@ export async function saveDecision(apiFetch: ApiFetch, result: string, input: Cl
   } catch {
     throw new DecisionUnconfirmed('Save was not confirmed. Your exact entry is kept for retry.');
   }
+  if (response.status !== 200 && response.status !== 201) await response.body?.cancel();
   if (response.status === 409) throw new SubmitError('The result or decision history changed. Your draft is kept. Cancel and reload before recording another decision.', 409);
   if (response.status === 403) throw new SubmitError('Your current role or authorship does not allow this entry. Your draft is kept.', 403);
   if (response.status === 400 || response.status === 404)

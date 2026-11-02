@@ -366,7 +366,7 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
                 type="file"
                 disabled={busy}
                 accept={chatFileAccept()}
-                className="sr-only"
+                hidden
                 tabIndex={-1}
                 aria-hidden="true"
                 onChange={(event) => {

@@ -57,7 +57,7 @@ test.describe('the feature panel (CH-2)', () => {
   test('past reports and patients come from the API, as words and labels', async ({ page }) => {
     await signInAs(page, 'alice', '/workspace');
     await openWorkspaceNavigation(page);
-    await expect(primary(page).getByRole('region', { name: 'Past reports' })).toBeVisible();
+    await expect(primary(page).getByRole('region', { name: 'Past reports', exact: true })).toBeVisible();
     await expect(primary(page).getByRole('region', { name: 'Patients' })).toBeVisible();
   });
 
@@ -81,6 +81,7 @@ test.describe('the feature panel (CH-2)', () => {
     expect(await page.evaluate(() => window.localStorage.getItem('telesphoros.sidebar'))).toBe('collapsed');
     await primary(page).getByRole('link', { name: 'All reports', exact: true }).click();
     await expect(page).toHaveURL(/\/reports$/);
+    await page.getByRole('button', { name: 'Close report history', exact: true }).click();
     await expect(sidebar).toHaveClass(/is-collapsed/);
   });
 
@@ -194,7 +195,7 @@ test.describe('accessibility and layout (CH-7)', () => {
       await signInAs(page, 'alice', '/workspace');
       await expect(page.getByRole('heading', { level: 1, name: HEADING })).toBeVisible();
       await openWorkspaceNavigation(page); // on a phone the panel is a drawer; open it so axe sees the lists too
-      await expect(primary(page).getByRole('region', { name: 'Past reports' })).toBeVisible();
+      await expect(primary(page).getByRole('region', { name: 'Past reports', exact: true })).toBeVisible();
       expect(await axeViolations(page)).toEqual([]);
       await page.locator('input[type=file]').setInputFiles({ name: 'axe.json', mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
       await expect(page.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' })).toBeVisible();

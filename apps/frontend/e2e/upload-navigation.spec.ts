@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openWorkspaceNavigation, signInWithPatient } from './helpers';
+import { signInWithPatient } from './helpers';
 
 const REPORT = Buffer.from('{"synthetic":true}');
 function latch() { let release!: () => void; const promise = new Promise<void>(resolve => { release = resolve; }); return { promise, release }; }
@@ -25,11 +25,9 @@ async function fill(page: Page, fixture: { id: string; label: string }, name: st
   await page.getByRole('button', { name: 'Upload report', exact: true }).click();
 }
 async function navigateAwayAndBack(page: Page) {
-  await openWorkspaceNavigation(page);
-  await page.locator('header.workspace-navigation').getByRole('link', { name: /^Telesphoros/ }).first().click();
-  await expect(page).toHaveURL(/\/$/);
-  await openWorkspaceNavigation(page);
-  await page.getByRole('link', { name: 'Upload report', exact: true }).click();
+  await page.getByRole('button', { name: 'Close resume report upload', exact: true }).click();
+  await expect(page).toHaveURL(/\/workspace$/);
+  await page.goBack();
   await expect(page).toHaveURL(/\/reports\/upload$/);
 }
 async function holdFirstTransfer(page: Page) {
