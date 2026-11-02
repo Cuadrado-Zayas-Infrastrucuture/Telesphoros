@@ -23,10 +23,12 @@ import { PatientDemographicsController } from '../patient-demographics/patient-d
 import { PatientIdentifiersController, PatientLinkQuarantineController, ReportPatientLinkController } from '../patient-identity/patient-identity.controller';
 import { PatientDuplicatesController, PatientMergesController } from '../patient-merge/patient-merge.controller';
 import { UsageController } from '../usage/usage.controller';
+import { StructuredPreviewController } from '../patient-identity/structured-preview.controller';
 import { InputBoundaryInterceptor } from './input-boundary.interceptor';
 import { ZodValidationPipe } from './zod-validation.pipe';
 
 const controllers: Type[] = [
+  StructuredPreviewController,
   PatientsController,
   PatientDemographicsController,
   PatientMedicationsController,
@@ -78,7 +80,7 @@ it('inventories every registered production controller and strict input pipe', (
     .filter((file) => String(file).endsWith('.controller.ts'))
     .flatMap((file) => [...readFileSync(resolve(source, String(file)), 'utf8').matchAll(/export class (\w+Controller)\b/g)].map((match) => match[1]));
   expect(controllers.map((c) => c.name).sort()).toEqual(declared.sort());
-  expect(controllers).toHaveLength(25);
+  expect(controllers).toHaveLength(26);
   expect(routes.length).toBeGreaterThan(30);
   for (const { controller, name } of routes) {
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, controller, name) ?? {};
