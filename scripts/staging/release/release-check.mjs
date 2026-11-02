@@ -5,7 +5,9 @@
 //   IMAGE    both images NEW: the API, provisioning and worker task definitions are replaced on NEW, and the two services move to them.
 //   INFRA    both images OLD (the canonical var file unchanged): no task definition or service changes; never a protected type destroyed or
 //            replaced. Everything else in the plan is for the founder's line-by-line read, which this check does not replace.
+//   FENCE-CLOSE / FENCE-OPEN keep one image, replace only the API task definition and move its service, changing only MEDICATION_WRITES.
 // Usage: node release-check.mjs MIGRATE|IMAGE|INFRA plan.json OLD_IMAGE NEW_IMAGE   (INFRA: NEW_IMAGE = OLD_IMAGE). Prints addresses, never values.
+import { fenceProblems } from './fence-plan.mjs';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -54,10 +56,11 @@ const containers = (change) => {
 
 /** Each reason the plan is not a MIGRATE, IMAGE or INFRA plan of this release; empty when it is. */
 export function problems(mode, plan, oldImage, newImage) {
+  if (mode === 'FENCE-CLOSE' || mode === 'FENCE-OPEN') return fenceProblems(mode, plan, oldImage, newImage);
   const out = [];
   const need = (ok, why) => { if (!ok) out.push(why); };
   const shape = SHAPES[mode];
-  if (!shape) return ['mode must be MIGRATE, IMAGE or INFRA'];
+  if (!shape) return ['mode must be MIGRATE, IMAGE, INFRA, FENCE-CLOSE or FENCE-OPEN'];
   if (!IMAGE_RE.test(oldImage ?? '') || !IMAGE_RE.test(newImage ?? '')) return ['OLD and NEW must be digest-pinned staging API images'];
   if (mode !== 'INFRA' && oldImage === newImage) return ['a MIGRATE or IMAGE plan needs two different images'];
   if (!plan || !/^1\./.test(plan.format_version ?? '') || !Array.isArray(plan.resource_changes)) return ['expected terraform show -json plan output with resource_changes'];
@@ -100,7 +103,9 @@ export function problems(mode, plan, oldImage, newImage) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const [mode, file, oldImage, newImage] = process.argv.slice(2);
   if (!newImage) { console.error('usage: node release-check.mjs MIGRATE|IMAGE|INFRA plan.json OLD_IMAGE NEW_IMAGE'); process.exit(2); }
-  const found = problems(mode, JSON.parse(readFileSync(file, 'utf8')), oldImage, newImage);
+  let plan;
+  try { plan = JSON.parse(readFileSync(file, 'utf8')); } catch { console.error('REFUSED: plan could not be read as JSON'); process.exit(1); }
+  const found = problems(mode, plan, oldImage, newImage);
   if (found.length) { for (const p of found) console.error(`REFUSED: ${p}`); process.exit(1); }
   console.log(`release-check ${mode} passed: only the expected changes. A line-by-line read of the plan text is still required.`);
 }
