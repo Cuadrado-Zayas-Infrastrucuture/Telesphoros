@@ -13,13 +13,15 @@ RUN pnpm --filter @telesphoros/backend build
 # modules the API already ships (pg, zod, the AWS SDK).
 RUN pnpm --filter @telesphoros/worker build
 # Legacy deploy keeps workspace isolation without altering the shared lockfile.
-RUN node infrastructure/docker/dependency-graph.cjs record && pnpm --filter @telesphoros/backend deploy --legacy --prod /output && node infrastructure/docker/dependency-graph.cjs compare
+# Remove only checkout backlinks from the disposable deploy output; the existing
+# graph comparison still refuses any missing or changed production dependency.
+RUN node infrastructure/docker/dependency-graph.cjs record && pnpm --filter @telesphoros/backend deploy --legacy --prod /output && find /output -type l -lname '*workspace/*' -delete && node infrastructure/docker/dependency-graph.cjs compare
 # Removes only throwaway build output, never the checkout.
 RUN rm -rf /output/src /output/test /output/scripts /output/*.mjs /output/jest.config.js /output/tsconfig*.json /output/README.md && find /output -name '*.map' -delete
 RUN mkdir /output/worker && cp apps/worker/dist/main.js /output/worker/main.js
 
-FROM node:22.22.0-bookworm-slim@sha256:dd9d21971ec4395903fa6143c2b9267d048ae01ca6d3ea96f16cb30df6187d94 AS runtime
-WORKDIR /app
+FROM node:22.22.0-bookworm-slim@sha256:dd9d21971ec4395903fa6143c2b9267d048ae01ca6d3ea96f16cb30df6187d94 AS runtime_files
+WORKDIR /runtime-input
 # Fixed versions from the blocking scan; unavailable fixes fail the build. glibc and dpkg are below the gate (Debian rates them medium/low) but
 # the registry scan reports them high, and Debian has fixes (2026-10-30), so they are pinned too.
 RUN apt-get update && apt-get install --yes --no-install-recommends --only-upgrade \
@@ -30,9 +32,17 @@ RUN apt-get update && apt-get install --yes --no-install-recommends --only-upgra
 COPY --from=build /output/ ./
 COPY infrastructure/docker/global-bundle.pem infrastructure/docker/global-bundle.sha256 /opt/telesphoros/ca/
 RUN cd /opt/telesphoros/ca && sha256sum --check global-bundle.sha256
-# Removes only installer tools inherited from the base; runtime never installs packages.
-RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /opt/yarn* /usr/local/bin/yarn /usr/local/bin/yarnpkg
-ENV NODE_ENV=production NODE_EXTRA_CA_CERTS=/opt/telesphoros/ca/global-bundle.pem
+COPY infrastructure/docker/runtime-rootfs.cjs /tmp/runtime-rootfs.cjs
+RUN node /tmp/runtime-rootfs.cjs /runtime-rootfs
+
+# Carry only Node's reviewed shared-library closure, not the build OS utilities.
+# The generated root retains Debian identity and the copied libraries' inventory.
+FROM scratch AS runtime
+COPY --from=runtime_files /runtime-rootfs/ /
+COPY --from=build /output/ /app/
+COPY --from=runtime_files /opt/telesphoros/ca/ /opt/telesphoros/ca/
+WORKDIR /app
+ENV PATH=/usr/local/bin NODE_ENV=production NODE_EXTRA_CA_CERTS=/opt/telesphoros/ca/global-bundle.pem LANG=C LC_ALL=C LANGUAGE=C
 USER 10001:10001
 EXPOSE 3000
 ENTRYPOINT ["node"]
