@@ -64,3 +64,7 @@ The [stored-revision slice](../../docs/design/plans/pgx-stored-revisions.md) con
 ## S2c findings review continuation
 
 The [findings-review slice](../../docs/design/plans/pgx-findings-review.md) adds append-only independent decisions about stored findings and explicit resolution of conflicting stored sources, in the existing report panel. It keeps patient matching separate, rechecks evidence freshness and reviewer authority at commit, never selects or revives a source on its own, and leaves every finding's stated uncertainty unchanged. Context-bound synthetic assessments and affected-assessment review tasks remain the next slice.
+
+## S3 synthetic assessment plan
+
+The [S3 plan](../../docs/design/plans/pgx-synthetic-assessment.md) proposes how a stored, reviewed synthetic revision becomes a held-or-selected synthetic assessment, where it is stored, and what must change before staging can show it. It is documentation only; its four founder decisions (D1 to D4) are open, and nothing in it opens a clinical, data-rights or real-data gate.
