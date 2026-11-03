@@ -20,9 +20,11 @@ const real = {
 };
 
 /** The only workflow files allowed on main. Adding one means changing this line, in review. */
-export const WORKFLOWS = ['ci.yml', 'e2e-storage.yml', 'rescan.yml'];
+export const WORKFLOWS = ['ci.yml', 'e2e-storage.yml', 'rescan.yml', 'staging-frontend.yml'];
 
 const code = (text) => text.split('\n').filter((line) => !/^\s*#/.test(line)).join('\n');
+/** Each job of a workflow, as text starting with its id. */
+const jobsOf = (text) => (text.split(/^jobs:\s*$/m)[1] ?? '').split(/^ {2}(?=[a-z][a-z0-9_-]*:\s*$)/m).filter((j) => /\S/.test(j));
 
 export function supplyChainProblems({ workflows, requirementsIn, requirementsTxt, dependabot }) {
   const problems = [];
@@ -39,8 +41,14 @@ export function supplyChainProblems({ workflows, requirementsIn, requirementsTxt
     }
     // The one exception (INF-03, release.test.mjs pins where it lives): ci.yml's release-image job asks for an OIDC token.
     const writes = text.split('\n').filter((line) => /:\s*write\b/.test(line));
-    need(/^permissions:\n {2}contents: read\n/m.test(raw) && (writes.length === 0 || (name === 'ci.yml' && JSON.stringify(writes) === JSON.stringify(['      id-token: write']))), `${name}: permissions must be read-only (only ci.yml's release-image may ask for id-token: write)`);
+    need(/^permissions:\n {2}contents: read\n/m.test(raw) && (writes.length === 0 || (['ci.yml', 'staging-frontend.yml'].includes(name) && JSON.stringify(writes) === JSON.stringify(['      id-token: write']))), `${name}: permissions must be read-only (only image release and staging frontend may ask for id-token: write)`);
     need(!/pull_request_target/.test(text) && !/secrets\./.test(text), `${name}: no pull_request_target and no repository secrets`);
+    // A job that may request an AWS-assumable OIDC token runs no package manager: an install or build script there could mint the token itself.
+    for (const job of jobsOf(text).filter((j) => /^\s+id-token:\s*write\b/m.test(j))) {
+      need(!/\b(pnpm|npm|yarn)\s+(install|ci|i|add)\b|pnpm\/action-setup@/.test(job), `${name}: job "${job.split(':')[0].trim()}" holds id-token and must not install packages (build in a job without it, pass the artifact by digest)`);
+    }
+    // The repository is public: an AWS account id belongs in a repository variable, never in a workflow (PR #86).
+    need(!/(?<![0-9A-Za-z])[0-9]{12}(?![0-9A-Za-z])/.test(text), `${name}: no 12-digit AWS account id in a workflow file (use a repository variable)`);
     // Container images by digest only: a tag can be re-pointed under a green check.
     for (const [, image] of text.matchAll(/^[ \t]*image:[ \t]*(\S+)/gm)) need(/@sha256:[0-9a-f]{64}$/.test(image), `${name}: image ${image} must be pinned by digest`);
     // Python packages only with hashes, and only from the hashed file.
@@ -97,6 +105,7 @@ test('the supply-chain rules report each way the files could be weakened (contro
   const rescan = real.workflows['rescan.yml'] ?? '';
   const storageYml = real.workflows['e2e-storage.yml'] ?? '';
   const pg = /image: (postgres:16@sha256:[0-9a-f]{64})/.exec(ci)?.[1] ?? 'postgres:16@sha256:missing';
+  const frontend = real.workflows['staging-frontend.yml'] ?? '';
   const weakened = [
     ['an unreviewed workflow', { workflows: { ...real.workflows, 'debug.yml': 'name: x\npermissions:\n  contents: read\n' } }],
     ['the diagnostic workflow restored', { workflows: { ...real.workflows, 'fixture-phase-capture.yml': 'name: x\npermissions:\n  contents: read\n' } }],
@@ -122,7 +131,10 @@ test('the supply-chain rules report each way the files could be weakened (contro
     ['a package by range', { requirementsTxt: real.requirementsTxt.replace(/\nmoto==/, '\nmoto>=') }],
     ['a hand-edited requirements file', { requirementsTxt: real.requirementsTxt.replace('uv pip compile requirements.in --generate-hashes', 'pip freeze') }],
     ['the emulator by range', { requirementsIn: real.requirementsIn.replace(/moto\[server\]==/, 'moto[server]>=') }],
-    ['Dependabot stops watching the Dockerfiles', { dependabot: real.dependabot.replace(/  - package-ecosystem: docker\n/, '  - package-ecosystem: dockerx\n') }],
+    ['the OIDC job installs packages', { workflows: { ...real.workflows, 'staging-frontend.yml': frontend.replace('      - name: The downloaded bundle is the one build packed\n', '      - run: pnpm install --frozen-lockfile\n      - name: The downloaded bundle is the one build packed\n') } }],
+    ['the OIDC job sets up pnpm', { workflows: { ...real.workflows, 'staging-frontend.yml': frontend.replace('      - name: The downloaded bundle is the one build packed\n', '      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0\n      - name: The downloaded bundle is the one build packed\n') } }],
+    ['an account id in a workflow', { workflows: { ...real.workflows, 'staging-frontend.yml': frontend.replace('allowed-account-ids: ${{ vars.STAGING_FRONTEND_ACCOUNT_ID }}', "allowed-account-ids: '123456789012'") } }],
+    ['Dependabot stops watching the Dockerfiles',{ dependabot: real.dependabot.replace(/  - package-ecosystem: docker\n/, '  - package-ecosystem: dockerx\n') }],
   ];
   for (const [name, change] of weakened) {
     const copy = { ...real, ...change };

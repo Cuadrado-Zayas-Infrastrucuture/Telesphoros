@@ -822,6 +822,114 @@ run "refuses_production_hosting_without_the_signed_release_path" {
   expect_failures = [aws_ecr_repository.api]
 }
 
+# INF-03 D6: on synthetic staging, named roles of this account may become the release role without any GitHub OIDC provider; never in production.
+run "image_release_for_named_roles_without_github" {
+  command = plan
+
+  override_data {
+    target = data.aws_caller_identity.current
+    values = { account_id = "123456789012" }
+  }
+
+  variables {
+    deployment_profile             = "synthetic"
+    vpc_id                         = ""
+    private_subnet_ids             = []
+    enable_api_hosting             = true
+    api_domain                     = "api.example.test"
+    api_cors_origins               = ["https://staging.example.test"]
+    image_release_human_principals = ["arn:aws:iam::123456789012:role/ReleaseOperator"]
+  }
+
+  assert {
+    condition     = length(aws_iam_openid_connect_provider.github) == 0 && length(aws_iam_role.image_release) == 1 && length(aws_kms_key.image_signing) == 1 && length(aws_kms_alias.image_signing) == 1
+    error_message = "named roles alone create the release role, key and alias, and no OIDC provider"
+  }
+  assert {
+    condition = (
+      length(data.aws_iam_policy_document.image_release_trust[0].statement) == 1 &&
+      one(data.aws_iam_policy_document.image_release_trust[0].statement).sid == "NamedRolesOnSyntheticStaging" &&
+      toset(one(data.aws_iam_policy_document.image_release_trust[0].statement).actions) == toset(["sts:AssumeRole"]) &&
+      one(one(data.aws_iam_policy_document.image_release_trust[0].statement).principals).type == "AWS" &&
+      one(one(data.aws_iam_policy_document.image_release_trust[0].statement).principals).identifiers == toset(["arn:aws:iam::123456789012:role/ReleaseOperator"]) &&
+      length(one(data.aws_iam_policy_document.image_release_trust[0].statement).condition) == 0
+    )
+    error_message = "the trust admits exactly the listed role with sts:AssumeRole and no GitHub statement"
+  }
+}
+
+run "image_release_for_named_roles_can_require_mfa" {
+  command = plan
+
+  override_data {
+    target = data.aws_caller_identity.current
+    values = { account_id = "123456789012" }
+  }
+
+  variables {
+    deployment_profile              = "synthetic"
+    vpc_id                          = ""
+    private_subnet_ids              = []
+    enable_api_hosting              = true
+    api_domain                      = "api.example.test"
+    api_cors_origins                = ["https://staging.example.test"]
+    image_release_human_principals  = ["arn:aws:iam::123456789012:role/ReleaseOperator"]
+    image_release_human_require_mfa = true
+  }
+
+  assert {
+    condition     = toset([for c in one(data.aws_iam_policy_document.image_release_trust[0].statement).condition : "${c.test} ${c.variable}=${join(",", c.values)}"]) == toset(["Bool aws:MultiFactorAuthPresent=true"])
+    error_message = "with MFA required, the named-role statement carries exactly the MFA condition"
+  }
+}
+
+run "refuses_named_roles_in_production" {
+  command = plan
+
+  override_data {
+    target = data.aws_caller_identity.current
+    values = { account_id = "123456789012" }
+  }
+
+  variables {
+    environment                    = "production"
+    db_multi_az                    = true
+    audit_lock_mode                = "COMPLIANCE"
+    aws_baa_executed               = true
+    enable_api_hosting             = true
+    api_domain                     = "api.example.test"
+    public_subnet_ids              = ["subnet-pub1111", "subnet-pub2222"]
+    api_cors_origins               = ["https://staging.example.test"]
+    github_repository              = "example-org/example-repo"
+    github_repository_id           = "100000001"
+    github_repository_owner_id     = "200000002"
+    image_release_human_principals = ["arn:aws:iam::123456789012:role/ReleaseOperator"]
+  }
+
+  expect_failures = [aws_ecr_repository.api, aws_iam_role.image_release]
+}
+
+run "refuses_named_roles_from_another_account" {
+  command = plan
+
+  override_data {
+    target = data.aws_caller_identity.current
+    values = { account_id = "123456789012" }
+  }
+
+  variables {
+    deployment_profile             = "synthetic"
+    vpc_id                         = ""
+    private_subnet_ids             = []
+    enable_api_hosting             = true
+    api_domain                     = "api.example.test"
+    api_cors_origins               = ["https://staging.example.test"]
+    image_release_human_principals = ["arn:aws:iam::999999999999:role/ReleaseOperator"]
+  }
+
+  expect_failures = [aws_iam_role.image_release]
+}
+
 # ------------------------------------------------------------------------------------------------
 # The database connection budget (database-connections.tf): every hosted service at its largest count must fit what the instance accepts.
 # ------------------------------------------------------------------------------------------------

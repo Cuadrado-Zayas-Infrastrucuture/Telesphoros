@@ -362,6 +362,9 @@ as a line with the date, the digest and the reason, and release the same commit 
 | 2026-10-31 | `sha256:d5df735309ec472c7369c9e48cd49f49f8c0840732a215691626d76d8c76b432` (commit `6c4714de`) | CI cannot sign: this account's organization SCP denies GitHub OIDC providers. Release of `main` with patient demographics (spec 025 PD-a, #208, migration 0064). The push run skipped by tree reuse; the pull-request run at the same tree (`73ebb777`) had a green image job. Replaces the image above on synthetic staging. Not yet released through CI. |
 | 2026-10-31 | `sha256:e1ea8d63e95f65d92bc7be12ad4e99598380121ba3e52ebf89a1218ba9e3fa33` (commit `299efbb3`) | CI cannot sign: this account's organization SCP denies GitHub OIDC providers. Release of `main` with the expired-capability sweep (spec 026 PR A, #214, migration 0065). The push run's image job was green on the same commit. ECR's scan of the linux/amd64 image: 0 critical, 8 high, none with a Debian bookworm fix (one new since the last release: glibc CVE-2026-84243, unfixed in every suite). Replaces the image above on synthetic staging. Not yet released through CI. |
 
+An image pushed and signed by a person through the release role on synthetic staging (decision D6, [image-push.md](image-push.md#synthetic-staging-without-github-oidc-a-person-runs-the-release-step-d6))
+is not break-glass and gets no row here: it is CI's scanned archive and its record says `signature`.
+
 ### Turning it on
 
 1. Merge the PR that adds these files, and let CI run on `main` once. A check name can only be required after it has reported.
