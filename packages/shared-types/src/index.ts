@@ -21,3 +21,4 @@ export * from './patient-medications';
 export * from './patient-followups';
 
 export * from './synthetic-pgx';
+export * from './structured-preview';

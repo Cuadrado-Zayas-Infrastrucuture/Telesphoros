@@ -484,6 +484,7 @@ export default function ReportsPage() {
             <section aria-label="Report details">
               <ReportDetails
                 report={selected}
+                compact={ownedStorageMode() && selected.type === 'structured'}
                 patientLabel={patientLabel(selected.patientId)}
                 canDownload={canDownload}
                 downloading={downloading}

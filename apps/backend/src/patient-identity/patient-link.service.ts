@@ -70,9 +70,16 @@ export class PatientLinkService {
    * Whoever decides is none of: the report's creator, who asked for its first upload link, who completed the upload (the database repeats the
    * rule; this gives the clear answer first). A match that does not match records NOTHING: it answers 409 and the person tries again or attests.
    */
-  async decide(principal: Principal, reportId: string, body: PatientLinkDecisionCreate): Promise<{ decision: PatientLinkDecisionDto; created: boolean }> {
+  async decide(
+    principal: Principal,
+    reportId: string,
+    body: PatientLinkDecisionCreate,
+    expectedReport?: { patientId: string; sha256: string; objectVersion: string },
+  ): Promise<{ decision: PatientLinkDecisionDto; created: boolean }> {
     const ledger = this.need(this.ledger);
     const report = await this.requireReport(principal, reportId);
+    if (expectedReport && (report.patientId !== expectedReport.patientId || report.sha256 !== expectedReport.sha256 || report.objectVersion !== expectedReport.objectVersion))
+      throw AppException.conflictBecause('source-changed', 'The report changed while you were deciding. Nothing was recorded; look at it again.');
     if (!report.uploadedAt || !report.sha256 || !report.objectVersion) {
       throw AppException.conflictBecause('not-uploaded', 'The file for this report has not been uploaded and verified yet.');
     }
