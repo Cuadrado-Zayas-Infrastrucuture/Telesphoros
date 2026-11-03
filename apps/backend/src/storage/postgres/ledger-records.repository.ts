@@ -464,14 +464,17 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
   }
 
   private async storeEvaluation(client: PoolClient, tenantId: string, actor: string, input: EvaluationInput): Promise<InsertResult> {
+    // One source, never both and never neither. The table's own checks say the same; this refuses before anything is read or written.
+    if ((input.structuredRevisionId !== undefined) === (input.captureId !== null)) throw new Error('An evaluation names exactly one source.');
+    if (input.structuredRevisionId !== undefined && input.captureAcceptanceId !== null) throw new Error('A structured evaluation has no capture acceptance.');
     const identityKey = evaluationIdentityKey(input);
     const existing = await client.query<{ id: string }>(`SELECT id::text AS id FROM evaluations WHERE tenant_id = $1 AND identity_key = $2`, [tenantId, identityKey]);
     if (existing.rows[0]) return this.existing(client, tenantId, 'evaluations', existing.rows[0].id);
     const id = newId();
     const inserted = await client.query(
       `INSERT INTO evaluations (id, tenant_id, created_by, ledger_event_id, patient_id, report_id, capture_id, capture_acceptance_id, disposition, hold_code,
-                                  binding, knowledge_set_id, engine_version, gene_inputs, occurrences, identity_key)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14::jsonb, $15::jsonb, $16)
+                                  binding, knowledge_set_id, engine_version, gene_inputs, occurrences, identity_key, source_kind, structured_revision_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14::jsonb, $15::jsonb, $16, $17, $18)
          ON CONFLICT ON CONSTRAINT evaluations_identity_uq DO NOTHING RETURNING id`,
       [
         id,
@@ -490,6 +493,8 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
         JSON.stringify(input.geneInputs),
         JSON.stringify(input.occurrences),
         identityKey,
+        input.structuredRevisionId === undefined ? 'pdf-capture' : 'structured-revision',
+        input.structuredRevisionId ?? null,
       ],
     );
     if (inserted.rowCount === 0) return this.raced(client, tenantId, 'evaluations', 'evaluations_identity_uq', undefined, identityKey);
@@ -529,6 +534,7 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
     const provenanceId = await insertEvaluationProvenance(client, tenantId, actor, id, {
       origin: input.origin,
       captureId: input.captureId,
+      structuredRevisionId: input.structuredRevisionId,
       captureAcceptanceId: input.captureAcceptanceId,
       engineVersion: input.engineVersion,
       knowledgeSetId: input.knowledgeSetId,
@@ -536,7 +542,7 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
     const stored = await this.finish(client, tenantId, 'evaluations', id);
     await this.finish(client, tenantId, 'data_provenance', provenanceId);
     // Capture decisions append under this same lock. A fresh statement sees any decision committed before we acquired it.
-    if (input.captureAcceptanceId !== null) await this.assertCurrentAcceptance(client, tenantId, input.captureId, input.captureAcceptanceId);
+    if (input.captureId !== null && input.captureAcceptanceId !== null) await this.assertCurrentAcceptance(client, tenantId, input.captureId, input.captureAcceptanceId);
     if (input.patientLinkDecisionId !== undefined) await this.assertVerifiedLink(client, tenantId, input.reportId, input.patientLinkDecisionId);
     // The append above took the tenant's ledger head lock and keeps it until COMMIT. Raising or deciding a dispute also appends, so it
     // needs the same lock: every dispute change is either committed before we got the lock (and this separate statement, a new
@@ -1086,6 +1092,19 @@ const CURRENT_EVALUATIONS_SQL = currentEvaluationsSql();
  * code, and how it came out. The hash is over canonical JSON of these fields only, so re-submitting the same inputs is idempotent.
  */
 export function evaluationIdentityKey(input: EvaluationInput): string {
+  // A structured source has its own version tag, so no PDF evaluation's key changes and the two kinds can never collide.
+  if (input.structuredRevisionId !== undefined) {
+    return canonicalHash({
+      v: 'evaluation-identity-v2-structured',
+      reportId: input.reportId,
+      structuredRevisionId: input.structuredRevisionId,
+      disposition: input.disposition,
+      holdCode: input.holdCode,
+      knowledgeSetId: input.knowledgeSetId,
+      engineVersion: input.engineVersion,
+      binding: input.binding,
+    });
+  }
   return canonicalHash({
     v: 'evaluation-identity-v1',
     reportId: input.reportId,

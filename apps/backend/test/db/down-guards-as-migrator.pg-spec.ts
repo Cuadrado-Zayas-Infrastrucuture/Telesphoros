@@ -971,6 +971,8 @@ describe('structured revisions down guard as the non-superuser migrator', () => 
 describe('structured findings review down guard as the non-superuser migrator', () => {
   it('sees populated decisions behind FORCE RLS and reverses only an empty migration', async () => {
     const f = await fixture();
+    const above = revertAbove('structured_findings_review');
+    if (above.steps) expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted);
     try {
       // Deliberate owner-only fixtures: foreign keys and triggers are off, so no application write or event is needed.
       await withAdmin(f.admin, async (c) => {
@@ -1013,7 +1015,47 @@ describe('structured findings review down guard as the non-superuser migrator', 
       const body = (await f.migrator.query("SELECT pg_get_functiondef('ledger_event_row_exists()'::regprocedure) AS body")).rows[0].body;
       expect(body).toContain('structured_report_revisions');
       expect(body).not.toContain('structured_finding_reviews');
-      expect(await migrateUp(f.migrator)).toEqual(['0069']);
+      expect(await migrateUp(f.migrator)).toEqual(['0069', ...above.reverted.slice().reverse()]);
+    } finally {
+      await f.drop();
+    }
+  });
+});
+
+describe('evaluations structured source down guard as the non-superuser migrator', () => {
+  it('sees a populated structured evaluation behind FORCE RLS and reverses only a migration with none', async () => {
+    const f = await fixture();
+    const above = revertAbove('evaluations_structured_source');
+    if (above.steps) expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted);
+    try {
+      // Deliberate owner-only fixture: foreign keys and triggers are off, so no application write or event is needed. The table's own checks still apply.
+      await withAdmin(f.admin, async (c) => {
+        await c.query('SET session_replication_role=replica');
+        await c.query(
+          `INSERT INTO evaluations
+          (id,tenant_id,created_by,ledger_event_id,patient_id,report_id,capture_id,capture_acceptance_id,disposition,hold_code,binding,knowledge_set_id,engine_version,gene_inputs,occurrences,identity_key,source_kind,structured_revision_id)
+          VALUES ($1,$2,'syn-system',$3,$4,$5,NULL,NULL,'held','findings-not-reviewed','{}'::jsonb,$6,'syn-engine','[]'::jsonb,'[]'::jsonb,$7,'structured-revision',$8)`,
+          [randomUUID(), tenant, randomUUID(), randomUUID(), randomUUID(), hash, 'b'.repeat(64), randomUUID()],
+        );
+      });
+      // The migrator sees none of the owner's rows through FORCE RLS: the guard must still find it.
+      expect((await f.migrator.query('SELECT count(*)::int AS n FROM evaluations')).rows).toEqual([{ n: 0 }]);
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop evaluations that rest on a structured revision/);
+      expect((await f.migrator.query("SELECT relforcerowsecurity AS forced FROM pg_class WHERE relname='evaluations'")).rows).toEqual([{ forced: true }]);
+      await withAdmin(f.admin, async (c) => {
+        await c.query('SET session_replication_role=replica');
+        await c.query("DELETE FROM evaluations WHERE source_kind='structured-revision'");
+      });
+      expect(await migrateDown(f.migrator, 1)).toEqual(['0070']);
+      const columns = (
+        await f.migrator.query(
+          "SELECT column_name, is_nullable FROM information_schema.columns WHERE table_name='evaluations' AND column_name IN ('capture_id','source_kind','structured_revision_id') ORDER BY column_name",
+        )
+      ).rows;
+      expect(columns).toEqual([{ column_name: 'capture_id', is_nullable: 'NO' }]);
+      const parent = (await f.migrator.query("SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname='data_provenance_parent_kind'")).rows[0].def;
+      expect(parent).not.toContain('structured-revision');
+      expect(await migrateUp(f.migrator)).toEqual(['0070', ...above.reverted.slice().reverse()]);
     } finally {
       await f.drop();
     }

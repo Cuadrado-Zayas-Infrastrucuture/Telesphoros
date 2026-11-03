@@ -76,6 +76,8 @@ const relationships: [string, string, string, string][] = [
   ['evaluations_patient_fk', 'evaluations', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   ['evaluations_report_fk', 'evaluations', 'report_id,patient_id,tenant_id', 'reports:id,patient_id,tenant_id'],
   ['evaluations_capture_fk', 'evaluations', 'capture_id,tenant_id', 'report_captures:id,tenant_id'],
+  // Spec 032 S3 (2a): an evaluation may rest on a stored structured revision instead of a capture.
+  ['evaluations_structured_revision_fk', 'evaluations', 'structured_revision_id,tenant_id', 'structured_report_revisions:id,tenant_id'],
   ['evaluations_acceptance_fk', 'evaluations', 'capture_acceptance_id,tenant_id', 'capture_acceptances:id,tenant_id'],
   ['evaluation_results_evaluation_fk', 'evaluation_results', 'evaluation_id,tenant_id', 'evaluations:id,tenant_id'],
   ['evaluation_gene_states_evaluation_fk', 'evaluation_gene_states', 'evaluation_id,tenant_id', 'evaluations:id,tenant_id'],
@@ -183,6 +185,7 @@ const primaryKeys: Record<string, string> = {
 };
 const uniqueKeys: Record<string, string> = {
   structured_report_revisions_source_uq: 'tenant_id, report_id',
+  structured_report_revisions_id_tenant_uq: 'id, tenant_id',
   structured_finding_reviews_request_uq: 'tenant_id, created_by, request_id',
   structured_source_resolutions_request_uq: 'tenant_id, created_by, request_id',
   evaluation_requests_tenant_id_requested_by_creation_request_key: 'tenant_id, requested_by, creation_request_id',
@@ -310,7 +313,8 @@ const checkNames: Record<string, string> = {
   patient_demographics: 'tenant_id_len created_by_len version key_version nonces name_len dob_len sex birth_year ethnicity request_pair request_hash',
   patient_field_keys: 'tenant_id_len created_by_len version wrapped_len provider',
   result_render_events: 'tenant_id_len viewer_len viewer_human viewer_roles seq kind kind_seq measurement rule_version schema_version capability client_times ms',
-  evaluations: 'created_by_len disposition engine_version_len hash_formats hold_code hold_consistent json_shapes tenant_id_len binding_size gene_inputs_size occurrences_size',
+  evaluations:
+    'created_by_len disposition engine_version_len hash_formats hold_code hold_consistent json_shapes tenant_id_len binding_size gene_inputs_size occurrences_size source_kind source_consistent hold_code_kind',
   evaluation_results: 'citation_ids citation_size gene_evidence_size json ordinal outcome reason shape strength',
   evaluation_gene_states: 'gene reason shape state',
   corrections: 'created_by_len kind note_required reason_for_kind reinstatement_chain replacement tenant_id_len created_by_human',
@@ -405,6 +409,8 @@ const queryIndexes: Record<string, string> = {
   result_acknowledgements_result_idx: 'INDEX result_acknowledgements_result_idx ON public.result_acknowledgements USING btree (tenant_id, result_id, seq)',
   result_render_events_result_idx: 'INDEX result_render_events_result_idx ON public.result_render_events USING btree (tenant_id, result_id, received_at)',
   evaluations_tenant_report_idx: 'INDEX evaluations_tenant_report_idx ON public.evaluations USING btree (tenant_id, report_id, seq)',
+  evaluations_structured_revision_idx:
+    'INDEX evaluations_structured_revision_idx ON public.evaluations USING btree (structured_revision_id) WHERE (structured_revision_id IS NOT NULL)',
   evaluations_tenant_patient_idx: 'INDEX evaluations_tenant_patient_idx ON public.evaluations USING btree (tenant_id, patient_id, seq)',
   evaluation_results_tenant_evaluation_idx: 'INDEX evaluation_results_tenant_evaluation_idx ON public.evaluation_results USING btree (tenant_id, evaluation_id, ordinal)',
   evaluation_gene_states_tenant_evaluation_idx: 'INDEX evaluation_gene_states_tenant_evaluation_idx ON public.evaluation_gene_states USING btree (tenant_id, evaluation_id)',

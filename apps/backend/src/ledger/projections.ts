@@ -429,7 +429,8 @@ const LOADERS: Record<Exclude<RecordTable, 'evaluations'>, Loader> = {
 
 const EVALUATION_SQL = `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
        patient_id::text AS patient_id, report_id::text AS report_id, capture_id::text AS capture_id, capture_acceptance_id::text AS capture_acceptance_id,
-       disposition, hold_code, binding, knowledge_set_id, engine_version, gene_inputs, occurrences, identity_key
+       disposition, hold_code, binding, knowledge_set_id, engine_version, gene_inputs, occurrences, identity_key,
+       source_kind, structured_revision_id::text AS structured_revision_id
   FROM evaluations WHERE id = ANY($1::uuid[])`;
 const RESULTS_SQL = `SELECT id::text AS id, evaluation_id::text AS evaluation_id, ordinal, drug, genes, outcome, reason_code, strength, citation, guideline_id,
        guideline_version, recommendation_text, implication, gene_evidence FROM evaluation_results WHERE evaluation_id = ANY($1::uuid[])`;
@@ -464,6 +465,8 @@ async function loadEvaluations(db: Queryable, ids: string[]): Promise<Map<string
       geneInputs: h.gene_inputs,
       occurrences: h.occurrences,
       identityKey: h.identity_key,
+      // Only a structured evaluation carries its source in the hashed projection: a PDF evaluation's projection, and so its hash, must not change.
+      ...(h.source_kind === 'structured-revision' ? { sourceKind: h.source_kind, structuredRevisionId: h.structured_revision_id } : {}),
       results: ownResults.map((r) => ({
         id: r.id,
         ordinal: r.ordinal,
