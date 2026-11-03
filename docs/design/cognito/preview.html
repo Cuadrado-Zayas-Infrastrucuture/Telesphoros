@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Telesphoros — Cognito branding preview</title>
+  <link rel="stylesheet" href="../../../apps/frontend/src/styles/tokens.css">
+  <link rel="stylesheet" href="preview.css">
+  <link rel="stylesheet" href="../../../infrastructure/terraform/cognito/hosted-ui.css">
+</head>
+<body class="background-customizable">
+  <main>
+    <header class="preview-note">
+      <h1>Cognito branding preview</h1>
+      <p>Illustrative layout, not a live AWS sign-in screen. Cognito controls the actual layout, font and copy. Fields are read-only and sign-in is disabled.</p>
+    </header>
+    <div class="preview-card">
+      <div class="banner-customizable">
+        <img class="logo-customizable" src="../../../apps/frontend/src/assets/telesphoros-shield-rx.png" width="256" height="256" alt="Telesphoros shield and Rx logo">
+      </div>
+      <section class="preview-fields" aria-label="Illustrative sign-in fields">
+        <h2>Sign in</h2>
+        <p class="textDescription-customizable">Sign in with your email and password.</p>
+        <label class="label-customizable" for="email">Email</label>
+        <input class="inputField-customizable" id="email" type="email" value="preview@example.test" readonly autocomplete="off">
+        <label class="label-customizable" for="password">Password</label>
+        <input class="inputField-customizable" id="password" type="password" value="synthetic-preview-only" readonly autocomplete="off">
+        <button class="submitButton-customizable" type="button" disabled>Sign in</button>
+        <details>
+          <summary>Show an example error</summary>
+          <p class="errorMessage-customizable">Example only: the sign-in could not be completed. Please try again.</p>
+        </details>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
