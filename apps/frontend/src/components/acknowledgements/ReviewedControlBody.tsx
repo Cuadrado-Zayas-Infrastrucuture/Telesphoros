@@ -1,3 +1,4 @@
+import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useEffect, useRef, useState } from 'react';
 import { ackKindFor, type AckKind, type ResultAcknowledgementCreateInput, type ResultAcknowledgementDto, type ResultAcknowledgementsDto } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
@@ -90,11 +91,7 @@ export function ReviewedControlBody({ resultId }: { resultId: string }) {
 
   return (
     <div role="group" aria-label={`Review of result ${resultId}`} className="flex flex-wrap items-center gap-3 text-sm">
-      {view.state === 'loading' && (
-        <p role="status" className="text-muted-foreground">
-          Loading review status…
-        </p>
-      )}
+      {view.state === 'loading' && <ContentSkeleton label="Loading review status…" variant="compact" />}
       {view.state === 'load-failed' && (
         <>
           <p role="alert" className="text-destructive">

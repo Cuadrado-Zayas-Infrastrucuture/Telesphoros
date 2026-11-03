@@ -1,3 +1,4 @@
+import { Skeleton } from '@/components/ui/Skeleton';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpFromLine, Check, ChevronDown, ChevronRight, Minus, RefreshCw, SlidersHorizontal, X } from 'lucide-react';
@@ -251,6 +252,7 @@ export default function ReportsPage() {
                 </Button>
               )}
             </div>
+            {patientsLoading && <Skeleton className="h-10 w-full" />}
             {patientMeta.totalPages <= 1 && (
               <p role="status" className={patientsLoading || !patients || patients.meta.total === 0 ? 'text-xs text-muted-foreground' : 'sr-only'}>
                 {patientsLoading

@@ -7,7 +7,7 @@ import { WRITER_ROLES } from '@/auth/roles';
 import { DemographicsSection } from '@/components/patients/DemographicsSection';
 import { MedicationsSection } from '@/components/patients/MedicationsSection';
 import { Button } from '@/components/ui/Button';
-import { Skeleton } from '@/components/ui/Skeleton';
+import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { when } from '@/lib/formatWhen';
 import { SubmitError } from '@/lib/api';
@@ -80,12 +80,7 @@ export default function PatientPage() {
     );
   }
   if (!patient || patient.id !== id || !read) {
-    return (
-      <div className="flex flex-col gap-3" aria-busy="true">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-40 w-full" />
-      </div>
-    );
+    return <ContentSkeleton label="Loading patient record…" variant="detail" />;
   }
 
   return (

@@ -1,3 +1,4 @@
+import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import type { FollowupDto, FollowupInput } from '@telesphoros/shared-types';
@@ -76,7 +77,7 @@ export function FollowupsList({ patientId, initialSaved = false, onEditingChange
           </Button>
         </div>
       ) : !data ? (
-        <p role="status">Loading follow-ups…</p>
+        <ContentSkeleton label="Loading follow-ups…" variant="list" />
       ) : (
         <>
           <p className="text-sm">

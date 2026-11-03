@@ -1,3 +1,4 @@
+import { ChatLoading } from './ChatLoading';
 // Adapted from Prompt Kit; no inferred model thoughts or latency claims.
 import { Button } from '@/components/ui/Button';
 import { Loader } from './Loader';
@@ -20,6 +21,7 @@ export function ThinkingBar({ text, stage, onStop }: { text: string; stage: numb
         ))}
       </div>
       <p className="mt-2 text-xs text-muted-foreground">Simulated preparation · phase {stage + 1} of 3</p>
+      <ChatLoading />
     </div>
   );
 }

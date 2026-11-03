@@ -173,3 +173,11 @@
     }
   }
 }
+
+/* Retain mounted page state during lazy navigation; show placeholders until the new route is ready. */
+.route-pending {
+  min-height: 32rem;
+}
+.route-pending > :not(.route-skeleton) {
+  visibility: hidden;
+}

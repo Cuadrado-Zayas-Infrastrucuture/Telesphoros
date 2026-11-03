@@ -1,3 +1,4 @@
+import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useEffect, useState } from 'react';
 import type { EvaluationSummaryDto, Paginated } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
@@ -39,7 +40,7 @@ export function ResultsList({ patientId, followupBusy, onFollowup }: { patientId
         </Button>
       </div>
     );
-  if (!data) return <p role="status">Loading stored results…</p>;
+  if (!data) return <ContentSkeleton label="Loading stored results…" variant="list" />;
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">Stored synthetic results. Clinical use is not approved. Decisions below document intent only.</p>

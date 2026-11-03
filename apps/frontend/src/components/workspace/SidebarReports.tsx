@@ -1,3 +1,4 @@
+import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useCallback, useEffect, useState } from 'react';
 import type { ReportDto } from '@telesphoros/shared-types';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
@@ -55,7 +56,7 @@ export function SidebarReports() {
           </Button>
         </div>
       ) : reports === null ? (
-        <p className="text-xs text-muted-foreground">Loading…</p>
+        <ContentSkeleton label="Loading reports…" variant="compact" />
       ) : reports.length === 0 ? (
         <p className="text-xs text-muted-foreground">No reports yet.</p>
       ) : (

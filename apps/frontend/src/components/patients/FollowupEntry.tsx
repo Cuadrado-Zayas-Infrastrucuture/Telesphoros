@@ -1,3 +1,4 @@
+import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useEffect, useRef, useState } from 'react';
 import { followupQuerySchema, type FollowupDto } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
@@ -45,7 +46,7 @@ export function FollowupEntry({ patientId, threadId, onClose, onSaved }: { patie
       {!canonical ? (
         <p role="alert">That follow-up link is invalid.</p>
       ) : state.kind === 'loading' ? (
-        <p role="status">Loading selected follow-up…</p>
+        <ContentSkeleton label="Loading selected follow-up…" variant="detail" />
       ) : state.kind === 'failed' ? (
         <div className="flex flex-col items-start gap-2">
           <p role="alert">This follow-up could not be loaded. Please retry.</p>
