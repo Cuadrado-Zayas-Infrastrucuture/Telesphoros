@@ -36,10 +36,22 @@ export async function insertEvaluationProvenance(
   tenantId: string,
   actor: string,
   evaluationId: string,
-  input: { origin: DataOrigin; captureId: string; captureAcceptanceId: string | null; engineVersion: string; knowledgeSetId: string },
+  input: { origin: DataOrigin; captureId: string | null; structuredRevisionId?: string; captureAcceptanceId: string | null; engineVersion: string; knowledgeSetId: string },
 ): Promise<string> {
   const origin = requireDataOrigin(input.origin);
   const id = newId();
+  if (input.structuredRevisionId !== undefined) {
+    // A structured evaluation reads the revision's own source hash, and its parent asset is the revision (032 S3).
+    const structured = await client.query(
+      `INSERT INTO data_provenance (id, tenant_id, created_by, ledger_event_id, subject_kind, evaluation_id, origin, interpretation, document_sha256,
+                                    transform_engine_version, transform_knowledge_set_id, parent_kind, parent_id)
+         SELECT $1, $2, $3, $4, 'evaluation', $5, $6, 'software-derived', r.report_sha256, $7, $8, 'structured-revision', r.id
+           FROM structured_report_revisions r WHERE r.id = $9 AND r.tenant_id = $2`,
+      [id, tenantId, actor, newId(), evaluationId, origin, input.engineVersion, input.knowledgeSetId, input.structuredRevisionId],
+    );
+    if (structured.rowCount !== 1) throw new Error('The structured revision an evaluation rests on was not found, so its provenance cannot be stored.');
+    return id;
+  }
   const inserted = await client.query(
     `INSERT INTO data_provenance (id, tenant_id, created_by, ledger_event_id, subject_kind, evaluation_id, origin, interpretation, document_sha256,
                                   transform_engine_version, transform_knowledge_set_id, parent_kind, parent_id)

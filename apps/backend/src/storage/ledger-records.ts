@@ -93,8 +93,11 @@ export interface EvaluationInput {
   origin: DataOrigin;
   patientId: string;
   reportId: string;
-  captureId: string;
+  /** The accepted PDF capture the evaluation rests on. Null exactly when `structuredRevisionId` names the source instead (032 S3). */
+  captureId: string | null;
   captureAcceptanceId: string | null;
+  /** The stored structured laboratory revision the evaluation rests on, in place of a capture. Never set together with `captureId`. */
+  structuredRevisionId?: string;
   disposition: 'held' | 'evaluated';
   holdCode: string | null;
   /** The adapter's SourceBinding. */

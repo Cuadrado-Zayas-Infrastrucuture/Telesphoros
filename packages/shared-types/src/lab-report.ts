@@ -171,7 +171,8 @@ export const evaluationDtoSchema = z.strictObject({
   id: z.uuid(),
   reportId: z.uuid(),
   patientId: z.uuid(),
-  captureId: z.uuid(),
+  /** Null for an evaluation that rests on a stored structured revision, which has no capture (032 S3). */
+  captureId: z.uuid().nullable(),
   /** The decision this relied on, and whether it is still the latest decision about its capture. */
   acceptance: z.strictObject({ id: z.uuid(), decision: z.enum(['accepted', 'rejected']), current: z.boolean() }).nullable(),
   disposition: z.enum(['held', 'evaluated']),
