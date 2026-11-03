@@ -27,12 +27,6 @@ async function fill(page: Page, fixture: { id: string; label: string }, name: st
 async function navigateAwayAndBack(page: Page) {
   await page.getByRole('button', { name: 'Close resume report upload', exact: true }).click();
   await expect(page).toHaveURL(/\/workspace$/);
-  // History changes before React commits: wait for the upload page to actually unmount.
-  await expect(page.getByRole('dialog', { name: 'Resume report upload', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('textbox', { name: 'Question', exact: true })).toBeVisible();
-  await page.goBack();
-  await expect(page).toHaveURL(/\/reports\/upload$/);
-  await expect(page.getByRole('dialog', { name: 'Resume report upload', exact: true })).toBeVisible();
   // History updates before React commits the route. Back must follow the actual unmount,
   // otherwise both navigations can retain the submitting form instead of exercising recovery.
   const panel = page.getByRole('dialog', { name: 'Resume report upload', exact: true });
