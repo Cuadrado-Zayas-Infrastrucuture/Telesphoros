@@ -176,6 +176,21 @@ describe('synthetic report revision inspection', () => {
     expect(group([source(), source(2, 2), branch])).toMatchObject({ state: 'held', candidate: null });
     expect(group([source(), source(2, 2), branch]).reasons).toContain('duplicate-revision-content');
   });
+  it('names same-revision conflicts without choosing a source, and ignores identical re-uploads', () => {
+    const find = (sources: ReturnType<typeof source>[]) => contracts.findSyntheticPgxRevisionConflicts({ tenantId, patientId, sources });
+    const a = source();
+    const twin = source(2);
+    expect(find([a, twin])).toEqual([]);
+    const changedHash = source(3);
+    changedHash.sha256 = 'a'.repeat(64);
+    const changedContent = source(4);
+    changedContent.report.limitations = ['Different source content.'];
+    expect(find([a, changedHash, changedContent, source(5, 2)])).toEqual([
+      { laboratoryId: a.report.laboratoryId, seriesId: a.report.seriesId, revision: 1, sourceIds: [sourceId(1), sourceId(3), sourceId(4)] },
+    ]);
+    expect(find([changedContent, a, changedHash])).toEqual(find([a, changedHash, changedContent]));
+    expect(() => contracts.findSyntheticPgxRevisionConflicts({ tenantId, patientId, sources: [{ ...a, patientId: otherId }] })).toThrow('Invalid synthetic lineage snapshot.');
+  });
   it('is independent of all input permutations and does not mutate caller objects', () => {
     const input = [source(), source(2, 2), source(3, 3)];
     const original = structuredClone(input);
