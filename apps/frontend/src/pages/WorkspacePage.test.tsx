@@ -352,6 +352,23 @@ describe('the chat-first home in every build (specs/024)', () => {
     expect(submitReport).not.toHaveBeenCalled();
   });
 
+  it('keeps the attachment Undo while the pointer is on it and starts the clock again when the pointer leaves', async () => {
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.upload(file(), json());
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove file' }));
+    const notice = screen.getByRole('button', { name: 'Undo attachment removal' }).closest('[role="status"]')!;
+    fireEvent.mouseEnter(notice);
+    act(() => vi.advanceTimersByTime(30_000));
+    expect(screen.getByRole('button', { name: 'Undo attachment removal' })).toBeInTheDocument();
+    fireEvent.mouseLeave(notice);
+    act(() => vi.advanceTimersByTime(7_999));
+    expect(screen.getByRole('button', { name: 'Undo attachment removal' })).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.queryByRole('button', { name: 'Undo attachment removal' })).not.toBeInTheDocument();
+  });
+
   it('a replacement attachment supersedes the removed file instead of leaving an Undo that restores stale input', async () => {
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
