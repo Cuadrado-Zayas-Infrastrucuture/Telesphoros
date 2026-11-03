@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { structuredConflictSchema, structuredReviewStateSchema } from './structured-review';
 
 export const structuredRecordCreateSchema = z.strictObject({
   patientId: z.uuid(),
@@ -19,6 +20,8 @@ const history = z.strictObject({
   createdAt: z.iso.datetime(),
   findingIds: z.array(z.string()).max(50),
   currentBinding: z.boolean(),
+  // Set only by a current explicit source resolution. A not-selected source stays in history and is never deleted.
+  selection: z.enum(['selected', 'not-selected']).nullable(),
 });
 export const structuredRecordStateSchema = z.strictObject({
   reportId: z.uuid(),
@@ -27,6 +30,8 @@ export const structuredRecordStateSchema = z.strictObject({
   history: z.array(history).max(100),
   state: z.enum(['not-recorded', 'candidate-for-review', 'superseded', 'held']),
   reasons: z.array(z.string()).max(20),
+  review: structuredReviewStateSchema,
+  conflict: structuredConflictSchema.nullable(),
   synthetic: z.literal(true),
   clinicalUse: z.literal('not-approved'),
   actionable: z.literal(false),
