@@ -1,6 +1,6 @@
 // Guards for the image-signing key, the GitHub OIDC trust and the CI release role (signing.tf), audit finding INF-03, specs/002-signed-image-release
 // (plan approved 2026-10-20). Imported by guard.test.mjs, so `pnpm test:infra` runs it. The key and the role exist only when API
-// hosting is on AND the GitHub repository IDs are set, and the founder applies them after the BAA.
+// hosting is on AND the GitHub repository IDs are set (or, on synthetic staging only, named roles: D6), and the founder applies them.
 // Like the other guards it reads Terraform TEXT. `signingProblems` returns what is wrong with a copy of the text (empty when nothing is); the tests run it on
 // the real file and on deliberately broken copies, so every rule has been seen to fail.
 import assert from 'node:assert/strict';
@@ -38,12 +38,13 @@ export function signingProblems({ signing, registry }) {
   const statements = (doc) => blocks(doc, 'statement \\{');
   const bySid = (doc, sid) => statements(doc).find((s) => has(s, `sid = "${sid}"`)) ?? '';
 
-  // Off unless API hosting is on AND the repository is named by its immutable IDs (dormant until the founder sets them).
-  need(has(signing, 'image_release_count = local.api_count == 1 && var.github_repository_id != "" ? 1 : 0'), 'the release path must exist only with API hosting on and the GitHub repository ID set');
+  // Off unless API hosting is on AND the repository is named by its immutable IDs, or named roles are listed (D6) (dormant until the founder sets them).
+  need(has(signing, 'image_release_github = var.github_repository_id != ""') && has(signing, 'image_release_humans = length(var.image_release_human_principals) > 0'), 'the two ways in are derived from the repository ID and the named-role list');
+  need(has(signing, 'image_release_count = local.api_count == 1 && (local.image_release_github || local.image_release_humans) ? 1 : 0'), 'the release path must exist only with API hosting on and the GitHub repository ID or named roles set');
   for (const r of ['resource "aws_kms_key" "image_signing"', 'resource "aws_kms_alias" "image_signing"', 'resource "aws_iam_role" "image_release"', 'resource "aws_iam_role_policy" "image_release"']) {
     need(has(one(signing, r), 'count = local.image_release_count'), `${r} must be counted by local.image_release_count`);
   }
-  need(has(one(signing, 'resource "aws_iam_openid_connect_provider" "github"'), 'count = local.image_release_count == 1 && var.github_oidc_provider_arn == "" ? 1 : 0'), 'the OIDC provider is created only when no existing one is named (D2)');
+  need(has(one(signing, 'resource "aws_iam_openid_connect_provider" "github"'), 'count = local.image_release_count == 1 && local.image_release_github && var.github_oidc_provider_arn == "" ? 1 : 0'), 'the OIDC provider is created only for the GitHub path and when no existing one is named (D2)');
 
   // The key: asymmetric, signing only, profile deletion window, its own policy. KMS cannot rotate an asymmetric key, so no rotation flag (D4: manual, annual).
   const key = one(signing, 'resource "aws_kms_key" "image_signing"');
@@ -79,6 +80,17 @@ export function signingProblems({ signing, registry }) {
   }
   need(conds.length === Object.keys(conditions).length, `the trust policy must have exactly ${Object.keys(conditions).length} conditions (found ${conds.length})`);
   need(!/StringLike/.test(code(trust)), 'no StringLike in the trust policy: no wildcard branch, environment or workflow');
+  need(has(trust, 'for_each = local.image_release_github ? [1] : []'), 'the GitHub statement exists only when the repository IDs are set');
+
+  // D6, synthetic staging only: the named roles become the release role by exact ARN, never in production, never from another account.
+  const humans = blocks(code(trust), 'dynamic "statement" \\{').find((b) => has(b, 'sid = "NamedRolesOnSyntheticStaging"')) ?? '';
+  need(has(humans, 'for_each = local.image_release_humans ? [1] : []') && has(humans, 'actions = ["sts:AssumeRole"]') && has(humans, 'type = "AWS"') && has(humans, 'identifiers = var.image_release_human_principals'), 'named roles may only sts:AssumeRole, by the exact ARNs listed');
+  need(!/"\*"/.test(humans), 'no wildcard principal for the named roles');
+  const variable = one(signing, 'variable "image_release_human_principals"');
+  need(has(variable, 'default = []') && variable.includes(':role/[A-Za-z0-9+=,.@_/-]{1,512}$'), 'the named-role list is empty by default and accepts role ARNs only');
+  const role = one(signing, 'resource "aws_iam_role" "image_release"');
+  need(has(role, 'condition = !local.image_release_humans || var.environment != "production"'), 'the release role refuses named roles in production');
+  need(has(role, 'condition = alltrue([for arn in var.image_release_human_principals : startswith(arn, "arn:aws:iam::${local.audit_account_id}:role/")])'), 'named roles must belong to the stack\'s account');
 
   // The role's permissions (FR-003): log in, push to the API repository only, sign with the key only.
   const perms = one(signing, 'data "aws_iam_policy_document" "image_release"');
@@ -94,7 +106,7 @@ export function signingProblems({ signing, registry }) {
   // The registry (FR-002 edge cases, D2): all three repository values or none; production with API hosting needs the release path.
   const repo = one(registry, 'resource "aws_ecr_repository" "api"');
   need(has(repo, 'condition = (var.github_repository == "") == (var.github_repository_id == "") && (var.github_repository_id == "") == (var.github_repository_owner_id == "")'), 'the three GitHub repository values must be set together or not at all');
-  need(has(repo, 'condition = var.environment != "production" || local.image_release_count == 1'), 'production must not get an image registry without the signed release path (INF-03)');
+  need(has(repo, 'condition = var.environment != "production" || (local.image_release_count == 1 && local.image_release_github && !local.image_release_humans)'), 'production must not get an image registry without the CI signed release path, nor with named roles (INF-03, D6)');
 
   // D5: count tagged images only, so signatures (untagged OCI 1.1 referrers, expired by ECR with their image) never take a slot.
   const lifecycle = one(registry, 'resource "aws_ecr_lifecycle_policy" "api"');
@@ -110,9 +122,16 @@ test('the signing key, OIDC trust and release role have no problems (and the sca
 test('the signing guard reports each way the text could be weakened (controls)', () => {
   const s = files.signing;
   const weakened = [
-    ['signing', 'the release path always on', 'local.api_count == 1 && var.github_repository_id != "" ? 1 : 0', 'local.api_count'],
+    ['signing', 'the release path always on', 'local.api_count == 1 && (local.image_release_github || local.image_release_humans) ? 1 : 0', 'local.api_count'],
     ['signing', 'the key not counted', /(resource "aws_kms_key" "image_signing" \{\n)\s+count\s+= local\.image_release_count\n/, '$1'],
-    ['signing', 'the provider always created', 'count          = local.image_release_count == 1 && var.github_oidc_provider_arn == "" ? 1 : 0', 'count          = local.image_release_count'],
+    ['signing', 'the provider always created', 'count          = local.image_release_count == 1 && local.image_release_github && var.github_oidc_provider_arn == "" ? 1 : 0', 'count          = local.image_release_count'],
+    ['signing', 'the GitHub statement without its IDs', 'for_each = local.image_release_github ? [1] : []', 'for_each = [1]'],
+    ['signing', 'named roles always trusted', 'for_each = local.image_release_humans ? [1] : []', 'for_each = [1]'],
+    ['signing', 'any principal for named roles', 'identifiers = var.image_release_human_principals', 'identifiers = ["*"]'],
+    ['signing', 'named roles get another STS action','actions = ["sts:AssumeRole"]', 'actions = ["sts:AssumeRole", "sts:TagSession"]'],
+    ['signing', 'users or wildcards accepted', ':role/[A-Za-z0-9+=,.@_/-]{1,512}$', ':.*$'],
+    ['signing', 'named roles in production', 'condition     = !local.image_release_humans || var.environment != "production"', 'condition     = true'],
+    ['signing', 'named roles from another account', 'startswith(arn, "arn:aws:iam::${local.audit_account_id}:role/")', 'startswith(arn, "arn:aws:iam::")'],
     ['signing', 'a symmetric key', 'customer_master_key_spec = "ECC_NIST_P256"', 'customer_master_key_spec = "SYMMETRIC_DEFAULT"'],
     ['signing', 'an encryption key', 'key_usage                = "SIGN_VERIFY"', 'key_usage                = "ENCRYPT_DECRYPT"'],
     ['signing', 'rotation set on an asymmetric key', 'key_usage                = "SIGN_VERIFY"\n', 'key_usage                = "SIGN_VERIFY"\n  enable_key_rotation      = true\n'],
@@ -121,7 +140,7 @@ test('the signing guard reports each way the text could be weakened (controls)',
     ['signing', 'the deny exempts everyone', 'test     = "ArnNotEquals"', 'test     = "ArnLike"'],
     ['signing', 'the role may decrypt', 'actions   = ["kms:Sign", "kms:GetPublicKey", "kms:DescribeKey"]\n    resources = ["*"]', 'actions   = ["kms:Sign", "kms:GetPublicKey", "kms:DescribeKey", "kms:Decrypt"]\n    resources = ["*"]'],
     ['signing', 'any branch', 'values   = ["refs/heads/main"]', 'values   = ["refs/heads/*"]'],
-    ['signing', 'a wildcard trust', 'test     = "StringEquals"\n      variable = "token.actions.githubusercontent.com:ref"', 'test     = "StringLike"\n      variable = "token.actions.githubusercontent.com:ref"'],
+    ['signing', 'a wildcard trust', 'test     = "StringEquals"\n        variable = "token.actions.githubusercontent.com:ref"', 'test     = "StringLike"\n        variable = "token.actions.githubusercontent.com:ref"'],
     ['signing', 'the environment not required', /\n\s+condition \{\n\s+test\s+= "StringEquals"\n\s+variable = "token\.actions\.githubusercontent\.com:environment"\n\s+values\s+= \[var\.image_release_environment\]\n\s+\}/, ''],
     ['signing', 'trust by repository name instead of ID', 'variable = "token.actions.githubusercontent.com:repository_id"', 'variable = "token.actions.githubusercontent.com:repository"'],
     ['signing', 'another workflow file may sign', '/.github/workflows/ci.yml@refs/heads/main', '/.github/workflows/rescan.yml@refs/heads/main'],
@@ -129,7 +148,9 @@ test('the signing guard reports each way the text could be weakened (controls)',
     ['signing', 'the role may delete images', '"ecr:PutImage",', '"ecr:PutImage", "ecr:BatchDeleteImage",'],
     ['signing', 'the role signs with any key', 'resources = [aws_kms_key.image_signing[0].arn]', 'resources = ["*"]'],
     ['registry', 'half-configured repository values', 'condition     = (var.github_repository == "") == (var.github_repository_id == "") && (var.github_repository_id == "") == (var.github_repository_owner_id == "")', 'condition     = true'],
-    ['registry', 'production without the signed path', 'condition     = var.environment != "production" || local.image_release_count == 1', 'condition     = true'],
+    ['registry', 'production without the signed path', 'condition     = var.environment != "production" || (local.image_release_count == 1 && local.image_release_github && !local.image_release_humans)', 'condition     = true'],
+    ['registry', 'production with named roles only', 'local.image_release_count == 1 && local.image_release_github && !local.image_release_humans)', 'local.image_release_count == 1)'],
+    ['registry', 'production with named roles beside CI', ' && !local.image_release_humans)', ')'],
     ['registry', 'signatures counted as images', 'tagStatus      = "tagged"\n        tagPatternList = ["*"]', 'tagStatus      = "any"'],
   ];
   for (const [file, name, from, to] of weakened) {

@@ -1,0 +1,15 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {"Federated": "arn:aws:iam::<account>:oidc-provider/token.actions.githubusercontent.com"},
+    "Action": "sts:AssumeRoleWithWebIdentity",
+    "Condition": {"StringEquals": {
+      "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+      "token.actions.githubusercontent.com:sub": "repo:Cuadrado-Zayas-Infrastrucuture/Telesphoros:environment:staging-frontend",
+      "token.actions.githubusercontent.com:repository_id": "<repository_id>",
+      "token.actions.githubusercontent.com:repository_owner_id": "<repository_owner_id>",
+      "token.actions.githubusercontent.com:job_workflow_ref": "Cuadrado-Zayas-Infrastrucuture/Telesphoros/.github/workflows/staging-frontend.yml@refs/heads/main"
+    }}
+  }]
+}
