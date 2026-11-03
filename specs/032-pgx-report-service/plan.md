@@ -1,6 +1,6 @@
 # Implementation proposal
 
-Status: Design for review. The current slice writes specifications only. No runtime, migration, knowledge, CI, cloud or clinical-gate changes are included. Implementation slices below require their own bounded plans and acceptance evidence.
+Status: The service design remains a proposal for clinical review. S1 synthetic contracts/fixtures are merged; S2a adds owned-local inspection of stored laboratory evidence and independent patient-link review ([bounded plan](../../docs/design/plans/pgx-structured-intake.md)). The remaining slices below require their own plans and acceptance evidence. No clinical gate is opened.
 
 ## Existing mechanisms and gaps
 
@@ -52,3 +52,7 @@ Build the investor demonstration from S1–S3 using clearly synthetic content. S
 Proposed event chain: issued report revision → reviewed finding → assessment/context/rule snapshot → clinician decision → separately documented medication exposure → dated follow-up. Use durable IDs and effective/recorded times. Preserve missingness, prior exposure, indication, dose, concomitant medicines and instrument versions where actually collected; never fabricate them from a decision.
 
 First useful physician views: follow-up completion/due counts, assessment coverage/missing prerequisites, decision distributions and longitudinal patient measurements with units. Observational comparisons must disclose eligibility, denominators, follow-up windows, loss to follow-up and confounding. No efficacy claim follows from a response chart. Keep care/QI, research and commercial secondary-use permissions distinct; hashed patient IDs alone are not de-identification. This proposal adds no export or new data-use authorization.
+
+## S2b1 bounded continuation
+
+The [revision inspection slice](../../docs/design/plans/pgx-revision-reconciliation.md) implements deterministic duplicate/conflict and amendment-chain classification as a pure shared-contract function. It is independently branched from main and does not depend on the S2a UI branch. It supplies candidate source references for future review, never persistence, acceptance or a current clinical profile. Immutable normalized records, transactional reconciliation and assessment-impact tasks remain S2 follow-ups.
