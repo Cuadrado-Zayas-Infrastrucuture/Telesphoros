@@ -28,10 +28,11 @@ resource "aws_ecr_repository" "api" {
       condition     = (var.github_repository == "") == (var.github_repository_id == "") && (var.github_repository_id == "") == (var.github_repository_owner_id == "")
       error_message = "Set github_repository, github_repository_id and github_repository_owner_id together, or none of them (signing.tf)."
     }
-    # INF-03: production must not get a registry whose images nobody signed. The signed release path (signing.tf) needs the repository IDs.
+    # INF-03: production must not get a registry whose images nobody signed. The signed release path (signing.tf) needs the repository IDs, and
+    # production never lets a person become the release role (D6): a release role created only for named roles does not count.
     precondition {
-      condition     = var.environment != "production" || local.image_release_count == 1
-      error_message = "Production with API hosting requires the signed image release path: set github_repository, github_repository_id and github_repository_owner_id (signing.tf, INF-03)."
+      condition     = var.environment != "production" || (local.image_release_count == 1 && local.image_release_github && !local.image_release_humans)
+      error_message = "Production with API hosting requires the signed image release path through CI: set github_repository, github_repository_id and github_repository_owner_id, and leave image_release_human_principals empty (signing.tf, INF-03, D6)."
     }
   }
 }

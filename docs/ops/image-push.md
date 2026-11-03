@@ -47,6 +47,35 @@ one hour (`max_session_duration = 3600`). The trust policy accepts only this rep
 
 Nothing else. The key policy also **denies** `kms:Sign` to every other principal, so an IAM policy added later cannot create a second signer.
 
+### Synthetic staging without GitHub OIDC: a person runs the release step (D6)
+
+The staging account's AWS-managed service control policy denies `iam:*Provider*`, so no GitHub OIDC provider can exist there and the job above
+cannot get credentials. Decision D6 (`specs/002-signed-image-release/plan.md`) adds a staging-only door: roles listed in
+`image_release_human_principals` may assume the same release role, and a person runs CI's own `release-image.sh` on the archive CI built. The key
+policy does not change: the release role is still the only signer, with the same narrow permissions, for at most one hour. Terraform refuses the list in
+production and refuses roles of another account. This is **not** break-glass: the image is the one CI scanned and rehearsed, and the record says
+`signature`. It does lose one proof, that the push came from CI on `main`, so step 3 below is not optional.
+
+1. Set `image_release_human_principals = ["arn:aws:iam::<account>:role/<your role>"]` (and `image_release_human_require_mfa = true` if your
+   session carries MFA), then plan and apply as usual. The outputs `image_release_role_arn` and `image_signing_key_alias` are then set.
+2. Get an archive from CI: run the `ci` workflow on `main` by hand (Actions, `ci`, Run workflow). A manual run always builds the `image` job's
+   archive (`.github/ci/scope.mjs`). Download its artifact `api-image-with-attestations` within a day (`retention-days: 1`), and note the `image`
+   job's digest and the run's full commit.
+3. Check the archive is the scanned one, exactly as the job does:
+   `node infrastructure/docker/image-digest.mjs digest api.oci.tar` must print `digest=<the image job's digest>`. Stop if it does not.
+4. With a profile whose `role_arn` is `image_release_role_arn` (your listed role as its source), and cosign v3.1.3 and crane v0.22.1 on `PATH`
+   (`infrastructure/docker/release-tools.sh` installs the linux/amd64 builds CI uses; on a Mac, install the same versions and check them against their
+   published checksums):
+
+   ```sh
+   AWS_REGION=<region> IMAGE_REPOSITORY_URL=<api_repository_url> IMAGE_SIGNING_KEY_ALIAS=<image_signing_key_alias> \
+   IMAGE_DIGEST=<the image job's digest> GITHUB_SHA=<the run's full commit> \
+   infrastructure/docker/release-image.sh api.oci.tar
+   ```
+
+   It pushes under `git-<first 12 characters>`, checks ECR kept the digest, signs it and verifies it.
+5. Verify and record it as for any signed image (below), with your own credentials, into the release directory when a release script needs it there.
+
 ## Before setting `api_image`: verify the signature
 
 `check-plan.mjs` stage C refuses a plan unless `verified-image.json` sits next to the saved plan and covers every image the plan deploys. Write it
