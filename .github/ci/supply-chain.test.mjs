@@ -20,7 +20,7 @@ const real = {
 };
 
 /** The only workflow files allowed on main. Adding one means changing this line, in review. */
-export const WORKFLOWS = ['ci.yml', 'e2e-storage.yml', 'rescan.yml'];
+export const WORKFLOWS = ['ci.yml', 'e2e-storage.yml', 'rescan.yml', 'staging-frontend.yml'];
 
 const code = (text) => text.split('\n').filter((line) => !/^\s*#/.test(line)).join('\n');
 
@@ -39,7 +39,7 @@ export function supplyChainProblems({ workflows, requirementsIn, requirementsTxt
     }
     // The one exception (INF-03, release.test.mjs pins where it lives): ci.yml's release-image job asks for an OIDC token.
     const writes = text.split('\n').filter((line) => /:\s*write\b/.test(line));
-    need(/^permissions:\n {2}contents: read\n/m.test(raw) && (writes.length === 0 || (name === 'ci.yml' && JSON.stringify(writes) === JSON.stringify(['      id-token: write']))), `${name}: permissions must be read-only (only ci.yml's release-image may ask for id-token: write)`);
+    need(/^permissions:\n {2}contents: read\n/m.test(raw) && (writes.length === 0 || (['ci.yml', 'staging-frontend.yml'].includes(name) && JSON.stringify(writes) === JSON.stringify(['      id-token: write']))), `${name}: permissions must be read-only (only image release and staging frontend may ask for id-token: write)`);
     need(!/pull_request_target/.test(text) && !/secrets\./.test(text), `${name}: no pull_request_target and no repository secrets`);
     // Container images by digest only: a tag can be re-pointed under a green check.
     for (const [, image] of text.matchAll(/^[ \t]*image:[ \t]*(\S+)/gm)) need(/@sha256:[0-9a-f]{64}$/.test(image), `${name}: image ${image} must be pinned by digest`);
