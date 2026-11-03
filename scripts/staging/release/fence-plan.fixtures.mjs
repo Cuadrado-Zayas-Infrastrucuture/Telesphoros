@@ -21,3 +21,22 @@ export function fencePlan(mode = 'FENCE-CLOSE', missing = false, runningImage = 
     ],
   };
 }
+
+/** What the provider reads back on a real replacement (the first live FENCE-CLOSE plan, 2026-11-02), with invented values. */
+export function providerReadBack(plan) {
+  const task = plan.resource_changes[0].change;
+  const volume = { name: 'scratch', host_path: '', docker_volume_configuration: [], efs_volume_configuration: [] };
+  const read = (side, extra) => { const c = JSON.parse(task[side].container_definitions); Object.assign(c[0], extra); task[side].container_definitions = JSON.stringify(c); };
+  read('before', { portMappings: [{ containerPort: 3000, hostPort: 3000, protocol: 'tcp' }], systemControls: [], volumesFrom: [] });
+  read('after', { portMappings: [{ containerPort: 3000, protocol: 'tcp' }] });
+  Object.assign(task.before, { ipc_mode: '', pid_mode: '', tags: {}, enable_fault_injection: false, volume: [{ ...volume, configure_at_launch: false }] });
+  Object.assign(task.after, { ipc_mode: null, pid_mode: null, tags: null, enable_fault_injection: null, volume: [volume] });
+  Object.assign(task.after_unknown, { enable_fault_injection: true, volume: [{ configure_at_launch: true, docker_volume_configuration: [] }], tags_all: {} });
+  plan.resource_drift = [
+    { address: 'aws_db_instance.main', mode: 'managed', type: 'aws_db_instance', change: { actions: ['update'],
+      before: { latest_restorable_time: '2026-01-01T00:00:00Z' }, after: { latest_restorable_time: '2026-01-02T00:00:00Z' } } },
+    { address: 'aws_cloudwatch_metric_alarm.example[0]', mode: 'managed', type: 'aws_cloudwatch_metric_alarm', change: { actions: ['update'],
+      before: { dimensions: null, ok_actions: null }, after: { dimensions: {}, ok_actions: [] } } },
+  ];
+  return plan;
+}
