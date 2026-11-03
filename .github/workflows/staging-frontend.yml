@@ -1,0 +1,74 @@
+name: staging-frontend
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: staging-frontend
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      vars.STAGING_FRONTEND_AUTO_DEPLOY == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: staging-frontend
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      AWS_REGION: us-east-2
+      AWS_EXPECTED_ACCOUNT: '403776649274'
+      WEB_BUCKET: telesphoros-staging-web-85b1e5378b2a7a0be7cfafa366
+      WEB_DISTRIBUTION_ID: E1WD7E7PP8PU73
+      VITE_OIDC_AUTHORITY: https://cognito-idp.us-east-2.amazonaws.com/us-east-2_CIf0CQGWC
+      VITE_OIDC_CLIENT_ID: 2mjjkupobec9r73fsu95h9ps5s
+      VITE_COGNITO_DOMAIN: https://telesphoros-staging.auth.us-east-2.amazoncognito.com
+      VITE_API_BASE_URL: https://api.staging.telesphoros.app
+      RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.22.0'
+      - id: gate
+        name: Only publish successful CI for current main
+        run: node .github/ci/staging-release.mjs
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        if: steps.gate.outputs.publish == 'true'
+      - name: Build and validate upload set without AWS credentials
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @telesphoros/shared-types build
+          bash scripts/staging/publish-frontend.sh
+          node -e 'require("fs").writeFileSync("apps/frontend/dist/release.json", JSON.stringify({commit:process.env.RELEASE_SHA}) + "\n")'
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        if: steps.gate.outputs.publish == 'true'
+        with:
+          role-to-assume: ${{ vars.STAGING_FRONTEND_ROLE_ARN }}
+          aws-region: us-east-2
+          allowed-account-ids: '403776649274'
+          role-session-name: staging-frontend-${{ github.run_id }}
+      - name: Recheck main, publish and verify the served commit
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_EXPECTED_ACCOUNT"
+          node .github/ci/staging-release.mjs --require-current
+          WEB_DISTRIBUTION_ID="" DIST_DIR="$PWD/apps/frontend/dist" bash scripts/staging/publish-frontend.sh --yes
+          invalidation="$(aws cloudfront create-invalidation --distribution-id "$WEB_DISTRIBUTION_ID" --paths '/*' --query Invalidation.Id --output text)"
+          aws cloudfront wait invalidation-completed --distribution-id "$WEB_DISTRIBUTION_ID" --id "$invalidation"
+          curl --fail --silent --show-error --retry 3 "https://app.staging.telesphoros.app/release.json?commit=$RELEASE_SHA" > "$RUNNER_TEMP/release.json"
+          node -e 'const r=require(process.env.RUNNER_TEMP+"/release.json"); if(r.commit!==process.env.RELEASE_SHA) throw Error("Served commit differs from release")'
+          echo "Published staging frontend: $RELEASE_SHA" >> "$GITHUB_STEP_SUMMARY"
