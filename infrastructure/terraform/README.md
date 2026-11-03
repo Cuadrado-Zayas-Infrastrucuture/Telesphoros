@@ -164,3 +164,7 @@ MFA, invite-only, password rules, token lifetimes or the client's flows. Details
 ## Reports download CORS
 
 The reports bucket permits browser GET from exactly `reports_cors_origins` (explicit HTTPS origins, with no wildcard/path/query/fragment/userinfo). Upload bytes enter through the authenticated API. `reports-cors.json` is the shared methods/headers/exposure/cache contract: include it whenever copying this Terraform module. The browser fixture and both local launchers substitute an explicit loopback origin while keeping that contract. CORS does not grant object access or replace IAM, tenant checks, signed version pins or download integrity checks. This local integration has not been applied to AWS.
+
+## Optional Cognito classic branding
+
+[Branding review and activation](../../docs/ops/cognito-branding.md) covers the generated app-palette CSS and unchanged product logo. This client-only customization is off by default. It requires an approved live-domain version observation and a reviewed infrastructure plan; it does not switch login versions, feature plans or authentication settings. The preview is illustrative, not a live Cognito screen.
