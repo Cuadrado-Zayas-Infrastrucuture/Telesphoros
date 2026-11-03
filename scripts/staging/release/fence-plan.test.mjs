@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { problems } from './release-check.mjs';
-import { fencePlan, FENCE_IMAGE } from './fence-plan.fixtures.mjs';
+import { fencePlan, FENCE_IMAGE, providerReadBack } from './fence-plan.fixtures.mjs';
 
 for (const mode of ['FENCE-CLOSE', 'FENCE-OPEN']) test(`${mode} accepts only its same-image medication setting transition`, () => {
   assert.deepEqual(problems(mode, fencePlan(mode), FENCE_IMAGE, FENCE_IMAGE), []);
@@ -53,6 +53,25 @@ test('opening needs the previous explicit disabled setting', () => {
 test('fence modes refuse changing image arguments and malformed plans', () => {
   assert.ok(problems('FENCE-CLOSE', fencePlan(), FENCE_IMAGE, FENCE_IMAGE.replace(/a{64}$/, 'b'.repeat(64))).length > 0);
   for (const plan of [null, {}, { resource_changes: [] }]) assert.ok(problems('FENCE-CLOSE', plan, FENCE_IMAGE, FENCE_IMAGE).length > 0);
+});
+
+test('the provider read-back of a real replacement is not a change (2026-11-02: the first live plan was refused for it)', () => {
+  assert.deepEqual(problems('FENCE-CLOSE', providerReadBack(fencePlan('FENCE-CLOSE', true)), FENCE_IMAGE, FENCE_IMAGE), []);
+});
+const readBack = (p) => p.resource_changes[0].change;
+for (const [name, edit] of [
+  ['a hostPort that differs from its containerPort', (p) => editContainer(p, (c) => { c.portMappings[0].hostPort = 8080; })],
+  ['a real system control', (p) => editContainer(p, (c) => { c.systemControls = [{ namespace: 'net.core.somaxconn', value: '1024' }]; })],
+  ['a volume change', (p) => { readBack(p).after.volume[0].host_path = '/data'; }],
+  ['fault injection that was on', (p) => { readBack(p).before.enable_fault_injection = true; }],
+  ['fault injection turned on', (p) => { readBack(p).after_unknown.enable_fault_injection = false; readBack(p).after.enable_fault_injection = true; }],
+  ['an IPC mode', (p) => { readBack(p).after.ipc_mode = 'host'; }],
+  ['drift outside the reviewed harmless list', (p) => { p.resource_drift.push({ address: 'aws_db_instance.main', mode: 'managed', type: 'aws_db_instance',
+    change: { actions: ['update'], before: { instance_class: 'db.t4g.micro' }, after: { instance_class: 'db.t4g.large' } } }); }],
+  ['another unknown attribute', (p) => { readBack(p).after_unknown.cpu = true; }],
+]) test(`with the provider read-back, a fence transition still refuses ${name}`, () => {
+  const plan = providerReadBack(fencePlan('FENCE-CLOSE', true)); edit(plan);
+  assert.ok(problems('FENCE-CLOSE', plan, FENCE_IMAGE, FENCE_IMAGE).length > 0);
 });
 
 test('Terraform may omit empty drift and output sections', () => {
