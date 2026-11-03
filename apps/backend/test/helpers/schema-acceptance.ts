@@ -3,6 +3,10 @@ import type { Client } from 'pg';
 // Hand-reviewed against the relationship design and original SQL, not generated from the live catalog.
 // Global containment clearances intentionally lack tenant-composite FKs: their functions check scope.
 const relationships: [string, string, string, string][] = [
+  // Spec 032 S2b2: immutable source/patient/review association; the trigger checks the latest review's complete binding.
+  ['structured_report_revisions_report_fk', 'structured_report_revisions', 'report_id,tenant_id', 'reports:id,tenant_id'],
+  ['structured_report_revisions_patient_fk', 'structured_report_revisions', 'patient_id,tenant_id', 'patients:id,tenant_id'],
+  ['structured_report_revisions_patient_link_decision_id_fkey', 'structured_report_revisions', 'patient_link_decision_id', 'report_patient_decisions:id'],
   // H1 (0050): immutable admission/source binding and inactive completion identity.
   ['evaluation_requests_tenant_id_fkey', 'evaluation_requests', 'tenant_id', 'tenants:id'],
   ['evaluation_requests_job_id_fkey', 'evaluation_requests', 'job_id', 'jobs:id'],
@@ -97,6 +101,7 @@ const relationships: [string, string, string, string][] = [
   ['agentic_synthetic_audit_tenant_id_run_id_fkey', 'agentic_synthetic_audit', 'tenant_id,run_id', 'agentic_synthetic_runs:tenant_id,run_id'],
 ];
 const primaryKeys: Record<string, string> = {
+  structured_report_revisions: 'id',
   evaluation_requests: 'id',
   evaluation_request_completions: 'request_id',
   evaluation_request_cancellations: 'request_id',
@@ -169,6 +174,7 @@ const primaryKeys: Record<string, string> = {
   agentic_synthetic_sources: 'tenant_id, source_id, source_version',
 };
 const uniqueKeys: Record<string, string> = {
+  structured_report_revisions_source_uq: 'tenant_id, report_id',
   evaluation_requests_tenant_id_requested_by_creation_request_key: 'tenant_id, requested_by, creation_request_id',
   evaluation_requests_id_tenant_id_key: 'id, tenant_id',
   evaluation_requests_job_id_key: 'job_id',
@@ -287,6 +293,7 @@ const checkNames: Record<string, string> = {
   use_restrictions: 'tenant_id_len created_by_len purpose interval reason_code',
   tenant_use_terms: 'tenant_id_len created_by_len refs interval purposes classifications',
   patient_followups: 'tenant_id_len created_by_len version action request_hash task_shape action_shape assessment_shape',
+  structured_report_revisions: 'tenant_id_check created_by_check report_sha256_check object_version_check parser_version_check shape',
   patient_medications: 'tenant_id_len created_by_len version rxcui name list_version status start_month stop_month month_order active_stop source request_hash',
   patient_demographics: 'tenant_id_len created_by_len version key_version nonces name_len dob_len sex birth_year ethnicity request_pair request_hash',
   patient_field_keys: 'tenant_id_len created_by_len version wrapped_len provider',
@@ -345,6 +352,7 @@ for (const table of [
   'patient_demographics',
   'patient_medications',
   'patient_followups',
+  'structured_report_revisions',
   'ledger_checkpoints',
 ]) {
   relationships.push([`${table}_event_fk`, table, 'ledger_event_id,tenant_id', 'ledger_events:id,tenant_id']);
@@ -352,6 +360,10 @@ for (const table of [
 
 // Query-facing definitions. Constraint-backed indexes and internal append-only guards are also covered by ledger-catalog/behavior suites.
 const queryIndexes: Record<string, string> = {
+  structured_report_revisions_patient_idx: 'INDEX structured_report_revisions_patient_idx ON public.structured_report_revisions USING btree (tenant_id, patient_id, seq)',
+  structured_report_revisions_event_idx: 'INDEX structured_report_revisions_event_idx ON public.structured_report_revisions USING btree (ledger_event_id, tenant_id)',
+  structured_report_revisions_issuer_idx:
+    "INDEX structured_report_revisions_issuer_idx ON public.structured_report_revisions USING btree (tenant_id, ((laboratory_report ->> 'laboratoryId'::text)))",
   patient_followups_patient_idx: 'INDEX patient_followups_patient_idx ON public.patient_followups USING btree (tenant_id, patient_id, thread_id, version DESC)',
   patient_followups_event_idx: 'INDEX patient_followups_event_idx ON public.patient_followups USING btree (ledger_event_id, tenant_id)',
   evaluation_requests_tenant_report: 'INDEX evaluation_requests_tenant_report ON public.evaluation_requests USING btree (tenant_id, report_id)',

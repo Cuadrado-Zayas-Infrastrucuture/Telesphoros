@@ -40,7 +40,24 @@ beforeEach(() => {
   vi.stubGlobal('location', { hostname: '127.0.0.1' });
   auth.roles = ['reviewer'];
   auth.apiFetch.mockReset();
-  auth.apiFetch.mockImplementation(async () => response(preview()));
+  auth.apiFetch.mockImplementation(async (path: string) =>
+    response(
+      path.endsWith('/record')
+        ? {
+            reportId: report.id,
+            patientId: report.patientId,
+            record: null,
+            history: [],
+            state: 'not-recorded',
+            reasons: [],
+            synthetic: true,
+            clinicalUse: 'not-approved',
+            actionable: false,
+            independentReviewRequired: true,
+          }
+        : preview(),
+    ),
+  );
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -150,11 +167,11 @@ it.each([
   expect(container).toBeEmptyDOMElement();
 });
 
-it('labels declared amendments as unreconciled and preserves their source revision', async () => {
+it('preserves the declared predecessor and source revision', async () => {
   const amended = JSON.parse(readFileSync('../../data/fixtures/pgx-contracts/amended/package.json', 'utf8')).report;
   auth.apiFetch.mockResolvedValue(response({ ...preview(), laboratoryReport: amended }));
   render(<StructuredReportPreview report={report} />);
   await open();
   expect(screen.getByText(/Revision 2/)).toBeVisible();
-  expect(screen.getByText(/Revision lineage has not been reconciled/)).toHaveTextContent(amended.previousRevisionId);
+  expect(screen.getByText(/Declared predecessor:/)).toHaveTextContent(amended.previousRevisionId);
 });
