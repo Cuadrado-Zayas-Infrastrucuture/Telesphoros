@@ -6,7 +6,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { WorkspaceSidebar } from '@/components/layout/WorkspaceSidebar';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SkipLink } from '@/components/layout/SkipLink';
-import { Spinner } from '@/components/ui/Spinner';
+import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useRouteFocus } from '@/hooks/useRouteFocus';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 
@@ -43,24 +43,26 @@ export function AppFrame() {
         <div className={sidebar ? 'workspace-body' : 'contents'}>
           {/* Announced politely while a lazy route's JavaScript is being fetched. */}
           <div role="status" aria-live="polite" className="mx-auto w-full max-w-page px-4 sm:px-6">
-            {navigation.state === 'loading' && (
-              <p className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
-                <Spinner /> Loading page…
-              </p>
-            )}
+            {navigation.state === 'loading' && <p className="sr-only">Loading page…</p>}
           </div>
           <main
             id="main"
             ref={mainRef}
             tabIndex={-1}
+            aria-busy={navigation.state === 'loading' || undefined}
             className={
               sidebar
-                ? 'workspace-main focus:outline-none'
+                ? `workspace-main relative focus:outline-none${navigation.state === 'loading' ? ' route-pending' : ''}`
                 : landing
-                  ? 'w-full flex-1 focus:outline-none'
-                  : 'mx-auto w-full max-w-page flex-1 px-4 py-6 focus:outline-none sm:px-6 sm:py-10'
+                  ? `relative w-full flex-1 focus:outline-none${navigation.state === 'loading' ? ' route-pending' : ''}`
+                  : `relative mx-auto w-full max-w-page flex-1 px-4 py-6 focus:outline-none sm:px-6 sm:py-10${navigation.state === 'loading' ? ' route-pending' : ''}`
             }
           >
+            {navigation.state === 'loading' && (
+              <div className="route-skeleton absolute inset-0 z-10 bg-background p-4 sm:p-6">
+                <ContentSkeleton label="" variant="page" />
+              </div>
+            )}
             <Outlet />
           </main>
           {!sidebar && <SiteFooter />}

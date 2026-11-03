@@ -1,3 +1,4 @@
+import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarClock } from 'lucide-react';
@@ -84,7 +85,7 @@ export function FollowupInbox({ onNavigate }: { onNavigate: () => void }) {
                 </Button>
               </>
             ) : !data ? (
-              <p role="status">Loading follow-ups…</p>
+              <ContentSkeleton label="Loading follow-ups…" variant="list" />
             ) : (
               <>
                 <p>

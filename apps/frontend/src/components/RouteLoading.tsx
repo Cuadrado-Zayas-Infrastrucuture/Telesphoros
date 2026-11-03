@@ -1,13 +1,10 @@
-import { Spinner } from '@/components/ui/Spinner';
+import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 
-/**
- * Shown while the first page's JavaScript is fetched. Every route is lazy, so without it the router renders nothing until the chunk arrives.
- * It stands in for the whole layout, so it is a bare status line; AppLayout's own "Loading page…" covers navigations after that.
- */
+/** Layout reserved while the initial route's code is fetched. */
 export function RouteLoading() {
   return (
-    <div role="status" className="flex min-h-dvh items-center justify-center gap-2 px-4 text-sm text-muted-foreground">
-      <Spinner /> Loading…
+    <div className="mx-auto flex min-h-dvh w-full max-w-page flex-col px-4 py-6 sm:px-6 sm:py-10">
+      <ContentSkeleton label="Loading…" variant="page" />
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { Alert } from '@/components/ui/Alert';
 import { AlertDescription } from '@/components/ui/AlertDescription';
 import { AlertTitle } from '@/components/ui/AlertTitle';
 import { Button } from '@/components/ui/Button';
-import { Spinner } from '@/components/ui/Spinner';
+import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { landingAfterSignIn } from '@/lib/localWorkspace';
 
@@ -70,9 +70,7 @@ export default function AuthCallbackPage() {
   return (
     <div className="flex max-w-prose flex-col gap-4">
       <h1 className="text-3xl leading-tight font-bold">Signing you in</h1>
-      <p role="status" className="flex items-center gap-2 text-muted-foreground">
-        <Spinner /> Please wait…
-      </p>
+      <ContentSkeleton label="Please wait…" variant="detail" />
     </div>
   );
 }

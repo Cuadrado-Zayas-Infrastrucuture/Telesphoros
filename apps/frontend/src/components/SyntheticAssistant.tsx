@@ -254,10 +254,6 @@ export function SyntheticAssistant({ embedded = false, workspace = false }: { em
                     </Message>
                     <ThinkingBar text={STAGES[stage]} stage={stage} onStop={cancel} />
                     {!workspace && <Tool key="pending-tool" toolPart={{ state: stage === 0 ? 'input-streaming' : 'input-available', stage }} defaultOpen />}
-                    <div aria-hidden="true" className="space-y-3 py-2 motion-safe:animate-pulse">
-                      <div className="h-2 w-3/4 rounded-sm bg-divider" />
-                      <div className="h-2 w-full rounded-sm bg-divider" />
-                    </div>
                   </div>
                 )}
                 {error && (

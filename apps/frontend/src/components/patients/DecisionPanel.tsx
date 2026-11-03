@@ -1,3 +1,4 @@
+import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useEffect, useState } from 'react';
 import type { ClinicianDecisionCreate, ClinicianDecisionHistoryDto, EvaluationSummaryDto } from '@telesphoros/shared-types';
 import { CDR_CODE_LABELS } from '@telesphoros/shared-types';
@@ -57,7 +58,7 @@ export function DecisionPanel({
         </Button>
       </div>
     );
-  if (!read) return <p role="status">Loading decision history…</p>;
+  if (!read) return <ContentSkeleton label="Loading decision history…" variant="list" />;
   const { history, actor } = read;
   const current = currentDecisionEntry(history);
   const head = history.entries.find((entry) => entry.id === history.headEntryId);

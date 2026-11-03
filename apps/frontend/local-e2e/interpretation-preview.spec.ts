@@ -32,7 +32,13 @@ test('branded synthetic explanation supports keyboard, recovery, stop, reset and
   await question.focus(); await page.keyboard.press('Enter');
   const status = page.getByRole('region', { name: 'AI-assisted explanation' }).getByRole('status');
   await expect(status).toHaveText('Loading a fixed synthetic response…');
-  await expect(page.locator('[class~="motion-safe:animate-pulse"]')).toHaveCSS('animation-name', 'none');
+  const skeletons = page.getByRole('group', { name: 'Sample response preparation' }).locator('[data-slot="skeleton"]');
+  await expect(skeletons).toHaveCount(3);
+  for (const skeleton of await skeletons.all()) {
+    await expect(skeleton).toHaveCSS('opacity', '1');
+    await expect(skeleton).toHaveCSS('background-image', 'none');
+    await expect(skeleton).not.toHaveCSS('animation-name', /skeleton-shimmer|pulse/);
+  }
   await page.getByRole('button', { name: 'Stop', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Sample question', exact: true })).toBeFocused();
   await expect(status).toContainText('stopped'); await question.click();

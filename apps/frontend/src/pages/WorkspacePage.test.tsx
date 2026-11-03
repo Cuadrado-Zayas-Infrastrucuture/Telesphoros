@@ -59,6 +59,23 @@ afterEach(() => {
 });
 
 describe('the chat-first home in every build (specs/024)', () => {
+  it('uses a preferred name set in account preferences for the chat welcome', async () => {
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.click(screen.getByRole('link', { name: 'Settings' }));
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Preferred name' }), 'Avery');
+    await userEvent.click(screen.getByRole('button', { name: 'Save preferred name' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Close account preferences' }));
+    expect(await screen.findByText('Welcome, Avery.')).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Start with a synthetic report.' })).toBeVisible();
+  });
+
+  it('shows a generic welcome when a preferred name has not been set', async () => {
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    expect(screen.getByText('Welcome.')).toBeVisible();
+  });
+
   it('opens patient creation on the patient page instead of inside chat', async () => {
     const { router } = open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
@@ -370,6 +387,35 @@ describe('the chat-first home in every build (specs/024)', () => {
     const sent = vi.mocked(submitReport).mock.calls[0]![0];
     expect(sent).toMatchObject({ patientId: PATIENT.id, reportType: 'structured', syntheticConfirmed: true });
     expect(sent.file.name).toBe('SYN-004-cyp2c19.json');
+  });
+
+  it.each(['success', 'failure'] as const)('shows a chat upload skeleton until %s, then removes it', async (outcome) => {
+    let finish!: (value: { reference: string }) => void;
+    let fail!: (error: Error) => void;
+    vi.mocked(submitReport).mockImplementationOnce(
+      () =>
+        new Promise((resolve, reject) => {
+          finish = resolve;
+          fail = reject;
+        }),
+    );
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.upload(file(), json());
+    await screen.findByRole('combobox', { name: 'Patient' });
+    await userEvent.click(screen.getByRole('checkbox', CONFIRM));
+    await userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
+    const thread = await conversation();
+    expect(within(thread).getByText('Uploading your report…')).toHaveAttribute('role', 'status');
+    expect(thread.querySelector('[data-slot="skeleton"]')).toBeInTheDocument();
+    expect(useSyntheticChat).not.toHaveBeenCalled();
+    await act(async () => {
+      if (outcome === 'success') finish({ reference: REPORT_ID });
+      else fail(new Error('Synthetic upload failure'));
+    });
+    expect(within(thread).queryByText('Uploading your report…')).not.toBeInTheDocument();
+    if (outcome === 'success') expect(await within(thread).findByText('Received')).toBeVisible();
+    else expect(within(thread).getByRole('alert')).toHaveTextContent('The upload was interrupted.');
   });
 
   it('"Check status" reloads the report from the list and shows its new status word (CH-3)', async () => {
