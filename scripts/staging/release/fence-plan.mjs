@@ -1,10 +1,20 @@
 // Narrow configuration-only plans. Existing MIGRATE/IMAGE/INFRA shapes are not changed.
-const canonical = (v) => JSON.stringify(v, (_, x) => x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a.localeCompare(b))) : x);
+import { canonical, harmlessDrift } from './plan-drift.mjs';
+
 const imagePattern = /^([0-9]{12})\.dkr\.ecr\.us-east-2\.amazonaws\.com\/telesphoros-staging-api@sha256:[0-9a-f]{64}$/;
 const computed = ['arn', 'arn_without_revision', 'id', 'revision'];
+// Read back by the provider on every replacement, not set here (first real FENCE-CLOSE plan, 2026-11-02): fault injection, which must stay off,
+// and each volume's configure_at_launch.
+const providerComputed = (path) => path === 'enable_fault_injection' || /^volume\.[0-9]+\.configure_at_launch$/.test(path);
 const unknowns = (value, prefix = '') => value === true ? [prefix] : value && typeof value === 'object'
   ? Object.entries(value).flatMap(([key, child]) => unknowns(child, prefix ? `${prefix}.${key}` : key)) : [];
 const without = (value, keys) => Object.fromEntries(Object.entries(value).filter(([key]) => !keys.includes(key)));
+// AWS stores an unchanged definition with empty strings, lists and maps where the configuration has none, and with hostPort equal to
+// containerPort (awsvpc). Those read as absent on both sides, so only a real difference remains.
+const empty = (v) => v === null || v === '' || (Array.isArray(v) && v.length === 0) || (v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 0);
+const settled = (v) => Array.isArray(v) ? v.map(settled) : v && typeof v === 'object'
+  ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, settled(x)]).filter(([, x]) => !empty(x))) : v;
+const off = (v) => v === false || v === null || v === undefined;
 function definition(value) {
   const containers = JSON.parse(value.container_definitions);
   if (!Array.isArray(containers) || containers.length !== 1 || containers[0].name !== 'api') throw new Error();
@@ -15,7 +25,10 @@ function definition(value) {
     container.secrets !== undefined && (!Array.isArray(container.secrets) || container.secrets.some((s) => s.name === 'MEDICATION_WRITES'))) throw new Error();
   const flag = container.environment.find((e) => e.name === 'MEDICATION_WRITES')?.value;
   const remaining = container.environment.filter((e) => e.name !== 'MEDICATION_WRITES').sort((a, b) => a.name.localeCompare(b.name));
-  return { flag, image: container.image, normal: { ...without(value, computed), container_definitions: [{ ...container, environment: remaining }] } };
+  const ports = container.portMappings?.map(({ hostPort, ...port }) => (hostPort === undefined || hostPort === port.containerPort ? port : { ...port, hostPort }));
+  const volumes = value.volume?.map((volume) => without(volume, ['configure_at_launch']));
+  return { flag, image: container.image, normal: settled({ ...without(value, [...computed, 'enable_fault_injection']), volume: volumes,
+    container_definitions: [{ ...container, portMappings: ports, environment: remaining }] }) };
 }
 
 export function fenceProblems(mode, plan, oldImage, newImage) {
@@ -30,7 +43,7 @@ export function fenceProblems(mode, plan, oldImage, newImage) {
     need(variable('deployment_profile') === 'synthetic' && variable('environment') === 'staging' && variable('region') === 'us-east-2', 'fence target must be synthetic us-east-2 staging');
     need(variable('api_image') === oldImage && variable('api_migrate_image') === oldImage, 'fence plan must keep both image variables unchanged');
     need(variable('medication_writes_enabled') === (mode === 'FENCE-OPEN'), 'fence variable must match the requested direction');
-    need(plan.resource_drift === undefined || Array.isArray(plan.resource_drift) && plan.resource_drift.every((d) => canonical(d.change?.actions) === '["no-op"]'), 'fence plan must have no drift');
+    need(plan.resource_drift === undefined || Array.isArray(plan.resource_drift) && plan.resource_drift.every((d) => canonical(d.change?.actions) === '["no-op"]' || harmlessDrift(d)), 'fence plan has drift outside the reviewed harmless list');
     need(plan.output_changes === undefined || plan.output_changes !== null && typeof plan.output_changes === 'object' && Object.values(plan.output_changes).every((v) => canonical(v.actions) === '["no-op"]'), 'fence plan must not change outputs');
     const changes = plan.resource_changes.filter((r) => !['["no-op"]', '["read"]'].includes(canonical(r.change?.actions)));
     const task = changes.find((r) => r.address === 'aws_ecs_task_definition.api[0]');
@@ -43,7 +56,9 @@ export function fenceProblems(mode, plan, oldImage, newImage) {
     need(before.image === oldImage && after.image === oldImage, 'fence task images must remain unchanged');
     need(canonical(before.normal) === canonical(after.normal), 'fence task definition changes beyond the medication setting');
     need(after.flag === (mode === 'FENCE-OPEN' ? 'enabled' : 'disabled') && (mode === 'FENCE-OPEN' ? before.flag === 'disabled' : before.flag === undefined || before.flag === 'enabled'), 'fence task setting must make the requested transition');
-    need(computed.every((key) => task.change.after_unknown?.[key] !== true || task.change.after[key] == null) && task.change.after_unknown?.arn === true && unknowns(task.change.after_unknown).every((key) => computed.includes(key)), 'fence task has unexpected unknown attributes');
+    need(computed.every((key) => task.change.after_unknown?.[key] !== true || task.change.after[key] == null) && task.change.after_unknown?.arn === true && unknowns(task.change.after_unknown).every((key) => computed.includes(key) || providerComputed(key)), 'fence task has unexpected unknown attributes');
+    need(off(task.change.before.enable_fault_injection) && (task.change.after_unknown?.enable_fault_injection === true ? task.change.after.enable_fault_injection == null : off(task.change.after.enable_fault_injection)),
+      'fence task must keep fault injection off');
     const arn = task.change.before.arn;
     const family = `arn:aws:ecs:us-east-2:${image[1]}:task-definition/telesphoros-staging-api:`;
     need(typeof arn === 'string' && arn.startsWith(family) && /^[1-9][0-9]*$/.test(arn.slice(family.length)) && task.change.before.family === 'telesphoros-staging-api', 'fence source task identity is invalid');
