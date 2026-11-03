@@ -1,0 +1,18 @@
+/* Local review scaffolding only. Cognito receives hosted-ui.css, not this file or HTML. */
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--foreground); font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.5; }
+main { width: min(100%, 50rem); margin: 0 auto; padding: 1.5rem; }
+.preview-note { max-width: 40rem; margin: 0 auto 2rem; }
+h1 { font-size: 1.25rem; margin: 0 0 .5rem; }
+h2 { font-size: 1.25rem; margin: 0; }
+p { margin: 0; }
+.preview-card { max-width: 400px; margin: 0 auto; border: 1px solid var(--divider); border-radius: 4px; background: var(--panel); overflow: hidden; }
+.banner-customizable { text-align: center; }
+.logo-customizable { height: auto; vertical-align: middle; }
+.preview-fields { padding: 1.5rem; }
+.label-customizable { display: block; margin: 12px 0 6px; }
+.inputField-customizable { padding: 6px 12px; font-family: inherit; font-size: 14px; }
+.submitButton-customizable { border: 1px solid transparent; border-radius: 4px; font-family: inherit; }
+summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--primary); }
+.errorMessage-customizable { margin-top: 8px; }
+summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
