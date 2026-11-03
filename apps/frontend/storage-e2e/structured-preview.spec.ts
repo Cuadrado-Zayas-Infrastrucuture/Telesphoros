@@ -95,4 +95,46 @@ test('chat upload, stored uncertain findings, and independent patient-link revie
     await expect(review.getByText('Saved · ready for findings review', { exact: true })).toBeVisible();
     await expect(review.getByRole('button', { name: 'Save findings for review', exact: true })).toHaveCount(0);
   } finally { await reviewer.close(); }
+
+  // Independent findings review: a third person, who neither uploaded (alice) nor saved (gina) the evidence.
+  const independent = await browser.newContext({ viewport: page.viewportSize()! });
+  try {
+    const third = await independent.newPage();
+    await signInAs(third, 'hal', '/reports');
+    await selectReportsPatient(third, createdPatient);
+    await third.getByRole('button', { name: `Open ${filename}`, exact: true }).click();
+    await third.getByRole('button', { name: 'Show structured findings' }).click();
+    const panel = third.getByRole('region', { name: 'Structured report inspection' });
+    await expect(panel.getByText('Awaiting independent review', { exact: true })).toBeVisible();
+    const findings = panel.getByRole('list', { name: 'Findings for review' });
+    await expect(findings).toContainText('analytical result ambiguous');
+    await expect(panel.getByRole('list', { name: 'Outstanding actions' })).toContainText('Check each saved finding against its source');
+    const matches = panel.getByRole('button', { name: /: Matches source$/ });
+    await matches.scrollIntoViewIfNeeded();
+    expect((await matches.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect(await third.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await third.addScriptTag({ path: createRequire(import.meta.url).resolve('axe-core/axe.min.js') });
+    const axe = () => third.evaluate(async () => {
+      // @ts-expect-error axe injected into this synthetic local browser.
+      return (await window.axe.run(document, { runOnly: ['wcag2a', 'wcag2aa', 'wcag21aa'] })).violations.map((v: { id: string }) => v.id);
+    });
+    expect(await axe()).toEqual([]);
+    await third.screenshot({ path: test.info().outputPath('structured-findings-review.png'), fullPage: true });
+    await matches.click();
+    await expect(panel.getByText('Findings review complete', { exact: true })).toBeVisible();
+    await expect(findings).toContainText('Matches its source');
+    // Recording a match keeps the uncertainty visible and adds no interpretation or prescribing control.
+    await expect(findings).toContainText('analytical result ambiguous');
+    await expect(findings).toContainText('interpretation indeterminate');
+    await expect(panel.getByRole('button', { name: /prescrib|approve|release|interpret/i })).toHaveCount(0);
+    expect(await axe()).toEqual([]);
+    expect(await third.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await third.screenshot({ path: test.info().outputPath('structured-findings-reviewed.png'), fullPage: true });
+    // A fresh read keeps the decision (a later decision may still amend it, so the controls remain).
+    await third.getByRole('button', { name: 'Back to reports' }).click();
+    await third.getByRole('button', { name: `Open ${filename}`, exact: true }).click();
+    await third.getByRole('button', { name: 'Show structured findings' }).click();
+    await expect(panel.getByText('Findings review complete', { exact: true })).toBeVisible();
+    await expect(panel.getByRole('button', { name: /: Matches source$/ })).toHaveCount(1);
+  } finally { await independent.close(); }
 });

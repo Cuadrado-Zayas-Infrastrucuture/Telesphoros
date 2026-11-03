@@ -7,6 +7,12 @@ const relationships: [string, string, string, string][] = [
   ['structured_report_revisions_report_fk', 'structured_report_revisions', 'report_id,tenant_id', 'reports:id,tenant_id'],
   ['structured_report_revisions_patient_fk', 'structured_report_revisions', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   ['structured_report_revisions_patient_link_decision_id_fkey', 'structured_report_revisions', 'patient_link_decision_id', 'report_patient_decisions:id'],
+  // Spec 032 S2c: review decisions are bound to one immutable revision and its independent patient-link decision; resolutions name their set by value.
+  ['structured_finding_reviews_report_fk', 'structured_finding_reviews', 'report_id,tenant_id', 'reports:id,tenant_id'],
+  ['structured_finding_reviews_patient_fk', 'structured_finding_reviews', 'patient_id,tenant_id', 'patients:id,tenant_id'],
+  ['structured_finding_reviews_revision_id_fkey', 'structured_finding_reviews', 'revision_id', 'structured_report_revisions:id'],
+  ['structured_finding_reviews_patient_link_decision_id_fkey', 'structured_finding_reviews', 'patient_link_decision_id', 'report_patient_decisions:id'],
+  ['structured_source_resolutions_patient_fk', 'structured_source_resolutions', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   // H1 (0050): immutable admission/source binding and inactive completion identity.
   ['evaluation_requests_tenant_id_fkey', 'evaluation_requests', 'tenant_id', 'tenants:id'],
   ['evaluation_requests_job_id_fkey', 'evaluation_requests', 'job_id', 'jobs:id'],
@@ -102,6 +108,8 @@ const relationships: [string, string, string, string][] = [
 ];
 const primaryKeys: Record<string, string> = {
   structured_report_revisions: 'id',
+  structured_finding_reviews: 'id',
+  structured_source_resolutions: 'id',
   evaluation_requests: 'id',
   evaluation_request_completions: 'request_id',
   evaluation_request_cancellations: 'request_id',
@@ -175,6 +183,8 @@ const primaryKeys: Record<string, string> = {
 };
 const uniqueKeys: Record<string, string> = {
   structured_report_revisions_source_uq: 'tenant_id, report_id',
+  structured_finding_reviews_request_uq: 'tenant_id, created_by, request_id',
+  structured_source_resolutions_request_uq: 'tenant_id, created_by, request_id',
   evaluation_requests_tenant_id_requested_by_creation_request_key: 'tenant_id, requested_by, creation_request_id',
   evaluation_requests_id_tenant_id_key: 'id, tenant_id',
   evaluation_requests_job_id_key: 'job_id',
@@ -294,6 +304,8 @@ const checkNames: Record<string, string> = {
   tenant_use_terms: 'tenant_id_len created_by_len refs interval purposes classifications',
   patient_followups: 'tenant_id_len created_by_len version action request_hash task_shape action_shape assessment_shape',
   structured_report_revisions: 'tenant_id_check created_by_check report_sha256_check object_version_check parser_version_check shape',
+  structured_finding_reviews: 'tenant_id_check created_by_check report_sha256_check object_version_check source_finding_id_check decision_check reason_code_check reason',
+  structured_source_resolutions: 'tenant_id_check created_by_check laboratory_id_check series_id_check revision_check revision_ids_check outcome_check reason_code_check shape',
   patient_medications: 'tenant_id_len created_by_len version rxcui name list_version status start_month stop_month month_order active_stop source request_hash',
   patient_demographics: 'tenant_id_len created_by_len version key_version nonces name_len dob_len sex birth_year ethnicity request_pair request_hash',
   patient_field_keys: 'tenant_id_len created_by_len version wrapped_len provider',
@@ -353,6 +365,8 @@ for (const table of [
   'patient_medications',
   'patient_followups',
   'structured_report_revisions',
+  'structured_finding_reviews',
+  'structured_source_resolutions',
   'ledger_checkpoints',
 ]) {
   relationships.push([`${table}_event_fk`, table, 'ledger_event_id,tenant_id', 'ledger_events:id,tenant_id']);
@@ -361,6 +375,12 @@ for (const table of [
 // Query-facing definitions. Constraint-backed indexes and internal append-only guards are also covered by ledger-catalog/behavior suites.
 const queryIndexes: Record<string, string> = {
   structured_report_revisions_patient_idx: 'INDEX structured_report_revisions_patient_idx ON public.structured_report_revisions USING btree (tenant_id, patient_id, seq)',
+  structured_finding_reviews_revision_idx:
+    'INDEX structured_finding_reviews_revision_idx ON public.structured_finding_reviews USING btree (tenant_id, revision_id, source_finding_id, seq)',
+  structured_finding_reviews_event_idx: 'INDEX structured_finding_reviews_event_idx ON public.structured_finding_reviews USING btree (ledger_event_id, tenant_id)',
+  structured_source_resolutions_series_idx:
+    'INDEX structured_source_resolutions_series_idx ON public.structured_source_resolutions USING btree (tenant_id, patient_id, laboratory_id, series_id, revision, seq)',
+  structured_source_resolutions_event_idx: 'INDEX structured_source_resolutions_event_idx ON public.structured_source_resolutions USING btree (ledger_event_id, tenant_id)',
   structured_report_revisions_event_idx: 'INDEX structured_report_revisions_event_idx ON public.structured_report_revisions USING btree (ledger_event_id, tenant_id)',
   structured_report_revisions_issuer_idx:
     "INDEX structured_report_revisions_issuer_idx ON public.structured_report_revisions USING btree (tenant_id, ((laboratory_report ->> 'laboratoryId'::text)))",

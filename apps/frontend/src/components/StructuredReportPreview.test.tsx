@@ -50,6 +50,8 @@ beforeEach(() => {
             history: [],
             state: 'not-recorded',
             reasons: [],
+            review: { status: 'not-reviewable', findings: [], outstanding: [], evidenceOnly: true },
+            conflict: null,
             synthetic: true,
             clinicalUse: 'not-approved',
             actionable: false,
