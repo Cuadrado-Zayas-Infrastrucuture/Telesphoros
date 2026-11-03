@@ -151,3 +151,27 @@ export function inspectSyntheticPgxLineage(input: unknown): SyntheticPgxLineageI
     series,
   };
 }
+
+export type SyntheticPgxRevisionConflict = { laboratoryId: string; seriesId: string; revision: number; sourceIds: string[] };
+
+/**
+ * The same-revision conflicts behind a `duplicate-revision-content` hold: one laboratory revision stored from sources whose bytes or
+ * content differ. Identical bytes uploaded twice are separate provenance, not a conflict. Pure; names the sources, never picks one.
+ */
+export function findSyntheticPgxRevisionConflicts(input: unknown): SyntheticPgxRevisionConflict[] {
+  inspectSyntheticPgxLineage(input); // same bounds, tenant and patient checks
+  const { sources } = snapshotSchema.parse(input);
+  const groups = new Map<string, Source[]>();
+  for (const s of sources) {
+    const key = JSON.stringify([s.report.laboratoryId, s.report.seriesId, s.report.revision]);
+    groups.set(key, [...(groups.get(key) ?? []), s]);
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => compare(a, b))
+    .flatMap(([, items]) => {
+      const first = items[0];
+      const content = canonical(first.report);
+      if (!items.some((s) => s.sha256 !== first.sha256 || canonical(s.report) !== content)) return [];
+      return [{ laboratoryId: first.report.laboratoryId, seriesId: first.report.seriesId, revision: first.report.revision, sourceIds: distinct(items.map((s) => s.sourceId)) }];
+    });
+}
