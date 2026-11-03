@@ -1,6 +1,6 @@
 # Implementation proposal
 
-Status: Design for review. The current slice writes specifications only. No runtime, migration, knowledge, CI, cloud or clinical-gate changes are included. Implementation slices below require their own bounded plans and acceptance evidence.
+Status: The service design remains a proposal for clinical review. S1 synthetic contracts/fixtures are merged; S2a adds owned-local inspection of stored laboratory evidence and independent patient-link review ([bounded plan](../../docs/design/plans/pgx-structured-intake.md)). The remaining slices below require their own plans and acceptance evidence. No clinical gate is opened.
 
 ## Existing mechanisms and gaps
 
