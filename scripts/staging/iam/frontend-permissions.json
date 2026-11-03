@@ -1,8 +1,8 @@
 {
   "Version": "2012-10-17",
   "Statement": [
-    {"Effect": "Allow", "Action": ["s3:ListBucket"], "Resource": "arn:aws:s3:::telesphoros-staging-web-85b1e5378b2a7a0be7cfafa366"},
-    {"Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject"], "Resource": "arn:aws:s3:::telesphoros-staging-web-85b1e5378b2a7a0be7cfafa366/*"},
-    {"Effect": "Allow", "Action": ["cloudfront:CreateInvalidation", "cloudfront:GetInvalidation"], "Resource": "arn:aws:cloudfront::403776649274:distribution/E1WD7E7PP8PU73"}
+    {"Effect": "Allow", "Action": ["s3:ListBucket"], "Resource": "arn:aws:s3:::<web_bucket>"},
+    {"Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject"], "Resource": "arn:aws:s3:::<web_bucket>/*"},
+    {"Effect": "Allow", "Action": ["cloudfront:CreateInvalidation", "cloudfront:GetInvalidation"], "Resource": "arn:aws:cloudfront::<account>:distribution/<distribution_id>"}
   ]
 }
