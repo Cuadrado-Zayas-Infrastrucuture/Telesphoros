@@ -57,7 +57,7 @@ type Entry =
  * The parent remounts this (a new key) for "New chat", which is how a conversation starts empty.
  */
 export function WorkspaceConversation({ active = true }: { active?: boolean }) {
-  const { roles, apiFetch, recoverySession } = useAuth();
+  const { roles, apiFetch, recoverySession, preferredName } = useAuth();
   const canAttach = roles.some((role) => WRITER_ROLES.includes(role));
   const { patients, loading: patientsLoading, error: patientsError, hasMore: morePatients, loadMore: loadPatients } = useWorkspacePatients(canAttach);
   const [file, setFile] = useState<File | null>(null);
@@ -408,6 +408,7 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
         {!started ? (
           <div className="flex flex-1 flex-col justify-center py-6">
             <img className="one-screen-mascot mascot-plate" src={mascot} width="162" height="192" loading="eager" alt="Telesphoros mascot in a teal cloak" />
+            <p className="mb-2 text-center text-sm break-words text-muted-foreground">{preferredName ? `Welcome, ${preferredName}.` : 'Welcome.'}</p>
             {/* The prototype does not interpret reports yet, so the heading does not promise a reading (specs/024 D3). */}
             <h1 className="mb-3 text-center font-heading text-3xl font-medium">Start with a synthetic report.</h1>
             <p className="text-center text-sm text-muted-foreground">
