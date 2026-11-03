@@ -3,8 +3,8 @@ import { expect, type Page } from '@playwright/test';
 
 const require = createRequire(import.meta.url);
 
-export type Persona = 'alice' | 'bob' | 'carol' | 'dave' | 'gina';
-export const ROLE: Record<Persona, string> = { alice: 'clinician', bob: 'reader', carol: 'admin', dave: 'no role', gina: 'reviewer' };
+export type Persona = 'alice' | 'bob' | 'carol' | 'dave' | 'gina' | 'hal';
+export const ROLE: Record<Persona, string> = { alice: 'clinician', bob: 'reader', carol: 'admin', dave: 'no role', gina: 'reviewer', hal: 'clinician and reviewer' };
 
 /**
  * Signs in exactly as a person would: open a protected page, get sent to sign in, click through to the

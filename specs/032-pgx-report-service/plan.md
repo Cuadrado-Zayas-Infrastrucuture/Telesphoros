@@ -60,3 +60,7 @@ The [revision inspection slice](../../docs/design/plans/pgx-revision-reconciliat
 ## S2b2 stored evidence continuation
 
 The [stored-revision slice](../../docs/design/plans/pgx-stored-revisions.md) connects S2a's exact-version source verification and independent patient matching to S2b1's lineage inspector. It adds immutable, ledger-covered laboratory revisions and a read-only normalized finding view, plus save/history controls in the existing report panel. Reconciliation uses the complete bounded patient history and preserves invalidated sources as holds. An eligible chain remains only a candidate for findings review; analytical acceptance, cross-laboratory selection, assessment generation and affected-assessment tasks remain follow-ups. The owned-local synthetic gate stays in force.
+
+## S2c findings review continuation
+
+The [findings-review slice](../../docs/design/plans/pgx-findings-review.md) adds append-only independent decisions about stored findings and explicit resolution of conflicting stored sources, in the existing report panel. It keeps patient matching separate, rechecks evidence freshness and reviewer authority at commit, never selects or revives a source on its own, and leaves every finding's stated uncertainty unchanged. Context-bound synthetic assessments and affected-assessment review tasks remain the next slice.

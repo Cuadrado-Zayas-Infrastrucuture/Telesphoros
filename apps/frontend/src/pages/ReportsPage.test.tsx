@@ -211,6 +211,24 @@ describe('reports page with real auth and route guards', () => {
     expect(next).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByText('Report page unavailable.')).toBeInTheDocument();
   });
+  it('retries the page that failed, not the first page', async () => {
+    let pageTwoReads = 0;
+    const api = fetcher(['reviewer'], async (url) =>
+      url.searchParams.get('page') === '2'
+        ? ++pageTwoReads === 1
+          ? json({ message: 'do-not-display' }, 503)
+          : json({ data: [row()], meta: { page: 2, pageSize: 20, total: 21, totalPages: 2 } })
+        : json({ data: [row()], meta: { page: 1, pageSize: 20, total: 21, totalPages: 2 } }),
+    );
+    renderApp('/reports', { signedInAs: ['reviewer'], fetchImpl: api });
+    await heading();
+    await screen.findByRole('button', { name: 'Open synthetic.json' });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Next report page' }));
+    await user.click(await screen.findByRole('button', { name: 'Retry loading reports' }));
+    await waitFor(() => expect(pageTwoReads).toBe(2));
+    expect(api.mock.calls.filter(([url]) => String(url).includes('/reports?page=1&pageSize=20'))).toHaveLength(1);
+  });
   it('focuses selected details, exposes technical fields on request and returns to the same report', async () => {
     renderApp('/reports', { signedInAs: ['reader'], fetchImpl: fetcher(['reader']) });
     await heading();

@@ -1,5 +1,12 @@
 import { StructuredRecordsService } from './structured-records.service';
-import { structuredRecordCreateSchema, type StructuredRecordCreate } from '@telesphoros/shared-types';
+import {
+  structuredFindingReviewCreateSchema,
+  structuredRecordCreateSchema,
+  structuredSourceResolutionCreateSchema,
+  type StructuredFindingReviewCreate,
+  type StructuredRecordCreate,
+  type StructuredSourceResolutionCreate,
+} from '@telesphoros/shared-types';
 import { Body, CanActivate, Controller, Get, Injectable, Param, Post, Res, UseGuards } from '@nestjs/common';
 import { idParamSchema, structuredPatientLinkSchema, type IdParam, type StructuredPatientLink } from '@telesphoros/shared-types';
 import type { Response } from 'express';
@@ -48,6 +55,33 @@ export class StructuredPreviewController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.records.save(principal, id, body);
+    res.status(result.created ? 201 : 200);
+    return result.state;
+  }
+
+  @Post('review')
+  @Roles('reviewer')
+  @RateLimitClass('expensive')
+  async reviewFinding(
+    @CurrentPrincipal() principal: Principal,
+    @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam,
+    @Body(new ZodValidationPipe(structuredFindingReviewCreateSchema)) body: StructuredFindingReviewCreate,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.records.review(principal, id, body);
+    res.status(result.created ? 201 : 200);
+    return result.state;
+  }
+  @Post('source-resolution')
+  @Roles('reviewer')
+  @RateLimitClass('expensive')
+  async resolveSources(
+    @CurrentPrincipal() principal: Principal,
+    @Param(new ZodValidationPipe(idParamSchema)) { id }: IdParam,
+    @Body(new ZodValidationPipe(structuredSourceResolutionCreateSchema)) body: StructuredSourceResolutionCreate,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.records.resolve(principal, id, body);
     res.status(result.created ? 201 : 200);
     return result.state;
   }
