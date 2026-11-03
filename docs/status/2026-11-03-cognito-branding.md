@@ -1,0 +1,15 @@
+# Cognito classic sign-in branding
+
+Date: 2026-11-03
+
+Prepared opt-in, client-scoped Cognito classic hosted-UI branding using canonical app colors, 48px controls and the unchanged product shield/Rx logo. A token-driven generator creates the external CSS; unsupported imports, variables, fonts and selector/property additions are rejected by guards. An illustrative read-only local preview documents the actual font/layout limitations instead of promising a custom application screen.
+
+The existing login flow, PKCE, invitation restrictions, authenticator MFA, callbacks, roles, scopes and token handling are unchanged. No domain version or feature plan is switched. The default flag is disabled; enabling requires a reviewed live-domain version observation of 1, a version-1 domain plan and an approved infrastructure plan. The observation is operator-supplied, not an automatic AWS query. The live domain/version, provider CSS acceptance and live authentication flows have not been inspected or applied. Managed-login version 2 requires a separate branding configuration.
+
+The new opt-in guard first failed for the missing configuration, then passed after implementation. Offline Terraform tests cover disabled defaults, enabled classic styling and refusal of managed-login or unverified domain observations, using mocked providers only. Existing security guards remain enabled. Review/deployment/rollback notes are in docs/ops/cognito-branding.md. No account, identity-provider credential, real person or cloud resource is used by the preview/tests.
+
+Completed verification: Terraform 1.16.5 (repository-pinned binary verified against the official checksum), initialization with `-backend=false -lockfile=readonly`, format check, validate and all 66 mocked plan tests passed. This includes all four new branding activation cases. Removing the observed-version guard made the wrong-version/unverified-domain tests fail as expected; the exact source was restored afterwards. No real Terraform plan/apply or backend activation was performed.
+
+Root typecheck, lint/format, full tests under the documented tini subreaper and production build passed. Infrastructure guards passed 291/291 (six new branding guards), CI configuration checks 217/217. Frontend: 707 Vitest tests across 63 files plus 55 Node guards; backend: 2080 passed / 483 skipped across 157 passing suites and 27 skipped suites. PostgreSQL/S3 service tiers and five reader-engine specs did not run locally; worker PostgreSQL/S3 tiers also skipped. Other unit tiers passed: shared types 244, CPIC schema 48, fake IdP 7, jobs 20, password notifier 10, worker 151, AI service 347, SMART pilot 188. The skips are not passes.
+
+Chromium preview review passed at 320/390/1440px: 48px inputs/buttons, visible 2px teal focus outline, no horizontal overflow, zero axe violations with the sample error expanded, and zero external requests. The system font in the preview is intentional; classic Cognito does not import the app's Inter/Poppins. Screenshots are illustrative and AWS must still accept the CSS and be checked through actual sign-in/MFA/recovery flows after an approved apply.
