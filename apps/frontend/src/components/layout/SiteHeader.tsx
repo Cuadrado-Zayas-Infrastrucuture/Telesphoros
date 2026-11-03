@@ -12,6 +12,7 @@ export function SiteHeader() {
   const pathname = useLocation().pathname;
   const landing = useLandingRoute();
   const { status, roles } = useAuth();
+  const authFlow = status !== 'signedIn' && ['/signin', '/auth/callback', '/signed-out'].some((path) => pathname === path || pathname === `${path}/`);
   // The shell is Spanish only while the landing shows and Spanish is chosen; every other page stays English.
   const { header: h } = useShellCopy();
   // Links to pages the user cannot use are simply not shown. The pages are guarded as well.
@@ -37,62 +38,66 @@ export function SiteHeader() {
             <span className="text-xs text-muted-foreground">{h.byline}</span>
           </span>
         </NavLink>
-        <nav aria-label={h.nav}>
-          <ul className="flex flex-wrap items-center gap-1">
-            {landing &&
-              [
-                ['#platform', h.features],
-                ['#questions', h.faq],
-              ].map(([href, label]) => (
-                <li key={href}>
-                  <a href={href} className="inline-flex min-h-control items-center px-2 text-sm font-medium hover:bg-muted">
-                    {label}
-                  </a>
-                </li>
-              ))}
-            {landing && (
-              <li>
-                <LanguageToggle />
-              </li>
-            )}
-            {links.map((link) => (
-              <li key={link.to}>
-                <NavLink
-                  to={link.to}
-                  end={link.end}
-                  className={({ isActive }) =>
-                    cn(
-                      'inline-flex min-h-control items-center border-b-2 px-2 text-sm font-medium hover:bg-muted',
-                      isActive ? 'border-primary text-primary' : 'border-transparent text-foreground',
-                    )
-                  }
-                >
-                  {link.label}
-                </NavLink>
-              </li>
-            ))}
-            {import.meta.env.DEV && location.hostname === '127.0.0.1' && ownedStorageMode() && roles.length > 0 && pathname === '/reports' && (
-              <li>
-                <a
-                  href="#ai-assistant"
-                  className="inline-flex min-h-control items-center border-b-2 border-transparent px-2 text-sm font-medium text-foreground hover:bg-muted"
-                  onClick={(event) => {
-                    const panel = document.getElementById('ai-assistant') as HTMLDetailsElement | null;
-                    if (panel) {
-                      event.preventDefault();
-                      panel.open = true;
-                      panel.scrollIntoView?.({ block: 'start' });
-                      panel.querySelector('summary')?.focus({ preventScroll: true });
-                    }
-                  }}
-                >
-                  AI preview
-                </a>
-              </li>
-            )}
-          </ul>
-        </nav>
-        <AccountMenu />
+        {!authFlow && (
+          <>
+            <nav aria-label={h.nav}>
+              <ul className="flex flex-wrap items-center gap-1">
+                {landing &&
+                  [
+                    ['#platform', h.features],
+                    ['#questions', h.faq],
+                  ].map(([href, label]) => (
+                    <li key={href}>
+                      <a href={href} className="inline-flex min-h-control items-center px-2 text-sm font-medium hover:bg-muted">
+                        {label}
+                      </a>
+                    </li>
+                  ))}
+                {landing && (
+                  <li>
+                    <LanguageToggle />
+                  </li>
+                )}
+                {links.map((link) => (
+                  <li key={link.to}>
+                    <NavLink
+                      to={link.to}
+                      end={link.end}
+                      className={({ isActive }) =>
+                        cn(
+                          'inline-flex min-h-control items-center border-b-2 px-2 text-sm font-medium hover:bg-muted',
+                          isActive ? 'border-primary text-primary' : 'border-transparent text-foreground',
+                        )
+                      }
+                    >
+                      {link.label}
+                    </NavLink>
+                  </li>
+                ))}
+                {import.meta.env.DEV && location.hostname === '127.0.0.1' && ownedStorageMode() && roles.length > 0 && pathname === '/reports' && (
+                  <li>
+                    <a
+                      href="#ai-assistant"
+                      className="inline-flex min-h-control items-center border-b-2 border-transparent px-2 text-sm font-medium text-foreground hover:bg-muted"
+                      onClick={(event) => {
+                        const panel = document.getElementById('ai-assistant') as HTMLDetailsElement | null;
+                        if (panel) {
+                          event.preventDefault();
+                          panel.open = true;
+                          panel.scrollIntoView?.({ block: 'start' });
+                          panel.querySelector('summary')?.focus({ preventScroll: true });
+                        }
+                      }}
+                    >
+                      AI preview
+                    </a>
+                  </li>
+                )}
+              </ul>
+            </nav>
+            <AccountMenu />
+          </>
+        )}
       </div>
     </header>
   );
