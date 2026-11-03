@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
 import { ADMIN_ROLES } from '@/auth/roles';
+import { PreferredName } from '@/components/settings/PreferredName';
 import { AppearanceChoice } from '@/components/settings/AppearanceChoice';
 import { OrganizationValue } from '@/components/settings/OrganizationValue';
 import { SettingsRow } from '@/components/settings/SettingsRow';
@@ -44,6 +45,7 @@ export default function SettingsPage() {
             <OrganizationValue key={attempt} apiFetch={apiFetch} onRetry={() => setAttempt((n) => n + 1)} />
           </SettingsRow>
         </dl>
+        <PreferredName />
       </SettingsSection>
 
       <SettingsSection id="settings-storage" title="Browser storage" description="Choose whether this browser remembers your display and language settings.">

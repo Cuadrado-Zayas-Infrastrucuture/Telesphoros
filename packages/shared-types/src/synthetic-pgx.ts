@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-/** Draft spec 032/S1 interchange only. No route, clinical engine or trust decision consumes this contract. */
+/** Draft spec 032 interchange. Owned-local inspection may read laboratory evidence; this is not a clinical engine contract. */
 export const SYNTHETIC_PGX_SCHEMA_VERSION = 'pgx-synthetic-0.1' as const;
 export const SYNTHETIC_PGX_MAX_BYTES = 256 * 1024;
 const id = z.string().regex(/^syn-[a-z0-9-]{1,76}$/);

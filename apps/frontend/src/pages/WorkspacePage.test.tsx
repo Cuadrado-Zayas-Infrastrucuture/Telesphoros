@@ -59,6 +59,23 @@ afterEach(() => {
 });
 
 describe('the chat-first home in every build (specs/024)', () => {
+  it('uses a preferred name set in account preferences for the chat welcome', async () => {
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.click(screen.getByRole('link', { name: 'Settings' }));
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Preferred name' }), 'Avery');
+    await userEvent.click(screen.getByRole('button', { name: 'Save preferred name' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Close account preferences' }));
+    expect(await screen.findByText('Welcome, Avery.')).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Start with a synthetic report.' })).toBeVisible();
+  });
+
+  it('shows a generic welcome when a preferred name has not been set', async () => {
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    expect(screen.getByText('Welcome.')).toBeVisible();
+  });
+
   it('opens patient creation on the patient page instead of inside chat', async () => {
     const { router } = open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });

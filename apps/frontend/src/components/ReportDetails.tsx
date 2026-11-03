@@ -1,4 +1,5 @@
 import type { ReportDto } from '@telesphoros/shared-types';
+import { StructuredReportPreview } from '@/components/StructuredReportPreview';
 import { SyntheticReportDemo } from '@/components/SyntheticReportDemo';
 import { Button } from '@/components/ui/Button';
 import { REPORT_TYPE_LABELS } from '@/types/report';
@@ -43,26 +44,18 @@ export function ReportDetails({
       {downloading === report.id ? 'Verifying download…' : 'Download file'}
     </Button>
   );
-  const verificationCompact = (
-    <div className="border-t border-divider pt-4">
-      <h3 className="text-base text-primary">{report.fileUploaded ? 'Upload verified' : 'Upload not complete'}</h3>
-      <p className="mt-2 text-sm text-muted-foreground">
-        {report.fileUploaded
-          ? 'The stored file was verified. This does not establish capture acceptance, clinical processing or a guideline result.'
-          : 'Only metadata is available. The file has not been marked uploaded.'}
-      </p>
-    </div>
-  );
   const verification = (
-    <div className={`flex gap-3 rounded-lg p-4 ${report.fileUploaded ? 'bg-success-surface' : 'bg-background'}`}>
+    <div className={`flex gap-3 rounded-lg ${compact ? 'p-3' : 'p-4'} ${report.fileUploaded ? 'bg-success-surface' : 'bg-background'}`}>
       {report.fileUploaded ? (
         <Check aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-success" />
       ) : (
         <Minus aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-primary" />
       )}
       <div>
-        <h3 className={`text-base ${report.fileUploaded ? 'text-success' : 'text-primary'}`}>{report.fileUploaded ? 'Upload verified' : 'Upload not complete'}</h3>
-        <p className="mt-1 text-sm text-foreground">
+        <h3 className={`${compact ? 'text-sm' : 'text-base'} ${report.fileUploaded ? 'text-success' : 'text-primary'}`}>
+          {report.fileUploaded ? 'Upload verified' : 'Upload not complete'}
+        </h3>
+        <p className={compact ? 'mt-1 text-xs text-foreground' : 'mt-1 text-sm text-foreground'}>
           {report.fileUploaded
             ? 'The stored file was verified. This does not establish capture acceptance, clinical processing or a guideline result.'
             : 'Only metadata is available. The file has not been marked uploaded.'}
@@ -78,7 +71,7 @@ export function ReportDetails({
           {!compact && <p className="mt-1 text-sm text-muted-foreground">{REPORT_TYPE_LABELS[report.type]}</p>}
         </div>
       </div>
-      {!compact && verification}
+      {verification}
       <dl className={compact ? 'grid grid-cols-3 gap-2 text-xs' : 'grid grid-cols-2 gap-4 rounded-lg bg-background p-4 text-sm'}>
         <div className={compact ? undefined : 'col-span-2'}>
           <dt className="text-muted-foreground">Patient</dt>
@@ -95,6 +88,7 @@ export function ReportDetails({
       </dl>
       {!compact && downloadAction}
       {!compact && import.meta.env.VITE_SYNTHETIC_PGX_DEMO === 'true' && <SyntheticReportDemo key={`${report.id}:${report.sha256}`} report={report} />}
+      <StructuredReportPreview report={report} />
       {downloadError && (
         <p role="alert" className="text-sm text-destructive">
           {downloadError}
@@ -107,7 +101,6 @@ export function ReportDetails({
           {compact && (
             <div className="mb-3">
               <p className="text-sm text-muted-foreground">{REPORT_TYPE_LABELS[report.type]}</p>
-              {verificationCompact}
             </div>
           )}
           <dl className="flex flex-col gap-3 pb-2 text-sm">
