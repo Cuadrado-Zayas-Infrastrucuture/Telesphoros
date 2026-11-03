@@ -163,7 +163,7 @@ If CI is down, a person can still push by hand (today's runbook). The image is u
 
 ## Key custody and rotation
 
-- **Who can sign:** only the release role, only from `main`, only in the release environment.
+- **Who can sign:** only the release role, only from `main`, only in the release environment. **Synthetic staging exception (plan D6, 2026-11-03):** named roles of the staging account may also become the release role, to run `release-image.sh` on an archive CI built, scanned and rehearsed. The signer is still the release role; what is lost is the proof that the push came from CI on `main`, so the operator checks the archive digest against the `image` job's output first. Never in production.
 - **Who can verify:** anyone who can read the public key (`kms:GetPublicKey`). Operators get it; it is not secret.
 - **Rotation:** manual (US1 edge cases). A new key, a new alias, re-sign the kept images, then drop the old key from the verify list. Annually, or at once on suspicion.
 - **Deletion:** the profile's window (7 days synthetic, 30 production). Deleting the key makes every image unverifiable, so stage C fails closed.
