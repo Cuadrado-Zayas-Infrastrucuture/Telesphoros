@@ -31,6 +31,7 @@ async function navigateAwayAndBack(page: Page) {
   // otherwise both navigations can retain the submitting form instead of exercising recovery.
   const panel = page.getByRole('dialog', { name: 'Resume report upload', exact: true });
   await expect(panel).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'Question', exact: true })).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/\/reports\/upload$/);
   await expect(panel).toBeVisible();
