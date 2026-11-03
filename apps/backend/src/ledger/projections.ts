@@ -308,6 +308,22 @@ const LOADERS: Record<Exclude<RecordTable, 'evaluations'>, Loader> = {
       deIdentificationAuthorized: r.de_identification_authorized,
     }),
   },
+  structured_report_revisions: {
+    sql: `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
+      report_id::text AS report_id, patient_id::text AS patient_id, report_sha256, object_version, patient_link_decision_id::text AS patient_link_decision_id,
+      parser_version, laboratory_report FROM structured_report_revisions WHERE id=ANY($1::uuid[])`,
+    project: (r) => ({
+      kind: 'structured-report-revision',
+      ...common(r),
+      reportId: r.report_id,
+      patientId: r.patient_id,
+      reportSha256: r.report_sha256,
+      objectVersion: r.object_version,
+      patientLinkDecisionId: r.patient_link_decision_id,
+      parserVersion: r.parser_version,
+      laboratoryReport: r.laboratory_report,
+    }),
+  },
   patient_followups: {
     sql: `SELECT f.id::text AS id, f.tenant_id, f.seq::text AS seq, f.created_by, ${UTC('f.created_at')} AS created_at, f.ledger_event_id::text AS ledger_event_id,
       f.patient_id::text AS patient_id, f.thread_id::text AS thread_id, f.version, f.medication_id::text AS medication_id, f.decision_id::text AS decision_id,

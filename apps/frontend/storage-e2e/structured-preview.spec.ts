@@ -6,7 +6,11 @@ import { signInAs, openWorkspaceNavigation, selectReportsPatient } from '../e2e/
 test('chat upload, stored uncertain findings, and independent patient-link review', async ({ page, browser }) => {
   await signInAs(page, 'alice', '/workspace');
   const filename = `synthetic-${crypto.randomUUID().slice(0, 8)}.json`;
-  await page.locator('input[type=file]').setInputFiles({ name: filename, mimeType: 'application/json', buffer: readFileSync(new URL('../../../data/fixtures/pgx-contracts/uncertain/package.json', import.meta.url)) });
+  // Each browser case represents a different synthetic issuer, so its identifiers never collide across patients.
+  const source = JSON.parse(readFileSync(new URL('../../../data/fixtures/pgx-contracts/uncertain/package.json', import.meta.url), 'utf8'));
+  source.report.laboratoryId = `syn-lab-${crypto.randomUUID()}`;
+  source.report.assay.manifest.laboratoryId = source.report.laboratoryId;
+  await page.locator('input[type=file]').setInputFiles({ name: filename, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) });
   const dialog = page.getByRole('dialog', { name: 'Report details', exact: true });
   await dialog.getByRole('link', { name: 'Add patient', exact: true }).click();
   const label = `SYN-PGX-${crypto.randomUUID().slice(0, 8)}`;
@@ -69,11 +73,26 @@ test('chat upload, stored uncertain findings, and independent patient-link revie
     await save.click();
     await expect(review.getByText('verified', { exact: true })).toBeVisible();
     await expect(review.getByRole('status')).toHaveText('Patient-link decision recorded. Findings remain source evidence only.');
+    const record = review.getByRole('button', { name: 'Save findings for review', exact: true });
+    await expect(record).toBeEnabled();
+    expect((await record.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await record.click();
+    await expect(review.getByText('Saved · ready for findings review', { exact: true })).toBeVisible();
+    await review.getByText('Saved source history (1)', { exact: true }).click();
+    await expect(review.getByRole('list', { name: 'Saved source history' })).toContainText('Revision 1 (final)');
+    await review.getByRole('list', { name: 'Saved source history' }).scrollIntoViewIfNeeded();
+    expect(await reviewPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await reviewPage.evaluate(async () => {
+      // @ts-expect-error axe injected into this synthetic local browser.
+      return (await window.axe.run(document, { runOnly: ['wcag2a', 'wcag2aa', 'wcag21aa'] })).violations.map((v: { id: string }) => v.id);
+    })).toEqual([]);
     await reviewPage.screenshot({ path: test.info().outputPath('structured-verified.png'), fullPage: true });
     // A fresh read must retain the recorded state; it cannot be an optimistic local-only update.
     await reviewPage.getByRole('button', { name: 'Back to reports' }).click();
     await reviewPage.getByRole('button', { name: `Open ${filename}`, exact: true }).click();
     await reviewPage.getByRole('button', { name: 'Show structured findings' }).click();
     await expect(review.getByText('verified', { exact: true })).toBeVisible();
+    await expect(review.getByText('Saved · ready for findings review', { exact: true })).toBeVisible();
+    await expect(review.getByRole('button', { name: 'Save findings for review', exact: true })).toHaveCount(0);
   } finally { await reviewer.close(); }
 });

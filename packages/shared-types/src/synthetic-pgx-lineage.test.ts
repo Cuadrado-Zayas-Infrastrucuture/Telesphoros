@@ -220,6 +220,11 @@ describe('synthetic report revision inspection', () => {
   it.each([null, {}, { tenantId, patientId, sources: [], actionable: true }])('rejects a malformed or extended envelope', (input) => {
     expect(() => contracts.inspectSyntheticPgxLineage(input)).toThrow('Invalid synthetic lineage snapshot.');
   });
+  it('accepts canonical non-UUID application tenants while refusing mixed scopes', () => {
+    const s = { ...source(), tenantId: 'synthetic-clinic' };
+    expect(contracts.inspectSyntheticPgxLineage({ tenantId: 'synthetic-clinic', patientId, sources: [s] }).series[0].state).toBe('candidate-for-review');
+    expect(() => contracts.inspectSyntheticPgxLineage({ tenantId: 'another-clinic', patientId, sources: [s] })).toThrow('Invalid synthetic lineage snapshot.');
+  });
   it('returns no candidate for an empty collection', () => {
     expect(inspect([]).series).toEqual([]);
   });

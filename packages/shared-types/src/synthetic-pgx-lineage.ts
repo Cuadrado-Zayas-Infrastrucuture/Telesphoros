@@ -1,14 +1,15 @@
 import { z } from 'zod';
+import { tenantIdSchema } from './tenant';
 import { syntheticPgxLabReportSchema } from './synthetic-pgx';
 
 const snapshotSchema = z.strictObject({
-  tenantId: z.uuid(),
+  tenantId: tenantIdSchema,
   patientId: z.uuid(),
   sources: z
     .array(
       z.strictObject({
         sourceId: z.uuid(),
-        tenantId: z.uuid(),
+        tenantId: tenantIdSchema,
         patientId: z.uuid(),
         sha256: z.string().regex(/^[a-f0-9]{64}$/),
         objectVersion: z.string().min(1).max(1024),

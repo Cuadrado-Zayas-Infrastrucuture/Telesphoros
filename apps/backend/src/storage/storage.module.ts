@@ -1,3 +1,5 @@
+import { StructuredRevisionsRepository, UnavailableStructuredRevisionsRepository } from './structured-revisions.repository';
+import { PostgresStructuredRevisionsRepository } from './postgres/structured-revisions.repository';
 import { PatientFollowupsRepository, UnavailablePatientFollowupsRepository } from './patient-followups.repository';
 import { PostgresPatientFollowupsRepository } from './postgres/patient-followups.repository';
 import { PatientMedicationsRepository, UnavailablePatientMedicationsRepository } from './patient-medications.repository';
@@ -37,6 +39,7 @@ export class StorageModule {
       PatientDemographicsRepository,
       PatientMedicationsRepository,
       PatientFollowupsRepository,
+      StructuredRevisionsRepository,
       PatientIdentifiersRepository,
       ReportsRepository,
       MembershipRepository,
@@ -54,6 +57,7 @@ export class StorageModule {
         { provide: PatientDemographicsRepository, useClass: PostgresPatientDemographicsRepository },
         { provide: PatientMedicationsRepository, useClass: PostgresPatientMedicationsRepository },
         { provide: PatientFollowupsRepository, useClass: PostgresPatientFollowupsRepository },
+        { provide: StructuredRevisionsRepository, useClass: PostgresStructuredRevisionsRepository },
         { provide: PatientIdentifiersRepository, useClass: PostgresPatientIdentifiersRepository },
         { provide: ReportsRepository, useClass: PostgresReportsRepository },
         { provide: MembershipRepository, useClass: PostgresMembershipRepository },
@@ -75,6 +79,7 @@ export class StorageModule {
         { provide: PatientDemographicsRepository, useClass: UnavailablePatientDemographicsRepository },
         { provide: PatientMedicationsRepository, useClass: UnavailablePatientMedicationsRepository },
         { provide: PatientFollowupsRepository, useClass: UnavailablePatientFollowupsRepository },
+        { provide: StructuredRevisionsRepository, useClass: UnavailableStructuredRevisionsRepository },
         { provide: PatientIdentifiersRepository, useClass: InMemoryPatientIdentifiersRepository },
         { provide: ReportsRepository, useClass: InMemoryReportsRepository },
         { provide: MembershipRepository, useClass: InMemoryMembershipRepository },

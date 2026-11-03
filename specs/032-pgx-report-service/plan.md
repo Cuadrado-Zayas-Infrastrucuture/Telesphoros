@@ -56,3 +56,7 @@ First useful physician views: follow-up completion/due counts, assessment covera
 ## S2b1 bounded continuation
 
 The [revision inspection slice](../../docs/design/plans/pgx-revision-reconciliation.md) implements deterministic duplicate/conflict and amendment-chain classification as a pure shared-contract function. It is independently branched from main and does not depend on the S2a UI branch. It supplies candidate source references for future review, never persistence, acceptance or a current clinical profile. Immutable normalized records, transactional reconciliation and assessment-impact tasks remain S2 follow-ups.
+
+## S2b2 stored evidence continuation
+
+The [stored-revision slice](../../docs/design/plans/pgx-stored-revisions.md) connects S2a's exact-version source verification and independent patient matching to S2b1's lineage inspector. It adds immutable, ledger-covered laboratory revisions and a read-only normalized finding view, plus save/history controls in the existing report panel. Reconciliation uses the complete bounded patient history and preserves invalidated sources as holds. An eligible chain remains only a candidate for findings review; analytical acceptance, cross-laboratory selection, assessment generation and affected-assessment tasks remain follow-ups. The owned-local synthetic gate stays in force.

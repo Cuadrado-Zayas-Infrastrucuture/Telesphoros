@@ -218,5 +218,7 @@ describe('structured inspection outside the owned profile', () => {
     const person = await lab.person('profile-reviewer', ['reviewer']);
     await lab.api().get(`/api/v1/reports/${randomUUID()}/structured-preview`).set(bearer(person.token)).expect(503);
     await lab.api().post(`/api/v1/reports/${randomUUID()}/structured-preview/patient-link`).set(bearer(person.token)).send({}).expect(503);
+    await lab.api().get(`/api/v1/reports/${randomUUID()}/structured-preview/record`).set(bearer(person.token)).expect(503);
+    await lab.api().post(`/api/v1/reports/${randomUUID()}/structured-preview/record`).set(bearer(person.token)).send({}).expect(503);
   });
 });

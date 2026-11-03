@@ -294,7 +294,8 @@ describe('report_patient_decisions: the rules the table enforces on its own', ()
     for (const sql of [
       `UPDATE report_patient_decisions SET decision = 'rejected', basis_code = 'different-person' WHERE id = '${stored.record.id}'`,
       `DELETE FROM report_patient_decisions WHERE id = '${stored.record.id}'`,
-      'TRUNCATE report_patient_decisions',
+      // Structured revisions now reference decisions; CASCADE reaches the append-only trigger past the FK refusal.
+      'TRUNCATE report_patient_decisions CASCADE',
     ]) {
       await expect(owner((c) => c.query(sql))).rejects.toMatchObject({ code: '23000' });
     }

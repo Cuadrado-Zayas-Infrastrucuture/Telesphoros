@@ -9,6 +9,7 @@ import {
 } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
+import { StructuredRevisionRecord } from './StructuredRevisionRecord';
 
 export function StructuredPreviewContent({ reportId }: { reportId: string }) {
   const { apiFetch, roles } = useAuth();
@@ -143,7 +144,7 @@ export function StructuredPreviewContent({ reportId }: { reportId: string }) {
               <p className="break-words">
                 {lab.laboratoryId} · {lab.accession} · Revision {lab.revision} ({lab.status})
               </p>
-              {lab.previousRevisionId && <p className="break-words text-warning">Declared predecessor: {lab.previousRevisionId}. Revision lineage has not been reconciled.</p>}
+              {lab.previousRevisionId && <p className="break-words">Declared predecessor: {lab.previousRevisionId}.</p>}
               <ul aria-label="Laboratory findings" className="divide-y divide-divider">
                 {lab.findings.map((finding) => (
                   <li key={finding.id} className="space-y-1 break-words py-3">
@@ -200,7 +201,7 @@ export function StructuredPreviewContent({ reportId }: { reportId: string }) {
                 </div>
               </details>
               {preview.canReview && roles.includes('reviewer') ? (
-                <details>
+                <details key={preview.patientLink.decision?.id ?? 'unreviewed'}>
                   <summary className="min-h-control cursor-pointer py-3 font-semibold">Review patient link</summary>
                   <form
                     className="space-y-3"
@@ -259,6 +260,9 @@ export function StructuredPreviewContent({ reportId }: { reportId: string }) {
                 </details>
               ) : (
                 <p className="text-muted-foreground">An independent reviewer must decide the patient link. Anyone who registered or uploaded this report cannot review it.</p>
+              )}
+              {!busy && (
+                <StructuredRevisionRecord key={`${preview.source.sha256}:${preview.source.objectVersion}:${preview.patientLink.decision?.id ?? 'unreviewed'}`} preview={preview} />
               )}
             </>
           )}
