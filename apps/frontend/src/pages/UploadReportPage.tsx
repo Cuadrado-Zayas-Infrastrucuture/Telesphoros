@@ -1,11 +1,10 @@
 import { Link } from 'react-router-dom';
 import { ownedStorageMode } from '@/lib/storageMode';
 import { cancelOwnedUpload, restoreProgress, retireOwnedUpload } from '@/lib/ownedStorageApi';
-import { clearRecovery, readRecovery, RECOVERY_LIFETIME_MS, type RecoveryEntry } from '@/lib/uploadRecovery';
+import { clearRecovery, readRecovery } from '@/lib/uploadRecovery';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus, RefreshCw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import type { Paginated, PatientDto } from '@telesphoros/shared-types';
+import type { PatientDto } from '@telesphoros/shared-types';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
 import { useForm, useWatch, type FieldErrors } from 'react-hook-form';
 import { QuestionnaireProgress } from '@/components/ui/QuestionnaireProgress';
@@ -21,21 +20,25 @@ import { CardTitle } from '@/components/ui/CardTitle';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/Form';
 import { Input } from '@/components/ui/Input';
-import { Label } from '@/components/ui/Label';
 import { NativeSelect } from '@/components/ui/NativeSelect';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { PatientPicker } from '@/components/PatientPicker';
+import { AddPatientPanel } from '@/components/upload/AddPatientPanel';
+import { PatientPaging } from '@/components/upload/PatientPaging';
+import { UploadReceived } from '@/components/upload/UploadReceived';
+import { UploadSummary } from '@/components/upload/UploadSummary';
 import { useAddPatient } from '@/hooks/useAddPatient';
+import { useInterruptedUpload } from '@/hooks/useInterruptedUpload';
+import { usePatientPages } from '@/hooks/usePatientPages';
 import { INCOMPLETE_PROMPT } from '@/components/patients/IncompleteWord';
-import { PatientDemographicsFields } from '@/components/patients/PatientDemographicsFields';
+import { describeSize } from '@/lib/describeSize';
 import { incompleteness } from '@/lib/demographicsDraft';
-import { listPatients, SubmitError, submitReport, type UploadProgress } from '@/lib/api';
+import { SubmitError, submitReport, type UploadProgress } from '@/lib/api';
 import { productUploadSchema, type ProductUploadValues } from '@/lib/productUploadSchema';
 import { REPORT_TYPE_LABELS, REPORT_TYPES } from '@/types/report';
 
-function describeSize(bytes: number) {
-  return bytes < 1024 ? `${bytes} bytes` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KiB` : `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
-}
+/** Nothing is left on the server to resume: no upload was declared, or it reached a final state. */
+const uploadSettled = (progress: UploadProgress) => !progress.declaration || ['cancelled', 'cleaned', 'committed'].includes(progress.attempt?.state ?? '');
 
 // The file starts unset; the schema reports "Choose a report file." until one is picked.
 const emptyValues = {
@@ -51,24 +54,9 @@ const STEP_FIELDS = [['patientId'], ['reportType', 'file'], ['syntheticConfirmed
 export default function UploadReportPage() {
   usePageTitle('Upload report');
   const { apiFetch, recoverySession } = useAuth();
-  // After a reload the browser may still hold an interrupted upload of this tab (see lib/uploadRecovery.ts): offer to finish or cancel it.
-  const [interrupted, setInterrupted] = useState<RecoveryEntry | undefined>(() => readRecovery(recoverySession));
+  // After a reload the browser may still hold an interrupted upload of this tab: offer to finish or cancel it.
+  const [interrupted, setInterrupted] = useInterruptedUpload(recoverySession);
   const [startingProgress] = useState<UploadProgress>(() => (interrupted && recoverySession ? restoreProgress(interrupted, recoverySession) : {}));
-  useEffect(() => {
-    if (!interrupted) return;
-    const refresh = () => setInterrupted(readRecovery(recoverySession));
-    const timer = setTimeout(refresh, Math.max(0, Date.parse(interrupted.savedAt) + RECOVERY_LIFETIME_MS - Date.now()));
-    const visible = () => {
-      if (document.visibilityState === 'visible') refresh();
-    };
-    window.addEventListener('focus', refresh);
-    document.addEventListener('visibilitychange', visible);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener('focus', refresh);
-      document.removeEventListener('visibilitychange', visible);
-    };
-  }, [interrupted, recoverySession]);
   const progress = useRef<UploadProgress>(startingProgress);
   const transfer = useRef<AbortController | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -81,33 +69,8 @@ export default function UploadReportPage() {
     },
     [],
   );
-  const [patients, setPatients] = useState<Paginated<PatientDto> | null>(null);
+  const { patients, loading: patientsLoading, error: patientError, requestedPage, load: loadPatients } = usePatientPages();
   const [selectedPatient, setSelectedPatient] = useState<PatientDto | null>(null);
-  const [patientRequest, setPatientRequest] = useState({ page: 1, attempt: 0 });
-  const [patientsLoading, setPatientsLoading] = useState(true);
-  const [patientError, setPatientError] = useState<string | null>(null);
-  useEffect(() => {
-    const controller = new AbortController();
-    void listPatients(apiFetch, patientRequest.page, controller.signal)
-      .then((result) => {
-        if (!controller.signal.aborted) {
-          setPatients(result);
-          setPatientsLoading(false);
-        }
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted && !(error instanceof SessionEndedError)) {
-          setPatientError('Patients could not be loaded. Please retry.');
-          setPatientsLoading(false);
-        }
-      });
-    return () => controller.abort();
-  }, [apiFetch, patientRequest]);
-  function loadPatients(page: number) {
-    setPatientError(null);
-    setPatientsLoading(true);
-    setPatientRequest((current) => ({ page, attempt: current.attempt + 1 }));
-  }
 
   const [serverError, setServerError] = useState<string | null>(null);
   const [reference, setReference] = useState<string | null>(null);
@@ -191,7 +154,7 @@ export default function UploadReportPage() {
     } finally {
       transfer.current = null;
       if (progress.current.cancelRequested) await cancelUpload();
-      setCanStartOver(!progress.current.declaration || ['cancelled', 'cleaned', 'committed'].includes(progress.current.attempt?.state ?? ''));
+      setCanStartOver(uploadSettled(progress.current));
       setInterrupted(readRecovery(recoverySession));
     }
   }
@@ -206,7 +169,7 @@ export default function UploadReportPage() {
       setServerError(error instanceof SubmitError ? error.message : 'Cancellation could not be confirmed. Retry cancellation before starting over.');
     } finally {
       setCancelling(false);
-      setCanStartOver(!progress.current.declaration || ['cancelled', 'cleaned', 'committed'].includes(progress.current.attempt?.state ?? ''));
+      setCanStartOver(uploadSettled(progress.current));
     }
   }
 
@@ -249,36 +212,7 @@ export default function UploadReportPage() {
     setFormKey((key) => key + 1);
   }
 
-  // The form, and the Submit button that had focus, are replaced by the result: say where the person is now.
-  const receivedHeading = useRef<HTMLHeadingElement>(null);
-  useEffect(() => {
-    if (reference) receivedHeading.current?.focus();
-  }, [reference]);
-
-  if (reference) {
-    return (
-      <div className="flex max-w-prose flex-col gap-4">
-        <h1 ref={receivedHeading} tabIndex={-1} className="text-3xl leading-tight font-bold focus:outline-none">
-          Report received
-        </h1>
-        <Alert variant="success">
-          <AlertTitle>Upload complete</AlertTitle>
-          <AlertDescription>
-            Reference <strong>{reference}</strong>. The server verified the stored file. This does not indicate clinical review or processing.
-          </AlertDescription>
-        </Alert>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button disabled={isSubmitting || cancelling} onClick={startOver}>
-            Upload another report
-          </Button>
-          {/* Every build has /reports (b9b5307d), and every uploader holds a role that may read it. */}
-          <Button asChild variant="outline">
-            <Link to="/reports">View reports</Link>
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  if (reference) return <UploadReceived reference={reference} busy={isSubmitting || cancelling} onStartOver={startOver} />;
 
   return (
     <div className="flex flex-col gap-6">
@@ -376,7 +310,7 @@ export default function UploadReportPage() {
                                 error={patientError}
                                 emptyMessage="No patients yet. Add a synthetic patient to continue."
                                 disabled={isSubmitting}
-                                onRetry={() => loadPatients(patientRequest.page)}
+                                onRetry={() => loadPatients(requestedPage)}
                                 onValueChange={(id) => {
                                   field.onChange(id);
                                   setSelectedPatient(patients?.data.find((patient) => patient.id === id) ?? null);
@@ -397,138 +331,28 @@ export default function UploadReportPage() {
                         )}
                       />
 
-                      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-                        {!patientsLoading && !patientError && patients && patients.meta.total > 0 && (
-                          <p role="status" className="text-sm text-muted-foreground">
-                            Patient page {patients.meta.page} of {patients.meta.totalPages}
-                          </p>
-                        )}
-                        <div className="-ml-3 flex flex-wrap gap-1 sm:ml-0">
-                          {!patientError && (
-                            <Button type="button" variant="ghost" size="sm" disabled={patientsLoading || isSubmitting} onClick={() => loadPatients(patients?.meta.page ?? 1)}>
-                              <RefreshCw aria-hidden="true" className="size-4 shrink-0" />
-                              Refresh patients
-                            </Button>
-                          )}
-                          {patients && patients.meta.totalPages > 1 && (
-                            <>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                disabled={patientsLoading || isSubmitting || patients.meta.page <= 1}
-                                onClick={() => loadPatients(patients.meta.page - 1)}
-                              >
-                                Previous patients
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                disabled={patientsLoading || isSubmitting || patients.meta.page >= patients.meta.totalPages}
-                                onClick={() => loadPatients(patients.meta.page + 1)}
-                              >
-                                Next patients
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </div>
+                      <PatientPaging patients={patients} loading={patientsLoading} error={patientError} busy={isSubmitting} onPage={loadPatients} />
                       {added && (
                         <p role="status" className="text-sm text-muted-foreground">
                           {added}
                         </p>
                       )}
-                      {addVisible ? (
-                        <div role="group" aria-labelledby="add-patient-heading" className="flex flex-col gap-3 rounded-md border border-border bg-muted/40 p-4">
-                          <p id="add-patient-heading" className="text-sm font-medium">
-                            Add a synthetic patient
-                          </p>
-                          {addForm.pending ? (
-                            <p className="text-sm text-muted-foreground">
-                              Patient <span className="font-medium text-foreground">{addForm.pending.label}</span> exists and is selected. Save its demographics, or continue and
-                              add them later on the patient's page.
-                            </p>
-                          ) : (
-                            <div className="flex flex-col gap-2">
-                              <Label htmlFor="new-patient-label">Synthetic patient label</Label>
-                              <Input
-                                id="new-patient-label"
-                                value={addForm.label}
-                                autoComplete="off"
-                                spellCheck={false}
-                                readOnly={addForm.busy}
-                                aria-invalid={addForm.labelError ? true : undefined}
-                                aria-describedby={addForm.labelError ? 'new-patient-help new-patient-error' : 'new-patient-help'}
-                                onChange={(event) => addForm.setLabel(event.target.value)}
-                                onKeyDown={(event) => {
-                                  // Enter adds the patient; without this it would submit the whole upload form.
-                                  if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
-                                    event.preventDefault();
-                                    void addPatient();
-                                  }
-                                }}
-                              />
-                              <p id="new-patient-help" className="text-sm text-muted-foreground">
-                                Letters, numbers and hyphens only, up to 40 characters, for example SYN-0002. A code, never a name or a real identifier.
-                              </p>
-                              {addForm.labelError && (
-                                <p id="new-patient-error" role="alert" className="text-sm text-destructive">
-                                  {addForm.labelError}
-                                </p>
-                              )}
-                            </div>
-                          )}
-                          <PatientDemographicsFields
-                            idPrefix="new-patient"
-                            value={addForm.draft}
-                            errors={addForm.errors}
-                            disabled={addForm.busy}
-                            onChange={addForm.setDraft}
-                            onEnter={() => void addPatient()}
-                          />
-                          {addForm.problem && (
-                            <p role="alert" className="text-sm text-destructive">
-                              {addForm.problem}
-                            </p>
-                          )}
-                          <div className="flex flex-wrap gap-2">
-                            <Button type="button" size="sm" pending={addForm.busy} pendingLabel="Saving…" disabled={isSubmitting} onClick={() => void addPatient()}>
-                              {addForm.pending ? 'Save demographics' : 'Add patient'}
-                            </Button>
-                            {!rosterEmpty && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                disabled={addForm.busy}
-                                onClick={() => {
-                                  setAddOpen(false);
-                                  addForm.reset();
-                                }}
-                              >
-                                Cancel
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="-ml-3">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            disabled={patientsLoading || isSubmitting}
-                            onClick={() => {
-                              setAddOpen(true);
-                              setAdded(null);
-                            }}
-                          >
-                            <Plus aria-hidden="true" className="size-4 shrink-0" />
-                            Add a synthetic patient
-                          </Button>
-                        </div>
-                      )}
+                      <AddPatientPanel
+                        addForm={addForm}
+                        visible={addVisible}
+                        rosterEmpty={rosterEmpty}
+                        rosterLoading={patientsLoading}
+                        submitting={isSubmitting}
+                        onAdd={() => void addPatient()}
+                        onOpen={() => {
+                          setAddOpen(true);
+                          setAdded(null);
+                        }}
+                        onCancel={() => {
+                          setAddOpen(false);
+                          addForm.reset();
+                        }}
+                      />
                     </div>
 
                     <div hidden={guided && step !== 1} className={guided && step !== 1 ? 'hidden' : 'flex flex-col gap-6'}>
@@ -576,31 +400,7 @@ export default function UploadReportPage() {
                       />
                     </div>
                     <div hidden={guided && step !== 2} className={guided && step !== 2 ? 'hidden' : 'flex flex-col gap-6'}>
-                      {guided && (
-                        <section aria-label="Upload summary" className="rounded-lg border border-divider bg-background p-4">
-                          <h3 className="text-lg">Check your entries</h3>
-                          <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-                            <div>
-                              <dt className="text-muted-foreground">Synthetic patient</dt>
-                              <dd className="wrap-anywhere font-medium">{selectedPatient?.label ?? 'Not selected'}</dd>
-                            </div>
-                            <div>
-                              <dt className="text-muted-foreground">Report type</dt>
-                              <dd>{values.reportType ? REPORT_TYPE_LABELS[values.reportType] : 'Not selected'}</dd>
-                            </div>
-                            <div className="min-w-0 sm:col-span-2">
-                              <dt className="text-muted-foreground">Report file</dt>
-                              <dd className="wrap-anywhere">
-                                {values.file?.name ?? 'Not selected'}
-                                {values.file && ` (${describeSize(values.file.size)})`}
-                              </dd>
-                            </div>
-                          </dl>
-                          <p className="mt-3 text-sm text-muted-foreground">
-                            Nothing has been submitted yet. Storage verification happens after upload and is not clinical review.
-                          </p>
-                        </section>
-                      )}
+                      {guided && <UploadSummary patientLabel={selectedPatient?.label} values={values} />}
                       <FormField
                         control={form.control}
                         name="syntheticConfirmed"
