@@ -1,3 +1,4 @@
+import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useEffect, useState } from 'react';
 import type { FollowupResponseSummary as Summary } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
@@ -59,7 +60,7 @@ export function FollowupResponseSummary() {
           Response summary is unavailable. Counts could not be verified.
         </p>
       ) : !data ? (
-        <p role="status">Loading response summary…</p>
+        <ContentSkeleton label="Loading response summary…" variant="detail" />
       ) : data.total === 0 ? (
         <p>No follow-ups recorded yet.</p>
       ) : (

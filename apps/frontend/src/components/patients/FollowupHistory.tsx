@@ -1,3 +1,4 @@
+import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { Button } from '@/components/ui/Button';
 import { useFollowups } from '@/hooks/useFollowups';
 import { FollowupValues } from './FollowupValues';
@@ -14,7 +15,7 @@ export function FollowupHistory({ patientId, threadId }: { patientId: string; th
           </Button>
         </>
       ) : !data ? (
-        <p>Loading history…</p>
+        <ContentSkeleton label="Loading history…" variant="list" />
       ) : (
         <>
           <ol aria-label="Follow-up history" className="flex flex-col gap-4">

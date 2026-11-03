@@ -1,3 +1,4 @@
+import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useEffect, useState } from 'react';
 import type { PatientMedicationDto } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
@@ -51,7 +52,7 @@ export function MedicationHistory({ patientId, current }: { patientId: string; c
       ) : value ? (
         <MedicationValues value={value} />
       ) : (
-        <p role="status">Loading version…</p>
+        <ContentSkeleton label="Loading version…" variant="detail" />
       )}
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" disabled={version <= 1} onClick={() => view(version - 1)}>

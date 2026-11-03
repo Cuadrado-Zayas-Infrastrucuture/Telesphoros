@@ -1,3 +1,4 @@
+import { Skeleton } from '@/components/ui/Skeleton';
 import { useId } from 'react';
 import type { PatientDto } from '@telesphoros/shared-types';
 import { Button } from '@/components/ui/Button';
@@ -61,6 +62,12 @@ export function PatientPicker({
         ))}
         {newPatientOption && <option value={newPatientOption.value}>{newPatientOption.label}</option>}
       </NativeSelect>
+      {busy && (
+        <div aria-hidden="true">
+          <Skeleton className="h-4 w-2/3" />
+          <Skeleton className="mt-2 h-4 w-1/2" />
+        </div>
+      )}
       {message && (
         <div className="flex flex-wrap items-center gap-2">
           <p id={stateId} role={!busy && error ? 'alert' : 'status'} className={!busy && error ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>
