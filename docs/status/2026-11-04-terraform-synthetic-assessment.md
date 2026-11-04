@@ -1,0 +1,11 @@
+# The Terraform switch for the synthetic assessment (032 S3, PR 3c-2)
+
+Date: 2026-11-04
+
+Staging can now be told to run the synthetic assessment, and nothing changes until someone says so. `synthetic_assessment_enabled` is a boolean that defaults to off. Turned on, it adds `SYNTHETIC_ASSESSMENT=enabled` and `SYNTHETIC_KNOWLEDGE_DIR=/app/synthetic-knowledge` to the API task, together (the application refuses either alone). The directory is where the image already carries the synthetic knowledge (3c-1). Turned on under a production definition, the plan fails: the variable's own validation refuses any profile but the synthetic one, and the environment map is built behind the same test a second time.
+
+What changed: `api-compute.tf` (the variable and a gated map merged into the API environment); `api-compute.guard.test.mjs` (new rules, a test that hands the on-environment to the application's own `loadEnv`, eleven new controls); `issuer.guard.test.mjs` and `profile.guard.test.mjs` (the pinned environment shape and the list of profile uses, changed on purpose); `profiles.tftest.hcl` (off by default in two existing runs, a run with it on, a run expecting the production refusal); `docs/ops/api-hosting.md`; the plan table, where the duplicate 3b and 3c rows left by the web merge on #282 are now one row each.
+
+Verification, Node 22.22.0 and Terraform 1.16.5 (the CI pin): `api-compute` guard 6 of 6, `issuer` 4 of 4, `profile` 2 of 2; each new control was checked against the rule it targets. `test:infra` 303 of 303 and `test:ci-config` 221 of 221 (sandbox off for the publish-script tests). `terraform fmt -check`, `validate` and `terraform test` (72 passed, 0 failed, two of them new runs) with the sandbox off for the provider plugin. Three deliberate breaks of the Terraform (validation always true, the directory moved, the default turned on) each failed the run meant to catch it, and the file was restored byte-identical. gitleaks: no leaks, run from the repository root with the repository's configuration.
+
+Not done: no plan or apply against the live stack. The flip changes only the API task definition, which the IMAGE release shape already allows, so it goes out together with the new image in 3c-3, applied by the founder. Hosted CI has not run.
