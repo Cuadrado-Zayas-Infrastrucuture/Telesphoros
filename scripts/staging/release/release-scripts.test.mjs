@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { createHash } from 'node:crypto';
-import { fencePlan } from './fence-plan.fixtures.mjs';
+import { assessmentPlan, fencePlan } from './fence-plan.fixtures.mjs';
 
 const here = new URL('.', import.meta.url).pathname;
 const box = mkdtempSync(join(tmpdir(), 'release-scripts-'));
@@ -288,4 +288,110 @@ test('fence operations preserve history, bind both var hashes and apply only the
   assert.match(failedLog, /== apply exit status: 17/);
   assert.equal(readFileSync(current, 'utf8'), target, 'a failed apply does not publish its target as canonical');
   assert.equal(readFileSync(`${current}.sha256`, 'utf8').trim(), sha(current));
+});
+
+test('assessment operations: ON waits for the verified release and OFF never waits; both bind the var hashes and publish only the reviewed target', () => {
+  writeCurrent(NEW);
+  const original = readFileSync(current, 'utf8');
+  const verificationFile = join(rel, 'verified-image.json');
+  const signed = readFileSync(verificationFile, 'utf8');
+  assert.match(signed, /"method":"signature"/, 'the fence test left a signature record covering the running image');
+  const imageLog = readFileSync(join(rel, 'i-apply.txt'), 'utf8');
+  assert.match(imageLog, /== apply exit status: 0/);
+  const migrateStatus = join(rel, 'migrate-status.txt');
+  writeFileSync(migrateStatus, 'pending: (none)\n');
+  const shape = (mode) => writeFileSync(join(stubDir, 'plan.json'), JSON.stringify(assessmentPlan(mode, NEW)));
+  const pinOf = (r) => r.stdout.match(/plan sha256: ([0-9a-f]{64})/)?.[1];
+  const saveCurrent = (text) => { writeFileSync(current, text); writeFileSync(`${current}.sha256`, sha(current) + '\n'); };
+  const startSerial = readFileSync(join(stubDir, 'serial'), 'utf8');
+
+  // Switching ON waits for a signed verification of the running image, a finished IMAGE apply and no pending migration.
+  shape('ASSESSMENT-ON');
+  writeFileSync(verificationFile, '{}');
+  assert.equal(run('plan.sh', ['ASSESSMENT-ON', COMMIT, 'on-unsigned'], owner).status, 1, 'an empty verification marker is insufficient');
+  writeFileSync(verificationFile, signed.replace('"method":"signature"', '"method":"break-glass"'));
+  assert.equal(run('plan.sh', ['ASSESSMENT-ON', COMMIT, 'on-break-glass'], owner).status, 1, 'an unsigned break-glass image is not enough');
+  writeFileSync(verificationFile, signed);
+  writeFileSync(join(rel, 'i-apply.txt'), '== apply exit status: 9\n');
+  assert.equal(run('plan.sh', ['ASSESSMENT-ON', COMMIT, 'on-incomplete-image'], owner).status, 1);
+  writeFileSync(join(rel, 'i-apply.txt'), imageLog);
+  writeFileSync(migrateStatus, 'pending: 0071\n');
+  assert.equal(run('plan.sh', ['ASSESSMENT-ON', COMMIT, 'on-pending-migration'], owner).status, 1);
+  writeFileSync(migrateStatus, 'pending: (none)\n');
+  assert.equal(run('plan.sh', ['ASSESSMENT-ON', COMMIT], owner).status, 1, 'an operation id is required');
+  assert.equal(run('plan.sh', ['ASSESSMENT-ON', COMMIT, '../escape'], owner).status, 1);
+  writeFileSync(join(stubDir, 'plan.json'), JSON.stringify(fencePlan('FENCE-CLOSE', true, NEW)));
+  assert.equal(run('plan.sh', ['ASSESSMENT-ON', COMMIT, 'on-wrong-shape'], owner).status, 1, 'a medication plan is not an assessment plan');
+  assert.ok(!existsSync(join(rel, 'assessments/on-wrong-shape/ae.tfplan.meta.json')), 'a plan the release check refuses is not recorded');
+  shape('ASSESSMENT-ON');
+
+  const planned = run('plan.sh', ['ASSESSMENT-ON', COMMIT, 'on-1'], owner);
+  assert.equal(planned.status, 0, planned.stdout + planned.stderr); quiet(planned);
+  const folder = join(rel, 'assessments/on-1');
+  const pin = pinOf(planned);
+  assert.ok(pin);
+  const target = readFileSync(join(folder, 'ae.tfvars'), 'utf8');
+  assert.equal(readFileSync(join(folder, 'source.tfvars'), 'utf8'), original);
+  assert.equal(target, original + 'synthetic_assessment_enabled = true\n');
+  const metadata = JSON.parse(readFileSync(join(folder, 'ae.tfplan.meta.json'), 'utf8'));
+  assert.equal(metadata.mode, 'ASSESSMENT-ON');
+  assert.equal(metadata.sourceVarSha256, sha(current));
+  assert.equal(metadata.varSha256, sha(join(folder, 'ae.tfvars')));
+  assert.equal(run('apply.sh', ['ASSESSMENT-ON', COMMIT, '0'.repeat(64), 'on-1'], owner).status, 1);
+  saveCurrent(target); // Even a changed canonical file with a valid self-hash must not pass.
+  const changedSource = run('apply.sh', ['ASSESSMENT-ON', COMMIT, pin, 'on-1'], owner);
+  assert.equal(changedSource.status, 1); assert.match(changedSource.stderr, /sourceVarSha256|stale|source variables changed/);
+  saveCurrent(original);
+  writeFileSync(join(stubDir, 'serial'), String(Number(startSerial) + 1));
+  assert.equal(run('apply.sh', ['ASSESSMENT-ON', COMMIT, pin, 'on-1'], owner).status, 1, 'state drift must refuse the plan');
+  writeFileSync(join(stubDir, 'serial'), startSerial);
+  writeFileSync(migrateStatus, 'pending: 0071\n');
+  assert.equal(run('apply.sh', ['ASSESSMENT-ON', COMMIT, pin, 'on-1'], owner).status, 1, 'switching on is rechecked at apply');
+  writeFileSync(migrateStatus, 'pending: (none)\n');
+  assert.equal(run('apply.sh', ['ASSESSMENT-ON', COMMIT, pin, 'on-1'], { CLAIM_OWNER: 'session-b' }).status, 1, 'only the claim holder applies');
+  const started = run('apply.sh', ['ASSESSMENT-ON', COMMIT, pin, 'on-1'], owner);
+  assert.equal(started.status, 0, started.stdout + started.stderr);
+  assert.match(waitFor(join(folder, 'ae-apply.txt')), /== apply exit status: 0/);
+  assert.equal(readFileSync(current, 'utf8'), target);
+  assert.equal(readFileSync(`${current}.sha256`, 'utf8').trim(), sha(current));
+  assert.equal(run('plan.sh', ['ASSESSMENT-ON', COMMIT, 'on-1'], owner).status, 1, 'old operation records are not overwritten');
+  assert.equal(run('apply.sh', ['ASSESSMENT-ON', COMMIT, pin, 'on-1'], owner).status, 1, 'an applied operation cannot be applied again');
+
+  // A target edited during the apply is never published as canonical, and a failed apply publishes nothing.
+  shape('ASSESSMENT-OFF');
+  writeFileSync(verificationFile, '{}'); writeFileSync(join(rel, 'i-apply.txt'), '== apply exit status: 9\n'); writeFileSync(migrateStatus, 'pending: 0071\n');
+  const changing = run('plan.sh', ['ASSESSMENT-OFF', COMMIT, 'off-target-changes'], owner);
+  assert.equal(changing.status, 0, 'switching OFF waits for nothing: ' + changing.stdout + changing.stderr);
+  const changeFolder = join(rel, 'assessments/off-target-changes');
+  const edited = run('apply.sh', ['ASSESSMENT-OFF', COMMIT, pinOf(changing), 'off-target-changes'], { ...owner, STUB_MUTATE_TARGET: join(changeFolder, 'ad.tfvars') });
+  assert.equal(edited.status, 0, edited.stdout + edited.stderr);
+  assert.match(waitFor(join(changeFolder, 'ad-apply.txt')), /== apply exit status: 3/);
+  assert.equal(readFileSync(current, 'utf8'), target, 'a target edited during apply is never published as canonical');
+  const failing = run('plan.sh', ['ASSESSMENT-OFF', COMMIT, 'off-fails'], owner);
+  assert.equal(failing.status, 0, failing.stdout + failing.stderr);
+  const failed = run('apply.sh', ['ASSESSMENT-OFF', COMMIT, pinOf(failing), 'off-fails'], { ...owner, STUB_APPLY_EXIT: '17' });
+  assert.equal(failed.status, 0, failed.stdout + failed.stderr);
+  assert.match(waitFor(join(rel, 'assessments/off-fails/ad-apply.txt')), /== apply exit status: 17/);
+  assert.equal(readFileSync(current, 'utf8'), target, 'a failed apply does not publish its target as canonical');
+
+  // The way back: OFF, with the release evidence gone, still plans and applies, and rewrites only its own line.
+  const off = run('plan.sh', ['ASSESSMENT-OFF', COMMIT, 'off-1'], owner);
+  assert.equal(off.status, 0, off.stdout + off.stderr); quiet(off);
+  assert.equal(readFileSync(join(rel, 'assessments/off-1/ad.tfvars'), 'utf8'), original + 'synthetic_assessment_enabled = false\n');
+  const offApply = run('apply.sh', ['ASSESSMENT-OFF', COMMIT, pinOf(off), 'off-1'], owner);
+  assert.equal(offApply.status, 0, offApply.stdout + offApply.stderr);
+  assert.match(waitFor(join(rel, 'assessments/off-1/ad-apply.txt')), /== apply exit status: 0/);
+  assert.equal(readFileSync(current, 'utf8'), original + 'synthetic_assessment_enabled = false\n');
+  assert.ok(existsSync(join(folder, 'ae.tfplan.meta.json')), 'the earlier switching-on evidence remains');
+
+  // Switching on again rewrites the same line in place.
+  writeFileSync(verificationFile, signed); writeFileSync(join(rel, 'i-apply.txt'), imageLog); writeFileSync(migrateStatus, 'pending: (none)\n');
+  shape('ASSESSMENT-ON');
+  const again = run('plan.sh', ['ASSESSMENT-ON', COMMIT, 'on-2'], owner);
+  assert.equal(again.status, 0, again.stdout + again.stderr);
+  assert.equal(readFileSync(join(rel, 'assessments/on-2/ae.tfvars'), 'utf8'), original + 'synthetic_assessment_enabled = true\n');
+  assert.ok(!existsSync(join(rel, 'fences/on-1')), 'assessment evidence never lands in the fence folders');
+  mkdirSync(join(rel, 'assessments/on-2/apply-started'));
+  assert.equal(run('apply.sh', ['ASSESSMENT-ON', COMMIT, pinOf(again), 'on-2'], owner).status, 1, 'a previous start blocks another apply even before its log exists');
+  assert.ok(!existsSync(join(rel, 'assessments/on-2/ae-apply.txt')));
 });

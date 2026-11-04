@@ -22,6 +22,22 @@ export function fencePlan(mode = 'FENCE-CLOSE', missing = false, runningImage = 
   };
 }
 
+/** The two settings ASSESSMENT-ON installs in the API task (and ASSESSMENT-OFF removes), as the container definition lists them. */
+export const ASSESSMENT_ENV = [{ name: 'SYNTHETIC_ASSESSMENT', value: 'enabled' }, { name: 'SYNTHETIC_KNOWLEDGE_DIR', value: '/app/synthetic-knowledge' }];
+/** The same resources and variables as fencePlan, for the synthetic assessment: ON adds both settings to the API task, OFF removes both. */
+export function assessmentPlan(mode = 'ASSESSMENT-ON', runningImage = FENCE_IMAGE) {
+  const on = mode === 'ASSESSMENT-ON';
+  const plan = fencePlan('FENCE-CLOSE', false, runningImage);
+  const { before, after } = plan.resource_changes[0].change;
+  const containers = (withSettings) => JSON.stringify([{ name: 'api', image: runningImage, environment: [{ name: 'NODE_ENV', value: 'production' },
+    { name: 'MEDICATION_WRITES', value: 'disabled' }, ...(withSettings ? ASSESSMENT_ENV : [])], secrets: [], readonlyRootFilesystem: true }]);
+  before.container_definitions = containers(!on);
+  after.container_definitions = containers(on);
+  delete plan.variables.medication_writes_enabled;
+  plan.variables.synthetic_assessment_enabled = { value: on };
+  return plan;
+}
+
 /** What the provider reads back on a real replacement (the first live FENCE-CLOSE plan, 2026-11-02), with invented values. */
 export function providerReadBack(plan) {
   const task = plan.resource_changes[0].change;

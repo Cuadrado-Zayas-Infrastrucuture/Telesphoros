@@ -36,3 +36,39 @@ test('opening record coverage rejects unsigned, wrong-image and wrong-stack reco
     assert.equal(coversFenceImage(Object.keys(change).length ? { ...good, ...change } : {}, image), false);
   }
 });
+
+// ASSESSMENT-ON / ASSESSMENT-OFF (spec 032 S3, PR 3c-3a): the same discipline for synthetic_assessment_enabled.
+test('assessment vars append or replace only their flag and preserve unrelated bytes', () => {
+  assert.equal(fenceVars(privateLine, 'ASSESSMENT-ON'), privateLine + 'synthetic_assessment_enabled = true\n');
+  assert.equal(fenceVars(privateLine, 'ASSESSMENT-OFF'), privateLine + 'synthetic_assessment_enabled = false\n');
+  assert.equal(fenceVars(privateLine + 'synthetic_assessment_enabled = false\n', 'ASSESSMENT-ON'), privateLine + 'synthetic_assessment_enabled = true\n');
+  assert.equal(fenceVars(privateLine + 'synthetic_assessment_enabled = true # approved\n', 'ASSESSMENT-OFF'), privateLine + 'synthetic_assessment_enabled = false\n');
+  assert.equal(fenceVars('x = 1', 'ASSESSMENT-ON'), 'x = 1\nsynthetic_assessment_enabled = true\n', 'a file without a final newline gets one before the flag');
+});
+test('the medication flag and the assessment flag never touch each other\'s line', () => {
+  const both = privateLine + 'medication_writes_enabled = false\nsynthetic_assessment_enabled = false\n';
+  assert.equal(fenceVars(both, 'ASSESSMENT-ON'), privateLine + 'medication_writes_enabled = false\nsynthetic_assessment_enabled = true\n');
+  assert.equal(fenceVars(both, 'FENCE-OPEN'), privateLine + 'medication_writes_enabled = true\nsynthetic_assessment_enabled = false\n');
+  assert.equal(fenceVars(privateLine + 'medication_writes_enabled = true\n', 'ASSESSMENT-ON'), privateLine + 'medication_writes_enabled = true\nsynthetic_assessment_enabled = true\n');
+  assert.equal(fenceVars(privateLine + 'synthetic_assessment_enabled = true\n', 'FENCE-CLOSE'), privateLine + 'synthetic_assessment_enabled = true\nmedication_writes_enabled = false\n');
+});
+test('ambiguous HCL and duplicates are rejected for the assessment flag without values', () => {
+  for (const text of ['synthetic_assessment_enabled = 1', 'synthetic_assessment_enabled = var.x', 'synthetic_assessment_enabled = false\nsynthetic_assessment_enabled = true',
+    '/*\nsynthetic_assessment_enabled = false\n*/', 'synthetic_assessment_enabled = false\r\n', 'note = <<EOF\nsynthetic_assessment_enabled = false\nEOF',
+    'synthetic_assessment_enabled = "true"']) {
+    assert.throws(() => fenceVars(text, 'ASSESSMENT-ON'));
+  }
+  assert.throws(() => fenceVars(privateLine, 'ASSESSMENT'));
+  assert.throws(() => fenceVars(privateLine, 'ASSESSMENT-ENABLE'));
+});
+test('assessment plan records bind both the canonical source and the generated target var files', () => {
+  for (const mode of ['ASSESSMENT-ON', 'ASSESSMENT-OFF']) {
+    const input = { mode, head: 'a'.repeat(40), varSha256: 'b'.repeat(64), planSha256: 'c'.repeat(64), sourceVarSha256: 'd'.repeat(64), state: { serial: 7, lineage: 'synthetic' } };
+    const saved = record(input);
+    assert.equal(saved.sourceVarSha256, 'd'.repeat(64));
+    assert.deepEqual(mismatches(saved, record(input)), []);
+    assert.match(mismatches(saved, record({ ...input, sourceVarSha256: 'e'.repeat(64) }))[0], /sourceVarSha256/);
+    assert.throws(() => record({ ...input, sourceVarSha256: undefined }));
+  }
+  assert.doesNotThrow(() => record({ mode: 'IMAGE', head: 'a'.repeat(40), varSha256: 'b'.repeat(64), planSha256: 'c'.repeat(64), state: { serial: 7, lineage: 'synthetic' } }), 'the other modes still need no source hash');
+});

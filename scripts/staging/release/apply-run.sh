@@ -11,7 +11,7 @@ load_stack
 pins_match() {
   [[ "$VAR_PIN" =~ ^[0-9a-f]{64}$ && "$PLAN_PIN" =~ ^[0-9a-f]{64}$ ]] || return 1
   [ "$(sha "$PLAN")" = "$PLAN_PIN" ] && [ "$(sha "$VARFILE")" = "$VAR_PIN" ] || return 1
-  if [[ "$MODE" = FENCE-CLOSE || "$MODE" = FENCE-OPEN ]]; then
+  if flag_mode "$MODE"; then
     [[ "$SOURCE_PIN" =~ ^[0-9a-f]{64}$ ]] && [ "$(sha "$CURRENT")" = "$SOURCE_PIN" ] &&
       [ "$(sha "$(dirname "$PLAN")/source.tfvars")" = "$SOURCE_PIN" ] || return 1
   fi
@@ -22,7 +22,7 @@ if ! pins_match; then
 fi
 "$TERRAFORM" -chdir="$TFDIR" apply -input=false -no-color "$PLAN" </dev/null > "$LOG" 2>&1
 STATUS=$?
-if [ "$STATUS" = 0 ] && { [ "$MODE" = IMAGE ] || [ "$MODE" = FENCE-CLOSE ] || [ "$MODE" = FENCE-OPEN ]; }; then
+if [ "$STATUS" = 0 ] && { [ "$MODE" = IMAGE ] || flag_mode "$MODE"; }; then
   if pins_match && cp "$VARFILE" "$CURRENT.new" && [ "$(sha "$CURRENT.new")" = "$VAR_PIN" ] &&
     sha "$CURRENT.new" > "$CURRENT.sha256.new" && mv "$CURRENT.new" "$CURRENT" && mv "$CURRENT.sha256.new" "$CURRENT.sha256"; then
     echo "== current.tfvars is now this release's var file (sha256 $(cut -c1-16 "$CURRENT.sha256"))" >> "$LOG"

@@ -6,6 +6,7 @@
 //   node plan-record.mjs check META MODE HEAD VAR_SHA PLAN_SHA < state-identity.json   exits 1 naming each mismatch
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { FLAG_MODES } from './fence-vars.mjs';
 
 const HEX64 = /^[0-9a-f]{64}$/;
 
@@ -18,8 +19,8 @@ export function stateIdentity(text) {
 }
 
 export function record({ mode, head, varSha256, planSha256, state, sourceVarSha256, made = new Date().toISOString() }) {
-  if (!['MIGRATE', 'IMAGE', 'INFRA', 'FENCE-CLOSE', 'FENCE-OPEN'].includes(mode)) throw new Error('unsupported release mode');
-  const fence = mode === 'FENCE-CLOSE' || mode === 'FENCE-OPEN';
+  if (!['MIGRATE', 'IMAGE', 'INFRA', ...FLAG_MODES].includes(mode)) throw new Error('unsupported release mode');
+  const fence = FLAG_MODES.includes(mode);
   if (fence && !HEX64.test(sourceVarSha256 ?? '')) throw new Error('fence source var hash must be sha256 hex');
   if (!/^[0-9a-f]{40}$/.test(head ?? '')) throw new Error('head is not a full commit id');
   if (!HEX64.test(varSha256 ?? '') || !HEX64.test(planSha256 ?? '')) throw new Error('the var file and plan hashes must be sha256 hex');
@@ -28,7 +29,7 @@ export function record({ mode, head, varSha256, planSha256, state, sourceVarSha2
 
 /** Each way the stack now differs from the record, as text; empty when the plan is still the one that was read. */
 export function mismatches(saved, now) {
-  return ['mode', 'serial', 'lineage', 'head', 'varSha256', 'planSha256', ...(['FENCE-CLOSE', 'FENCE-OPEN'].includes(now.mode) ? ['sourceVarSha256'] : [])]
+  return ['mode', 'serial', 'lineage', 'head', 'varSha256', 'planSha256', ...(FLAG_MODES.includes(now.mode) ? ['sourceVarSha256'] : [])]
     .filter((k) => saved?.[k] !== now[k])
     .map((k) => `${k}: the plan was made at ${saved?.[k] ?? '(none)'}, now ${now[k]}`);
 }

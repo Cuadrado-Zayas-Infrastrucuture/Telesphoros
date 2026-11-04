@@ -68,4 +68,11 @@ running_image() {
   printf '%s\n' "$api"
 }
 
+# The reviewed one-flag transitions (fence-vars.mjs): same image, one canonical variable changed, one operation folder per attempt.
+flag_mode() { case "$1" in FENCE-CLOSE|FENCE-OPEN|ASSESSMENT-ON|ASSESSMENT-OFF) return 0 ;; *) return 1 ;; esac; }
+flag_folder() { case "$1" in FENCE-CLOSE|FENCE-OPEN) echo fences ;; ASSESSMENT-ON|ASSESSMENT-OFF) echo assessments ;; esac; }
+# The two that may only follow a finished, verified release: opening the medication fence, and switching the synthetic assessment on.
+# Closing and switching off never wait for anything: they are the way back.
+flag_needs_release() { [ "$1" = FENCE-OPEN ] || [ "$1" = ASSESSMENT-ON ]; }
+
 state_identity() { "$TERRAFORM" -chdir="$TFDIR" state pull </dev/null 2>/dev/null | node "$HERE/plan-record.mjs" state; }
