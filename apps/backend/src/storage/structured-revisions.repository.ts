@@ -40,9 +40,18 @@ export interface StructuredSnapshot {
 }
 /** Runs inside the writing transaction after its locks are held; throws a conflict when the evidence is no longer open for the decision. */
 export type SnapshotCheck = (snapshot: StructuredSnapshot) => void;
+/** The report file a snapshot is read for: the same four facts a preview carries, so a snapshot can be read without opening the preview. */
+export interface SnapshotKey {
+  patientId: string;
+  reportId: string;
+  sha256: string;
+  objectVersion: string;
+}
 export abstract class StructuredRevisionsRepository {
   abstract save(tenant: string, actor: string, preview: StructuredPreview): Promise<boolean>;
   abstract read(tenant: string, preview: StructuredPreview): Promise<StructuredSnapshot>;
+  /** Same snapshot as `read`, for a caller that holds the report record and not a preview (the synthetic assessment). */
+  abstract readForReport(tenant: string, key: SnapshotKey): Promise<StructuredSnapshot>;
   abstract recordReview(tenant: string, actor: string, preview: StructuredPreview, input: StructuredFindingReviewCreate, check: SnapshotCheck): Promise<boolean>;
   abstract recordResolution(tenant: string, actor: string, preview: StructuredPreview, input: StructuredSourceResolutionCreate, check: SnapshotCheck): Promise<boolean>;
 }
@@ -52,6 +61,9 @@ export class UnavailableStructuredRevisionsRepository extends StructuredRevision
     throw AppException.unavailable('Structured records require the PostgreSQL store.');
   }
   async read(): Promise<StructuredSnapshot> {
+    throw AppException.unavailable('Structured records require the PostgreSQL store.');
+  }
+  async readForReport(): Promise<StructuredSnapshot> {
     throw AppException.unavailable('Structured records require the PostgreSQL store.');
   }
   async recordReview(): Promise<boolean> {
