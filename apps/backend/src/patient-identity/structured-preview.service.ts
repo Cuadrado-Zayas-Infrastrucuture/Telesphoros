@@ -21,7 +21,13 @@ export class StructuredPreviewService {
     private readonly links: PatientLinkService,
   ) {}
 
+  /**
+   * Two ways in, never mixed: an owned disposable local run (every restriction of `assertLocalStorage`), or an environment switched to hold only synthetic
+   * data (SYNTHETIC_ASSESSMENT, which configuration validation only allows with PostgreSQL, versioned S3, a watched ledger and no local run). The switch does
+   * not loosen the local check; it is a different environment with its own requirements.
+   */
   assertEnabled() {
+    if (this.env.SYNTHETIC_ASSESSMENT === 'enabled') return;
     assertLocalStorage(this.env);
     if (this.env.STORAGE_DRIVER !== 'postgres' || this.env.OBJECT_STORAGE_DRIVER !== 's3')
       throw AppException.unavailable('Structured inspection requires owned local PostgreSQL and versioned object storage.');

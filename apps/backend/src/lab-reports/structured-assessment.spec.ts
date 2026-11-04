@@ -263,3 +263,32 @@ describe('the synthetic knowledge set for structured assessment', () => {
     ).toEqual(['drugv-genea', 'drugv-genea-genee', 'drugw-genea', 'drugx-genea', 'drugx-genec', 'drugy-geneb']);
   });
 });
+
+describe('the structured demonstration package', () => {
+  const demoPath = resolve(REPO, 'data/fixtures/pgx-structured-demo/package.json');
+  const demo = () => parseSyntheticPgxPackage(readFileSync(demoPath, 'utf8')).report;
+
+  it('is a valid S1 package whose findings are assessable once a second person accepts them (control: unreviewed, it is held)', () => {
+    const report = demo();
+    expect(report.findings.map((f) => [f.id, f.gene, f.reportedCall?.kind])).toEqual([
+      ['syn-finding-a', 'GENEA', 'diplotype'],
+      ['syn-finding-b', 'GENEB', 'diplotype'],
+    ]);
+    expect(held(plan(snapshot([revision(report)])))).toMatchObject({ holdCode: 'findings-not-reviewed' });
+    const ready = plan(snapshot([revision(report)], [review(REV1, 'syn-finding-a'), review(REV1, 'syn-finding-b')]));
+    expect(ready.kind).toBe('ready');
+    if (ready.kind === 'ready')
+      expect(ready.geneInputs).toEqual([
+        { gene: 'GENEA', state: 'diplotype', diplotype: '*1/*1' },
+        { gene: 'GENEB', state: 'diplotype', diplotype: '*3/*3' },
+      ]);
+  });
+
+  it('gives the expected synthetic cells against the structured knowledge, written by hand: GENEA *1/*1 is Normal and GENEB *3/*3 (activity 0) is Low', async () => {
+    const set = await loadKnowledge({ directory: resolve(REPO, 'data/fixtures/knowledge/synthetic-structured'), mode: 'non-production' });
+    const plan_ = plan(snapshot([revision(demo())], [review(REV1, 'syn-finding-a'), review(REV1, 'syn-finding-b')]));
+    if (plan_.kind !== 'ready') throw new Error('expected a ready plan');
+    const text = Object.fromEntries(evaluate(set, plan_.geneInputs).results.map((r) => [r.drug, 'recommendationText' in r ? r.recommendationText : null]));
+    expect(text).toEqual({ drugq: 'Q normal.', drugz: 'Z normal-low.' });
+  });
+});

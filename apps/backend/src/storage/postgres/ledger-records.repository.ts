@@ -10,6 +10,7 @@ import {
   MergeAlreadyDecidedError,
   MergeRefusedError,
   PatientLinkUnverifiedError,
+  StructuredBasisChangedError,
   StaleAcceptanceError,
   SourceChangedError,
   toLedgerError,
@@ -548,7 +549,23 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
     // needs the same lock: every dispute change is either committed before we got the lock (and this separate statement, a new
     // snapshot under READ COMMITTED, sees it) or queued behind us (and is ordered after this evaluation).
     if (input.disposition === 'evaluated') await this.assertDisputeBasis(client, tenantId, input.disputeBasis ?? []);
+    // Reviews and source resolutions append under this same lock too, so what a fresh statement reads now is what exists at COMMIT.
+    if (input.structuredBasis !== undefined) await this.assertStructuredBasis(client, tenantId, input.patientId, input.structuredBasis);
     return stored;
+  }
+
+  /** Refuses (StructuredBasisChangedError) unless the patient's stored revisions, newest finding reviews and source resolutions are exactly the ones planned on. */
+  private async assertStructuredBasis(client: PoolClient, tenantId: string, patientId: string, basis: NonNullable<EvaluationInput['structuredBasis']>): Promise<void> {
+    const { rows } = await client.query<{ revisions: string[]; reviews: string[]; resolutions: string[] }>(
+      `SELECT COALESCE((SELECT array_agg(id::text) FROM structured_report_revisions WHERE tenant_id = $1 AND patient_id = $2), '{}') AS revisions,
+              COALESCE((SELECT array_agg(id::text) FROM (SELECT DISTINCT ON (revision_id, source_finding_id) id FROM structured_finding_reviews
+                         WHERE tenant_id = $1 AND patient_id = $2 ORDER BY revision_id, source_finding_id, seq DESC) f), '{}') AS reviews,
+              COALESCE((SELECT array_agg(id::text) FROM structured_source_resolutions WHERE tenant_id = $1 AND patient_id = $2), '{}') AS resolutions`,
+      [tenantId, patientId],
+    );
+    const same = (a: readonly string[], b: readonly string[]) => a.length === b.length && [...a].sort().join() === [...b].sort().join();
+    const now = rows[0]!;
+    if (!same(now.revisions, basis.revisionIds) || !same(now.reviews, basis.reviewIds) || !same(now.resolutions, basis.resolutionIds)) throw new StructuredBasisChangedError();
   }
 
   /** The ids of the disputes in force (open, or decided `upheld`) in the tenant. */

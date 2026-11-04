@@ -11,6 +11,8 @@ import { ObjectStorage } from '../object-storage/object-storage';
 @Injectable()
 export class PipelineSwitch {
   readonly enabled: boolean;
+  /** SYNTHETIC_ASSESSMENT: the synthetic structured assessment, which is not the pipeline. */
+  readonly syntheticAssessment: boolean;
   readonly localStorageOnly: boolean;
   readonly downloadUrlTtlSeconds: number;
   private readonly originEnv: Pick<Env, 'NODE_ENV' | 'LAB_REPORT_PIPELINE'>;
@@ -18,6 +20,7 @@ export class PipelineSwitch {
   constructor(@Inject(ENV) env: Env) {
     this.originEnv = { NODE_ENV: env.NODE_ENV, LAB_REPORT_PIPELINE: env.LAB_REPORT_PIPELINE };
     this.enabled = env.LAB_REPORT_PIPELINE === 'enabled';
+    this.syntheticAssessment = env.SYNTHETIC_ASSESSMENT === 'enabled';
     this.localStorageOnly = !!env.LOCAL_STORAGE_RUN_ID;
     this.downloadUrlTtlSeconds = env.DOWNLOAD_URL_TTL_SECONDS;
   }
@@ -31,9 +34,21 @@ export class PipelineSwitch {
   assertEnabled(): void {
     if (!this.enabled) throw AppException.pipelineDisabled();
   }
+
+  /** Throws 503 PIPELINE_DISABLED unless the pipeline or the synthetic structured assessment is on. For the evaluation reads, which need neither the reader nor the knowledge. */
+  assertEnabledOrSyntheticAssessment(): void {
+    if (!this.enabled && !this.syntheticAssessment) throw AppException.pipelineDisabled();
+  }
+
+  /** Throws 503 unless the synthetic structured assessment is on. Cheap and side-effect free, like `assertEnabled`. */
+  assertSyntheticAssessment(): void {
+    if (!this.syntheticAssessment) throw AppException.unavailable('The synthetic structured assessment is switched off.');
+  }
 }
 
 export const REQUIRES_PIPELINE = 'lab-reports:requires-pipeline';
+/** Marks a controller that SYNTHETIC_ASSESSMENT unlocks. A test lists them, so the switch can never open a route without this mark being added on purpose. */
+export const UNLOCKED_BY_SYNTHETIC_ASSESSMENT = 'lab-reports:unlocked-by-synthetic-assessment';
 
 /**
  * Route guard for every route that belongs to the pipeline. Nest runs global guards first (authentication, then roles), then this one,
@@ -51,6 +66,31 @@ export class PipelineGateGuard implements CanActivate {
 
 /** Marks a controller or route as part of the pipeline (and applies the gate). A test lists routes by this mark. */
 export const RequiresPipeline = () => applyDecorators(SetMetadata(REQUIRES_PIPELINE, true), UseGuards(PipelineGateGuard));
+
+/** For the evaluation reads only: open with the pipeline OR the synthetic structured assessment. Still a pipeline route (the mark stays), and listed as unlocked. */
+@Injectable()
+export class EvaluationReadGateGuard implements CanActivate {
+  constructor(private readonly pipeline: PipelineSwitch) {}
+  canActivate(): boolean {
+    this.pipeline.assertEnabledOrSyntheticAssessment();
+    return true;
+  }
+}
+export const RequiresPipelineOrSyntheticAssessment = () =>
+  applyDecorators(SetMetadata(REQUIRES_PIPELINE, true), SetMetadata(UNLOCKED_BY_SYNTHETIC_ASSESSMENT, true), UseGuards(EvaluationReadGateGuard));
+
+/** Gate of the synthetic structured assessment's own routes: they need the switch, and never the pipeline. */
+@Injectable()
+export class SyntheticAssessmentGateGuard implements CanActivate {
+  constructor(private readonly pipeline: PipelineSwitch) {}
+  canActivate(): boolean {
+    this.pipeline.assertSyntheticAssessment();
+    return true;
+  }
+}
+/** Only the mark, for a controller that keeps its own gate (the structured preview's) but is opened by the switch. */
+export const UnlockedBySyntheticAssessment = () => SetMetadata(UNLOCKED_BY_SYNTHETIC_ASSESSMENT, true);
+export const RequiresSyntheticAssessment = () => applyDecorators(SetMetadata(UNLOCKED_BY_SYNTHETIC_ASSESSMENT, true), UseGuards(SyntheticAssessmentGateGuard));
 
 /**
  * With the pipeline on, the evidence rests on object VERSIONS: a bucket that does not keep them cannot pin a captured file, so the

@@ -12,6 +12,8 @@ import { withAdmin } from './database';
 import { bearer, signToken } from './tokens';
 
 export const TEST_KNOWLEDGE = resolve(__dirname, '../../../../data/fixtures/knowledge/test-only-reader');
+/** The synthetic knowledge of the structured assessment (spec 032 S3); never the pipeline's. */
+export const SYNTHETIC_STRUCTURED_KNOWLEDGE = resolve(__dirname, '../../../../data/fixtures/knowledge/synthetic-structured');
 export const REPO_ROOT = resolve(__dirname, '../../../..');
 // The public synthetic fixtures (D01 to D12; see data/fixtures/lab-reports/README.md), whose ids match the hand-written oracle. Every pipeline spec
 // reads these with the test stand-in reader (see app.ts), whether or not the engine is in the checkout.

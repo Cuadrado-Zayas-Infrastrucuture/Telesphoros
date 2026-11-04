@@ -14,6 +14,7 @@ import { CurrentPrincipal, Roles } from '../auth/decorators';
 import type { Principal } from '../auth/principal';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { RateLimitClass } from '../rate-limit/rate-limit.decorators';
+import { UnlockedBySyntheticAssessment } from '../lab-reports/pipeline-switch';
 import { StructuredPreviewService } from './structured-preview.service';
 
 @Injectable()
@@ -27,6 +28,7 @@ export class StructuredPreviewGuard implements CanActivate {
 
 @Controller('reports/:id/structured-preview')
 @UseGuards(StructuredPreviewGuard)
+@UnlockedBySyntheticAssessment()
 export class StructuredPreviewController {
   constructor(
     private readonly service: StructuredPreviewService,

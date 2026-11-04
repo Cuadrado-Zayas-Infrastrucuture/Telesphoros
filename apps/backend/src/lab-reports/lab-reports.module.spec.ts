@@ -2,7 +2,8 @@ import { resolve } from 'node:path';
 import type { Env } from '../config/env';
 import { KnowledgeLoadError } from '../services/knowledge/knowledge-loader';
 import { ReaderNotApprovedError } from '../services/report-reader/report-reader';
-import { labKnowledgeFactory, labReaderFactory } from './lab-reports.module';
+import { cleanupTempDirs, reviewedCopyOf, tempDir } from '../../test/helpers/knowledge';
+import { labKnowledgeFactory, labReaderFactory, syntheticKnowledgeFactory } from './lab-reports.module';
 
 // loadEnv refuses the pipeline in production. These are the second line: had that refusal been bypassed (a wrong or missing NODE_ENV reaching
 // a production start), the reader and the knowledge loader must apply their own production rules, which the module used to switch off.
@@ -23,5 +24,38 @@ describe('the lab-report pipeline applies production rules when NODE_ENV is prod
     const off = { ...envOf('production'), LAB_REPORT_PIPELINE: 'disabled' } as Env;
     await expect(labReaderFactory(off)).resolves.toBeUndefined();
     await expect(labKnowledgeFactory(off)).resolves.toBeUndefined();
+  });
+});
+
+// Spec 032 S3: the synthetic structured assessment loads its own knowledge under the non-production rules, so the factory itself makes sure nothing but
+// synthetic content can be loaded that way. It is never the pipeline's knowledge.
+describe('the synthetic knowledge of the structured assessment', () => {
+  const SYNTHETIC_STRUCTURED = resolve(__dirname, '../../../../data/fixtures/knowledge/synthetic-structured');
+  const switched = (over: Partial<Env> = {}) =>
+    ({ NODE_ENV: 'production', LAB_REPORT_PIPELINE: 'disabled', SYNTHETIC_ASSESSMENT: 'enabled', SYNTHETIC_KNOWLEDGE_DIR: SYNTHETIC_STRUCTURED, ...over }) as Env;
+  afterAll(cleanupTempDirs);
+
+  it('is built only while the switch is on, even in production mode, and then holds the synthetic guidelines (control for each refusal below)', async () => {
+    await expect(syntheticKnowledgeFactory(switched({ SYNTHETIC_ASSESSMENT: 'disabled' }))).resolves.toBeUndefined();
+    const set = await syntheticKnowledgeFactory(switched());
+    expect(
+      set
+        ?.allGuidelines()
+        .map((g) => g.id)
+        .sort(),
+    ).toEqual(['drugq-genea', 'drugz-genea', 'drugz-genea-geneb']);
+    expect(set?.files.every((f) => f.synthetic)).toBe(true);
+  });
+
+  it('refuses a directory that holds content which says it is not synthetic, which the non-production loader would otherwise accept', async () => {
+    const real = await reviewedCopyOf(SYNTHETIC_STRUCTURED);
+    // Loaded as it would be started: the loader itself accepts it outside production, so only the factory's own check can stop it.
+    await expect(syntheticKnowledgeFactory(switched({ SYNTHETIC_KNOWLEDGE_DIR: real }))).rejects.toThrow(/synthetic knowledge only/);
+  });
+
+  it('refuses an empty directory, and the base directory of the pipeline is not what it reads', async () => {
+    await expect(syntheticKnowledgeFactory(switched({ SYNTHETIC_KNOWLEDGE_DIR: await tempDir() }))).rejects.toThrow(/at least one guideline/);
+    const set = await syntheticKnowledgeFactory(switched());
+    expect(set?.files.some((f) => f.path.includes('drugv'))).toBe(false);
   });
 });

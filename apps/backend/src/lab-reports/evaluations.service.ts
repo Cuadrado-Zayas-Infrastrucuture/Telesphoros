@@ -16,8 +16,8 @@ import { evaluate } from '../services/recommendation-engine/recommendation-engin
 import { adaptReport, adapterKnowledgeFrom, type AdapterResult } from '../services/report-adapter';
 import { applyDisputeOverlay, type DisputedCell, OVERLAY_VERSION, type OverlayResult } from '../services/knowledge/dispute-overlay';
 import type { KnowledgeSet } from '../services/knowledge/knowledge-set';
-import { currentDataOrigin } from '../ledger/data-origin';
-import { DisputeChangedError, PatientLinkUnverifiedError } from '../ledger/ledger-types';
+import { currentDataOrigin, structuredAssessmentOrigin } from '../ledger/data-origin';
+import { DisputeChangedError, PatientLinkUnverifiedError, StructuredBasisChangedError } from '../ledger/ledger-types';
 import { linkState } from '../patient-identity/link-state';
 import { type ReaderResult } from '../services/report-reader/reader-result';
 import type { ReadOptions, ReportReader } from '../services/report-reader/report-reader';
@@ -35,6 +35,8 @@ import { TextCaptureRunner } from './runner/text-capture-runner';
 
 export const LAB_KNOWLEDGE = Symbol('LAB_KNOWLEDGE');
 export const LAB_READER = Symbol('LAB_READER');
+/** The synthetic knowledge a structured assessment evaluates against (SYNTHETIC_ASSESSMENT). Undefined otherwise; never the pipeline's LAB_KNOWLEDGE. */
+export const SYNTHETIC_KNOWLEDGE = Symbol('SYNTHETIC_KNOWLEDGE');
 /** The scope stored in the binding of a synthetic structured assessment: it never reads a PDF and is never a clinical release. */
 export const STRUCTURED_ASSESSMENT_SCOPE = 'synthetic-structured-assessment';
 /** What a structured assessment refusal says, by plan reason. Nothing from the report is quoted. */
@@ -75,6 +77,7 @@ export class EvaluationsService {
     @Optional() @Inject(LAB_READER) private readonly reader?: ReportReader,
     @Optional() private readonly status?: LedgerStatus,
     @Optional() private readonly structured?: StructuredRevisionsRepository,
+    @Optional() @Inject(SYNTHETIC_KNOWLEDGE) private readonly syntheticKnowledge?: KnowledgeSet,
   ) {}
 
   private need<T>(dependency: T | undefined | null): T {
@@ -161,17 +164,27 @@ export class EvaluationsService {
   }
 
   /**
+   * Assesses the stored structured revision of a report (032 S3, synthetic) and reads the stored evaluation back the way a caller of the API sees it.
+   * `created` is false when the same assessment already exists.
+   */
+  async assessStructured(principal: Principal, reportId: string): Promise<EvaluationOutcome> {
+    const stored = await this.storeStructured(principal, reportId);
+    return { evaluation: await this.present(principal.tenantId, stored.record), created: stored.created };
+  }
+
+  /**
    * Assesses the stored structured revision of a report (032 S3, synthetic). Nothing here reads a PDF or runs the reader: the input is the stored
-   * revision and the independent reviews of its findings. Refused BEFORE anything is stored: a report without a verified patient link, one that is
-   * not a structured report, a revision whose stored evidence changed or that is not the one under review. Held (stored, no result) for everything
-   * incomplete, conflicting or unsupported. No route calls this yet; the staging slice does.
+   * revision and the independent reviews of its findings, evaluated against the SYNTHETIC knowledge only (never the pipeline's). Refused BEFORE anything
+   * is stored: a report without a verified patient link, one that is not a structured report, a revision whose stored evidence changed or that is not
+   * the one under review. Held (stored, no result) for everything incomplete, conflicting or unsupported. The stored evidence the plan rests on (revisions,
+   * newest reviews, resolutions) is read again after the ledger lock is held, as the patient link and disputes are; a difference plans again, once more.
    */
   async storeStructured(principal: Principal, reportId: string): Promise<InsertResult> {
     const ledger = this.need(this.ledger);
-    const knowledge = this.need(this.knowledge);
+    const knowledge = this.need(this.syntheticKnowledge);
     const structured = this.need(this.structured);
     this.status?.assertOpen(principal.tenantId);
-    const origin = currentDataOrigin(this.env);
+    const origin = structuredAssessmentOrigin(this.env);
     // Stored with every evaluation. Missing is a misconfiguration, refused here and not left to fail when the record is hashed.
     const engineVersion = this.need(this.env.BUILD_VERSION);
 
@@ -184,27 +197,31 @@ export class EvaluationsService {
     const link = linkState(report, await ledger.latestPatientDecision(principal.tenantId, report.id));
     if (link.state !== 'verified') throw this.unverified();
 
-    const snapshot = await structured.readForReport(principal.tenantId, {
-      patientId: report.patientId,
-      reportId: report.id,
-      sha256: report.sha256 as string,
-      objectVersion: report.objectVersion as string,
-    });
-    const plan = planStructuredAssessment(principal.tenantId, report, snapshot);
-    if (plan.kind === 'refused') {
-      const [code, message] = STRUCTURED_REFUSALS[plan.reason];
-      throw AppException.conflictBecause(code, message);
-    }
-
     for (let attempt = 1; ; attempt++) {
+      const snapshot = await structured.readForReport(principal.tenantId, {
+        patientId: report.patientId,
+        reportId: report.id,
+        sha256: report.sha256 as string,
+        objectVersion: report.objectVersion as string,
+      });
+      const plan = planStructuredAssessment(principal.tenantId, report, snapshot);
+      if (plan.kind === 'refused') {
+        const [code, message] = STRUCTURED_REFUSALS[plan.reason];
+        throw AppException.conflictBecause(code, message);
+      }
       const active = (await ledger.listDisputes(principal.tenantId)).filter((d) => d.status !== 'dismissed');
-      const input = { origin, ...this.buildStructured(report, plan, knowledge, active, engineVersion), patientLinkDecisionId: link.decision!.id };
+      const structuredBasis = {
+        revisionIds: snapshot.revisions.map((r) => r.id).sort(),
+        reviewIds: snapshot.reviews.map((r) => r.id).sort(),
+        resolutionIds: snapshot.resolutions.map((r) => r.id).sort(),
+      };
+      const input = { origin, ...this.buildStructured(report, plan, knowledge, active, engineVersion), structuredBasis, patientLinkDecisionId: link.decision!.id };
       try {
         return await ledger.insertEvaluation(principal.tenantId, principal.sub, input);
       } catch (error) {
         if (error instanceof PatientLinkUnverifiedError) throw this.unverified();
-        if (!(error instanceof DisputeChangedError) || attempt >= 2) throw error;
-        this.logger.warn({ event: 'dispute-changed-retry' }, 'A dispute changed while assessing; assessing once more');
+        if (!(error instanceof DisputeChangedError || error instanceof StructuredBasisChangedError) || attempt >= 3) throw error;
+        this.logger.warn({ event: 'structured-basis-changed-retry' }, 'The stored evidence or a dispute changed while assessing; assessing once more');
       }
     }
   }

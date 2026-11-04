@@ -78,6 +78,17 @@ export class DisputeChangedError extends Error {
 }
 
 /**
+ * The reviews, resolutions or stored revisions an assessment of a structured revision was planned on are not what the ledger holds now (found after the
+ * ledger lock was taken). Nothing was written; the caller reads the stored evidence again and plans again.
+ */
+export class StructuredBasisChangedError extends Error {
+  constructor() {
+    super('The stored evidence changed while the assessment was being made.');
+    this.name = 'StructuredBasisChangedError';
+  }
+}
+
+/**
  * The report's patient link is not verified for the file it holds now: no decision, a rejection, or a decision made about an earlier file. Raised
  * AFTER the ledger lock is held, so a decision recorded or a file replaced in between cannot slip past. Nothing was saved.
  */
