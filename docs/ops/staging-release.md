@@ -21,7 +21,8 @@ people's merged Terraform. The scripts in `scripts/staging/release/` replace tho
 ## The steps
 
 1. `scripts/staging/staging-status.sh` (spec 027, PR 2): read its table. Anything merged and not applied goes out first, as step 3 with INFRA.
-2. `scripts/staging/release/claim.sh take NAME "reason"`. Every later step runs with `CLAIM_OWNER=NAME`.
+2. `scripts/staging/release/claim.sh take NAME "reason"`. Every later step runs with `CLAIM_OWNER=NAME`. If `take` refuses,
+   `claim.sh show` names the holder: ask them, and never plan from another session's pin or saved plan.
 3. INFRA, only if step 1 listed merged Terraform: `plan.sh INFRA COMMIT`, read the plan text line by line, then `apply.sh INFRA COMMIT SHA256`.
 4. The image. Until PR 3b ports it, build and record it with the last release folder's `release-image.sh`, writing `new_image.txt` and
    `verified-image.json` into `~/telesphoros-private/releases/COMMIT/`.
