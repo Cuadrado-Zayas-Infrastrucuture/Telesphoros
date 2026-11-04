@@ -9,11 +9,14 @@ export function StoredResult({
   result,
   followupBusy,
   onFollowup,
+  decisions = true,
 }: {
   evaluation: EvaluationSummaryDto;
   result: EvaluationSummaryDto['results'][number];
   followupBusy: boolean;
   onFollowup: (link: DecisionLink) => void;
+  /** False in the synthetic staging, where decisions on results are not switched on: the result is shown and nothing can be recorded about it. */
+  decisions?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -35,10 +38,12 @@ export function StoredResult({
           {result.citation && <pre className="whitespace-pre-wrap wrap-anywhere">{JSON.stringify(result.citation, null, 2)}</pre>}
         </div>
       </details>
-      <Button variant="outline" size="sm" className="self-start" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-        Decision and history
-      </Button>
-      {open && <DecisionPanel evaluation={evaluation} result={result} followupBusy={followupBusy} onFollowup={onFollowup} />}
+      {decisions && (
+        <Button variant="outline" size="sm" className="self-start" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+          Decision and history
+        </Button>
+      )}
+      {decisions && open && <DecisionPanel evaluation={evaluation} result={result} followupBusy={followupBusy} onFollowup={onFollowup} />}
     </section>
   );
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { structuredRecordStateSchema, type StructuredPreview, type StructuredRecordState } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
+import { StructuredAssessment } from './StructuredAssessment';
 import { StructuredFindingsReview, type FindingChoice, type SourceChoice } from './StructuredFindingsReview';
 
 const labels = {
@@ -161,6 +162,9 @@ export function StructuredRevisionRecord({ preview }: { preview: StructuredPrevi
               <p>Verify the patient link before saving findings for review.</p>
             ))}
           <StructuredFindingsReview state={state} canReview={roles.includes('reviewer')} busy={busy} thisReportId={preview.reportId} onFinding={decide} onSources={resolve} />
+          {import.meta.env.VITE_SYNTHETIC_ASSESSMENT === 'true' && state.record && (
+            <StructuredAssessment key={`${state.record.id}:${state.review.findings.map((f) => f.decision).join()}`} preview={preview} state={state} />
+          )}
           {state.history.length > 0 && (
             <details>
               <summary className="min-h-control cursor-pointer py-3 font-semibold">Saved source history ({state.history.length})</summary>

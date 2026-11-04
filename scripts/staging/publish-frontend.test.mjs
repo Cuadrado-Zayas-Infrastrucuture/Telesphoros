@@ -40,7 +40,7 @@ exit 0
 }
 
 /** A build as `vite build` leaves it (with source maps, because vite.config.ts sets sourcemap: true). */
-function fixtureBuild({ withSettings = true, settings = {}, quote = '"', extra = {} } = {}) {
+function fixtureBuild({ withSettings = true, settings = {}, quote = '"', extra = {}, assessmentUi = false } = {}) {
   const dist = mkdtempSync(join(sandbox, 'dist-'));
   mkdirSync(join(dist, 'assets'));
   const compiled = Object.fromEntries(Object.entries(GOOD).filter(([name]) => name.startsWith('VITE_')));
@@ -55,6 +55,8 @@ function fixtureBuild({ withSettings = true, settings = {}, quote = '"', extra =
   writeFileSync(join(dist, 'assets/index-abc123.js'), `${config}\n//# sourceMappingURL=index-abc123.js.map`);
   writeFileSync(join(dist, 'assets/index-abc123.js.map'), '{"version":3}');
   writeFileSync(join(dist, 'assets/style-def456.css'), 'body{margin:0}');
+  // The synthetic assessment UI, as it appears once built with the flag: a chunk that carries its marker string.
+  if (assessmentUi) writeFileSync(join(dist, 'assets/StructuredAssessment-9a8b7c.js'), 'const s={"data-surface":"synthetic-staging-assessment"};');
   writeFileSync(join(dist, 'favicon.svg'), '<svg/>');
   mkdirSync(join(dist, '.vite')); // `manifest: true` in vite.config.ts writes this build-time file
   writeFileSync(join(dist, '.vite/manifest.json'), '{}');
@@ -250,4 +252,30 @@ test('a local Vite env file next to the frontend is refused: Vite would read it 
   // Control: the two tracked examples are allowed, and the same layout otherwise publishes.
   const { status, out } = run({ scriptPath: scriptInLayout({ '.env.example': 'VITE_API_BASE_URL=\n', '.env.e2e': 'VITE_API_BASE_URL=http://127.0.0.1:3010\n' }) });
   assert.equal(status, 0, out);
+});
+
+// The synthetic assessment UI (spec 032 S3): chosen by an option, never by the environment, and the bundle must agree with the choice.
+test('the synthetic assessment UI is published only when asked for, and only when the bundle has it', () => {
+  const withUi = fixtureBuild({ assessmentUi: true });
+  const asked = run({ dist: withUi, args: ['--with-synthetic-assessment'] });
+  assert.equal(asked.status, 0, asked.out);
+  assert.match(asked.out, /includes the synthetic assessment UI/);
+  // Control: the ordinary build and the ordinary call still pass, and say nothing about it.
+  const plain = run();
+  assert.equal(plain.status, 0, plain.out);
+  assert.doesNotMatch(plain.out, /synthetic assessment UI/);
+  const notAsked = run({ dist: fixtureBuild({ assessmentUi: true }) });
+  assert.notEqual(notAsked.status, 0);
+  assert.match(notAsked.out, /contains the synthetic assessment UI but --with-synthetic-assessment was not given/);
+  const missing = run({ args: ['--with-synthetic-assessment'] });
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.out, /does not contain the synthetic assessment UI/);
+});
+
+test('a stray VITE_SYNTHETIC_ASSESSMENT in the environment is refused, whatever its value', () => {
+  for (const value of ['true', 'false', '1']) {
+    const result = run({ env: { VITE_SYNTHETIC_ASSESSMENT: value } });
+    assert.notEqual(result.status, 0, `${value} was accepted`);
+    assert.match(result.out, /VITE_SYNTHETIC_ASSESSMENT is set: use --with-synthetic-assessment/);
+  }
 });

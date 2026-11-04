@@ -5,10 +5,13 @@ import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
 import { readPatientResults, type DecisionLink } from '@/lib/clinicianDecisions';
 import { SubmitError } from '@/lib/api';
+import { syntheticStagingMode } from '@/lib/storageMode';
 import { StoredResult } from './StoredResult';
 
 export function ResultsList({ patientId, followupBusy, onFollowup }: { patientId: string; followupBusy: boolean; onFollowup: (link: DecisionLink) => void }) {
   const { apiFetch } = useAuth();
+  // In the synthetic staging a result can be read but nothing can be recorded about it (decisions are not switched on there).
+  const decisions = !syntheticStagingMode();
   const [page, setPage] = useState(1);
   const [attempt, setAttempt] = useState(0);
   const [data, setData] = useState<Paginated<EvaluationSummaryDto> | null>(null);
@@ -43,7 +46,7 @@ export function ResultsList({ patientId, followupBusy, onFollowup }: { patientId
   if (!data) return <ContentSkeleton label="Loading stored results…" variant="list" />;
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">Stored synthetic results. Clinical use is not approved. Decisions below document intent only.</p>
+      <p className="text-sm text-muted-foreground">Stored synthetic results. Clinical use is not approved.{decisions ? ' Decisions below document intent only.' : ''}</p>
       {data.data.length === 0 && <p>No stored evaluations for this patient.</p>}
       {data.data.map((evaluation) => (
         <article key={evaluation.id} className="rounded-lg border border-border bg-panel p-4">
@@ -58,7 +61,7 @@ export function ResultsList({ patientId, followupBusy, onFollowup }: { patientId
             </p>
           )}
           {evaluation.results.map((result) => (
-            <StoredResult key={result.id} evaluation={evaluation} result={result} followupBusy={followupBusy} onFollowup={onFollowup} />
+            <StoredResult key={result.id} evaluation={evaluation} result={result} followupBusy={followupBusy} onFollowup={onFollowup} decisions={decisions} />
           ))}
         </article>
       ))}
