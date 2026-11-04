@@ -123,6 +123,9 @@ separate migration decision first. Do not automatically add `-reconfigure` (whic
 disregards the old backend without migrating), `-migrate-state`, `-force-copy` or
 force-unlock. [Initialization options](https://developer.hashicorp.com/terraform/cli/commands/init).
 
+When a later plan fails and Terraform suggests running init, that is not the fix: read why it failed, and
+reuse exactly how the last apply ran (the same binary, data directory and backend file).
+
 If initialization, locking or permission checks fail, preserve private native errors
 and exit status, stop writers and investigate. Do not switch to local state, disable
 locking, weaken encryption or expand policies to bypass the refusal. Before activation,
@@ -130,6 +133,9 @@ the source PR can be reverted normally. After activation, reverting code does no
 or recover state: preserve version/lineage records and follow a separately approved
 recovery/migration procedure. No state deletion, bucket/key recreation or automatic
 teardown is a rollback for this wiring.
+
+To compare two state pulls or backups, compare serial, lineage and a hash of the JSON with its keys and arrays
+sorted. `terraform state pull` is not byte-stable: a raw sha256 differs between pulls of the same serial.
 
 CI still uses backend-disabled/read-only-provider-lock initialization and mocked tests
 for both roots. No workflow or deployment identity is added. Offline checks do not
