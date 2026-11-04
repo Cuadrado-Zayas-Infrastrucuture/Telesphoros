@@ -22,6 +22,14 @@ no repository policy, no replication, no pull-through cache. The task **executio
 | Retention | the last 10 **tagged** images | Older images expire. Signatures are untagged OCI referrers and are not counted. A rollback target is always within the last ten, but **do not rely on an old digest staying pullable**. |
 | Deleting the repository | **synthetic profile only** (`force_delete = local.synthetic`) | A synthetic destroy works with images in it. In production AWS refuses to delete a repository that still holds images. |
 
+## What the image carries from `data/`
+
+The root build context excludes `data/` and the image carries **one** exception: `data/fixtures/knowledge/synthetic-structured`, copied to `/app/synthetic-knowledge`
+(spec 032 S3). It is invented genes and drugs, data only, and the API reads it **only while `SYNTHETIC_ASSESSMENT` is enabled**, which nothing sets until the
+Terraform switch (3c-2). `infrastructure/docker/guard.test.mjs` fails on any other `!data` line in `.dockerignore`, on any other `COPY` from `data/`, and on the
+copy going missing. The CI `image` job's rehearsal then runs `synthetic-knowledge-smoke.cjs` inside the built image: it loads that directory with the
+application's own loader and fails if it is absent, if it has other guidelines, or if any file does not say it is synthetic.
+
 ## How an image gets to ECR: CI pushes and signs
 
 On every pull request and push, the `image` job builds **one** OCI archive (the image index with its SBOM and provenance), scans that archive's own

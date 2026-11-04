@@ -40,6 +40,8 @@ RUN node /tmp/runtime-rootfs.cjs /runtime-rootfs
 FROM scratch AS runtime
 COPY --from=runtime_files /runtime-rootfs/ /
 COPY --from=build /output/ /app/
+# Synthetic knowledge for the structured assessment (spec 032 S3): invented genes and drugs, data only. The API reads it only while SYNTHETIC_ASSESSMENT is enabled.
+COPY --from=build /workspace/data/fixtures/knowledge/synthetic-structured/ /app/synthetic-knowledge/
 COPY --from=runtime_files /opt/telesphoros/ca/ /opt/telesphoros/ca/
 WORKDIR /app
 ENV PATH=/usr/local/bin NODE_ENV=production NODE_EXTRA_CA_CERTS=/opt/telesphoros/ca/global-bundle.pem LANG=C LC_ALL=C LANGUAGE=C

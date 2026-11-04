@@ -22,6 +22,8 @@ export function problems(source){
     ['no credential ARG',()=>!/^ARG\s+/m.test(lines)],
     ['no healthcheck',()=>!/^HEALTHCHECK\b/m.test(lines)],
     ['no runtime installers',()=>!/^RUN.*(?:npm|pnpm|pip).*install/m.test(lines.split('FROM scratch AS runtime')[1] || '')],
+    // Spec 032 S3 (3c-1): the one data set the image carries is the synthetic knowledge of the structured assessment, in the runtime stage, and nothing else from data/.
+    ['synthetic knowledge',()=>(lines.split('FROM scratch AS runtime')[1] || '').includes('COPY --from=build /workspace/data/fixtures/knowledge/synthetic-structured/ /app/synthetic-knowledge/') && [...lines.matchAll(/^COPY .*data\/.*$/gm)].length===1],
   ];
   return rules.filter(([,check])=>!check()).map(([name])=>name);
 }
@@ -47,6 +49,10 @@ const mutations=[
  ['no credential ARG',s=>s+'\nARG TOKEN\n'],
  ['no healthcheck',s=>s+'\nHEALTHCHECK CMD true\n'],
  ['no runtime installers',s=>s+'\nRUN npm install jest\n'],
+ ['synthetic knowledge',s=>s.replace('COPY --from=build /workspace/data/fixtures/knowledge/synthetic-structured/ /app/synthetic-knowledge/','true')],
+ ['synthetic knowledge',s=>s.replace('/workspace/data/fixtures/knowledge/synthetic-structured/','/workspace/data/')],
+ ['synthetic knowledge',s=>s.replace('/app/synthetic-knowledge/','/app/knowledge/')],
+ ['synthetic knowledge',s=>s+'\nCOPY --from=build /workspace/data/fixtures/lab-reports/ /app/lab/\n'],
 ];
 for(const [rule,mutate] of mutations)test(`detects ${rule} defect`,()=>assert.ok(problems(mutate(text)).includes(rule)));
 test('public CA bytes match owner-confirmed pin',()=>{
@@ -69,5 +75,30 @@ for (const pattern of ['packages/smart-pilot/openemr/.runtime', 'packages/smart-
   test(`detects missing pilot context exclusion: ${pattern}`, () => {
     const valid = `${rootIgnore}\npackages/smart-pilot/openemr/.runtime\npackages/smart-pilot/dist-ui\n`;
     assert.ok(pilotContextProblems(valid.split('\n').filter(line => line !== pattern).join('\n')).includes(pattern));
+  });
+}
+
+// The root build context excludes data/, with exactly one exception: the synthetic knowledge the image carries (spec 032 S3, 3c-1). Docker re-includes a path under an
+// excluded directory when a later `!` line names it, so any other `!data` line would put other fixtures into the production image; this fails on it.
+export function dataContextProblems(source) {
+  const lines = source.split('\n').map(line => line.trim()).filter(line => line && !line.startsWith('#'));
+  const problems = [];
+  if (!lines.includes('data')) problems.push('data is not excluded');
+  if (JSON.stringify(lines.filter(line => line.startsWith('!data'))) !== JSON.stringify(['!data/fixtures/knowledge/synthetic-structured'])) problems.push('data exceptions');
+  if (lines.indexOf('data') > lines.indexOf('!data/fixtures/knowledge/synthetic-structured')) problems.push('exception before exclusion');
+  return problems;
+}
+test('root build context excludes data/ except the synthetic knowledge (control)', () => {
+  assert.deepEqual(dataContextProblems(rootIgnore), []);
+});
+for (const [name, mutate, expected] of [
+  ['the exclusion is removed', s => s.replace(/^data$/m, ''), 'data is not excluded'],
+  ['the exception is removed', s => s.replace('!data/fixtures/knowledge/synthetic-structured\n', ''), 'data exceptions'],
+  ['the exception is widened', s => s.replace('!data/fixtures/knowledge/synthetic-structured', '!data/fixtures'), 'data exceptions'],
+  ['a second exception is added', s => `${s}\n!data/fixtures/lab-reports\n`, 'data exceptions'],
+  ['the exception comes before the exclusion', s => s.replace(/^data$/m, '').replace('!data/fixtures/knowledge/synthetic-structured', 'data\n!data/fixtures/knowledge/synthetic-structured').replace(/^data\n(?=!)/m, '!x\n') + '\ndata\n', 'exception before exclusion'],
+]) {
+  test(`detects a data context defect: ${name}`, () => {
+    assert.ok(dataContextProblems(mutate(rootIgnore)).includes(expected));
   });
 }

@@ -32,6 +32,8 @@ async function main(){
   // First, before any container is created: the task commands in Terraform start under the image's real ENTRYPOINT (the driver below bypasses it).
   console.log(docker('run','--rm','--platform','linux/amd64','--read-only','--user','10001:10001','--cap-drop','ALL','--security-opt','no-new-privileges','--network','none','-v',`${join(root,'infrastructure/docker/runtime-smoke.cjs')}:/test/runtime-smoke.cjs:ro`,tag,'/test/runtime-smoke.cjs').trim());
   console.log(`PASS ${await smoke(tag)} Terraform task commands start under the image ENTRYPOINT (no module-not-found; the processes then refuse for missing configuration)`);
+  // The synthetic knowledge of the structured assessment is in the image and loads with the application's own loader (spec 032 S3).
+  console.log(`PASS ${docker('run','--rm','--platform','linux/amd64','--read-only','--user','10001:10001','--network','none','-v',`${join(root,'infrastructure/docker/synthetic-knowledge-smoke.cjs')}:/test/synthetic-knowledge-smoke.cjs:ro`,tag,'/test/synthetic-knowledge-smoke.cjs').trim()}`);
   // No existing container, database, volume or network is reused.
   run('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',join(scratch,'ca.key'),'-out',join(scratch,'ca.crt'),'-days','1','-subj','/CN=synthetic-rehearsal-ca']);
   run('openssl',['req','-newkey','rsa:2048','-nodes','-keyout',join(scratch,'server.key'),'-out',join(scratch,'server.csr'),'-subj','/CN=pg']);
