@@ -101,6 +101,15 @@ for (const path of files('dist/assets').filter(path => path.endsWith('.js'))) {
 }
 console.log('interpretation preview excluded from production assets');
 
+// The synthetic staging UI (spec 032 S3) is a build-time opt-in: the default build must not carry it. A build made with VITE_SYNTHETIC_ASSESSMENT=true is
+// checked by scripts/staging/publish-frontend.sh, which requires this marker to be present exactly when --with-synthetic-assessment was given.
+if (process.env.VITE_SYNTHETIC_ASSESSMENT !== 'true') {
+  for (const path of files('dist/assets').filter(path => path.endsWith('.js'))) {
+    assert.ok(!readFileSync(path, 'utf8').includes('synthetic-staging-assessment'), `${path}: the synthetic staging assessment UI is in a build made without the flag`);
+  }
+  console.log('synthetic staging assessment UI excluded from the default build');
+}
+
 // Source maps prove SDK/transport modules were tree-shaken out, even if minified names change.
 for (const path of files('dist/assets').filter(path => path.endsWith('.js.map'))) {
   const map = JSON.parse(readFileSync(path, 'utf8'));

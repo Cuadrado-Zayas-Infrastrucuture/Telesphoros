@@ -3,6 +3,8 @@
 #
 #   scripts/staging/publish-frontend.sh          dry run (default): validates, builds, stages, prints what it would do, uploads nothing
 #   scripts/staging/publish-frontend.sh --yes    uploads (needs the AWS CLI and credentials for the account that owns the bucket)
+#   --with-synthetic-assessment                  builds with VITE_SYNTHETIC_ASSESSMENT=true: the review and assessment of stored structured reports (spec 032 S3).
+#                                                Only for an environment whose API runs with SYNTHETIC_ASSESSMENT=enabled. Without it the bundle must NOT contain that UI.
 #
 # Required environment (none of the VITE values is secret: they are compiled into the public bundle):
 #   WEB_BUCKET            terraform output web_bucket
@@ -20,10 +22,12 @@ set -euo pipefail
 die() { echo "publish-frontend: $*" >&2; exit 1; }
 
 apply=0
+assessment=0
 for arg in "$@"; do
   case "$arg" in
     --yes) apply=1 ;;
-    *) die "unknown argument: $arg (the only option is --yes)" ;;
+    --with-synthetic-assessment) assessment=1 ;;
+    *) die "unknown argument: $arg (the options are --yes and --with-synthetic-assessment)" ;;
   esac
 done
 
@@ -51,6 +55,8 @@ fi
 for name in VITE_LOCAL_STORAGE_INTAKE VITE_LOCAL_REVIEW_S3_ORIGIN VITE_REPORT_STORAGE_ORIGINS; do
   [[ -z "${!name:-}" ]] || die "$name is set: it belongs to a local or end-to-end build and must not reach the published bundle"
 done
+# The synthetic assessment UI is chosen by the option above, never by the caller's environment: a stray variable must not decide what is published.
+[[ -z "${VITE_SYNTHETIC_ASSESSMENT:-}" ]] || die "VITE_SYNTHETIC_ASSESSMENT is set: use --with-synthetic-assessment, which sets it for the build and checks the bundle"
 # The same settings can arrive through a file: Vite reads apps/frontend/.env, .env.local, .env.production and .env.production.local at
 # build time. Only the two tracked examples may sit there.
 for env_file in "$repo_root"/apps/frontend/.env*; do
@@ -69,6 +75,7 @@ else
   dist="$repo_root/apps/frontend/dist"
   echo "building the production frontend"
   export VITE_OIDC_AUTHORITY VITE_OIDC_CLIENT_ID VITE_COGNITO_DOMAIN VITE_API_BASE_URL
+  [[ "$assessment" -ne 1 ]] || export VITE_SYNTHETIC_ASSESSMENT=true
   (cd "$repo_root" && pnpm --filter @telesphoros/frontend build)
 fi
 [[ -f "$dist/index.html" ]] || die "no index.html in $dist"
@@ -101,10 +108,17 @@ for name in VITE_API_BASE_URL VITE_OIDC_AUTHORITY VITE_OIDC_CLIENT_ID VITE_COGNI
   ' -- "${!name}")"
   grep -rqF -- "$literal" "$stage/assets" || die "the build does not contain $name (${!name}): it was not built with these settings"
 done
+# The synthetic assessment UI carries a marker. It must be in the bundle exactly when it was asked for, whether this script built it or the caller named it.
+if grep -rqF -- "synthetic-staging-assessment" "$stage/assets"; then
+  [[ "$assessment" -eq 1 ]] || die "the build contains the synthetic assessment UI but --with-synthetic-assessment was not given: build without VITE_SYNTHETIC_ASSESSMENT, or say so"
+else
+  [[ "$assessment" -ne 1 ]] || die "--with-synthetic-assessment was given but the build does not contain the synthetic assessment UI: it was not built with VITE_SYNTHETIC_ASSESSMENT=true"
+fi
 files="$(find "$stage" -type f | wc -l | tr -d ' ')"
 
 # ---- 4. What happens ---------------------------------------------------------------------------------------------------
 echo "upload set: $files files ($excluded source maps left out), bucket s3://$WEB_BUCKET"
+[[ "$assessment" -ne 1 ]] || echo "includes the synthetic assessment UI (the API must run with SYNTHETIC_ASSESSMENT=enabled)"
 steps=(
   "aws s3 sync $stage/assets s3://$WEB_BUCKET/assets --cache-control public,max-age=31536000,immutable --only-show-errors"
   "aws s3 sync $stage s3://$WEB_BUCKET --exclude assets/* --exclude index.html --cache-control no-cache --only-show-errors"
