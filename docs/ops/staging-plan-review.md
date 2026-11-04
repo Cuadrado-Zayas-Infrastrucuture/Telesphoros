@@ -185,6 +185,9 @@ under `/assets/` should show `content-encoding: br` and `x-cache: Hit from cloud
 - a relaxation (`force_destroy`, no deletion protection, a 7-day key window, `recovery_window_in_days = 0`, a public task address) appears for a resource that is not in the tables above, or `deployment_profile` is not `synthetic`;
 - a resource named in the quick checks appears; an unapproved Region, a backups bucket or a CloudTrail trail that is multi-Region appears. The web certificate in `us-east-1` and global CloudFront are expected by `web.tf`, even when the primary data Region differs; they are not off-site backups;
 - a value that should be known is `(known after apply)` and the table says it is a literal (bucket names contain the account id, which the offline plan replaces with a random string, so read the real plan's names for the account you decided in D1);
+- the plan's resource count is not the state's count plus its creates minus its deletes (read `prior_state` in the `show -json`; data sources count too);
+- `check-plan` refuses drift after a failed apply: a failed apply can leave part of the attempted change in state, so compare state with the live resource (its ETag and settings) before changing the checker;
+- an id copied from documentation or memory (a managed policy, an AMI, an ARN) has not been read back from the staging account with a read-only call (for example `aws cloudfront list-cache-policies --type managed`): tests that share the same typo cannot find it;
 - a quota, a free-plan restriction or a missing service is reported: record it in the plan's risks and do not work around it silently.
 
 ## Billable items to price before D2
