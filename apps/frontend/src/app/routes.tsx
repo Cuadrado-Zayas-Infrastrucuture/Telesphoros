@@ -1,4 +1,4 @@
-import { ownedStorageMode } from '@/lib/storageMode';
+import { ownedStorageMode, syntheticStagingMode } from '@/lib/storageMode';
 import type { RouteObject } from 'react-router-dom';
 import { ProtectedRoute } from '@/auth/ProtectedRoute';
 import { RequireRole } from '@/auth/RequireRole';
@@ -16,6 +16,7 @@ import { RouteLoading } from '@/components/RouteLoading';
  */
 // Read once at start-up so an invalid owned-storage setting fails here, before anything renders, rather than being taken for "off".
 ownedStorageMode();
+syntheticStagingMode();
 
 export const routes: RouteObject[] = [
   {
