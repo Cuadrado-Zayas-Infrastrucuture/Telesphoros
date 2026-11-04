@@ -217,6 +217,10 @@ run "production_hosting_on" {
     error_message = "production signs with an ECC P-256 signing key with the production deletion window"
   }
   assert {
+    condition     = !contains(keys(local.api_environment), "SYNTHETIC_ASSESSMENT") && !contains(keys(local.api_environment), "SYNTHETIC_KNOWLEDGE_DIR")
+    error_message = "a production definition's API environment carries neither synthetic assessment setting"
+  }
+  assert {
     condition     = length(aws_iam_role.image_release) == 1 && length(aws_iam_openid_connect_provider.github) == 1 && aws_iam_openid_connect_provider.github[0].url == "https://token.actions.githubusercontent.com" && toset(aws_iam_openid_connect_provider.github[0].client_id_list) == toset(["sts.amazonaws.com"])
     error_message = "the release role and the GitHub OIDC provider exist when no existing provider is named"
   }
@@ -386,6 +390,10 @@ run "synthetic_hosting_on" {
   assert {
     condition     = one(aws_ecs_service.api[0].network_configuration).assign_public_ip == true
     error_message = "synthetic tasks get a public address (there is no NAT)"
+  }
+  assert {
+    condition     = !contains(keys(local.api_environment), "SYNTHETIC_ASSESSMENT") && !contains(keys(local.api_environment), "SYNTHETIC_KNOWLEDGE_DIR")
+    error_message = "the synthetic assessment is off by default: the API environment carries neither of its settings"
   }
   assert {
     condition     = length(aws_subnet.synthetic) == 2 && length(aws_route_table_association.synthetic) == 2 && length(aws_route.synthetic_internet) == 1
@@ -1325,4 +1333,43 @@ run "connection_budget_refuses_an_api_ceiling_over_the_budget" {
   }
 
   expect_failures = [aws_db_instance.main]
+}
+
+# ------------------------------------------------------------------------------------------------
+# The synthetic assessment (spec 032 S3, PR 3c-2): a variable that defaults to off, honoured only in the synthetic profile. With it on, the API environment
+# carries both settings together (config/env.ts refuses either alone); a production definition is refused at the variable. The default-off side is asserted in
+# production_hosting_on and synthetic_hosting_on above.
+# ------------------------------------------------------------------------------------------------
+run "synthetic_assessment_on_in_the_synthetic_profile" {
+  command = plan
+
+  variables {
+    deployment_profile           = "synthetic"
+    vpc_id                       = ""
+    private_subnet_ids           = []
+    enable_api_hosting           = true
+    api_domain                   = "api.example.test"
+    api_image                    = "123456789012.dkr.ecr.us-east-2.amazonaws.com/telesphoros-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    api_cors_origins             = ["https://staging.example.test"]
+    synthetic_assessment_enabled = true
+  }
+
+  assert {
+    condition     = local.api_environment.SYNTHETIC_ASSESSMENT == "enabled" && local.api_environment.SYNTHETIC_KNOWLEDGE_DIR == "/app/synthetic-knowledge"
+    error_message = "with the variable on in the synthetic profile the API environment carries both settings, and the directory is where the image puts the synthetic knowledge"
+  }
+  assert {
+    condition     = local.api_environment.NODE_ENV == "production" && local.api_environment.MEDICATION_WRITES == "disabled" && !contains(keys(local.api_environment), "LAB_REPORT_PIPELINE")
+    error_message = "turning the assessment on changes nothing else: still production mode, medication writes still fenced, the pipeline still absent"
+  }
+}
+
+run "refuses_the_synthetic_assessment_in_a_production_definition" {
+  command = plan
+
+  variables {
+    synthetic_assessment_enabled = true
+  }
+
+  expect_failures = [var.synthetic_assessment_enabled]
 }
