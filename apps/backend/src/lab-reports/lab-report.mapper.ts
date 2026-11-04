@@ -16,6 +16,7 @@ import {
   noteDtoSchema,
 } from '@telesphoros/shared-types';
 import { REPORT_HOLD_ACTIONS, REPORT_HOLD_MESSAGES, type ReportHoldCode } from '../services/report-adapter';
+import { STRUCTURED_HOLD_ACTIONS, STRUCTURED_HOLD_MESSAGES, type StructuredHoldCode } from './structured-hold-codes';
 import type { KnowledgeSet } from '../services/knowledge/knowledge-set';
 import type { DisputeStatus, NoteRecord, Projected } from '../storage/ledger-records';
 
@@ -118,7 +119,9 @@ export function toEvaluationDto(record: Projected, context: EvaluationContext): 
     hold:
       holdCode && holdCode in REPORT_HOLD_MESSAGES
         ? { message: REPORT_HOLD_MESSAGES[holdCode as ReportHoldCode], reviewerAction: REPORT_HOLD_ACTIONS[holdCode as ReportHoldCode] }
-        : null,
+        : holdCode && holdCode in STRUCTURED_HOLD_MESSAGES
+          ? { message: STRUCTURED_HOLD_MESSAGES[holdCode as StructuredHoldCode], reviewerAction: STRUCTURED_HOLD_ACTIONS[holdCode as StructuredHoldCode] }
+          : null,
     knowledgeSetId: record.knowledgeSetId,
     engineVersion: record.engineVersion,
     scope: text(binding.scope),

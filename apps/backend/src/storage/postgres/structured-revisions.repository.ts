@@ -11,7 +11,7 @@ import { Database } from '../../db/database';
 import { toLedgerError } from '../../ledger/ledger-types';
 import { newId } from '../../ledger/ledger-writer';
 import { LedgerRecordsRepository } from '../ledger-records.repository';
-import { StructuredRevisionsRepository, type SnapshotCheck, type StructuredSnapshot } from '../structured-revisions.repository';
+import { StructuredRevisionsRepository, type SnapshotCheck, type SnapshotKey, type StructuredSnapshot } from '../structured-revisions.repository';
 import type { PoolClient } from 'pg';
 
 interface Row {
@@ -45,6 +45,12 @@ interface ResolutionRow {
   created_at: string;
 }
 const MAX_RESOLUTIONS = 1000;
+const keyOf = (preview: StructuredPreview): SnapshotKey => ({
+  patientId: preview.patientId,
+  reportId: preview.reportId,
+  sha256: preview.source.sha256,
+  objectVersion: preview.source.objectVersion,
+});
 // One SQL snapshot includes every stored source and its newest review. Never filter away an invalidated source.
 const recordsSql = `SELECT s.*, COALESCE(r.deleted_at IS NULL AND r.uploaded_at IS NOT NULL AND r.patient_id=s.patient_id AND
   r.sha256=s.report_sha256 AND r.object_version=s.object_version AND d.id=s.patient_link_decision_id AND d.decision='verified' AND
@@ -62,10 +68,13 @@ export class PostgresStructuredRevisionsRepository extends StructuredRevisionsRe
     super();
   }
   async read(tenant: string, preview: StructuredPreview): Promise<StructuredSnapshot> {
-    return this.db.withTenant(tenant, (client) => this.snapshot(client, tenant, preview));
+    return this.readForReport(tenant, keyOf(preview));
+  }
+  async readForReport(tenant: string, key: SnapshotKey): Promise<StructuredSnapshot> {
+    return this.db.withTenant(tenant, (client) => this.snapshot(client, tenant, key));
   }
   // Revisions, the newest decision per finding and every resolution come from ONE statement, so they describe the same instant.
-  private async snapshot(client: PoolClient, tenant: string, preview: StructuredPreview): Promise<StructuredSnapshot> {
+  private async snapshot(client: PoolClient, tenant: string, key: SnapshotKey): Promise<StructuredSnapshot> {
     const result = await client.query<{ available: boolean; records: Row[]; reviews: ReviewRow[]; resolutions: ResolutionRow[] }>(
       `SELECT EXISTS(
         SELECT 1 FROM reports r JOIN patients p ON p.id=r.patient_id AND p.tenant_id=r.tenant_id
@@ -76,7 +85,7 @@ export class PostgresStructuredRevisionsRepository extends StructuredRevisionsRe
           FROM structured_finding_reviews WHERE tenant_id=$1 AND patient_id=$2 ORDER BY revision_id,source_finding_id,seq DESC) f),'[]'::json) AS reviews,
         COALESCE((SELECT json_agg(q) FROM (SELECT id,laboratory_id,series_id,revision,revision_ids,outcome,chosen_revision_id,reason_code,created_at
           FROM structured_source_resolutions WHERE tenant_id=$1 AND patient_id=$2 ORDER BY seq LIMIT ${MAX_RESOLUTIONS + 1}) q),'[]'::json) AS resolutions`,
-      [tenant, preview.patientId, preview.reportId, preview.source.sha256, preview.source.objectVersion],
+      [tenant, key.patientId, key.reportId, key.sha256, key.objectVersion],
     );
     const snapshot = result.rows[0];
     if (!snapshot.available) throw AppException.conflict('The source or patient changed. Reopen the report.');
@@ -231,7 +240,7 @@ export class PostgresStructuredRevisionsRepository extends StructuredRevisionsRe
               throw AppException.conflict('That request id was already used for a different review.');
             return false;
           }
-          check(await this.snapshot(client, tenant, preview));
+          check(await this.snapshot(client, tenant, keyOf(preview)));
           const id = newId(),
             eventId = newId();
           await client.query(
@@ -257,7 +266,7 @@ export class PostgresStructuredRevisionsRepository extends StructuredRevisionsRe
           );
           await this.ledger.appendRecordEvent(client, tenant, 'structured_finding_reviews', id, eventId);
           // The shared ledger lock now orders this check after any earlier review, merge or revision change.
-          check(await this.snapshot(client, tenant, preview));
+          check(await this.snapshot(client, tenant, keyOf(preview)));
           return true;
         },
         { actor },
@@ -301,7 +310,7 @@ export class PostgresStructuredRevisionsRepository extends StructuredRevisionsRe
               throw AppException.conflict('That request id was already used for a different resolution.');
             return false;
           }
-          check(await this.snapshot(client, tenant, preview));
+          check(await this.snapshot(client, tenant, keyOf(preview)));
           const id = newId(),
             eventId = newId();
           await client.query(
@@ -325,7 +334,7 @@ export class PostgresStructuredRevisionsRepository extends StructuredRevisionsRe
             ],
           );
           await this.ledger.appendRecordEvent(client, tenant, 'structured_source_resolutions', id, eventId);
-          check(await this.snapshot(client, tenant, preview));
+          check(await this.snapshot(client, tenant, keyOf(preview)));
           return true;
         },
         { actor },
