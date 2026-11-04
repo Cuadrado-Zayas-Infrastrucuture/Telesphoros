@@ -32,6 +32,7 @@ import '../../scripts/staging/staging-status-sh.test.mjs';
 import '../../scripts/staging/release/release-check.test.mjs';
 import '../../scripts/staging/release/fence-plan.test.mjs';
 import '../../scripts/staging/release/fence-vars.test.mjs';
+import '../../scripts/staging/release/assessment-plan.test.mjs';
 import '../../scripts/staging/release/release-scripts.test.mjs';
 
 const cognito = readFileSync(new URL('./cognito.tf', import.meta.url), 'utf8');

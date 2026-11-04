@@ -7,6 +7,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { ASSESSMENT_SETTINGS } from '../../scripts/staging/release/fence-plan.mjs';
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const compute = read('./api-compute.tf');
@@ -420,6 +421,15 @@ test("the synthetic assessment's settings, as Terraform writes them when the swi
   assert.throws(() => loadEnv({ ...base, SYNTHETIC_ASSESSMENT: mode }), /SYNTHETIC_KNOWLEDGE_DIR/);
   assert.throws(() => loadEnv({ ...base, SYNTHETIC_KNOWLEDGE_DIR: dir }), /SYNTHETIC_KNOWLEDGE_DIR/);
   assert.throws(() => loadEnv({ ...base, SYNTHETIC_ASSESSMENT: mode, SYNTHETIC_KNOWLEDGE_DIR: dir, BUILD_VERSION: undefined }), /BUILD_VERSION/);
+});
+
+test('the release tooling expects exactly the assessment settings api-compute.tf writes (the plan checker and the Terraform text agree)', () => {
+  const written = /synthetic_assessment_environment = \{ for name, value in \{ ([^}]*) \}/.exec(code(compute))?.[1] ?? '';
+  const pairs = Object.fromEntries([...written.matchAll(/([A-Z_]+) = "([^"]+)"/g)].map((m) => [m[1], m[2]]));
+  assert.deepEqual(pairs, ASSESSMENT_SETTINGS);
+  // Controls: a checker or a Terraform line that moved on its own would disagree.
+  assert.notDeepEqual(pairs, { ...ASSESSMENT_SETTINGS, SYNTHETIC_KNOWLEDGE_DIR: '/app/knowledge' });
+  assert.notDeepEqual(Object.fromEntries([...code(compute).replace('/app/synthetic-knowledge', '/app/knowledge').match(/synthetic_assessment_environment = \{[^\n]*/)[0].matchAll(/([A-Z_]+) = "([^"]+)"/g)].map((m) => [m[1], m[2]])), ASSESSMENT_SETTINGS);
 });
 
 const envLine = (key, value) => `${key.padEnd(33)} = ${value}`;

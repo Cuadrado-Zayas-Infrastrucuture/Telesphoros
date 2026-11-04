@@ -16,6 +16,7 @@ people's merged Terraform. The scripts in `scripts/staging/release/` replace tho
 | The release check was edited to accept that release's other changes | **Fixed shapes** (`release-check.mjs`): MIGRATE changes the migration task definition only, IMAGE the task definitions and the two services only. Anything else is refused: merged Terraform goes out first as its own **INFRA** plan |
 | Any session could plan, and a saved plan could be applied after another apply | **A claim** (`claim.sh`): one owner plans and applies at a time. **A record next to each plan**: the state serial and lineage, the clone HEAD, the var file's and the plan's sha256. `apply.sh` refuses a plan whose record does not match the stack now, and Terraform refuses it too ("Saved plan is stale", rehearsed in `release-rehearsal.test.mjs`) |
 | The apply script was edited to pin the plan's hash | `apply.sh` takes the hash as an argument, typed after reading the plan |
+| A switch that is a Terraform variable could only go in by editing the canonical var file by hand | **One-flag modes**, same image, one reviewed variable, the API task definition and its service only: `FENCE-CLOSE` / `FENCE-OPEN` for medication recording ([medication-fence-transitions.md](medication-fence-transitions.md)) and `ASSESSMENT-ON` / `ASSESSMENT-OFF` for the synthetic assessment ([synthetic-assessment-switch.md](synthetic-assessment-switch.md)) |
 
 ## The steps
 
@@ -28,6 +29,9 @@ people's merged Terraform. The scripts in `scripts/staging/release/` replace tho
 5. `plan.sh MIGRATE COMMIT`, read it, `apply.sh MIGRATE COMMIT SHA256`. Then migrate (until PR 3b, the last folder's `release-migrate.sh`),
    which writes `migrate-status.txt` saying `pending: (none)`.
 6. `plan.sh IMAGE COMMIT`, read it, `apply.sh IMAGE COMMIT SHA256`. When its log ends `== apply exit status: 0`, `current.tfvars` is this release's.
+6a. Only when this release turns the synthetic assessment on: `plan.sh ASSESSMENT-ON COMMIT OPERATION_ID`, read it, `apply.sh ASSESSMENT-ON COMMIT SHA256 OPERATION_ID`
+   ([synthetic-assessment-switch.md](synthetic-assessment-switch.md)). It refuses to plan until this release's IMAGE apply finished, migrations are complete and
+   the running image has a signature record. `ASSESSMENT-OFF` takes it away again and waits for nothing.
 7. `staging-status.sh` again, then update `docs/ops/staging-expected.json` and [environments.md](environments.md) in one pull request.
 8. `claim.sh release NAME`.
 
