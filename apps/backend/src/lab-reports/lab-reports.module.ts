@@ -17,10 +17,11 @@ import { DisputesService } from './disputes.service';
 import { EvaluationRequestsController } from './evaluation-requests.controller';
 import { EVALUATION_REQUESTS_SERVICE, EvaluationRequestsGateGuard, evaluationRequestsFactory, EvaluationRequestsSwitch } from './evaluation-requests-switch';
 import { EvaluationsController, ReportEvaluationController } from './evaluations.controller';
-import { EvaluationsService, LAB_KNOWLEDGE, LAB_READER } from './evaluations.service';
+import { EvaluationsService, LAB_KNOWLEDGE, LAB_READER, SYNTHETIC_KNOWLEDGE } from './evaluations.service';
 import { LedgerController } from '../ledger/ledger.controller';
-import { PipelineGateGuard, PipelineStartupCheck, PipelineSwitch } from './pipeline-switch';
+import { EvaluationReadGateGuard, PipelineGateGuard, PipelineStartupCheck, PipelineSwitch, SyntheticAssessmentGateGuard } from './pipeline-switch';
 import { ReaderLimiter } from './reader-limiter';
+import { StructuredAssessmentController } from './structured-assessment.controller';
 import { ResultAcknowledgementsController } from './result-acknowledgements.controller';
 import { ResultAcknowledgementsService } from './result-acknowledgements.service';
 import { ResultRendersController } from './result-renders.controller';
@@ -36,6 +37,18 @@ const modeOf = (env: Env) => (env.NODE_ENV === 'production' ? 'production' : 'no
 
 export const labKnowledgeFactory = async (env: Env): Promise<KnowledgeSet | undefined> =>
   enabled(env) ? loadKnowledge({ directory: env.KNOWLEDGE_DIR!, mode: modeOf(env) }) : undefined;
+
+/**
+ * The synthetic knowledge for the structured assessment: loaded only while SYNTHETIC_ASSESSMENT is on, from its own directory and never from the
+ * pipeline's. It is loaded under the non-production rules, so the check that makes that safe is made here: every file must say it is synthetic, and the set
+ * must not be empty. A directory holding anything that claims to be real content stops the start.
+ */
+export const syntheticKnowledgeFactory = async (env: Env): Promise<KnowledgeSet | undefined> => {
+  if (env.SYNTHETIC_ASSESSMENT !== 'enabled') return undefined;
+  const set = await loadKnowledge({ directory: env.SYNTHETIC_KNOWLEDGE_DIR!, mode: 'non-production' });
+  if (set.isEmpty || set.files.some((file) => !file.synthetic)) throw new Error('SYNTHETIC_KNOWLEDGE_DIR must hold synthetic knowledge only, and at least one guideline.');
+  return set;
+};
 
 export const labReaderFactory = async (env: Env): Promise<ReportReader | undefined> => {
   if (!enabled(env)) return undefined;
@@ -60,6 +73,7 @@ export const labReaderFactory = async (env: Env): Promise<ReportReader | undefin
     CapturesController,
     ReportEvaluationController,
     EvaluationsController,
+    StructuredAssessmentController,
     EvaluationCorrectionsController,
     NotesController,
     DisputesController,
@@ -72,6 +86,8 @@ export const labReaderFactory = async (env: Env): Promise<ReportReader | undefin
   providers: [
     PipelineSwitch,
     PipelineGateGuard,
+    EvaluationReadGateGuard,
+    SyntheticAssessmentGateGuard,
     PipelineStartupCheck,
     CapturesService,
     EvaluationsService,
@@ -88,6 +104,7 @@ export const labReaderFactory = async (env: Env): Promise<ReportReader | undefin
     },
     { provide: LAB_KNOWLEDGE, inject: [ENV], useFactory: labKnowledgeFactory },
     { provide: LAB_READER, inject: [ENV], useFactory: labReaderFactory },
+    { provide: SYNTHETIC_KNOWLEDGE, inject: [ENV], useFactory: syntheticKnowledgeFactory },
     EvaluationRequestsSwitch,
     EvaluationRequestsGateGuard,
     // Undefined unless EVALUATION_REQUESTS=enabled (H4); the database is absent with the in-memory store, which configuration refuses for the pipeline.

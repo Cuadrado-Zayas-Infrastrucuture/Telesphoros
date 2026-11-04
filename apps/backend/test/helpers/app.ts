@@ -26,7 +26,7 @@ import { ledgerWatchConfig } from '../../src/ledger/ledger.module';
 import { createEphemeralDatabase, ownerUrlFor, verifierUrlFor } from './database';
 import { PgMembershipMirror, RegisteringMembershipAdmin } from './membership';
 import { LAB_READER } from '../../src/lab-reports/evaluations.service';
-import { ENGINE_FIXTURES, PUBLIC_FIXTURES, TEST_KNOWLEDGE } from './lab-pipeline';
+import { ENGINE_FIXTURES, PUBLIC_FIXTURES, SYNTHETIC_STRUCTURED_KNOWLEDGE, TEST_KNOWLEDGE } from './lab-pipeline';
 import { StandInReportReader } from './stand-in-reader';
 import { TEST_AUDIENCE, TEST_ISSUER, TEST_SECRET } from './env';
 import type { TestingModule } from '@nestjs/testing';
@@ -59,6 +59,9 @@ export interface TestAppOptions {
   evaluationRequests?: string;
   /** Explicitly open medication capture; omitted exercises the production-safe disabled default. */
   medicationWrites?: 'enabled' | 'disabled';
+  /** SYNTHETIC_ASSESSMENT=enabled with the synthetic structured knowledge (or `syntheticKnowledgeDir`): no disposable local run and no pipeline, as the synthetic staging runs. */
+  syntheticAssessment?: boolean;
+  syntheticKnowledgeDir?: string;
   followupWrites?: 'enabled' | 'disabled';
   /**
    * Read reports with the private report-reader engine and its own captures, instead of the test stand-in and the public fixtures. Only specs on the
@@ -183,7 +186,7 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
       throw new Error('TEST_REAL_ISSUER=1 needs this app on the ephemeral PostgreSQL tier; refusing to run on the null issuer.');
     realIssuer = database && process.env.TEST_REAL_ISSUER === '1' ? await startRealIssuer(database) : undefined;
     options.signal?.throwIfAborted();
-    const runId = options.labReportPipeline || options.recoveryStorage || options.organizationIntake ? undefined : randomUUID();
+    const runId = options.labReportPipeline || options.recoveryStorage || options.organizationIntake || options.syntheticAssessment ? undefined : randomUUID();
     const s3 = usingS3() ? await createBucket(runId) : undefined;
     const env = loadEnv({
       NODE_ENV: 'test',
@@ -199,6 +202,13 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
       ...(options.labReportPipeline ? { LAB_REPORT_PIPELINE: 'enabled' } : {}),
       ...(options.followupWrites === undefined ? {} : { FOLLOWUP_WRITES: options.followupWrites }),
       ...(options.medicationWrites === undefined ? {} : { MEDICATION_WRITES: options.medicationWrites }),
+      ...(options.syntheticAssessment
+        ? {
+            SYNTHETIC_ASSESSMENT: 'enabled',
+            SYNTHETIC_KNOWLEDGE_DIR: options.syntheticKnowledgeDir ?? SYNTHETIC_STRUCTURED_KNOWLEDGE,
+            BUILD_VERSION: options.buildVersion ?? 'test-build-1',
+          }
+        : {}),
       ...(options.evaluationRequests === undefined ? {} : { EVALUATION_REQUESTS: 'enabled', EVALUATION_EXECUTION_PROFILE: options.evaluationRequests }),
       ...(options.labReportPipeline
         ? {
@@ -208,7 +218,7 @@ async function buildTestApp(options: TestAppOptions, onClosed: () => void): Prom
             ...(options.maxConcurrentReads ? { LAB_REPORT_MAX_CONCURRENT_READS: String(options.maxConcurrentReads) } : {}),
           }
         : {}),
-      ...(options.labReportPipeline || options.ledgerWatch
+      ...(options.labReportPipeline || options.ledgerWatch || options.syntheticAssessment
         ? { LEDGER_VERIFIER_DATABASE_URL: options.verifierUrl ?? (database ? database.verifierUrl : verifierUrlFor(options.postgresUrl!)), ...options.ledgerSettings }
         : {}),
       RATE_LIMIT_ENABLED: options.rateLimit ? 'true' : 'false',

@@ -1,0 +1,129 @@
+{
+  "schemaVersion": "pgx-synthetic-0.1",
+  "synthetic": true,
+  "clinicalUse": "not-approved",
+  "actionable": false,
+  "report": {
+    "id": "syn-report-demo",
+    "seriesId": "syn-series-demo",
+    "revision": 1,
+    "previousRevisionId": null,
+    "status": "final",
+    "patientId": "syn-patient-demo",
+    "laboratoryId": "syn-lab-demo",
+    "accession": "syn-accession-demo",
+    "specimen": {
+      "id": "syn-specimen-1",
+      "type": "synthetic-saliva",
+      "collectedAt": "2026-11-01T08:00:00Z"
+    },
+    "issuedAt": "2026-11-02T08:00:00Z",
+    "receivedAt": "2026-11-02T09:00:00Z",
+    "releasedBy": "Synthetic laboratory reviewer",
+    "assay": {
+      "state": "provided",
+      "manifest": {
+        "id": "syn-assay-demo",
+        "version": "1",
+        "laboratoryId": "syn-lab-demo",
+        "method": "Invented assay; no analytical validation",
+        "specimenTypes": [
+          "synthetic-saliva"
+        ],
+        "referenceAssembly": "synthetic-reference-1",
+        "nomenclatureVersion": "synthetic-names-1",
+        "targets": [
+          {
+            "id": "syn-target-a",
+            "gene": "GENEA",
+            "variantClasses": [
+              "sequence"
+            ],
+            "alleles": [
+              "*1",
+              "*2",
+              "*3"
+            ],
+            "limitations": [
+              "Invented target; no clinical coverage."
+            ]
+          },
+          {
+            "id": "syn-target-b",
+            "gene": "GENEB",
+            "variantClasses": [
+              "sequence"
+            ],
+            "alleles": [
+              "*1",
+              "*2",
+              "*3",
+              "*4",
+              "*5"
+            ],
+            "limitations": [
+              "Invented target; no clinical coverage."
+            ]
+          }
+        ],
+        "limitations": [
+          "Synthetic demonstration only."
+        ]
+      }
+    },
+    "findings": [
+      {
+        "id": "syn-finding-a",
+        "targetId": "syn-target-a",
+        "gene": "GENEA",
+        "orderScope": "ordered",
+        "coverage": "tested",
+        "analyticalState": "resolved",
+        "interpretationState": "interpretable",
+        "reportedCall": {
+          "kind": "diplotype",
+          "originalText": "*1 / *1",
+          "value": "*1/*1",
+          "phase": "resolved",
+          "copyNumber": 2
+        },
+        "laboratoryInterpretation": {
+          "phenotype": "Synthetic lab category A",
+          "activityScore": null,
+          "translationVersion": "synthetic-lab-translation-1"
+        },
+        "limitations": [
+          "No clinical meaning."
+        ]
+      },
+      {
+        "id": "syn-finding-b",
+        "targetId": "syn-target-b",
+        "gene": "GENEB",
+        "orderScope": "ordered",
+        "coverage": "tested",
+        "analyticalState": "resolved",
+        "interpretationState": "interpretable",
+        "reportedCall": {
+          "kind": "diplotype",
+          "originalText": "*3 / *3",
+          "value": "*3/*3",
+          "phase": "resolved",
+          "copyNumber": 2
+        },
+        "laboratoryInterpretation": {
+          "phenotype": "Synthetic lab category B",
+          "activityScore": null,
+          "translationVersion": "synthetic-lab-translation-1"
+        },
+        "limitations": [
+          "No clinical meaning."
+        ]
+      }
+    ],
+    "limitations": [
+      "This document is not an issued clinical laboratory report."
+    ]
+  },
+  "assessment": null
+}

@@ -16,7 +16,7 @@ import { CurrentPrincipal, Roles } from '../auth/decorators';
 import type { Principal } from '../auth/principal';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { EvaluationsService } from './evaluations.service';
-import { RequiresPipeline } from './pipeline-switch';
+import { RequiresPipeline, RequiresPipelineOrSyntheticAssessment } from './pipeline-switch';
 import { RateLimitClass } from '../rate-limit/rate-limit.decorators';
 
 const CAN_EVALUATE = ['clinician', 'reviewer'] as const;
@@ -43,8 +43,9 @@ export class ReportEvaluationController {
   }
 }
 
+/** The reads only: open with the pipeline or the synthetic structured assessment, because they need neither the reader nor the knowledge. */
 @Controller('evaluations')
-@RequiresPipeline()
+@RequiresPipelineOrSyntheticAssessment()
 export class EvaluationsController {
   constructor(private readonly evaluations: EvaluationsService) {}
 

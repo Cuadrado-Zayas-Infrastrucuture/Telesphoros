@@ -28,6 +28,15 @@ export function currentDataOrigin(env: Pick<Env, 'NODE_ENV' | 'LAB_REPORT_PIPELI
   return 'synthetic';
 }
 
+/**
+ * The origin of a stored structured revision's assessment (spec 032 S3). `synthetic` when the environment has been switched to hold only synthetic data
+ * (SYNTHETIC_ASSESSMENT, set by the infrastructure of the synthetic staging and refused beside the pipeline); otherwise exactly what `currentDataOrigin`
+ * says, so a development run with the pipeline on behaves as before. Like it, this never returns `real`.
+ */
+export function structuredAssessmentOrigin(env: Pick<Env, 'NODE_ENV' | 'LAB_REPORT_PIPELINE' | 'SYNTHETIC_ASSESSMENT'>): DataOrigin {
+  return env.SYNTHETIC_ASSESSMENT === 'enabled' ? 'synthetic' : currentDataOrigin(env);
+}
+
 /** The repository's own check, so a caller that skips the type system (or a future path that forgets the field) is refused before a row is written. */
 export function requireDataOrigin(origin: unknown): DataOrigin {
   if (origin !== 'synthetic' && origin !== 'real') throw new DataOriginError('A fact cannot be stored without a data origin.');

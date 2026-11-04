@@ -136,6 +136,55 @@ describe('loadEnv', () => {
       expect(loadEnv(production).NODE_ENV).toBe('production');
     });
 
+    describe('the synthetic structured assessment switch (spec 032 S3)', () => {
+      const switched = { ...production, SYNTHETIC_ASSESSMENT: 'enabled', SYNTHETIC_KNOWLEDGE_DIR: '/synthetic', BUILD_VERSION: 'sha256-abcdef012345' };
+
+      it('is off by default, and production accepts it only with everything its records need (control for each refusal below)', () => {
+        expect(loadEnv(production).SYNTHETIC_ASSESSMENT).toBe('disabled');
+        expect(loadEnv(switched)).toMatchObject({ NODE_ENV: 'production', SYNTHETIC_ASSESSMENT: 'enabled', LAB_REPORT_PIPELINE: 'disabled' });
+      });
+
+      it.each([
+        ['an in-memory store', { STORAGE_DRIVER: 'memory' }, /STORAGE_DRIVER/],
+        ['in-memory file storage', { OBJECT_STORAGE_DRIVER: 'memory' }, /OBJECT_STORAGE_DRIVER/],
+        ['no ledger verifier login', { LEDGER_VERIFIER_DATABASE_URL: undefined }, /LEDGER_VERIFIER_DATABASE_URL/],
+        ['no synthetic knowledge directory', { SYNTHETIC_KNOWLEDGE_DIR: undefined }, /SYNTHETIC_KNOWLEDGE_DIR.*required/],
+        ['no build version', { BUILD_VERSION: undefined }, /BUILD_VERSION/],
+        ['a disposable local run', { LOCAL_STORAGE_RUN_ID: '11111111-1111-4111-8111-111111111111' }, /SYNTHETIC_ASSESSMENT.*local/],
+      ])('refuses %s', (_name, over, message) => {
+        expect(() => loadEnv({ ...switched, ...over })).toThrow(message);
+      });
+
+      it('is not the pipeline: it refuses to be enabled beside it, and the pipeline is still refused in production', () => {
+        expect(() => loadEnv({ ...switched, LAB_REPORT_PIPELINE: 'enabled', LAB_REPORT_FIXTURES_DIR: '/f', KNOWLEDGE_DIR: '/k' })).toThrow(/LAB_REPORT_PIPELINE/);
+        const development = { ...switched, NODE_ENV: 'development', LAB_REPORT_PIPELINE: 'enabled', LAB_REPORT_FIXTURES_DIR: '/f', KNOWLEDGE_DIR: '/k' };
+        expect(() => loadEnv({ ...development, AUTH_VERIFIER: 'hmac', JWT_SECRET: 'x'.repeat(40) })).toThrow(/SYNTHETIC_ASSESSMENT.*two different integrations/);
+      });
+
+      it('states its own requirements outside production too, where the production list does not already imply them (control: the same setup is accepted)', () => {
+        const development = {
+          ...base,
+          STORAGE_DRIVER: 'postgres',
+          DATABASE_URL: 'postgres://app@db/app',
+          OBJECT_STORAGE_DRIVER: 's3',
+          REPORTS_BUCKET: 'a-bucket',
+          LEDGER_VERIFIER_DATABASE_URL: 'postgres://verifier@db/app',
+          SYNTHETIC_ASSESSMENT: 'enabled',
+          SYNTHETIC_KNOWLEDGE_DIR: '/synthetic',
+          BUILD_VERSION: 'b1',
+        };
+        expect(loadEnv(development).SYNTHETIC_ASSESSMENT).toBe('enabled');
+        expect(() => loadEnv({ ...development, LEDGER_VERIFIER_DATABASE_URL: undefined })).toThrow(/LEDGER_VERIFIER_DATABASE_URL.*SYNTHETIC_ASSESSMENT=enabled/);
+        expect(() => loadEnv({ ...development, STORAGE_DRIVER: 'memory', LEDGER_VERIFIER_DATABASE_URL: undefined })).toThrow(/SYNTHETIC_ASSESSMENT.*STORAGE_DRIVER=postgres/);
+        expect(() => loadEnv({ ...development, OBJECT_STORAGE_DRIVER: 'memory', REPORTS_BUCKET: undefined })).toThrow(/SYNTHETIC_ASSESSMENT.*OBJECT_STORAGE_DRIVER=s3/);
+      });
+
+      it('does not let a knowledge directory be set while it is off, and refuses a value that is not enabled or disabled', () => {
+        expect(() => loadEnv({ ...production, SYNTHETIC_KNOWLEDGE_DIR: '/synthetic' })).toThrow(/SYNTHETIC_KNOWLEDGE_DIR.*SYNTHETIC_ASSESSMENT=enabled/);
+        expect(() => loadEnv({ ...switched, SYNTHETIC_ASSESSMENT: 'yes' })).toThrow(/SYNTHETIC_ASSESSMENT/);
+      });
+    });
+
     it.each([
       ['the shared-secret verifier', { AUTH_VERIFIER: 'hmac', JWT_SECRET: 'x'.repeat(40) }, /AUTH_VERIFIER/],
       ["an issuer override (it could point at an attacker's keys)", { COGNITO_ISSUER: 'https://evil.example.com' }, /COGNITO_ISSUER/],
