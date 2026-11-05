@@ -23,13 +23,13 @@ error, never skipped**, because skipped knowledge looks exactly like "no guideli
 Test content lives elsewhere (`data/fixtures/knowledge/synthetic/`, invented genes `GENEA`–`GENED`). Every file
 there is `synthetic: true`.
 
-## File format (schema version `1.2`)
+## File format (schema versions `1.2` and `1.3`)
 
 Every file starts with the same envelope:
 
 | Field | Meaning |
 | --- | --- |
-| `schemaVersion` | `"1.2"` |
+| `schemaVersion` | `"1.3"` (current) or `"1.2"`. A 1.2 file parses exactly as before, so its content hash is unchanged; production refuses it (below). |
 | `id` | lower-case letters, digits, dashes; equals the file name |
 | `kind` | `gene-phenotype-map` or `guideline` |
 | `synthetic` | `true` for invented test content. Refused in production; can never be signed off |
@@ -60,6 +60,26 @@ table replaces; `[]` if none) and `recommendations`: one **cell** per combinatio
 Only `verified` cells can ever be shown. The five outcomes, the reason codes and the rules above are in
 [design/outcomes-and-reason-codes.md](design/outcomes-and-reason-codes.md).
 
+### Schema 1.3: identifiers and origin
+
+Schema 1.3 ([spec 033](../specs/033-ontology-identifiers/spec.md)) adds standard identifiers and says where content came from. Each field is
+required on a 1.3 file and refused on a 1.2 file.
+
+| Field | Where | Meaning |
+| --- | --- | --- |
+| `rxcui` | guideline | The drug's RxNorm ingredient id. One per file, because a file covers one drug. |
+| `origin` | every guideline cell, and every gene map | `cpic`, `pharmgkb`, `pharmvar` or `unknown`: which source's content this is, so the terms that apply to each cell are recorded with it. |
+| `hgncId` | gene map | The gene's HGNC id, e.g. `HGNC:` followed by digits. |
+| `pharmvarVersion` | gene map that lists `alleles` | The PharmVar release the alleles were defined in. Absent on a phenotype-only gene. |
+
+- **Identifier forms.** A non-synthetic file uses the real forms (an RxCUI is digits; `HGNC:` plus digits; a dotted release such as `6.2.1`).
+  A synthetic file must use invented forms (`syn-rxcui-…`, `syn-hgnc-…`, `syn-pharmvar-…`), and a real-form identifier in a synthetic file is
+  refused, so test content can never carry, or collide with, a real identifier.
+- **Origin.** A reviewed, non-synthetic file may not say `unknown` for any origin, exactly as for `license` and `redistribution`, so
+  `knowledge:hash` prints no hash for it and the loader refuses it in every mode.
+- Synthetic 1.3 content lives in `data/fixtures/knowledge/synthetic-identifiers/`. The real formats of these identifiers are to be confirmed
+  against CPIC's own fields before the first real file is signed.
+
 Schema 1.1 limits (stated so nobody assumes more): **at most four genes per guideline; diploid genes written
 `allele/allele`; no copy-number or structural variants.**
 
@@ -81,7 +101,7 @@ loader rejects it, in every environment**, until someone reviews it again.
 - `supersedes` is checked: the replaced guidelines must exist, be for the same drug, cover a smaller subset of the
   genes, not themselves supersede others (no chains), and be replaced by only one table.
 - **Production** (`mode: "production"`, and also any mode that is not exactly `"non-production"`):
-  refuses `synthetic` files and anything not `reviewed`. All problems are listed together.
+  refuses `synthetic` files, anything not `reviewed`, and any schema 1.2 file (it states no origin). All problems are listed together.
 - A test (`knowledge-loader.spec.ts`) loads the real `knowledge/cpic/` under the production rules, so
   committing unreviewed, edited or synthetic content there fails the build.
 - `pnpm --filter @telesphoros/backend knowledge:verify -- --production` runs the same check by hand.
@@ -98,7 +118,10 @@ fails) arrives with the processing pipeline in PR 5B.
 `evaluate(knowledge, geneInputs, {drugs?})` takes one input per occurrence of a gene in the report (a canonical
 phenotype, a diplotype, a "no result" marker, or "unresolved") and returns the resolved state of each gene plus one
 result per drug and guideline, each one of the five outcomes with its reason code, version stamps (`knowledgeSetId`,
-guideline id and version, source URL) and, where a cell applies, its citation. Details, precedence and the choices
+guideline id and version, source URL) and, where a cell applies, its citation. When the guideline and every gene map it reads are
+schema 1.3, a result with a citation also carries `identifiers` (the RxCUI, each gene's HGNC id and PharmVar release, and the cell's origin).
+They are copied, never used to choose a cell or an outcome, and stored on the result row inside the ledger hash (migration 0071); a result
+from 1.2 knowledge carries none and hashes exactly as before. Details, precedence and the choices
 awaiting confirmation: [design/outcomes-and-reason-codes.md](design/outcomes-and-reason-codes.md).
 
 **Where an input came from (`callSource`).** Each input the report adapter emits carries `callSource: 'lab-report'`: the value is what the lab printed, read by the adapter. It is stored with the input (so it is inside the ledger-hashed evaluation record) and shown in the evaluation detail's `geneInputs`; it is **not** on the resolved gene state the engine returns, and the engine and the knowledge files never read it. The field is optional in the schema because evaluations stored before it existed carry none and their hashes were taken without it; absence means `lab-report`, the only source there was. Any other value (an external genotype caller, for example) is refused until it is added deliberately, in its own change.

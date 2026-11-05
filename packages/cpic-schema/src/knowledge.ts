@@ -3,7 +3,14 @@ import { canonicalDiplotype, hasAtMostTwoDecimals, toHundredths } from './diplot
 import { cpicStrengthSchema } from './vocabulary';
 
 /** Bump when a file's shape changes. Files declare the version they were written for. */
-export const KNOWLEDGE_SCHEMA_VERSION = '1.2';
+export const KNOWLEDGE_SCHEMA_VERSION = '1.3';
+/**
+ * Versions the loader still reads. A 1.2 file parses exactly as before, so its content hash and every knowledge set id built
+ * from it are unchanged. 1.3 adds standard identifiers and an origin (spec 033 K2).
+ */
+export const KNOWLEDGE_SCHEMA_VERSIONS = ['1.2', '1.3'] as const;
+/** Which source a cell or gene map came from. "unknown" is a draft state: a reviewed, non-synthetic file may not use it. */
+export const KNOWLEDGE_ORIGINS = ['cpic', 'pharmgkb', 'pharmvar', 'unknown'] as const;
 
 /** The license a source states for its content. "unknown" is a draft state: a reviewed, non-synthetic file may not use it. */
 export const KNOWLEDGE_LICENSES = ['cc0-1.0', 'cc-by-4.0', 'cc-by-sa-4.0', 'proprietary', 'unknown'] as const;
@@ -37,6 +44,24 @@ export const alleleNameSchema = z.string().regex(/^[A-Za-z0-9*._>+-]{1,40}$/, 'A
 const fileIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,80}$/, 'Lower-case letters, digits and dashes.');
 const sha256Hex = z.string().regex(/^[0-9a-f]{64}$/, 'A lowercase hex SHA-256.');
 
+/**
+ * Standard identifiers (schema 1.3). Real content uses the real form; synthetic content must use the "syn-" form, so an
+ * invented identifier can never look like, or collide with, a real one. Which form a file may use is checked against
+ * `synthetic` in `requireIdentifierForm`.
+ */
+const IDENTIFIER_FORMS = {
+  /** RxNorm concept id: digits, the same form `patient_medications.drug_rxcui` checks. */
+  rxcui: { real: /^[1-9][0-9]{0,15}$/, synthetic: /^syn-rxcui-[a-z0-9][a-z0-9-]{0,39}$/ },
+  /** HGNC gene id, e.g. HGNC:2625. */
+  hgncId: { real: /^HGNC:[1-9][0-9]{0,6}$/, synthetic: /^syn-hgnc-[a-z0-9][a-z0-9-]{0,39}$/ },
+  /** The PharmVar release the allele definitions were taken from, e.g. 6.2.1. */
+  pharmvarVersion: { real: /^[0-9]{1,3}\.[0-9]{1,3}(\.[0-9]{1,3})?$/, synthetic: /^syn-pharmvar-[a-z0-9][a-z0-9.-]{0,39}$/ },
+} as const;
+type IdentifierField = keyof typeof IDENTIFIER_FORMS;
+const identifierSchema = (field: IdentifierField) =>
+  z.string().refine((value) => IDENTIFIER_FORMS[field].real.test(value) || IDENTIFIER_FORMS[field].synthetic.test(value), `Not a valid ${field}.`);
+const originSchema = z.enum(KNOWLEDGE_ORIGINS);
+
 const provenanceSchema = z.strictObject({
   /** Where the content came from, e.g. "CPIC". */
   source: label(200),
@@ -69,7 +94,7 @@ const reviewSchema = z.discriminatedUnion('status', [
 export type Review = z.infer<typeof reviewSchema>;
 
 const envelope = {
-  schemaVersion: z.literal(KNOWLEDGE_SCHEMA_VERSION),
+  schemaVersion: z.enum(KNOWLEDGE_SCHEMA_VERSIONS),
   id: fileIdSchema,
   /** True for invented test content. Synthetic files are refused in production and can never be signed off. */
   synthetic: z.boolean(),
@@ -90,6 +115,38 @@ function requireStatedLicense(file: { synthetic: boolean; provenance: { license:
   if (file.provenance.license === 'unknown') addIssue(ctx, ['provenance', 'license'], 'A reviewed file must state its license (not "unknown").');
   if (file.provenance.redistribution === 'unknown') {
     addIssue(ctx, ['provenance', 'redistribution'], 'A reviewed file must state whether it may be redistributed (not "unknown").');
+  }
+}
+
+/**
+ * Schema 1.3 fields are required on a 1.3 file and refused on a 1.2 file, so a 1.2 file keeps the exact content (and hash) it
+ * had. `present` lists each 1.3 field with its path and whether the file gives it.
+ */
+function requireVersionedFields(file: { schemaVersion: string }, present: readonly { path: (string | number)[]; given: boolean }[], ctx: z.RefinementCtx): void {
+  const is13 = file.schemaVersion === '1.3';
+  for (const { path, given } of present) {
+    if (is13 && !given) addIssue(ctx, path, 'Required from schema 1.3.');
+    if (!is13 && given) addIssue(ctx, path, 'Not part of schema 1.2: declare schemaVersion "1.3" to use it.');
+  }
+}
+
+/** A synthetic file must use invented "syn-" identifiers; a real file must use the real form. */
+function requireIdentifierForm(file: { synthetic: boolean }, field: IdentifierField, value: string | undefined, path: (string | number)[], ctx: z.RefinementCtx): void {
+  if (value === undefined) return;
+  const form = IDENTIFIER_FORMS[field];
+  if (file.synthetic && !form.synthetic.test(value)) addIssue(ctx, path, `A synthetic file must use an invented "syn-" ${field}, never a real-form one.`);
+  if (!file.synthetic && !form.real.test(value)) addIssue(ctx, path, `A non-synthetic file must use a real ${field}, not an invented "syn-" one.`);
+}
+
+/** Real content that carries a reviewer's signature must say where it came from (spec 033 K2-3). Drafts and synthetic files may say "unknown". */
+function requireStatedOrigin(
+  file: { synthetic: boolean; review: { status: string } },
+  origins: readonly { path: (string | number)[]; origin: string | undefined }[],
+  ctx: z.RefinementCtx,
+): void {
+  if (file.synthetic || file.review.status !== 'reviewed') return;
+  for (const { path, origin } of origins) {
+    if (origin === 'unknown') addIssue(ctx, path, 'A reviewed file must state the origin of its content (not "unknown").');
   }
 }
 
@@ -138,6 +195,12 @@ export const geneMapFileSchema = z
     ...envelope,
     kind: z.literal('gene-phenotype-map'),
     gene: geneSymbolSchema,
+    /** Schema 1.3: the gene's HGNC id. */
+    hgncId: identifierSchema('hgncId').optional(),
+    /** Schema 1.3: where this map came from. */
+    origin: originSchema.optional(),
+    /** Schema 1.3: the PharmVar release the alleles were defined in. Given exactly when `alleles` is. */
+    pharmvarVersion: identifierSchema('pharmvarVersion').optional(),
     /** Needed only to turn a diplotype into a phenotype. A gene a lab reports as a phenotype needs neither. */
     alleles: z.array(alleleSchema).min(1).max(2000).optional(),
     /** Every phenotype term this gene can have. Reported phenotypes and guideline cells may only use these. */
@@ -146,6 +209,21 @@ export const geneMapFileSchema = z
   })
   .superRefine((file, ctx) => {
     requireStatedLicense(file, ctx);
+    requireVersionedFields(
+      file,
+      [
+        { path: ['hgncId'], given: file.hgncId !== undefined },
+        { path: ['origin'], given: file.origin !== undefined },
+      ],
+      ctx,
+    );
+    if (file.schemaVersion === '1.3' && (file.pharmvarVersion === undefined) !== (file.alleles === undefined)) {
+      addIssue(ctx, ['pharmvarVersion'], 'Give pharmvarVersion exactly when the map lists alleles.');
+    }
+    if (file.schemaVersion !== '1.3' && file.pharmvarVersion !== undefined) addIssue(ctx, ['pharmvarVersion'], 'Not part of schema 1.2: declare schemaVersion "1.3" to use it.');
+    requireIdentifierForm(file, 'hgncId', file.hgncId, ['hgncId'], ctx);
+    requireIdentifierForm(file, 'pharmvarVersion', file.pharmvarVersion, ['pharmvarVersion'], ctx);
+    requireStatedOrigin(file, [{ path: ['origin'], origin: file.origin }], ctx);
     if ((file.alleles === undefined) !== (file.method === undefined)) {
       addIssue(ctx, ['method'], 'Give both alleles and method (to map diplotypes) or neither (phenotype-only gene).');
       return;
@@ -245,6 +323,8 @@ const recommendationRowSchema = z.strictObject({
   /** The guideline's wording, kept exactly. The engine never rewrites it. */
   recommendationText: prose(4000),
   implication: prose(2000).optional(),
+  /** Schema 1.3: which source this cell came from, so a package can show which rows are CC0. */
+  origin: originSchema.optional(),
 });
 export type RecommendationRow = z.infer<typeof recommendationRowSchema>;
 
@@ -256,6 +336,8 @@ export const guidelineFileSchema = z
     guidelineVersion: label(50),
     title: label(200),
     drug: drugNameSchema,
+    /** Schema 1.3: the drug's RxNorm ingredient id. One per file, because a file covers one drug. */
+    rxcui: identifierSchema('rxcui').optional(),
     /** The genes this guideline's table is read by: one for a single-gene table, several for a combined table. */
     genes: z.array(geneSymbolSchema).min(1).max(4),
     /**
@@ -268,6 +350,20 @@ export const guidelineFileSchema = z
   })
   .superRefine((file, ctx) => {
     requireStatedLicense(file, ctx);
+    requireVersionedFields(
+      file,
+      [
+        { path: ['rxcui'], given: file.rxcui !== undefined },
+        ...file.recommendations.map((row, index) => ({ path: ['recommendations', index, 'origin'], given: row.origin !== undefined })),
+      ],
+      ctx,
+    );
+    requireIdentifierForm(file, 'rxcui', file.rxcui, ['rxcui'], ctx);
+    requireStatedOrigin(
+      file,
+      file.recommendations.map((row, index) => ({ path: ['recommendations', index, 'origin'], origin: row.origin })),
+      ctx,
+    );
     if (new Set(file.genes).size !== file.genes.length) addIssue(ctx, ['genes'], 'Genes must be unique.');
     if (new Set(file.supersedes).size !== file.supersedes.length) addIssue(ctx, ['supersedes'], 'Ids must be unique.');
     if (file.supersedes.includes(file.id)) addIssue(ctx, ['supersedes'], 'A guideline cannot supersede itself.');

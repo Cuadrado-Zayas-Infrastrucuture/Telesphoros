@@ -315,7 +315,8 @@ const checkNames: Record<string, string> = {
   result_render_events: 'tenant_id_len viewer_len viewer_human viewer_roles seq kind kind_seq measurement rule_version schema_version capability client_times ms',
   evaluations:
     'created_by_len disposition engine_version_len hash_formats hold_code hold_consistent json_shapes tenant_id_len binding_size gene_inputs_size occurrences_size source_kind source_consistent hold_code_kind',
-  evaluation_results: 'citation_ids citation_size gene_evidence_size json ordinal outcome reason shape strength',
+  evaluation_results:
+    'citation_ids citation_size gene_evidence_size json ordinal outcome reason shape strength cell_origin drug_rxcui gene_hgnc_ids identifiers_all_or_none identifiers_need_citation pharmvar_versions',
   evaluation_gene_states: 'gene reason shape state',
   corrections: 'created_by_len kind note_required reason_for_kind reinstatement_chain replacement tenant_id_len created_by_human',
   cell_disputes: 'created_by_len hash labels tenant_id_len created_by_human creation_request_pair',
