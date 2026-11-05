@@ -62,7 +62,7 @@ Only `verified` cells can ever be shown. The five outcomes, the reason codes and
 
 ### Schema 1.3: identifiers and origin
 
-Schema 1.3 ([spec 033](../specs/033-ontology-identifiers/spec.md)) adds standard identifiers and says where content came from. Each field is
+Schema 1.3 ([spec 033](../specs/033-knowledge-identifiers/spec.md)) adds standard identifiers and says where content came from. Each field is
 required on a 1.3 file and refused on a 1.2 file.
 
 | Field | Where | Meaning |
