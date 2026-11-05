@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { drugNameSchema, geneSymbolSchema } from './knowledge';
+import { drugNameSchema, geneSymbolSchema, KNOWLEDGE_ORIGINS } from './knowledge';
 import { callerReasonCodeSchema, cpicStrengthSchema, reasonCodeSchema, verificationStateSchema } from './vocabulary';
 
 /**
@@ -88,6 +88,17 @@ export const citationSchema = z.strictObject({
 });
 export type Citation = z.infer<typeof citationSchema>;
 
+/**
+ * Standard identifiers of the cell a result came from (spec 033 K2-6), copied from schema 1.3 knowledge. Absent when the
+ * guideline or any of its gene maps is schema 1.2. They never change an outcome; they are the join key for records.
+ */
+export const resultIdentifiersSchema = z.strictObject({
+  rxcui: z.string(),
+  genes: z.array(z.strictObject({ gene: geneSymbolSchema, hgncId: z.string(), pharmvarVersion: z.string().nullable() })),
+  origin: z.enum(KNOWLEDGE_ORIGINS),
+});
+export type ResultIdentifiers = z.infer<typeof resultIdentifiersSchema>;
+
 const base = {
   drug: drugNameSchema,
   genes: z.array(geneSymbolSchema),
@@ -108,6 +119,7 @@ export const drugResultSchema = z.discriminatedUnion('outcome', [
     /** The guideline's wording, verbatim. */
     recommendationText: z.string(),
     implication: z.string().nullable(),
+    identifiers: resultIdentifiersSchema.optional(),
   }),
   z.strictObject({
     outcome: z.literal('no-published-recommendation'),
@@ -118,6 +130,8 @@ export const drugResultSchema = z.discriminatedUnion('outcome', [
     strength: cpicStrengthSchema.nullable(),
     recommendationText: z.string().nullable(),
     implication: z.string().nullable(),
+    /** Only with a citation: identifiers name a cell. */
+    identifiers: resultIdentifiersSchema.optional(),
   }),
   z.strictObject({
     outcome: z.literal('held'),
@@ -125,6 +139,8 @@ export const drugResultSchema = z.discriminatedUnion('outcome', [
     reasonCode: reasonCodeSchema,
     /** Present for out-of-review-scope and cell-disputed, so a reviewer can find the cell. No wording. */
     citation: citationSchema.nullable(),
+    /** Only with a citation: identifiers name a cell. */
+    identifiers: resultIdentifiersSchema.optional(),
   }),
   z.strictObject({
     outcome: z.literal('abstained'),

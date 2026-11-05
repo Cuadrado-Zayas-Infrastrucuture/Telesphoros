@@ -433,7 +433,8 @@ const EVALUATION_SQL = `SELECT id::text AS id, tenant_id, seq::text AS seq, crea
        source_kind, structured_revision_id::text AS structured_revision_id
   FROM evaluations WHERE id = ANY($1::uuid[])`;
 const RESULTS_SQL = `SELECT id::text AS id, evaluation_id::text AS evaluation_id, ordinal, drug, genes, outcome, reason_code, strength, citation, guideline_id,
-       guideline_version, recommendation_text, implication, gene_evidence FROM evaluation_results WHERE evaluation_id = ANY($1::uuid[])`;
+       guideline_version, recommendation_text, implication, gene_evidence, drug_rxcui, gene_hgnc_ids, pharmvar_versions, cell_origin
+  FROM evaluation_results WHERE evaluation_id = ANY($1::uuid[])`;
 const GENE_STATES_SQL = `SELECT id::text AS id, evaluation_id::text AS evaluation_id, gene, state, phenotype, diplotype, activity_score::text AS activity_score, reason_code
   FROM evaluation_gene_states WHERE evaluation_id = ANY($1::uuid[])`;
 
@@ -481,6 +482,8 @@ async function loadEvaluations(db: Queryable, ids: string[]): Promise<Map<string
         recommendationText: r.recommendation_text,
         implication: r.implication,
         geneEvidence: r.gene_evidence,
+        // Spec 033 K2-8: only a result that carries identifiers has them in its hashed projection, so every earlier result hashes as it did.
+        ...(r.drug_rxcui === null ? {} : { drugRxcui: r.drug_rxcui, geneHgncIds: r.gene_hgnc_ids, pharmvarVersions: r.pharmvar_versions, cellOrigin: r.cell_origin }),
       })),
       geneStates: ownStates.map((s) => ({
         id: s.id,

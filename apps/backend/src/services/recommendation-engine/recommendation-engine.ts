@@ -13,6 +13,7 @@ import {
   REASON_OUTCOME,
   REASON_PRECEDENCE,
   type RecommendationRow,
+  type ResultIdentifiers,
 } from '@telesphoros/cpic-schema';
 import { mapPhenotype } from '../phenotype-engine/phenotype-engine';
 import type { KnowledgeSet } from '../knowledge/knowledge-set';
@@ -59,7 +60,7 @@ export function evaluate(knowledge: KnowledgeSet, inputs: readonly GeneInput[], 
     for (const guideline of guidelines) {
       if (superseded.has(guideline.id)) continue;
       guideline.genes.forEach((gene) => needed.add(gene));
-      results.push(evaluateGuideline(guideline, stateOf));
+      results.push(evaluateGuideline(knowledge, guideline, stateOf));
     }
   }
 
@@ -125,7 +126,22 @@ function citationFor(guideline: GuidelineFile, row: RecommendationRow): Citation
   };
 }
 
-function evaluateGuideline(guideline: GuidelineFile, stateOf: (gene: string) => GeneStateResult): DrugResult {
+/**
+ * The standard identifiers of a cell (spec 033 K2-6), only when the guideline and every gene map it reads are schema 1.3.
+ * Copied, never looked up elsewhere, and never used to choose a cell or an outcome.
+ */
+function identifiersFor(knowledge: KnowledgeSet, guideline: GuidelineFile, row: RecommendationRow): { identifiers?: ResultIdentifiers } {
+  if (guideline.schemaVersion !== '1.3' || guideline.rxcui === undefined || row.origin === undefined) return {};
+  const genes: ResultIdentifiers['genes'] = [];
+  for (const gene of guideline.genes) {
+    const map = knowledge.gene(gene);
+    if (map?.schemaVersion !== '1.3' || map.hgncId === undefined) return {};
+    genes.push({ gene, hgncId: map.hgncId, pharmvarVersion: map.pharmvarVersion ?? null });
+  }
+  return { identifiers: { rxcui: guideline.rxcui, genes, origin: row.origin } };
+}
+
+function evaluateGuideline(knowledge: KnowledgeSet, guideline: GuidelineFile, stateOf: (gene: string) => GeneStateResult): DrugResult {
   const { drug, genes } = guideline;
   const states = genes.map(stateOf);
   const geneStates = states.map(evidence);
@@ -156,9 +172,10 @@ function evaluateGuideline(guideline: GuidelineFile, stateOf: (gene: string) => 
   }
 
   const citation = citationFor(guideline, row);
+  const ids = identifiersFor(knowledge, guideline, row);
   // The wording of a cell that has not been verified is never exposed, not even to a reviewer-facing field.
-  if (row.verification.state === 'unverified') return { outcome: 'held', drug, genes, geneStates, reasonCode: 'out-of-review-scope', citation };
-  if (row.verification.state === 'disputed') return { outcome: 'held', drug, genes, geneStates, reasonCode: 'cell-disputed', citation };
+  if (row.verification.state === 'unverified') return { outcome: 'held', drug, genes, geneStates, reasonCode: 'out-of-review-scope', citation, ...ids };
+  if (row.verification.state === 'disputed') return { outcome: 'held', drug, genes, geneStates, reasonCode: 'cell-disputed', citation, ...ids };
 
   if (row.strength === 'No recommendation') {
     return {
@@ -171,7 +188,8 @@ function evaluateGuideline(guideline: GuidelineFile, stateOf: (gene: string) => 
       strength: row.strength,
       recommendationText: row.recommendationText,
       implication: row.implication ?? null,
+      ...ids,
     };
   }
-  return { outcome: 'shown', drug, genes, geneStates, strength: row.strength, citation, recommendationText: row.recommendationText, implication: row.implication ?? null };
+  return { outcome: 'shown', drug, genes, geneStates, strength: row.strength, citation, recommendationText: row.recommendationText, implication: row.implication ?? null, ...ids };
 }
