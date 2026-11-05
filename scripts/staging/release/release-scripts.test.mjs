@@ -305,13 +305,46 @@ test('assessment operations: ON waits for the verified release and OFF never wai
   const saveCurrent = (text) => { writeFileSync(current, text); writeFileSync(`${current}.sha256`, sha(current) + '\n'); };
   const startSerial = readFileSync(join(stubDir, 'serial'), 'utf8');
 
-  // Switching ON waits for a signed verification of the running image, a finished IMAGE apply and no pending migration.
+  // Switching ON waits for a verification record of the running image (a signature, or a break-glass record with a written reason), a finished
+  // IMAGE apply and no pending migration. The medication fence keeps requiring a signature.
   shape('ASSESSMENT-ON');
   writeFileSync(verificationFile, '{}');
   assert.equal(run('plan.sh', ['ASSESSMENT-ON', COMMIT, 'on-unsigned'], owner).status, 1, 'an empty verification marker is insufficient');
-  writeFileSync(verificationFile, signed.replace('"method":"signature"', '"method":"break-glass"'));
-  assert.equal(run('plan.sh', ['ASSESSMENT-ON', COMMIT, 'on-break-glass'], owner).status, 1, 'an unsigned break-glass image is not enough');
+  const breakGlass = { format: 1, environment: 'staging', images: [NEW], recordedAt: '2026-11-04T00:00:00Z', method: 'break-glass',
+    reason: 'CI release-image cannot sign in this account; founder approved an unsigned synthetic staging image' };
+  writeFileSync(verificationFile, JSON.stringify({ ...breakGlass, reason: undefined }));
+  assert.equal(run('plan.sh', ['ASSESSMENT-ON', COMMIT, 'on-no-reason'], owner).status, 1, 'a break-glass record without a written reason is not enough');
+  writeFileSync(verificationFile, JSON.stringify({ ...breakGlass, images: [OLD] }));
+  assert.equal(run('plan.sh', ['ASSESSMENT-ON', COMMIT, 'on-other-image'], owner).status, 1, 'a break-glass record for another image is not enough');
+  writeFileSync(verificationFile, JSON.stringify({ ...breakGlass, environment: 'production' }));
+  assert.equal(run('plan.sh', ['ASSESSMENT-ON', COMMIT, 'on-production'], owner).status, 1, 'a production record is not enough');
+  writeFileSync(verificationFile, JSON.stringify(breakGlass));
+  writeFileSync(join(stubDir, 'plan.json'), JSON.stringify(fencePlan('FENCE-OPEN', false, NEW)));
+  const fenceOpen = run('plan.sh', ['FENCE-OPEN', COMMIT, 'open-break-glass'], owner);
+  assert.equal(fenceOpen.status, 1, 'the medication fence still refuses a break-glass record');
+  assert.match(fenceOpen.stderr, /signature-verification record/);
+  shape('ASSESSMENT-ON');
+  const unsignedOn = run('plan.sh', ['ASSESSMENT-ON', COMMIT, 'on-break-glass'], owner);
+  assert.equal(unsignedOn.status, 0, 'a break-glass record with a reason, naming the running image, is accepted: ' + unsignedOn.stdout + unsignedOn.stderr);
+  writeFileSync(verificationFile, '{}');
+  assert.equal(run('apply.sh', ['ASSESSMENT-ON', COMMIT, pinOf(unsignedOn), 'on-break-glass'], owner).status, 1, 'the record is checked again at apply');
+  assert.ok(!existsSync(join(rel, 'assessments/on-break-glass/ae-apply.txt')));
+  writeFileSync(verificationFile, JSON.stringify(breakGlass));
+  const unsignedApply = run('apply.sh', ['ASSESSMENT-ON', COMMIT, pinOf(unsignedOn), 'on-break-glass'], owner);
+  assert.equal(unsignedApply.status, 0, 'the apply accepts the same break-glass record: ' + unsignedApply.stdout + unsignedApply.stderr);
+  assert.match(waitFor(join(rel, 'assessments/on-break-glass/ae-apply.txt')), /== apply exit status: 0/);
+  saveCurrent(original); writeFileSync(join(stubDir, 'serial'), startSerial); // put the stack back as the rest of this test expects it
+  // The fence: planned on a signature, then the record turns into a break-glass one before the apply, which must refuse.
   writeFileSync(verificationFile, signed);
+  writeFileSync(join(stubDir, 'plan.json'), JSON.stringify(fencePlan('FENCE-OPEN', false, NEW)));
+  const openSigned = run('plan.sh', ['FENCE-OPEN', COMMIT, 'open-signed'], owner);
+  assert.equal(openSigned.status, 0, openSigned.stdout + openSigned.stderr);
+  writeFileSync(verificationFile, JSON.stringify(breakGlass));
+  const openRefused = run('apply.sh', ['FENCE-OPEN', COMMIT, pinOf(openSigned), 'open-signed'], owner);
+  assert.equal(openRefused.status, 1, 'the medication fence refuses a break-glass record at apply too');
+  assert.match(openRefused.stderr, /signature-verification record/);
+  writeFileSync(verificationFile, signed);
+  shape('ASSESSMENT-ON');
   writeFileSync(join(rel, 'i-apply.txt'), '== apply exit status: 9\n');
   assert.equal(run('plan.sh', ['ASSESSMENT-ON', COMMIT, 'on-incomplete-image'], owner).status, 1);
   writeFileSync(join(rel, 'i-apply.txt'), imageLog);

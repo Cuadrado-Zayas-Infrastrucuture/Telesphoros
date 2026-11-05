@@ -40,7 +40,9 @@ OLD=$(running_image)
 case "$MODE" in FENCE-CLOSE|FENCE-OPEN|ASSESSMENT-ON|ASSESSMENT-OFF) NEW=$OLD; VARFILE="$OUT/$T.tfvars" ;; INFRA) NEW=$OLD; VARFILE="$CURRENT" ;; MIGRATE) NEW=$(cat "$OUT/new_image.txt"); VARFILE="$CURRENT" ;; IMAGE) NEW=$(cat "$OUT/new_image.txt"); VARFILE="$OUT/release.tfvars" ;; esac
 if flag_needs_release "$MODE"; then
   [ -f "$RELEASE_OUT/verified-image.json" ] && [ "$(cat "$RELEASE_OUT/new_image.txt" 2>/dev/null)" = "$OLD" ] || die "$MODE needs the running image's verified release at this commit"
-  node "$HERE/fence-image-record.mjs" "$RELEASE_OUT/verified-image.json" "$OLD" || die "running image verification record refused"
+  IMAGE_POLICY=()
+  if [ "$MODE" = ASSESSMENT-ON ]; then IMAGE_POLICY=(--allow-break-glass); fi # a signature, or a break-glass record with a written reason; the fence stays signature-only
+  node "$HERE/fence-image-record.mjs" "$RELEASE_OUT/verified-image.json" "$OLD" ${IMAGE_POLICY[@]+"${IMAGE_POLICY[@]}"} || die "running image verification record refused"
   grep -qx '== apply exit status: 0' "$RELEASE_OUT/i-apply.txt" 2>/dev/null || die "$MODE needs the coordinated IMAGE apply to finish first"
   grep -qx 'pending: (none)' "$RELEASE_OUT/migrate-status.txt" 2>/dev/null || die "$MODE needs migrations confirmed complete"
 fi
