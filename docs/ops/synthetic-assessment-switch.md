@@ -15,7 +15,7 @@ the two image lines. So the switch has its own two modes, built like the medicat
 
 | Mode | Variable written | Task definition before, after | Waits for |
 | --- | --- | --- | --- |
-| `ASSESSMENT-ON` | `synthetic_assessment_enabled = true` | neither setting, then both | this commit's IMAGE apply (`i-apply.txt` ends `exit status: 0`), `migrate-status.txt` saying `pending: (none)`, and a **signature** record for the running image (`verified-image.json`, the same check `FENCE-OPEN` makes) |
+| `ASSESSMENT-ON` | `synthetic_assessment_enabled = true` | neither setting, then both | this commit's IMAGE apply (`i-apply.txt` ends `exit status: 0`), `migrate-status.txt` saying `pending: (none)`, and a verification record for the running image in `verified-image.json`: a **signature** (the check `FENCE-OPEN` makes), or a **break-glass** record with a written reason, which synthetic staging needs because it cannot sign (PR 3c-3b, founder's decision of 2026-11-04) |
 | `ASSESSMENT-OFF` | `synthetic_assessment_enabled = false` | both settings, then neither | nothing beyond the claim, the clone at the commit and the identity: it is the way back |
 
 ## Commands
@@ -46,6 +46,15 @@ overwritten, and a started apply cannot be started again. `ae` is the switching-
 - **The apply:** the plan hash typed after reading, the plan record (state serial and lineage, clone HEAD, source and target var hashes), the claim, the identity, the
   release gates again for `ASSESSMENT-ON`, and a one-start lock. After a successful apply the generated var file becomes the canonical one, but only if it is still
   byte-identical to what was reviewed.
+
+## The unsigned image
+
+Synthetic staging cannot hold a GitHub OIDC provider (its service control policy denies it), so its images are unsigned unless the staging-only signing door
+(`image_release_human_principals`, decision D6) is opened, and that needs a founder-resealed var file plus an INFRA apply that creates an IAM role and a signing
+key. `ASSESSMENT-ON` therefore also accepts a break-glass record from `verify-image.mjs --unsigned-break-glass "<reason>"`: environment `staging`, the exact digest of the
+running image and nothing else, and a one-line reason of 10 to 300 characters (the recorder's own rule, imported and not copied). The recorder itself refuses production,
+`FENCE-OPEN` still requires a signature, and the reason stays in the record next to the release. What this does not give: any assurance that the digest is what CI built
+beyond the same-commit CI `image` job the image step already requires, and no signature a later reader can check.
 
 ## What it does not prove
 
