@@ -27,7 +27,7 @@ An organization's record representing the person to whom reports belong.
 _Avoid_: member or user when referring to a patient record.
 
 **Report**:
-A patient-associated record for an incoming laboratory document or data file. Registration can precede upload; accepted formats are VCF, structured JSON and lab PDF.
+A patient-associated record for an incoming laboratory document or data file. Registration can precede upload; accepted formats are structured JSON and lab PDF.
 _Avoid_: PDF, upload or evaluation as a synonym for every report.
 
 **Report file**:
@@ -59,7 +59,7 @@ Verification or rejection that a report's exact file version belongs to the assi
 _Avoid_: capture acceptance or patient merge as a synonym for patient-link verification.
 
 **Evaluation**:
-The recorded outcome of processing an accepted capture: results or a hold.
+The recorded outcome of processing an accepted capture or a reviewed structured revision: results or a hold.
 _Avoid_: report, capture or recommendation as a synonym for the whole evaluation record.
 
 **Active evaluation**:
@@ -71,6 +71,26 @@ The report's newest evaluation, if active and the patient link for its current f
 _Avoid_: newest active evaluation, latest successful result or clinically approved evaluation as a synonym for current.
 
 Usage: [pipeline contracts](../packages/shared-types/src/lab-report.ts), [capture review](../apps/backend/src/lab-reports/captures.service.ts), [evaluation states](../apps/backend/src/lab-reports/lab-report.mapper.ts), [current-evaluation selection](../apps/backend/src/storage/postgres/ledger-records.repository.ts), [records and corrections](design/records-and-corrections.md).
+
+## Structured reports and the synthetic assessment
+
+**Structured revision**:
+A saved, append-only version of the findings read from a structured report.
+_Avoid_: capture, which is text from a PDF.
+
+**Finding review**:
+A reviewer's decision on one saved finding, made by someone who did not upload or save that evidence.
+_Avoid_: capture decision, which accepts or rejects a PDF capture.
+
+**Synthetic assessment**:
+An evaluation computed from a reviewed structured revision against synthetic knowledge, available only where the API runs with `SYNTHETIC_ASSESSMENT=enabled` (synthetic staging). Every result is labelled synthetic and not approved for clinical use.
+_Avoid_: recommendation or clinical result as a synonym for a synthetic assessment.
+
+**Synthetic knowledge**:
+Invented phenotype and guideline content used only for tests and synthetic staging; never `knowledge/cpic`.
+_Avoid_: guideline or CPIC content as a synonym for synthetic knowledge.
+
+Usage: [structured preview and review](../apps/backend/src/patient-identity/structured-preview.service.ts), [assessment](../apps/backend/src/lab-reports/structured-assessment.ts), [synthetic structured knowledge](../data/fixtures/knowledge/synthetic-structured), [architecture](architecture.md#the-synthetic-assessment-synthetic-staging-only-spec-032-s3).
 
 ## Corrections and history
 
