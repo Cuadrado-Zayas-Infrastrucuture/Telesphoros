@@ -1,9 +1,9 @@
 const assert = require('node:assert/strict');
-const {mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync} = require('node:fs');
+const {mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync, statSync} = require('node:fs');
 const {tmpdir} = require('node:os');
 const {join} = require('node:path');
 const {test} = require('node:test');
-const {libraryPaths, rejectNativeAddons} = require('./runtime-rootfs.cjs');
+const {libraryPaths, rejectNativeAddons, scratchDir} = require('./runtime-rootfs.cjs');
 const fixture = ['libdl.so.2', 'libstdc++.so.6', 'libm.so.6', 'libgcc_s.so.1', 'libpthread.so.0', 'libc.so.6']
   .map(name => `  ${name} => /lib/x86_64-linux-gnu/${name} (0x00000001)`)
   .concat('  /lib64/ld-linux-x86-64.so.2 (0x00000002)', '  linux-vdso.so.1 (0x00000003)').join('\n');
@@ -37,6 +37,14 @@ test('an external application symlink cannot add undeclared runtime dependencies
     symlinkSync('../outside.js', join(dir, 'app', 'alias'));
     assert.throws(() => rejectNativeAddons(join(dir, 'app')), /symlink leaves/);
   } finally { rmSync(dir, {recursive: true, force: true}); }
+});
+
+test('the runtime root has a sticky, world-writable /tmp whatever the umask', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'runtime-tmp-'));
+  const umask = process.umask(0o077);
+  try {
+    assert.equal(statSync(scratchDir(dir)).mode & 0o7777, 0o1777);
+  } finally { process.umask(umask); rmSync(dir, {recursive: true, force: true}); }
 });
 
 test('a dangling internal deployment-index alias carries no native payload', () => {
