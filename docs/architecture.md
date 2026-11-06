@@ -1,7 +1,7 @@
 # Architecture
 
-How the parts fit together today. Status and history: [STATUS.md](STATUS.md). Everything here runs on **synthetic data only**; nothing is
-applied in AWS.
+How the parts fit together today. Status and history: [STATUS.md](STATUS.md). Everything here runs on **synthetic data only**. One
+synthetic staging environment runs in AWS and there is no production; what is applied there is in [ops/environments.md](ops/environments.md).
 
 ## The shape
 
@@ -69,6 +69,27 @@ different person where the rules say so:
 5. **Corrections** (`POST /evaluations/:id/corrections`, reviewer): retraction, supersession and reinstatement, each a new ledgered record; the evaluation is never edited, its state is derived from its corrections, and `current` marks a report's newest evaluation if it is active (none if the newest is retracted). **Disputes** (`POST /cell-disputes`, reviewer): a disputed guideline cell is held by an overlay at the next evaluation. **The ledger watch** (5B-3.3c, [ops/ledger-watch.md](ops/ledger-watch.md)) verifies each tenant's chain at start (production refuses to start on a failure), walks it in full in the background and on a timer, shows the result in `/ready`, and on damage records an **incident in the database** (FD-2, migration 0011): `ledger_append` then refuses that tenant's writes in every task (503 `LEDGER_COMPROMISED`) while the other tenants carry on, until an operator clears it after a later full walk has passed. Restore re-walks every chain.
 
 Details of the reader and adapter: [lab-report-reader.md](lab-report-reader.md).
+
+## The synthetic assessment (synthetic staging only, spec 032 S3)
+The path the MVP uses to show a stored result on staging. Staging runs with `NODE_ENV=production`, which refuses the lab-report pipeline, so
+this is a separate switch, `SYNTHETIC_ASSESSMENT` (off by default), for **structured** reports (JSON), never PDFs:
+
+1. **Upload** a structured report through the same validated intake.
+2. **Review** (`/reports/:id/structured-preview`): a `reviewer` who did not upload or save the evidence verifies the patient link and decides
+   each saved finding. The revisions and finding reviews are append-only and ledgered (migrations 0068 and 0069).
+3. **Assess** (`POST /reports/:id/structured-assessment`, `clinician` or `reviewer`): once every finding has a decision, the existing engine
+   evaluates the findings against its own synthetic knowledge, `data/fixtures/knowledge/synthetic-structured` (copied into the image as
+   `/app/synthetic-knowledge`). The result is stored as an evaluation with a structured source (migration 0070) and the ledger. An incomplete,
+   conflicting or unsupported finding holds; nothing is inferred.
+4. **Read** (`GET /evaluations`, `GET /evaluations/:id`): the patient page shows the stored result (outcome, reason code, citation), labelled
+   synthetic and not approved for clinical use. Clinician decisions, acknowledgements, corrections and disputes stay off (503).
+
+Three switches must agree. The API refuses `SYNTHETIC_ASSESSMENT` beside the pipeline and in a disposable local run. Terraform sets it only through
+`synthetic_assessment_enabled`, which the synthetic profile alone accepts. The frontend shows the UI only when built with `VITE_SYNTHETIC_ASSESSMENT=true`,
+which the publish script sets only with `--with-synthetic-assessment`. Code: `apps/backend/src/lab-reports/structured-assessment*.ts`,
+`apps/backend/src/patient-identity/structured-preview.*`, `apps/frontend/src/components/StructuredAssessment.tsx`. Decisions and slices:
+[design/plans/pgx-synthetic-assessment.md](design/plans/pgx-synthetic-assessment.md). Turning it on and off:
+[ops/synthetic-assessment-switch.md](ops/synthetic-assessment-switch.md). Whether staging runs it: [ops/environments.md](ops/environments.md).
 
 ## Delivery
 CI runs six required checks (`verify`, `database-and-storage`, `browser`, `terraform`, `secret-scan`, `image`) plus an advisory lint; every GitHub
