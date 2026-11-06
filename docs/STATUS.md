@@ -1,6 +1,7 @@
 # Status, history and working agreements
 
-Read this first to pick the project up. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. A pull request that changes what is described here adds a fragment under `docs/status/` (next section).
+The project's history up to 2026-10-20 and its working agreements. **New to the project? Start with the [documentation map](README.md)**, and run
+`pnpm status:index` for the dated entries since then, newest first. Project snapshot: **2026-10-14**; CI status updated **2026-10-17**. A pull request that changes what is described here adds a fragment under `docs/status/` (next section).
 Synthetic data only: the AWS BAA is not executed, and nothing here is approved for clinical use. **What is applied in AWS now** (one synthetic
 staging environment, no production) is in [ops/environments.md](ops/environments.md); this page is a snapshot, and its dated sections keep their own wording.
 
