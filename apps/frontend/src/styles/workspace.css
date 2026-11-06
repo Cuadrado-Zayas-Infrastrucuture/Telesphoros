@@ -118,8 +118,9 @@
    the global reduced-motion rule in index.css removes the transition). */
 .workspace-navigation :is(a[href], button, label[for]) { cursor: pointer; }
 .workspace-navigation :is(a[href], button) { transition: background-color .15s ease-out, color .15s ease-out; }
-/* The account menu rises a little from its row as it opens: opacity and transform only, so nothing around it moves. */
-.workspace-account-menu { transition: opacity .15s ease-out, transform .15s ease-out; }
+/* The account menu rises a little from its row as it opens: transform only, so nothing around it moves and its text is never faded
+   (a fade-in left the text below contrast while it ran; the accessibility checks open the menu and measure at once). */
+.workspace-account-menu { transition: transform .15s ease-out; }
 @starting-style {
-  .workspace-account-menu:not([hidden]) { opacity: 0; transform: translateY(.25rem); }
+  .workspace-account-menu:not([hidden]) { transform: translateY(.25rem); }
 }
