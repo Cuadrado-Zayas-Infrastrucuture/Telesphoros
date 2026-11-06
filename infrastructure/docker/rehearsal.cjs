@@ -32,6 +32,10 @@ async function main(){
   // First, before any container is created: the task commands in Terraform start under the image's real ENTRYPOINT (the driver below bypasses it).
   console.log(docker('run','--rm','--platform','linux/amd64','--read-only','--user','10001:10001','--cap-drop','ALL','--security-opt','no-new-privileges','--network','none','-v',`${join(root,'infrastructure/docker/runtime-smoke.cjs')}:/test/runtime-smoke.cjs:ro`,tag,'/test/runtime-smoke.cjs').trim());
   console.log(`PASS ${await smoke(tag)} Terraform task commands start under the image ENTRYPOINT (no module-not-found; the processes then refuse for missing configuration)`);
+  // Upload staging: ECS copies the image's /tmp permissions onto the task's scratch volume only for a declared VOLUME, so check the declaration, then write to a fresh
+  // anonymous volume at /tmp as the task user (`-v /tmp` starts empty and takes the image's /tmp permissions, as the ECS volume does).
+  assert.deepEqual(Object.keys(JSON.parse(docker('image','inspect','--format','{{json .Config.Volumes}}',tag)) || {}),['/tmp'],'the image must declare /tmp, and only /tmp, a volume');
+  console.log(docker('run','--rm','--platform','linux/amd64','--read-only','--user','10001:10001','--cap-drop','ALL','--security-opt','no-new-privileges','--network','none','-v','/tmp','-v',`${join(root,'infrastructure/docker/tmp-smoke.cjs')}:/test/tmp-smoke.cjs:ro`,tag,'/test/tmp-smoke.cjs').trim());
   // The synthetic knowledge of the structured assessment is in the image and loads with the application's own loader (spec 032 S3).
   console.log(`PASS ${docker('run','--rm','--platform','linux/amd64','--read-only','--user','10001:10001','--network','none','-v',`${join(root,'infrastructure/docker/synthetic-knowledge-smoke.cjs')}:/test/synthetic-knowledge-smoke.cjs:ro`,tag,'/test/synthetic-knowledge-smoke.cjs').trim()}`);
   // No existing container, database, volume or network is reused.
