@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { openWorkspaceNavigation, signInAs } from '../e2e/helpers';
+import { openPatients, signInAs } from '../e2e/helpers';
 
 test('the storage prototype reports disabled processing without inventing stored results', async ({ page }) => {
   await signInAs(page, 'alice', '/workspace');
-  await openWorkspaceNavigation(page);
+  await openPatients(page); // specs/034 D2
   await page.getByRole('link', { name: 'Add patient', exact: true }).click();
   const label = `SYN-RESULTS-${crypto.randomUUID().slice(0, 8)}`;
   await page.getByRole('textbox', { name: 'Synthetic patient label', exact: true }).fill(label);

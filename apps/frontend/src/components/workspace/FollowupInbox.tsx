@@ -25,7 +25,7 @@ export function FollowupInbox({ onNavigate }: { onNavigate: () => void }) {
   };
   return (
     <>
-      <Button variant="ghost" className="min-h-control w-full justify-start gap-3 px-3 text-sm" onClick={() => setOpen(true)} title="Follow-ups">
+      <Button variant="ghost" className="min-h-control w-full justify-start gap-3 px-3 text-sm font-medium text-muted-foreground" onClick={() => setOpen(true)} title="Follow-ups">
         <CalendarClock className="size-4 shrink-0" aria-hidden="true" />
         <span className="workspace-link-label">Follow-ups{data && !error ? ` (${data.counts.overdue + data.counts.today})` : ''}</span>
       </Button>

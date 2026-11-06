@@ -24,9 +24,15 @@ test('the page, navigation and chat controls stay inside device safe areas', asy
   const me = await signedIn;
   const api = new URL(me.url()).origin;
   const headers = { Authorization: me.request().headers().authorization! };
-  // Fill a real first page: a long panel must scroll a focused link above the home indicator too.
+  // Fill a real first page of Recents (specs/034 D3): a long panel must keep its foot, the account row, above the home indicator too.
+  const patient = await page.request.post(`${api}/api/v1/patients`, { headers, data: { label: `SYN-SAFE-${crypto.randomUUID().slice(0, 8)}`, requestId: crypto.randomUUID() } });
+  expect(patient.ok()).toBe(true);
+  const patientId = ((await patient.json()) as { id: string }).id;
   for (let index = 0; index < 20; index++) {
-    const added = await page.request.post(`${api}/api/v1/patients`, { headers, data: { label: `SYN-SAFE-${crypto.randomUUID().slice(0, 8)}-${index}`, requestId: crypto.randomUUID() } });
+    const added = await page.request.post(`${api}/api/v1/reports`, {
+      headers,
+      data: { patientId, type: 'structured', filename: `safe-area-${index}.json`, sizeBytes: 64, requestId: crypto.randomUUID() },
+    });
     expect(added.ok()).toBe(true);
   }
   // Visit home, then use its account link to remount a fresh workspace panel.
@@ -34,7 +40,7 @@ test('the page, navigation and chat controls stay inside device safe areas', asy
   await page.locator('header.workspace-navigation a[href="/"]').click();
   await page.getByRole('link', { name: 'Open workspace', exact: true }).click();
   await openWorkspaceNavigation(page);
-  await expect(page.getByRole('region', { name: 'Patients' }).getByRole('listitem')).toHaveCount(20);
+  await expect(page.getByRole('list', { name: 'Recent reports' }).getByRole('listitem')).toHaveCount(20);
   if (page.viewportSize()!.width < 1024) await page.getByRole('button', { name: 'Workspace navigation', exact: true }).click();
   await expect(page.locator('body')).toHaveCSS('padding-top', '24px');
   await expect(page.locator('body')).toHaveCSS('padding-left', '32px');
@@ -42,7 +48,7 @@ test('the page, navigation and chat controls stay inside device safe areas', asy
   await expect(page.locator('body')).toHaveCSS('padding-bottom', '34px');
   await withinSafeArea(page, page.getByRole('button', { name: 'Send', exact: true }));
   await openWorkspaceNavigation(page);
-  await withinSafeArea(page, page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'Settings', exact: true }));
+  await withinSafeArea(page, page.locator('header.workspace-navigation').getByRole('button', { name: /^Account, / }));
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(await axeViolations(page)).toEqual([]);
   await page.screenshot({ path: info.outputPath('safe-area-chat.png'), fullPage: true });
@@ -59,7 +65,7 @@ test('report details and its close button avoid the cutout and home indicator', 
   await page.getByRole('button', { name: 'Upload report', exact: true }).click();
   await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
   await openWorkspaceNavigation(page);
-  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'All reports', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'Reports', exact: true }).click();
   await selectReportsPatient(page, fixture);
   await page.getByRole('button', { name: `Open ${name}` }).click();
   const dialog = page.getByRole('dialog', { name: 'Report details' });

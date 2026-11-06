@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { axeViolations, openWorkspaceNavigation, signInAs, type Persona } from './helpers';
+import { axeViolations, openPatients, openWorkspaceNavigation, signInAs, type Persona } from './helpers';
 
 // Spec 024: the chat-first home in a production-mode build (`vite build --mode e2e`, so `import.meta.env.DEV` is false and the local preview gate is off
 // whatever the host name). The fake identity provider's redirect address fixes the host at 127.0.0.1; the unit tests cover `localhost` and a deployed host.
@@ -39,26 +39,27 @@ test.describe('where signing in lands (CH-1)', () => {
   });
 });
 
-test.describe('the feature panel (CH-2)', () => {
+test.describe('the feature panel (CH-2, specs/034 D1)', () => {
   const cases = [
-    ['alice', ['New chat', 'Past reports', 'Patients', 'All reports', 'Settings']],
-    ['bob', ['New chat', 'Past reports', 'Patients', 'All reports', 'Settings']],
-    ['carol', ['New chat', 'Usage', 'Settings']],
+    ['alice', ['New chat', 'Patients', 'Reports', 'Follow-ups', 'Recents']],
+    ['bob', ['New chat', 'Patients', 'Reports', 'Recents']],
+    ['carol', ['New chat', 'Usage']],
   ] as const;
   for (const [persona, expected] of cases) {
     test(`lists, in order, only what ${persona} may use`, async ({ page }) => {
       await signInAs(page, persona, '/workspace');
       await openWorkspaceNavigation(page);
       expect(await panelItems(page)).toEqual(expected);
-      await expect(page.locator('.workspace-account').getByRole('button', { name: 'Sign out' }).filter({ visible: true })).toHaveCount(1);
+      await expect(page.locator('.workspace-account').getByRole('button', { name: /^Account, / })).toBeVisible();
     });
   }
 
-  test('past reports and patients come from the API, as words and labels', async ({ page }) => {
+  test('recent reports come from the API, and patients have their own page (specs/034 D2, D3)', async ({ page }) => {
     await signInAs(page, 'alice', '/workspace');
     await openWorkspaceNavigation(page);
-    await expect(primary(page).getByRole('region', { name: 'Past reports', exact: true })).toBeVisible();
-    await expect(primary(page).getByRole('region', { name: 'Patients' })).toBeVisible();
+    await expect(primary(page).getByText('Recents', { exact: true })).toBeVisible();
+    await openPatients(page);
+    await expect(page.getByRole('region', { name: 'Patient records' })).toBeVisible();
   });
 
   test('New chat opens an empty conversation', async ({ page }) => {
@@ -79,7 +80,7 @@ test.describe('the feature panel (CH-2)', () => {
     const sidebar = page.locator('header.workspace-navigation');
     await expect(sidebar).toHaveClass(/is-collapsed/);
     expect(await page.evaluate(() => window.localStorage.getItem('telesphoros.sidebar'))).toBe('collapsed');
-    await primary(page).getByRole('link', { name: 'All reports', exact: true }).click();
+    await primary(page).getByRole('link', { name: 'Reports', exact: true }).click();
     await expect(page).toHaveURL(/\/reports$/);
     await page.getByRole('button', { name: 'Close report history', exact: true }).click();
     await expect(sidebar).toHaveClass(/is-collapsed/);
@@ -168,9 +169,12 @@ test.describe('the conversation', () => {
     await reload;
     await expect(word).toBeVisible();
     expect(declarations).toHaveLength(1);
-    // The panel lists reports too. The list is the oldest page and the suite shares one organization, so this report may not be on it: check the list shows words.
+    // Recents lists the newest reports, so this one is on it, with its status word; its row opens the report's details (specs/034 D3).
     await openWorkspaceNavigation(page);
-    await expect(primary(page).getByRole('list', { name: 'Past reports' }).getByRole('listitem').first()).toBeVisible();
+    const row = primary(page).getByRole('list', { name: 'Recent reports' }).getByRole('link').filter({ hasText: name.replace(/\.json$/, '') });
+    await expect(row.getByText(/^(Received|Processing|Processed|Failed)$/)).toBeVisible();
+    await row.click();
+    await expect(page.getByRole('dialog', { name: 'Report details' }).getByText(name).first()).toBeVisible();
   });
 
   test('a PDF is refused with a message naming the local preview, and nothing is uploaded (CH-6)', async ({ page }) => {
@@ -195,7 +199,7 @@ test.describe('accessibility and layout (CH-7)', () => {
       await signInAs(page, 'alice', '/workspace');
       await expect(page.getByRole('heading', { level: 1, name: HEADING })).toBeVisible();
       await openWorkspaceNavigation(page); // on a phone the panel is a drawer; open it so axe sees the lists too
-      await expect(primary(page).getByRole('region', { name: 'Past reports', exact: true })).toBeVisible();
+      await expect(primary(page).getByText('Recents', { exact: true })).toBeVisible();
       expect(await axeViolations(page)).toEqual([]);
       await page.locator('input[type=file]').setInputFiles({ name: 'axe.json', mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
       await expect(page.getByRole('checkbox', { name: 'I confirm this file contains synthetic data only' })).toBeVisible();
@@ -228,10 +232,10 @@ test.describe('accessibility and layout (CH-7)', () => {
 });
 
 test.describe('Add patient from chat (CH-9)', () => {
-  test('a writer adds one synthetic patient; it shows in the section and the chat choice; a bad label sends nothing; a reader has no control', async ({ page }) => {
+  test('a writer adds one synthetic patient; it shows on the Patients page and in the chat choice; a bad label sends nothing', async ({ page }) => {
     await signInAs(page, 'alice', '/workspace');
     await page.locator('input[type=file]').setInputFiles({ name: 'p.json', mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
-    const section = page.getByRole('region', { name: 'Patients' });
+    const section = page.getByRole('region', { name: 'Patient records' });
     const posts: string[] = [];
     page.on('request', (request) => {
       if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/v1/patients') posts.push(request.url());
@@ -246,19 +250,20 @@ test.describe('Add patient from chat (CH-9)', () => {
     await page.getByRole('button', { name: 'Create patient' }).click();
     await expect(page).toHaveURL(/\/patients\/[0-9a-f-]{36}$/);
     await page.getByRole('link', { name: 'Back to chat' }).click();
-    await openWorkspaceNavigation(page);
+    await openPatients(page);
     await expect(section.getByRole('list', { name: 'Patients' }).getByText(created)).toBeVisible();
-    const menu = page.getByRole('button', { name: 'Workspace navigation', exact: true });
-    if (await menu.isVisible()) await menu.click();
+    // Back to the same conversation: the chat stays in memory while a page is open.
+    await page.goBack();
+    await expect(page).toHaveURL(/\/workspace$/);
     await page.getByRole('button', { name: 'Report details' }).click();
     expect(posts).toHaveLength(1);
     await expect(page.getByRole('combobox', { name: 'Patient' }).locator('option', { hasText: created })).toHaveCount(1);
   });
 
-  test('a reader sees the Patients section without the control', async ({ page }) => {
+  test('a reader sees the Patients page without the control', async ({ page }) => {
     await signInAs(page, 'bob', '/workspace');
-    await openWorkspaceNavigation(page);
-    await expect(page.getByRole('region', { name: 'Patients' })).toBeVisible();
+    await openPatients(page);
+    await expect(page.getByRole('region', { name: 'Patient records' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Add patient' })).toHaveCount(0);
   });
 });

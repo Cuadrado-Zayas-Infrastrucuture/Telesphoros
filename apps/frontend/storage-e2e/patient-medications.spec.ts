@@ -1,14 +1,13 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page, type Locator } from '@playwright/test';
-import { axeViolations, openWorkspaceNavigation, signInAs } from '../e2e/helpers';
+import { axeViolations, openPatients, signInAs } from '../e2e/helpers';
 
 async function openPatient(page: Page) {
   await signInAs(page, 'alice', '/workspace');
-  await openWorkspaceNavigation(page);
-  const patients = page.getByRole('region', { name: 'Patients' });
+  await openPatients(page); // specs/034 D2: the patient list and Add patient live on the Patients page
   const label = `SYN-MED-${crypto.randomUUID().slice(0, 8)}`;
-  await patients.getByRole('link', { name: 'Add patient' }).click();
+  await page.getByRole('link', { name: 'Add patient' }).click();
   await page.getByLabel('Synthetic patient label').fill(label);
   await page.getByRole('button', { name: 'Create patient' }).click();
   await expect(page).toHaveURL(/\/patients\/[0-9a-f-]{36}$/);

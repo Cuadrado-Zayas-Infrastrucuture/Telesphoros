@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { DemographicsCompleteness } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
-import { WRITER_ROLES } from '@/auth/roles';
 import { IncompleteWord } from '@/components/patients/IncompleteWord';
 import { Button } from '@/components/ui/Button';
 import { useWorkspacePatients } from '@/hooks/useWorkspacePatients';
@@ -12,12 +11,11 @@ import { getCompleteness } from '@/lib/patientDemographics';
 import { onPatientAdded } from '@/lib/workspaceEvents';
 
 /**
- * The panel's "Patients": the first page of synthetic labels, each a link to the patient's page and marked "Incomplete" when its demographics are missing,
- * and for writer roles an "Add patient" link to the patient creation page.
+ * The Patients page's roster (specs/034, from the panel's former list, specs/024 D2a): the synthetic labels, newest first, each a link to the
+ * patient's page and marked "Incomplete" when its demographics are missing, under a line counting complete demographics.
  */
-export function SidebarPatients({ onNavigate }: { onNavigate?: () => void }) {
-  const { apiFetch, roles } = useAuth();
-  const canAdd = roles.some((role) => WRITER_ROLES.includes(role));
+export function PatientRoster() {
+  const { apiFetch } = useAuth();
   const { patients, loading, error, hasMore, loadMore } = useWorkspacePatients();
   const [filter, setFilter] = useState('');
   const [counts, setCounts] = useState<DemographicsCompleteness | null>(null);
@@ -45,33 +43,28 @@ export function SidebarPatients({ onNavigate }: { onNavigate?: () => void }) {
   const visible = patients?.filter((patient) => patient.label.toLowerCase().includes(filter.trim().toLowerCase()));
 
   return (
-    <section aria-labelledby="panel-patients-heading" data-panel-item="Patients" className="workspace-panel-section flex flex-col gap-1 px-3 py-2">
-      <p id="panel-patients-heading" className="text-xs font-medium text-muted-foreground">
-        Patients
-      </p>
-      {counts && counts.patients > 0 && (
-        <p className="text-xs text-muted-foreground">
-          Demographics:{' '}
-          <span className={counts.complete < counts.patients ? 'text-warning' : 'text-success'}>
-            {counts.complete} of {counts.patients} complete
-          </span>
-        </p>
-      )}
-      {canAdd && (
-        <Button asChild variant="ghost" size="sm" className="min-h-control justify-start px-2 text-xs">
-          <Link to="/patients/new" onClick={onNavigate}>
-            Add patient
-          </Link>
-        </Button>
-      )}
+    <section aria-labelledby="patient-roster-heading" className="flex flex-col gap-3 rounded-lg border border-divider bg-panel px-4 py-4 sm:px-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="patient-roster-heading" className="text-xl">
+          Patient records
+        </h2>
+        {counts && counts.patients > 0 && (
+          <p className="text-sm text-muted-foreground">
+            Demographics:{' '}
+            <span className={counts.complete < counts.patients ? 'text-warning' : 'text-success'}>
+              {counts.complete} of {counts.patients} complete
+            </span>
+          </p>
+        )}
+      </div>
       {patients && patients.length > 5 && (
-        <label htmlFor="sidebar-patient-filter" className="flex flex-col gap-1 text-xs">
+        <label htmlFor="patient-roster-filter" className="flex max-w-sm flex-col gap-1 text-sm">
           Find loaded patients
-          <Input id="sidebar-patient-filter" value={filter} onChange={(event) => setFilter(event.target.value)} autoComplete="off" spellCheck={false} placeholder="Patient code" />
+          <Input id="patient-roster-filter" value={filter} onChange={(event) => setFilter(event.target.value)} autoComplete="off" spellCheck={false} placeholder="Patient code" />
         </label>
       )}
       {error && (
-        <div className="flex flex-col items-start gap-1 text-xs">
+        <div className="flex flex-col items-start gap-1 text-sm">
           <p role="alert" className="text-destructive">
             {error}
           </p>
@@ -83,17 +76,20 @@ export function SidebarPatients({ onNavigate }: { onNavigate?: () => void }) {
       {patients === null ? (
         !error && <ContentSkeleton label="Loading patients…" variant="compact" />
       ) : patients.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No patients yet.</p>
+        <p className="text-sm text-muted-foreground">No patients yet.</p>
       ) : (
         <>
-          <ul aria-label="Patients" className="workspace-roster flex flex-col">
+          <ul aria-label="Patients" className="flex flex-col">
             {visible?.map((patient) => (
-              <li key={patient.id} className="flex min-w-0 items-center gap-2 text-xs">
+              <li
+                key={patient.id}
+                className="flex min-w-0 items-center justify-between gap-3 rounded-sm border-b border-divider px-2 text-sm transition-colors duration-150 last:border-0 hover:bg-muted motion-reduce:transition-none"
+              >
+                {/* The whole row is the link's target, not just the code: easier to hit, and the hover shows which row will open. */}
                 <Link
                   to={`/patients/${patient.id}`}
-                  onClick={onNavigate}
                   title={patient.label}
-                  className="flex min-h-control min-w-0 items-center truncate text-foreground underline-offset-2 hover:underline"
+                  className="flex min-h-control min-w-0 flex-1 items-center truncate font-medium text-foreground underline-offset-2 hover:underline"
                 >
                   {patient.label}
                 </Link>
@@ -102,14 +98,14 @@ export function SidebarPatients({ onNavigate }: { onNavigate?: () => void }) {
             ))}
           </ul>
           {visible?.length === 0 && (
-            <p role="status" className="text-xs text-muted-foreground">
+            <p role="status" className="text-sm text-muted-foreground">
               No match among loaded patients.{hasMore ? ' Load more to keep looking.' : ''}
             </p>
           )}
         </>
       )}
       {hasMore && !error && (
-        <Button variant="ghost" size="sm" pending={loading} pendingLabel="Loading patients…" onClick={loadMore}>
+        <Button variant="outline" size="sm" className="self-start" pending={loading} pendingLabel="Loading patients…" onClick={loadMore}>
           More patients
         </Button>
       )}
