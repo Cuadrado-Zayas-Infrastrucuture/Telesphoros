@@ -44,6 +44,9 @@ COPY --from=build /output/ /app/
 COPY --from=build /workspace/data/fixtures/knowledge/synthetic-structured/ /app/synthetic-knowledge/
 COPY --from=runtime_files /opt/telesphoros/ca/ /opt/telesphoros/ca/
 WORKDIR /app
+# Report intake stages uploads in /tmp, where ECS mounts the task's ephemeral `scratch` volume (api-compute.tf). ECS gives that volume the image's /tmp
+# permissions (1777, from runtime-rootfs.cjs) only for a path the image declares a VOLUME; without it the volume is root-owned 0755 and user 10001 cannot write.
+VOLUME ["/tmp"]
 ENV PATH=/usr/local/bin NODE_ENV=production NODE_EXTRA_CA_CERTS=/opt/telesphoros/ca/global-bundle.pem LANG=C LC_ALL=C LANGUAGE=C
 USER 10001:10001
 EXPOSE 3000
