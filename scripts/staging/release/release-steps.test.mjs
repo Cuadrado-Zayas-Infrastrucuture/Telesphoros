@@ -289,7 +289,7 @@ function noChangeExceptStatus() {
 }
 
 test('the steps name no release: no commit, account, path, host or migration number is written into them', () => {
-  for (const f of ['image.sh', 'migrate.sh', 'migration-pending.mjs', 'lib.sh']) {
+  for (const f of ['image.sh', 'migrate.sh', 'migration-pending.mjs', 'lib.sh', 'verify.sh', 'frontend.sh', 'state-backup.sh']) {
     const text = readFileSync(join(here, f), 'utf8');
     for (const [what, re] of [['a commit', /\b[0-9a-f]{40}\b/], ['an account', /\b[0-9]{12}\b/], ['a home path', /\/Users\//], ['a host', /telesphoros\.app/],
       ['a migration number', /\b00[0-9]{2}\b/]]) assert.ok(!re.test(text), `${f} names ${what}`);

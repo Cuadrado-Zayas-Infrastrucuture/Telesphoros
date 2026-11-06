@@ -4,6 +4,7 @@
 #   STAGING_ACCOUNT_ID   12 digits                       BACKEND_CLONE   the founder's backend clone (on main)
 #   TERRAFORM            the pinned 1.16.5 binary         TF_DATA_DIR     the backend's data directory
 #   STAGING_ROLE_ARN_PART  optional; the caller's ARN must contain it (for example the role name)
+#   API_BASE_URL, APP_URL  https://<host>, no path: the API and the web app (verify.sh and frontend.sh only)
 # The canonical var file is $PRIVATE/staging/current.tfvars, with its sha256 beside it; it is the only var file a release reads.
 # Each release writes its outputs to $PRIVATE/releases/<commit>/, never copies of these scripts.
 

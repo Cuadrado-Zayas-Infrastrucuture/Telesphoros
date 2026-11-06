@@ -37,7 +37,10 @@
 - [ ] T020 3b-1: `image.sh` and `migrate.sh` with the gates of the 661512c9 copies unchanged in strength, nothing release-specific in them
   (the reason for an unsigned image is a file per release), and the Terraform version read without a pipe in `lib.sh` and
   `staging-status.sh`. shellcheck; full local loop; a PR when the founder says push.
-- [ ] T021 3b-2: verification, the frontend and the state backup, the same way.
+- [ ] T021 3b-2: `verify.sh`, `frontend.sh` and `state-backup.sh`, the same way. Expected settings come from `current.tfvars`, the hosts
+  from `stack.env` (`API_BASE_URL`, `APP_URL`, which the founder adds before the next release), the backup's serial floor from the IMAGE
+  plan's record; the frontend publishes only after a verification newer than the last apply. An open medication fence is refused, not
+  verified (the fence checker judges a closed fence only).
 
 ## PR 4: the daily check
 
