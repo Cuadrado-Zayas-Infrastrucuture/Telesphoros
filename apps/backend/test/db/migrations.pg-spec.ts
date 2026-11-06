@@ -6,6 +6,10 @@ import { loadMigrations, MIGRATIONS_DIR, type Compat, migrateDown, migrateUp, mi
 import { adminUrl, createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
 import { allVersions, revertAbove } from '../helpers/migration-history';
 
+// Several tests apply, revert and re-apply every shipped migration, so their time grows with each new one: about 1 s locally, but past Jest's
+// 5 s default on a loaded CI runner (main 661512c9, 2026-11-06).
+jest.setTimeout(60_000);
+
 const dbs: EphemeralDatabase[] = [];
 const dirs: string[] = [];
 afterAll(async () => {
