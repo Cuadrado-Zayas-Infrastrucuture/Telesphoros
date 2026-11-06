@@ -4,7 +4,8 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {test} from 'node:test';
 const text=readFileSync(new URL('api.Dockerfile',import.meta.url),'utf8');
-export function problems(source){
+const apiCompute=readFileSync(new URL('../terraform/api-compute.tf',import.meta.url),'utf8');
+export function problems(source,compute=apiCompute){
   const lines=source.split('\n').filter(l=>!l.trim().startsWith('#')).join('\n');
   const rules=[
     ['base',()=>{const from=[...lines.matchAll(/^FROM (\S+) AS (\w+)$/gm)];return from.length===3 && from.slice(0,2).every(m=>/^node:22\.22\.0-bookworm-slim@sha256:[0-9a-f]{64}$/.test(m[1])) && from[2][1]==='scratch' && from[2][2]==='runtime';}],
@@ -24,6 +25,9 @@ export function problems(source){
     ['no runtime installers',()=>!/^RUN.*(?:npm|pnpm|pip).*install/m.test(lines.split('FROM scratch AS runtime')[1] || '')],
     // Spec 032 S3 (3c-1): the one data set the image carries is the synthetic knowledge of the structured assessment, in the runtime stage, and nothing else from data/.
     ['synthetic knowledge',()=>(lines.split('FROM scratch AS runtime')[1] || '').includes('COPY --from=build /workspace/data/fixtures/knowledge/synthetic-structured/ /app/synthetic-knowledge/') && [...lines.matchAll(/^COPY .*data\/.*$/gm)].length===1],
+    // The one writable path: the runtime stage declares /tmp a volume (so ECS copies its 1777 permissions onto the task's scratch volume) and the API task mounts its
+    // scratch volume at that same path. Nothing else is a volume.
+    ['writable tmp',()=>JSON.stringify([...lines.matchAll(/^VOLUME .*$/gm)].map(m=>m[0]))===JSON.stringify(['VOLUME ["/tmp"]']) && (lines.split('FROM scratch AS runtime')[1] || '').includes('VOLUME ["/tmp"]') && /sourceVolume = "scratch", containerPath = "\/tmp"/.test(compute)],
   ];
   return rules.filter(([,check])=>!check()).map(([name])=>name);
 }
@@ -53,8 +57,13 @@ const mutations=[
  ['synthetic knowledge',s=>s.replace('/workspace/data/fixtures/knowledge/synthetic-structured/','/workspace/data/')],
  ['synthetic knowledge',s=>s.replace('/app/synthetic-knowledge/','/app/knowledge/')],
  ['synthetic knowledge',s=>s+'\nCOPY --from=build /workspace/data/fixtures/lab-reports/ /app/lab/\n'],
+ ['writable tmp',s=>s.replace('VOLUME ["/tmp"]','')],
+ ['writable tmp',s=>s.replace('VOLUME ["/tmp"]','VOLUME ["/var/tmp"]')],
+ ['writable tmp',s=>s+'\nVOLUME ["/app"]\n'],
+ ['writable tmp',s=>s.replace('VOLUME ["/tmp"]','').replace('FROM scratch AS runtime','VOLUME ["/tmp"]\nFROM scratch AS runtime')],
 ];
 for(const [rule,mutate] of mutations)test(`detects ${rule} defect`,()=>assert.ok(problems(mutate(text)).includes(rule)));
+test('detects writable tmp defect: the API task mounts its scratch volume elsewhere',()=>assert.ok(problems(text,apiCompute.replace('containerPath = "/tmp"','containerPath = "/scratch"')).includes('writable tmp')));
 test('public CA bytes match owner-confirmed pin',()=>{
  const bytes=readFileSync(new URL('global-bundle.pem',import.meta.url));
  assert.equal(createHash('sha256').update(bytes).digest('hex'),'fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c');
