@@ -18,7 +18,7 @@ import { ContextDrawer } from '@/components/ui/ContextDrawer';
 import { INCOMPLETE_PROMPT } from '@/components/patients/IncompleteWord';
 import { incompleteness } from '@/lib/demographicsDraft';
 import { SubmitError, submitReport, type UploadProgress } from '@/lib/api';
-import { cancelOwnedUpload, listReports } from '@/lib/ownedStorageApi';
+import { cancelOwnedUpload, listReports, removeUnfinishedReport } from '@/lib/ownedStorageApi';
 import { productUploadSchema } from '@/lib/productUploadSchema';
 import { reportTypeFor } from '@/lib/reportTypeFor';
 import { readRecovery } from '@/lib/uploadRecovery';
@@ -52,6 +52,9 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
   const [input, setInput] = useState('');
   const [entries, setEntries] = useState<Entry[]>([]);
   const [uploading, setUploading] = useState(false);
+  /** The conversation entry of the upload that just failed, while it can still be cancelled from the details. */
+  const [failedId, setFailedId] = useState<number | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const [interrupted] = useState(() => !!readRecovery(recoverySession));
   const counter = useRef(0);
   const picker = useRef<HTMLInputElement>(null);
@@ -68,6 +71,7 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
     if (!next) return;
     attachment.discard();
     setFile(next);
+    setFailedId(null);
     setUploadError(null);
     setSynthetic(false);
     setTried(false);
@@ -80,9 +84,39 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
     setDetailsOpen(false);
     attachment.offer(file);
     setFile(null);
+    setFailedId(null);
     setFileError(null);
     setUploadError(null);
     setTried(false);
+  }
+
+  /**
+   * After a failed upload: the server cancels the attempt (aborting the browser request alone is not cancellation), then the report it registered, which never
+   * got its file, is removed so it does not stay in Past reports. Nothing is removed unless the server acknowledged the cancel.
+   */
+  async function cancelFailed() {
+    if (busy || cancelling || failedId === null) return;
+    const pending = progress.current;
+    setCancelling(true);
+    try {
+      await cancelOwnedUpload(apiFetch, pending);
+      if (pending.reportId) await removeUnfinishedReport(apiFetch, pending.reportId);
+    } catch (error) {
+      if (!(error instanceof SessionEndedError)) setUploadError(error instanceof SubmitError ? error.message : 'The upload could not be cancelled. Please retry.');
+      return;
+    } finally {
+      setCancelling(false);
+    }
+    update(failedId, { message: 'Upload cancelled and removed from your reports.' });
+    progress.current = {};
+    setFailedId(null);
+    setDetailsOpen(false);
+    setFile(null);
+    setFileError(null);
+    setUploadError(null);
+    setSynthetic(false);
+    setTried(false);
+    announceReportsChanged();
   }
 
   function drop(event: DragEvent<HTMLDivElement>) {
@@ -142,6 +176,7 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
         }
         setDetailsOpen(false);
         setUploadError(null);
+        setFailedId(null);
         const id = ++counter.current;
         setEntries((list) => [
           ...list,
@@ -169,6 +204,8 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
               : 'The upload was interrupted. Your file is kept; please retry.';
           setUploadError(message);
           update(id, { phase: 'failed', message });
+          setFailedId(progress.current.cancelRequested ? null : id);
+          announceReportsChanged();
           return;
         } finally {
           window.clearInterval(watch);
@@ -218,10 +255,15 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
         className="border-0 bg-transparent p-0"
       >
         {file && !detailsOpen && (
-          <Button variant="outline" size="sm" onClick={() => setDetailsOpen(true)} aria-label="Report details">
-            <FileText aria-hidden="true" className="size-4" />
-            <span className="truncate">{file.name}</span>
-          </Button>
+          <span className="inline-flex max-w-full items-center gap-1">
+            <Button variant="outline" size="sm" className="min-w-0" onClick={() => setDetailsOpen(true)} aria-label="Report details">
+              <FileText aria-hidden="true" className="size-4" />
+              <span className="truncate">{file.name}</span>
+            </Button>
+            <Button variant="ghost" size="sm" className="size-11 shrink-0 p-0" aria-label={`Remove ${file.name}`} disabled={busy} onClick={removeAttachment}>
+              <X aria-hidden="true" className="size-4" />
+            </Button>
+          </span>
         )}
         {file && (
           <ContextDrawer
@@ -286,9 +328,16 @@ export function WorkspaceConversation({ active = true }: { active?: boolean }) {
                     Stop upload
                   </Button>
                 ) : (
-                  <Button variant="outline" disabled={busy} onClick={() => setDetailsOpen(false)}>
-                    Back to chat
-                  </Button>
+                  <>
+                    {failedId !== null && (
+                      <Button variant="ghost" pending={cancelling} pendingLabel="Cancelling…" onClick={() => void cancelFailed()}>
+                        Cancel upload
+                      </Button>
+                    )}
+                    <Button variant="outline" disabled={busy || cancelling} onClick={() => setDetailsOpen(false)}>
+                      Back to chat
+                    </Button>
+                  </>
                 )}
                 <Button aria-label="Upload report" pending={busy} pendingLabel="Uploading…" aria-disabled={!!blocked} onClick={() => void send()}>
                   Upload report

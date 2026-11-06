@@ -105,8 +105,9 @@ describe('protected pages', () => {
     expect(screen.getByRole('link', { name: 'New chat' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Upload report' })).not.toBeInTheDocument();
     const sidebar = document.querySelector('header.workspace-navigation') as HTMLElement;
-    expect(within(sidebar).getByText('clinician')).toBeInTheDocument();
-    expect(within(sidebar).getAllByRole('button', { name: 'Sign out' })[0]).toBeEnabled();
+    // Specs/034 D4: the role names the account row at the bottom, whose menu holds Sign out.
+    await userEvent.setup().click(within(sidebar).getByRole('button', { name: 'Account, clinician' }));
+    expect(within(sidebar).getByRole('button', { name: 'Sign out' })).toBeEnabled();
   });
 
   it('offer the way back into the workspace on the landing header, with no sign-out there', async () => {
@@ -119,7 +120,9 @@ describe('protected pages', () => {
     const { client } = renderApp('/settings', { signedInAs: ['clinician'] });
     await screen.findByRole('button', { name: 'Collapse sidebar' });
     const sidebar = document.querySelector('header.workspace-navigation') as HTMLElement;
-    await userEvent.setup().click(within(sidebar).getAllByRole('button', { name: 'Sign out' })[0]!);
+    const user = userEvent.setup();
+    await user.click(within(sidebar).getByRole('button', { name: 'Account, clinician' }));
+    await user.click(within(sidebar).getByRole('button', { name: 'Sign out' }));
     expect(client.signOut).toHaveBeenCalledTimes(1);
     expect(await heading('Sign in')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Upload report' })).not.toBeInTheDocument();

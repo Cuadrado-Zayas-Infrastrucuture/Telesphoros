@@ -59,7 +59,11 @@ export const routes: RouteObject[] = [
               },
               {
                 element: <RequireRole anyOf={CLINICAL_READ_ROLES} />,
-                children: [{ path: 'patients/:id', lazy: async () => ({ Component: (await import('@/pages/PatientPage')).default }) }],
+                children: [
+                  // Specs/034: the sidebar's Patients destination, the list the panel used to hold.
+                  { path: 'patients', lazy: async () => ({ Component: (await import('@/pages/PatientsPage')).default }) },
+                  { path: 'patients/:id', lazy: async () => ({ Component: (await import('@/pages/PatientPage')).default }) },
+                ],
               },
             ],
           },

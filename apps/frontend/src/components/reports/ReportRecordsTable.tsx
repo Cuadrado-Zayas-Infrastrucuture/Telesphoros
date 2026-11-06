@@ -90,7 +90,7 @@ export function ReportRecordsTable({
                     )}
                   </td>
                   <td className="break-words px-2 py-2 sm:px-3">
-                    <ReportStatusText status={report.status} />
+                    <ReportStatusText status={report.status} fileUploaded={report.fileUploaded} />
                   </td>
                   <td className={report.fileUploaded ? 'break-words px-2 py-2 text-success sm:px-3' : 'break-words px-2 py-2 text-primary sm:px-3'}>
                     <span className="inline-flex items-start gap-2">

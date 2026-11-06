@@ -1,10 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { axeViolations, openWorkspaceNavigation, signInAs } from '../e2e/helpers';
+import { axeViolations, openPatients, openWorkspaceNavigation, signInAs } from '../e2e/helpers';
 
 test('a treatment follow-up saves its reminder, opens from chat and survives retry and reload', async ({ page }) => {
   await signInAs(page, 'alice', '/workspace');
   await page.getByRole('textbox', { name: 'Question' }).fill('Keep this synthetic patient discussion');
-  await openWorkspaceNavigation(page);
+  await openPatients(page); // specs/034 D2
   await page.getByRole('link', { name: 'Add patient', exact: true }).click();
   const label = `SYN-FOLLOWUP-${crypto.randomUUID().slice(0, 8)}`;
   await page.getByRole('textbox', { name: 'Synthetic patient label' }).fill(label);

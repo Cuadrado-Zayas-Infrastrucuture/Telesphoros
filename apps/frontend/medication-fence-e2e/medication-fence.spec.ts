@@ -1,18 +1,16 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
-import { axeViolations, openWorkspaceNavigation, signInAs } from '../e2e/helpers';
+import { axeViolations, openPatients, signInAs } from '../e2e/helpers';
 
 test('paused recording retains the compact form, creates no entry and leaves reads available', async ({ page }, info) => {
   await signInAs(page, 'alice', '/workspace');
-  await openWorkspaceNavigation(page);
-  const patients = page.getByRole('region', { name: 'Patients' });
+  await openPatients(page); // specs/034 D2: Add patient lives on the Patients page and opens the new patient's page
   const label = `SYN-FENCE-${crypto.randomUUID().slice(0, 8)}`;
-  await patients.getByRole('button', { name: 'Add patient' }).click();
-  await patients.getByLabel('Synthetic patient label').fill(label);
-  await patients.getByRole('button', { name: 'Create patient' }).click();
-  await expect(patients.getByText(`Added ${label}.`)).toBeVisible();
-  await patients.getByRole('link', { name: label, exact: true }).click();
+  await page.getByRole('link', { name: 'Add patient' }).click();
+  await page.getByLabel('Synthetic patient label').fill(label);
+  await page.getByRole('button', { name: 'Create patient' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: label })).toBeVisible();
   const section = page.getByRole('region', { name: 'Medications' });
   await expect(section.getByText('No medications recorded yet.')).toBeVisible();
   await section.getByRole('button', { name: 'Add medication' }).click();

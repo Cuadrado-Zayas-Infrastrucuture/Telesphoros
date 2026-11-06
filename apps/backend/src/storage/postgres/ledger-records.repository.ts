@@ -502,10 +502,12 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
     let ordinal = 0;
     for (const result of input.results) {
       const citation = 'citation' in result ? result.citation : null;
+      // Spec 033 K2-7: identifiers of the cell, only for a result from schema 1.3 knowledge.
+      const ids = 'identifiers' in result ? (result.identifiers ?? null) : null;
       await client.query(
         `INSERT INTO evaluation_results (tenant_id, evaluation_id, ordinal, drug, genes, outcome, reason_code, strength, citation, guideline_id, guideline_version,
-                                           recommendation_text, implication, gene_evidence)
-           VALUES ($1, $2, $3, $4, $5::text[], $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14::jsonb)`,
+                                           recommendation_text, implication, gene_evidence, drug_rxcui, gene_hgnc_ids, pharmvar_versions, cell_origin)
+           VALUES ($1, $2, $3, $4, $5::text[], $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14::jsonb, $15, $16::text[], $17::text[], $18)`,
         [
           tenantId,
           id,
@@ -521,6 +523,10 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
           'recommendationText' in result ? result.recommendationText : null,
           'implication' in result ? result.implication : null,
           JSON.stringify(result.geneStates),
+          ids?.rxcui ?? null,
+          ids ? ids.genes.map((gene) => gene.hgncId) : null,
+          ids ? ids.genes.map((gene) => gene.pharmvarVersion) : null,
+          ids?.origin ?? null,
         ],
       );
     }

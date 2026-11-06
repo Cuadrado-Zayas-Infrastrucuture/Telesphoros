@@ -41,6 +41,15 @@ function rejectNativeAddons(dir) {
   }
   visit(root);
 }
+// The image starts from scratch, so it has no /tmp. ECS mounts the task's `scratch` volume there and gives it the image's permissions for that path only when the
+// image declares it a VOLUME; otherwise it is root-owned 0755 and the application user (10001) cannot stage an upload (500 on every intake, staging 2026-11-05).
+// Sticky and world-writable, as /tmp is everywhere: the image has one user, and the sticky bit still keeps one process from removing another's files.
+function scratchDir(dest) {
+  const target = path.join(dest, 'tmp');
+  fs.mkdirSync(target, {recursive: true});
+  fs.chmodSync(target, 0o1777);
+  return target;
+}
 function assemble(dest) {
   assert.equal(process.platform, 'linux');
   assert.equal(process.arch, 'x64', 'the hosted image is linux/amd64');
@@ -70,7 +79,8 @@ function assemble(dest) {
   write('/etc/group', 'app:x:10001:\n');
   write('/etc/nsswitch.conf', 'passwd: files\ngroup: files\nhosts: files dns\nnetworks: files\n');
   write('/etc/fstab', '# No user mounts in the application runtime.\n');
+  scratchDir(dest);
   console.log(`runtime root: Node and ${libs.length} reviewed shared libraries; ${packages.length} Debian inventory records`);
 }
-module.exports = {libraryPaths, rejectNativeAddons};
+module.exports = {libraryPaths, rejectNativeAddons, scratchDir};
 if (require.main === module) assemble(process.argv[2] || '/runtime-rootfs');

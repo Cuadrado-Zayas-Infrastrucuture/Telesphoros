@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { expect, test } from '@playwright/test';
-import { signInAs } from '../e2e/helpers';
+import { openAccountMenu, openWorkspaceNavigation, signInAs } from '../e2e/helpers';
 
 test('attach in chat, complete details, and upload into the conversation', async ({ page }) => {
   await signInAs(page, 'alice', '/workspace');
@@ -64,13 +64,14 @@ test('attach in chat, complete details, and upload into the conversation', async
   await page.screenshot({ path: test.info().outputPath('chat-report-uploaded.png') });
 });
 
-for (const [link, title] of [['All reports', 'Report history'], ['Settings', 'Account preferences']] as const) {
+for (const [link, title] of [['Reports', 'Report history'], ['Settings', 'Account preferences']] as const) {
   test(`${link} opens as a panel and returns to the same draft`, async ({ page }) => {
     await signInAs(page, 'alice', '/workspace');
     await page.getByRole('textbox', { name: 'Question' }).fill('Unsent synthetic question');
-    const toggle = page.getByRole('button', { name: 'Workspace navigation', exact: true });
-    if (await toggle.isVisible()) await toggle.click();
-    await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: link, exact: true }).click();
+    // Reports is a destination; Settings is in the account menu at the sidebar's foot (specs/034 D1, D4).
+    if (link === 'Settings') await openAccountMenu(page);
+    else await openWorkspaceNavigation(page);
+    await page.locator('header.workspace-navigation').getByRole('link', { name: link, exact: true }).click();
     const panel = page.getByRole('dialog', { name: title, exact: true });
     await expect(panel).toBeVisible();
     await expect(panel.getByRole('heading', { name: title, exact: true })).toBeFocused();

@@ -35,7 +35,7 @@ test('chat upload, stored uncertain findings, and independent patient-link revie
   expect((await uploaded).status()).toBe(200);
   await expect(page.getByRole('region', { name: 'Conversation' }).getByText('Received', { exact: true })).toBeVisible();
   await openWorkspaceNavigation(page);
-  await page.getByRole('link', { name: 'All reports', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'Reports', exact: true }).click();
   await selectReportsPatient(page, createdPatient);
   await page.getByRole('button', { name: `Open ${filename}`, exact: true }).click();
   await page.getByRole('button', { name: 'Show structured findings' }).click();

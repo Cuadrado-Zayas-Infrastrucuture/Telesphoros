@@ -79,6 +79,8 @@
   --size-button-md: 3rem;
   --size-button-lg: 3.5rem;
   --size-control: 2.75rem;
+  /* Menu rows under a mouse or trackpad (specs/034 D11); touch keeps --size-control. */
+  --size-control-compact: 2.25rem;
 
   --size-consent-space: 0px;
   /* Device cutouts and the home indicator. Zero on ordinary displays. */
@@ -91,7 +93,7 @@
   --size-safe-viewport: calc(100dvh - var(--safe-area-block));
 
   /* Layout */
-  --size-sidebar: 15rem;
+  --size-sidebar: 17rem;
   --size-sidebar-collapsed: 4.5rem;
   --size-context-drawer: 30rem;
   --size-chat-workspace: calc(var(--size-safe-viewport) - 15rem);

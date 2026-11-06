@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const CONSENT_KEY = 'telesphoros.storage-consent.v1';
-export const PREFERENCE_KEYS = ['telesphoros.theme', 'telesphoros.sidebar', 'telesphoros.landing.language'] as const;
+export const PREFERENCE_KEYS = ['telesphoros.theme', 'telesphoros.sidebar', 'telesphoros.sidebar-width', 'telesphoros.landing.language'] as const;
 type PreferenceKey = (typeof PREFERENCE_KEYS)[number];
 const savedSchema = z.object({ version: z.literal(1), preferences: z.boolean() });
 export interface ConsentSnapshot {

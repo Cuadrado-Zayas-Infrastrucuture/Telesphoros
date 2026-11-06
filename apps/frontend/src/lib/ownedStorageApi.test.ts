@@ -1,7 +1,7 @@
 import { webcrypto } from 'node:crypto';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { submitReport, type UploadProgress } from './api';
-import { cancelOwnedUpload, downloadReport, retireOwnedUpload } from './ownedStorageApi';
+import { cancelOwnedUpload, downloadReport, removeUnfinishedReport, retireOwnedUpload } from './ownedStorageApi';
 import { productUploadSchema } from './productUploadSchema';
 import { endRecoverySession, startRecoverySession } from './uploadRecovery';
 const patientId = '11111111-1111-4111-8111-111111111111';
@@ -212,4 +212,28 @@ it('idle progress survives initial cleanup replay, but retired active progress c
   await expect(submitReport(values, none, progress)).rejects.toThrow('Upload page ended');
   await expect(cancelOwnedUpload(none, progress)).rejects.toThrow('Upload page ended');
   expect(none).not.toHaveBeenCalled();
+});
+
+it('removes a report whose file never arrived, after reading it again', async () => {
+  const api = vi
+    .fn()
+    .mockResolvedValueOnce(response(report()))
+    .mockResolvedValueOnce(new Response(null, { status: 204 }));
+  await expect(removeUnfinishedReport(api, id)).resolves.toBeUndefined();
+  expect(api.mock.calls.map(([path, init]) => [path, init?.method ?? 'GET'])).toEqual([
+    [`/api/v1/reports/${id}`, 'GET'],
+    [`/api/v1/reports/${id}`, 'DELETE'],
+  ]);
+  expect(api.mock.calls[1]![1]).toMatchObject({ redirect: 'error', credentials: 'omit', cache: 'no-store' });
+});
+it('never removes a report whose file is stored', async () => {
+  const api = vi.fn().mockResolvedValueOnce(response(report(true)));
+  await expect(removeUnfinishedReport(api, id)).rejects.toThrow('file stored');
+  expect(api).toHaveBeenCalledTimes(1);
+});
+it('counts a report that is already gone as removed, and says plainly when the removal fails', async () => {
+  await expect(removeUnfinishedReport(vi.fn().mockResolvedValueOnce(response({}, 404)), id)).resolves.toBeUndefined();
+  const failing = vi.fn().mockResolvedValueOnce(response(report())).mockResolvedValueOnce(response({}, 500));
+  await expect(removeUnfinishedReport(failing, id)).rejects.toThrow('could not be removed');
+  await expect(removeUnfinishedReport(vi.fn(), 'not-a-report-id')).rejects.toThrow();
 });

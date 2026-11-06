@@ -48,6 +48,38 @@ describe('loadKnowledge: the fixtures', () => {
   });
 });
 
+describe('loadKnowledge: the schema 1.3 fixtures (spec 033)', () => {
+  const IDENTIFIERS_DIR = join(SYNTHETIC_DIR, '../synthetic-identifiers');
+
+  it('loads outside production with every identifier and origin as written', async () => {
+    const set = await loadKnowledge({ directory: IDENTIFIERS_DIR, mode: 'non-production' });
+    expect(set.files).toHaveLength(5);
+    expect(set.drugs()).toEqual(['drugq', 'drugz']);
+    expect(set.gene('GENEA')).toMatchObject({ schemaVersion: '1.3', hgncId: 'syn-hgnc-genea', origin: 'pharmvar', pharmvarVersion: 'syn-pharmvar-1.0' });
+    expect(set.guidelinesForDrug('drugq')[0]).toMatchObject({ rxcui: 'syn-rxcui-drugq' });
+    expect(set.guidelinesForDrug('drugq')[0]!.recommendations.map((row) => row.origin)).toEqual(['cpic', 'pharmgkb', 'pharmvar']);
+  });
+
+  it('is refused in production like every synthetic set', async () => {
+    const problems = await problemsOf(IDENTIFIERS_DIR, 'production');
+    expect(problems.filter((p) => p.includes('synthetic test content is not allowed in production'))).toHaveLength(5);
+  });
+
+  it('differs from the structured set only by the schema 1.3 fields and the provenance label', async () => {
+    const strip = (file: Record<string, unknown>) => {
+      const { schemaVersion: _v, hgncId: _h, origin: _o, pharmvarVersion: _p, rxcui: _r, provenance: _s, ...rest } = file;
+      void [_v, _h, _o, _p, _r, _s];
+      if (Array.isArray(rest.recommendations)) rest.recommendations = rest.recommendations.map(({ origin: _c, ...row }: Record<string, unknown>) => (void _c, row));
+      return rest;
+    };
+    for (const path of ['phenotypes/genea.json', 'phenotypes/geneb.json', 'guidelines/drugq-genea.json', 'guidelines/drugz-genea.json', 'guidelines/drugz-genea-geneb.json']) {
+      const ours = (await readJson(join(IDENTIFIERS_DIR, path))) as unknown as Record<string, unknown>;
+      const theirs = (await readJson(join(SYNTHETIC_DIR, '../synthetic-structured', path))) as unknown as Record<string, unknown>;
+      expect({ path, file: strip(ours) }).toEqual({ path, file: strip(theirs) });
+    }
+  });
+});
+
 describe('loadKnowledge: production rules', () => {
   it('refuses every synthetic and unreviewed file, naming each one', async () => {
     const problems = await problemsOf(SYNTHETIC_DIR, 'production');
@@ -131,6 +163,32 @@ describe('loadKnowledge: production rules', () => {
     file.review = { status: 'reviewed', reviewedBy: 'X', reviewedAt: '2026-02-01', contentSha256: contentSha256(file) };
     await writeJson(path, file);
     expect((await problemsOf(dir)).join('\n')).toContain('synthetic content can never be marked reviewed');
+  });
+
+  it('refuses signed-off schema 1.2 content in production, naming each file, and still reads it outside production (spec 033 K2-4)', async () => {
+    const dir = await reviewedCopyOf(SYNTHETIC_DIR, undefined, { schema: '1.2' });
+    const problems = await problemsOf(dir, 'production');
+    expect(problems).toHaveLength(11);
+    expect(problems.every((p) => p.endsWith(': schema 1.2 states no origin; production needs schema 1.3 with a stated origin.'))).toBe(true);
+    expect(await problemsOf(dir, 'non-production')).toEqual([]);
+  });
+
+  it('refuses a reviewed real file with an "unknown" origin, in every mode (spec 033 K2-3)', async () => {
+    const dir = await reviewedCopyOf(SYNTHETIC_DIR, (file) => {
+      if (file.kind === 'guideline' && file.id === 'drugx-genea') file.recommendations[0]!.origin = 'unknown';
+      if (file.kind === 'gene-phenotype-map' && file.id === 'gened') file.origin = 'unknown';
+    });
+    for (const mode of ['production', 'non-production'] as const) {
+      const problems = await problemsOf(dir, mode);
+      expect({ mode, problems }).toEqual({
+        mode,
+        problems: [
+          'guidelines/drugx-genea.json: recommendations.0.origin: A reviewed file must state the origin of its content (not "unknown").',
+
+          'phenotypes/gened.json: origin: A reviewed file must state the origin of its content (not "unknown").',
+        ],
+      });
+    }
   });
 
   it('the knowledge directory that ships always loads under the production rules', async () => {

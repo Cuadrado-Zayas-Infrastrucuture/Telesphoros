@@ -29,6 +29,8 @@ Confidence: **V** = read in a primary source this session; **S** = from a second
 | R11 | CPIC's license page says CPIC content is CC0 1.0, with a request to attribute and to cite URL, access date and version for the database and API. | [CPIC license](https://cpicpgx.org/license/) (redirects to ClinPGx; I read it only through search) | S |
 | R12 | ClinPGx and PharmGKB data are CC BY-SA 4.0, and a 2018 PharmGKB post says "Under no circumstances can PharmGKB data be sold for other's private or commercial use". The API page says data is "subject to ClinPGx's Data Usage Policy". | [ClinPGx post](https://blog.clinpgx.org/changes-to-pharmgkb-data-licensing/) (read), [API](https://api.clinpgx.org/) (read) | V for the quotes |
 | R13 | **The CPIC (CC0) and ClinPGx (CC BY-SA, no sale) statements conflict, and I could not read ClinPGx's current Data Usage Policy** (the page did not render). PharmVar's terms were also not found. | n/a | **U** |
+| R13-CPIC | **Update 2026-11-06, splitting R13.** CPIC staff confirmed by email on 2026-08-31 that content served by the CPIC API endpoints `pair`, `recommendation`, `guideline`, `drug`, `publication` and `test_alert` is CC0 1.0, with no share-alike or non-commercial restriction. The email is founder-held and private and is not copied here; [the patient-medications verification](../../verification/patient-medications.md) records it. CPIC's licence file, read directly, says the same, asks for attribution, and adds that the CPIC logo and acronym may not be reproduced on another website or in advertising without NIH permission (CPIC® is an HHS service mark). This resolves R13 for content from those endpoints only. It does not cover ClinPGx or PharmGKB annotations (R12), PharmVar (R13-PharmVar) or use of the CPIC name. | Founder-held email; [cpic-data LICENSE.md](https://github.com/cpicpgx/cpic-data/blob/main/LICENSE.md) (read) | V |
+| R13-PharmVar | **Update 2026-11-06.** HL7 Terminology 7.4.0 records PharmVar database content as CC BY-SA 4.0 and refers to PharmVar's own terms, which still could not be read. Whether those terms add a research-only or no-sale condition for paid software, or for redistribution in a sold knowledge feed, is open. | [HL7 PharmVar NamingSystem](https://terminology.hl7.org/7.4.0/en/NamingSystem-PharmVar.html) (read) | V for the licence, **U** for added terms |
 | R14 | The CPIC database is relational: `gene`, `drug` (key like `RxNorm:2670`), `allele` with a shared `allele_definition`, `guideline` (one logical guideline across updates), `publication`, `recommendation` (guideline, drug, **population**, and a lookup key of phenotypes, activity score or allele status), `gene_result` / `gene_result_lookup` / `gene_result_diplotype`, `pair` (with `cpiclevel`), and `allele_frequency` by population. **There is no separate phenotype table.** Releases follow guideline publications, with no fixed schedule. | [cpic-data wiki](https://github.com/cpicpgx/cpic-data/wiki) | V |
 | R15 | FHIR Genomics Reporting STU3: a Genomic Report carries Genotype / Haplotype / Variant observations; the **phenotype is a component of the Therapeutic Implication** observation, linked by `derivedFrom`, with CPIC cited through a RelatedArtifact; recommended actions are `Medication Recommendation` tasks. | [HL7 STU3 PGx](https://hl7.org/fhir/uv/genomics-reporting/STU3/pharmacogenomics.html) | V |
 | R16 | FDA's CDS guidance was revised 2026-01-06 and re-issued 2026-01-29. It keeps the four non-device criteria, adds enforcement discretion for a single output when only one recommendation is clinically appropriate, and moves the time-critical limit to criterion 4. Genomic data is not discussed. | [Covington](https://www.cov.com/en/news-and-insights/insights/2026/01/5-key-takeaways-from-fdas-revised-clinical-decision-support-cds-software-guidance), [FDA page](https://www.fda.gov/regulatory-information/search-fda-guidance-documents/clinical-decision-support-software) | S |
@@ -41,7 +43,7 @@ What the research changes in the pasted model:
 - **R14 and R15 contradict its `Phenotype` entity and its single-phenotype `Recommendation` key.** In both CPIC and FHIR the phenotype is a *result of a mapping* (and, in FHIR, part of the implication), and recommendations carry a population and a multi-input lookup. This repository's cells (one per combination of phenotypes, verified state, verbatim text) are closer to the standards than the pasted table.
 - **R5 invalidates `external_id_hash` as a de-identification token.** A hash of the patient's own identifier is derived from information about the individual.
 - **R2, R3 and R6 mean the first gate on any data product is the tenant's contract, not the schema.** The business associate agreement must authorize de-identification, and a sale of PHI, or a limited data set, is not a commercial route.
-- **R12 and R13 mean a paid knowledge feed cannot be designed until the source licenses are settled in writing.**
+- **R12 and R13 mean a paid knowledge feed cannot be designed until the source licenses are settled in writing.** Update 2026-11-06: R13-CPIC settles this for a feed built only from the six named CPIC endpoints. A feed that carries ClinPGx, PharmGKB or PharmVar content stays blocked by R12 and R13-PharmVar. The feed's other gates (section 4) still apply, and a licence is not clinical approval.
 - **R17 to R19 make a payer-sponsored testing program workable, with limits:** payment-purpose disclosures to the plan are permitted and bounded by minimum necessary; the plan may not use the genetic information for underwriting; and eligibility should follow the plans' own clinical policies (a medication decision pending, or an actionable gene-drug pair). R20 stays open for counsel.
 
 ## 3. The model: six zones, one-way flow
@@ -105,7 +107,7 @@ Rules specific to this zone:
 
 | Line | Reads | Gate before building |
 | --- | --- | --- |
-| Knowledge API or feed | Zone K only | **Source licenses settled in writing (R12, R13); M2.4 real signed content; M0.1 regulatory posture (R16).** Per-source `redistribution` flags let a feed exclude restricted sources. |
+| Knowledge API or feed | Zone K only | **Source licenses settled in writing (R12, R13-PharmVar; R13-CPIC is settled for the six named CPIC endpoints); M2.4 real signed content; M0.1 regulatory posture (R16).** Per-source `redistribution` flags let a feed exclude restricted sources. |
 | Enrichment API for integrators | Zone K and the integrator's own request (no stored patient data) | Same as the clinical product, plus integrator contracts and liability |
 | Aggregate statistics | Zone D1 | Tenant terms, patient consent, minimum cell size, volume that does not exist yet |
 | Research cohorts | Zone D2 | Expert Determination, DUA, consent, counsel |
@@ -140,7 +142,7 @@ Rules specific to this zone:
 
 ## 7. Open items only others can close
 
-- **Source licenses (R12, R13):** ask ClinPGx and CPIC in writing which terms govern the CPIC database and API, and whether a paid knowledge feed built on CPIC content is allowed. Read ClinPGx's current Data Usage Policy and PharmVar's terms directly.
+- **Source licenses (R12, R13):** ask ClinPGx and CPIC in writing which terms govern the CPIC database and API, and whether a paid knowledge feed built on CPIC content is allowed. Read ClinPGx's current Data Usage Policy and PharmVar's terms directly. Update 2026-11-06: CPIC answered the CPIC part (R13-CPIC). Still open: ClinPGx and PharmGKB annotations in a paid product (R12), PharmVar's terms (R13-PharmVar), and NIH permission for promotional use of the CPIC name, such as "CPIC-guided" in the README (R13-CPIC).
 - **Counsel:** the BAA language for de-identification and secondary use; whether the state consent laws apply to your tenants' patients; Puerto Rico's data-protection statute and any rule on genetic data (R8); anti-kickback review of any arrangement that passes value to physicians (R9).
 - **FDA (M0.1):** whether processing a lab-supplied VCF is closer to criterion 1 (signals from an in vitro diagnostic) than reading a lab's reported diplotype. The guidance does not address genomic data (R16).
 - **Minimum cell size and Expert Determination provider:** founder and counsel decisions.
@@ -152,11 +154,11 @@ Code, migrations, knowledge files, CI, Terraform, the roadmap table, the approva
 
 ## 9. How this was verified
 
-Primary text read: 45 CFR 164.502(d) and (a)(5)(ii), 164.514(a) to (e) (via Cornell LII), the CPIC data wiki, HL7 STU3 PGx page, a ClinPGx licensing post and the ClinPGx API page. Repository facts come from reading `0008_evaluations.up.sql`, [cpic-integration.md](../../cpic-integration.md) and the table list across `migrations/`. Items marked S are secondary summaries (the payer-program rows R17 to R19 are all secondary); items marked U are unresolved. Nothing was run in AWS or against a model provider.
+Primary text read: 45 CFR 164.502(d) and (a)(5)(ii), 164.514(a) to (e) (via Cornell LII), the CPIC data wiki, HL7 STU3 PGx page, a ClinPGx licensing post and the ClinPGx API page. Repository facts come from reading `0008_evaluations.up.sql`, [cpic-integration.md](../../cpic-integration.md) and the table list across `migrations/`. Items marked S are secondary summaries (the payer-program rows R17 to R19 are all secondary); items marked U are unresolved. Nothing was run in AWS or against a model provider. The 2026-11-06 rows R13-CPIC and R13-PharmVar rest on the cpic-data `LICENSE.md` and the HL7 Terminology 7.4.0 PharmVar record, both read that day, and on the repository's existing record of the CPIC email; the email itself was not re-read.
 
 ## Appendix A: brief for counsel and for the source publishers
 
-Prepared so the founder can hand it over as is. Each question cites the finding it comes from; none has been answered.
+Prepared so the founder can hand it over as is. Each question cites the finding it comes from; none had been answered when this was written. Update 2026-11-06: the CPIC parts of publisher questions 1 and 2 are answered (R13-CPIC); the rest is open.
 
 **For counsel**
 1. Do the tenant business associate agreements authorize Telesphoros to de-identify PHI, and for which downstream uses (aggregate statistics, research cohorts, payer-program reports)? If not, what wording is needed? (R2)
@@ -170,9 +172,10 @@ Prepared so the founder can hand it over as is. Each question cites the finding 
 9. FDA (M0.1): does the intended use stay non-device CDS, does a lab-supplied VCF raise criterion 1, and does licensing the knowledge to third parties change the posture? (R16)
 
 **For ClinPGx, CPIC and PharmVar (in writing)**
-1. Which terms govern the CPIC database and API: CC0 as the CPIC license page states, or ClinPGx's Data Usage Policy? (R11, R12)
-2. May a paid product redistribute or build on CPIC content, and on ClinPGx or PharmGKB annotations, given "cannot be sold for others' private or commercial use"? (R12)
-3. What are PharmVar's terms for star-allele definitions in a commercial product? (R13)
+1. Which terms govern the CPIC database and API: CC0 as the CPIC license page states, or ClinPGx's Data Usage Policy? (R11, R12) **Answered for CPIC content 2026-08-31, recorded 2026-11-06 (R13-CPIC).**
+2. May a paid product redistribute or build on CPIC content, and on ClinPGx or PharmGKB annotations, given "cannot be sold for others' private or commercial use"? (R12) **CPIC content: yes, answered (R13-CPIC). ClinPGx and PharmGKB annotations: open.**
+3. What are PharmVar's terms for star-allele definitions in a commercial product? (R13-PharmVar) **Open.**
+4. May the product be described as "CPIC-guided" in the README, on the landing page and in sales material, and is NIH the office to ask? (R13-CPIC) **Added 2026-11-06; open.**
 
 ## Appendix B: sketch of the two new patient-zone tables
 

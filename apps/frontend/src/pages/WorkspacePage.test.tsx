@@ -4,23 +4,30 @@ import type { ReportStatus, Role } from '@telesphoros/shared-types';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RECOVERY_SCOPE, renderApp } from '@/test/authTestUtils';
 import { useSyntheticChat } from '@/hooks/useSyntheticChat';
-import { submitReport } from '@/lib/api';
+import { SubmitError, submitReport } from '@/lib/api';
+import { cancelOwnedUpload, removeUnfinishedReport } from '@/lib/ownedStorageApi';
 
 // The sample engine must never be reached from the production workspace (spec 024 CH-5): both entry points are replaced by spies.
 vi.mock('@/hooks/useSyntheticChat', () => ({ useSyntheticChat: vi.fn() }));
 vi.mock('@/lib/syntheticChatTransport', () => ({ createSyntheticChatTransport: vi.fn() }));
 vi.mock('@/lib/api', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/api')>()), submitReport: vi.fn() }));
+// The server-side cancel and the removal have their own tests (ownedStorageApi.test.ts); here only what the chat asks for, and when.
+vi.mock('@/lib/ownedStorageApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/ownedStorageApi')>()),
+  cancelOwnedUpload: vi.fn(),
+  removeUnfinishedReport: vi.fn(),
+}));
 
 const PATIENT = { id: '0f8fad5b-d9cb-469f-a165-70867728950e', label: 'SYN-004', createdAt: '2026-10-28T12:00:00.000Z', updatedAt: '2026-10-28T12:00:00.000Z', mergedInto: null };
 const REPORT_ID = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
-const report = (status: ReportStatus) => ({
+const report = (status: ReportStatus, fileUploaded = true) => ({
   id: REPORT_ID,
   patientId: PATIENT.id,
   type: 'structured',
   filename: 'SYN-004-cyp2c19.json',
   sizeBytes: 18,
   status,
-  fileUploaded: true,
+  fileUploaded,
   contentType: 'application/json',
   sha256: 'a'.repeat(64),
   createdAt: '2026-10-28T12:00:00.000Z',
@@ -29,13 +36,14 @@ const report = (status: ReportStatus) => ({
 const page = (data: unknown[]) => ({ data, meta: { page: 1, pageSize: 20, total: data.length, totalPages: data.length ? 1 : 0 } });
 
 let listed: ReportStatus = 'received';
+let listedUploaded = true;
 function api(roles: Role[]) {
   return vi.fn<typeof fetch>(async (input) => {
     const url = String(input);
     const body = url.includes('/api/v1/patients')
       ? page([PATIENT])
       : url.includes('/api/v1/reports')
-        ? page([report(listed)])
+        ? page([report(listed, listedUploaded)])
         : url.endsWith('/api/v1/me/recovery-scope')
           ? { recoveryScope: RECOVERY_SCOPE }
           : { roles };
@@ -51,6 +59,7 @@ const conversation = () => screen.findByRole('region', { name: 'Conversation' })
 
 beforeEach(() => {
   listed = 'received';
+  listedUploaded = true;
   vi.mocked(submitReport).mockResolvedValue({ reference: REPORT_ID });
 });
 afterEach(() => {
@@ -58,11 +67,22 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+/** Settings sits in the account menu at the sidebar's foot (specs/034 D4). */
+async function openSettings() {
+  await userEvent.click(screen.getByRole('button', { name: /^Account, / }));
+  await userEvent.click(screen.getByRole('link', { name: 'Settings' }));
+}
+/** Add patient is on the Patients page (specs/034 D2). */
+async function addPatientFromSidebar() {
+  await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'Patients' }));
+  await userEvent.click(await screen.findByRole('link', { name: 'Add patient' }));
+}
+
 describe('the chat-first home in every build (specs/024)', () => {
   it('uses a preferred name set in account preferences for the chat welcome', async () => {
     open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.click(screen.getByRole('link', { name: 'Settings' }));
+    await openSettings();
     await userEvent.type(await screen.findByRole('textbox', { name: 'Preferred name' }), 'Avery');
     await userEvent.click(screen.getByRole('button', { name: 'Save preferred name' }));
     await userEvent.click(screen.getByRole('button', { name: 'Close account preferences' }));
@@ -79,7 +99,7 @@ describe('the chat-first home in every build (specs/024)', () => {
   it('opens patient creation on the patient page instead of inside chat', async () => {
     const { router } = open(['clinician']);
     await screen.findByRole('button', { name: 'Attach a report' });
-    await userEvent.click(screen.getByRole('link', { name: 'Add patient' }));
+    await addPatientFromSidebar();
     await waitFor(() => expect(router.state.location.pathname).toBe('/patients/new'));
     expect(await screen.findByRole('heading', { name: 'New patient' })).toBeVisible();
     expect(screen.getByRole('textbox', { name: 'Given name' })).toBeVisible();
@@ -90,7 +110,7 @@ describe('the chat-first home in every build (specs/024)', () => {
     await userEvent.type(await screen.findByRole('textbox', { name: 'Question' }), 'Keep this draft');
     await userEvent.upload(file(), json());
     await userEvent.click(screen.getByRole('button', { name: 'Back to chat' }));
-    await userEvent.click(screen.getByRole('link', { name: 'Add patient' }));
+    await addPatientFromSidebar();
     await screen.findByRole('heading', { name: 'New patient' });
     await userEvent.click(screen.getByRole('link', { name: 'Back to chat' }));
     expect(router.state.location.pathname).toBe('/workspace');
@@ -100,12 +120,13 @@ describe('the chat-first home in every build (specs/024)', () => {
   });
 
   it.each([
-    ['All reports', 'Report history'],
+    ['Reports', 'Report history'],
     ['Settings', 'Account preferences'],
   ])('opens %s over chat and keeps the draft when closed', async (link, title) => {
     open(['clinician']);
     await userEvent.type(await screen.findByRole('textbox', { name: 'Question' }), 'Keep my draft');
-    await userEvent.click(screen.getByRole('link', { name: link }));
+    if (link === 'Settings') await openSettings();
+    else await userEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: link }));
     const panel = await screen.findByRole('dialog', { name: title });
     await userEvent.click(within(panel).getByRole('button', { name: `Close ${title.toLowerCase()}` }));
     expect(await screen.findByRole('textbox', { name: 'Question' })).toHaveValue('Keep my draft');
@@ -140,6 +161,85 @@ describe('the chat-first home in every build (specs/024)', () => {
     await userEvent.click(details.getByRole('button', { name: 'Upload report' }));
     expect(await within(await conversation()).findByText('Received')).toBeVisible();
     expect(submitReport).toHaveBeenCalledTimes(2);
+  });
+
+  it('removes an attached file from its chip in the message box, with Undo', async () => {
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.upload(file(), json());
+    await userEvent.click(screen.getByRole('button', { name: 'Back to chat' }));
+    const form = within(screen.getByRole('form', { name: 'Report and question' }));
+    await userEvent.click(form.getByRole('button', { name: 'Remove SYN-004-cyp2c19.json' }));
+    expect(form.queryByRole('button', { name: 'Report details' })).not.toBeInTheDocument();
+    expect(form.getByRole('button', { name: 'Undo attachment removal' })).toBeVisible();
+    expect(submitReport).not.toHaveBeenCalled();
+  });
+
+  it('cancels a failed upload: the server cancels the attempt first, then the report that never got its file is removed', async () => {
+    vi.mocked(submitReport).mockImplementationOnce(async (_values, _api, progress) => {
+      progress.reportId = REPORT_ID;
+      throw new Error('outside-response-not-for-display');
+    });
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.upload(file(), json());
+    await userEvent.click(screen.getByRole('checkbox', CONFIRM));
+    await userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
+    const details = within(await screen.findByRole('dialog', { name: 'Report details' }));
+    await details.findByRole('alert');
+    await userEvent.click(details.getByRole('button', { name: 'Cancel upload' }));
+    expect(await within(await conversation()).findByText('Upload cancelled and removed from your reports.')).toBeVisible();
+    expect(vi.mocked(cancelOwnedUpload).mock.calls[0]![1]).toMatchObject({ reportId: REPORT_ID });
+    expect(removeUnfinishedReport).toHaveBeenCalledWith(expect.any(Function), REPORT_ID);
+    expect(vi.mocked(cancelOwnedUpload).mock.invocationCallOrder[0]!).toBeLessThan(vi.mocked(removeUnfinishedReport).mock.invocationCallOrder[0]!);
+    const form = within(screen.getByRole('form', { name: 'Report and question' }));
+    expect(form.queryByRole('button', { name: 'Report details' })).not.toBeInTheDocument();
+    expect(submitReport).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the report, and says why, when the server does not acknowledge the cancel', async () => {
+    vi.mocked(submitReport).mockImplementationOnce(async (_values, _api, progress) => {
+      progress.reportId = REPORT_ID;
+      throw new Error('outside-response-not-for-display');
+    });
+    vi.mocked(cancelOwnedUpload).mockRejectedValueOnce(new SubmitError('Cancellation is pending. Retry cancellation before starting over.'));
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.upload(file(), json());
+    await userEvent.click(screen.getByRole('checkbox', CONFIRM));
+    await userEvent.click(screen.getByRole('button', { name: 'Upload report' }));
+    const details = within(await screen.findByRole('dialog', { name: 'Report details' }));
+    await details.findByRole('alert');
+    await userEvent.click(details.getByRole('button', { name: 'Cancel upload' }));
+    expect(await details.findByText('Cancellation is pending. Retry cancellation before starting over.')).toBeVisible();
+    expect(removeUnfinishedReport).not.toHaveBeenCalled();
+    expect(details.getByRole('button', { name: 'Cancel upload' })).toBeVisible();
+  });
+
+  it('offers no cancel for an upload that has not failed', async () => {
+    open(['clinician']);
+    await screen.findByRole('button', { name: 'Attach a report' });
+    await userEvent.upload(file(), json());
+    expect(within(screen.getByRole('dialog', { name: 'Report details' })).queryByRole('button', { name: 'Cancel upload' })).not.toBeInTheDocument();
+  });
+
+  it('says "Upload not finished" for a recent report whose file never arrived, and removes it after a second step', async () => {
+    listedUploaded = false;
+    open(['clinician']);
+    const list = within(await screen.findByRole('list', { name: 'Recent reports' })); // specs/034 D3: the former Past reports
+    expect(await list.findByText('Upload not finished')).toBeVisible();
+    expect(list.queryByText('Received')).not.toBeInTheDocument();
+    await userEvent.click(list.getByRole('button', { name: 'Remove unfinished upload SYN-004-cyp2c19.json' }));
+    expect(removeUnfinishedReport).not.toHaveBeenCalled();
+    await userEvent.click(within(list.getByRole('group', { name: 'Remove unfinished upload SYN-004-cyp2c19.json?' })).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(removeUnfinishedReport).toHaveBeenCalledWith(expect.any(Function), REPORT_ID));
+  });
+
+  it('offers no removal for a recent report whose file is stored', async () => {
+    open(['clinician']);
+    const list = within(await screen.findByRole('list', { name: 'Recent reports' })); // specs/034 D3: the former Past reports
+    expect(await list.findByText('Received')).toBeVisible();
+    expect(list.queryByRole('button', { name: /^Remove unfinished upload/ })).not.toBeInTheDocument();
   });
 
   it('requires fresh confirmation after replacing a file', async () => {

@@ -1061,3 +1061,48 @@ describe('evaluations structured source down guard as the non-superuser migrator
     }
   });
 });
+
+describe('evaluation result identifiers down guard as the non-superuser migrator', () => {
+  it('sees a result carrying identifiers behind FORCE RLS and reverses only a migration with none', async () => {
+    const f = await fixture();
+    const above = revertAbove('evaluation_result_identifiers');
+    if (above.steps) expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted);
+    try {
+      // Deliberate owner-only fixture: foreign keys and triggers are off, so no application write or event is needed. The table's own checks still apply.
+      await withAdmin(f.admin, async (c) => {
+        await c.query('SET session_replication_role=replica');
+        await c.query(
+          `INSERT INTO evaluation_results
+          (tenant_id,evaluation_id,ordinal,drug,genes,outcome,reason_code,citation,guideline_id,guideline_version,gene_evidence,drug_rxcui,gene_hgnc_ids,pharmvar_versions,cell_origin)
+          VALUES ($1,$2,0,'drugq',ARRAY['GENEA'],'held','out-of-review-scope','{}'::jsonb,'drugq-genea','synthetic-1','[]'::jsonb,
+                  'syn-rxcui-drugq',ARRAY['syn-hgnc-genea'],ARRAY['syn-pharmvar-1.0'],'unknown')`,
+          [tenant, randomUUID()],
+        );
+      });
+      // The migrator sees none of the owner's rows through FORCE RLS: the guard must still find it.
+      expect((await f.migrator.query('SELECT count(*)::int AS n FROM evaluation_results')).rows).toEqual([{ n: 0 }]);
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop identifiers that stored results carry/);
+      expect((await f.migrator.query("SELECT relforcerowsecurity AS forced FROM pg_class WHERE relname='evaluation_results'")).rows).toEqual([{ forced: true }]);
+      // A result without identifiers does not block the down.
+      await withAdmin(f.admin, async (c) => {
+        await c.query('SET session_replication_role=replica');
+        await c.query('DELETE FROM evaluation_results WHERE drug_rxcui IS NOT NULL');
+        await c.query(
+          `INSERT INTO evaluation_results (tenant_id,evaluation_id,ordinal,drug,genes,outcome,reason_code,gene_evidence)
+           VALUES ($1,$2,0,'drugq',ARRAY[]::text[],'no-guideline','no-guideline-for-drug','[]'::jsonb)`,
+          [tenant, randomUUID()],
+        );
+      });
+      expect(await migrateDown(f.migrator, 1)).toEqual(['0071']);
+      const columns = (
+        await f.migrator.query(
+          "SELECT column_name FROM information_schema.columns WHERE table_name='evaluation_results' AND column_name IN ('drug_rxcui','gene_hgnc_ids','pharmvar_versions','cell_origin')",
+        )
+      ).rows;
+      expect(columns).toEqual([]);
+      expect(await migrateUp(f.migrator)).toEqual(['0071', ...above.reverted.slice().reverse()]);
+    } finally {
+      await f.drop();
+    }
+  });
+});

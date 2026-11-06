@@ -2,16 +2,15 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrugList } from '@telesphoros/shared-types';
 import { expect, test } from '@playwright/test';
-import { axeViolations, openWorkspaceNavigation, signInAs } from '../e2e/helpers';
+import { axeViolations, openPatients, signInAs } from '../e2e/helpers';
 
 const list: DrugList = JSON.parse(readFileSync(new URL('../../../packages/shared-types/src/drug-list/bundled.json', import.meta.url), 'utf8'));
 
 test('20 recorded medications stay compact, searchable and readable in both themes', async ({ page }, info) => {
   await signInAs(page, 'alice', '/workspace');
-  await openWorkspaceNavigation(page);
-  const patients = page.getByRole('region', { name: 'Patients' });
+  await openPatients(page); // specs/034 D2: the patient list and Add patient live on the Patients page
   const label = `SYN-TWENTY-${crypto.randomUUID().slice(0, 8)}`;
-  await patients.getByRole('link', { name: 'Add patient' }).click();
+  await page.getByRole('link', { name: 'Add patient' }).click();
   await page.getByLabel('Synthetic patient label').fill(label);
   const created = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().endsWith('/patients'));
   await page.getByRole('button', { name: 'Create patient' }).click();

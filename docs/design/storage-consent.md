@@ -8,6 +8,7 @@ Date: 2026-11-01. Public Telesphoros. The original implementation began at `45ce
 | --- | --- |
 | `telesphoros.theme` | Optional; choice works in memory before permission, persists only after acceptance. |
 | `telesphoros.sidebar` | Optional; same gate for collapsed/expanded preference. |
+| `telesphoros.sidebar-width` | Optional; same gate for the dragged sidebar width, a number of rem within fixed bounds (specs/034 D8). |
 | `telesphoros.landing.language` | Optional; language remains usable in the current tab without persistence. |
 | `telesphoros.storage-consent.v1` | Required local record of `{version: 1, preferences: boolean}`. No tracking identifier. Invalid JSON, wrong versions or wrong field types do not enable optional storage. |
 | Auth/PKCE and upload-recovery session storage | Existing behavior retained. Never passed through the optional preference store or removed on withdrawal. |

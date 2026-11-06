@@ -16,16 +16,23 @@ data "aws_iam_policy_document" "app_runtime" {
     resources = [aws_s3_bucket.reports.arn]
   }
   # The validated intake lists a report's own intake prefix (versions and unfinished multipart uploads) before it accepts a new attempt, and
-  # treats a listing it cannot finish as "not empty". Listing only: no delete action, and only keys under reports/.
+  # treats a listing it cannot finish as "not empty". Listing only: no delete action. Versions are limited to keys under reports/.
   statement {
     sid       = "ReportIntakeInventory"
-    actions   = ["s3:ListBucketVersions", "s3:ListBucketMultipartUploads"]
+    actions   = ["s3:ListBucketVersions"]
     resources = [aws_s3_bucket.reports.arn]
     condition {
       test     = "StringLike"
       variable = "s3:prefix"
       values   = ["reports/*"]
     }
+  }
+  # S3 sends no s3:prefix key with ListBucketMultipartUploads (service authorization reference), so a prefix condition here never matches and
+  # every intake answered 503 on staging (2026-11-05). The API still asks only for its report's prefix; the listing shows keys and upload ids, no bytes.
+  statement {
+    sid       = "ReportIntakeMultipartInventory"
+    actions   = ["s3:ListBucketMultipartUploads"]
+    resources = [aws_s3_bucket.reports.arn]
   }
   # The application's own credentials write the validated bytes (and read them back), so it needs the key too.
   statement {
