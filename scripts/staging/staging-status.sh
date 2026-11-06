@@ -29,7 +29,9 @@ STACK_ENV="${STACK_ENV:-$PRIVATE/staging/stack.env}"
 [ -x "${TERRAFORM:-}" ] || die "TERRAFORM is not an executable"
 [ -d "${TF_DATA_DIR:-}" ] || die "TF_DATA_DIR is not a directory"
 export TF_DATA_DIR AWS_REGION="${AWS_REGION:-us-east-2}" AWS_PROFILE="${AWS_PROFILE:-telesphoros}"
-"$TERRAFORM" version | head -1 | grep -qx 'Terraform v1.16.5' || die "TERRAFORM is not 1.16.5"
+# The whole output first: under pipefail, `version | head -1` fails whenever Terraform is still writing after head has stopped reading.
+TFV="$("$TERRAFORM" version </dev/null)" || die "TERRAFORM version failed"
+[ "${TFV%%$'\n'*}" = 'Terraform v1.16.5' ] || die "TERRAFORM is not 1.16.5"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/staging-status.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
