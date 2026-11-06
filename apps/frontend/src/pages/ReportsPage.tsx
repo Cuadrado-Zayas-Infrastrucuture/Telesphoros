@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ArrowUpFromLine, RefreshCw } from 'lucide-react';
-import type { PatientDto, ReportDto } from '@telesphoros/shared-types';
+import { reportDtoSchema, type PatientDto, type ReportDto } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
 import { WRITER_ROLES } from '@/auth/roles';
 import { Button } from '@/components/ui/Button';
@@ -38,6 +38,22 @@ export default function ReportsPage() {
   const pageSearch = useRef<HTMLInputElement>(null);
   const reportsHeading = useRef<HTMLHeadingElement>(null);
   const selectionTrigger = useRef<HTMLButtonElement | null>(null);
+
+  // Specs/034: a Recents row in the sidebar opens its report here. The row hands over the report it already read, so nothing is fetched again.
+  // Read once per navigation, during render (react.dev "adjusting state when a prop changes"). The details open once the first page has loaded:
+  // on /workspace this page sits in a drawer that opens after it mounts, and a details panel opened sooner would stay behind that drawer.
+  const location = useLocation();
+  const [openedFrom, setOpenedFrom] = useState<string | null>(null);
+  const [handedOver, setHandedOver] = useState<ReportDto | null>(null);
+  if (openedFrom !== location.key) {
+    setOpenedFrom(location.key);
+    const opened = reportDtoSchema.safeParse((location.state as { report?: unknown } | null)?.report);
+    setHandedOver(opened.success ? opened.data : null);
+  }
+  if (handedOver && reports) {
+    setHandedOver(null);
+    setSelected(handedOver);
+  }
 
   useEffect(() => {
     if (selected) detailHeading.current?.focus();

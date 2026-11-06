@@ -97,7 +97,7 @@ describe('the reports page in the published build', () => {
     renderApp('/reports/upload', { signedInAs: ['clinician'], fetchImpl: api(['clinician']).fetchImpl });
     await screen.findByRole('button', { name: 'Workspace navigation' }); // the sidebar has replaced the header (both name their links Primary)
     const primary = screen.getByRole('navigation', { name: 'Primary' });
-    expect(await within(primary).findByRole('link', { name: 'All reports' })).toHaveAttribute('href', '/reports');
+    expect(await within(primary).findByRole('link', { name: 'Reports' })).toHaveAttribute('href', '/reports');
   });
 
   it('links Reports from the site header outside the workspace', async () => {

@@ -17,7 +17,7 @@ export class AccountNotReadyError extends Error {}
 export interface AuthContextValue {
   status: AuthStatus;
   roles: Role[];
-  /** The signed-in person's email, from the ID token at sign-in. In memory only and shown only in Settings; never sent to the API. */
+  /** The signed-in person's email, from the ID token at sign-in. In memory only and shown only in Settings and the account menu (specs/034 D9); never sent to the API. */
   email: string | null;
   preferredName: string | null;
   setPreferredName(name: string | null): void;

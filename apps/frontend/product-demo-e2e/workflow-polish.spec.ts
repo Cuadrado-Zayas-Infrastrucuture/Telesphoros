@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { axeViolations, openWorkspaceNavigation, signInAs } from '../e2e/helpers';
+import { axeViolations, openPatients, signInAs } from '../e2e/helpers';
 
 const confirmation = 'I confirm this file contains synthetic data only';
 const fixture = (id: string) => new URL(`../../../data/fixtures/lab-reports/captures/${id}/source.pdf`, import.meta.url).pathname;
@@ -61,9 +61,9 @@ test('a roster beyond 20 patients stays searchable and selectable without losing
   const view = await browser.newPage({ viewport: page.viewportSize()!, hasTouch: info.project.use.hasTouch, isMobile: info.project.use.isMobile });
   try {
     await signInAs(view, 'alice', '/workspace');
-    await openWorkspaceNavigation(view);
-    const patients = view.getByRole('region', { name: 'Patients', exact: true });
-    await expect(patients.getByRole('link', { name: 'Add patient', exact: true })).toBeInViewport();
+    await openPatients(view); // specs/034 D2: the roster lives on the Patients page
+    const patients = view.getByRole('region', { name: 'Patient records', exact: true });
+    await expect(view.getByRole('link', { name: 'Add patient', exact: true })).toBeInViewport();
     await patients.getByRole('textbox', { name: 'Find loaded patients' }).fill(firstLabel);
     await expect(patients.getByText(/No match among loaded patients/)).toBeVisible();
     await patients.getByRole('button', { name: 'More patients' }).click();
@@ -71,8 +71,7 @@ test('a roster beyond 20 patients stays searchable and selectable without losing
     await patients.getByRole('textbox', { name: 'Find loaded patients' }).fill('');
     expect(await view.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await view.screenshot({ path: info.outputPath('busy-roster.png') });
-    const toggle = view.getByRole('button', { name: 'Workspace navigation', exact: true });
-    if (await toggle.isVisible()) await toggle.click();
+    await view.goBack(); // back to the chat
     await view.getByRole('textbox', { name: 'Question' }).fill('Keep this roster-selection draft');
     await view.locator('input[type=file]').setInputFiles(fixture('D01'));
     const details = view.getByRole('dialog', { name: 'Report details', exact: true });

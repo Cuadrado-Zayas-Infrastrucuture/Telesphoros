@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { axeViolations, openWorkspaceNavigation, signInAs } from '../e2e/helpers';
+import { axeViolations, openPatients, signInAs } from '../e2e/helpers';
 
 const label = () => `SYN-${crypto.randomUUID().slice(0, 8)}`;
 
@@ -7,9 +7,9 @@ test.describe('Patient demographics: collected in Add patient, read and correcte
   test('a clinician adds a patient with demographics, opens its page, corrects it; a reader reads it; a label alone shows Incomplete', async ({ page, browser }) => {
     const given = `Zzyzx${crypto.randomUUID().slice(0, 6)}`;
     await signInAs(page, 'alice', '/workspace');
-    await openWorkspaceNavigation(page);
-    const section = page.getByRole('region', { name: 'Patients' });
-    // The panel's line "N of M complete" (T304) comes from the counts route; this suite shares one database, so the test reads where it starts and checks the change.
+    await openPatients(page);
+    const section = page.getByRole('region', { name: 'Patient records' });
+    // The Patients page's line "N of M complete" (T304) comes from the counts route; this suite shares one database, so the test reads where it starts and checks the change.
     const line = section.getByText(/\d+ of \d+ complete/);
     const readCounts = async () => {
       const [, complete, patients] = /(\d+) of (\d+) complete/.exec((await line.textContent()) ?? '') ?? [];
@@ -18,7 +18,7 @@ test.describe('Patient demographics: collected in Add patient, read and correcte
     await expect(line).toBeVisible();
     const start = await readCounts();
     const created = label();
-    await section.getByRole('link', { name: 'Add patient' }).click();
+    await page.getByRole('link', { name: 'Add patient' }).click();
     await page.getByRole('textbox', { name: 'Synthetic patient label' }).fill(created);
     await page.getByRole('textbox', { name: 'Given name' }).fill(given);
     await page.getByRole('textbox', { name: 'Family name' }).fill('Testcase');
@@ -27,13 +27,11 @@ test.describe('Patient demographics: collected in Add patient, read and correcte
     await page.getByRole('checkbox', { name: 'Hispanic or Latino' }).check();
     await page.getByRole('button', { name: 'Create patient' }).click();
     await expect(page.getByRole('heading', { level: 1, name: created })).toBeVisible();
-    await openWorkspaceNavigation(page);
+    await openPatients(page);
     await expect.poll(readCounts).toEqual({ complete: start.complete + 1, patients: start.patients + 1 });
     const row = section.getByRole('list', { name: 'Patients' }).getByRole('listitem').filter({ hasText: created });
     await expect(row.getByText('Incomplete')).toHaveCount(0);
-
-    const menu = page.getByRole('button', { name: 'Workspace navigation', exact: true });
-    if (await menu.isVisible()) await menu.click();
+    await row.getByRole('link', { name: created, exact: true }).click();
     await expect(page.getByRole('heading', { level: 1, name: created })).toBeVisible();
     const demographics = page.getByRole('region', { name: 'Demographics' });
     await expect(demographics.getByText(given)).toBeVisible();
@@ -66,14 +64,13 @@ test.describe('Patient demographics: collected in Add patient, read and correcte
     await expect(outsider.getByText(given)).toHaveCount(0);
     await outsider.close();
 
-    await page.getByRole('link', { name: 'Back to chat', exact: true }).click();
-    await openWorkspaceNavigation(page);
+    await openPatients(page);
     const bare = label();
-    await section.getByRole('link', { name: 'Add patient' }).click();
+    await page.getByRole('link', { name: 'Add patient' }).click();
     await page.getByRole('textbox', { name: 'Synthetic patient label' }).fill(bare);
     await page.getByRole('button', { name: 'Create patient' }).click();
     await expect(page.getByRole('heading', { level: 1, name: bare })).toBeVisible();
-    await openWorkspaceNavigation(page);
+    await openPatients(page);
     await expect(section.getByRole('list', { name: 'Patients' }).getByRole('listitem').filter({ hasText: bare }).getByText('Incomplete')).toBeVisible();
     await expect.poll(readCounts).toEqual({ complete: start.complete + 1, patients: start.patients + 2 }); // a label alone adds one to the denominator and nothing to complete
   });

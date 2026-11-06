@@ -91,6 +91,27 @@ export async function openWorkspaceNavigation(page: Page) {
   await expect(page.getByRole('navigation', { name: 'Primary', exact: true })).toBeVisible();
 }
 
+/** Opens the account menu at the sidebar's foot (specs/034 D4), which holds Settings and Sign out; on a phone the menu button opens first. */
+export async function openAccountMenu(page: Page) {
+  await openWorkspaceNavigation(page);
+  const account = page.locator('header.workspace-navigation').getByRole('button', { name: /^Account, / });
+  if ((await account.getAttribute('aria-expanded')) !== 'true') await account.click();
+  await expect(page.locator('#workspace-account-menu')).toBeVisible();
+}
+
+/** Signs out from the account menu (specs/034 D4). */
+export async function signOutFromSidebar(page: Page) {
+  await openAccountMenu(page);
+  await page.locator('#workspace-account-menu').getByRole('button', { name: 'Sign out', exact: true }).click();
+}
+
+/** The Patients page, through the sidebar (specs/034 D2): the patient list and, for writer roles, Add patient. */
+export async function openPatients(page: Page) {
+  await openWorkspaceNavigation(page);
+  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'Patients', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Patients' })).toBeVisible();
+}
+
 /** WCAG 2.0/2.1 A and AA violations on the current page, colour contrast included, as "rule (count)" strings. */
 export async function axeViolations(page: Page) {
   await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
