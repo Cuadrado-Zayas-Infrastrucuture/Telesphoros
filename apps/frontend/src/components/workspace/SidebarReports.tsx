@@ -4,10 +4,14 @@ import type { ReportDto } from '@telesphoros/shared-types';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
 import { ReportStatusText } from '@/components/ReportStatusText';
+import { RemoveUnfinishedReport } from '@/components/workspace/RemoveUnfinishedReport';
 import { listReports } from '@/lib/ownedStorageApi';
 import { onReportsChanged } from '@/lib/workspaceEvents';
 
-/** The panel's "Past reports": the first page, newest first, each with its status as a word in color (specs/024 D2). Reloads when the chat uploads or checks a report. */
+/**
+ * The panel's "Past reports": the first page, newest first, each with its status as a word in color (specs/024 D2). Reloads when the chat uploads, checks or
+ * removes a report. A report whose file never arrived says so and can be removed.
+ */
 export function SidebarReports() {
   const { apiFetch } = useAuth();
   const [reports, setReports] = useState<ReportDto[] | null>(null);
@@ -67,7 +71,8 @@ export function SidebarReports() {
                 <span title={report.filename} className="block truncate font-medium text-foreground">
                   {report.filename}
                 </span>
-                <ReportStatusText status={report.status} />
+                <ReportStatusText status={report.status} fileUploaded={report.fileUploaded} />
+                {!report.fileUploaded && <RemoveUnfinishedReport reportId={report.id} filename={report.filename} />}
               </li>
             ))}
           </ul>
