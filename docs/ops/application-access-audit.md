@@ -14,6 +14,14 @@ This branch records application API events in a separate append-only PostgreSQL 
 
 The restricted table stores event/outcome, validated tenant and actor identifiers, a static controller/handler key, optional opaque UUID, request ID and server timestamp. It stores no path, query, body, filename, patient name, token, download URL or raw exception. The application role has only `EXECUTE` on the constrained writer; the verifier role has read access. A protected GET waits for its audit write before the response is emitted; writer failure returns a generic 503. The audit table refuses update, delete and truncate, and its down migration refuses populated evidence.
 
+**Verified and claimed identity (migration `0072`, DATA-01 slice 4, decision D6).**
+- `tenant_id` and `actor_sub` hold what the API passed: the **claimed** identity.
+- `verified_tenant_id` and `verified_actor_sub` hold the organization and person named by the request's capability. The database reads that capability itself, at write time.
+- The verified fields are NULL when the request has no capability, or when its capability has expired or been revoked. The row is still written.
+- Settings never count as verification, in any binding mode.
+- `api-auth` `accepted` is recorded before the guard asks for a capability, so that row's verified fields are always NULL. Later rows of the same request (`private-read`, `private-write`, `download-link`) carry the capability.
+- Until the issuer runs (synthetic staging today), every row's verified fields are NULL.
+
 ## Limits and sequencing
 
 - This slice uses migration `0016`. The live-membership slice (M1.5) was built against the same number; it has been renumbered to `0017` on top of this one and re-verified (migration history, real PostgreSQL, recovery). The guard records `api-auth` `accepted` as soon as the token verifies and **before** the membership is read, so the event keeps its stated meaning: it does not prove the membership allowed anything.
