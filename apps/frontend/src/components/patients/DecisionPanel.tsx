@@ -1,7 +1,7 @@
 import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useEffect, useState } from 'react';
 import type { ClinicianDecisionCreate, ClinicianDecisionHistoryDto, EvaluationSummaryDto } from '@telesphoros/shared-types';
-import { CDR_CODE_LABELS } from '@telesphoros/shared-types';
+import { CDR_CODE_LABELS, drugPresentation } from '@telesphoros/shared-types';
 import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
 import { currentDecisionEntry, decisionLabels, readDecisionHistory, type DecisionLink } from '@/lib/clinicianDecisions';
@@ -114,7 +114,7 @@ export function DecisionPanel({
               size="sm"
               variant="outline"
               disabled={followupBusy}
-              onClick={() => onFollowup({ id: history.currentDecisionId!, label: `${result.drug} · ${decisionLabels[current.response!]}` })}
+              onClick={() => onFollowup({ id: history.currentDecisionId!, label: `${drugPresentation({ name: result.drug }).displayName} · ${decisionLabels[current.response!]}` })}
             >
               Schedule linked follow-up
             </Button>

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import type { EvaluationDto } from '@telesphoros/shared-types';
+import { drugPresentation, type EvaluationDto } from '@telesphoros/shared-types';
 
 /** One stored synthetic assessment, read-only: the outcome and wording per drug, its source and provenance, and the way to the patient's stored results. */
 export function AssessmentResult({ evaluation, created }: { evaluation: EvaluationDto; created: boolean }) {
@@ -15,7 +15,7 @@ export function AssessmentResult({ evaluation, created }: { evaluation: Evaluati
       )}
       {evaluation.results.map((result) => (
         <section key={result.id} aria-label={`Assessment ${result.drug}`} className="space-y-1 border-t border-divider pt-2">
-          <p className="font-medium">{result.drug}</p>
+          <p className="font-medium">{drugPresentation({ name: result.drug }).displayName}</p>
           <p className="text-sm">
             {result.genes.join(', ')} · {result.outcome}
             {result.reasonCode ? ` · ${result.reasonCode}` : ''}
