@@ -104,7 +104,8 @@ build_lambdas() { # LOG; sets LAMBDAS to the names built
   [ "${#LAMBDAS[@]}" -gt 0 ] || return 0
   gate_node
   pin=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).packageManager||"")' "$C/package.json")
-  [ "pnpm@$(pnpm --version </dev/null)" = "$pin" ] || die "pnpm is not the clone's packageManager ($pin)"
+  # Asked inside the clone: corepack's pnpm answers with the version the nearest package.json pins, and the install and builds run there.
+  [ "pnpm@$(cd "$C" && pnpm --version </dev/null)" = "$pin" ] || die "pnpm is not the clone's packageManager ($pin)"
   ( cd "$C" && CI=true pnpm install --frozen-lockfile </dev/null ) > "$log" 2>&1 || { tail -20 "$log"; die "pnpm install failed in the clone"; }
   for name in "${LAMBDAS[@]}"; do
     dir="$C/infrastructure/lambda/$name"
