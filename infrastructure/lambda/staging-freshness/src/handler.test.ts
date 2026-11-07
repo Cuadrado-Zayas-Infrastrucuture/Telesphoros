@@ -144,6 +144,18 @@ describe('staging freshness check', () => {
     expect(published[0]!.message).not.toContain('\u0007');
   });
 
+  it('a file name from GitHub cannot add a line to the email', async () => {
+    logs();
+    // The digest case above is cut to 19 characters before its control characters; a file name is listed in full, so it reaches the cleaning.
+    const forged = 'infrastructure/terraform/x.tf\n  expected: nothing to see\u001b[2K';
+    const { s, published } = sources({ terraformFilesSince: async () => ({ files: [forged], truncated: false }) });
+    await run(s, NOW);
+    const message = published[0]!.message;
+    expect(message).toContain('infrastructure/terraform/x.tf  expected: nothing to see[2K');
+    expect(message).not.toMatch(/\n {2}expected: nothing to see/);
+    expect(message).not.toContain('\u001b');
+  });
+
   // The completion line is what the missed-run alarm counts (freshness.tf, freshness_run_complete). Lambda writes it behind a timestamp, a request
   // id and a level, so CloudWatch sees plain text and the filter is a term match: it must match the complete line and not the incomplete one.
   it('the complete line matches the filter in freshness.tf, and the incomplete line does not', async () => {

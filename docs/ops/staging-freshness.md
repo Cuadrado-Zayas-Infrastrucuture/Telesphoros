@@ -35,10 +35,10 @@ in git.
 
 ## Applying it (founder-run, after reading the plan)
 
-1. `pnpm --filter @telesphoros/staging-freshness build` in the backend clone: Terraform zips `infrastructure/lambda/staging-freshness/dist`.
-2. Plan with the canonical var file. Expect, beyond the Lambda: one in-place update of the service-logs key policy (it names the new log group),
-   and nothing else. `check-plan` has no stage for this change, so read the plan line by line: 10 creates (log group, role, role policy,
-   function, schedule rule, target, invoke permission, metric filter, two alarms) and that one update.
+1. Not by hand: `plan.sh` builds every Lambda in the backend clone before it plans (spec 027 T022), so the zip is this commit's code.
+2. `plan.sh INFRA COMMIT` ([staging-release.md](staging-release.md), step 3). Expect, beyond the Lambda: one in-place update of the service-logs
+   key policy (it names the new log group), and nothing else. Read the plan line by line: 10 creates (log group, role, role policy,
+   function, schedule rule, target, invoke permission, metric filter, two alarms) and that one update. Then `apply.sh INFRA COMMIT SHA256`.
 3. After the apply, the facts file's `alarms` goes up by 2 and [environments.md](environments.md) is updated in the same pull request.
 4. Invoke it once by hand and read the email. The first email is expected to list whatever is merged and unapplied at that moment.
 5. Cause each condition once on purpose (spec 027 T017) and see each email arrive; put it back each time.

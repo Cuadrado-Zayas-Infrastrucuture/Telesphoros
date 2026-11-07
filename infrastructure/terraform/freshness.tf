@@ -1,6 +1,7 @@
 # The daily staging freshness check (spec 027, PR 4): a Lambda that compares what synthetic staging runs with docs/ops/staging-expected.json and
 # lists the Terraform merged after the last apply, and emails the audit alarm topic when anything is stale or the check itself could not read
-# something. Source: infrastructure/lambda/staging-freshness (build it first: pnpm --filter @telesphoros/staging-freshness build).
+# something. Source: infrastructure/lambda/staging-freshness. A release plan builds it (scripts/staging/release/lib.sh build_lambdas); before
+# any other plan, build it first under umask 022: pnpm --filter @telesphoros/staging-freshness build.
 # Synthetic profile only, and only when the API (and so the worker) and the web distribution exist: there is nothing to compare otherwise.
 # It reads, and publishes one message; it can change nothing. What is applied: docs/ops/environments.md.
 locals {
