@@ -54,7 +54,9 @@ const show = (v) => (v === undefined || v === null ? '-' : typeof v === 'object'
 
 /**
  * The printed table and the exit code. Fails (1) on any row that is not ok, a plan that has changes or did not run, Terraform merged after
- * the applied commit, a saved plan made at another serial or with no record, or a claim older than CLAIM_ABANDONED_HOURS.
+ * the applied commit, a saved plan made at another serial or with no record, or a claim older than CLAIM_ABANDONED_HOURS. A saved plan whose
+ * apply log ends with exit status 0 is listed as applied and does not fail the run: apply.sh refuses any plan whose log exists, so it cannot
+ * run again. One whose apply failed does fail it, since a failed apply can leave the stack half-changed.
  */
 export function report({ rows, plan, unapplied = [], savedPlans = [], legacyPlans = 0, claim = null, serial = null, now }) {
   const lines = [];
@@ -73,6 +75,8 @@ export function report({ rows, plan, unapplied = [], savedPlans = [], legacyPlan
   if (unapplied.length) { lines.push(`merged after the applied commit, under infrastructure/terraform/: ${unapplied.length}`, ...unapplied.map((u) => `  ${u}`)); problems.push('unapplied'); }
   else lines.push('merged after the applied commit, under infrastructure/terraform/: none');
   for (const p of savedPlans) {
+    if (p.applied === 0) { lines.push(`saved plan ${p.path}: applied (exit 0)`); continue; }
+    if (Number.isInteger(p.applied)) { lines.push(`saved plan ${p.path}: APPLY FAILED (exit ${p.applied}): read its log`); problems.push(p.path); continue; }
     const fresh = p.serial !== null && p.serial === serial;
     lines.push(`saved plan ${p.path}: ${p.serial === null ? 'STALE (no record)' : fresh ? `current (serial ${p.serial})` : `STALE (serial ${p.serial})`}`);
     if (!fresh) problems.push(p.path);
@@ -102,6 +106,13 @@ export function collect(dir, env, { exists, read, now = new Date().toISOString()
   };
   const int = (v) => (/^\d+$/.test(v ?? '') ? Number(v) : undefined);
   const serialOf = (plan) => { try { return JSON.parse(read(`${plan}.meta.json`)).serial ?? null; } catch { return null; } };
+  /** The last exit status apply-run.sh wrote to the plan's log (X.tfplan -> X-apply.txt); null with no log or while the apply still runs. */
+  const appliedOf = (plan) => {
+    const log = plan.replace(/\.tfplan$/, '-apply.txt');
+    if (!exists(log)) return null;
+    const last = [...read(log).matchAll(/^== apply exit status: (\d+)$/gm)].pop();
+    return last ? Number(last[1]) : null;
+  };
   const lines = (n) => (file(n) ?? '').split('\n').filter(Boolean);
   let state = {};
   try { state = JSON.parse(file('state.json') || '{}'); } catch { state = {}; }
@@ -118,7 +129,7 @@ export function collect(dir, env, { exists, read, now = new Date().toISOString()
     ready: int(env.READY),
     plan: { exit: env.PLAN_EXIT === 'null' ? null : Number(env.PLAN_EXIT), changes: lines('changes'), why: env.PLAN_WHY || undefined },
     unapplied: lines('unapplied'),
-    savedPlans: lines('saved').map((f) => ({ path: f.startsWith(`${env.PRIVATE}/`) ? f.slice(env.PRIVATE.length + 1) : f, serial: serialOf(f) })),
+    savedPlans: lines('saved').map((f) => ({ path: f.startsWith(`${env.PRIVATE}/`) ? f.slice(env.PRIVATE.length + 1) : f, serial: serialOf(f), applied: appliedOf(f) })),
     legacyPlans: Number(env.LEGACY ?? 0),
     claim: exists(env.CLAIM ?? '') ? JSON.parse(read(env.CLAIM)) : null,
     serial: Number.isInteger(state.serial) ? state.serial : null,
