@@ -93,3 +93,39 @@ step_lock() { # the lock goes when the script exits
 }
 tf_out() { "$TERRAFORM" -chdir="$TFDIR" output -raw "$1" </dev/null; }
 gate_node() { [ "$(node --version)" = "v$(cat "$C/.nvmrc")" ] || die "node $(cat "$C/.nvmrc") is not first on PATH"; }
+
+# The Lambda bundles (spec 027 T022). Terraform zips infrastructure/lambda/<name>/dist into .build/<name>.zip at plan time, so every plan
+# builds each one first from the clone at the release commit: a dist left from an older build is never packaged. Built under umask 022,
+# because the zip keeps each file's mode and these scripts run under 077: an owner-only file changes the zip's hash and Lambda cannot read it.
+build_lambdas() { # LOG; sets LAMBDAS to the names built
+  local log="$1" dir name pin
+  LAMBDAS=()
+  for dir in "$C"/infrastructure/lambda/*/; do [ -f "$dir/package.json" ] && LAMBDAS+=("$(basename "$dir")"); done
+  [ "${#LAMBDAS[@]}" -gt 0 ] || return 0
+  gate_node
+  pin=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).packageManager||"")' "$C/package.json")
+  [ "pnpm@$(pnpm --version </dev/null)" = "$pin" ] || die "pnpm is not the clone's packageManager ($pin)"
+  ( cd "$C" && CI=true pnpm install --frozen-lockfile </dev/null ) > "$log" 2>&1 || { tail -20 "$log"; die "pnpm install failed in the clone"; }
+  for name in "${LAMBDAS[@]}"; do
+    dir="$C/infrastructure/lambda/$name"
+    rm -rf "$dir/dist" "$TFDIR/.build/$name.zip"
+    ( umask 022; cd "$dir" && pnpm run build </dev/null ) >> "$log" 2>&1 || { tail -20 "$log"; die "the $name Lambda did not build"; }
+    [ -n "$(ls -A "$dir/dist" 2>/dev/null)" ] || die "the $name Lambda built nothing into dist"
+    [ -z "$(find "$dir/dist" \( -type f ! -perm 644 \) -o \( -type d ! -perm 755 \))" ] || die "the $name bundle has a file Lambda cannot read (not 644)"
+  done
+}
+# What a plan zipped, next to the plan; apply.sh refuses when a zip changed after it (a rebuild in the clone would upload code nobody planned).
+bundle_record() { # FILE
+  local name
+  : > "$1"
+  for name in ${LAMBDAS[@]+"${LAMBDAS[@]}"}; do
+    if [ -f "$TFDIR/.build/$name.zip" ]; then printf '%s %s\n' "$(sha "$TFDIR/.build/$name.zip")" "$name" >> "$1"; fi
+  done
+}
+bundle_check() { # FILE
+  local want name
+  [ -f "$1" ] || die "no bundle record next to the plan ($1): plan again"
+  while read -r want name; do
+    [ -f "$TFDIR/.build/$name.zip" ] && [ "$(sha "$TFDIR/.build/$name.zip")" = "$want" ] || die "the $name Lambda bundle changed after the plan: plan again"
+  done < "$1"
+}

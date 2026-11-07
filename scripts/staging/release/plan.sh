@@ -7,6 +7,7 @@
 #   CLAIM_OWNER=NAME scripts/staging/release/plan.sh ASSESSMENT-ON|ASSESSMENT-OFF COMMIT OPERATION_ID  same image, exact synthetic assessment flag delta only
 # Reads only current.tfvars (and, for IMAGE, the file made from it); the clone must be at exactly COMMIT. Each plan is checked by release-check.mjs
 # and recorded next to itself (state serial and lineage, clone HEAD, var file and plan sha256). Read the plan text, then apply.sh with its sha256.
+# Every plan first builds each Lambda bundle in the clone (lib.sh build_lambdas) and records the zips it made (PLAN.bundles).
 set -euo pipefail
 umask 077
 # shellcheck source=scripts/staging/release/lib.sh
@@ -34,6 +35,9 @@ claim_check
 gate_quiet
 gate_identity
 gate_clone "$COMMIT"
+build_lambdas "$OUT/$T-build.txt"
+gate_clone "$COMMIT" # a build that edits a tracked file is refused
+echo "built: ${LAMBDAS[*]:-(no Lambdas)}"
 OLD=$(running_image)
 if [ "$MODE" = INFRA ] || flag_mode "$MODE"; then NEW=$OLD; else
   NEW=$(cat "$OUT/new_image.txt" 2>/dev/null) || die "no $OUT/new_image.txt: the image step did not finish"
@@ -84,5 +88,6 @@ grep -E '^Plan: ' "$OUT/$T.txt" || die "no Plan: line"
 node "$HERE/release-check.mjs" "$MODE" "$OUT/$T.plan.json" "$OLD" "$NEW" || die "release check refused the $MODE plan: read why above"
 PLANSHA=$(sha "$PLAN")
 printf '%s\n' "$STATE" | node "$HERE/plan-record.mjs" write "$PLAN.meta.json" "$MODE" "$COMMIT" "$VARSHA" "$PLANSHA" ${SOURCE_ARGS[@]+"${SOURCE_ARGS[@]}"} || die "could not write the plan record"
+bundle_record "$PLAN.bundles"
 echo "plan sha256: $PLANSHA"
 echo "NOT APPLIED. Read $OUT/$T.txt line by line, then: CLAIM_OWNER=$CLAIM_OWNER $HERE/apply.sh $MODE $COMMIT $PLANSHA${OPERATION:+ $OPERATION}"

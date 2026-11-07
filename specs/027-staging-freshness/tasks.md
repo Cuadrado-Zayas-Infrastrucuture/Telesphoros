@@ -41,6 +41,9 @@
   from `stack.env` (`API_BASE_URL`, `APP_URL`, which the founder adds before the next release), the backup's serial floor from the IMAGE
   plan's record; the frontend publishes only after a verification newer than the last apply. An open medication fence is refused, not
   verified (the fence checker judges a closed fence only).
+- [ ] T022 (added 2026-11-07, before PR 4 adds a second Lambda): every plan builds each `infrastructure/lambda/*` in the clone (frozen
+  install, emptied `dist`, umask 022, files 644) and records the zips; `apply.sh` refuses a zip changed since the plan. A guard that every
+  function is such a bundle with `source_code_hash`; a rehearsal against the real archive provider (mode in the hash, file times not).
 
 ## PR 4: the daily check
 
