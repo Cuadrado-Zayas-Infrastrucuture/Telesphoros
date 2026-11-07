@@ -4,6 +4,7 @@
 #   STAGING_ACCOUNT_ID   12 digits                       BACKEND_CLONE   the founder's backend clone (on main)
 #   TERRAFORM            the pinned 1.16.5 binary         TF_DATA_DIR     the backend's data directory
 #   STAGING_ROLE_ARN_PART  optional; the caller's ARN must contain it (for example the role name)
+#   API_BASE_URL, APP_URL  https://<host>, no path: the API and the web app (verify.sh and frontend.sh only)
 # The canonical var file is $PRIVATE/staging/current.tfvars, with its sha256 beside it; it is the only var file a release reads.
 # Each release writes its outputs to $PRIVATE/releases/<commit>/, never copies of these scripts.
 
@@ -26,7 +27,10 @@ load_stack() {
   export TF_DATA_DIR AWS_REGION="${AWS_REGION:-us-east-2}" AWS_PROFILE="${AWS_PROFILE:-telesphoros}"
   C="$BACKEND_CLONE"
   TFDIR="$C/infrastructure/terraform"
-  "$TERRAFORM" version | head -1 | grep -qx 'Terraform v1.16.5' || die "TERRAFORM is not 1.16.5"
+  # The whole output first: under pipefail, `version | head -1` fails whenever Terraform is still writing after head has stopped reading.
+  local tfv
+  tfv="$("$TERRAFORM" version </dev/null)" || die "TERRAFORM version failed"
+  [ "${tfv%%$'\n'*}" = 'Terraform v1.16.5' ] || die "TERRAFORM is not 1.16.5"
 }
 
 sha() { shasum -a 256 "$1" | cut -c1-64; }
@@ -76,3 +80,16 @@ flag_folder() { case "$1" in FENCE-CLOSE|FENCE-OPEN) echo fences ;; ASSESSMENT-O
 flag_needs_release() { [ "$1" = FENCE-OPEN ] || [ "$1" = ASSESSMENT-ON ]; }
 
 state_identity() { "$TERRAFORM" -chdir="$TFDIR" state pull </dev/null 2>/dev/null | node "$HERE/plan-record.mjs" state; }
+
+# The steps around the plans (spec 027, PR 3b): the release's folder, one run of a step at a time, and one Terraform output.
+release_folder() {
+  [[ "${1:-}" =~ ^[0-9a-f]{40}$ ]] || die "COMMIT must be a full 40-character commit id"
+  OUT="$PRIVATE/releases/$1"
+}
+step_lock() { # the lock goes when the script exits
+  LOCK="$OUT/.$1.lock"
+  mkdir "$LOCK" 2>/dev/null || die "another run of this step holds $LOCK"
+  trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
+}
+tf_out() { "$TERRAFORM" -chdir="$TFDIR" output -raw "$1" </dev/null; }
+gate_node() { [ "$(node --version)" = "v$(cat "$C/.nvmrc")" ] || die "node $(cat "$C/.nvmrc") is not first on PATH"; }
