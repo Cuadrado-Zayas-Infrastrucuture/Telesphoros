@@ -21,7 +21,8 @@
     "db:restore": "node dist/db/cli.js restore",
     "knowledge:verify": "node dist/services/knowledge/cli.js verify",
     "knowledge:hash": "node dist/services/knowledge/cli.js hash",
-    "knowledge:locate": "node dist/services/knowledge/cli.js locate"
+    "knowledge:locate": "node dist/services/knowledge/cli.js locate",
+    "knowledge:sign": "node dist/services/knowledge/cli.js sign"
   },
   "dependencies": {
     "@aws-sdk/client-kms": "^3.1153.0",

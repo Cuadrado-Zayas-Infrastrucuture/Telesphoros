@@ -4,7 +4,7 @@ import { CPIC_STRENGTHS, type DrugResult, type EvaluationResult, evaluationResul
 import { RECOMMENDATION_STRENGTHS } from '@telesphoros/shared-types';
 import { loadKnowledge } from '../knowledge/knowledge-loader';
 import type { KnowledgeSet } from '../knowledge/knowledge-set';
-import { cleanupTempDirs, copyOf, readJson, SYNTHETIC_DIR, tempDir, writeJson } from '../../../test/helpers/knowledge';
+import { cleanupTempDirs, copyOf, readJson, reviewedCopyOf, SYNTHETIC_DIR, tempDir, TEST_SIGNER_KEYS, writeJson } from '../../../test/helpers/knowledge';
 import { EngineInputError, evaluate } from './recommendation-engine';
 
 let knowledge: KnowledgeSet;
@@ -275,5 +275,23 @@ describe('evaluate: standard identifiers on results (spec 033 K2-6)', () => {
     const results = run(await loadKnowledge({ directory: dir, mode: 'non-production' }), 'Synthetic Normal', 'Synthetic Low');
     expect('identifiers' in byDrug(results, 'drugz')).toBe(false); // reads GENEB
     expect(byDrug(results, 'drugq')).toMatchObject({ identifiers: { rxcui: 'syn-rxcui-drugq' } }); // reads GENEA only
+  });
+});
+
+describe('evaluate: the signers of the cited file are named in the citation (audit CLIN-01)', () => {
+  const drugx = (set: KnowledgeSet) =>
+    evaluate(set, [canonical('GENEA', 'Synthetic Normal')], { drugs: ['drugx'] }).results.find((r) => (r.genes as readonly string[]).includes('GENEA'))!;
+
+  it('names the signers whose signatures the production load verified', async () => {
+    const signed = await loadKnowledge({ directory: await reviewedCopyOf(SYNTHETIC_DIR), mode: 'production', signerKeys: TEST_SIGNER_KEYS });
+    const result = drugx(signed);
+    expect(result.outcome).toBe('shown');
+    expect(result.outcome === 'shown' && result.citation.signedBy).toEqual(['test-signer-a', 'test-signer-b']);
+    expect(evaluationResultSchema.safeParse(evaluate(signed, [canonical('GENEA', 'Synthetic Normal')])).success).toBe(true);
+  });
+
+  it('adds nothing outside production, so every existing citation keeps its exact shape', () => {
+    const result = drugx(knowledge);
+    expect(result.outcome === 'shown' && 'signedBy' in result.citation).toBe(false);
   });
 });

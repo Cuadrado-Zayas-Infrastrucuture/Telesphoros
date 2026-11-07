@@ -82,6 +82,22 @@ export type Provenance = z.infer<typeof provenanceSchema>;
  * (everything except this block). Change the content afterwards and the hash no longer matches, so
  * the file is rejected until someone reviews it again.
  */
+/** The one signature algorithm: ECDSA over NIST P-256 with SHA-256, the signature DER-encoded (what a KMS `ECC_NIST_P256` key produces). */
+export const KNOWLEDGE_SIGNATURE_ALGORITHM = 'ecdsa-p256-sha256';
+/**
+ * Schema 1.3: a signer's signature over the file's id and `contentSha256` (the message is built in the backend's signatures module). It sits in
+ * the review block, outside the hash it signs. Which signers count, and with which public keys, is configured where the loader runs, never here.
+ */
+const signatureSchema = z.strictObject({
+  keyId: z.string().regex(/^[a-z0-9][a-z0-9-]{1,62}$/, 'A short lower-case key id: letters, digits and dashes.'),
+  algorithm: z.literal(KNOWLEDGE_SIGNATURE_ALGORITHM),
+  signature: z
+    .string()
+    .max(200)
+    .regex(/^[A-Za-z0-9+/]+={0,2}$/, 'Base64.'),
+});
+export type KnowledgeSignature = z.infer<typeof signatureSchema>;
+
 const reviewSchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('unreviewed') }),
   z.strictObject({
@@ -89,6 +105,7 @@ const reviewSchema = z.discriminatedUnion('status', [
     reviewedBy: label(100),
     reviewedAt: z.iso.date(),
     contentSha256: sha256Hex,
+    signatures: z.array(signatureSchema).min(1).max(4).optional(),
   }),
 ]);
 export type Review = z.infer<typeof reviewSchema>;
@@ -110,6 +127,13 @@ function addIssue(ctx: z.RefinementCtx, path: (string | number)[], message: stri
  * Real content that carries a reviewer's signature must say what its license allows. Drafts and synthetic
  * files may leave either "unknown", because nothing downstream redistributes them.
  */
+/** Signatures are a schema 1.3 field; a 1.2 file keeps exactly the review block it had. */
+function refuseSignaturesBefore13(file: { schemaVersion: string; review: { status: string; signatures?: unknown } }, ctx: z.RefinementCtx): void {
+  if (file.schemaVersion !== '1.3' && file.review.status === 'reviewed' && file.review.signatures !== undefined) {
+    addIssue(ctx, ['review', 'signatures'], 'Not part of schema 1.2: declare schemaVersion "1.3" to use it.');
+  }
+}
+
 function requireStatedLicense(file: { synthetic: boolean; provenance: { license: string; redistribution: string }; review: { status: string } }, ctx: z.RefinementCtx): void {
   if (file.synthetic || file.review.status !== 'reviewed') return;
   if (file.provenance.license === 'unknown') addIssue(ctx, ['provenance', 'license'], 'A reviewed file must state its license (not "unknown").');
@@ -209,6 +233,7 @@ export const geneMapFileSchema = z
   })
   .superRefine((file, ctx) => {
     requireStatedLicense(file, ctx);
+    refuseSignaturesBefore13(file, ctx);
     requireVersionedFields(
       file,
       [
@@ -350,6 +375,7 @@ export const guidelineFileSchema = z
   })
   .superRefine((file, ctx) => {
     requireStatedLicense(file, ctx);
+    refuseSignaturesBefore13(file, ctx);
     requireVersionedFields(
       file,
       [

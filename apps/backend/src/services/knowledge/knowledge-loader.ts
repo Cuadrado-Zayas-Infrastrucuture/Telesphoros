@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { type GeneMapFile, type GuidelineFile, knowledgeFileSchema, type KnowledgeFile } from '@telesphoros/cpic-schema';
 import { contentSha256, fullSha256, knowledgeSetId } from './content-hash';
 import { genesKey, type KnowledgeFileInfo, KnowledgeSet } from './knowledge-set';
+import { checkSignatures, type SignerKeys } from './signatures';
 
 export type KnowledgeMode = 'production' | 'non-production';
 
@@ -14,6 +15,8 @@ export interface LoadKnowledgeOptions {
    * "production" refuses unreviewed and synthetic content; the caller derives it from NODE_ENV.
    */
   mode: KnowledgeMode;
+  /** The public keys of the signers whose signatures count (KNOWLEDGE_SIGNER_KEYS). Checked under the production rules only; none by default. */
+  signerKeys?: SignerKeys;
 }
 
 /** Thrown when the knowledge directory is not safe to use. `problems` lists EVERY problem found, not only the first. */
@@ -75,6 +78,14 @@ export async function loadKnowledge(options: LoadKnowledgeOptions): Promise<Know
       // Spec 033 K2-4: a 1.2 file has no origin, which counts as "unknown". Synthetic and unreviewed files are refused above anyway.
       if (file.schemaVersion === '1.2') problems.push(`${path}: schema 1.2 states no origin; production needs schema 1.3 with a stated origin.`);
     }
+    // Two signers, with keys configured outside the repository, stand behind every real reviewed file (audit CLIN-01). A synthetic, unreviewed or
+    // schema 1.2 file is refused above, so its signatures are not checked as well.
+    let signedBy: string[] | undefined;
+    if (strict && !file.synthetic && file.review.status === 'reviewed' && file.schemaVersion === '1.3') {
+      const checked = checkSignatures(path, file, hash, options.signerKeys ?? new Map());
+      problems.push(...checked.problems);
+      signedBy = checked.signedBy;
+    }
 
     if (file.kind === 'gene-phenotype-map') {
       if (geneMaps.has(file.gene)) problems.push(`${path}: gene ${file.gene} already has a phenotype map.`);
@@ -93,6 +104,7 @@ export async function loadKnowledge(options: LoadKnowledgeOptions): Promise<Know
       synthetic: file.synthetic,
       reviewStatus: file.review.status,
       contentSha256: hash,
+      ...(signedBy ? { signedBy } : {}),
     });
   }
 

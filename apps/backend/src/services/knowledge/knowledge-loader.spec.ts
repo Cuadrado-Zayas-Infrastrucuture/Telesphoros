@@ -1,15 +1,29 @@
 import { mkdir, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { KnowledgeLoadError, loadKnowledge } from './knowledge-loader';
-import { cleanupTempDirs, copyOf, readJson, REAL_KNOWLEDGE_DIR, reviewedCopyOf, SYNTHETIC_DIR, tempDir, writeJson } from '../../../test/helpers/knowledge';
+import {
+  cleanupTempDirs,
+  copyOf,
+  readJson,
+  REAL_KNOWLEDGE_DIR,
+  reviewedCopyOf,
+  signatureBy,
+  SYNTHETIC_DIR,
+  tempDir,
+  TEST_SIGNER_KEYS,
+  TEST_SIGNERS,
+  UNLISTED_SIGNER,
+  writeJson,
+} from '../../../test/helpers/knowledge';
+import type { SignerKeys } from './signatures';
 import { contentSha256 } from './content-hash';
 import type { GuidelineFile } from '@telesphoros/cpic-schema';
 
 afterAll(cleanupTempDirs);
 
-async function problemsOf(directory: string, mode: 'production' | 'non-production' = 'non-production'): Promise<string[]> {
+async function problemsOf(directory: string, mode: 'production' | 'non-production' = 'non-production', signerKeys: SignerKeys = TEST_SIGNER_KEYS): Promise<string[]> {
   try {
-    await loadKnowledge({ directory, mode });
+    await loadKnowledge({ directory, mode, signerKeys });
   } catch (error) {
     if (error instanceof KnowledgeLoadError) return [...error.problems];
     throw error;
@@ -100,7 +114,7 @@ describe('loadKnowledge: production rules', () => {
 
   it('accepts properly signed-off, non-synthetic content', async () => {
     const dir = await reviewedCopyOf(SYNTHETIC_DIR);
-    const set = await loadKnowledge({ directory: dir, mode: 'production' });
+    const set = await loadKnowledge({ directory: dir, mode: 'production', signerKeys: TEST_SIGNER_KEYS });
     expect(set.mode).toBe('production');
     expect(set.allReviewed).toBe(true);
     expect(set.containsSynthetic).toBe(false);
@@ -124,7 +138,7 @@ describe('loadKnowledge: production rules', () => {
       file.provenance.license = 'cc-by-sa-4.0';
       file.provenance.redistribution = 'restricted';
     });
-    await expect(loadKnowledge({ directory: dir, mode: 'production' })).resolves.toBeDefined();
+    await expect(loadKnowledge({ directory: dir, mode: 'production', signerKeys: TEST_SIGNER_KEYS })).resolves.toBeDefined();
   });
 
   it('rejects a reviewed file whose content was edited after the sign-off, in every mode', async () => {
@@ -145,7 +159,7 @@ describe('loadKnowledge: production rules', () => {
     const file = (await readJson(path)) as unknown as Record<string, unknown>;
     const reversed = Object.fromEntries(Object.entries(file).reverse());
     await writeFile(path, JSON.stringify(reversed));
-    await expect(loadKnowledge({ directory: dir, mode: 'production' })).resolves.toBeDefined();
+    await expect(loadKnowledge({ directory: dir, mode: 'production', signerKeys: TEST_SIGNER_KEYS })).resolves.toBeDefined();
   });
 
   it('the sign-off hash the helper writes is exactly the content hash the loader checks', async () => {
@@ -296,7 +310,7 @@ describe('loadKnowledge: an empty knowledge directory', () => {
     const dir = await tempDir();
     await mkdir(join(dir, 'guidelines'));
     await writeFile(join(dir, 'guidelines/.gitkeep'), '');
-    const set = await loadKnowledge({ directory: dir, mode: 'production' });
+    const set = await loadKnowledge({ directory: dir, mode: 'production', signerKeys: TEST_SIGNER_KEYS });
     expect(set.isEmpty).toBe(true);
     expect(set.drugs()).toEqual([]);
   });
@@ -367,5 +381,58 @@ describe('loadKnowledge: a combined table replacing narrower ones (supersedes)',
       await writeJson(join(dir, 'guidelines/drugv-reordered.json'), { ...combined, id: 'drugv-reordered', genes: ['GENEE', 'GENEA'], supersedes: [] });
     });
     expect(text).toContain('there is already a guideline for drugv and GENEE + GENEA');
+  });
+});
+
+describe('loadKnowledge: two signers sign real content, under the production rules (audit CLIN-01)', () => {
+  const [a, b] = TEST_SIGNERS as [(typeof TEST_SIGNERS)[number], (typeof TEST_SIGNERS)[number]];
+  const path = 'guidelines/drugx-genea.json';
+  const only = (problems: string[]) => problems.filter((p) => p.startsWith(path));
+
+  it('loads a file signed by two configured signers, and records who signed it', async () => {
+    const set = await loadKnowledge({ directory: await reviewedCopyOf(SYNTHETIC_DIR), mode: 'production', signerKeys: TEST_SIGNER_KEYS });
+    expect(set.files.find((f) => f.id === 'drugx-genea')?.signedBy).toEqual(['test-signer-a', 'test-signer-b']);
+  });
+
+  it('refuses an edited cell whose hash and reviewer were rewritten: the signatures were made over the old content', async () => {
+    const dir = await reviewedCopyOf(SYNTHETIC_DIR);
+    const file = (await readJson(join(dir, path))) as GuidelineFile;
+    file.recommendations[0]!.recommendationText = 'Edited after the sign-off.';
+    if (file.review.status === 'reviewed') file.review = { ...file.review, reviewedBy: 'Anyone At All', contentSha256: contentSha256(file) };
+    await writeJson(join(dir, path), file);
+    expect(only(await problemsOf(dir, 'production'))).toEqual([
+      `${path}: the signature by "test-signer-a" does not match this file's content.`,
+      `${path}: the signature by "test-signer-b" does not match this file's content.`,
+    ]);
+  });
+
+  it('refuses one signer, the same signer twice, and a signer that is not configured', async () => {
+    const once = await reviewedCopyOf(SYNTHETIC_DIR, undefined, { signers: [a] });
+    expect(only(await problemsOf(once, 'production'))).toEqual([`${path}: needs valid signatures from 2 distinct signers; has 1.`]);
+    const twice = await reviewedCopyOf(SYNTHETIC_DIR, undefined, { signers: [a, a] });
+    expect(only(await problemsOf(twice, 'production'))).toEqual([`${path}: "test-signer-a" signed more than once.`]);
+    const stranger = await reviewedCopyOf(SYNTHETIC_DIR, undefined, { signers: [a, UNLISTED_SIGNER] });
+    expect(only(await problemsOf(stranger, 'production'))).toEqual([`${path}: "test-signer-x" is not a configured signer.`]);
+  });
+
+  it("refuses a signature moved from another file: it signs that file's id", async () => {
+    const dir = await reviewedCopyOf(SYNTHETIC_DIR);
+    const file = await readJson(join(dir, path));
+    if (file.review.status === 'reviewed') file.review.signatures = [signatureBy(a, 'drugw-genea', file.review.contentSha256), signatureBy(b, file.id, file.review.contentSha256)];
+    await writeJson(join(dir, path), file);
+    expect(only(await problemsOf(dir, 'production'))).toEqual([`${path}: the signature by "test-signer-a" does not match this file's content.`]);
+  });
+
+  it('refuses every signed real file when no signer keys are configured', async () => {
+    const problems = await problemsOf(await reviewedCopyOf(SYNTHETIC_DIR), 'production', new Map());
+    expect(problems).toHaveLength(11);
+    expect(problems.every((p) => p.endsWith('no signer keys are configured (KNOWLEDGE_SIGNER_KEYS), so its signatures cannot be checked.'))).toBe(true);
+  });
+
+  it('control: outside production signatures are not required, and none are recorded as checked', async () => {
+    const dir = await reviewedCopyOf(SYNTHETIC_DIR, undefined, { signers: [] });
+    expect(await problemsOf(dir, 'non-production', new Map())).toEqual([]);
+    const set = await loadKnowledge({ directory: await reviewedCopyOf(SYNTHETIC_DIR), mode: 'non-production' });
+    expect(set.files.every((f) => f.signedBy === undefined)).toBe(true);
   });
 });

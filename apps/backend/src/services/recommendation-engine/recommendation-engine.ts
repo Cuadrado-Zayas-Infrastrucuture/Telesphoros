@@ -116,13 +116,16 @@ function resolveOne(knowledge: KnowledgeSet, input: GeneInput): GeneStateResult 
 
 const evidence = (state: GeneStateResult): GeneEvidence => ({ gene: state.gene, state: state.state, phenotype: state.phenotype, reasonCode: state.reasonCode });
 
-function citationFor(guideline: GuidelineFile, row: RecommendationRow): Citation {
+function citationFor(knowledge: KnowledgeSet, guideline: GuidelineFile, row: RecommendationRow): Citation {
+  // Only signers the production load verified; nothing is added otherwise, so an unsigned citation keeps its exact shape.
+  const signedBy = knowledge.files.find((file) => file.id === guideline.id)?.signedBy;
   return {
     guidelineId: guideline.id,
     guidelineVersion: guideline.guidelineVersion,
     sourceUrl: guideline.provenance.sourceUrl,
     locator: { table: row.locator.table, row: row.locator.row, column: row.locator.column ?? null },
     verification: row.verification.state,
+    ...(signedBy && signedBy.length > 0 ? { signedBy: [...signedBy] } : {}),
   };
 }
 
@@ -171,7 +174,7 @@ function evaluateGuideline(knowledge: KnowledgeSet, guideline: GuidelineFile, st
     };
   }
 
-  const citation = citationFor(guideline, row);
+  const citation = citationFor(knowledge, guideline, row);
   const ids = identifiersFor(knowledge, guideline, row);
   // The wording of a cell that has not been verified is never exposed, not even to a reviewer-facing field.
   if (row.verification.state === 'unverified') return { outcome: 'held', drug, genes, geneStates, reasonCode: 'out-of-review-scope', citation, ...ids };

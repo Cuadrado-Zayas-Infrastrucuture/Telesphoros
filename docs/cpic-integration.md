@@ -27,14 +27,14 @@ there is `synthetic: true`.
 
 Every file starts with the same envelope:
 
-| Field | Meaning |
-| --- | --- |
-| `schemaVersion` | `"1.3"` (current) or `"1.2"`. A 1.2 file parses exactly as before, so its content hash is unchanged; production refuses it (below). |
-| `id` | lower-case letters, digits, dashes; equals the file name |
-| `kind` | `gene-phenotype-map` or `guideline` |
-| `synthetic` | `true` for invented test content. Refused in production; can never be signed off |
-| `provenance` | `source`, `sourceUrl` (https), `retrievedAt` (date), `sourceVersion`, `license` (`cc0-1.0`, `cc-by-4.0`, `cc-by-sa-4.0`, `proprietary` or `unknown`) and `redistribution` (`allowed`, `restricted` or `unknown`). A **reviewed, non-synthetic** file may not say `unknown` for either: the reviewer states what the source's license allows before signing (`knowledge:hash` refuses to print a hash until then). Drafts and synthetic files may. The fields record what the reviewer read; they do not grant a right. |
-| `review` | `{status: "unreviewed"}` or `{status: "reviewed", reviewedBy, reviewedAt, contentSha256}` |
+| Field           | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schemaVersion` | `"1.3"` (current) or `"1.2"`. A 1.2 file parses exactly as before, so its content hash is unchanged; production refuses it (below).                                                                                                                                                                                                                                                                                                                                                                                    |
+| `id`            | lower-case letters, digits, dashes; equals the file name                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `kind`          | `gene-phenotype-map` or `guideline`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `synthetic`     | `true` for invented test content. Refused in production; can never be signed off                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `provenance`    | `source`, `sourceUrl` (https), `retrievedAt` (date), `sourceVersion`, `license` (`cc0-1.0`, `cc-by-4.0`, `cc-by-sa-4.0`, `proprietary` or `unknown`) and `redistribution` (`allowed`, `restricted` or `unknown`). A **reviewed, non-synthetic** file may not say `unknown` for either: the reviewer states what the source's license allows before signing (`knowledge:hash` refuses to print a hash until then). Drafts and synthetic files may. The fields record what the reviewer read; they do not grant a right. |
+| `review`        | `{status: "unreviewed"}` or `{status: "reviewed", reviewedBy, reviewedAt, contentSha256}`, plus (schema 1.3) `signatures: [{keyId, algorithm: "ecdsa-p256-sha256", signature}]`                                                                                                                                                                                                                                                                                                                                        |
 
 **Gene map** (`kind: gene-phenotype-map`): `gene` and `phenotypes` (every canonical term the gene can have;
 reported phenotypes and guideline cells may only use these). To accept a **diplotype** as input, also give
@@ -65,12 +65,12 @@ Only `verified` cells can ever be shown. The five outcomes, the reason codes and
 Schema 1.3 ([spec 033](../specs/033-knowledge-identifiers/spec.md)) adds standard identifiers and says where content came from. Each field is
 required on a 1.3 file and refused on a 1.2 file.
 
-| Field | Where | Meaning |
-| --- | --- | --- |
-| `rxcui` | guideline | The drug's RxNorm ingredient id. One per file, because a file covers one drug. |
-| `origin` | every guideline cell, and every gene map | `cpic`, `pharmgkb`, `pharmvar` or `unknown`: which source's content this is, so the terms that apply to each cell are recorded with it. |
-| `hgncId` | gene map | The gene's HGNC id, e.g. `HGNC:` followed by digits. |
-| `pharmvarVersion` | gene map that lists `alleles` | The PharmVar release the alleles were defined in. Absent on a phenotype-only gene. |
+| Field             | Where                                    | Meaning                                                                                                                                 |
+| ----------------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `rxcui`           | guideline                                | The drug's RxNorm ingredient id. One per file, because a file covers one drug.                                                          |
+| `origin`          | every guideline cell, and every gene map | `cpic`, `pharmgkb`, `pharmvar` or `unknown`: which source's content this is, so the terms that apply to each cell are recorded with it. |
+| `hgncId`          | gene map                                 | The gene's HGNC id, e.g. `HGNC:` followed by digits.                                                                                    |
+| `pharmvarVersion` | gene map that lists `alleles`            | The PharmVar release the alleles were defined in. Absent on a phenotype-only gene.                                                      |
 
 - **Identifier forms.** A non-synthetic file uses the real forms (an RxCUI is digits; `HGNC:` plus digits; a dotted release such as `6.2.1`).
   A synthetic file must use invented forms (`syn-rxcui-…`, `syn-hgnc-…`, `syn-pharmvar-…`), and a real-form identifier in a synthetic file is
@@ -94,6 +94,16 @@ Schema 1.1 limits (stated so nobody assumes more): **at most four genes per guid
 The hash binds the signature to the content. **Edit the file afterwards and the hash no longer matches: the
 loader rejects it, in every environment**, until someone reviews it again.
 
+5. **Two signers sign it (audit CLIN-01).** The hash alone proves nothing about who reviewed: anyone who edits a cell can recompute it and write
+   any name in `reviewedBy`. So each of two signers runs
+   `pnpm --filter @telesphoros/backend knowledge:sign -- <file> --key-id <id> --kms-key <arn>` with their own KMS key (key spec
+   `ECC_NIST_P256`, usage `SIGN_VERIFY`). It signs the text `telesphoros-knowledge/1`, the file id and the content hash, one per line, checks
+   the result against the key's public key, and prints an entry to add to `review.signatures`. It writes nothing. The signatures sit inside
+   the `review` block, outside the hash they sign.
+
+Which signers count is not in the repository: `KNOWLEDGE_SIGNER_KEYS` (a JSON object of key id to P-256 SPKI PEM public key) is set where the
+process runs, so write access to the files is not enough to sign them.
+
 ## What the loader enforces (`services/knowledge/knowledge-loader.ts`)
 
 - Everything above, plus: unique ids; one gene map per gene; one guideline per drug and set of genes (however the
@@ -101,7 +111,10 @@ loader rejects it, in every environment**, until someone reviews it again.
 - `supersedes` is checked: the replaced guidelines must exist, be for the same drug, cover a smaller subset of the
   genes, not themselves supersede others (no chains), and be replaced by only one table.
 - **Production** (`mode: "production"`, and also any mode that is not exactly `"non-production"`):
-  refuses `synthetic` files, anything not `reviewed`, and any schema 1.2 file (it states no origin). All problems are listed together.
+  refuses `synthetic` files, anything not `reviewed`, and any schema 1.2 file (it states no origin). A reviewed 1.3 file needs valid
+  signatures from two distinct signers in `KNOWLEDGE_SIGNER_KEYS`; an unknown signer, the same signer twice, a signature over other
+  content or another file's id, or no configured keys are each refused. All problems are listed together.
+- The signers that verified are kept with the file, and every citation from it carries them (`citation.signedBy`), inside the ledger hash.
 - A test (`knowledge-loader.spec.ts`) loads the real `knowledge/cpic/` under the production rules, so
   committing unreviewed, edited or synthetic content there fails the build.
 - `pnpm --filter @telesphoros/backend knowledge:verify -- --production` runs the same check by hand.
