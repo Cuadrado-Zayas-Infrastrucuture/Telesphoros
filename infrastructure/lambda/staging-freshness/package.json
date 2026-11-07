@@ -1,0 +1,22 @@
+{
+  "name": "@telesphoros/staging-freshness",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Daily check that synthetic staging still matches docs/ops/staging-expected.json, and that nothing merged is waiting unapplied. Emails the alarm topic when it does not (spec 027).",
+  "type": "module",
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-cloudfront": "^3.1153.0",
+    "@aws-sdk/client-cloudwatch": "^3.1153.0",
+    "@aws-sdk/client-ecs": "^3.1153.0",
+    "@aws-sdk/client-sns": "^3.1153.0",
+    "@types/node": "^26.6.5",
+    "tsup": "^9.0.0",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.5"
+  }
+}

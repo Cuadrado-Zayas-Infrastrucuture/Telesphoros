@@ -29,12 +29,14 @@ resource "aws_kms_alias" "backup" {
 }
 
 # ------------------------------------------------------------------------------------------------
-# The logs AWS services write for us: the database's exported logs (database.tf) and the password-change notifier's (lambda.tf). Their own key, not the
-# data key and not the audit key, usable only by the log service and only for these groups (audit finding INF-12).
+# The logs AWS services write for us: the database's exported logs (database.tf), the password-change notifier's (lambda.tf) and the staging
+# freshness check's (freshness.tf). Their own key, not the data key and not the audit key, usable only by the log service and only for these
+# groups (audit finding INF-12).
 # ------------------------------------------------------------------------------------------------
 locals {
   password_notifier_log_group = "/aws/lambda/${local.name}-password-notifier"
-  service_log_groups          = concat([for log in local.rds_log_exports : "/aws/rds/instance/${local.name}/${log}"], [local.password_notifier_log_group])
+  freshness_log_group         = "/aws/lambda/${local.name}-staging-freshness"
+  service_log_groups          = concat([for log in local.rds_log_exports : "/aws/rds/instance/${local.name}/${log}"], [local.password_notifier_log_group, local.freshness_log_group])
 }
 
 data "aws_iam_policy_document" "service_logs_key" {
