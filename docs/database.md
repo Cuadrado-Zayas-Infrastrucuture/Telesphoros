@@ -187,6 +187,12 @@ signed business associate agreement first. Until then backups contain synthetic 
 | + the whole API suite running **on PostgreSQL** | same | `... test:db` |
 | + the whole API suite uploading over the S3 protocol | `TEST_S3_ENDPOINT` + `TEST_OBJECT_STORAGE=s3` | `TEST_STORAGE=postgres TEST_OBJECT_STORAGE=s3 ... test` |
 
+**On macOS, set a locale first.** PostgreSQL 16 started from a shell with no `LANG` and no `LC_ALL`, as some agent, cron and launchd
+shells are, stops with `FATAL: postmaster became multithreaded during startup` (reproduced 2026-11-04 with Homebrew 16.15; either variable
+fixes it). `dev-postgres.sh` sets `LC_ALL` for its own server, but the recovery suites (`independent-recovery`, `application-recovery`,
+`recovery-cli`) start another server through `test/helpers/recovery-target.ts`, which inherits your shell's: `export LC_ALL=en_US.UTF-8` before
+the database tier.
+
 The background worker has its own suites (`pnpm --filter @telesphoros/worker test`; with `TEST_DATABASE_URL` set they also run the queue against PostgreSQL and start real worker processes: a claim race, a killed worker, a drain). CI runs them in the same job and fails if they are skipped.
 
 A plain `test` prints which tiers it skipped. **CI runs all three tiers** (the `database-and-storage` job in

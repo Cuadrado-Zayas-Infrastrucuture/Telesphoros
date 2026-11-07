@@ -29,6 +29,16 @@
 - [ ] T010 Founder: create `~/telesphoros-private/staging/current.tfvars` from `release-6c4714de/release.tfvars`, then run
   `staging-status` once. Its table is the first live read of the facts file.
 
+## PR 3b: the steps around the plans (added 2026-11-06, after the 661512c9 release ran them from re-pinned copies)
+
+- [ ] T019 Test first: `migration-pending.mjs` (the migrations after `newestMigration` on `origin/main`; exactly those on a first run, a
+  tail only after an interrupted `migrate-up`), and `image.sh` and `migrate.sh` against stand-ins, one refusal per gate, each gate broken
+  once on purpose and seen red.
+- [ ] T020 3b-1: `image.sh` and `migrate.sh` with the gates of the 661512c9 copies unchanged in strength, nothing release-specific in them
+  (the reason for an unsigned image is a file per release), and the Terraform version read without a pipe in `lib.sh` and
+  `staging-status.sh`. shellcheck; full local loop; a PR when the founder says push.
+- [ ] T021 3b-2: verification, the frontend and the state backup, the same way.
+
 ## PR 4: the daily check
 
 - [ ] T011 Read the audit key policy (R1), read-only.

@@ -1,6 +1,6 @@
 # Product capabilities and delivery state — 2026-10-14
 
-Source baseline: main `4400efae920f4cefa918e9b3c8862b3e5e6af9e9`, after merged PRs [#100](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/100) and [#101](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/101). This is a source/build matrix, not hosted acceptance or clinical approval.
+Source baseline: main `4400efae920f4cefa918e9b3c8862b3e5e6af9e9`, after merged PRs [#100](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/100) and [#101](https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros-Remastered/pull/101). This is a source/build matrix, not hosted acceptance or clinical approval. One row was added later and is dated; the rest of the page is the 2026-10-14 baseline. What runs in AWS: [ops/environments.md](ops/environments.md).
 
 | Build / runtime | Upload | Find / download | Review and interpretation |
 | --- | --- | --- | --- |
@@ -9,6 +9,7 @@ Source baseline: main `4400efae920f4cefa918e9b3c8862b3e5e6af9e9`, after merged P
 | Vite development server / local review launcher | Product upload plus development-only local upload tool | Development review can retrieve accepted source evidence through existing authorized routes | `/local-interpretation`, `/local-review`, `/local-operations` are development-only protected routes; their operations retain server role and independent-review gates. The review launcher uses only synthetic fixtures |
 | Server with `LAB_REPORT_PIPELINE=disabled` (default) | Lab-PDF declaration/send/resume refused; storage-only owned rehearsal has its explicit nonclinical scope | Nonclinical storage permissions and exact-version access remain independently enforced | Pipeline routes refuse processing; a frontend build flag cannot override this |
 | Server with pipeline enabled | Synthetic non-production PostgreSQL integration only; recorded-text runner and reviewed fixture boundaries remain | Patient/file identity, permissions and pipeline gates still apply | Production mode and memory-store pipeline enablement are refused; no production PDF extraction or prescribing approval follows |
+| Server with `SYNTHETIC_ASSESSMENT=enabled` and a frontend built with `VITE_SYNTHETIC_ASSESSMENT=true` (added 2026-11-04, spec 032 S3; synthetic staging only) | Structured JSON through the same intake | Evaluation reads only (`GET /evaluations`, `GET /evaluations/:id`) | Independent review of the patient link and each finding, then `POST /reports/:id/structured-assessment` against synthetic knowledge, shown labelled synthetic and not approved for clinical use. Refused beside the pipeline and in a disposable local run; Terraform allows it only in the synthetic profile. Clinician decisions stay off. [Architecture](architecture.md#the-synthetic-assessment-synthetic-staging-only-spec-032-s3) |
 
 The browser test build uses the same protected product routes at mobile and desktop widths. A flag that exposes a choice does not establish that the selected API/runtime accepts it. Verify upload → find → download as one journey for the intended build before release.
 
