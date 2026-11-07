@@ -1,4 +1,5 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { preferenceStorage } from '@/lib/storageConsent';
 import { applyTheme, deviceQuery, readThemePreference, themeFor, type ThemePreference, writeThemePreference } from '@/lib/theme';
 
 interface ThemeContextValue {
@@ -22,6 +23,8 @@ export function ThemeProvider({ pathname, children }: { pathname: string; childr
     query.addEventListener('change', update);
     return () => query.removeEventListener('change', update);
   }, []);
+
+  useEffect(() => preferenceStorage.subscribe(() => setPreferenceState(readThemePreference())), []);
 
   // Before paint, so a route change or a new choice never shows a frame in the old theme.
   useLayoutEffect(() => applyTheme(themeFor(pathname, preference, deviceDark)), [pathname, preference, deviceDark]);

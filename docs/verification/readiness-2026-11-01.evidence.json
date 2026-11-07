@@ -1,0 +1,865 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-01",
+  "timezone": "America/Puerto_Rico",
+  "synthetic": true,
+  "base": "45ce0af1f0ce5eb3bedf05e9a48e8b31cf7da1cc",
+  "branch": "fix/production-readiness",
+  "verdict": "Not ready for production/clinical launch",
+  "checks": {
+    "typecheck": {
+      "exit": 0,
+      "log": "ux-readiness-candidate-typecheck.log"
+    },
+    "lint": {
+      "exit": 0,
+      "log": "ux-readiness-candidate-lint.log"
+    },
+    "test": {
+      "exit": 0,
+      "log": "ux-readiness-candidate-test.log"
+    },
+    "build": {
+      "exit": 0,
+      "log": "ux-readiness-candidate-build.log"
+    },
+    "infra": {
+      "exit": 0,
+      "log": "ux-readiness-candidate-infra.log"
+    },
+    "ci-config": {
+      "exit": 0,
+      "log": "ux-readiness-candidate-ci-config.log"
+    },
+    "chunks": {
+      "exit": 0,
+      "log": "ux-readiness-candidate-chunks.log"
+    },
+    "demo": {
+      "exit": 0,
+      "log": "ux-readiness-candidate-demo.log"
+    },
+    "workflows": {
+      "exit": 0,
+      "log": "ux-readiness-candidate-workflows.log"
+    },
+    "knowledge": {
+      "exit": 0,
+      "log": "ux-readiness-candidate-knowledge.log"
+    }
+  },
+  "summaries": {
+    "frontend": {
+      "passed": 638,
+      "files": 57
+    },
+    "backendMemory": {
+      "passed": 2069,
+      "skipped": 436
+    },
+    "postgresS3": {
+      "passed": 3957,
+      "skipped": 1,
+      "files": 285,
+      "seconds": 665.236,
+      "scope": "Complete profile before final issuer/verifier deadline extension; affected final production paths rerun below."
+    },
+    "affectedPostgresFinal": {
+      "passed": 101,
+      "files": 12,
+      "seconds": 31.144
+    },
+    "workerPostgresS3": {
+      "passed": 247,
+      "files": 20,
+      "seconds": 96.552
+    },
+    "browser": {
+      "configPassCounts": [
+        207,
+        46,
+        2
+      ],
+      "passed": 255,
+      "skipped": 5,
+      "exit": 0
+    },
+    "infra": {
+      "passed": 215
+    },
+    "ciConfig": {
+      "passed": 217
+    },
+    "imageContract": {
+      "passed": 25,
+      "scope": "Static contract/rejection tests; no image build"
+    },
+    "launcher": {
+      "passed": 5
+    }
+  },
+  "load": {
+    "synthetic": true,
+    "workload": "two API instances in one Node process, three tenants, PostgreSQL restricted application roles; rate limiter disabled",
+    "thresholds": {
+      "errorRate": 0,
+      "p95Ms": 2000
+    },
+    "phases": [
+      {
+        "name": "baseline",
+        "concurrency": 4,
+        "requestLimit": 120,
+        "durationLimitMs": 0,
+        "requests": 120,
+        "errors": 0,
+        "errorRate": 0,
+        "seconds": 0.22248895800000013,
+        "requestsPerSecond": 539.3526091303818,
+        "p50Ms": 7,
+        "p95Ms": 10.53,
+        "p99Ms": 11.55,
+        "maxMs": 12.042625000000044,
+        "processCpuMs": 419.274,
+        "processRssBytes": 196050944
+      },
+      {
+        "name": "bounded sustained load",
+        "concurrency": 8,
+        "requestLimit": 60000,
+        "durationLimitMs": 30000,
+        "requests": 25739,
+        "errors": 0,
+        "errorRate": 0,
+        "seconds": 30.012951958,
+        "requestsPerSecond": 857.5964149084385,
+        "p50Ms": 8.43,
+        "p95Ms": 15.16,
+        "p99Ms": 22.8,
+        "maxMs": 326.4069159999999,
+        "processCpuMs": 32243.309,
+        "processRssBytes": 327647232
+      },
+      {
+        "name": "spike",
+        "concurrency": 24,
+        "requestLimit": 240,
+        "durationLimitMs": 0,
+        "requests": 240,
+        "errors": 0,
+        "errorRate": 0,
+        "seconds": 0.2807256669999988,
+        "requestsPerSecond": 854.9271698764938,
+        "p50Ms": 26.69,
+        "p95Ms": 36.71,
+        "p99Ms": 45.09,
+        "maxMs": 50.15674999999828,
+        "processCpuMs": 296.401,
+        "processRssBytes": 328007680
+      },
+      {
+        "name": "recovery",
+        "concurrency": 4,
+        "requestLimit": 120,
+        "durationLimitMs": 0,
+        "requests": 120,
+        "errors": 0,
+        "errorRate": 0,
+        "seconds": 0.1532776249999988,
+        "requestsPerSecond": 782.8931326408596,
+        "p50Ms": 5.04,
+        "p95Ms": 6.13,
+        "p99Ms": 6.38,
+        "maxMs": 6.640124999998079,
+        "processCpuMs": 147.801,
+        "processRssBytes": 328056832
+      }
+    ],
+    "duplicates": {
+      "requests": 16,
+      "successfulResponses": 16,
+      "distinctRecords": 1,
+      "storedRows": 1,
+      "changedPayloadStatus": 409
+    },
+    "passed": true
+  },
+  "loadConfigRefusals": [
+    {
+      "case": "non-PostgreSQL URL",
+      "exit": 1,
+      "expected": 1
+    },
+    {
+      "case": "remote object storage",
+      "exit": 1,
+      "expected": 1
+    }
+  ],
+  "queryPlans": {
+    "facts": {
+      "postgres": {
+        "server_version": "16.15 (Homebrew)"
+      },
+      "databaseBytes": "26516503",
+      "rows": [
+        {
+          "table_name": "patients",
+          "rows": 4506
+        },
+        {
+          "table_name": "reports",
+          "rows": 9006
+        },
+        {
+          "table_name": "evaluations",
+          "rows": 195
+        },
+        {
+          "table_name": "corrections",
+          "rows": 132
+        },
+        {
+          "table_name": "capture_acceptances",
+          "rows": 12
+        },
+        {
+          "table_name": "cell_disputes",
+          "rows": 75
+        },
+        {
+          "table_name": "ledger_events",
+          "rows": 786
+        }
+      ]
+    },
+    "workloads": [
+      {
+        "label": "patients-list",
+        "statements": 1,
+        "executionMs": 1.489
+      },
+      {
+        "label": "patient-label",
+        "statements": 1,
+        "executionMs": 0.221
+      },
+      {
+        "label": "patient-detail",
+        "statements": 1,
+        "executionMs": 0.198
+      },
+      {
+        "label": "reports-list",
+        "statements": 1,
+        "executionMs": 0.655
+      },
+      {
+        "label": "reports-by-patient",
+        "statements": 1,
+        "executionMs": 1.222
+      },
+      {
+        "label": "report-parent-count",
+        "statements": 1,
+        "executionMs": 0.026
+      },
+      {
+        "label": "report-detail",
+        "statements": 1,
+        "executionMs": 0.025
+      },
+      {
+        "label": "evaluations-page",
+        "statements": 4,
+        "executionMs": 0.29200000000000004
+      },
+      {
+        "label": "evaluations-by-report",
+        "statements": 4,
+        "executionMs": 0.30900000000000005
+      },
+      {
+        "label": "evaluations-by-patient",
+        "statements": 4,
+        "executionMs": 0.508
+      },
+      {
+        "label": "evaluations-current",
+        "statements": 4,
+        "executionMs": 0.3590000000000001
+      },
+      {
+        "label": "patient-link-states",
+        "statements": 1,
+        "executionMs": 0.061
+      },
+      {
+        "label": "quarantine-page",
+        "statements": 1,
+        "executionMs": 0.319
+      },
+      {
+        "label": "disputes-page",
+        "statements": 3,
+        "executionMs": 0.251
+      },
+      {
+        "label": "disputes-open",
+        "statements": 2,
+        "executionMs": 0.16
+      },
+      {
+        "label": "disputes-complete-safety-read",
+        "statements": 3,
+        "executionMs": 0.238
+      },
+      {
+        "label": "dense-latest-acceptance",
+        "statements": 2,
+        "executionMs": 0.087
+      },
+      {
+        "label": "dense-complete-corrections",
+        "statements": 2,
+        "executionMs": 0.10300000000000001
+      },
+      {
+        "label": "dense-context-batch",
+        "statements": 3,
+        "executionMs": 0.237
+      },
+      {
+        "label": "sparse-latest-acceptance",
+        "statements": 2,
+        "executionMs": 0.082
+      },
+      {
+        "label": "sparse-complete-corrections",
+        "statements": 2,
+        "executionMs": 0.122
+      },
+      {
+        "label": "sparse-context-batch",
+        "statements": 3,
+        "executionMs": 0.197
+      },
+      {
+        "label": "patients-list-with-merges",
+        "statements": 1,
+        "executionMs": 1.624
+      },
+      {
+        "label": "patients-list-include-merged",
+        "statements": 1,
+        "executionMs": 1.647
+      },
+      {
+        "label": "patient-detail-alias",
+        "statements": 1,
+        "executionMs": 0.371
+      },
+      {
+        "label": "reports-by-patient-group",
+        "statements": 1,
+        "executionMs": 1.559
+      },
+      {
+        "label": "merges-page",
+        "statements": 3,
+        "executionMs": 0.539
+      },
+      {
+        "label": "merges-pending",
+        "statements": 1,
+        "executionMs": 0.416
+      },
+      {
+        "label": "membership-lookup",
+        "statements": 1,
+        "executionMs": 0.029
+      }
+    ]
+  },
+  "recovery": {
+    "independent": {
+      "status": "passed",
+      "controlsPassed": 30,
+      "nativeReplicationVerified": false,
+      "samples": [
+        {
+          "databaseRecoveryVerified": true,
+          "independentBytesRecovered": true,
+          "references": 5,
+          "recoveredObjects": 5,
+          "seconds": {
+            "backupDownload": 0.03426891699999999,
+            "catalogue": 0.024033958000000098,
+            "restoreAndEvidence": 0.8162944169999999,
+            "evidenceVerification": 0.08280925000000001,
+            "total": 0.880103625
+          },
+          "volumes": {
+            "restoredDatabase": {
+              "bytes": 13794327,
+              "GB": 0.013794327,
+              "GiB": 0.01284696813672781
+            },
+            "archive": {
+              "bytes": 770272,
+              "GB": 0.000770272,
+              "GiB": 0.0007173717021942139
+            },
+            "catalogue": {
+              "bytes": 4983,
+              "GB": 4.983e-06,
+              "GiB": 4.6407803893089294e-06
+            },
+            "recoveredObjects": {
+              "bytes": 134,
+              "GB": 1.34e-07,
+              "GiB": 1.2479722499847412e-07
+            },
+            "read": {
+              "bytes": 851123,
+              "GB": 0.000851123,
+              "GiB": 0.0007926700636744499
+            },
+            "writeAttempted": {
+              "bytes": 134,
+              "GB": 1.34e-07,
+              "GiB": 1.2479722499847412e-07
+            }
+          }
+        },
+        {
+          "databaseRecoveryVerified": true,
+          "independentBytesRecovered": true,
+          "references": 5,
+          "recoveredObjects": 5,
+          "seconds": {
+            "backupDownload": 0.033260208000000006,
+            "catalogue": 0.02335983300000001,
+            "restoreAndEvidence": 0.8184655000000002,
+            "evidenceVerification": 0.08566374999999994,
+            "total": 0.880410209
+          },
+          "volumes": {
+            "restoredDatabase": {
+              "bytes": 13794327,
+              "GB": 0.013794327,
+              "GiB": 0.01284696813672781
+            },
+            "archive": {
+              "bytes": 770272,
+              "GB": 0.000770272,
+              "GiB": 0.0007173717021942139
+            },
+            "catalogue": {
+              "bytes": 4986,
+              "GB": 4.986e-06,
+              "GiB": 4.643574357032776e-06
+            },
+            "recoveredObjects": {
+              "bytes": 134,
+              "GB": 1.34e-07,
+              "GiB": 1.2479722499847412e-07
+            },
+            "read": {
+              "bytes": 851129,
+              "GB": 0.000851129,
+              "GiB": 0.0007926756516098976
+            },
+            "writeAttempted": {
+              "bytes": 134,
+              "GB": 1.34e-07,
+              "GiB": 1.2479722499847412e-07
+            }
+          }
+        },
+        {
+          "databaseRecoveryVerified": true,
+          "independentBytesRecovered": true,
+          "references": 5,
+          "recoveredObjects": 5,
+          "seconds": {
+            "backupDownload": 0.033465166999999976,
+            "catalogue": 0.023672916999999984,
+            "restoreAndEvidence": 0.807008542,
+            "evidenceVerification": 0.08984837500000004,
+            "total": 0.8695613329999999
+          },
+          "volumes": {
+            "restoredDatabase": {
+              "bytes": 13794327,
+              "GB": 0.013794327,
+              "GiB": 0.01284696813672781
+            },
+            "archive": {
+              "bytes": 770272,
+              "GB": 0.000770272,
+              "GiB": 0.0007173717021942139
+            },
+            "catalogue": {
+              "bytes": 4983,
+              "GB": 4.983e-06,
+              "GiB": 4.6407803893089294e-06
+            },
+            "recoveredObjects": {
+              "bytes": 134,
+              "GB": 1.34e-07,
+              "GiB": 1.2479722499847412e-07
+            },
+            "read": {
+              "bytes": 851123,
+              "GB": 0.000851123,
+              "GiB": 0.0007926700636744499
+            },
+            "writeAttempted": {
+              "bytes": 134,
+              "GB": 1.34e-07,
+              "GiB": 1.2479722499847412e-07
+            }
+          }
+        },
+        {
+          "databaseRecoveryVerified": true,
+          "independentBytesRecovered": true,
+          "references": 5,
+          "recoveredObjects": 5,
+          "seconds": {
+            "backupDownload": 0.034940957999999994,
+            "catalogue": 0.024102374999999995,
+            "restoreAndEvidence": 0.8211251249999999,
+            "evidenceVerification": 0.08993716599999993,
+            "total": 0.885530333
+          },
+          "volumes": {
+            "restoredDatabase": {
+              "bytes": 13794327,
+              "GB": 0.013794327,
+              "GiB": 0.01284696813672781
+            },
+            "archive": {
+              "bytes": 770272,
+              "GB": 0.000770272,
+              "GiB": 0.0007173717021942139
+            },
+            "catalogue": {
+              "bytes": 4983,
+              "GB": 4.983e-06,
+              "GiB": 4.6407803893089294e-06
+            },
+            "recoveredObjects": {
+              "bytes": 134,
+              "GB": 1.34e-07,
+              "GiB": 1.2479722499847412e-07
+            },
+            "read": {
+              "bytes": 851123,
+              "GB": 0.000851123,
+              "GiB": 0.0007926700636744499
+            },
+            "writeAttempted": {
+              "bytes": 134,
+              "GB": 1.34e-07,
+              "GiB": 1.2479722499847412e-07
+            }
+          }
+        },
+        {
+          "databaseRecoveryVerified": true,
+          "independentBytesRecovered": true,
+          "references": 5,
+          "recoveredObjects": 5,
+          "seconds": {
+            "backupDownload": 0.033648,
+            "catalogue": 0.02393658400000001,
+            "restoreAndEvidence": 0.7912196659999999,
+            "evidenceVerification": 0.05767262500000004,
+            "total": 0.8543736249999999
+          },
+          "volumes": {
+            "restoredDatabase": {
+              "bytes": 13794327,
+              "GB": 0.013794327,
+              "GiB": 0.01284696813672781
+            },
+            "archive": {
+              "bytes": 770272,
+              "GB": 0.000770272,
+              "GiB": 0.0007173717021942139
+            },
+            "catalogue": {
+              "bytes": 4983,
+              "GB": 4.983e-06,
+              "GiB": 4.6407803893089294e-06
+            },
+            "recoveredObjects": {
+              "bytes": 134,
+              "GB": 1.34e-07,
+              "GiB": 1.2479722499847412e-07
+            },
+            "read": {
+              "bytes": 851123,
+              "GB": 0.000851123,
+              "GiB": 0.0007926700636744499
+            },
+            "writeAttempted": {
+              "bytes": 0,
+              "GB": 0,
+              "GiB": 0
+            }
+          }
+        },
+        {
+          "databaseRecoveryVerified": true,
+          "independentBytesRecovered": true,
+          "references": 5,
+          "recoveredObjects": 5,
+          "seconds": {
+            "backupDownload": 0.033688625,
+            "catalogue": 0.023627958000000008,
+            "restoreAndEvidence": 0.8051128750000001,
+            "evidenceVerification": 0.08574475000000006,
+            "total": 0.8678622079999999
+          },
+          "volumes": {
+            "restoredDatabase": {
+              "bytes": 13794327,
+              "GB": 0.013794327,
+              "GiB": 0.01284696813672781
+            },
+            "archive": {
+              "bytes": 770272,
+              "GB": 0.000770272,
+              "GiB": 0.0007173717021942139
+            },
+            "catalogue": {
+              "bytes": 4983,
+              "GB": 4.983e-06,
+              "GiB": 4.6407803893089294e-06
+            },
+            "recoveredObjects": {
+              "bytes": 134,
+              "GB": 1.34e-07,
+              "GiB": 1.2479722499847412e-07
+            },
+            "read": {
+              "bytes": 851123,
+              "GB": 0.000851123,
+              "GiB": 0.0007926700636744499
+            },
+            "writeAttempted": {
+              "bytes": 104,
+              "GB": 1.04e-07,
+              "GiB": 9.685754776000977e-08
+            }
+          }
+        },
+        {
+          "databaseRecoveryVerified": true,
+          "independentBytesRecovered": true,
+          "references": 5,
+          "recoveredObjects": 5,
+          "seconds": {
+            "backupDownload": 0.033632666,
+            "catalogue": 0.023996375,
+            "restoreAndEvidence": 0.7852377919999999,
+            "evidenceVerification": 0.05806916699999999,
+            "total": 0.84831975
+          },
+          "volumes": {
+            "restoredDatabase": {
+              "bytes": 13794327,
+              "GB": 0.013794327,
+              "GiB": 0.01284696813672781
+            },
+            "archive": {
+              "bytes": 770272,
+              "GB": 0.000770272,
+              "GiB": 0.0007173717021942139
+            },
+            "catalogue": {
+              "bytes": 4983,
+              "GB": 4.983e-06,
+              "GiB": 4.6407803893089294e-06
+            },
+            "recoveredObjects": {
+              "bytes": 134,
+              "GB": 1.34e-07,
+              "GiB": 1.2479722499847412e-07
+            },
+            "read": {
+              "bytes": 851123,
+              "GB": 0.000851123,
+              "GiB": 0.0007926700636744499
+            },
+            "writeAttempted": {
+              "bytes": 0,
+              "GB": 0,
+              "GiB": 0
+            }
+          }
+        }
+      ],
+      "rawReceiptSha256": "9ef872c1656ba0bbc927d53cdf64621f94682ce4b7975029acdacb02229bdbb8"
+    },
+    "application": {
+      "status": "passed",
+      "controlsPassed": 13,
+      "nativeReplicationVerified": false,
+      "samples": [
+        {
+          "databaseRecoveryVerified": true,
+          "independentBytesRecovered": true,
+          "references": 7,
+          "recoveredObjects": 7,
+          "seconds": {
+            "backupDownload": 0.03424000000000001,
+            "catalogue": 0.023314082999999982,
+            "restoreAndEvidence": 1.612857167,
+            "evidenceVerification": 0.1164420829999999,
+            "total": 1.6737022499999998
+          },
+          "volumes": {
+            "restoredDatabase": {
+              "bytes": 14089239,
+              "GB": 0.014089239,
+              "GiB": 0.01312162633985281
+            },
+            "archive": {
+              "bytes": 776937,
+              "GB": 0.000776937,
+              "GiB": 0.000723578967154026
+            },
+            "catalogue": {
+              "bytes": 6835,
+              "GB": 6.835e-06,
+              "GiB": 6.365589797496796e-06
+            },
+            "recoveredObjects": {
+              "bytes": 3321,
+              "GB": 3.321e-06,
+              "GiB": 3.092922270298004e-06
+            },
+            "read": {
+              "bytes": 866015,
+              "GB": 0.000866015,
+              "GiB": 0.0008065393194556236
+            },
+            "writeAttempted": {
+              "bytes": 3321,
+              "GB": 3.321e-06,
+              "GiB": 3.092922270298004e-06
+            }
+          },
+          "application": {
+            "applicationRecoveryComplete": true,
+            "clinicalUseApproved": false,
+            "linkedBytes": 1246,
+            "seconds": 0.46995975
+          }
+        },
+        {
+          "databaseRecoveryVerified": true,
+          "independentBytesRecovered": true,
+          "references": 7,
+          "recoveredObjects": 7,
+          "seconds": {
+            "backupDownload": 0.03381045799999998,
+            "catalogue": 0.023155834000000028,
+            "restoreAndEvidence": 1.5346407089999998,
+            "evidenceVerification": 0.07477691699999992,
+            "total": 1.594937875
+          },
+          "volumes": {
+            "restoredDatabase": {
+              "bytes": 14089239,
+              "GB": 0.014089239,
+              "GiB": 0.01312162633985281
+            },
+            "archive": {
+              "bytes": 776937,
+              "GB": 0.000776937,
+              "GiB": 0.000723578967154026
+            },
+            "catalogue": {
+              "bytes": 6835,
+              "GB": 6.835e-06,
+              "GiB": 6.365589797496796e-06
+            },
+            "recoveredObjects": {
+              "bytes": 3321,
+              "GB": 3.321e-06,
+              "GiB": 3.092922270298004e-06
+            },
+            "read": {
+              "bytes": 866015,
+              "GB": 0.000866015,
+              "GiB": 0.0008065393194556236
+            },
+            "writeAttempted": {
+              "bytes": 0,
+              "GB": 0,
+              "GiB": 0
+            }
+          },
+          "application": {
+            "applicationRecoveryComplete": true,
+            "clinicalUseApproved": false,
+            "linkedBytes": 1246,
+            "seconds": 0.4654530830000001
+          }
+        }
+      ],
+      "rawReceiptSha256": "14007f5ba114ece70f7b189f6c6f174bee9b67f0a69f14cf27e17333ccdd847d"
+    }
+  },
+  "ownedServiceCleanup": true,
+  "notTested": [
+    "Five engine-dependent specification files: private report-reader engine absent",
+    "Live provider IAM/KMS/Object Lock/replication/PITR and custody",
+    "Hosted alarm subscription and delivery; external authenticated uptime journey",
+    "Independent-process/hosted capacity and hours-long soak",
+    "Production-size restore/RPO/RTO",
+    "Actual container image build/scan",
+    "FHIR IG validator",
+    "Production data, identity-provider delivery, provider accounts and deployment"
+  ],
+  "remainingDecisions": [
+    "Exact fleet/tenant/user quota and shared-store outage policy",
+    "Durable queue admission limit/backpressure policy",
+    "Monetary/lifetime retained-storage ceiling, owner and safe admission stop",
+    "Backup scheduling/custody, approved RPO/RTO and live restore drill",
+    "Monitoring responder, external journey and safe delivery acceptance",
+    "Clinical pipeline/knowledge/engine acceptance"
+  ],
+  "delivery": "Local candidate only; no push, PR, deployment or live service configuration change.",
+  "notApplicable": [
+    "Payment/subscription flows and payment webhooks: absent",
+    "Application-issued password reset tokens: provider-hosted auth instead",
+    "General archive ingestion: absent"
+  ],
+  "sourceSet": {
+    "algorithm": "sha256",
+    "encoding": "UTF-8 canonical JSON of path/sha256 records, sorted by path; sorted object keys; compact separators",
+    "paths": [
+      "apps/backend/src/app.factory.ts",
+      "apps/backend/src/db/database.ts",
+      "apps/backend/src/db/query-deadline.spec.ts",
+      "apps/backend/src/issuer/issuer-core.ts",
+      "apps/backend/src/ledger/verifier.ts",
+      "apps/backend/src/object-storage/s3-deadlines.spec.ts",
+      "apps/backend/src/object-storage/s3-object-storage.ts",
+      "apps/backend/test/rate-limit.e2e-spec.ts",
+      "apps/frontend/src/auth/AuthProvider.test.tsx",
+      "apps/frontend/src/auth/AuthProvider.tsx",
+      "apps/worker/src/scheduler.test.ts",
+      "apps/worker/src/scheduler.ts",
+      "scripts/readiness/local-load.cjs"
+    ],
+    "digest": "3a0b322bc7e6d7a4c368624e6b3a18c57994acb8a7da31dbb8666bd1f6fd3621",
+    "perFileManifest": "Preserved outside the repository in local verification evidence; individual hashes are not repository immutability pins."
+  }
+}

@@ -33,4 +33,6 @@ Static checks enforce a finite contract, not every possible CSS behavior. They d
 
 Approved spacing and typography should use shared utilities/tokens; adding a new component is not permission to invent another palette. Brand changes require explicit approval and a reviewed policy update with visual evidence. Existing permission and development boundaries remain authoritative.
 
+Operational UI stays compact and easy to use across empty, populated and expanded states (founder direction, 2026-11-01). Repeated records use scannable rows; secondary actions and history open on demand. Long coded lists use local type-ahead with explicit selection. Verify realistic list sizes, such as 20 medications, on mobile and desktop. Density must preserve readable text, visible focus, 44px controls and keyboard access.
+
 The company page is currently a separate local sketch. It has no repository build pipeline yet. Apply this contract when that sketch is implemented in the company repository; this check does not pretend to guard external repositories or standalone HTML files.

@@ -7,6 +7,7 @@ import { CapturesController, ReportCaptureController } from '../src/lab-reports/
 import { LabReportsModule } from '../src/lab-reports/lab-reports.module';
 import { LAB_KNOWLEDGE, LAB_READER } from '../src/lab-reports/evaluations.service';
 import { REQUIRES_PIPELINE } from '../src/lab-reports/pipeline-switch';
+import { StructuredAssessmentController } from '../src/lab-reports/structured-assessment.controller';
 import { TextCaptureRunner } from '../src/lab-reports/runner/text-capture-runner';
 import { ObjectStorage } from '../src/object-storage/object-storage';
 import { LedgerRecordsRepository } from '../src/storage/ledger-records.repository';
@@ -40,7 +41,11 @@ function routesOf(controller: ControllerClass): Route[] {
     }));
 }
 
-const moduleControllers = Reflect.getMetadata('controllers', LabReportsModule) as ControllerClass[];
+// The synthetic structured assessment's own route is gated by its own switch (SYNTHETIC_ASSESSMENT), never the pipeline's: test/synthetic-assessment.e2e-spec.ts
+// holds it, and everything else this module registers must still carry the pipeline gate.
+const moduleControllers = (Reflect.getMetadata('controllers', LabReportsModule) as ControllerClass[]).filter(
+  (c) => c !== (StructuredAssessmentController as unknown as ControllerClass),
+);
 const routes = moduleControllers.flatMap(routesOf);
 
 describe('the lab-report pipeline routes', () => {

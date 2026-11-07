@@ -3,6 +3,16 @@ import type { Client } from 'pg';
 // Hand-reviewed against the relationship design and original SQL, not generated from the live catalog.
 // Global containment clearances intentionally lack tenant-composite FKs: their functions check scope.
 const relationships: [string, string, string, string][] = [
+  // Spec 032 S2b2: immutable source/patient/review association; the trigger checks the latest review's complete binding.
+  ['structured_report_revisions_report_fk', 'structured_report_revisions', 'report_id,tenant_id', 'reports:id,tenant_id'],
+  ['structured_report_revisions_patient_fk', 'structured_report_revisions', 'patient_id,tenant_id', 'patients:id,tenant_id'],
+  ['structured_report_revisions_patient_link_decision_id_fkey', 'structured_report_revisions', 'patient_link_decision_id', 'report_patient_decisions:id'],
+  // Spec 032 S2c: review decisions are bound to one immutable revision and its independent patient-link decision; resolutions name their set by value.
+  ['structured_finding_reviews_report_fk', 'structured_finding_reviews', 'report_id,tenant_id', 'reports:id,tenant_id'],
+  ['structured_finding_reviews_patient_fk', 'structured_finding_reviews', 'patient_id,tenant_id', 'patients:id,tenant_id'],
+  ['structured_finding_reviews_revision_id_fkey', 'structured_finding_reviews', 'revision_id', 'structured_report_revisions:id'],
+  ['structured_finding_reviews_patient_link_decision_id_fkey', 'structured_finding_reviews', 'patient_link_decision_id', 'report_patient_decisions:id'],
+  ['structured_source_resolutions_patient_fk', 'structured_source_resolutions', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   // H1 (0050): immutable admission/source binding and inactive completion identity.
   ['evaluation_requests_tenant_id_fkey', 'evaluation_requests', 'tenant_id', 'tenants:id'],
   ['evaluation_requests_job_id_fkey', 'evaluation_requests', 'job_id', 'jobs:id'],
@@ -53,6 +63,11 @@ const relationships: [string, string, string, string][] = [
   ['use_withdrawals_grant_fk', 'use_withdrawals', 'grant_id,tenant_id', 'use_grants:id,tenant_id'],
   ['use_restrictions_patient_fk', 'use_restrictions', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   // Spec 025 PD-a (patient demographics): the versions and the wrapped key both name the patient. No foreign key from a version to its key: erasure deletes the key.
+  ['patient_followups_patient_fk', 'patient_followups', 'patient_id,tenant_id', 'patients:id,tenant_id'],
+  ['patient_followups_note_fk', 'patient_followups', 'note_id,tenant_id', 'event_notes:id,tenant_id'],
+  ['patient_followups_medication_id_fkey', 'patient_followups', 'medication_id', 'patient_medications:id'],
+  ['patient_followups_decision_id_fkey', 'patient_followups', 'decision_id', 'clinician_result_decisions:id'],
+  ['patient_medications_patient_fk', 'patient_medications', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   ['patient_demographics_patient_fk', 'patient_demographics', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   ['patient_field_keys_patient_fk', 'patient_field_keys', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   // Spec 019 D02b (render events, not ledgered): the result, its evaluation and patient.
@@ -61,6 +76,8 @@ const relationships: [string, string, string, string][] = [
   ['evaluations_patient_fk', 'evaluations', 'patient_id,tenant_id', 'patients:id,tenant_id'],
   ['evaluations_report_fk', 'evaluations', 'report_id,patient_id,tenant_id', 'reports:id,patient_id,tenant_id'],
   ['evaluations_capture_fk', 'evaluations', 'capture_id,tenant_id', 'report_captures:id,tenant_id'],
+  // Spec 032 S3 (2a): an evaluation may rest on a stored structured revision instead of a capture.
+  ['evaluations_structured_revision_fk', 'evaluations', 'structured_revision_id,tenant_id', 'structured_report_revisions:id,tenant_id'],
   ['evaluations_acceptance_fk', 'evaluations', 'capture_acceptance_id,tenant_id', 'capture_acceptances:id,tenant_id'],
   ['evaluation_results_evaluation_fk', 'evaluation_results', 'evaluation_id,tenant_id', 'evaluations:id,tenant_id'],
   ['evaluation_gene_states_evaluation_fk', 'evaluation_gene_states', 'evaluation_id,tenant_id', 'evaluations:id,tenant_id'],
@@ -92,6 +109,9 @@ const relationships: [string, string, string, string][] = [
   ['agentic_synthetic_audit_tenant_id_run_id_fkey', 'agentic_synthetic_audit', 'tenant_id,run_id', 'agentic_synthetic_runs:tenant_id,run_id'],
 ];
 const primaryKeys: Record<string, string> = {
+  structured_report_revisions: 'id',
+  structured_finding_reviews: 'id',
+  structured_source_resolutions: 'id',
   evaluation_requests: 'id',
   evaluation_request_completions: 'request_id',
   evaluation_request_cancellations: 'request_id',
@@ -116,6 +136,8 @@ const primaryKeys: Record<string, string> = {
   use_restrictions: 'id',
   tenant_use_terms: 'id',
   patient_demographics: 'id',
+  patient_medications: 'id',
+  patient_followups: 'id',
   patient_field_keys: 'tenant_id, patient_id',
   result_render_events: 'id',
   evaluations: 'id',
@@ -162,6 +184,10 @@ const primaryKeys: Record<string, string> = {
   agentic_synthetic_sources: 'tenant_id, source_id, source_version',
 };
 const uniqueKeys: Record<string, string> = {
+  structured_report_revisions_source_uq: 'tenant_id, report_id',
+  structured_report_revisions_id_tenant_uq: 'id, tenant_id',
+  structured_finding_reviews_request_uq: 'tenant_id, created_by, request_id',
+  structured_source_resolutions_request_uq: 'tenant_id, created_by, request_id',
   evaluation_requests_tenant_id_requested_by_creation_request_key: 'tenant_id, requested_by, creation_request_id',
   evaluation_requests_id_tenant_id_key: 'id, tenant_id',
   evaluation_requests_job_id_key: 'job_id',
@@ -199,6 +225,9 @@ const uniqueKeys: Record<string, string> = {
   use_grant_validations_once_uq: 'grant_id, tenant_id',
   use_withdrawals_once_uq: 'grant_id, tenant_id',
   tenant_use_terms_once_uq: 'tenant_id, agreement_ref, agreement_version',
+  patient_followups_version_uq: 'tenant_id, thread_id, version',
+  patient_followups_request_uq: 'tenant_id, created_by, creation_request_id',
+  patient_medications_version_uq: 'tenant_id, entry_id, version',
   patient_demographics_version_uq: 'tenant_id, patient_id, version',
   patient_field_keys_version_uq: 'tenant_id, patient_id, key_version',
   result_render_events_once_uq: 'tenant_id, viewer, episode_id, seq',
@@ -276,11 +305,18 @@ const checkNames: Record<string, string> = {
   use_withdrawals: 'tenant_id_len created_by_len recorded_by_actor not_backdated',
   use_restrictions: 'tenant_id_len created_by_len purpose interval reason_code',
   tenant_use_terms: 'tenant_id_len created_by_len refs interval purposes classifications',
+  patient_followups: 'tenant_id_len created_by_len version action request_hash task_shape action_shape assessment_shape',
+  structured_report_revisions: 'tenant_id_check created_by_check report_sha256_check object_version_check parser_version_check shape',
+  structured_finding_reviews: 'tenant_id_check created_by_check report_sha256_check object_version_check source_finding_id_check decision_check reason_code_check reason',
+  structured_source_resolutions: 'tenant_id_check created_by_check laboratory_id_check series_id_check revision_check revision_ids_check outcome_check reason_code_check shape',
+  patient_medications: 'tenant_id_len created_by_len version rxcui name list_version status start_month stop_month month_order active_stop source request_hash',
   patient_demographics: 'tenant_id_len created_by_len version key_version nonces name_len dob_len sex birth_year ethnicity request_pair request_hash',
   patient_field_keys: 'tenant_id_len created_by_len version wrapped_len provider',
   result_render_events: 'tenant_id_len viewer_len viewer_human viewer_roles seq kind kind_seq measurement rule_version schema_version capability client_times ms',
-  evaluations: 'created_by_len disposition engine_version_len hash_formats hold_code hold_consistent json_shapes tenant_id_len binding_size gene_inputs_size occurrences_size',
-  evaluation_results: 'citation_ids citation_size gene_evidence_size json ordinal outcome reason shape strength',
+  evaluations:
+    'created_by_len disposition engine_version_len hash_formats hold_code hold_consistent json_shapes tenant_id_len binding_size gene_inputs_size occurrences_size source_kind source_consistent hold_code_kind',
+  evaluation_results:
+    'citation_ids citation_size gene_evidence_size json ordinal outcome reason shape strength cell_origin drug_rxcui gene_hgnc_ids identifiers_all_or_none identifiers_need_citation pharmvar_versions',
   evaluation_gene_states: 'gene reason shape state',
   corrections: 'created_by_len kind note_required reason_for_kind reinstatement_chain replacement tenant_id_len created_by_human',
   cell_disputes: 'created_by_len hash labels tenant_id_len created_by_human creation_request_pair',
@@ -331,6 +367,11 @@ for (const table of [
   'use_restrictions',
   'tenant_use_terms',
   'patient_demographics',
+  'patient_medications',
+  'patient_followups',
+  'structured_report_revisions',
+  'structured_finding_reviews',
+  'structured_source_resolutions',
   'ledger_checkpoints',
 ]) {
   relationships.push([`${table}_event_fk`, table, 'ledger_event_id,tenant_id', 'ledger_events:id,tenant_id']);
@@ -338,6 +379,18 @@ for (const table of [
 
 // Query-facing definitions. Constraint-backed indexes and internal append-only guards are also covered by ledger-catalog/behavior suites.
 const queryIndexes: Record<string, string> = {
+  structured_report_revisions_patient_idx: 'INDEX structured_report_revisions_patient_idx ON public.structured_report_revisions USING btree (tenant_id, patient_id, seq)',
+  structured_finding_reviews_revision_idx:
+    'INDEX structured_finding_reviews_revision_idx ON public.structured_finding_reviews USING btree (tenant_id, revision_id, source_finding_id, seq)',
+  structured_finding_reviews_event_idx: 'INDEX structured_finding_reviews_event_idx ON public.structured_finding_reviews USING btree (ledger_event_id, tenant_id)',
+  structured_source_resolutions_series_idx:
+    'INDEX structured_source_resolutions_series_idx ON public.structured_source_resolutions USING btree (tenant_id, patient_id, laboratory_id, series_id, revision, seq)',
+  structured_source_resolutions_event_idx: 'INDEX structured_source_resolutions_event_idx ON public.structured_source_resolutions USING btree (ledger_event_id, tenant_id)',
+  structured_report_revisions_event_idx: 'INDEX structured_report_revisions_event_idx ON public.structured_report_revisions USING btree (ledger_event_id, tenant_id)',
+  structured_report_revisions_issuer_idx:
+    "INDEX structured_report_revisions_issuer_idx ON public.structured_report_revisions USING btree (tenant_id, ((laboratory_report ->> 'laboratoryId'::text)))",
+  patient_followups_patient_idx: 'INDEX patient_followups_patient_idx ON public.patient_followups USING btree (tenant_id, patient_id, thread_id, version DESC)',
+  patient_followups_event_idx: 'INDEX patient_followups_event_idx ON public.patient_followups USING btree (ledger_event_id, tenant_id)',
   evaluation_requests_tenant_report: 'INDEX evaluation_requests_tenant_report ON public.evaluation_requests USING btree (tenant_id, report_id)',
   browser_sessions_expiry_idx: 'INDEX browser_sessions_expiry_idx ON public.browser_sessions USING btree (tenant_id, expires_at, handle_hash)',
   upload_attempt_run_idx: 'INDEX upload_attempt_run_idx ON public.report_upload_attempts USING btree (tenant_id, run_id, state)',
@@ -357,6 +410,8 @@ const queryIndexes: Record<string, string> = {
   result_acknowledgements_result_idx: 'INDEX result_acknowledgements_result_idx ON public.result_acknowledgements USING btree (tenant_id, result_id, seq)',
   result_render_events_result_idx: 'INDEX result_render_events_result_idx ON public.result_render_events USING btree (tenant_id, result_id, received_at)',
   evaluations_tenant_report_idx: 'INDEX evaluations_tenant_report_idx ON public.evaluations USING btree (tenant_id, report_id, seq)',
+  evaluations_structured_revision_idx:
+    'INDEX evaluations_structured_revision_idx ON public.evaluations USING btree (structured_revision_id) WHERE (structured_revision_id IS NOT NULL)',
   evaluations_tenant_patient_idx: 'INDEX evaluations_tenant_patient_idx ON public.evaluations USING btree (tenant_id, patient_id, seq)',
   evaluation_results_tenant_evaluation_idx: 'INDEX evaluation_results_tenant_evaluation_idx ON public.evaluation_results USING btree (tenant_id, evaluation_id, ordinal)',
   evaluation_gene_states_tenant_evaluation_idx: 'INDEX evaluation_gene_states_tenant_evaluation_idx ON public.evaluation_gene_states USING btree (tenant_id, evaluation_id)',

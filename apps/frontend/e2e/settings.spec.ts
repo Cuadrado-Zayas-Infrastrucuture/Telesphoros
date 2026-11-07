@@ -30,7 +30,8 @@ test('a member with no role can open Settings, and is told why there is little e
 
 test('reloading signs the tab out: Settings then asks to sign in and shows no email', async ({ page }) => {
   await signInAs(page, 'alice', '/settings');
-  await expect(page.getByText(EMAIL.alice)).toBeVisible();
+  // The account menu at the sidebar's foot holds the email too, hidden until opened (specs/034 D10): check the Settings copy.
+  await expect(page.getByRole('region', { name: 'Account' }).getByText(EMAIL.alice)).toBeVisible();
   await page.reload();
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
   await expect(page.getByText(EMAIL.alice)).toHaveCount(0);

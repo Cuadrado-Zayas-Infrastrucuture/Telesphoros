@@ -216,6 +216,6 @@ What it proves: a login with the application's privileges, with the session sett
 
 Review fixes made on top of the first build, each its own commit: the migration now checks that the three entry points keep owner and privileges (plan step 6, missing from the first build), and the caller-document comparison is tested on `admit` and `cancel`, not only `read` (a mutant that dropped it from either was red only through the no-database text comparison).
 
-Pinned limit, not a pass: `admit` still needs the settings (`membership_assert_current` and `job_enqueue` read them) until DATA-01 slice 3; the spec records that. `agentic_synthetic_member_current` (worker side) still writes the tenant setting, so DATA-01 slice 5 must not flip the mode to `capability` before it moves.
+Pinned limit, not a pass: `admit` still needs the settings (`membership_assert_current` and `job_enqueue` read them) until DATA-01 slice 3; the spec records that. `agentic_synthetic_member_current` (worker side) still writes the tenant setting, so DATA-01 slice 5 must not flip the mode to `capability` before it moves. (Update 2026-11-06: it moved, in migration 0073; see the R2 section of [tenant-capability.md](tenant-capability.md).)
 
 Not run: `tofu test`, browser tests, the FHIR IG validation, Docker image tests, the CI budget and evidence wrappers, hosted CI, a real RDS or non-local migrator.

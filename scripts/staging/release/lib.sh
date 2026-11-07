@@ -1,0 +1,131 @@
+# shellcheck shell=bash
+# Shared by the release scripts in this folder (spec 027, PR 3a). Sourced, never run. Founder-run, synthetic staging only.
+# Live values come from the private ~/telesphoros-private/staging/stack.env (override with STACK_ENV), never from this repository:
+#   STAGING_ACCOUNT_ID   12 digits                       BACKEND_CLONE   the founder's backend clone (on main)
+#   TERRAFORM            the pinned 1.16.5 binary         TF_DATA_DIR     the backend's data directory
+#   STAGING_ROLE_ARN_PART  optional; the caller's ARN must contain it (for example the role name)
+#   API_BASE_URL, APP_URL  https://<host>, no path: the API and the web app (verify.sh and frontend.sh only)
+# The canonical var file is $PRIVATE/staging/current.tfvars, with its sha256 beside it; it is the only var file a release reads.
+# Each release writes its outputs to $PRIVATE/releases/<commit>/, never copies of these scripts.
+
+die() { printf 'STOP: %s\n' "$*" >&2; exit 1; }
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PRIVATE="${PRIVATE_DIR:-$HOME/telesphoros-private}"
+STAGING="$PRIVATE/staging"
+CURRENT="$STAGING/current.tfvars"
+CLAIM_DIR="$STAGING/claim"
+
+load_stack() {
+  local env="${STACK_ENV:-$STAGING/stack.env}"
+  [ -f "$env" ] || die "no $env (see scripts/staging/release/lib.sh)"
+  # shellcheck source=/dev/null
+  . "$env"
+  [[ "${STAGING_ACCOUNT_ID:-}" =~ ^[0-9]{12}$ ]] || die "STAGING_ACCOUNT_ID is not 12 digits"
+  [ -e "${BACKEND_CLONE:-}/.git" ] || die "BACKEND_CLONE is not a git checkout"
+  [ -x "${TERRAFORM:-}" ] || die "TERRAFORM is not an executable"
+  [ -d "${TF_DATA_DIR:-}" ] || die "TF_DATA_DIR is not a directory"
+  export TF_DATA_DIR AWS_REGION="${AWS_REGION:-us-east-2}" AWS_PROFILE="${AWS_PROFILE:-telesphoros}"
+  C="$BACKEND_CLONE"
+  TFDIR="$C/infrastructure/terraform"
+  # The whole output first: under pipefail, `version | head -1` fails whenever Terraform is still writing after head has stopped reading.
+  local tfv
+  tfv="$("$TERRAFORM" version </dev/null)" || die "TERRAFORM version failed"
+  [ "${tfv%%$'\n'*}" = 'Terraform v1.16.5' ] || die "TERRAFORM is not 1.16.5"
+}
+
+sha() { shasum -a 256 "$1" | cut -c1-64; }
+
+gate_identity() {
+  [ "$(aws sts get-caller-identity --query Account --output text </dev/null)" = "$STAGING_ACCOUNT_ID" ] || die "wrong account or expired login (run: aws login --profile $AWS_PROFILE)"
+  if [ -n "${STAGING_ROLE_ARN_PART:-}" ]; then
+    aws sts get-caller-identity --query Arn --output text </dev/null | grep -qF "$STAGING_ROLE_ARN_PART" || die "not the expected role session"
+  fi
+}
+
+gate_quiet() { if pgrep -f 'terraform.*(apply|plan|import|untaint)' >/dev/null 2>&1; then die "a terraform process is running"; fi; }
+
+gate_clone() { # the commit this release plans from
+  [ "$(git -C "$C" rev-parse --abbrev-ref HEAD)" = main ] || die "the clone is not on main"
+  [ -z "$(git -C "$C" status --porcelain --untracked-files=no)" ] || die "tracked changes in the clone"
+  [ "$(git -C "$C" rev-parse HEAD)" = "$1" ] || die "the clone is at $(git -C "$C" rev-parse --short=8 HEAD), not ${1:0:8}: run git -C \"$C\" merge --ff-only $1 first"
+}
+
+# The claim: one owner at a time plans or applies against the stack. Taken with mkdir, which is atomic; never broken by a script.
+claim_check() {
+  [ -n "${CLAIM_OWNER:-}" ] || die "set CLAIM_OWNER to the name you took the claim with (claim.sh take NAME REASON)"
+  [ -f "$CLAIM_DIR/owner.json" ] || die "no claim is held: run claim.sh take $CLAIM_OWNER <reason> first"
+  node -e 'const c=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.exit(c.owner===process.argv[2]?0:1)' "$CLAIM_DIR/owner.json" "$CLAIM_OWNER" \
+    || die "the claim is held by someone else: $(node -e 'const c=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));console.log(c.owner+" since "+c.started+" ("+c.reason+")")' "$CLAIM_DIR/owner.json")"
+}
+
+# The image that runs now: what the canonical var file names twice, and what ECS runs. Prints it.
+running_image() {
+  [ -f "$CURRENT" ] && [ -f "$CURRENT.sha256" ] || die "no $CURRENT with its .sha256 (spec 027 T010)"
+  [ "$(sha "$CURRENT")" = "$(cat "$CURRENT.sha256")" ] || die "current.tfvars does not match its recorded sha256: it was edited by hand"
+  local api mig ecs
+  api=$(sed -nE 's/^api_image[[:space:]]*=[[:space:]]*"([^"]+)".*$/\1/p' "$CURRENT")
+  mig=$(sed -nE 's/^api_migrate_image[[:space:]]*=[[:space:]]*"([^"]+)".*$/\1/p' "$CURRENT")
+  [ -n "$api" ] && [ "$api" = "$mig" ] || die "current.tfvars does not name one image as both api_image and api_migrate_image"
+  ecs=$(aws ecs describe-task-definition --task-definition "$(aws ecs describe-services --cluster telesphoros-staging-api --services telesphoros-staging-api \
+    --query 'services[0].taskDefinition' --output text </dev/null)" --query 'taskDefinition.containerDefinitions[0].image' --output text </dev/null) || die "cannot read the running api image"
+  [ "$ecs" = "$api" ] || die "ECS runs ${ecs##*@}, but current.tfvars names ${api##*@}: the var file is stale; tell Claude"
+  printf '%s\n' "$api"
+}
+
+# The reviewed one-flag transitions (fence-vars.mjs): same image, one canonical variable changed, one operation folder per attempt.
+flag_mode() { case "$1" in FENCE-CLOSE|FENCE-OPEN|ASSESSMENT-ON|ASSESSMENT-OFF) return 0 ;; *) return 1 ;; esac; }
+flag_folder() { case "$1" in FENCE-CLOSE|FENCE-OPEN) echo fences ;; ASSESSMENT-ON|ASSESSMENT-OFF) echo assessments ;; esac; }
+# The two that may only follow a finished, verified release: opening the medication fence, and switching the synthetic assessment on.
+# Closing and switching off never wait for anything: they are the way back.
+flag_needs_release() { [ "$1" = FENCE-OPEN ] || [ "$1" = ASSESSMENT-ON ]; }
+
+state_identity() { "$TERRAFORM" -chdir="$TFDIR" state pull </dev/null 2>/dev/null | node "$HERE/plan-record.mjs" state; }
+
+# The steps around the plans (spec 027, PR 3b): the release's folder, one run of a step at a time, and one Terraform output.
+release_folder() {
+  [[ "${1:-}" =~ ^[0-9a-f]{40}$ ]] || die "COMMIT must be a full 40-character commit id"
+  OUT="$PRIVATE/releases/$1"
+}
+step_lock() { # the lock goes when the script exits
+  LOCK="$OUT/.$1.lock"
+  mkdir "$LOCK" 2>/dev/null || die "another run of this step holds $LOCK"
+  trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
+}
+tf_out() { "$TERRAFORM" -chdir="$TFDIR" output -raw "$1" </dev/null; }
+gate_node() { [ "$(node --version)" = "v$(cat "$C/.nvmrc")" ] || die "node $(cat "$C/.nvmrc") is not first on PATH"; }
+
+# The Lambda bundles (spec 027 T022). Terraform zips infrastructure/lambda/<name>/dist into .build/<name>.zip at plan time, so every plan
+# builds each one first from the clone at the release commit: a dist left from an older build is never packaged. Built under umask 022,
+# because the zip keeps each file's mode and these scripts run under 077: an owner-only file changes the zip's hash and Lambda cannot read it.
+build_lambdas() { # LOG; sets LAMBDAS to the names built
+  local log="$1" dir name pin
+  LAMBDAS=()
+  for dir in "$C"/infrastructure/lambda/*/; do [ -f "$dir/package.json" ] && LAMBDAS+=("$(basename "$dir")"); done
+  [ "${#LAMBDAS[@]}" -gt 0 ] || return 0
+  gate_node
+  pin=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).packageManager||"")' "$C/package.json")
+  [ "pnpm@$(pnpm --version </dev/null)" = "$pin" ] || die "pnpm is not the clone's packageManager ($pin)"
+  ( cd "$C" && CI=true pnpm install --frozen-lockfile </dev/null ) > "$log" 2>&1 || { tail -20 "$log"; die "pnpm install failed in the clone"; }
+  for name in "${LAMBDAS[@]}"; do
+    dir="$C/infrastructure/lambda/$name"
+    rm -rf "$dir/dist" "$TFDIR/.build/$name.zip"
+    ( umask 022; cd "$dir" && pnpm run build </dev/null ) >> "$log" 2>&1 || { tail -20 "$log"; die "the $name Lambda did not build"; }
+    [ -n "$(ls -A "$dir/dist" 2>/dev/null)" ] || die "the $name Lambda built nothing into dist"
+    [ -z "$(find "$dir/dist" \( -type f ! -perm 644 \) -o \( -type d ! -perm 755 \))" ] || die "the $name bundle has a file Lambda cannot read (not 644)"
+  done
+}
+# What a plan zipped, next to the plan; apply.sh refuses when a zip changed after it (a rebuild in the clone would upload code nobody planned).
+bundle_record() { # FILE
+  local name
+  : > "$1"
+  for name in ${LAMBDAS[@]+"${LAMBDAS[@]}"}; do
+    if [ -f "$TFDIR/.build/$name.zip" ]; then printf '%s %s\n' "$(sha "$TFDIR/.build/$name.zip")" "$name" >> "$1"; fi
+  done
+}
+bundle_check() { # FILE
+  local want name
+  [ -f "$1" ] || die "no bundle record next to the plan ($1): plan again"
+  while read -r want name; do
+    [ -f "$TFDIR/.build/$name.zip" ] && [ "$(sha "$TFDIR/.build/$name.zip")" = "$want" ] || die "the $name Lambda bundle changed after the plan: plan again"
+  done < "$1"
+}

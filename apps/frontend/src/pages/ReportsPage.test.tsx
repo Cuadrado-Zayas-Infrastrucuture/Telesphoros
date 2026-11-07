@@ -43,6 +43,7 @@ function fetcher(
     const url = new URL(String(input));
     if (url.pathname.endsWith('/me')) return json({ roles });
     if (url.pathname.endsWith('/me/recovery-scope')) return json({ recoveryScope: RECOVERY_SCOPE });
+    if (url.pathname.endsWith('/followups')) return json({ currentActor: p1, items: [], page: 1, hasMore: false, counts: { overdue: 0, today: 0, upcoming: 0, unassigned: 0 } });
     if (url.pathname.endsWith('/patients'))
       return json({ data: [p1, p2].map((id, i) => ({ id, label: `SYN-${i + 1}`, createdAt: date, updatedAt: date })), meta: { page: 1, pageSize: 20, total: 2, totalPages: 1 } });
     if (url.searchParams.get('pageSize') === '100') return stages(url);
@@ -80,10 +81,11 @@ describe('reports page with real auth and route guards', () => {
       vi.stubGlobal('location', { hostname: '127.0.0.1' });
       const { container } = renderApp('/reports', { signedInAs: roles, fetchImpl: fetcher(roles) });
       await heading();
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Report history' })).toBeVisible();
+      expect(screen.queryByRole('dialog', { name: 'Report details' })).not.toBeInTheDocument();
       expect(screen.queryByRole('textbox', { name: 'Sample question' })).not.toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Chat preview' })).toHaveAttribute('href', '/local-interpretation');
-      expect(Boolean(screen.queryByRole('link', { name: 'Upload synthetic report' }))).toBe(roles.includes('clinician'));
+      expect(Boolean(screen.queryByRole('link', { name: 'Attach report in chat' }))).toBe(roles.includes('clinician'));
       await userEvent.setup().click(await screen.findByRole('button', { name: 'Open synthetic.json' }));
       const drawer = screen.getByRole('dialog', { name: 'Report details' });
       expect(within(drawer).getByRole('heading', { name: 'Report details' })).toHaveFocus();
@@ -116,7 +118,7 @@ describe('reports page with real auth and route guards', () => {
       renderApp('/reports', { signedInAs: roles, fetchImpl: fetcher(roles) });
       await heading();
       await screen.findByRole('button', { name: 'Open synthetic.json' });
-      expect(Boolean(screen.queryByRole('link', { name: 'Upload synthetic report' }))).toBe(roles.some((role) => ['clinician'].includes(role)));
+      expect(Boolean(screen.queryByRole('link', { name: 'Attach report in chat' }))).toBe(roles.some((role) => ['clinician'].includes(role)));
       const user = userEvent.setup();
       await user.click(screen.getByRole('button', { name: 'Open synthetic.json' }));
       expect(Boolean(screen.queryByRole('button', { name: 'Download synthetic.json' }))).toBe(roles.some((role) => ['clinician', 'reviewer'].includes(role)));
@@ -209,6 +211,24 @@ describe('reports page with real auth and route guards', () => {
     expect(next).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByText('Report page unavailable.')).toBeInTheDocument();
   });
+  it('retries the page that failed, not the first page', async () => {
+    let pageTwoReads = 0;
+    const api = fetcher(['reviewer'], async (url) =>
+      url.searchParams.get('page') === '2'
+        ? ++pageTwoReads === 1
+          ? json({ message: 'do-not-display' }, 503)
+          : json({ data: [row()], meta: { page: 2, pageSize: 20, total: 21, totalPages: 2 } })
+        : json({ data: [row()], meta: { page: 1, pageSize: 20, total: 21, totalPages: 2 } }),
+    );
+    renderApp('/reports', { signedInAs: ['reviewer'], fetchImpl: api });
+    await heading();
+    await screen.findByRole('button', { name: 'Open synthetic.json' });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Next report page' }));
+    await user.click(await screen.findByRole('button', { name: 'Retry loading reports' }));
+    await waitFor(() => expect(pageTwoReads).toBe(2));
+    expect(api.mock.calls.filter(([url]) => String(url).includes('/reports?page=1&pageSize=20'))).toHaveLength(1);
+  });
   it('focuses selected details, exposes technical fields on request and returns to the same report', async () => {
     renderApp('/reports', { signedInAs: ['reader'], fetchImpl: fetcher(['reader']) });
     await heading();
@@ -258,7 +278,7 @@ describe('reports page with real auth and route guards', () => {
   ] as [Role[], boolean][])('offers empty-state upload only for an existing writer role: %j', async (roles, allowed) => {
     renderApp('/reports', { signedInAs: roles, fetchImpl: fetcher(roles, async () => json({ data: [], meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 } })) });
     await screen.findByText('No reports found for this selection.');
-    expect(Boolean(screen.queryByRole('link', { name: 'Upload first synthetic report' }))).toBe(allowed);
+    expect(Boolean(screen.queryByRole('link', { name: 'Attach first report in chat' }))).toBe(allowed);
   });
   it('returns an emptied later page to page one while retaining the patient filter', async () => {
     const api = fetcher(['reviewer'], async (url) =>

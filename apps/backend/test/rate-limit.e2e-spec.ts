@@ -75,6 +75,19 @@ describe('the 429 answer', () => {
 });
 
 describe('route classes', () => {
+  it('exposes the retry delay to an allowed browser origin on a real 429', async () => {
+    const origin = 'https://app.example.test';
+    const app = await start({ corsOrigins: [origin], rateLimit: { ip: 1000, read: 1 } });
+    const token = await person('browser');
+    await get(app, '/read', token, { Origin: origin }).expect(200);
+    const limited = await get(app, '/read', token, { Origin: origin }).expect(429);
+    expect(limited.headers['retry-after']).toMatch(/^[1-9]\d*$/);
+    expect(limited.headers['access-control-allow-origin']).toBe(origin);
+    expect(limited.headers['access-control-expose-headers'].split(',').map((h: string) => h.trim().toLowerCase())).toContain('retry-after');
+    const foreign = await get(app, '/read', token, { Origin: 'https://other.example.test' });
+    expect(foreign.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
   it('reads, writes and expensive routes have separate buckets per person, with their own limits', async () => {
     const app = await start({ rateLimit: { ip: 1000, read: 3, write: 2, expensive: 1 } });
     const token = await person('p1');

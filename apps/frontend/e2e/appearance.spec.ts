@@ -6,7 +6,7 @@ const LIGHT_BACKGROUND = 'rgb(245, 247, 247)'; // #F5F7F7
 const pageBackground = (page: Page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 const theme = (page: Page) => page.evaluate(() => document.documentElement.dataset.theme ?? 'light');
 /** As if Dark had been chosen in an earlier visit: the saved word is all that persists. */
-const savedDark = (page: Page) => page.addInitScript(() => window.localStorage.setItem('telesphoros.theme', 'dark'));
+const savedDark = (page: Page) => page.addInitScript(() => { window.localStorage.setItem('telesphoros.storage-consent.v1', JSON.stringify({ version: 1, preferences: true })); window.localStorage.setItem('telesphoros.theme', 'dark'); });
 
 test('choosing Dark in Settings turns the page dark at once, and Light turns it back', async ({ page }) => {
   await signInAs(page, 'alice', '/settings');

@@ -93,8 +93,11 @@ export interface EvaluationInput {
   origin: DataOrigin;
   patientId: string;
   reportId: string;
-  captureId: string;
+  /** The accepted PDF capture the evaluation rests on. Null exactly when `structuredRevisionId` names the source instead (032 S3). */
+  captureId: string | null;
   captureAcceptanceId: string | null;
+  /** The stored structured laboratory revision the evaluation rests on, in place of a capture. Never set together with `captureId`. */
+  structuredRevisionId?: string;
   disposition: 'held' | 'evaluated';
   holdCode: string | null;
   /** The adapter's SourceBinding. */
@@ -115,6 +118,12 @@ export interface EvaluationInput {
    * Omitted means no such check: only the evaluations service creates evaluations in production, and it always passes this (a test enforces that).
    */
   patientLinkDecisionId?: string;
+  /**
+   * A structured source only: the ids of every stored revision of the patient, of the newest review of each finding, and of every source resolution, as
+   * the assessment was planned on them. After the ledger lock is held they are read again, and any difference refuses (StructuredBasisChangedError). Omitted
+   * means no such check.
+   */
+  structuredBasis?: { revisionIds: readonly string[]; reviewIds: readonly string[]; resolutionIds: readonly string[] };
   /** The adapter's audit trail (offsets, hashes, states, codes); empty when held. */
   occurrences: unknown[];
   /** The engine's output, stored as it was shown. Empty when held. */

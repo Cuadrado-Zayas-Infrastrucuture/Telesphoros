@@ -13,12 +13,26 @@ describe('public pages', () => {
   it.each([
     ['/', 'PGx reports, interpreted with care.'],
     ['/signin', 'Sign in'],
+    ['/signin/', 'Sign in'],
+    ['/signin?source=header', 'Sign in'],
     ['/signed-out', 'You have been signed out'],
     ['/nope', 'Page not found'],
   ])('lazy-loads %s with exactly one h1, no accessibility violations, and no sign-in needed', async (path, title) => {
     const { container } = renderApp(path);
     expect(await heading(title)).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    const header = within(screen.getByRole('banner'));
+    if (title === 'Sign in') {
+      expect(header.queryByRole('link', { name: 'Sign in', exact: true })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Sign in', exact: true })).toBeEnabled();
+    } else if (title === 'You have been signed out') {
+      expect(header.queryByRole('link', { name: 'Sign in', exact: true })).not.toBeInTheDocument();
+      expect(header.queryByRole('navigation')).not.toBeInTheDocument();
+      expect(screen.getAllByRole('link', { name: 'Sign in', exact: true })).toHaveLength(1);
+      expect(screen.getByRole('link', { name: 'Sign in', exact: true })).toHaveAttribute('href', '/signin');
+    } else {
+      expect(header.getByRole('link', { name: 'Sign in', exact: true })).toHaveAttribute('href', '/signin');
+    }
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -26,6 +40,13 @@ describe('public pages', () => {
     renderApp('/');
     await heading(/PGx reports, interpreted/);
     for (const img of screen.getAllByRole('img')) expect(img.getAttribute('alt')?.trim()).toBeTruthy();
+  });
+
+  it("shows a loading status, not a blank page, while the first page's code downloads", async () => {
+    const { container } = renderApp('/signin');
+    expect(within(container).getByRole('status')).toHaveTextContent('Loading…');
+    expect(await heading('Sign in')).toBeInTheDocument();
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
   });
 
   it('makes the skip link the first tab stop', async () => {
@@ -78,13 +99,15 @@ describe('protected pages', () => {
     expect(screen.queryByRole('link', { name: 'Upload report' })).not.toBeInTheDocument();
   });
 
-  it('show the upload link, the role and a sign-out control in the sidebar to a clinician', async () => {
+  it('show chat, the role and a sign-out control in the sidebar to a clinician', async () => {
     renderApp('/settings', { signedInAs: ['clinician'] });
     await screen.findByRole('button', { name: 'Collapse sidebar' });
-    expect(screen.getByRole('link', { name: 'Upload report' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'New chat' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Upload report' })).not.toBeInTheDocument();
     const sidebar = document.querySelector('header.workspace-navigation') as HTMLElement;
-    expect(within(sidebar).getByText('clinician')).toBeInTheDocument();
-    expect(within(sidebar).getAllByRole('button', { name: 'Sign out' })[0]).toBeEnabled();
+    // Specs/034 D4: the role names the account row at the bottom, whose menu holds Sign out.
+    await userEvent.setup().click(within(sidebar).getByRole('button', { name: 'Account, clinician' }));
+    expect(within(sidebar).getByRole('button', { name: 'Sign out' })).toBeEnabled();
   });
 
   it('offer the way back into the workspace on the landing header, with no sign-out there', async () => {
@@ -97,9 +120,11 @@ describe('protected pages', () => {
     const { client } = renderApp('/settings', { signedInAs: ['clinician'] });
     await screen.findByRole('button', { name: 'Collapse sidebar' });
     const sidebar = document.querySelector('header.workspace-navigation') as HTMLElement;
-    await userEvent.setup().click(within(sidebar).getAllByRole('button', { name: 'Sign out' })[0]!);
+    const user = userEvent.setup();
+    await user.click(within(sidebar).getByRole('button', { name: 'Account, clinician' }));
+    await user.click(within(sidebar).getByRole('button', { name: 'Sign out' }));
     expect(client.signOut).toHaveBeenCalledTimes(1);
-    expect(await screen.findByRole('link', { name: 'Sign in' })).toBeInTheDocument();
+    expect(await heading('Sign in')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Upload report' })).not.toBeInTheDocument();
   });
 });

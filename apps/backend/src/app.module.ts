@@ -1,3 +1,4 @@
+import { PatientFollowupsModule } from './patient-followups/patient-followups.module';
 import { type DynamicModule, Module } from '@nestjs/common';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
@@ -15,6 +16,7 @@ import { MeModule } from './me/me.module';
 import { MembersModule } from './members/members.module';
 import { ObjectStorageModule } from './object-storage/object-storage.module';
 import type { RecoveryObjectStorage } from './object-storage/recovery-object-storage';
+import { PatientMedicationsModule } from './patient-medications/patient-medications.module';
 import { PatientDemographicsModule } from './patient-demographics/patient-demographics.module';
 import { PatientIdentityModule } from './patient-identity/patient-identity.module';
 import { PatientMergeModule } from './patient-merge/patient-merge.module';
@@ -43,6 +45,8 @@ export class AppModule {
         LabReportsModule,
         PatientsModule,
         PatientDemographicsModule,
+        PatientMedicationsModule,
+        PatientFollowupsModule,
         PatientIdentityModule,
         PatientMergeModule,
         ReportsModule,

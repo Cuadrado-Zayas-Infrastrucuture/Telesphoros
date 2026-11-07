@@ -1,0 +1,108 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 5 0 R /Resources << /Font << /F1 3 0 R >> >> >>
+endobj
+5 0 obj
+<< /Length 2138 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+40 750 Td
+(SYNTHETIC LABORATORY REPORT) Tj T*
+(Report syn-report-uncertain | revision 1 | patient syn-patient-1) Tj T*
+(TEST ONLY - NOT FOR CLINICAL USE | Page 1/2) Tj T*
+() Tj T*
+(schemaVersion: pgx-synthetic-0.1) Tj T*
+(synthetic: true) Tj T*
+(clinicalUse: not-approved) Tj T*
+(actionable: false) Tj T*
+() Tj T*
+(LABORATORY IDENTITY AND ORIGINAL FINDINGS) Tj T*
+(id: syn-report-uncertain) Tj T*
+(seriesId: syn-series-1) Tj T*
+(revision: 1) Tj T*
+(previousRevisionId: null \(not supplied / not applicable\)) Tj T*
+(status: final) Tj T*
+(patientId: syn-patient-1) Tj T*
+(laboratoryId: syn-lab-1) Tj T*
+(accession: syn-accession-1) Tj T*
+(specimen.id: syn-specimen-1) Tj T*
+(specimen.type: synthetic-saliva) Tj T*
+(specimen.collectedAt: 2026-11-01T08:00:00Z) Tj T*
+(issuedAt: 2026-11-02T08:00:00Z) Tj T*
+(receivedAt: 2026-11-02T09:00:00Z) Tj T*
+(releasedBy: Synthetic laboratory reviewer) Tj T*
+(assay.state: provided) Tj T*
+(assay.manifest.id: syn-assay-1) Tj T*
+(assay.manifest.version: 1) Tj T*
+(assay.manifest.laboratoryId: syn-lab-1) Tj T*
+(assay.manifest.method: Invented assay; no analytical validation) Tj T*
+(assay.manifest.specimenTypes.0: synthetic-saliva) Tj T*
+(assay.manifest.referenceAssembly: synthetic-reference-1) Tj T*
+(assay.manifest.nomenclatureVersion: synthetic-names-1) Tj T*
+(assay.manifest.targets.0.id: syn-target-a) Tj T*
+(assay.manifest.targets.0.gene: GENEA) Tj T*
+(assay.manifest.targets.0.variantClasses.0: sequence) Tj T*
+(assay.manifest.targets.0.alleles.0: *A) Tj T*
+(assay.manifest.targets.0.alleles.1: *B) Tj T*
+(assay.manifest.targets.0.limitations.0: Invented target; no clinical coverage.) Tj T*
+(assay.manifest.limitations.0: Synthetic demonstration only.) Tj T*
+(findings.0.id: syn-finding-a) Tj T*
+(findings.0.targetId: syn-target-a) Tj T*
+(findings.0.gene: GENEA) Tj T*
+(findings.0.orderScope: ordered) Tj T*
+(findings.0.coverage: tested) Tj T*
+(findings.0.analyticalState: ambiguous) Tj T*
+(findings.0.interpretationState: indeterminate) Tj T*
+(findings.0.reportedCall.kind: unresolved) Tj T*
+(findings.0.reportedCall.originalText: *A/*B or *B/*A; phase unresolved) Tj T*
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 7 0 R /Resources << /Font << /F1 3 0 R >> >> >>
+endobj
+7 0 obj
+<< /Length 562 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+40 750 Td
+(SYNTHETIC LABORATORY REPORT) Tj T*
+(Report syn-report-uncertain | revision 1 | patient syn-patient-1) Tj T*
+(TEST ONLY - NOT FOR CLINICAL USE | Page 2/2) Tj T*
+() Tj T*
+(findings.0.reportedCall.candidates.0: *A/*B) Tj T*
+(findings.0.reportedCall.candidates.1: *B/*A) Tj T*
+(findings.0.laboratoryInterpretation: null \(not supplied / not applicable\)) Tj T*
+(findings.0.limitations.0: Phase is unresolved; laboratory clarification required.) Tj T*
+(limitations.0: This document is not an issued clinical laboratory report.) Tj T*
+ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000189 00000 n 
+0000000315 00000 n 
+0000002504 00000 n 
+0000002630 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+3242
+%%EOF

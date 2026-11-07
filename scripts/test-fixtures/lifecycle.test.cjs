@@ -11,16 +11,18 @@ async function databases() {
   const client = new Client({ connectionString: process.env.TEST_DATABASE_URL });
   try {
     await client.connect();
-    return (await client.query('SELECT datname FROM pg_database WHERE left(datname, 5)=$1 ORDER BY datname', ['test_'])).rows.map(row => row.datname);
+    return (await client.query('SELECT datname FROM pg_database WHERE starts_with(datname, $1) OR starts_with(datname, $2) ORDER BY datname', ['test_', 'tplbuild_'])).rows.map(row => row.datname);
   } finally { await client.end(); }
 }
 for (const [mode, file, name, expected] of [
   ['split', 'test/local-storage-intake.e2e-spec.ts', 'stores and retrieves exact lab-pdf', 0],
   ['late', 'test/local-storage-intake.e2e-spec.ts', 'stores and retrieves exact lab-pdf', 1],
+  ['split', 'test/input-boundaries.e2e-spec.ts', 'rejects unexpected query and body', 0],
+  ['late', 'test/input-boundaries.e2e-spec.ts', 'rejects unexpected query and body', 1],
   ['lock', 'test/db/report-registration.pg-spec.ts', 'fails migration on bounded lock contention', 0],
   ['late-lock', 'test/db/report-registration.pg-spec.ts', 'fails migration on bounded lock contention', 1],
 ]) {
-  test(`${mode}: real resources close naturally and checks retain their deadlines`, async () => {
+  test(`${mode}: real resources close naturally and checks retain their deadlines [${file}]`, async () => {
     const before = await databases();
     const result = spawnSync(process.execPath, [backendRequire.resolve('jest/bin/jest'), '--runInBand',
       '--runTestsByPath', file, '--testNamePattern', name,

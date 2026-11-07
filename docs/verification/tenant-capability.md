@@ -301,3 +301,77 @@ Each mutant was applied to `apps/backend/migrations/0032_tenant_binding_policies
 - T023: the patients policy's capability read is an InitPlan (checked with the capability presented).
 
 **Still open:** the Gitleaks scan (refused by the worktree guard), the full backend suite under real capabilities in `dual` mode (G6/R8), operator redaction under capability mode (G1, slice 5), and the staging D4 and D7 evidence.
+
+## Slice 4: the access-audit writer stores verified identity (T027, T028, migration 0072), 2026-11-06 (local)
+
+Decision D6. `security_audit_events` gains `verified_tenant_id` and `verified_actor_sub`. The existing `tenant_id` and `actor_sub` become the claimed identity. `security_audit_record` fills the verified columns from `security_audit_capability()`.
+- That function is owned by `telesphoros_capability` and callable by `telesphoros_ledger` only.
+- It answers only for a current, unrevoked capability, and never falls back to the settings.
+- `Database.recordSecurityEvent` binds the request's capability in the same statement and leaves `capabilityStats` alone.
+
+The class (a) row above for `security_audit_record` ("neither: tenant and actor are plain parameters") describes 0016. Since 0072 the parameters are the claim and the verified identity comes from the capability.
+
+**Test first.** `test/db/audit-verified-identity.pg-spec.ts`, 13 tests: 12 failed before the migration (no verified columns) and 1 passed (the capability counts were not yet touched by the writer). They cover, in `dual` and `capability` mode:
+- a capability for org-alpha/alice with an org-beta/mallory claim stores alice as verified and mallory as claimed;
+- no capability, an expired capability and a revoked capability each store NULL verified fields and still write the row;
+- forged settings with no capability verify nothing;
+- the audit write leaves `capabilityStats` unchanged;
+- the application login cannot call the lookup (`42501`);
+- the down migration refuses while verified rows exist and reverts only with `telesphoros.allow_audit_drop=yes`.
+
+**Mutants, each run once and restored:**
+
+| Mutant | Result |
+| --- | --- |
+| writer ignores the capability | red: 3 failed |
+| writer reads `app_tenant()`/`app_actor()` (settings fallback) | red: 1 failed (forged settings, `dual`) |
+| lookup ignores expiry | red: 2 failed |
+| lookup ignores revocation | red: 2 failed |
+| lookup granted to `telesphoros_app` | red: 1 failed |
+| down migration drops verified evidence without the setting | red: 1 failed |
+| API does not bind the capability for the audit write | red: 3 failed |
+| API counts audit writes in `capabilityStats` | red: 1 failed |
+
+**Found on the way.** The first `down` read the table as the migrator login, which has no read access; 28 tests in `down-guards-as-migrator.pg-spec.ts` failed. The check now runs as `telesphoros_ledger`. The 0031 revert snapshot in `tenant-capability.pg-spec.ts` lists the new function with the others removed above 0031.
+
+**Not covered.** The `api-auth` `accepted` row is written before the guard asks for a capability, so it never has a verified identity; this is documented, not changed. Nothing was run in AWS, and staging has no issuer, so verified fields stay NULL there.
+
+## Slice 5 readiness R2 and R5: the P2 worker checks membership without the tenant setting (migration 0073), 2026-11-06 (local)
+
+**R2, the problem.** `agentic_synthetic_member_current` (0029) wrote `app.current_tenant_id` and called `membership_assert_current`, which reads the organization through `app_tenant()`. The worker has no capability. That is the setting in `guc` and `dual`, and nothing in `capability`, so every worker step would be refused there. Shown red first:
+- `agentic-identity.pg-spec.ts`, "the worker side, binding mode capability (R2)": a run admitted with a capability, claimed with `agentic_synthetic_claim` and loaded with `agentic_synthetic_load` by the real worker login came back `refused`;
+- in `guc` and `dual` the same step passed.
+
+**R2, the fix.**
+- `membership_current_in(tenant, sub, version)`, owned like `membership_assert_current` by the migrating login and executable by `telesphoros_jobs` only. It is row-sourced: `agentic_synthetic_authority` passes the organization from the run it has locked.
+- It answers for an active member at that version of an active organization, under the same `FOR SHARE` lock.
+- `member_current` calls it and reads no setting. 0073 refuses unless the body it replaces is 0029's (md5), and its `down` restores that body byte for byte.
+- Binding through `tenant_capability_bind_internal` was not possible: `membership_assert_current` then compares the capability's membership version, which is 0 for an internal binding.
+
+**Tests**, in `agentic-identity.pg-spec.ts`, 38 in all:
+- in each of `guc`, `dual` and `capability`, a worker step for a current member loads and one after the member's removal is refused;
+- a role change, which moves the version, is refused in `capability`;
+- the lookup refuses another version, another person, a row inactive at the version asked, and a suspended organization;
+- the lock makes a concurrent removal wait (`55P03` with a 300 ms lock timeout);
+- no login can execute the lookup, and only `telesphoros_jobs` is granted;
+- the revert restores the 0029 body hash, the precondition refuses a changed body, and re-apply works;
+- the catalog pin now says no P2 function reads a tenant setting.
+- The 0031 revert snapshot in `tenant-capability.pg-spec.ts` lists the new function.
+
+**Mutants, each run once and restored:**
+
+| Mutant | Result |
+| --- | --- |
+| `member_current` back on the setting and `membership_assert_current` | red: 2 failed |
+| lookup ignores the version | red: 2 failed |
+| lookup ignores the status | red: 1 failed (survived until the inactive-at-version case was added) |
+| lookup ignores the person | red: 1 failed |
+| lookup ignores suspension | red: 1 failed |
+| lookup takes no row lock | red: 1 failed |
+| lookup granted to `telesphoros_worker` | red: 1 failed |
+| up skips its precondition | red: 1 failed |
+| down changes the 0029 body | red: 2 failed |
+
+**R5.** It does not apply in production. `PostgresSyntheticStore` is built only in tests, and nothing outside `apps/ai-service` imports it. Its application-side calls have required a capability since 0030, and its worker side is R2.
+
+**Not run.** The ai-service's own durable PostgreSQL suites (`test:durable:pg`). They need the owned PostgreSQL runtime and its sealed manifest outside this repository, and CI does not run them either. Nothing in AWS.

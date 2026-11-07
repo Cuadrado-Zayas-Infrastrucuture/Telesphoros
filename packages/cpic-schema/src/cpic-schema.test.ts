@@ -553,3 +553,136 @@ describe('envelope', () => {
     expect(knowledgeFileSchema.safeParse({ ...guideline(), kind: 'other' }).success).toBe(false);
   });
 });
+
+describe('schema 1.3 identifiers and origin (spec 033 K2)', () => {
+  const signed = { status: 'reviewed', reviewedBy: 'A. Reviewer', reviewedAt: '2026-02-01', contentSha256: 'a'.repeat(64) } as const;
+  // Real-form values chosen beyond any range the registries have assigned, so no test names a real drug or gene.
+  const REAL = { rxcui: '999999999999', hgncId: 'HGNC:9999999', pharmvarVersion: '999.0.0' } as const;
+  const SYN = { rxcui: 'syn-rxcui-drugx', hgncId: 'syn-hgnc-genea', pharmvarVersion: 'syn-pharmvar-1' } as const;
+
+  const guideline13 = (over: Record<string, unknown> = {}) => ({
+    ...guideline(),
+    schemaVersion: '1.3',
+    rxcui: SYN.rxcui,
+    recommendations: [cell({ GENEA: 'Normal' }, { origin: 'cpic' })],
+    ...over,
+  });
+  const map13 = (over: Record<string, unknown> = {}) => ({
+    ...functionPairMap(),
+    schemaVersion: '1.3',
+    hgncId: SYN.hgncId,
+    origin: 'pharmvar',
+    pharmvarVersion: SYN.pharmvarVersion,
+    ...over,
+  });
+  const phenotypeOnly13 = (over: Record<string, unknown> = {}) => {
+    const { alleles: _a, method: _m, pharmvarVersion: _p, ...rest } = map13();
+    (void _a, void _m, void _p);
+    return { ...rest, ...over };
+  };
+  const realFile = <T extends Record<string, unknown>>(file: T, over: Record<string, unknown>) => ({
+    ...file,
+    synthetic: false,
+    provenance: { ...base.provenance, license: 'cc0-1.0', redistribution: 'allowed' },
+    review: signed,
+    ...over,
+  });
+
+  it('a 1.2 file parses to exactly its input, so its content hash cannot change', () => {
+    for (const [schema, file] of [
+      [guidelineFileSchema, guideline()],
+      [geneMapFileSchema, functionPairMap()],
+    ] as const) {
+      const parsed = schema.safeParse(file);
+      expect(parsed.success).toBe(true);
+      expect(parsed.data).toStrictEqual(file);
+    }
+  });
+
+  it('a 1.2 file may not carry any 1.3 field', () => {
+    expect(issuesOf(guidelineFileSchema, { ...guideline(), rxcui: SYN.rxcui })).toContain('rxcui: Not part of schema 1.2: declare schemaVersion "1.3" to use it.');
+    expect(issuesOf(guidelineFileSchema, { ...guideline(), recommendations: [cell({ GENEA: 'Normal' }, { origin: 'cpic' })] })).toContain(
+      'recommendations.0.origin: Not part of schema 1.2: declare schemaVersion "1.3" to use it.',
+    );
+    for (const field of ['hgncId', 'origin', 'pharmvarVersion'] as const) {
+      expect(geneMapFileSchema.safeParse({ ...functionPairMap(), [field]: map13()[field] }).success, field).toBe(false);
+    }
+  });
+
+  it('accepts a complete synthetic 1.3 guideline and gene maps', () => {
+    expect(issuesOf(guidelineFileSchema, guideline13())).toEqual([]);
+    expect(issuesOf(geneMapFileSchema, map13())).toEqual([]);
+    expect(issuesOf(geneMapFileSchema, phenotypeOnly13())).toEqual([]);
+  });
+
+  it('a 1.3 guideline needs an RxCUI and an origin on every cell', () => {
+    const { rxcui: _r, ...noRxcui } = guideline13();
+    void _r;
+    expect(issuesOf(guidelineFileSchema, noRxcui)).toContain('rxcui: Required from schema 1.3.');
+    expect(issuesOf(guidelineFileSchema, guideline13({ recommendations: [cell({ GENEA: 'Normal' })] }))).toContain('recommendations.0.origin: Required from schema 1.3.');
+    expect(guidelineFileSchema.safeParse(guideline13({ recommendations: [cell({ GENEA: 'Normal' }, { origin: 'clinpgx' })] })).success).toBe(false);
+  });
+
+  it('a 1.3 gene map needs an HGNC id and an origin, and a PharmVar release exactly when it lists alleles', () => {
+    for (const field of ['hgncId', 'origin'] as const) {
+      const file = map13() as Record<string, unknown>;
+      delete file[field];
+      expect(issuesOf(geneMapFileSchema, file), field).toContain(`${field}: Required from schema 1.3.`);
+    }
+    const { pharmvarVersion: _p, ...noRelease } = map13();
+    void _p;
+    expect(issuesOf(geneMapFileSchema, noRelease)).toContain('pharmvarVersion: Give pharmvarVersion exactly when the map lists alleles.');
+    expect(issuesOf(geneMapFileSchema, phenotypeOnly13({ pharmvarVersion: SYN.pharmvarVersion }))).toContain(
+      'pharmvarVersion: Give pharmvarVersion exactly when the map lists alleles.',
+    );
+  });
+
+  it('refuses malformed identifiers', () => {
+    for (const rxcui of ['', '0123', 'RxNorm:2670', 'syn-rxcui-', 'syn-rxcui-DRUGX', '12 34']) {
+      expect(guidelineFileSchema.safeParse(guideline13({ rxcui })).success, rxcui).toBe(false);
+    }
+    for (const hgncId of ['', 'HGNC:', 'HGNC:0', 'hgnc:12', '2625', 'syn-hgnc-']) {
+      expect(geneMapFileSchema.safeParse(map13({ hgncId })).success, hgncId).toBe(false);
+    }
+    for (const pharmvarVersion of ['', '6', 'v6.2', '6.2.1.4', 'syn-pharmvar-']) {
+      expect(geneMapFileSchema.safeParse(map13({ pharmvarVersion })).success, pharmvarVersion).toBe(false);
+    }
+  });
+
+  it('a synthetic file must use invented "syn-" identifiers, never real-form ones (D1)', () => {
+    expect(issuesOf(guidelineFileSchema, guideline13({ rxcui: REAL.rxcui }))).toContain('rxcui: A synthetic file must use an invented "syn-" rxcui, never a real-form one.');
+    expect(issuesOf(geneMapFileSchema, map13({ hgncId: REAL.hgncId }))).toContain('hgncId: A synthetic file must use an invented "syn-" hgncId, never a real-form one.');
+    expect(issuesOf(geneMapFileSchema, map13({ pharmvarVersion: REAL.pharmvarVersion }))).toContain(
+      'pharmvarVersion: A synthetic file must use an invented "syn-" pharmvarVersion, never a real-form one.',
+    );
+  });
+
+  it('a non-synthetic file must use real-form identifiers, never invented ones (D1)', () => {
+    // control: real forms are accepted on a reviewed, non-synthetic file
+    expect(issuesOf(guidelineFileSchema, realFile(guideline13(), { rxcui: REAL.rxcui }))).toEqual([]);
+    expect(issuesOf(geneMapFileSchema, realFile(map13(), { hgncId: REAL.hgncId, pharmvarVersion: REAL.pharmvarVersion }))).toEqual([]);
+    expect(issuesOf(guidelineFileSchema, realFile(guideline13(), {}))).toContain('rxcui: A non-synthetic file must use a real rxcui, not an invented "syn-" one.');
+    expect(issuesOf(geneMapFileSchema, realFile(map13(), { pharmvarVersion: REAL.pharmvarVersion }))).toContain(
+      'hgncId: A non-synthetic file must use a real hgncId, not an invented "syn-" one.',
+    );
+  });
+
+  it('refuses a reviewed, non-synthetic file whose origin is "unknown" (K2-3)', () => {
+    const unknownCell = realFile(guideline13(), { rxcui: REAL.rxcui, recommendations: [cell({ GENEA: 'Normal' }, { origin: 'unknown' })] });
+    expect(issuesOf(guidelineFileSchema, unknownCell)).toContain('recommendations.0.origin: A reviewed file must state the origin of its content (not "unknown").');
+    const unknownMap = realFile(map13(), { hgncId: REAL.hgncId, pharmvarVersion: REAL.pharmvarVersion, origin: 'unknown' });
+    expect(issuesOf(geneMapFileSchema, unknownMap)).toContain('origin: A reviewed file must state the origin of its content (not "unknown").');
+    // every stated origin is accepted
+    for (const origin of ['cpic', 'pharmgkb', 'pharmvar']) {
+      expect(guidelineFileSchema.safeParse({ ...unknownCell, recommendations: [cell({ GENEA: 'Normal' }, { origin })] }).success, origin).toBe(true);
+    }
+  });
+
+  it('still allows "unknown" origin on a draft or a synthetic file', () => {
+    const unknownCells = [cell({ GENEA: 'Normal' }, { origin: 'unknown' })];
+    expect(guidelineFileSchema.safeParse(guideline13({ recommendations: unknownCells })).success).toBe(true); // synthetic
+    expect(guidelineFileSchema.safeParse({ ...realFile(guideline13(), { rxcui: REAL.rxcui, recommendations: unknownCells }), review: { status: 'unreviewed' } }).success).toBe(
+      true,
+    ); // draft
+  });
+});

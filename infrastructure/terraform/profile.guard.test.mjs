@@ -46,7 +46,9 @@ const RELAXING = /local\.(synthetic|synthetic_network|network_count|offsite_coun
  * created) must be seen, which a set of distinct lines would not.
  */
 export const EXPECTED_USES = {
-  'api-compute.tf': { 'assign_public_ip = local.tasks_public_ip': 1, 'value = var.enable_api_hosting ? local.tasks_public_ip : null': 1, 'deletion_window_in_days = local.kms_deletion_days': 1, 'recovery_window_in_days = local.secret_recovery_days': 7 },
+  // api-compute.tf, the last two entries (spec 032 S3, PR 3c-2): the synthetic assessment settings. Unlike the others these ADD a feature, only in the synthetic
+  // profile, and remove no protection: the variable's validation refuses anything but the synthetic profile, and the environment map is built behind the same test.
+  'api-compute.tf': { 'assign_public_ip = local.tasks_public_ip': 1, 'value = var.enable_api_hosting ? local.tasks_public_ip : null': 1, 'deletion_window_in_days = local.kms_deletion_days': 1, 'recovery_window_in_days = local.secret_recovery_days': 7, 'condition = !var.synthetic_assessment_enabled || local.synthetic': 1, 'synthetic_assessment_environment = { for name, value in { SYNTHETIC_ASSESSMENT = "enabled", SYNTHETIC_KNOWLEDGE_DIR = "/app/synthetic-knowledge" } : name => value if local.synthetic && var.synthetic_assessment_enabled }': 1 },
   // The budget follows the class the profile picks; it can only refuse a plan, never relax a protection.
   'database-connections.tf': { 'connection_budget = var.db_connection_budget != null ? var.db_connection_budget : lookup(local.connection_estimates, local.db_instance_class, null)': 1 },
   'audit.tf': { 'days = local.audit_lock_days': 1, 'deletion_window_in_days = local.kms_deletion_days': 1, 'force_destroy = local.synthetic': 1, 'is_multi_region_trail = !local.synthetic': 1 },

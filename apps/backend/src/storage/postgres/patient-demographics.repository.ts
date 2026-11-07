@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { DemographicsCompleteness } from '@telesphoros/shared-types';
 import type { PoolClient } from 'pg';
 import { Database } from '../../db/database';
 import { toLedgerError } from '../../ledger/ledger-types';
@@ -81,6 +82,26 @@ export class PostgresPatientDemographicsRepository extends PatientDemographicsRe
         [tenantId, patientIds],
       );
       return new Map(rows.map((r) => [r.patient_id, { version: r.version, sex: r.sex, birthYear: r.birth_year, ethnicity: r.ethnicity }]));
+    });
+  }
+
+  completenessCounts(tenantId: string): Promise<DemographicsCompleteness> {
+    return this.db.withTenant(tenantId, async (client) => {
+      // The same live patients the list shows (merged-away ones are aliases and are left out), each with its latest version's coded columns.
+      // "Complete" is the list's rule: sex and ethnicity both recorded. The four counts come from one statement, so they come from one snapshot.
+      const { rows } = await client.query<{ patients: number; complete: number; incomplete: number; none: number }>(
+        `WITH edges AS MATERIALIZED (SELECT * FROM patient_alias_edges($1)),
+              live AS (SELECT p.id FROM patients p LEFT JOIN edges e ON e.source_patient_id = p.id
+                        WHERE p.tenant_id = $1 AND p.deleted_at IS NULL AND e.source_patient_id IS NULL),
+              latest AS (SELECT DISTINCT ON (patient_id) patient_id, sex, ethnicity FROM patient_demographics WHERE tenant_id = $1 ORDER BY patient_id, version DESC)
+         SELECT count(*)::int AS patients,
+                count(*) FILTER (WHERE l.patient_id IS NOT NULL AND l.sex IS NOT NULL AND l.ethnicity IS NOT NULL)::int AS complete,
+                count(*) FILTER (WHERE l.patient_id IS NOT NULL AND (l.sex IS NULL OR l.ethnicity IS NULL))::int AS incomplete,
+                count(*) FILTER (WHERE l.patient_id IS NULL)::int AS none
+           FROM live LEFT JOIN latest l ON l.patient_id = live.id`,
+        [tenantId],
+      );
+      return rows[0]!;
     });
   }
 

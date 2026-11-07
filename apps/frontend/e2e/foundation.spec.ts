@@ -73,6 +73,7 @@ test('keyboard: the whole upload form can be completed without a mouse', async (
 });
 
 test('form: field-level errors, input preserved after a failed submit, loading state', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   const patient = await signInWithPatient(page);
   await page.getByRole('button', { name: 'Upload report' }).click();
   await expect(page.getByText('Choose an existing patient.')).toBeVisible();
@@ -87,15 +88,26 @@ test('form: field-level errors, input preserved after a failed submit, loading s
   await page.getByLabel(/report file/i).setInputFiles({ name: 'fail.json', mimeType: 'application/json', buffer: Buffer.from('{"synthetic":true}') });
   await page.getByLabel(/synthetic data only/i).check();
 
+  let release!: () => void;
+  const requestHeld = new Promise<void>(resolve => { release = resolve; });
   await page.route('**/api/v1/reports', async route => {
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await requestHeld;
     await route.fulfill({ status: 429, json: { message: 'synthetic refusal' } });
   });
   const submit = page.getByRole('button', { name: 'Upload report' });
+  const restingWidth = await submit.evaluate(el => el.getBoundingClientRect().width);
   await submit.click();
   const busy = page.getByRole('button', { name: /uploading/i });
-  await expect(busy).toBeVisible();
-  await expect(busy).toBeDisabled();
+  try {
+    await expect(busy).toBeVisible();
+    await expect(busy).toBeDisabled();
+    await expect(busy).toHaveAttribute('aria-busy', 'true');
+    expect(await busy.evaluate(el => el.getBoundingClientRect().width)).toBe(restingWidth);
+    await expect(busy.locator('svg')).toHaveCSS('animation-name', 'none');
+    expect(await axeViolations(page)).toEqual([]);
+  } finally {
+    release();
+  }
 
   await expect(page.getByRole('alert')).toContainText('Too many requests. Wait a moment');
   await expect(page.getByLabel(/synthetic patient \(required\)/i)).toHaveValue(patient.id);

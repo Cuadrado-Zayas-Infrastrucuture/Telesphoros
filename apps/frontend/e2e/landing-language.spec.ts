@@ -28,6 +28,7 @@ test('the landing is English by default, whatever the browser language', async (
 
 test('choosing Spanish changes the whole landing, passes axe and fits the viewport; the choice survives a reload; English comes back', async ({ page }) => {
   await page.goto('/');
+  await page.getByRole('button', { name: 'Allow preferences', exact: true }).click();
   await toggle(page, 'Español').click();
   await expect(page.getByRole('heading', { level: 1, name: 'Informes PGx, interpretados con cuidado.' })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('lang', 'es');

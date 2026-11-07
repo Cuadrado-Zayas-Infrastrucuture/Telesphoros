@@ -1,0 +1,154 @@
+{
+  "schemaVersion": "pgx-synthetic-0.1",
+  "synthetic": true,
+  "clinicalUse": "not-approved",
+  "actionable": false,
+  "report": {
+    "id": "syn-report-uncertain",
+    "seriesId": "syn-series-1",
+    "revision": 1,
+    "previousRevisionId": null,
+    "status": "final",
+    "patientId": "syn-patient-1",
+    "laboratoryId": "syn-lab-1",
+    "accession": "syn-accession-1",
+    "specimen": {
+      "id": "syn-specimen-1",
+      "type": "synthetic-saliva",
+      "collectedAt": "2026-11-01T08:00:00Z"
+    },
+    "issuedAt": "2026-11-02T08:00:00Z",
+    "receivedAt": "2026-11-02T09:00:00Z",
+    "releasedBy": "Synthetic laboratory reviewer",
+    "assay": {
+      "state": "provided",
+      "manifest": {
+        "id": "syn-assay-1",
+        "version": "1",
+        "laboratoryId": "syn-lab-1",
+        "method": "Invented assay; no analytical validation",
+        "specimenTypes": [
+          "synthetic-saliva"
+        ],
+        "referenceAssembly": "synthetic-reference-1",
+        "nomenclatureVersion": "synthetic-names-1",
+        "targets": [
+          {
+            "id": "syn-target-a",
+            "gene": "GENEA",
+            "variantClasses": [
+              "sequence"
+            ],
+            "alleles": [
+              "*A",
+              "*B"
+            ],
+            "limitations": [
+              "Invented target; no clinical coverage."
+            ]
+          }
+        ],
+        "limitations": [
+          "Synthetic demonstration only."
+        ]
+      }
+    },
+    "findings": [
+      {
+        "id": "syn-finding-a",
+        "targetId": "syn-target-a",
+        "gene": "GENEA",
+        "orderScope": "ordered",
+        "coverage": "tested",
+        "analyticalState": "ambiguous",
+        "interpretationState": "indeterminate",
+        "reportedCall": {
+          "kind": "unresolved",
+          "originalText": "*A/*B or *B/*A; phase unresolved",
+          "candidates": [
+            "*A/*B",
+            "*B/*A"
+          ]
+        },
+        "laboratoryInterpretation": null,
+        "limitations": [
+          "Phase is unresolved; laboratory clarification required."
+        ]
+      }
+    ],
+    "limitations": [
+      "This document is not an issued clinical laboratory report."
+    ]
+  },
+  "assessment": {
+    "id": "syn-assessment-uncertain",
+    "previousAssessmentId": null,
+    "status": "released",
+    "sourceReport": {
+      "id": "syn-report-uncertain",
+      "revision": 1,
+      "patientId": "syn-patient-1"
+    },
+    "generatedAt": "2026-11-02T11:00:00Z",
+    "context": {
+      "id": "syn-context-1",
+      "patientId": "syn-patient-1",
+      "version": 1,
+      "effectiveAt": "2026-11-02T10:00:00Z",
+      "recordedAt": "2026-11-02T10:00:00Z",
+      "medications": [
+        {
+          "id": "syn-medication-1",
+          "version": 1,
+          "drug": "synthetic-drug-a",
+          "route": "oral",
+          "indication": "synthetic indication",
+          "status": "active",
+          "startAt": "2026-11-01T10:00:00Z",
+          "stopAt": null,
+          "verifiedAt": "2026-11-02T10:00:00Z"
+        }
+      ]
+    },
+    "knowledge": {
+      "id": "syn-knowledge-1",
+      "version": "1",
+      "source": "synthetic-example",
+      "translationVersion": "synthetic-translation-1",
+      "softwareVersion": "synthetic-build-1",
+      "rules": [
+        {
+          "id": "syn-rule-1",
+          "version": "1",
+          "cell": "synthetic-cell-a",
+          "drug": "synthetic-drug-a",
+          "route": "oral",
+          "indication": "synthetic indication",
+          "requiredTargetIds": [
+            "syn-target-a"
+          ]
+        }
+      ]
+    },
+    "results": [
+      {
+        "id": "syn-result-1",
+        "medicationId": "syn-medication-1",
+        "drug": "synthetic-drug-a",
+        "disposition": "missing-prerequisites",
+        "findingIds": [
+          "syn-finding-a"
+        ],
+        "missingPrerequisites": [
+          "Resolved laboratory finding"
+        ],
+        "sourceRuleId": "syn-rule-1",
+        "recommendationText": null,
+        "reason": "The reported call is ambiguous."
+      }
+    ],
+    "limitations": [
+      "Not CPIC guidance; not approved for clinical use."
+    ]
+  }
+}

@@ -16,15 +16,18 @@ import { evaluate } from '../services/recommendation-engine/recommendation-engin
 import { adaptReport, adapterKnowledgeFrom, type AdapterResult } from '../services/report-adapter';
 import { applyDisputeOverlay, type DisputedCell, OVERLAY_VERSION, type OverlayResult } from '../services/knowledge/dispute-overlay';
 import type { KnowledgeSet } from '../services/knowledge/knowledge-set';
-import { currentDataOrigin } from '../ledger/data-origin';
-import { DisputeChangedError, PatientLinkUnverifiedError } from '../ledger/ledger-types';
+import { currentDataOrigin, structuredAssessmentOrigin } from '../ledger/data-origin';
+import { DisputeChangedError, PatientLinkUnverifiedError, StructuredBasisChangedError } from '../ledger/ledger-types';
 import { linkState } from '../patient-identity/link-state';
 import { type ReaderResult } from '../services/report-reader/reader-result';
 import type { ReadOptions, ReportReader } from '../services/report-reader/report-reader';
 import { LedgerRecordsRepository } from '../storage/ledger-records.repository';
 import type { DisputeStatus, EvaluationCompletion, EvaluationInput, EvaluationView, InsertResult, Projected } from '../storage/ledger-records';
 import { ReportsRepository } from '../storage/reports.repository';
+import type { ReportRecord } from '../storage/records';
+import { StructuredRevisionsRepository } from '../storage/structured-revisions.repository';
 import { DatabaseCaptureAcceptanceStore } from './acceptance-store';
+import { planStructuredAssessment, type StructuredAssessmentPlan } from './structured-assessment';
 import { type EvaluationContext, toEvaluationDto, toEvaluationSummaryDto } from './lab-report.mapper';
 import { LedgerStatus } from '../ledger/ledger-status';
 import { ReaderLimiter } from './reader-limiter';
@@ -32,6 +35,16 @@ import { TextCaptureRunner } from './runner/text-capture-runner';
 
 export const LAB_KNOWLEDGE = Symbol('LAB_KNOWLEDGE');
 export const LAB_READER = Symbol('LAB_READER');
+/** The synthetic knowledge a structured assessment evaluates against (SYNTHETIC_ASSESSMENT). Undefined otherwise; never the pipeline's LAB_KNOWLEDGE. */
+export const SYNTHETIC_KNOWLEDGE = Symbol('SYNTHETIC_KNOWLEDGE');
+/** The scope stored in the binding of a synthetic structured assessment: it never reads a PDF and is never a clinical release. */
+export const STRUCTURED_ASSESSMENT_SCOPE = 'synthetic-structured-assessment';
+/** What a structured assessment refusal says, by plan reason. Nothing from the report is quoted. */
+const STRUCTURED_REFUSALS = {
+  'not-recorded': ['structured-not-recorded', 'No stored structured revision exists for this report.'],
+  'source-changed': ['structured-source-changed', 'The stored evidence changed. Reopen the report and review it again.'],
+  superseded: ['structured-superseded', 'This revision is not the one under review for its series.'],
+} as const;
 
 /** Captured text is at most 100 000 Unicode scalars (4 bytes each). */
 const MAX_TEXT_BYTES = 400_000;
@@ -63,6 +76,8 @@ export class EvaluationsService {
     @Optional() @Inject(LAB_KNOWLEDGE) private readonly knowledge?: KnowledgeSet,
     @Optional() @Inject(LAB_READER) private readonly reader?: ReportReader,
     @Optional() private readonly status?: LedgerStatus,
+    @Optional() private readonly structured?: StructuredRevisionsRepository,
+    @Optional() @Inject(SYNTHETIC_KNOWLEDGE) private readonly syntheticKnowledge?: KnowledgeSet,
   ) {}
 
   private need<T>(dependency: T | undefined | null): T {
@@ -148,6 +163,69 @@ export class EvaluationsService {
     }
   }
 
+  /**
+   * Assesses the stored structured revision of a report (032 S3, synthetic) and reads the stored evaluation back the way a caller of the API sees it.
+   * `created` is false when the same assessment already exists.
+   */
+  async assessStructured(principal: Principal, reportId: string): Promise<EvaluationOutcome> {
+    const stored = await this.storeStructured(principal, reportId);
+    return { evaluation: await this.present(principal.tenantId, stored.record), created: stored.created };
+  }
+
+  /**
+   * Assesses the stored structured revision of a report (032 S3, synthetic). Nothing here reads a PDF or runs the reader: the input is the stored
+   * revision and the independent reviews of its findings, evaluated against the SYNTHETIC knowledge only (never the pipeline's). Refused BEFORE anything
+   * is stored: a report without a verified patient link, one that is not a structured report, a revision whose stored evidence changed or that is not
+   * the one under review. Held (stored, no result) for everything incomplete, conflicting or unsupported. The stored evidence the plan rests on (revisions,
+   * newest reviews, resolutions) is read again after the ledger lock is held, as the patient link and disputes are; a difference plans again, once more.
+   */
+  async storeStructured(principal: Principal, reportId: string): Promise<InsertResult> {
+    const ledger = this.need(this.ledger);
+    const knowledge = this.need(this.syntheticKnowledge);
+    const structured = this.need(this.structured);
+    this.status?.assertOpen(principal.tenantId);
+    const origin = structuredAssessmentOrigin(this.env);
+    // Stored with every evaluation. Missing is a misconfiguration, refused here and not left to fail when the record is hashed.
+    const engineVersion = this.need(this.env.BUILD_VERSION);
+
+    const report = await this.reports.findById(principal.tenantId, reportId);
+    if (!report) throw AppException.notFound('Report not found.');
+    if (report.type !== 'structured') throw AppException.conflictBecause('wrong-type', 'Only a stored structured laboratory report can be assessed this way.');
+
+    // Same rule as the PDF path: nothing is assessed for a patient until a second person has recorded that THIS file belongs to them, checked here
+    // and again inside the storing transaction after the ledger lock.
+    const link = linkState(report, await ledger.latestPatientDecision(principal.tenantId, report.id));
+    if (link.state !== 'verified') throw this.unverified();
+
+    for (let attempt = 1; ; attempt++) {
+      const snapshot = await structured.readForReport(principal.tenantId, {
+        patientId: report.patientId,
+        reportId: report.id,
+        sha256: report.sha256 as string,
+        objectVersion: report.objectVersion as string,
+      });
+      const plan = planStructuredAssessment(principal.tenantId, report, snapshot);
+      if (plan.kind === 'refused') {
+        const [code, message] = STRUCTURED_REFUSALS[plan.reason];
+        throw AppException.conflictBecause(code, message);
+      }
+      const active = (await ledger.listDisputes(principal.tenantId)).filter((d) => d.status !== 'dismissed');
+      const structuredBasis = {
+        revisionIds: snapshot.revisions.map((r) => r.id).sort(),
+        reviewIds: snapshot.reviews.map((r) => r.id).sort(),
+        resolutionIds: snapshot.resolutions.map((r) => r.id).sort(),
+      };
+      const input = { origin, ...this.buildStructured(report, plan, knowledge, active, engineVersion), structuredBasis, patientLinkDecisionId: link.decision!.id };
+      try {
+        return await ledger.insertEvaluation(principal.tenantId, principal.sub, input);
+      } catch (error) {
+        if (error instanceof PatientLinkUnverifiedError) throw this.unverified();
+        if (!(error instanceof DisputeChangedError || error instanceof StructuredBasisChangedError) || attempt >= 3) throw error;
+        this.logger.warn({ event: 'structured-basis-changed-retry' }, 'The stored evidence or a dispute changed while assessing; assessing once more');
+      }
+    }
+  }
+
   async list(principal: Principal, query: EvaluationListQuery): Promise<Paginated<EvaluationSummaryDto>> {
     const ledger = this.need(this.ledger);
     const { current, page, pageSize, ...filter } = query;
@@ -207,18 +285,7 @@ export class EvaluationsService {
   ): Omit<EvaluationInput, 'origin'> {
     // The scope and what the substitute runner can answer for are part of the stored binding, hence of the ledger event.
     const binding: Record<string, unknown> = { ...adapted.binding, scope: PIPELINE_SCOPE, recordingsSha256: runner.manifestSha256 };
-    // Bind the actual base files into the immutable, ledger-hashed record; an overlay changes verification, never file identity.
-    binding.cellProvenance = {
-      version: 'cell-provenance/1',
-      files: knowledge
-        .allGuidelines()
-        .map((g) => {
-          const file = knowledge.files.find((f) => f.kind === 'guideline' && f.id === g.id);
-          if (!file) throw AppException.pipelineMisconfigured();
-          return { guidelineId: g.id, guidelineVersion: g.guidelineVersion, contentSha256: file.contentSha256 };
-        })
-        .sort((a, b) => (a.guidelineId < b.guidelineId ? -1 : a.guidelineId > b.guidelineId ? 1 : 0)),
-    };
+    binding.cellProvenance = this.cellProvenance(knowledge);
     if (adapted.disposition === 'held') {
       // A held evaluation shows no result, so no cell and no dispute matters to it.
       return {
@@ -237,15 +304,7 @@ export class EvaluationsService {
         geneStates: [],
       };
     }
-    const disputed: DisputedCell[] = active.map(({ dispute: d }) => ({
-      guidelineId: d.guidelineId as string,
-      guidelineVersion: d.guidelineVersion as string,
-      guidelineContentSha256: d.guidelineContentSha256 as string,
-      locator: { table: d.locatorTable as string, row: d.locatorRow as string, column: (d.locatorColumn as string | null) ?? null },
-    }));
-    const overlay: OverlayResult = applyDisputeOverlay(knowledge, disputed);
-    // When the overlay changed a cell, the stored binding says how to rebuild the effective set from the base set (inside the hashed record).
-    if (overlay.cellKeys.length > 0) binding.overlay = { version: OVERLAY_VERSION, baseKnowledgeSetId: knowledge.id, cellKeys: overlay.cellKeys };
+    const overlay = this.overlayFor(knowledge, active, binding);
     const engine = evaluate(overlay.knowledge, adapted.geneInputs);
     return {
       patientId,
@@ -259,6 +318,81 @@ export class EvaluationsService {
       engineVersion: this.env.BUILD_VERSION!,
       geneInputs: adapted.geneInputs,
       occurrences: adapted.occurrences,
+      results: engine.results,
+      geneStates: engine.geneStates,
+      disputeBasis: active.map(({ dispute }) => dispute.id),
+    };
+  }
+
+  /** Bind the actual base files into the immutable, ledger-hashed record; an overlay changes verification, never file identity. */
+  private cellProvenance(knowledge: KnowledgeSet) {
+    return {
+      version: 'cell-provenance/1',
+      files: knowledge
+        .allGuidelines()
+        .map((g) => {
+          const file = knowledge.files.find((f) => f.kind === 'guideline' && f.id === g.id);
+          if (!file) throw AppException.pipelineMisconfigured();
+          return { guidelineId: g.id, guidelineVersion: g.guidelineVersion, contentSha256: file.contentSha256 };
+        })
+        .sort((a, b) => (a.guidelineId < b.guidelineId ? -1 : a.guidelineId > b.guidelineId ? 1 : 0)),
+    };
+  }
+
+  /** The disputed cells applied to the knowledge, and (when one changed a cell) how to rebuild the effective set from the base set, inside the hashed binding. */
+  private overlayFor(knowledge: KnowledgeSet, active: DisputeStatus[], binding: Record<string, unknown>): OverlayResult {
+    const disputed: DisputedCell[] = active.map(({ dispute: d }) => ({
+      guidelineId: d.guidelineId as string,
+      guidelineVersion: d.guidelineVersion as string,
+      guidelineContentSha256: d.guidelineContentSha256 as string,
+      locator: { table: d.locatorTable as string, row: d.locatorRow as string, column: (d.locatorColumn as string | null) ?? null },
+    }));
+    const overlay: OverlayResult = applyDisputeOverlay(knowledge, disputed);
+    if (overlay.cellKeys.length > 0) binding.overlay = { version: OVERLAY_VERSION, baseKnowledgeSetId: knowledge.id, cellKeys: overlay.cellKeys };
+    return overlay;
+  }
+
+  /**
+   * Synthetic structured assessment (032 S3): everything the evaluation records comes from the stored revision and the independent reviews of
+   * its findings, never from the reader. A held plan stores a held evaluation (no result, no cell); a ready plan evaluates the same engine over the
+   * same knowledge and disputes as the PDF path. The binding names the revision, the source file, the patient-link decision and each review relied on.
+   */
+  private buildStructured(
+    report: ReportRecord,
+    plan: Exclude<StructuredAssessmentPlan, { kind: 'refused' }>,
+    knowledge: KnowledgeSet,
+    active: DisputeStatus[],
+    engineVersion: string,
+  ): Omit<EvaluationInput, 'origin'> {
+    const { revision } = plan;
+    const binding: Record<string, unknown> = {
+      version: 'structured-assessment-binding/1',
+      scope: STRUCTURED_ASSESSMENT_SCOPE,
+      synthetic: true,
+      clinicalUse: 'not-approved',
+      revisionId: revision.id,
+      revisionSha256: revision.sha256,
+      laboratoryReportId: revision.laboratoryReport.id,
+      laboratoryReportRevision: revision.laboratoryReport.revision,
+      patientLinkDecisionId: revision.patientLinkDecisionId,
+      cellProvenance: this.cellProvenance(knowledge),
+    };
+    const common = { patientId: report.patientId, reportId: report.id, captureId: null, captureAcceptanceId: null, structuredRevisionId: revision.id, engineVersion };
+    if (plan.kind === 'held') {
+      binding.holdDetail = plan.detail;
+      return { ...common, disposition: 'held', holdCode: plan.holdCode, binding, knowledgeSetId: knowledge.id, geneInputs: [], occurrences: [], results: [], geneStates: [] };
+    }
+    binding.reviewIds = plan.reviewIds;
+    const overlay = this.overlayFor(knowledge, active, binding);
+    const engine = evaluate(overlay.knowledge, plan.geneInputs);
+    return {
+      ...common,
+      disposition: 'evaluated',
+      holdCode: null,
+      binding,
+      knowledgeSetId: engine.knowledgeSetId,
+      geneInputs: plan.geneInputs,
+      occurrences: [],
       results: engine.results,
       geneStates: engine.geneStates,
       disputeBasis: active.map(({ dispute }) => dispute.id),

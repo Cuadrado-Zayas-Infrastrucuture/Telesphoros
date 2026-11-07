@@ -29,10 +29,10 @@ const lastInLedger = (captureId: string) =>
     return rows[0]?.id;
   });
 
-it('reports the decision last in the ledger as current when two reviewers decide one capture at once', async () => {
-  const pairs = 60;
-  let disagreements = 0;
-  for (let i = 0; i < pairs; i++) {
+// Keep all 60 races, with the default five-second deadline applied to each independent scenario.
+it.each(Array.from({ length: 60 }, (_, index) => index + 1))(
+  'race %i/60: reports the decision last in the ledger as current when two reviewers decide one capture at once',
+  async () => {
     const report = await seedLabReport(pg.adminUrl, `tenant-${randomUUID()}`, { uploader: 'syn-up', requestedBy: 'syn-req', completedBy: 'syn-done' });
     const capture = captureFor(report);
     const captureId = (await repo.insertCapture(report.tenantId, 'syn-capturer', capture)).record.id as string;
@@ -41,7 +41,8 @@ it('reports the decision last in the ledger as current when two reviewers decide
       repo.insertAcceptance(report.tenantId, 'syn-y', acceptanceFor(captureId, capture)),
     ]);
     expect(settled.map((s) => s.status)).toEqual(['fulfilled', 'fulfilled']); // control: both decisions are recorded
-    if ((await repo.latestAcceptance(report.tenantId, captureId))?.id !== (await lastInLedger(captureId))) disagreements++;
-  }
-  expect(disagreements).toBe(0);
-});
+    const expected = await lastInLedger(captureId);
+    expect(expected).toBeDefined();
+    expect((await repo.latestAcceptance(report.tenantId, captureId))?.id).toBe(expected);
+  },
+);

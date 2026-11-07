@@ -14,7 +14,7 @@ test('a clinician opens Reports from the navigation and finds the report they up
   await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
 
   await openWorkspaceNavigation(page);
-  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'All reports', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'Reports', exact: true }).click();
   await expect(page).toHaveURL(/\/reports$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Reports' })).toBeVisible();
   const links: string[] = [];
@@ -22,6 +22,9 @@ test('a clinician opens Reports from the navigation and finds the report they up
     if (new URL(request.url()).pathname.endsWith('/download-url')) links.push(request.url());
   });
   await selectReportsPatient(page, fixture); // the suite shares one organization, so its first page may hold other tests' reports
+  const reportRow = page.getByRole('row').filter({ has: page.getByRole('button', { name: `Open ${name}` }) });
+  await expect(reportRow.getByText('Received', { exact: true })).toBeVisible();
+  await expect(reportRow.getByText('Received', { exact: true })).toHaveClass('text-warning');
   await page.getByRole('button', { name: `Open ${name}` }).click();
   await expect(page.getByRole('region', { name: 'Report details' }).getByText('Yes — server verified')).toBeVisible();
   await expect(page.getByRole('button', { name: `Download ${name}` })).toHaveCount(0);

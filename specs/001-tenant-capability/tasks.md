@@ -72,8 +72,9 @@
 
 ## Phase 5: Slice 4, the audit writer stores verified identity (US2) — needs D6
 
-- [ ] T027 [US2] Test first: under alice's org-alpha capability, calling the writer with org-beta/mallory stores verified org-alpha/alice and keeps the claim only in the unverified columns. With no capability, the verified fields are NULL and the row is still written
-- [ ] T028 [US2] Migration: add the verified and claimed columns to `security_audit_events` (`expand`). Redefine `security_audit_record` to derive identity from `app_tenant()`/`app_actor()` (`breaking`). `Database.recordSecurityEvent` (`database.ts:131-135`) is unchanged at its call sites
+- [x] T027 [US2] Test first: under alice's org-alpha capability, calling the writer with org-beta/mallory stores verified org-alpha/alice and keeps the claim only in the unverified columns. With no capability, the verified fields are NULL and the row is still written
+- [x] T028 [US2] Migration: add the verified and claimed columns to `security_audit_events` (`expand`). Redefine `security_audit_record` to derive identity from `app_tenant()`/`app_actor()` (`breaking`). `Database.recordSecurityEvent` (`database.ts:131-135`) is unchanged at its call sites
+  - Built 2026-11-06 as migration 0072 (`breaking`, one file). Two departures, each so that settings never count as verification. First, the existing `tenant_id`/`actor_sub` are the claimed columns and only the two `verified_*` columns are new. Second, identity comes from `security_audit_capability()`, a capability-only lookup, because `app_tenant()`/`app_actor()` fall back to the settings in `dual` mode and `app_tenant()` drops a suspended organization. `recordSecurityEvent` binds the request's capability in the same statement; its call sites are unchanged.
 
 ## Phase 6: Slice 5, enforce (US1, US2) — needs D4, D7, D8
 
@@ -87,10 +88,13 @@
 What still runs tenant-scoped SQL without a capability, or assumes `dual`. Each must be closed, or shown not to apply, before T031 flips the mode. Gates D4, D7 and D8 are unchanged.
 
 - [ ] R1 `restore.ts` `verifyIsolation` (now `apps/backend/src/db/restore.ts:314-341`; T029, T031 cite the older 288-296): the "with tenant" case sets only `app.current_tenant_id` (`:330-331`) and would see 0 rows in `capability` mode. Closed by T029 and T031 (FR-016).
-- [ ] R2 `agentic_synthetic_member_current` (`migrations/0029_agentic_synthetic.up.sql:519`) still writes the tenant setting on the worker side; 0030 and `docs/verification/business-durable-synthetic.md:219` say slice 5 must not flip before it moves. Not yet a task here: needs one.
+- [x] R2 `agentic_synthetic_member_current` (`migrations/0029_agentic_synthetic.up.sql:519`) still writes the tenant setting on the worker side; 0030 and `docs/verification/business-durable-synthetic.md:219` say slice 5 must not flip before it moves. Not yet a task here: needs one.
+  - Closed 2026-11-06 by migration 0073. In `capability` mode every worker step was refused (`NOT_AUTHORIZED`), shown red first by `agentic-identity.pg-spec.ts`. `member_current` now calls `membership_current_in(tenant, sub, version)`, a row-sourced lookup callable by `telesphoros_jobs` only, and reads no setting.
+  - It could not go through `tenant_capability_bind_internal`: `membership_assert_current` would then compare the internal capability's version, which is always 0.
 - [ ] R3 The evaluation worker acts under a capability only when `EVALUATION_WORKER_ISSUER_URL` and its key are set (`apps/backend/src/config/env.ts:142`, spec 012); no Terraform sets them. Needed before D7's window can start.
 - [ ] R4 API requests carry a capability only when the issuer is deployed: `enable_issuer` defaults to `false` (`infrastructure/terraform/issuer.tf:13`). D7's window starts only once it is on in synthetic staging.
 - [ ] R5 The ai-service durable store calls an injected `withTenant` (`apps/ai-service/durable/postgres.ts:44`); whether that binds a capability is not determined. Find out before T031.
+  - Found out 2026-11-06: it does not apply in production. `PostgresSyntheticStore` is constructed only in tests, and nothing in the backend, worker or images imports `apps/ai-service/durable`. Its application-side calls (`admit`, `read`, `cancel`) have required `app.capability` in every mode since 0030, and the test helper binds one. Its worker-side calls run as the worker login and are covered by R2. If it is ever wired, its binder must set the capability, as `Database.withTenant` does.
 - [ ] R6 Specs that pin `dual`: `apps/backend/test/db/tenant-capability.pg-spec.ts:128` asserts the mode is `dual`, and `:293-300`, `:526-532` restore `dual` after switching. T031's PR updates them with the flip.
 
 Paths checked and needing no capability (they bind the organization from the row or read no setting): the upload sweep, `jobs-cli`, the ledger monitor and verifier, the outbox relay and job claim and heartbeat (`docs/verification/tenant-capability.md`, class (c)). The security-event writer accepts a recently expired capability since spec 015 (0059).

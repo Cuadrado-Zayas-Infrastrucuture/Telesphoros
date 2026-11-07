@@ -1,3 +1,5 @@
+import { ChatLoading } from '@/components/prompt-kit/ChatLoading';
+import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUp, FileText, Paperclip, Square, X } from 'lucide-react';
@@ -289,8 +291,10 @@ export default function LocalWorkspacePage() {
                     />
                   )}
                 </>
+              ) : patientsError ? (
+                <span className="text-muted-foreground">{patientsError}</span>
               ) : (
-                <span className="text-muted-foreground">{patientsError ?? 'loading patients…'}</span>
+                <ContentSkeleton label="loading patients…" variant="compact" />
               )}
             </div>
             <label className="inline-flex min-h-11 items-center gap-2">
@@ -385,6 +389,7 @@ export default function LocalWorkspacePage() {
                   {item.filename} · {item.patient}
                 </span>
                 <Steps stage={item.stage} failed={item.phase === 'failed'} labels={UPLOAD_STEPS} words={UPLOAD_WORDS} label={`Upload of ${item.filename}`} colored />
+                {item.phase === 'uploading' && <ChatLoading label="Uploading your report…" />}
                 {item.phase === 'failed' && <SystemMessage error>{item.message}</SystemMessage>}
               </div>
             ))}

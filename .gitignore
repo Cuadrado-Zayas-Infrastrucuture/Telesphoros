@@ -53,6 +53,8 @@ crash.log
 # Browser-test build output
 dist-e2e/
 dist-storage-e2e/
+dist-decision-e2e/
+test-results-decisions/
 
 # Dedicated synthetic local review state
 .local-review/

@@ -30,6 +30,8 @@ pnpm test:infra && pnpm test:ci-config
 
 The database and S3 test tiers are in [docs/STATUS.md](docs/STATUS.md#running-things-locally) and [docs/database.md](docs/database.md). A green run without them proves nothing about the schema.
 
+What you can do with the repository alone, and what access only the founder holds today (AWS, the private release folder, DNS): [docs/ops/team-access.md](docs/ops/team-access.md).
+
 ## Reporting bugs and proposing changes
 
 Use the issue forms. Do not put patient data, real reports, identifiers or credentials in an issue, a pull request or a log excerpt. Report security problems through [SECURITY.md](SECURITY.md), never in a public issue.

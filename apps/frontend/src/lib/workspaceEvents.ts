@@ -23,3 +23,12 @@ export function onPatientAdded(listener: (patient: PatientDto) => void): () => v
   target.addEventListener(PATIENT, handler);
   return () => target.removeEventListener(PATIENT, handler);
 }
+
+const NEW_CHAT = 'telesphoros:new-chat';
+export function announceNewChat(): void {
+  target.dispatchEvent(new Event(NEW_CHAT));
+}
+export function onNewChat(listener: () => void): () => void {
+  target.addEventListener(NEW_CHAT, listener);
+  return () => target.removeEventListener(NEW_CHAT, listener);
+}

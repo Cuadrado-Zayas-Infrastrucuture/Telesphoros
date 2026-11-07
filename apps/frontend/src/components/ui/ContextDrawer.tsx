@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
 import { X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 
 /** Native modal semantics keep the background inert and support Escape and nested image dialogs. */
@@ -11,6 +12,7 @@ export function ContextDrawer({
   children,
   headingRef,
   closeLabel,
+  className,
 }: {
   open: boolean;
   onClose: () => void;
@@ -18,6 +20,7 @@ export function ContextDrawer({
   id: string;
   children: ReactNode;
   closeLabel?: string;
+  className?: string;
   headingRef?: RefObject<HTMLHeadingElement | null>;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -69,7 +72,7 @@ export function ContextDrawer({
           last.focus();
         }
       }}
-      className="context-drawer"
+      className={cn('context-drawer', className)}
     >
       <div className="flex items-center justify-between gap-3 border-b border-divider px-5 py-4">
         <h2 id={`${id}-heading`} ref={heading} tabIndex={-1} className="text-xl">

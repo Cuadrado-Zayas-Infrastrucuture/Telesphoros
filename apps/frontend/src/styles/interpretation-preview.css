@@ -9,7 +9,7 @@
 .dashboard-assistant .assistant-composer textarea { max-height: 5rem; }
 .dashboard-assistant > div, .dashboard-assistant > div > div { gap: .5rem; }
 @media (max-width: 40rem) { .dashboard-assistant .preview-conversation { height: 5rem; } }
-.preview-image-dialog { width: min(var(--size-image-dialog), calc(100% - 2rem)); max-height: calc(100dvh - 2rem); margin: auto; }
+.preview-image-dialog { inset: var(--safe-area-top) var(--safe-area-right) var(--safe-area-bottom) var(--safe-area-left); width: min(var(--size-image-dialog), calc(100% - var(--safe-area-inline) - 2rem)); max-height: calc(var(--size-safe-viewport) - 2rem); margin: auto; }
 .preview-image-viewport { max-height: 60dvh; overflow: auto; overscroll-behavior: contain; }
 .preview-image-zoom { width: var(--size-source-image-zoom); }
 .preview-image-dialog::backdrop { background: color-mix(in srgb, var(--primary) 45%, transparent); }

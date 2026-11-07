@@ -43,15 +43,16 @@ function ignoredPaths(rules) {
   // Only this function's disposable directory is removed; no checkout is used.
   try {
     const env = { PATH: process.env.PATH, HOME: directory, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' };
-    const git = args => {
-      const result = spawnSync('git', args, { cwd: directory, env, encoding: 'utf8', input: [...livePaths, ...trackedPaths].join('\0') + '\0' });
+    const git = (args, input) => {
+      const result = spawnSync('git', args, { cwd: directory, env, encoding: 'utf8', input });
       assert.ifError(result.error);
       assert.equal(result.signal, null);
       return result;
     };
     assert.equal(git(['init', '-q', '--template=']).status, 0);
     writeFileSync(join(directory, '.gitignore'), rules);
-    const result = git(['check-ignore', '--no-index', '--stdin', '-z']);
+    // Only check-ignore consumes the path list. Writing it to git init races its exit and can raise EPIPE.
+    const result = git(['check-ignore', '--no-index', '--stdin', '-z'], [...livePaths, ...trackedPaths].join('\0') + '\0');
     assert.ok([0, 1].includes(result.status), `git check-ignore failed: ${result.stderr}`);
     return result.stdout.split('\0').filter(Boolean).sort();
   } finally {

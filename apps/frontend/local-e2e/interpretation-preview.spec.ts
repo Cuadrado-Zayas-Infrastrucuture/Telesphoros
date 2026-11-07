@@ -32,7 +32,13 @@ test('branded synthetic explanation supports keyboard, recovery, stop, reset and
   await question.focus(); await page.keyboard.press('Enter');
   const status = page.getByRole('region', { name: 'AI-assisted explanation' }).getByRole('status');
   await expect(status).toHaveText('Loading a fixed synthetic response…');
-  await expect(page.locator('[class~="motion-safe:animate-pulse"]')).toHaveCSS('animation-name', 'none');
+  const skeletons = page.getByRole('group', { name: 'Sample response preparation' }).locator('[data-slot="skeleton"]');
+  await expect(skeletons).toHaveCount(3);
+  for (const skeleton of await skeletons.all()) {
+    await expect(skeleton).toHaveCSS('opacity', '1');
+    await expect(skeleton).toHaveCSS('background-image', 'none');
+    await expect(skeleton).not.toHaveCSS('animation-name', /skeleton-shimmer|pulse/);
+  }
   await page.getByRole('button', { name: 'Stop', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Sample question', exact: true })).toBeFocused();
   await expect(status).toContainText('stopped'); await question.click();
@@ -68,7 +74,8 @@ test('attachments, nested image dialog, feedback and scroll controls remain loca
   const network: string[] = []; page.on('request', request => { if (['fetch', 'xhr'].includes(request.resourceType())) network.push(new URL(request.url()).pathname); });
   // The URL can change before the signed-in workspace replaces the temporary site header.
   const brand = page.locator('header.workspace-navigation').getByRole('img', { name: 'Telesphoros shield and Rx logo', exact: true });
-  await expect(brand).toBeVisible(); expect((await brand.boundingBox())!.width).toBeGreaterThanOrEqual(64);
+  // Specs/034 D7: the sidebar shows the mark at 2.25rem beside the wordmark (it was 4rem with the byline).
+  await expect(brand).toBeVisible(); expect((await brand.boundingBox())!.width).toBeGreaterThanOrEqual(36);
   await expect(page.getByRole('img', { name: 'Telesphoros mascot in a teal cloak', exact: true })).toHaveJSProperty('naturalWidth', 162);
   await expect(page.locator('[data-mascot-context="assistant"]')).toHaveAttribute('data-mascot-variant', 'centered');
   const drawer = await evidence(page), imageTrigger = drawer.getByRole('button', { name: 'Preview bundled source image' });

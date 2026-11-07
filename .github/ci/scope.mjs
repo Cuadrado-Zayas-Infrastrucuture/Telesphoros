@@ -43,7 +43,7 @@ const documentation = (archive, reason) => ({ heavy: false, guards: true, terraf
  * A path whose change cannot alter what the heavy jobs prove. Deliberately narrow. Markdown elsewhere is read by tests
  * (knowledge/lab-report-reader/v2-handoff/ORIGIN.md by handoff-import.spec.ts), and docs/ holds JSON and PNG files that are not documentation.
  * The only code that reads documentation is test:infra (docs/ops/break-glass.md, docs/ops/staging-plan-review.md), test:ci-config
- * (docs/status/, CLAUDE.md) and check:workflows (docs/engineering/workflows.md); scope.test.mjs lists the readers, so a new one turns the guard red.
+ * (docs/status/, CLAUDE.md, docs/ops/environments.md with docs/ops/staging-expected.json) and check:workflows (docs/engineering/workflows.md); scope.test.mjs lists the readers, so a new one turns the guard red.
  */
 export const docsPath = p => /^docs\/(?:[^/\0]+\/)*[^/\0]+\.md$/.test(p) || /^[^/\0]+\.md$/.test(p);
 /** Paths the terraform and terraform-lint jobs can depend on (the roots, the lambda source, the lint config, the workflow itself). */

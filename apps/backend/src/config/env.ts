@@ -121,6 +121,18 @@ export const envSchema = z
     LOCAL_STORAGE_RUN_ID: z.uuid().optional(),
     LOCAL_UPLOAD_CLEANUP_GRACE_SECONDS: z.coerce.number().int().min(0).max(604800).default(86400),
     LAB_REPORT_PIPELINE: z.enum(['disabled', 'enabled']).default('disabled'),
+    /**
+     * Synthetic assessment of stored structured revisions (spec 032 S3): the one switch that lets an environment holding ONLY synthetic data (the
+     * synthetic staging) review, assess and read assessments of stored structured laboratory revisions, without the lab-report pipeline. It unlocks the
+     * structured-preview routes, the assessment route and the evaluation reads, and nothing else. It is a declaration that no real patient data is held,
+     * set by the infrastructure of that one environment; nothing here can prove it. It never names real data: the origin it gives is `synthetic`.
+     */
+    SYNTHETIC_ASSESSMENT: z.enum(['disabled', 'enabled']).default('disabled'),
+    /** The synthetic knowledge the assessment evaluates against, loaded once at start. Required when SYNTHETIC_ASSESSMENT is enabled; never the pipeline's knowledge. */
+    SYNTHETIC_KNOWLEDGE_DIR: z.string().min(1).optional(),
+    // Rollout fence: reads stay available; enable writes only after migration and compatible services are confirmed.
+    MEDICATION_WRITES: z.enum(['disabled', 'enabled']).default('disabled'),
+    FOLLOWUP_WRITES: z.enum(['disabled', 'enabled']).default('disabled'),
     /** Directory of recorded PDFs and their text for the TEST-ONLY text runner. Required when the pipeline is enabled; there is no default. */
     LAB_REPORT_FIXTURES_DIR: z.string().min(1).optional(),
     /** The knowledge directory the pipeline evaluates against (loaded once at start, under the non-production rules). Required when enabled. */
@@ -259,6 +271,20 @@ export const envSchema = z
         problem('LAB_REPORT_FIXTURES_DIR', 'is required when LAB_REPORT_PIPELINE=enabled (the directory of recorded PDFs for the test-only text runner)');
       if (env.NODE_ENV === 'production')
         problem('LAB_REPORT_PIPELINE', 'is refused in production: it is a synthetic, non-production integration (test-only text runner and development knowledge)');
+    }
+
+    if (env.SYNTHETIC_ASSESSMENT === 'enabled') {
+      // Its records are a database guarantee and its evidence is pinned to object versions, as the pipeline's are; and it is not the pipeline, nor a disposable local run.
+      if (env.STORAGE_DRIVER !== 'postgres') problem('SYNTHETIC_ASSESSMENT', 'can only be enabled with STORAGE_DRIVER=postgres (the ledger has no in-memory version)');
+      if (env.OBJECT_STORAGE_DRIVER !== 's3') problem('SYNTHETIC_ASSESSMENT', 'can only be enabled with OBJECT_STORAGE_DRIVER=s3 (its evidence is pinned to object versions)');
+      if (!env.LEDGER_VERIFIER_DATABASE_URL)
+        problem('LEDGER_VERIFIER_DATABASE_URL', 'is required when SYNTHETIC_ASSESSMENT=enabled (the record log must be watched while it is written)');
+      if (!env.SYNTHETIC_KNOWLEDGE_DIR) problem('SYNTHETIC_KNOWLEDGE_DIR', 'is required when SYNTHETIC_ASSESSMENT=enabled');
+      if (!env.BUILD_VERSION) problem('BUILD_VERSION', 'is required when SYNTHETIC_ASSESSMENT=enabled (it is stored with every evaluation)');
+      if (env.LAB_REPORT_PIPELINE === 'enabled') problem('SYNTHETIC_ASSESSMENT', 'cannot be enabled with LAB_REPORT_PIPELINE=enabled: they are two different integrations');
+      if (env.LOCAL_STORAGE_RUN_ID) problem('SYNTHETIC_ASSESSMENT', 'cannot be enabled in a disposable local storage run');
+    } else if (env.SYNTHETIC_KNOWLEDGE_DIR) {
+      problem('SYNTHETIC_KNOWLEDGE_DIR', 'can only be set when SYNTHETIC_ASSESSMENT=enabled');
     }
 
     // Checked on its own, not only through the pipeline: production refuses the queued path even with the pipeline off.

@@ -48,45 +48,79 @@
 .questionnaire-progress::-moz-progress-bar { background: var(--primary); }
 
 /* Operational navigation has its own column; public pages keep their existing header. */
-.workspace-layout { display: grid; grid-template-columns: var(--size-sidebar) minmax(0, 1fr); align-items: start; }
-.workspace-navigation { position: sticky; top: 0; display: flex; flex-direction: column; height: 100dvh; min-width: 0; padding: 1.25rem 1rem; border-right: 1px solid var(--divider); }
+.workspace-layout { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+.workspace-navigation { position: sticky; top: var(--safe-area-top); display: flex; flex-direction: column; width: var(--size-sidebar); height: var(--size-safe-viewport); min-width: 0; padding: 1.25rem 1rem; border-right: 1px solid var(--divider); }
 .workspace-brand-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
-.workspace-navigation-content { display: flex; flex: 1; min-height: 0; flex-direction: column; justify-content: space-between; gap: 2rem; padding-top: 3rem; overflow-y: auto; }
-.workspace-account > div { flex-wrap: wrap; }
-.workspace-account > div > span > span { display: none; }
+/* Specs/034: New chat and the destinations stay put, Recents takes the height left and scrolls by itself, and the account is pinned at the bottom. */
+.workspace-navigation-content { display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 1rem; padding-top: 1.5rem; }
+.workspace-recents { flex: 1; }
+.workspace-recents-list { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .workspace-navigation .workspace-menu-toggle { display: none; }
 .workspace-body { min-width: 0; }
 .workspace-main { width: 100%; min-width: 0; padding: 2rem; }
 .workspace-shell .workspace-main:has(.chat-workspace) { padding-block: 1.5rem; }
-.context-drawer { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(100%, var(--size-context-drawer)); max-width: 100vw; height: 100dvh; max-height: 100dvh; padding: 0; border: 0; border-left: 1px solid var(--divider); background: var(--panel); color: var(--foreground); overflow: hidden; }
+.context-drawer { position: fixed; inset: var(--safe-area-top) var(--safe-area-right) var(--safe-area-bottom) auto; margin: 0; width: min(calc(100% - var(--safe-area-inline)), var(--size-context-drawer)); max-width: 100vw; height: var(--size-safe-viewport); max-height: var(--size-safe-viewport); padding: 0; border: 0; border-left: 1px solid var(--divider); background: var(--panel); color: var(--foreground); overflow: hidden; }
 .context-drawer[open] { display: flex; flex-direction: column; }
 .context-drawer::backdrop { background: color-mix(in srgb, var(--foreground) 22%, transparent); }
 .context-drawer-body { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 1.25rem; }
 .context-drawer .workspace-shell { display: contents; }
 /* Collapsed to icons (desktop only): names stay readable to assistive technology and appear as tooltips. */
-.workspace-account-compact { display: none; }
 @media (min-width: 64rem) {
-  .workspace-layout:has(.workspace-navigation.is-collapsed) { grid-template-columns: var(--size-sidebar-collapsed) minmax(0, 1fr); }
+  .workspace-navigation.is-collapsed { width: var(--size-sidebar-collapsed); }
   .workspace-navigation.is-collapsed { padding-inline: .75rem; align-items: center; }
-  .workspace-navigation.is-collapsed .workspace-brand img { width: 2.75rem; }
+  .workspace-navigation.is-collapsed .workspace-brand-row { flex-direction: column; }
+  .workspace-navigation.is-collapsed .workspace-brand img { width: 2.5rem; }
   .workspace-navigation.is-collapsed :is(.workspace-brand-text, .workspace-group-label) { display: none; }
   .workspace-navigation.is-collapsed .workspace-link-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .workspace-navigation.is-collapsed nav a { justify-content: center; padding-inline: 0; }
-  .workspace-navigation.is-collapsed .workspace-account { align-items: center; }
-  .workspace-navigation.is-collapsed .workspace-account-full { display: none; }
-  .workspace-navigation.is-collapsed .workspace-account-compact { display: inline-flex; }
+  .workspace-navigation.is-collapsed :is(nav a, nav button, .workspace-account-toggle) { justify-content: center; padding-inline: 0; }
+  .workspace-navigation.is-collapsed .workspace-recents { display: none; }
 }
 @media (max-width: 63.99rem) {
   .workspace-layout { display: block; }
-  .workspace-collapse-toggle { display: none; }
+  .workspace-collapse-toggle, .workspace-resize-handle { display: none; }
   .workspace-navigation { position: static; width: 100%; height: auto; padding: 1rem; border-right: 0; border-bottom: 1px solid var(--divider); }
   .workspace-navigation .workspace-menu-toggle { display: inline-flex; }
   .workspace-navigation-content { display: none; padding-top: 1.5rem; }
+  .workspace-recents-list { max-height: 40vh; }
   .workspace-navigation-content.is-open { display: flex; }
   .workspace-main { padding: 1.5rem 1rem; }
 }
-/* Specs/024: the feature panel's lists (past reports, patients) are for an expanded sidebar; collapsed to icons they would not fit. */
-.workspace-navigation.is-collapsed .workspace-panel-item { display: none; }
-@media (max-width: 63.99rem) {
-  .workspace-navigation.is-collapsed .workspace-panel-item { display: list-item; }
+
+/* Compact report details stay over the chat rather than navigating to a new page. */
+.context-drawer.report-intake { inset: 0; margin: auto; width: min(calc(100% - 2rem), var(--size-context-drawer)); height: fit-content; max-height: calc(var(--size-safe-viewport) - 2rem); border: 1px solid var(--divider); border-radius: 1rem; }
+
+/* Report history and account preferences keep the conversation behind a roomy panel. */
+.context-drawer.workspace-context-panel {
+  width: min(100%, 64rem);
+}
+
+
+/* Specs/034 D8: the drag handle on the sidebar's right edge (desktop only). A wider invisible hit area, a 2px line on hover and focus. */
+/* The sidebar stacks above the page so the half of the handle that overhangs the page can still be grabbed. */
+.workspace-layout > .workspace-navigation { z-index: 10; }
+.workspace-resize-handle { position: absolute; top: 0; right: -.375rem; bottom: 0; z-index: 1; width: .75rem; cursor: col-resize; touch-action: none; }
+.workspace-resize-handle::after { content: ''; position: absolute; top: 0; bottom: 0; left: calc(50% - 1px); width: 2px; background: transparent; transition: background-color .15s; }
+.workspace-resize-handle:is(:hover, :focus-visible)::after, .is-resizing-sidebar .workspace-resize-handle::after { background: var(--ring); }
+.workspace-resize-handle:focus-visible { outline: none; }
+.is-resizing-sidebar { cursor: col-resize; user-select: none; }
+
+/* Specs/034 D10: the account menu holds help and policy links too; on a short screen it scrolls rather than leaving the top of the window. */
+.workspace-account-menu { max-height: calc(var(--size-safe-viewport) - 6rem); overflow-y: auto; overscroll-behavior: contain; }
+/* Specs/034 D11: the account menu is compact under a mouse or trackpad; on touch every row and theme choice keeps the 44px target. */
+.account-menu-row { min-height: var(--size-control); }
+.account-menu-segment { min-height: var(--size-control); }
+@media (pointer: fine) {
+  .account-menu-row { min-height: var(--size-control-compact); }
+  .account-menu-segment { min-height: 1.75rem; }
+}
+
+/* Specs/034 polish: everything clickable in the sidebar says so, and its hover and selected states ease in rather than snap (150ms;
+   the global reduced-motion rule in index.css removes the transition). */
+.workspace-navigation :is(a[href], button, label[for]) { cursor: pointer; }
+.workspace-navigation :is(a[href], button) { transition: background-color .15s ease-out, color .15s ease-out; }
+/* The account menu rises a little from its row as it opens: transform only, so nothing around it moves and its text is never faded
+   (a fade-in left the text below contrast while it ran; the accessibility checks open the menu and measure at once). */
+.workspace-account-menu { transition: transform .15s ease-out; }
+@starting-style {
+  .workspace-account-menu:not([hidden]) { transform: translateY(.25rem); }
 }

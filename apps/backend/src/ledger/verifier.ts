@@ -113,6 +113,8 @@ export class LedgerVerifier {
       ...pgClientConfig(url, ssl),
       max: 3,
       connectionTimeoutMillis: 5_000,
+      statement_timeout: 30_000,
+      query_timeout: 35_000, // longer than the verifier's statement budget; still finite if the server response is lost
       application_name: 'telesphoros-ledger-verifier',
     });
     pool.on('error', () => undefined); // intentional: an idle verifier connection can die; the next verification opens another

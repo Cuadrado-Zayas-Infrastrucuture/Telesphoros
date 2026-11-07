@@ -308,6 +308,99 @@ const LOADERS: Record<Exclude<RecordTable, 'evaluations'>, Loader> = {
       deIdentificationAuthorized: r.de_identification_authorized,
     }),
   },
+  structured_report_revisions: {
+    sql: `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
+      report_id::text AS report_id, patient_id::text AS patient_id, report_sha256, object_version, patient_link_decision_id::text AS patient_link_decision_id,
+      parser_version, laboratory_report FROM structured_report_revisions WHERE id=ANY($1::uuid[])`,
+    project: (r) => ({
+      kind: 'structured-report-revision',
+      ...common(r),
+      reportId: r.report_id,
+      patientId: r.patient_id,
+      reportSha256: r.report_sha256,
+      objectVersion: r.object_version,
+      patientLinkDecisionId: r.patient_link_decision_id,
+      parserVersion: r.parser_version,
+      laboratoryReport: r.laboratory_report,
+    }),
+  },
+  structured_finding_reviews: {
+    sql: `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
+      request_id::text AS request_id, revision_id::text AS revision_id, report_id::text AS report_id, patient_id::text AS patient_id, report_sha256, object_version,
+      patient_link_decision_id::text AS patient_link_decision_id, source_finding_id, decision, reason_code FROM structured_finding_reviews WHERE id=ANY($1::uuid[])`,
+    project: (r) => ({
+      kind: 'structured-finding-review',
+      ...common(r),
+      requestId: r.request_id,
+      revisionId: r.revision_id,
+      reportId: r.report_id,
+      patientId: r.patient_id,
+      reportSha256: r.report_sha256,
+      objectVersion: r.object_version,
+      patientLinkDecisionId: r.patient_link_decision_id,
+      sourceFindingId: r.source_finding_id,
+      decision: r.decision,
+      reasonCode: r.reason_code,
+    }),
+  },
+  structured_source_resolutions: {
+    sql: `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
+      request_id::text AS request_id, patient_id::text AS patient_id, laboratory_id, series_id, revision, revision_ids::text[] AS revision_ids, outcome,
+      chosen_revision_id::text AS chosen_revision_id, reason_code FROM structured_source_resolutions WHERE id=ANY($1::uuid[])`,
+    project: (r) => ({
+      kind: 'structured-source-resolution',
+      ...common(r),
+      requestId: r.request_id,
+      patientId: r.patient_id,
+      laboratoryId: r.laboratory_id,
+      seriesId: r.series_id,
+      revision: r.revision,
+      revisionIds: r.revision_ids,
+      outcome: r.outcome,
+      chosenRevisionId: r.chosen_revision_id,
+      reasonCode: r.reason_code,
+    }),
+  },
+  patient_followups: {
+    sql: `SELECT f.id::text AS id, f.tenant_id, f.seq::text AS seq, f.created_by, ${UTC('f.created_at')} AS created_at, f.ledger_event_id::text AS ledger_event_id,
+      f.patient_id::text AS patient_id, f.thread_id::text AS thread_id, f.version, f.medication_id::text AS medication_id, f.decision_id::text AS decision_id,
+      f.action, f.assessment, f.due_date::text AS due_date, f.due_timezone, f.assignee, n.id::text AS note_id, n.body_sha256 AS note_digest
+      FROM patient_followups f JOIN event_notes n ON n.id=f.note_id AND n.tenant_id=f.tenant_id WHERE f.id=ANY($1::uuid[])`,
+    project: (r) => ({
+      kind: 'patient-followup',
+      ...common(r),
+      patientId: r.patient_id,
+      threadId: r.thread_id,
+      version: r.version,
+      medicationId: r.medication_id,
+      decisionId: r.decision_id,
+      action: r.action,
+      assessment: r.assessment,
+      dueDate: r.due_date,
+      dueTimezone: r.due_timezone,
+      assignee: r.assignee,
+      note: note(r.note_id, r.note_digest),
+    }),
+  },
+  patient_medications: {
+    sql: `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
+      patient_id::text AS patient_id, entry_id::text AS entry_id, version, drug_rxcui, drug_name, list_version, status, start_month, stop_month, source
+      FROM patient_medications WHERE id = ANY($1::uuid[])`,
+    project: (r) => ({
+      kind: 'patient-medication',
+      ...common(r),
+      patientId: r.patient_id,
+      entryId: r.entry_id,
+      medicationVersion: r.version,
+      rxcui: r.drug_rxcui,
+      name: r.drug_name,
+      listVersion: r.list_version,
+      status: r.status,
+      startMonth: r.start_month,
+      stopMonth: r.stop_month,
+      source: r.source,
+    }),
+  },
   // Spec 025 PD-a. Every column as stored except the retry identity (as clinician decisions). The three identity fields enter the payload as the sha-256 of
   // nonce || ciphertext: never a plaintext value, and never the ciphertext itself. The coded columns are plaintext by design (D1).
   patient_demographics: {
@@ -336,10 +429,12 @@ const LOADERS: Record<Exclude<RecordTable, 'evaluations'>, Loader> = {
 
 const EVALUATION_SQL = `SELECT id::text AS id, tenant_id, seq::text AS seq, created_by, ${UTC('created_at')} AS created_at, ledger_event_id::text AS ledger_event_id,
        patient_id::text AS patient_id, report_id::text AS report_id, capture_id::text AS capture_id, capture_acceptance_id::text AS capture_acceptance_id,
-       disposition, hold_code, binding, knowledge_set_id, engine_version, gene_inputs, occurrences, identity_key
+       disposition, hold_code, binding, knowledge_set_id, engine_version, gene_inputs, occurrences, identity_key,
+       source_kind, structured_revision_id::text AS structured_revision_id
   FROM evaluations WHERE id = ANY($1::uuid[])`;
 const RESULTS_SQL = `SELECT id::text AS id, evaluation_id::text AS evaluation_id, ordinal, drug, genes, outcome, reason_code, strength, citation, guideline_id,
-       guideline_version, recommendation_text, implication, gene_evidence FROM evaluation_results WHERE evaluation_id = ANY($1::uuid[])`;
+       guideline_version, recommendation_text, implication, gene_evidence, drug_rxcui, gene_hgnc_ids, pharmvar_versions, cell_origin
+  FROM evaluation_results WHERE evaluation_id = ANY($1::uuid[])`;
 const GENE_STATES_SQL = `SELECT id::text AS id, evaluation_id::text AS evaluation_id, gene, state, phenotype, diplotype, activity_score::text AS activity_score, reason_code
   FROM evaluation_gene_states WHERE evaluation_id = ANY($1::uuid[])`;
 
@@ -371,6 +466,8 @@ async function loadEvaluations(db: Queryable, ids: string[]): Promise<Map<string
       geneInputs: h.gene_inputs,
       occurrences: h.occurrences,
       identityKey: h.identity_key,
+      // Only a structured evaluation carries its source in the hashed projection: a PDF evaluation's projection, and so its hash, must not change.
+      ...(h.source_kind === 'structured-revision' ? { sourceKind: h.source_kind, structuredRevisionId: h.structured_revision_id } : {}),
       results: ownResults.map((r) => ({
         id: r.id,
         ordinal: r.ordinal,
@@ -385,6 +482,8 @@ async function loadEvaluations(db: Queryable, ids: string[]): Promise<Map<string
         recommendationText: r.recommendation_text,
         implication: r.implication,
         geneEvidence: r.gene_evidence,
+        // Spec 033 K2-8: only a result that carries identifiers has them in its hashed projection, so every earlier result hashes as it did.
+        ...(r.drug_rxcui === null ? {} : { drugRxcui: r.drug_rxcui, geneHgncIds: r.gene_hgnc_ids, pharmvarVersions: r.pharmvar_versions, cellOrigin: r.cell_origin }),
       })),
       geneStates: ownStates.map((s) => ({
         id: s.id,

@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "1.2",
+  "synthetic": true,
+  "provenance": {
+    "source": "SYNTHETIC TEST FIXTURE - not CPIC content",
+    "sourceUrl": "https://example.invalid/synthetic",
+    "retrievedAt": "2026-01-01",
+    "sourceVersion": "synthetic-1",
+    "license": "proprietary",
+    "redistribution": "restricted"
+  },
+  "review": {
+    "status": "unreviewed"
+  },
+  "id": "drugz-genea-geneb",
+  "kind": "guideline",
+  "guidelineVersion": "synthetic-1",
+  "title": "Synthetic guideline for drugz",
+  "drug": "drugz",
+  "genes": [
+    "GENEA",
+    "GENEB"
+  ],
+  "supersedes": [
+    "drugz-genea"
+  ],
+  "recommendations": [
+    {
+      "when": {
+        "GENEA": "Synthetic Normal",
+        "GENEB": "Synthetic Low"
+      },
+      "locator": {
+        "table": "Synthetic Table 3",
+        "row": "Synthetic Normal",
+        "column": "Synthetic Low"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
+      "strength": "Strong",
+      "recommendationText": "Z normal-low."
+    },
+    {
+      "when": {
+        "GENEA": "Synthetic Normal",
+        "GENEB": "Synthetic Medium"
+      },
+      "locator": {
+        "table": "Synthetic Table 3",
+        "row": "Synthetic Normal",
+        "column": "Synthetic Medium"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
+      "strength": "Moderate",
+      "recommendationText": "Z normal-medium."
+    },
+    {
+      "when": {
+        "GENEA": "Synthetic Poor",
+        "GENEB": "Synthetic Low"
+      },
+      "locator": {
+        "table": "Synthetic Table 3",
+        "row": "Synthetic Poor",
+        "column": "Synthetic Low"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
+      "strength": "Strong",
+      "recommendationText": "Z poor-low.",
+      "implication": "Z poor-low implication."
+    },
+    {
+      "when": {
+        "GENEA": "Synthetic Intermediate",
+        "GENEB": "Synthetic Low"
+      },
+      "locator": {
+        "table": "Synthetic Table 3",
+        "row": "Synthetic Intermediate",
+        "column": "Synthetic Low"
+      },
+      "verification": {
+        "state": "unverified"
+      },
+      "strength": "Moderate",
+      "recommendationText": "Z intermediate-low."
+    },
+    {
+      "when": {
+        "GENEA": "Synthetic Poor",
+        "GENEB": "Synthetic High"
+      },
+      "locator": {
+        "table": "Synthetic Table 3",
+        "row": "Synthetic Poor",
+        "column": "Synthetic High"
+      },
+      "verification": {
+        "state": "verified",
+        "verifiedBy": "SYNTHETIC TEST",
+        "verifiedAt": "2026-01-02"
+      },
+      "strength": "No recommendation",
+      "recommendationText": "Z poor-high: no recommendation."
+    }
+  ]
+}

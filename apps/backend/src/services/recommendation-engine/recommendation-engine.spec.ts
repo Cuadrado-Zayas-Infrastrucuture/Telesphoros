@@ -4,7 +4,7 @@ import { CPIC_STRENGTHS, type DrugResult, type EvaluationResult, evaluationResul
 import { RECOMMENDATION_STRENGTHS } from '@telesphoros/shared-types';
 import { loadKnowledge } from '../knowledge/knowledge-loader';
 import type { KnowledgeSet } from '../knowledge/knowledge-set';
-import { cleanupTempDirs, SYNTHETIC_DIR, tempDir } from '../../../test/helpers/knowledge';
+import { cleanupTempDirs, copyOf, readJson, SYNTHETIC_DIR, tempDir, writeJson } from '../../../test/helpers/knowledge';
 import { EngineInputError, evaluate } from './recommendation-engine';
 
 let knowledge: KnowledgeSet;
@@ -209,5 +209,71 @@ describe('evaluate: when no guidelines are loaded', () => {
 
   it('has nothing to evaluate when no drug is named', () => {
     expect(evaluate(empty, [canonical('GENEA', 'Synthetic Normal')]).results).toEqual([]);
+  });
+});
+
+describe('evaluate: standard identifiers on results (spec 033 K2-6)', () => {
+  // Expected identifiers are written by hand from data/fixtures/knowledge/synthetic-identifiers, never read back from the engine.
+  const IDENTIFIERS_DIR = join(SYNTHETIC_DIR, '../synthetic-identifiers');
+  const STRUCTURED_DIR = join(SYNTHETIC_DIR, '../synthetic-structured');
+  const PHENOTYPES_A = ['Synthetic Normal', 'Synthetic Intermediate', 'Synthetic Poor'];
+  const PHENOTYPES_B = ['Synthetic Low', 'Synthetic Medium', 'Synthetic High'];
+  const GENE_A = { gene: 'GENEA', hgncId: 'syn-hgnc-genea', pharmvarVersion: 'syn-pharmvar-1.0' };
+  const GENE_B = { gene: 'GENEB', hgncId: 'syn-hgnc-geneb', pharmvarVersion: 'syn-pharmvar-1.0' };
+  let identified: KnowledgeSet;
+  let structured: KnowledgeSet;
+  beforeAll(async () => {
+    identified = await loadKnowledge({ directory: IDENTIFIERS_DIR, mode: 'non-production' });
+    structured = await loadKnowledge({ directory: STRUCTURED_DIR, mode: 'non-production' });
+  });
+  const run = (set: KnowledgeSet, a: string, b: string) => evaluate(set, [canonical('GENEA', a), canonical('GENEB', b)]).results;
+  const byDrug = (results: DrugResult[], drug: string) => results.find((result) => result.drug === drug)!;
+
+  it('copies the RxCUI, the HGNC id and PharmVar release of each gene, and the origin of the cell', () => {
+    const results = run(identified, 'Synthetic Normal', 'Synthetic Low');
+    expect(byDrug(results, 'drugz')).toMatchObject({ outcome: 'shown', identifiers: { rxcui: 'syn-rxcui-drugz', genes: [GENE_A, GENE_B], origin: 'cpic' } });
+    expect(byDrug(results, 'drugq')).toMatchObject({ outcome: 'shown', identifiers: { rxcui: 'syn-rxcui-drugq', genes: [GENE_A], origin: 'cpic' } });
+    const intermediate = run(identified, 'Synthetic Intermediate', 'Synthetic Low');
+    expect(byDrug(intermediate, 'drugq')).toMatchObject({ outcome: 'shown', identifiers: { origin: 'pharmgkb' } });
+    // an unverified cell is held without its wording, but still names its identifiers so a reviewer can find it
+    expect(byDrug(intermediate, 'drugz')).toMatchObject({ outcome: 'held', reasonCode: 'out-of-review-scope', identifiers: { rxcui: 'syn-rxcui-drugz', origin: 'unknown' } });
+    expect(byDrug(run(identified, 'Synthetic Poor', 'Synthetic High'), 'drugz')).toMatchObject({ outcome: 'no-published-recommendation', identifiers: { origin: 'cpic' } });
+  });
+
+  it('never changes an outcome: over every combination, results equal those from the same cells without identifiers', () => {
+    for (const a of PHENOTYPES_A) {
+      for (const b of PHENOTYPES_B) {
+        const withIds = run(identified, a, b).map((result) => {
+          const { identifiers: _ids, ...rest } = result as DrugResult & { identifiers?: unknown };
+          void _ids;
+          return rest;
+        });
+        expect({ a, b, results: withIds }).toEqual({ a, b, results: run(structured, a, b) });
+        expect(evaluationResultSchema.safeParse(evaluate(identified, [canonical('GENEA', a), canonical('GENEB', b)])).success).toBe(true);
+      }
+    }
+  });
+
+  it('adds nothing to results from schema 1.2 knowledge, or where no cell applies', () => {
+    for (const result of evaluate(knowledge, [canonical('GENEA', 'Synthetic Normal'), canonical('GENEE', 'Synthetic Fast')]).results) expect('identifiers' in result).toBe(false);
+    // GENEB missing: the combined table is held with no cell, so there is nothing to identify
+    const held = byDrug(evaluate(identified, [canonical('GENEA', 'Synthetic Normal')]).results, 'drugz');
+    expect(held).toMatchObject({ outcome: 'held', citation: null });
+    expect('identifiers' in held).toBe(false);
+    // a combination with no cell
+    const none = byDrug(run(identified, 'Synthetic Intermediate', 'Synthetic High'), 'drugz');
+    expect(none).toMatchObject({ outcome: 'no-published-recommendation', citation: null });
+    expect('identifiers' in none).toBe(false);
+  });
+
+  it('adds nothing when any gene map the guideline reads is still schema 1.2', async () => {
+    const dir = await copyOf(IDENTIFIERS_DIR);
+    const path = join(dir, 'phenotypes/geneb.json');
+    const { hgncId: _h, origin: _o, pharmvarVersion: _p, ...map } = (await readJson(path)) as unknown as Record<string, unknown>;
+    void [_h, _o, _p];
+    await writeJson(path, { ...map, schemaVersion: '1.2' });
+    const results = run(await loadKnowledge({ directory: dir, mode: 'non-production' }), 'Synthetic Normal', 'Synthetic Low');
+    expect('identifiers' in byDrug(results, 'drugz')).toBe(false); // reads GENEB
+    expect(byDrug(results, 'drugq')).toMatchObject({ identifiers: { rxcui: 'syn-rxcui-drugq' } }); // reads GENEA only
   });
 });

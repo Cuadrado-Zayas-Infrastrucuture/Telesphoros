@@ -1,7 +1,10 @@
+import { StoragePreferencesButton } from '@/components/privacy/StoragePreferencesButton';
+import { useStorageConsent } from '@/components/privacy/StorageConsentProvider';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
 import { ADMIN_ROLES } from '@/auth/roles';
+import { PreferredName } from '@/components/settings/PreferredName';
 import { AppearanceChoice } from '@/components/settings/AppearanceChoice';
 import { OrganizationValue } from '@/components/settings/OrganizationValue';
 import { SettingsRow } from '@/components/settings/SettingsRow';
@@ -27,6 +30,7 @@ const BUILD_LABELS: Record<string, string> = { production: 'Production', develop
  */
 export default function SettingsPage() {
   usePageTitle('Settings');
+  const { snapshot: storageChoice } = useStorageConsent();
   const { email, roles, apiFetch, signOut } = useAuth();
   const [attempt, setAttempt] = useState(0);
 
@@ -41,6 +45,15 @@ export default function SettingsPage() {
             <OrganizationValue key={attempt} apiFetch={apiFetch} onRetry={() => setAttempt((n) => n + 1)} />
           </SettingsRow>
         </dl>
+        <PreferredName />
+      </SettingsSection>
+
+      <SettingsSection id="settings-storage" title="Browser storage" description="Choose whether this browser remembers your display and language settings.">
+        <p className="text-sm text-muted-foreground">
+          {storageChoice.preferences === null ? 'No storage choice saved.' : storageChoice.preferences ? 'Optional preferences allowed.' : 'Necessary storage only.'}
+        </p>
+        {storageChoice.preferences !== null && !storageChoice.persisted && <p className="text-sm text-muted-foreground">The choice applies to this tab only.</p>}
+        <StoragePreferencesButton />
       </SettingsSection>
 
       <SettingsSection id="settings-roles" title="Roles" description="What your roles let you do here. The server checks every request; this list only describes it.">

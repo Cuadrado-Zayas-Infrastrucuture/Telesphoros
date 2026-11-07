@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { EthnicityCode, SexCode } from '@telesphoros/shared-types';
+import type { DemographicsCompleteness, EthnicityCode, SexCode } from '@telesphoros/shared-types';
 import { AppException } from '../common/app-exception';
 import type { SealedField } from '../patient-demographics/identity-crypto';
 
@@ -86,6 +86,8 @@ export class DemographicsRequestRaceError extends Error {
 export abstract class PatientDemographicsRepository {
   /** The latest version's coded columns for each patient that has one. Reads no ciphertext, so no key is needed and none is used. */
   abstract codedFor(tenantId: string, patientIds: readonly string[]): Promise<Map<string, CodedDemographics>>;
+  /** One count per completeness state over the organization's live patients, from the latest version's coded columns. Reads no ciphertext and needs no key. */
+  abstract completenessCounts(tenantId: string): Promise<DemographicsCompleteness>;
   abstract keyState(tenantId: string, patientId: string): Promise<KeyState>;
   /** Every version of the patient, oldest first, identity sealed. */
   abstract versions(tenantId: string, patientId: string): Promise<StoredDemographics[]>;
@@ -100,6 +102,9 @@ export abstract class PatientDemographicsRepository {
 export class UnavailablePatientDemographicsRepository extends PatientDemographicsRepository {
   async codedFor(): Promise<Map<string, CodedDemographics>> {
     return new Map();
+  }
+  async completenessCounts(): Promise<DemographicsCompleteness> {
+    throw this.unavailable();
   }
   async keyState(): Promise<KeyState> {
     throw this.unavailable();

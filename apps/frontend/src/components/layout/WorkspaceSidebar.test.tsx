@@ -1,7 +1,8 @@
+import { preferenceStorage } from '@/lib/storageConsent';
 import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Role } from '@telesphoros/shared-types';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RECOVERY_SCOPE, renderApp } from '@/test/authTestUtils';
 
 const sidebar = () => document.querySelector<HTMLElement>('header.workspace-navigation');
@@ -10,8 +11,13 @@ const primary = async () => {
   await screen.findByRole('button', { name: /^(Collapse|Expand) sidebar$/ });
   return within(screen.getByRole('navigation', { name: 'Primary' }));
 };
-const linkNames = async () => (await primary()).getAllByRole('link').map((link) => link.textContent);
-/** The feature panel's items in order: links by their text, sections by their heading (specs/024 D2). */
+/** The links above Recents (Recents loads on its own; its rows are checked separately). */
+const linkNames = async () =>
+  (await primary())
+    .getAllByRole('link')
+    .filter((link) => !link.closest('.workspace-recents'))
+    .map((link) => link.textContent);
+/** The panel's items in order: links by their text, Follow-ups and Recents by their names (specs/034 D1). */
 const panelItems = async () => {
   await primary();
   return [...screen.getByRole('navigation', { name: 'Primary' }).querySelectorAll<HTMLElement>('[data-panel-item]')].map((item) => item.dataset.panelItem);
@@ -49,22 +55,23 @@ const open = (path: string, roles: Role[]) => renderApp(path, { signedInAs: role
 
 afterEach(() => {
   window.localStorage.clear();
+  preferenceStorage.choose(true);
   vi.restoreAllMocks();
 });
 
 describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () => {
   it('frames Settings with the sidebar, holding the feature panel for a clinician', async () => {
     open('/settings', ['clinician']);
-    expect(await linkNames()).toEqual(['New chat', 'Upload report', 'All reports', 'Settings']);
+    expect(await linkNames()).toEqual(['New chat', 'Patients', 'Reports']);
     expect(sidebar()).not.toBeNull();
   });
 
-  it('in the local preview, puts "Workspace" first, linking to the one-screen workspace (specs/022)', async () => {
+  it('in the local preview, puts "Workspace" first among the destinations, linking to the one-screen workspace (specs/022, specs/034 D1)', async () => {
     vi.stubGlobal('location', { ...window.location, hostname: '127.0.0.1' });
     try {
       open('/settings', ['clinician']);
       const nav = await primary();
-      expect(nav.getAllByRole('link').map((link) => link.textContent)).toEqual(['Workspace', 'Chat preview', 'New chat', 'Upload report', 'All reports', 'Settings']);
+      expect(nav.getAllByRole('link').map((link) => link.textContent)).toEqual(['New chat', 'Workspace', 'Chat preview', 'Patients', 'Reports']);
       expect(nav.getByRole('link', { name: 'Workspace' })).toHaveAttribute('href', '/local-workspace');
     } finally {
       vi.unstubAllGlobals();
@@ -73,8 +80,8 @@ describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () 
 
   it('gives an administrator Usage and no clinical link that would lead to "no access"', async () => {
     open('/usage', ['admin']);
-    expect(await linkNames()).toEqual(['New chat', 'Usage', 'Settings']);
-    expect(await panelItems()).toEqual(['New chat', 'Usage', 'Settings']);
+    expect(await linkNames()).toEqual(['New chat', 'Usage']);
+    expect(await panelItems()).toEqual(['New chat', 'Usage']);
   });
 
   it('keeps the site header on the public landing page, even when signed in', async () => {
@@ -89,10 +96,8 @@ describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () 
     await userEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
     expect(sidebar()).toHaveClass('is-collapsed');
     expect(window.localStorage.getItem('telesphoros.sidebar')).toBe('collapsed');
-    const settings = (await primary()).getByRole('link', { name: 'Settings' });
-    expect(settings).toHaveAttribute('title', 'Settings');
-    // CSS shows one of the two Sign out controls (jsdom applies no CSS; the browser suite checks which is visible).
-    expect(document.querySelector('.workspace-account-compact')).toHaveAccessibleName('Sign out');
+    expect((await primary()).getByRole('link', { name: 'Patients' })).toHaveAttribute('title', 'Patients');
+    expect(screen.getByRole('button', { name: 'Account, clinician' })).toHaveAttribute('title', 'Account, clinician');
     unmount();
 
     open('/settings', ['clinician']);
@@ -118,18 +123,78 @@ describe('one sidebar for every signed-in page (specs/018-unified-sidebar)', () 
   });
 });
 
-describe('the feature panel (specs/024 D2, D6, CH-2)', () => {
+describe('the sidebar width (specs/034 D8)', () => {
+  // The preference store keeps an in-memory copy when storage is blocked; start each test expanded at the default width.
+  beforeEach(() => {
+    preferenceStorage.write('telesphoros.sidebar', null);
+    preferenceStorage.write('telesphoros.sidebar-width', null);
+  });
+  const handle = () => screen.getByRole('slider', { name: 'Sidebar width' });
+  const width = () => sidebar()!.style.getPropertyValue('--size-sidebar');
+
+  it('drags with the mouse, within bounds, and keeps the width in this browser once the drag ends', async () => {
+    const { unmount } = open('/settings', ['clinician']);
+    await primary();
+    expect(width()).toBe('17rem');
+    fireEvent.pointerDown(handle(), { button: 0, clientX: 272, pointerId: 1 });
+    fireEvent.pointerMove(handle(), { clientX: 336, pointerId: 1 });
+    expect(width()).toBe('21rem');
+    expect(window.localStorage.getItem('telesphoros.sidebar-width')).toBeNull();
+    fireEvent.pointerMove(handle(), { clientX: 2000, pointerId: 1 });
+    expect(width()).toBe('24rem');
+    fireEvent.pointerUp(handle(), { clientX: 2000, pointerId: 1 });
+    expect(window.localStorage.getItem('telesphoros.sidebar-width')).toBe('24');
+    unmount();
+
+    open('/settings', ['clinician']);
+    await primary();
+    expect(width()).toBe('24rem');
+    expect(handle()).toHaveAttribute('aria-valuenow', '24');
+  });
+
+  it('moves with the arrow keys, Home and End, and a double click restores the default', async () => {
+    open('/settings', ['clinician']);
+    await primary();
+    fireEvent.keyDown(handle(), { key: 'ArrowLeft' });
+    expect(width()).toBe('16.5rem');
+    fireEvent.keyDown(handle(), { key: 'Home' });
+    expect(width()).toBe('14rem');
+    fireEvent.keyDown(handle(), { key: 'ArrowLeft' });
+    expect(handle()).toHaveAttribute('aria-valuenow', '14');
+    fireEvent.keyDown(handle(), { key: 'End' });
+    expect(window.localStorage.getItem('telesphoros.sidebar-width')).toBe('24');
+    fireEvent.doubleClick(handle());
+    expect(width()).toBe('17rem');
+    expect(window.localStorage.getItem('telesphoros.sidebar-width')).toBeNull();
+  });
+
+  it('ignores a stored width that is out of bounds or not a number, and has no handle while collapsed', async () => {
+    for (const stored of ['99', '2', 'wide']) {
+      window.localStorage.setItem('telesphoros.sidebar-width', stored);
+      const { unmount } = open('/settings', ['clinician']);
+      await primary();
+      expect(width(), stored).toBe('17rem');
+      unmount();
+    }
+    open('/settings', ['clinician']);
+    await primary();
+    await userEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+    expect(screen.queryByRole('slider', { name: 'Sidebar width' })).toBeNull();
+  });
+});
+
+describe('the feature panel (specs/034 D1, D3, D4; specs/024 D6)', () => {
   it('lists, in order, only the items the role may use', async () => {
     const cases: [Role[], string[]][] = [
-      [['clinician'], ['New chat', 'Past reports', 'Patients', 'Upload report', 'All reports', 'Settings']],
-      [['reader'], ['New chat', 'Past reports', 'Patients', 'All reports', 'Settings']],
-      [['reviewer'], ['New chat', 'Past reports', 'Patients', 'All reports', 'Settings']],
-      [['admin'], ['New chat', 'Usage', 'Settings']],
+      [['clinician'], ['New chat', 'Patients', 'Reports', 'Follow-ups', 'Recents']],
+      [['reader'], ['New chat', 'Patients', 'Reports', 'Recents']],
+      [['reviewer'], ['New chat', 'Patients', 'Reports', 'Follow-ups', 'Recents']],
+      [['admin'], ['New chat', 'Usage']],
       [
         ['admin', 'clinician'],
-        ['New chat', 'Past reports', 'Patients', 'Upload report', 'All reports', 'Usage', 'Settings'],
+        ['New chat', 'Patients', 'Reports', 'Follow-ups', 'Usage', 'Recents'],
       ],
-      [[], ['New chat', 'Settings']],
+      [[], ['New chat']],
     ];
     for (const [roles, expected] of cases) {
       const { unmount } = open('/settings', roles);
@@ -138,107 +203,124 @@ describe('the feature panel (specs/024 D2, D6, CH-2)', () => {
     }
   });
 
-  it('points each link where the old pages are, and New chat at /workspace (D7)', async () => {
-    open('/settings', ['admin', 'clinician']);
-    const nav = await primary();
-    const href = (name: string) => nav.getByRole('link', { name }).getAttribute('href');
-    expect({ chat: href('New chat'), upload: href('Upload report'), all: href('All reports'), usage: href('Usage'), settings: href('Settings') }).toEqual({
-      chat: '/workspace',
-      upload: '/reports/upload',
-      all: '/reports',
-      usage: '/usage',
-      settings: '/settings',
+  it('asks for its recent reports newest first, so the latest are on top', async () => {
+    const fetchImpl = api(['clinician']);
+    renderApp('/settings', { signedInAs: ['clinician'], fetchImpl: fetchImpl as unknown as typeof fetch });
+    await panelItems();
+    const urls = () => fetchImpl.mock.calls.map(([input]) => String(input));
+    await vi.waitFor(() => {
+      expect(urls().some((url) => url.endsWith('/api/v1/reports?page=1&pageSize=20&order=desc'))).toBe(true);
     });
   });
 
-  it('shows the first page of past reports with the status as a word in color, and the first page of patient labels only', async () => {
-    open('/settings', ['clinician']);
+  it('points each link where the old pages are, New chat at /workspace (specs/024 D7) and Patients at its page (D2)', async () => {
+    open('/settings', ['admin', 'clinician']);
     const nav = await primary();
-    const past = await screen.findByRole('list', { name: 'Past reports' });
-    expect(await within(past).findByText('SYN-004-cyp2c19.json')).toBeVisible();
-    expect(within(past).getByText('Processed')).toHaveClass('text-success');
-    const patients = nav.getByRole('list', { name: 'Patients' });
-    expect(await within(patients).findByText('SYN-004')).toBeVisible();
-    expect(within(patients).queryAllByRole('link')).toHaveLength(0);
+    const href = (name: string) => nav.getByRole('link', { name }).getAttribute('href');
+    expect({ chat: href('New chat'), patients: href('Patients'), reports: href('Reports'), usage: href('Usage') }).toEqual({
+      chat: '/workspace',
+      patients: '/patients',
+      reports: '/reports',
+      usage: '/usage',
+    });
+  });
+
+  it('shows the recent reports one line each, the status as a word in color, and each row opens its report on the Reports page (D3)', async () => {
+    open('/settings', ['clinician']);
+    await primary();
+    const recents = await screen.findByRole('list', { name: 'Recent reports' });
+    const row = await within(recents).findByRole('link', { name: /^SYN-004-cyp2c19\s*,\s*Processed$/ });
+    expect(row).toHaveAttribute('title', 'SYN-004-cyp2c19.json');
+    expect(within(row).getByText('Processed')).toHaveClass('text-success');
+    expect(screen.queryByRole('list', { name: 'Patients' })).toBeNull();
+    await userEvent.click(row);
+    const details = await screen.findByRole('region', { name: 'Report details' });
+    expect(within(details).getAllByText('SYN-004-cyp2c19.json').length).toBeGreaterThan(0);
   });
 
   it('asks for neither list when the role has no clinical read access', async () => {
     const { fetchImpl } = open('/usage', ['admin']);
     await primary();
-    expect(screen.queryByRole('list', { name: 'Past reports' })).toBeNull();
+    expect(screen.queryByRole('list', { name: 'Recent reports' })).toBeNull();
     expect(fetchImpl.mock.calls.some(([input]) => /\/api\/v1\/(reports|patients)/.test(String(input)))).toBe(false);
   });
 
-  it('puts the account and Sign out at the bottom', async () => {
-    open('/settings', ['clinician']);
+  it('puts the account at the bottom; its menu holds Settings and Sign out and closes on Escape (D4)', async () => {
+    open('/reports', ['clinician']);
     await primary();
     const account = document.querySelector<HTMLElement>('.workspace-account')!;
-    expect(within(account).getAllByRole('button', { name: 'Sign out', hidden: true }).length).toBeGreaterThan(0);
     expect(account.compareDocumentPosition(screen.getByRole('navigation', { name: 'Primary' })) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    const toggle = within(account).getByRole('button', { name: 'Account, clinician' });
+    expect(within(account).queryByRole('link', { name: 'Settings' })).toBeNull();
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(within(account).getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+    expect(within(account).getByRole('button', { name: 'Sign out' })).toBeVisible();
+    fireEvent.keyDown(within(account).getByRole('link', { name: 'Settings' }), { key: 'Escape' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveFocus();
   });
 
-  describe('Add patient (CH-9, D2a)', () => {
-    const NEW = { ...PATIENT, id: '1a8fad5b-d9cb-469f-a165-70867728950f', label: 'SYN-777' };
-    /** The panel's API plus patient creation; `failFirst` makes the first creation fail after the server "created" nothing. */
-    function withCreate(roles: Role[], failFirst = false) {
-      const posts: { requestId: string; label: string }[] = [];
-      const base = api(roles);
-      const impl = vi.fn<typeof fetch>(async (input, init) => {
-        if (String(input).includes('/api/v1/patients') && init?.method === 'POST') {
-          posts.push(JSON.parse(String(init.body)));
-          if (failFirst && posts.length === 1) return new Response('{}', { status: 503 });
-          return new Response(JSON.stringify(NEW), { status: 201, headers: { 'Content-Type': 'application/json' } });
-        }
-        return base(input, init);
-      });
-      return { impl, posts };
+  it('gives quick settings in the account menu: the theme in one click, and the storage choice under Learn more (D9, D10)', async () => {
+    open('/reports', ['clinician']);
+    await primary();
+    const account = document.querySelector<HTMLElement>('.workspace-account')!;
+    await userEvent.click(within(account).getByRole('button', { name: 'Account, clinician' }));
+    const theme = within(account).getByRole('radiogroup', { name: 'Theme' });
+    expect(within(theme).getByRole('radio', { name: 'Auto (match this device)' })).toBeChecked();
+    await userEvent.click(within(theme).getByRole('radio', { name: 'Dark' }));
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+    expect(within(theme).getByRole('radio', { name: 'Dark' })).toBeChecked();
+    await userEvent.click(within(theme).getByRole('radio', { name: 'Auto (match this device)' }));
+    expect(within(account).queryByRole('button', { name: 'Cookie settings' })).toBeNull();
+    await userEvent.click(within(account).getByRole('button', { name: 'Learn more' }));
+    await userEvent.click(within(account).getByRole('button', { name: 'Cookie settings' }));
+    expect(within(account).getByRole('button', { name: 'Account, clinician' })).toHaveAttribute('aria-expanded', 'false');
+    expect(await screen.findByRole('dialog', { name: /cookie|storage/i })).toBeVisible();
+  });
+
+  it('links help, feedback, bug reports, the changelog and the policies to the repository, each in a new tab (D10)', async () => {
+    open('/reports', ['clinician']);
+    await primary();
+    const account = document.querySelector<HTMLElement>('.workspace-account')!;
+    await userEvent.click(within(account).getByRole('button', { name: 'Account, clinician' }));
+    // Closed, the menu is short: Help and Learn more hold the links until opened (D11).
+    expect(within(account).queryByRole('link', { name: /^Get help/ })).toBeNull();
+    await userEvent.click(within(account).getByRole('button', { name: 'Help' }));
+    await userEvent.click(within(account).getByRole('button', { name: 'Learn more' }));
+    const repo = 'https://github.com/Cuadrado-Zayas-Infrastrucuture/Telesphoros';
+    const expected: [RegExp, string][] = [
+      [/^Get help/, `${repo}/blob/main/SUPPORT.md`],
+      [/^Send feedback/, `${repo}/issues/new?template=feature_request.yml`],
+      [/^Report a bug/, `${repo}/issues/new?template=bug_report.yml`],
+      [/^View changelog/, `${repo}/blob/main/CHANGELOG.md`],
+      [/^Security policy/, `${repo}/blob/main/SECURITY.md`],
+      [/^Code of conduct/, `${repo}/blob/main/CODE_OF_CONDUCT.md`],
+      [/^License/, `${repo}/blob/main/LICENSE`],
+    ];
+    for (const [name, href] of expected) {
+      const link = within(account).getByRole('link', { name });
+      expect(link).toHaveAttribute('href', href);
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+      expect(link).toHaveAccessibleName(expect.stringMatching(/\(opens in a new tab\)$/));
     }
-    const addPatient = async (label: string) => {
-      const patients = within(await screen.findByRole('region', { name: 'Patients' }));
-      await userEvent.click(patients.getByRole('button', { name: 'Add patient' }));
-      await userEvent.type(patients.getByRole('textbox', { name: 'Synthetic patient label' }), label);
-      await userEvent.click(patients.getByRole('button', { name: 'Create patient' }));
-      return patients;
-    };
+    // Language says what is true: English only, Spanish not yet.
+    await userEvent.click(within(account).getByRole('button', { name: /^Language/ }));
+    expect(within(account).getByText('English', { selector: 'li' })).toBeVisible();
+    expect(within(account).getByText('Español: aún no disponible')).toHaveAttribute('lang', 'es');
+  });
 
-    it('is offered to writer roles only', async () => {
-      open('/settings', ['reader']);
-      await primary();
-      expect(screen.queryByRole('button', { name: 'Add patient' })).toBeNull();
-      expect(await panelItems()).toContain('Patients');
-    });
-
-    it('creates exactly one patient with a request id, then lists it', async () => {
-      const { impl, posts } = withCreate(['clinician']);
-      renderApp('/settings', { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
-      await primary();
-      const patients = await addPatient('SYN-777');
-      expect(await within(patients.getByRole('list', { name: 'Patients' })).findByText('SYN-777')).toBeVisible();
-      expect(posts).toHaveLength(1);
-      expect(posts[0]).toMatchObject({ label: 'SYN-777' });
-      expect(posts[0]!.requestId).toMatch(/^[0-9a-f-]{36}$/);
-    });
-
-    it('refuses an invalid label before any request', async () => {
-      const { impl, posts } = withCreate(['clinician']);
-      renderApp('/settings', { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
-      await primary();
-      const patients = await addPatient('Jane Doe');
-      expect(await patients.findByRole('alert')).toHaveTextContent(/letters, numbers and hyphens/i);
-      expect(posts).toHaveLength(0);
-    });
-
-    it('a retry with the same label reuses the request id, so a lost response never makes a second patient', async () => {
-      const { impl, posts } = withCreate(['clinician'], true);
-      renderApp('/settings', { signedInAs: ['clinician'], fetchImpl: impl as unknown as typeof fetch });
-      await primary();
-      const patients = await addPatient('SYN-777');
-      expect(await patients.findByRole('alert')).toBeVisible();
-      await userEvent.click(patients.getByRole('button', { name: 'Create patient' }));
-      expect(await within(patients.getByRole('list', { name: 'Patients' })).findByText('SYN-777')).toBeVisible();
-      expect(posts).toHaveLength(2);
-      expect(posts[1]!.requestId).toBe(posts[0]!.requestId);
-    });
+  it('moves focus into the menu when it opens, and the arrow keys move between its items (D10)', async () => {
+    open('/reports', ['clinician']);
+    await primary();
+    const account = document.querySelector<HTMLElement>('.workspace-account')!;
+    await userEvent.click(within(account).getByRole('button', { name: 'Account, clinician' }));
+    expect(within(account).getByRole('link', { name: 'Settings' })).toHaveFocus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(within(account).getByRole('button', { name: /^Language/ })).toHaveFocus();
+    await userEvent.keyboard('{ArrowUp}{ArrowUp}');
+    expect(within(account).getByRole('button', { name: 'Sign out' })).toHaveFocus();
   });
 
   it('on a phone the menu button opens it, and Escape closes it and returns focus to the button', async () => {
@@ -247,8 +329,8 @@ describe('the feature panel (specs/024 D2, D6, CH-2)', () => {
     const toggle = screen.getByRole('button', { name: 'Workspace navigation' });
     await userEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    screen.getByRole('link', { name: 'Upload report' }).focus();
-    fireEvent.keyDown(screen.getByRole('link', { name: 'Upload report' }), { key: 'Escape' });
+    screen.getByRole('link', { name: 'Reports' }).focus();
+    fireEvent.keyDown(screen.getByRole('link', { name: 'Reports' }), { key: 'Escape' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(toggle).toHaveFocus();
   });

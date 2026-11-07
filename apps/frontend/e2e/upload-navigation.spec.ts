@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openWorkspaceNavigation, signInWithPatient } from './helpers';
+import { signInWithPatient } from './helpers';
 
 const REPORT = Buffer.from('{"synthetic":true}');
 function latch() { let release!: () => void; const promise = new Promise<void>(resolve => { release = resolve; }); return { promise, release }; }
@@ -25,12 +25,16 @@ async function fill(page: Page, fixture: { id: string; label: string }, name: st
   await page.getByRole('button', { name: 'Upload report', exact: true }).click();
 }
 async function navigateAwayAndBack(page: Page) {
-  await openWorkspaceNavigation(page);
-  await page.locator('header.workspace-navigation').getByRole('link', { name: /^Telesphoros/ }).first().click();
-  await expect(page).toHaveURL(/\/$/);
-  await openWorkspaceNavigation(page);
-  await page.getByRole('link', { name: 'Upload report', exact: true }).click();
+  await page.getByRole('button', { name: 'Close resume report upload', exact: true }).click();
+  await expect(page).toHaveURL(/\/workspace$/);
+  // History updates before React commits the route. Back must follow the actual unmount,
+  // otherwise both navigations can retain the submitting form instead of exercising recovery.
+  const panel = page.getByRole('dialog', { name: 'Resume report upload', exact: true });
+  await expect(panel).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'Question', exact: true })).toBeVisible();
+  await page.goBack();
   await expect(page).toHaveURL(/\/reports\/upload$/);
+  await expect(panel).toBeVisible();
 }
 async function holdFirstTransfer(page: Page) {
   const arrived = latch(), released = latch(), done = latch(); let first = true;

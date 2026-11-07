@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import './backend.guard.test.mjs';
+import './cognito-branding.guard.test.mjs';
 import './api-compute.guard.test.mjs';
 import './api-autoscaling.guard.test.mjs';
 import './api.guard.test.mjs';
@@ -26,6 +27,19 @@ import './reports-cors.guard.test.mjs';
 import '../../scripts/staging/publish-frontend.test.mjs';
 import '../../scripts/staging/run-task.test.mjs';
 import '../../scripts/staging/verify-image.test.mjs';
+import '../../scripts/staging/staging-status.test.mjs';
+import '../../scripts/staging/check-medication-fence-rollout.test.mjs';
+import '../../scripts/staging/staging-status-sh.test.mjs';
+import '../../scripts/staging/release/release-check.test.mjs';
+import '../../scripts/staging/release/fence-plan.test.mjs';
+import '../../scripts/staging/release/fence-vars.test.mjs';
+import '../../scripts/staging/release/assessment-plan.test.mjs';
+import '../../scripts/staging/release/release-scripts.test.mjs';
+import '../../scripts/staging/release/migration-pending.test.mjs';
+import '../../scripts/staging/release/release-steps.test.mjs';
+import '../../scripts/staging/release/release-after.test.mjs';
+import '../../scripts/staging/release/lambda-build.test.mjs';
+import './lambda-bundles.guard.test.mjs';
 
 const cognito = readFileSync(new URL('./cognito.tf', import.meta.url), 'utf8');
 const lambda = readFileSync(new URL('./lambda.tf', import.meta.url), 'utf8');
@@ -290,13 +304,20 @@ test('the backup-upload guard reports each way the text could be weakened (contr
 });
 
 test('the application may list a report\'s intake prefix (versions and multipart uploads) and only under reports/', () => {
-  const [inventory] = blocks(code(iam), 'statement').filter((s) => /sid\s*=\s*"ReportIntakeInventory"/.test(s));
+  const statements = blocks(code(iam), 'statement');
+  const [inventory] = statements.filter((s) => /sid\s*=\s*"ReportIntakeInventory"/.test(s));
   assert.ok(inventory, 'the validated intake needs a listing statement');
   has(inventory, '"s3:ListBucketVersions"');
-  has(inventory, '"s3:ListBucketMultipartUploads"');
   has(inventory, 'aws_s3_bucket.reports.arn]');
-  assert.ok(/variable\s*=\s*"s3:prefix"/.test(inventory) && /values\s*=\s*\["reports\/\*"\]/.test(inventory), 'the listing must be limited to the reports/ prefix');
+  assert.ok(/variable\s*=\s*"s3:prefix"/.test(inventory) && /values\s*=\s*\["reports\/\*"\]/.test(inventory), 'the version listing must be limited to the reports/ prefix');
   lacks(inventory, /s3:Delete|s3:Put|s3:Get|"s3:\*"/, 'the listing statement grants nothing but listing');
+  // S3 sends no s3:prefix with ListBucketMultipartUploads, so a statement that conditions it on s3:prefix never matches (staging, 2026-11-05).
+  const multipart = statements.filter((s) => /"s3:ListBucketMultipartUploads"/.test(s));
+  assert.equal(multipart.length, 1, 'exactly one statement grants the multipart listing');
+  assert.ok(/sid\s*=\s*"ReportIntakeMultipartInventory"/.test(multipart[0]), 'the multipart listing has its own statement');
+  has(multipart[0], 'aws_s3_bucket.reports.arn]');
+  lacks(multipart[0], /condition|s3:prefix/, 'the multipart listing must carry no s3:prefix condition: S3 never sends that key for it');
+  lacks(multipart[0], /s3:Delete|s3:Put|s3:Get|s3:Abort|"s3:\*"|actions\s*=\s*\[[^\]]*,/, 'the multipart statement grants the multipart listing alone');
 });
 
 test('no policy in this module grants deletion of object versions (a break-glass role outside this module is the only holder)', () => {

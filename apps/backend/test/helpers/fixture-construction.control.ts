@@ -1,13 +1,17 @@
 // Explicit real-service controls; .control.ts is outside normal profile discovery.
 import { Client, Pool } from 'pg';
 import { Test } from '@nestjs/testing';
-import { createEphemeralDatabase, withAdmin } from './database';
+import { createEphemeralDatabase, ensureMigratedTemplate, migratedTemplateName, withAdmin } from './database';
 import { createTestApp } from './app';
 import { disposeFixtures, onceFixtureCleanup } from './fixture-cleanup';
 
 const base = process.env.TEST_DATABASE_URL!;
 const inventory = () =>
-  withAdmin(base, async (c) => (await c.query('SELECT datname FROM pg_database WHERE left(datname, 5)=$1 ORDER BY datname', ['test_'])).rows.map((r) => r.datname));
+  withAdmin(base, async (c) =>
+    (await c.query('SELECT datname FROM pg_database WHERE starts_with(datname, $1) OR starts_with(datname, $2) ORDER BY datname', ['test_', 'tplbuild_'])).rows.map(
+      (r) => r.datname,
+    ),
+  );
 let protectedDatabase: Awaited<ReturnType<typeof createEphemeralDatabase>>;
 let before: string[];
 beforeAll(async () => {
@@ -17,29 +21,45 @@ beforeAll(async () => {
 afterEach(async () => {
   jest.restoreAllMocks();
   expect(await inventory()).toEqual(before);
-  const sessions = await withAdmin(base, async (c) => (await c.query('SELECT count(*)::int AS n FROM pg_stat_activity WHERE left(datname, 5)=$1', ['test_'])).rows[0].n);
+  const sessions = await withAdmin(
+    base,
+    async (c) => (await c.query('SELECT count(*)::int AS n FROM pg_stat_activity WHERE starts_with(datname, $1) OR starts_with(datname, $2)', ['test_', 'tplbuild_'])).rows[0].n,
+  );
   expect(sessions).toBe(0);
 });
 afterAll(async () => {
   await protectedDatabase?.drop();
 });
 
-it('closes an already-connected migrator and drops its database when connect rejects', async () => {
+// Run these controls alone: force a cold template build without touching the unrelated protected fixture.
+async function removeTemplate(): Promise<void> {
+  await withAdmin(base, async (c) => {
+    const template = migratedTemplateName();
+    if ((await c.query('SELECT 1 FROM pg_database WHERE datname = $1', [template])).rows.length > 0) {
+      await c.query(`ALTER DATABASE ${template} IS_TEMPLATE false`);
+      await c.query(`DROP DATABASE ${template} WITH (FORCE)`);
+    }
+  });
+}
+
+it('closes an already-connected template migrator and drops its build when connect rejects', async () => {
+  await removeTemplate();
   const connect = Client.prototype.connect;
   let injected = false;
   // eslint-disable-next-line @typescript-eslint/no-misused-promises -- pg types connect's callback overload as void; the real method returns this promise
   jest.spyOn(Client.prototype, 'connect').mockImplementation(async function (this: Client) {
     await Reflect.apply(connect, this, []);
-    if (!injected && /^test_/.test((this as unknown as { database: string }).database)) {
+    if (!injected && /^tplbuild_/.test((this as unknown as { database: string }).database)) {
       injected = true;
       throw new Error('synthetic migrator connect rejection');
     }
   });
-  await expect(createEphemeralDatabase()).rejects.toThrow('synthetic migrator connect rejection');
+  await expect(ensureMigratedTemplate()).rejects.toThrow('synthetic migrator connect rejection');
   expect(injected).toBe(true);
 });
 
-it('drops the database when the real migrator rejects before returning a handle', async () => {
+it('drops the template build when the real migrator rejects before publishing it', async () => {
+  await removeTemplate();
   const query = Client.prototype.query;
   let injected = false;
   // eslint-disable-next-line @typescript-eslint/no-misused-promises -- pg types query's callback overloads as void; the real method returns this promise
@@ -50,8 +70,40 @@ it('drops the database when the real migrator rejects before returning a handle'
     }
     return Reflect.apply(query, this, args);
   } as typeof query);
-  await expect(createEphemeralDatabase()).rejects.toThrow('synthetic migration rejection');
+  await expect(ensureMigratedTemplate()).rejects.toThrow('synthetic migration rejection');
   expect(injected).toBe(true);
+});
+
+it('drops the renamed database when template publication rejects', async () => {
+  await removeTemplate();
+  const query = Client.prototype.query;
+  let injected = false;
+  // eslint-disable-next-line @typescript-eslint/no-misused-promises -- pg types query's callback overloads as void; the real method returns this promise
+  jest.spyOn(Client.prototype, 'query').mockImplementation(function (this: Client, ...args: unknown[]) {
+    if (args[0] === `ALTER DATABASE ${migratedTemplateName()} WITH IS_TEMPLATE true ALLOW_CONNECTIONS false`) {
+      injected = true;
+      return Promise.reject(new Error('synthetic template publication rejection'));
+    }
+    return Reflect.apply(query, this, args);
+  } as typeof query);
+  await expect(ensureMigratedTemplate()).rejects.toThrow('synthetic template publication rejection');
+  expect(injected).toBe(true);
+  expect(await withAdmin(base, async (c) => (await c.query('SELECT datname FROM pg_database WHERE datname = $1', [migratedTemplateName()])).rows)).toEqual([]);
+});
+
+it('cancellation after migration drops the unpublished template build', async () => {
+  await removeTemplate();
+  const controller = new AbortController();
+  const query = Client.prototype.query;
+  // eslint-disable-next-line @typescript-eslint/no-misused-promises -- pg types query's callback overloads as void; the real method returns this promise
+  jest.spyOn(Client.prototype, 'query').mockImplementation(async function (this: Client, ...args: unknown[]) {
+    const result = await Reflect.apply(query, this, args);
+    if (args[0] === 'SELECT pg_advisory_unlock($1)' && (args[1] as number[])?.[0] === 7262001) controller.abort(new Error('synthetic cancelled template'));
+    return result;
+  } as typeof query);
+  await expect(ensureMigratedTemplate(base, controller.signal)).rejects.toThrow('synthetic cancelled template');
+  expect(controller.signal.aborted).toBe(true);
+  expect(await withAdmin(base, async (c) => (await c.query('SELECT datname FROM pg_database WHERE datname = $1', [migratedTemplateName()])).rows)).toEqual([]);
 });
 
 it('unwinds an owned database and admin pool when module compilation rejects', async () => {

@@ -7,6 +7,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { ASSESSMENT_SETTINGS } from '../../scripts/staging/release/fence-plan.mjs';
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const compute = read('./api-compute.tf');
@@ -23,6 +24,7 @@ const logShapeSpec = read('../../apps/backend/src/log-shape.spec.ts');
 const loggerOptions = read('../../apps/backend/src/logger-options.ts');
 const appModule = read('../../apps/backend/src/app.module.ts');
 const cliSource = read('../../apps/backend/src/db/cli.ts');
+const apiDockerfile = read('../docker/api.Dockerfile');
 const { loadEnv } = await import('../../apps/backend/src/config/env.ts').catch((error) => {
   throw new Error(`the application's own configuration loader could not be imported (it needs Node 22.18 or newer and a built @telesphoros/shared-types: pnpm --filter @telesphoros/shared-types build): ${error.message}`);
 });
@@ -50,6 +52,7 @@ function blocks(text, header) {
 
 const PLACEHOLDERS = {
   'tostring(local.api_port)': '3000',
+  'var.medication_writes_enabled ? "enabled" : "disabled"': 'disabled',
   'tostring(var.api_db_pool_max)': '10', // database-connections.tf; its default, which the backend's own loader must accept
   'var.region': 'us-east-2',
   'aws_cognito_user_pool.main.id': 'us-east-2_AbCdEfGhI',
@@ -68,7 +71,7 @@ const SECRET_PLACEHOLDERS = {
   TLS_KEY_PEM: 'synthetic-key-pem',
 };
 /** Values that must never be plain environment: secrets, and anything the production start-up refuses. */
-const FORBIDDEN_ENVIRONMENT = ['DATABASE_URL', 'LEDGER_VERIFIER_DATABASE_URL', 'INVITATION_DIGEST_KEY', 'IDENTIFIER_DIGEST_KEY', 'DATABASE_MIGRATOR_URL', 'DATABASE_ADMIN_URL', 'JWT_SECRET', 'LAB_REPORT_PIPELINE', 'COGNITO_ISSUER', 'COGNITO_JWKS_URI', 'S3_ENDPOINT', 'KNOWLEDGE_DIR', 'LAB_REPORT_FIXTURES_DIR', 'LAB_REPORT_PIPELINE'];
+const FORBIDDEN_ENVIRONMENT = ['DATABASE_URL', 'LEDGER_VERIFIER_DATABASE_URL', 'INVITATION_DIGEST_KEY', 'IDENTIFIER_DIGEST_KEY', 'DATABASE_MIGRATOR_URL', 'DATABASE_ADMIN_URL', 'JWT_SECRET', 'LAB_REPORT_PIPELINE', 'COGNITO_ISSUER', 'COGNITO_JWKS_URI', 'S3_ENDPOINT', 'KNOWLEDGE_DIR', 'LAB_REPORT_FIXTURES_DIR', 'LAB_REPORT_PIPELINE', 'SYNTHETIC_ASSESSMENT', 'SYNTHETIC_KNOWLEDGE_DIR'];
 
 /** The task environment as Terraform would write it: name -> value, plus problems for anything this guard cannot evaluate. */
 function environmentOf(text, problems) {
@@ -100,6 +103,7 @@ export function apiComputeProblems(tf, sources = {}) {
   const options = sources.options ?? loggerOptions;
   const moduleSource = sources.appModule ?? appModule;
   const cli = sources.cli ?? cliSource;
+  const dockerfile = sources.dockerfile ?? apiDockerfile;
   const edge = sources.edge ?? edgeTf;
   const factory = sources.factory ?? appFactory;
   const main = sources.main ?? apiMain;
@@ -232,6 +236,19 @@ export function apiComputeProblems(tf, sources = {}) {
   need(adminRead !== undefined && adminRead.resources.trim() === '[aws_db_instance.main.master_user_secret[0].secret_arn]', 'the provisioning execution role must read the administrator secret and nothing else');
   need(has(provisionExec, 'source_policy_documents = [data.aws_iam_policy_document.api_execution_common.json]'), 'the provisioning execution role must build on the common statements');
   for (const doc of ['api_execution_provision', 'api_provision_task']) need(has(one(`data "aws_iam_policy_document" "${doc}"`), 'count = local.api_count'), `${doc} must be counted by local.api_count`);
+
+  need(has(one('variable "medication_writes_enabled"'), 'type = bool') && has(one('variable "medication_writes_enabled"'), 'default = false'), 'medication writes need an explicit boolean switch defaulting to false');
+  need(has(one('api_environment = '), 'MEDICATION_WRITES = var.medication_writes_enabled ? "enabled" : "disabled"'), 'the API environment must carry the medication-write fence');
+
+  // The synthetic assessment (spec 032 S3, PR 3c-2): off by default, refused outside the synthetic profile, and its two settings arrive together or not at all.
+  // They are NOT in the base map (FORBIDDEN_ENVIRONMENT): only the gated local carries them.
+  const assessmentVariable = one('variable "synthetic_assessment_enabled"');
+  need(has(assessmentVariable, 'type = bool') && has(assessmentVariable, 'default = false'), 'the synthetic assessment needs an explicit boolean switch defaulting to false');
+  need(has(assessmentVariable, 'condition = !var.synthetic_assessment_enabled || local.synthetic'), 'the synthetic assessment switch must be refused outside the synthetic profile');
+  need(has(text, 'synthetic_assessment_environment = { for name, value in { SYNTHETIC_ASSESSMENT = "enabled", SYNTHETIC_KNOWLEDGE_DIR = "/app/synthetic-knowledge" } : name => value if local.synthetic && var.synthetic_assessment_enabled }'), 'the synthetic assessment settings must be one map, both settings together, present only in the synthetic profile with the variable on');
+  need(has(text, '}, local.issuer_client_environment, local.synthetic_assessment_environment)'), 'the API environment must merge the synthetic assessment settings');
+  const knowledgeDir = /SYNTHETIC_KNOWLEDGE_DIR = "([^"]+)"/.exec(text)?.[1];
+  need(knowledgeDir !== undefined && dockerfile.split('\n').some((line) => line.startsWith('COPY ') && line.trimEnd().endsWith(` ${knowledgeDir}/`)), 'the synthetic knowledge directory must be where the image copies the synthetic knowledge (api.Dockerfile)');
 
   // The environment, judged by the application's own start-up rules.
   const env = environmentOf(text, problems);
@@ -388,10 +405,39 @@ test("the address the API is given when the issuer is on is one the application'
   for (const broken of ['', `${dns}:${port}`, `http://user:pw@${dns}:${port}`, `${url}/v1`, `${url}?x=1`]) assert.throws(() => loadEnv({ ...env, ...SECRET_PLACEHOLDERS, ISSUER_URL: broken }), /ISSUER_URL/);
 });
 
+test("the synthetic assessment's settings, as Terraform writes them when the switch is on, are accepted by the application's own loader, and half of them is refused (control)", () => {
+  const problems = [];
+  const env = environmentOf(code(compute), problems);
+  assert.deepEqual(problems, []);
+  // Worked out from the local's own text, the way Terraform builds it, not typed here.
+  const on = /SYNTHETIC_ASSESSMENT = "([^"]+)", SYNTHETIC_KNOWLEDGE_DIR = "([^"]+)"/.exec(code(compute));
+  assert.ok(on, 'api-compute.tf must name both synthetic assessment settings');
+  const [, mode, dir] = on;
+  const base = { ...env, ...SECRET_PLACEHOLDERS };
+  assert.equal(loadEnv(base).SYNTHETIC_ASSESSMENT, 'disabled', 'with the variable off the API environment has no switch and the application keeps it off');
+  const loaded = loadEnv({ ...base, SYNTHETIC_ASSESSMENT: mode, SYNTHETIC_KNOWLEDGE_DIR: dir });
+  assert.equal(loaded.SYNTHETIC_ASSESSMENT, 'enabled');
+  assert.equal(loaded.SYNTHETIC_KNOWLEDGE_DIR, dir);
+  assert.throws(() => loadEnv({ ...base, SYNTHETIC_ASSESSMENT: mode }), /SYNTHETIC_KNOWLEDGE_DIR/);
+  assert.throws(() => loadEnv({ ...base, SYNTHETIC_KNOWLEDGE_DIR: dir }), /SYNTHETIC_KNOWLEDGE_DIR/);
+  assert.throws(() => loadEnv({ ...base, SYNTHETIC_ASSESSMENT: mode, SYNTHETIC_KNOWLEDGE_DIR: dir, BUILD_VERSION: undefined }), /BUILD_VERSION/);
+});
+
+test('the release tooling expects exactly the assessment settings api-compute.tf writes (the plan checker and the Terraform text agree)', () => {
+  const written = /synthetic_assessment_environment = \{ for name, value in \{ ([^}]*) \}/.exec(code(compute))?.[1] ?? '';
+  const pairs = Object.fromEntries([...written.matchAll(/([A-Z_]+) = "([^"]+)"/g)].map((m) => [m[1], m[2]]));
+  assert.deepEqual(pairs, ASSESSMENT_SETTINGS);
+  // Controls: a checker or a Terraform line that moved on its own would disagree.
+  assert.notDeepEqual(pairs, { ...ASSESSMENT_SETTINGS, SYNTHETIC_KNOWLEDGE_DIR: '/app/knowledge' });
+  assert.notDeepEqual(Object.fromEntries([...code(compute).replace('/app/synthetic-knowledge', '/app/knowledge').match(/synthetic_assessment_environment = \{[^\n]*/)[0].matchAll(/([A-Z_]+) = "([^"]+)"/g)].map((m) => [m[1], m[2]])), ASSESSMENT_SETTINGS);
+});
+
 const envLine = (key, value) => `${key.padEnd(33)} = ${value}`;
 
 test('the API compute guard reports each way the text could be weakened (controls)', () => {
   const weakened = [
+    ['medication capture enabled by default', 'default     = false\n}\n\nvariable "synthetic_assessment_enabled" {', 'default     = true\n}\n\nvariable "synthetic_assessment_enabled" {'],
+    ['the medication fence missing from the task', envLine('MEDICATION_WRITES', 'var.medication_writes_enabled ? "enabled" : "disabled"'), ''],
     ['the verification-error filter names another event', 'pattern        = "{ $.event = \\"ledger-verification-error\\" }"', 'pattern        = "{ $.event = \\"ledger-verification-failed\\" }"'],
     ['the over-size alarm treats silence as failure', 'treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]', 'treat_missing_data  = "breaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]'],
     ['the over-size alarm needs ten lines', 'threshold           = 1\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]', 'threshold           = 10\n  comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "notBreaching"\n  alarm_actions       = [aws_sns_topic.audit_alarms.arn]\n  depends_on          = [aws_cloudwatch_log_metric_filter.api_ledger_chain_over_size]'],
@@ -525,6 +571,16 @@ test('the API compute guard reports each way the text could be weakened (control
     ['the stale alarm compares the wrong way', 'comparison_operator = "LessThanThreshold"\n  treat_missing_data  = "breaching"', 'comparison_operator = "GreaterThanOrEqualToThreshold"\n  treat_missing_data  = "breaching"'],
     ['the walk interval outgrows the stale window', 'LEDGER_FULL_VERIFY_INTERVAL_HOURS = "24"', 'LEDGER_FULL_VERIFY_INTERVAL_HOURS = "48"'],
     ['the stale alarm counted before an image runs', 'resource "aws_cloudwatch_metric_alarm" "api_ledger_check_stale" {\n  count               = local.api_service_count', 'resource "aws_cloudwatch_metric_alarm" "api_ledger_check_stale" {\n  count               = local.api_count'],
+    // The synthetic assessment switch (PR 3c-2).
+    ['the synthetic assessment on by default', 'type        = bool\n  default     = false\n  validation {\n    condition     = !var.synthetic_assessment_enabled', 'type        = bool\n  default     = true\n  validation {\n    condition     = !var.synthetic_assessment_enabled'],
+    ['the synthetic assessment allowed in a production definition', 'condition     = !var.synthetic_assessment_enabled || local.synthetic', 'condition     = true'],
+    ['the synthetic assessment gated on the profile alone', 'if local.synthetic && var.synthetic_assessment_enabled }', 'if local.synthetic }'],
+    ['the synthetic assessment gated on the variable alone', 'if local.synthetic && var.synthetic_assessment_enabled }', 'if var.synthetic_assessment_enabled }'],
+    ['the synthetic assessment switch without its knowledge directory', ', SYNTHETIC_KNOWLEDGE_DIR = "/app/synthetic-knowledge" }', ' }'],
+    ['the synthetic knowledge directory without its switch', 'SYNTHETIC_ASSESSMENT = "enabled", SYNTHETIC_KNOWLEDGE_DIR', 'SYNTHETIC_KNOWLEDGE_DIR'],
+    ['the synthetic knowledge directory somewhere the image does not put it', 'SYNTHETIC_KNOWLEDGE_DIR = "/app/synthetic-knowledge"', 'SYNTHETIC_KNOWLEDGE_DIR = "/app/knowledge"'],
+    ['the synthetic assessment settings never merged into the task', ', local.issuer_client_environment, local.synthetic_assessment_environment)', ', local.issuer_client_environment)'],
+    ['the synthetic assessment switch written into the base environment', envLine('RATE_LIMIT_ENABLED', '"true"'), `${envLine('RATE_LIMIT_ENABLED', '"true"')}\n    ${envLine('SYNTHETIC_ASSESSMENT', '"enabled"')}`],
   ];
   for (const [name, from, to] of weakened) {
     assert.ok(compute.includes(from), `the control for "${name}" must match the real text (it does not: fix the control)`);
@@ -554,6 +610,10 @@ test('the API compute guard reports each way the text could be weakened (control
     ['cli.ts stops reading the issuer variable', { cli: cliSource.replace('...(process.env.PROVISION_SECRET_ISSUER ? { issuer: process.env.PROVISION_SECRET_ISSUER } : {})', '') }],
     ['cli.ts reads an extra provisioning secret Terraform does not pass', { cli: cliSource.replace("worker: required('PROVISION_SECRET_WORKER')", "worker: required('PROVISION_SECRET_WORKER'), extra: required('PROVISION_SECRET_EXTRA')") }],
   ];
+  applicationSide.push(
+    ['the image copies the synthetic knowledge somewhere else', { dockerfile: apiDockerfile.replace(' /app/synthetic-knowledge/', ' /app/knowledge/') }],
+    ['the image stops copying the synthetic knowledge', { dockerfile: apiDockerfile.replace(/^COPY .* \/app\/synthetic-knowledge\/$/m, '') }],
+  );
   for (const [name, sources] of applicationSide) assert.ok(apiComputeProblems(compute, sources).length > 0, `a changed application must be reported: ${name}`);
   assert.deepEqual(apiComputeProblems(compute), []); // control: the unchanged text is clean
 });

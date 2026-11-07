@@ -18,9 +18,17 @@ export class PatientsService {
     private readonly demographics: PatientDemographicsRepository,
   ) {}
 
-  async list(principal: Principal, { page, pageSize, includeMerged }: Pick<PatientListQuery, 'page' | 'pageSize'> & { includeMerged?: boolean }) {
-    const result = await this.patients.list(principal.tenantId, { offset: (page - 1) * pageSize, limit: pageSize }, { includeMerged });
+  async list(
+    principal: Principal,
+    { page, pageSize, includeMerged, order }: Pick<PatientListQuery, 'page' | 'pageSize'> & { includeMerged?: boolean; order?: PatientListQuery['order'] },
+  ) {
+    const result = await this.patients.list(principal.tenantId, { offset: (page - 1) * pageSize, limit: pageSize, order }, { includeMerged });
     return { ...result, items: await this.withCoded(principal.tenantId, result.items) };
+  }
+
+  /** How many patients have complete coded demographics, with the denominator. Counts only: reads no ciphertext and asks the key provider for nothing. */
+  completeness(principal: Principal) {
+    return this.demographics.completenessCounts(principal.tenantId);
   }
 
   /** Attaches each patient's latest coded demographics (sex, birth year, ethnicity). Reads no ciphertext and needs no key. */

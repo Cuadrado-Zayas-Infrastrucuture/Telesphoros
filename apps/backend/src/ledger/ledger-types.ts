@@ -33,6 +33,11 @@ export const EVENT_TYPE_FOR_TABLE = {
   use_restrictions: 'use-restriction',
   tenant_use_terms: 'tenant-use-terms',
   patient_demographics: 'patient-demographics',
+  patient_medications: 'patient-medication',
+  patient_followups: 'patient-followup',
+  structured_report_revisions: 'structured-report-revision',
+  structured_finding_reviews: 'structured-finding-review',
+  structured_source_resolutions: 'structured-source-resolution',
 } as const;
 export type RecordTable = keyof typeof EVENT_TYPE_FOR_TABLE;
 export const RECORD_TABLES = Object.keys(EVENT_TYPE_FOR_TABLE) as RecordTable[];
@@ -69,6 +74,17 @@ export class DisputeChangedError extends Error {
   constructor() {
     super('A dispute changed while the evaluation was being made.');
     this.name = 'DisputeChangedError';
+  }
+}
+
+/**
+ * The reviews, resolutions or stored revisions an assessment of a structured revision was planned on are not what the ledger holds now (found after the
+ * ledger lock was taken). Nothing was written; the caller reads the stored evidence again and plans again.
+ */
+export class StructuredBasisChangedError extends Error {
+  constructor() {
+    super('The stored evidence changed while the assessment was being made.');
+    this.name = 'StructuredBasisChangedError';
   }
 }
 

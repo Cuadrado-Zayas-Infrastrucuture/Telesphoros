@@ -73,6 +73,22 @@ variable "api_log_retention_days" {
   }
 }
 
+variable "medication_writes_enabled" {
+  description = "Open medication POSTs only after migration 0066 and compatible API/worker/verifier rollout are confirmed. False fences medication writes; it is not a global write drain."
+  type        = bool
+  default     = false
+}
+
+variable "synthetic_assessment_enabled" {
+  description = "Turns on the synthetic assessment (SYNTHETIC_ASSESSMENT, spec 032 S3) for the staged synthetic environment: the structured preview, POST /reports/:id/structured-assessment and the evaluation reads, over the synthetic knowledge the image carries. Synthetic data only; not approved for real records. Refused unless deployment_profile = \"synthetic\". False leaves the task environment exactly as it was."
+  type        = bool
+  default     = false
+  validation {
+    condition     = !var.synthetic_assessment_enabled || local.synthetic
+    error_message = "synthetic_assessment_enabled needs deployment_profile = \"synthetic\": the assessment stores synthetic evaluations and is never switched on in a production definition."
+  }
+}
+
 locals {
   api_service_count = var.enable_api_hosting && var.api_image != "" ? 1 : 0
   api_container     = "api"
@@ -84,6 +100,11 @@ locals {
   api_image_parts = try(regex("^([0-9]{12})\\.dkr\\.ecr\\.([a-z0-9-]+)\\.amazonaws\\.com/([a-z0-9._/-]+)@sha256:([0-9a-f]{64})$", var.api_image), null)
   api_repository  = local.api_image_parts == null ? "arn:aws:ecr:${var.region}:${local.audit_account_id}:repository/none" : "arn:aws:ecr:${local.api_image_parts[1]}:${local.api_image_parts[0]}:repository/${local.api_image_parts[2]}"
   api_build       = local.api_image_parts == null ? "none" : "sha256-${substr(local.api_image_parts[3], 0, 12)}"
+
+  # The synthetic assessment's two settings, together or not at all: config/env.ts refuses the knowledge directory while the switch is off, and refuses the
+  # switch without it. Present only in the synthetic profile with the variable on (the variable's own validation already refuses the other profile; this is the
+  # second layer). The directory is where the image carries the synthetic knowledge (infrastructure/docker/api.Dockerfile). With the variable off the map is empty.
+  synthetic_assessment_environment = { for name, value in { SYNTHETIC_ASSESSMENT = "enabled", SYNTHETIC_KNOWLEDGE_DIR = "/app/synthetic-knowledge" } : name => value if local.synthetic && var.synthetic_assessment_enabled }
 
   # Everything the production start-up demands (config/env.ts), and nothing it refuses (no pipeline, no development overrides, no shared secret).
   api_environment = merge({
@@ -101,13 +122,14 @@ locals {
     DATABASE_POOL_MAX                 = tostring(var.api_db_pool_max)
     CORS_ALLOWED_ORIGINS              = join(",", var.api_cors_origins)
     RATE_LIMIT_ENABLED                = "true"
+    MEDICATION_WRITES                 = var.medication_writes_enabled ? "enabled" : "disabled"
     TRUST_PROXY_HOPS                  = "1"
     BUILD_VERSION                     = local.api_build
     LEDGER_FULL_VERIFY_INTERVAL_HOURS = "24"
     # Spec 025: the key that wraps each patient's identity data key (envelope encryption, context {tenant, patient}). Not a secret: an ARN.
     PATIENT_FIELD_KMS_KEY_ID = aws_kms_key.data.arn
     # ISSUER_URL (DATA-01) is not typed here: it is built from the issuer's own names in issuer.tf and exists only while the issuer service does.
-  }, local.issuer_client_environment)
+  }, local.issuer_client_environment, local.synthetic_assessment_environment)
 }
 
 # ------------------------------------------------------------------------------------------------

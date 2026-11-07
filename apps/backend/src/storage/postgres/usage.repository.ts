@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Database } from '../../db/database';
-import { type UsageActivity, UsageRepository, type UsageStorage } from '../usage.repository';
+import { OFFSET_HOURS } from '../../usage/usage-months';
+import { type UsageActivity, type UsageDay, UsageRepository, type UsageStorage } from '../usage.repository';
 
 /**
  * Aggregates through the application role, so row-level security already limits every row to the caller's tenant; each query states the
@@ -35,6 +36,27 @@ export class PostgresUsageRepository extends UsageRepository {
         [tenantId],
       );
       return { reportFiles: Number(rows[0]!.files), reportBytes: Number(rows[0]!.bytes) };
+    });
+  }
+
+  /** Groups by the upload instant shifted by the same fixed offset as `puertoRicoDate`, passed as a parameter rather than a time zone name. */
+  uploadsByDay(tenantId: string, from: Date, to: Date): Promise<UsageDay[]> {
+    return this.db.withTenant(tenantId, async (client) => {
+      const { rows } = await client.query<{ day: string; uploaded: string }>(
+        `SELECT to_char((uploaded_at AT TIME ZONE 'UTC') - make_interval(hours => $4), 'YYYY-MM-DD') AS day, count(*) AS uploaded
+           FROM reports WHERE tenant_id = $1 AND uploaded_at >= $2 AND uploaded_at < $3
+          GROUP BY day ORDER BY day`,
+        [tenantId, from, to, OFFSET_HOURS],
+      );
+      return rows.map((row) => ({ date: row.day, reportsUploaded: Number(row.uploaded) }));
+    });
+  }
+
+  /** The caller's own row, which the `tenants_own` policy lets the application role read. An unregistered organization has none: now. */
+  createdAt(tenantId: string): Promise<Date> {
+    return this.db.withTenant(tenantId, async (client) => {
+      const { rows } = await client.query<{ created_at: Date }>('SELECT created_at FROM tenants WHERE id = $1', [tenantId]);
+      return rows[0]?.created_at ?? new Date();
     });
   }
 }

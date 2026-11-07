@@ -15,6 +15,9 @@
 sidecars
 ml
 data
+# The one data set the API image carries: the synthetic knowledge of the structured assessment (spec 032 S3), loaded only while SYNTHETIC_ASSESSMENT is on.
+# Nothing else under data/ may be re-included; infrastructure/docker/guard.test.mjs fails on any other exception.
+!data/fixtures/knowledge/synthetic-structured
 # Local SMART rehearsal state must never enter the API image build context.
 packages/smart-pilot/openemr/.runtime
 packages/smart-pilot/dist-ui

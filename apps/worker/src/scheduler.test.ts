@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { sweepCapabilities } from './job-data';
 import type { LogFields, Logger } from './log';
 import { Ticker } from './scheduler';
@@ -10,6 +10,42 @@ const capture = (): { lines: Line[]; log: Logger } => {
 };
 
 describe('Ticker', () => {
+  it('coalesces timer ticks while a run is stalled and stops without draining a backlog', async () => {
+    vi.useFakeTimers();
+    let finish!: () => void;
+    const held = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    let runs = 0;
+    const ticker = new Ticker(
+      'schedule',
+      async () => {
+        runs++;
+        await held;
+        return 0;
+      },
+      1,
+      capture().log,
+    );
+    try {
+      ticker.start();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(runs).toBe(1);
+      const stopped = ticker.stop();
+      finish();
+      await stopped;
+      expect(runs).toBe(1);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(runs).toBe(1);
+      await ticker.tick();
+      expect(runs).toBe(2);
+    } finally {
+      finish();
+      await ticker.stop();
+      vi.useRealTimers();
+    }
+  });
+
   it('by default logs a run only when it did something, with its count (the tick and the relay, unchanged)', async () => {
     const { lines, log } = capture();
     await new Ticker('schedule', async () => 0, 60, log).tick();

@@ -72,6 +72,8 @@ export async function loadKnowledge(options: LoadKnowledgeOptions): Promise<Know
     if (strict) {
       if (file.synthetic) problems.push(`${path}: synthetic test content is not allowed in production.`);
       if (file.review.status !== 'reviewed') problems.push(`${path}: unreviewed content is not allowed in production.`);
+      // Spec 033 K2-4: a 1.2 file has no origin, which counts as "unknown". Synthetic and unreviewed files are refused above anyway.
+      if (file.schemaVersion === '1.2') problems.push(`${path}: schema 1.2 states no origin; production needs schema 1.3 with a stated origin.`);
     }
 
     if (file.kind === 'gene-phenotype-map') {

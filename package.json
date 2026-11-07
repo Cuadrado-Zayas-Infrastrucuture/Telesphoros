@@ -12,7 +12,7 @@
     "format": "prettier --write \"{apps,packages}/*/{src,test}/**/*.{ts,tsx,mts,cts,js,mjs,cjs}\"",
     "format:check": "prettier --check \"{apps,packages}/*/{src,test}/**/*.{ts,tsx,mts,cts,js,mjs,cjs}\"",
     "typecheck": "node scripts/workspace-build/workspace.cjs run typecheck",
-    "test": "node --test scripts/workspace-build/workspace.test.cjs scripts/workspace-build/versions.test.cjs scripts/lint/type-imports.test.mjs scripts/lint/prettier-scope.test.mjs scripts/local-storage/operations.test.cjs && node scripts/workspace-build/workspace.cjs run test",
+    "test": "node --test scripts/drug-list/build.test.mjs scripts/workspace-build/workspace.test.cjs scripts/workspace-build/versions.test.cjs scripts/lint/type-imports.test.mjs scripts/lint/prettier-scope.test.mjs scripts/local-storage/operations.test.cjs && node scripts/workspace-build/workspace.cjs run test",
     "build": "node scripts/workspace-build/workspace.cjs run build",
     "test:infra": "node --test infrastructure/terraform/guard.test.mjs",
     "test:ci-config": "node --test .github/ci/*.test.mjs",

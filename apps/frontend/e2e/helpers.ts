@@ -3,16 +3,21 @@ import { expect, type Page } from '@playwright/test';
 
 const require = createRequire(import.meta.url);
 
-export type Persona = 'alice' | 'bob' | 'carol' | 'dave' | 'gina';
-export const ROLE: Record<Persona, string> = { alice: 'clinician', bob: 'reader', carol: 'admin', dave: 'no role', gina: 'reviewer' };
+export type Persona = 'alice' | 'bob' | 'carol' | 'dave' | 'gina' | 'hal';
+export const ROLE: Record<Persona, string> = { alice: 'clinician', bob: 'reader', carol: 'admin', dave: 'no role', gina: 'reviewer', hal: 'clinician and reviewer' };
 
 /**
  * Signs in exactly as a person would: open a protected page, get sent to sign in, click through to the
  * identity provider, pick an account there, and come back to the page they wanted.
  */
-export async function signInAs(page: Page, persona: Persona, path = '/reports/upload') {
+export async function signInAs(page: Page, persona: Persona, path = '/reports/upload', consent: 'preferences' | 'necessary' | 'unanswered' = 'preferences') {
   await page.goto(path);
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
+  // Existing flows model a visitor's explicit choice; consent tests can leave the first-visit bar unanswered.
+  if (consent !== 'unanswered') {
+    const choice = page.getByRole('button', { name: consent === 'preferences' ? 'Allow preferences' : 'Use necessary only', exact: true });
+    if (await choice.count()) await choice.click();
+  }
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.getByRole('button', { name: new RegExp(`Sign in as ${persona}\\b`) }).click();
   await page.waitForURL(`**${path}`);
@@ -70,6 +75,13 @@ export async function selectReportsPatient(page: Page, fixture: { id: string; la
 
 /** Open the compact workspace menu before using a sidebar item on mobile. */
 export async function openWorkspaceNavigation(page: Page) {
+  // Workspace routes now open modal panels; a physician closes the panel before using the sidebar.
+  const panel = /^\/(reports(?:\/upload)?|settings)$/.test(new URL(page.url()).pathname);
+  if (panel) {
+    const close = page.getByRole('button', { name: /^Close (report history|resume report upload|account preferences)$/ });
+    await close.click();
+    await expect(page).toHaveURL(/\/workspace$/);
+  }
   // The URL can change before React commits the signed-in workspace shell.
   // isVisible() does not wait: checking it first can silently skip the mobile menu.
   const workspaceRoute = /^\/(?:reports(?:\/|$)|local-|workspace(?:\/|$))/.test(new URL(page.url()).pathname);
@@ -77,6 +89,27 @@ export async function openWorkspaceNavigation(page: Page) {
   const menu = page.getByRole('button', { name: 'Workspace navigation', exact: true });
   if (await menu.isVisible() && await menu.getAttribute('aria-expanded') !== 'true') await menu.click();
   await expect(page.getByRole('navigation', { name: 'Primary', exact: true })).toBeVisible();
+}
+
+/** Opens the account menu at the sidebar's foot (specs/034 D4), which holds Settings and Sign out; on a phone the menu button opens first. */
+export async function openAccountMenu(page: Page) {
+  await openWorkspaceNavigation(page);
+  const account = page.locator('header.workspace-navigation').getByRole('button', { name: /^Account, / });
+  if ((await account.getAttribute('aria-expanded')) !== 'true') await account.click();
+  await expect(page.locator('#workspace-account-menu')).toBeVisible();
+}
+
+/** Signs out from the account menu (specs/034 D4). */
+export async function signOutFromSidebar(page: Page) {
+  await openAccountMenu(page);
+  await page.locator('#workspace-account-menu').getByRole('button', { name: 'Sign out', exact: true }).click();
+}
+
+/** The Patients page, through the sidebar (specs/034 D2): the patient list and, for writer roles, Add patient. */
+export async function openPatients(page: Page) {
+  await openWorkspaceNavigation(page);
+  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'Patients', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Patients' })).toBeVisible();
 }
 
 /** WCAG 2.0/2.1 A and AA violations on the current page, colour contrast included, as "rule (count)" strings. */

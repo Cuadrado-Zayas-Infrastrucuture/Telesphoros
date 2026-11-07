@@ -169,6 +169,7 @@ export class PgCapabilityIssueStore implements CapabilityIssueStore, JobCapabili
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 2_000,
       statement_timeout: 5_000,
+      query_timeout: 7_000, // also bound a half-open connection that cannot deliver PostgreSQL's timeout response
       idle_in_transaction_session_timeout: 10_000,
       application_name: 'telesphoros-session-issuer',
     });

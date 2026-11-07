@@ -1,0 +1,3585 @@
+{
+  "status": "verified",
+  "version": "b67108bcce609d1ac7dd8df87f17128619abd3cfb478d582db159532a66acc0c",
+  "cpicRelease": "v1.61.0",
+  "cpicSource": "https://api.cpicpgx.org/v1/drug",
+  "accessedAt": "2026-11-01T16:38:24.637Z",
+  "rxnormRelease": "05-Oct-2026",
+  "attribution": "This product uses publicly available data courtesy of the U.S. National Library of Medicine (NLM), National Institutes of Health, Department of Health and Human Services; NLM is not responsible for the product and does not endorse or recommend this or any other product.",
+  "currencyNotice": "This bundled snapshot may not reflect the most current or accurate NLM data.",
+  "citations": [
+    "https://github.com/cpicpgx/cpic-data/releases/tag/v1.61.0; API snapshot retrieved 2026-11-01T16:38:24.637Z; associated release, not a pinned database export.",
+    "CPIC CC0 1.0; licensing confirmation from CPIC staff, 2026-08-31 (private founder-held email; do not publish the screenshot).",
+    "https://cpicpgx.org/licensing/",
+    "https://www.nlm.nih.gov/research/umls/rxnorm/docs/termsofservice.html",
+    "https://www.fda.gov/drugs/medication-errors-related-cder-regulated-drug-products/fda-name-differentiation-project; accessed 2026-11-01; FDA only, no ISMP-only entries."
+  ],
+  "sourceProperties": [
+    {
+      "rxcui": "10109",
+      "name": "streptomycin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1011650",
+      "name": "pegloticase",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "10154",
+      "name": "succinylcholine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "10169",
+      "name": "sulfacetamide",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "10171",
+      "name": "sulfadiazine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "10178",
+      "name": "sulfamethazine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "10184",
+      "name": "sulfanilamide",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "10207",
+      "name": "sulfisoxazole",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "103",
+      "name": "mercaptopurine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "10324",
+      "name": "tamoxifen",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "10390",
+      "name": "tetrabenazine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "10485",
+      "name": "thioguanine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "10502",
+      "name": "thioridazine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "10600",
+      "name": "timolol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "10627",
+      "name": "tobramycin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "10633",
+      "name": "tolazamide",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "10635",
+      "name": "tolbutamide",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "10638",
+      "name": "tolonium chloride",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "10689",
+      "name": "tramadol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "10759",
+      "name": "triamcinolone",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "10831",
+      "name": "sulfamethoxazole / trimethoprim",
+      "tty": "MIN"
+    },
+    {
+      "rxcui": "10834",
+      "name": "trimipramine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1086769",
+      "name": "vilazodone",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "11258",
+      "name": "vitamin K",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "11289",
+      "name": "warfarin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "114176",
+      "name": "zuclopenthixol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "114979",
+      "name": "rabeprazole",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1151",
+      "name": "ascorbic acid",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "115698",
+      "name": "ziprasidone",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "117466",
+      "name": "tenofovir",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1191",
+      "name": "aspirin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "119565",
+      "name": "tolterodine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1202",
+      "name": "atenolol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "120608",
+      "name": "peginterferon alfa-2a",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "121191",
+      "name": "rituximab",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "121243",
+      "name": "voriconazole",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1243041",
+      "name": "ivacaftor",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1256",
+      "name": "azathioprine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "12574",
+      "name": "gemcitabine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1300786",
+      "name": "mirabegron",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1311280",
+      "name": "platinum",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "135447",
+      "name": "donepezil",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "136198",
+      "name": "darifenacin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "136411",
+      "name": "sildenafil",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "139462",
+      "name": "moxifloxacin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "140587",
+      "name": "celecoxib",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1424911",
+      "name": "dabrafenib",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1425099",
+      "name": "trametinib",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1433212",
+      "name": "levomilnacipran",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1433868",
+      "name": "dolutegravir",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1455099",
+      "name": "vortioxetine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "149",
+      "name": "acebutolol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1520",
+      "name": "betaxolol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "154",
+      "name": "acenocoumarol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1543543",
+      "name": "belinostat",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1547220",
+      "name": "eliglustat",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "15996",
+      "name": "mirtazapine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1658314",
+      "name": "brexpiprazole",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1665509",
+      "name": "flibanserin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "16689",
+      "name": "aceclofenac",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1673265",
+      "name": "aripiprazole lauroxil",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "17128",
+      "name": "lansoprazole",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1731031",
+      "name": "lesinurad",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1739745",
+      "name": "brivaracetam",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1819",
+      "name": "buprenorphine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1876905",
+      "name": "deutetrabenazine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1886",
+      "name": "caffeine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "190521",
+      "name": "abacavir",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1918219",
+      "name": "valbenazine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "191831",
+      "name": "infliximab",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "194000",
+      "name": "capecitabine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "19484",
+      "name": "bisoprolol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "195085",
+      "name": "efavirenz",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "19831",
+      "name": "budesonide",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "1998",
+      "name": "captopril",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2002",
+      "name": "carbamazepine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2020",
+      "name": "carbimazole",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "20352",
+      "name": "carvedilol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2045726",
+      "name": "avatrombopag",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2049549",
+      "name": "plazomicin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2049846",
+      "name": "elagolix",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2054023",
+      "name": "tafenoquine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "20890",
+      "name": "lornoxicam",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2101",
+      "name": "carisoprodol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2106338",
+      "name": "amifampridine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2121085",
+      "name": "siponimod",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2123125",
+      "name": "erdafitinib",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "21241",
+      "name": "clobazam",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "214555",
+      "name": "etanercept",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2197878",
+      "name": "pitolisant",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2348",
+      "name": "chloramphenicol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "236913",
+      "name": "levomethadone",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2392230",
+      "name": "oliceridine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2393",
+      "name": "chloroquine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2404",
+      "name": "chlorpropamide",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "253453",
+      "name": "peginterferon alfa-2b",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2551",
+      "name": "ciprofloxacin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2555",
+      "name": "cisplatin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2556",
+      "name": "citalopram",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "25789",
+      "name": "glimepiride",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2597",
+      "name": "clomipramine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "26225",
+      "name": "ondansetron",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2626",
+      "name": "clozapine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "2670",
+      "name": "codeine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "27340",
+      "name": "desflurane",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "27392",
+      "name": "tropisetron",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "283742",
+      "name": "esomeprazole",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "283821",
+      "name": "rasburicase",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "28439",
+      "name": "lamotrigine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "284635",
+      "name": "fluticasone / salmeterol",
+      "tty": "MIN"
+    },
+    {
+      "rxcui": "28863",
+      "name": "lofexidine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "3002",
+      "name": "cyclophosphamide",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "30077",
+      "name": "mivacurium",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "3008",
+      "name": "cyclosporine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "30125",
+      "name": "modafinil",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "301542",
+      "name": "rosuvastatin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "3108",
+      "name": "dapsone",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "3109",
+      "name": "daunorubicin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "31448",
+      "name": "nabumetone",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "31555",
+      "name": "nebivolol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "31748",
+      "name": "nicorandil",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "318341",
+      "name": "cetuximab",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "321988",
+      "name": "escitalopram",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "3247",
+      "name": "desipramine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "32592",
+      "name": "oxaliplatin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "32624",
+      "name": "oxcarbazepine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "327361",
+      "name": "adalimumab",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "328134",
+      "name": "gefitinib",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "3289",
+      "name": "dextromethorphan",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "32937",
+      "name": "paroxetine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "32968",
+      "name": "clopidogrel",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "3322",
+      "name": "diazepam",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "3328",
+      "name": "dibekacin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "3355",
+      "name": "diclofenac",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "3407",
+      "name": "digoxin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "3423",
+      "name": "hydromorphone",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "343047",
+      "name": "atazanavir",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "3445",
+      "name": "dimercaprol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "3523",
+      "name": "dipyrone",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "35302",
+      "name": "sirolimus",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "35636",
+      "name": "risperidone",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "357977",
+      "name": "sunitinib",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "36117",
+      "name": "salmeterol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "3638",
+      "name": "doxepin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "3639",
+      "name": "doxorubicin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "36437",
+      "name": "sertraline",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "36453",
+      "name": "sevoflurane",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "36567",
+      "name": "simvastatin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "37790",
+      "name": "tenoxicam",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "37801",
+      "name": "terbinafine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "38400",
+      "name": "atomoxetine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "3920",
+      "name": "enflurane",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "39786",
+      "name": "venlafaxine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "3995",
+      "name": "epirubicin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "40048",
+      "name": "carboplatin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "401713",
+      "name": "carglumic acid",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "4053",
+      "name": "erythromycin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "40790",
+      "name": "pantoprazole",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "41127",
+      "name": "fluvastatin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "41493",
+      "name": "meloxicam",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "4179",
+      "name": "etoposide",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "42316",
+      "name": "tacrolimus",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "42347",
+      "name": "bupropion",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "42355",
+      "name": "fluvoxamine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "42463",
+      "name": "pravastatin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "4337",
+      "name": "fentanyl",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "435",
+      "name": "albuterol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "43611",
+      "name": "latanoprost",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "44281",
+      "name": "cevimeline",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "4441",
+      "name": "flecainide",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "448",
+      "name": "ethanol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "4492",
+      "name": "fluorouracil",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "4493",
+      "name": "fluoxetine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "4502",
+      "name": "flurbiprofen",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "4582",
+      "name": "tegafur",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "4601",
+      "name": "furazolidone",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "4603",
+      "name": "furosemide",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "46041",
+      "name": "alendronate",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "46303",
+      "name": "amisulpride",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "4637",
+      "name": "galantamine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "480",
+      "name": "alfentanil",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "480167",
+      "name": "lapatinib",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "4815",
+      "name": "glyburide",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "4816",
+      "name": "gliclazide",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "4821",
+      "name": "glipizide",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "49737",
+      "name": "esmolol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "5093",
+      "name": "haloperidol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "5095",
+      "name": "halothane",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "51272",
+      "name": "quetiapine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "51499",
+      "name": "irinotecan",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "519",
+      "name": "allopurinol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "52582",
+      "name": "mesalamine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "53654",
+      "name": "nevirapine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "5470",
+      "name": "hydralazine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "5487",
+      "name": "hydrochlorothiazide",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "5489",
+      "name": "hydrocodone",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "5521",
+      "name": "hydroxychloroquine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "5640",
+      "name": "ibuprofen",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "5650",
+      "name": "idarubicin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "56795",
+      "name": "sufentanil",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "5691",
+      "name": "imipramine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "5781",
+      "name": "indomethacin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "5880",
+      "name": "interferon alfa-2b",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "588250",
+      "name": "milnacipran",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "596723",
+      "name": "cerivastatin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6026",
+      "name": "isoflurane",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6038",
+      "name": "isoniazid",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6058",
+      "name": "isosorbide dinitrate",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6099",
+      "name": "kanamycin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "61381",
+      "name": "olanzapine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6185",
+      "name": "labetalol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6313",
+      "name": "leucovorin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6387",
+      "name": "lidocaine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "641",
+      "name": "amikacin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6472",
+      "name": "lovastatin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6572",
+      "name": "mafenide",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "662281",
+      "name": "nilotinib",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6676",
+      "name": "meclizine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6694",
+      "name": "mefloquine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "679314",
+      "name": "paliperidone",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6809",
+      "name": "metformin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "68091",
+      "name": "dolasetron",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6813",
+      "name": "methadone",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6826",
+      "name": "methazolamide",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6835",
+      "name": "methimazole",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6851",
+      "name": "methotrexate",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6857",
+      "name": "methoxyflurane",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6878",
+      "name": "methylene blue",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6901",
+      "name": "methylphenidate",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "69120",
+      "name": "tiotropium",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6915",
+      "name": "metoclopramide",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6918",
+      "name": "metoprolol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "6960",
+      "name": "midazolam",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "704",
+      "name": "amitriptyline",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "7052",
+      "name": "morphine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "70561",
+      "name": "palonosetron",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "711942",
+      "name": "eltrombopag",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "714438",
+      "name": "pazopanib",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "7145",
+      "name": "mycophenolic acid",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "719872",
+      "name": "raltegravir",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "72143",
+      "name": "raloxifene",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "722",
+      "name": "amoxapine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "72236",
+      "name": "fosphenytoin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "7226",
+      "name": "nadolol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "7242",
+      "name": "naloxone",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "7243",
+      "name": "naltrexone",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "725",
+      "name": "amphetamine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "7258",
+      "name": "naproxen",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "72625",
+      "name": "duloxetine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "7299",
+      "name": "neomycin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "73032",
+      "name": "remifentanil",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "73056",
+      "name": "risedronate",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "73178",
+      "name": "iloperidone",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "7337",
+      "name": "netilmicin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "734064",
+      "name": "desvenlafaxine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "7407",
+      "name": "nicotine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "7454",
+      "name": "nitrofurantoin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "7455",
+      "name": "nitrofurazone",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "7517",
+      "name": "norfloxacin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "7531",
+      "name": "nortriptyline",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "7623",
+      "name": "ofloxacin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "7646",
+      "name": "omeprazole",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "77492",
+      "name": "tamsulosin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "7781",
+      "name": "oxazepam",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "7804",
+      "name": "oxycodone",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "7833",
+      "name": "aminosalicylic acid",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "7934",
+      "name": "paromomycin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "797195",
+      "name": "fesoterodine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "8076",
+      "name": "perphenazine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "8120",
+      "name": "phenazopyridine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "8150",
+      "name": "phenprocoumon",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "816346",
+      "name": "dexlansoprazole",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "8183",
+      "name": "phenytoin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "82122",
+      "name": "levofloxacin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "8331",
+      "name": "pimozide",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "8332",
+      "name": "pindolol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "83367",
+      "name": "atorvastatin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "8356",
+      "name": "piroxicam",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "84108",
+      "name": "rosiglitazone",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "861634",
+      "name": "pitavastatin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "8687",
+      "name": "primaquine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "8698",
+      "name": "probenecid",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "8700",
+      "name": "procainamide",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "8754",
+      "name": "propafenone",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "8787",
+      "name": "propranolol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "8794",
+      "name": "propylthiouracil",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "8886",
+      "name": "protriptyline",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "89013",
+      "name": "aripiprazole",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "901805",
+      "name": "velaglucerase alfa",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "9061",
+      "name": "quinacrine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "9068",
+      "name": "quinidine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "9071",
+      "name": "quinine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "9344",
+      "name": "ribavirin",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "9524",
+      "name": "sulfasalazine",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "9894",
+      "name": "sodium nitrite",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "9947",
+      "name": "sotalol",
+      "tty": "IN"
+    },
+    {
+      "rxcui": "9997",
+      "name": "spironolactone",
+      "tty": "IN"
+    }
+  ],
+  "entries": [
+    {
+      "rxcui": "190521",
+      "name": "abacavir",
+      "displayName": "abacavir",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "149",
+      "name": "acebutolol",
+      "displayName": "acebutolol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "16689",
+      "name": "aceclofenac",
+      "displayName": "aceclofenac",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "154",
+      "name": "acenocoumarol",
+      "displayName": "acenocoumarol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "327361",
+      "name": "adalimumab",
+      "displayName": "adalimumab",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "435",
+      "name": "albuterol",
+      "displayName": "albuterol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "46041",
+      "name": "alendronate",
+      "displayName": "alendronate",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "480",
+      "name": "alfentanil",
+      "displayName": "alfentanil",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "519",
+      "name": "allopurinol",
+      "displayName": "allopurinol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2106338",
+      "name": "amifampridine",
+      "displayName": "amifampridine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "641",
+      "name": "amikacin",
+      "displayName": "amikacin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "7833",
+      "name": "aminosalicylic acid",
+      "displayName": "aminosalicylic acid",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "46303",
+      "name": "amisulpride",
+      "displayName": "amisulpride",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "704",
+      "name": "amitriptyline",
+      "displayName": "amitriptyline",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "722",
+      "name": "amoxapine",
+      "displayName": "amoxapine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "725",
+      "name": "amphetamine",
+      "displayName": "amphetamine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "89013",
+      "name": "aripiprazole",
+      "displayName": "aripiprazole",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1673265",
+      "name": "aripiprazole lauroxil",
+      "displayName": "aripiprazole lauroxil",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1151",
+      "name": "ascorbic acid",
+      "displayName": "ascorbic acid",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1191",
+      "name": "aspirin",
+      "displayName": "aspirin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "343047",
+      "name": "atazanavir",
+      "displayName": "atazanavir",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1202",
+      "name": "atenolol",
+      "displayName": "atenolol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "38400",
+      "name": "atomoxetine",
+      "displayName": "atomoxetine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "83367",
+      "name": "atorvastatin",
+      "displayName": "atorvastatin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2045726",
+      "name": "avatrombopag",
+      "displayName": "avatrombopag",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1256",
+      "name": "azathioprine",
+      "displayName": "azathioprine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1543543",
+      "name": "belinostat",
+      "displayName": "belinostat",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1520",
+      "name": "betaxolol",
+      "displayName": "betaxolol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "19484",
+      "name": "bisoprolol",
+      "displayName": "bisoprolol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1658314",
+      "name": "brexpiprazole",
+      "displayName": "brexpiprazole",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1739745",
+      "name": "brivaracetam",
+      "displayName": "brivaracetam",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "19831",
+      "name": "budesonide",
+      "displayName": "budesonide",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1819",
+      "name": "buprenorphine",
+      "displayName": "buprenorphine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "42347",
+      "name": "bupropion",
+      "displayName": "buPROPion",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1886",
+      "name": "caffeine",
+      "displayName": "caffeine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "194000",
+      "name": "capecitabine",
+      "displayName": "capecitabine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1998",
+      "name": "captopril",
+      "displayName": "captopril",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2002",
+      "name": "carbamazepine",
+      "displayName": "carbamazepine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2020",
+      "name": "carbimazole",
+      "displayName": "carbimazole",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "40048",
+      "name": "carboplatin",
+      "displayName": "CARBOplatin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "401713",
+      "name": "carglumic acid",
+      "displayName": "carglumic acid",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2101",
+      "name": "carisoprodol",
+      "displayName": "carisoprodol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "20352",
+      "name": "carvedilol",
+      "displayName": "carvedilol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "140587",
+      "name": "celecoxib",
+      "displayName": "celecoxib",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "596723",
+      "name": "cerivastatin",
+      "displayName": "cerivastatin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "318341",
+      "name": "cetuximab",
+      "displayName": "cetuximab",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "44281",
+      "name": "cevimeline",
+      "displayName": "cevimeline",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2348",
+      "name": "chloramphenicol",
+      "displayName": "chloramphenicol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2393",
+      "name": "chloroquine",
+      "displayName": "chloroquine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2404",
+      "name": "chlorpropamide",
+      "displayName": "chlorproPAMIDE",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2551",
+      "name": "ciprofloxacin",
+      "displayName": "ciprofloxacin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2555",
+      "name": "cisplatin",
+      "displayName": "CISplatin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2556",
+      "name": "citalopram",
+      "displayName": "citalopram",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "21241",
+      "name": "clobazam",
+      "displayName": "clobazam",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2597",
+      "name": "clomipramine",
+      "displayName": "clomiPRAMINE",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "32968",
+      "name": "clopidogrel",
+      "displayName": "clopidogrel",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2626",
+      "name": "clozapine",
+      "displayName": "clozapine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2670",
+      "name": "codeine",
+      "displayName": "codeine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "3002",
+      "name": "cyclophosphamide",
+      "displayName": "cyclophosphamide",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "3008",
+      "name": "cyclosporine",
+      "displayName": "cycloSPORINE",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1424911",
+      "name": "dabrafenib",
+      "displayName": "dabrafenib",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "3108",
+      "name": "dapsone",
+      "displayName": "dapsone",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "136198",
+      "name": "darifenacin",
+      "displayName": "darifenacin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "3109",
+      "name": "daunorubicin",
+      "displayName": "DAUNOrubicin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "27340",
+      "name": "desflurane",
+      "displayName": "desflurane",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "3247",
+      "name": "desipramine",
+      "displayName": "desipramine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "734064",
+      "name": "desvenlafaxine",
+      "displayName": "desvenlafaxine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1876905",
+      "name": "deutetrabenazine",
+      "displayName": "deutetrabenazine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "816346",
+      "name": "dexlansoprazole",
+      "displayName": "dexlansoprazole",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "3289",
+      "name": "dextromethorphan",
+      "displayName": "dextromethorphan",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "3322",
+      "name": "diazepam",
+      "displayName": "diazepam",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "3328",
+      "name": "dibekacin",
+      "displayName": "dibekacin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "3355",
+      "name": "diclofenac",
+      "displayName": "diclofenac",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "3407",
+      "name": "digoxin",
+      "displayName": "digoxin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "3445",
+      "name": "dimercaprol",
+      "displayName": "dimercaprol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "3523",
+      "name": "dipyrone",
+      "displayName": "dipyrone",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "68091",
+      "name": "dolasetron",
+      "displayName": "dolasetron",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1433868",
+      "name": "dolutegravir",
+      "displayName": "dolutegravir",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "135447",
+      "name": "donepezil",
+      "displayName": "donepezil",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "3638",
+      "name": "doxepin",
+      "displayName": "doxepin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "3639",
+      "name": "doxorubicin",
+      "displayName": "DOXOrubicin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "72625",
+      "name": "duloxetine",
+      "displayName": "duloxetine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "195085",
+      "name": "efavirenz",
+      "displayName": "efavirenz",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2049846",
+      "name": "elagolix",
+      "displayName": "elagolix",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1547220",
+      "name": "eliglustat",
+      "displayName": "eliglustat",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "711942",
+      "name": "eltrombopag",
+      "displayName": "eltrombopag",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "3920",
+      "name": "enflurane",
+      "displayName": "enflurane",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "3995",
+      "name": "epirubicin",
+      "displayName": "epirubicin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2123125",
+      "name": "erdafitinib",
+      "displayName": "erdafitinib",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "4053",
+      "name": "erythromycin",
+      "displayName": "erythromycin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "321988",
+      "name": "escitalopram",
+      "displayName": "escitalopram",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "49737",
+      "name": "esmolol",
+      "displayName": "esmolol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "283742",
+      "name": "esomeprazole",
+      "displayName": "esomeprazole",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "214555",
+      "name": "etanercept",
+      "displayName": "etanercept",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "448",
+      "name": "ethanol",
+      "displayName": "ethanol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "4179",
+      "name": "etoposide",
+      "displayName": "etoposide",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "4337",
+      "name": "fentanyl",
+      "displayName": "fentanyl",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "797195",
+      "name": "fesoterodine",
+      "displayName": "fesoterodine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "4441",
+      "name": "flecainide",
+      "displayName": "flecainide",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1665509",
+      "name": "flibanserin",
+      "displayName": "flibanserin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "4492",
+      "name": "fluorouracil",
+      "displayName": "fluorouracil",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "4493",
+      "name": "fluoxetine",
+      "displayName": "fluoxetine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "4502",
+      "name": "flurbiprofen",
+      "displayName": "flurbiprofen",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "284635",
+      "name": "fluticasone / salmeterol",
+      "displayName": "fluticasone / salmeterol",
+      "tty": "MIN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "41127",
+      "name": "fluvastatin",
+      "displayName": "fluvastatin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "42355",
+      "name": "fluvoxamine",
+      "displayName": "fluvoxamine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "72236",
+      "name": "fosphenytoin",
+      "displayName": "fosphenytoin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "4601",
+      "name": "furazolidone",
+      "displayName": "furazolidone",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "4603",
+      "name": "furosemide",
+      "displayName": "furosemide",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "4637",
+      "name": "galantamine",
+      "displayName": "galantamine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "328134",
+      "name": "gefitinib",
+      "displayName": "gefitinib",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "12574",
+      "name": "gemcitabine",
+      "displayName": "gemcitabine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "4816",
+      "name": "gliclazide",
+      "displayName": "gliclazide",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "25789",
+      "name": "glimepiride",
+      "displayName": "glimepiride",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "4821",
+      "name": "glipizide",
+      "displayName": "glipiZIDE",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "4815",
+      "name": "glyburide",
+      "displayName": "glyBURIDE",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "5093",
+      "name": "haloperidol",
+      "displayName": "haloperidol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "5095",
+      "name": "halothane",
+      "displayName": "halothane",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "5470",
+      "name": "hydralazine",
+      "displayName": "hydrALAZINE",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "5487",
+      "name": "hydrochlorothiazide",
+      "displayName": "hydrochlorothiazide",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "5489",
+      "name": "hydrocodone",
+      "displayName": "hydrocodone",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "3423",
+      "name": "hydromorphone",
+      "displayName": "HYDROmorphone",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "5521",
+      "name": "hydroxychloroquine",
+      "displayName": "hydroxychloroquine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "5640",
+      "name": "ibuprofen",
+      "displayName": "ibuprofen",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "5650",
+      "name": "idarubicin",
+      "displayName": "idarubicin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "73178",
+      "name": "iloperidone",
+      "displayName": "iloperidone",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "5691",
+      "name": "imipramine",
+      "displayName": "imipramine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "5781",
+      "name": "indomethacin",
+      "displayName": "indomethacin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "191831",
+      "name": "infliximab",
+      "displayName": "infliximab",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "5880",
+      "name": "interferon alfa-2b",
+      "displayName": "interferon alfa-2b",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "51499",
+      "name": "irinotecan",
+      "displayName": "irinotecan",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6026",
+      "name": "isoflurane",
+      "displayName": "isoflurane",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6038",
+      "name": "isoniazid",
+      "displayName": "isoniazid",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6058",
+      "name": "isosorbide dinitrate",
+      "displayName": "isosorbide dinitrate",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1243041",
+      "name": "ivacaftor",
+      "displayName": "ivacaftor",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6099",
+      "name": "kanamycin",
+      "displayName": "kanamycin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6185",
+      "name": "labetalol",
+      "displayName": "labetalol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "28439",
+      "name": "lamotrigine",
+      "displayName": "lamotrigine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "17128",
+      "name": "lansoprazole",
+      "displayName": "lansoprazole",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "480167",
+      "name": "lapatinib",
+      "displayName": "lapatinib",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "43611",
+      "name": "latanoprost",
+      "displayName": "latanoprost",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1731031",
+      "name": "lesinurad",
+      "displayName": "lesinurad",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6313",
+      "name": "leucovorin",
+      "displayName": "leucovorin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "82122",
+      "name": "levofloxacin",
+      "displayName": "levofloxacin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "236913",
+      "name": "levomethadone",
+      "displayName": "levomethadone",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1433212",
+      "name": "levomilnacipran",
+      "displayName": "levomilnacipran",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6387",
+      "name": "lidocaine",
+      "displayName": "lidocaine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "28863",
+      "name": "lofexidine",
+      "displayName": "lofexidine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "20890",
+      "name": "lornoxicam",
+      "displayName": "lornoxicam",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6472",
+      "name": "lovastatin",
+      "displayName": "lovastatin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6572",
+      "name": "mafenide",
+      "displayName": "mafenide",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6676",
+      "name": "meclizine",
+      "displayName": "meclizine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6694",
+      "name": "mefloquine",
+      "displayName": "mefloquine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "41493",
+      "name": "meloxicam",
+      "displayName": "meloxicam",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "103",
+      "name": "mercaptopurine",
+      "displayName": "mercaptopurine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "52582",
+      "name": "mesalamine",
+      "displayName": "mesalamine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6809",
+      "name": "metformin",
+      "displayName": "metformin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6813",
+      "name": "methadone",
+      "displayName": "methadone",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6826",
+      "name": "methazolamide",
+      "displayName": "methazolamide",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6835",
+      "name": "methimazole",
+      "displayName": "methimazole",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6851",
+      "name": "methotrexate",
+      "displayName": "methotrexate",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6857",
+      "name": "methoxyflurane",
+      "displayName": "methoxyflurane",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6878",
+      "name": "methylene blue",
+      "displayName": "methylene blue",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6901",
+      "name": "methylphenidate",
+      "displayName": "methylphenidate",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6915",
+      "name": "metoclopramide",
+      "displayName": "metoclopramide",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6918",
+      "name": "metoprolol",
+      "displayName": "metoprolol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "6960",
+      "name": "midazolam",
+      "displayName": "midazolam",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "588250",
+      "name": "milnacipran",
+      "displayName": "milnacipran",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1300786",
+      "name": "mirabegron",
+      "displayName": "mirabegron",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "15996",
+      "name": "mirtazapine",
+      "displayName": "mirtazapine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "30077",
+      "name": "mivacurium",
+      "displayName": "mivacurium",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "30125",
+      "name": "modafinil",
+      "displayName": "modafinil",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "7052",
+      "name": "morphine",
+      "displayName": "morphine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "139462",
+      "name": "moxifloxacin",
+      "displayName": "moxifloxacin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "7145",
+      "name": "mycophenolic acid",
+      "displayName": "mycophenolic acid",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "31448",
+      "name": "nabumetone",
+      "displayName": "nabumetone",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "7226",
+      "name": "nadolol",
+      "displayName": "nadolol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "7242",
+      "name": "naloxone",
+      "displayName": "naloxone",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "7243",
+      "name": "naltrexone",
+      "displayName": "naltrexone",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "7258",
+      "name": "naproxen",
+      "displayName": "naproxen",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "31555",
+      "name": "nebivolol",
+      "displayName": "nebivolol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "7299",
+      "name": "neomycin",
+      "displayName": "neomycin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "7337",
+      "name": "netilmicin",
+      "displayName": "netilmicin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "53654",
+      "name": "nevirapine",
+      "displayName": "nevirapine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "31748",
+      "name": "nicorandil",
+      "displayName": "nicorandil",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "7407",
+      "name": "nicotine",
+      "displayName": "nicotine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "662281",
+      "name": "nilotinib",
+      "displayName": "nilotinib",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "7454",
+      "name": "nitrofurantoin",
+      "displayName": "nitrofurantoin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "7455",
+      "name": "nitrofurazone",
+      "displayName": "nitrofurazone",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "7517",
+      "name": "norfloxacin",
+      "displayName": "norfloxacin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "7531",
+      "name": "nortriptyline",
+      "displayName": "nortriptyline",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "7623",
+      "name": "ofloxacin",
+      "displayName": "ofloxacin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "61381",
+      "name": "olanzapine",
+      "displayName": "olanzapine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2392230",
+      "name": "oliceridine",
+      "displayName": "oliceridine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "7646",
+      "name": "omeprazole",
+      "displayName": "omeprazole",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "26225",
+      "name": "ondansetron",
+      "displayName": "ondansetron",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "32592",
+      "name": "oxaliplatin",
+      "displayName": "oxaliplatin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "7781",
+      "name": "oxazepam",
+      "displayName": "oxazepam",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "32624",
+      "name": "oxcarbazepine",
+      "displayName": "oxcarbazepine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "7804",
+      "name": "oxycodone",
+      "displayName": "oxycodone",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "679314",
+      "name": "paliperidone",
+      "displayName": "paliperidone",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "70561",
+      "name": "palonosetron",
+      "displayName": "palonosetron",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "40790",
+      "name": "pantoprazole",
+      "displayName": "pantoprazole",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "7934",
+      "name": "paromomycin",
+      "displayName": "paromomycin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "32937",
+      "name": "paroxetine",
+      "displayName": "paroxetine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "714438",
+      "name": "pazopanib",
+      "displayName": "pazopanib",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "120608",
+      "name": "peginterferon alfa-2a",
+      "displayName": "peginterferon alfa-2a",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "253453",
+      "name": "peginterferon alfa-2b",
+      "displayName": "peginterferon alfa-2b",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1011650",
+      "name": "pegloticase",
+      "displayName": "pegloticase",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "8076",
+      "name": "perphenazine",
+      "displayName": "perphenazine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "8120",
+      "name": "phenazopyridine",
+      "displayName": "phenazopyridine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "8150",
+      "name": "phenprocoumon",
+      "displayName": "phenprocoumon",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "8183",
+      "name": "phenytoin",
+      "displayName": "phenytoin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "8331",
+      "name": "pimozide",
+      "displayName": "pimozide",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "8332",
+      "name": "pindolol",
+      "displayName": "pindolol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "8356",
+      "name": "piroxicam",
+      "displayName": "piroxicam",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "861634",
+      "name": "pitavastatin",
+      "displayName": "pitavastatin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2197878",
+      "name": "pitolisant",
+      "displayName": "pitolisant",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1311280",
+      "name": "platinum",
+      "displayName": "platinum",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2049549",
+      "name": "plazomicin",
+      "displayName": "plazomicin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "42463",
+      "name": "pravastatin",
+      "displayName": "pravastatin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "8687",
+      "name": "primaquine",
+      "displayName": "primaquine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "8698",
+      "name": "probenecid",
+      "displayName": "probenecid",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "8700",
+      "name": "procainamide",
+      "displayName": "procainamide",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "8754",
+      "name": "propafenone",
+      "displayName": "propafenone",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "8787",
+      "name": "propranolol",
+      "displayName": "propranolol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "8794",
+      "name": "propylthiouracil",
+      "displayName": "propylthiouracil",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "8886",
+      "name": "protriptyline",
+      "displayName": "protriptyline",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "51272",
+      "name": "quetiapine",
+      "displayName": "quetiapine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "9061",
+      "name": "quinacrine",
+      "displayName": "quinacrine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "9068",
+      "name": "quinidine",
+      "displayName": "quinidine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "9071",
+      "name": "quinine",
+      "displayName": "quinine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "114979",
+      "name": "rabeprazole",
+      "displayName": "rabeprazole",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "72143",
+      "name": "raloxifene",
+      "displayName": "raloxifene",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "719872",
+      "name": "raltegravir",
+      "displayName": "raltegravir",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "283821",
+      "name": "rasburicase",
+      "displayName": "rasburicase",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "73032",
+      "name": "remifentanil",
+      "displayName": "remifentanil",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "9344",
+      "name": "ribavirin",
+      "displayName": "ribavirin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "73056",
+      "name": "risedronate",
+      "displayName": "risedronate",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "35636",
+      "name": "risperidone",
+      "displayName": "risperiDONE",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "121191",
+      "name": "rituximab",
+      "displayName": "rituximab",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "84108",
+      "name": "rosiglitazone",
+      "displayName": "rosiglitazone",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "301542",
+      "name": "rosuvastatin",
+      "displayName": "rosuvastatin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "36117",
+      "name": "salmeterol",
+      "displayName": "salmeterol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "36437",
+      "name": "sertraline",
+      "displayName": "sertraline",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "36453",
+      "name": "sevoflurane",
+      "displayName": "sevoflurane",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "136411",
+      "name": "sildenafil",
+      "displayName": "sildenafil",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "36567",
+      "name": "simvastatin",
+      "displayName": "simvastatin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2121085",
+      "name": "siponimod",
+      "displayName": "siponimod",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "35302",
+      "name": "sirolimus",
+      "displayName": "sirolimus",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "9894",
+      "name": "sodium nitrite",
+      "displayName": "sodium nitrite",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "9947",
+      "name": "sotalol",
+      "displayName": "sotalol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "9997",
+      "name": "spironolactone",
+      "displayName": "spironolactone",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "10109",
+      "name": "streptomycin",
+      "displayName": "streptomycin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "10154",
+      "name": "succinylcholine",
+      "displayName": "succinylcholine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "56795",
+      "name": "sufentanil",
+      "displayName": "sufentanil",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "10169",
+      "name": "sulfacetamide",
+      "displayName": "sulfacetamide",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "10171",
+      "name": "sulfadiazine",
+      "displayName": "sulfADIAZINE",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "10178",
+      "name": "sulfamethazine",
+      "displayName": "sulfamethazine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "10831",
+      "name": "sulfamethoxazole / trimethoprim",
+      "displayName": "sulfamethoxazole / trimethoprim",
+      "tty": "MIN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "10184",
+      "name": "sulfanilamide",
+      "displayName": "sulfanilamide",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "9524",
+      "name": "sulfasalazine",
+      "displayName": "sulfasalazine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "10207",
+      "name": "sulfisoxazole",
+      "displayName": "sulfiSOXAZOLE",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "357977",
+      "name": "sunitinib",
+      "displayName": "sunitinib",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "42316",
+      "name": "tacrolimus",
+      "displayName": "tacrolimus",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "2054023",
+      "name": "tafenoquine",
+      "displayName": "tafenoquine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "10324",
+      "name": "tamoxifen",
+      "displayName": "tamoxifen",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "77492",
+      "name": "tamsulosin",
+      "displayName": "tamsulosin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "4582",
+      "name": "tegafur",
+      "displayName": "tegafur",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "117466",
+      "name": "tenofovir",
+      "displayName": "tenofovir",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "37790",
+      "name": "tenoxicam",
+      "displayName": "tenoxicam",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "37801",
+      "name": "terbinafine",
+      "displayName": "terbinafine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "10390",
+      "name": "tetrabenazine",
+      "displayName": "tetrabenazine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "10485",
+      "name": "thioguanine",
+      "displayName": "thioguanine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "10502",
+      "name": "thioridazine",
+      "displayName": "thioridazine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "10600",
+      "name": "timolol",
+      "displayName": "timolol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "69120",
+      "name": "tiotropium",
+      "displayName": "tiotropium",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "10627",
+      "name": "tobramycin",
+      "displayName": "tobramycin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "10633",
+      "name": "tolazamide",
+      "displayName": "TOLAZamide",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "10635",
+      "name": "tolbutamide",
+      "displayName": "TOLBUTamide",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "10638",
+      "name": "tolonium chloride",
+      "displayName": "tolonium chloride",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "119565",
+      "name": "tolterodine",
+      "displayName": "tolterodine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "10689",
+      "name": "tramadol",
+      "displayName": "traMADol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1425099",
+      "name": "trametinib",
+      "displayName": "trametinib",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "10759",
+      "name": "triamcinolone",
+      "displayName": "triamcinolone",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "10834",
+      "name": "trimipramine",
+      "displayName": "trimipramine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "27392",
+      "name": "tropisetron",
+      "displayName": "tropisetron",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1918219",
+      "name": "valbenazine",
+      "displayName": "valbenazine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "901805",
+      "name": "velaglucerase alfa",
+      "displayName": "velaglucerase alfa",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "39786",
+      "name": "venlafaxine",
+      "displayName": "venlafaxine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1086769",
+      "name": "vilazodone",
+      "displayName": "vilazodone",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "11258",
+      "name": "vitamin K",
+      "displayName": "vitamin K",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "121243",
+      "name": "voriconazole",
+      "displayName": "voriconazole",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "1455099",
+      "name": "vortioxetine",
+      "displayName": "vortioxetine",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "11289",
+      "name": "warfarin",
+      "displayName": "warfarin",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "115698",
+      "name": "ziprasidone",
+      "displayName": "ziprasidone",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    },
+    {
+      "rxcui": "114176",
+      "name": "zuclopenthixol",
+      "displayName": "zuclopenthixol",
+      "tty": "IN",
+      "rxnormRelease": "05-Oct-2026"
+    }
+  ]
+}

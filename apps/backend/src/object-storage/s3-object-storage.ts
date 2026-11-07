@@ -33,8 +33,9 @@ export class S3ObjectStorage extends ObjectStorage {
     version: string | undefined,
     limit: number,
     keep: boolean,
-    signal = AbortSignal.timeout(30000),
+    callerSignal?: AbortSignal,
   ): Promise<(InspectedObject & { bytes?: Buffer; tooLarge: boolean }) | undefined> {
+    const signal = AbortSignal.any([...(callerSignal ? [callerSignal] : []), AbortSignal.timeout(30000)]);
     let response;
     try {
       response = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key, ...(version === undefined ? {} : { VersionId: version }) }), { abortSignal: signal });
@@ -49,6 +50,7 @@ export class S3ObjectStorage extends ObjectStorage {
     const body = response.Body as Readable;
     const abort = () => body.destroy(new Error('Object read deadline exceeded.'));
     signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
     try {
       for await (const chunk of body) {
         sizeBytes += (chunk as Buffer).length;
@@ -90,7 +92,9 @@ export class S3ObjectStorage extends ObjectStorage {
   }
 
   async putObject(key: string, bytes: Buffer, contentType: string): Promise<{ version: string | undefined }> {
-    const response = await this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: bytes, ContentType: contentType, ContentLength: bytes.length }));
+    const response = await this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: bytes, ContentType: contentType, ContentLength: bytes.length }), {
+      abortSignal: AbortSignal.timeout(30000),
+    });
     return { version: realVersion(response.VersionId) };
   }
 
@@ -119,7 +123,7 @@ export class S3ObjectStorage extends ObjectStorage {
   async putStream(key: string, bytes: Readable, contentType: string, size: number, signal: AbortSignal, metadata?: Record<string, string>) {
     const response = await this.client.send(
       new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: bytes, ContentType: contentType, ContentLength: size, IfNoneMatch: '*', Metadata: metadata }),
-      { abortSignal: signal },
+      { abortSignal: AbortSignal.any([signal, AbortSignal.timeout(30000)]) },
     );
     return { version: realVersion(response.VersionId) };
   }

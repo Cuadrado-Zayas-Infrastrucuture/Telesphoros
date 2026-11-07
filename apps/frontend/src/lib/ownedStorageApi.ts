@@ -214,11 +214,16 @@ export async function submitOwnedReport(
 }
 
 /** One bounded tenant-authorized page; the dashboard keeps filters out of browser history. */
-export async function listReports(api: ApiFetch, page: number, signal?: AbortSignal, patientId?: string) {
+export async function listReports(api: ApiFetch, page: number, signal?: AbortSignal, patientId?: string, order?: 'newest') {
   try {
-    const query = reportListQuerySchema.parse({ page, pageSize: 20, ...(patientId ? { patientId } : {}) });
+    const query = reportListQuerySchema.parse({ page, pageSize: 20, ...(patientId ? { patientId } : {}), ...(order === 'newest' ? { order: 'desc' } : {}) });
     if (!Number.isSafeInteger(query.page)) throw new Error();
-    const params = new URLSearchParams({ page: String(query.page), pageSize: '20', ...(query.patientId ? { patientId: query.patientId } : {}) });
+    const params = new URLSearchParams({
+      page: String(query.page),
+      pageSize: '20',
+      ...(query.patientId ? { patientId: query.patientId } : {}),
+      ...(query.order === 'desc' ? { order: 'desc' } : {}),
+    });
     const response = await api(`/api/v1/reports?${params}`, { signal });
     if (!response.ok) throw new Error();
     const result = paginatedSchema(reportDtoSchema).parse(await response.json());
@@ -237,6 +242,33 @@ export async function listReports(api: ApiFetch, page: number, signal?: AbortSig
     if (signal?.aborted || error instanceof SessionEndedError || error instanceof NotSignedInError) throw error;
     throw new SubmitError('Reports could not be loaded. Please retry.');
   }
+}
+
+/**
+ * Removes a report whose file never arrived (a failed or abandoned upload). It reads the report again first and refuses one whose file is stored: removing
+ * a stored report is not this action. A report that is already gone counts as removed.
+ */
+export async function removeUnfinishedReport(api: ApiFetch, id: string) {
+  const path = `/reports/${z.uuid().parse(id)}`;
+  let current: z.infer<typeof reportDtoSchema>;
+  try {
+    current = reportDtoSchema.parse(await request(api, path));
+  } catch (error) {
+    if (error instanceof SubmitError && error.status === 404) return;
+    throw error;
+  }
+  if (current.fileUploaded) throw new SubmitError('This report has its file stored, so it is kept. Open it in Reports.');
+  const response = await api(`/api/v1${path}`, {
+    method: 'DELETE',
+    signal: AbortSignal.timeout(15000),
+    redirect: 'error',
+    credentials: 'omit',
+    referrerPolicy: 'no-referrer',
+    cache: 'no-store',
+  });
+  if (response.ok || response.status === 404) return;
+  if ([403, 429].includes(response.status)) throw refusal(response.status);
+  throw new SubmitError('The report could not be removed. Please retry.', response.status);
 }
 
 export async function downloadReport(api: ApiFetch, id: string, filename: string, sizeBytes: number, sha256: string | null) {

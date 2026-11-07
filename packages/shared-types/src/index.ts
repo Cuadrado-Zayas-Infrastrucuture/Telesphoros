@@ -1,6 +1,7 @@
 export * from './common';
 export * from './errors';
 export * from './lab-report';
+export * from './synthetic-pgx-lineage';
 export * from './members';
 export * from './pagination';
 export * from './patient-merge';
@@ -16,3 +17,11 @@ export * from './usage';
 export * from './clinician-decisions';
 export * from './result-acknowledgements';
 export * from './result-renders';
+export * from './drug-list';
+export * from './patient-medications';
+export * from './patient-followups';
+
+export * from './synthetic-pgx';
+export * from './structured-preview';
+export * from './structured-records';
+export * from './structured-review';

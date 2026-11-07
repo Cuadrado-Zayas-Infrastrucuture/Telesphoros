@@ -1,0 +1,77 @@
+import { expect, test } from '@playwright/test';
+import { axeViolations, openPatients, signInAs } from '../e2e/helpers';
+
+const label = () => `SYN-${crypto.randomUUID().slice(0, 8)}`;
+
+test.describe('Patient demographics: collected in Add patient, read and corrected on the patient page (spec 025 PD-c; needs the database, so it runs in the owned-storage suite)', () => {
+  test('a clinician adds a patient with demographics, opens its page, corrects it; a reader reads it; a label alone shows Incomplete', async ({ page, browser }) => {
+    const given = `Zzyzx${crypto.randomUUID().slice(0, 6)}`;
+    await signInAs(page, 'alice', '/workspace');
+    await openPatients(page);
+    const section = page.getByRole('region', { name: 'Patient records' });
+    // The Patients page's line "N of M complete" (T304) comes from the counts route; this suite shares one database, so the test reads where it starts and checks the change.
+    const line = section.getByText(/\d+ of \d+ complete/);
+    const readCounts = async () => {
+      const [, complete, patients] = /(\d+) of (\d+) complete/.exec((await line.textContent()) ?? '') ?? [];
+      return { complete: Number(complete), patients: Number(patients) };
+    };
+    await expect(line).toBeVisible();
+    const start = await readCounts();
+    const created = label();
+    await page.getByRole('link', { name: 'Add patient' }).click();
+    await page.getByRole('textbox', { name: 'Synthetic patient label' }).fill(created);
+    await page.getByRole('textbox', { name: 'Given name' }).fill(given);
+    await page.getByRole('textbox', { name: 'Family name' }).fill('Testcase');
+    await page.getByLabel('Date of birth').fill('1980-02-29');
+    await page.getByRole('combobox', { name: 'Sex' }).selectOption('female');
+    await page.getByRole('checkbox', { name: 'Hispanic or Latino' }).check();
+    await page.getByRole('button', { name: 'Create patient' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: created })).toBeVisible();
+    await openPatients(page);
+    await expect.poll(readCounts).toEqual({ complete: start.complete + 1, patients: start.patients + 1 });
+    const row = section.getByRole('list', { name: 'Patients' }).getByRole('listitem').filter({ hasText: created });
+    await expect(row.getByText('Incomplete')).toHaveCount(0);
+    await row.getByRole('link', { name: created, exact: true }).click();
+    await expect(page.getByRole('heading', { level: 1, name: created })).toBeVisible();
+    const demographics = page.getByRole('region', { name: 'Demographics' });
+    await expect(demographics.getByText(given)).toBeVisible();
+    await expect(demographics.getByText('Complete', { exact: true })).toBeVisible();
+    expect(page.url()).not.toContain(given);
+    expect(await page.title()).not.toContain(given);
+    const patientUrl = page.url();
+
+    await demographics.getByRole('button', { name: 'Correct' }).click();
+    await demographics.getByRole('textbox', { name: 'Family name' }).fill('Corrected');
+    await demographics.getByRole('button', { name: 'Save correction' }).click();
+    await expect(demographics.getByText('Corrected', { exact: true })).toBeVisible();
+    await expect(demographics.getByRole('listitem')).toHaveCount(2);
+    await demographics.getByRole('button', { name: 'View' }).click();
+    await expect(demographics.getByText('Testcase', { exact: true })).toBeVisible();
+    expect(await axeViolations(page)).toEqual([]);
+
+    // gina is a reviewer in the same organization: she reads, and is offered no correction.
+    const reader = await browser.newPage();
+    await signInAs(reader, 'gina', new URL(patientUrl).pathname);
+    const readerSection = reader.getByRole('region', { name: 'Demographics' });
+    await expect(readerSection.getByText('Corrected', { exact: true })).toBeVisible();
+    await expect(readerSection.getByRole('button', { name: 'Correct' })).toHaveCount(0);
+    await reader.close();
+
+    // bob is in another organization: the patient does not exist for him, and no demographics are shown.
+    const outsider = await browser.newPage();
+    await signInAs(outsider, 'bob', new URL(patientUrl).pathname);
+    await expect(outsider.getByText('This patient is not available.')).toBeVisible();
+    await expect(outsider.getByText(given)).toHaveCount(0);
+    await outsider.close();
+
+    await openPatients(page);
+    const bare = label();
+    await page.getByRole('link', { name: 'Add patient' }).click();
+    await page.getByRole('textbox', { name: 'Synthetic patient label' }).fill(bare);
+    await page.getByRole('button', { name: 'Create patient' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: bare })).toBeVisible();
+    await openPatients(page);
+    await expect(section.getByRole('list', { name: 'Patients' }).getByRole('listitem').filter({ hasText: bare }).getByText('Incomplete')).toBeVisible();
+    await expect.poll(readCounts).toEqual({ complete: start.complete + 1, patients: start.patients + 2 }); // a label alone adds one to the denominator and nothing to complete
+  });
+});

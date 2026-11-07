@@ -17,8 +17,10 @@ export class AccountNotReadyError extends Error {}
 export interface AuthContextValue {
   status: AuthStatus;
   roles: Role[];
-  /** The signed-in person's email, from the ID token at sign-in. In memory only and shown only in Settings; never sent to the API. */
+  /** The signed-in person's email, from the ID token at sign-in. In memory only and shown only in Settings and the account menu (specs/034 D9); never sent to the API. */
   email: string | null;
+  preferredName: string | null;
+  setPreferredName(name: string | null): void;
   recoverySession: RecoverySession | null;
   signIn(returnTo?: string): Promise<void>;
   /** Finishes the redirect back from sign-in. Resolves with where to go next. */
@@ -55,6 +57,10 @@ export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthPr
   const [status, setStatus] = useState<AuthStatus>('signedOut');
   const [roles, setRoles] = useState<Role[]>([]);
   const [email, setEmail] = useState<string | null>(null);
+  const [preferredName, updatePreferredName] = useState<string | null>(null);
+  const setPreferredName = useCallback((name: string | null) => {
+    updatePreferredName(name?.trim().replace(/\s+/g, ' ').slice(0, 80) || null);
+  }, []);
   useEffect(
     () => () => {
       epoch.current += 1;
@@ -73,6 +79,7 @@ export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthPr
     token.current = null;
     setRoles([]);
     setEmail(null);
+    updatePreferredName(null);
   }, []);
 
   const currentPath = () => `${window.location.pathname}${window.location.search}`;
@@ -87,6 +94,9 @@ export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthPr
       const doFetch = fetchImpl ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
       return doFetch(`${apiBaseUrl}${path}`, {
         ...init,
+        // Includes response-body consumption. Keep caller cancellation, and never retry a write whose outcome may be unknown.
+        // Intake can spend 60 s receiving bytes plus two 30 s storage checks; leave room for admission/commit as well.
+        signal: AbortSignal.any([...(init.signal ? [init.signal] : []), AbortSignal.timeout(180_000)]),
         // After the caller's options on purpose: an authenticated response (patients, reports, results) is never kept in the browser HTTP cache.
         cache: 'no-store',
         headers: { ...(init.headers as Record<string, string> | undefined), Authorization: `Bearer ${held.accessToken}` },
@@ -177,8 +187,8 @@ export function AuthProvider({ client, apiBaseUrl, children, fetchImpl }: AuthPr
   }, [clear, client, send]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, roles, email, recoverySession, signIn, completeSignIn, signOut, apiFetch }),
-    [status, roles, email, recoverySession, signIn, completeSignIn, signOut, apiFetch],
+    () => ({ status, roles, email, preferredName, setPreferredName, recoverySession, signIn, completeSignIn, signOut, apiFetch }),
+    [status, roles, email, preferredName, setPreferredName, recoverySession, signIn, completeSignIn, signOut, apiFetch],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

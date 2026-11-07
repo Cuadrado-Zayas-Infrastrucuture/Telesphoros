@@ -1,7 +1,7 @@
 # Publishing the frontend (FD-7 slice 2)
 
 **Status: the script and its tests exist, and the synthetic staging frontend is published (`index.html` last written 2026-10-30; [environments.md](environments.md)).** It is for the synthetic staged environment and runs from a person's shell:
-CI holds no cloud credentials and publishes nothing. Plan: [fd7-staged-synthetic-deploy.md](../design/plans/fd7-staged-synthetic-deploy.md). The hosting itself is described in [domains-and-hosting.md](domains-and-hosting.md).
+The main CI workflow publishes nothing. An opt-in, separate [automatic staging publisher](automatic-staging-frontend.md) now provides deployment after successful main CI, once its dedicated AWS OIDC role and GitHub environment are configured. Until activated, use the manual procedure below. Plan: [fd7-staged-synthetic-deploy.md](../design/plans/fd7-staged-synthetic-deploy.md). The hosting itself is described in [domains-and-hosting.md](domains-and-hosting.md).
 
 Complete the pending [readiness decisions and live authorization](foundations-readiness.md)
 before following the later AWS instructions. No account/bucket was inspected by
@@ -27,7 +27,14 @@ None of the `VITE_*` values is secret: they are compiled into the public bundle.
 # from the repository root, on the reviewed commit, with the values above exported
 scripts/staging/publish-frontend.sh          # dry run: read what it says
 scripts/staging/publish-frontend.sh --yes    # upload (AWS CLI v2 and credentials for the account that owns the bucket)
+scripts/staging/publish-frontend.sh --with-synthetic-assessment   # dry run of the build that includes the synthetic assessment UI (see below)
 ```
+
+## The synthetic assessment UI (spec 032 S3, 3b)
+
+The review and assessment of stored structured reports is a build-time opt-in, off in every ordinary build. `--with-synthetic-assessment` builds with `VITE_SYNTHETIC_ASSESSMENT=true` and may be used **only for an environment whose API runs with `SYNTHETIC_ASSESSMENT=enabled`**: the API is the real gate, and a build with the option served against an API without the switch can only show refusals. The option, not the caller's environment, decides: a stray `VITE_SYNTHETIC_ASSESSMENT` is refused. The script then checks the bundle both ways: the UI carries a marker string (`synthetic-staging-assessment`), which must be present exactly when the option was given, whether the script built the bundle or `DIST_DIR` named one. The ordinary build is checked by `pnpm --filter @telesphoros/frontend check:chunks`, which fails if the marker is in a build made without the flag.
+
+With the option, the report page offers the independent patient-link review, the saved findings and their review, and **Run synthetic assessment** (enabled once every saved finding has a decision). The patient page shows the stored result, its source and provenance; the decision controls are hidden, because decisions on results are not switched on in this environment. Everything is labelled synthetic and not approved for clinical use.
 
 ## What it refuses
 

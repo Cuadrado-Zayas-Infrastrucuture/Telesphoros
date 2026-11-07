@@ -1,0 +1,109 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 5 0 R /Resources << /Font << /F1 3 0 R >> >> >>
+endobj
+5 0 obj
+<< /Length 2184 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+40 750 Td
+(SYNTHETIC TELESPHOROS ASSESSMENT) Tj T*
+(Report syn-report-uncertain | revision 1 | patient syn-patient-1) Tj T*
+(TEST ONLY - NOT FOR CLINICAL USE | Page 1/2) Tj T*
+() Tj T*
+(Derived example; not authored by the laboratory.) Tj T*
+(schemaVersion: pgx-synthetic-0.1) Tj T*
+(synthetic: true) Tj T*
+(clinicalUse: not-approved) Tj T*
+(actionable: false) Tj T*
+() Tj T*
+(ASSESSMENT, CONTEXT AND SYNTHETIC RULE SOURCES) Tj T*
+(id: syn-assessment-uncertain) Tj T*
+(previousAssessmentId: null \(not supplied / not applicable\)) Tj T*
+(status: released) Tj T*
+(sourceReport.id: syn-report-uncertain) Tj T*
+(sourceReport.revision: 1) Tj T*
+(sourceReport.patientId: syn-patient-1) Tj T*
+(generatedAt: 2026-11-02T11:00:00Z) Tj T*
+(context.id: syn-context-1) Tj T*
+(context.patientId: syn-patient-1) Tj T*
+(context.version: 1) Tj T*
+(context.effectiveAt: 2026-11-02T10:00:00Z) Tj T*
+(context.recordedAt: 2026-11-02T10:00:00Z) Tj T*
+(context.medications.0.id: syn-medication-1) Tj T*
+(context.medications.0.version: 1) Tj T*
+(context.medications.0.drug: synthetic-drug-a) Tj T*
+(context.medications.0.route: oral) Tj T*
+(context.medications.0.indication: synthetic indication) Tj T*
+(context.medications.0.status: active) Tj T*
+(context.medications.0.startAt: 2026-11-01T10:00:00Z) Tj T*
+(context.medications.0.stopAt: null \(not supplied / not applicable\)) Tj T*
+(context.medications.0.verifiedAt: 2026-11-02T10:00:00Z) Tj T*
+(knowledge.id: syn-knowledge-1) Tj T*
+(knowledge.version: 1) Tj T*
+(knowledge.source: synthetic-example) Tj T*
+(knowledge.translationVersion: synthetic-translation-1) Tj T*
+(knowledge.softwareVersion: synthetic-build-1) Tj T*
+(knowledge.rules.0.id: syn-rule-1) Tj T*
+(knowledge.rules.0.version: 1) Tj T*
+(knowledge.rules.0.cell: synthetic-cell-a) Tj T*
+(knowledge.rules.0.drug: synthetic-drug-a) Tj T*
+(knowledge.rules.0.route: oral) Tj T*
+(knowledge.rules.0.indication: synthetic indication) Tj T*
+(knowledge.rules.0.requiredTargetIds.0: syn-target-a) Tj T*
+(results.0.id: syn-result-1) Tj T*
+(results.0.medicationId: syn-medication-1) Tj T*
+(results.0.drug: synthetic-drug-a) Tj T*
+(results.0.disposition: missing-prerequisites) Tj T*
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 7 0 R /Resources << /Font << /F1 3 0 R >> >> >>
+endobj
+7 0 obj
+<< /Length 574 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+40 750 Td
+(SYNTHETIC TELESPHOROS ASSESSMENT) Tj T*
+(Report syn-report-uncertain | revision 1 | patient syn-patient-1) Tj T*
+(TEST ONLY - NOT FOR CLINICAL USE | Page 2/2) Tj T*
+() Tj T*
+(results.0.findingIds.0: syn-finding-a) Tj T*
+(results.0.missingPrerequisites.0: Resolved laboratory finding) Tj T*
+(results.0.sourceRuleId: syn-rule-1) Tj T*
+(results.0.recommendationText: null \(not supplied / not applicable\)) Tj T*
+(results.0.reason: The reported call is ambiguous.) Tj T*
+(limitations.0: Not CPIC guidance; not approved for clinical use.) Tj T*
+ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000189 00000 n 
+0000000315 00000 n 
+0000002550 00000 n 
+0000002676 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+3300
+%%EOF

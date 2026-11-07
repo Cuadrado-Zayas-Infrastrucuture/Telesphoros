@@ -35,7 +35,7 @@ export function ReportStages({ patientId }: { patientId: string }) {
   }
 
   return (
-    <section aria-labelledby="report-stages-heading" aria-busy={state.status === 'loading'} className="flex flex-col gap-2 border-t border-divider px-4 py-3 sm:px-5">
+    <section aria-labelledby="report-stages-heading" aria-busy={state.status === 'loading'} className="flex flex-col gap-2 border-t border-divider px-4 py-3 tabular-nums sm:px-5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4">
         <h3 id="report-stages-heading" className="text-sm font-medium">
           Report stages

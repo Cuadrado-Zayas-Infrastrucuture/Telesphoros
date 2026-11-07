@@ -10,6 +10,7 @@ import {
   MergeAlreadyDecidedError,
   MergeRefusedError,
   PatientLinkUnverifiedError,
+  StructuredBasisChangedError,
   StaleAcceptanceError,
   SourceChangedError,
   toLedgerError,
@@ -464,14 +465,17 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
   }
 
   private async storeEvaluation(client: PoolClient, tenantId: string, actor: string, input: EvaluationInput): Promise<InsertResult> {
+    // One source, never both and never neither. The table's own checks say the same; this refuses before anything is read or written.
+    if ((input.structuredRevisionId !== undefined) === (input.captureId !== null)) throw new Error('An evaluation names exactly one source.');
+    if (input.structuredRevisionId !== undefined && input.captureAcceptanceId !== null) throw new Error('A structured evaluation has no capture acceptance.');
     const identityKey = evaluationIdentityKey(input);
     const existing = await client.query<{ id: string }>(`SELECT id::text AS id FROM evaluations WHERE tenant_id = $1 AND identity_key = $2`, [tenantId, identityKey]);
     if (existing.rows[0]) return this.existing(client, tenantId, 'evaluations', existing.rows[0].id);
     const id = newId();
     const inserted = await client.query(
       `INSERT INTO evaluations (id, tenant_id, created_by, ledger_event_id, patient_id, report_id, capture_id, capture_acceptance_id, disposition, hold_code,
-                                  binding, knowledge_set_id, engine_version, gene_inputs, occurrences, identity_key)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14::jsonb, $15::jsonb, $16)
+                                  binding, knowledge_set_id, engine_version, gene_inputs, occurrences, identity_key, source_kind, structured_revision_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14::jsonb, $15::jsonb, $16, $17, $18)
          ON CONFLICT ON CONSTRAINT evaluations_identity_uq DO NOTHING RETURNING id`,
       [
         id,
@@ -490,16 +494,20 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
         JSON.stringify(input.geneInputs),
         JSON.stringify(input.occurrences),
         identityKey,
+        input.structuredRevisionId === undefined ? 'pdf-capture' : 'structured-revision',
+        input.structuredRevisionId ?? null,
       ],
     );
     if (inserted.rowCount === 0) return this.raced(client, tenantId, 'evaluations', 'evaluations_identity_uq', undefined, identityKey);
     let ordinal = 0;
     for (const result of input.results) {
       const citation = 'citation' in result ? result.citation : null;
+      // Spec 033 K2-7: identifiers of the cell, only for a result from schema 1.3 knowledge.
+      const ids = 'identifiers' in result ? (result.identifiers ?? null) : null;
       await client.query(
         `INSERT INTO evaluation_results (tenant_id, evaluation_id, ordinal, drug, genes, outcome, reason_code, strength, citation, guideline_id, guideline_version,
-                                           recommendation_text, implication, gene_evidence)
-           VALUES ($1, $2, $3, $4, $5::text[], $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14::jsonb)`,
+                                           recommendation_text, implication, gene_evidence, drug_rxcui, gene_hgnc_ids, pharmvar_versions, cell_origin)
+           VALUES ($1, $2, $3, $4, $5::text[], $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14::jsonb, $15, $16::text[], $17::text[], $18)`,
         [
           tenantId,
           id,
@@ -515,6 +523,10 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
           'recommendationText' in result ? result.recommendationText : null,
           'implication' in result ? result.implication : null,
           JSON.stringify(result.geneStates),
+          ids?.rxcui ?? null,
+          ids ? ids.genes.map((gene) => gene.hgncId) : null,
+          ids ? ids.genes.map((gene) => gene.pharmvarVersion) : null,
+          ids?.origin ?? null,
         ],
       );
     }
@@ -529,6 +541,7 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
     const provenanceId = await insertEvaluationProvenance(client, tenantId, actor, id, {
       origin: input.origin,
       captureId: input.captureId,
+      structuredRevisionId: input.structuredRevisionId,
       captureAcceptanceId: input.captureAcceptanceId,
       engineVersion: input.engineVersion,
       knowledgeSetId: input.knowledgeSetId,
@@ -536,13 +549,29 @@ export class PostgresLedgerRecordsRepository extends LedgerRecordsRepository {
     const stored = await this.finish(client, tenantId, 'evaluations', id);
     await this.finish(client, tenantId, 'data_provenance', provenanceId);
     // Capture decisions append under this same lock. A fresh statement sees any decision committed before we acquired it.
-    if (input.captureAcceptanceId !== null) await this.assertCurrentAcceptance(client, tenantId, input.captureId, input.captureAcceptanceId);
+    if (input.captureId !== null && input.captureAcceptanceId !== null) await this.assertCurrentAcceptance(client, tenantId, input.captureId, input.captureAcceptanceId);
     if (input.patientLinkDecisionId !== undefined) await this.assertVerifiedLink(client, tenantId, input.reportId, input.patientLinkDecisionId);
     // The append above took the tenant's ledger head lock and keeps it until COMMIT. Raising or deciding a dispute also appends, so it
     // needs the same lock: every dispute change is either committed before we got the lock (and this separate statement, a new
     // snapshot under READ COMMITTED, sees it) or queued behind us (and is ordered after this evaluation).
     if (input.disposition === 'evaluated') await this.assertDisputeBasis(client, tenantId, input.disputeBasis ?? []);
+    // Reviews and source resolutions append under this same lock too, so what a fresh statement reads now is what exists at COMMIT.
+    if (input.structuredBasis !== undefined) await this.assertStructuredBasis(client, tenantId, input.patientId, input.structuredBasis);
     return stored;
+  }
+
+  /** Refuses (StructuredBasisChangedError) unless the patient's stored revisions, newest finding reviews and source resolutions are exactly the ones planned on. */
+  private async assertStructuredBasis(client: PoolClient, tenantId: string, patientId: string, basis: NonNullable<EvaluationInput['structuredBasis']>): Promise<void> {
+    const { rows } = await client.query<{ revisions: string[]; reviews: string[]; resolutions: string[] }>(
+      `SELECT COALESCE((SELECT array_agg(id::text) FROM structured_report_revisions WHERE tenant_id = $1 AND patient_id = $2), '{}') AS revisions,
+              COALESCE((SELECT array_agg(id::text) FROM (SELECT DISTINCT ON (revision_id, source_finding_id) id FROM structured_finding_reviews
+                         WHERE tenant_id = $1 AND patient_id = $2 ORDER BY revision_id, source_finding_id, seq DESC) f), '{}') AS reviews,
+              COALESCE((SELECT array_agg(id::text) FROM structured_source_resolutions WHERE tenant_id = $1 AND patient_id = $2), '{}') AS resolutions`,
+      [tenantId, patientId],
+    );
+    const same = (a: readonly string[], b: readonly string[]) => a.length === b.length && [...a].sort().join() === [...b].sort().join();
+    const now = rows[0]!;
+    if (!same(now.revisions, basis.revisionIds) || !same(now.reviews, basis.reviewIds) || !same(now.resolutions, basis.resolutionIds)) throw new StructuredBasisChangedError();
   }
 
   /** The ids of the disputes in force (open, or decided `upheld`) in the tenant. */
@@ -1086,6 +1115,19 @@ const CURRENT_EVALUATIONS_SQL = currentEvaluationsSql();
  * code, and how it came out. The hash is over canonical JSON of these fields only, so re-submitting the same inputs is idempotent.
  */
 export function evaluationIdentityKey(input: EvaluationInput): string {
+  // A structured source has its own version tag, so no PDF evaluation's key changes and the two kinds can never collide.
+  if (input.structuredRevisionId !== undefined) {
+    return canonicalHash({
+      v: 'evaluation-identity-v2-structured',
+      reportId: input.reportId,
+      structuredRevisionId: input.structuredRevisionId,
+      disposition: input.disposition,
+      holdCode: input.holdCode,
+      knowledgeSetId: input.knowledgeSetId,
+      engineVersion: input.engineVersion,
+      binding: input.binding,
+    });
+  }
   return canonicalHash({
     v: 'evaluation-identity-v1',
     reportId: input.reportId,

@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { expect, test, type Page } from '@playwright/test';
-import { openWorkspaceNavigation, JWT_PATTERN, ROLE, signInAs, waitPastSignOutSecond } from './helpers';
+import { openAccountMenu, JWT_PATTERN, ROLE, signInAs, signOutFromSidebar, waitPastSignOutSecond } from './helpers';
 
 const require = createRequire(import.meta.url);
 
@@ -14,18 +14,21 @@ async function axeViolations(page: Page) {
 }
 
 test.describe('signing in', () => {
-  test('an anonymous visitor to a protected page is sent to sign in; the sign-in page is accessible', async ({ page }) => {
+  test('an anonymous visitor to a protected page is sent to sign in; the sign-in page is accessible', async ({ page }, testInfo) => {
     await page.goto('/reports/upload');
     await expect(page).toHaveURL(/\/signin$/);
     await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
+    await expect(page.getByRole('banner').getByRole('link', { name: 'Sign in', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeEnabled();
     expect(await axeViolations(page)).toEqual([]);
+    await page.screenshot({ path: testInfo.outputPath('sign-in-entry.png') });
   });
 
   test('a clinician signs in through the identity provider and lands on the page they wanted', async ({ page }) => {
     await signInAs(page, 'alice');
     await expect(page.getByRole('heading', { level: 1, name: 'Upload report' })).toBeVisible();
-    await openWorkspaceNavigation(page);
-    await expect(page.getByText(ROLE.alice, { exact: true })).toBeVisible();
+    await openAccountMenu(page);
+    await expect(page.locator('#workspace-account-menu').getByText(ROLE.alice, { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
     // The one-time code must not linger in the address bar (or the history).
     expect(page.url()).not.toMatch(/[?&](code|state)=/);
@@ -101,8 +104,7 @@ test.describe('where the token lives', () => {
 test.describe('signing out', () => {
   test('ends the provider session as well, so the next sign-in asks again', async ({ page }) => {
     await signInAs(page, 'alice');
-    await openWorkspaceNavigation(page);
-    await page.getByRole('button', { name: 'Sign out' }).click();
+    await signOutFromSidebar(page);
     await expect(page).toHaveURL(/\/signed-out$/);
     await expect(page.getByRole('heading', { level: 1, name: 'You have been signed out' })).toBeVisible();
     expect(await axeViolations(page)).toEqual([]);

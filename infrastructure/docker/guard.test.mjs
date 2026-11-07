@@ -1,26 +1,33 @@
+import './runtime-rootfs.test.cjs';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {test} from 'node:test';
 const text=readFileSync(new URL('api.Dockerfile',import.meta.url),'utf8');
-export function problems(source){
+const apiCompute=readFileSync(new URL('../terraform/api-compute.tf',import.meta.url),'utf8');
+export function problems(source,compute=apiCompute){
   const lines=source.split('\n').filter(l=>!l.trim().startsWith('#')).join('\n');
   const rules=[
-    ['base',()=>{const from=[...lines.matchAll(/^FROM (\S+) AS (\w+)$/gm)];return from.length===2 && from.every(m=>/^node:22\.22\.0-bookworm-slim@sha256:[0-9a-f]{64}$/.test(m[1]));}],
+    ['base',()=>{const from=[...lines.matchAll(/^FROM (\S+) AS (\w+)$/gm)];return from.length===3 && from.slice(0,2).every(m=>/^node:22\.22\.0-bookworm-slim@sha256:[0-9a-f]{64}$/.test(m[1])) && from[2][1]==='scratch' && from[2][2]==='runtime';}],
     ['OS fixes',()=>['libcap2=1:2.66-4+deb12u3+b1','libgnutls30=3.7.9-2+deb12u7','libpcre2-8-0=10.42-1+deb12u2','perl-base=5.36.0-7+deb12u4','libc6=2.36-9+deb12u14','libc-bin=2.36-9+deb12u14','dpkg=1.21.23'].every(pin=>lines.includes(pin))],
-    ['installer removal',()=>lines.includes('/usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx')],
+    ['minimal runtime',()=>lines.includes('RUN node /tmp/runtime-rootfs.cjs /runtime-rootfs') && lines.includes('COPY --from=runtime_files /runtime-rootfs/ /') && !/^COPY --from=runtime_files \/(?:usr|lib|etc)\//m.test(lines)],
     ['pnpm',()=>lines.includes('pnpm@10.28.0')],
     ['frozen',()=>lines.includes('pnpm fetch --frozen-lockfile')&&lines.includes('pnpm install --frozen-lockfile --offline')],
     ['prod',()=>/pnpm --filter @telesphoros\/backend deploy --legacy --prod \/output/.test(lines)],
     ['worker bundle',()=>lines.includes('pnpm --filter @telesphoros/worker build')&&lines.includes('cp apps/worker/dist/main.js /output/worker/main.js')&&!/COPY .*worker.*\.map/.test(lines)],
     ['dependency graph',()=>lines.includes('dependency-graph.cjs record') && lines.includes('dependency-graph.cjs compare')],
     ['CA build check',()=>lines.includes('sha256sum --check global-bundle.sha256')],
-    ['production',()=>/ENV NODE_ENV=production NODE_EXTRA_CA_CERTS=\/opt\/telesphoros\/ca\/global-bundle.pem/.test(lines)],
+    ['production',()=>/ENV PATH=\/usr\/local\/bin NODE_ENV=production NODE_EXTRA_CA_CERTS=\/opt\/telesphoros\/ca\/global-bundle.pem LANG=C LC_ALL=C LANGUAGE=C/.test(lines)],
     ['nonroot',()=>/^USER 10001:10001$/m.test(lines)],
     ['exec entrypoint',()=>/^ENTRYPOINT \["node"\]$/m.test(lines)&&/^CMD \["dist\/main.js"\]$/m.test(lines)],
     ['no credential ARG',()=>!/^ARG\s+/m.test(lines)],
     ['no healthcheck',()=>!/^HEALTHCHECK\b/m.test(lines)],
-    ['no runtime installers',()=>!/^RUN.*(?:npm|pnpm|pip).*install/m.test(lines.split('AS runtime')[1] || '')],
+    ['no runtime installers',()=>!/^RUN.*(?:npm|pnpm|pip).*install/m.test(lines.split('FROM scratch AS runtime')[1] || '')],
+    // Spec 032 S3 (3c-1): the one data set the image carries is the synthetic knowledge of the structured assessment, in the runtime stage, and nothing else from data/.
+    ['synthetic knowledge',()=>(lines.split('FROM scratch AS runtime')[1] || '').includes('COPY --from=build /workspace/data/fixtures/knowledge/synthetic-structured/ /app/synthetic-knowledge/') && [...lines.matchAll(/^COPY .*data\/.*$/gm)].length===1],
+    // The one writable path: the runtime stage declares /tmp a volume (so ECS copies its 1777 permissions onto the task's scratch volume) and the API task mounts its
+    // scratch volume at that same path. Nothing else is a volume.
+    ['writable tmp',()=>JSON.stringify([...lines.matchAll(/^VOLUME .*$/gm)].map(m=>m[0]))===JSON.stringify(['VOLUME ["/tmp"]']) && (lines.split('FROM scratch AS runtime')[1] || '').includes('VOLUME ["/tmp"]') && /sourceVolume = "scratch", containerPath = "\/tmp"/.test(compute)],
   ];
   return rules.filter(([,check])=>!check()).map(([name])=>name);
 }
@@ -29,7 +36,7 @@ const mutations=[
  ['OS fixes',s=>s.replace('libcap2=1:2.66-4+deb12u3+b1','libcap2')],
  ['OS fixes',s=>s.replace('libc6=2.36-9+deb12u14 ','')],
  ['OS fixes',s=>s.replace('dpkg=1.21.23','dpkg')],
- ['installer removal',s=>s.replace('/usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx','/unused')],
+ ['minimal runtime',s=>s.replace('COPY --from=runtime_files /runtime-rootfs/ /','COPY --from=runtime_files / /')],
  ['base',s=>s.replace(/@sha256:[0-9a-f]{64}/g,'')],
  ['pnpm',s=>s.replace('pnpm@10.28.0','pnpm@latest')],
  ['frozen',s=>s.replace('--frozen-lockfile','')],
@@ -46,8 +53,17 @@ const mutations=[
  ['no credential ARG',s=>s+'\nARG TOKEN\n'],
  ['no healthcheck',s=>s+'\nHEALTHCHECK CMD true\n'],
  ['no runtime installers',s=>s+'\nRUN npm install jest\n'],
+ ['synthetic knowledge',s=>s.replace('COPY --from=build /workspace/data/fixtures/knowledge/synthetic-structured/ /app/synthetic-knowledge/','true')],
+ ['synthetic knowledge',s=>s.replace('/workspace/data/fixtures/knowledge/synthetic-structured/','/workspace/data/')],
+ ['synthetic knowledge',s=>s.replace('/app/synthetic-knowledge/','/app/knowledge/')],
+ ['synthetic knowledge',s=>s+'\nCOPY --from=build /workspace/data/fixtures/lab-reports/ /app/lab/\n'],
+ ['writable tmp',s=>s.replace('VOLUME ["/tmp"]','')],
+ ['writable tmp',s=>s.replace('VOLUME ["/tmp"]','VOLUME ["/var/tmp"]')],
+ ['writable tmp',s=>s+'\nVOLUME ["/app"]\n'],
+ ['writable tmp',s=>s.replace('VOLUME ["/tmp"]','').replace('FROM scratch AS runtime','VOLUME ["/tmp"]\nFROM scratch AS runtime')],
 ];
 for(const [rule,mutate] of mutations)test(`detects ${rule} defect`,()=>assert.ok(problems(mutate(text)).includes(rule)));
+test('detects writable tmp defect: the API task mounts its scratch volume elsewhere',()=>assert.ok(problems(text,apiCompute.replace('containerPath = "/tmp"','containerPath = "/scratch"')).includes('writable tmp')));
 test('public CA bytes match owner-confirmed pin',()=>{
  const bytes=readFileSync(new URL('global-bundle.pem',import.meta.url));
  assert.equal(createHash('sha256').update(bytes).digest('hex'),'fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c');
@@ -68,5 +84,30 @@ for (const pattern of ['packages/smart-pilot/openemr/.runtime', 'packages/smart-
   test(`detects missing pilot context exclusion: ${pattern}`, () => {
     const valid = `${rootIgnore}\npackages/smart-pilot/openemr/.runtime\npackages/smart-pilot/dist-ui\n`;
     assert.ok(pilotContextProblems(valid.split('\n').filter(line => line !== pattern).join('\n')).includes(pattern));
+  });
+}
+
+// The root build context excludes data/, with exactly one exception: the synthetic knowledge the image carries (spec 032 S3, 3c-1). Docker re-includes a path under an
+// excluded directory when a later `!` line names it, so any other `!data` line would put other fixtures into the production image; this fails on it.
+export function dataContextProblems(source) {
+  const lines = source.split('\n').map(line => line.trim()).filter(line => line && !line.startsWith('#'));
+  const problems = [];
+  if (!lines.includes('data')) problems.push('data is not excluded');
+  if (JSON.stringify(lines.filter(line => line.startsWith('!data'))) !== JSON.stringify(['!data/fixtures/knowledge/synthetic-structured'])) problems.push('data exceptions');
+  if (lines.indexOf('data') > lines.indexOf('!data/fixtures/knowledge/synthetic-structured')) problems.push('exception before exclusion');
+  return problems;
+}
+test('root build context excludes data/ except the synthetic knowledge (control)', () => {
+  assert.deepEqual(dataContextProblems(rootIgnore), []);
+});
+for (const [name, mutate, expected] of [
+  ['the exclusion is removed', s => s.replace(/^data$/m, ''), 'data is not excluded'],
+  ['the exception is removed', s => s.replace('!data/fixtures/knowledge/synthetic-structured\n', ''), 'data exceptions'],
+  ['the exception is widened', s => s.replace('!data/fixtures/knowledge/synthetic-structured', '!data/fixtures'), 'data exceptions'],
+  ['a second exception is added', s => `${s}\n!data/fixtures/lab-reports\n`, 'data exceptions'],
+  ['the exception comes before the exclusion', s => s.replace(/^data$/m, '').replace('!data/fixtures/knowledge/synthetic-structured', 'data\n!data/fixtures/knowledge/synthetic-structured').replace(/^data\n(?=!)/m, '!x\n') + '\ndata\n', 'exception before exclusion'],
+]) {
+  test(`detects a data context defect: ${name}`, () => {
+    assert.ok(dataContextProblems(mutate(rootIgnore)).includes(expected));
   });
 }

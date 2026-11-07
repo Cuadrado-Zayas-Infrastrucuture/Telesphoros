@@ -1,19 +1,29 @@
+import { ContentSkeleton } from '@/components/ui/ContentSkeleton';
 import { useCallback, useEffect, useState } from 'react';
 import type { ReportDto } from '@telesphoros/shared-types';
 import { SessionEndedError, useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
-import { STATUS_WORD } from '@/components/workspace/PastReports';
+import { Link } from 'react-router-dom';
+import { ReportStatusText } from '@/components/ReportStatusText';
+import { RemoveUnfinishedReport } from '@/components/workspace/RemoveUnfinishedReport';
 import { listReports } from '@/lib/ownedStorageApi';
 import { onReportsChanged } from '@/lib/workspaceEvents';
 
-/** The panel's "Past reports": the first page, newest first, each with its status as a word in color (specs/024 D2). Reloads when the chat uploads or checks a report. */
-export function SidebarReports() {
+/** The file name without its report extension; the full name stays in the row's tooltip. */
+const shortName = (filename: string) => filename.replace(/\.(json|pdf)$/i, '') || filename;
+
+/**
+ * The panel's "Recents" (specs/034, was "Past reports", specs/024 D2): the first page, newest first, one line each with the status as a word in color.
+ * A row opens that report on the Reports page. A report whose file never arrived says so, and its Remove sits beside the row, not inside the link.
+ * Reloads when the chat uploads, checks or removes a report.
+ */
+export function SidebarReports({ onNavigate }: { onNavigate?: () => void }) {
   const { apiFetch } = useAuth();
   const [reports, setReports] = useState<ReportDto[] | null>(null);
   const [failed, setFailed] = useState(false);
   const load = useCallback(
     (signal?: AbortSignal) => {
-      listReports(apiFetch, 1, signal)
+      listReports(apiFetch, 1, signal, undefined, 'newest')
         .then((result) => {
           setFailed(false);
           setReports(result.data);
@@ -35,12 +45,12 @@ export function SidebarReports() {
     };
   }, [load]);
   return (
-    <section aria-labelledby="panel-reports-heading" data-panel-item="Past reports" className="workspace-panel-section flex flex-col gap-1 px-3 py-2">
-      <p id="panel-reports-heading" className="text-xs font-medium text-muted-foreground">
-        Past reports
+    <section aria-labelledby="panel-reports-heading" data-panel-item="Recents" className="workspace-panel-section workspace-recents flex min-h-0 flex-col gap-1">
+      <p id="panel-reports-heading" className="workspace-group-label px-3 text-xs font-medium text-muted-foreground">
+        Recents
       </p>
       {failed ? (
-        <div role="alert" className="flex flex-col items-start gap-1 text-xs">
+        <div role="alert" className="flex flex-col items-start gap-1 px-3 text-xs">
           <span className="text-destructive">Reports could not be loaded.</span>
           <Button
             variant="ghost"
@@ -55,18 +65,32 @@ export function SidebarReports() {
           </Button>
         </div>
       ) : reports === null ? (
-        <p className="text-xs text-muted-foreground">Loading…</p>
+        <div className="px-3">
+          <ContentSkeleton label="Loading reports…" variant="compact" />
+        </div>
       ) : reports.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No reports yet.</p>
+        <p className="px-3 text-xs text-muted-foreground">No reports yet.</p>
       ) : (
-        <ul aria-label="Past reports" className="flex flex-col">
-          {reports.map((report) => (
-            <li key={report.id} className="py-1 text-xs">
-              <span className="block truncate font-medium text-foreground">{report.filename}</span>
-              <span className={STATUS_WORD[report.status].tone}>{STATUS_WORD[report.status].label}</span>
-            </li>
-          ))}
-        </ul>
+        <div role="region" aria-label="Recent reports" tabIndex={0} className="workspace-recents-list rounded-sm focus-visible:outline-2 focus-visible:outline-ring">
+          <ul aria-label="Recent reports" className="flex flex-col">
+            {reports.map((report) => (
+              <li key={report.id} className="flex min-w-0 flex-wrap items-center">
+                <Link
+                  to="/reports"
+                  state={{ report }}
+                  onClick={onNavigate}
+                  title={report.filename}
+                  className="flex min-h-control min-w-0 flex-1 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <span className="min-w-0 flex-1 truncate">{shortName(report.filename)}</span>
+                  <span className="sr-only">, </span>
+                  <ReportStatusText status={report.status} fileUploaded={report.fileUploaded} className="shrink-0 text-xs" />
+                </Link>
+                {!report.fileUploaded && <RemoveUnfinishedReport reportId={report.id} filename={report.filename} />}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );

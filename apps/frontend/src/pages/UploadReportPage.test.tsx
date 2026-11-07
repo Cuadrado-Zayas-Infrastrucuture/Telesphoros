@@ -1,5 +1,7 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render as renderBare, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactElement } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { axe } from 'vitest-axe';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import UploadReportPage from '@/pages/UploadReportPage';
@@ -41,6 +43,8 @@ const interruptedUpload = () => {
   rememberUpload(progress);
 };
 const submitMock = vi.mocked(submitReport);
+// The page links to /reports in every build, so it renders inside a router.
+const render = (ui: ReactElement) => renderBare(ui, { wrapper: MemoryRouter });
 beforeEach(() => {
   endRecoverySession(pageOwner ?? null);
   window.sessionStorage.clear();
@@ -232,7 +236,8 @@ it('reports a list failure, preserves selection, and retries the requested page'
   await user.click(screen.getByRole('button', { name: 'Next patients' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Patients could not be loaded');
   expect(screen.getByLabelText(/synthetic patient \(required\)/i)).toHaveValue(patientId);
-  await user.click(screen.getByRole('button', { name: 'Refresh patients' }));
+  expect(screen.queryByRole('button', { name: 'Refresh patients' })).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Retry loading patients' }));
   await screen.findByText('Patient page 2 of 2');
   expect(patientApi.mock.calls.at(-1)?.[0]).toBe('/api/v1/patients?page=2&pageSize=20');
 });
@@ -397,6 +402,19 @@ it('keeps one progress object across retries and clears it when starting another
   expect(submitMock.mock.calls[2]![2]).not.toBe(progress);
 });
 
+it('moves focus to "Report received" and links to the reports, where the status is, in every build', async () => {
+  submitMock.mockReset().mockResolvedValue({ reference: 'verified-report-id' });
+  patientApi.mockReset().mockImplementation(async () => pageResponse());
+  const user = userEvent.setup();
+  render(<UploadReportPage />);
+  expect(screen.getByRole('link', { name: 'Reports page' })).toHaveAttribute('href', '/reports');
+  await fillValidForm(user);
+  await user.click(screen.getByRole('button', { name: 'Upload report' }));
+  const received = await screen.findByRole('heading', { level: 1, name: 'Report received' });
+  await waitFor(() => expect(received).toHaveFocus());
+  expect(screen.getByRole('link', { name: 'View reports' })).toHaveAttribute('href', '/reports');
+});
+
 it('never renders raw service or transport errors', async () => {
   submitMock.mockReset().mockRejectedValue(new Error('raw token or patient payload'));
   patientApi.mockReset().mockImplementation(async () => pageResponse());
@@ -488,4 +506,62 @@ it('removes an idle recovery banner at the fixed one-hour boundary', async () =>
   });
   expect(screen.queryByText('The file you chose earlier')).not.toBeInTheDocument();
   expect(window.sessionStorage.getItem('telesphoros.upload-recovery.v2')).toBeNull();
+});
+
+describe('demographics while adding and choosing a patient (spec 025 T301, T302)', () => {
+  const incompletePatient = { ...patient, sex: null, birthYear: null, ageYears: null, ethnicity: null, demographicsComplete: false };
+
+  it('says once, without blocking, that the chosen patient is Incomplete, and links to its page', async () => {
+    patientApi.mockReset().mockImplementation(async () => pageResponse([incompletePatient]));
+    const user = userEvent.setup();
+    render(<UploadReportPage />);
+    const select = await screen.findByLabelText(/synthetic patient \(required\)/i);
+    expect(await screen.findByRole('option', { name: 'SYN-0001' })).toBeInTheDocument();
+    await user.selectOptions(select, patientId);
+    expect(await screen.findByText(/demographics are incomplete\. You can still attach the report/)).toHaveClass('text-warning');
+    expect(screen.getByRole('link', { name: 'Open SYN-0001' })).toHaveAttribute('href', `/patients/${patientId}`);
+    expect(screen.queryByText('Choose an existing patient.')).not.toBeInTheDocument();
+  });
+
+  it('Enter in a demographics field adds the patient with its demographics, and does not submit the upload', async () => {
+    const demographicsPosts: unknown[] = [];
+    let added = false;
+    patientApi.mockReset().mockImplementation(async (path: string, init?: RequestInit) => {
+      if (init?.method === 'POST' && path.endsWith('/demographics')) {
+        const sent = JSON.parse(String(init.body));
+        demographicsPosts.push(sent);
+        const v = { version: 1, createdAt: date, createdBy: 'p', sex: sent.sex, birthYear: 1980, ethnicity: sent.ethnicity };
+        return new Response(
+          JSON.stringify({
+            patientId: createdPatient.id,
+            current: true,
+            givenName: sent.givenName,
+            familyName: sent.familyName,
+            dateOfBirth: sent.dateOfBirth,
+            ageYears: 46,
+            ...v,
+            versions: [v],
+          }),
+          { status: 201 },
+        );
+      }
+      if (init?.method === 'POST') {
+        added = true;
+        return createdAnswer();
+      }
+      return pageResponse(added ? [createdPatient] : []);
+    });
+    const user = userEvent.setup();
+    render(<UploadReportPage />);
+    await screen.findByText('No patients yet. Add a synthetic patient to continue.');
+    await user.type(screen.getByLabelText('Synthetic patient label'), 'SYN-0002');
+    await user.type(screen.getByRole('textbox', { name: 'Given name' }), 'Zzyzx-Needle');
+    await user.type(screen.getByRole('textbox', { name: 'Family name' }), 'Testcase');
+    await user.type(screen.getByLabelText('Date of birth'), '1980-02-29');
+    await user.type(screen.getByRole('textbox', { name: 'Family name' }), '{Enter}');
+    expect(await screen.findByText('Added SYN-0002 and selected it.')).toBeInTheDocument();
+    expect(demographicsPosts).toEqual([expect.objectContaining({ givenName: 'Zzyzx-Needle', familyName: 'Testcase', dateOfBirth: '1980-02-29', sex: null, ethnicity: null })]);
+    expect(submitMock).not.toHaveBeenCalled();
+    expect(screen.queryByText('Zzyzx-Needle')).not.toBeInTheDocument();
+  });
 });

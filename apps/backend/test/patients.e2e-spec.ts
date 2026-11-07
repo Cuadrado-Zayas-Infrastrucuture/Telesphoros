@@ -74,6 +74,22 @@ describe('patients: ownership (one user can never see or touch another user’s 
   });
 });
 
+describe('patients: list order', () => {
+  it('lists oldest first by default, newest first on request, and refuses any other word; another organization never appears', async () => {
+    const a = await clinicianA();
+    const mine = [await makePatient(a, 'SYN-ORD-1'), await makePatient(a, 'SYN-ORD-2'), await makePatient(a, 'SYN-ORD-3')].map((p) => p.id);
+    await makePatient(await clinicianB(), 'SYN-ORD-OTHER');
+    const ids = async (query: string) =>
+      ((await api().get(`${BASE}${query}`).set(bearer(a)).expect(200)).body.data as { id: string }[]).map((p) => p.id).filter((id) => mine.includes(id));
+    expect(await ids('')).toEqual(mine);
+    expect(await ids('?order=asc')).toEqual(mine);
+    expect(await ids('?order=desc')).toEqual([...mine].reverse());
+    const refused = await api().get(`${BASE}?order=sideways`).set(bearer(a)).expect(400);
+    expect(refused.body.error.details[0].field).toBe('order');
+    expect(JSON.stringify(refused.body)).not.toContain('sideways');
+  });
+});
+
 describe('patients: validation (rejected before any business logic)', () => {
   it.each([
     ['empty body', {}],

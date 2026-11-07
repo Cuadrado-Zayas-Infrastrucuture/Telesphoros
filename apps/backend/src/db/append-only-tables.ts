@@ -24,6 +24,11 @@ export const APPEND_ONLY_CLASSES = {
     'use_restrictions',
     'tenant_use_terms',
     'patient_demographics',
+    'patient_medications',
+    'patient_followups',
+    'structured_report_revisions',
+    'structured_finding_reviews',
+    'structured_source_resolutions',
   ],
   /** Parts of a record, covered by the parent's event. Insert-only; frozen once the parent's event is visible. */
   child: ['evaluation_results', 'evaluation_gene_states'],

@@ -225,7 +225,7 @@ const WORKER_UNREADABLE = [
 ];
 
 /** Tables a later migration added that the worker must not read either (0064, spec 025: encrypted identity and its wrapped keys). Checked only once the table exists. */
-const LATER_WORKER_UNREADABLE = ['patient_demographics', 'patient_field_keys'];
+const LATER_WORKER_UNREADABLE = ['patient_demographics', 'patient_field_keys', 'patient_medications'];
 /** The erasure function (0064): no login may execute it. Checked only once it exists. */
 const LATER_OWNER_ONLY_FUNCTIONS = ['patient_field_key_erase'];
 

@@ -25,6 +25,10 @@ pnpm --filter @telesphoros/backend build && JWT_SECRET=<32+ chars> pnpm --filter
 | POST | `/reports/:id/upload-attempts` | `clinician` | Declare an upload: `requestId`, `revision`, `contentType`, `sha256` (replaying the same declaration returns the attempt) |
 | PUT | `/reports/:id/upload-attempts/:attemptId/bytes` | `clinician` | The raw bytes, with `X-Upload-Revision`: the server validates, stores, pins and commits |
 | POST | `/reports/:id/upload-attempts/:attemptId/resume`, `/cancel` | `clinician` | Reconcile a lost reply; cancel (both need `X-Upload-Revision`) |
+| GET, POST | `/reports/:id/structured-preview`, `/record`, `/review`, `/source-resolution`, `/patient-link` | `clinician`,`reviewer` to read and save; `reviewer` to review | Structured reports only. Owned local runs, or `SYNTHETIC_ASSESSMENT=enabled` (synthetic staging); a reviewer cannot review evidence they uploaded or saved |
+| POST | `/reports/:id/structured-assessment` | `clinician`,`reviewer` | Only with `SYNTHETIC_ASSESSMENT=enabled`: assesses the reviewed revision against synthetic knowledge and stores an evaluation. See [docs/architecture.md](../../docs/architecture.md#the-synthetic-assessment-synthetic-staging-only-spec-032-s3) |
+
+The lab-report pipeline routes (captures, decisions, evaluations, corrections, disputes) are in [docs/architecture.md](../../docs/architecture.md) and answer 503 unless their switch is on.
 
 Health vs ready: use **health** for "restart this process if it fails", and **ready** for "stop
 routing traffic here if it fails". A database outage must fail *ready* but not *health*, or an

@@ -14,7 +14,7 @@ test('real report reads filter and paginate without retaining the previous selec
     expect(response.status()).toBe(201);
   }
   await openWorkspaceNavigation(page);
-  await page.getByRole('link', { name: 'All reports', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Primary', exact: true }).getByRole('link', { name: 'Reports', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Reports' })).toBeVisible();
   await selectReportsPatient(page, fixture);
   await expect(page.getByText('Page 1 of 2. 21 records.', { exact: true })).toBeVisible();
@@ -64,7 +64,8 @@ test('real report reads filter and paginate without retaining the previous selec
   await expect(page.getByLabel('Filter by patient')).toHaveValue(fixture.id);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.evaluate(() => document.fonts.ready);
-  expect(await page.getByRole('heading', { level: 1 }).evaluate(element => getComputedStyle(element).fontFamily)).toContain('Inter');
+  // The Reports panel opens over the chat, whose welcome is also a level-1 heading: check the page's own.
+  expect(await page.getByRole('heading', { level: 1, name: 'Reports' }).evaluate(element => getComputedStyle(element).fontFamily)).toContain('Inter');
   expect(await page.locator('body').evaluate(element => getComputedStyle(element).fontFamily)).toContain('Inter');
   expect(await page.locator('header .font-heading').evaluate(element => getComputedStyle(element).fontFamily)).toContain('Poppins');
   await page.getByRole('button', { name: 'Previous report page' }).focus();

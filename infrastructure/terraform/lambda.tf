@@ -1,5 +1,6 @@
 # Password-change notifier: emails the account owner when a password is reset.
-# Source: infrastructure/lambda/password-change-notifier (build it first: pnpm --filter @telesphoros/password-change-notifier build).
+# Source: infrastructure/lambda/password-change-notifier. A release plan builds it (scripts/staging/release/lib.sh build_lambdas); before any
+# other plan, build it first under umask 022: pnpm --filter @telesphoros/password-change-notifier build.
 
 data "archive_file" "password_notifier" {
   type        = "zip"

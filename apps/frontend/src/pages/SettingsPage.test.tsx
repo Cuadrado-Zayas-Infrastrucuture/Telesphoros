@@ -105,9 +105,10 @@ describe('Settings', () => {
     await waitFor(() => expect(client.signOut).toHaveBeenCalledTimes(1));
   });
 
-  it('is linked from the navigation once signed in', async () => {
+  it('is linked from the account menu at the foot of the sidebar once signed in (specs/034 D4)', async () => {
     open([], api([], organization));
     await section('Account');
+    await userEvent.click(screen.getByRole('button', { name: /^Account, / }));
     expect(screen.getAllByRole('link', { name: /Settings/ }).length).toBeGreaterThan(0);
   });
 

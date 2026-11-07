@@ -80,6 +80,7 @@ export class Database {
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 2_000, // fail fast instead of queueing forever when the database is down
       statement_timeout: 5_000, // no query may run unbounded
+      query_timeout: 7_000, // client-side bound if a half-open socket prevents the server's timeout response arriving
       idle_in_transaction_session_timeout: 10_000,
       application_name: options.applicationName ?? 'telesphoros-backend',
     });
@@ -220,16 +221,23 @@ export class Database {
     }
   }
 
-  /** The app role has EXECUTE on this writer, but no table privileges. */
+  /**
+   * The app role has EXECUTE on this writer, but no table privileges. The request's capability, if it has one, goes in with the write so the database
+   * records the organization and person it names as verified (DATA-01 slice 4); the event's own tenant and actor are stored as claimed. One statement,
+   * as before: the capability is set in a subquery the planner cannot fold away (set_config is volatile), so it is in place when the writer reads it,
+   * and is_local ends it with the statement's own transaction. An expired capability is bound too (the database then verifies nothing; the row is still
+   * written). Not counted in `capabilityStats`: an audit row is not tenant work, and the guard records `api-auth` before it asks for a capability.
+   */
   async recordSecurityEvent(event: SecurityAuditEvent): Promise<void> {
-    await this.pool.query('SELECT public.security_audit_record($1,$2,$3,$4,$5,$6,$7)', [
-      event.type,
-      event.outcome,
-      event.tenantId,
-      event.actorSub,
-      event.routeKey,
-      event.subjectId,
-      event.requestId,
+    const values = [event.type, event.outcome, event.tenantId, event.actorSub, event.routeKey, event.subjectId, event.requestId];
+    const capability = currentRequestCapability();
+    if (!capability) {
+      await this.pool.query('SELECT public.security_audit_record($1,$2,$3,$4,$5,$6,$7)', values);
+      return;
+    }
+    await this.pool.query(`SELECT public.security_audit_record($1,$2,$3,$4,$5,$6,$7) FROM (SELECT set_config('app.capability', $8, true) AS capability) bound`, [
+      ...values,
+      capability.token,
     ]);
   }
 

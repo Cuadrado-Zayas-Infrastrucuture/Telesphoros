@@ -1,13 +1,32 @@
-import { useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { ContextDrawer } from '@/components/ui/ContextDrawer';
 import { WorkspaceConversation } from '@/components/workspace/WorkspaceConversation';
-import { usePageTitle } from '@/hooks/usePageTitle';
+import { onNewChat } from '@/lib/workspaceEvents';
 
-/**
- * The chat-first home, in every build (specs/024). The feature panel is the shared sidebar. Each navigation to this address (the panel's "New chat"
- * included) has its own location key, and keying the conversation on it is what starts a new chat empty.
- */
+/** The signed-in conversation stays in memory while the physician visits a patient or a workspace panel. */
 export default function WorkspacePage() {
-  usePageTitle('Workspace');
-  const { key } = useLocation();
-  return <WorkspaceConversation key={key} />;
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const active = pathname === '/workspace';
+  const panel = pathname === '/reports' ? 'Report history' : pathname === '/settings' ? 'Account preferences' : pathname === '/reports/upload' ? 'Resume report upload' : null;
+  const [conversation, setConversation] = useState(0);
+  useEffect(() => onNewChat(() => setConversation((value) => value + 1)), []);
+  useEffect(() => {
+    if (active) document.title = 'Workspace · Telesphoros';
+  }, [active]);
+  return (
+    <>
+      <div hidden={!active && !panel} className={active || panel ? 'contents' : undefined}>
+        <WorkspaceConversation key={conversation} active={active} />
+      </div>
+      {panel ? (
+        <ContextDrawer key={pathname} id="workspace-panel" title={panel} open onClose={() => navigate('/workspace')} className="workspace-context-panel">
+          <Outlet />
+        </ContextDrawer>
+      ) : (
+        <Outlet />
+      )}
+    </>
+  );
 }

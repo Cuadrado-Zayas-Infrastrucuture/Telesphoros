@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useMatch } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
 import { useShellCopy } from '@/lib/landing/landing-language';
@@ -11,6 +11,8 @@ import { signedInHome } from '@/lib/localWorkspace';
 export function AccountMenu() {
   const { status, roles } = useAuth();
   const { header } = useShellCopy();
+  const signInPage = useMatch('/signin');
+  if (status !== 'signedIn' && signInPage) return null;
   return (
     <Button asChild variant="outline">
       {status === 'signedIn' ? <Link to={signedInHome(roles)}>{header.openWorkspace}</Link> : <Link to="/signin">{header.signIn}</Link>}

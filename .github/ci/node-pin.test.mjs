@@ -30,13 +30,13 @@ export function nodePinProblems({ nvmrc, workflows, dockerfile, packageJson, npm
 
 const current = () => ({
   nvmrc: read('../../.nvmrc'),
-  workflows: { 'ci.yml': read('../workflows/ci.yml'), 'rescan.yml': read('../workflows/rescan.yml') },
+  workflows: { 'ci.yml': read('../workflows/ci.yml'), 'e2e-storage.yml': read('../workflows/e2e-storage.yml'), 'rescan.yml': read('../workflows/rescan.yml') },
   dockerfile: read('../../infrastructure/docker/api.Dockerfile'),
   packageJson: read('../../package.json'),
   npmrc: read('../../.npmrc'),
 });
 
-test('.nvmrc, both workflows, the API image and the engines range pin the same Node, and .npmrc enforces it', () => {
+test('.nvmrc, every workflow, the API image and the engines range pin the same Node, and .npmrc enforces it', () => {
   assert.deepEqual(nodePinProblems(current()), []);
 });
 
@@ -46,6 +46,7 @@ test('the pin check reports each kind of drift', () => {
   const other = pinned.replace(/\.(\d+)$/, (_, p) => `.${Number(p) + 1}`);
   const drift = [
     { ...base, workflows: { ...base.workflows, 'rescan.yml': base.workflows['rescan.yml'].replace(`NODE_VERSION: "${pinned}"`, `NODE_VERSION: "${other}"`) } },
+    { ...base, workflows: { ...base.workflows, 'e2e-storage.yml': base.workflows['e2e-storage.yml'].replace(`NODE_VERSION: "${pinned}"`, `NODE_VERSION: "${other}"`) } },
     { ...base, dockerfile: base.dockerfile.replace(`node:${pinned}-`, `node:${other}-`) },
     { ...base, packageJson: base.packageJson.replace(/"node": "[^"]*"/, '"node": ">=22"') },
     { ...base, nvmrc: other },

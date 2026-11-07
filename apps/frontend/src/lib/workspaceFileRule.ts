@@ -1,6 +1,11 @@
 import { ownedStorageMode } from '@/lib/storageMode';
 import { reportTypeFor } from '@/lib/reportTypeFor';
 
+/** The picker's `accept`: only what `fileProblem` lets through in this build, so a file is never offered and then refused. */
+export function chatFileAccept(): string {
+  return ownedStorageMode() ? '.json,.pdf' : '.json';
+}
+
 /**
  * Which files the chat accepts (specs/024 D4): a .json file is a structured report; a .pdf only in owned-storage mode, which a published (staging)
  * bundle refuses; anything else, VCF included, is refused. Returns the reason shown to the person, or null when the file may be sent.

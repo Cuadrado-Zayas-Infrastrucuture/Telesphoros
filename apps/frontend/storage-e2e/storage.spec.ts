@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
-import { openWorkspaceNavigation, selectReportsPatient, signInAs, signInWithPatient, waitPastSignOutSecond } from '../e2e/helpers';
+import { openWorkspaceNavigation, selectReportsPatient, signInAs, signInWithPatient, signOutFromSidebar, waitPastSignOutSecond } from '../e2e/helpers';
 const STORAGE_ORIGIN = process.env.E2E_REPORT_STORAGE_ORIGIN ?? 'http://127.0.0.1:5557';
 
 async function storageInventory() {
@@ -134,8 +134,7 @@ test('reader sees metadata but cannot request a file or upload', async ({ page }
   await fill(page, fixture.id, samples[1]!); await page.getByRole('button', { name: 'Upload report', exact: true }).click();
   await expect(page.getByText('Upload complete', { exact: true })).toBeVisible();
   const report = (await rows(page, fixture))[0];
-  await openWorkspaceNavigation(page);
-  await page.getByRole('button', { name: /sign out/i }).click();
+  await signOutFromSidebar(page); // in the account menu (specs/034 D4)
   // Sign-out posts to the API before it sends the browser to the provider's /logout; a goto before /signed-out keeps the provider session.
   await expect(page).toHaveURL(/\/signed-out$/);
   await waitPastSignOutSecond(page); // the next test signs alice in again; the API refuses a token issued in her sign-out second
@@ -160,8 +159,7 @@ test('reports pagination, keyboard download, reviewer access and accessibility',
     const response = await page.request.post(`${fixture.api}/api/v1/reports`, { headers: fixture.headers, data: { patientId: fixture.id, type: 'structured', filename: `page-${index}.json`, sizeBytes: 2 } });
     expect(response.status()).toBe(201);
   }
-  await openWorkspaceNavigation(page);
-  await page.getByRole('button', { name: /sign out/i }).click();
+  await signOutFromSidebar(page); // in the account menu (specs/034 D4)
   await expect(page).toHaveURL(/\/signed-out$/); // let the provider's /logout end its session first
   await waitPastSignOutSecond(page); // as above: a later test signs alice in again
   await signInAs(page, 'gina', '/reports');

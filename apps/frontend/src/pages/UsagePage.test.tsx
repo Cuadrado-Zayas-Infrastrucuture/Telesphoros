@@ -110,7 +110,10 @@ describe('Usage', () => {
       api(['admin'], () => new Promise<Response>(() => {}) as unknown as Response),
     );
     expect(await screen.findByText('Loading usage…')).toHaveAttribute('role', 'status');
-    expect(document.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(10);
+    const summary = document.getElementById('usage-storage')!.closest('section')!.parentElement!;
+    expect(summary).toHaveAttribute('aria-hidden', 'true');
+    expect(summary.querySelectorAll('dl > div')).toHaveLength(8);
+    expect(summary.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(8);
     expect(screen.queryByRole('region', { name: 'Storage' })).not.toBeInTheDocument();
   });
 });

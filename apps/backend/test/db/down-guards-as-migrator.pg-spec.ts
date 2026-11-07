@@ -1,10 +1,14 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { Client } from 'pg';
 import { enqueueJob, evaluationRequest } from '@telesphoros/jobs';
 import { Database } from '../../src/db/database';
 import { EvaluationRequestsService } from '../../src/lab-reports/evaluation-requests.service';
 import { EvaluationRequestsRepository } from '../../src/storage/postgres/evaluation-requests.repository';
 import { PostgresLedgerRecordsRepository } from '../../src/storage/postgres/ledger-records.repository';
+import { PostgresPatientFollowupsRepository } from '../../src/storage/postgres/patient-followups.repository';
+import { PostgresPatientMedicationsRepository } from '../../src/storage/postgres/patient-medications.repository';
 import { PostgresPatientDemographicsRepository } from '../../src/storage/postgres/patient-demographics.repository';
 import { sealField } from '../../src/patient-demographics/identity-crypto';
 import { PostgresResultRendersRepository } from '../../src/storage/postgres/result-renders';
@@ -826,6 +830,277 @@ describe('down-migration guards, run as the migrator login (owner of the tables,
       await setting(f.migrator, AUDIT, '');
       expect(await migrateDown(f.migrator, 1)).toEqual([through.reverted.at(-1)]);
       expect((await stillForced(f.migrator)).every((t) => t.f)).toBe(true);
+    } finally {
+      await f.drop();
+    }
+  });
+});
+
+describe('patient medications down guard as the non-superuser migrator', () => {
+  it('refuses populated records with FORCE restored, and restores the prior ledger function when empty', async () => {
+    const f = await fixture();
+    const connection = new Database({ url: f.app, ssl: 'disable' });
+    try {
+      expect((await f.migrator.query('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user')).rows).toEqual([{ rolsuper: false, rolbypassrls: false }]);
+      const above = revertAbove('patient_medications');
+      if (above.steps) await migrateDown(f.migrator, above.steps);
+      const seeded = await seedLabReport(f.admin, tenant);
+      const repo = new PostgresPatientMedicationsRepository(connection, new PostgresLedgerRecordsRepository(connection));
+      await repo.insertVersion(tenant, 'SYN-clinician', {
+        id: randomUUID(),
+        entryId: randomUUID(),
+        patientId: seeded.patientId,
+        name: 'syn-ingredient',
+        requestHash: 'a'.repeat(64),
+        input: { requestId: randomUUID(), rxcui: '991001', listVersion: 'a'.repeat(64), status: 'active', startMonth: null, stopMonth: null, source: 'clinician-entered' },
+      });
+      expect((await f.migrator.query('SELECT count(*)::int AS n FROM patient_medications')).rows).toEqual([{ n: 0 }]); // FORCE hides rows from the owner.
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated patient medications/);
+      expect((await f.migrator.query("SELECT relforcerowsecurity AS forced FROM pg_class WHERE relname='patient_medications'")).rows).toEqual([{ forced: true }]);
+      // Remove synthetic fixtures only as the test administrator, to exercise the empty down path in the same database.
+      await withAdmin(f.admin, async (c) => {
+        await c.query('BEGIN');
+        await c.query('SET LOCAL session_replication_role = replica');
+        await c.query('DELETE FROM patient_medications');
+        await c.query("DELETE FROM ledger_events WHERE event_type='patient-medication'");
+        await c.query('COMMIT');
+      });
+      expect(await migrateDown(f.migrator, 1)).toEqual(['0066']);
+      expect((await f.migrator.query("SELECT to_regclass('patient_medications') AS name")).rows).toEqual([{ name: null }]);
+      const fn = (await f.migrator.query("SELECT pg_get_functiondef('ledger_event_row_exists()'::regprocedure) AS body")).rows[0].body;
+      expect(fn).toContain('patient_demographics');
+      expect(fn).not.toContain('patient_medications');
+    } finally {
+      await connection.onModuleDestroy();
+      await f.drop();
+    }
+  });
+});
+
+describe('patient follow-ups down guard as the non-superuser migrator', () => {
+  it('refuses populated follow-ups despite FORCE RLS and reverses the empty migration', async () => {
+    const f = await fixture();
+    const above = revertAbove('patient_followups');
+    if (above.steps) expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted);
+    const connection = new Database({ url: f.app, ssl: 'disable' });
+    try {
+      const seeded = await seedLabReport(f.admin, tenant);
+      await withAdmin(f.admin, (c) =>
+        c.query("INSERT INTO tenant_memberships (tenant_id,sub,status,roles,changed_by) VALUES ($1,'SYN-followup-author','active',ARRAY['clinician'],'synthetic-test')", [tenant]),
+      );
+      const ledger = new PostgresLedgerRecordsRepository(connection);
+      const medications = new PostgresPatientMedicationsRepository(connection, ledger);
+      const medication = await medications.insertVersion(tenant, 'SYN-followup-author', {
+        id: randomUUID(),
+        entryId: randomUUID(),
+        patientId: seeded.patientId,
+        name: 'syn-ingredient',
+        requestHash: 'a'.repeat(64),
+        input: { requestId: randomUUID(), rxcui: '991001', listVersion: 'a'.repeat(64), status: 'active', startMonth: null, stopMonth: null, source: 'clinician-entered' },
+      });
+      const records = new PostgresPatientFollowupsRepository(connection, ledger);
+      await records.record(tenant, 'SYN-followup-author', seeded.patientId, {
+        requestId: randomUUID(),
+        action: 'schedule',
+        medicationId: medication.id,
+        decisionId: null,
+        assessment: null,
+        note: 'Synthetic follow-up',
+        next: { date: '2026-01-01', timezone: 'America/Puerto_Rico', assignee: 'SYN-followup-author' },
+      });
+      expect((await f.migrator.query('SELECT count(*)::int AS n FROM patient_followups')).rows).toEqual([{ n: 0 }]);
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated patient follow-ups/);
+      expect((await f.migrator.query("SELECT relforcerowsecurity AS forced FROM pg_class WHERE relname='patient_followups'")).rows).toEqual([{ forced: true }]);
+      await withAdmin(f.admin, async (c) => {
+        await c.query('BEGIN');
+        await c.query('SET LOCAL session_replication_role=replica');
+        await c.query('DELETE FROM patient_followups');
+        await c.query("DELETE FROM ledger_events WHERE event_type='patient-followup'");
+        await c.query('COMMIT');
+      });
+      expect(await migrateDown(f.migrator, 1)).toEqual(['0067']);
+      expect((await f.migrator.query("SELECT to_regclass('patient_followups') AS name")).rows).toEqual([{ name: null }]);
+      const fn = (await f.migrator.query("SELECT pg_get_functiondef('ledger_event_row_exists()'::regprocedure) AS body")).rows[0].body;
+      expect(fn).toContain('patient_medications');
+      expect(fn).not.toContain('patient_followups');
+    } finally {
+      await connection.onModuleDestroy();
+      await f.drop();
+    }
+  });
+});
+
+describe('structured revisions down guard as the non-superuser migrator', () => {
+  it('sees populated evidence behind FORCE RLS and reverses only an empty migration', async () => {
+    const f = await fixture();
+    const above = revertAbove('structured_report_revisions');
+    if (above.steps) expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted);
+    try {
+      // Isolate the destructive down guard: deliberate owner-only fixture, without application writes or an event.
+      const laboratoryReport = JSON.parse(readFileSync(resolve(__dirname, '../../../../data/fixtures/pgx-contracts/resolved/package.json'), 'utf8')).report;
+      await withAdmin(f.admin, async (c) => {
+        await c.query('SET session_replication_role=replica');
+        await c.query(
+          `INSERT INTO structured_report_revisions
+          (id,tenant_id,created_by,ledger_event_id,report_id,patient_id,report_sha256,object_version,patient_link_decision_id,parser_version,laboratory_report)
+          VALUES ($1,$2,'syn-author',$3,$4,$5,$6,'syn-version',$7,'pgx-synthetic-0.1',$8)`,
+          [randomUUID(), tenant, randomUUID(), randomUUID(), randomUUID(), hash, randomUUID(), laboratoryReport],
+        );
+      });
+      expect((await f.migrator.query('SELECT count(*)::int AS n FROM structured_report_revisions')).rows).toEqual([{ n: 0 }]);
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated structured report revisions/);
+      expect((await f.migrator.query("SELECT relforcerowsecurity AS forced FROM pg_class WHERE relname='structured_report_revisions'")).rows).toEqual([{ forced: true }]);
+      await withAdmin(f.admin, async (c) => {
+        await c.query('SET session_replication_role=replica');
+        await c.query('DELETE FROM structured_report_revisions');
+      });
+      expect(await migrateDown(f.migrator, 1)).toEqual(['0068']);
+      expect((await f.migrator.query("SELECT to_regclass('structured_report_findings') AS view, to_regclass('structured_report_revisions') AS table")).rows).toEqual([
+        { view: null, table: null },
+      ]);
+      const body = (await f.migrator.query("SELECT pg_get_functiondef('ledger_event_row_exists()'::regprocedure) AS body")).rows[0].body;
+      expect(body).toContain('patient_followups');
+      expect(body).not.toContain('structured_report_revisions');
+      expect(await migrateUp(f.migrator)).toEqual(['0068', ...above.reverted.slice().reverse()]);
+    } finally {
+      await f.drop();
+    }
+  });
+});
+
+describe('structured findings review down guard as the non-superuser migrator', () => {
+  it('sees populated decisions behind FORCE RLS and reverses only an empty migration', async () => {
+    const f = await fixture();
+    const above = revertAbove('structured_findings_review');
+    if (above.steps) expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted);
+    try {
+      // Deliberate owner-only fixtures: foreign keys and triggers are off, so no application write or event is needed.
+      await withAdmin(f.admin, async (c) => {
+        await c.query('SET session_replication_role=replica');
+        await c.query(
+          `INSERT INTO structured_finding_reviews
+          (id,tenant_id,created_by,ledger_event_id,request_id,revision_id,report_id,patient_id,report_sha256,object_version,patient_link_decision_id,source_finding_id,decision,reason_code)
+          VALUES ($1,$2,'syn-reviewer',$3,$4,$5,$6,$7,$8,'syn-version',$9,'syn-finding-a','accepted-as-evidence','matches-source')`,
+          [randomUUID(), tenant, randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID(), hash, randomUUID()],
+        );
+      });
+      expect((await f.migrator.query('SELECT count(*)::int AS n FROM structured_finding_reviews')).rows).toEqual([{ n: 0 }]);
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated structured finding reviews/);
+      expect(
+        (
+          await f.migrator.query(
+            "SELECT relforcerowsecurity AS forced FROM pg_class WHERE relname IN ('structured_finding_reviews','structured_source_resolutions') ORDER BY relname",
+          )
+        ).rows,
+      ).toEqual([{ forced: true }, { forced: true }]);
+      await withAdmin(f.admin, async (c) => {
+        await c.query('SET session_replication_role=replica');
+        await c.query('DELETE FROM structured_finding_reviews');
+        await c.query(
+          `INSERT INTO structured_source_resolutions
+          (id,tenant_id,created_by,ledger_event_id,request_id,patient_id,laboratory_id,series_id,revision,revision_ids,outcome,chosen_revision_id,reason_code)
+          VALUES ($1,$2,'syn-reviewer',$3,$4,$5,'syn-lab','syn-series',1,ARRAY[$6,$7]::uuid[],'keep-held',NULL,'awaiting-laboratory')`,
+          [randomUUID(), tenant, randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID()],
+        );
+      });
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop populated structured finding reviews or source resolutions/);
+      await withAdmin(f.admin, async (c) => {
+        await c.query('SET session_replication_role=replica');
+        await c.query('DELETE FROM structured_source_resolutions');
+      });
+      expect(await migrateDown(f.migrator, 1)).toEqual(['0069']);
+      expect((await f.migrator.query("SELECT to_regclass('structured_finding_reviews') AS a, to_regclass('structured_source_resolutions') AS b")).rows).toEqual([
+        { a: null, b: null },
+      ]);
+      const body = (await f.migrator.query("SELECT pg_get_functiondef('ledger_event_row_exists()'::regprocedure) AS body")).rows[0].body;
+      expect(body).toContain('structured_report_revisions');
+      expect(body).not.toContain('structured_finding_reviews');
+      expect(await migrateUp(f.migrator)).toEqual(['0069', ...above.reverted.slice().reverse()]);
+    } finally {
+      await f.drop();
+    }
+  });
+});
+
+describe('evaluations structured source down guard as the non-superuser migrator', () => {
+  it('sees a populated structured evaluation behind FORCE RLS and reverses only a migration with none', async () => {
+    const f = await fixture();
+    const above = revertAbove('evaluations_structured_source');
+    if (above.steps) expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted);
+    try {
+      // Deliberate owner-only fixture: foreign keys and triggers are off, so no application write or event is needed. The table's own checks still apply.
+      await withAdmin(f.admin, async (c) => {
+        await c.query('SET session_replication_role=replica');
+        await c.query(
+          `INSERT INTO evaluations
+          (id,tenant_id,created_by,ledger_event_id,patient_id,report_id,capture_id,capture_acceptance_id,disposition,hold_code,binding,knowledge_set_id,engine_version,gene_inputs,occurrences,identity_key,source_kind,structured_revision_id)
+          VALUES ($1,$2,'syn-system',$3,$4,$5,NULL,NULL,'held','findings-not-reviewed','{}'::jsonb,$6,'syn-engine','[]'::jsonb,'[]'::jsonb,$7,'structured-revision',$8)`,
+          [randomUUID(), tenant, randomUUID(), randomUUID(), randomUUID(), hash, 'b'.repeat(64), randomUUID()],
+        );
+      });
+      // The migrator sees none of the owner's rows through FORCE RLS: the guard must still find it.
+      expect((await f.migrator.query('SELECT count(*)::int AS n FROM evaluations')).rows).toEqual([{ n: 0 }]);
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop evaluations that rest on a structured revision/);
+      expect((await f.migrator.query("SELECT relforcerowsecurity AS forced FROM pg_class WHERE relname='evaluations'")).rows).toEqual([{ forced: true }]);
+      await withAdmin(f.admin, async (c) => {
+        await c.query('SET session_replication_role=replica');
+        await c.query("DELETE FROM evaluations WHERE source_kind='structured-revision'");
+      });
+      expect(await migrateDown(f.migrator, 1)).toEqual(['0070']);
+      const columns = (
+        await f.migrator.query(
+          "SELECT column_name, is_nullable FROM information_schema.columns WHERE table_name='evaluations' AND column_name IN ('capture_id','source_kind','structured_revision_id') ORDER BY column_name",
+        )
+      ).rows;
+      expect(columns).toEqual([{ column_name: 'capture_id', is_nullable: 'NO' }]);
+      const parent = (await f.migrator.query("SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname='data_provenance_parent_kind'")).rows[0].def;
+      expect(parent).not.toContain('structured-revision');
+      expect(await migrateUp(f.migrator)).toEqual(['0070', ...above.reverted.slice().reverse()]);
+    } finally {
+      await f.drop();
+    }
+  });
+});
+
+describe('evaluation result identifiers down guard as the non-superuser migrator', () => {
+  it('sees a result carrying identifiers behind FORCE RLS and reverses only a migration with none', async () => {
+    const f = await fixture();
+    const above = revertAbove('evaluation_result_identifiers');
+    if (above.steps) expect(await migrateDown(f.migrator, above.steps)).toEqual(above.reverted);
+    try {
+      // Deliberate owner-only fixture: foreign keys and triggers are off, so no application write or event is needed. The table's own checks still apply.
+      await withAdmin(f.admin, async (c) => {
+        await c.query('SET session_replication_role=replica');
+        await c.query(
+          `INSERT INTO evaluation_results
+          (tenant_id,evaluation_id,ordinal,drug,genes,outcome,reason_code,citation,guideline_id,guideline_version,gene_evidence,drug_rxcui,gene_hgnc_ids,pharmvar_versions,cell_origin)
+          VALUES ($1,$2,0,'drugq',ARRAY['GENEA'],'held','out-of-review-scope','{}'::jsonb,'drugq-genea','synthetic-1','[]'::jsonb,
+                  'syn-rxcui-drugq',ARRAY['syn-hgnc-genea'],ARRAY['syn-pharmvar-1.0'],'unknown')`,
+          [tenant, randomUUID()],
+        );
+      });
+      // The migrator sees none of the owner's rows through FORCE RLS: the guard must still find it.
+      expect((await f.migrator.query('SELECT count(*)::int AS n FROM evaluation_results')).rows).toEqual([{ n: 0 }]);
+      await expect(migrateDown(f.migrator, 1)).rejects.toThrow(/Refusing to drop identifiers that stored results carry/);
+      expect((await f.migrator.query("SELECT relforcerowsecurity AS forced FROM pg_class WHERE relname='evaluation_results'")).rows).toEqual([{ forced: true }]);
+      // A result without identifiers does not block the down.
+      await withAdmin(f.admin, async (c) => {
+        await c.query('SET session_replication_role=replica');
+        await c.query('DELETE FROM evaluation_results WHERE drug_rxcui IS NOT NULL');
+        await c.query(
+          `INSERT INTO evaluation_results (tenant_id,evaluation_id,ordinal,drug,genes,outcome,reason_code,gene_evidence)
+           VALUES ($1,$2,0,'drugq',ARRAY[]::text[],'no-guideline','no-guideline-for-drug','[]'::jsonb)`,
+          [tenant, randomUUID()],
+        );
+      });
+      expect(await migrateDown(f.migrator, 1)).toEqual(['0071']);
+      const columns = (
+        await f.migrator.query(
+          "SELECT column_name FROM information_schema.columns WHERE table_name='evaluation_results' AND column_name IN ('drug_rxcui','gene_hgnc_ids','pharmvar_versions','cell_origin')",
+        )
+      ).rows;
+      expect(columns).toEqual([]);
+      expect(await migrateUp(f.migrator)).toEqual(['0071', ...above.reverted.slice().reverse()]);
     } finally {
       await f.drop();
     }

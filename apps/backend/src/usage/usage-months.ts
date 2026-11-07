@@ -4,7 +4,8 @@
  * free of time-zone data; if Puerto Rico ever adopted daylight saving, this is the one place to change.
  */
 export const USAGE_TIME_ZONE = 'America/Puerto_Rico';
-const OFFSET_HOURS = 4;
+/** Hours behind UTC. Exported for the SQL that groups uploads by Puerto Rico day, so both places shift by the same amount. */
+export const OFFSET_HOURS = 4;
 
 export interface UsageWindow {
   /** `YYYY-MM` in Puerto Rico. */
@@ -26,4 +27,14 @@ export function usageWindows(now: Date): [UsageWindow, UsageWindow] {
   const year = local.getUTCFullYear();
   const month = local.getUTCMonth();
   return [window(year, month), window(year, month - 1)];
+}
+
+/** One calendar year in Puerto Rico (specs/028-usage-heatmap D4): from 1 January 04:00 UTC to the next 1 January 04:00 UTC. */
+export function usageYear(year: number): { from: Date; to: Date } {
+  return { from: new Date(Date.UTC(year, 0, 1, OFFSET_HOURS)), to: new Date(Date.UTC(year + 1, 0, 1, OFFSET_HOURS)) };
+}
+
+/** The Puerto Rico calendar date of an instant, as `YYYY-MM-DD`. */
+export function puertoRicoDate(instant: Date): string {
+  return new Date(instant.getTime() - OFFSET_HOURS * 3_600_000).toISOString().slice(0, 10);
 }

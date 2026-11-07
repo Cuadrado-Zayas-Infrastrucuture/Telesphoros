@@ -6,7 +6,8 @@
 
 **Status**: Approved 2026-10-31. The founder chose D1 to D4 from the options offered: reports uploaded, a new route, a plain grid with no
 chart library, and a calendar year with a year picker. D5 to D9 were proposed with them and approved as written ("Approve D5–D9"). Amendment A1 (plan.md), approved the same day ("Approve A1"),
-replaced D6's `firstYear` with `firstDate` and `today`, so the page can draw D7 without working out dates itself.
+replaced D6's `firstYear` with `firstDate` and `today`, so the page can draw D7 without working out dates itself. Amendment A2, approved while
+building the page, replaced D9's single image with a keyboard grid and hides the year picker when there is only one year.
 
 **Input**: The founder wanted a calendar heatmap on the Usage page, like the evilcharts heatmap. `GET /usage` (spec 010) returns only this
 month so far and last month, so there is nothing per day to draw.
@@ -35,9 +36,11 @@ built them.
 - **D8, shading (approved):** zero, then four steps that split 1 up to the year's busiest day evenly. A small organization still sees a range
   of shades. The colors come from the existing tokens in both themes, with a "Fewer / More" key. The palette stays neutral, like the rest of the
   page, so no shade reads as a warning.
-- **D9, accessible version (approved):** the grid is one image to assistive technology (`role="img"`), labeled with the year's total and its
-  busiest day. Below it, a visible table lists each month's uploads for the chosen year, and that table is the text version of the grid.
-  Hovering or focusing the grid shows a day's count, but no information is only available that way.
+- **D9, accessible version (approved, amended by A2):** the grid follows the ARIA grid pattern (`role="grid"`), labeled with the year's total
+  and its busiest day. It is one tab stop; the arrow keys move a day up or down and a week across, and every day is named, such as "Thursday,
+  14 May 2026: 9 reports uploaded". A line below it repeats the day being pointed at or focused. Below that, a visible table lists each
+  month's uploads for the chosen year. A2 replaced a single `role="img"`: a focusable image is not a valid widget, and the grid lets a
+  keyboard or screen reader user reach each day's count, so no information is only available by hovering.
 
 ## Out of scope
 
@@ -51,7 +54,7 @@ built them.
 1. **An administrator reads this year (P1).** **Acceptance:** each day with uploads is shaded by its count, and the month table matches the
    sum of those days. Days after today read "not counted".
 2. **An earlier year (P1).** **Acceptance:** the picker offers every year from the organization's first year to this one, and choosing one
-   loads that year. A leap year shows 366 days.
+   loads that year. A leap year shows 366 days. An organization whose first year is this year sees no picker (A2).
 3. **Another organization's activity (P1).** **Acceptance:** it never appears in the counts.
 4. **A non-administrator (P1).** **Acceptance:** a reader, clinician, reviewer or member with no role gets 403; an anonymous request gets 401.
    The page shows no calendar to them, as spec 011 D1 already hides the whole page.

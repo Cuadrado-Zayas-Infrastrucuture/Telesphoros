@@ -290,7 +290,7 @@ const behaviour = (cachePolicy, path) => ({
   forwarded_values: [], min_ttl: 0, default_ttl: 0, max_ttl: 0, smooth_streaming: false, grpc_config: [{ enabled: false }],
 });
 const ASSETS = behaviour(CACHING_OPTIMIZED, '/assets/*');
-const DISTRIBUTION_ARN = `arn:aws:cloudfront::${ACCOUNT}:distribution/E1WD7E7PP8PU73`;
+const DISTRIBUTION_ARN = `arn:aws:cloudfront::${ACCOUNT}:distribution/E2EXAMPLE1FIXTURE`;
 const distribution = (ordered, extra = {}) => ({
   arn: DISTRIBUTION_ARN, aliases: ['app.staging.telesphoros.app', 'staging.telesphoros.app'], enabled: true, default_root_object: 'index.html', price_class: 'PriceClass_100', http_version: 'http2and3',
   default_cache_behavior: [behaviour(CACHING_DISABLED)], ordered_cache_behavior: ordered, origin: [{ origin_id: 'web-s3', domain_name: 'web.s3.us-east-2.amazonaws.com' }],

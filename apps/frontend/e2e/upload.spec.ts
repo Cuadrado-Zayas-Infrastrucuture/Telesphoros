@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
-import { openWorkspaceNavigation, signInWithPatient, waitPastSignOutSecond } from './helpers';
+import { signInWithPatient, signOutFromSidebar, waitPastSignOutSecond } from './helpers';
 
 const STORAGE_ORIGIN = process.env.E2E_REPORT_STORAGE_ORIGIN ?? 'http://127.0.0.1:5557';
 
@@ -238,8 +238,7 @@ test('signing out clears an interrupted upload, so the next person on this tab i
   await held.arrived;
   await reloadAndSignIn(page, held.interrupt);
   await expect(page.getByText('An upload was interrupted')).toBeVisible();
-  await openWorkspaceNavigation(page);
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await signOutFromSidebar(page);
   await expect(page).toHaveURL(/\/signed-out$/);
   expect(await page.evaluate(key => window.sessionStorage.getItem(key), RECOVERY_KEY)).toBeNull();
   await waitPastSignOutSecond(page); // the next test signs in as the same person; the API refuses a token issued in the sign-out second
@@ -262,7 +261,8 @@ test('a different verified caller after a 401 never sees or replays the previous
   await page.getByRole('button', { name: /Sign in as hal\b/ }).click();
   await page.waitForURL('**/reports/upload');
   await expect(page.getByRole('heading', { level: 1, name: 'Upload report' })).toBeVisible();
-  await expect(page.getByText('previous-caller.json', { exact: true })).toHaveCount(0);
+  // The panel's Recents lists the newest reports, this one included: the recovery notice is what must not name it.
+  await expect(page.getByRole('main').getByText('previous-caller.json', { exact: true })).toHaveCount(0);
   await expect(page.getByText('An upload was interrupted')).toHaveCount(0);
   expect(await page.evaluate(key => sessionStorage.getItem(key), RECOVERY_KEY)).toBeNull();
 });
@@ -285,7 +285,8 @@ for (const invalid of ['legacy', 'expired'] as const) test(`${invalid} metadata 
     }
   }, { key: RECOVERY_KEY, invalid });
   await reloadAndSignIn(page, held.interrupt);
-  await expect(page.getByText('discard.json', { exact: true })).toHaveCount(0);
+  // The panel's Recents lists the newest reports, this one included: the recovery notice is what must not name it.
+  await expect(page.getByRole('main').getByText('discard.json', { exact: true })).toHaveCount(0);
   await expect(page.getByText('An upload was interrupted')).toHaveCount(0);
   expect(await page.evaluate(key => sessionStorage.getItem(key), RECOVERY_KEY)).toBeNull();
   expect(await page.evaluate(() => sessionStorage.getItem('telesphoros.upload-recovery.v1'))).toBeNull();

@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
 import {
   buildMeta,
+  type DemographicsCompleteness,
   type IdParam,
   idParamSchema,
   type Paginated,
@@ -31,6 +32,13 @@ export class PatientsController {
   async list(@CurrentPrincipal() principal: Principal, @Query(new ZodValidationPipe(patientListQuerySchema)) query: PatientListQuery): Promise<Paginated<PatientDto>> {
     const { items, total } = await this.service.list(principal, query);
     return { data: items.map((item) => toPatientListItemDto(item)), meta: buildMeta(query.page, query.pageSize, total) };
+  }
+
+  /** Declared before `:id`, so the word is never read as an id. */
+  @Get('demographics-completeness')
+  @Roles(...CLINICAL_READ_ROLES)
+  completeness(@CurrentPrincipal() principal: Principal): Promise<DemographicsCompleteness> {
+    return this.service.completeness(principal);
   }
 
   @Get(':id')

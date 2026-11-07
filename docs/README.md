@@ -17,6 +17,7 @@ Start with [the local demo](start-here.md), then use the sections below for the 
 - [Spec-driven workflow](engineering/spec-driven-workflow.md): Spec Kit and feature specs under `specs/`.
 - [Backend setup](../apps/backend/README.md) and [database guide](database.md): storage profiles, migrations and real-service test tiers.
 - [CI and delivery](ops/ci-cd.md): required checks and the difference between local, PR and deployment evidence.
+- [Team access](ops/team-access.md): what a new engineer can do with the repository alone, and what only the founder holds today.
 
 ## Work on records and access
 
@@ -45,6 +46,8 @@ Start with [the local demo](start-here.md), then use the sections below for the 
 
 - [Lab-report pipeline](lab-report-reader.md) and [adapter specification](design/report-adapter-spec.md): capture, review and evaluation boundaries.
 - [CPIC integration](cpic-integration.md): knowledge loading and the clinical-content gates.
+- [PGx report service proposal](../specs/032-pgx-report-service/spec.md): laboratory/assessment contracts, candidate coverage, partner requirements and synthetic acceptance scenarios.
+- [Synthetic assessment](architecture.md#the-synthetic-assessment-synthetic-staging-only-spec-032-s3): the MVP's path on synthetic staging. [Plan and decisions](design/plans/pgx-synthetic-assessment.md); [switching it on and off](ops/synthetic-assessment-switch.md).
 - [LLM harness specification](../specs/003-llm-harness/spec.md): explanation contracts, budgets, evaluation and release gates.
 - [AI safety requirements](ai-safety-and-hallucination-controls.md): requirements for a future model path.
 

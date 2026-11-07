@@ -131,6 +131,7 @@ test('landing sign-in works and returning home includes the brand header', async
 test('reader is pointed to the workspace but receives no upload action or live AI route', async ({ page }) => {
   await signInAs(page, 'bob', '/reports/upload');
   await expect(page.getByRole('heading', { name: 'You do not have access to this page' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close resume report upload', exact: true }).click();
   await page.getByRole('link', { name: /Telesphoros shield and Rx logo/ }).click();
   await expect(page.getByRole('heading', { name: /PGx reports, interpreted/ })).toBeVisible();
   await expect(page.getByRole('link', { name: /Upload/ })).toHaveCount(0);

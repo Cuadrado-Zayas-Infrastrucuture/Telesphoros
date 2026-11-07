@@ -20,9 +20,11 @@ const real = {
 };
 
 /** The only workflow files allowed on main. Adding one means changing this line, in review. */
-export const WORKFLOWS = ['ci.yml', 'rescan.yml'];
+export const WORKFLOWS = ['ci.yml', 'e2e-storage.yml', 'rescan.yml', 'staging-frontend.yml'];
 
 const code = (text) => text.split('\n').filter((line) => !/^\s*#/.test(line)).join('\n');
+/** Each job of a workflow, as text starting with its id. */
+const jobsOf = (text) => (text.split(/^jobs:\s*$/m)[1] ?? '').split(/^ {2}(?=[a-z][a-z0-9_-]*:\s*$)/m).filter((j) => /\S/.test(j));
 
 export function supplyChainProblems({ workflows, requirementsIn, requirementsTxt, dependabot }) {
   const problems = [];
@@ -39,8 +41,14 @@ export function supplyChainProblems({ workflows, requirementsIn, requirementsTxt
     }
     // The one exception (INF-03, release.test.mjs pins where it lives): ci.yml's release-image job asks for an OIDC token.
     const writes = text.split('\n').filter((line) => /:\s*write\b/.test(line));
-    need(/^permissions:\n {2}contents: read\n/m.test(raw) && (writes.length === 0 || (name === 'ci.yml' && JSON.stringify(writes) === JSON.stringify(['      id-token: write']))), `${name}: permissions must be read-only (only ci.yml's release-image may ask for id-token: write)`);
+    need(/^permissions:\n {2}contents: read\n/m.test(raw) && (writes.length === 0 || (['ci.yml', 'staging-frontend.yml'].includes(name) && JSON.stringify(writes) === JSON.stringify(['      id-token: write']))), `${name}: permissions must be read-only (only image release and staging frontend may ask for id-token: write)`);
     need(!/pull_request_target/.test(text) && !/secrets\./.test(text), `${name}: no pull_request_target and no repository secrets`);
+    // A job that may request an AWS-assumable OIDC token runs no package manager: an install or build script there could mint the token itself.
+    for (const job of jobsOf(text).filter((j) => /^\s+id-token:\s*write\b/m.test(j))) {
+      need(!/\b(pnpm|npm|yarn)\s+(install|ci|i|add)\b|pnpm\/action-setup@/.test(job), `${name}: job "${job.split(':')[0].trim()}" holds id-token and must not install packages (build in a job without it, pass the artifact by digest)`);
+    }
+    // The repository is public: an AWS account id belongs in a repository variable, never in a workflow (PR #86).
+    need(!/(?<![0-9A-Za-z])[0-9]{12}(?![0-9A-Za-z])/.test(text), `${name}: no 12-digit AWS account id in a workflow file (use a repository variable)`);
     // Container images by digest only: a tag can be re-pointed under a green check.
     for (const [, image] of text.matchAll(/^[ \t]*image:[ \t]*(\S+)/gm)) need(/@sha256:[0-9a-f]{64}$/.test(image), `${name}: image ${image} must be pinned by digest`);
     // Python packages only with hashes, and only from the hashed file.
@@ -75,6 +83,15 @@ export function supplyChainProblems({ workflows, requirementsIn, requirementsTxt
   need(/trivy(-action)?/.test(rescan) && /exit-code: '1'/.test(rescan) && /severity: CRITICAL,HIGH/.test(rescan), 'rescan.yml must fail on a CRITICAL or HIGH finding in a fresh image');
   need(/pnpm audit --prod --audit-level high/.test(rescan), 'rescan.yml must audit the production dependencies');
   need(/timeout-minutes: \d+/.test(rescan), 'rescan.yml must have a time limit');
+
+  // The nightly browser suite on PostgreSQL: advisory like the rescan, and it must really run the suite on a database it built.
+  const storage = code(workflows['e2e-storage.yml'] ?? '');
+  need(/^on:\n {2}schedule:\n {4}- cron: '[^']+'[^\n]*\n {2}workflow_dispatch:\n(?! )/m.test(storage), 'e2e-storage.yml must run only on its schedule and by hand (never on push or pull_request, so it cannot gate a merge)');
+  need(/timeout-minutes: \d+/.test(storage), 'e2e-storage.yml must have a time limit');
+  need(/^concurrency:\n {2}group: e2e-storage\n {2}cancel-in-progress: false\n/m.test(storage), 'e2e-storage.yml must run one at a time and never cancel a run in progress (the emulator and browser ports are fixed)');
+  need(/^\s*run: pnpm --filter @telesphoros\/frontend e2e:storage\s*$/m.test(storage), 'e2e-storage.yml must run the e2e:storage suite');
+  need(/scripts\/e2e-storage\/provision\.sh/.test(storage), 'e2e-storage.yml must build its database with scripts/e2e-storage/provision.sh');
+  need(!/continue-on-error/.test(storage), 'e2e-storage.yml must not hide a failure with continue-on-error');
   return problems;
 }
 
@@ -86,7 +103,9 @@ test('every workflow meets the supply-chain rules (and the scan found the files:
 test('the supply-chain rules report each way the files could be weakened (controls)', () => {
   const ci = real.workflows['ci.yml'];
   const rescan = real.workflows['rescan.yml'] ?? '';
+  const storageYml = real.workflows['e2e-storage.yml'] ?? '';
   const pg = /image: (postgres:16@sha256:[0-9a-f]{64})/.exec(ci)?.[1] ?? 'postgres:16@sha256:missing';
+  const frontend = real.workflows['staging-frontend.yml'] ?? '';
   const weakened = [
     ['an unreviewed workflow', { workflows: { ...real.workflows, 'debug.yml': 'name: x\npermissions:\n  contents: read\n' } }],
     ['the diagnostic workflow restored', { workflows: { ...real.workflows, 'fixture-phase-capture.yml': 'name: x\npermissions:\n  contents: read\n' } }],
@@ -100,12 +119,22 @@ test('the supply-chain rules report each way the files could be weakened (contro
     ['the rescan no longer audits packages', { workflows: { ...real.workflows, 'rescan.yml': rescan.replace('pnpm audit --prod --audit-level high', 'pnpm audit --prod --audit-level critical') } }],
     ['the rescan never fails', { workflows: { ...real.workflows, 'rescan.yml': rescan.replace("exit-code: '1'", "exit-code: '0'") } }],
     ['the rescan action by tag', { workflows: { ...real.workflows, 'rescan.yml': rescan.replace(/actions\/checkout@[0-9a-f]{40}/, 'actions/checkout@v7') } }],
+    ['the nightly browser suite runs on pull requests (a merge gate)', { workflows: { ...real.workflows, 'e2e-storage.yml': storageYml.replace('  workflow_dispatch:\n', '  workflow_dispatch:\n  pull_request:\n') } }],
+    ['the nightly browser suite no longer runs the suite', { workflows: { ...real.workflows, 'e2e-storage.yml': storageYml.replace('e2e:storage\n', 'e2e\n') } }],
+    ['the nightly browser suite hides its failure', { workflows: { ...real.workflows, 'e2e-storage.yml': storageYml.replace('    timeout-minutes: 30\n', '    timeout-minutes: 30\n    continue-on-error: true\n') } }],
+    ['the nightly browser suite has no time limit', { workflows: { ...real.workflows, 'e2e-storage.yml': storageYml.replace('    timeout-minutes: 30\n', '') } }],
+    ['the nightly browser suite may be cancelled by the next run', { workflows: { ...real.workflows, 'e2e-storage.yml': storageYml.replace('cancel-in-progress: false', 'cancel-in-progress: true') } }],
+    ['the nightly browser suite builds no database', { workflows: { ...real.workflows, 'e2e-storage.yml': storageYml.replace('scripts/e2e-storage/provision.sh', 'true') } }],
+    ['the nightly browser suite may write', { workflows: { ...real.workflows, 'e2e-storage.yml': storageYml.replace('permissions:\n  contents: read\n', 'permissions:\n  contents: read\n  issues: write\n') } }],
     ['the rescan may write', { workflows: { ...real.workflows, 'rescan.yml': rescan.replace('permissions:\n  contents: read\n', 'permissions:\n  contents: read\n  issues: write\n') } }],
     ['a package without a hash', { requirementsTxt: real.requirementsTxt.replace(/(\nmoto==[^\n]+) \\\n(\s+--hash=sha256:[0-9a-f]{64} \\\n)+/, '$1\n') }],
     ['a package by range', { requirementsTxt: real.requirementsTxt.replace(/\nmoto==/, '\nmoto>=') }],
     ['a hand-edited requirements file', { requirementsTxt: real.requirementsTxt.replace('uv pip compile requirements.in --generate-hashes', 'pip freeze') }],
     ['the emulator by range', { requirementsIn: real.requirementsIn.replace(/moto\[server\]==/, 'moto[server]>=') }],
-    ['Dependabot stops watching the Dockerfiles', { dependabot: real.dependabot.replace(/  - package-ecosystem: docker\n/, '  - package-ecosystem: dockerx\n') }],
+    ['the OIDC job installs packages', { workflows: { ...real.workflows, 'staging-frontend.yml': frontend.replace('      - name: The downloaded bundle is the one build packed\n', '      - run: pnpm install --frozen-lockfile\n      - name: The downloaded bundle is the one build packed\n') } }],
+    ['the OIDC job sets up pnpm', { workflows: { ...real.workflows, 'staging-frontend.yml': frontend.replace('      - name: The downloaded bundle is the one build packed\n', '      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0\n      - name: The downloaded bundle is the one build packed\n') } }],
+    ['an account id in a workflow', { workflows: { ...real.workflows, 'staging-frontend.yml': frontend.replace('allowed-account-ids: ${{ vars.STAGING_FRONTEND_ACCOUNT_ID }}', "allowed-account-ids: '123456789012'") } }],
+    ['Dependabot stops watching the Dockerfiles',{ dependabot: real.dependabot.replace(/  - package-ecosystem: docker\n/, '  - package-ecosystem: dockerx\n') }],
   ];
   for (const [name, change] of weakened) {
     const copy = { ...real, ...change };
