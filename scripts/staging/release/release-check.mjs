@@ -51,7 +51,7 @@ export function problems(mode, plan, oldImage, newImage) {
   const v = (k) => plan.variables?.[k]?.value;
   need(v('deployment_profile') === 'synthetic' && v('environment') === 'staging' && v('region') === 'us-east-2', 'only the us-east-2 staging/synthetic profile');
   for (const [k, want] of Object.entries(shape.vars(oldImage, newImage))) need(v(k) === want, `${k} must be the ${want === newImage && mode !== 'INFRA' ? 'NEW' : 'OLD'} image`);
-  for (const d of plan.resource_drift ?? []) if (canonical(d.change?.actions) !== canonical(['no-op']) && !harmlessDrift(d)) out.push(`${d.address}: drift needs review`);
+  for (const d of plan.resource_drift ?? []) if (canonical(d.change?.actions) !== canonical(['no-op']) && !harmlessDrift(d, plan)) out.push(`${d.address}: drift needs review`);
 
   const changes = plan.resource_changes.filter((c) => !['["no-op"]', '["read"]'].includes(canonical(c.change?.actions)));
   const seen = new Set();
