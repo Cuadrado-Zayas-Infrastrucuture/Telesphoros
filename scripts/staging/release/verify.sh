@@ -75,7 +75,9 @@ echo "   telesphoros-staging alarms: $(aws cloudwatch describe-alarms --alarm-na
 
 echo "== 4. Ledger full check since the $MODE plan (API log group, counts only)"
 API_LOG_GROUP=$(tf_out api_log_group) || fail "cannot read api_log_group"
-START=$(( ($(stat -f %m "$SINCE") - 60) * 1000 ))
+# The plan's mtime through node: BSD stat's format flag means "file system" to GNU stat (CI runs Linux).
+PLANNED=$(node -e 'console.log(Math.floor(require("fs").statSync(process.argv[1]).mtimeMs / 1000))' "$SINCE") || fail "cannot read when the $MODE plan was made"
+START=$(( (${PLANNED:-0} - 60) * 1000 ))
 LEDGER=$(aws logs filter-log-events --log-group-name "$API_LOG_GROUP" --start-time "$START" --filter-pattern '{ $.event = "ledger-full-check-completed" }' \
   --query 'events[].message' --output json </dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const m=JSON.parse(s||"[]").map(x=>{try{return JSON.parse(x)}catch{return {}}});console.log(m.length+" run(s); tenantsChecked: "+m.map(x=>x.tenantsChecked).join(","))})')
 echo "   $LEDGER"
