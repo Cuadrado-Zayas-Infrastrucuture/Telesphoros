@@ -14,7 +14,8 @@
 # Live values come from a private file outside the repository, ~/telesphoros-private/staging/stack.env (override with STACK_ENV):
 #   STAGING_ACCOUNT_ID   the staging account (12 digits)          BACKEND_CLONE   the founder's backend clone (on main)
 #   TERRAFORM            the pinned Terraform 1.16.5 binary       TF_DATA_DIR     the backend's data directory
-#   STAGING_VAR_FILE     the canonical var file (optional here; without it the plan row is "not run")
+# The plan reads the same var file as every release step, ~/telesphoros-private/staging/current.tfvars (scripts/staging/release/lib.sh),
+# and only while it matches its recorded current.tfvars.sha256; otherwise the plan row is "not run". STAGING_VAR_FILE is no longer read.
 # Docs: docs/ops/environments.md, specs/027-staging-freshness/.
 set -euo pipefail
 umask 077
@@ -23,6 +24,7 @@ die() { echo "staging-status: $*" >&2; exit 2; }
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PRIVATE="${PRIVATE_DIR:-$HOME/telesphoros-private}"
 STACK_ENV="${STACK_ENV:-$PRIVATE/staging/stack.env}"
+CURRENT="$PRIVATE/staging/current.tfvars"
 [ -f "$STACK_ENV" ] || die "no $STACK_ENV (see the header of this script)"
 # shellcheck source=/dev/null
 . "$STACK_ENV"
@@ -100,15 +102,17 @@ echo "== state and plan"
 "$TERRAFORM" -chdir="$TFDIR" state pull </dev/null 2>/dev/null | node "$MJS" project-state > "$WORK/state.json" 2>/dev/null || echo '{}' > "$WORK/state.json"
 PLAN_EXIT=null; PLAN_WHY=""
 UNBUILT=$(unbuilt_lambda)
-if [ -z "${STAGING_VAR_FILE:-}" ] || [ ! -f "$STAGING_VAR_FILE" ]; then
-  PLAN_WHY="no canonical var file (STAGING_VAR_FILE)"
+if [ ! -f "$CURRENT" ] || [ ! -f "$CURRENT.sha256" ]; then
+  PLAN_WHY="no canonical var file (current.tfvars with its .sha256)"
+elif [ "$(shasum -a 256 "$CURRENT" | cut -c1-64)" != "$(cut -c1-64 "$CURRENT.sha256")" ]; then
+  PLAN_WHY="current.tfvars does not match its recorded sha256 (edited by hand)"
 elif [ -n "$UNBUILT" ]; then
   PLAN_WHY="the $UNBUILT Lambda is not built for this checkout (plan.sh builds it)"
 elif pgrep -f 'terraform.*(apply|plan|import|untaint)' >/dev/null; then
   PLAN_WHY="another terraform process is running"
 else
   set +e
-  "$TERRAFORM" -chdir="$TFDIR" plan -input=false -no-color -lock=false -detailed-exitcode -var-file="$STAGING_VAR_FILE" -out="$WORK/status.tfplan" </dev/null > "$WORK/plan.log" 2>&1
+  "$TERRAFORM" -chdir="$TFDIR" plan -input=false -no-color -lock=false -detailed-exitcode -var-file="$CURRENT" -out="$WORK/status.tfplan" </dev/null > "$WORK/plan.log" 2>&1
   PLAN_EXIT=$?
   set -e
   if [ "$PLAN_EXIT" = 2 ]; then "$TERRAFORM" -chdir="$TFDIR" show -json "$WORK/status.tfplan" </dev/null | node "$MJS" project-plan > "$WORK/changes" || PLAN_EXIT=1; fi
