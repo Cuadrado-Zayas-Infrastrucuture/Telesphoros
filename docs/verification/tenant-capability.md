@@ -301,3 +301,37 @@ Each mutant was applied to `apps/backend/migrations/0032_tenant_binding_policies
 - T023: the patients policy's capability read is an InitPlan (checked with the capability presented).
 
 **Still open:** the Gitleaks scan (refused by the worktree guard), the full backend suite under real capabilities in `dual` mode (G6/R8), operator redaction under capability mode (G1, slice 5), and the staging D4 and D7 evidence.
+
+## Slice 4: the access-audit writer stores verified identity (T027, T028, migration 0072), 2026-11-06 (local)
+
+Decision D6. `security_audit_events` gains `verified_tenant_id` and `verified_actor_sub`. The existing `tenant_id` and `actor_sub` become the claimed identity. `security_audit_record` fills the verified columns from `security_audit_capability()`.
+- That function is owned by `telesphoros_capability` and callable by `telesphoros_ledger` only.
+- It answers only for a current, unrevoked capability, and never falls back to the settings.
+- `Database.recordSecurityEvent` binds the request's capability in the same statement and leaves `capabilityStats` alone.
+
+The class (a) row above for `security_audit_record` ("neither: tenant and actor are plain parameters") describes 0016. Since 0072 the parameters are the claim and the verified identity comes from the capability.
+
+**Test first.** `test/db/audit-verified-identity.pg-spec.ts`, 13 tests: 12 failed before the migration (no verified columns) and 1 passed (the capability counts were not yet touched by the writer). They cover, in `dual` and `capability` mode:
+- a capability for org-alpha/alice with an org-beta/mallory claim stores alice as verified and mallory as claimed;
+- no capability, an expired capability and a revoked capability each store NULL verified fields and still write the row;
+- forged settings with no capability verify nothing;
+- the audit write leaves `capabilityStats` unchanged;
+- the application login cannot call the lookup (`42501`);
+- the down migration refuses while verified rows exist and reverts only with `telesphoros.allow_audit_drop=yes`.
+
+**Mutants, each run once and restored:**
+
+| Mutant | Result |
+| --- | --- |
+| writer ignores the capability | red: 3 failed |
+| writer reads `app_tenant()`/`app_actor()` (settings fallback) | red: 1 failed (forged settings, `dual`) |
+| lookup ignores expiry | red: 2 failed |
+| lookup ignores revocation | red: 2 failed |
+| lookup granted to `telesphoros_app` | red: 1 failed |
+| down migration drops verified evidence without the setting | red: 1 failed |
+| API does not bind the capability for the audit write | red: 3 failed |
+| API counts audit writes in `capabilityStats` | red: 1 failed |
+
+**Found on the way.** The first `down` read the table as the migrator login, which has no read access; 28 tests in `down-guards-as-migrator.pg-spec.ts` failed. The check now runs as `telesphoros_ledger`. The 0031 revert snapshot in `tenant-capability.pg-spec.ts` lists the new function with the others removed above 0031.
+
+**Not covered.** The `api-auth` `accepted` row is written before the guard asks for a capability, so it never has a verified identity; this is documented, not changed. Nothing was run in AWS, and staging has no issuer, so verified fields stay NULL there.

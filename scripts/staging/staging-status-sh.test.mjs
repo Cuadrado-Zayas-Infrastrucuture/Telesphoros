@@ -31,8 +31,9 @@ stub('aws', `case "$*" in
 esac`);
 // Only the real readiness path answers 200 (apps/backend/src/health/health.controller.ts, GET /api/v1/ready); any other URL is a 404.
 stub('curl', 'case "$*" in *https://api.staging.telesphoros.app/api/v1/ready*) printf 200 ;; *) printf 404 ;; esac');
+// STUB_TF_SLOW: write more lines after a pause, as a Terraform that checks for updates does (the reader may have stopped by then).
 stub('terraform', `case "$*" in
-  version) echo "Terraform v1.16.5" ;;
+  version) echo "\${STUB_TF_VERSION:-Terraform v1.16.5}"; if [ -n "\${STUB_TF_SLOW:-}" ]; then sleep 0.2; echo "on darwin_arm64"; echo "Your version of Terraform is out of date!"; fi ;;
   *state\\ pull*) echo '{"version":4,"serial":42,"lineage":"l-1","outputs":{"x":{"value":"SENTINEL-STATE"}}}' ;;
   *show\\ -json*) echo '{"resource_changes":[{"address":"aws_cloudfront_distribution.web[0]","change":{"actions":["update"],"after":{"x":"SENTINEL-PLAN"}}}]}' ;;
   *\\ plan\\ *) echo "SENTINEL-PLAN-LOG"; exit "$STUB_PLAN_EXIT" ;;
@@ -109,6 +110,15 @@ test('each kind of staleness fails the run and is named', () => {
   assert.match(late.stdout, /merged after the applied commit, under infrastructure\/terraform\/: 1\n {2}[0-9a-f]+ Merge pull request #999/);
   git(clone, 'reset', '-q', '--hard', 'HEAD~1');
   git(clone, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+});
+
+test('the Terraform version check reads the whole output: a binary still writing after the first line passes, another version stops', () => {
+  stackEnv();
+  const slow = run({ STUB_TF_SLOW: '1' });
+  assert.equal(slow.status, 0, slow.stdout + slow.stderr);
+  const other = run({ STUB_TF_VERSION: 'Terraform v1.15.0' });
+  assert.equal(other.status, 2);
+  assert.match(other.stderr, /TERRAFORM is not 1\.16\.5/);
 });
 
 test('a missing var file, a wrong account and a missing stack.env stop or fail the run, never pass it', () => {

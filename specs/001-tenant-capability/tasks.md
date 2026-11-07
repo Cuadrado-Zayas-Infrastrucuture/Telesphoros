@@ -72,8 +72,9 @@
 
 ## Phase 5: Slice 4, the audit writer stores verified identity (US2) — needs D6
 
-- [ ] T027 [US2] Test first: under alice's org-alpha capability, calling the writer with org-beta/mallory stores verified org-alpha/alice and keeps the claim only in the unverified columns. With no capability, the verified fields are NULL and the row is still written
-- [ ] T028 [US2] Migration: add the verified and claimed columns to `security_audit_events` (`expand`). Redefine `security_audit_record` to derive identity from `app_tenant()`/`app_actor()` (`breaking`). `Database.recordSecurityEvent` (`database.ts:131-135`) is unchanged at its call sites
+- [x] T027 [US2] Test first: under alice's org-alpha capability, calling the writer with org-beta/mallory stores verified org-alpha/alice and keeps the claim only in the unverified columns. With no capability, the verified fields are NULL and the row is still written
+- [x] T028 [US2] Migration: add the verified and claimed columns to `security_audit_events` (`expand`). Redefine `security_audit_record` to derive identity from `app_tenant()`/`app_actor()` (`breaking`). `Database.recordSecurityEvent` (`database.ts:131-135`) is unchanged at its call sites
+  - Built 2026-11-06 as migration 0072 (`breaking`, one file). Two departures, each so that settings never count as verification. First, the existing `tenant_id`/`actor_sub` are the claimed columns and only the two `verified_*` columns are new. Second, identity comes from `security_audit_capability()`, a capability-only lookup, because `app_tenant()`/`app_actor()` fall back to the settings in `dual` mode and `app_tenant()` drops a suspended organization. `recordSecurityEvent` binds the request's capability in the same statement; its call sites are unchanged.
 
 ## Phase 6: Slice 5, enforce (US1, US2) — needs D4, D7, D8
 
