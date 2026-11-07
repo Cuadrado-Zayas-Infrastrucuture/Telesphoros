@@ -131,8 +131,8 @@ describe('vocabulary (frozen: see docs/design/outcomes-and-reason-codes.md)', ()
 
   it('the held and abstained codes are all in the precedence list, and nothing else is', () => {
     const needsPrecedence = REASON_CODES.filter((code) => REASON_OUTCOME[code] === 'held' || REASON_OUTCOME[code] === 'abstained');
-    // out-of-review-scope and cell-disputed belong to a CELL, not to a gene, so they never compete with gene problems.
-    const cellLevel = ['out-of-review-scope', 'cell-disputed'];
+    // out-of-review-scope, cell-disputed and knowledge-gap belong to a CELL (or its absence), not to a gene, so they never compete with gene problems.
+    const cellLevel = ['out-of-review-scope', 'cell-disputed', 'knowledge-gap'];
     expect([...REASON_PRECEDENCE].sort()).toEqual(needsPrecedence.filter((c) => !cellLevel.includes(c)).sort());
     expect(REASON_PRECEDENCE[REASON_PRECEDENCE.length - 1]).toBe('association-abstained'); // holds win over abstention
   });
@@ -174,6 +174,7 @@ describe('vocabulary (frozen: see docs/design/outcomes-and-reason-codes.md)', ()
       'allele-not-in-definitions': 'held',
       'no-phenotype-mapping': 'held',
       'no-gene-definition': 'held',
+      'knowledge-gap': 'held',
       'association-abstained': 'abstained',
       'no-published-recommendation': 'no-published-recommendation',
       'no-guideline-for-drug': 'no-guideline',
@@ -684,5 +685,44 @@ describe('schema 1.3 identifiers and origin (spec 033 K2)', () => {
     expect(guidelineFileSchema.safeParse({ ...realFile(guideline13(), { rxcui: REAL.rxcui, recommendations: unknownCells }), review: { status: 'unreviewed' } }).success).toBe(
       true,
     ); // draft
+  });
+});
+
+describe('cells a guideline marks as not covered (audit DATA-01)', () => {
+  const combined13 = (over: Record<string, unknown> = {}) => ({
+    ...combined(),
+    schemaVersion: '1.3',
+    rxcui: 'syn-rxcui-drugx',
+    recommendations: combined().recommendations.map((row) => ({ ...row, origin: 'cpic' })),
+    ...over,
+  });
+  const gap = (when: Record<string, string>, note = 'Not addressed by the published table.') => ({ when, note });
+
+  it('a 1.3 guideline may sign a combination it has no cell for as not covered, and parses to exactly its input', () => {
+    const file = combined13({ notCovered: [gap({ GENEA: 'Poor', GENEB: 'Slow' })] });
+    const parsed = guidelineFileSchema.safeParse(file);
+    expect(parsed.error?.issues ?? []).toEqual([]);
+    expect(parsed.data).toStrictEqual(file);
+  });
+
+  it('a 1.2 guideline may not carry the marker', () => {
+    expect(issuesOf(guidelineFileSchema, { ...combined(), notCovered: [gap({ GENEA: 'Poor', GENEB: 'Slow' })] })).toContain(
+      'notCovered: Not part of schema 1.2: declare schemaVersion "1.3" to use it.',
+    );
+  });
+
+  it("a marker names a phenotype for exactly the guideline's genes, once, and never a combination that has a cell", () => {
+    expect(issuesOf(guidelineFileSchema, combined13({ notCovered: [gap({ GENEA: 'Poor' })] })).join('|')).toContain(
+      'notCovered.0.when: A marker must give a phenotype for exactly',
+    );
+    const twice = combined13({ notCovered: [gap({ GENEA: 'Poor', GENEB: 'Slow' }), gap({ GENEB: 'Slow', GENEA: 'Poor' })] });
+    expect(issuesOf(guidelineFileSchema, twice).join('|')).toContain('notCovered.1.when: This combination of phenotypes appears more than once.');
+    const overlaps = combined13({ notCovered: [gap({ GENEA: 'Normal', GENEB: 'Fast' })] });
+    expect(issuesOf(guidelineFileSchema, overlaps).join('|')).toContain('notCovered.0.when: This combination has a cell; it cannot also be marked not covered.');
+  });
+
+  it('a marker needs a note, and an empty list is refused rather than read as "complete"', () => {
+    expect(guidelineFileSchema.safeParse(combined13({ notCovered: [{ when: { GENEA: 'Poor', GENEB: 'Slow' } }] })).success).toBe(false);
+    expect(guidelineFileSchema.safeParse(combined13({ notCovered: [] })).success).toBe(false);
   });
 });
