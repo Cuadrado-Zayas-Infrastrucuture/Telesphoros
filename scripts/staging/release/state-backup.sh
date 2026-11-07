@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Encrypted backup of the staging Terraform state after a release (spec 027, PR 3b). Founder-run; changes nothing in AWS.
-#   scripts/staging/release/state-backup.sh BACKUP COMMIT
-# One run at a time (a lock). The expected address count comes from the IMAGE plan's own prior state plus its creates minus its deletes (data
-# sources count); a flag apply after it replaces the API task definition one for one, so the count still holds. The written state's serial must
-# be newer than the one recorded with the IMAGE plan, and the live state must match it by an ORDER-FREE JSON hash (`state pull` is not
+#   scripts/staging/release/state-backup.sh BACKUP COMMIT          after a release (MIGRATE and IMAGE applied)
+#   scripts/staging/release/state-backup.sh BACKUP COMMIT INFRA    after an INFRA apply alone
+# One run at a time (a lock). The expected address count comes from that plan's own prior state plus its creates minus its deletes, plus the
+# data sources it reads for the first time (Terraform keeps those in the state too: the 2026-11-07 INFRA apply went 244 -> 255 with 10 creates
+# and one new data source). A flag apply after an IMAGE apply replaces the API task definition one for one, so the count still holds. The
+# written state's serial must be newer than the one recorded with that plan, and the live state must match it by an ORDER-FREE JSON hash (`state pull` is not
 # byte-stable). The state holds secrets: it is written ONLY inside the encrypted volume, and nothing here prints it.
 # hdiutil asks for a NEW passphrase (create), then again (attach), then once more (read-only re-open). Save it before the third prompt.
 # The image lands in ~/telesphoros-private/tfstate-backup-<day>-<commit8>.dmg; the Drive copy and its round trip come next, by hand. A run
@@ -12,8 +14,15 @@ set -euo pipefail
 umask 077
 # shellcheck source=scripts/staging/release/lib.sh
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
-[ "${1:-}" = BACKUP ] || die "usage: state-backup.sh BACKUP COMMIT (BACKUP confirms that this writes the state into a new encrypted image)"
+USAGE="usage: state-backup.sh BACKUP COMMIT [IMAGE|INFRA] (BACKUP confirms that this writes the state into a new encrypted image)"
+[ "${1:-}" = BACKUP ] || die "$USAGE"
 COMMIT="${2:-}"
+KIND="${3:-IMAGE}"
+case "$KIND" in
+  IMAGE) T=i; LOGS=(m i); WHICH="the MIGRATE and IMAGE apply logs of this release are" ;;
+  INFRA) T=x; LOGS=(x); WHICH="the INFRA apply log of this release is" ;;
+  *) die "$USAGE" ;;
+esac
 release_folder "$COMMIT"
 load_stack
 DAY=$(date +%Y-%m-%d)
@@ -32,22 +41,30 @@ const sum=(b)=>{const j=JSON.parse(b);return [j.serial,String(j.lineage).slice(0
 echo "== 1. Preconditions"
 [ ! -e "$IMG" ] || die "$IMG already exists"
 [ ! -e "$MNT" ] || die "$MNT exists: tell Claude"
-if ! { grep -qx '== apply exit status: 0' "$OUT/m-apply.txt" 2>/dev/null && grep -qx '== apply exit status: 0' "$OUT/i-apply.txt" 2>/dev/null; }; then
-  die "the MIGRATE and IMAGE apply logs of this release are missing or not clean"
-fi
-FLOOR=$(node -e 'const s=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).serial;if(!Number.isInteger(s))process.exit(3);console.log(s)' "$OUT/i.tfplan.meta.json") \
-  || die "no state serial in the IMAGE plan's record (i.tfplan.meta.json)"
+for l in "${LOGS[@]}"; do
+  grep -qx '== apply exit status: 0' "$OUT/$l-apply.txt" 2>/dev/null || die "$WHICH missing or not clean"
+done
+FLOOR=$(node -e 'const s=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).serial;if(!Number.isInteger(s))process.exit(3);console.log(s)' "$OUT/$T.tfplan.meta.json") \
+  || die "no state serial in the $KIND plan's record ($T.tfplan.meta.json)"
 gate_quiet
 gate_identity
 EXPECT=$(node -e '
 const p = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
 const count = (m) => (m?.resources ?? []).length + (m?.child_modules ?? []).reduce((n, c) => n + count(c), 0);
-let add = 0, del = 0;
-for (const rc of p.resource_changes ?? []) { const a = rc.change.actions; if (a.includes("create")) add++; if (a.includes("delete")) del++; }
-console.log(count(p.prior_state?.values?.root_module) + add - del);' "$OUT/i.plan.json") || die "cannot read i.plan.json"
+const prior = new Set();
+const walk = (m) => { for (const r of m?.resources ?? []) prior.add(r.address); for (const c of m?.child_modules ?? []) walk(c); };
+walk(p.prior_state?.values?.root_module);
+let add = 0, del = 0, read = 0;
+for (const rc of p.resource_changes ?? []) {
+  const a = rc.change.actions;
+  if (a.includes("create")) add++;
+  if (a.includes("delete")) del++;
+  if (a.length === 1 && a[0] === "read" && !prior.has(rc.address)) read++; // a data source read for the first time is kept in the state
+}
+console.log(count(p.prior_state?.values?.root_module) + add - del + read);' "$OUT/$T.plan.json") || die "cannot read $T.plan.json"
 LIST=$("$TERRAFORM" -chdir="$TFDIR" state list </dev/null) || die "state list failed"
 COUNT=$(printf '%s\n' "$LIST" | grep -c .)
-echo "live: $COUNT addresses; expected from the IMAGE plan: $EXPECT"
+echo "live: $COUNT addresses; expected from the $KIND plan: $EXPECT"
 [ "$COUNT" = "$EXPECT" ] || die "expected $EXPECT addresses, found $COUNT: the state moved; tell Claude"
 echo ok
 
@@ -63,7 +80,7 @@ read -r ISERIAL ILIN IBYTES ICANON <<<"$(node -e "$SUM"'console.log(sum(require(
 hdiutil detach "$MNT" -quiet || die "detach failed"
 rmdir "$MNT"
 echo "written: serial $ISERIAL, lineage $ILIN..., $IBYTES bytes, order-free sha256 $ICANON"
-[ "$ISERIAL" -gt "$FLOOR" ] || die "serial $ISERIAL is not newer than the $FLOOR recorded with the IMAGE plan"
+[ "$ISERIAL" -gt "$FLOOR" ] || die "serial $ISERIAL is not newer than the $FLOOR recorded with the $KIND plan"
 
 echo "== 4. Same content as the live state? (one more pull, summarized in memory)"
 read -r LSERIAL LLIN LBYTES LCANON <<<"$("$TERRAFORM" -chdir="$TFDIR" state pull </dev/null | node -e "$SUM"'let s="";process.stdin.setEncoding("utf8");process.stdin.on("data",d=>s+=d).on("end",()=>console.log(sum(s)))')"

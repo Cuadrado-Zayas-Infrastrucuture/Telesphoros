@@ -4,7 +4,7 @@ This page is the one place that says what exists outside a developer's machine. 
 is deployed". Dated records (`docs/status/`, `docs/verification/`, `docs/design/plans/`, `CHANGELOG.md`, the dated sections of
 [STATUS.md](../STATUS.md)) keep the wording of their own date and are not rewritten.
 
-**Last checked against AWS: 2026-10-31**, read-only, by the commands at the end of this page. A pull request that changes what is applied
+**Last checked against AWS: 2026-11-07**, read-only, by the commands at the end of this page. A pull request that changes what is applied
 updates this page in the same pull request.
 
 | Environment | Exists | Data | Where |
@@ -24,14 +24,16 @@ the issuer's three log alarms, #210), then `main` `299efbb3` the same evening (s
 migrations 0066 to 0070, then the synthetic assessment switched on (`ASSESSMENT-ON`, spec 032 S3); that night an `INFRA` apply from `d5a1a7fb`
 gave the intake its multipart listing (#288). On 2026-11-06 `main` `661512c9`: the image with a writable `/tmp` for upload staging (#289),
 migration 0071 (spec 033 slice 1), the frontend with unfinished uploads (#290) and the new sidebar (#291), then one rehearsal of the
-assessment kill switch (`ASSESSMENT-OFF` and back on). No CI job holds cloud credentials or applies anything.
+assessment kill switch (`ASSESSMENT-OFF` and back on). On 2026-11-07 an `INFRA` apply from `main` `01325995` added the daily freshness check
+(spec 027 PR 4, #304; the plan built both Lambdas first, #303): no image, task definition or migration changed. No CI job holds cloud
+credentials or applies anything.
 
-The last apply read the backend clone at, and so applied from `main` `661512c9` (the 2026-11-06 release): anything merged after it under `infrastructure/terraform/` is not
+The last apply read the backend clone at, and so applied from `main` `01325995` (the 2026-11-07 `INFRA` apply): anything merged after it under `infrastructure/terraform/` is not
 applied until a release says so here. The values in the table below are kept as data in
 [staging-expected.json](staging-expected.json) (spec 027); a guard in `pnpm test:ci-config` fails when this page and that file disagree, so change
 both in the same pull request.
 
-| Piece | What runs (read 2026-11-06) | What production adds or changes |
+| Piece | What runs (read 2026-11-07) | What production adds or changes |
 | --- | --- | --- |
 | API | ECS Fargate service `telesphoros-staging-api` on cluster `telesphoros-staging-api`: 1 task, task definition revision 11, image `sha256:7f3ee46a91e8…` (commit `661512c9`, pushed by hand; see "Break-glass" in [ci-cd.md](ci-cd.md)), `NODE_ENV=production`. Patient name and date of birth are encrypted under a KMS data key per patient; the task's key policy only allows calls with a `{tenant, patient}` encryption context. `MEDICATION_WRITES=disabled` (medication recording answers with a fixed pause message) and `SYNTHETIC_ASSESSMENT=enabled` (next row) | At least 2 tasks; only images signed in CI |
 | Worker | Service `telesphoros-staging-worker`, 1 task (task definition revision 6), the same image. It runs the upload sweep and stale-file checks, and since 2026-10-31 removes expired tenant capabilities every minute (its first run removed the 73 that had accumulated; [jobs.md](jobs.md)) | |
@@ -43,7 +45,8 @@ both in the same pull request.
 | Sign-in | Cognito user pool `telesphoros-staging` (invite only, authenticator-app MFA required); mail through SES | |
 | Report files | Versioned S3 bucket with Object Lock in **GOVERNANCE** mode, 1-day default retention, no replication | Object Lock **COMPLIANCE** (`profile.tf` precondition) |
 | Audit trail | CloudTrail `telesphoros-staging-audit`, logging, **single Region**. It records every object read and write in the reports bucket, and deletes and lock changes in the audit bucket. The audit bucket has Object Lock in GOVERNANCE mode with 1-day retention ([audit-trail.md](audit-trail.md)) | A multi-Region trail and COMPLIANCE lock |
-| Alarms | 34 CloudWatch alarms into SNS topic `telesphoros-staging-audit-alarms`, which has **1 confirmed email subscription**. Includes `ledger-compromised` ([ledger-watch.md](ledger-watch.md)), the audit alarms, the database alarms and the worker alarms. The three capability-sweep alarms (failing, stale, behind; #216) were applied on 2026-10-31 once the sweep ran, and each was fired once on purpose that evening: CloudWatch ran every notification and all three returned to OK. No other alarm has been fired on purpose yet | Paging to an on-call person |
+| Alarms | 36 CloudWatch alarms into SNS topic `telesphoros-staging-audit-alarms`, which has **1 confirmed email subscription**. Includes `ledger-compromised` ([ledger-watch.md](ledger-watch.md)), the audit alarms, the database alarms, the worker alarms and, since 2026-11-07, the freshness check's two (`freshness-check-missed`, `freshness-check-failing`; next row). The three capability-sweep alarms (failing, stale, behind; #216) were applied on 2026-10-31 once the sweep ran, and each was fired once on purpose that evening: CloudWatch ran every notification and all three returned to OK. No other alarm has been fired on purpose yet | Paging to an on-call person |
+| Freshness check | Lambda `telesphoros-staging-staging-freshness`, daily at 12:00 UTC, read-only except for one message: it compares this table's facts with ECS, CloudWatch, CloudFront, the API's readiness and GitHub, and emails the alarm topic when anything differs or a read fails ([staging-freshness.md](staging-freshness.md)). Invoked once by hand on 2026-11-07, before this page's update: complete, 2 findings, no refused read. Later that day each kind of email was caused once on purpose and arrived (spec 027 T017): a finding (one extra alarm), an incomplete run (a denied read), and the `freshness-check-failing` alarm (a denied publish); each was put back and `staging-status` stayed clean ([staging-freshness.md](staging-freshness.md), "Rehearsing it") | |
 | Terraform state | Versioned S3 state bucket in `us-east-2` ([terraform-state.md](terraform-state.md)) | |
 
 **Not created, or not readable from the account.**
@@ -65,12 +68,14 @@ both in the same pull request.
 | [break-glass.md](break-glass.md) | Never | The role does not exist |
 | [ledger-watch.md](ledger-watch.md) | Alarm exists in staging | Never fired on purpose |
 | [terraform-state.md](terraform-state.md) | Bootstrap applied (the bucket exists) | State recovery never drilled |
+| [staging-freshness.md](staging-freshness.md) | Staging, 2026-11-07 | Applied, invoked by hand, and a finding, a refused read and a failed publish each caused once on purpose (T017). `freshness-check-missed` not yet seen |
 
 ## Checking it again (read-only)
 
 **Before planning anything against staging**, run `scripts/staging/staging-status.sh` (founder-run, read-only; spec 027). It compares
 live staging with `docs/ops/staging-expected.json` on `origin/main`, runs `terraform plan -lock=false -detailed-exitcode` on the backend
-clone, lists the Terraform merged after the applied commit, marks saved plans made at another state serial as stale, and shows who holds
+clone, lists the Terraform merged after the applied commit, marks saved plans made at another state serial as stale (one already applied
+with exit 0 is listed as applied and does not count: `apply.sh` never runs a plan twice; a failed apply does count), and shows who holds
 the stack claim. It prints identifiers and counts, never a state, plan or variable value, and exits 0 only when there is nothing to do.
 A plan for staging quotes its table; a session that has not seen it does not know what staging runs. Its live values (the account, the
 clone, the Terraform binary and data directory, the canonical var file) come from the private `~/telesphoros-private/staging/stack.env`,

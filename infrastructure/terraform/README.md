@@ -136,7 +136,9 @@ objectives for the managed database as **unproven** until a restore drill has be
 `cognito.tf` and `lambda.tf` add: an **invite-only** user pool (MFA required, authenticator app only, 15-character
 passwords, email-only recovery), the `reader`/`clinician`/`admin` groups (tenant groups, `tenant:<id>`, are created per organization by the runbook in `docs/auth.md`, not here), a **public** browser client (authorization
 code + PKCE, 15-minute tokens, revocation on, no user-enumeration hints), the sign-in domain, an SES sender, and the
-Lambda that emails the owner when a password is reset. Build the Lambda first:
+Lambda that emails the owner when a password is reset. A staging release plan builds every Lambda itself
+(`scripts/staging/release/lib.sh` `build_lambdas`); before any other plan, build it first, under umask 022 (the zip keeps
+each file's mode, and the function must be able to read it):
 
 ```bash
 pnpm --filter @telesphoros/password-change-notifier build   # produces infrastructure/lambda/password-change-notifier/dist

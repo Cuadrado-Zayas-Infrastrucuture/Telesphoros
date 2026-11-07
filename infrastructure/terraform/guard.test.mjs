@@ -19,6 +19,7 @@ import './worker.guard.test.mjs';
 import './issuer.guard.test.mjs';
 import './entrypoint.guard.test.mjs';
 import './logs.guard.test.mjs';
+import './freshness.guard.test.mjs';
 import './database-alarms.guard.test.mjs';
 import './database-connections.guard.test.mjs';
 import './signing.guard.test.mjs';
@@ -37,6 +38,8 @@ import '../../scripts/staging/release/release-scripts.test.mjs';
 import '../../scripts/staging/release/migration-pending.test.mjs';
 import '../../scripts/staging/release/release-steps.test.mjs';
 import '../../scripts/staging/release/release-after.test.mjs';
+import '../../scripts/staging/release/lambda-build.test.mjs';
+import './lambda-bundles.guard.test.mjs';
 
 const cognito = readFileSync(new URL('./cognito.tf', import.meta.url), 'utf8');
 const lambda = readFileSync(new URL('./lambda.tf', import.meta.url), 'utf8');
