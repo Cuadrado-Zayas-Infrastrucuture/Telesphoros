@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import { type Facts, run, type Sources } from './handler';
+import { type Facts, PublishError, run, type Sources } from './handler';
 
 const DIGEST = `sha256:${'d5'.repeat(32)}`;
 const FACTS: Facts = {
@@ -129,10 +129,22 @@ describe('staging freshness check', () => {
 
   it('an email that cannot be sent fails the invocation (the Errors alarm), and the run is not logged complete', async () => {
     const lines = logs();
-    const { s } = sources({ alarms: async () => 33, publish: async () => { throw new Error('KMSAccessDenied'); } });
-    await expect(run(s, NOW)).rejects.toThrow('KMSAccessDenied');
+    const denied = Object.assign(new Error('KMS denied'), { name: 'KMSAccessDeniedException' });
+    const { s } = sources({ alarms: async () => 33, publish: async () => { throw denied; } });
+    await expect(run(s, NOW)).rejects.toThrow('publish failed: KMSAccessDeniedException');
     expect(lines.some((l) => l.includes('outcome=complete'))).toBe(false);
     expect(lines).toContain('staging-freshness-ran outcome=incomplete findings=1 problems=1');
+  });
+
+  it('a failed publish throws the error class only, never its message, which names the role and the topic by ARN', async () => {
+    logs();
+    const message = 'User: arn:aws:sts::111122223333:assumed-role/SENTINEL-ROLE/x is not authorized to perform: SNS:Publish on resource: arn:aws:sns:us-east-2:111122223333:SENTINEL-TOPIC';
+    const denied = Object.assign(new Error(message), { name: 'AuthorizationErrorException' });
+    const { s } = sources({ alarms: async () => 33, publish: async () => { throw denied; } });
+    const thrown = await run(s, NOW).then(() => undefined, (e: unknown) => e);
+    expect(thrown).toBeInstanceOf(PublishError);
+    expect((thrown as Error).message).toBe('publish failed: AuthorizationErrorException');
+    expect(JSON.stringify(thrown, Object.getOwnPropertyNames(thrown as object))).not.toMatch(/arn:|SENTINEL|111122223333/);
   });
 
   it('every digest in the email is shortened, and control characters never get through', async () => {
