@@ -416,6 +416,10 @@ run "synthetic_hosting_on" {
     error_message = "the synthetic registry can be destroyed with images in it, and its tags are still immutable"
   }
   assert {
+    condition     = length(aws_lambda_function.staging_freshness) == 0 && length(aws_cloudwatch_metric_alarm.freshness_check_missed) == 0
+    error_message = "the freshness check needs the API and the web distribution: with web hosting off it does not exist"
+  }
+  assert {
     condition     = output.api_task_assign_public_ip == true && output.api_service_name == "telesphoros-staging-api"
     error_message = "the one-off tasks are told to take a public address under the synthetic profile (no NAT), and the service name is the documented one"
   }
