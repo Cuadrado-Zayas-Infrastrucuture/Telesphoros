@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Client } from 'pg';
 import { migrateDown, migrateUp } from '../../src/db/migrator';
 import { createEphemeralDatabase, type EphemeralDatabase, withAdmin } from '../helpers/database';
+import { revertThrough } from '../helpers/migration-history';
 import { migrationsThrough } from '../helpers/migrations-through';
 import { registerTenantRow } from '../helpers/membership';
 
@@ -315,6 +316,164 @@ describe('read and cancel no longer need the settings at all', () => {
   });
 });
 
+/**
+ * DATA-01 slice 5 readiness R2: the worker side checks the requester's membership from the run's own row, never through the tenant setting, so a
+ * worker step works in every binding mode, `capability` included, and still stops for a person whose membership changed. Driven by the real worker
+ * login: the run is admitted with a capability, claimed with agentic_synthetic_claim and loaded with agentic_synthetic_load.
+ */
+async function worker<T>(work: (c: Client) => Promise<T>): Promise<T> {
+  const c = new Client({ connectionString: db.workerUrl });
+  await c.connect();
+  try {
+    return await work(c);
+  } finally {
+    await c.end();
+  }
+}
+
+/**
+ * Claims this run's P2 job as `worker-r2` and loads the run, as the durable runner's first step does. Jobs other suites in this file left queued are
+ * deferred first, so the claim can only return this one.
+ */
+const claimAndLoad = async (runId: string) => {
+  await owner((c) =>
+    c.query(`UPDATE public.jobs SET run_after = now() + interval '1 day' WHERE type = 'test.agentic-synthetic' AND state = 'queued' AND payload ->> 'runId' <> $1`, [runId]),
+  );
+  return worker(async (c) => {
+    const { rows } = await c.query('SELECT * FROM public.agentic_synthetic_claim($1, $2)', ['worker-r2', 1]);
+    expect(rows).toHaveLength(1);
+    const row = rows[0];
+    const stamp = { jobId: row.id, runId: row.run_id, workerId: 'worker-r2', queueAttempt: Number(row.attempt), claimId: row.claim_id, fence: String(row.fence) };
+    const expected = { sequence: String(row.sequence), state: row.state };
+    return (await c.query('SELECT public.agentic_synthetic_load($1::jsonb, $2::jsonb) AS r', [JSON.stringify(stamp), JSON.stringify(expected)])).rows[0].r as Json;
+  });
+};
+
+describe.each(MODES)('the worker side, binding mode %s (R2)', (mode) => {
+  beforeAll(() => setMode(mode));
+  afterAll(() => setMode('guc'));
+
+  it('loads a run admitted for a current member', async () => {
+    const w = await world(`r2-${mode}`);
+    const runId = await admitted(w, `p2b/r2-${mode}`);
+    expect(await claimAndLoad(runId)).toMatchObject({ kind: 'ok', value: { runId } });
+    await settle(w, runId);
+  });
+
+  it('refuses the step once the requester is no longer a current member (control: the same step was allowed above)', async () => {
+    const w = await world(`r2-removed-${mode}`);
+    const runId = await admitted(w, `p2b/r2-removed-${mode}`);
+    await owner((c) => c.query(`UPDATE tenant_memberships SET status = 'removed', changed_by = 'test' WHERE tenant_id = $1 AND sub = $2`, [w.tenant, w.actor]));
+    expect(await claimAndLoad(runId)).toEqual(REFUSED);
+    await owner((c) => c.query(`UPDATE public.agentic_synthetic_reservations SET in_flight = false WHERE run_id = $1 AND NOT settled`, [runId]));
+  });
+});
+
+describe('the worker-side membership lookup (R2, migration 0073)', () => {
+  /** The lookup as its only grantee calls it (the owner enters the NOLOGIN role, as the worker's definer functions do), in `c`'s open transaction. */
+  const lookup = async (c: Client, tenant: string, sub: string, version: number) => {
+    await c.query('SET LOCAL ROLE telesphoros_jobs');
+    const ok = (await c.query('SELECT public.membership_current_in($1, $2, $3) AS ok', [tenant, sub, version])).rows[0].ok as boolean;
+    await c.query('RESET ROLE');
+    return ok;
+  };
+  const inTransaction = <T>(work: (c: Client) => Promise<T>) =>
+    owner(async (c) => {
+      await c.query('BEGIN');
+      try {
+        return await work(c);
+      } finally {
+        await c.query('ROLLBACK');
+      }
+    });
+
+  it('answers for an active member at that version of an active organization, and nothing else', async () => {
+    const w = await world('r2-lookup');
+    expect(await inTransaction((c) => lookup(c, w.tenant, w.actor, 1))).toBe(true); // control
+    expect(await inTransaction((c) => lookup(c, w.tenant, w.actor, 2))).toBe(false); // another version
+    expect(await inTransaction((c) => lookup(c, w.tenant, 'mallory', 1))).toBe(false); // not a member
+    // A row that is not active at the very version asked for. A removal through the guard also moves the version, so only a row written this way
+    // shows that status is checked on its own.
+    await owner((c) =>
+      c.query(`INSERT INTO tenant_memberships (tenant_id, sub, status, roles, changed_by) VALUES ($1, 'r2-removed-at-1', 'removed', ARRAY['reader'], 'test')`, [w.tenant]),
+    );
+    expect(await inTransaction((c) => lookup(c, w.tenant, 'r2-removed-at-1', 1))).toBe(false);
+    await owner((c) => c.query(`UPDATE tenants SET status = 'suspended', changed_by = 'test' WHERE id = $1`, [w.tenant]));
+    expect(await inTransaction((c) => lookup(c, w.tenant, w.actor, 1))).toBe(false); // the organization is suspended
+  });
+
+  it('refuses a worker step after a role change, which moves the membership version (control: the first test of each mode)', async () => {
+    await setMode('capability');
+    try {
+      const w = await world('r2-roles');
+      const runId = await admitted(w, 'p2b/r2-roles');
+      await owner((c) => c.query(`UPDATE tenant_memberships SET roles = ARRAY['clinician'], changed_by = 'test' WHERE tenant_id = $1 AND sub = $2`, [w.tenant, w.actor]));
+      expect(await claimAndLoad(runId)).toEqual(REFUSED);
+      await owner((c) => c.query(`UPDATE public.agentic_synthetic_reservations SET in_flight = false WHERE run_id = $1 AND NOT settled`, [runId]));
+    } finally {
+      await setMode('guc');
+    }
+  });
+
+  it('holds the membership row until the step commits: a removal waits for it', async () => {
+    const w = await world('r2-lock');
+    await inTransaction(async (c) => {
+      expect(await lookup(c, w.tenant, w.actor, 1)).toBe(true);
+      await expect(
+        owner(async (other) => {
+          await other.query(`SET lock_timeout = '300ms'`);
+          await other.query(`UPDATE tenant_memberships SET status = 'removed', changed_by = 'test' WHERE tenant_id = $1 AND sub = $2`, [w.tenant, w.actor]);
+        }),
+      ).rejects.toMatchObject({ code: '55P03' });
+    });
+  });
+
+  it('is executable by telesphoros_jobs only, and by no login', async () => {
+    for (const [name, url] of [
+      ['app', db.appUrl],
+      ['worker', db.workerUrl],
+      ['verifier', db.verifierUrl],
+      ['operator', db.operatorUrl],
+      ['auditor', db.auditorUrl],
+      ['issuer', db.issuerUrl],
+    ] as const) {
+      const c = new Client({ connectionString: url });
+      await c.connect();
+      try {
+        const { rows } = await c.query(`SELECT has_function_privilege(current_user, 'public.membership_current_in(text, text, bigint)', 'EXECUTE') AS ok`);
+        expect([name, rows[0].ok]).toEqual([name, false]);
+      } finally {
+        await c.end();
+      }
+    }
+    const acl = await owner(
+      async (c) => (await c.query(`SELECT proacl::text AS acl FROM pg_proc WHERE oid = 'public.membership_current_in(text, text, bigint)'::regprocedure`)).rows[0].acl,
+    );
+    expect(acl).toMatch(/^\{[^,]*=X\/[^,]*,telesphoros_jobs=X\/[^,]*\}$/);
+  });
+
+  it('reverts to the 0029 body byte for byte, refuses on a body it was not written against, and re-applies', async () => {
+    const body = () =>
+      owner(
+        async (c) =>
+          (await c.query(`SELECT md5(prosrc) AS h FROM pg_proc WHERE oid = 'public.agentic_synthetic_member_current(text, text, bigint)'::regprocedure`)).rows[0].h as string,
+      );
+    const { steps, reverted } = revertThrough('agentic_worker_membership');
+    expect(await owner((c) => migrateDown(c, steps))).toEqual(reverted);
+    expect(await body()).toBe('7125c26a77d525ee83b855830fee0bb5'); // the 0029 body
+    expect(await owner(async (c) => (await c.query(`SELECT to_regprocedure('public.membership_current_in(text, text, bigint)') IS NULL AS gone`)).rows[0].gone)).toBe(true);
+    // a body that is not 0029's: the precondition refuses, and nothing is applied
+    const original = await owner(
+      async (c) => (await c.query(`SELECT pg_get_functiondef('public.agentic_synthetic_member_current(text, text, bigint)'::regprocedure) AS d`)).rows[0].d as string,
+    );
+    await owner((c) => c.query(original.replace('RETURN coalesce(v_ok, false);', 'RETURN coalesce(v_ok, false) AND true;')));
+    await expect(owner((c) => migrateUp(c))).rejects.toThrow(/Migration 0073 expects the 0029 body/);
+    await owner((c) => c.query(original));
+    expect(await owner((c) => migrateUp(c))).toEqual([...reverted].reverse());
+    expect(await body()).not.toBe('7125c26a77d525ee83b855830fee0bb5');
+  });
+});
+
 describe('the catalog says the same thing the behaviour does', () => {
   const scan = (src: string) => /app\.current_(tenant_id|actor)/.test(src);
 
@@ -332,13 +491,13 @@ describe('the catalog says the same thing the behaviour does', () => {
     for (const r of rows) expect([r.proname, scan(r.prosrc), /public\.agentic_synthetic_identity\(\)/.test(r.prosrc)]).toEqual([r.proname, false, true]);
   });
 
-  it('across the whole schema, the only P2 function that still reads a tenant setting is the worker-side member_current (pinned; DATA-01 slice 5 must not flip the mode before it moves)', async () => {
+  it('across the whole schema, no P2 function reads a tenant setting (the worker-side member_current moved off it for DATA-01 slice 5, R2)', async () => {
     const names = await owner(async (c) =>
       (await c.query(`SELECT proname, prosrc FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname LIKE 'agentic_synthetic_%' ORDER BY proname`)).rows
         .filter((r) => scan(r.prosrc))
         .map((r) => r.proname),
     );
-    expect(names).toEqual(['agentic_synthetic_member_current']);
+    expect(names).toEqual([]);
   });
 
   it('privileges: the helper is executable by no login; the entry points are app-only; the owner can call the helper', async () => {
