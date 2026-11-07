@@ -80,8 +80,8 @@ the stack claim. It prints identifiers and counts, never a state, plan or variab
 It builds nothing: when a Lambda bundle in the clone is missing or older than its source, the plan row says "not run" and names the
 Lambda; `plan.sh` builds every bundle before it plans.
 A plan for staging quotes its table; a session that has not seen it does not know what staging runs. Its live values (the account, the
-clone, the Terraform binary and data directory, the canonical var file) come from the private `~/telesphoros-private/staging/stack.env`,
-described in the script's header.
+clone, the Terraform binary and data directory) come from the private `~/telesphoros-private/staging/stack.env`, described in the script's
+header. It plans with the same `current.tfvars` the release steps read, and only while that file matches its recorded sha256.
 
 The single commands below are what it runs, for reading one thing by hand. Run these with the staging identity, and confirm that identity first. The reports and audit bucket names end in the account id, so read them
 from the console or `aws s3api list-buckets`; they are not written here.

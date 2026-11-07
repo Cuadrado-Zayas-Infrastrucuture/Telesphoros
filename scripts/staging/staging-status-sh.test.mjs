@@ -4,7 +4,8 @@
 // same way, or that the real Terraform's exit codes match (`-detailed-exitcode` is documented as 0, 1, 2).
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
@@ -36,7 +37,7 @@ stub('terraform', `case "$*" in
   version) echo "\${STUB_TF_VERSION:-Terraform v1.16.5}"; if [ -n "\${STUB_TF_SLOW:-}" ]; then sleep 0.2; echo "on darwin_arm64"; echo "Your version of Terraform is out of date!"; fi ;;
   *state\\ pull*) echo '{"version":4,"serial":42,"lineage":"l-1","outputs":{"x":{"value":"SENTINEL-STATE"}}}' ;;
   *show\\ -json*) echo '{"resource_changes":[{"address":"aws_cloudfront_distribution.web[0]","change":{"actions":["update"],"after":{"x":"SENTINEL-PLAN"}}}]}' ;;
-  *\\ plan\\ *) echo "SENTINEL-PLAN-LOG"; exit "$STUB_PLAN_EXIT" ;;
+  *\\ plan\\ *) echo "$*" > "$TMPDIR/plan-args"; echo "SENTINEL-PLAN-LOG"; exit "$STUB_PLAN_EXIT" ;;
   *) exit 99 ;;
 esac`);
 
@@ -67,10 +68,14 @@ git(clone, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
 const priv = join(box, 'private');
 mkdirSync(join(priv, 'staging'), { recursive: true });
 mkdirSync(join(priv, 'maindata'));
-writeFileSync(join(priv, 'staging/current.tfvars'), 'SENTINEL-VARS = "x"\n');
+const current = join(priv, 'staging/current.tfvars');
+const writeCurrent = () => {
+  writeFileSync(current, 'SENTINEL-VARS = "x"\n');
+  writeFileSync(`${current}.sha256`, `${createHash('sha256').update(readFileSync(current)).digest('hex')}\n`);
+};
+writeCurrent();
 const stackEnv = (extra = '') => writeFileSync(join(priv, 'staging/stack.env'), [
-  `STAGING_ACCOUNT_ID=${ACCOUNT}`, `BACKEND_CLONE=${clone}`, `TERRAFORM=${join(bin, 'terraform')}`, `TF_DATA_DIR=${join(priv, 'maindata')}`,
-  `STAGING_VAR_FILE=${join(priv, 'staging/current.tfvars')}`, extra,
+  `STAGING_ACCOUNT_ID=${ACCOUNT}`, `BACKEND_CLONE=${clone}`, `TERRAFORM=${join(bin, 'terraform')}`, `TF_DATA_DIR=${join(priv, 'maindata')}`, extra,
 ].join('\n'));
 
 const run = (env = {}) => spawnSync('bash', [script], {
@@ -121,11 +126,34 @@ test('the Terraform version check reads the whole output: a binary still writing
   assert.match(other.stderr, /TERRAFORM is not 1\.16\.5/);
 });
 
-test('a missing var file, a wrong account and a missing stack.env stop or fail the run, never pass it', () => {
-  stackEnv('STAGING_VAR_FILE=');
-  const noVars = run();
-  assert.equal(noVars.status, 1);
-  assert.match(noVars.stdout, /plan: not run: no canonical var file/);
+test('the plan reads current.tfvars, the release steps\' var file, only while it matches its sha256; STAGING_VAR_FILE is not read', () => {
+  const elsewhere = join(box, 'other.tfvars');
+  writeFileSync(elsewhere, 'SENTINEL-OTHER = "y"\n');
+  stackEnv(`STAGING_VAR_FILE=${elsewhere}`);
+  rmSync(join(box, 'plan-args'), { force: true });
+  const ok = run();
+  assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+  assert.match(readFileSync(join(box, 'plan-args'), 'utf8'), new RegExp(`-var-file=${current.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} `), 'planned with current.tfvars');
+  stackEnv();
+  writeFileSync(current, 'SENTINEL-VARS = "edited"\n');
+  rmSync(join(box, 'plan-args'), { force: true });
+  const edited = run();
+  assert.equal(edited.status, 1);
+  assert.match(edited.stdout, /plan: not run: current\.tfvars does not match its recorded sha256 \(edited by hand\)/);
+  assert.ok(!existsSync(join(box, 'plan-args')), 'no plan was made with an edited var file');
+  noSentinel(edited);
+  for (const gone of [current, `${current}.sha256`]) {
+    writeCurrent();
+    rmSync(gone);
+    const missing = run();
+    assert.equal(missing.status, 1);
+    assert.match(missing.stdout, /plan: not run: no canonical var file \(current\.tfvars with its \.sha256\)/);
+  }
+  writeCurrent();
+  assert.equal(run().status, 0, 'back to current');
+});
+
+test('a wrong account and a missing stack.env stop the run, never pass it', () => {
   stackEnv();
   const wrong = run({ STUB_ACCOUNT: '210987654321' });
   assert.equal(wrong.status, 2);
