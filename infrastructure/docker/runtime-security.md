@@ -14,6 +14,8 @@ References: [Debian record](https://security-tracker.debian.org/tracker/CVE-2026
 
 The candidate removes system libz and all the OS utilities that depended on it. Node's statically linked compression library remains: its version number is not changed, and this PR does not claim to patch it. Node's JavaScript compression interface does not expose the gzip-file writer API involved in this finding. The build rejects additional native code/addons and unreviewed libraries; adding those requires a fresh assessment. The real image test preserves Node gzip/gunzip behavior. Monitor upstream Node security releases; code removal here is not a blanket assertion that the Node binary has no vulnerabilities.
 
+The API never decompresses a request body. Every body parser is registered with `inflate: false` (`apps/backend/src/app.factory.ts`) and answers a compressed body with 415 before authentication, and lab intake refuses compressed uploads itself; `apps/backend/test/compressed-bodies.e2e-spec.ts` holds both parsers to it for br, gzip, deflate and zstd.
+
 ## Disposition of the seven reported HIGH findings
 
 These conclusions concern the new local candidate, not the previously imported staging image. No staging image, plan or service was changed. A future authorized registry import must be scanned independently; no new ECR result is claimed.
