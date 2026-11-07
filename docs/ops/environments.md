@@ -25,10 +25,12 @@ migrations 0066 to 0070, then the synthetic assessment switched on (`ASSESSMENT-
 gave the intake its multipart listing (#288). On 2026-11-06 `main` `661512c9`: the image with a writable `/tmp` for upload staging (#289),
 migration 0071 (spec 033 slice 1), the frontend with unfinished uploads (#290) and the new sidebar (#291), then one rehearsal of the
 assessment kill switch (`ASSESSMENT-OFF` and back on). On 2026-11-07 an `INFRA` apply from `main` `01325995` added the daily freshness check
-(spec 027 PR 4, #304; the plan built both Lambdas first, #303): no image, task definition or migration changed. No CI job holds cloud
+(spec 027 PR 4, #304; the plan built both Lambdas first, #303): no image, task definition or migration changed. That evening a second
+`INFRA` apply from `main` `e6050644` changed only the freshness Lambda's code, so a failed publish reports the error's class only (#313); it
+was the first plan with the AWS provider at 6.72.0 (#295), whose read-back the release check accepts since #314. No CI job holds cloud
 credentials or applies anything.
 
-The last apply read the backend clone at, and so applied from `main` `01325995` (the 2026-11-07 `INFRA` apply): anything merged after it under `infrastructure/terraform/` is not
+The last apply read the backend clone at, and so applied from `main` `e6050644` (the second 2026-11-07 `INFRA` apply): anything merged after it under `infrastructure/terraform/` is not
 applied until a release says so here. The values in the table below are kept as data in
 [staging-expected.json](staging-expected.json) (spec 027); a guard in `pnpm test:ci-config` fails when this page and that file disagree, so change
 both in the same pull request.
