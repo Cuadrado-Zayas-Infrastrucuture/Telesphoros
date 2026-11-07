@@ -306,3 +306,39 @@ test('state backup: writes the image, prints counts and hashes but never the sta
   assert.ok(!existsSync(join(priv, `mnt-tfstate-${new Date().toLocaleDateString('en-CA')}-${COMMIT.slice(0, 8)}`)), 'the mount point is gone');
   assert.match(out(run('state-backup.sh', ['BACKUP', COMMIT])), /already exists/);
 });
+
+const infraReady = () => {
+  backupReady();
+  rmSync(dmg(), { force: true });
+  writeFileSync(join(rel, 'x-apply.txt'), '== apply exit status: 0\n');
+  writeFileSync(join(rel, 'x.tfplan.meta.json'), JSON.stringify({ serial: 44 }));
+  // 3 addresses before, 1 create, a data source read for the first time, and one already in the state read again: 5 after.
+  writeFileSync(join(rel, 'x.plan.json'), JSON.stringify({ prior_state: { values: { root_module: { resources: [{ address: 'a' }, { address: 'data.b' }, { address: 'c' }] } } },
+    resource_changes: [{ address: 'd', change: { actions: ['create'] } }, { address: 'data.e', change: { actions: ['read'] } }, { address: 'data.b', change: { actions: ['read'] } }] }));
+};
+
+test('state backup after an INFRA apply alone: its own log, record and plan, and a data source read for the first time counts', () => {
+  infraReady();
+  assert.match(out(run('state-backup.sh', ['BACKUP', COMMIT, 'FLAG'])), /usage: state-backup\.sh BACKUP COMMIT \[IMAGE\|INFRA\]/);
+  rmSync(join(rel, 'x-apply.txt'));
+  assert.match(out(run('state-backup.sh', ['BACKUP', COMMIT, 'INFRA'])), /the INFRA apply log of this release is missing or not clean/);
+  writeFileSync(join(rel, 'x-apply.txt'), '== apply exit status: 3\n');
+  assert.match(out(run('state-backup.sh', ['BACKUP', COMMIT, 'INFRA'])), /the INFRA apply log of this release is missing or not clean/, 'a failed apply');
+  infraReady();
+  rmSync(join(rel, 'x.tfplan.meta.json'));
+  assert.match(out(run('state-backup.sh', ['BACKUP', COMMIT, 'INFRA'])), /no state serial in the INFRA plan's record \(x\.tfplan\.meta\.json\)/);
+  infraReady();
+  writeFileSync(join(stubDir, 'state'), STATE(44));
+  assert.match(out(run('state-backup.sh', ['BACKUP', COMMIT, 'INFRA'])), /serial 44 is not newer than the 44 recorded with the INFRA plan/);
+  infraReady();
+  const imageLog = readFileSync(join(rel, 'i-apply.txt'), 'utf8');
+  rmSync(join(rel, 'i-apply.txt'));
+  const r = run('state-backup.sh', ['BACKUP', COMMIT, 'INFRA']);
+  assert.equal(r.status, 0, out(r));
+  assert.match(r.stdout, /live: 5 addresses; expected from the INFRA plan: 5/, 'the new data source counts, the one read again does not');
+  assert.ok(existsSync(dmg()));
+  assert.ok(!out(r).includes('SENTINEL'), 'the state is never printed');
+  rmSync(dmg(), { force: true });
+  assert.match(out(run('state-backup.sh', ['BACKUP', COMMIT])), /the MIGRATE and IMAGE apply logs of this release are missing/, 'IMAGE still needs both of its logs');
+  writeFileSync(join(rel, 'i-apply.txt'), imageLog);
+});
