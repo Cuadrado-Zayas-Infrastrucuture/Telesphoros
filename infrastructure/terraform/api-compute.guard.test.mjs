@@ -246,7 +246,7 @@ export function apiComputeProblems(tf, sources = {}) {
   need(has(assessmentVariable, 'type = bool') && has(assessmentVariable, 'default = false'), 'the synthetic assessment needs an explicit boolean switch defaulting to false');
   need(has(assessmentVariable, 'condition = !var.synthetic_assessment_enabled || local.synthetic'), 'the synthetic assessment switch must be refused outside the synthetic profile');
   need(has(text, 'synthetic_assessment_environment = { for name, value in { SYNTHETIC_ASSESSMENT = "enabled", SYNTHETIC_KNOWLEDGE_DIR = "/app/synthetic-knowledge" } : name => value if local.synthetic && var.synthetic_assessment_enabled }'), 'the synthetic assessment settings must be one map, both settings together, present only in the synthetic profile with the variable on');
-  need(has(text, '}, local.issuer_client_environment, local.synthetic_assessment_environment)'), 'the API environment must merge the synthetic assessment settings');
+  need(has(text, '}, local.issuer_client_environment, local.synthetic_assessment_environment, local.knowledge_signer_environment)'), 'the API environment must merge the synthetic assessment settings');
   const knowledgeDir = /SYNTHETIC_KNOWLEDGE_DIR = "([^"]+)"/.exec(text)?.[1];
   need(knowledgeDir !== undefined && dockerfile.split('\n').some((line) => line.startsWith('COPY ') && line.trimEnd().endsWith(` ${knowledgeDir}/`)), 'the synthetic knowledge directory must be where the image copies the synthetic knowledge (api.Dockerfile)');
 
@@ -579,7 +579,7 @@ test('the API compute guard reports each way the text could be weakened (control
     ['the synthetic assessment switch without its knowledge directory', ', SYNTHETIC_KNOWLEDGE_DIR = "/app/synthetic-knowledge" }', ' }'],
     ['the synthetic knowledge directory without its switch', 'SYNTHETIC_ASSESSMENT = "enabled", SYNTHETIC_KNOWLEDGE_DIR', 'SYNTHETIC_KNOWLEDGE_DIR'],
     ['the synthetic knowledge directory somewhere the image does not put it', 'SYNTHETIC_KNOWLEDGE_DIR = "/app/synthetic-knowledge"', 'SYNTHETIC_KNOWLEDGE_DIR = "/app/knowledge"'],
-    ['the synthetic assessment settings never merged into the task', ', local.issuer_client_environment, local.synthetic_assessment_environment)', ', local.issuer_client_environment)'],
+    ['the synthetic assessment settings never merged into the task', ', local.issuer_client_environment, local.synthetic_assessment_environment, local.knowledge_signer_environment)', ', local.issuer_client_environment, local.knowledge_signer_environment)'],
     ['the synthetic assessment switch written into the base environment', envLine('RATE_LIMIT_ENABLED', '"true"'), `${envLine('RATE_LIMIT_ENABLED', '"true"')}\n    ${envLine('SYNTHETIC_ASSESSMENT', '"enabled"')}`],
   ];
   for (const [name, from, to] of weakened) {
