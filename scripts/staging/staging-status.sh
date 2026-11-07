@@ -8,6 +8,7 @@
 # Reads the Terraform state's serial and lineage (nothing else of it) and runs `plan -lock=false -detailed-exitcode` on the backend clone's
 # HEAD, printing addresses and actions only. Lists the Terraform merged on origin/main after the applied commit, the saved plans and the claim.
 # A saved plan whose apply log ends `== apply exit status: 0` is listed as applied and does not count; a failed apply does.
+# It builds nothing: a Lambda bundle missing, or older than its source, makes the plan row "not run" and names the Lambda (plan.sh builds it).
 # It does not fetch: run `git -C "$BACKEND_CLONE" fetch origin` first if origin/main may be behind.
 #
 # Live values come from a private file outside the repository, ~/telesphoros-private/staging/stack.env (override with STACK_ENV):
@@ -77,11 +78,32 @@ if [ "$(cat "$WORK/api-digest" 2>/dev/null)" = "$(fact image.digest)" ] && git -
   git -C "$C" ls-tree --name-only "$IMAGE_COMMIT" apps/backend/migrations/ | grep -oE '/[0-9]{4}_' | tr -d '/_' | sort | tail -1 > "$WORK/migration"
 fi
 
+# The first Lambda whose bundle is not built for this checkout, or nothing. Terraform zips infrastructure/lambda/<name>/dist as it finds it,
+# so a missing dist fails the plan and one older than its source (a merge or fast-forward rewrites the files it changes) shows a change that
+# is not real. File times only: nothing is built here.
+unbuilt_lambda() {
+  local dir name f
+  for dir in "$C"/infrastructure/lambda/*/; do
+    [ -f "$dir/package.json" ] || continue
+    dir=${dir%/}; name=${dir##*/}
+    if [ -z "$(ls -A "$dir/dist" 2>/dev/null)" ]; then echo "$name"; return 0; fi
+    for f in "$dir"/dist/*; do
+      if [ -n "$(find "$dir/src" "$dir/package.json" "$dir"/tsup.config.* "$dir"/tsconfig*.json "$C/pnpm-lock.yaml" -type f -newer "$f" -print -quit 2>/dev/null)" ]; then
+        echo "$name"; return 0
+      fi
+    done
+  done
+  return 0
+}
+
 echo "== state and plan"
 "$TERRAFORM" -chdir="$TFDIR" state pull </dev/null 2>/dev/null | node "$MJS" project-state > "$WORK/state.json" 2>/dev/null || echo '{}' > "$WORK/state.json"
 PLAN_EXIT=null; PLAN_WHY=""
+UNBUILT=$(unbuilt_lambda)
 if [ -z "${STAGING_VAR_FILE:-}" ] || [ ! -f "$STAGING_VAR_FILE" ]; then
   PLAN_WHY="no canonical var file (STAGING_VAR_FILE)"
+elif [ -n "$UNBUILT" ]; then
+  PLAN_WHY="the $UNBUILT Lambda is not built for this checkout (plan.sh builds it)"
 elif pgrep -f 'terraform.*(apply|plan|import|untaint)' >/dev/null; then
   PLAN_WHY="another terraform process is running"
 else

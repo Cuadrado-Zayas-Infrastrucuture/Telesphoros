@@ -4,7 +4,7 @@
 // same way, or that the real Terraform's exit codes match (`-detailed-exitcode` is documented as 0, 1, 2).
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
@@ -133,6 +133,38 @@ test('a missing var file, a wrong account and a missing stack.env stop or fail t
   const none = run({ PRIVATE_DIR: join(box, 'nowhere') });
   assert.equal(none.status, 2);
   assert.match(none.stderr, /no .*stack\.env/);
+});
+
+test('a Lambda bundle missing or older than its source makes the plan "not run" and names it; a current one lets the plan run', () => {
+  stackEnv();
+  const lambda = join(clone, 'infrastructure/lambda/demo');
+  mkdirSync(join(lambda, 'src'), { recursive: true });
+  writeFileSync(join(lambda, 'package.json'), '{"name":"demo","scripts":{"build":"tsup"}}');
+  writeFileSync(join(lambda, 'src/index.ts'), 'export const handler = 1;\n');
+  writeFileSync(join(clone, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n');
+  const at = (file, minutes) => { const t = new Date(Date.parse('2026-11-07T12:00:00Z') + minutes * 60_000); utimesSync(file, t, t); };
+  for (const f of [join(lambda, 'package.json'), join(lambda, 'src/index.ts'), join(clone, 'pnpm-lock.yaml')]) at(f, 0);
+  const notRun = /plan: not run: the demo Lambda is not built for this checkout \(plan\.sh builds it\)/;
+  const missing = run({ STUB_PLAN_EXIT: '1' });
+  assert.equal(missing.status, 1);
+  assert.match(missing.stdout, notRun, 'no dist: the plan is not run (the stand-in would have failed it)');
+  mkdirSync(join(lambda, 'dist'));
+  assert.match(run({ STUB_PLAN_EXIT: '1' }).stdout, notRun, 'an empty dist');
+  writeFileSync(join(lambda, 'dist/index.mjs'), 'built\n');
+  at(join(lambda, 'dist/index.mjs'), 5);
+  const built = run();
+  assert.equal(built.status, 0, built.stdout + built.stderr);
+  assert.match(built.stdout, /plan: no changes \(exit 0\)/, 'built after its source: the plan runs');
+  for (const [file, what] of [[join(lambda, 'src/index.ts'), 'its source'], [join(clone, 'pnpm-lock.yaml'), 'the lockfile'], [join(lambda, 'package.json'), 'its package.json']]) {
+    at(file, 10);
+    const stale = run();
+    assert.equal(stale.status, 1, what);
+    assert.match(stale.stdout, notRun, `${what} changed after the build`);
+    at(file, 0);
+  }
+  assert.equal(run().status, 0, 'back to current');
+  rmSync(join(clone, 'infrastructure/lambda'), { recursive: true });
+  rmSync(join(clone, 'pnpm-lock.yaml'));
 });
 
 test('saved plans: current, stale, unrecorded and legacy; and the claim', () => {
