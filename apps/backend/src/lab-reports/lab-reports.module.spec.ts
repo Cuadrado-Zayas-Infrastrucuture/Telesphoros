@@ -20,6 +20,12 @@ describe('the lab-report pipeline applies production rules when NODE_ENV is prod
     await expect(labKnowledgeFactory(envOf('development'))).resolves.toBeDefined();
   });
 
+  it('the pipeline refuses an empty knowledge set in production; outside production it loads (audit CLIN-14)', async () => {
+    const empty = await tempDir();
+    await expect(labKnowledgeFactory({ ...envOf('production'), KNOWLEDGE_DIR: empty })).rejects.toThrow('KNOWLEDGE_DIR holds no guideline: production needs at least one.');
+    await expect(labKnowledgeFactory({ ...envOf('development'), KNOWLEDGE_DIR: empty })).resolves.toBeDefined();
+  });
+
   it('builds neither when the pipeline is off', async () => {
     const off = { ...envOf('production'), LAB_REPORT_PIPELINE: 'disabled' } as Env;
     await expect(labReaderFactory(off)).resolves.toBeUndefined();

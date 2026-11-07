@@ -139,10 +139,11 @@ jobs:
       - name: Frontend chunk budget
         if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
         run: pnpm --filter @telesphoros/frontend check:chunks
-      # Fails if anything synthetic or unreviewed sits in the real knowledge directory.
+      # Fails if anything synthetic or unreviewed sits in the real knowledge directory. --allow-empty: knowledge/cpic holds no guideline yet, and
+      # verify refuses an empty set in production otherwise (audit CLIN-14); remove the flag with the first reviewed guideline.
       - name: Knowledge directory loads under production rules
         if: ${{ needs.changes.outputs.heavy == 'true' || needs.changes.result == 'failure' }}
-        run: pnpm --filter @telesphoros/backend knowledge:verify --production
+        run: pnpm --filter @telesphoros/backend knowledge:verify --production --allow-empty
       # Unconditional, like the install: test:infra imports the backend's configuration loader, which imports @telesphoros/shared-types from its
       # built dist. A documentation-only run skips Production builds above, so without this the tripwire cannot load (2026-10-28, #144).
       - name: Build the shared types the guards import

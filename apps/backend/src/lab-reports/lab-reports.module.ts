@@ -35,8 +35,13 @@ const enabled = (env: Env) => env.LAB_REPORT_PIPELINE === 'enabled';
 // rules are a second line rather than switched off: in production the reader refuses and the loader refuses synthetic content (audit A1).
 const modeOf = (env: Env) => (env.NODE_ENV === 'production' ? 'production' : 'non-production');
 
-export const labKnowledgeFactory = async (env: Env): Promise<KnowledgeSet | undefined> =>
-  enabled(env) ? loadKnowledge({ directory: env.KNOWLEDGE_DIR!, mode: modeOf(env) }) : undefined;
+export const labKnowledgeFactory = async (env: Env): Promise<KnowledgeSet | undefined> => {
+  if (!enabled(env)) return undefined;
+  const set = await loadKnowledge({ directory: env.KNOWLEDGE_DIR!, mode: modeOf(env) });
+  // An empty set loads, and every drug then reports no guideline: under the production rules that is refused, as the synthetic factory does (audit CLIN-14).
+  if (set.isEmpty && modeOf(env) === 'production') throw new Error('KNOWLEDGE_DIR holds no guideline: production needs at least one.');
+  return set;
+};
 
 /**
  * The synthetic knowledge for the structured assessment: loaded only while SYNTHETIC_ASSESSMENT is on, from its own directory and never from the
