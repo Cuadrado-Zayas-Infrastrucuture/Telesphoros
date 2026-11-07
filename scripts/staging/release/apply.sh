@@ -3,7 +3,8 @@
 #   CLAIM_OWNER=NAME scripts/staging/release/apply.sh MIGRATE|IMAGE|INFRA COMMIT PLAN_SHA256
 #   CLAIM_OWNER=NAME scripts/staging/release/apply.sh FENCE-CLOSE|FENCE-OPEN|ASSESSMENT-ON|ASSESSMENT-OFF COMMIT PLAN_SHA256 OPERATION_ID
 # PLAN_SHA256 is the hash plan.sh printed, typed after reading the plan text: a different plan is refused. So is a plan whose record no longer
-# matches the stack (another apply moved the state serial, the clone moved, the var file changed), before Terraform's own stale-plan refusal.
+# matches the stack (another apply moved the state serial, the clone moved, the var file changed, a Lambda zip was rebuilt), before Terraform's
+# own stale-plan refusal.
 # Terraform runs detached (it survives a closing window) through apply-run.sh; its log ends "== apply exit status: N". After an IMAGE apply
 # exits 0, release.tfvars becomes current.tfvars, so the next release cannot start from an older file.
 set -euo pipefail
@@ -58,6 +59,7 @@ fi
 TARGET_VAR_PIN=$(sha "$VARFILE")
 state_identity | node "$HERE/plan-record.mjs" check "$PLAN.meta.json" "$MODE" "$COMMIT" "$TARGET_VAR_PIN" "$PIN" ${SOURCE_ARGS[@]+"${SOURCE_ARGS[@]}"} \
   || die "the plan is stale (above): plan again rather than applying it"
+bundle_check "$PLAN.bundles"
 CHECK_PLAN="$OUT/$T-apply-check.plan.json"
 if flag_mode "$MODE"; then CHECK_PLAN=$(mktemp "$OUT/$T-apply-check.XXXXXX"); fi
 "$TERRAFORM" -chdir="$TFDIR" show -json "$PLAN" </dev/null > "$CHECK_PLAN"
