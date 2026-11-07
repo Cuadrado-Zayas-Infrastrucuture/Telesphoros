@@ -110,8 +110,11 @@ the check does not run.
 
 - **SC-001**: For 14 days after release, the daily check's finding count is reported each day. Each finding is either fixed or recorded
   as an accepted exception within 2 working days.
-- **SC-002**: Each of the six stale states (table above) is caused once on purpose in staging, or in a staging-shaped rehearsal where
-  causing it in staging is unsafe, and an email naming it arrives.
+- **SC-002** (reworded 2026-11-07, founder): Each of the six stale states (table above) is shown to be caught once. States 1, 2 and 6 are
+  emailed by the daily check: each is caused once on purpose in staging, or seen when it occurs on its own, and an email naming it arrives.
+  States 3, 4 and 5 are refused before they can do harm rather than emailed: a hand-edited `current.tfvars` fails its sha256, a stale or
+  already-applied saved plan is refused by `apply.sh`, and a session reads `staging-status` before it plans. Each refusal is shown once in
+  staging or by its test.
 - **SC-003**: The next release after this one runs from `scripts/staging/release/` and `current.tfvars` alone, with no per-release
   copies of scripts or var files.
 - **SC-004**: An incomplete run (GitHub unreachable, a refused AWS read) produces an email, proved once by denying one read.

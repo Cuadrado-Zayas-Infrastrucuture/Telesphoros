@@ -28,8 +28,14 @@ stub('aws', `case "$*" in
   *describe-task-definition*) echo "${IMAGE}" ;;
   *) echo "unexpected aws $*" >&2; exit 99 ;;
 esac`);
+// Like corepack's pnpm, --version answers with the version the nearest package.json pins, and with corepack's own default outside any project.
 stub('pnpm', `case "$1" in
-  --version) echo "\${STUB_PNPM:-${PNPM}}" ;;
+  --version) if [ -n "\${STUB_PNPM:-}" ]; then echo "$STUB_PNPM"; exit 0; fi
+    d=$PWD; while [ "$d" != / ]; do
+      if [ -f "$d/package.json" ]; then v=$(sed -nE 's/.*"packageManager": *"pnpm@([^"]+)".*/\\1/p' "$d/package.json"); if [ -n "$v" ]; then echo "$v"; exit 0; fi; fi
+      d=$(dirname "$d")
+    done
+    echo 9.0.4 ;;
   install) echo "install $*" >> "$STUB/calls"; exit "\${STUB_INSTALL_EXIT:-0}" ;;
   run) echo "build $(basename "$PWD") $(umask)" >> "$STUB/calls"; [ "\${STUB_BUILD_EXIT:-0}" = 0 ] || exit "$STUB_BUILD_EXIT"
     mkdir -p dist; [ -n "\${STUB_BUILD_EMPTY:-}" ] || printf 'code %s\\n' "\${STUB_CODE:-v1}" > dist/index.mjs
@@ -89,8 +95,10 @@ const current = join(staging, 'current.tfvars');
 writeFileSync(current, `api_image = "${IMAGE}"\napi_migrate_image = "${IMAGE}"\n`);
 writeFileSync(`${current}.sha256`, `${sha(current)}\n`);
 
+// Launched from the test's own folder, which no package.json covers, as the founder launches from ~ (the repository's own pins a pnpm).
 const run = (script, args, env = {}) => spawnSync('bash', [join(here, script), ...args], {
   encoding: 'utf8',
+  cwd: box,
   env: { PATH: `${bin}:${process.env.PATH}`, HOME: box, PRIVATE_DIR: priv, TMPDIR: box, STUB: stubDir, CLAIM_OWNER: 'session-a', ...env },
 });
 const calls = () => (existsSync(join(stubDir, 'calls')) ? readFileSync(join(stubDir, 'calls'), 'utf8').trim().split('\n') : []);
@@ -114,6 +122,12 @@ const zip = join(tfdir, '.build/demo.zip');
 const bundles = join(rel, 'x.tfplan.bundles');
 
 test('claim', () => assert.equal(run('claim.sh', ['take', 'session-a', 'lambda bundles']).status, 0));
+
+test('the pnpm stand-in answers per folder as corepack does, so a plan launched outside the clone is checked against the clone', () => {
+  const version = (cwd) => spawnSync(join(bin, 'pnpm'), ['--version'], { cwd, encoding: 'utf8' }).stdout.trim();
+  assert.equal(version(box), '9.0.4', 'outside any project: corepack\'s own default');
+  assert.equal(version(lambda), PNPM, 'inside the clone: the version its package.json pins');
+});
 
 test('every plan builds each Lambda first, from an empty dist, readable by Lambda, and records the zip it made', () => {
   mkdirSync(join(lambda, 'dist'));

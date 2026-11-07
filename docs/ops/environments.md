@@ -46,7 +46,7 @@ both in the same pull request.
 | Report files | Versioned S3 bucket with Object Lock in **GOVERNANCE** mode, 1-day default retention, no replication | Object Lock **COMPLIANCE** (`profile.tf` precondition) |
 | Audit trail | CloudTrail `telesphoros-staging-audit`, logging, **single Region**. It records every object read and write in the reports bucket, and deletes and lock changes in the audit bucket. The audit bucket has Object Lock in GOVERNANCE mode with 1-day retention ([audit-trail.md](audit-trail.md)) | A multi-Region trail and COMPLIANCE lock |
 | Alarms | 36 CloudWatch alarms into SNS topic `telesphoros-staging-audit-alarms`, which has **1 confirmed email subscription**. Includes `ledger-compromised` ([ledger-watch.md](ledger-watch.md)), the audit alarms, the database alarms, the worker alarms and, since 2026-11-07, the freshness check's two (`freshness-check-missed`, `freshness-check-failing`; next row). The three capability-sweep alarms (failing, stale, behind; #216) were applied on 2026-10-31 once the sweep ran, and each was fired once on purpose that evening: CloudWatch ran every notification and all three returned to OK. No other alarm has been fired on purpose yet | Paging to an on-call person |
-| Freshness check | Lambda `telesphoros-staging-staging-freshness`, daily at 12:00 UTC, read-only except for one message: it compares this table's facts with ECS, CloudWatch, CloudFront, the API's readiness and GitHub, and emails the alarm topic when anything differs or a read fails ([staging-freshness.md](staging-freshness.md)). Invoked once by hand on 2026-11-07, before this page's update: complete, 2 findings, no refused read. Its findings and refusals have not each been caused on purpose yet (spec 027 T017) | |
+| Freshness check | Lambda `telesphoros-staging-staging-freshness`, daily at 12:00 UTC, read-only except for one message: it compares this table's facts with ECS, CloudWatch, CloudFront, the API's readiness and GitHub, and emails the alarm topic when anything differs or a read fails ([staging-freshness.md](staging-freshness.md)). Invoked once by hand on 2026-11-07, before this page's update: complete, 2 findings, no refused read. Later that day each kind of email was caused once on purpose and arrived (spec 027 T017): a finding (one extra alarm), an incomplete run (a denied read), and the `freshness-check-failing` alarm (a denied publish); each was put back and `staging-status` stayed clean ([staging-freshness.md](staging-freshness.md), "Rehearsing it") | |
 | Terraform state | Versioned S3 state bucket in `us-east-2` ([terraform-state.md](terraform-state.md)) | |
 
 **Not created, or not readable from the account.**
@@ -68,13 +68,14 @@ both in the same pull request.
 | [break-glass.md](break-glass.md) | Never | The role does not exist |
 | [ledger-watch.md](ledger-watch.md) | Alarm exists in staging | Never fired on purpose |
 | [terraform-state.md](terraform-state.md) | Bootstrap applied (the bucket exists) | State recovery never drilled |
-| [staging-freshness.md](staging-freshness.md) | Staging, 2026-11-07 | Applied and invoked once by hand; each condition not yet caused on purpose (T017) |
+| [staging-freshness.md](staging-freshness.md) | Staging, 2026-11-07 | Applied, invoked by hand, and a finding, a refused read and a failed publish each caused once on purpose (T017). `freshness-check-missed` not yet seen |
 
 ## Checking it again (read-only)
 
 **Before planning anything against staging**, run `scripts/staging/staging-status.sh` (founder-run, read-only; spec 027). It compares
 live staging with `docs/ops/staging-expected.json` on `origin/main`, runs `terraform plan -lock=false -detailed-exitcode` on the backend
-clone, lists the Terraform merged after the applied commit, marks saved plans made at another state serial as stale, and shows who holds
+clone, lists the Terraform merged after the applied commit, marks saved plans made at another state serial as stale (one already applied
+with exit 0 is listed as applied and does not count: `apply.sh` never runs a plan twice; a failed apply does count), and shows who holds
 the stack claim. It prints identifiers and counts, never a state, plan or variable value, and exits 0 only when there is nothing to do.
 A plan for staging quotes its table; a session that has not seen it does not know what staging runs. Its live values (the account, the
 clone, the Terraform binary and data directory, the canonical var file) come from the private `~/telesphoros-private/staging/stack.env`,

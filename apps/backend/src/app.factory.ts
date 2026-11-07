@@ -79,10 +79,15 @@ export function configureApp(app: NestExpressApplication, options: ConfigureOpti
     });
   }
 
+  // inflate: false on every body parser: a compressed body is refused with 415 instead of being decoded by zlib before any guard runs, so an
+  // anonymous caller never reaches the decompressor. Registering urlencoded here (same name as Nest's default) stops Nest adding its own
+  // parser, which inflates. Lab intake reads raw bytes and refuses compression itself (intake.service.ts). Audit OPS-01.
   app.useBodyParser('json', {
     limit: JSON_BODY_LIMIT,
+    inflate: false,
     type: (req: IncomingMessage) => !isIntakePath((req.url ?? '').split('?')[0]!, req.method ?? '') && /^application\/json(?:;|$)/i.test(req.headers['content-type'] ?? ''),
   });
+  app.useBodyParser('urlencoded', { extended: true, inflate: false });
   // Finite pre-authentication header/body lifetime; intake imposes its tighter progress deadlines after admission.
   const server = app.getHttpServer() as Server;
   server.headersTimeout = 30000;

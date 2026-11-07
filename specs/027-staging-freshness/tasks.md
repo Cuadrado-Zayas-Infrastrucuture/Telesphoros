@@ -58,5 +58,8 @@
 
 - [ ] T015 `staging-status` exit 0 (or the founder's choice of what to fold in, R2); plan PR 4; read it line by line; apply.
 - [ ] T016 Invoke the Lambda once by hand; see an email with today's findings (expect #214 and the break-glass images, R3).
-- [ ] T017 SC-002 and SC-004: break each check once on purpose, and deny one read, and see each email; return each to OK.
+- [x] T017 SC-002 and SC-004: break each check once on purpose, and deny one read, and see each email; return each to OK.
+  Done 2026-11-07 (`docs/ops/staging-freshness.md`, "Rehearsing it"): an extra alarm (state 2, "1 finding"), a denied read (SC-004,
+  "check incomplete"), a denied publish (the `freshness-check-failing` alarm); each put back, `staging-status` exit 0 after. States 1 and 6
+  are recorded when they occur on their own; 3 to 5 by their refusals (SC-002 as reworded). Still unseen: `freshness-check-missed`.
 - [ ] T018 Facts file and `environments.md` updated in a docs PR (alarm count plus 2). SC-001 runs for 14 days.

@@ -7,6 +7,7 @@
 # Reads, and never writes, AWS: the ECS services and task definitions, the alarm count, the CloudFront cache paths, and the API's /api/v1/ready.
 # Reads the Terraform state's serial and lineage (nothing else of it) and runs `plan -lock=false -detailed-exitcode` on the backend clone's
 # HEAD, printing addresses and actions only. Lists the Terraform merged on origin/main after the applied commit, the saved plans and the claim.
+# A saved plan whose apply log ends `== apply exit status: 0` is listed as applied and does not count; a failed apply does.
 # It does not fetch: run `git -C "$BACKEND_CLONE" fetch origin` first if origin/main may be behind.
 #
 # Live values come from a private file outside the repository, ~/telesphoros-private/staging/stack.env (override with STACK_ENV):
