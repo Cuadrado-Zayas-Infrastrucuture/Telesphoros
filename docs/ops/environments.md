@@ -74,7 +74,8 @@ both in the same pull request.
 
 **Before planning anything against staging**, run `scripts/staging/staging-status.sh` (founder-run, read-only; spec 027). It compares
 live staging with `docs/ops/staging-expected.json` on `origin/main`, runs `terraform plan -lock=false -detailed-exitcode` on the backend
-clone, lists the Terraform merged after the applied commit, marks saved plans made at another state serial as stale, and shows who holds
+clone, lists the Terraform merged after the applied commit, marks saved plans made at another state serial as stale (one already applied
+with exit 0 is listed as applied and does not count: `apply.sh` never runs a plan twice; a failed apply does count), and shows who holds
 the stack claim. It prints identifiers and counts, never a state, plan or variable value, and exits 0 only when there is nothing to do.
 A plan for staging quotes its table; a session that has not seen it does not know what staging runs. Its live values (the account, the
 clone, the Terraform binary and data directory, the canonical var file) come from the private `~/telesphoros-private/staging/stack.env`,
