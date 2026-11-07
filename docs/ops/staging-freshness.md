@@ -41,4 +41,21 @@ in git.
    function, schedule rule, target, invoke permission, metric filter, two alarms) and that one update. Then `apply.sh INFRA COMMIT SHA256`.
 3. After the apply, the facts file's `alarms` goes up by 2 and [environments.md](environments.md) is updated in the same pull request.
 4. Invoke it once by hand and read the email. The first email is expected to list whatever is merged and unapplied at that moment.
-5. Cause each condition once on purpose (spec 027 T017) and see each email arrive; put it back each time.
+5. Cause each condition once on purpose (spec 027 T017) and see each email arrive; put it back each time. Done on 2026-11-07: next section.
+
+## Rehearsing it (the 2026-11-07 drills, spec 027 T017)
+
+Founder-run, one at a time, each put back before the next. None touches Terraform: the drill alarm is a separate resource, and the role's
+only Terraform inline policy is `check-and-publish`, so an extra inline policy is not in any plan. After each one, `staging-status.sh`
+shows `plan: no changes` and the facts' alarm count.
+
+| Drill | What was changed | What arrived | Put back by |
+| --- | --- | --- | --- |
+| A: the facts disagree with AWS | One extra metric alarm with the stack's prefix (`telesphoros-staging-t017-drill`), no actions, a threshold it never reaches | "Staging freshness: 1 finding": `alarms`, expected 36, live 37 | `aws cloudwatch delete-alarms`; the next run had 0 findings and sent nothing |
+| B: a refused read (SC-004) | An inline policy on the function's role denying `cloudfront:GetDistribution` | "Staging freshness: check incomplete": could not read `cloudfront (AccessDenied)` | `aws iam delete-role-policy`; runs in the first minute after it were still incomplete (IAM takes a while to drop a deny), the one 3 minutes later was clean |
+| C: the email cannot be sent | The same deny plus `sns:Publish` (a clean run publishes nothing, so a read had to fail too) | The invocation failed (`AuthorizationErrorException`), no freshness email, and CloudWatch's "ALARM: …freshness-check-failing" | `aws iam delete-role-policy`; the alarm returns to OK after its one-hour window |
+
+Not drilled: `freshness-check-missed` (it needs 26 hours without a complete run; it will show if the schedule ever stops), and
+`terraform-unapplied` and `image-behind-main`, which the next merged Terraform change and the first application change 7 days unreleased
+cause on their own. Keep a drill short: each run makes up to seven unauthenticated GitHub API calls, and GitHub allows 60 an hour per address,
+so a burst of invocations can turn the next run incomplete for a reason that has nothing to do with the drill.
