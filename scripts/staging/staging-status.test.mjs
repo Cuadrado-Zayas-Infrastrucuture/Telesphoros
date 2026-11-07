@@ -89,6 +89,31 @@ test('the plan, unapplied Terraform, saved plans and the claim each fail the run
   assert.match(held.text, /claim: held by session-a/);
 });
 
+test('a saved plan applied with exit 0 is listed and does not fail the run; a failed or unfinished apply still does', () => {
+  const rows = compare(FACTS, OBSERVED);
+  const spent = report({ rows, ...QUIET, savedPlans: [{ path: 'releases/x/i.tfplan', serial: 40, applied: 0 }, { path: 'releases/y/fc.tfplan', serial: null, applied: 0 }] });
+  assert.equal(spent.exitCode, 0, spent.text);
+  assert.match(spent.text, /saved plan releases\/x\/i\.tfplan: applied \(exit 0\)/);
+  const failed = report({ rows, ...QUIET, savedPlans: [{ path: 'releases/x/i.tfplan', serial: 40, applied: 3 }] });
+  assert.equal(failed.exitCode, 1);
+  assert.match(failed.text, /APPLY FAILED \(exit 3\): read its log/);
+  for (const p of [{ serial: 40, applied: null }, { serial: null, applied: null }]) {
+    assert.equal(report({ rows, ...QUIET, savedPlans: [{ path: 'releases/x/m.tfplan', ...p }] }).exitCode, 1, `never applied: ${JSON.stringify(p)}`);
+  }
+
+  // collect reads the last exit line of X-apply.txt next to X.tfplan; a log without one is an apply still running.
+  const base = { '/w/state.json': '{"serial":42,"lineage":"l"}', '/w/saved': '/p/releases/x/i.tfplan\n/p/releases/x/m.tfplan\n/p/releases/z/x.tfplan' };
+  const io = (f) => ({ exists: (n) => n in f, read: (n) => { if (!(n in f)) throw new Error('ENOENT'); return f[n]; }, now: QUIET.now });
+  const env = { PLAN_EXIT: '0', PRIVATE: '/p' };
+  const o = collect('/w', env, io({ ...base,
+    '/p/releases/x/i-apply.txt': 'Apply complete!\n== apply exit status: 1\nretried\n== apply exit status: 0\n',
+    '/p/releases/x/m-apply.txt': 'Terraform is still applying\n',
+  }));
+  assert.deepEqual(o.savedPlans.map((p) => [p.path, p.applied]), [['releases/x/i.tfplan', 0], ['releases/x/m.tfplan', null], ['releases/z/x.tfplan', null]]);
+  const lineOnly = collect('/w', env, io({ ...base, '/p/releases/x/i-apply.txt': 'the text == apply exit status: 0 inside a line\n' }));
+  assert.equal(lineOnly.savedPlans[0].applied, null, 'only a whole line counts');
+});
+
 test('the state projection keeps the serial and lineage and nothing else', () => {
   const state = JSON.stringify({ version: 4, serial: 42, lineage: 'l-1', outputs: { db_password: { value: 'SENTINEL-VALUE' } }, resources: [{ instances: [{ attributes: { secret: 'SENTINEL-VALUE' } }] }] });
   assert.deepEqual(stateIdentity(state), { serial: 42, lineage: 'l-1' });
@@ -130,7 +155,7 @@ test('collect turns the shell work directory into what report takes; a refusal i
   const env = { READY: '200', PLAN_EXIT: '0', PLAN_WHY: '', LEGACY: '12', CLAIM: '/p/staging/claim/owner.json', PRIVATE: '/p' };
   const o = collect('/w', env, io(files));
   assert.deepEqual(compare(FACTS, o).filter((r) => r.status !== 'ok'), []);
-  assert.deepEqual([o.serial, o.legacyPlans, o.savedPlans, o.claim], [42, 12, [{ path: 'releases/x/i.tfplan', serial: 42 }], null]);
+  assert.deepEqual([o.serial, o.legacyPlans, o.savedPlans, o.claim], [42, 12, [{ path: 'releases/x/i.tfplan', serial: 42, applied: null }], null]);
   assert.equal(report({ ...o, rows: compare(FACTS, o) }).exitCode, 0);
   const refusedAlarms = collect('/w', env, io({ ...files, '/w/alarms.refused': 'AccessDenied' }));
   assert.deepEqual(refusedAlarms.alarms, { refused: 'AccessDenied' });
