@@ -29,19 +29,21 @@ assessment kill switch (`ASSESSMENT-OFF` and back on). On 2026-11-07 an `INFRA` 
 `INFRA` apply from `main` `e6050644` changed only the freshness Lambda's code, so a failed publish reports the error's class only (#313); it
 was the first plan with the AWS provider at 6.72.0 (#295), whose read-back the release check accepts since #314. On 2026-11-08 the release
 of `main` `859e964a` stopped halfway: its MIGRATE step applied migrations 0072 and 0073 (#299, #302), then its IMAGE plan was refused,
-because the freshness policy named the two services by resource and so was read only at apply (`fix/freshness-policy-stable-arns`). The
-API and worker still run the `661512c9` image on the new schema, which both migrations only add to. No CI job holds cloud credentials or
-applies anything.
+because the freshness policy named the two services by resource and so was read only at apply (#318). The old `661512c9` API refused
+readiness on the new schema, so the load balancer kept replacing its task: the staging API was down from about 00:16 to 02:29 UTC. The
+release resumed from `main` `2a66207b` (#318, #319): its MIGRATE step found nothing pending, its IMAGE apply put the API on task
+definition revision 12 and the worker on 7, both on the new image, and the frontend build was unchanged, so it was not republished. No CI
+job holds cloud credentials or applies anything.
 
-The last apply read the backend clone at, and so applied from `main` `859e964a` (the 2026-11-08 `MIGRATE` apply): anything merged after it under `infrastructure/terraform/` is not
+The last apply read the backend clone at, and so applied from `main` `2a66207b` (the 2026-11-08 `IMAGE` apply): anything merged after it under `infrastructure/terraform/` is not
 applied until a release says so here. The values in the table below are kept as data in
 [staging-expected.json](staging-expected.json) (spec 027); a guard in `pnpm test:ci-config` fails when this page and that file disagree, so change
 both in the same pull request.
 
 | Piece | What runs (read 2026-11-08) | What production adds or changes |
 | --- | --- | --- |
-| API | ECS Fargate service `telesphoros-staging-api` on cluster `telesphoros-staging-api`: 1 task, task definition revision 11, image `sha256:7f3ee46a91e8…` (commit `661512c9`, pushed by hand; see "Break-glass" in [ci-cd.md](ci-cd.md)), `NODE_ENV=production`. Patient name and date of birth are encrypted under a KMS data key per patient; the task's key policy only allows calls with a `{tenant, patient}` encryption context. `MEDICATION_WRITES=disabled` (medication recording answers with a fixed pause message) and `SYNTHETIC_ASSESSMENT=enabled` (next row) | At least 2 tasks; only images signed in CI |
-| Worker | Service `telesphoros-staging-worker`, 1 task (task definition revision 6), the same image. It runs the upload sweep and stale-file checks, and since 2026-10-31 removes expired tenant capabilities every minute (its first run removed the 73 that had accumulated; [jobs.md](jobs.md)) | |
+| API | ECS Fargate service `telesphoros-staging-api` on cluster `telesphoros-staging-api`: 1 task, task definition revision 12, image `sha256:28eb01f9866d…` (commit `2a66207b`, pushed by hand; see "Break-glass" in [ci-cd.md](ci-cd.md)), `NODE_ENV=production`. Patient name and date of birth are encrypted under a KMS data key per patient; the task's key policy only allows calls with a `{tenant, patient}` encryption context. `MEDICATION_WRITES=disabled` (medication recording answers with a fixed pause message) and `SYNTHETIC_ASSESSMENT=enabled` (next row) | At least 2 tasks; only images signed in CI |
+| Worker | Service `telesphoros-staging-worker`, 1 task (task definition revision 7), the same image. It runs the upload sweep and stale-file checks, and since 2026-10-31 removes expired tenant capabilities every minute (its first run removed the 73 that had accumulated; [jobs.md](jobs.md)) | |
 | Issuer | **No service runs.** Its roles exist; its log alarms were removed on 2026-10-31 (#210), since only the issuer's own logs could raise them. Tenant binding is still `dual` (the database accepts the tenant the API sets) | The issuer service, and capability-only binding before real data |
 | Synthetic assessment | **On** since 2026-11-05 (spec 032 S3): the API evaluates a reviewed structured report against the synthetic knowledge baked into the image (`/app/synthetic-knowledge`) and the frontend is built with the assessment controls. `ASSESSMENT-OFF` is the kill switch: the routes answer 503 again and stored evaluations stay stored (rehearsed off and on 2026-11-06). The two-person check SC-001 has not been run on staging yet | None: `synthetic_assessment_enabled` is accepted only by the synthetic profile |
 | Lab-report pipeline and queued evaluation | **Off.** `NODE_ENV=production` refuses `LAB_REPORT_PIPELINE` and `EVALUATION_REQUESTS` (`apps/backend/src/config/env.ts`), so those routes answer 503 | |
